@@ -1,4 +1,4 @@
-rootProject.name = "ktor-sample"
+rootProject.name = "synara-api"
 
 dependencyResolutionManagement {
     repositories {
@@ -8,5 +8,3 @@ dependencyResolutionManagement {
 }
 
 include(":server")
-include(":core")
-include(":client")

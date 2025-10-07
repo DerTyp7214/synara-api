@@ -7,7 +7,7 @@ ktor:
 jwt:
   domain: "https://jwt-provider-domain/"
   audience: "jwt-audience"
-  realm: "ktor sample app"
+  realm: "synara api"
 postgres:
   url: "jdbc:postgresql://localhost/default"
   user: username

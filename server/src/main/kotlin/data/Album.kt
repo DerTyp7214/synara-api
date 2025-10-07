@@ -3,13 +3,12 @@ package dev.dertyp.data
 import kotlinx.serialization.Serializable
 
 @Serializable
-data class Song(
+data class Album(
     val id: String,
-    val title: String,
+    val name: String,
     val artists: List<Artist>,
-    val album: Album,
     val coverUrl: String,
-    val duration: Long,
-    val lyrics: String,
-    val path: String,
+    val songCount: Int = 0,
+    val releaseDate: Long,
+    val totalDuration: Long,
 )

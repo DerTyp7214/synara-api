@@ -18,7 +18,6 @@ application {
 }
 
 dependencies {
-    implementation(project(":core"))
     implementation("io.ktor:ktor-server-cors")
     implementation("io.ktor:ktor-server-core")
     implementation("com.ucasoft.ktor:ktor-simple-cache:0.55.3")
@@ -30,7 +29,6 @@ dependencies {
     implementation("io.ktor:ktor-server-host-common")
     implementation("io.ktor:ktor-server-status-pages")
     implementation("io.ktor:ktor-server-webjars")
-    implementation("org.webjars:jquery:3.2.1")
     implementation("io.ktor:ktor-server-call-logging")
     implementation("dev.hayden:khealth:3.0.2")
     implementation("io.ktor:ktor-server-content-negotiation")
@@ -47,6 +45,7 @@ dependencies {
     implementation("io.ktor:ktor-server-netty")
     implementation("ch.qos.logback:logback-classic:$logback_version")
     implementation("io.ktor:ktor-server-config-yaml")
+    implementation("net.jthink:jaudiotagger:3.0.1")
     testImplementation("io.ktor:ktor-server-test-host")
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit:$kotlin_version")
 }
