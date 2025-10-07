@@ -36,6 +36,7 @@ dependencies {
     implementation("io.ktor:ktor-server-html-builder")
     implementation("org.jetbrains.kotlinx:kotlinx-html:$kotlinx_html_version")
     implementation("io.ktor:ktor-serialization-kotlinx-json")
+    implementation("org.jetbrains.exposed:exposed-dao:$exposed_version")
     implementation("org.jetbrains.exposed:exposed-core:$exposed_version")
     implementation("org.jetbrains.exposed:exposed-jdbc:$exposed_version")
     implementation("com.h2database:h2:$h2_version")

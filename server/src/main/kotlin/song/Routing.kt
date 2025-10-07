@@ -1,6 +1,7 @@
 package dev.dertyp.song
 
 import com.ucasoft.ktor.simpleCache.cacheOutput
+import dev.dertyp.core.toUUIDOrNull
 import dev.dertyp.repos.SongRepository
 import io.ktor.http.*
 import io.ktor.server.response.*
@@ -11,7 +12,7 @@ fun Routing.song(repository: SongRepository) {
     cacheOutput(2.seconds) {
         route("/song") {
             get("/byId/{id}") {
-                val id = call.parameters["id"]
+                val id = call.parameters["id"]?.toUUIDOrNull()
                 if (id == null) return@get call.respond(HttpStatusCode.BadRequest)
 
                 val song = repository.byId(id)
@@ -20,13 +21,13 @@ fun Routing.song(repository: SongRepository) {
                 call.respond(song)
             }
             get("/byAlbum/{albumId}") {
-                val id = call.parameters["albumId"]
+                val id = call.parameters["albumId"]?.toUUIDOrNull()
                 if (id == null) return@get call.respond(HttpStatusCode.BadRequest)
 
                 call.respond(repository.byAlbum(id))
             }
             get("/byArtist/{artistId}") {
-                val id = call.parameters["artistId"]
+                val id = call.parameters["artistId"]?.toUUIDOrNull()
                 if (id == null) return@get call.respond(HttpStatusCode.BadRequest)
 
                 call.respond(repository.byArtist(id))

@@ -1,12 +1,13 @@
 package dev.dertyp.repos
 
 import dev.dertyp.data.Song
+import java.util.*
 
 interface SongRepository {
-    fun byId(id: String): Song?
-    fun byTitle(title: String): List<Song>
-    fun byArtist(artistId: String): List<Song>
-    fun byAlbum(albumId: String): List<Song>
+    suspend fun byId(id: UUID): Song?
+    suspend fun byTitle(title: String): List<Song>
+    suspend fun byArtist(artistId: UUID): List<Song>
+    suspend fun byAlbum(albumId: UUID): List<Song>
 
-    fun allSongs(): List<Song>
+    suspend fun allSongs(): List<Song>
 }
