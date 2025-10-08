@@ -12,9 +12,16 @@ data class Album(
     val id: UUID,
     val name: String,
     val artists: List<Artist>,
-    val coverUrl: String,
     val songCount: Int = 0,
     @Serializable(with = LocalDateTimeSerializer::class)
     val releaseDate: LocalDateTime,
     val totalDuration: Long,
+)
+
+@Serializable
+data class InsertableAlbum(
+    val name: String,
+    val artists: List<String>,
+    @Serializable(with = LocalDateTimeSerializer::class)
+    val releaseDate: LocalDateTime = LocalDateTime.now(),
 )

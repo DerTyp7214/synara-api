@@ -13,10 +13,21 @@ data class Song(
     val title: String,
     val artists: List<Artist>,
     val album: Album,
-    val coverUrl: String,
     val duration: Long,
     @Serializable(with = LocalDateTimeSerializer::class)
     val releaseDate: LocalDateTime,
+    val lyrics: String = "",
+    val path: String,
+)
+
+@Serializable
+data class InsertableSong(
+    val title: String,
+    val artists: List<String> = listOf(),
+    val album: InsertableAlbum,
+    val duration: Long,
+    @Serializable(with = LocalDateTimeSerializer::class)
+    val releaseDate: LocalDateTime = LocalDateTime.now(),
     val lyrics: String = "",
     val path: String,
 )

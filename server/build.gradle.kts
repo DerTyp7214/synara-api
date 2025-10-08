@@ -1,3 +1,7 @@
+@file:OptIn(OpenApiPreview::class)
+
+import io.ktor.plugin.*
+
 val exposed_version: String by project
 val h2_version: String by project
 val kotlin_version: String by project
@@ -22,7 +26,8 @@ dependencies {
     implementation("io.ktor:ktor-server-core")
     implementation("com.ucasoft.ktor:ktor-simple-cache:0.55.3")
     implementation("com.ucasoft.ktor:ktor-simple-memory-cache:0.55.3")
-    implementation("io.ktor:ktor-server-openapi")
+    implementation("io.github.smiley4:ktor-openapi:5.1.0")
+    implementation("io.github.smiley4:ktor-swagger-ui:5.1.0")
     implementation("io.ktor:ktor-server-auth")
     implementation("io.ktor:ktor-server-auth-jwt")
     implementation("io.ktor:ktor-server-sse")
@@ -47,6 +52,7 @@ dependencies {
     implementation("ch.qos.logback:logback-classic:$logback_version")
     implementation("io.ktor:ktor-server-config-yaml")
     implementation("net.jthink:jaudiotagger:3.0.1")
+    implementation("org.xerial:sqlite-jdbc:3.49.1.0")
     testImplementation("io.ktor:ktor-server-test-host")
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit:$kotlin_version")
 }
