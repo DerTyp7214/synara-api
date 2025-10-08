@@ -26,6 +26,7 @@ class ArtistService(database: Database) {
             val name = resultRow[ArtistTable.name]
             val isGroup = resultRow[ArtistTable.isGroup]
             val about = resultRow[ArtistTable.about]
+            val imageId = resultRow[ArtistTable.image]?.value
 
             val artists = if (isGroup && mapGroup) dbQuery {
                 ArtistTable
@@ -40,6 +41,7 @@ class ArtistService(database: Database) {
                 isGroup = isGroup,
                 artists = artists,
                 about = about,
+                imageId = imageId
             )
         }
     }

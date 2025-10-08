@@ -52,6 +52,7 @@ class AlbumService(database: Database) {
                 },
                 songCount = songs.size,
                 totalDuration = songs.fold(0) { sum, song -> sum + song },
+                coverId = resultRow[AlbumTable.cover]?.value
             )
         }
     }
@@ -109,11 +110,15 @@ class AlbumService(database: Database) {
         val albums = getAlbums()
         if (albums.isNotEmpty()) return albums.singleOrNull()?.id
 
+
+        val imageId = album.coverHash?.let { ImageService.instance?.byHash(it)?.id }
+
         val albumId = dbQuery {
             AlbumTable.insertAndGetId {
                 it[name] = album.name
                 it[songCount] = album.songCount
                 it[releaseDate] = getISOFromDate(album.releaseDate)
+                it[cover] = imageId
             }
         }
 

@@ -4,6 +4,7 @@ import dev.dertyp.core.*
 import dev.dertyp.data.InsertableAlbum
 import dev.dertyp.data.InsertableImage
 import dev.dertyp.data.InsertableSong
+import dev.dertyp.services.ImageService
 import dev.dertyp.services.SongService
 import io.ktor.server.application.*
 import io.ktor.server.routing.*
@@ -21,7 +22,11 @@ import kotlin.time.Clock
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
 
-class Indexer(environment: ApplicationEnvironment, private val service: SongService) {
+class Indexer(
+    environment: ApplicationEnvironment,
+    private val songService: SongService,
+    private val imageService: ImageService
+) {
 
     private val tracksPath = environment.config.propertyOrNull("audio.tracks")?.getString()
     private val albumsPath = environment.config.propertyOrNull("audio.albums")?.getString()
@@ -49,9 +54,17 @@ class Indexer(environment: ApplicationEnvironment, private val service: SongServ
             }s)"
         ).await()
 
-        log("Grouping songs by albums.").await()
+        var successful = 0
 
         val (images, albums) = groupByAlbum(files)
+
+        log("Saving covers to database.").await()
+
+        for ((_, image) in images) {
+            if (imageService.getOrCreate(image) != null) log("Saved ${image.imageHash}.").await()
+        }
+
+        log("Grouping songs by albums.").await()
 
         for ((album, songs) in albums) {
             log("""Grouped ${songs.size} songs to "${album.name}" by ${album.artists.joinToString(", ")}.""")
@@ -59,16 +72,16 @@ class Indexer(environment: ApplicationEnvironment, private val service: SongServ
             for (song in songs) {
                 val insertableSong = insertableSongFromFile(song, album)
 
-                val song = service.getOrCreate(insertableSong)
+                val song = songService.getOrCreate(insertableSong)
 
-                if (song == null) log("Song creation failed for ${insertableSong.title} $insertableSong")
-                else log(song.toString())
+                if (song == null) log("Song creation failed for ${insertableSong.title}")
+                else successful++
             }
         }
 
         log("Found ${images.size} unique images.").await()
         log("Found ${albums.size} unique albums.").await()
-        log("Found ${files.size} songs.").await()
+        log("Found ${files.size} songs, inserted $successful to the database.").await()
     }
 
     private fun buildMap(path: Path): List<Path> {
@@ -144,7 +157,7 @@ class Indexer(environment: ApplicationEnvironment, private val service: SongServ
         val discNumber = tag.getFirst(FieldKey.DISC_NO).toIntOrNull() ?: 1
 
         val url = tag.getFirst("URL") ?: ""
-        val cover = if (audioFile.hasCover) audioFile.coverImage else null
+        val cover = audioFile.coverImage
         val lyrics = tag.getFirst(FieldKey.LYRICS) ?: ""
         val year = tag.getFirst(FieldKey.YEAR)
 
@@ -179,5 +192,5 @@ class Indexer(environment: ApplicationEnvironment, private val service: SongServ
     }
 }
 
-fun Route.Indexer(service: SongService) = Indexer(environment, service)
-fun Application.Indexer(service: SongService) = Indexer(environment, service)
+fun Route.Indexer(service: SongService, imageService: ImageService) = Indexer(environment, service, imageService)
+fun Application.Indexer(service: SongService, imageService: ImageService) = Indexer(environment, service, imageService)

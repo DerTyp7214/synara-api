@@ -16,6 +16,8 @@ data class Album(
     @Serializable(with = LocalDateSerializer::class)
     val releaseDate: LocalDate?,
     val totalDuration: Long,
+    @Serializable(with = UUIDSerializer::class)
+    val coverId: UUID? = null,
 )
 
 @Serializable

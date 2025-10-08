@@ -1,9 +1,10 @@
-package dev.dertyp.song
+package dev.dertyp.routing
 
-import dev.dertyp.Indexer
+import dev.dertyp.core.omitLyrics
 import dev.dertyp.core.toUUIDOrNull
 import dev.dertyp.data.InsertableSong
 import dev.dertyp.data.Song
+import dev.dertyp.data.SongWithoutLyrics
 import dev.dertyp.services.SongService
 import io.github.smiley4.ktoropenapi.get
 import io.github.smiley4.ktoropenapi.post
@@ -12,21 +13,21 @@ import io.ktor.http.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
-import io.ktor.server.sse.*
+import io.ktor.util.logging.*
+import io.ktor.utils.io.*
+import io.ktor.utils.io.jvm.javaio.*
+import kotlin.io.path.Path
+import kotlin.math.min
 
 fun Routing.song(service: SongService) {
-    sse("/buildIndex") {
-        val indexer = Indexer(service)
+    val logger = KtorSimpleLogger("song")
 
-        indexer.start { stdout ->
-            send(stdout)
-        }
-    }
-
-    route("/song") {
+    route("/song", {
+        tags("song")
+    }) {
         get("/byId/{id}", {
             request {
-                queryParameter<String>("id") {
+                pathParameter<String>("id") {
                     description = "The song id."
                 }
             }
@@ -47,7 +48,7 @@ fun Routing.song(service: SongService) {
         }
         get("/byAlbum/{albumId}", {
             request {
-                queryParameter<String>("albumId") {
+                pathParameter<String>("albumId") {
                     description = "The album id to search all songs for."
                 }
             }
@@ -65,7 +66,7 @@ fun Routing.song(service: SongService) {
         }
         get("/byArtist/{artistId}", {
             request {
-                queryParameter<String>("artistId") {
+                pathParameter<String>("artistId") {
                     description = "The artist id to search all songs for."
                 }
             }
@@ -83,7 +84,7 @@ fun Routing.song(service: SongService) {
         }
         get("/byTitle/{title}", {
             request {
-                queryParameter<String>("title") {
+                pathParameter<String>("title") {
                     description = "The title to exactly match to."
                 }
             }
@@ -101,7 +102,7 @@ fun Routing.song(service: SongService) {
         }
         get("/searchByTitle/{title}", {
             request {
-                queryParameter<String>("title") {
+                pathParameter<String>("title") {
                     description = "The title query."
                 }
             }
@@ -117,16 +118,90 @@ fun Routing.song(service: SongService) {
 
             call.respond(service.searchByTitle(title))
         }
+        get("/audio/{id}", {
+            request {
+                pathParameter<String>("id") {
+                    description = "The id of the song."
+                }
+            }
+            response {
+                HttpStatusCode.OK to {
+                    description = "Audio stream of the song."
+                }
+                HttpStatusCode.PartialContent to {
+                    description = "The audio stream of the song."
+                }
+            }
+        }) {
+            val id = call.parameters["id"]?.toUUIDOrNull()
+            if (id == null) return@get call.respond(HttpStatusCode.BadRequest)
+
+            val song = service.byId(id)
+            if (song == null) return@get call.respond(HttpStatusCode.NotFound)
+
+            val flacFile = Path(song.path).toFile()
+            if (!flacFile.exists()) return@get call.respond(HttpStatusCode.NotFound)
+
+            val contentType = ContentType.parse("audio/flac")
+
+            val range = call.request.ranges()?.ranges?.first()
+            val fullSize = flacFile.length()
+
+            logger.info("audio stream ${range?.javaClass?.simpleName}")
+
+            when (range) {
+                is ContentRange.TailFrom,
+                is ContentRange.Suffix,
+                is ContentRange.Bounded -> {
+                    val start = when (range) {
+                        is ContentRange.TailFrom -> range.from.coerceIn(0 until fullSize)
+                        is ContentRange.Bounded -> range.from.coerceIn(0 until fullSize)
+                        is ContentRange.Suffix -> 0
+                    }
+                    val end = when (range) {
+                        is ContentRange.TailFrom -> fullSize
+                        is ContentRange.Bounded -> min(range.to, fullSize)
+                        is ContentRange.Suffix -> min(range.lastCount, fullSize)
+                    }
+                    val chunkSize = end - start
+
+                    if (chunkSize <= 0) return@get call.respond(HttpStatusCode.RequestedRangeNotSatisfiable)
+
+                    call.response.header(HttpHeaders.AcceptRanges, "bytes")
+                    call.response.header(HttpHeaders.ContentRange, "bytes ${start}-${end}/${fullSize}")
+                    call.response.header(HttpHeaders.ContentLength, chunkSize.toString())
+                    call.response.header(
+                        HttpHeaders.ContentDisposition,
+                        ContentDisposition.Inline.withParameter(ContentDisposition.Parameters.FileName, flacFile.name)
+                            .toString()
+                    )
+
+                    call.respondBytesWriter(contentType, HttpStatusCode.PartialContent) {
+                        flacFile.inputStream().use { inputStream ->
+                            inputStream.skip(start)
+                            writeFully(inputStream.readNBytes(chunkSize.toInt()))
+                        }
+                    }
+
+                }
+
+                else -> {
+                    call.respondBytesWriter(contentType) {
+                        flacFile.inputStream().transferTo(toOutputStream())
+                    }
+                }
+            }
+        }
 
         get("/list", {
             response {
                 HttpStatusCode.OK to {
                     description = "List of all Songs"
-                    body<List<Song>>()
+                    body<List<SongWithoutLyrics>>()
                 }
             }
         }) {
-            call.respond(service.allSongs())
+            call.respond(service.allSongs().map { it.omitLyrics() })
         }
 
         post<InsertableSong>({

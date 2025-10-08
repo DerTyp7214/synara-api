@@ -31,11 +31,5 @@ val AudioFile.albumArtists: List<String>
         }.flatten().map { it.trim() }
     }
 
-val AudioFile.hasCover: Boolean
-    get() = !tag.getFirstField(FieldKey.COVER_ART).isEmpty
-
 val AudioFile.coverImage: ByteArray?
-    get() {
-        val coverField = tag.getFirstField(FieldKey.COVER_ART)
-        return if (!coverField.isEmpty) coverField.rawContent else null
-    }
+    get() = tag.firstArtwork.binaryData

@@ -12,4 +12,6 @@ data class Artist(
     val isGroup: Boolean,
     val artists: List<Artist> = listOf(),
     val about: String = "",
+    @Serializable(with = UUIDSerializer::class)
+    val imageId: UUID? = null,
 )

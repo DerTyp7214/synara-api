@@ -2,7 +2,10 @@ package dev.dertyp.services
 
 import dev.dertyp.data.InsertableSong
 import dev.dertyp.data.Song
-import dev.dertyp.db.*
+import dev.dertyp.db.AlbumTable
+import dev.dertyp.db.ArtistTable
+import dev.dertyp.db.SongArtistTable
+import dev.dertyp.db.SongTable
 import dev.dertyp.dbQuery
 import dev.dertyp.getDateFromISO
 import dev.dertyp.getISOFromDate
@@ -20,7 +23,6 @@ class SongService(database: Database) {
         transaction(database) {
             SchemaUtils.create(SongTable)
             SchemaUtils.create(SongArtistTable)
-            SchemaUtils.create(ImageTable)
         }
     }
 
@@ -55,6 +57,7 @@ class SongService(database: Database) {
                 sampleRate = resultRow[SongTable.sampleRate],
                 bitsPerSample = resultRow[SongTable.bitsPerSample],
                 bitRate = resultRow[SongTable.bitRate],
+                coverId = resultRow[SongTable.cover]?.value,
             )
         }
     }
@@ -144,6 +147,8 @@ class SongService(database: Database) {
             return null
         }
 
+        val imageId = song.coverHash?.let { ImageService.instance?.byHash(it)?.id }
+
         val songId = dbQuery {
             SongTable.insertAndGetId {
                 it[SongTable.title] = song.title
@@ -159,6 +164,7 @@ class SongService(database: Database) {
                 it[SongTable.sampleRate] = song.sampleRate
                 it[SongTable.bitsPerSample] = song.bitsPerSample
                 it[SongTable.bitRate] = song.bitRate
+                it[SongTable.cover] = imageId
             }
         }
 
