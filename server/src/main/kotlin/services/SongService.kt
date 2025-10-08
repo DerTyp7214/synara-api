@@ -24,9 +24,14 @@ class SongService(database: Database) {
             SchemaUtils.create(SongTable)
             SchemaUtils.create(SongArtistTable)
         }
+
+        instance = this
     }
 
     companion object {
+        var instance: SongService? = null
+            private set
+
         suspend fun mapSong(resultRow: ResultRow): Song {
             val id = resultRow[SongTable.id].value
 

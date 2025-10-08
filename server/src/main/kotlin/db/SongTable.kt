@@ -1,10 +1,11 @@
 package dev.dertyp.db
 
 import org.jetbrains.exposed.dao.id.UUIDTable
+import org.jetbrains.exposed.sql.ReferenceOption
 
 object SongTable : UUIDTable("song") {
     val title = text("title")
-    val albumId = reference("albumId", AlbumTable.id)
+    val albumId = reference("albumId", AlbumTable.id, onDelete = ReferenceOption.SET_NULL)
     val duration = long("duration").default(0L)
     val releaseDate = varchar("releaseDate", 128).nullable()
     val lyrics = text("lyrics").default("")

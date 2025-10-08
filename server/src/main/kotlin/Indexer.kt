@@ -3,11 +3,14 @@ package dev.dertyp
 import dev.dertyp.core.*
 import dev.dertyp.data.InsertableAlbum
 import dev.dertyp.data.InsertableImage
+import dev.dertyp.data.InsertablePlaylist
 import dev.dertyp.data.InsertableSong
 import dev.dertyp.services.ImageService
+import dev.dertyp.services.PlaylistService
 import dev.dertyp.services.SongService
 import io.ktor.server.application.*
 import io.ktor.server.routing.*
+import io.ktor.util.logging.*
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import org.jaudiotagger.audio.AudioFile
@@ -25,28 +28,36 @@ import kotlin.time.ExperimentalTime
 class Indexer(
     environment: ApplicationEnvironment,
     private val songService: SongService,
-    private val imageService: ImageService
+    private val imageService: ImageService,
+    private val playlistService: PlaylistService,
 ) {
+    private val logger = KtorSimpleLogger("Indexer")
 
     private val tracksPath = environment.config.propertyOrNull("audio.tracks")?.getString()
     private val albumsPath = environment.config.propertyOrNull("audio.albums")?.getString()
     private val playlistsPath = environment.config.propertyOrNull("audio.playlists")?.getString()
+
+    private val audioExtension = "flac"
+    private val playlistExtension = "m3u"
 
     @OptIn(ExperimentalTime::class)
     suspend fun start(stdout: suspend (String) -> Unit) = coroutineScope {
         AudioFileIO.logger.level = Level.WARNING
 
         val log = { line: String -> async { stdout(line) } }
-        if (tracksPath == null) return@coroutineScope log("audio.tracks not set in the configuration file")
+        if (tracksPath == null || albumsPath == null || playlistsPath == null)
+            return@coroutineScope log("audio paths are not configured")
 
         log("Starting Indexer").await()
 
-        val rootPath = Path(tracksPath)
+        val songRootPath = Path(tracksPath)
+        val playlistRootPath = Path(playlistsPath)
 
-        log("Scanning ${rootPath.toAbsolutePath()}").await()
+        log("Scanning ${songRootPath.toAbsolutePath()}").await()
         val startTime = Clock.System.now()
 
-        val files = buildMap(rootPath)
+        val songs = buildMap(songRootPath)
+        val playlists = buildMap(playlistRootPath)
 
         log(
             "Finished scanning directories. (${
@@ -56,7 +67,7 @@ class Indexer(
 
         var successful = 0
 
-        val (images, albums) = groupByAlbum(files)
+        val (images, albums) = groupByAlbum(songs)
 
         log("Saving covers to database.").await()
 
@@ -81,7 +92,13 @@ class Indexer(
 
         log("Found ${images.size} unique images.").await()
         log("Found ${albums.size} unique albums.").await()
-        log("Found ${files.size} songs, inserted $successful to the database.").await()
+        log("Found ${songs.size} songs, inserted $successful to the database.").await()
+
+        log("Start playlist parsing.").await()
+
+        val playlistCount = parsePlaylists(playlists)
+
+        log("Parsed and inserted $playlistCount playlists.")
     }
 
     private fun buildMap(path: Path): List<Path> {
@@ -89,17 +106,31 @@ class Indexer(
 
         path.listDirectoryEntries().forEach {
             if (it.isDirectory()) files.addAll(buildMap(it))
-            else if (it.extension == "flac" && !it.isSymbolicLink()) files.add(it)
+            else if ((it.extension == audioExtension || it.extension == playlistExtension) && !it.isSymbolicLink()) files.add(
+                it
+            )
         }
 
         return files
+    }
+
+    private suspend fun parsePlaylists(files: List<Path>): Int {
+        var successful = 0
+        for (file in files.filter { it.extension == playlistExtension }) {
+            val name = file.fileName.nameWithoutExtension.removePrefix("_")
+            val songs = file.readText().lines().map { file.parent.resolve(it).normalize().toString() }
+
+            if (playlistService.getOrCreate(InsertablePlaylist(name, songs)) != null) successful++
+        }
+
+        return successful
     }
 
     private fun groupByAlbum(files: List<Path>): Pair<Map<String, InsertableImage>, Map<InsertableAlbum, List<AudioFile>>> {
         val map = mutableMapOf<InsertableAlbum, MutableList<AudioFile>>()
         val images = mutableMapOf<String, InsertableImage>()
 
-        for (file in files) {
+        for (file in files.filter { it.extension == audioExtension }) {
             try {
                 val audioFile = AudioFileIO.read(file.toFile())
 
@@ -192,5 +223,8 @@ class Indexer(
     }
 }
 
-fun Route.Indexer(service: SongService, imageService: ImageService) = Indexer(environment, service, imageService)
-fun Application.Indexer(service: SongService, imageService: ImageService) = Indexer(environment, service, imageService)
+fun Route.Indexer(service: SongService, imageService: ImageService, playlistService: PlaylistService) =
+    Indexer(environment, service, imageService, playlistService)
+
+fun Application.Indexer(service: SongService, imageService: ImageService, playlistService: PlaylistService) =
+    Indexer(environment, service, imageService, playlistService)

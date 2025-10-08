@@ -3,6 +3,7 @@ package dev.dertyp.routing
 import dev.dertyp.core.omitLyrics
 import dev.dertyp.core.toUUIDOrNull
 import dev.dertyp.data.InsertableSong
+import dev.dertyp.data.PlaylistEntry
 import dev.dertyp.data.Song
 import dev.dertyp.data.SongWithoutLyrics
 import dev.dertyp.services.SongService
@@ -118,7 +119,7 @@ fun Routing.song(service: SongService) {
 
             call.respond(service.searchByTitle(title))
         }
-        get("/audio/{id}", {
+        get("/stream/{id}", {
             request {
                 pathParameter<String>("id") {
                     description = "The id of the song."
@@ -126,7 +127,7 @@ fun Routing.song(service: SongService) {
             }
             response {
                 HttpStatusCode.OK to {
-                    description = "Audio stream of the song."
+                    description = "Full audio of the song."
                 }
                 HttpStatusCode.PartialContent to {
                     description = "The audio stream of the song."
@@ -146,8 +147,6 @@ fun Routing.song(service: SongService) {
 
             val range = call.request.ranges()?.ranges?.first()
             val fullSize = flacFile.length()
-
-            logger.info("audio stream ${range?.javaClass?.simpleName}")
 
             when (range) {
                 is ContentRange.TailFrom,
@@ -202,6 +201,15 @@ fun Routing.song(service: SongService) {
             }
         }) {
             call.respond(service.allSongs().map { it.omitLyrics() })
+        }
+
+        m3u(path = "/m3u", pathParams = {}, validateId = { true }) { id ->
+            Pair(
+                "All Songs",
+                service.allSongs().map {
+                    PlaylistEntry(it.id, it.title, it.duration)
+                }
+            )
         }
 
         post<InsertableSong>({

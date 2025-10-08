@@ -1,11 +1,9 @@
 package dev.dertyp
 
 import dev.dertyp.routing.image
+import dev.dertyp.routing.playlist
 import dev.dertyp.routing.song
-import dev.dertyp.services.AlbumService
-import dev.dertyp.services.ArtistService
-import dev.dertyp.services.ImageService
-import dev.dertyp.services.SongService
+import dev.dertyp.services.*
 import io.ktor.server.application.*
 import io.ktor.server.routing.*
 import io.ktor.server.sse.*
@@ -18,10 +16,11 @@ fun Application.configureDatabases() {
     val imageService = ImageService(database)
     val albumService = AlbumService(database)
     val artistService = ArtistService(database)
+    val playlistService = PlaylistService(database)
 
     routing {
         sse("/buildIndex") {
-            val indexer = Indexer(songService, imageService)
+            val indexer = Indexer(songService, imageService, playlistService)
 
             indexer.start { stdout ->
                 send(stdout)
@@ -30,5 +29,6 @@ fun Application.configureDatabases() {
 
         song(songService)
         image(imageService)
+        playlist(playlistService)
     }
 }

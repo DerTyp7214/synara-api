@@ -23,7 +23,7 @@ class ImageService(database: Database) {
             private set
 
 
-        suspend fun mapImage(resultRow: ResultRow, mapGroup: Boolean = true): Image {
+        suspend fun mapImage(resultRow: ResultRow): Image {
             val id = resultRow[ImageTable.id].value
             val data = resultRow[ImageTable.data]
             val imageHash = resultRow[ImageTable.imageHash]
