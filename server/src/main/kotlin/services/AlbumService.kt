@@ -9,6 +9,7 @@ import dev.dertyp.db.ArtistTable
 import dev.dertyp.db.SongTable
 import dev.dertyp.dbQuery
 import dev.dertyp.getDateFromISO
+import dev.dertyp.getISOFromDate
 import dev.dertyp.services.ArtistService.Companion.mapArtist
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.transactions.transaction
@@ -96,9 +97,11 @@ class AlbumService(database: Database) {
                 AlbumTable
                     .innerJoin(AlbumArtistTable)
                     .innerJoin(ArtistTable)
-                    .selectAll()
+                    .select(AlbumTable.columns)
+                    .withDistinct()
                     .where { AlbumTable.name eq album.name }
                     .andWhere { ArtistTable.name inList album.artists }
+                    .andWhere { AlbumTable.releaseDate eq getISOFromDate(album.releaseDate) }
                     .map { map(it) }
             }
         }
@@ -109,6 +112,8 @@ class AlbumService(database: Database) {
         val albumId = dbQuery {
             AlbumTable.insertAndGetId {
                 it[name] = album.name
+                it[songCount] = album.songCount
+                it[releaseDate] = getISOFromDate(album.releaseDate)
             }
         }
 

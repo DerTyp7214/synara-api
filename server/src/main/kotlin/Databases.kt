@@ -9,7 +9,8 @@ import io.ktor.server.routing.*
 import org.jetbrains.exposed.sql.Database
 
 fun Application.configureDatabases() {
-    val database = Database.connect("jdbc:sqlite:./data.db", "org.sqlite.JDBC")
+    val dbPath = environment.config.propertyOrNull("sqlite.path")?.getString() ?: "./data.db"
+    val database = Database.connect("jdbc:sqlite:$dbPath", "org.sqlite.JDBC")
     val songService = SongService(database)
     val albumService = AlbumService(database)
     val artistService = ArtistService(database)

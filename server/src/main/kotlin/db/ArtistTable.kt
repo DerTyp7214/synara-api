@@ -7,4 +7,5 @@ object ArtistTable : UUIDTable("artist") {
     val isGroup = bool("group").default(false)
     val groupId = reference("groupId", id).nullable()
     val about = text("about").default("")
+    val image = reference("image", ImageTable.id).nullable()
 }

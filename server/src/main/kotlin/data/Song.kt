@@ -1,9 +1,9 @@
 package dev.dertyp.data
 
-import dev.dertyp.serializers.LocalDateTimeSerializer
+import dev.dertyp.serializers.LocalDateSerializer
 import dev.dertyp.serializers.UUIDSerializer
 import kotlinx.serialization.Serializable
-import java.time.LocalDateTime
+import java.time.LocalDate
 import java.util.*
 
 @Serializable
@@ -14,10 +14,17 @@ data class Song(
     val artists: List<Artist>,
     val album: Album,
     val duration: Long,
-    @Serializable(with = LocalDateTimeSerializer::class)
-    val releaseDate: LocalDateTime,
+    @Serializable(with = LocalDateSerializer::class)
+    val releaseDate: LocalDate? = null,
     val lyrics: String = "",
     val path: String,
+    val originalUrl: String = "",
+    val trackNumber: Int = 1,
+    val discNumber: Int = 1,
+    val copyright: String = "",
+    val sampleRate: Int = 0,
+    val bitsPerSample: Int = 0,
+    val bitRate: Long = 0,
 )
 
 @Serializable
@@ -26,8 +33,16 @@ data class InsertableSong(
     val artists: List<String> = listOf(),
     val album: InsertableAlbum,
     val duration: Long,
-    @Serializable(with = LocalDateTimeSerializer::class)
-    val releaseDate: LocalDateTime = LocalDateTime.now(),
+    @Serializable(with = LocalDateSerializer::class)
+    val releaseDate: LocalDate? = null,
     val lyrics: String = "",
     val path: String,
+    val originalUrl: String = "",
+    val trackNumber: Int = 1,
+    val discNumber: Int = 1,
+    val copyright: String = "",
+    val sampleRate: Int = 0,
+    val bitsPerSample: Int = 0,
+    val bitRate: Long = 0,
+    val coverHash: String? = null,
 )

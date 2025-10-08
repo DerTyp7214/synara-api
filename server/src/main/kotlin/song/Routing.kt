@@ -1,5 +1,6 @@
 package dev.dertyp.song
 
+import dev.dertyp.Indexer
 import dev.dertyp.core.toUUIDOrNull
 import dev.dertyp.data.InsertableSong
 import dev.dertyp.data.Song
@@ -11,8 +12,17 @@ import io.ktor.http.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import io.ktor.server.sse.*
 
 fun Routing.song(service: SongService) {
+    sse("/buildIndex") {
+        val indexer = Indexer(service)
+
+        indexer.start { stdout ->
+            send(stdout)
+        }
+    }
+
     route("/song") {
         get("/byId/{id}", {
             request {

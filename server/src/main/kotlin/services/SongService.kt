@@ -2,24 +2,25 @@ package dev.dertyp.services
 
 import dev.dertyp.data.InsertableSong
 import dev.dertyp.data.Song
-import dev.dertyp.db.AlbumTable
-import dev.dertyp.db.ArtistTable
-import dev.dertyp.db.SongArtistTable
-import dev.dertyp.db.SongTable
+import dev.dertyp.db.*
 import dev.dertyp.dbQuery
 import dev.dertyp.getDateFromISO
 import dev.dertyp.getISOFromDate
 import dev.dertyp.services.AlbumService.Companion.mapAlbum
 import dev.dertyp.services.ArtistService.Companion.mapArtist
+import io.ktor.util.logging.*
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.util.*
 
 class SongService(database: Database) {
+    private val logger = KtorSimpleLogger("getOrCreateSong")
+
     init {
         transaction(database) {
             SchemaUtils.create(SongTable)
             SchemaUtils.create(SongArtistTable)
+            SchemaUtils.create(ImageTable)
         }
     }
 
@@ -46,7 +47,14 @@ class SongService(database: Database) {
                 duration = resultRow[SongTable.duration],
                 releaseDate = getDateFromISO(resultRow[SongTable.releaseDate]),
                 lyrics = resultRow[SongTable.lyrics],
-                path = resultRow[SongTable.filePath]
+                path = resultRow[SongTable.filePath],
+                originalUrl = resultRow[SongTable.originalUrl],
+                trackNumber = resultRow[SongTable.trackNumber],
+                discNumber = resultRow[SongTable.discNumber],
+                copyright = resultRow[SongTable.copyright],
+                sampleRate = resultRow[SongTable.sampleRate],
+                bitsPerSample = resultRow[SongTable.bitsPerSample],
+                bitRate = resultRow[SongTable.bitRate],
             )
         }
     }
@@ -113,14 +121,15 @@ class SongService(database: Database) {
                 .join(
                     ArtistTable,
                     JoinType.INNER,
-                    additionalConstraint = {
-                        (ArtistTable.id eq SongArtistTable.artistId) and
-                                (ArtistTable.name inList song.artists)
-                    }
+                    additionalConstraint = { ArtistTable.id eq SongArtistTable.artistId }
                 )
                 .select(SongTable.columns)
                 .withDistinct()
                 .where { SongTable.title eq song.title }
+                .andWhere { SongTable.discNumber eq song.discNumber }
+                .andWhere { SongTable.trackNumber eq song.trackNumber }
+                .andWhere { AlbumTable.name eq song.album.name }
+                .andWhere { ArtistTable.name inList song.artists }
                 .map { map(it) }
         }
         if (songs.isNotEmpty()) return songs.singleOrNull()
@@ -130,7 +139,10 @@ class SongService(database: Database) {
         }
 
         val albumId = AlbumService.instance?.getOrCreate(song.album)
-        if (albumId == null) return null
+        if (albumId == null) {
+            logger.info("AlbumId is null $song")
+            return null
+        }
 
         val songId = dbQuery {
             SongTable.insertAndGetId {
@@ -140,6 +152,13 @@ class SongService(database: Database) {
                 it[SongTable.releaseDate] = getISOFromDate(song.releaseDate)
                 it[SongTable.lyrics] = song.lyrics
                 it[SongTable.filePath] = song.path
+                it[SongTable.originalUrl] = song.originalUrl
+                it[SongTable.trackNumber] = song.trackNumber
+                it[SongTable.discNumber] = song.discNumber
+                it[SongTable.copyright] = song.copyright
+                it[SongTable.sampleRate] = song.sampleRate
+                it[SongTable.bitsPerSample] = song.bitsPerSample
+                it[SongTable.bitRate] = song.bitRate
             }
         }
 

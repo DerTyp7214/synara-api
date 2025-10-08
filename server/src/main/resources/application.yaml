@@ -10,3 +10,7 @@ jwt:
   realm: "synara api"
 sqlite:
   path: "./data.db"
+audio:
+  tracks: "/home/typ/Music/Tidal/Tracks/"
+  albums: "/home/typ/Music/Tidal/Albums/"
+  playlists: "/home/typ/Music/Tidal/Playlists/"
