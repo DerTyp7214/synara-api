@@ -20,15 +20,26 @@ class ArtistService(database: Database) {
         var instance: ArtistService? = null
             private set
 
-        fun mapArtist(resultRow: ResultRow): Artist {
-            return Artist(
-                id = resultRow[ArtistTable.id].value,
-                name = resultRow[ArtistTable.name],
-                isGroup = resultRow[ArtistTable.isGroup],
-                artists = listOf(),
-                about = resultRow[ArtistTable.about],
-                imageId = resultRow[ArtistTable.image]?.value,
-            )
+        fun mapArtist(resultRow: ResultRow, table: ColumnSet = ArtistTable): Artist {
+            if (table is Alias<*>) {
+                return Artist(
+                    id = resultRow[table[ArtistTable.id]].value,
+                    name = resultRow[table[ArtistTable.name]],
+                    isGroup = resultRow[table[ArtistTable.isGroup]],
+                    artists = listOf(),
+                    about = resultRow[table[ArtistTable.about]],
+                    imageId = resultRow[table[ArtistTable.image]]?.value,
+                )
+            } else {
+                return Artist(
+                    id = resultRow[ArtistTable.id].value,
+                    name = resultRow[ArtistTable.name],
+                    isGroup = resultRow[ArtistTable.isGroup],
+                    artists = listOf(),
+                    about = resultRow[ArtistTable.about],
+                    imageId = resultRow[ArtistTable.image]?.value,
+                )
+            }
         }
     }
 

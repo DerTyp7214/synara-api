@@ -1,8 +1,8 @@
 package dev.dertyp.services
 
 import dev.dertyp.data.Album
+import dev.dertyp.data.Artist
 import dev.dertyp.data.InsertableAlbum
-import dev.dertyp.data.Song
 import dev.dertyp.db.AlbumArtistTable
 import dev.dertyp.db.AlbumTable
 import dev.dertyp.db.ArtistTable
@@ -16,6 +16,9 @@ import org.jetbrains.exposed.sql.transactions.transaction
 import java.util.*
 
 class AlbumService(database: Database) {
+
+    val albumArtistAlias = ArtistTable.alias("album_artist_alias")
+
     init {
         transaction(database) {
             SchemaUtils.create(AlbumTable)
@@ -29,63 +32,107 @@ class AlbumService(database: Database) {
         var instance: AlbumService? = null
             private set
 
-        suspend fun mapAlbum(resultRow: ResultRow): Album {
+        fun mapAlbum(resultRow: ResultRow): Album {
             val id = resultRow[AlbumTable.id].value
-            val songs = dbQuery {
-                SongTable
-                    .select(SongTable.duration)
-                    .where {
-                        SongTable.albumId eq id
-                    }
-                    .map { it[SongTable.duration] }
-            }
 
             return Album(
                 id = id,
                 name = resultRow[AlbumTable.name],
                 releaseDate = getDateFromISO(resultRow[AlbumTable.releaseDate]),
-                artists = dbQuery {
-                    ArtistTable
-                        .innerJoin(AlbumArtistTable)
-                        .selectAll().where { AlbumArtistTable.albumId eq id }
-                        .map { mapArtist(it) }
-                },
-                songCount = songs.size,
-                totalDuration = songs.fold(0) { sum, song -> sum + song },
+                artists = listOf(),
+                songCount = resultRow[AlbumTable.songCount],
+                totalDuration = -1,
                 coverId = resultRow[AlbumTable.cover]?.value
             )
         }
+
+        suspend fun calculateAlbumDurations(albumIds: List<UUID>): Map<UUID, Long> = dbQuery {
+            SongTable
+                .select(SongTable.albumId, SongTable.duration.sum())
+                .where { SongTable.albumId inList albumIds }
+                .groupBy(SongTable.albumId)
+                .associate { row ->
+                    row[SongTable.albumId].value to (row[SongTable.duration.sum()] ?: -1L)
+                }
+        }
     }
 
-    suspend fun map(resultRow: ResultRow): Album = mapAlbum(resultRow)
+    fun map(resultRow: ResultRow): Album = mapAlbum(resultRow)
 
-    suspend fun byId(id: UUID): Album? = dbQuery {
-        AlbumTable
-            .selectAll()
-            .where { AlbumTable.id eq id }
-            .map { map(it) }.singleOrNull()
+    suspend fun byId(id: UUID): Album? = queryAlbums {
+        where { AlbumTable.id eq id }
+    }.singleOrNull()
+
+    suspend fun byName(name: String): List<Album> = queryAlbums {
+        where { AlbumTable.name eq name }
     }
 
-    suspend fun byName(name: String): List<Album> = dbQuery {
-        AlbumTable
-            .selectAll()
-            .where { AlbumTable.name eq name }
-            .map { map(it) }
+    suspend fun searchByName(name: String): List<Album> = queryAlbums {
+        where { AlbumTable.name like "%$name%" }
     }
 
-    suspend fun searchByName(name: String): List<Album> = dbQuery {
-        AlbumTable
-            .selectAll()
-            .where { AlbumTable.name like "%$name%" }
-            .map { map(it) }
+    suspend fun byArtist(artistId: UUID): List<Album> = queryAlbums {
+        where { AlbumArtistTable.artistId eq artistId }
     }
 
-    suspend fun byArtist(artistId: UUID): List<Song> = dbQuery {
-        listOf()
+    suspend fun allAlbums(): List<Album> = queryAlbums()
+
+    private suspend fun queryAlbums(query: Query.() -> Query = { this }) = dbQuery {
+        val rows = AlbumTable
+            .leftJoin(AlbumArtistTable, onColumn = { id }, otherColumn = { AlbumArtistTable.albumId })
+            .leftJoin(
+                albumArtistAlias,
+                onColumn = { AlbumArtistTable.artistId },
+                otherColumn = { albumArtistAlias[ArtistTable.id] }
+            )
+            .select(AlbumTable.columns + albumArtistAlias.columns)
+            .query()
+            .toList()
+
+        if (rows.isEmpty()) return@dbQuery listOf()
+
+        val albumIds = rows.map { it[AlbumTable.id].value }.distinct()
+
+        val durationsByAlbumId = if (albumIds.isNotEmpty()) {
+            calculateAlbumDurations(albumIds)
+        } else {
+            emptyMap()
+        }
+
+        mapEagerly(rows, durationsByAlbumId, albumArtistAlias)
     }
 
-    suspend fun allAlbums(): List<Album> = dbQuery {
-        AlbumTable.selectAll().map { map(it) }
+    private fun mapEagerly(
+        rows: List<ResultRow>,
+        durations: Map<UUID, Long>,
+        albumArtistAlias: Alias<ArtistTable>
+    ): List<Album> {
+        val albumMap = mutableMapOf<UUID, Album>()
+        val albumArtistsMap = mutableMapOf<UUID, MutableList<Artist>>()
+
+        for (row in rows) {
+            val albumId = row[AlbumTable.id].value
+
+            albumMap.getOrPut(albumId) {
+                mapAlbum(row)
+            }
+
+            if (row.getOrNull(albumArtistAlias[ArtistTable.id]) != null) {
+                val artist = mapArtist(row, albumArtistAlias)
+                if (artist !in albumArtistsMap.getOrDefault(albumId, emptyList())) {
+                    albumArtistsMap.getOrPut(albumId) { mutableListOf() }.add(artist)
+                }
+            }
+        }
+
+        return albumMap.values.map { album ->
+            val albumArtists = albumArtistsMap[album.id]?.distinctBy { it.id } ?: listOf()
+
+            album.copy(
+                artists = albumArtists,
+                totalDuration = durations[album.id] ?: -1L
+            )
+        }
     }
 
     suspend fun getOrCreate(album: InsertableAlbum): UUID? {

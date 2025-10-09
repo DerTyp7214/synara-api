@@ -27,105 +27,159 @@ class PlaylistService(database: Database) {
             private set
 
 
-        suspend fun mapPlaylist(resultRow: ResultRow, fetchSongs: Boolean = true): Playlist {
+        fun mapPlaylist(resultRow: ResultRow): Playlist {
             val id = resultRow[PlaylistTable.id].value
             val name = resultRow[PlaylistTable.name]
             val imageId = resultRow[PlaylistTable.imageId]?.value
 
-            val songs = mutableListOf<UUID>()
-
-            if (fetchSongs) {
-                songs.addAll(
-                    dbQuery {
-                        PlaylistSongTable
-                            .select(PlaylistSongTable.songId, PlaylistSongTable.position)
-                            .where { PlaylistSongTable.playlistId eq id }
-                            .map { Pair(it[PlaylistSongTable.songId].value, it[PlaylistSongTable.position]) }
-                            .sortedBy { it.second }
-                            .map { it.first }
-                    }
-                )
-            }
-
             return Playlist(
                 id = id,
                 name = name,
-                songs = songs,
+                songs = emptyList(),
                 imageId = imageId,
             )
         }
     }
 
-    suspend fun map(resultRow: ResultRow, fetchSongs: Boolean = true): Playlist = mapPlaylist(resultRow, fetchSongs)
+    fun map(resultRow: ResultRow): Playlist = mapPlaylist(resultRow)
 
-    suspend fun byId(id: UUID): Playlist? = dbQuery {
-        PlaylistTable
-            .selectAll()
-            .where { PlaylistTable.id eq id }
-            .map { map(it) }.singleOrNull()
-    }
+    suspend fun byId(id: UUID): Playlist? = queryPlaylists {
+        where { PlaylistTable.id eq id }
+    }.singleOrNull()
 
     suspend fun byIdFull(id: UUID): Pair<String, List<PlaylistEntry>>? = dbQuery {
-        PlaylistTable
-            .selectAll()
+        val rows = PlaylistTable
+            .leftJoin(
+                PlaylistSongTable,
+                onColumn = { PlaylistTable.id },
+                otherColumn = { PlaylistSongTable.playlistId })
+            .leftJoin(
+                SongTable,
+                onColumn = { PlaylistSongTable.songId },
+                otherColumn = { SongTable.id }
+            )
+            .select(
+                PlaylistTable.name,
+                PlaylistSongTable.position,
+                PlaylistSongTable.songId,
+                SongTable.title,
+                SongTable.duration
+            )
             .where { PlaylistTable.id eq id }
-            .map { resultRow ->
-                val id = resultRow[PlaylistTable.id].value
-                val name = resultRow[PlaylistTable.name]
-                val imageId = resultRow[PlaylistTable.imageId]?.value
+            .toList()
 
-                val songs = mutableListOf<PlaylistEntry>()
+        if (rows.isEmpty()) return@dbQuery null
 
-                songs.addAll(
-                    dbQuery {
-                        PlaylistSongTable
-                            .join(
-                                SongTable,
-                                JoinType.INNER,
-                                additionalConstraint = { SongTable.id eq PlaylistSongTable.songId }
-                            )
-                            .select(
-                                PlaylistSongTable.position,
-                                PlaylistSongTable.songId,
-                                SongTable.title,
-                                SongTable.duration
-                            )
-                            .where { PlaylistSongTable.playlistId eq id }
-                            .map {
-                                Pair(
-                                    it[PlaylistSongTable.position], PlaylistEntry(
-                                        id = it[PlaylistSongTable.songId].value,
-                                        name = it[SongTable.title],
-                                        duration = it[SongTable.duration]
-                                    )
-                                )
-                            }
-                            .sortedBy { it.first }
-                            .map { it.second }
-                    }
-                )
-
-                Pair(name, songs)
-            }.singleOrNull()
+        mapFullEagerly(rows)
     }
 
-    suspend fun byName(name: String): Playlist? = dbQuery {
-        PlaylistTable
-            .selectAll()
-            .where { PlaylistTable.name eq name }
-            .map { map(it) }
-            .singleOrNull()
+    suspend fun byName(name: String): Playlist? = queryPlaylists {
+        where { PlaylistTable.name eq name }
+    }.singleOrNull()
+
+    suspend fun searchByName(name: String): List<Playlist> = queryPlaylists {
+        where { PlaylistTable.name like "%$name%" }
     }
 
-    suspend fun searchByName(name: String): List<Playlist> = dbQuery {
-        PlaylistTable
-            .selectAll()
-            .where { PlaylistTable.name like "%$name%" }
-            .map { map(it, false) }
-    }
+    suspend fun allPlaylists(): List<Playlist> = queryPlaylists()
 
     suspend fun delete(id: UUID): Boolean = dbQuery {
         PlaylistTable.deleteWhere() { PlaylistTable.id eq id } == 1
+    }
+
+    private suspend fun queryPlaylists(query: Query.() -> Query = { this }) = dbQuery {
+        val mainPlaylistRows = PlaylistTable
+            .selectAll()
+            .query()
+            .toList()
+
+        if (mainPlaylistRows.isEmpty()) return@dbQuery listOf()
+
+        val playlistIds = mainPlaylistRows.map { it[PlaylistTable.id].value }
+
+        val songLinkRows = PlaylistSongTable
+            .select(PlaylistSongTable.playlistId, PlaylistSongTable.songId, PlaylistSongTable.position)
+            .where { PlaylistSongTable.playlistId inList playlistIds }
+            .toList()
+
+        val songIds = songLinkRows.map { it[PlaylistSongTable.songId].value }.distinct()
+
+        val songDurationsById = if (songIds.isNotEmpty()) {
+            getSongDurations(songIds)
+        } else {
+            emptyMap()
+        }
+
+        mapEagerly(mainPlaylistRows, songLinkRows, songDurationsById)
+    }
+
+    private suspend fun getSongDurations(songIds: List<UUID>): Map<UUID, Long> = dbQuery {
+        SongTable
+            .select(SongTable.id, SongTable.duration)
+            .where { SongTable.id inList songIds }
+            .associate { row ->
+                row[SongTable.id].value to row[SongTable.duration]
+            }
+    }
+
+    private fun mapEagerly(
+        mainRows: List<ResultRow>,
+        songLinkRows: List<ResultRow>,
+        songDurationsById: Map<UUID, Long>
+    ): List<Playlist> {
+        val songsByPlaylistId = songLinkRows
+            .map { row ->
+                row[PlaylistSongTable.playlistId].value to
+                        Pair(row[PlaylistSongTable.songId].value, row[PlaylistSongTable.position])
+            }
+            .groupBy({ it.first }, { it.second })
+
+        return mainRows.map { playlistRow ->
+            val playlist = map(playlistRow)
+            val links = songsByPlaylistId[playlist.id] ?: listOf()
+
+            val totalDuration = links
+                .sumOf { (songId, _) ->
+                    songDurationsById[songId] ?: 0L
+                }.takeIf { it > 0L } ?: -1L
+
+            val songs = songsByPlaylistId[playlist.id]
+                ?.sortedBy { it.second }
+                ?.map { it.first }
+                ?: listOf()
+
+            playlist.copy(
+                songs = songs,
+                totalDuration = totalDuration,
+            )
+        }
+    }
+
+    private fun mapFullEagerly(rows: List<ResultRow>): Pair<String, List<PlaylistEntry>> {
+        val playlistName = rows.first()[PlaylistTable.name]
+
+        val songEntriesWithPosition = rows
+            .mapNotNull { row ->
+                val songId = row.getOrNull(PlaylistSongTable.songId)?.value
+                if (songId == null) {
+                    return@mapNotNull null
+                }
+
+                Pair(
+                    row[PlaylistSongTable.position],
+                    PlaylistEntry(
+                        id = songId,
+                        name = row[SongTable.title],
+                        duration = row[SongTable.duration]
+                    )
+                )
+            }
+
+        val sortedEntries = songEntriesWithPosition
+            .sortedBy { it.first }
+            .map { it.second }
+
+        return Pair(playlistName, sortedEntries)
     }
 
     suspend fun getOrCreate(insertablePlaylist: InsertablePlaylist): UUID? {

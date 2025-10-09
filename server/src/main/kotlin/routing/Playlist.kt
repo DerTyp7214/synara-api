@@ -12,7 +12,6 @@ import io.ktor.http.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
-import java.util.*
 
 fun Routing.playlist(service: PlaylistService) {
     route("/playlist", {
@@ -78,8 +77,18 @@ fun Routing.playlist(service: PlaylistService) {
 
             call.respond(service.searchByName(name))
         }
+        get("/list", {
+            response {
+                HttpStatusCode.OK to {
+                    description = "Lists all playlists."
+                    body<List<Playlist>>()
+                }
+            }
+        }) {
+            call.respond(service.allPlaylists())
+        }
 
-        m3u { map ->
+        m3u("/m3u/{id}") { map ->
             map["id"]?.toUUIDOrNull()?.let { service.byIdFull(it) }
         }
 

@@ -23,7 +23,7 @@ class ImageService(database: Database) {
             private set
 
 
-        suspend fun mapImage(resultRow: ResultRow): Image {
+        fun mapImage(resultRow: ResultRow): Image {
             val id = resultRow[ImageTable.id].value
             val data = resultRow[ImageTable.data]
             val imageHash = resultRow[ImageTable.imageHash]
@@ -36,21 +36,21 @@ class ImageService(database: Database) {
         }
     }
 
-    suspend fun map(resultRow: ResultRow): Image = mapImage(resultRow)
+    fun map(resultRow: ResultRow): Image = mapImage(resultRow)
 
-    suspend fun byId(id: UUID): Image? = dbQuery {
+    suspend fun byId(id: UUID): Image? = queryImages {
+        where { ImageTable.id eq id }
+    }.singleOrNull()
+
+    suspend fun byHash(hash: String): Image? = queryImages {
+        where { ImageTable.imageHash eq hash }
+    }.singleOrNull()
+
+    private suspend fun queryImages(query: Query.() -> Query = { this }) = dbQuery {
         ImageTable
             .selectAll()
-            .where { ImageTable.id eq id }
-            .map { map(it) }.singleOrNull()
-    }
-
-    suspend fun byHash(hash: String): Image? = dbQuery {
-        ImageTable
-            .selectAll()
-            .where { ImageTable.imageHash eq hash }
+            .query()
             .map { map(it) }
-            .singleOrNull()
     }
 
     suspend fun getOrCreate(insertableImage: InsertableImage): UUID? {

@@ -12,6 +12,7 @@ data class Playlist(
     val name: String,
     @Serializable(with = UUIDListSerializer::class)
     val songs: List<UUID>,
+    val totalDuration: Long = -1L,
     @Serializable(with = UUIDSerializer::class)
     val imageId: UUID? = null,
 )

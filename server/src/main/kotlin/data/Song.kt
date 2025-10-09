@@ -12,7 +12,7 @@ data class SongWithoutLyrics(
     val id: UUID,
     val title: String,
     val artists: List<Artist>,
-    val album: Album,
+    val album: Album?,
     val duration: Long,
     @Serializable(with = LocalDateSerializer::class)
     val releaseDate: LocalDate? = null,
@@ -34,7 +34,7 @@ data class Song(
     val id: UUID,
     val title: String,
     val artists: List<Artist>,
-    val album: Album,
+    val album: Album?,
     val duration: Long,
     @Serializable(with = LocalDateSerializer::class)
     val releaseDate: LocalDate? = null,
