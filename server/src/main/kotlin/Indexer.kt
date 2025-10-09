@@ -71,28 +71,20 @@ class Indexer(
 
         log("Saving covers to database.").await()
 
-        for ((_, image) in images) {
-            if (imageService.getOrCreate(image) != null) log("Saved ${image.imageHash}.").await()
-        }
+        val imageResult = imageService.createBatch(images.values.toList())
+
+        log("Saved ${imageResult.size} of ${images.size} images.").await()
 
         log("Grouping songs by albums.").await()
 
-        for ((album, songs) in albums) {
-            log("""Grouped ${songs.size} songs to "${album.name}" by ${album.artists.joinToString(", ")}.""")
+        val songResult = songService.createBatch(albums.entries.map { (album, songs) ->
+            songs.map { audioFile -> insertableSongFromFile(audioFile, album) }
+        }.flatten())
 
-            for (song in songs) {
-                val insertableSong = insertableSongFromFile(song, album)
-
-                val song = songService.getOrCreate(insertableSong)
-
-                if (song == null) log("Song creation failed for ${insertableSong.title}")
-                else successful++
-            }
-        }
+        log("Saved ${songResult.size} of ${albums.values.flatten().size} songs.").await()
 
         log("Found ${images.size} unique images.").await()
         log("Found ${albums.size} unique albums.").await()
-        log("Found ${songs.size} songs, inserted $successful to the database.").await()
 
         log("Start playlist parsing.").await()
 

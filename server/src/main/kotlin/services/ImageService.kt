@@ -53,6 +53,31 @@ class ImageService(database: Database) {
             .map { map(it) }
     }
 
+    suspend fun getCoverHashes(hashes: List<String>): Map<String, UUID> = dbQuery {
+        ImageTable
+            .select(ImageTable.id, ImageTable.imageHash)
+            .where { ImageTable.imageHash inList hashes }
+            .associate { Pair(it[ImageTable.imageHash], it[ImageTable.id].value) }
+    }
+
+    suspend fun createBatch(insertableImages: List<InsertableImage>): List<UUID> {
+        if (insertableImages.isEmpty()) return emptyList()
+
+        val imageIds = dbQuery {
+            ImageTable
+                .select(ImageTable.id, ImageTable.imageHash)
+                .where { ImageTable.imageHash inList insertableImages.map { it.imageHash } }
+                .map { it[ImageTable.imageHash] }
+        }
+
+        return dbQuery {
+            ImageTable.batchInsert(insertableImages.filter { it.imageHash !in imageIds }) {
+                this[ImageTable.data] = ExposedBlob(it.data)
+                this[ImageTable.imageHash] = it.imageHash
+            }.map { it[ImageTable.id].value }
+        }
+    }
+
     suspend fun getOrCreate(insertableImage: InsertableImage): UUID? {
         val imageId = dbQuery {
             ImageTable

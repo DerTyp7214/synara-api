@@ -38,6 +38,7 @@ dependencies {
     implementation("dev.hayden:khealth:3.0.2")
     implementation("io.ktor:ktor-server-content-negotiation")
     implementation("io.ktor:ktor-serialization-gson")
+    implementation("io.ktor:ktor-serialization-kotlinx-protobuf")
     implementation("io.ktor:ktor-server-html-builder")
     implementation("org.jetbrains.kotlinx:kotlinx-html:$kotlinx_html_version")
     implementation("io.ktor:ktor-serialization-kotlinx-json")

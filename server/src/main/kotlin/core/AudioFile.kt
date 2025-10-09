@@ -10,7 +10,7 @@ val AudioFile.artists: List<String>
     get() {
         val artists = tag.getAll(FieldKey.ARTISTS)?.filterNotNull() ?: emptyList()
         return artists.ifEmpty { tag.getAll(FieldKey.ARTIST)?.filterNotNull() ?: emptyList() }.map {
-            it.split(",", ";")
+            it.split(",", ";", " & ")
         }.flatten().map { it.trim() }
     }
 
@@ -27,7 +27,7 @@ val AudioFile.albumArtists: List<String>
     get() {
         val artists = tag.getAll(FieldKey.ALBUM_ARTISTS)?.filterNotNull() ?: emptyList()
         return artists.ifEmpty { tag.getAll(FieldKey.ALBUM_ARTIST)?.filterNotNull() ?: emptyList() }.map {
-            it.split(",", ";")
+            it.split(",", ";", " & ")
         }.flatten().map { it.trim() }
     }
 

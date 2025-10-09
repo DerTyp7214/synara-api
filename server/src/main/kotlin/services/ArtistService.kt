@@ -105,6 +105,34 @@ class ArtistService(database: Database) {
         }
     }
 
+    suspend fun getOrBulkCreate(artistNames: List<String>): Map<String, UUID> {
+        val existingRows = dbQuery {
+            ArtistTable
+                .select(ArtistTable.id, ArtistTable.name)
+                .where { ArtistTable.name inList artistNames }
+                .toList()
+        }
+
+        val existingNames = existingRows.map { it[ArtistTable.name] }.toSet()
+        val existingMap = existingRows.associate { it[ArtistTable.name] to it[ArtistTable.id].value }
+
+        val newNames = artistNames.filter { it !in existingNames }
+
+        val newRows = if (newNames.isNotEmpty()) {
+            dbQuery {
+                ArtistTable.batchInsert(newNames) { name ->
+                    this[ArtistTable.name] = name
+                }
+            }
+        } else {
+            emptyList()
+        }
+
+        val newMap = newRows.associate { it[ArtistTable.name] to it[ArtistTable.id].value }
+
+        return existingMap + newMap
+    }
+
     suspend fun getOrCreate(artistName: String): UUID? {
         val artist = byName(artistName)
         if (artist.isNotEmpty()) return artist.singleOrNull()?.id

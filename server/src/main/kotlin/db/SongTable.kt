@@ -4,12 +4,12 @@ import org.jetbrains.exposed.dao.id.UUIDTable
 import org.jetbrains.exposed.sql.ReferenceOption
 
 object SongTable : UUIDTable("song") {
-    val title = text("title")
+    val title = text("title").default("")
     val albumId = reference("albumId", AlbumTable.id, onDelete = ReferenceOption.SET_NULL)
     val duration = long("duration").default(0L)
     val releaseDate = varchar("releaseDate", 128).nullable()
     val lyrics = text("lyrics").default("")
-    val filePath = text("filePath")
+    val filePath = text("filePath").default("")
     val cover = reference("cover", ImageTable.id).nullable()
     val originalUrl = text("originalUrl").default("")
     val trackNumber = integer("trackNumber").default(1)

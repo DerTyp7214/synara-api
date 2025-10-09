@@ -2,6 +2,7 @@ package dev.dertyp.services
 
 import dev.dertyp.core.withArtistNames
 import dev.dertyp.data.Artist
+import dev.dertyp.data.InsertableAlbum
 import dev.dertyp.data.InsertableSong
 import dev.dertyp.data.Song
 import dev.dertyp.db.*
@@ -172,6 +173,133 @@ class SongService(database: Database) {
                 artists = songArtists
             )
         }
+    }
+
+    private suspend fun bulkFindExistingSongs(
+        songs: List<InsertableSong>,
+        albumIdMap: Map<InsertableAlbum, UUID>
+    ): Map<InsertableSong, UUID> = dbQuery {
+        val rows = SongTable
+            .innerJoin(AlbumTable, onColumn = { albumId }, otherColumn = { AlbumTable.id })
+            .innerJoin(SongArtistTable)
+            .innerJoin(ArtistTable, onColumn = { SongArtistTable.artistId }, otherColumn = { ArtistTable.id })
+            .select(SongTable.id, SongTable.title, SongTable.trackNumber, SongTable.discNumber, AlbumTable.name)
+            .withDistinct()
+            .where {
+                (SongTable.title inList songs.map { it.title }) and
+                        (SongTable.trackNumber inList songs.map { it.trackNumber }) and
+                        (SongTable.discNumber inList songs.map { it.discNumber })
+            }
+            .toList()
+
+        val existingSongMap = mutableMapOf<InsertableSong, UUID>()
+
+        for (song in songs) {
+            rows.firstOrNull { row ->
+                val albumName = row[AlbumTable.name]
+                val songId = row[SongTable.id].value
+
+                val metadataMatch = row[SongTable.title] == song.title &&
+                        row[SongTable.trackNumber] == song.trackNumber &&
+                        row[SongTable.discNumber] == song.discNumber &&
+                        albumName == song.album.name
+
+                if (metadataMatch) {
+                    val inputAlbumId = albumIdMap[song.album]
+                    val simpleMatch = row[SongTable.title] == song.title &&
+                            row[SongTable.trackNumber] == song.trackNumber &&
+                            row[SongTable.discNumber] == song.discNumber &&
+                            (inputAlbumId != null && songId == inputAlbumId)
+
+                    if (simpleMatch) {
+                        existingSongMap[song] = songId
+                        return@firstOrNull true
+                    }
+                }
+                return@firstOrNull false
+            }
+        }
+        return@dbQuery existingSongMap
+    }
+
+    suspend fun createBatch(songs: List<InsertableSong>): List<UUID> {
+        if (songs.isEmpty()) return emptyList()
+
+        val uniqueArtistNames = songs.flatMap { it.artists }.distinct()
+        val uniqueAlbums = songs.map { it.album }.distinctBy { it.name }
+        val uniqueCoverHashes = songs.map { it.coverHash }.distinct()
+
+        val artistIdMap: Map<String, UUID> = ArtistService.instance?.getOrBulkCreate(uniqueArtistNames) ?: emptyMap()
+        val albumIdMap: Map<InsertableAlbum, UUID> = AlbumService.instance?.getOrBulkCreate(uniqueAlbums) ?: emptyMap()
+        val imageIdMap: Map<String, UUID> =
+            ImageService.instance?.getCoverHashes(uniqueCoverHashes.filterNotNull()) ?: emptyMap()
+
+        val existingSongMap = bulkFindExistingSongs(songs, albumIdMap)
+        val existingSongIds = existingSongMap.values.toList()
+
+        val newSongs = songs.filter { it !in existingSongMap.keys }
+        if (newSongs.isEmpty()) return existingSongIds
+
+        val uniqueSongs = songs.distinctBy { song ->
+            listOf(
+                song.title,
+                song.album.name,
+                song.trackNumber,
+                song.discNumber,
+            )
+        }
+
+        val filteredSongs = uniqueSongs.filter {
+            albumIdMap[it.album] != null
+        }
+
+        val songInsertResult: List<ResultRow> = dbQuery {
+            SongTable.batchInsert(filteredSongs) { song ->
+                val albumId = albumIdMap[song.album]
+                val imageId = song.coverHash?.let { imageIdMap[it] }
+
+                this[SongTable.title] = song.title
+                this[SongTable.albumId] = albumId!!
+                this[SongTable.duration] = song.duration
+                this[SongTable.releaseDate] = getISOFromDate(song.releaseDate)
+                this[SongTable.lyrics] = song.lyrics
+                this[SongTable.filePath] = song.path
+                this[SongTable.originalUrl] = song.originalUrl
+                this[SongTable.trackNumber] = song.trackNumber
+                this[SongTable.discNumber] = song.discNumber
+                this[SongTable.copyright] = song.copyright
+                this[SongTable.sampleRate] = song.sampleRate
+                this[SongTable.bitsPerSample] = song.bitsPerSample
+                this[SongTable.bitRate] = song.bitRate
+                this[SongTable.cover] = imageId
+            }
+        }
+
+        val insertedSongs: List<Pair<UUID, InsertableSong>> =
+            songInsertResult.map { it[SongTable.id].value to filteredSongs[songInsertResult.indexOf(it)] }
+
+        val insertedSongIds = insertedSongs.map { it.first }
+
+        val songArtistLinks = insertedSongs.flatMap { (songId, songData) ->
+            songData.artists.mapNotNull { artistName ->
+                if (songData.title == "GNRFT") {
+                    logger.warn("GNRFT: $artistName (${artistIdMap[artistName]})")
+                    logger.warn("GNRFT: ${songData.path} ($songId)")
+                }
+                artistIdMap[artistName]?.let { artistId ->
+                    Triple(songId, artistId, artistName)
+                }
+            }
+        }.distinct()
+
+        dbQuery {
+            SongArtistTable.batchInsert(songArtistLinks) { (songId, artistId, _) ->
+                this[SongArtistTable.songId] = songId
+                this[SongArtistTable.artistId] = artistId
+            }
+        }
+
+        return insertedSongIds
     }
 
     suspend fun getOrCreate(song: InsertableSong): UUID? {
