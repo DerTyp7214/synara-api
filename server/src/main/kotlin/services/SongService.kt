@@ -113,7 +113,7 @@ class SongService(database: Database) {
         SongTable.selectAll().map { map(it) }
     }
 
-    suspend fun getOrCreate(song: InsertableSong): Song? {
+    suspend fun getOrCreate(song: InsertableSong): UUID? {
         val songs = dbQuery {
             SongTable
                 .join(
@@ -131,14 +131,14 @@ class SongService(database: Database) {
                     JoinType.INNER,
                     additionalConstraint = { ArtistTable.id eq SongArtistTable.artistId }
                 )
-                .select(SongTable.columns)
+                .select(SongTable.id)
                 .withDistinct()
                 .where { SongTable.title eq song.title }
                 .andWhere { SongTable.discNumber eq song.discNumber }
                 .andWhere { SongTable.trackNumber eq song.trackNumber }
                 .andWhere { AlbumTable.name eq song.album.name }
                 .andWhere { ArtistTable.name inList song.artists }
-                .map { map(it) }
+                .map { it[SongTable.id].value }
         }
         if (songs.isNotEmpty()) return songs.singleOrNull()
 
@@ -180,6 +180,6 @@ class SongService(database: Database) {
             }
         }
 
-        return byId(songId.value)
+        return songId.value
     }
 }

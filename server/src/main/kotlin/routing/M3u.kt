@@ -1,21 +1,18 @@
 package dev.dertyp.routing
 
-import dev.dertyp.core.toUUIDOrNull
 import dev.dertyp.data.PlaylistEntry
-import io.github.smiley4.ktoropenapi.config.RequestConfig
 import io.github.smiley4.ktoropenapi.get
 import io.ktor.http.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.ktor.utils.io.*
-import java.util.*
 import kotlin.time.Duration.Companion.milliseconds
 
 fun Route.m3u(
     path: String = "/m3u/{id}",
-    pathParams: RequestConfig.() -> Unit = { pathParameter<String>("id") },
-    validateId: (id: UUID?) -> Boolean = { it != null },
-    fetchData: suspend (id: UUID?) -> Pair<String, List<PlaylistEntry>>?
+    pathParams: List<Pair<String, String>> = listOf(Pair("id", "")),
+    validate: (Map<String, String?>) -> Boolean = { it.none { (_, value) -> value == null } },
+    fetchData: suspend (Map<String, String?>) -> Pair<String, List<PlaylistEntry>>?
 ) {
     get(path, {
         request {
@@ -28,7 +25,11 @@ fun Route.m3u(
             queryParameter<Boolean>("shuffle") {
                 description = "If the playlist should be shuffled."
             }
-            pathParams()
+            for ((name, desc) in pathParams) {
+                pathParameter<String>(name) {
+                    description = desc
+                }
+            }
         }
         response {
             HttpStatusCode.OK to {
@@ -41,10 +42,13 @@ fun Route.m3u(
         val extM3u = call.parameters["extM3u"].toBoolean()
         val shuffle = call.parameters["shuffle"].toBoolean()
 
-        val id = call.parameters["id"]?.toUUIDOrNull()
-        if (!validateId(id)) return@get call.respond(HttpStatusCode.BadRequest)
+        val paramMap = mutableMapOf<String, String?>()
 
-        val playlist = fetchData(id)
+        for ((name) in pathParams) paramMap[name] = call.parameters[name]
+
+        if (!validate(paramMap)) return@get call.respond(HttpStatusCode.BadRequest)
+
+        val playlist = fetchData(paramMap)
         if (playlist == null) return@get call.respond(HttpStatusCode.NotFound)
 
         val (name, entries) = playlist

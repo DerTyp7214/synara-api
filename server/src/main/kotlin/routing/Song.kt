@@ -17,6 +17,7 @@ import io.ktor.server.routing.*
 import io.ktor.util.logging.*
 import io.ktor.utils.io.*
 import io.ktor.utils.io.jvm.javaio.*
+import java.util.*
 import kotlin.io.path.Path
 import kotlin.math.min
 
@@ -82,6 +83,19 @@ fun Routing.song(service: SongService) {
             if (id == null) return@get call.respond(HttpStatusCode.BadRequest)
 
             call.respond(service.byArtist(id))
+        }
+        m3u(
+            path = "/byArtist/{artistId}/m3u",
+            pathParams = listOf(Pair("artistId", "The artist id to search all songs for.")),
+            validate = { map -> map["artistId"] != null }) { map ->
+            map["artistId"]?.toUUIDOrNull()?.let {
+                Pair(
+                    "All Songs",
+                    service.byArtist(it).map { song ->
+                        PlaylistEntry(song.id, song.title, song.duration)
+                    }
+                )
+            }
         }
         get("/byTitle/{title}", {
             request {
@@ -203,7 +217,7 @@ fun Routing.song(service: SongService) {
             call.respond(service.allSongs().map { it.omitLyrics() })
         }
 
-        m3u(path = "/m3u", pathParams = {}, validateId = { true }) { id ->
+        m3u(path = "/list/m3u", pathParams = listOf(), validate = { true }) {
             Pair(
                 "All Songs",
                 service.allSongs().map {
@@ -218,8 +232,8 @@ fun Routing.song(service: SongService) {
             }
             response {
                 HttpStatusCode.OK to {
-                    description = "The matched or inserted song."
-                    body<Song>()
+                    description = "The matched or inserted songId."
+                    body<UUID>()
                 }
             }
         }) {

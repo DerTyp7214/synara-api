@@ -6,7 +6,7 @@ import dev.dertyp.data.Playlist
 import dev.dertyp.services.PlaylistService
 import io.github.smiley4.ktoropenapi.delete
 import io.github.smiley4.ktoropenapi.get
-import io.github.smiley4.ktoropenapi.post
+import io.github.smiley4.ktoropenapi.put
 import io.github.smiley4.ktoropenapi.route
 import io.ktor.http.*
 import io.ktor.server.request.*
@@ -78,11 +78,11 @@ fun Routing.playlist(service: PlaylistService) {
             call.respond(service.searchByName(name))
         }
 
-        m3u { id ->
-            service.byIdFull(id!!)
+        m3u { map ->
+            map["id"]?.toUUIDOrNull()?.let { service.byIdFull(it) }
         }
 
-        post("/create", {
+        put("/create", {
             request {
                 body<InsertablePlaylist>()
             }
@@ -95,10 +95,10 @@ fun Routing.playlist(service: PlaylistService) {
             val insertablePlaylist = call.receive<InsertablePlaylist>()
 
             val playlistId = service.getOrCreate(insertablePlaylist)
-            if (playlistId == null) return@post call.respond(HttpStatusCode.BadRequest)
+            if (playlistId == null) return@put call.respond(HttpStatusCode.BadRequest)
 
             val playlist = service.byId(playlistId)
-            if (playlist == null) return@post call.respond(HttpStatusCode.NotFound)
+            if (playlist == null) return@put call.respond(HttpStatusCode.NotFound)
 
             call.respond(playlist)
         }
