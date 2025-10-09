@@ -1,11 +1,9 @@
 package dev.dertyp.routing
 
 import dev.dertyp.core.omitLyrics
+import dev.dertyp.core.paging
 import dev.dertyp.core.toUUIDOrNull
-import dev.dertyp.data.InsertableSong
-import dev.dertyp.data.PlaylistEntry
-import dev.dertyp.data.Song
-import dev.dertyp.data.SongWithoutLyrics
+import dev.dertyp.data.*
 import dev.dertyp.services.SongService
 import io.github.smiley4.ktoropenapi.get
 import io.github.smiley4.ktoropenapi.post
@@ -53,18 +51,22 @@ fun Routing.song(service: SongService) {
                 pathParameter<String>("albumId") {
                     description = "The album id to search all songs for."
                 }
+
+                paging()
             }
             response {
                 HttpStatusCode.OK to {
                     description = "All songs on this album."
-                    body<List<Song>>()
+                    body<PaginatedResponse<Song>>()
                 }
             }
         }) {
             val id = call.parameters["albumId"]?.toUUIDOrNull()
             if (id == null) return@get call.respond(HttpStatusCode.BadRequest)
 
-            call.respond(service.byAlbum(id))
+            val (page, pageSize) = call.paging()
+
+            call.respond(service.byAlbum(page, pageSize, id))
         }
         m3u(
             path = "/byAlbum/{albumId}/m3u",
@@ -73,7 +75,7 @@ fun Routing.song(service: SongService) {
             map["albumId"]?.toUUIDOrNull()?.let {
                 Pair(
                     "All Songs on $it",
-                    service.byAlbum(it).map { song ->
+                    service.byAlbum(0, Int.MAX_VALUE, it).data.map { song ->
                         PlaylistEntry(song.id, song.title, song.duration)
                     }
                 )
@@ -84,18 +86,22 @@ fun Routing.song(service: SongService) {
                 pathParameter<String>("artistId") {
                     description = "The artist id to search all songs for."
                 }
+
+                paging()
             }
             response {
                 HttpStatusCode.OK to {
                     description = "All songs by this artist."
-                    body<List<Song>>()
+                    body<PaginatedResponse<Song>>()
                 }
             }
         }) {
             val id = call.parameters["artistId"]?.toUUIDOrNull()
             if (id == null) return@get call.respond(HttpStatusCode.BadRequest)
 
-            call.respond(service.byArtist(id))
+            val (page, pageSize) = call.paging()
+
+            call.respond(service.byArtist(page, pageSize, id))
         }
         m3u(
             path = "/byArtist/{artistId}/m3u",
@@ -104,7 +110,7 @@ fun Routing.song(service: SongService) {
             map["artistId"]?.toUUIDOrNull()?.let {
                 Pair(
                     "All Songs by $it",
-                    service.byArtist(it).map { song ->
+                    service.byArtist(0, Int.MAX_VALUE, it).data.map { song ->
                         PlaylistEntry(song.id, song.title, song.duration)
                     }
                 )
@@ -115,36 +121,44 @@ fun Routing.song(service: SongService) {
                 pathParameter<String>("title") {
                     description = "The title to exactly match to."
                 }
+
+                paging()
             }
             response {
                 HttpStatusCode.OK to {
                     description = "All songs with exactly this title."
-                    body<List<Song>>()
+                    body<PaginatedResponse<Song>>()
                 }
             }
         }) {
             val title = call.parameters["title"]
             if (title == null) return@get call.respond(HttpStatusCode.BadRequest)
 
-            call.respond(service.byTitle(title))
+            val (page, pageSize) = call.paging()
+
+            call.respond(service.byTitle(page, pageSize, title))
         }
         get("/searchByTitle/{title}", {
             request {
                 pathParameter<String>("title") {
                     description = "The title query."
                 }
+
+                paging()
             }
             response {
                 HttpStatusCode.OK to {
                     description = "All songs including the query."
-                    body<List<Song>>()
+                    body<PaginatedResponse<Song>>()
                 }
             }
         }) {
             val title = call.parameters["title"]
             if (title == null) return@get call.respond(HttpStatusCode.BadRequest)
 
-            call.respond(service.searchByTitle(title))
+            val (page, pageSize) = call.paging()
+
+            call.respond(service.searchByTitle(page, pageSize, title))
         }
         m3u(
             path = "/searchByTitle/{title}/m3u",
@@ -153,7 +167,7 @@ fun Routing.song(service: SongService) {
             map["title"]?.let {
                 Pair(
                     "All Songs for $it",
-                    service.searchByTitle(it).map { song ->
+                    service.searchByTitle(0, Int.MAX_VALUE, it).data.map { song ->
                         PlaylistEntry(song.id, song.title, song.duration)
                     }
                 )
@@ -233,20 +247,24 @@ fun Routing.song(service: SongService) {
         }
 
         get("/list", {
+            request {
+                paging()
+            }
             response {
                 HttpStatusCode.OK to {
                     description = "List of all Songs"
-                    body<List<SongWithoutLyrics>>()
+                    body<PaginatedResponse<SongWithoutLyrics>>()
                 }
             }
         }) {
-            call.respond(service.allSongs().map { it.omitLyrics() })
+            val (page, pageSize) = call.paging()
+            call.respond(service.allSongs(page, pageSize).omitLyrics())
         }
 
         m3u(path = "/list/m3u", pathParams = listOf(), validate = { true }) {
             Pair(
                 "All Songs",
-                service.allSongs().map {
+                service.allSongs(0, Int.MAX_VALUE).data.map {
                     PlaylistEntry(it.id, it.title, it.duration)
                 }
             )
@@ -263,7 +281,7 @@ fun Routing.song(service: SongService) {
                 }
             }
         }) {
-            val song = service.getOrCreate(call.receive())
+            val song = service.createBatch(listOf(call.receive())).singleOrNull()
             if (song == null) return@post call.respond(HttpStatusCode.NotFound)
 
             call.respond(song)

@@ -1,10 +1,6 @@
 package dev.dertyp.services
 
-import dev.dertyp.core.withArtistNames
-import dev.dertyp.data.Artist
-import dev.dertyp.data.InsertableAlbum
-import dev.dertyp.data.InsertableSong
-import dev.dertyp.data.Song
+import dev.dertyp.data.*
 import dev.dertyp.db.*
 import dev.dertyp.dbQuery
 import dev.dertyp.getDateFromISO
@@ -18,7 +14,7 @@ import org.jetbrains.exposed.sql.transactions.transaction
 import java.util.*
 
 class SongService(database: Database) {
-    private val logger = KtorSimpleLogger("getOrCreateSong")
+    private val logger = KtorSimpleLogger("SongService")
 
     val albumArtistAlias = ArtistTable.alias("album_artist_alias")
 
@@ -61,32 +57,41 @@ class SongService(database: Database) {
 
     fun map(resultRow: ResultRow): Song = mapSong(resultRow)
 
-    suspend fun byId(id: UUID): Song? = querySongs {
+    suspend fun byId(id: UUID): Song? = querySingle() {
         where { SongTable.id eq id }
-    }.singleOrNull()
-
-    suspend fun byTitle(title: String): List<Song> = querySongs {
-        where { SongTable.title eq title }
     }
 
-    suspend fun searchByTitle(title: String): List<Song> = querySongs {
-        where { SongTable.title like "%$title%" }
-    }
+    suspend fun byTitle(page: Int, pageSize: Int, title: String): PaginatedResponse<Song> =
+        querySongs(page, pageSize) {
+            where { SongTable.title eq title }
+        }
 
-    suspend fun byArtist(artistId: UUID): List<Song> = querySongs {
-        where { SongArtistTable.artistId eq artistId }
-    }
+    suspend fun searchByTitle(page: Int, pageSize: Int, title: String): PaginatedResponse<Song> =
+        querySongs(page, pageSize) {
+            where { SongTable.title like "%$title%" }
+        }
 
-    suspend fun byAlbum(albumId: UUID): List<Song> = querySongs {
-        where { SongTable.albumId eq albumId }
-    }
+    suspend fun byArtist(page: Int, pageSize: Int, artistId: UUID): PaginatedResponse<Song> =
+        querySongs(page, pageSize) {
+            where { SongArtistTable.artistId eq artistId }
+        }
 
-    suspend fun allSongs(): List<Song> = querySongs()
+    suspend fun byAlbum(page: Int, pageSize: Int, albumId: UUID): PaginatedResponse<Song> =
+        querySongs(page, pageSize) {
+            where { SongTable.albumId eq albumId }
+            orderBy(SongTable.trackNumber, SortOrder.ASC)
+        }
 
-    private suspend fun querySongs(query: Query.() -> Query = { this }) = dbQuery {
+    suspend fun allSongs(page: Int, pageSize: Int): PaginatedResponse<Song> = querySongs(page, pageSize)
+
+    private suspend fun querySingle(query: Query.() -> Query) =
+        querySongs(0, Int.MAX_VALUE, query).data.singleOrNull()
+
+    private suspend fun querySongs(page: Int, pageSize: Int, query: Query.() -> Query = { this }) = dbQuery {
+        val offset = if (pageSize == Int.MAX_VALUE) 0 else 1
+
         val rows = SongTable
-            .leftJoin(AlbumTable, onColumn = { albumId }, otherColumn = { AlbumTable.id })
-
+            .leftJoin(AlbumTable, onColumn = { SongTable.albumId }, otherColumn = { AlbumTable.id })
             .leftJoin(SongArtistTable)
             .leftJoin(
                 ArtistTable,
@@ -113,7 +118,11 @@ class SongService(database: Database) {
             .query()
             .toList()
 
-        if (rows.isEmpty()) return@dbQuery listOf()
+        if (rows.isEmpty()) return@dbQuery PaginatedResponse(
+            data = listOf(),
+            page = page,
+            pageSize = pageSize,
+        )
 
         val albumIds = rows.mapNotNull { it.getOrNull(AlbumTable.id)?.value }.distinct()
 
@@ -123,7 +132,14 @@ class SongService(database: Database) {
             emptyMap()
         }
 
-        mapEagerly(rows, albumArtistAlias, durationsByAlbumId)
+        val data = mapEagerly(rows, albumArtistAlias, durationsByAlbumId)
+
+        PaginatedResponse(
+            data = data.drop(page * pageSize).take(pageSize),
+            page = page,
+            pageSize = pageSize,
+            hasNextPage = data.drop(page * pageSize).size >= pageSize + offset,
+        )
     }
 
     private fun mapEagerly(
@@ -282,10 +298,6 @@ class SongService(database: Database) {
 
         val songArtistLinks = insertedSongs.flatMap { (songId, songData) ->
             songData.artists.mapNotNull { artistName ->
-                if (songData.title == "GNRFT") {
-                    logger.warn("GNRFT: $artistName (${artistIdMap[artistName]})")
-                    logger.warn("GNRFT: ${songData.path} ($songId)")
-                }
                 artistIdMap[artistName]?.let { artistId ->
                     Triple(songId, artistId, artistName)
                 }
@@ -300,67 +312,5 @@ class SongService(database: Database) {
         }
 
         return insertedSongIds
-    }
-
-    suspend fun getOrCreate(song: InsertableSong): UUID? {
-        val songs = dbQuery {
-            SongTable
-                .innerJoin(
-                    AlbumTable,
-                    onColumn = { SongTable.albumId },
-                    otherColumn = { AlbumTable.id }
-                )
-                .select(SongTable.id)
-                .where {
-                    (SongTable.title eq song.title) and
-                            (SongTable.discNumber eq song.discNumber) and
-                            (SongTable.trackNumber eq song.trackNumber) and
-                            (AlbumTable.name eq song.album.name)
-                }
-                .withArtistNames(song.artists)
-                .withDistinct()
-                .map { it[SongTable.id].value }
-        }
-        if (songs.isNotEmpty()) return songs.singleOrNull()
-
-        val artists = song.artists.mapNotNull { artist ->
-            ArtistService.instance?.getOrCreate(artist)
-        }
-
-        val albumId = AlbumService.instance?.getOrCreate(song.album)
-        if (albumId == null) {
-            logger.info("AlbumId is null $song")
-            return null
-        }
-
-        val imageId = song.coverHash?.let { ImageService.instance?.byHash(it)?.id }
-
-        val songId = dbQuery {
-            SongTable.insertAndGetId {
-                it[SongTable.title] = song.title
-                it[SongTable.albumId] = albumId
-                it[SongTable.duration] = song.duration
-                it[SongTable.releaseDate] = getISOFromDate(song.releaseDate)
-                it[SongTable.lyrics] = song.lyrics
-                it[SongTable.filePath] = song.path
-                it[SongTable.originalUrl] = song.originalUrl
-                it[SongTable.trackNumber] = song.trackNumber
-                it[SongTable.discNumber] = song.discNumber
-                it[SongTable.copyright] = song.copyright
-                it[SongTable.sampleRate] = song.sampleRate
-                it[SongTable.bitsPerSample] = song.bitsPerSample
-                it[SongTable.bitRate] = song.bitRate
-                it[SongTable.cover] = imageId
-            }
-        }
-
-        dbQuery {
-            SongArtistTable.batchInsert(artists) { artist ->
-                this[SongArtistTable.songId] = songId
-                this[SongArtistTable.artistId] = artist
-            }
-        }
-
-        return songId.value
     }
 }

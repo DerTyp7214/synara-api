@@ -1,7 +1,9 @@
 package dev.dertyp.routing
 
+import dev.dertyp.core.paging
 import dev.dertyp.core.toUUIDOrNull
 import dev.dertyp.data.InsertablePlaylist
+import dev.dertyp.data.PaginatedResponse
 import dev.dertyp.data.Playlist
 import dev.dertyp.services.PlaylistService
 import io.github.smiley4.ktoropenapi.delete
@@ -64,20 +66,27 @@ fun Routing.playlist(service: PlaylistService) {
                 pathParameter<String>("name") {
                     description = "The playlist name."
                 }
+
+                paging()
             }
             response {
                 HttpStatusCode.OK to {
                     description = "The playlists with the name containing the query."
-                    body<Playlist>()
+                    body<PaginatedResponse<Playlist>>()
                 }
             }
         }) {
             val name = call.parameters["name"]
             if (name == null) return@get call.respond(HttpStatusCode.BadRequest)
 
-            call.respond(service.searchByName(name))
+            val (page, pageSize) = call.paging()
+
+            call.respond(service.searchByName(page, pageSize, name))
         }
         get("/list", {
+            request {
+                paging()
+            }
             response {
                 HttpStatusCode.OK to {
                     description = "Lists all playlists."
@@ -85,7 +94,8 @@ fun Routing.playlist(service: PlaylistService) {
                 }
             }
         }) {
-            call.respond(service.allPlaylists())
+            val (page, pageSize) = call.paging()
+            call.respond(service.allPlaylists(page, pageSize))
         }
 
         m3u("/m3u/{id}") { map ->
@@ -104,7 +114,7 @@ fun Routing.playlist(service: PlaylistService) {
         }) {
             val insertablePlaylist = call.receive<InsertablePlaylist>()
 
-            val playlistId = service.getOrCreate(insertablePlaylist)
+            val playlistId = service.createBatch(listOf(insertablePlaylist)).firstOrNull()
             if (playlistId == null) return@put call.respond(HttpStatusCode.BadRequest)
 
             val playlist = service.byId(playlistId)

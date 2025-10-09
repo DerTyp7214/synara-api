@@ -3,6 +3,7 @@ package dev.dertyp.services
 import dev.dertyp.data.Album
 import dev.dertyp.data.Artist
 import dev.dertyp.data.InsertableAlbum
+import dev.dertyp.data.PaginatedResponse
 import dev.dertyp.db.AlbumArtistTable
 import dev.dertyp.db.AlbumTable
 import dev.dertyp.db.ArtistTable
@@ -11,13 +12,15 @@ import dev.dertyp.dbQuery
 import dev.dertyp.getDateFromISO
 import dev.dertyp.getISOFromDate
 import dev.dertyp.services.ArtistService.Companion.mapArtist
+import io.ktor.util.logging.*
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.util.*
 
 class AlbumService(database: Database) {
+    private val logger = KtorSimpleLogger("AlbumService")
 
-    val albumArtistAlias = ArtistTable.alias("album_artist_alias")
+    val albumArtistAlias = ArtistTable.alias("albumArtistAlias")
 
     init {
         transaction(database) {
@@ -59,25 +62,31 @@ class AlbumService(database: Database) {
 
     fun map(resultRow: ResultRow): Album = mapAlbum(resultRow)
 
-    suspend fun byId(id: UUID): Album? = queryAlbums {
+    suspend fun byId(id: UUID): Album? = querySingle {
         where { AlbumTable.id eq id }
-    }.singleOrNull()
+    }
 
-    suspend fun byName(name: String): List<Album> = queryAlbums {
+    suspend fun byName(page: Int, pageSize: Int, name: String): PaginatedResponse<Album> = queryAlbums(page, pageSize) {
         where { AlbumTable.name eq name }
     }
 
-    suspend fun searchByName(name: String): List<Album> = queryAlbums {
-        where { AlbumTable.name like "%$name%" }
-    }
+    suspend fun byArtist(page: Int, pageSize: Int, artistId: UUID): PaginatedResponse<Album> =
+        queryAlbums(page, pageSize) {
+            where { AlbumArtistTable.artistId eq artistId }
+        }
 
-    suspend fun byArtist(artistId: UUID): List<Album> = queryAlbums {
-        where { AlbumArtistTable.artistId eq artistId }
-    }
+    suspend fun searchByName(page: Int, pageSize: Int, name: String): PaginatedResponse<Album> =
+        queryAlbums(page, pageSize) {
+            where { AlbumTable.name like "%$name%" }
+        }
 
-    suspend fun allAlbums(): List<Album> = queryAlbums()
+    suspend fun allAlbums(page: Int, pageSize: Int): PaginatedResponse<Album> = queryAlbums(page, pageSize)
 
-    private suspend fun queryAlbums(query: Query.() -> Query = { this }) = dbQuery {
+    private suspend fun querySingle(query: Query.() -> Query) =
+        queryAlbums(0, Int.MAX_VALUE, query).data.singleOrNull()
+
+    private suspend fun queryAlbums(page: Int, pageSize: Int, query: Query.() -> Query = { this }) = dbQuery {
+        val offset = if (pageSize == Int.MAX_VALUE) 0 else 1
         val rows = AlbumTable
             .leftJoin(AlbumArtistTable, onColumn = { id }, otherColumn = { AlbumArtistTable.albumId })
             .leftJoin(
@@ -89,7 +98,11 @@ class AlbumService(database: Database) {
             .query()
             .toList()
 
-        if (rows.isEmpty()) return@dbQuery listOf()
+        if (rows.isEmpty()) return@dbQuery PaginatedResponse(
+            data = listOf(),
+            page = page,
+            pageSize = pageSize,
+        )
 
         val albumIds = rows.map { it[AlbumTable.id].value }.distinct()
 
@@ -99,7 +112,14 @@ class AlbumService(database: Database) {
             emptyMap()
         }
 
-        mapEagerly(rows, durationsByAlbumId, albumArtistAlias)
+        val data = mapEagerly(rows, durationsByAlbumId, albumArtistAlias)
+
+        PaginatedResponse(
+            data = data.take(pageSize),
+            page = page,
+            pageSize = pageSize,
+            hasNextPage = data.size == pageSize + offset,
+        )
     }
 
     private fun mapEagerly(
@@ -138,6 +158,7 @@ class AlbumService(database: Database) {
     suspend fun getOrBulkCreate(albums: List<InsertableAlbum>): Map<InsertableAlbum, UUID> {
         if (albums.isEmpty()) return emptyMap()
 
+        val uniqueCoverHashed = albums.distinctBy { it.coverHash }.mapNotNull { it.coverHash }
         val uniqueAlbumMetadata = albums.distinctBy { Pair(it.name, it.releaseDate) }
         val uniqueAlbumNames = uniqueAlbumMetadata.map { it.name }
         val uniqueReleaseDates = uniqueAlbumMetadata.map { getISOFromDate(it.releaseDate) }
@@ -145,6 +166,8 @@ class AlbumService(database: Database) {
 
         val artistIdMap: Map<String, UUID> =
             ArtistService.instance?.getOrBulkCreate(allRequiredArtistNames) ?: emptyMap()
+        val imageMap: Map<String, UUID> =
+            ImageService.instance?.getCoverHashes(uniqueCoverHashed) ?: emptyMap()
 
         val potentialAlbumRows = dbQuery {
             AlbumTable
@@ -197,6 +220,7 @@ class AlbumService(database: Database) {
                     this[AlbumTable.name] = album.name
                     this[AlbumTable.releaseDate] = getISOFromDate(album.releaseDate)
                     this[AlbumTable.songCount] = album.songCount
+                    this[AlbumTable.cover] = imageMap[album.coverHash]
                 }
             }
         } else {
@@ -235,45 +259,6 @@ class AlbumService(database: Database) {
             val key = Pair(album.name, getISOFromDate(album.releaseDate))
             finalCombinedIdMap[key]!!
         }
-    }
-
-    suspend fun getOrCreate(album: InsertableAlbum): UUID? {
-        val artists = album.artists.mapNotNull { artist ->
-            ArtistService.instance?.getOrCreate(artist)
-        }
-
-        val albumIds = dbQuery {
-            AlbumTable
-                .innerJoin(AlbumArtistTable)
-                .innerJoin(ArtistTable)
-                .select(AlbumTable.id)
-                .withDistinct()
-                .where { AlbumTable.name eq album.name }
-                .andWhere { ArtistTable.name inList album.artists }
-                .andWhere { AlbumTable.releaseDate eq getISOFromDate(album.releaseDate) }
-                .map { it[AlbumTable.id].value }
-        }
-        if (albumIds.isNotEmpty()) return albumIds.singleOrNull()
-
-        val imageId = album.coverHash?.let { ImageService.instance?.byHash(it)?.id }
-
-        val albumId = dbQuery {
-            AlbumTable.insertAndGetId {
-                it[name] = album.name
-                it[songCount] = album.songCount
-                it[releaseDate] = getISOFromDate(album.releaseDate)
-                it[cover] = imageId
-            }
-        }
-
-        dbQuery {
-            AlbumArtistTable.batchInsert(artists) { artist ->
-                this[AlbumArtistTable.albumId] = albumId.value
-                this[AlbumArtistTable.artistId] = artist
-            }
-        }
-
-        return albumId.value
     }
 }
 

@@ -1,18 +1,23 @@
 package dev.dertyp.services
 
+import dev.dertyp.core.paging
 import dev.dertyp.data.InsertablePlaylist
+import dev.dertyp.data.PaginatedResponse
 import dev.dertyp.data.Playlist
 import dev.dertyp.data.PlaylistEntry
 import dev.dertyp.db.PlaylistSongTable
 import dev.dertyp.db.PlaylistTable
 import dev.dertyp.db.SongTable
 import dev.dertyp.dbQuery
+import io.ktor.util.logging.*
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.util.*
 
 class PlaylistService(database: Database) {
+    private val logger = KtorSimpleLogger("PlaylistService")
+
     init {
         transaction(database) {
             SchemaUtils.create(PlaylistTable)
@@ -43,9 +48,9 @@ class PlaylistService(database: Database) {
 
     fun map(resultRow: ResultRow): Playlist = mapPlaylist(resultRow)
 
-    suspend fun byId(id: UUID): Playlist? = queryPlaylists {
+    suspend fun byId(id: UUID): Playlist? = querySingle {
         where { PlaylistTable.id eq id }
-    }.singleOrNull()
+    }
 
     suspend fun byIdFull(id: UUID): Pair<String, List<PlaylistEntry>>? = dbQuery {
         val rows = PlaylistTable
@@ -73,45 +78,64 @@ class PlaylistService(database: Database) {
         mapFullEagerly(rows)
     }
 
-    suspend fun byName(name: String): Playlist? = queryPlaylists {
+    suspend fun byName(name: String): Playlist? = querySingle {
         where { PlaylistTable.name eq name }
-    }.singleOrNull()
-
-    suspend fun searchByName(name: String): List<Playlist> = queryPlaylists {
-        where { PlaylistTable.name like "%$name%" }
     }
 
-    suspend fun allPlaylists(): List<Playlist> = queryPlaylists()
+    suspend fun searchByName(page: Int, pageSize: Int, name: String): PaginatedResponse<Playlist> =
+        queryPlaylists(page, pageSize) {
+            where { PlaylistTable.name like "%$name%" }
+        }
+
+    suspend fun allPlaylists(page: Int, pageSize: Int): PaginatedResponse<Playlist> =
+        queryPlaylists(page, pageSize)
 
     suspend fun delete(id: UUID): Boolean = dbQuery {
         PlaylistTable.deleteWhere() { PlaylistTable.id eq id } == 1
     }
 
-    private suspend fun queryPlaylists(query: Query.() -> Query = { this }) = dbQuery {
-        val mainPlaylistRows = PlaylistTable
-            .selectAll()
-            .query()
-            .toList()
+    private suspend fun querySingle(query: Query.() -> Query) =
+        queryPlaylists(0, Int.MAX_VALUE, query).data.singleOrNull()
 
-        if (mainPlaylistRows.isEmpty()) return@dbQuery listOf()
+    private suspend fun queryPlaylists(page: Int, pageSize: Int, query: Query.() -> Query = { this }) =
+        dbQuery {
+            val offset = if (pageSize == Int.MAX_VALUE) 0 else 1
+            val mainPlaylistRows = PlaylistTable
+                .selectAll()
+                .query()
+                .paging(page, pageSize, offset)
+                .toList()
 
-        val playlistIds = mainPlaylistRows.map { it[PlaylistTable.id].value }
+            if (mainPlaylistRows.isEmpty()) return@dbQuery PaginatedResponse(
+                data = listOf(),
+                page = page,
+                pageSize = pageSize
+            )
 
-        val songLinkRows = PlaylistSongTable
-            .select(PlaylistSongTable.playlistId, PlaylistSongTable.songId, PlaylistSongTable.position)
-            .where { PlaylistSongTable.playlistId inList playlistIds }
-            .toList()
+            val playlistIds = mainPlaylistRows.map { it[PlaylistTable.id].value }
 
-        val songIds = songLinkRows.map { it[PlaylistSongTable.songId].value }.distinct()
+            val songLinkRows = PlaylistSongTable
+                .select(PlaylistSongTable.playlistId, PlaylistSongTable.songId, PlaylistSongTable.position)
+                .where { PlaylistSongTable.playlistId inList playlistIds }
+                .toList()
 
-        val songDurationsById = if (songIds.isNotEmpty()) {
-            getSongDurations(songIds)
-        } else {
-            emptyMap()
+            val songIds = songLinkRows.map { it[PlaylistSongTable.songId].value }.distinct()
+
+            val songDurationsById = if (songIds.isNotEmpty()) {
+                getSongDurations(songIds)
+            } else {
+                emptyMap()
+            }
+
+            val data = mapEagerly(mainPlaylistRows, songLinkRows, songDurationsById)
+
+            PaginatedResponse(
+                data = data.take(pageSize),
+                page = page,
+                pageSize = pageSize,
+                hasNextPage = data.size == pageSize + offset
+            )
         }
-
-        mapEagerly(mainPlaylistRows, songLinkRows, songDurationsById)
-    }
 
     private suspend fun getSongDurations(songIds: List<UUID>): Map<UUID, Long> = dbQuery {
         SongTable
@@ -182,37 +206,68 @@ class PlaylistService(database: Database) {
         return Pair(playlistName, sortedEntries)
     }
 
-    suspend fun getOrCreate(insertablePlaylist: InsertablePlaylist): UUID? {
-        val playlist = byName(insertablePlaylist.name)
-        if (playlist != null) return playlist.id
+    suspend fun createBatch(playlists: List<InsertablePlaylist>): List<UUID> {
+        if (playlists.isEmpty()) return emptyList()
 
-        val imageId = insertablePlaylist.imageHash?.let { ImageService.instance?.byHash(it)?.id }
+        val allUniqueImageHashes = playlists.mapNotNull { it.imageHash }.distinct()
+        val allUniqueSongPaths = playlists.flatMap { it.songPaths }.distinct()
 
-        val songs = dbQuery {
-            SongTable
-                .select(SongTable.id)
-                .where { SongTable.filePath inList insertablePlaylist.songPaths }
-                .map { it[SongTable.id].value }
+        val existingRows = dbQuery {
+            PlaylistTable
+                .select(PlaylistTable.id, PlaylistTable.name)
+                .where { PlaylistTable.name inList playlists.map { it.name } }
+                .toList()
         }
 
-        if (songs.isEmpty()) return null
+        val existingNames = existingRows.map { it[PlaylistTable.name] }.toSet()
+        val existingMap = existingRows.associate { it[PlaylistTable.name] to it[PlaylistTable.id].value }
 
-        val playlistId = dbQuery {
-            PlaylistTable.insertAndGetId {
-                it[PlaylistTable.name] = insertablePlaylist.name
-                it[PlaylistTable.imageId] = imageId
+        val newPlaylists = playlists.filter { it.name !in existingNames }
+
+        val imageIdMap: Map<String, UUID> = ImageService.instance?.getCoverHashes(allUniqueImageHashes)
+            ?: emptyMap()
+
+        val songIdByPath: Map<String, UUID> = dbQuery {
+            SongTable
+                .select(SongTable.id, SongTable.filePath)
+                .where { SongTable.filePath inList allUniqueSongPaths }
+                .associate { it[SongTable.filePath] to it[SongTable.id].value }
+        }
+
+        val playlistInsertResults: List<ResultRow> = dbQuery {
+            PlaylistTable.batchInsert(newPlaylists) { playlist ->
+                val imageId = playlist.imageHash?.let { imageIdMap[it] }
+
+                this[PlaylistTable.name] = playlist.name
+                this[PlaylistTable.imageId] = imageId
             }
-        }.value
+        }
+
+        val insertedPlaylistsWithData = playlistInsertResults
+            .map { it[PlaylistTable.id].value to newPlaylists[playlistInsertResults.indexOf(it)] }
+
+        val insertedPlaylistIds = insertedPlaylistsWithData.map { it.first }
+
+        val playlistSongLinks = insertedPlaylistsWithData.flatMap { (playlistId, playlistData) ->
+            var position = 1
+            playlistData.songPaths.mapNotNull { songPath ->
+                val songId = songIdByPath[songPath]
+
+                songId?.let {
+                    val link = Triple(playlistId, it, position++)
+                    link
+                }
+            }
+        }.distinctBy { listOf(it.first, it.second) }
 
         dbQuery {
-            var position = 1
-            PlaylistSongTable.batchInsert(songs) {
-                this[PlaylistSongTable.songId] = it
+            PlaylistSongTable.batchInsert(playlistSongLinks) { (playlistId, songId, position) ->
                 this[PlaylistSongTable.playlistId] = playlistId
-                this[PlaylistSongTable.position] = position++
+                this[PlaylistSongTable.songId] = songId
+                this[PlaylistSongTable.position] = position
             }
         }
 
-        return playlistId
+        return existingMap.values + insertedPlaylistIds
     }
 }

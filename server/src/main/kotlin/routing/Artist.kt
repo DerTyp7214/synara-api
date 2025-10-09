@@ -1,7 +1,9 @@
 package dev.dertyp.routing
 
+import dev.dertyp.core.paging
 import dev.dertyp.core.toUUIDOrNull
 import dev.dertyp.data.Artist
+import dev.dertyp.data.PaginatedResponse
 import dev.dertyp.services.ArtistService
 import io.github.smiley4.ktoropenapi.get
 import io.github.smiley4.ktoropenapi.route
@@ -41,17 +43,21 @@ fun Routing.artist(service: ArtistService) {
                 pathParameter<String>("id") {
                     description = "The group id of the artist."
                 }
+
+                paging()
             }
             response {
                 HttpStatusCode.OK to {
-                    body<List<Artist>>()
+                    body<PaginatedResponse<Artist>>()
                 }
             }
         }) {
             val id = call.parameters["id"]?.toUUIDOrNull()
             if (id == null) return@get call.respond(HttpStatusCode.BadRequest)
 
-            val artists = service.byGroup(id)
+            val (page, pageSize) = call.paging()
+
+            val artists = service.byGroup(page, pageSize, id)
             call.respond(artists)
         }
         get("/searchByName/{name}", {
@@ -59,6 +65,8 @@ fun Routing.artist(service: ArtistService) {
                 pathParameter<String>("name") {
                     description = "The name of the artist."
                 }
+
+                paging()
             }
             response {
                 HttpStatusCode.OK to {
@@ -69,18 +77,24 @@ fun Routing.artist(service: ArtistService) {
             val name = call.parameters["name"]
             if (name == null) return@get call.respond(HttpStatusCode.BadRequest)
 
-            val artists = service.searchByName(name)
+            val (page, pageSize) = call.paging()
+
+            val artists = service.searchByName(page, pageSize, name)
             call.respond(artists)
         }
 
         get("/list", {
+            request {
+                paging()
+            }
             response {
                 HttpStatusCode.OK to {
                     body<List<Artist>>()
                 }
             }
         }) {
-            val artists = service.allArtists()
+            val (page, pageSize) = call.paging()
+            val artists = service.allArtists(page, pageSize)
             call.respond(artists)
         }
     }

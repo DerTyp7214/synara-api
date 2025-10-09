@@ -1,9 +1,6 @@
 package dev.dertyp
 
-import dev.dertyp.routing.artist
-import dev.dertyp.routing.image
-import dev.dertyp.routing.playlist
-import dev.dertyp.routing.song
+import dev.dertyp.routing.*
 import dev.dertyp.services.*
 import io.ktor.server.application.*
 import io.ktor.server.routing.*
@@ -30,6 +27,7 @@ fun Application.configureDatabases() {
 
         song(songService)
         image(imageService)
+        album(albumService)
         artist(artistService)
         playlist(playlistService)
     }

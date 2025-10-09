@@ -1,5 +1,6 @@
 package dev.dertyp.routing
 
+import dev.dertyp.core.sized
 import dev.dertyp.core.toUUIDOrNull
 import dev.dertyp.services.ImageService
 import io.github.smiley4.ktoropenapi.get
@@ -7,7 +8,6 @@ import io.github.smiley4.ktoropenapi.route
 import io.ktor.http.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
-import java.util.UUID
 
 fun Routing.image(service: ImageService) {
     route("/image", {
@@ -17,6 +17,10 @@ fun Routing.image(service: ImageService) {
             request {
                 pathParameter<String>("id") {
                     description = "The image id."
+                }
+
+                queryParameter<Int>("size") {
+                    description = "The size of the image. (default: 1280)"
                 }
             }
             response {
@@ -32,7 +36,9 @@ fun Routing.image(service: ImageService) {
             val image = service.byId(id)
             if (image == null) return@get call.respond(HttpStatusCode.NotFound)
 
-            call.respondBytes(image.data, ContentType.Image.JPEG)
+            val size = call.parameters["size"]?.toIntOrNull() ?: 1280
+
+            call.respondBytes(image.sized(size), ContentType.Image.JPEG)
         }
 
         get("/byHash/{hash}", {

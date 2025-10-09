@@ -1,11 +1,19 @@
 package dev.dertyp.core
 
+import dev.dertyp.data.PaginatedResponse
 import dev.dertyp.data.Song
 import dev.dertyp.data.SongWithoutLyrics
 import dev.dertyp.db.ArtistTable
 import dev.dertyp.db.SongArtistTable
 import dev.dertyp.db.SongTable
 import org.jetbrains.exposed.sql.*
+
+fun PaginatedResponse<Song>.omitLyrics() = PaginatedResponse(
+    data = data.map { it.omitLyrics() },
+    page = page,
+    pageSize = pageSize,
+    hasNextPage = hasNextPage,
+)
 
 fun Song.omitLyrics(): SongWithoutLyrics = SongWithoutLyrics(
     id = this.id,

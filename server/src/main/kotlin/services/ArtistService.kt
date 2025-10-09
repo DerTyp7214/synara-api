@@ -1,13 +1,17 @@
 package dev.dertyp.services
 
 import dev.dertyp.data.Artist
+import dev.dertyp.data.PaginatedResponse
 import dev.dertyp.db.ArtistTable
 import dev.dertyp.dbQuery
+import io.ktor.util.logging.*
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.util.*
 
 class ArtistService(database: Database) {
+    private val logger = KtorSimpleLogger("ArtistService")
+
     init {
         transaction(database) {
             SchemaUtils.create(ArtistTable)
@@ -45,25 +49,32 @@ class ArtistService(database: Database) {
 
     fun map(resultRow: ResultRow): Artist = mapArtist(resultRow)
 
-    suspend fun byId(id: UUID): Artist? = queryArtists {
+    suspend fun byId(id: UUID): Artist? = querySingle {
         where { ArtistTable.id eq id }
-    }.singleOrNull()
-
-    suspend fun byName(name: String): List<Artist> = queryArtists {
-        where { ArtistTable.name eq name }
     }
 
-    suspend fun searchByName(name: String): List<Artist> = queryArtists {
-        where { ArtistTable.name like "%$name%" }
-    }
+    suspend fun byName(page: Int, pageSize: Int, name: String): PaginatedResponse<Artist> =
+        queryArtists(page, pageSize) {
+            where { ArtistTable.name eq name }
+        }
 
-    suspend fun byGroup(groupId: UUID): List<Artist> = queryArtists {
-        where { ArtistTable.groupId eq groupId }
-    }
+    suspend fun searchByName(page: Int, pageSize: Int, name: String): PaginatedResponse<Artist> =
+        queryArtists(page, pageSize) {
+            where { ArtistTable.name like "%$name%" }
+        }
 
-    suspend fun allArtists(): List<Artist> = queryArtists()
+    suspend fun byGroup(page: Int, pageSize: Int, groupId: UUID): PaginatedResponse<Artist> =
+        queryArtists(page, pageSize) {
+            where { ArtistTable.groupId eq groupId }
+        }
 
-    private suspend fun queryArtists(query: Query.() -> Query = { this }) = dbQuery {
+    suspend fun allArtists(page: Int, pageSize: Int): PaginatedResponse<Artist> = queryArtists(page, pageSize)
+
+    private suspend fun querySingle(query: Query.() -> Query) =
+        queryArtists(0, Int.MAX_VALUE, query).data.singleOrNull()
+
+    private suspend fun queryArtists(page: Int, pageSize: Int, query: Query.() -> Query = { this }) = dbQuery {
+        val offset = if (pageSize == Int.MAX_VALUE) 0 else 1
         val mainArtistRows = ArtistTable
             .selectAll()
             .query()
@@ -73,7 +84,14 @@ class ArtistService(database: Database) {
             .map { it[ArtistTable.id].value }
 
         if (groupIds.isEmpty()) {
-            return@dbQuery mainArtistRows.map { map(it) }
+            return@dbQuery mainArtistRows.map { map(it) }.let {
+                PaginatedResponse(
+                    data = it.take(pageSize),
+                    page = page,
+                    pageSize = pageSize,
+                    hasNextPage = it.size == pageSize + offset,
+                )
+            }
         }
 
         val memberDataRows = ArtistTable
@@ -81,7 +99,14 @@ class ArtistService(database: Database) {
             .where { ArtistTable.groupId inList groupIds }
             .toList()
 
-        mapEagerly(mainArtistRows, memberDataRows)
+        val data = mapEagerly(mainArtistRows, memberDataRows)
+
+        PaginatedResponse(
+            data = data.take(pageSize),
+            page = page,
+            pageSize = pageSize,
+            hasNextPage = data.size == pageSize + offset,
+        )
     }
 
     private fun mapEagerly(mainRows: List<ResultRow>, memberRows: List<ResultRow>): List<Artist> {
@@ -131,17 +156,6 @@ class ArtistService(database: Database) {
         val newMap = newRows.associate { it[ArtistTable.name] to it[ArtistTable.id].value }
 
         return existingMap + newMap
-    }
-
-    suspend fun getOrCreate(artistName: String): UUID? {
-        val artist = byName(artistName)
-        if (artist.isNotEmpty()) return artist.singleOrNull()?.id
-
-        return dbQuery {
-            ArtistTable.insertAndGetId {
-                it[name] = artistName
-            }
-        }.value
     }
 }
 

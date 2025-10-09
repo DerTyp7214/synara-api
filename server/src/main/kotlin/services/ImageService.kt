@@ -1,15 +1,20 @@
 package dev.dertyp.services
 
+import dev.dertyp.core.paging
 import dev.dertyp.data.Image
 import dev.dertyp.data.InsertableImage
+import dev.dertyp.data.PaginatedResponse
 import dev.dertyp.db.ImageTable
 import dev.dertyp.dbQuery
+import io.ktor.util.logging.*
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.statements.api.ExposedBlob
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.util.*
 
 class ImageService(database: Database) {
+    private val logger = KtorSimpleLogger("ImageService")
+
     init {
         transaction(database) {
             SchemaUtils.create(ImageTable)
@@ -38,26 +43,38 @@ class ImageService(database: Database) {
 
     fun map(resultRow: ResultRow): Image = mapImage(resultRow)
 
-    suspend fun byId(id: UUID): Image? = queryImages {
+    suspend fun byId(id: UUID): Image? = querySingle {
         where { ImageTable.id eq id }
-    }.singleOrNull()
+    }
 
-    suspend fun byHash(hash: String): Image? = queryImages {
+    suspend fun byHash(hash: String): Image? = querySingle {
         where { ImageTable.imageHash eq hash }
-    }.singleOrNull()
+    }
 
-    private suspend fun queryImages(query: Query.() -> Query = { this }) = dbQuery {
-        ImageTable
+    private suspend fun querySingle(query: Query.() -> Query) =
+        queryImages(0, Int.MAX_VALUE, query).data.singleOrNull()
+
+    private suspend fun queryImages(page: Int, pageSize: Int, query: Query.() -> Query = { this }) = dbQuery {
+        val offset = if (pageSize == Int.MAX_VALUE) 0 else 1
+        val data = ImageTable
             .selectAll()
             .query()
+            .paging(page, pageSize)
             .map { map(it) }
+
+        PaginatedResponse(
+            data = data.take(pageSize),
+            page = page,
+            pageSize = pageSize,
+            hasNextPage = data.size == pageSize + offset,
+        )
     }
 
     suspend fun getCoverHashes(hashes: List<String>): Map<String, UUID> = dbQuery {
         ImageTable
             .select(ImageTable.id, ImageTable.imageHash)
             .where { ImageTable.imageHash inList hashes }
-            .associate { Pair(it[ImageTable.imageHash], it[ImageTable.id].value) }
+            .associate { it[ImageTable.imageHash] to it[ImageTable.id].value }
     }
 
     suspend fun createBatch(insertableImages: List<InsertableImage>): List<UUID> {
@@ -76,22 +93,5 @@ class ImageService(database: Database) {
                 this[ImageTable.imageHash] = it.imageHash
             }.map { it[ImageTable.id].value }
         }
-    }
-
-    suspend fun getOrCreate(insertableImage: InsertableImage): UUID? {
-        val imageId = dbQuery {
-            ImageTable
-                .select(ImageTable.id)
-                .where { ImageTable.imageHash eq insertableImage.imageHash }
-                .map { it[ImageTable.id].value }
-        }
-        if (imageId.isNotEmpty()) return imageId.singleOrNull()
-
-        return dbQuery {
-            ImageTable.insertAndGetId {
-                it[ImageTable.data] = ExposedBlob(insertableImage.data)
-                it[ImageTable.imageHash] = insertableImage.imageHash
-            }
-        }.value
     }
 }

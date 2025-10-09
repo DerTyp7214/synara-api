@@ -65,8 +65,6 @@ class Indexer(
             }s)"
         ).await()
 
-        var successful = 0
-
         val (images, albums) = groupByAlbum(songs)
 
         log("Saving covers to database.").await()
@@ -107,15 +105,16 @@ class Indexer(
     }
 
     private suspend fun parsePlaylists(files: List<Path>): Int {
-        var successful = 0
-        for (file in files.filter { it.extension == playlistExtension }) {
-            val name = file.fileName.nameWithoutExtension.removePrefix("_")
-            val songs = file.readText().lines().map { file.parent.resolve(it).normalize().toString() }
+        return playlistService.createBatch(
+            files
+                .filter { it.extension == playlistExtension }
+                .map { file ->
+                    val name = file.fileName.nameWithoutExtension.removePrefix("_")
+                    val songs = file.readText().lines().map { file.parent.resolve(it).normalize().toString() }
 
-            if (playlistService.getOrCreate(InsertablePlaylist(name, songs)) != null) successful++
-        }
-
-        return successful
+                    InsertablePlaylist(name = name, songPaths = songs)
+                }
+        ).size
     }
 
     private fun groupByAlbum(files: List<Path>): Pair<Map<String, InsertableImage>, Map<InsertableAlbum, List<AudioFile>>> {
