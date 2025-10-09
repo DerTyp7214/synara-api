@@ -54,8 +54,13 @@ class ImageService(database: Database) {
     }
 
     suspend fun getOrCreate(insertableImage: InsertableImage): UUID? {
-        val image = byHash(insertableImage.imageHash)
-        if (image != null) return image.id
+        val imageId = dbQuery {
+            ImageTable
+                .select(ImageTable.id)
+                .where { ImageTable.imageHash eq insertableImage.imageHash }
+                .map { it[ImageTable.id].value }
+        }
+        if (imageId.isNotEmpty()) return imageId.singleOrNull()
 
         return dbQuery {
             ImageTable.insertAndGetId {
@@ -65,4 +70,3 @@ class ImageService(database: Database) {
         }.value
     }
 }
-

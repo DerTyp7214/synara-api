@@ -1,5 +1,6 @@
 package dev.dertyp.services
 
+import dev.dertyp.core.withArtistNames
 import dev.dertyp.data.InsertableSong
 import dev.dertyp.data.Song
 import dev.dertyp.db.AlbumTable
@@ -116,28 +117,20 @@ class SongService(database: Database) {
     suspend fun getOrCreate(song: InsertableSong): UUID? {
         val songs = dbQuery {
             SongTable
-                .join(
-                    SongArtistTable,
-                    JoinType.INNER,
-                    additionalConstraint = { SongArtistTable.songId eq SongTable.id }
-                )
-                .join(
+                .innerJoin(
                     AlbumTable,
-                    JoinType.INNER,
-                    additionalConstraint = { AlbumTable.id eq SongTable.albumId }
-                )
-                .join(
-                    ArtistTable,
-                    JoinType.INNER,
-                    additionalConstraint = { ArtistTable.id eq SongArtistTable.artistId }
+                    onColumn = { SongTable.albumId },
+                    otherColumn = { AlbumTable.id }
                 )
                 .select(SongTable.id)
+                .where {
+                    (SongTable.title eq song.title) and
+                            (SongTable.discNumber eq song.discNumber) and
+                            (SongTable.trackNumber eq song.trackNumber) and
+                            (AlbumTable.name eq song.album.name)
+                }
+                .withArtistNames(song.artists)
                 .withDistinct()
-                .where { SongTable.title eq song.title }
-                .andWhere { SongTable.discNumber eq song.discNumber }
-                .andWhere { SongTable.trackNumber eq song.trackNumber }
-                .andWhere { AlbumTable.name eq song.album.name }
-                .andWhere { ArtistTable.name inList song.artists }
                 .map { it[SongTable.id].value }
         }
         if (songs.isNotEmpty()) return songs.singleOrNull()

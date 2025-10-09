@@ -135,10 +135,11 @@ class Indexer(
                 val audioFile = AudioFileIO.read(file.toFile())
 
                 val cover = audioFile.coverImage
-                if (cover != null && !images.containsKey(cover.sha256())) images.put(
-                    cover.sha256(), InsertableImage(
+                val hash = cover?.sha256()
+                if (hash != null && !images.containsKey(hash)) images.put(
+                    hash, InsertableImage(
                         data = cover,
-                        imageHash = cover.sha256()
+                        imageHash = hash
                     )
                 )
 
@@ -159,7 +160,7 @@ class Indexer(
                     name = name,
                     artists = artists,
                     releaseDate = releaseDate,
-                    coverHash = cover?.sha256(),
+                    coverHash = hash,
                     songCount = songCount
                 )
 

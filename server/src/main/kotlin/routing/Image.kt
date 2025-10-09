@@ -7,6 +7,7 @@ import io.github.smiley4.ktoropenapi.route
 import io.ktor.http.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import java.util.UUID
 
 fun Routing.image(service: ImageService) {
     route("/image", {

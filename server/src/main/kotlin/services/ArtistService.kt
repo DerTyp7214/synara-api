@@ -20,64 +20,78 @@ class ArtistService(database: Database) {
         var instance: ArtistService? = null
             private set
 
-
-        suspend fun mapArtist(resultRow: ResultRow, mapGroup: Boolean = true): Artist {
-            val id = resultRow[ArtistTable.id].value
-            val name = resultRow[ArtistTable.name]
-            val isGroup = resultRow[ArtistTable.isGroup]
-            val about = resultRow[ArtistTable.about]
-            val imageId = resultRow[ArtistTable.image]?.value
-
-            val artists = if (isGroup && mapGroup) dbQuery {
-                ArtistTable
-                    .selectAll()
-                    .where { ArtistTable.groupId eq id }
-                    .map { mapArtist(it) }
-            } else listOf()
-
+        fun mapArtist(resultRow: ResultRow): Artist {
             return Artist(
-                id = id,
-                name = name,
-                isGroup = isGroup,
-                artists = artists,
-                about = about,
-                imageId = imageId
+                id = resultRow[ArtistTable.id].value,
+                name = resultRow[ArtistTable.name],
+                isGroup = resultRow[ArtistTable.isGroup],
+                artists = listOf(),
+                about = resultRow[ArtistTable.about],
+                imageId = resultRow[ArtistTable.image]?.value,
             )
         }
     }
 
-    suspend fun map(resultRow: ResultRow): Artist = mapArtist(resultRow)
+    fun map(resultRow: ResultRow): Artist = mapArtist(resultRow)
 
-    suspend fun byId(id: UUID): Artist? = dbQuery {
-        ArtistTable
-            .selectAll()
-            .where { ArtistTable.id eq id }
-            .map { map(it) }.singleOrNull()
+    suspend fun byId(id: UUID): Artist? = queryArtists {
+        where { ArtistTable.id eq id }
+    }.singleOrNull()
+
+    suspend fun byName(name: String): List<Artist> = queryArtists {
+        where { ArtistTable.name eq name }
     }
 
-    suspend fun byName(name: String): List<Artist> = dbQuery {
-        ArtistTable
-            .selectAll()
-            .where { ArtistTable.name eq name }
-            .map { map(it) }
+    suspend fun searchByName(name: String): List<Artist> = queryArtists {
+        where { ArtistTable.name like "%$name%" }
     }
 
-    suspend fun searchByName(name: String): List<Artist> = dbQuery {
-        ArtistTable
-            .selectAll()
-            .where { ArtistTable.name like "%$name%" }
-            .map { map(it) }
+    suspend fun byGroup(groupId: UUID): List<Artist> = queryArtists {
+        where { ArtistTable.groupId eq groupId }
     }
 
-    suspend fun byGroup(groupId: UUID): List<Artist> = dbQuery {
-        ArtistTable
+    suspend fun allArtists(): List<Artist> = queryArtists()
+
+    private suspend fun queryArtists(query: Query.() -> Query = { this }) = dbQuery {
+        val mainArtistRows = ArtistTable
             .selectAll()
-            .where { ArtistTable.groupId eq groupId }
-            .map { map(it) }
+            .query()
+            .toList()
+
+        val groupIds = mainArtistRows.filter { it[ArtistTable.isGroup] }
+            .map { it[ArtistTable.id].value }
+
+        if (groupIds.isEmpty()) {
+            return@dbQuery mainArtistRows.map { map(it) }
+        }
+
+        val memberDataRows = ArtistTable
+            .selectAll()
+            .where { ArtistTable.groupId inList groupIds }
+            .toList()
+
+        mapEagerly(mainArtistRows, memberDataRows)
     }
 
-    suspend fun allArtists(): List<Artist> = dbQuery {
-        ArtistTable.selectAll().map { map(it) }
+    private fun mapEagerly(mainRows: List<ResultRow>, memberRows: List<ResultRow>): List<Artist> {
+        val membersByGroupId = memberRows
+            .mapNotNull { row ->
+                val groupId = row[ArtistTable.groupId]?.value ?: return@mapNotNull null
+                val artist = mapArtist(row)
+                groupId to artist
+            }
+            .groupBy({ it.first }, { it.second })
+
+        return mainRows.map { mainRow ->
+            val artist = map(mainRow)
+
+            return@map if (artist.isGroup) {
+                val memberArtists = membersByGroupId[artist.id] ?: listOf()
+                artist.copy(artists = memberArtists)
+            } else {
+                artist
+            }
+        }
     }
 
     suspend fun getOrCreate(artistName: String): UUID? {

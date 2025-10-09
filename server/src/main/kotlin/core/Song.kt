@@ -2,6 +2,10 @@ package dev.dertyp.core
 
 import dev.dertyp.data.Song
 import dev.dertyp.data.SongWithoutLyrics
+import dev.dertyp.db.ArtistTable
+import dev.dertyp.db.SongArtistTable
+import dev.dertyp.db.SongTable
+import org.jetbrains.exposed.sql.*
 
 fun Song.omitLyrics(): SongWithoutLyrics = SongWithoutLyrics(
     id = this.id,
@@ -20,3 +24,19 @@ fun Song.omitLyrics(): SongWithoutLyrics = SongWithoutLyrics(
     bitRate = this.bitRate,
     coverId = this.coverId,
 )
+
+fun Query.withArtistNames(artistNames: List<String>): Query = this.andWhere {
+    exists(
+        SongArtistTable
+            .innerJoin(
+                ArtistTable,
+                onColumn = { SongArtistTable.artistId },
+                otherColumn = { ArtistTable.id },
+            )
+            .select(SongArtistTable.songId)
+            .where {
+                (SongArtistTable.songId eq SongTable.id) and
+                        (ArtistTable.name inList artistNames)
+            }
+    )
+}

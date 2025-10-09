@@ -66,6 +66,19 @@ fun Routing.song(service: SongService) {
 
             call.respond(service.byAlbum(id))
         }
+        m3u(
+            path = "/byAlbum/{albumId}/m3u",
+            pathParams = listOf(Pair("albumId", "The album id to search all songs for.")),
+            validate = { map -> map["albumId"] != null }) { map ->
+            map["albumId"]?.toUUIDOrNull()?.let {
+                Pair(
+                    "All Songs on $it",
+                    service.byAlbum(it).map { song ->
+                        PlaylistEntry(song.id, song.title, song.duration)
+                    }
+                )
+            }
+        }
         get("/byArtist/{artistId}", {
             request {
                 pathParameter<String>("artistId") {
@@ -90,7 +103,7 @@ fun Routing.song(service: SongService) {
             validate = { map -> map["artistId"] != null }) { map ->
             map["artistId"]?.toUUIDOrNull()?.let {
                 Pair(
-                    "All Songs",
+                    "All Songs by $it",
                     service.byArtist(it).map { song ->
                         PlaylistEntry(song.id, song.title, song.duration)
                     }
@@ -132,6 +145,19 @@ fun Routing.song(service: SongService) {
             if (title == null) return@get call.respond(HttpStatusCode.BadRequest)
 
             call.respond(service.searchByTitle(title))
+        }
+        m3u(
+            path = "/searchByTitle/{title}/m3u",
+            pathParams = listOf(Pair("title", "The query to search all songs for.")),
+            validate = { map -> map["title"] != null }) { map ->
+            map["title"]?.let {
+                Pair(
+                    "All Songs for $it",
+                    service.searchByTitle(it).map { song ->
+                        PlaylistEntry(song.id, song.title, song.duration)
+                    }
+                )
+            }
         }
         get("/stream/{id}", {
             request {

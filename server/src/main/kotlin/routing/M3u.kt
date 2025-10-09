@@ -15,6 +15,7 @@ fun Route.m3u(
     fetchData: suspend (Map<String, String?>) -> Pair<String, List<PlaylistEntry>>?
 ) {
     get(path, {
+        tags("m3u")
         request {
             queryParameter<Boolean>("onlyIds") {
                 description = "If only the song ids should be inside the m3u."

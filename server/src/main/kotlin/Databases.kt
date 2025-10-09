@@ -1,5 +1,6 @@
 package dev.dertyp
 
+import dev.dertyp.routing.artist
 import dev.dertyp.routing.image
 import dev.dertyp.routing.playlist
 import dev.dertyp.routing.song
@@ -29,6 +30,7 @@ fun Application.configureDatabases() {
 
         song(songService)
         image(imageService)
+        artist(artistService)
         playlist(playlistService)
     }
 }
