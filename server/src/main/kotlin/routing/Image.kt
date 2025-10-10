@@ -21,6 +21,7 @@ fun Routing.image(service: ImageService) {
 
                 queryParameter<Int>("size") {
                     description = "The size of the image. (default: 1280)"
+                    required = false
                 }
             }
             response {

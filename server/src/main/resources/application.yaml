@@ -14,3 +14,4 @@ audio:
   tracks: "/home/typ/Music/Tidal/Tracks/"
   albums: "/home/typ/Music/Tidal/Albums/"
   playlists: "/home/typ/Music/Tidal/Playlists/"
+  transcode: "/home/typ/Music/Tidal/Transcode/"

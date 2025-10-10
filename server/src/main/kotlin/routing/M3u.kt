@@ -19,12 +19,15 @@ fun Route.m3u(
         request {
             queryParameter<Boolean>("onlyIds") {
                 description = "If only the song ids should be inside the m3u."
+                required = false
             }
             queryParameter<Boolean>("extM3u") {
                 description = "If the playlist should use Extended M3U."
+                required = false
             }
             queryParameter<Boolean>("shuffle") {
                 description = "If the playlist should be shuffled."
+                required = false
             }
             for ((name, desc) in pathParams) {
                 pathParameter<String>(name) {

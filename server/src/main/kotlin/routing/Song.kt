@@ -5,6 +5,7 @@ import dev.dertyp.core.paging
 import dev.dertyp.core.toUUIDOrNull
 import dev.dertyp.data.*
 import dev.dertyp.services.SongService
+import dev.dertyp.stream
 import io.github.smiley4.ktoropenapi.get
 import io.github.smiley4.ktoropenapi.post
 import io.github.smiley4.ktoropenapi.route
@@ -13,11 +14,7 @@ import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.ktor.util.logging.*
-import io.ktor.utils.io.*
-import io.ktor.utils.io.jvm.javaio.*
 import java.util.*
-import kotlin.io.path.Path
-import kotlin.math.min
 
 fun Routing.song(service: SongService) {
     val logger = KtorSimpleLogger("song")
@@ -173,78 +170,7 @@ fun Routing.song(service: SongService) {
                 )
             }
         }
-        get("/stream/{id}", {
-            request {
-                pathParameter<String>("id") {
-                    description = "The id of the song."
-                }
-            }
-            response {
-                HttpStatusCode.OK to {
-                    description = "Full audio of the song."
-                }
-                HttpStatusCode.PartialContent to {
-                    description = "The audio stream of the song."
-                }
-            }
-        }) {
-            val id = call.parameters["id"]?.toUUIDOrNull()
-            if (id == null) return@get call.respond(HttpStatusCode.BadRequest)
-
-            val song = service.byId(id)
-            if (song == null) return@get call.respond(HttpStatusCode.NotFound)
-
-            val flacFile = Path(song.path).toFile()
-            if (!flacFile.exists()) return@get call.respond(HttpStatusCode.NotFound)
-
-            val contentType = ContentType.parse("audio/flac")
-
-            val range = call.request.ranges()?.ranges?.first()
-            val fullSize = flacFile.length()
-
-            when (range) {
-                is ContentRange.TailFrom,
-                is ContentRange.Suffix,
-                is ContentRange.Bounded -> {
-                    val start = when (range) {
-                        is ContentRange.TailFrom -> range.from.coerceIn(0 until fullSize)
-                        is ContentRange.Bounded -> range.from.coerceIn(0 until fullSize)
-                        is ContentRange.Suffix -> 0
-                    }
-                    val end = when (range) {
-                        is ContentRange.TailFrom -> fullSize
-                        is ContentRange.Bounded -> min(range.to, fullSize)
-                        is ContentRange.Suffix -> min(range.lastCount, fullSize)
-                    }
-                    val chunkSize = end - start
-
-                    if (chunkSize <= 0) return@get call.respond(HttpStatusCode.RequestedRangeNotSatisfiable)
-
-                    call.response.header(HttpHeaders.AcceptRanges, "bytes")
-                    call.response.header(HttpHeaders.ContentRange, "bytes ${start}-${end}/${fullSize}")
-                    call.response.header(HttpHeaders.ContentLength, chunkSize.toString())
-                    call.response.header(
-                        HttpHeaders.ContentDisposition,
-                        ContentDisposition.Inline.withParameter(ContentDisposition.Parameters.FileName, flacFile.name)
-                            .toString()
-                    )
-
-                    call.respondBytesWriter(contentType, HttpStatusCode.PartialContent) {
-                        flacFile.inputStream().use { inputStream ->
-                            inputStream.skip(start)
-                            writeFully(inputStream.readNBytes(chunkSize.toInt()))
-                        }
-                    }
-
-                }
-
-                else -> {
-                    call.respondBytesWriter(contentType) {
-                        flacFile.inputStream().transferTo(toOutputStream())
-                    }
-                }
-            }
-        }
+        stream(service)
 
         get("/list", {
             request {
