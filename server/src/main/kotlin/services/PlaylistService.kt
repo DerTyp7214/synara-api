@@ -13,6 +13,7 @@ import dev.dertyp.dbQuery
 import io.ktor.util.logging.*
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.util.*
 
@@ -227,7 +228,13 @@ class PlaylistService(database: Database) {
         val existingNames = existingRows.map { it[PlaylistTable.name] }.toSet()
         val existingMap = existingRows.associate { it[PlaylistTable.name] to it[PlaylistTable.id].value }
 
-        val newPlaylists = playlists.filter { it.name !in existingNames }
+        val existingPlaylists = playlists.filter { it.name in existingNames }.mapNotNull { existingMap[it.name] }
+
+        dbQuery {
+            PlaylistTable.deleteWhere {
+                PlaylistTable.id inList existingPlaylists
+            }
+        }
 
         val imageIdMap: Map<String, UUID> = ImageService.instance?.getCoverHashes(allUniqueImageHashes)
             ?: emptyMap()
@@ -240,7 +247,7 @@ class PlaylistService(database: Database) {
         }
 
         val playlistInsertResults: List<ResultRow> = dbQuery {
-            PlaylistTable.batchInsert(newPlaylists) { playlist ->
+            PlaylistTable.batchInsert(playlists) { playlist ->
                 val imageId = playlist.imageHash?.let { imageIdMap[it] }
 
                 this[PlaylistTable.name] = playlist.name
@@ -249,7 +256,7 @@ class PlaylistService(database: Database) {
         }
 
         val insertedPlaylistsWithData = playlistInsertResults
-            .map { it[PlaylistTable.id].value to newPlaylists[playlistInsertResults.indexOf(it)] }
+            .map { it[PlaylistTable.id].value to playlists[playlistInsertResults.indexOf(it)] }
 
         val insertedPlaylistIds = insertedPlaylistsWithData.map { it.first }
 
