@@ -54,7 +54,7 @@ fun Routing.song(service: SongService) {
             response {
                 HttpStatusCode.OK to {
                     description = "All songs on this album."
-                    body<PaginatedResponse<Song>>()
+                    body<PaginatedResponse<SongWithoutLyrics>>()
                 }
             }
         }) {
@@ -63,7 +63,7 @@ fun Routing.song(service: SongService) {
 
             val (page, pageSize) = call.paging()
 
-            call.respond(service.byAlbum(page, pageSize, id))
+            call.respond(service.byAlbum(page, pageSize, id).omitLyrics())
         }
         m3u(
             path = "/byAlbum/{albumId}/m3u",
@@ -89,7 +89,7 @@ fun Routing.song(service: SongService) {
             response {
                 HttpStatusCode.OK to {
                     description = "All songs by this artist."
-                    body<PaginatedResponse<Song>>()
+                    body<PaginatedResponse<SongWithoutLyrics>>()
                 }
             }
         }) {
@@ -98,7 +98,7 @@ fun Routing.song(service: SongService) {
 
             val (page, pageSize) = call.paging()
 
-            call.respond(service.byArtist(page, pageSize, id))
+            call.respond(service.byArtist(page, pageSize, id).omitLyrics())
         }
         m3u(
             path = "/byArtist/{artistId}/m3u",
@@ -124,7 +124,7 @@ fun Routing.song(service: SongService) {
             response {
                 HttpStatusCode.OK to {
                     description = "All songs with exactly this title."
-                    body<PaginatedResponse<Song>>()
+                    body<PaginatedResponse<SongWithoutLyrics>>()
                 }
             }
         }) {
@@ -133,7 +133,7 @@ fun Routing.song(service: SongService) {
 
             val (page, pageSize) = call.paging()
 
-            call.respond(service.byTitle(page, pageSize, title))
+            call.respond(service.byTitle(page, pageSize, title).omitLyrics())
         }
         get("/searchByTitle/{title}", {
             request {
@@ -146,7 +146,7 @@ fun Routing.song(service: SongService) {
             response {
                 HttpStatusCode.OK to {
                     description = "All songs including the query."
-                    body<PaginatedResponse<Song>>()
+                    body<PaginatedResponse<SongWithoutLyrics>>()
                 }
             }
         }) {
@@ -155,7 +155,7 @@ fun Routing.song(service: SongService) {
 
             val (page, pageSize) = call.paging()
 
-            call.respond(service.searchByTitle(page, pageSize, title))
+            call.respond(service.searchByTitle(page, pageSize, title).omitLyrics())
         }
         m3u(
             path = "/searchByTitle/{title}/m3u",

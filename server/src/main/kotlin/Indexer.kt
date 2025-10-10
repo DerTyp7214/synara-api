@@ -210,6 +210,7 @@ class Indexer(
             sampleRate = sampleRate,
             bitsPerSample = bitsPerSample,
             bitRate = bitRate,
+            fileSize = audioFile.file.length(),
             coverHash = cover?.sha256()
         )
     }

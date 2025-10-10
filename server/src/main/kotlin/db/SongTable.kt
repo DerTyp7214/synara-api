@@ -18,4 +18,5 @@ object SongTable : UUIDTable("song") {
     val sampleRate = integer("sampleRate").default(0)
     val bitsPerSample = integer("bitsPerSample").default(0)
     val bitRate = long("bitRate").default(0)
+    val fileSize = long("fileSize").default(0)
 }

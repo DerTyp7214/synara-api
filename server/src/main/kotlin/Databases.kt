@@ -60,7 +60,6 @@ fun Application.configureDatabases() {
                         }
                     }
                 }
-
                 for (song in songs) {
                     songChannel.send(song)
                     ensureActive()

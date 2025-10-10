@@ -1,11 +1,12 @@
 package dev.dertyp.services
 
+import dev.dertyp.core.Quadruple
 import dev.dertyp.data.*
 import dev.dertyp.db.*
 import dev.dertyp.dbQuery
 import dev.dertyp.getDateFromISO
 import dev.dertyp.getISOFromDate
-import dev.dertyp.services.AlbumService.Companion.calculateAlbumDurations
+import dev.dertyp.services.AlbumService.Companion.calculateAlbumStats
 import dev.dertyp.services.AlbumService.Companion.mapAlbum
 import dev.dertyp.services.ArtistService.Companion.mapArtist
 import io.ktor.util.logging.*
@@ -50,6 +51,7 @@ class SongService(database: Database) {
                 sampleRate = resultRow[SongTable.sampleRate],
                 bitsPerSample = resultRow[SongTable.bitsPerSample],
                 bitRate = resultRow[SongTable.bitRate],
+                fileSize = resultRow[SongTable.fileSize],
                 coverId = resultRow[SongTable.cover]?.value,
             )
         }
@@ -126,13 +128,13 @@ class SongService(database: Database) {
 
         val albumIds = rows.mapNotNull { it.getOrNull(AlbumTable.id)?.value }.distinct()
 
-        val durationsByAlbumId = if (albumIds.isNotEmpty()) {
-            calculateAlbumDurations(albumIds)
+        val statsByAlbumId = if (albumIds.isNotEmpty()) {
+            calculateAlbumStats(albumIds)
         } else {
             emptyMap()
         }
 
-        val data = mapEagerly(rows, albumArtistAlias, durationsByAlbumId)
+        val data = mapEagerly(rows, albumArtistAlias, statsByAlbumId)
 
         PaginatedResponse(
             data = data.drop(page * pageSize).take(pageSize),
@@ -145,7 +147,7 @@ class SongService(database: Database) {
     private fun mapEagerly(
         rows: List<ResultRow>,
         albumArtistAlias: Alias<ArtistTable>,
-        durations: Map<UUID, Long>
+        albumStats: Map<UUID, Pair<Long, Long>>
     ): List<Song> {
         val songMap = mutableMapOf<UUID, Song>()
         val songArtistsMap = mutableMapOf<UUID, MutableList<Artist>>()
@@ -181,7 +183,8 @@ class SongService(database: Database) {
 
             val albumWithArtists = song.album?.copy(
                 artists = albumArtists,
-                totalDuration = durations[song.album.id] ?: -1L,
+                totalDuration = albumStats[song.album.id]?.first ?: -1L,
+                totalSize = albumStats[song.album.id]?.second ?: -1L
             )
 
             song.copy(
@@ -191,14 +194,19 @@ class SongService(database: Database) {
         }
     }
 
-    private suspend fun bulkFindExistingSongs(
-        songs: List<InsertableSong>,
-        albumIdMap: Map<InsertableAlbum, UUID>
-    ): Map<InsertableSong, UUID> = dbQuery {
+    private suspend fun bulkFindExistingSongs(songs: List<InsertableSong>): Map<InsertableSong, UUID> = dbQuery {
         val rows = SongTable
-            .innerJoin(AlbumTable, onColumn = { albumId }, otherColumn = { AlbumTable.id })
+            .innerJoin(
+                AlbumTable,
+                onColumn = { SongTable.albumId },
+                otherColumn = { AlbumTable.id }
+            )
             .innerJoin(SongArtistTable)
-            .innerJoin(ArtistTable, onColumn = { SongArtistTable.artistId }, otherColumn = { ArtistTable.id })
+            .innerJoin(
+                ArtistTable,
+                onColumn = { SongArtistTable.artistId },
+                otherColumn = { ArtistTable.id }
+            )
             .select(SongTable.id, SongTable.title, SongTable.trackNumber, SongTable.discNumber, AlbumTable.name)
             .withDistinct()
             .where {
@@ -221,16 +229,8 @@ class SongService(database: Database) {
                         albumName == song.album.name
 
                 if (metadataMatch) {
-                    val inputAlbumId = albumIdMap[song.album]
-                    val simpleMatch = row[SongTable.title] == song.title &&
-                            row[SongTable.trackNumber] == song.trackNumber &&
-                            row[SongTable.discNumber] == song.discNumber &&
-                            (inputAlbumId != null && songId == inputAlbumId)
-
-                    if (simpleMatch) {
-                        existingSongMap[song] = songId
-                        return@firstOrNull true
-                    }
+                    existingSongMap[song] = songId
+                    return@firstOrNull true
                 }
                 return@firstOrNull false
             }
@@ -242,7 +242,14 @@ class SongService(database: Database) {
         if (songs.isEmpty()) return emptyList()
 
         val uniqueArtistNames = songs.flatMap { it.artists }.distinct()
-        val uniqueAlbums = songs.map { it.album }.distinctBy { it.name }
+        val uniqueAlbums = songs.map { it.album }.distinctBy {
+            Quadruple(
+                it.name,
+                it.releaseDate,
+                it.songCount,
+                it.artists.sorted().joinToString(", ")
+            )
+        }
         val uniqueCoverHashes = songs.map { it.coverHash }.distinct()
 
         val artistIdMap: Map<String, UUID> = ArtistService.instance?.getOrBulkCreate(uniqueArtistNames) ?: emptyMap()
@@ -250,20 +257,27 @@ class SongService(database: Database) {
         val imageIdMap: Map<String, UUID> =
             ImageService.instance?.getCoverHashes(uniqueCoverHashes.filterNotNull()) ?: emptyMap()
 
-        val existingSongMap = bulkFindExistingSongs(songs, albumIdMap)
+        val existingSongMap = bulkFindExistingSongs(songs)
         val existingSongIds = existingSongMap.values.toList()
 
         val newSongs = songs.filter { it !in existingSongMap.keys }
+
         if (newSongs.isEmpty()) return existingSongIds
 
-        val uniqueSongs = songs.distinctBy { song ->
-            listOf(
-                song.title,
-                song.album.name,
-                song.trackNumber,
-                song.discNumber,
-            )
-        }
+        val uniqueSongs = newSongs
+            .groupBy { song ->
+                listOf(
+                    song.title,
+                    song.album.name,
+                    song.trackNumber,
+                    song.discNumber,
+                    song.duration,
+                )
+            }
+            .map { (_, songs) ->
+                songs.maxByOrNull { it.bitRate }
+            }
+            .filterNotNull()
 
         val filteredSongs = uniqueSongs.filter {
             albumIdMap[it.album] != null
@@ -287,6 +301,7 @@ class SongService(database: Database) {
                 this[SongTable.sampleRate] = song.sampleRate
                 this[SongTable.bitsPerSample] = song.bitsPerSample
                 this[SongTable.bitRate] = song.bitRate
+                this[SongTable.fileSize] = song.fileSize
                 this[SongTable.cover] = imageId
             }
         }

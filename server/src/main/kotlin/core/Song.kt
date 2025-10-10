@@ -1,5 +1,6 @@
 package dev.dertyp.core
 
+import dev.dertyp.data.InsertableSong
 import dev.dertyp.data.PaginatedResponse
 import dev.dertyp.data.Song
 import dev.dertyp.data.SongWithoutLyrics
@@ -30,6 +31,7 @@ fun Song.omitLyrics(): SongWithoutLyrics = SongWithoutLyrics(
     sampleRate = this.sampleRate,
     bitsPerSample = this.bitsPerSample,
     bitRate = this.bitRate,
+    fileSize = this.fileSize,
     coverId = this.coverId,
 )
 
@@ -47,4 +49,13 @@ fun Query.withArtistNames(artistNames: List<String>): Query = this.andWhere {
                         (ArtistTable.name inList artistNames)
             }
     )
+}
+
+fun InsertableSong.contentEquals(other: InsertableSong): Boolean {
+    return title == other.title &&
+            trackNumber == other.trackNumber &&
+            discNumber == other.discNumber &&
+            duration == other.duration &&
+            album.name == other.album.name &&
+            releaseDate == other.releaseDate
 }

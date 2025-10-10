@@ -1,5 +1,6 @@
 package dev.dertyp.data
 
+import dev.dertyp.core.contentEquals
 import dev.dertyp.serializers.LocalDateSerializer
 import dev.dertyp.serializers.UUIDSerializer
 import kotlinx.serialization.Serializable
@@ -24,6 +25,7 @@ data class SongWithoutLyrics(
     val sampleRate: Int = 0,
     val bitsPerSample: Int = 0,
     val bitRate: Long = 0,
+    val fileSize: Long = 0,
     @Serializable(with = UUIDSerializer::class)
     val coverId: UUID? = null,
 )
@@ -47,6 +49,7 @@ data class Song(
     val sampleRate: Int = 0,
     val bitsPerSample: Int = 0,
     val bitRate: Long = 0,
+    val fileSize: Long = 0,
     @Serializable(with = UUIDSerializer::class)
     val coverId: UUID? = null,
 )
@@ -68,5 +71,20 @@ data class InsertableSong(
     val sampleRate: Int = 0,
     val bitsPerSample: Int = 0,
     val bitRate: Long = 0,
+    val fileSize: Long = 0,
     val coverHash: String? = null,
-)
+) {
+    override fun equals(other: Any?): Boolean {
+        return if (other is InsertableSong) contentEquals(other) else false
+    }
+
+    override fun hashCode(): Int {
+        var result = trackNumber
+        result = 31 * result + title.hashCode()
+        result = 31 * result + duration.hashCode()
+        result = 31 * result + discNumber.hashCode()
+        result = 31 * result + album.name.hashCode()
+        result = 31 * result + (releaseDate?.hashCode() ?: 0)
+        return result
+    }
+}

@@ -57,6 +57,7 @@ dependencies {
     implementation("io.ktor:ktor-server-config-yaml")
     implementation("net.jthink:jaudiotagger:3.0.1")
     implementation("org.xerial:sqlite-jdbc:3.49.1.0")
+    implementation("io.ktor:ktor-server-compression:3.3.0")
     testImplementation("io.ktor:ktor-server-test-host")
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit:$kotlin_version")
 }

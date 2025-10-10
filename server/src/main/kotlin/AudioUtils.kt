@@ -218,11 +218,6 @@ fun Route.stream(service: SongService) {
                     serveFile.inputStream().use { inputStream ->
                         inputStream.skip(start)
                         writeFully(inputStream.readNBytes(chunkSize.toInt()))
-
-                        /*if (targetKbps > 0) {
-                            val deleted = serveFile.delete()
-                            AudioUtils.logger.info("Partial Content Cleanup: File ${serveFile.name} delete attempt. Success: $deleted")
-                        }*/
                     }
                 }
 
@@ -231,11 +226,6 @@ fun Route.stream(service: SongService) {
             else -> {
                 call.respondBytesWriter(contentType) {
                     serveFile.inputStream().transferTo(toOutputStream())
-
-                    /*if (targetKbps > 0) {
-                        val deleted = serveFile.delete()
-                        AudioUtils.logger.info("Partial Content Cleanup: File ${serveFile.name} delete attempt. Success: $deleted")
-                    }*/
                 }
             }
         }
