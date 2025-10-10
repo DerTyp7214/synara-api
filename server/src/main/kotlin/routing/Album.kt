@@ -79,27 +79,27 @@ fun Routing.album(service: AlbumService) {
 
             call.respond(service.byArtist(page, pageSize, artistId))
         }
-        get("/searchByName/{name}", {
+        get("/search/{query}", {
             request {
-                pathParameter<String>("name") {
-                    description = "The name to search for albums."
+                pathParameter<String>("query") {
+                    description = "The query to search for albums."
                 }
 
                 paging()
             }
             response {
                 HttpStatusCode.OK to {
-                    description = "The albums matching the name."
+                    description = "The albums matching the query."
                     body<Album>()
                 }
             }
         }) {
-            val name = call.parameters["name"]
-            if (name == null) return@get call.respond(HttpStatusCode.BadRequest)
+            val query = call.parameters["query"]
+            if (query == null) return@get call.respond(HttpStatusCode.BadRequest)
 
             val (page, pageSize) = call.paging()
 
-            call.respond(service.searchByName(page, pageSize, name))
+            call.respond(service.rankedSearch(page, pageSize, query))
         }
         get("/list", {
             request {

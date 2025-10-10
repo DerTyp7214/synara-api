@@ -60,10 +60,10 @@ fun Routing.artist(service: ArtistService) {
             val artists = service.byGroup(page, pageSize, id)
             call.respond(artists)
         }
-        get("/searchByName/{name}", {
+        get("/search/{query}", {
             request {
-                pathParameter<String>("name") {
-                    description = "The name of the artist."
+                pathParameter<String>("query") {
+                    description = "The query of the artist."
                 }
 
                 paging()
@@ -74,12 +74,12 @@ fun Routing.artist(service: ArtistService) {
                 }
             }
         }) {
-            val name = call.parameters["name"]
-            if (name == null) return@get call.respond(HttpStatusCode.BadRequest)
+            val query = call.parameters["query"]
+            if (query == null) return@get call.respond(HttpStatusCode.BadRequest)
 
             val (page, pageSize) = call.paging()
 
-            val artists = service.searchByName(page, pageSize, name)
+            val artists = service.rankedSearch(page, pageSize, query)
             call.respond(artists)
         }
 

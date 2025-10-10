@@ -1,6 +1,7 @@
 package dev.dertyp.services
 
 import dev.dertyp.core.Quadruple
+import dev.dertyp.core.rankedSearchQuery
 import dev.dertyp.data.*
 import dev.dertyp.db.*
 import dev.dertyp.dbQuery
@@ -68,11 +69,6 @@ class SongService(database: Database) {
             where { SongTable.title eq title }
         }
 
-    suspend fun searchByTitle(page: Int, pageSize: Int, title: String): PaginatedResponse<Song> =
-        querySongs(page, pageSize) {
-            where { SongTable.title like "%$title%" }
-        }
-
     suspend fun byArtist(page: Int, pageSize: Int, artistId: UUID): PaginatedResponse<Song> =
         querySongs(page, pageSize) {
             where { SongArtistTable.artistId eq artistId }
@@ -84,16 +80,33 @@ class SongService(database: Database) {
             orderBy(SongTable.trackNumber, SortOrder.ASC)
         }
 
+    suspend fun rankedSearch(page: Int, pageSize: Int, query: String): PaginatedResponse<Song> =
+        querySongs(page, pageSize) {
+            rankedSearchQuery(
+                query,
+                listOf(10, 5, 5),
+                listOf(SongTable.title, ArtistTable.name, AlbumTable.name)
+            )
+        }
+
     suspend fun allSongs(page: Int, pageSize: Int): PaginatedResponse<Song> = querySongs(page, pageSize)
 
     private suspend fun querySingle(query: Query.() -> Query) =
         querySongs(0, Int.MAX_VALUE, query).data.singleOrNull()
 
-    private suspend fun querySongs(page: Int, pageSize: Int, query: Query.() -> Query = { this }) = dbQuery {
+    private suspend fun querySongs(
+        page: Int,
+        pageSize: Int,
+        query: Query.() -> Query = { this }
+    ) = dbQuery {
         val offset = if (pageSize == Int.MAX_VALUE) 0 else 1
 
         val rows = SongTable
-            .leftJoin(AlbumTable, onColumn = { SongTable.albumId }, otherColumn = { AlbumTable.id })
+            .leftJoin(
+                AlbumTable,
+                onColumn = { SongTable.albumId },
+                otherColumn = { AlbumTable.id }
+            )
             .leftJoin(SongArtistTable)
             .leftJoin(
                 ArtistTable,

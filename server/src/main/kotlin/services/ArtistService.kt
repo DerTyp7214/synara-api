@@ -1,5 +1,6 @@
 package dev.dertyp.services
 
+import dev.dertyp.core.rankedSearchQuery
 import dev.dertyp.data.Artist
 import dev.dertyp.data.PaginatedResponse
 import dev.dertyp.db.ArtistTable
@@ -53,14 +54,13 @@ class ArtistService(database: Database) {
         where { ArtistTable.id eq id }
     }
 
-    suspend fun byName(page: Int, pageSize: Int, name: String): PaginatedResponse<Artist> =
+    suspend fun rankedSearch(page: Int, pageSize: Int, query: String): PaginatedResponse<Artist> =
         queryArtists(page, pageSize) {
-            where { ArtistTable.name eq name }
-        }
-
-    suspend fun searchByName(page: Int, pageSize: Int, name: String): PaginatedResponse<Artist> =
-        queryArtists(page, pageSize) {
-            where { ArtistTable.name like "%$name%" }
+            rankedSearchQuery(
+                query,
+                listOf(10),
+                listOf(ArtistTable.name)
+            )
         }
 
     suspend fun byGroup(page: Int, pageSize: Int, groupId: UUID): PaginatedResponse<Artist> =

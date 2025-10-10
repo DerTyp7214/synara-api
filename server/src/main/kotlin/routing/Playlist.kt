@@ -61,27 +61,27 @@ fun Routing.playlist(service: PlaylistService) {
 
             call.respond(playlist)
         }
-        get("/searchByName/{name}", {
+        get("/search/{query}", {
             request {
-                pathParameter<String>("name") {
-                    description = "The playlist name."
+                pathParameter<String>("query") {
+                    description = "The playlist query."
                 }
 
                 paging()
             }
             response {
                 HttpStatusCode.OK to {
-                    description = "The playlists with the name containing the query."
+                    description = "The playlists with the query containing the query."
                     body<PaginatedResponse<Playlist>>()
                 }
             }
         }) {
-            val name = call.parameters["name"]
-            if (name == null) return@get call.respond(HttpStatusCode.BadRequest)
+            val query = call.parameters["query"]
+            if (query == null) return@get call.respond(HttpStatusCode.BadRequest)
 
             val (page, pageSize) = call.paging()
 
-            call.respond(service.searchByName(page, pageSize, name))
+            call.respond(service.rankedSearch(page, pageSize, query))
         }
         get("/list", {
             request {

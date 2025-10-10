@@ -1,6 +1,7 @@
 package dev.dertyp.services
 
 import dev.dertyp.core.paging
+import dev.dertyp.core.rankedSearchQuery
 import dev.dertyp.data.InsertablePlaylist
 import dev.dertyp.data.PaginatedResponse
 import dev.dertyp.data.Playlist
@@ -82,9 +83,13 @@ class PlaylistService(database: Database) {
         where { PlaylistTable.name eq name }
     }
 
-    suspend fun searchByName(page: Int, pageSize: Int, name: String): PaginatedResponse<Playlist> =
+    suspend fun rankedSearch(page: Int, pageSize: Int, query: String): PaginatedResponse<Playlist> =
         queryPlaylists(page, pageSize) {
-            where { PlaylistTable.name like "%$name%" }
+            rankedSearchQuery(
+                query,
+                listOf(10),
+                listOf(PlaylistTable.name)
+            )
         }
 
     suspend fun allPlaylists(page: Int, pageSize: Int): PaginatedResponse<Playlist> =

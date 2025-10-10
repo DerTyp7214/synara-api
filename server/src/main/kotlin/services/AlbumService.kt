@@ -1,6 +1,7 @@
 package dev.dertyp.services
 
 import dev.dertyp.core.Quadruple
+import dev.dertyp.core.rankedSearchQuery
 import dev.dertyp.data.Album
 import dev.dertyp.data.Artist
 import dev.dertyp.data.InsertableAlbum
@@ -79,9 +80,13 @@ class AlbumService(database: Database) {
             where { AlbumArtistTable.artistId eq artistId }
         }
 
-    suspend fun searchByName(page: Int, pageSize: Int, name: String): PaginatedResponse<Album> =
+    suspend fun rankedSearch(page: Int, pageSize: Int, query: String): PaginatedResponse<Album> =
         queryAlbums(page, pageSize) {
-            where { AlbumTable.name like "%$name%" }
+            rankedSearchQuery(
+                query,
+                listOf(10, 5),
+                listOf(AlbumTable.name, albumArtistAlias[ArtistTable.name])
+            )
         }
 
     suspend fun allAlbums(page: Int, pageSize: Int): PaginatedResponse<Album> = queryAlbums(page, pageSize)
@@ -188,16 +193,6 @@ class AlbumService(database: Database) {
             andWhere { AlbumTable.releaseDate inList uniqueReleaseDates }
             andWhere { AlbumTable.songCount inList uniqueSongCounts }
         }.data
-        /*val potentialAlbumRows = dbQuery {
-            AlbumTable
-                .select(AlbumTable.id, AlbumTable.name, AlbumTable.releaseDate, AlbumTable.songCount)
-                .where {
-                    (AlbumTable.name inList uniqueAlbumNames) and
-                            (AlbumTable.releaseDate inList uniqueReleaseDates) and
-                            (AlbumTable.songCount inList uniqueSongCounts)
-                }
-                .toList()
-        }*/
 
         val potentialAlbumIds = potentialAlbumRows.map { it.id }.toSet()
 

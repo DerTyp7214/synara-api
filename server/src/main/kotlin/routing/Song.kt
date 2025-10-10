@@ -135,10 +135,10 @@ fun Routing.song(service: SongService) {
 
             call.respond(service.byTitle(page, pageSize, title).omitLyrics())
         }
-        get("/searchByTitle/{title}", {
+        get("/search/{query}", {
             request {
-                pathParameter<String>("title") {
-                    description = "The title query."
+                pathParameter<String>("query") {
+                    description = "The query."
                 }
 
                 paging()
@@ -150,21 +150,21 @@ fun Routing.song(service: SongService) {
                 }
             }
         }) {
-            val title = call.parameters["title"]
-            if (title == null) return@get call.respond(HttpStatusCode.BadRequest)
+            val query = call.parameters["query"]
+            if (query == null) return@get call.respond(HttpStatusCode.BadRequest)
 
             val (page, pageSize) = call.paging()
 
-            call.respond(service.searchByTitle(page, pageSize, title).omitLyrics())
+            call.respond(service.rankedSearch(page, pageSize, query).omitLyrics())
         }
         m3u(
-            path = "/searchByTitle/{title}/m3u",
-            pathParams = listOf(Pair("title", "The query to search all songs for.")),
-            validate = { map -> map["title"] != null }) { map ->
-            map["title"]?.let {
+            path = "/search/{query}/m3u",
+            pathParams = listOf(Pair("query", "The query to search all songs for.")),
+            validate = { map -> map["query"] != null }) { map ->
+            map["query"]?.let {
                 Pair(
                     "All Songs for $it",
-                    service.searchByTitle(0, Int.MAX_VALUE, it).data.map { song ->
+                    service.rankedSearch(0, Int.MAX_VALUE, it).data.map { song ->
                         PlaylistEntry(song.id, song.title, song.duration)
                     }
                 )
