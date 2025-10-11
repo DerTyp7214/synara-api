@@ -5,16 +5,14 @@ import dev.dertyp.data.Artist
 import dev.dertyp.data.PaginatedResponse
 import dev.dertyp.db.ArtistTable
 import dev.dertyp.dbQuery
-import io.ktor.util.logging.*
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.util.*
 
-class ArtistService(database: Database) {
-    private val logger = KtorSimpleLogger("ArtistService")
-
+class ArtistService(database: Database): Service() {
     init {
         transaction(database) {
+            execInBatch(listOf("PRAGMA foreign_keys = ON"))
             SchemaUtils.create(ArtistTable)
         }
 

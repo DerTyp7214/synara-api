@@ -6,17 +6,15 @@ import dev.dertyp.data.InsertableImage
 import dev.dertyp.data.PaginatedResponse
 import dev.dertyp.db.ImageTable
 import dev.dertyp.dbQuery
-import io.ktor.util.logging.*
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.statements.api.ExposedBlob
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.util.*
 
-class ImageService(database: Database) {
-    private val logger = KtorSimpleLogger("ImageService")
-
+class ImageService(database: Database): Service() {
     init {
         transaction(database) {
+            execInBatch(listOf("PRAGMA foreign_keys = ON"))
             SchemaUtils.create(ImageTable)
         }
 

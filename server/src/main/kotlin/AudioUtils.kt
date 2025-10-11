@@ -3,6 +3,9 @@ package dev.dertyp
 import dev.dertyp.AudioUtils.transcodeFlacToWebm
 import dev.dertyp.core.deleteOnExitRecursive
 import dev.dertyp.core.toUUIDOrNull
+import dev.dertyp.data.SimpleSong
+import dev.dertyp.db.SongTable
+import dev.dertyp.db.TranscodedSongTable
 import dev.dertyp.services.SongService
 import io.github.smiley4.ktoropenapi.get
 import io.ktor.http.*
@@ -19,6 +22,7 @@ import org.bytedeco.ffmpeg.global.avcodec
 import org.bytedeco.ffmpeg.global.avutil
 import org.bytedeco.javacv.FFmpegFrameGrabber
 import org.bytedeco.javacv.FFmpegFrameRecorder
+import org.jetbrains.exposed.sql.batchInsert
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.Paths
@@ -138,6 +142,51 @@ object AudioUtils {
             e.printStackTrace()
             throw e
         }
+    }
+
+    suspend fun getSongsWithTranscodingInfo(exclude: List<Int> = emptyList()) = dbQuery {
+        val excludedSongIds = TranscodedSongTable
+            .select(TranscodedSongTable.songId)
+            .where { TranscodedSongTable.bitrate inList exclude }
+            .map { it[TranscodedSongTable.songId].value }
+            .distinct()
+
+        SongTable
+            .leftJoin(TranscodedSongTable)
+            .select(SongTable.columns + TranscodedSongTable.columns)
+            .where { SongTable.id notInList excludedSongIds }
+            .map {
+                SimpleSong(
+                    id = it[SongTable.id].value,
+                    title = it[SongTable.title],
+                    duration = it[SongTable.duration],
+                    releaseDate = getDateFromISO(it[SongTable.releaseDate]),
+                    path = it[SongTable.filePath],
+                    originalUrl = it[SongTable.originalUrl],
+                    trackNumber = it[SongTable.trackNumber],
+                    discNumber = it[SongTable.discNumber],
+                    sampleRate = it[SongTable.sampleRate],
+                    bitsPerSample = it[SongTable.bitsPerSample],
+                    bitRate = it[SongTable.bitRate],
+                    fileSize = it[SongTable.fileSize],
+                    coverId = it[SongTable.cover]?.value,
+                    transcodedTo = listOfNotNull(it[TranscodedSongTable.bitrate]),
+                )
+            }
+            .groupBy { it.id }
+            .map { (_, songs) ->
+                songs.first().copy(
+                    transcodedTo = songs.flatMap { it.transcodedTo }.distinct(),
+                )
+            }
+    }
+
+    suspend fun insertTranscodedSong(songs: List<Triple<SimpleSong, File, Int>>) = dbQuery {
+        TranscodedSongTable.batchInsert(songs) {
+            this[TranscodedSongTable.songId] = it.first.id
+            this[TranscodedSongTable.bitrate] = it.third
+            this[TranscodedSongTable.path] = it.second.absolutePath
+        }.size
     }
 }
 

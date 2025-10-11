@@ -10,18 +10,16 @@ import dev.dertyp.db.PlaylistSongTable
 import dev.dertyp.db.PlaylistTable
 import dev.dertyp.db.SongTable
 import dev.dertyp.dbQuery
-import io.ktor.util.logging.*
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.util.*
 
-class PlaylistService(database: Database) {
-    private val logger = KtorSimpleLogger("PlaylistService")
-
+class PlaylistService(database: Database) : Service() {
     init {
         transaction(database) {
+            execInBatch(listOf("PRAGMA foreign_keys = ON"))
             SchemaUtils.create(PlaylistTable)
             SchemaUtils.create(PlaylistSongTable)
         }
@@ -233,6 +231,9 @@ class PlaylistService(database: Database) {
         dbQuery {
             PlaylistTable.deleteWhere {
                 PlaylistTable.id inList existingPlaylists
+            }
+            PlaylistSongTable.deleteWhere {
+                PlaylistSongTable.playlistId inList existingPlaylists
             }
         }
 

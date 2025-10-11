@@ -55,6 +55,27 @@ data class Song(
 )
 
 @Serializable
+data class SimpleSong(
+    @Serializable(with = UUIDSerializer::class)
+    val id: UUID,
+    val title: String,
+    val duration: Long,
+    @Serializable(with = LocalDateSerializer::class)
+    val releaseDate: LocalDate?,
+    val path: String,
+    val originalUrl: String,
+    val trackNumber: Int,
+    val discNumber: Int,
+    val sampleRate: Int,
+    val bitsPerSample: Int,
+    val bitRate: Long,
+    val fileSize: Long,
+    @Serializable(with = UUIDSerializer::class)
+    val coverId: UUID?,
+    val transcodedTo: List<Int>
+)
+
+@Serializable
 data class InsertableSong(
     val title: String,
     val artists: List<String> = listOf(),

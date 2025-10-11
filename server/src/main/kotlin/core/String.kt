@@ -9,3 +9,5 @@ fun String.toUUIDOrNull(): UUID? {
         null
     }
 }
+
+fun String.capitalize(): String = replaceFirstChar { it.lowercase() }

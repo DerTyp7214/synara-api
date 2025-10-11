@@ -10,20 +10,19 @@ import dev.dertyp.getISOFromDate
 import dev.dertyp.services.AlbumService.Companion.calculateAlbumStats
 import dev.dertyp.services.AlbumService.Companion.mapAlbum
 import dev.dertyp.services.ArtistService.Companion.mapArtist
-import io.ktor.util.logging.*
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.util.*
 
-class SongService(database: Database) {
-    private val logger = KtorSimpleLogger("SongService")
-
+class SongService(database: Database): Service() {
     val albumArtistAlias = ArtistTable.alias("album_artist_alias")
 
     init {
         transaction(database) {
+            execInBatch(listOf("PRAGMA foreign_keys = ON"))
             SchemaUtils.create(SongTable)
             SchemaUtils.create(SongArtistTable)
+            SchemaUtils.create(TranscodedSongTable)
         }
 
         instance = this
@@ -123,7 +122,6 @@ class SongService(database: Database) {
                 onColumn = { AlbumArtistTable.artistId },
                 otherColumn = { albumArtistAlias[ArtistTable.id] }
             )
-
             .select(
                 SongTable.columns +
                         AlbumTable.columns +

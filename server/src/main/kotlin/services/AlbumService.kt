@@ -14,18 +14,16 @@ import dev.dertyp.dbQuery
 import dev.dertyp.getDateFromISO
 import dev.dertyp.getISOFromDate
 import dev.dertyp.services.ArtistService.Companion.mapArtist
-import io.ktor.util.logging.*
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.util.*
 
-class AlbumService(database: Database) {
-    private val logger = KtorSimpleLogger("AlbumService")
-
+class AlbumService(database: Database): Service() {
     val albumArtistAlias = ArtistTable.alias("albumArtistAlias")
 
     init {
         transaction(database) {
+            execInBatch(listOf("PRAGMA foreign_keys = ON"))
             SchemaUtils.create(AlbumTable)
             SchemaUtils.create(AlbumArtistTable)
         }

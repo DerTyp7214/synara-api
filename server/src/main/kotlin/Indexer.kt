@@ -20,6 +20,8 @@ import java.nio.file.Path
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.logging.Level
+import kotlin.concurrent.atomics.AtomicBoolean
+import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.io.path.*
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.seconds
@@ -33,31 +35,44 @@ class Indexer(
 ) {
     private val logger = KtorSimpleLogger("Indexer")
 
-    private val tracksPath = environment.config.propertyOrNull("audio.tracks")?.getString()
-    private val albumsPath = environment.config.propertyOrNull("audio.albums")?.getString()
-    private val playlistsPath = environment.config.propertyOrNull("audio.playlists")?.getString()
+    val tracksPath = environment.config.propertyOrNull("audio.tracks")?.getString()
+    val albumsPath = environment.config.propertyOrNull("audio.albums")?.getString()
+    val playlistsPath = environment.config.propertyOrNull("audio.playlists")?.getString()
 
-    private val audioExtension = "flac"
-    private val playlistExtension = "m3u"
+    val audioExtension = "flac"
+    val playlistExtension = "m3u"
 
-    @OptIn(ExperimentalTime::class)
+    @OptIn(ExperimentalAtomicApi::class)
+    val isActive = AtomicBoolean(false)
+
     suspend fun start(stdout: suspend (String) -> Unit) = coroutineScope {
-        AudioFileIO.logger.level = Level.WARNING
-
         val log = { line: String -> async { stdout(line) } }
         if (tracksPath == null || albumsPath == null || playlistsPath == null)
             return@coroutineScope log("audio paths are not configured")
 
-        log("Starting Indexer").await()
-
         val songRootPath = Path(tracksPath)
         val playlistRootPath = Path(playlistsPath)
 
-        log("Scanning ${songRootPath.toAbsolutePath()}").await()
+        start(listOf(songRootPath), listOf(playlistRootPath), stdout)
+    }
+
+    @OptIn(ExperimentalTime::class)
+    suspend fun start(
+        songPaths: List<Path>,
+        playlistPaths: List<Path> = playlistsPath?.let { listOf(Path(it)) } ?: emptyList(),
+        stdout: suspend (String) -> Unit
+    ) = coroutineScope {
+        AudioFileIO.logger.level = Level.WARNING
+
+        val log = { line: String -> async { stdout(line) } }
+
+        log("Starting Indexer").await()
+
+        log("Scanning ${songPaths.joinToString(", ") { it.absolutePathString() }}").await()
         val startTime = Clock.System.now()
 
-        val songs = buildMap(songRootPath)
-        val playlists = buildMap(playlistRootPath)
+        val songs = buildMap(songPaths)
+        val playlists = buildMap(playlistPaths)
 
         log(
             "Finished scanning directories. (${
@@ -91,11 +106,11 @@ class Indexer(
         log("Parsed and inserted $playlistCount playlists.")
     }
 
-    private fun buildMap(path: Path): List<Path> {
+    private fun buildMap(paths: List<Path>): List<Path> {
         val files = mutableListOf<Path>()
 
-        path.listDirectoryEntries().forEach {
-            if (it.isDirectory()) files.addAll(buildMap(it))
+        paths.forEach {
+            if (it.isDirectory()) files.addAll(buildMap(it.listDirectoryEntries()))
             else if ((it.extension == audioExtension || it.extension == playlistExtension) && !it.isSymbolicLink()) files.add(
                 it
             )
