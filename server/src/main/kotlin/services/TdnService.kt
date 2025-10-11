@@ -2,12 +2,10 @@ package dev.dertyp.services
 
 import dev.dertyp.Indexer
 import dev.dertyp.core.lineFlow
+import dev.dertyp.core.oneLine
 import dev.dertyp.core.resolveRelativeAbsolute
 import dev.dertyp.core.resolveSymlinkAbsolute
-import kotlinx.coroutines.DisposableHandle
-import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.ensureActive
-import kotlinx.coroutines.job
+import kotlinx.coroutines.*
 import java.io.InputStreamReader
 import java.nio.file.Path
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
@@ -28,17 +26,21 @@ class TdnService(private val indexer: Indexer) : Service() {
     @OptIn(ExperimentalAtomicApi::class)
     private suspend fun collectDownloadedFiles(
         command: List<String>,
+        maxRetries: Int = 5,
+        currentTry: Int = 0,
         logProxy: suspend (String) -> Unit
     ): Pair<ProcessExecutionResult, List<Path>> {
         val pathLines = mutableListOf<String>()
-        val result = executeTdn(command) {
+        var result = executeTdn(command) {
             val trimmed = it.trim().removeSurrounding("'")
             if (indexer.tracksPath != null) {
                 if (
-                    trimmed.startsWith(indexer.tracksPath) &&
-                    trimmed.endsWith(indexer.audioExtension)
+                    trimmed.endsWith(indexer.audioExtension) &&
+                    trimmed.contains(indexer.tracksPath)
                 ) {
-                    pathLines.add(trimmed)
+                    val start = trimmed.indexOf(indexer.tracksPath)
+                    val path = trimmed.substring(start)
+                    pathLines.add(path)
                 } else {
                     try {
                         val path = Path(trimmed)
@@ -57,52 +59,130 @@ class TdnService(private val indexer: Indexer) : Service() {
                     trimmed.endsWith(indexer.playlistExtension) &&
                     trimmed.contains(indexer.playlistsPath)
                 ) {
-                    val start = trimmed.indexOf(indexer.playlistsPath)
-                    val pathString = trimmed.substring(start)
-                    pathLines.add(pathString)
+                    val start = when {
+                        trimmed.contains(indexer.playlistsPath) -> trimmed.indexOf(indexer.playlistsPath)
+                        indexer.albumsPath?.let { p -> trimmed.contains(p) }
+                            ?: false -> trimmed.indexOf(indexer.albumsPath)
 
-                    try {
-                        val path = Path(pathString)
-                        if (path.exists()) {
-                            for (line in path.readLines()) {
-                                pathLines.add(path.resolveRelativeAbsolute(line).absolutePathString())
+                        else -> -1
+                    }
+
+                    if (start >= 0) {
+                        val pathString = trimmed.substring(start)
+                        if (trimmed.contains(indexer.playlistsPath)) {
+                            try {
+                                pathLines.add(Path(pathString).absolutePathString())
+                            } catch (_: Throwable) {
                             }
                         }
-                    } catch (_: Throwable) {}
+                    }
                 }
             }
             logProxy(it)
         }
 
-        val paths = pathLines.map { Path(it) }.filter { it.exists() }.distinctBy { it.absolutePathString() }
-        val songPaths = paths.filter { it.extension == indexer.audioExtension }
-        val playlistPaths = paths.filter { it.extension == indexer.playlistExtension }
+        val paths = pathLines.map { Path(it) }.filter { it.exists() }.toMutableList()
+
+        val playlistRegex =
+            Regex("${indexer.playlistsPath?.removeSuffix("/")}/([^/]+?)/_\\1\\.m3u", RegexOption.DOT_MATCHES_ALL)
+
+        playlistRegex.findAll(result.fullOutput.oneLine()).forEach { matchResult ->
+            val fullMatch = matchResult.value
+
+            try {
+                val path = Path(fullMatch)
+                if (path.exists()) paths.add(path)
+            } catch (_: Throwable) {
+            }
+        }
+
+        for (path in paths.filter { it.extension == indexer.playlistExtension }) {
+            if (!path.exists()) continue
+            for (line in path.readLines()) {
+                try {
+                    val songPath = path.resolveRelativeAbsolute(line)
+                    if (songPath.exists()) paths.add(songPath)
+                } catch (_: Throwable) {
+                }
+            }
+        }
+
+        val songPaths =
+            paths.filter { it.extension == indexer.audioExtension }.distinctBy { it.absolutePathString() }
+        val playlistPaths =
+            paths.filter { it.extension == indexer.playlistExtension }.distinctBy { it.absolutePathString() }
 
         if (result.exitCode == 0 && indexer.isActive.compareAndSet(expectedValue = false, newValue = true)) {
-            if (pathLines.isEmpty()) indexer.start(logProxy)
+            if (songPaths.isEmpty()) indexer.start(logProxy)
             else indexer.start(songPaths, playlistPaths.ifEmpty {
                 indexer.playlistsPath?.let { listOf(Path(it)) } ?: emptyList()
             }, stdout = logProxy)
             indexer.isActive.store(false)
+        } else if (result.exitCode == 1) {
+            val pathAlternation =
+                "(${indexer.playlistsPath?.removeSuffix("/")}|${indexer.albumsPath?.removeSuffix("/")})"
+
+            val errorRegex = Regex(
+                "FileNotFoundError:\\s+(\\[.+?])\\s+No\\s+such\\s+file\\s+or\\s+directory:\\s+'" +
+                        "(.+?)'\\s+->\\s+'$pathAlternation/([^/]+?)/(.+?)'"
+            )
+
+            val matchResult = errorRegex.find(result.fullOutput.oneLine())
+            if (matchResult != null) {
+                val relativePathString = matchResult.groupValues[2]
+                val fullPathString =
+                    "${matchResult.groupValues[3]}/${matchResult.groupValues[4]}/${matchResult.groupValues[5]}"
+
+                try {
+                    val fullPath = Path(fullPathString)
+                    val brokenFilePath = fullPath.resolveRelativeAbsolute(relativePathString)
+
+                    if (currentTry < maxRetries) {
+                        if (brokenFilePath.deleteIfExists()) {
+                            logProxy("Deleted file $brokenFilePath")
+                            logger.info("Deleted file $brokenFilePath")
+                        } else {
+                            logProxy("Could not delete file $brokenFilePath")
+                            logger.info("Could not delete file $brokenFilePath")
+                        }
+
+                        logProxy("Retrying (${currentTry + 1}/$maxRetries)")
+
+                        delay(2000)
+
+                        val (newResult, newPaths) = collectDownloadedFiles(command, maxRetries, currentTry + 1, logProxy)
+
+                        result = newResult
+                        paths.clear()
+                        paths.addAll(newPaths)
+                    }
+                } catch (_: Throwable) {
+                }
+            }
         }
 
         return Pair(result, paths)
     }
 
     @OptIn(ExperimentalAtomicApi::class)
-    suspend fun downloadContent(url: String, onLiveOutput: suspend (String) -> Unit): ProcessExecutionResult {
+    suspend fun downloadContent(
+        url: String,
+        maxRetries: Int = 5,
+        onLiveOutput: suspend (String) -> Unit
+    ): ProcessExecutionResult {
         val command = listOf("tdn", "dl", url)
-        val (result) = collectDownloadedFiles(command, onLiveOutput)
+        val (result) = collectDownloadedFiles(command, maxRetries, 0, onLiveOutput)
         return result
     }
 
     @OptIn(ExperimentalAtomicApi::class)
     suspend fun downloadFavoriteCollection(
         type: TdnFavoriteType,
+        maxRetries: Int = 5,
         onLiveOutput: suspend (String) -> Unit
     ): ProcessExecutionResult {
         val command = listOf("tdn", "dl_fav", type.name)
-        val (result) = collectDownloadedFiles(command, onLiveOutput)
+        val (result) = collectDownloadedFiles(command, maxRetries, 0, onLiveOutput)
         return result
     }
 

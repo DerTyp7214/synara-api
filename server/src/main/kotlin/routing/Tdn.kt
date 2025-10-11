@@ -23,6 +23,9 @@ fun Routing.tdn(service: TdnService) {
                 queryParameter<String>("url") {
                     description = "Tidal share url to download."
                 }
+                queryParameter<Int>("maxRetries") {
+                    description = "Maximum retries to download. (defaults to 5)"
+                }
             }
         }) {
             sse {
@@ -40,14 +43,21 @@ fun Routing.tdn(service: TdnService) {
                 }
                 if (url == null) return@sse call.respond(HttpStatusCode.BadRequest)
 
+                val maxRetries = call.parameters["maxRetries"]?.toIntOrNull() ?: 5
+
                 send("Starting download of \"$url\"")
 
-                val result = service.downloadContent(url.toString()) {
-                    send(it)
+                suspend fun sendSafe(msg: String) = try {
+                    send(msg)
+                } catch (e: Throwable) {
                 }
 
-                if (result.exitCode == 0) send("Download complete")
-                else send("Download failed: ${result.error}")
+                val result = service.downloadContent(url.toString(), maxRetries) {
+                    sendSafe(it)
+                }
+
+                if (result.exitCode == 0) sendSafe("Download complete")
+                else sendSafe("Download failed: ${result.error}")
 
                 isDownloadActive.store(false)
             }

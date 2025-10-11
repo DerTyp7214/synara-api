@@ -281,6 +281,6 @@ class PlaylistService(database: Database) : Service() {
             }
         }
 
-        return existingMap.values + insertedPlaylistIds
+        return insertedPlaylistIds
     }
 }
