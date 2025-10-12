@@ -1,15 +1,25 @@
 package dev.dertyp.routing
 
+import dev.dertyp.core.ClientCloseException
 import dev.dertyp.core.capitalize
+import dev.dertyp.services.ProcessExecutionResult
 import dev.dertyp.services.TdnFavoriteType
 import dev.dertyp.services.TdnService
 import io.github.smiley4.ktoropenapi.route
 import io.ktor.http.*
+import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.ktor.server.sse.*
+import io.ktor.utils.io.*
+import kotlinx.serialization.Serializable
 import kotlin.concurrent.atomics.AtomicBoolean
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
+
+@Serializable
+data class DlBody(
+    val urls: List<String> = emptyList(),
+)
 
 @OptIn(ExperimentalAtomicApi::class)
 fun Routing.tdn(service: TdnService) {
@@ -18,7 +28,7 @@ fun Routing.tdn(service: TdnService) {
     route("/tdn", {
         tags("tdn")
     }) {
-        route("dl", HttpMethod.Get, {
+        route("dl", HttpMethod.Post, {
             request {
                 queryParameter<String>("url") {
                     description = "Tidal share url to download."
@@ -26,40 +36,63 @@ fun Routing.tdn(service: TdnService) {
                 queryParameter<Int>("maxRetries") {
                     description = "Maximum retries to download. (defaults to 5)"
                 }
+                body<DlBody>()
             }
         }) {
-            sse {
+            post {
                 if (!isDownloadActive.compareAndSet(expectedValue = false, newValue = true)) {
-                    call.respond(HttpStatusCode.Conflict, "Download is already running.")
-                    return@sse
+                    call.respond(HttpStatusCode.Conflict, "Download is already running. (If you just closed one, please wait a few seconds)")
+                    return@post
                 }
 
-                val url = call.parameters["url"]?.let {
+                val bodyUrls = call.receive<DlBody>().urls
+                val pathUrls = call.parameters.getAll("url")?.mapNotNull {
                     try {
                         Url(it)
-                    } catch (_: Throwable) {
+                    } catch (e: Throwable) {
+                        e.printStackTrace()
                         null
                     }
-                }
-                if (url == null) return@sse call.respond(HttpStatusCode.BadRequest)
+                } ?: emptyList()
+
+                val urls = pathUrls + bodyUrls
+                if (urls.isEmpty()) return@post call.respond(HttpStatusCode.BadRequest)
+
+                call.response.header(HttpHeaders.ContentType, ContentType.Text.EventStream.toString())
+                call.response.header(HttpHeaders.CacheControl, "no-cache")
+                call.response.header(HttpHeaders.Connection, "keep-alive")
+                call.response.header("X-Accel-Buffering", "no")
 
                 val maxRetries = call.parameters["maxRetries"]?.toIntOrNull() ?: 5
 
-                send("Starting download of \"$url\"")
+                call.respondBytesWriter(ContentType.Text.EventStream) {
+                    suspend fun sendSafe(msg: String) = try {
+                        writeStringUtf8("event: message\ndata: $msg\n\n")
+                        flush()
+                    } catch (_: Throwable) {
+                    }
 
-                suspend fun sendSafe(msg: String) = try {
-                    send(msg)
-                } catch (e: Throwable) {
+                    val results = mutableListOf<ProcessExecutionResult>()
+
+                    for (url in urls) {
+                        if (isClosedForWrite) break
+                        sendSafe("Starting download of \"$url\"")
+
+                        val result = service.downloadContent(url.toString(), maxRetries) {
+                            if (isClosedForWrite) throw ClientCloseException()
+                            sendSafe(it)
+                        }
+
+                        results.add(result)
+
+                        if (result.exitCode == 0) sendSafe("Download complete ($url)")
+                        else sendSafe("Download failed: ${result.error} ($url)")
+                    }
+
+                    sendSafe("${results.count { it.exitCode == 0 }}/${results.size} successful")
+
+                    isDownloadActive.store(false)
                 }
-
-                val result = service.downloadContent(url.toString(), maxRetries) {
-                    sendSafe(it)
-                }
-
-                if (result.exitCode == 0) sendSafe("Download complete")
-                else sendSafe("Download failed: ${result.error}")
-
-                isDownloadActive.store(false)
             }
         }
 

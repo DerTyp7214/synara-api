@@ -11,4 +11,4 @@ fun String.toUUIDOrNull(): UUID? {
 }
 
 fun String.capitalize(): String = replaceFirstChar { it.lowercase() }
-fun String.oneLine(): String = replace("\n", "").replace("\r", "")
+fun String.oneLine(joiner: String = ""): String = split(Regex("[\n\r]")).joinToString(joiner)

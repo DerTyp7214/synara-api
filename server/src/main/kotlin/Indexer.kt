@@ -59,7 +59,7 @@ class Indexer(
     @OptIn(ExperimentalTime::class)
     suspend fun start(
         songPaths: List<Path>,
-        playlistPaths: List<Path> = playlistsPath?.let { listOf(Path(it)) } ?: emptyList(),
+        playlistPaths: List<Path> = emptyList(),
         stdout: suspend (String) -> Unit
     ) = coroutineScope {
         AudioFileIO.logger.level = Level.WARNING
@@ -94,7 +94,9 @@ class Indexer(
             songs.map { audioFile -> insertableSongFromFile(audioFile, album) }
         }.flatten())
 
-        log("Saved ${songResult.size} of ${albums.values.flatten().size} songs.").await()
+        val totalSize = songResult.values.fold(0L) { acc, song -> acc + song.fileSize }
+
+        log("Saved ${songResult.size} of ${albums.values.flatten().size} songs. (${totalSize.toHumanReadableSize()})").await()
 
         log("Found ${images.size} unique images.").await()
         log("Found ${albums.size} unique albums.").await()
@@ -215,6 +217,7 @@ class Indexer(
             artists = artists,
             album = album,
             duration = duration,
+            explicit = audioFile.file.nameWithoutExtension.endsWith("(Explicit)"),
             releaseDate = releaseDate,
             lyrics = lyrics,
             path = audioFile.file.absolutePath,

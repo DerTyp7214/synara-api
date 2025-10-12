@@ -1,10 +1,7 @@
 package dev.dertyp.services
 
 import dev.dertyp.Indexer
-import dev.dertyp.core.lineFlow
-import dev.dertyp.core.oneLine
-import dev.dertyp.core.resolveRelativeAbsolute
-import dev.dertyp.core.resolveSymlinkAbsolute
+import dev.dertyp.core.*
 import kotlinx.coroutines.*
 import java.io.InputStreamReader
 import java.nio.file.Path
@@ -83,8 +80,11 @@ class TdnService(private val indexer: Indexer) : Service() {
 
         val paths = pathLines.map { Path(it) }.filter { it.exists() }.toMutableList()
 
+        val pathAlternation =
+            "(${indexer.playlistsPath?.removeSuffix("/")}|${indexer.albumsPath?.removeSuffix("/")})"
+
         val playlistRegex =
-            Regex("${indexer.playlistsPath?.removeSuffix("/")}/([^/]+?)/_\\1\\.m3u", RegexOption.DOT_MATCHES_ALL)
+            Regex("${pathAlternation}/([^/]+?)/_[^/]+?\\.m3u", RegexOption.DOT_MATCHES_ALL)
 
         playlistRegex.findAll(result.fullOutput.oneLine()).forEach { matchResult ->
             val fullMatch = matchResult.value
@@ -92,7 +92,9 @@ class TdnService(private val indexer: Indexer) : Service() {
             try {
                 val path = Path(fullMatch)
                 if (path.exists()) paths.add(path)
-            } catch (_: Throwable) {
+                else logger.info("PlaylistPath $path ($fullMatch) does not exist")
+            } catch (e: Throwable) {
+                e.printStackTrace()
             }
         }
 
@@ -118,13 +120,17 @@ class TdnService(private val indexer: Indexer) : Service() {
                 indexer.playlistsPath?.let { listOf(Path(it)) } ?: emptyList()
             }, stdout = logProxy)
             indexer.isActive.store(false)
-        } else if (result.exitCode == 1) {
+
+            logProxy("Took ${currentTry + 1} tr${if (currentTry == 0) "y" else "ies"} to download.")
+        } else if (result.exitCode == 1 && indexer.playlistsPath != null) {
             val pathAlternation =
-                "(${indexer.playlistsPath?.removeSuffix("/")}|${indexer.albumsPath?.removeSuffix("/")})"
+                "(${indexer.playlistsPath.removeSuffix("/")}|${indexer.albumsPath?.removeSuffix("/")})"
+
+            val rootPath = Path(indexer.playlistsPath).parent.absolute()
 
             val errorRegex = Regex(
                 "FileNotFoundError:\\s+(\\[.+?])\\s+No\\s+such\\s+file\\s+or\\s+directory:\\s+'" +
-                        "(.+?)'\\s+->\\s+'$pathAlternation/([^/]+?)/(.+?)'"
+                        "(.+?)'\\s+->\\s+['\"]$pathAlternation/([^/]+?)/(.+?)['\"]"
             )
 
             val matchResult = errorRegex.find(result.fullOutput.oneLine())
@@ -137,7 +143,7 @@ class TdnService(private val indexer: Indexer) : Service() {
                     val fullPath = Path(fullPathString)
                     val brokenFilePath = fullPath.resolveRelativeAbsolute(relativePathString)
 
-                    if (currentTry < maxRetries) {
+                    if (currentTry < maxRetries && brokenFilePath.isInside(rootPath)) {
                         if (brokenFilePath.deleteIfExists()) {
                             logProxy("Deleted file $brokenFilePath")
                             logger.info("Deleted file $brokenFilePath")
@@ -148,17 +154,24 @@ class TdnService(private val indexer: Indexer) : Service() {
 
                         logProxy("Retrying (${currentTry + 1}/$maxRetries)")
 
-                        delay(2000)
+                        delay(10000)
 
-                        val (newResult, newPaths) = collectDownloadedFiles(command, maxRetries, currentTry + 1, logProxy)
+                        val (newResult, newPaths) = collectDownloadedFiles(
+                            command,
+                            maxRetries,
+                            currentTry + 1,
+                            logProxy
+                        )
 
                         result = newResult
                         paths.clear()
                         paths.addAll(newPaths)
+                    } else if (!brokenFilePath.isInside(rootPath)) {
+                        logProxy("File ($brokenFilePath) not inside $rootPath")
                     }
                 } catch (_: Throwable) {
                 }
-            }
+            } else logger.info(errorRegex.toString())
         }
 
         return Pair(result, paths)
@@ -228,7 +241,8 @@ class TdnService(private val indexer: Indexer) : Service() {
             return ProcessExecutionResult(exitCode, fullOutput.toString(), "")
 
         } catch (e: Exception) {
-            e.printStackTrace()
+            if (e is ClientCloseException) logger.info("Client disconnected.")
+            else e.printStackTrace()
             return ProcessExecutionResult(-2, fullOutput.toString(), "Failed to execute 'tdn'. Error: ${e.message}")
         } finally {
             completionHandle?.dispose()

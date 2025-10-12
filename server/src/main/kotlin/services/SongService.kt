@@ -1,6 +1,5 @@
 package dev.dertyp.services
 
-import dev.dertyp.core.Quadruple
 import dev.dertyp.core.rankedSearchQuery
 import dev.dertyp.data.*
 import dev.dertyp.db.*
@@ -41,6 +40,7 @@ class SongService(database: Database): Service() {
                 artists = listOf(),
                 album = null,
                 duration = resultRow[SongTable.duration],
+                explicit = resultRow[SongTable.explicit],
                 releaseDate = getDateFromISO(resultRow[SongTable.releaseDate]),
                 lyrics = resultRow[SongTable.lyrics],
                 path = resultRow[SongTable.filePath],
@@ -218,13 +218,11 @@ class SongService(database: Database): Service() {
                 onColumn = { SongArtistTable.artistId },
                 otherColumn = { ArtistTable.id }
             )
-            .select(SongTable.id, SongTable.title, SongTable.trackNumber, SongTable.discNumber, AlbumTable.name)
+            .select(SongTable.id, SongTable.title, SongTable.trackNumber, SongTable.discNumber, SongTable.explicit, AlbumTable.name)
             .withDistinct()
-            .where {
-                (SongTable.title inList songs.map { it.title }) and
-                        (SongTable.trackNumber inList songs.map { it.trackNumber }) and
-                        (SongTable.discNumber inList songs.map { it.discNumber })
-            }
+            .where { SongTable.title inList songs.map { it.title } }
+            .andWhere { SongTable.trackNumber inList songs.map { it.trackNumber } }
+            .andWhere { SongTable.discNumber inList songs.map { it.discNumber } }
             .toList()
 
         val existingSongMap = mutableMapOf<InsertableSong, UUID>()
@@ -237,6 +235,7 @@ class SongService(database: Database): Service() {
                 val metadataMatch = row[SongTable.title] == song.title &&
                         row[SongTable.trackNumber] == song.trackNumber &&
                         row[SongTable.discNumber] == song.discNumber &&
+                        row[SongTable.explicit] == song.explicit &&
                         albumName == song.album.name
 
                 if (metadataMatch) {
@@ -249,12 +248,12 @@ class SongService(database: Database): Service() {
         return@dbQuery existingSongMap
     }
 
-    suspend fun createBatch(songs: List<InsertableSong>): List<UUID> {
-        if (songs.isEmpty()) return emptyList()
+    suspend fun createBatch(songs: List<InsertableSong>): Map<UUID, InsertableSong> {
+        if (songs.isEmpty()) return emptyMap()
 
         val uniqueArtistNames = songs.flatMap { it.artists }.distinct()
         val uniqueAlbums = songs.map { it.album }.distinctBy {
-            Quadruple(
+            listOf(
                 it.name,
                 it.releaseDate,
                 it.songCount,
@@ -269,11 +268,10 @@ class SongService(database: Database): Service() {
             ImageService.instance?.getCoverHashes(uniqueCoverHashes.filterNotNull()) ?: emptyMap()
 
         val existingSongMap = bulkFindExistingSongs(songs)
-        val existingSongIds = existingSongMap.values.toList()
 
         val newSongs = songs.filter { it !in existingSongMap.keys }
 
-        if (newSongs.isEmpty()) return existingSongIds
+        if (newSongs.isEmpty()) return emptyMap()
 
         val uniqueSongs = newSongs
             .groupBy { song ->
@@ -283,6 +281,7 @@ class SongService(database: Database): Service() {
                     song.trackNumber,
                     song.discNumber,
                     song.duration,
+                    song.explicit,
                 )
             }
             .map { (_, songs) ->
@@ -302,6 +301,7 @@ class SongService(database: Database): Service() {
                 this[SongTable.title] = song.title
                 this[SongTable.albumId] = albumId!!
                 this[SongTable.duration] = song.duration
+                this[SongTable.explicit] = song.explicit
                 this[SongTable.releaseDate] = getISOFromDate(song.releaseDate)
                 this[SongTable.lyrics] = song.lyrics
                 this[SongTable.filePath] = song.path
@@ -320,8 +320,6 @@ class SongService(database: Database): Service() {
         val insertedSongs: List<Pair<UUID, InsertableSong>> =
             songInsertResult.map { it[SongTable.id].value to filteredSongs[songInsertResult.indexOf(it)] }
 
-        val insertedSongIds = insertedSongs.map { it.first }
-
         val songArtistLinks = insertedSongs.flatMap { (songId, songData) ->
             songData.artists.mapNotNull { artistName ->
                 artistIdMap[artistName]?.let { artistId ->
@@ -337,6 +335,6 @@ class SongService(database: Database): Service() {
             }
         }
 
-        return insertedSongIds
+        return insertedSongs.toMap()
     }
 }

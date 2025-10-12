@@ -207,7 +207,7 @@ fun Routing.song(service: SongService) {
                 }
             }
         }) {
-            val song = service.createBatch(listOf(call.receive())).singleOrNull()
+            val song = service.createBatch(listOf(call.receive())).values.singleOrNull()
             if (song == null) return@post call.respond(HttpStatusCode.NotFound)
 
             call.respond(song)

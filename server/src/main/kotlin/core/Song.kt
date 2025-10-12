@@ -22,6 +22,7 @@ fun Song.omitLyrics(): SongWithoutLyrics = SongWithoutLyrics(
     artists = this.artists,
     album = this.album,
     duration = this.duration,
+    explicit = this.explicit,
     releaseDate = this.releaseDate,
     path = this.path,
     originalUrl = this.originalUrl,
@@ -53,6 +54,7 @@ fun Query.withArtistNames(artistNames: List<String>): Query = this.andWhere {
 
 fun InsertableSong.contentEquals(other: InsertableSong): Boolean {
     return title == other.title &&
+            explicit == other.explicit &&
             trackNumber == other.trackNumber &&
             discNumber == other.discNumber &&
             duration == other.duration &&

@@ -15,6 +15,7 @@ data class SongWithoutLyrics(
     val artists: List<Artist>,
     val album: Album?,
     val duration: Long,
+    val explicit: Boolean,
     @Serializable(with = LocalDateSerializer::class)
     val releaseDate: LocalDate? = null,
     val path: String,
@@ -38,6 +39,7 @@ data class Song(
     val artists: List<Artist>,
     val album: Album?,
     val duration: Long,
+    val explicit: Boolean,
     @Serializable(with = LocalDateSerializer::class)
     val releaseDate: LocalDate? = null,
     val lyrics: String = "",
@@ -60,6 +62,7 @@ data class SimpleSong(
     val id: UUID,
     val title: String,
     val duration: Long,
+    val explicit: Boolean,
     @Serializable(with = LocalDateSerializer::class)
     val releaseDate: LocalDate?,
     val path: String,
@@ -81,6 +84,7 @@ data class InsertableSong(
     val artists: List<String> = listOf(),
     val album: InsertableAlbum,
     val duration: Long,
+    val explicit: Boolean,
     @Serializable(with = LocalDateSerializer::class)
     val releaseDate: LocalDate? = null,
     val lyrics: String = "",

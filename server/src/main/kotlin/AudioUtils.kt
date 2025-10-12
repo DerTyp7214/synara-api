@@ -160,6 +160,7 @@ object AudioUtils {
                     id = it[SongTable.id].value,
                     title = it[SongTable.title],
                     duration = it[SongTable.duration],
+                    explicit = it[SongTable.explicit],
                     releaseDate = getDateFromISO(it[SongTable.releaseDate]),
                     path = it[SongTable.filePath],
                     originalUrl = it[SongTable.originalUrl],

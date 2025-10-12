@@ -9,6 +9,7 @@ object SongTable : UUIDTable("song") {
     val duration = long("duration").default(0L)
     val releaseDate = varchar("releaseDate", 128).nullable()
     val lyrics = text("lyrics").default("")
+    val explicit = bool("explicit").default(false)
     val filePath = text("filePath").default("")
     val cover = reference("cover", ImageTable.id).nullable()
     val originalUrl = text("originalUrl").default("")

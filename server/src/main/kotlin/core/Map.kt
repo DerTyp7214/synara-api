@@ -13,3 +13,5 @@ fun Map<InsertableAlbum, Any>.getAlbum(album: InsertableAlbum): InsertableAlbum?
 fun Map<InsertableAlbum, Any>.hasAlbum(album: InsertableAlbum): Boolean {
     return getAlbum(album) != null
 }
+
+fun <K, V> Map<K, V>.flip(): Map<V, K> = map { (key, value) -> Pair(value, key) }.toMap()
