@@ -92,7 +92,12 @@ class TdnService(private val indexer: Indexer) : Service() {
             try {
                 val path = Path(fullMatch)
                 if (path.exists()) paths.add(path)
-                else logger.info("PlaylistPath $path ($fullMatch) does not exist")
+                else {
+                    val siblings = path.parent.listDirectoryEntries()
+                    val path = siblings.find { it.extension == indexer.playlistExtension }
+                    if (path?.exists() == true) paths.add(path)
+                    else logger.info("PlaylistPath $path ($fullMatch) does not exist")
+                }
             } catch (e: Throwable) {
                 e.printStackTrace()
             }

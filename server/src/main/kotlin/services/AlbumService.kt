@@ -1,6 +1,7 @@
 package dev.dertyp.services
 
 import dev.dertyp.core.Quadruple
+import dev.dertyp.core.filterValueNotNull
 import dev.dertyp.core.rankedSearchQuery
 import dev.dertyp.data.Album
 import dev.dertyp.data.Artist
@@ -290,7 +291,7 @@ class AlbumService(database: Database): Service() {
                 album.songCount,
                 album.artists.joinToString(", ")
             )
-            finalCombinedIdMap[key]!!
-        }
+            finalCombinedIdMap[key]
+        }.filterValueNotNull()
     }
 }
