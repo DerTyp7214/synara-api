@@ -29,10 +29,12 @@ class TdnService(private val indexer: Indexer) : Service() {
         command: List<String>,
         maxRetries: Int = 5,
         currentTry: Int = 0,
+        aliveCheck: suspend () -> Boolean,
         logProxy: suspend (String) -> Unit
     ): Pair<ProcessExecutionResult, List<Path>> {
         val pathLines = mutableListOf<String>()
-        var result = executeTdn(command) {
+        var result = executeTdn(command, aliveCheck) {
+            if (!aliveCheck()) throw ClientCloseException()
             val trimmed = it.trim().removeSurrounding("'")
             if (indexer.tracksPath != null) {
                 if (
@@ -172,6 +174,7 @@ class TdnService(private val indexer: Indexer) : Service() {
                             command,
                             maxRetries,
                             currentTry + 1,
+                            aliveCheck,
                             logProxy
                         )
 
@@ -193,10 +196,11 @@ class TdnService(private val indexer: Indexer) : Service() {
     suspend fun downloadContent(
         url: String,
         maxRetries: Int = 5,
+        aliveCheck: suspend () -> Boolean = { true },
         onLiveOutput: suspend (String) -> Unit
     ): ProcessExecutionResult {
         val command = listOf("tdn", "dl", url)
-        val (result) = collectDownloadedFiles(command, maxRetries, 0, onLiveOutput)
+        val (result) = collectDownloadedFiles(command, maxRetries, 0, aliveCheck, onLiveOutput)
         return result
     }
 
@@ -204,15 +208,17 @@ class TdnService(private val indexer: Indexer) : Service() {
     suspend fun downloadFavoriteCollection(
         type: TdnFavoriteType,
         maxRetries: Int = 5,
+        aliveCheck: suspend () -> Boolean = { true },
         onLiveOutput: suspend (String) -> Unit
     ): ProcessExecutionResult {
         val command = listOf("tdn", "dl_fav", type.name)
-        val (result) = collectDownloadedFiles(command, maxRetries, 0, onLiveOutput)
+        val (result) = collectDownloadedFiles(command, maxRetries, 0, aliveCheck, onLiveOutput)
         return result
     }
 
     private suspend fun executeTdn(
         command: List<String>,
+        aliveCheck: suspend () -> Boolean,
         onLineReceived: suspend (String) -> Unit
     ): ProcessExecutionResult {
         if (command.isEmpty() || command[0] != "tdn") {
@@ -228,38 +234,50 @@ class TdnService(private val indexer: Indexer) : Service() {
 
         var process: Process? = null
 
-        try {
-            process = ProcessBuilder(command)
-                .redirectErrorStream(true)
-                .start()
-
-            completionHandle = currentJob.invokeOnCompletion { cause ->
-                if (cause is CancellationException) {
-                    process?.destroyForcibly()
+        return coroutineScope {
+            val checkJob = launch {
+                while (aliveCheck()) {
+                    delay(200)
+                    ensureActive()
                 }
+
+                cancel("Client disconnected", ClientCloseException())
             }
 
-            val reader = InputStreamReader(process.inputStream)
+            try {
+                process = ProcessBuilder(command)
+                    .redirectErrorStream(true)
+                    .start()
 
-            reader.lineFlow().collect { line ->
-                currentCoroutineContext().ensureActive()
+                completionHandle = currentJob.invokeOnCompletion { cause ->
+                    if (cause is CancellationException) {
+                        process?.destroyForcibly()
+                    }
+                }
 
-                fullOutput.appendLine(line)
-                onLineReceived(line)
+                val reader = InputStreamReader(process.inputStream)
+
+                reader.lineFlow().collect { line ->
+                    currentCoroutineContext().ensureActive()
+
+                    fullOutput.appendLine(line)
+                    onLineReceived(line)
+                }
+
+                val exitCode = process.waitFor()
+
+                return@coroutineScope ProcessExecutionResult(exitCode, fullOutput.toString(), "")
+
+            } catch (e: Exception) {
+                if (e is ClientCloseException || e.cause is ClientCloseException) logger.info("Client disconnected.")
+                else e.printStackTrace()
+                return@coroutineScope ProcessExecutionResult(-2, fullOutput.toString(), "Failed to execute 'tdn'. Error: ${e.message}")
+            } finally {
+                completionHandle?.dispose()
+
+                if (checkJob.isActive) checkJob.cancel()
+                if (process?.isAlive == true) process.destroyForcibly()
             }
-
-            val exitCode = process.waitFor()
-
-            return ProcessExecutionResult(exitCode, fullOutput.toString(), "")
-
-        } catch (e: Exception) {
-            if (e is ClientCloseException) logger.info("Client disconnected.")
-            else e.printStackTrace()
-            return ProcessExecutionResult(-2, fullOutput.toString(), "Failed to execute 'tdn'. Error: ${e.message}")
-        } finally {
-            completionHandle?.dispose()
-
-            if (process?.isAlive == true) process.destroyForcibly()
         }
     }
 }
