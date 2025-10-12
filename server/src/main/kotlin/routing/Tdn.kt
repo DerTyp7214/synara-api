@@ -12,8 +12,10 @@ import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.ktor.server.sse.*
 import io.ktor.utils.io.*
+import kotlinx.coroutines.ensureActive
 import kotlinx.serialization.Serializable
-import kotlin.concurrent.atomics.AtomicBoolean
+import java.time.LocalTime
+import java.time.format.DateTimeFormatter
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 
 @Serializable
@@ -23,8 +25,6 @@ data class DlBody(
 
 @OptIn(ExperimentalAtomicApi::class)
 fun Routing.tdn(service: TdnService) {
-    val isDownloadActive = AtomicBoolean(false)
-
     route("/tdn", {
         tags("tdn")
     }) {
@@ -40,8 +40,11 @@ fun Routing.tdn(service: TdnService) {
             }
         }) {
             post {
-                if (!isDownloadActive.compareAndSet(expectedValue = false, newValue = true)) {
-                    call.respond(HttpStatusCode.Conflict, "Download is already running. (If you just closed one, please wait a few seconds)")
+                if (!service.isDownloadActive.compareAndSet(expectedValue = false, newValue = true)) {
+                    call.respond(
+                        HttpStatusCode.Conflict,
+                        "Download is already running. (If you just closed one, please wait a few seconds)"
+                    )
                     return@post
                 }
 
@@ -67,7 +70,11 @@ fun Routing.tdn(service: TdnService) {
 
                 call.respondBytesWriter(ContentType.Text.EventStream) {
                     suspend fun sendSafe(msg: String) = try {
-                        writeStringUtf8("event: message\ndata: $msg\n\n")
+                        writeStringUtf8(
+                            "event: ${
+                                LocalTime.now().format(DateTimeFormatter.ISO_LOCAL_TIME).split(".").first()
+                            }\ndata: $msg\n\n"
+                        )
                         flush()
                     } catch (_: Throwable) {
                     }
@@ -91,7 +98,7 @@ fun Routing.tdn(service: TdnService) {
 
                     sendSafe("${results.count { it.exitCode == 0 }}/${results.size} successful")
 
-                    isDownloadActive.store(false)
+                    service.isDownloadActive.store(false)
                 }
             }
         }
@@ -104,7 +111,7 @@ fun Routing.tdn(service: TdnService) {
             }
         }) {
             sse {
-                if (!isDownloadActive.compareAndSet(expectedValue = false, newValue = true)) {
+                if (!service.isDownloadActive.compareAndSet(expectedValue = false, newValue = true)) {
                     call.respond(HttpStatusCode.Conflict, "Download is already running.")
                     return@sse
                 }
@@ -115,13 +122,14 @@ fun Routing.tdn(service: TdnService) {
                 send("Starting download of ${type.name.capitalize()}")
 
                 val result = service.downloadFavoriteCollection(type) {
+                    ensureActive()
                     send(it)
                 }
 
                 if (result.exitCode == 0) send("Download complete")
                 else send("Download failed: ${result.error}")
 
-                isDownloadActive.store(false)
+                service.isDownloadActive.store(false)
             }
         }
     }

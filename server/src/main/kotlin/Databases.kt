@@ -6,6 +6,7 @@ import dev.dertyp.AudioUtils.transcodeFlacToWebm
 import dev.dertyp.data.SimpleSong
 import dev.dertyp.routing.*
 import dev.dertyp.services.*
+import dev.hayden.KHealth
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.response.*
@@ -43,6 +44,28 @@ fun Application.configureDatabases() {
     val isTranscoderActive = AtomicBoolean(false)
 
     routing {
+        install(KHealth) {
+            successfulCheckStatusCode = HttpStatusCode.Accepted
+            unsuccessfulCheckStatusCode = HttpStatusCode.Accepted
+            healthChecks {
+                check("available") {
+                    true
+                }
+            }
+
+            readyChecks {
+                check("indexer_ready") {
+                    !indexer.isActive.load()
+                }
+                check("transcoder_ready") {
+                    !isTranscoderActive.load()
+                }
+                check("downloader_ready") {
+                    !tdnService.isDownloadActive.load()
+                }
+            }
+        }
+
         sse("/buildIndex") {
             if (!indexer.isActive.compareAndSet(expectedValue = false, newValue = true)) {
                 call.respond(HttpStatusCode.Conflict, "Indexer is already running.")

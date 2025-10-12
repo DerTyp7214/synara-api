@@ -5,6 +5,7 @@ import dev.dertyp.core.*
 import kotlinx.coroutines.*
 import java.io.InputStreamReader
 import java.nio.file.Path
+import kotlin.concurrent.atomics.AtomicBoolean
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.io.path.*
@@ -19,7 +20,10 @@ enum class TdnFavoriteType {
 
 data class ProcessExecutionResult(val exitCode: Int, val fullOutput: String, val error: String)
 
+@OptIn(ExperimentalAtomicApi::class)
 class TdnService(private val indexer: Indexer) : Service() {
+    val isDownloadActive = AtomicBoolean(false)
+
     @OptIn(ExperimentalAtomicApi::class)
     private suspend fun collectDownloadedFiles(
         command: List<String>,
@@ -114,10 +118,13 @@ class TdnService(private val indexer: Indexer) : Service() {
             }
         }
 
-        val songPaths =
-            paths.filter { it.extension == indexer.audioExtension }.distinctBy { it.absolutePathString() }
-        val playlistPaths =
-            paths.filter { it.extension == indexer.playlistExtension }.distinctBy { it.absolutePathString() }
+        val songPaths = paths
+            .filter { it.extension == indexer.audioExtension }
+            .distinctBy { it.absolutePathString() }
+        val playlistPaths = paths
+            .filter { it.isInside(indexer.playlistsPath ?: it.parent.absolutePathString()) }
+            .filter { it.extension == indexer.playlistExtension }
+            .distinctBy { it.absolutePathString() }
 
         if (result.exitCode == 0 && indexer.isActive.compareAndSet(expectedValue = false, newValue = true)) {
             if (songPaths.isEmpty()) indexer.start(logProxy)

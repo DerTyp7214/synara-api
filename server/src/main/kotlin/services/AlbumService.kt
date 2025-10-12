@@ -212,11 +212,11 @@ class AlbumService(database: Database): Service() {
             val albumId = row.id
             val albumArtists = artistsByPotentialAlbumId[albumId] ?: emptySet()
 
-            val inputAlbum = albums.first {
+            val inputAlbum = albums.firstOrNull {
                 it.name == row.name && getISOFromDate(it.releaseDate) == getISOFromDate(row.releaseDate)
             }
 
-            val requiredArtistIdsForInput = inputAlbum.artists.mapNotNull { artistIdMap[it] }.toSet()
+            val requiredArtistIdsForInput = inputAlbum?.artists?.mapNotNull { artistIdMap[it] }?.toSet() ?: emptySet()
 
             if (albumArtists == requiredArtistIdsForInput) {
                 finalMatchMap[Quadruple(
