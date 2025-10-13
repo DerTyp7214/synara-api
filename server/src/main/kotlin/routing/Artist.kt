@@ -12,7 +12,7 @@ import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.ktor.util.logging.*
 
-fun Routing.artist(service: ArtistService) {
+fun Route.artist(service: ArtistService) {
     val logger = KtorSimpleLogger("artist")
 
     route("/artist", {

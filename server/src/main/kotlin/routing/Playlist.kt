@@ -15,7 +15,7 @@ import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 
-fun Routing.playlist(service: PlaylistService) {
+fun Route.playlist(service: PlaylistService) {
     route("/playlist", {
         tags("playlist")
     }) {

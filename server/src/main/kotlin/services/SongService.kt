@@ -304,6 +304,7 @@ class SongService(database: Database) : Service() {
             .filterNotNull()
 
         val filteredSongs = uniqueSongs.filter {
+            if (albumIdMap[it.album] == null) logger.info("${it.title} (${it.album.name}) has no album.")
             albumIdMap[it.album] != null
         }
 

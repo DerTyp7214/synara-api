@@ -83,15 +83,19 @@ class ImageService(database: Database, environment: ApplicationEnvironment) : Se
     suspend fun createBatch(insertableImages: List<InsertableImage>): List<UUID> {
         if (insertableImages.isEmpty()) return emptyList()
 
-        val imageHashes = dbQuery {
+        val images = dbQuery {
             ImageTable
                 .select(ImageTable.id, ImageTable.imageHash)
                 .where { ImageTable.imageHash inList insertableImages.map { it.imageHash } }
-                .map { it[ImageTable.imageHash] }
-        }
+                .map { Pair(it[ImageTable.id].value, it[ImageTable.imageHash]) }
+        }.toMap()
+
+        val imageHashes = images.values
+        val newImages = insertableImages.filter { it.imageHash !in imageHashes }
+        val existingImages = images.filter { (_, imageHash) -> imageHash !in newImages.map { it.imageHash } }.keys
 
         return dbQuery {
-            ImageTable.batchInsert(insertableImages.filter { it.imageHash !in imageHashes }.map {
+            ImageTable.batchInsert(newImages.map {
                 val imagePath = Path(
                     imagesPath,
                     *it.imageHash.windowed(2, 2).take(4).toTypedArray(),
@@ -107,6 +111,6 @@ class ImageService(database: Database, environment: ApplicationEnvironment) : Se
                 this[ImageTable.path] = Path(imagesPath).relativize(path).pathString
                 this[ImageTable.imageHash] = image.imageHash
             }.map { it[ImageTable.id].value }
-        }
+        } + existingImages
     }
 }

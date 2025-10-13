@@ -23,7 +23,7 @@ data class DlBody(
 )
 
 @OptIn(ExperimentalAtomicApi::class)
-fun Routing.tdn(service: TdnService) {
+fun Route.tdn(service: TdnService) {
     route("/tdn", {
         tags("tdn")
     }) {

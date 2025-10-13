@@ -4,10 +4,14 @@ ktor:
             - dev.dertyp.ApplicationKt.module
     deployment:
         port: 8080
+client:
+  id: ${CLIENT_ID}
+  secret: ${CLIENT_SECRET}
 jwt:
-  domain: "https://jwt-provider-domain/"
-  audience: "jwt-audience"
-  realm: "synara api"
+  issuer: ${JWT_ISSUER}
+  audience: ${JWT_AUDIENCE}
+  realm: ${JWT_REALM}
+  secret: ${JWT_SECRET}
 sqlite:
   path: ${SQLITE_PATH}
 audio:

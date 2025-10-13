@@ -10,7 +10,7 @@ import io.ktor.http.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 
-fun Routing.album(service: AlbumService) {
+fun Route.album(service: AlbumService) {
     route("/album", {
         tags("album")
     }) {

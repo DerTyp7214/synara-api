@@ -11,7 +11,7 @@ import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import kotlin.time.Duration.Companion.minutes
 
-fun Routing.image(service: ImageService) {
+fun Route.image(service: ImageService) {
     route("/image", {
         tags("image")
     }) {

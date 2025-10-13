@@ -26,18 +26,25 @@ class SpotifyService(environment: ApplicationEnvironment) : Service() {
 
         if ((accessToken?.second ?: 0) > System.currentTimeMillis()) return accessToken!!.first
 
-        val tokenResponse = ApiClient.instance.post("https://accounts.spotify.com/api/token") {
+        val response = ApiClient.instance.post("https://accounts.spotify.com/api/token") {
             header(HttpHeaders.ContentType, ContentType.parse("application/x-www-form-urlencoded"))
             parameter("grant_type", "client_credentials")
             parameter("client_id", clientId)
             parameter("client_secret", clientSecret)
-        }.body<AccessTokenResponse>()
+        }
+
+        if (response.status != HttpStatusCode.OK) {
+            delay(30.seconds)
+            return getAccessToken()
+        }
+
+        val tokenResponse = response.body<AccessTokenResponse>()
 
         accessToken = Pair(tokenResponse, System.currentTimeMillis() + tokenResponse.expiresIn)
         return tokenResponse
     }
 
-    suspend fun searchArtists(query: String, limit: Int = 5): List<Artist> {
+    suspend fun searchArtists(query: String, limit: Int = 50): List<Artist> {
         val response = ApiClient.instance.get("https://api.spotify.com/v1/search") {
             val token = getAccessToken()
             header(HttpHeaders.Authorization, "${token.tokenType} ${token.accessToken}")

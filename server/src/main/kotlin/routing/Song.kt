@@ -16,7 +16,7 @@ import io.ktor.server.routing.*
 import io.ktor.util.logging.*
 import java.util.*
 
-fun Routing.song(service: SongService) {
+fun Route.song(service: SongService) {
     val logger = KtorSimpleLogger("song")
 
     route("/song", {

@@ -6,7 +6,8 @@ import org.jaudiotagger.tag.FieldKey
 fun artistSplitter(input: String): List<String> = when {
     else -> input.split(";")
     //else -> input.split(",")
-}
+}.map { it.replace("\\p{Cf}".toRegex(), "").trim() }
+    .filter { it.length > 1 }
 
 val AudioFile.title: String?
     get() = tag.getFirst(FieldKey.TITLE)
@@ -17,7 +18,6 @@ val AudioFile.artists: List<String>
         return artists.ifEmpty { tag.getAll(FieldKey.ARTIST)?.filterNotNull() ?: emptyList() }
             .map(::artistSplitter)
             .flatten()
-            .map { it.trim() }
     }
 
 val AudioFile.year: String?
@@ -35,7 +35,6 @@ val AudioFile.albumArtists: List<String>
         return artists.ifEmpty { tag.getAll(FieldKey.ALBUM_ARTIST)?.filterNotNull() ?: emptyList() }
             .map(::artistSplitter)
             .flatten()
-            .map { it.trim() }
     }
 
 val AudioFile.coverImage: ByteArray?

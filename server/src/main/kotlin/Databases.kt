@@ -1,10 +1,17 @@
 package dev.dertyp
 
+import dev.dertyp.AudioUtils.getSongsWithTranscodingInfo
+import dev.dertyp.core.authHeader
+import dev.dertyp.data.ServerStats
 import dev.dertyp.routing.*
 import dev.dertyp.services.*
 import dev.hayden.KHealth
+import io.github.smiley4.ktoropenapi.get
+import io.github.smiley4.ktoropenapi.route
 import io.ktor.http.*
 import io.ktor.server.application.*
+import io.ktor.server.auth.*
+import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import org.jetbrains.exposed.sql.Database
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
@@ -47,14 +54,51 @@ fun Application.configureDatabases() {
             }
         }
 
-        utils(songService, imageService, albumService, artistService, playlistService, spotifyService, indexer)
+        get("/stats", {
+            response {
+                HttpStatusCode.OK to {
+                    body<ServerStats>()
+                }
+            }
+        }) {
+            val allSongs = getSongsWithTranscodingInfo(listOf())
+            val allArtists = artistService.allArtists(0, Int.MAX_VALUE)
+            val allAlbums = albumService.allAlbums(0, Int.MAX_VALUE)
+            val allPlaylists = playlistService.allPlaylists(0, Int.MAX_VALUE)
 
-        tdn(tdnService)
+            val totalDuration = allSongs.fold(0L) { acc, song -> acc + song.duration }
+            val totalFileSize = allSongs.fold(0L) { acc, song -> acc + song.fileSize }
 
-        song(songService)
+            call.respond(
+                ServerStats(
+                    songCount = allSongs.size,
+                    artistCount = allArtists.data.size,
+                    albumCount = allAlbums.data.size,
+                    playlistCount = allPlaylists.data.size,
+                    totalDuration = totalDuration,
+                    totalFileSize = totalFileSize,
+                    averageSizePerSong = totalFileSize / allSongs.size,
+                )
+            )
+        }
+
         image(imageService)
-        album(albumService)
-        artist(artistService)
-        playlist(playlistService)
+
+        authenticate("synara-auth") {
+            route({
+                request {
+                    authHeader()
+                }
+            }) {
+                utils(imageService, spotifyService, indexer)
+
+                tdn(tdnService)
+
+                song(songService)
+                album(albumService)
+                artist(artistService)
+                playlist(playlistService)
+            }
+        }
     }
 }
