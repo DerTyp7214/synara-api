@@ -4,7 +4,7 @@ import java.util.*
 
 data class Image(
     val id: UUID,
-    val data: ByteArray,
+    val path: String,
     val imageHash: String,
 )
 

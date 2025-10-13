@@ -13,7 +13,7 @@ import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.util.*
 
-class SongService(database: Database): Service() {
+class SongService(database: Database) : Service() {
     val albumArtistAlias = ArtistTable.alias("album_artist_alias")
 
     init {
@@ -64,23 +64,23 @@ class SongService(database: Database): Service() {
     }
 
     suspend fun byTitle(page: Int, pageSize: Int, title: String): PaginatedResponse<Song> =
-        querySongs(page, pageSize) {
+        querySongs(page, pageSize, true) {
             where { SongTable.title eq title }
         }
 
     suspend fun byArtist(page: Int, pageSize: Int, artistId: UUID): PaginatedResponse<Song> =
-        querySongs(page, pageSize) {
+        querySongs(page, pageSize, true) {
             where { SongArtistTable.artistId eq artistId }
         }
 
     suspend fun byAlbum(page: Int, pageSize: Int, albumId: UUID): PaginatedResponse<Song> =
-        querySongs(page, pageSize) {
+        querySongs(page, pageSize, true) {
             where { SongTable.albumId eq albumId }
             orderBy(SongTable.trackNumber, SortOrder.ASC)
         }
 
-    suspend fun rankedSearch(page: Int, pageSize: Int, query: String): PaginatedResponse<Song> =
-        querySongs(page, pageSize) {
+    suspend fun rankedSearch(page: Int, pageSize: Int, query: String, explicit: Boolean): PaginatedResponse<Song> =
+        querySongs(page, pageSize, explicit) {
             rankedSearchQuery(
                 query,
                 listOf(10, 5, 5),
@@ -88,14 +88,15 @@ class SongService(database: Database): Service() {
             )
         }
 
-    suspend fun allSongs(page: Int, pageSize: Int): PaginatedResponse<Song> = querySongs(page, pageSize)
+    suspend fun allSongs(page: Int, pageSize: Int, explicit: Boolean): PaginatedResponse<Song> = querySongs(page, pageSize, explicit)
 
     private suspend fun querySingle(query: Query.() -> Query) =
-        querySongs(0, Int.MAX_VALUE, query).data.singleOrNull()
+        querySongs(0, Int.MAX_VALUE, true, query).data.singleOrNull()
 
     private suspend fun querySongs(
         page: Int,
         pageSize: Int,
+        explicit: Boolean,
         query: Query.() -> Query = { this }
     ) = dbQuery {
         val offset = if (pageSize == Int.MAX_VALUE) 0 else 1
@@ -145,7 +146,7 @@ class SongService(database: Database): Service() {
             emptyMap()
         }
 
-        val data = mapEagerly(rows, albumArtistAlias, statsByAlbumId)
+        val data = mapEagerly(rows, albumArtistAlias, statsByAlbumId, explicit)
 
         PaginatedResponse(
             data = data.drop(page * pageSize).take(pageSize),
@@ -158,7 +159,8 @@ class SongService(database: Database): Service() {
     private fun mapEagerly(
         rows: List<ResultRow>,
         albumArtistAlias: Alias<ArtistTable>,
-        albumStats: Map<UUID, Pair<Long, Long>>
+        albumStats: Map<UUID, Pair<Long, Long>>,
+        explicit: Boolean = false
     ): List<Song> {
         val songMap = mutableMapOf<UUID, Song>()
         val songArtistsMap = mutableMapOf<UUID, MutableList<Artist>>()
@@ -202,6 +204,11 @@ class SongService(database: Database): Service() {
                 album = albumWithArtists,
                 artists = songArtists
             )
+        }.groupBy {
+            listOf(it.title, it.releaseDate, it.duration, it.trackNumber, it.discNumber, it.album?.id)
+        }.mapNotNull { (_, songList) ->
+            if (explicit) songList.find { it.explicit } ?: songList.first()
+            else songList.find { !it.explicit }
         }
     }
 
@@ -218,7 +225,14 @@ class SongService(database: Database): Service() {
                 onColumn = { SongArtistTable.artistId },
                 otherColumn = { ArtistTable.id }
             )
-            .select(SongTable.id, SongTable.title, SongTable.trackNumber, SongTable.discNumber, SongTable.explicit, AlbumTable.name)
+            .select(
+                SongTable.id,
+                SongTable.title,
+                SongTable.trackNumber,
+                SongTable.discNumber,
+                SongTable.explicit,
+                AlbumTable.name
+            )
             .withDistinct()
             .where { SongTable.title inList songs.map { it.title } }
             .andWhere { SongTable.trackNumber inList songs.map { it.trackNumber } }

@@ -11,6 +11,7 @@ import kotlin.time.Duration.Companion.milliseconds
 fun Route.m3u(
     path: String = "/m3u/{id}",
     pathParams: List<Pair<String, String>> = listOf(Pair("id", "")),
+    queryParams: List<Pair<String, String>> = listOf(),
     validate: (Map<String, String?>) -> Boolean = { it.none { (_, value) -> value == null } },
     fetchData: suspend (Map<String, String?>) -> Pair<String, List<PlaylistEntry>>?
 ) {
@@ -34,6 +35,11 @@ fun Route.m3u(
                     description = desc
                 }
             }
+            for ((name, desc) in queryParams) {
+                queryParameter<String>(name) {
+                    description = desc
+                }
+            }
         }
         response {
             HttpStatusCode.OK to {
@@ -48,7 +54,7 @@ fun Route.m3u(
 
         val paramMap = mutableMapOf<String, String?>()
 
-        for ((name) in pathParams) paramMap[name] = call.parameters[name]
+        for ((name) in (pathParams + queryParams)) paramMap[name] = call.parameters[name]
 
         if (!validate(paramMap)) return@get call.respond(HttpStatusCode.BadRequest)
 

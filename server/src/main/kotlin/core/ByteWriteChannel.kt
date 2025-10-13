@@ -7,6 +7,8 @@ suspend fun ByteWriteChannel.isClientConnected(): Boolean = try {
     writeStringUtf8("")
     flush()
     true
-} catch (e: IOException) {
+} catch (_: IOException) {
+    false
+} catch (_: NullPointerException) {
     false
 }

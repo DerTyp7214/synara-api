@@ -26,6 +26,8 @@ import org.jetbrains.exposed.sql.batchInsert
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.Paths
+import kotlin.concurrent.atomics.AtomicBoolean
+import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.io.path.Path
 import kotlin.math.abs
 import kotlin.math.min
@@ -37,8 +39,11 @@ data class StreamInfo(
     val fileName: String,
 )
 
+@OptIn(ExperimentalAtomicApi::class)
 object AudioUtils {
     val logger = KtorSimpleLogger("AudioUtils")
+
+    val isTranscoderActive = AtomicBoolean(false)
 
     private fun closestSampleRate(rate: Int): Int {
         val supported = listOf(8000, 12000, 16000, 24000, 48000)
@@ -88,8 +93,6 @@ object AudioUtils {
         tempFile.createNewFile()
 
         try {
-            logger.info("Starting FFmpeg transcofing of ${flacFile.name} to ${targetKbps}kbps into temporary file: ${tempFile.name}")
-
             avutil.av_log_set_level(avutil.AV_LOG_QUIET)
 
             val grabber = FFmpegFrameGrabber(flacFile.absolutePath).apply { start() }
@@ -128,8 +131,6 @@ object AudioUtils {
             recorder.release()
             grabber.stop()
             grabber.release()
-
-            logger.info("Transcoding complete. Size ${tempFile.length()} bytes (${tempFile.absolutePath}).")
 
             return@withContext StreamInfo(
                 tempFile,

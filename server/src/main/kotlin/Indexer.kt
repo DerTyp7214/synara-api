@@ -35,9 +35,9 @@ class Indexer(
 ) {
     private val logger = KtorSimpleLogger("Indexer")
 
-    val tracksPath = environment.config.propertyOrNull("audio.tracks")?.getString()
-    val albumsPath = environment.config.propertyOrNull("audio.albums")?.getString()
-    val playlistsPath = environment.config.propertyOrNull("audio.playlists")?.getString()
+    val tracksPath = environment.config.propertyOrNull("audio.tracks")?.getString()?.removeSuffix("/")
+    val albumsPath = environment.config.propertyOrNull("audio.albums")?.getString()?.removeSuffix("/")
+    val playlistsPath = environment.config.propertyOrNull("audio.playlists")?.getString()?.removeSuffix("/")
 
     val audioExtension = "flac"
     val playlistExtension = "m3u"

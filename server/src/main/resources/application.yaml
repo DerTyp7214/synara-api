@@ -9,9 +9,14 @@ jwt:
   audience: "jwt-audience"
   realm: "synara api"
 sqlite:
-  path: "./data.db"
+  path: ${SQLITE_PATH}
 audio:
-  tracks: "/home/typ/Music/Tidal/Tracks/"
-  albums: "/home/typ/Music/Tidal/Albums/"
-  playlists: "/home/typ/Music/Tidal/Playlists/"
-  transcode: "/home/typ/Music/Tidal/Transcode/"
+  tracks: ${AUDIO_TRACKS_PATH}
+  albums: ${AUDIO_ALBUMS_PATH}
+  playlists: ${AUDIO_PLAYLISTS_PATH}
+  transcode: ${AUDIO_TRANSCODE_PATH}
+data:
+  images: ${DATA_IMAGES_PATH}
+spotify:
+  clientId: ${SPOTIFY_CLIENT_ID}
+  clientSecret: ${SPOTIFY_CLIENT_SECRET}

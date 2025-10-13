@@ -22,6 +22,8 @@ application {
 }
 
 dependencies {
+    implementation("io.ktor:ktor-client-core")
+    implementation("io.ktor:ktor-client-cio")
     implementation("io.ktor:ktor-server-cors")
     implementation("io.ktor:ktor-server-core")
     implementation("com.ucasoft.ktor:ktor-simple-cache:0.55.3")
@@ -36,6 +38,7 @@ dependencies {
     implementation("io.ktor:ktor-server-webjars")
     implementation("io.ktor:ktor-server-call-logging")
     implementation("dev.hayden:khealth:3.0.2")
+    implementation("io.ktor:ktor-client-content-negotiation")
     implementation("io.ktor:ktor-server-content-negotiation")
     implementation("io.ktor:ktor-serialization-gson")
     implementation("io.ktor:ktor-serialization-kotlinx-protobuf")

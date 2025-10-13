@@ -87,7 +87,7 @@ class TdnService(private val indexer: Indexer) : Service() {
         val paths = pathLines.map { Path(it) }.filter { it.exists() }.toMutableList()
 
         val pathAlternation =
-            "(${indexer.playlistsPath?.removeSuffix("/")}|${indexer.albumsPath?.removeSuffix("/")})"
+            "(${indexer.playlistsPath}|${indexer.albumsPath})"
 
         val playlistRegex =
             Regex("${pathAlternation}/([^/]+?)/_[^/]+?\\.m3u", RegexOption.DOT_MATCHES_ALL)
@@ -138,7 +138,7 @@ class TdnService(private val indexer: Indexer) : Service() {
             logProxy("Took ${currentTry + 1} tr${if (currentTry == 0) "y" else "ies"} to download.")
         } else if (result.exitCode == 1 && indexer.playlistsPath != null) {
             val pathAlternation =
-                "(${indexer.playlistsPath.removeSuffix("/")}|${indexer.albumsPath?.removeSuffix("/")})"
+                "(${indexer.playlistsPath}|${indexer.albumsPath})"
 
             val rootPath = Path(indexer.playlistsPath).parent.absolute()
 
@@ -225,7 +225,7 @@ class TdnService(private val indexer: Indexer) : Service() {
             return ProcessExecutionResult(-1, "Error: Command must start with 'tdn'.", "")
         }
 
-        println("Starting command: ${command.joinToString(" ")}")
+        logger.info("Starting command: ${command.joinToString(" ")}")
 
         val fullOutput = StringBuilder()
 

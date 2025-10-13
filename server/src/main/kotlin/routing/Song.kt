@@ -140,6 +140,9 @@ fun Routing.song(service: SongService) {
                 pathParameter<String>("query") {
                     description = "The query."
                 }
+                queryParameter<Boolean>("explicit") {
+                    description = "Include explicit songs."
+                }
 
                 paging()
             }
@@ -153,18 +156,25 @@ fun Routing.song(service: SongService) {
             val query = call.parameters["query"]
             if (query == null) return@get call.respond(HttpStatusCode.BadRequest)
 
+            val explicit = call.parameters["explicit"] == "true"
+
             val (page, pageSize) = call.paging()
 
-            call.respond(service.rankedSearch(page, pageSize, query).omitLyrics())
+            call.respond(service.rankedSearch(page, pageSize, query, explicit).omitLyrics())
         }
         m3u(
             path = "/search/{query}/m3u",
-            pathParams = listOf(Pair("query", "The query to search all songs for.")),
+            pathParams = listOf(
+                Pair("query", "The query to search all songs for."),
+            ),
+            queryParams = listOf(
+                Pair("explicit", "Include explicit songs."),
+            ),
             validate = { map -> map["query"] != null }) { map ->
             map["query"]?.let {
                 Pair(
                     "All Songs for $it",
-                    service.rankedSearch(0, Int.MAX_VALUE, it).data.map { song ->
+                    service.rankedSearch(0, Int.MAX_VALUE, it, map["explicit"] == "true").data.map { song ->
                         PlaylistEntry(song.id, song.title, song.duration)
                     }
                 )
@@ -174,6 +184,10 @@ fun Routing.song(service: SongService) {
 
         get("/list", {
             request {
+                queryParameter<Boolean>("explicit") {
+                    description = "Include explicit songs."
+                }
+
                 paging()
             }
             response {
@@ -183,14 +197,22 @@ fun Routing.song(service: SongService) {
                 }
             }
         }) {
+            val explicit = call.parameters["explicit"] == "true"
+
             val (page, pageSize) = call.paging()
-            call.respond(service.allSongs(page, pageSize).omitLyrics())
+            call.respond(service.allSongs(page, pageSize, explicit).omitLyrics())
         }
 
-        m3u(path = "/list/m3u", pathParams = listOf(), validate = { true }) {
+        m3u(
+            path = "/list/m3u",
+            pathParams = listOf(),
+            queryParams = listOf(
+                Pair("explicit", "Include explicit songs."),
+            ),
+            validate = { true }) { map ->
             Pair(
                 "All Songs",
-                service.allSongs(0, Int.MAX_VALUE).data.map {
+                service.allSongs(0, Int.MAX_VALUE, map["explicit"] == "true").data.map {
                     PlaylistEntry(it.id, it.title, it.duration)
                 }
             )

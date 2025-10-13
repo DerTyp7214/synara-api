@@ -6,17 +6,22 @@ import dev.dertyp.data.InsertableImage
 import dev.dertyp.data.PaginatedResponse
 import dev.dertyp.db.ImageTable
 import dev.dertyp.dbQuery
+import io.ktor.server.application.*
 import org.jetbrains.exposed.sql.*
-import org.jetbrains.exposed.sql.statements.api.ExposedBlob
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.util.*
+import kotlin.io.path.*
 
-class ImageService(database: Database): Service() {
+class ImageService(database: Database, environment: ApplicationEnvironment) : Service() {
+    private val imagesPath = environment.config.property("data.images").getString().removeSuffix("/")
+
     init {
         transaction(database) {
             execInBatch(listOf("PRAGMA foreign_keys = ON"))
             SchemaUtils.create(ImageTable)
         }
+
+        Path(imagesPath).toFile().mkdirs()
 
         instance = this
     }
@@ -28,12 +33,12 @@ class ImageService(database: Database): Service() {
 
         fun mapImage(resultRow: ResultRow): Image {
             val id = resultRow[ImageTable.id].value
-            val data = resultRow[ImageTable.data]
+            val path = Path(instance!!.imagesPath, resultRow[ImageTable.path]).absolutePathString()
             val imageHash = resultRow[ImageTable.imageHash]
 
             return Image(
                 id = id,
-                data = data.bytes,
+                path = path,
                 imageHash = imageHash
             )
         }
@@ -78,7 +83,7 @@ class ImageService(database: Database): Service() {
     suspend fun createBatch(insertableImages: List<InsertableImage>): List<UUID> {
         if (insertableImages.isEmpty()) return emptyList()
 
-        val imageIds = dbQuery {
+        val imageHashes = dbQuery {
             ImageTable
                 .select(ImageTable.id, ImageTable.imageHash)
                 .where { ImageTable.imageHash inList insertableImages.map { it.imageHash } }
@@ -86,9 +91,21 @@ class ImageService(database: Database): Service() {
         }
 
         return dbQuery {
-            ImageTable.batchInsert(insertableImages.filter { it.imageHash !in imageIds }) {
-                this[ImageTable.data] = ExposedBlob(it.data)
-                this[ImageTable.imageHash] = it.imageHash
+            ImageTable.batchInsert(insertableImages.filter { it.imageHash !in imageHashes }.map {
+                val imagePath = Path(
+                    imagesPath,
+                    *it.imageHash.windowed(2, 2).take(4).toTypedArray(),
+                    "${it.imageHash.drop(2 * 4)}.jpeg"
+                )
+                if (imagePath.exists()) return@map Pair(it, imagePath)
+
+                imagePath.parent.toFile().mkdirs()
+
+                imagePath.writeBytes(it.data)
+                Pair(it, imagePath)
+            }) { (image, path) ->
+                this[ImageTable.path] = Path(imagesPath).relativize(path).pathString
+                this[ImageTable.imageHash] = image.imageHash
             }.map { it[ImageTable.id].value }
         }
     }

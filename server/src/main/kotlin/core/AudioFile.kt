@@ -3,15 +3,21 @@ package dev.dertyp.core
 import org.jaudiotagger.audio.AudioFile
 import org.jaudiotagger.tag.FieldKey
 
+fun artistSplitter(input: String): List<String> = when {
+    else -> input.split(";")
+    //else -> input.split(",")
+}
+
 val AudioFile.title: String?
     get() = tag.getFirst(FieldKey.TITLE)
 
 val AudioFile.artists: List<String>
     get() {
         val artists = tag.getAll(FieldKey.ARTISTS)?.filterNotNull() ?: emptyList()
-        return artists.ifEmpty { tag.getAll(FieldKey.ARTIST)?.filterNotNull() ?: emptyList() }.map {
-            it.split(",", ";", " & ")
-        }.flatten().map { it.trim() }
+        return artists.ifEmpty { tag.getAll(FieldKey.ARTIST)?.filterNotNull() ?: emptyList() }
+            .map(::artistSplitter)
+            .flatten()
+            .map { it.trim() }
     }
 
 val AudioFile.year: String?
@@ -26,9 +32,10 @@ val AudioFile.songCount: Int?
 val AudioFile.albumArtists: List<String>
     get() {
         val artists = tag.getAll(FieldKey.ALBUM_ARTISTS)?.filterNotNull() ?: emptyList()
-        return artists.ifEmpty { tag.getAll(FieldKey.ALBUM_ARTIST)?.filterNotNull() ?: emptyList() }.map {
-            it.split(",", ";", " & ")
-        }.flatten().map { it.trim() }
+        return artists.ifEmpty { tag.getAll(FieldKey.ALBUM_ARTIST)?.filterNotNull() ?: emptyList() }
+            .map(::artistSplitter)
+            .flatten()
+            .map { it.trim() }
     }
 
 val AudioFile.coverImage: ByteArray?
