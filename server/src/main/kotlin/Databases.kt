@@ -1,25 +1,20 @@
 package dev.dertyp
 
 import dev.dertyp.AudioUtils.getSongsWithTranscodingInfo
-import dev.dertyp.core.authHeader
 import dev.dertyp.data.ServerStats
 import dev.dertyp.routing.*
 import dev.dertyp.services.*
 import dev.hayden.KHealth
 import io.github.smiley4.ktoropenapi.get
-import io.github.smiley4.ktoropenapi.route
 import io.ktor.http.*
 import io.ktor.server.application.*
-import io.ktor.server.auth.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import org.jetbrains.exposed.sql.Database
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 
 @OptIn(ExperimentalAtomicApi::class)
-fun Application.configureDatabases() {
-    val dbPath = environment.config.propertyOrNull("sqlite.path")?.getString() ?: "./data.db"
-    val database = Database.connect("jdbc:sqlite:$dbPath", "org.sqlite.JDBC")
+fun Application.configureDatabases(database: Database, jwtService: JwtService) {
     val songService = SongService(database)
     val imageService = ImageService(database, environment)
     val albumService = AlbumService(database)
@@ -84,21 +79,15 @@ fun Application.configureDatabases() {
 
         image(imageService)
 
-        authenticate("synara-auth") {
-            route({
-                request {
-                    authHeader()
-                }
-            }) {
-                utils(imageService, spotifyService, indexer)
+        jwtService.authenticated(this) {
+            utils(imageService, spotifyService, indexer)
 
-                tdn(tdnService)
+            tdn(tdnService)
 
-                song(songService)
-                album(albumService)
-                artist(artistService)
-                playlist(playlistService)
-            }
+            song(songService)
+            album(albumService)
+            artist(artistService)
+            playlist(playlistService)
         }
     }
 }
