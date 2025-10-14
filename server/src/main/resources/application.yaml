@@ -24,3 +24,6 @@ data:
 spotify:
   clientId: ${SPOTIFY_CLIENT_ID}
   clientSecret: ${SPOTIFY_CLIENT_SECRET}
+tidal:
+  clientId: ${TIDAL_CLIENT_ID}
+  clientSecret: ${TIDAL_CLIENT_SECRET}

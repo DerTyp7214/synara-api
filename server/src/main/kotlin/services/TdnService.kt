@@ -130,9 +130,7 @@ class TdnService(private val indexer: Indexer) : Service() {
 
         if (result.exitCode == 0 && indexer.isActive.compareAndSet(expectedValue = false, newValue = true)) {
             if (songPaths.isEmpty()) indexer.start(logProxy)
-            else indexer.start(songPaths, playlistPaths.ifEmpty {
-                indexer.playlistsPath?.let { listOf(Path(it)) } ?: emptyList()
-            }, stdout = logProxy)
+            else indexer.start(songPaths, playlistPaths.ifEmpty { emptyList() }, stdout = logProxy)
             indexer.isActive.store(false)
 
             logProxy("Took ${currentTry + 1} tr${if (currentTry == 0) "y" else "ies"} to download.")
@@ -271,7 +269,11 @@ class TdnService(private val indexer: Indexer) : Service() {
             } catch (e: Exception) {
                 if (e is ClientCloseException || e.cause is ClientCloseException) logger.info("Client disconnected.")
                 else e.printStackTrace()
-                return@coroutineScope ProcessExecutionResult(-2, fullOutput.toString(), "Failed to execute 'tdn'. Error: ${e.message}")
+                return@coroutineScope ProcessExecutionResult(
+                    -2,
+                    fullOutput.toString(),
+                    "Failed to execute 'tdn'. Error: ${e.message}"
+                )
             } finally {
                 completionHandle?.dispose()
 

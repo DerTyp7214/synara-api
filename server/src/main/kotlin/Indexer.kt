@@ -68,7 +68,8 @@ class Indexer(
 
         log("Starting Indexer").await()
 
-        log("Scanning ${songPaths.joinToString(", ") { it.absolutePathString() }}").await()
+        log("Scanning Songs ${songPaths.joinToString(", ") { it.absolutePathString() }}").await()
+        log("Scanning Playlists ${playlistPaths.joinToString(", ") { it.absolutePathString() }}").await()
         val startTime = Clock.System.now()
 
         val songs = buildMap(songPaths)

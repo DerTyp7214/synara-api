@@ -21,7 +21,6 @@ fun Application.configureDatabases(database: Database, jwtService: JwtService) {
     val albumService = AlbumService(database)
     val artistService = ArtistService(database)
     val playlistService = PlaylistService(database)
-    val spotifyService = SpotifyService(environment)
 
     val indexer = Indexer(songService, imageService, playlistService)
 
@@ -83,7 +82,7 @@ fun Application.configureDatabases(database: Database, jwtService: JwtService) {
         image(imageService)
 
         jwtService.authenticated(this) {
-            utils(imageService, spotifyService, indexer)
+            utils(imageService, environment, indexer)
 
             tdn(tdnService)
 

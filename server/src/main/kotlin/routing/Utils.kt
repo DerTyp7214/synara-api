@@ -15,9 +15,10 @@ import dev.dertyp.data.SimpleSong
 import dev.dertyp.db.ArtistTable
 import dev.dertyp.dbQuery
 import dev.dertyp.services.ImageService
-import dev.dertyp.services.SpotifyService
+import dev.dertyp.services.metadata.MetadataService
 import io.github.smiley4.ktoropenapi.route
 import io.ktor.http.*
+import io.ktor.server.application.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.ktor.server.sse.*
@@ -37,13 +38,14 @@ import kotlin.concurrent.atomics.ExperimentalAtomicApi
 @OptIn(ExperimentalAtomicApi::class)
 fun Route.utils(
     imageService: ImageService,
-    spotifyService: SpotifyService,
+    environment: ApplicationEnvironment,
     indexer: Indexer,
 ) {
     val maxConcurrentTranscoders = 6
 
-    route("/fetchArtistImages", HttpMethod.Get, {
+    route("/fetchArtistImages/{metadataProvider}", HttpMethod.Get, {
         request {
+            pathParameter<MetadataService.Companion.MetadataType>("metadataProvider")
         }
     }) {
         sse {
@@ -52,7 +54,14 @@ fun Route.utils(
                 return@sse
             }
 
-            if (!spotifyService.isFetching.compareAndSet(expectedValue = false, newValue = true)) {
+            val metadataProviderString = call.parameters["metadataProvider"]
+            if (metadataProviderString == null) return@sse call.respond(HttpStatusCode.BadRequest)
+
+            val metadataProvider = MetadataService.Companion.MetadataType.valueOf(metadataProviderString)
+
+            val service = MetadataService.getMetadataService(metadataProvider, environment)
+
+            if (!MetadataService.isFetching.compareAndSet(expectedValue = false, newValue = true)) {
                 call.respond(HttpStatusCode.Conflict, "Fetching is already in progress.")
                 return@sse
             }
@@ -72,7 +81,7 @@ fun Route.utils(
                         launch {
                             for ((id, name) in artistChannel) {
                                 send("Fetching image for: $name")
-                                val response = spotifyService.searchArtists(name)
+                                val response = service.searchArtists(name)
                                 val artist = response.sortedByDescending { it.popularity }.firstOrNull { artist ->
                                     artist.name.replace(".", "")
                                         .equals(name.replace(".", ""), ignoreCase = true)
@@ -82,9 +91,10 @@ fun Route.utils(
                                     continue
                                 }
 
-                                val image = artist.images.maxByOrNull { it.width }
+                                val images = artist.images()
+                                val image = images.maxByOrNull { it.width }
                                 if (image == null) {
-                                    send("No image for \"$name\" $artist")
+                                    send("No image for \"$name\" $artist ${images.joinToString(", ")}")
                                     continue
                                 }
 
@@ -129,8 +139,11 @@ fun Route.utils(
                 send("Loading artist images done.")
             } catch (e: CancellationException) {
                 throw e
+            } catch (_: ClosedWriteChannelException) {
+            } catch (e: Throwable) {
+                e.printStackTrace()
             } finally {
-                spotifyService.isFetching.store(false)
+                MetadataService.isFetching.store(false)
             }
         }
     }

@@ -6,6 +6,7 @@ import com.auth0.jwt.algorithms.Algorithm
 import dev.dertyp.core.authHeader
 import dev.dertyp.data.AuthenticationRequest
 import dev.dertyp.data.AuthenticationResponse
+import dev.dertyp.data.RefreshTokenRequest
 import dev.dertyp.data.User
 import io.github.smiley4.ktoropenapi.config.descriptors.ValueExampleDescriptor
 import io.github.smiley4.ktoropenapi.post
@@ -27,7 +28,7 @@ class JwtService(
     environment: ApplicationEnvironment,
     private val userService: UserService,
     private val refreshTokenService: RefreshTokenService
-) {
+): Service() {
     val jwtAudience = environment.config.property("jwt.audience").getString()
     val jwtIssuer = environment.config.property("jwt.issuer").getString()
     val jwtRealm = environment.config.property("jwt.realm").getString()
@@ -92,10 +93,10 @@ class JwtService(
 
         post("/refresh-token", {
             request {
-                body<String>()
+                body<RefreshTokenRequest>()
             }
         }) {
-            val refreshToken = call.receiveText()
+            val refreshToken = call.receive<RefreshTokenRequest>().refreshToken
 
             val dbToken = refreshTokenService.validByTokenHash(refreshToken)
 
@@ -181,8 +182,8 @@ class JwtService(
 
     fun generateRefreshToken(): String {
         val random = SecureRandom.getInstanceStrong()
-        val bytes = ByteArray(64)
+        val bytes = ByteArray(192)
         random.nextBytes(bytes)
-        return Base64.UrlSafe.encode(bytes)
+        return Base64.UrlSafe.encode(bytes).take(255)
     }
 }
