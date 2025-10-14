@@ -1,6 +1,7 @@
 package dev.dertyp
 
 import dev.dertyp.services.JwtService
+import dev.dertyp.services.RefreshTokenService
 import dev.dertyp.services.UserService
 import io.ktor.server.application.*
 import io.ktor.server.plugins.calllogging.*
@@ -15,7 +16,8 @@ fun Application.module() {
     val database = Database.connect("jdbc:sqlite:$dbPath", "org.sqlite.JDBC")
 
     val userService = UserService(database, environment)
-    val jwtService = JwtService(environment, userService)
+    val refreshTokenService = RefreshTokenService(database)
+    val jwtService = JwtService(environment, userService, refreshTokenService)
 
     install(CallLogging)
 

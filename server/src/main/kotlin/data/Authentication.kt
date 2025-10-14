@@ -13,6 +13,7 @@ data class AuthenticationRequest(
 @Serializable
 data class AuthenticationResponse(
     val token: String,
+    val refreshToken: String,
     @Serializable(with = DateSerializer::class)
     val expiresAt: Date,
 )

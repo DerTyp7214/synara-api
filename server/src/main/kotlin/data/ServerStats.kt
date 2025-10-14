@@ -7,6 +7,7 @@ data class ServerStats(
     val songCount: Int,
     val albumCount: Int,
     val artistCount: Int,
+    val imagesCount: Int,
     val playlistCount: Int,
     val totalFileSize: Long,
     val averageSizePerSong: Long,

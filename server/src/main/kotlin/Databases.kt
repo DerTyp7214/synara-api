@@ -2,6 +2,7 @@ package dev.dertyp
 
 import dev.dertyp.AudioUtils.getSongsWithTranscodingInfo
 import dev.dertyp.data.ServerStats
+import dev.dertyp.db.ImageTable
 import dev.dertyp.routing.*
 import dev.dertyp.services.*
 import dev.hayden.KHealth
@@ -60,6 +61,7 @@ fun Application.configureDatabases(database: Database, jwtService: JwtService) {
             val allArtists = artistService.allArtists(0, Int.MAX_VALUE)
             val allAlbums = albumService.allAlbums(0, Int.MAX_VALUE)
             val allPlaylists = playlistService.allPlaylists(0, Int.MAX_VALUE)
+            val images = dbQuery { ImageTable.select(ImageTable.id).map { it[ImageTable.id].value } }
 
             val totalDuration = allSongs.fold(0L) { acc, song -> acc + song.duration }
             val totalFileSize = allSongs.fold(0L) { acc, song -> acc + song.fileSize }
@@ -69,6 +71,7 @@ fun Application.configureDatabases(database: Database, jwtService: JwtService) {
                     songCount = allSongs.size,
                     artistCount = allArtists.data.size,
                     albumCount = allAlbums.data.size,
+                    imagesCount = images.size,
                     playlistCount = allPlaylists.data.size,
                     totalDuration = totalDuration,
                     totalFileSize = totalFileSize,
@@ -85,6 +88,7 @@ fun Application.configureDatabases(database: Database, jwtService: JwtService) {
             tdn(tdnService)
 
             song(songService)
+            stream(songService)
             album(albumService)
             artist(artistService)
             playlist(playlistService)

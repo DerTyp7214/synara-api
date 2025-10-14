@@ -74,7 +74,7 @@ fun Route.m3u(
         for (entry in entries.let { if (shuffle) it.shuffled() else it }) {
             if (extM3u) lines.add("#EXTINF:${entry.duration.milliseconds.inWholeSeconds},${entry.name}")
             if (onlyIds) lines.add(entry.id.toString())
-            else lines.add("${scheme}://${host}${port}/song/stream/${entry.id}")
+            else lines.add("${scheme}://${host}${port}/stream/${entry.id}")
         }
 
         call.response.header(

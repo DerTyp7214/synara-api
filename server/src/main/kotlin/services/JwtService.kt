@@ -6,6 +6,7 @@ import com.auth0.jwt.algorithms.Algorithm
 import dev.dertyp.core.authHeader
 import dev.dertyp.data.AuthenticationRequest
 import dev.dertyp.data.AuthenticationResponse
+import dev.dertyp.data.User
 import io.github.smiley4.ktoropenapi.config.descriptors.ValueExampleDescriptor
 import io.github.smiley4.ktoropenapi.post
 import io.github.smiley4.ktoropenapi.route
@@ -16,10 +17,17 @@ import io.ktor.server.auth.jwt.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import java.security.SecureRandom
 import java.util.*
+import kotlin.io.encoding.Base64
+import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.hours
 
-class JwtService(environment: ApplicationEnvironment, private val userService: UserService) {
+class JwtService(
+    environment: ApplicationEnvironment,
+    private val userService: UserService,
+    private val refreshTokenService: RefreshTokenService
+) {
     val jwtAudience = environment.config.property("jwt.audience").getString()
     val jwtIssuer = environment.config.property("jwt.issuer").getString()
     val jwtRealm = environment.config.property("jwt.realm").getString()
@@ -73,7 +81,39 @@ class JwtService(environment: ApplicationEnvironment, private val userService: U
                 "Invalid username or password"
             )
 
-            call.respond(HttpStatusCode.OK, generateToken(authenticationRequest.username))
+            val token = generateToken(user)
+            if (token == null) return@post call.respond(
+                HttpStatusCode.InternalServerError,
+                "Something went wrong inserting the refresh token."
+            )
+
+            call.respond(HttpStatusCode.OK, token)
+        }
+
+        post("/refresh-token", {
+            request {
+                body<String>()
+            }
+        }) {
+            val refreshToken = call.receiveText()
+
+            val dbToken = refreshTokenService.validByTokenHash(refreshToken)
+
+            if (dbToken == null) return@post call.respond(
+                HttpStatusCode.Unauthorized,
+                "Invalid refresh token"
+            )
+
+            val user = userService.findUserById(dbToken.userId)
+            if (user == null) return@post call.respond(HttpStatusCode.Unauthorized, "Invalid user")
+
+            val newToken = generateToken(user, true)
+            if (newToken == null) return@post call.respond(
+                HttpStatusCode.InternalServerError,
+                "Something went wrong inserting the refresh token."
+            )
+
+            call.respond(HttpStatusCode.OK, newToken)
         }
 
         authenticated(this) {
@@ -85,7 +125,12 @@ class JwtService(environment: ApplicationEnvironment, private val userService: U
                 response {
                     HttpStatusCode.OK to {
                         body<Map<String, String>> {
-                            example(ValueExampleDescriptor("UserResponse", mapOf("userId" to UUID.randomUUID().toString())))
+                            example(
+                                ValueExampleDescriptor(
+                                    "UserResponse",
+                                    mapOf("userId" to UUID.randomUUID().toString())
+                                )
+                            )
                         }
                     }
                 }
@@ -103,19 +148,41 @@ class JwtService(environment: ApplicationEnvironment, private val userService: U
         }
     }
 
-    fun generateToken(username: String): AuthenticationResponse {
-        val expiresAt = Date(System.currentTimeMillis() + 1.hours.inWholeMilliseconds)
+    suspend fun generateToken(user: User, refresh: Boolean = false): AuthenticationResponse? {
+        val expiresAt = Date(System.currentTimeMillis() + 24.hours.inWholeMilliseconds)
 
         val token = JWT.create()
             .withAudience(jwtAudience)
             .withIssuer(jwtIssuer)
-            .withClaim("username", username)
+            .withClaim("username", user.username)
             .withExpiresAt(expiresAt)
             .sign(Algorithm.HMAC256(jwtSecret))
 
+
+        var newRefreshToken = refresh
+        val refreshToken = if (!refresh) {
+            val existingToken = refreshTokenService.validByUserId(user.id)
+            newRefreshToken = existingToken == null
+            existingToken?.tokenHash ?: generateRefreshToken()
+        } else generateRefreshToken()
+
+
+        if (newRefreshToken) {
+            val tokenId = refreshTokenService.createToken(user.id, 30.days, refreshToken)
+            if (tokenId == null) return null
+        }
+
         return AuthenticationResponse(
             token = token,
+            refreshToken = refreshToken,
             expiresAt = expiresAt
         )
+    }
+
+    fun generateRefreshToken(): String {
+        val random = SecureRandom.getInstanceStrong()
+        val bytes = ByteArray(64)
+        random.nextBytes(bytes)
+        return Base64.UrlSafe.encode(bytes)
     }
 }

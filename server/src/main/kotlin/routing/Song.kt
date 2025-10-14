@@ -5,7 +5,6 @@ import dev.dertyp.core.paging
 import dev.dertyp.core.toUUIDOrNull
 import dev.dertyp.data.*
 import dev.dertyp.services.SongService
-import dev.dertyp.stream
 import io.github.smiley4.ktoropenapi.get
 import io.github.smiley4.ktoropenapi.post
 import io.github.smiley4.ktoropenapi.route
@@ -180,7 +179,6 @@ fun Route.song(service: SongService) {
                 )
             }
         }
-        stream(service)
 
         get("/list", {
             request {
