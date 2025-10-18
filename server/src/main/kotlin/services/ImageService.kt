@@ -35,11 +35,13 @@ class ImageService(database: Database, environment: ApplicationEnvironment) : Se
             val id = resultRow[ImageTable.id].value
             val path = Path(instance!!.imagesPath, resultRow[ImageTable.path]).absolutePathString()
             val imageHash = resultRow[ImageTable.imageHash]
+            val origin = resultRow[ImageTable.origin]
 
             return Image(
                 id = id,
                 path = path,
-                imageHash = imageHash
+                imageHash = imageHash,
+                origin = origin,
             )
         }
     }
@@ -110,6 +112,7 @@ class ImageService(database: Database, environment: ApplicationEnvironment) : Se
             }) { (image, path) ->
                 this[ImageTable.path] = Path(imagesPath).relativize(path).pathString
                 this[ImageTable.imageHash] = image.imageHash
+                this[ImageTable.origin] = image.origin
             }.map { it[ImageTable.id].value }
         } + existingImages
     }

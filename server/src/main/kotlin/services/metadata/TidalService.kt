@@ -60,6 +60,18 @@ class TidalService(
         if (response.status != HttpStatusCode.OK) {
             logger.info("Searching artists for $query: $url")
             logger.info(response.bodyAsText())
+
+            when (response.status) {
+                HttpStatusCode.BadRequest -> {
+                    logger.error("Searching artist for $query failed")
+                    logger.error("Status: ${response.status}")
+                    return emptyList()
+                }
+                else -> {
+                    delay(30.seconds)
+                    return searchArtists(query, limit)
+                }
+            }
         }
 
         val searchResponse = response.body<Response<Response.Included.SearchAttributes>>()

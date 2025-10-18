@@ -108,7 +108,8 @@ fun Route.utils(
                                     listOf(
                                         InsertableImage(
                                             data = imageBytes,
-                                            imageHash = imageBytes.sha256()
+                                            imageHash = imageBytes.sha256(),
+                                            origin = image.url
                                         )
                                     )
                                 ).firstOrNull()

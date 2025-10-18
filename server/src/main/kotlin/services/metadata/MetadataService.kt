@@ -48,9 +48,9 @@ abstract class MetadataService(private val providerName: String, environment: Ap
     protected open suspend fun getAccessToken(): AccessTokenResponse {
         if (clientId == null || clientSecret == null) throw NullPointerException("$providerName credentials are null. ($clientIdConfigPath & $clientSecretConfigPath)")
 
-        logger.info("Requesting access token for $providerName")
-
         if ((accessToken?.second ?: 0) > System.currentTimeMillis()) return accessToken!!.first
+
+        logger.info("Requesting access token for $providerName")
 
         val response = ApiClient.instance.post(tokenUrl) {
             header(HttpHeaders.ContentType, ContentType.parse("application/x-www-form-urlencoded"))
@@ -68,7 +68,10 @@ abstract class MetadataService(private val providerName: String, environment: Ap
 
         logger.info("Got new access token for $providerName")
 
-        accessToken = Pair(tokenResponse, System.currentTimeMillis() + tokenResponse.expiresIn)
+        accessToken = Pair(
+            tokenResponse,
+            System.currentTimeMillis() + tokenResponse.expiresIn.seconds.inWholeMilliseconds
+        )
         return tokenResponse
     }
 

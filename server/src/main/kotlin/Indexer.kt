@@ -148,7 +148,8 @@ class Indexer(
                 if (hash != null && !images.containsKey(hash)) images.put(
                     hash, InsertableImage(
                         data = cover,
-                        imageHash = hash
+                        imageHash = hash,
+                        origin = file.absolutePathString()
                     )
                 )
 

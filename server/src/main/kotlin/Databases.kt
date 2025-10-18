@@ -81,13 +81,14 @@ fun Application.configureDatabases(database: Database, jwtService: JwtService) {
 
         image(imageService)
 
+        stream(songService)
+
         jwtService.authenticated(this) {
             utils(imageService, environment, indexer)
 
             tdn(tdnService)
 
             song(songService)
-            stream(songService)
             album(albumService)
             artist(artistService)
             playlist(playlistService)

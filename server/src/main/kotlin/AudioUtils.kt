@@ -9,6 +9,7 @@ import dev.dertyp.db.TranscodedSongTable
 import dev.dertyp.services.SongService
 import io.github.smiley4.ktoropenapi.get
 import io.ktor.http.*
+import io.ktor.http.content.*
 import io.ktor.server.application.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
@@ -192,8 +193,45 @@ object AudioUtils {
     }
 }
 
+private class NoOutputWithContentLength(
+    override val contentType: ContentType,
+    override val status: HttpStatusCode? = null,
+    override val contentLength: Long? = null
+) : OutgoingContent.NoContent() {
+}
+
 @Suppress("LoggingSimilarMessage")
 fun Route.stream(service: SongService) {
+    head("/stream/{id}") {
+        val id = call.parameters["id"]?.toUUIDOrNull()
+        if (id == null) return@head call.respond(HttpStatusCode.BadRequest)
+
+        val song = service.byId(id)
+        if (song == null) return@head call.respond(HttpStatusCode.NotFound)
+
+        val bitrate = call.request.queryParameters["bitrate"]?.toIntOrNull()
+        val targetKbps = bitrate ?: 0
+
+        val flacFile = Path(song.path).toFile()
+        if (!flacFile.exists()) return@head call.respond(HttpStatusCode.NotFound)
+
+        val (serveFile, contentType, fullSize, fileName) = if (targetKbps > 0) {
+            transcodeFlacToWebm(flacFile, targetKbps)
+        } else {
+            StreamInfo(
+                flacFile,
+                ContentType.parse("audio/flac"),
+                flacFile.length(),
+                flacFile.name
+            )
+        }
+
+        call.respond(NoOutputWithContentLength(
+            contentType = contentType,
+            status = HttpStatusCode.OK,
+            contentLength = fullSize
+        ))
+    }
     get("/stream/{id}", {
         request {
             pathParameter<String>("id") {
@@ -275,6 +313,7 @@ fun Route.stream(service: SongService) {
             }
 
             else -> {
+                call.response.header(HttpHeaders.ContentLength, fullSize)
                 call.respondBytesWriter(contentType) {
                     serveFile.inputStream().transferTo(toOutputStream())
                 }
