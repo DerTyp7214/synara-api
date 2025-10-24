@@ -207,13 +207,13 @@ fun Route.stream(service: SongService) {
         if (id == null) return@head call.respond(HttpStatusCode.BadRequest)
 
         val song = service.byId(id)
-        if (song == null) return@head call.respond(HttpStatusCode.NotFound)
+        if (song == null) return@head call.respond(HttpStatusCode.NotFound, "Song not found.")
 
         val bitrate = call.request.queryParameters["bitrate"]?.toIntOrNull()
         val targetKbps = bitrate ?: 0
 
         val flacFile = Path(song.path).toFile()
-        if (!flacFile.exists()) return@head call.respond(HttpStatusCode.NotFound)
+        if (!flacFile.exists()) return@head call.respond(HttpStatusCode.NotFound, "File not found.")
 
         val (serveFile, contentType, fullSize, fileName) = if (targetKbps > 0) {
             transcodeFlacToWebm(flacFile, targetKbps)
@@ -255,13 +255,13 @@ fun Route.stream(service: SongService) {
         if (id == null) return@get call.respond(HttpStatusCode.BadRequest)
 
         val song = service.byId(id)
-        if (song == null) return@get call.respond(HttpStatusCode.NotFound)
+        if (song == null) return@get call.respond(HttpStatusCode.NotFound, "Song not found.")
 
         val bitrate = call.request.queryParameters["bitrate"]?.toIntOrNull()
         val targetKbps = bitrate ?: 0
 
         val flacFile = Path(song.path).toFile()
-        if (!flacFile.exists()) return@get call.respond(HttpStatusCode.NotFound)
+        if (!flacFile.exists()) return@get call.respond(HttpStatusCode.NotFound, "File not found.")
 
         val range = call.request.ranges()?.ranges?.first()
 

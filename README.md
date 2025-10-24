@@ -6,8 +6,8 @@
  - Artist delimiter in the music tags should be `;`
  - Only supports `flac` at the moment.
  - Transcoder saves as `opus`
- - Only fetch service for artist images is spotify right now.
-   - `spotify.clientId` and `spotify.clientSecret` have to be added to the `application.yaml` to use this feature.
+ - Have a look at the `application.yaml` to see which env vars exist.
+   - `secondary-tracks` is an optional list of paths
 
 ## Running
 

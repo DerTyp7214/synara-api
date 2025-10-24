@@ -39,6 +39,10 @@ class Indexer(
     val albumsPath = environment.config.propertyOrNull("audio.albums")?.getString()?.removeSuffix("/")
     val playlistsPath = environment.config.propertyOrNull("audio.playlists")?.getString()?.removeSuffix("/")
 
+    val secondaryTracksPaths = environment.config.propertyOrNull("audio.secondary-tracks")?.getList()?.map {
+        Path(it.removeSuffix("/"))
+    } ?: emptyList()
+
     val audioExtension = "flac"
     val playlistExtension = "m3u"
 
@@ -47,13 +51,16 @@ class Indexer(
 
     suspend fun start(stdout: suspend (String) -> Unit) = coroutineScope {
         val log = { line: String -> async { stdout(line) } }
-        if (tracksPath == null || albumsPath == null || playlistsPath == null)
+        if (tracksPath == null || playlistsPath == null)
             return@coroutineScope log("audio paths are not configured")
 
         val songRootPath = Path(tracksPath)
         val playlistRootPath = Path(playlistsPath)
 
-        start(listOf(songRootPath), listOf(playlistRootPath), stdout)
+        start(
+            listOf(songRootPath, *secondaryTracksPaths.toTypedArray()),
+            listOf(playlistRootPath), stdout
+        )
     }
 
     @OptIn(ExperimentalTime::class)
