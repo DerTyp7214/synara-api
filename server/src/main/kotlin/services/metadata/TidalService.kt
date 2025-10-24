@@ -16,7 +16,7 @@ import kotlin.time.Duration.Companion.seconds
 @OptIn(ExperimentalAtomicApi::class)
 class TidalService(
     environment: ApplicationEnvironment
-) : MetadataService("Tidal", environment) {
+) : MetadataService("Tidal", Companion.MetadataType.tidal, environment) {
     override val tokenUrl = "https://auth.tidal.com/v1/oauth2/token"
     override val clientIdConfigPath: String = "tidal.clientId"
     override val clientSecretConfigPath: String = "tidal.clientSecret"
@@ -67,6 +67,7 @@ class TidalService(
                     logger.error("Status: ${response.status}")
                     return emptyList()
                 }
+
                 else -> {
                     delay(30.seconds)
                     return searchArtists(query, limit)

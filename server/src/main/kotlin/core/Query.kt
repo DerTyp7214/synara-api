@@ -25,7 +25,7 @@ fun Query.rankedSearchQuery(
     var scoreExpression: ExpressionWithColumnType<Int> = intLiteral(0)
     var whereClause: Op<Boolean>? = null
 
-    for (token in tokens) {
+    for (token in tokens.filter { !it.startsWith("-") }) {
         val matches = columns.map { Op.build { it ilike "%${token}%" } }
 
         val tokenMatchOp = matches.reduce { a, b -> a or b }
@@ -42,34 +42,46 @@ fun Query.rankedSearchQuery(
         scoreExpression = scoreExpression + tokenScore
     }
 
-    val phraseBonus = (weights.first() * tokens.size) + 100
+    if (!queryString.startsWith("-")) {
+        val phraseBonus = (weights.first() * tokens.size) + 100
 
-    val phraseMatchOp = Op.build { columns.first() ilike "%$queryString%" }
+        val phraseMatchOp = Op.build { columns.first() ilike "%$queryString%" }
 
-    val bonusExpression = case(null)
-        .When(phraseMatchOp, intLiteral(phraseBonus))
-        .Else(zeroLiteral)
+        val bonusExpression = case(null)
+            .When(phraseMatchOp, intLiteral(phraseBonus))
+            .Else(zeroLiteral)
 
-    scoreExpression = scoreExpression + bonusExpression
-    whereClause = whereClause?.let { it or phraseMatchOp } ?: phraseMatchOp
+        scoreExpression = scoreExpression + bonusExpression
+        whereClause = whereClause?.let { it or phraseMatchOp } ?: phraseMatchOp
 
-    if (tokens.size > 1) {
-        val bigrams = tokens.windowed(2, 1)
+        if (tokens.size > 1) {
+            val bigrams = tokens.windowed(2, 1)
 
-        for ((token1, token2) in bigrams) {
-            columns.forEachIndexed { index, column ->
-                val consecutiveBonus = weights[index] * 2
-                val consecutiveMatchOp = Op.build { column ilike "%$token1% $token2%" }
+            for ((token1, token2) in bigrams) {
+                columns.forEachIndexed { index, column ->
+                    val consecutiveBonus = weights[index] * 2
+                    val consecutiveMatchOp = Op.build { column ilike "%$token1% $token2%" }
 
-                scoreExpression = scoreExpression + case(null)
-                    .When(consecutiveMatchOp, intLiteral(consecutiveBonus))
-                    .Else(zeroLiteral)
+                    scoreExpression = scoreExpression + case(null)
+                        .When(consecutiveMatchOp, intLiteral(consecutiveBonus))
+                        .Else(zeroLiteral)
+                }
             }
         }
     }
 
-    where { whereClause }
-    orderBy(scoreExpression, SortOrder.DESC)
+    for (token in tokens.filter { it.startsWith("-") }) {
+        val matches = columns.map { Op.build { it notIlike "%${token.substring(1)}%" } }
+
+        val tokenMatchOp = matches.reduce { a, b -> a and b }
+        whereClause = whereClause?.let { it and tokenMatchOp } ?: tokenMatchOp
+    }
+
+    where { whereClause!! }
+    orderBy(scoreExpression.let {
+        if (it is LiteralOp && it.value == 0) intLiteral(1)
+        else it
+    }, SortOrder.DESC)
 
     return this
 }

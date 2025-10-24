@@ -15,7 +15,11 @@ import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.time.Duration.Companion.seconds
 
 @OptIn(ExperimentalAtomicApi::class)
-abstract class MetadataService(private val providerName: String, environment: ApplicationEnvironment) : Service() {
+abstract class MetadataService(
+    private val providerName: String,
+    private val metadataType: MetadataService.Companion.MetadataType,
+    environment: ApplicationEnvironment
+) : Service() {
     protected abstract val clientIdConfigPath: String
     protected abstract val clientSecretConfigPath: String
     protected abstract val tokenUrl: String
@@ -28,8 +32,15 @@ abstract class MetadataService(private val providerName: String, environment: Ap
 
     private var accessToken: Pair<AccessTokenResponse, Long>? = null
 
+    init {
+        logger.info("Initializing MetadataService for $providerName")
+        instances[metadataType] = this
+    }
+
     companion object {
         val isFetching = AtomicBoolean(false)
+
+        private var instances: MutableMap<MetadataType, MetadataService> = mutableMapOf()
 
         @Suppress("EnumEntryName")
         enum class MetadataType {
@@ -38,6 +49,8 @@ abstract class MetadataService(private val providerName: String, environment: Ap
         }
 
         fun getMetadataService(type: MetadataType, environment: ApplicationEnvironment): MetadataService {
+            if (instances.contains(type)) return instances[type]!!
+
             return when (type) {
                 MetadataType.tidal -> TidalService(environment)
                 MetadataType.spotify -> SpotifyService(environment)

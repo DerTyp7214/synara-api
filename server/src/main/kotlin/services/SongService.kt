@@ -88,7 +88,8 @@ class SongService(database: Database) : Service() {
             )
         }
 
-    suspend fun allSongs(page: Int, pageSize: Int, explicit: Boolean): PaginatedResponse<Song> = querySongs(page, pageSize, explicit)
+    suspend fun allSongs(page: Int, pageSize: Int, explicit: Boolean): PaginatedResponse<Song> =
+        querySongs(page, pageSize, explicit)
 
     private suspend fun querySingle(query: Query.() -> Query) =
         querySongs(0, Int.MAX_VALUE, true, query).data.singleOrNull()
@@ -205,7 +206,14 @@ class SongService(database: Database) : Service() {
                 artists = songArtists
             )
         }.groupBy {
-            listOf(it.title, it.releaseDate, it.duration, it.trackNumber, it.discNumber, it.album?.id)
+            listOf(
+                it.title.removeSuffix("\uD83C\uDD74").trim(),
+                it.releaseDate,
+                it.duration,
+                it.trackNumber,
+                it.discNumber,
+                it.album?.name
+            )
         }.mapNotNull { (_, songList) ->
             if (explicit) songList.find { it.explicit } ?: songList.first()
             else songList.find { !it.explicit }

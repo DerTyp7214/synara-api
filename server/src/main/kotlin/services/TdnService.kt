@@ -5,6 +5,8 @@ import dev.dertyp.core.*
 import kotlinx.coroutines.*
 import java.io.InputStreamReader
 import java.nio.file.Path
+import java.time.LocalTime
+import java.time.format.DateTimeFormatter
 import kotlin.concurrent.atomics.AtomicBoolean
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.coroutines.cancellation.CancellationException
@@ -223,7 +225,8 @@ class TdnService(private val indexer: Indexer) : Service() {
             return ProcessExecutionResult(-1, "Error: Command must start with 'tdn'.", "")
         }
 
-        logger.info("Starting command: ${command.joinToString(" ")}")
+        val timeString = LocalTime.now().format(DateTimeFormatter.ISO_LOCAL_TIME).split(".").first()
+        logger.info("[$timeString] Starting command: ${command.joinToString(" ")}")
 
         val fullOutput = StringBuilder()
 

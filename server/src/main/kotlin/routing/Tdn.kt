@@ -1,7 +1,9 @@
 package dev.dertyp.routing
 
 import dev.dertyp.core.capitalize
+import dev.dertyp.core.digitCount
 import dev.dertyp.core.isClientConnected
+import dev.dertyp.core.zeroPad
 import dev.dertyp.services.ProcessExecutionResult
 import dev.dertyp.services.TdnFavoriteType
 import dev.dertyp.services.TdnService
@@ -47,16 +49,16 @@ fun Route.tdn(service: TdnService) {
             }
 
             val bodyUrls = call.receive<DlBody>().urls
-            val pathUrls = call.parameters.getAll("url")?.mapNotNull {
+            val pathUrls = call.parameters.getAll("url") ?: emptyList()
+
+            val urls = (pathUrls + bodyUrls).mapNotNull {
                 try {
                     Url(it)
                 } catch (e: Throwable) {
                     e.printStackTrace()
                     null
                 }
-            } ?: emptyList()
-
-            val urls = pathUrls + bodyUrls
+            }
             if (urls.isEmpty()) return@post call.respond(HttpStatusCode.BadRequest)
 
             call.response.header(HttpHeaders.ContentType, ContentType.Text.EventStream.toString())
@@ -67,9 +69,8 @@ fun Route.tdn(service: TdnService) {
             val maxRetries = call.parameters["maxRetries"]?.toIntOrNull() ?: 5
 
             call.respondBytesWriter(ContentType.Text.EventStream) {
-                suspend fun sendSafe(msg: String) = try {
-                    writeStringUtf8(
-                        "event: ${
+                suspend fun sendSafe(msg: String, message: String = "") = try {
+                    writeStringUtf8("event: $message${
                             LocalTime.now().format(DateTimeFormatter.ISO_LOCAL_TIME).split(".").first()
                         }\ndata: $msg\n\n"
                     )
@@ -81,16 +82,17 @@ fun Route.tdn(service: TdnService) {
 
                 for (url in urls) {
                     if (isClosedForWrite) break
-                    sendSafe("Starting download of \"$url\"")
+                    val indexLine = "${(urls.indexOf(url) + 1).zeroPad(urls.size.digitCount())}/${urls.size} "
+                    sendSafe("Starting download of \"$url\"", indexLine)
 
                     val result = service.downloadContent(url.toString(), maxRetries, { isClientConnected() }) {
-                        sendSafe(it)
+                        sendSafe(it,indexLine)
                     }
 
                     results.add(result)
 
-                    if (result.exitCode == 0) sendSafe("Download complete ($url)")
-                    else sendSafe("Download failed: ${result.error} ($url)")
+                    if (result.exitCode == 0) sendSafe("Download complete ($url)", indexLine)
+                    else sendSafe("Download failed: ${result.error} ($url)", indexLine)
                 }
 
                 sendSafe("${results.count { it.exitCode == 0 }}/${results.size} successful")
