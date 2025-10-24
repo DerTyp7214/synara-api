@@ -1,0 +1,26 @@
+type: http_request
+model: http_request
+id: rq_jF6pA9LmTV
+createdAt: 2025-10-24T19:01:43.177947800
+updatedAt: 2025-10-24T22:39:39.077872018
+workspaceId: wk_9dbKacQT4H
+folderId: null
+authentication: {}
+authenticationType: null
+body: {}
+bodyType: null
+description: '[object Object]'
+headers: []
+method: GET
+name: /sync/callback
+sortPriority: 10000.0
+url: http://localhost:8080/sync/tidal/callback
+urlParameters:
+- enabled: true
+  name: code
+  value: eyJraWQiOiJ2OU1GbFhqWSIsImFsZyI6IkVTMjU2In0.eyJ0eXBlIjoibzJfY29kZSIsInVpZCI6MjA1NjU1NDExLCJzY29wZSI6InVzZXIucmVhZCBjb2xsZWN0aW9uLnJlYWQgc2VhcmNoLnJlYWQgcmVjb21tZW5kYXRpb25zLnJlYWQgZW50aXRsZW1lbnRzLnJlYWQgcGxheWxpc3RzLnJlYWQiLCJleHAiOjE3NjEzNDU2MzQsImNhbGxiYWNrVXJpSWQiOiI2YmNjNDIxMi1iMzI4LTQzYmUtOGQ0Mi02YTU3MDc0ZDJhOGEiLCJjaWQiOjIwMTYyLCJjaGFsbGVuZ2VJZCI6IjA2ZTBjMTk4LTJkZGYtNDU0Yi1iNmYwLTc5ZDFmYjg0NTg5ZCIsImxtIjoicCIsImlzcyI6Imh0dHBzOi8vYXV0aC50aWRhbC5jb20vdjEifQ.G4n1kEZbXlLf8Bh_SasDya3KvtLzP5ES11fC2_8N820BJRTydRvsmai48QQIc4bSm9nqRYhYKC5OaUQunmXcHQ
+  id: EuyZXXNYPT
+- enabled: true
+  name: state
+  value: test-id
+  id: jHsh63kfRe

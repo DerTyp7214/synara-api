@@ -1,0 +1,30 @@
+type: http_request
+model: http_request
+id: rq_VcjYbg4BXV
+createdAt: 2025-10-24T21:12:23.382095699
+updatedAt: 2025-10-24T23:23:36.694679173
+workspaceId: wk_9dbKacQT4H
+folderId: null
+authentication: {}
+authenticationType: null
+body: {}
+bodyType: null
+description: '[object Object]'
+headers: []
+method: GET
+name: /sync/me
+sortPriority: 11000.0
+url: ${[baseUrl]}/sync/:service/get/liked/tracks
+urlParameters:
+- enabled: true
+  name: :service
+  value: tidal
+  id: J2PTfXvIAX
+- enabled: false
+  name: all
+  value: 'true'
+  id: 9xwcfzTAGG
+- enabled: true
+  name: ''
+  value: ''
+  id: W9mPzwGk95

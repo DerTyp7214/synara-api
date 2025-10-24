@@ -1,0 +1,26 @@
+type: http_request
+model: http_request
+id: rq_GPFSqSKaqP
+createdAt: 2025-10-24T19:00:40.270966363
+updatedAt: 2025-10-24T21:14:59.590006167
+workspaceId: wk_9dbKacQT4H
+folderId: null
+authentication: {}
+authenticationType: null
+body: {}
+bodyType: null
+description: '[object Object]'
+headers: []
+method: GET
+name: /sync/auth
+sortPriority: 9000.0
+url: ${[baseUrl]}/sync/:service/auth
+urlParameters:
+- enabled: true
+  name: :service
+  value: tidal
+  id: dEHgNKhEsa
+- enabled: true
+  name: ''
+  value: ''
+  id: WaJapZm45Z
