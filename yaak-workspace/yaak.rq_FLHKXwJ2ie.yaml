@@ -2,7 +2,7 @@ type: http_request
 model: http_request
 id: rq_FLHKXwJ2ie
 createdAt: 2025-10-14T19:25:16.449424518
-updatedAt: 2025-10-14T19:26:36.242041180
+updatedAt: 2025-10-24T21:12:25.396504307
 workspaceId: wk_9dbKacQT4H
 folderId: null
 authentication: {}
@@ -13,6 +13,6 @@ description: '[object Object]'
 headers: []
 method: GET
 name: /ready
-sortPriority: 3.0
+sortPriority: 3000.0
 url: ${[baseUrl]}/ready
 urlParameters: []

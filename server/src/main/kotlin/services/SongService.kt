@@ -79,6 +79,15 @@ class SongService(database: Database) : Service() {
             orderBy(SongTable.trackNumber, SortOrder.ASC)
         }
 
+    suspend fun byTidalTrackIds(ids: List<Long>): List<Song> =
+        querySongs(0, Int.MAX_VALUE, true) {
+            where {
+                SongTable.originalUrl inList ids.map {
+                    "https://tidal.com/browse/track/$it"
+                }
+            }
+        }.data
+
     suspend fun rankedSearch(page: Int, pageSize: Int, query: String, explicit: Boolean): PaginatedResponse<Song> =
         querySongs(page, pageSize, explicit) {
             rankedSearchQuery(

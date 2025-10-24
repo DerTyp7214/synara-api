@@ -2,7 +2,7 @@ type: http_request
 model: http_request
 id: rq_S5odwLAmbh
 createdAt: 2025-10-14T19:25:16.449204681
-updatedAt: 2025-10-14T19:26:39.466016137
+updatedAt: 2025-10-24T21:12:25.385432254
 workspaceId: wk_9dbKacQT4H
 folderId: null
 authentication: {}
@@ -21,6 +21,6 @@ headers:
   id: null
 method: POST
 name: /refresh-token
-sortPriority: 1.0
+sortPriority: 1000.0
 url: ${[baseUrl]}/refresh-token
 urlParameters: []

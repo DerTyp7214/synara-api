@@ -2,7 +2,7 @@ type: http_request
 model: http_request
 id: rq_qtiy9DZVXd
 createdAt: 2025-10-14T19:25:16.449607945
-updatedAt: 2025-10-14T19:26:49.464262920
+updatedAt: 2025-10-24T21:12:25.407020334
 workspaceId: wk_9dbKacQT4H
 folderId: null
 authentication: {}
@@ -17,6 +17,6 @@ headers:
   id: null
 method: GET
 name: /stats
-sortPriority: 5.0
+sortPriority: 5000.0
 url: ${[baseUrl]}/stats
 urlParameters: []

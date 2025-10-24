@@ -3,6 +3,7 @@ package dev.dertyp
 import dev.dertyp.AudioUtils.getSongsWithTranscodingInfo
 import dev.dertyp.data.ServerStats
 import dev.dertyp.db.ImageTable
+import dev.dertyp.db.SyncServiceTable
 import dev.dertyp.routing.*
 import dev.dertyp.services.*
 import dev.hayden.KHealth
@@ -12,6 +13,8 @@ import io.ktor.server.application.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import org.jetbrains.exposed.sql.Database
+import org.jetbrains.exposed.sql.SchemaUtils
+import org.jetbrains.exposed.sql.transactions.transaction
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 
 @OptIn(ExperimentalAtomicApi::class)
@@ -25,6 +28,10 @@ fun Application.configureDatabases(database: Database, jwtService: JwtService) {
     val indexer = Indexer(songService, imageService, playlistService)
 
     val tdnService = TdnService(indexer)
+
+    transaction {
+        SchemaUtils.create(SyncServiceTable)
+    }
 
     routing {
         install(KHealth) {
@@ -85,6 +92,8 @@ fun Application.configureDatabases(database: Database, jwtService: JwtService) {
 
         jwtService.authenticated(this) {
             utils(imageService, environment, indexer)
+
+            sync(database, songService)
 
             tdn(tdnService)
 

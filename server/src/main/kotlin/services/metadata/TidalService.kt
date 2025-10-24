@@ -2,6 +2,7 @@ package dev.dertyp.services.metadata
 
 import com.google.gson.annotations.SerializedName
 import dev.dertyp.ApiClient
+import dev.dertyp.core.parameters
 import io.ktor.client.call.*
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
@@ -38,7 +39,7 @@ class TidalService(
 
             encodedPath += "/" + query.encodeURLParameter()
 
-            parameters.apply {
+            parameters {
                 append("include", "artists")
                 append("countryCode", "US")
                 append("explicitFilter", "include, exclude")
@@ -103,7 +104,7 @@ class TidalService(
         val url = baseUrl.clone().apply {
             appendPathSegments(Url(urlPath).segments)
 
-            parameters.apply {
+            parameters {
                 append("include", "profileArt")
                 append("countryCode", "US")
             }

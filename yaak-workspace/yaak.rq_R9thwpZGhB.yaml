@@ -2,7 +2,7 @@ type: http_request
 model: http_request
 id: rq_R9thwpZGhB
 createdAt: 2025-10-14T19:25:16.449334718
-updatedAt: 2025-10-14T19:26:42.475214070
+updatedAt: 2025-10-24T21:12:25.390871188
 workspaceId: wk_9dbKacQT4H
 folderId: null
 authentication: {}
@@ -26,6 +26,6 @@ headers:
   id: null
 method: POST
 name: /register
-sortPriority: 2.0
+sortPriority: 2000.0
 url: ${[baseUrl]}/register
 urlParameters: []

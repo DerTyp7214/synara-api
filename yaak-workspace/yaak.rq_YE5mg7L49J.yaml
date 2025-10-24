@@ -2,7 +2,7 @@ type: http_request
 model: http_request
 id: rq_YE5mg7L49J
 createdAt: 2025-10-14T19:25:16.449863259
-updatedAt: 2025-10-14T19:25:16.449863309
+updatedAt: 2025-10-24T21:12:25.421594310
 workspaceId: wk_9dbKacQT4H
 folderId: null
 authentication: {}
@@ -13,6 +13,6 @@ description: '[object Object]'
 headers: []
 method: GET
 name: /buildIndex
-sortPriority: 10.0
+sortPriority: 8000.0
 url: ${[baseUrl]}/buildIndex
 urlParameters: []
