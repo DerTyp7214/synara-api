@@ -1,0 +1,34 @@
+type: http_request
+model: http_request
+id: rq_yndJt4T9ie
+createdAt: 2025-10-14T19:25:16.451085805
+updatedAt: 2025-10-14T19:25:16.451085855
+workspaceId: wk_9dbKacQT4H
+folderId: fl_m5uDzfqeJa
+authentication: {}
+authenticationType: null
+body: {}
+bodyType: null
+description: '[object Object]'
+headers:
+- enabled: true
+  name: Accept
+  value: application/json
+  id: null
+method: GET
+name: /album/search/:query
+sortPriority: 36.0
+url: ${[baseUrl]}/album/search/:query
+urlParameters:
+- enabled: true
+  name: page
+  value: <integer>
+  id: null
+- enabled: true
+  name: pageSize
+  value: <integer>
+  id: null
+- enabled: true
+  name: :query
+  value: <string>
+  id: null

@@ -1,0 +1,34 @@
+type: http_request
+model: http_request
+id: rq_yq8i6uN83D
+createdAt: 2025-10-14T19:25:16.451239226
+updatedAt: 2025-10-14T19:25:16.451239276
+workspaceId: wk_9dbKacQT4H
+folderId: fl_MAn552zthQ
+authentication: {}
+authenticationType: null
+body: {}
+bodyType: null
+description: '[object Object]'
+headers:
+- enabled: true
+  name: Accept
+  value: application/json
+  id: null
+method: GET
+name: /artist/byGroupId/:id
+sortPriority: 40.0
+url: ${[baseUrl]}/artist/byGroupId/:id
+urlParameters:
+- enabled: true
+  name: page
+  value: <integer>
+  id: null
+- enabled: true
+  name: pageSize
+  value: <integer>
+  id: null
+- enabled: true
+  name: :id
+  value: <string>
+  id: null

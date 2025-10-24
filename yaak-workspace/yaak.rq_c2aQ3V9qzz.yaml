@@ -1,0 +1,42 @@
+type: http_request
+model: http_request
+id: rq_c2aQ3V9qzz
+createdAt: 2025-10-14T19:25:16.450619051
+updatedAt: 2025-10-24T08:21:29.051999894
+workspaceId: wk_9dbKacQT4H
+folderId: fl_RHZBV9eRzQ
+authentication: {}
+authenticationType: null
+body: {}
+bodyType: null
+description: '[object Object]'
+headers:
+- enabled: true
+  name: Accept
+  value: application/json
+  id: null
+method: GET
+name: /song/search/:query
+sortPriority: 26.0
+url: ${[baseUrl]}/song/search/:query
+urlParameters:
+- enabled: true
+  name: explicit
+  value: 'true'
+  id: 2rQ0ynqE6s
+- enabled: false
+  name: page
+  value: <integer>
+  id: 9H63rbCnHd
+- enabled: false
+  name: pageSize
+  value: '5'
+  id: Cqh8H4cRV7
+- enabled: true
+  name: :query
+  value: metro we dont
+  id: zXFn5dePsN
+- enabled: true
+  name: ''
+  value: ''
+  id: SQuJ2trXeC

@@ -1,0 +1,26 @@
+type: http_request
+model: http_request
+id: rq_7mSrGHMwap
+createdAt: 2025-10-14T19:25:16.451189552
+updatedAt: 2025-10-14T19:25:16.451189602
+workspaceId: wk_9dbKacQT4H
+folderId: fl_MAn552zthQ
+authentication: {}
+authenticationType: null
+body: {}
+bodyType: null
+description: '[object Object]'
+headers:
+- enabled: true
+  name: Accept
+  value: application/json
+  id: null
+method: GET
+name: /artist/byId/:id
+sortPriority: 39.0
+url: ${[baseUrl]}/artist/byId/:id
+urlParameters:
+- enabled: true
+  name: :id
+  value: <string>
+  id: null

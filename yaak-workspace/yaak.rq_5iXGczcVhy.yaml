@@ -1,0 +1,38 @@
+type: http_request
+model: http_request
+id: rq_5iXGczcVhy
+createdAt: 2025-10-14T19:25:16.450829239
+updatedAt: 2025-10-14T19:25:16.450829299
+workspaceId: wk_9dbKacQT4H
+folderId: fl_eQwiGHYwEF
+authentication: {}
+authenticationType: null
+body: {}
+bodyType: null
+description: '[object Object]'
+headers:
+- enabled: true
+  name: Accept
+  value: application/json
+  id: null
+method: GET
+name: /song/list/m3u
+sortPriority: 30.0
+url: ${[baseUrl]}/song/list/m3u
+urlParameters:
+- enabled: true
+  name: onlyIds
+  value: <boolean>
+  id: null
+- enabled: true
+  name: extM3u
+  value: <boolean>
+  id: null
+- enabled: true
+  name: shuffle
+  value: <boolean>
+  id: null
+- enabled: true
+  name: explicit
+  value: <string>
+  id: null

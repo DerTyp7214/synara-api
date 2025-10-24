@@ -1,0 +1,38 @@
+type: http_request
+model: http_request
+id: rq_ZT98rAGUhi
+createdAt: 2025-10-14T19:25:16.450773584
+updatedAt: 2025-10-19T12:35:42.831982665
+workspaceId: wk_9dbKacQT4H
+folderId: fl_eQwiGHYwEF
+authentication: {}
+authenticationType: null
+body: {}
+bodyType: null
+description: '[object Object]'
+headers:
+- enabled: true
+  name: Accept
+  value: application/json
+  id: null
+method: GET
+name: /song/list
+sortPriority: 29.0
+url: ${[baseUrl]}/song/list
+urlParameters:
+- enabled: true
+  name: explicit
+  value: 'true'
+  id: tGScqhHPir
+- enabled: false
+  name: page
+  value: <integer>
+  id: xeQxI0GU86
+- enabled: false
+  name: pageSize
+  value: <integer>
+  id: 8gWazEq9zx
+- enabled: true
+  name: ''
+  value: ''
+  id: qNK8qtse3J

@@ -1,0 +1,30 @@
+type: http_request
+model: http_request
+id: rq_sV2RWJoRCe
+createdAt: 2025-10-14T19:25:16.450882239
+updatedAt: 2025-10-24T08:19:37.091532584
+workspaceId: wk_9dbKacQT4H
+folderId: null
+authentication: {}
+authenticationType: null
+body: {}
+bodyType: null
+description: '[object Object]'
+headers: []
+method: GET
+name: /stream/:id
+sortPriority: 31.0
+url: ${[baseUrl]}/stream/:id
+urlParameters:
+- enabled: false
+  name: bitrate
+  value: <integer>
+  id: BA37kca2a2
+- enabled: true
+  name: :id
+  value: a8377e30-ce95-426c-a3c6-669619d40390
+  id: uR6bPyezIh
+- enabled: true
+  name: ''
+  value: ''
+  id: krtExYPvNS

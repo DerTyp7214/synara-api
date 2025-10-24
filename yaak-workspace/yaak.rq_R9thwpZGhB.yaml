@@ -1,0 +1,31 @@
+type: http_request
+model: http_request
+id: rq_R9thwpZGhB
+createdAt: 2025-10-14T19:25:16.449334718
+updatedAt: 2025-10-14T19:26:42.475214070
+workspaceId: wk_9dbKacQT4H
+folderId: null
+authentication: {}
+authenticationType: none
+body:
+  text: |-
+    {
+      "password": "<string>",
+      "username": "<string>"
+    }
+bodyType: application/json
+description: '[object Object]'
+headers:
+- enabled: true
+  name: Content-Type
+  value: application/json
+  id: null
+- enabled: true
+  name: Accept
+  value: application/json
+  id: null
+method: POST
+name: /register
+sortPriority: 2.0
+url: ${[baseUrl]}/register
+urlParameters: []

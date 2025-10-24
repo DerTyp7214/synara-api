@@ -1,0 +1,26 @@
+type: http_request
+model: http_request
+id: rq_nK86XhuvE4
+createdAt: 2025-10-14T19:25:16.449914205
+updatedAt: 2025-10-14T19:28:44.312191323
+workspaceId: wk_9dbKacQT4H
+folderId: null
+authentication: {}
+authenticationType: null
+body: {}
+bodyType: null
+description: '[object Object]'
+headers: []
+method: GET
+name: /transcodeAll/:bitrate
+sortPriority: 11.0
+url: ${[baseUrl]}/transcodeAll/:bitrate
+urlParameters:
+- enabled: true
+  name: :bitrate
+  value: '256'
+  id: EX2gyKsMx6
+- enabled: true
+  name: ''
+  value: ''
+  id: 8xzNyVIJFV

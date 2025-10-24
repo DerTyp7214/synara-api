@@ -1,0 +1,35 @@
+type: http_request
+model: http_request
+id: rq_cLALLADYHT
+createdAt: 2025-10-14T19:25:16.451697324
+updatedAt: 2025-10-14T19:25:16.451697384
+workspaceId: wk_9dbKacQT4H
+folderId: fl_yrAFFKZKvb
+authentication: {}
+authenticationType: null
+body:
+  text: |-
+    {
+      "name": "<string>",
+      "songPaths": [
+        "<string>",
+        "<string>"
+      ],
+      "imageHash": "<null,string>"
+    }
+bodyType: application/json
+description: '[object Object]'
+headers:
+- enabled: true
+  name: Content-Type
+  value: application/json
+  id: null
+- enabled: true
+  name: Accept
+  value: application/json
+  id: null
+method: PUT
+name: /playlist/create
+sortPriority: 49.0
+url: ${[baseUrl]}/playlist/create
+urlParameters: []

@@ -1,0 +1,13 @@
+type: folder
+model: folder
+id: fl_3CS5CXjvx3
+createdAt: 2025-10-14T19:25:16.451839092
+updatedAt: 2025-10-14T19:25:16.451839183
+workspaceId: wk_9dbKacQT4H
+folderId: null
+authentication: {}
+authenticationType: null
+description: ''
+headers: []
+name: image
+sortPriority: 6.0

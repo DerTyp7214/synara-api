@@ -1,0 +1,46 @@
+type: http_request
+model: http_request
+id: rq_SgeYtjQiV3
+createdAt: 2025-10-14T19:25:16.450709101
+updatedAt: 2025-10-24T08:21:36.285593304
+workspaceId: wk_9dbKacQT4H
+folderId: fl_RHZBV9eRzQ
+authentication: {}
+authenticationType: null
+body: {}
+bodyType: null
+description: '[object Object]'
+headers:
+- enabled: true
+  name: Accept
+  value: application/json
+  id: null
+method: GET
+name: /song/search/:query/m3u
+sortPriority: 27.0
+url: ${[baseUrl]}/song/search/:query/m3u
+urlParameters:
+- enabled: false
+  name: onlyIds
+  value: <boolean>
+  id: ZZ2Y739IIT
+- enabled: true
+  name: extM3u
+  value: 'true'
+  id: G2C2JzVppa
+- enabled: false
+  name: shuffle
+  value: <boolean>
+  id: mA28hYkmEh
+- enabled: true
+  name: explicit
+  value: 'true'
+  id: GjDv0PgC5j
+- enabled: true
+  name: :query
+  value: metro we dont
+  id: D3SeB0yjmy
+- enabled: true
+  name: ''
+  value: ''
+  id: 3KwH07gek0

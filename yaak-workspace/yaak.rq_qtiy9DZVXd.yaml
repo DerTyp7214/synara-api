@@ -1,0 +1,22 @@
+type: http_request
+model: http_request
+id: rq_qtiy9DZVXd
+createdAt: 2025-10-14T19:25:16.449607945
+updatedAt: 2025-10-14T19:26:49.464262920
+workspaceId: wk_9dbKacQT4H
+folderId: null
+authentication: {}
+authenticationType: none
+body: {}
+bodyType: null
+description: '[object Object]'
+headers:
+- enabled: true
+  name: Accept
+  value: application/json
+  id: null
+method: GET
+name: /stats
+sortPriority: 5.0
+url: ${[baseUrl]}/stats
+urlParameters: []

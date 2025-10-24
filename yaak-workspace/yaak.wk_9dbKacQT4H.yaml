@@ -1,0 +1,15 @@
+type: workspace
+model: workspace
+id: wk_9dbKacQT4H
+createdAt: 2025-10-14T19:25:16.448421347
+updatedAt: 2025-10-14T19:25:41.060808554
+authentication:
+  token: ${[ token ]}
+authenticationType: bearer
+description: ''
+headers: []
+name: API
+encryptionKeyChallenge: null
+settingValidateCertificates: true
+settingFollowRedirects: true
+settingRequestTimeout: 0

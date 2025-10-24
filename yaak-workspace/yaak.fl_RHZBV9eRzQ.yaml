@@ -1,0 +1,13 @@
+type: folder
+model: folder
+id: fl_RHZBV9eRzQ
+createdAt: 2025-10-14T19:25:16.452019384
+updatedAt: 2025-10-14T19:25:16.452019434
+workspaceId: wk_9dbKacQT4H
+folderId: fl_QrUoFyttZM
+authentication: {}
+authenticationType: null
+description: ''
+headers: []
+name: search/{query}
+sortPriority: 25.0

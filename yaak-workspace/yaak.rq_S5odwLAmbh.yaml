@@ -1,0 +1,26 @@
+type: http_request
+model: http_request
+id: rq_S5odwLAmbh
+createdAt: 2025-10-14T19:25:16.449204681
+updatedAt: 2025-10-14T19:26:39.466016137
+workspaceId: wk_9dbKacQT4H
+folderId: null
+authentication: {}
+authenticationType: none
+body:
+  text: |-
+    {
+      "refreshToken": "<string>"
+    }
+bodyType: application/json
+description: '[object Object]'
+headers:
+- enabled: true
+  name: Content-Type
+  value: application/json
+  id: null
+method: POST
+name: /refresh-token
+sortPriority: 1.0
+url: ${[baseUrl]}/refresh-token
+urlParameters: []

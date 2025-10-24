@@ -1,0 +1,27 @@
+type: http_request
+model: http_request
+id: rq_E43hSHaxXc
+createdAt: 2025-10-14T19:25:16.449037665
+updatedAt: 2025-10-16T00:35:20.139403799
+workspaceId: wk_9dbKacQT4H
+folderId: null
+authentication: {}
+authenticationType: none
+body:
+  text: |-
+    {
+      "password": "test-secret",
+      "username": "test-id"
+    }
+bodyType: application/json
+description: '[object Object]'
+headers:
+- enabled: true
+  name: Content-Type
+  value: application/json
+  id: null
+method: POST
+name: /authenticate
+sortPriority: 0.0
+url: ${[baseUrl]}/authenticate
+urlParameters: []

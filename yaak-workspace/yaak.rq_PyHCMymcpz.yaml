@@ -1,0 +1,34 @@
+type: http_request
+model: http_request
+id: rq_PyHCMymcpz
+createdAt: 2025-10-14T19:25:16.450298363
+updatedAt: 2025-10-14T19:25:16.450298423
+workspaceId: wk_9dbKacQT4H
+folderId: fl_MTVZdwaxao
+authentication: {}
+authenticationType: null
+body: {}
+bodyType: null
+description: '[object Object]'
+headers:
+- enabled: true
+  name: Accept
+  value: application/json
+  id: null
+method: GET
+name: /song/byArtist/:artistId
+sortPriority: 22.0
+url: ${[baseUrl]}/song/byArtist/:artistId
+urlParameters:
+- enabled: true
+  name: page
+  value: <integer>
+  id: null
+- enabled: true
+  name: pageSize
+  value: <integer>
+  id: null
+- enabled: true
+  name: :artistId
+  value: <string>
+  id: null

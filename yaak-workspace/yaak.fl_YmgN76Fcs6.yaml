@@ -1,0 +1,13 @@
+type: folder
+model: folder
+id: fl_YmgN76Fcs6
+createdAt: 2025-10-14T19:25:16.451962596
+updatedAt: 2025-10-14T19:25:16.451962646
+workspaceId: wk_9dbKacQT4H
+folderId: fl_QrUoFyttZM
+authentication: {}
+authenticationType: null
+description: ''
+headers: []
+name: byAlbum/{albumId}
+sortPriority: 18.0

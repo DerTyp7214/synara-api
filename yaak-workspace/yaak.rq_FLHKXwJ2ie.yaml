@@ -1,0 +1,18 @@
+type: http_request
+model: http_request
+id: rq_FLHKXwJ2ie
+createdAt: 2025-10-14T19:25:16.449424518
+updatedAt: 2025-10-14T19:26:36.242041180
+workspaceId: wk_9dbKacQT4H
+folderId: null
+authentication: {}
+authenticationType: none
+body: {}
+bodyType: null
+description: '[object Object]'
+headers: []
+method: GET
+name: /ready
+sortPriority: 3.0
+url: ${[baseUrl]}/ready
+urlParameters: []

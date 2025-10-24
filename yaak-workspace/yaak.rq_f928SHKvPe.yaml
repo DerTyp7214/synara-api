@@ -1,0 +1,26 @@
+type: http_request
+model: http_request
+id: rq_f928SHKvPe
+createdAt: 2025-10-14T19:25:16.449753711
+updatedAt: 2025-10-14T19:25:16.449753771
+workspaceId: wk_9dbKacQT4H
+folderId: fl_3CS5CXjvx3
+authentication: {}
+authenticationType: null
+body: {}
+bodyType: null
+description: '[object Object]'
+headers:
+- enabled: true
+  name: Accept
+  value: application/json
+  id: null
+method: GET
+name: /image/byHash/:hash
+sortPriority: 8.0
+url: ${[baseUrl]}/image/byHash/:hash
+urlParameters:
+- enabled: true
+  name: :hash
+  value: <string>
+  id: null

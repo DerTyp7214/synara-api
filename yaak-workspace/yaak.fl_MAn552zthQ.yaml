@@ -1,0 +1,13 @@
+type: folder
+model: folder
+id: fl_MAn552zthQ
+createdAt: 2025-10-14T19:25:16.452102291
+updatedAt: 2025-10-14T19:25:16.452102351
+workspaceId: wk_9dbKacQT4H
+folderId: null
+authentication: {}
+authenticationType: null
+description: ''
+headers: []
+name: artist
+sortPriority: 38.0

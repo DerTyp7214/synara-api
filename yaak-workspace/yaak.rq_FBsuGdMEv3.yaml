@@ -1,0 +1,30 @@
+type: http_request
+model: http_request
+id: rq_FBsuGdMEv3
+createdAt: 2025-10-14T19:25:16.450019345
+updatedAt: 2025-10-18T22:14:10.322284832
+workspaceId: wk_9dbKacQT4H
+folderId: fl_NXkRVdWsW4
+authentication: {}
+authenticationType: null
+body: {}
+bodyType: null
+description: '[object Object]'
+headers: []
+method: POST
+name: /tdn/dl_fav/:type
+sortPriority: 14.0
+url: ${[baseUrl]}/tdn/dl_fav/:type
+urlParameters:
+- enabled: true
+  name: maxRetries
+  value: '250'
+  id: eMd3hE638x
+- enabled: true
+  name: :type
+  value: tracks
+  id: pMtmZGkG4M
+- enabled: true
+  name: ''
+  value: ''
+  id: 5h4ysvddmy

@@ -1,0 +1,22 @@
+type: http_request
+model: http_request
+id: rq_CdNrmMVfon
+createdAt: 2025-10-14T19:25:16.451758470
+updatedAt: 2025-10-14T19:25:16.451758520
+workspaceId: wk_9dbKacQT4H
+folderId: fl_yrAFFKZKvb
+authentication: {}
+authenticationType: null
+body: {}
+bodyType: null
+description: '[object Object]'
+headers: []
+method: DELETE
+name: /playlist/delete/:id
+sortPriority: 50.0
+url: ${[baseUrl]}/playlist/delete/:id
+urlParameters:
+- enabled: true
+  name: :id
+  value: <string>
+  id: null

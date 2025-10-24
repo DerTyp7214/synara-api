@@ -1,0 +1,58 @@
+type: http_request
+model: http_request
+id: rq_4ryCoaw2aB
+createdAt: 2025-10-14T19:25:16.450072676
+updatedAt: 2025-10-14T19:25:16.450072766
+workspaceId: wk_9dbKacQT4H
+folderId: fl_QrUoFyttZM
+authentication: {}
+authenticationType: null
+body:
+  text: |-
+    {
+      "album": {
+        "artists": [
+          "<string>",
+          "<string>"
+        ],
+        "name": "<string>",
+        "songCount": "<integer>",
+        "coverHash": "<null,string>",
+        "releaseDate": "<null>"
+      },
+      "artists": [
+        "<string>",
+        "<string>"
+      ],
+      "bitRate": "<long>",
+      "bitsPerSample": "<integer>",
+      "copyright": "<string>",
+      "discNumber": "<integer>",
+      "duration": "<long>",
+      "explicit": "<boolean>",
+      "fileSize": "<long>",
+      "lyrics": "<string>",
+      "originalUrl": "<string>",
+      "path": "<string>",
+      "sampleRate": "<integer>",
+      "title": "<string>",
+      "trackNumber": "<integer>",
+      "coverHash": "<null,string>",
+      "releaseDate": "<null>"
+    }
+bodyType: application/json
+description: '[object Object]'
+headers:
+- enabled: true
+  name: Content-Type
+  value: application/json
+  id: null
+- enabled: true
+  name: Accept
+  value: application/json
+  id: null
+method: POST
+name: /song
+sortPriority: 16.0
+url: ${[baseUrl]}/song
+urlParameters: []

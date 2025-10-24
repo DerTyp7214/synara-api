@@ -1,0 +1,26 @@
+type: http_request
+model: http_request
+id: rq_YkkVmumbQJ
+createdAt: 2025-10-14T19:25:16.451392947
+updatedAt: 2025-10-14T19:25:16.451392997
+workspaceId: wk_9dbKacQT4H
+folderId: fl_yrAFFKZKvb
+authentication: {}
+authenticationType: null
+body: {}
+bodyType: null
+description: '[object Object]'
+headers:
+- enabled: true
+  name: Accept
+  value: application/json
+  id: null
+method: GET
+name: /playlist/byId/:id
+sortPriority: 44.0
+url: ${[baseUrl]}/playlist/byId/:id
+urlParameters:
+- enabled: true
+  name: :id
+  value: <string>
+  id: null

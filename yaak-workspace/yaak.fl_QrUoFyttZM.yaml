@@ -1,0 +1,13 @@
+type: folder
+model: folder
+id: fl_QrUoFyttZM
+createdAt: 2025-10-14T19:25:16.451934183
+updatedAt: 2025-10-14T19:25:16.451934233
+workspaceId: wk_9dbKacQT4H
+folderId: null
+authentication: {}
+authenticationType: null
+description: ''
+headers: []
+name: song
+sortPriority: 15.0

@@ -1,0 +1,26 @@
+type: http_request
+model: http_request
+id: rq_fgVMVAHksw
+createdAt: 2025-10-14T19:25:16.450934378
+updatedAt: 2025-10-14T19:25:16.450934438
+workspaceId: wk_9dbKacQT4H
+folderId: fl_m5uDzfqeJa
+authentication: {}
+authenticationType: null
+body: {}
+bodyType: null
+description: '[object Object]'
+headers:
+- enabled: true
+  name: Accept
+  value: application/json
+  id: null
+method: GET
+name: /album/byId/:id
+sortPriority: 33.0
+url: ${[baseUrl]}/album/byId/:id
+urlParameters:
+- enabled: true
+  name: :id
+  value: <string>
+  id: null
