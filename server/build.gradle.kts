@@ -12,7 +12,7 @@ val postgres_version: String by project
 
 plugins {
     kotlin("jvm") version "2.2.20"
-    id("io.ktor.plugin") version "3.3.0"
+    id("io.ktor.plugin") version "3.3.1"
     id("org.jetbrains.kotlin.plugin.serialization") version "2.2.20"
     id("org.jetbrains.kotlinx.rpc.plugin") version "0.10.0"
 }
@@ -61,9 +61,9 @@ dependencies {
     implementation("io.ktor:ktor-server-config-yaml")
     implementation("net.jthink:jaudiotagger:3.0.1")
     implementation("org.xerial:sqlite-jdbc:3.49.1.0")
-    implementation("io.ktor:ktor-server-compression:3.3.0")
-    implementation("io.ktor:ktor-server-auto-head-response:3.3.0")
-    implementation("io.ktor:ktor-server-sessions:3.3.0")
+    implementation("io.ktor:ktor-server-compression:3.3.1")
+    implementation("io.ktor:ktor-server-auto-head-response:3.3.1")
+    implementation("io.ktor:ktor-server-sessions:3.3.1")
     implementation("com.github.ben-manes.caffeine:caffeine:3.1.8")
     testImplementation("io.ktor:ktor-server-test-host")
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit:$kotlin_version")
