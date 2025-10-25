@@ -52,4 +52,4 @@ ENV DATA_IMAGES_PATH="/data/Tidal/Images"
 ENV TDN_TOKEN_PATH="/home/appuser/.config/tidal_dl_ng/token.json"
 
 ENV HOME=/home/appuser
-ENTRYPOINT ["java","-jar","/app/synara-api.jar"]
+ENTRYPOINT ["java","--enable-native-access=ALL-UNNAMED","-jar","/app/synara-api.jar"]

@@ -15,8 +15,8 @@ jwt:
 storage:
   driverClassName: ${DB_DRIVER}
   jdbcURL: ${DB_URL}
-  user: ${DB_USER:-}
-  password: ${DB_PASSWORD:-}
+  user: ${DB_USER:}
+  password: ${DB_PASSWORD:}
 audio:
   tracks: ${AUDIO_TRACKS_PATH}
   albums: ${AUDIO_ALBUMS_PATH}
@@ -31,4 +31,4 @@ spotify:
 tidal:
   clientId: ${TIDAL_CLIENT_ID}
   clientSecret: ${TIDAL_CLIENT_SECRET}
-  tdnTokenPath: ${TDN_TOKEN_PATH}
+  tdnTokenPath: ${TDN_TOKEN_PATH:}
