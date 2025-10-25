@@ -60,7 +60,7 @@ dependencies {
     implementation("ch.qos.logback:logback-classic:$logback_version")
     implementation("io.ktor:ktor-server-config-yaml")
     implementation("net.jthink:jaudiotagger:3.0.1")
-    implementation("org.xerial:sqlite-jdbc:3.49.1.0")
+    implementation("org.xerial:sqlite-jdbc:3.50.3.0")
     implementation("io.ktor:ktor-server-compression:3.3.1")
     implementation("io.ktor:ktor-server-auto-head-response:3.3.1")
     implementation("io.ktor:ktor-server-sessions:3.3.1")
