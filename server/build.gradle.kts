@@ -51,7 +51,7 @@ dependencies {
     implementation("com.h2database:h2:$h2_version")
     implementation("org.bytedeco:ffmpeg:7.1-1.5.11")
     implementation("org.bytedeco:javacv-platform:1.5.11")
-    implementation("net.coobird:thumbnailator:0.4.20")
+    implementation("net.coobird:thumbnailator:0.4.21")
     implementation("org.postgresql:postgresql:$postgres_version")
     implementation("org.jetbrains.kotlinx:kotlinx-rpc-krpc-ktor-server:$kotlinx_rpc_version")
     implementation("org.jetbrains.kotlinx:kotlinx-rpc-krpc-ktor-client:$kotlinx_rpc_version")
