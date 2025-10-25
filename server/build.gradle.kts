@@ -68,3 +68,13 @@ dependencies {
     testImplementation("io.ktor:ktor-server-test-host")
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit:$kotlin_version")
 }
+
+val ktorBaseImageTag = "synara-api-base:latest"
+
+ktor {
+    docker {
+        localImageName.set(ktorBaseImageTag.split(":").first())
+        imageTag.set(ktorBaseImageTag.split(":").last())
+        jreVersion.set(JavaVersion.VERSION_21)
+    }
+}

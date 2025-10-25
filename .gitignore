@@ -37,4 +37,5 @@ out/
 
 
 /data.db
-/.env
+.env
+.*.env

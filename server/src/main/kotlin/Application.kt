@@ -12,8 +12,7 @@ fun main(args: Array<String>) {
 }
 
 fun Application.module() {
-    val dbPath = environment.config.propertyOrNull("sqlite.path")?.getString() ?: "./data.db"
-    val database = Database.connect("jdbc:sqlite:$dbPath", "org.sqlite.JDBC")
+    val database = getDatabase(environment)
 
     val userService = UserService(database, environment)
     val refreshTokenService = RefreshTokenService(database)
@@ -24,4 +23,21 @@ fun Application.module() {
     configureHTTP(jwtService)
     configureRouting(jwtService)
     configureDatabases(database, jwtService)
+}
+
+fun getDatabase(environment: ApplicationEnvironment): Database {
+    val dbDriver = environment.config.property("storage.driverClassName").getString()
+    val dbUrl = environment.config.property("storage.jdbcURL").getString()
+    val dbUser = environment.config.property("storage.user").getString()
+    val dbPassword = environment.config.property("storage.password").getString()
+
+    return when (dbDriver) {
+        "org.sqlite.JDBC" -> Database.connect(dbUrl, dbDriver)
+        else -> Database.connect(
+            url = dbUrl,
+            driver = dbDriver,
+            user = dbUser,
+            password = dbPassword
+        )
+    }
 }

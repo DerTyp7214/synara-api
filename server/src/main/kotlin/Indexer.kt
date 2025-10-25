@@ -120,6 +120,7 @@ class Indexer(
         val files = mutableListOf<Path>()
 
         paths.forEach {
+            if (it.isDirectory()) it.toFile().mkdirs()
             if (it.isDirectory()) files.addAll(buildMap(it.listDirectoryEntries()))
             else if ((it.extension == audioExtension || it.extension == playlistExtension) && !it.isSymbolicLink()) files.add(
                 it

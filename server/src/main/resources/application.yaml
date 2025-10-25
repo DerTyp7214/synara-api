@@ -12,8 +12,11 @@ jwt:
   audience: ${JWT_AUDIENCE}
   realm: ${JWT_REALM}
   secret: ${JWT_SECRET}
-sqlite:
-  path: ${SQLITE_PATH}
+storage:
+  driverClassName: ${DB_DRIVER}
+  jdbcURL: ${DB_URL}
+  user: ${DB_USER:-}
+  password: ${DB_PASSWORD:-}
 audio:
   tracks: ${AUDIO_TRACKS_PATH}
   albums: ${AUDIO_ALBUMS_PATH}
