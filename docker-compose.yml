@@ -15,7 +15,7 @@ services:
       - HOST_UID=1000
       - HOST_GID=1000
     volumes:
-      - ./tmp/data:/data
+      - /home/typ/Music:/data
       - config:/home/appuser/.config
     depends_on:
       db:

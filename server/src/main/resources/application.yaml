@@ -31,3 +31,4 @@ spotify:
 tidal:
   clientId: ${TIDAL_CLIENT_ID}
   clientSecret: ${TIDAL_CLIENT_SECRET}
+  tdnTokenPath: ${TDN_TOKEN_PATH}

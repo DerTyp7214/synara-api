@@ -1,9 +1,6 @@
 package dev.dertyp.routing
 
-import dev.dertyp.core.capitalize
-import dev.dertyp.core.digitCount
-import dev.dertyp.core.isClientConnected
-import dev.dertyp.core.zeroPad
+import dev.dertyp.core.*
 import dev.dertyp.services.ProcessExecutionResult
 import dev.dertyp.services.TdnFavoriteType
 import dev.dertyp.services.TdnService
@@ -13,10 +10,7 @@ import io.ktor.http.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
-import io.ktor.utils.io.*
 import kotlinx.serialization.Serializable
-import java.time.LocalTime
-import java.time.format.DateTimeFormatter
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 
 @Serializable
@@ -29,6 +23,29 @@ fun Route.tdn(service: TdnService) {
     route("/tdn", {
         tags("tdn")
     }) {
+        post("login", {}) {
+            if (!service.isDownloadActive.compareAndSet(expectedValue = false, newValue = true)) {
+                call.respond(
+                    HttpStatusCode.Conflict,
+                    "Download is already running. (If you just closed one, please wait a few seconds)"
+                )
+                return@post
+            }
+
+            call.response.header(HttpHeaders.ContentType, ContentType.Text.EventStream.toString())
+            call.response.header(HttpHeaders.CacheControl, "no-cache")
+            call.response.header(HttpHeaders.Connection, "keep-alive")
+            call.response.header("X-Accel-Buffering", "no")
+
+            call.respondBytesWriter(ContentType.Text.EventStream) {
+                service.login({ isClientConnected() }) {
+                    sendSafe(it)
+                }
+
+                service.isDownloadActive.store(false)
+            }
+        }
+
         post("dl", {
             request {
                 queryParameter<String>("url") {
@@ -69,15 +86,6 @@ fun Route.tdn(service: TdnService) {
             val maxRetries = call.parameters["maxRetries"]?.toIntOrNull() ?: 5
 
             call.respondBytesWriter(ContentType.Text.EventStream) {
-                suspend fun sendSafe(msg: String, message: String = "") = try {
-                    writeStringUtf8("event: $message${
-                            LocalTime.now().format(DateTimeFormatter.ISO_LOCAL_TIME).split(".").first()
-                        }\ndata: $msg\n\n"
-                    )
-                    flush()
-                } catch (_: Throwable) {
-                }
-
                 val results = mutableListOf<ProcessExecutionResult>()
 
                 for (url in urls) {
@@ -127,16 +135,6 @@ fun Route.tdn(service: TdnService) {
             val maxRetries = call.parameters["maxRetries"]?.toIntOrNull() ?: 5
 
             call.respondBytesWriter(ContentType.Text.EventStream) {
-                suspend fun sendSafe(msg: String) = try {
-                    writeStringUtf8(
-                        "event: ${
-                            LocalTime.now().format(DateTimeFormatter.ISO_LOCAL_TIME).split(".").first()
-                        }\ndata: $msg\n\n"
-                    )
-                    flush()
-                } catch (_: Throwable) {
-                }
-
                 sendSafe("Starting download of ${type.name.capitalize()}")
 
                 val result = service.downloadFavoriteCollection(type, maxRetries, { isClientConnected() }) {

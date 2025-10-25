@@ -28,7 +28,7 @@ class TdnService(private val indexer: Indexer) : Service() {
 
     @OptIn(ExperimentalAtomicApi::class)
     private suspend fun collectDownloadedFiles(
-        command: List<String>,
+        command: MutableList<String>,
         maxRetries: Int = 5,
         currentTry: Int = 0,
         aliveCheck: suspend () -> Boolean,
@@ -199,7 +199,7 @@ class TdnService(private val indexer: Indexer) : Service() {
         aliveCheck: suspend () -> Boolean = { true },
         onLiveOutput: suspend (String) -> Unit
     ): ProcessExecutionResult {
-        val command = listOf("tdn", "dl", url)
+        val command = mutableListOf("tdn", "dl", url)
         val (result) = collectDownloadedFiles(command, maxRetries, 0, aliveCheck, onLiveOutput)
         return result
     }
@@ -211,19 +211,32 @@ class TdnService(private val indexer: Indexer) : Service() {
         aliveCheck: suspend () -> Boolean = { true },
         onLiveOutput: suspend (String) -> Unit
     ): ProcessExecutionResult {
-        val command = listOf("tdn", "dl_fav", type.name)
+        val command = mutableListOf("tdn", "dl_fav", type.name)
         val (result) = collectDownloadedFiles(command, maxRetries, 0, aliveCheck, onLiveOutput)
         return result
     }
 
+    suspend fun login(
+        aliveCheck: suspend () -> Boolean = { true },
+        onLiveOutput: suspend (String) -> Unit
+    ): ProcessExecutionResult {
+        val command = mutableListOf("tdn", "login")
+        return executeTdn(command, aliveCheck, onLiveOutput)
+    }
+
     private suspend fun executeTdn(
-        command: List<String>,
+        command: MutableList<String>,
         aliveCheck: suspend () -> Boolean,
         onLineReceived: suspend (String) -> Unit
     ): ProcessExecutionResult {
         if (command.isEmpty() || command[0] != "tdn") {
             return ProcessExecutionResult(-1, "Error: Command must start with 'tdn'.", "")
         }
+
+        command[0] = "tidal_dl_ng.cli"
+        command.add(0, "python")
+        command.add(1, "-u")
+        command.add(2, "-m")
 
         val timeString = LocalTime.now().format(DateTimeFormatter.ISO_LOCAL_TIME).split(".").first()
         logger.info("[$timeString] Starting command: ${command.joinToString(" ")}")
@@ -256,16 +269,23 @@ class TdnService(private val indexer: Indexer) : Service() {
                     }
                 }
 
-                val reader = InputStreamReader(process.inputStream)
+                val outputJob = launch {
+                    val reader = InputStreamReader(process.inputStream)
 
-                reader.lineFlow().collect { line ->
-                    currentCoroutineContext().ensureActive()
+                    try {
+                        reader.lineFlow().collect { line ->
+                            currentCoroutineContext().ensureActive()
 
-                    fullOutput.appendLine(line)
-                    onLineReceived(line)
+                            fullOutput.appendLine(line)
+                            onLineReceived(line)
+                        }
+                    } catch (e: Exception) {
+                        if (e is CancellationException) throw e
+                    }
                 }
 
                 val exitCode = process.waitFor()
+                outputJob.join()
 
                 return@coroutineScope ProcessExecutionResult(exitCode, fullOutput.toString(), "")
 

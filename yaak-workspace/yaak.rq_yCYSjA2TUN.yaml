@@ -1,0 +1,31 @@
+type: http_request
+model: http_request
+id: rq_yCYSjA2TUN
+createdAt: 2025-10-25T21:17:12.962532412
+updatedAt: 2025-10-25T21:17:31.219719756
+workspaceId: wk_9dbKacQT4H
+folderId: fl_NXkRVdWsW4
+authentication: {}
+authenticationType: null
+body:
+  text: ''
+bodyType: application/json
+description: '[object Object]'
+headers:
+- enabled: true
+  name: Content-Type
+  value: application/json
+  id: null
+method: POST
+name: /tdn/login
+sortPriority: 4.333366666666667
+url: ${[baseUrl]}/tdn/login
+urlParameters:
+- enabled: false
+  name: url
+  value: <string>
+  id: IgqGGn9M7v
+- enabled: true
+  name: ''
+  value: ''
+  id: R9QzY6r3cx

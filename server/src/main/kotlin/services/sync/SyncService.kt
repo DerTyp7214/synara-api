@@ -27,7 +27,7 @@ import kotlin.time.Duration.Companion.seconds
 @Suppress("unused")
 abstract class SyncService(
     private val database: Database,
-    private val environment: ApplicationEnvironment,
+    protected val environment: ApplicationEnvironment,
     protected val user: User
 ): Service() {
     abstract val clientIdConfigPath: String
@@ -51,7 +51,7 @@ abstract class SyncService(
         val authFlowCache = Caffeine.newBuilder()
             .expireAfterWrite(15, TimeUnit.MINUTES)
             .maximumSize(1000)
-            .build<String, String>()!!
+            .build<String, String>()
 
         private suspend fun getInstance(name: String?, database: Database, call: ApplicationCall): SyncService? {
             return when (name) {
@@ -92,6 +92,7 @@ abstract class SyncService(
     }
 
     protected suspend fun setToken(token: Token) {
+        if (this is TidalSyncServiceBase) setTdnToken(token)
         if (token.createdAt != null) {
             dbQuery {
                 SyncServiceTable.upsert {

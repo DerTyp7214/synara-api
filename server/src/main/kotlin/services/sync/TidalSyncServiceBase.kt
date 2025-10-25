@@ -1,5 +1,6 @@
 package dev.dertyp.services.sync
 
+import com.google.gson.GsonBuilder
 import com.google.gson.annotations.SerializedName
 import dev.dertyp.ApiClient
 import dev.dertyp.core.getUsername
@@ -15,6 +16,9 @@ import io.ktor.server.util.*
 import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.ResultRow
+import java.io.File
+import java.util.*
+import kotlin.time.Duration.Companion.seconds
 
 abstract class TidalSyncServiceBase(
     database: Database,
@@ -123,6 +127,25 @@ abstract class TidalSyncServiceBase(
         userId = row[SyncServiceTable.userId],
         createdAt = row[SyncServiceTable.createdAt],
     )
+
+    fun setTdnToken(token: Token) {
+        val tdnConfigPath = environment.config.propertyOrNull("tidal.tdnTokenPath")?.getString()
+        if (tdnConfigPath == null) return
+
+        val tokenJson = mapOf<String, Any?>(
+            "token_type" to token.tokenType,
+            "access_token" to token.accessToken,
+            "refresh_token" to token.refreshToken,
+            "expiry_time" to String.format(
+                Locale.ROOT, "%.6f",
+                (token.expiresIn.seconds.inWholeMilliseconds + (token.createdAt ?: 0)) / 1000.0
+            ).toBigDecimal(),
+        )
+
+        File(tdnConfigPath).writeText(
+            GsonBuilder().setPrettyPrinting().create().toJson(tokenJson)
+        )
+    }
 
     @Serializable
     data class TidalTokenResponse(

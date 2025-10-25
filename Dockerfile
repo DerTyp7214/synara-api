@@ -49,5 +49,7 @@ ENV AUDIO_PLAYLISTS_PATH="/data/Tidal/Playlists"
 ENV AUDIO_TRANSCODE_PATH="/data/Tidal/Transcode"
 ENV DATA_IMAGES_PATH="/data/Tidal/Images"
 
+ENV TDN_TOKEN_PATH="/home/appuser/.config/tidal_dl_ng/token.json"
+
 ENV HOME=/home/appuser
-ENTRYPOINT ["java","-jar","/app/synara-api.jar", "--enable-native-access=ALL-UNNAMED"]
+ENTRYPOINT ["java","-jar","/app/synara-api.jar"]
