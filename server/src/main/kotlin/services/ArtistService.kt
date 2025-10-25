@@ -1,5 +1,6 @@
 package dev.dertyp.services
 
+import dev.dertyp.core.foreignKeyOn
 import dev.dertyp.core.rankedSearchQuery
 import dev.dertyp.data.Artist
 import dev.dertyp.data.PaginatedResponse
@@ -12,7 +13,7 @@ import java.util.*
 class ArtistService(database: Database): Service() {
     init {
         transaction(database) {
-            execInBatch(listOf("PRAGMA foreign_keys = ON"))
+            foreignKeyOn(database)
             SchemaUtils.create(ArtistTable)
         }
 

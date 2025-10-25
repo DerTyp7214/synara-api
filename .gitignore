@@ -39,3 +39,4 @@ out/
 /data.db
 .env
 .*.env
+tmp

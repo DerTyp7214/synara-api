@@ -1,5 +1,6 @@
 package dev.dertyp.services
 
+import dev.dertyp.core.foreignKeyOn
 import dev.dertyp.core.rankedSearchQuery
 import dev.dertyp.data.*
 import dev.dertyp.db.*
@@ -18,7 +19,7 @@ class SongService(database: Database) : Service() {
 
     init {
         transaction(database) {
-            execInBatch(listOf("PRAGMA foreign_keys = ON"))
+            foreignKeyOn(database)
             SchemaUtils.create(SongTable)
             SchemaUtils.create(SongArtistTable)
             SchemaUtils.create(TranscodedSongTable)

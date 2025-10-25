@@ -1,5 +1,6 @@
 package dev.dertyp.services
 
+import dev.dertyp.core.foreignKeyOn
 import dev.dertyp.core.paging
 import dev.dertyp.data.Image
 import dev.dertyp.data.InsertableImage
@@ -17,7 +18,7 @@ class ImageService(database: Database, environment: ApplicationEnvironment) : Se
 
     init {
         transaction(database) {
-            execInBatch(listOf("PRAGMA foreign_keys = ON"))
+            foreignKeyOn(database)
             SchemaUtils.create(ImageTable)
         }
 

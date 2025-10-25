@@ -33,7 +33,7 @@ class Indexer(
     private val imageService: ImageService,
     private val playlistService: PlaylistService,
 ) {
-    private val logger = KtorSimpleLogger("Indexer")
+    val logger = KtorSimpleLogger("Indexer")
 
     val tracksPath = environment.config.propertyOrNull("audio.tracks")?.getString()?.removeSuffix("/")
     val albumsPath = environment.config.propertyOrNull("audio.albums")?.getString()?.removeSuffix("/")
@@ -52,7 +52,7 @@ class Indexer(
     suspend fun start(stdout: suspend (String) -> Unit) = coroutineScope {
         val log = { line: String -> async { stdout(line) } }
         if (tracksPath == null || playlistsPath == null)
-            return@coroutineScope log("audio paths are not configured")
+            return@coroutineScope log("audio paths are not configured").await()
 
         val songRootPath = Path(tracksPath)
         val playlistRootPath = Path(playlistsPath)

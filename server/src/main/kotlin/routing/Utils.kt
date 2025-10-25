@@ -154,14 +154,17 @@ fun Route.utils(
     }) {
         sse {
             if (!indexer.isActive.compareAndSet(expectedValue = false, newValue = true)) {
+                indexer.logger.warn("Indexer is already running.")
                 call.respond(HttpStatusCode.Conflict, "Indexer is already running.")
                 return@sse
             }
 
+            indexer.logger.info("Starting indexing ...")
             indexer.start { stdout ->
                 send(stdout)
             }
 
+            indexer.logger.info("Finished indexing ...")
             indexer.isActive.store(false)
         }
     }

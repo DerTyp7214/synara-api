@@ -2,7 +2,7 @@ type: http_request
 model: http_request
 id: rq_VQadihtDLH
 createdAt: 2025-10-14T19:25:16.450134282
-updatedAt: 2025-10-24T08:20:20.319519688
+updatedAt: 2025-10-25T19:39:53.973182983
 workspaceId: wk_9dbKacQT4H
 folderId: fl_QrUoFyttZM
 authentication: {}
@@ -22,9 +22,9 @@ url: ${[baseUrl]}/song/byId/:id
 urlParameters:
 - enabled: true
   name: :id
-  value: a8377e30-ce95-426c-a3c6-669619d40390
+  value: fae6de16-232f-4713-bdd0-5da23ee1c600
   id: u6yAuI348I
 - enabled: true
   name: ''
   value: ''
-  id: faNbSRmrTB
+  id: hEe3wHMUra

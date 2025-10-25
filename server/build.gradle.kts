@@ -11,14 +11,25 @@ val logback_version: String by project
 val postgres_version: String by project
 
 plugins {
-    kotlin("jvm") version "2.2.21"
+    kotlin("jvm") version "2.2.20"
     id("io.ktor.plugin") version "3.3.1"
-    id("org.jetbrains.kotlin.plugin.serialization") version "2.2.21"
+    id("org.jetbrains.kotlin.plugin.serialization") version "2.2.20"
     id("org.jetbrains.kotlinx.rpc.plugin") version "0.10.0"
 }
 
 application {
     mainClass = "io.ktor.server.netty.EngineMain"
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_24
+    targetCompatibility = JavaVersion.VERSION_24
+}
+
+tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_24)
+    }
 }
 
 dependencies {
@@ -75,6 +86,6 @@ ktor {
     docker {
         localImageName.set(ktorBaseImageTag.split(":").first())
         imageTag.set(ktorBaseImageTag.split(":").last())
-        jreVersion.set(JavaVersion.VERSION_21)
+        jreVersion.set(JavaVersion.VERSION_24)
     }
 }

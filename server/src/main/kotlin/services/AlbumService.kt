@@ -2,6 +2,7 @@ package dev.dertyp.services
 
 import dev.dertyp.core.Quadruple
 import dev.dertyp.core.filterValueNotNull
+import dev.dertyp.core.foreignKeyOn
 import dev.dertyp.core.rankedSearchQuery
 import dev.dertyp.data.Album
 import dev.dertyp.data.Artist
@@ -24,7 +25,7 @@ class AlbumService(database: Database): Service() {
 
     init {
         transaction(database) {
-            execInBatch(listOf("PRAGMA foreign_keys = ON"))
+            foreignKeyOn(database)
             SchemaUtils.create(AlbumTable)
             SchemaUtils.create(AlbumArtistTable)
         }

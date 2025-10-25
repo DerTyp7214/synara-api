@@ -1,5 +1,6 @@
 package dev.dertyp.services
 
+import dev.dertyp.core.foreignKeyOn
 import dev.dertyp.core.paging
 import dev.dertyp.core.rankedSearchQuery
 import dev.dertyp.data.InsertablePlaylist
@@ -19,7 +20,7 @@ import java.util.*
 class PlaylistService(database: Database) : Service() {
     init {
         transaction(database) {
-            execInBatch(listOf("PRAGMA foreign_keys = ON"))
+            foreignKeyOn(database)
             SchemaUtils.create(PlaylistTable)
             SchemaUtils.create(PlaylistSongTable)
         }

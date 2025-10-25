@@ -2,7 +2,7 @@ type: http_request
 model: http_request
 id: rq_SgeYtjQiV3
 createdAt: 2025-10-14T19:25:16.450709101
-updatedAt: 2025-10-24T08:21:36.285593304
+updatedAt: 2025-10-25T19:39:32.861504040
 workspaceId: wk_9dbKacQT4H
 folderId: fl_RHZBV9eRzQ
 authentication: {}
@@ -38,9 +38,9 @@ urlParameters:
   id: GjDv0PgC5j
 - enabled: true
   name: :query
-  value: metro we dont
+  value: offset
   id: D3SeB0yjmy
 - enabled: true
   name: ''
   value: ''
-  id: 3KwH07gek0
+  id: K73tyYHda4

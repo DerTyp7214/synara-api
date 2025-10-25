@@ -1,19 +1,32 @@
 services:
   api:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        APP_USER_ID: 1000
+        APP_GROUP_ID: 1000
+    user: "1000:1000"
     ports:
       - "8080:8080"
     env_file:
       - .server.env
+    environment:
+      - HOST_UID=1000
+      - HOST_GID=1000
     volumes:
       - ./tmp/data:/data
+      - config:/home/appuser/.config
     depends_on:
       db:
         condition: service_healthy
+    restart: unless-stopped
   db:
     image: postgres
+    hostname: postgres
+    user: "1000:1000"
     volumes:
-      - ./tmp/db:/var/lib/postgresql/data
+      - postgres:/var/lib/postgresql
     environment:
       POSTGRES_DB: synara-api-db
       POSTGRES_HOST_AUTH_METHOD: trust
@@ -22,3 +35,8 @@ services:
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U postgres" ]
       interval: 1s
+    restart: unless-stopped
+
+volumes:
+  config:
+  postgres:
