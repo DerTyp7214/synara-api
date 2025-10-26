@@ -45,8 +45,7 @@ RUN ./configure \
     --disable-ffplay \
     --extra-libs="-ldl -lm -lz -lrt"
 
-RUN make -j$(nproc)
-RUN make install
+RUN make -j$(nproc) && make install
 
 # Stage 4: Create the Runtime Image
 FROM amazoncorretto:25 AS runtime
