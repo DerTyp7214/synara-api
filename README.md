@@ -13,10 +13,10 @@
 
 To run the project, use one of the following tasks:
 
-| Task                          | Description                      |
-|-------------------------------|----------------------------------|
-| `./gradlew :server:run`       | Run the server                   |
-| `./gradlew :server:runDocker` | Run using the local docker image |
+| Task                    | Description                      |
+|-------------------------|----------------------------------|
+| `./gradlew :server:run` | Run the server                   |
+| `./docker compose up`   | Run using the local docker image |
 
 If the server starts successfully, you'll see the following output:
 
