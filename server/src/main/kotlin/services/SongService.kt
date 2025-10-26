@@ -37,7 +37,7 @@ class SongService(database: Database) : Service() {
 
             return Song(
                 id = id,
-                title = resultRow[SongTable.title],
+                title = resultRow[SongTable.title].removeSuffix("\uD83C\uDD74"),
                 artists = listOf(),
                 album = null,
                 duration = resultRow[SongTable.duration],

@@ -25,7 +25,7 @@ fun Route.sync(database: Database, songService: SongService) {
         }
 
         get("/callback") {
-            SyncService.handleCallback(call, database)
+            SyncService.handleCallback(call, database, call.request.queryParameters["state"])
         }
 
         route("/get") {

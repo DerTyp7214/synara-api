@@ -59,6 +59,9 @@ class JwtService(
                 challenge { defaultScheme, realm ->
                     call.respond(HttpStatusCode.Unauthorized, "Token is not valid or has expired")
                 }
+                skipWhen { call ->
+                    call.request.path().endsWith("/callback")
+                }
             }
         }
 
@@ -66,6 +69,16 @@ class JwtService(
         post("/authenticate", {
             request {
                 body<AuthenticationRequest>()
+            }
+            response {
+                HttpStatusCode.OK to {
+                    body<AuthenticationResponse>()
+                }
+                HttpStatusCode.Unauthorized to {
+                    body<String> {
+                        example(ValueExampleDescriptor("message", "Invalid username or password"))
+                    }
+                }
             }
         }) {
             val authenticationRequest = call.receive<AuthenticationRequest>()
@@ -94,6 +107,11 @@ class JwtService(
         post("/refresh-token", {
             request {
                 body<RefreshTokenRequest>()
+            }
+            response {
+                HttpStatusCode.OK to {
+                    body<AuthenticationResponse>()
+                }
             }
         }) {
             val refreshToken = call.receive<RefreshTokenRequest>().refreshToken

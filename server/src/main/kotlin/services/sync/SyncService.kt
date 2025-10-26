@@ -10,9 +10,11 @@ import dev.dertyp.services.Service
 import dev.dertyp.services.UserService
 import io.ktor.http.*
 import io.ktor.server.application.*
+import io.ktor.server.html.*
 import io.ktor.server.response.*
 import io.ktor.server.util.*
 import kotlinx.coroutines.flow.Flow
+import kotlinx.html.*
 import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.ResultRow
@@ -29,7 +31,7 @@ abstract class SyncService(
     private val database: Database,
     protected val environment: ApplicationEnvironment,
     protected val user: User
-): Service() {
+) : Service() {
     abstract val clientIdConfigPath: String
     abstract val clientSecretConfigPath: String
     abstract val scopes: List<String>
@@ -53,11 +55,17 @@ abstract class SyncService(
             .maximumSize(1000)
             .build<String, String>()
 
-        private suspend fun getInstance(name: String?, database: Database, call: ApplicationCall): SyncService? {
+        private suspend fun getInstance(
+            name: String?,
+            database: Database,
+            call: ApplicationCall,
+            username: String? = null
+        ): SyncService? {
             return when (name) {
                 SyncServiceType.tidal.name -> {
                     val environment = call.application.environment
-                    val user = UserService(database, environment).findUserByUsername(call.getUsername())
+                    val user = UserService(database, environment)
+                        .findUserByUsername(username ?: call.getUsername())
                     if (user == null) return null
                     TidalSyncService(database, environment, user)
                 }
@@ -66,8 +74,8 @@ abstract class SyncService(
             }
         }
 
-        suspend fun getInstance(call: ApplicationCall, database: Database): SyncService {
-            val instance = getInstance(call.parameters["service"], database, call)
+        suspend fun getInstance(call: ApplicationCall, database: Database, username: String? = null): SyncService {
+            val instance = getInstance(call.parameters["service"], database, call, username)
             if (instance == null) throw IllegalStateException("Service not found")
             return instance
         }
@@ -81,8 +89,8 @@ abstract class SyncService(
             service.handleAuth(call)
         }
 
-        suspend fun handleCallback(call: ApplicationCall, database: Database) {
-            val service = getInstance(call.parameters["service"], database, call)
+        suspend fun handleCallback(call: ApplicationCall, database: Database, username: String?) {
+            val service = getInstance(call.parameters["service"], database, call, username)
 
             if (service == null)
                 return call.respond(HttpStatusCode.BadRequest, "Invalid Service")
@@ -92,7 +100,6 @@ abstract class SyncService(
     }
 
     protected suspend fun setToken(token: Token) {
-        if (this is TidalSyncServiceBase) setTdnToken(token)
         if (token.createdAt != null) {
             dbQuery {
                 SyncServiceTable.upsert {
@@ -171,7 +178,30 @@ abstract class SyncService(
     suspend fun handleCallback(call: ApplicationCall) {
         try {
             setToken(getToken(call))
-            call.respond(HttpStatusCode.NoContent)
+            call.respondHtml(HttpStatusCode.OK) {
+                head {
+                    title("Authentication Complete")
+                    style {
+                        unsafe {
+                            +"body { background-color: #333333; color: #FFFFFF; font-family: sans-serif; width: 100vw; height: 100vh; }"
+                            +"p { margin: 1em; }"
+                        }
+                    }
+                    script(ScriptType.textJavaScript) {
+                        unsafe {
+                            +"setTimeout(function() { window.close(); }, 100);"
+                        }
+                    }
+                }
+                body {
+                    p {
+                        +"Authentication Complete"
+                    }
+                    p {
+                        +"You may safely close this window now."
+                    }
+                }
+            }
         } catch (e: Exception) {
             call.respond(HttpStatusCode.InternalServerError, e.message ?: "Internal Server Error")
         }

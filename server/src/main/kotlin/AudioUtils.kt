@@ -198,8 +198,7 @@ private class NoOutputWithContentLength(
     override val contentType: ContentType,
     override val status: HttpStatusCode? = null,
     override val contentLength: Long? = null
-) : OutgoingContent.NoContent() {
-}
+) : OutgoingContent.NoContent()
 
 @Suppress("LoggingSimilarMessage")
 fun Route.stream(service: SongService) {
@@ -297,14 +296,13 @@ fun Route.stream(service: SongService) {
 
                 call.response.header(HttpHeaders.AcceptRanges, "bytes")
                 call.response.header(HttpHeaders.ContentRange, "bytes ${start}-${end}/${fullSize}")
-                call.response.header(HttpHeaders.ContentLength, chunkSize.toString())
                 call.response.header(
                     HttpHeaders.ContentDisposition,
                     ContentDisposition.Inline.withParameter(ContentDisposition.Parameters.FileName, fileName)
                         .toString()
                 )
 
-                call.respondBytesWriter(contentType, HttpStatusCode.PartialContent) {
+                call.respondBytesWriter(contentType, HttpStatusCode.PartialContent, contentLength = chunkSize) {
                     serveFile.inputStream().use { inputStream ->
                         inputStream.skip(start)
                         writeFully(inputStream.readNBytes(chunkSize.toInt()))
@@ -314,8 +312,8 @@ fun Route.stream(service: SongService) {
             }
 
             else -> {
-                call.response.header(HttpHeaders.ContentLength, fullSize)
-                call.respondBytesWriter(contentType) {
+                call.response.header(HttpHeaders.AcceptRanges, "bytes")
+                call.respondBytesWriter(contentType, contentLength = fullSize) {
                     serveFile.inputStream().transferTo(toOutputStream())
                 }
             }

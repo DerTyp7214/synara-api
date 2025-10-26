@@ -90,7 +90,7 @@ fun Route.playlist(service: PlaylistService) {
             response {
                 HttpStatusCode.OK to {
                     description = "Lists all playlists."
-                    body<List<Playlist>>()
+                    body<PaginatedResponse<Playlist>>()
                 }
             }
         }) {
