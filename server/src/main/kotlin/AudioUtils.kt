@@ -40,6 +40,7 @@ data class StreamInfo(
     val fileName: String,
 )
 
+@Suppress("unused")
 @OptIn(ExperimentalAtomicApi::class)
 object AudioUtils {
     val logger = KtorSimpleLogger("AudioUtils")

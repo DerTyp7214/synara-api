@@ -234,7 +234,7 @@ class TdnService(private val indexer: Indexer) : Service() {
         }
 
         command[0] = "tidal_dl_ng.cli"
-        command.add(0, "python")
+        command.add(0, "python3")
         command.add(1, "-u")
         command.add(2, "-m")
 
@@ -277,7 +277,7 @@ class TdnService(private val indexer: Indexer) : Service() {
                             currentCoroutineContext().ensureActive()
 
                             fullOutput.appendLine(line)
-                            onLineReceived(line)
+                            if (line.isNotBlank()) onLineReceived(line)
                         }
                     } catch (e: Exception) {
                         if (e is CancellationException) throw e
