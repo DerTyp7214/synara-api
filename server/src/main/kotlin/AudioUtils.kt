@@ -215,7 +215,7 @@ fun Route.stream(service: SongService) {
         val flacFile = Path(song.path).toFile()
         if (!flacFile.exists()) return@head call.respond(HttpStatusCode.NotFound, "File not found.")
 
-        val (serveFile, contentType, fullSize, fileName) = if (targetKbps > 0) {
+        val (_, contentType, fullSize) = if (targetKbps > 0) {
             transcodeFlacToWebm(flacFile, targetKbps)
         } else {
             StreamInfo(
@@ -263,7 +263,7 @@ fun Route.stream(service: SongService) {
         val flacFile = Path(song.path).toFile()
         if (!flacFile.exists()) return@get call.respond(HttpStatusCode.NotFound, "File not found.")
 
-        val range = call.request.ranges()?.ranges?.first()
+        var range = call.request.ranges()?.ranges?.first()
 
         val (serveFile, contentType, fullSize, fileName) = if (targetKbps > 0) {
             transcodeFlacToWebm(flacFile, targetKbps)
@@ -275,6 +275,12 @@ fun Route.stream(service: SongService) {
                 flacFile.name
             )
         }
+
+        val userAgent = call.request.header("User-Agent") ?: ""
+        val isChrome = userAgent.contains("Chrome/")
+        val isElectron = userAgent.contains("Electron/")
+
+        if (isElectron || isChrome) range = null
 
         when (range) {
             is ContentRange.TailFrom,
