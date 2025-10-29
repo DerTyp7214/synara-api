@@ -11,12 +11,10 @@ import io.github.smiley4.ktoropenapi.get
 import io.ktor.http.*
 import io.ktor.http.content.*
 import io.ktor.server.application.*
-import io.ktor.server.request.*
+import io.ktor.server.plugins.partialcontent.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.ktor.util.logging.*
-import io.ktor.utils.io.*
-import io.ktor.utils.io.jvm.javaio.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.bytedeco.ffmpeg.global.avcodec
@@ -31,7 +29,6 @@ import kotlin.concurrent.atomics.AtomicBoolean
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.io.path.Path
 import kotlin.math.abs
-import kotlin.math.min
 
 data class StreamInfo(
     val file: File,
@@ -202,127 +199,95 @@ private class NoOutputWithContentLength(
 
 @Suppress("LoggingSimilarMessage")
 fun Route.stream(service: SongService) {
-    head("/stream/{id}") {
-        val id = call.parameters["id"]?.toUUIDOrNull()
-        if (id == null) return@head call.respond(HttpStatusCode.BadRequest)
-
-        val song = service.byId(id)
-        if (song == null) return@head call.respond(HttpStatusCode.NotFound, "Song not found.")
-
-        val bitrate = call.request.queryParameters["bitrate"]?.toIntOrNull()
-        val targetKbps = bitrate ?: 0
-
-        val flacFile = Path(song.path).toFile()
-        if (!flacFile.exists()) return@head call.respond(HttpStatusCode.NotFound, "File not found.")
-
-        val (_, contentType, fullSize) = if (targetKbps > 0) {
-            transcodeFlacToWebm(flacFile, targetKbps)
-        } else {
-            StreamInfo(
-                flacFile,
-                ContentType.parse("audio/flac"),
-                flacFile.length(),
-                flacFile.name
-            )
+    route("/stream") {
+        install(PartialContent) {
+            // Maximum number of ranges that will be accepted from a HTTP request.
+            // If the HTTP request specifies more ranges, they will all be merged into a single range.
+            maxRangeCount = 10
         }
 
-        call.respond(NoOutputWithContentLength(
-            contentType = contentType,
-            status = HttpStatusCode.OK,
-            contentLength = fullSize
-        ))
-    }
-    get("/stream/{id}", {
-        request {
-            pathParameter<String>("id") {
-                description = "The id of the song."
-            }
-            queryParameter<Int>("bitrate") {
-                description = "Target bitrate in kbps (e.g., 320, 192, 128). Defaults to full quality if omitted."
-                required = false
-            }
-        }
-        response {
-            HttpStatusCode.OK to {
-                description = "Full audio of the song."
-            }
-            HttpStatusCode.PartialContent to {
-                description = "The audio stream of the song."
-            }
-        }
-    }) {
-        val id = call.parameters["id"]?.toUUIDOrNull()
-        if (id == null) return@get call.respond(HttpStatusCode.BadRequest)
+        head("/{id}") {
+            val id = call.parameters["id"]?.toUUIDOrNull()
+            if (id == null) return@head call.respond(HttpStatusCode.BadRequest)
 
-        val song = service.byId(id)
-        if (song == null) return@get call.respond(HttpStatusCode.NotFound, "Song not found.")
+            val song = service.byId(id)
+            if (song == null) return@head call.respond(HttpStatusCode.NotFound, "Song not found.")
 
-        val bitrate = call.request.queryParameters["bitrate"]?.toIntOrNull()
-        val targetKbps = bitrate ?: 0
+            val bitrate = call.request.queryParameters["bitrate"]?.toIntOrNull()
+            val targetKbps = bitrate ?: 0
 
-        val flacFile = Path(song.path).toFile()
-        if (!flacFile.exists()) return@get call.respond(HttpStatusCode.NotFound, "File not found.")
+            val flacFile = Path(song.path).toFile()
+            if (!flacFile.exists()) return@head call.respond(HttpStatusCode.NotFound, "File not found.")
 
-        var range = call.request.ranges()?.ranges?.first()
-
-        val (serveFile, contentType, fullSize, fileName) = if (targetKbps > 0) {
-            transcodeFlacToWebm(flacFile, targetKbps)
-        } else {
-            StreamInfo(
-                flacFile,
-                ContentType.parse("audio/flac"),
-                flacFile.length(),
-                flacFile.name
-            )
-        }
-
-        val userAgent = call.request.header("User-Agent") ?: ""
-        val isChrome = userAgent.contains("Chrome/")
-        val isElectron = userAgent.contains("Electron/")
-
-        if (isElectron || isChrome) range = null
-
-        when (range) {
-            is ContentRange.TailFrom,
-            is ContentRange.Suffix,
-            is ContentRange.Bounded -> {
-                val start = when (range) {
-                    is ContentRange.TailFrom -> range.from.coerceIn(0 until fullSize)
-                    is ContentRange.Bounded -> range.from.coerceIn(0 until fullSize)
-                    is ContentRange.Suffix -> 0
-                }
-                val end = when (range) {
-                    is ContentRange.TailFrom -> fullSize
-                    is ContentRange.Bounded -> min(range.to, fullSize)
-                    is ContentRange.Suffix -> min(range.lastCount, fullSize)
-                }
-                val chunkSize = end - start
-
-                if (chunkSize <= 0) return@get call.respond(HttpStatusCode.RequestedRangeNotSatisfiable)
-
-                call.response.header(HttpHeaders.AcceptRanges, "bytes")
-                call.response.header(HttpHeaders.ContentRange, "bytes ${start}-${end}/${fullSize}")
-                call.response.header(
-                    HttpHeaders.ContentDisposition,
-                    ContentDisposition.Inline.withParameter(ContentDisposition.Parameters.FileName, fileName)
-                        .toString()
+            val (_, contentType, fullSize) = if (targetKbps > 0) {
+                transcodeFlacToWebm(flacFile, targetKbps)
+            } else {
+                StreamInfo(
+                    flacFile,
+                    ContentType.parse("application/octet-stream"),
+                    flacFile.length(),
+                    flacFile.name
                 )
-
-                call.respondBytesWriter(contentType, HttpStatusCode.PartialContent, contentLength = chunkSize) {
-                    serveFile.inputStream().use { inputStream ->
-                        inputStream.skip(start)
-                        writeFully(inputStream.readNBytes(chunkSize.toInt()))
-                    }
-                }
-
             }
 
-            else -> {
-                call.response.header(HttpHeaders.AcceptRanges, "bytes")
-                call.respondBytesWriter(contentType, contentLength = fullSize) {
-                    serveFile.inputStream().transferTo(toOutputStream())
+            call.response.header(HttpHeaders.AcceptRanges, "bytes")
+            call.respond(
+                NoOutputWithContentLength(
+                    contentType = contentType,
+                    status = HttpStatusCode.OK,
+                    contentLength = fullSize
+                )
+            )
+        }
+        get("/{id}", {
+            request {
+                pathParameter<String>("id") {
+                    description = "The id of the song."
+                }
+                queryParameter<Int>("bitrate") {
+                    description = "Target bitrate in kbps (e.g., 320, 192, 128). Defaults to full quality if omitted."
+                    required = false
                 }
             }
+            response {
+                HttpStatusCode.OK to {
+                    description = "Full audio of the song."
+                }
+                HttpStatusCode.PartialContent to {
+                    description = "The audio stream of the song."
+                }
+            }
+        }) {
+            val id = call.parameters["id"]?.toUUIDOrNull()
+            if (id == null) return@get call.respond(HttpStatusCode.BadRequest)
+
+            val song = service.byId(id)
+            if (song == null) return@get call.respond(HttpStatusCode.NotFound, "Song not found.")
+
+            val bitrate = call.request.queryParameters["bitrate"]?.toIntOrNull()
+            val targetKbps = bitrate ?: 0
+
+            val flacFile = Path(song.path).toFile()
+            if (!flacFile.exists()) return@get call.respond(HttpStatusCode.NotFound, "File not found.")
+
+            val (serveFile, _, _, fileName) = if (targetKbps > 0) {
+                transcodeFlacToWebm(flacFile, targetKbps)
+            } else {
+                StreamInfo(
+                    flacFile,
+                    ContentType.parse(Files.probeContentType(flacFile.toPath())),
+                    flacFile.length(),
+                    flacFile.name
+                )
+            }
+
+            call.response.header(
+                HttpHeaders.ContentDisposition,
+                ContentDisposition.Inline.withParameter(ContentDisposition.Parameters.FileName, fileName)
+                    .toString()
+            )
+
+            return@get call.respondFile(serveFile)
         }
     }
 }
