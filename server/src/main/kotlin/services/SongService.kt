@@ -80,6 +80,16 @@ class SongService(database: Database) : Service() {
             orderBy(SongTable.trackNumber, SortOrder.ASC)
         }
 
+    suspend fun byPlaylist(page: Int, pageSize: Int, playlistId: UUID): PaginatedResponse<Song> =
+        querySongs(page, pageSize, true) {
+            val songs = dbQuery {
+                PlaylistService.instance?.byId(playlistId)?.songs
+            }.orEmpty()
+
+            where { SongTable.id inList songs }
+            orderBy(SongTable.trackNumber, SortOrder.ASC)
+        }
+
     suspend fun byTidalTrackIds(ids: List<Long>): List<Song> =
         querySongs(0, Int.MAX_VALUE, true) {
             where {
@@ -108,7 +118,7 @@ class SongService(database: Database) : Service() {
         page: Int,
         pageSize: Int,
         explicit: Boolean,
-        query: Query.() -> Query = { this }
+        query: suspend Query.() -> Query = { this }
     ) = dbQuery {
         val offset = if (pageSize == Int.MAX_VALUE) 0 else 1
 

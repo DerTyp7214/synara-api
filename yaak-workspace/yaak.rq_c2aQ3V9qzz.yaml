@@ -2,7 +2,7 @@ type: http_request
 model: http_request
 id: rq_c2aQ3V9qzz
 createdAt: 2025-10-14T19:25:16.450619051
-updatedAt: 2025-10-28T21:28:46.795904474
+updatedAt: 2025-10-31T21:15:13.840913578
 workspaceId: wk_9dbKacQT4H
 folderId: fl_RHZBV9eRzQ
 authentication: {}
@@ -34,9 +34,9 @@ urlParameters:
   id: Cqh8H4cRV7
 - enabled: true
   name: :query
-  value: gary
+  value: future
   id: zXFn5dePsN
 - enabled: true
   name: ''
   value: ''
-  id: UB4FxecpjY
+  id: faBpMkHCHK

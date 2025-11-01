@@ -77,6 +77,41 @@ fun Route.song(service: SongService) {
                 )
             }
         }
+        get("/byPlaylist/{playlistId}", {
+            request {
+                pathParameter<String>("playlistId") {
+                    description = "The playlist id to search all songs for."
+                }
+
+                paging()
+            }
+            response {
+                HttpStatusCode.OK to {
+                    description = "All songs on this playlist."
+                    body<PaginatedResponse<SongWithoutLyrics>>()
+                }
+            }
+        }) {
+            val id = call.parameters["playlistId"]?.toUUIDOrNull()
+            if (id == null) return@get call.respond(HttpStatusCode.BadRequest)
+
+            val (page, pageSize) = call.paging()
+
+            call.respond(service.byPlaylist(page, pageSize, id).omitLyrics())
+        }
+        m3u(
+            path = "/byPlaylist/{playlistId}/m3u",
+            pathParams = listOf(Pair("playlistId", "The playlist id to search all songs for.")),
+            validate = { map -> map["playlistId"] != null }) { map ->
+            map["playlistId"]?.toUUIDOrNull()?.let {
+                Pair(
+                    "All Songs on $it",
+                    service.byPlaylist(0, Int.MAX_VALUE, it).data.map { song ->
+                        PlaylistEntry(song.id, song.title, song.duration)
+                    }
+                )
+            }
+        }
         get("/byArtist/{artistId}", {
             request {
                 pathParameter<String>("artistId") {
