@@ -9,6 +9,7 @@ val kotlinx_html_version: String by project
 val kotlinx_rpc_version: String by project
 val logback_version: String by project
 val postgres_version: String by project
+val jmdns_version: String by project
 
 plugins {
     kotlin("jvm") version "2.2.20"
@@ -77,6 +78,7 @@ dependencies {
     implementation("io.ktor:ktor-server-sessions:3.3.1")
     implementation("com.github.ben-manes.caffeine:caffeine:3.2.2")
     implementation("io.ktor:ktor-server-partial-content:3.3.1")
+    implementation ("org.jmdns:jmdns:$jmdns_version")
     testImplementation("io.ktor:ktor-server-test-host")
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit:$kotlin_version")
 }

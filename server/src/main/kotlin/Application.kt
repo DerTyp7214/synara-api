@@ -1,5 +1,6 @@
 package dev.dertyp
 
+import dev.dertyp.plugins.JmDNSPlugin
 import dev.dertyp.services.JwtService
 import dev.dertyp.services.RefreshTokenService
 import dev.dertyp.services.UserService
@@ -19,6 +20,10 @@ fun Application.module() {
     val jwtService = JwtService(environment, userService, refreshTokenService)
 
     install(CallLogging)
+    install(JmDNSPlugin) {
+        serviceName = "synara-api"
+        serviceType = "_synara-api._tcp.local."
+    }
 
     configureHTTP(jwtService)
     configureRouting(jwtService)
