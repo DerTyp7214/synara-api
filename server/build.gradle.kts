@@ -33,6 +33,10 @@ tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach 
     }
 }
 
+tasks.shadowJar {
+    mergeServiceFiles()
+}
+
 dependencies {
     implementation("io.ktor:ktor-client-core")
     implementation("io.ktor:ktor-client-cio")
@@ -40,6 +44,7 @@ dependencies {
     implementation("io.ktor:ktor-server-core")
     implementation("com.ucasoft.ktor:ktor-simple-cache:0.55.3")
     implementation("com.ucasoft.ktor:ktor-simple-memory-cache:0.55.3")
+    implementation("com.ucasoft.ktor:ktor-simple-redis-cache:0.55.3")
     implementation("io.github.smiley4:ktor-openapi:5.1.0")
     implementation("io.github.smiley4:ktor-swagger-ui:5.1.0")
     implementation("io.ktor:ktor-server-auth")
@@ -79,6 +84,8 @@ dependencies {
     implementation("com.github.ben-manes.caffeine:caffeine:3.2.2")
     implementation("io.ktor:ktor-server-partial-content:3.3.1")
     implementation ("org.jmdns:jmdns:$jmdns_version")
+    implementation("com.sksamuel.scrimage:scrimage-core:4.3.5")
+    implementation("com.sksamuel.scrimage:scrimage-webp:4.3.5")
     testImplementation("io.ktor:ktor-server-test-host")
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit:$kotlin_version")
 }

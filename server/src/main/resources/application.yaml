@@ -3,10 +3,13 @@ ktor:
         modules:
             - dev.dertyp.ApplicationKt.module
     deployment:
-        port: 8080
+        port: $PORT:8080
 client:
   id: ${CLIENT_ID}
   secret: ${CLIENT_SECRET}
+redis:
+  host: ${REDIS_HOST:}
+  port: ${REDIS_PORT:}
 jwt:
   issuer: ${JWT_ISSUER}
   audience: ${JWT_AUDIENCE}

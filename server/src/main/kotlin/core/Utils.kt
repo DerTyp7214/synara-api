@@ -3,6 +3,8 @@ package dev.dertyp.core
 import java.io.Serializable
 import kotlin.math.ln
 import kotlin.math.pow
+import kotlin.time.TimedValue
+import kotlin.time.measureTimedValue
 
 
 data class Quadruple<out A, out B, out C, out D>(
@@ -32,4 +34,23 @@ fun Number.toHumanReadableSize(): String {
     val unit = units.getOrElse(i) { units.last() }
 
     return "%.1f %s".format(size, unit)
+}
+
+fun <T> logTimeSplit(label: String, block: () -> T): T {
+    val result: TimedValue<T> = measureTimedValue(block)
+
+    println("Time Split: | $label | took ${result.duration}")
+
+    return result.value
+}
+
+suspend fun <T> logTimeSplitSuspend(label: String, block: suspend () -> T): T {
+    val result: TimedValue<T> = measureTimedValue {
+        block()
+    }
+
+    // Log the split time to the console
+    println("Time Split (Suspend): | $label | took ${result.duration}")
+
+    return result.value
 }

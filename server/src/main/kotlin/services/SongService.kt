@@ -77,17 +77,16 @@ class SongService(database: Database) : Service() {
     suspend fun byAlbum(page: Int, pageSize: Int, albumId: UUID): PaginatedResponse<Song> =
         querySongs(page, pageSize, true) {
             where { SongTable.albumId eq albumId }
+            orderBy(SongTable.discNumber, SortOrder.ASC)
             orderBy(SongTable.trackNumber, SortOrder.ASC)
         }
 
     suspend fun byPlaylist(page: Int, pageSize: Int, playlistId: UUID): PaginatedResponse<Song> =
-        querySongs(page, pageSize, true) {
-            val songs = dbQuery {
-                PlaylistService.instance?.byId(playlistId)?.songs
-            }.orEmpty()
-
-            where { SongTable.id inList songs }
-            orderBy(SongTable.trackNumber, SortOrder.ASC)
+        querySongs(page, pageSize, true, {
+            leftJoin(PlaylistSongTable)
+        }) {
+            where { PlaylistSongTable.playlistId eq playlistId }
+            orderBy(PlaylistSongTable.position, SortOrder.ASC)
         }
 
     suspend fun byTidalTrackIds(ids: List<Long>): List<Song> =
@@ -112,12 +111,13 @@ class SongService(database: Database) : Service() {
         querySongs(page, pageSize, explicit)
 
     private suspend fun querySingle(query: Query.() -> Query) =
-        querySongs(0, Int.MAX_VALUE, true, query).data.singleOrNull()
+        querySongs(0, Int.MAX_VALUE, true, query = query).data.singleOrNull()
 
     private suspend fun querySongs(
         page: Int,
         pageSize: Int,
         explicit: Boolean,
+        columnSet: suspend ColumnSet.() -> ColumnSet = { this },
         query: suspend Query.() -> Query = { this }
     ) = dbQuery {
         val offset = if (pageSize == Int.MAX_VALUE) 0 else 1
@@ -144,6 +144,7 @@ class SongService(database: Database) : Service() {
                 onColumn = { AlbumArtistTable.artistId },
                 otherColumn = { albumArtistAlias[ArtistTable.id] }
             )
+            .columnSet()
             .select(
                 SongTable.columns +
                         AlbumTable.columns +

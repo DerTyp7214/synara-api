@@ -7,13 +7,23 @@ services:
         APP_USER_ID: 1000
         APP_GROUP_ID: 1000
     user: "1000:1000"
-    ports:
-      - "8080:8080"
+    network_mode: host
+    #ports:
+    #  - "8080:8080"
     env_file:
       - .server.env
     environment:
+      - PORT=8080
       - HOST_UID=1000
       - HOST_GID=1000
+      #- DB_URL=jdbc:postgresql://postgres:5432/synara-api-db
+      - DB_URL=jdbc:postgresql://127.0.0.1:5432/synara-api-db
+      - DB_USER=postgres
+      - DB_PASSWORD=password
+      - DB_DRIVER=org.postgresql.Driver
+      #- REDIS_HOST=redis-cache
+      - REDIS_HOST=127.0.0.1
+      - REDIS_PORT=6379
     volumes:
       - /home/typ/Music:/data
       - config:/home/appuser/.config
@@ -23,7 +33,7 @@ services:
     restart: unless-stopped
   db:
     image: postgres
-    hostname: postgres
+    #hostname: postgres
     user: "1000:1000"
     volumes:
       - postgres:/var/lib/postgresql
@@ -36,7 +46,17 @@ services:
       test: [ "CMD-SHELL", "pg_isready -U postgres" ]
       interval: 1s
     restart: unless-stopped
+  redis-cache:
+    image: redis:alpine
+    #hostname: redis-cache
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes --maxmemory 2gb --maxmemory-policy allkeys-lru
+    restart: unless-stopped
 
 volumes:
   config:
   postgres:
+  redis_data:

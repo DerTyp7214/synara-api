@@ -1,7 +1,7 @@
 package dev.dertyp.routing
 
 import com.ucasoft.ktor.simpleCache.cacheOutput
-import dev.dertyp.core.sized
+import dev.dertyp.core.respondImageSized
 import dev.dertyp.core.toUUIDOrNull
 import dev.dertyp.services.ImageService
 import io.github.smiley4.ktoropenapi.get
@@ -9,7 +9,7 @@ import io.github.smiley4.ktoropenapi.route
 import io.ktor.http.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
-import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.days
 
 fun Route.image(service: ImageService) {
     route("/image", {
@@ -34,7 +34,7 @@ fun Route.image(service: ImageService) {
             }
         }) {
             route({ hidden = true }) {
-                cacheOutput(5.minutes) {
+                cacheOutput(1.days) {
                     get {
                         val id = call.parameters["id"]?.toUUIDOrNull()
                         if (id == null) return@get call.respond(HttpStatusCode.BadRequest)
@@ -42,9 +42,9 @@ fun Route.image(service: ImageService) {
                         val image = service.byId(id)
                         if (image == null) return@get call.respond(HttpStatusCode.NotFound)
 
-                        val size = call.parameters["size"]?.toIntOrNull() ?: 1280
+                        val size = call.parameters["size"]?.toIntOrNull() ?: -1
 
-                        call.respondBytes(image.sized(size), ContentType.Image.JPEG)
+                        call.respondImageSized(image, size)
                     }
                 }
             }
@@ -64,7 +64,7 @@ fun Route.image(service: ImageService) {
             }
         }) {
             route({ hidden = true }) {
-                cacheOutput(5.minutes) {
+                cacheOutput(1.days) {
                     get {
                         val id = call.parameters["hash"]
                         if (id == null) return@get call.respond(HttpStatusCode.BadRequest)
@@ -72,9 +72,9 @@ fun Route.image(service: ImageService) {
                         val image = service.byHash(id)
                         if (image == null) return@get call.respond(HttpStatusCode.NotFound)
 
-                        val size = call.parameters["size"]?.toIntOrNull() ?: 1280
+                        val size = call.parameters["size"]?.toIntOrNull() ?: -1
 
-                        call.respondBytes(image.sized(size), ContentType.Image.JPEG)
+                        call.respondImageSized(image, size)
                     }
                 }
             }
