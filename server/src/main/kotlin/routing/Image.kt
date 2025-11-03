@@ -34,7 +34,7 @@ fun Route.image(service: ImageService) {
             }
         }) {
             route({ hidden = true }) {
-                cacheOutput(1.days) {
+                cacheOutput(30.days) {
                     get {
                         val id = call.parameters["id"]?.toUUIDOrNull()
                         if (id == null) return@get call.respond(HttpStatusCode.BadRequest)
@@ -64,7 +64,7 @@ fun Route.image(service: ImageService) {
             }
         }) {
             route({ hidden = true }) {
-                cacheOutput(1.days) {
+                cacheOutput(30.days) {
                     get {
                         val id = call.parameters["hash"]
                         if (id == null) return@get call.respond(HttpStatusCode.BadRequest)

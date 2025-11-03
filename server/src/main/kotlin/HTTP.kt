@@ -7,6 +7,7 @@ import dev.dertyp.core.anyHeader
 import dev.dertyp.services.JwtService
 import io.ktor.server.application.*
 import io.ktor.server.plugins.cors.routing.*
+import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.seconds
 
 fun Application.configureHTTP(jwtService: JwtService) {
@@ -19,7 +20,7 @@ fun Application.configureHTTP(jwtService: JwtService) {
         if (!environment.config.propertyOrNull("redis.host")?.getString().isNullOrBlank()) {
             println("Using redis for cache!")
             redisCache {
-                invalidateAt = 10.seconds
+                invalidateAt = 30.days
                 host = environment.config.propertyOrNull("redis.host")!!.getString()
                 port = environment.config.propertyOrNull("redis.port")?.getString()?.toInt() ?: port
             }
