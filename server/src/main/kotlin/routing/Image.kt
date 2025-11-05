@@ -9,7 +9,7 @@ import io.github.smiley4.ktoropenapi.route
 import io.ktor.http.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
-import kotlin.time.Duration.Companion.days
+import kotlin.time.Duration
 
 fun Route.image(service: ImageService) {
     route("/image", {
@@ -34,7 +34,7 @@ fun Route.image(service: ImageService) {
             }
         }) {
             route({ hidden = true }) {
-                cacheOutput(30.days) {
+                cacheOutput(Duration.INFINITE) {
                     get {
                         val id = call.parameters["id"]?.toUUIDOrNull()
                         if (id == null) return@get call.respond(HttpStatusCode.BadRequest)
@@ -64,7 +64,7 @@ fun Route.image(service: ImageService) {
             }
         }) {
             route({ hidden = true }) {
-                cacheOutput(30.days) {
+                cacheOutput(Duration.INFINITE) {
                     get {
                         val id = call.parameters["hash"]
                         if (id == null) return@get call.respond(HttpStatusCode.BadRequest)

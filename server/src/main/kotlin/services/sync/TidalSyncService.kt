@@ -61,7 +61,7 @@ class TidalSyncService(
             return getMe()
         }
 
-        val body = response.body<Response<TidalDataWithAttrObject<UserAttribute>, Any>>()
+        val body = response.body<ResponseWithInclude<TidalDataWithAttrObject<UserAttribute>, Any>>()
 
         me = Me(
             id = body.data.id,
@@ -107,7 +107,8 @@ class TidalSyncService(
             else -> println("error: ${response.status}")
         }
 
-        val body = response.body<Response<List<TidalDataWithMetaObject>, TidalDataWithAttrObject<TrackAttributes>>>()
+        val body =
+            response.body<ResponseWithInclude<List<TidalDataWithMetaObject>, TidalDataWithAttrObject<TrackAttributes>>>()
 
         val songMap = body.included.associateBy { i -> i.id }
 
@@ -137,11 +138,84 @@ class TidalSyncService(
         }
     }
 
+    override suspend fun getAlbumIdByTrackId(trackId: String): String? {
+        val url = getUrl("/tracks/${trackId}/relationships/albums") {
+            parameters {
+                append("countryCode", "US")
+                append("locale", "en-US")
+            }
+        }
+
+        val token = getAccessToken() ?: throw IllegalArgumentException("Invalid access token")
+
+        val response = ApiClient.instance.get(url) {
+            headers {
+                defaultHeaders(token)
+            }
+        }
+
+        when (response.status) {
+            HttpStatusCode.OK -> {}
+            HttpStatusCode.TooManyRequests -> {
+                logger.warn("[getAlbumIdByTrackId]: Too many requests, waiting 10 seconds")
+                delay(10.seconds)
+                return getAlbumIdByTrackId(trackId)
+            }
+
+            else -> println("error: ${response.status}")
+        }
+
+        val body = response.body<Response<List<TidalData>>>()
+
+        return body.data.first().id
+    }
+
+    override suspend fun getImageUrlByAlbumId(albumId: String): List<Image> {
+        val url = getUrl("/albums/${albumId}/relationships/coverArt") {
+            parameters {
+                append("countryCode", "US")
+                append("locale", "en-US")
+                append("include", "coverArt")
+            }
+        }
+
+        val token = getAccessToken() ?: throw IllegalArgumentException("Invalid access token")
+
+        val response = ApiClient.instance.get(url) {
+            headers {
+                defaultHeaders(token)
+            }
+        }
+
+        when (response.status) {
+            HttpStatusCode.OK -> {}
+            HttpStatusCode.TooManyRequests -> {
+                logger.warn("[getImageUrlByAlbumId]: Too many requests, waiting 10 seconds")
+                delay(10.seconds)
+                return getImageUrlByAlbumId(albumId)
+            }
+
+            else -> println("error: ${response.status}")
+        }
+
+        val body = response.body<ResponseWithInclude<List<TidalData>, TidalDataWithAttrObject<MediaAttribute>>>()
+
+        return body.included.map { i ->
+            i.attributes.files.map { f -> Image(f.href, f.meta.width, f.meta.height) }
+        }.flatten()
+    }
+
     @Serializable
-    private data class Response<T, I>(
+    private data class Response<T>(
         val data: T,
         val links: Links,
-        val included: List<I>
+    )
+
+    @Serializable
+    private data class ResponseWithInclude<T, I>(
+        val data: T,
+        val links: Links,
+        val included: List<I> = emptyList(),
     )
 
     @Serializable
@@ -152,21 +226,39 @@ class TidalSyncService(
     )
 
     @Serializable
-    private data class ExternalLinks(
+    private data class ExternalLinks<T>(
         val href: String,
-        val meta: Map<MetaKeys, String>?
+        val meta: Map<MetaKeys, T>?
+    )
+
+    @Serializable
+    private data class ImageFile(
+        val href: String,
+        val meta: ImageSize
+    )
+
+    @Serializable
+    private data class ImageSize(
+        val width: Int,
+        val height: Int
+    )
+
+    @Serializable
+    private data class TidalData(
+        val id: String,
+        val type: String
     )
 
     @Serializable
     private data class TidalDataWithMetaObject(
-        val id: Long,
+        val id: String,
         val type: String,
         val meta: Map<MetaKeys, String>
     )
 
     @Serializable
     private data class TidalDataWithAttrObject<T>(
-        val id: Long,
+        val id: String,
         val type: String,
         val attributes: T,
         val relationships: Map<RelationshipsKeys, Links>?
@@ -181,6 +273,12 @@ class TidalSyncService(
     )
 
     @Serializable
+    private data class MediaAttribute(
+        val mediaType: String,
+        val files: List<ImageFile>
+    )
+
+    @Serializable
     private data class TrackAttributes(
         val title: String,
         val version: String,
@@ -192,7 +290,7 @@ class TidalSyncService(
         val accessType: String,
         val availability: List<String>,
         val mediaTags: List<String>,
-        val externalLings: List<ExternalLinks>,
+        val externalLings: List<ExternalLinks<String>>,
         val spotlighted: Boolean,
     )
 

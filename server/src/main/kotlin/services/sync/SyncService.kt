@@ -217,6 +217,8 @@ abstract class SyncService(
         cursor: String? = null,
         continueRequest: suspend (List<LikedSong>) -> Boolean = { true }
     ): Flow<LikedSong>
+    abstract suspend fun getAlbumIdByTrackId(trackId: String): String?
+    abstract suspend fun getImageUrlByAlbumId(albumId: String): List<Image>
 
     interface Token {
         val scope: String?
@@ -236,17 +238,38 @@ abstract class SyncService(
 
     @Serializable
     data class Me(
-        val id: Long,
+        val id: String,
         val username: String,
         val email: String,
     )
 
     @Serializable
     data class LikedSong(
-        val id: Long,
+        val id: String,
         val title: String,
         @Serializable(with = DateSerializer::class)
         val addedAt: Date,
         val explicit: Boolean,
+    )
+
+    @Serializable
+    data class Image(
+        val url: String,
+        val width: Int,
+        val height: Int,
+    )
+
+    @Serializable
+    data class Album(
+        val id: String,
+        val title: String,
+        val numberOfVolumes: Long,
+        val numberOfItems: Long,
+        val duration: Long,
+        val explicit: Boolean,
+        @Serializable(with = DateSerializer::class)
+        val releaseDate: Date,
+        val copyright: String,
+        val coverUrl: String,
     )
 }

@@ -168,7 +168,11 @@ class TdnService(private val indexer: Indexer) : Service() {
 
                         logProxy("Retrying (${currentTry + 1}/$maxRetries)")
 
-                        delay(10000)
+                        (0 until 10).forEach { i ->
+                            logProxy("Waiting for 500ms (${i + 1}/10)")
+                            if (!aliveCheck()) throw ClientCloseException()
+                            delay(500)
+                        }
 
                         val (newResult, newPaths) = collectDownloadedFiles(
                             command,
@@ -229,14 +233,16 @@ class TdnService(private val indexer: Indexer) : Service() {
         aliveCheck: suspend () -> Boolean,
         onLineReceived: suspend (String) -> Unit
     ): ProcessExecutionResult {
-        if (command.isEmpty() || command[0] != "tdn") {
+        if (command.isEmpty() || (command[0] != "tdn" && command[0] != "python3")) {
             return ProcessExecutionResult(-1, "Error: Command must start with 'tdn'.", "")
         }
 
-        command[0] = "tidal_dl_ng.cli"
-        command.add(0, "python3")
-        command.add(1, "-u")
-        command.add(2, "-m")
+        if (command[0] != "python3") {
+            command[0] = "tidal_dl_ng.cli"
+            command.add(0, "python3")
+            command.add(1, "-u")
+            command.add(2, "-m")
+        }
 
         val timeString = LocalTime.now().format(DateTimeFormatter.ISO_LOCAL_TIME).split(".").first()
         logger.info("[$timeString] Starting command: ${command.joinToString(" ")}")
@@ -261,6 +267,7 @@ class TdnService(private val indexer: Indexer) : Service() {
             try {
                 process = ProcessBuilder(command)
                     .redirectErrorStream(true)
+                    .apply { environment()["COLUMNS"] = "500" }
                     .start()
 
                 completionHandle = currentJob.invokeOnCompletion { cause ->

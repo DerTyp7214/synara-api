@@ -89,7 +89,7 @@ class SongService(database: Database) : Service() {
             orderBy(PlaylistSongTable.position, SortOrder.ASC)
         }
 
-    suspend fun byTidalTrackIds(ids: List<Long>): List<Song> =
+    suspend fun byTidalTrackIds(ids: List<String>): List<Song> =
         querySongs(0, Int.MAX_VALUE, true) {
             where {
                 SongTable.originalUrl inList ids.map {

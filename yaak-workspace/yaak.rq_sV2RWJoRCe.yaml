@@ -2,7 +2,7 @@ type: http_request
 model: http_request
 id: rq_sV2RWJoRCe
 createdAt: 2025-10-14T19:25:16.450882239
-updatedAt: 2025-10-26T22:32:58.233441649
+updatedAt: 2025-11-03T20:05:56.037915720
 workspaceId: wk_9dbKacQT4H
 folderId: null
 authentication: {}
@@ -16,15 +16,15 @@ name: /stream/:id
 sortPriority: 15000.0
 url: ${[baseUrl]}/stream/:id
 urlParameters:
-- enabled: false
+- enabled: true
   name: bitrate
-  value: <integer>
+  value: '32'
   id: BA37kca2a2
 - enabled: true
   name: :id
-  value: 671c5f7d-f59b-4a84-a430-d89a379ab615
+  value: 88b496d3-f6a7-49e2-81d9-ff53fd90d6c7
   id: uR6bPyezIh
 - enabled: true
   name: ''
   value: ''
-  id: czRCaVDxx9
+  id: ePhP5tq6CS
