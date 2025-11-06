@@ -55,17 +55,16 @@ class RefreshTokenService(database: Database) : Service() {
         orderBy(RefreshTokenTable.expiresAt, SortOrder.DESC)
     }.firstOrNull()
 
-    suspend fun createToken(userId: UUID, expirationMillis: Duration, tokenHash: String): RefreshToken? = dbQuery {
-        val expirationDate = Date(System.currentTimeMillis() + expirationMillis.inWholeMilliseconds)
-
+    suspend fun invalidateToken(userId: UUID, tokenHash: String) = dbQuery {
         val op = Op
             .build { RefreshTokenTable.userId eq userId }
-            .and { RefreshTokenTable.expiresAt greater System.currentTimeMillis() }
-            .and { RefreshTokenTable.isRevoked eq false }
+            .and { RefreshTokenTable.tokenHash eq tokenHash }
 
-        RefreshTokenTable.update({ op }) {
-            it[RefreshTokenTable.isRevoked] = true
-        }
+        RefreshTokenTable.deleteWhere { op }
+    }
+
+    suspend fun createToken(userId: UUID, expirationMillis: Duration, tokenHash: String): RefreshToken? = dbQuery {
+        val expirationDate = Date(System.currentTimeMillis() + expirationMillis.inWholeMilliseconds)
 
         RefreshTokenTable.batchInsert(listOf(Triple(userId, expirationDate, tokenHash))) {
             this[RefreshTokenTable.userId] = it.first

@@ -1,15 +1,14 @@
 package dev.dertyp.services.metadata
 
-import com.google.gson.annotations.SerializedName
 import dev.dertyp.ApiClient
 import dev.dertyp.core.parameters
+import dev.dertyp.services.models.tidal.*
 import io.ktor.client.call.*
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.server.application.*
 import kotlinx.coroutines.delay
-import kotlinx.serialization.Serializable
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.io.encoding.Base64
 import kotlin.time.Duration.Companion.seconds
@@ -76,16 +75,16 @@ class TidalService(
             }
         }
 
-        val searchResponse = response.body<Response<Response.Included.SearchAttributes>>()
+        val searchResponse = response.body<SearchResultsSingleResourceDataDocument<ArtistsAttributes, ArtistsRelationships>>()
         return searchResponse.included.map { included ->
             Artist(
                 id = included.id,
                 name = included.attributes.name,
-                popularity = included.attributes.popularity,
-                url = included.attributes.externalLinks.firstOrNull()?.href,
+                popularity = included.attributes.popularity.toFloat(),
+                url = included.attributes.externalLinks?.firstOrNull()?.href,
                 images = {
                     getImages(
-                        included.relationships[Response.Included.RelationshipType.PROFILE_ART]?.links?.self
+                        included.relationships.profileArt.links.self
                     ).map { file ->
                         Artist.Image(
                             url = file.href,
@@ -98,7 +97,7 @@ class TidalService(
         }
     }
 
-    private suspend fun getImages(urlPath: String?): List<Response.Included.FilesAttributes.File> {
+    private suspend fun getImages(urlPath: String?): List<ArtworkFile> {
         if (urlPath == null) return emptyList()
 
         val url = baseUrl.clone().apply {
@@ -126,106 +125,8 @@ class TidalService(
             logger.info(response.bodyAsText())
         }
 
-        val imagesResponse = response.body<Response<Response.Included.FilesAttributes>>()
+        val imagesResponse = response.body<ArtworksSingleResourceDataDocument<ArtworksAttributes, ArtworksRelationships>>()
 
         return imagesResponse.included.firstOrNull()?.attributes?.files ?: emptyList()
-    }
-
-    @Serializable
-    private data class Response<T>(
-        val included: List<Included<T>> = emptyList()
-    ) {
-        @Serializable
-        data class Included<T>(
-            val id: String,
-            val type: String,
-            val attributes: T,
-            val relationships: Map<RelationshipType, Relationship>,
-        ) {
-            @Serializable
-            data class FilesAttributes(
-                val mediaType: String,
-                val files: List<File>
-            ) {
-                @Serializable
-                data class File(
-                    val href: String,
-                    val meta: Meta
-                ) {
-                    @Serializable
-                    data class Meta(
-                        val width: Int,
-                        val height: Int,
-                    )
-                }
-            }
-
-            @Serializable
-            data class SearchAttributes(
-                val name: String,
-                val popularity: Float,
-                val externalLinks: List<ExternalLink>
-            ) {
-                @Serializable
-                data class ExternalLink(
-                    val href: String,
-                    val meta: Meta
-                ) {
-                    @Serializable
-                    data class Meta(
-                        val type: String,
-                    )
-                }
-            }
-
-            @Serializable
-            enum class RelationshipType {
-                @SerializedName("similarArtist")
-                SIMILAR_ARTISTS,
-
-                @SerializedName("albums")
-                ALBUMS,
-
-                @SerializedName("followers")
-                FOLLOWERS,
-
-                @SerializedName("following")
-                FOLLOWING,
-
-                @SerializedName("roles")
-                ROLES,
-
-                @SerializedName("videos")
-                VIDEOS,
-
-                @SerializedName("owners")
-                OWNERS,
-
-                @SerializedName("biography")
-                BIOGRAPHY,
-
-                @SerializedName("profileArt")
-                PROFILE_ART,
-
-                @SerializedName("trackProviders")
-                TRACK_PROVIDERS,
-
-                @SerializedName("tracks")
-                TRACKS,
-
-                @SerializedName("radio")
-                RADIO,
-            }
-
-            @Serializable
-            data class Relationship(
-                val links: Links
-            ) {
-                @Serializable
-                data class Links(
-                    val self: String,
-                )
-            }
-        }
     }
 }

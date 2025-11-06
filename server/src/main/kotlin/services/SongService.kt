@@ -71,7 +71,18 @@ class SongService(database: Database) : Service() {
 
     suspend fun byArtist(page: Int, pageSize: Int, artistId: UUID): PaginatedResponse<Song> =
         querySongs(page, pageSize, true) {
-            where { SongArtistTable.artistId eq artistId }
+            val songIds = SongArtistTable
+                .select(SongArtistTable.songId)
+                .where { SongArtistTable.artistId eq artistId }
+                .map { it[SongArtistTable.songId].value }
+
+            val albumIds = AlbumArtistTable
+                .select(AlbumArtistTable.albumId)
+                .where { AlbumArtistTable.artistId eq artistId }
+                .map { it[AlbumArtistTable.albumId].value }
+
+            where { SongTable.id inList songIds }
+            orWhere { SongTable.albumId inList albumIds }
         }
 
     suspend fun byAlbum(page: Int, pageSize: Int, albumId: UUID): PaginatedResponse<Song> =

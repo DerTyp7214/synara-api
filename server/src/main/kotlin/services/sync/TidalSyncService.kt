@@ -3,8 +3,10 @@ package dev.dertyp.services.sync
 import dev.dertyp.ApiClient
 import dev.dertyp.core.parameters
 import dev.dertyp.data.User
+import dev.dertyp.services.models.tidal.*
 import io.ktor.client.call.*
 import io.ktor.client.request.*
+import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.util.*
@@ -12,10 +14,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
-import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.sql.Database
-import java.time.LocalDateTime
-import java.time.ZoneOffset
+import java.time.Instant
 import java.util.*
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
@@ -61,7 +61,7 @@ class TidalSyncService(
             return getMe()
         }
 
-        val body = response.body<ResponseWithInclude<TidalDataWithAttrObject<UserAttribute>, Any>>()
+        val body = response.body<UsersSingleResourceDataDocument>()
 
         me = Me(
             id = body.data.id,
@@ -108,18 +108,16 @@ class TidalSyncService(
         }
 
         val body =
-            response.body<ResponseWithInclude<List<TidalDataWithMetaObject>, TidalDataWithAttrObject<TrackAttributes>>>()
+            response.body<UserCollectionsTracksMultiRelationshipDataDocument<TracksAttributes, TracksRelationships>>()
 
         val songMap = body.included.associateBy { i -> i.id }
 
         val likedSongs = body.data.map { d ->
-            val date = d.meta[MetaKeys.addedAt]?.let {
-                LocalDateTime.parse(it.removeSuffix("Z"))
-            } ?: LocalDateTime.now()
+            val date = d.meta?.addedAt?.toInstant() ?: Instant.now()
 
             LikedSong(
                 id = d.id,
-                addedAt = Date.from(date.toInstant(ZoneOffset.UTC)) ?: Date(),
+                addedAt = Date.from(date) ?: Date(),
                 title = songMap[d.id]?.attributes?.title ?: "",
                 explicit = songMap[d.id]?.attributes?.explicit ?: false,
             )
@@ -130,10 +128,10 @@ class TidalSyncService(
                 emit(song)
             }
 
-            if (body.links.meta?.contains(MetaKeys.nextCursor) == true && continueRequest(likedSongs)) {
-                logger.info("Fetching with cursor: ${body.links.meta[MetaKeys.nextCursor]}")
+            if (body.links.meta?.nextCursor != null && continueRequest(likedSongs)) {
+                logger.info("Fetching with cursor: ${body.links.meta.nextCursor}")
                 delay(500.milliseconds)
-                emitAll(getLikedSongs(body.links.meta[MetaKeys.nextCursor]))
+                emitAll(getLikedSongs(body.links.meta.nextCursor))
             }
         }
     }
@@ -165,9 +163,15 @@ class TidalSyncService(
             else -> println("error: ${response.status}")
         }
 
-        val body = response.body<Response<List<TidalData>>>()
+        try {
+            val body = response.body<TracksMultiRelationshipDataDocument<ResourceIdentifier, EmptyRelationships>>()
 
-        return body.data.first().id
+            return body.data.first().id
+        } catch (e: Exception) {
+            e.printStackTrace()
+            println(response.bodyAsText())
+            return null
+        }
     }
 
     override suspend fun getImageUrlByAlbumId(albumId: String): List<Image> {
@@ -198,123 +202,16 @@ class TidalSyncService(
             else -> println("error: ${response.status}")
         }
 
-        val body = response.body<ResponseWithInclude<List<TidalData>, TidalDataWithAttrObject<MediaAttribute>>>()
+        try {
+            val body = response.body<AlbumsMultiRelationshipDataDocument<ArtworksAttributes, ArtworksRelationships>>()
 
-        return body.included.map { i ->
-            i.attributes.files.map { f -> Image(f.href, f.meta.width, f.meta.height) }
-        }.flatten()
-    }
-
-    @Serializable
-    private data class Response<T>(
-        val data: T,
-        val links: Links,
-    )
-
-    @Serializable
-    private data class ResponseWithInclude<T, I>(
-        val data: T,
-        val links: Links,
-        val included: List<I> = emptyList(),
-    )
-
-    @Serializable
-    private data class Links(
-        val self: String,
-        val next: String?,
-        val meta: Map<MetaKeys, String>?
-    )
-
-    @Serializable
-    private data class ExternalLinks<T>(
-        val href: String,
-        val meta: Map<MetaKeys, T>?
-    )
-
-    @Serializable
-    private data class ImageFile(
-        val href: String,
-        val meta: ImageSize
-    )
-
-    @Serializable
-    private data class ImageSize(
-        val width: Int,
-        val height: Int
-    )
-
-    @Serializable
-    private data class TidalData(
-        val id: String,
-        val type: String
-    )
-
-    @Serializable
-    private data class TidalDataWithMetaObject(
-        val id: String,
-        val type: String,
-        val meta: Map<MetaKeys, String>
-    )
-
-    @Serializable
-    private data class TidalDataWithAttrObject<T>(
-        val id: String,
-        val type: String,
-        val attributes: T,
-        val relationships: Map<RelationshipsKeys, Links>?
-    )
-
-    @Serializable
-    private data class UserAttribute(
-        val username: String,
-        val country: String,
-        val email: String,
-        val emailVerified: Boolean,
-    )
-
-    @Serializable
-    private data class MediaAttribute(
-        val mediaType: String,
-        val files: List<ImageFile>
-    )
-
-    @Serializable
-    private data class TrackAttributes(
-        val title: String,
-        val version: String,
-        val isrc: String,
-        val duration: String,
-        val copyright: Map<String, String>,
-        val explicit: Boolean,
-        val popularity: Float,
-        val accessType: String,
-        val availability: List<String>,
-        val mediaTags: List<String>,
-        val externalLings: List<ExternalLinks<String>>,
-        val spotlighted: Boolean,
-    )
-
-    @Suppress("EnumEntryName")
-    @Serializable
-    enum class MetaKeys {
-        addedAt,
-        nextCursor,
-        type
-    }
-
-    @Suppress("EnumEntryName")
-    @Serializable
-    enum class RelationshipsKeys {
-        shares,
-        albums,
-        trackStatistics,
-        artists,
-        genres,
-        similarTracks,
-        owners,
-        lyrics,
-        sourceFile,
-        providers,
-        radio
+            return body.included.map { i ->
+                i.attributes.files.map { f -> Image(f.href, f.meta.width, f.meta.height) }
+            }.flatten()
+        } catch (e: Exception) {
+            e.printStackTrace()
+            println(response.bodyAsText())
+            return listOf()
+        }
     }
 }

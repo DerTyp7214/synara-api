@@ -2,8 +2,8 @@ package dev.dertyp
 
 import com.ucasoft.ktor.simpleCache.SimpleCache
 import com.ucasoft.ktor.simpleMemoryCache.memoryCache
-import com.ucasoft.ktor.simpleRedisCache.redisCache
 import dev.dertyp.core.anyHeader
+import dev.dertyp.plugins.redisCache
 import dev.dertyp.services.JwtService
 import io.ktor.server.application.*
 import io.ktor.server.plugins.cors.routing.*

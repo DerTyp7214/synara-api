@@ -45,6 +45,7 @@ dependencies {
     implementation("com.ucasoft.ktor:ktor-simple-cache:0.55.3")
     implementation("com.ucasoft.ktor:ktor-simple-memory-cache:0.55.3")
     implementation("com.ucasoft.ktor:ktor-simple-redis-cache:0.55.3")
+    implementation("redis.clients:jedis:7.0.0")
     implementation("io.github.smiley4:ktor-openapi:5.1.0")
     implementation("io.github.smiley4:ktor-swagger-ui:5.1.0")
     implementation("io.ktor:ktor-server-auth")

@@ -28,7 +28,7 @@ class JwtService(
     environment: ApplicationEnvironment,
     private val userService: UserService,
     private val refreshTokenService: RefreshTokenService
-): Service() {
+) : Service() {
     val jwtAudience = environment.config.property("jwt.audience").getString()
     val jwtIssuer = environment.config.property("jwt.issuer").getString()
     val jwtRealm = environment.config.property("jwt.realm").getString()
@@ -179,10 +179,11 @@ class JwtService(
 
 
         var newRefreshToken = refresh
-        val refreshToken = if (!refresh) {
-            val existingToken = refreshTokenService.validByUserId(user.id)
-            newRefreshToken = existingToken == null
-            existingToken?.tokenHash ?: generateRefreshToken()
+        val existingToken = refreshTokenService.validByUserId(user.id)
+        newRefreshToken = existingToken?.tokenHash == null || newRefreshToken
+        val refreshToken = if (existingToken?.tokenHash != null) {
+            refreshTokenService.invalidateToken(user.id, existingToken.tokenHash)
+            existingToken.tokenHash
         } else generateRefreshToken()
 
 
