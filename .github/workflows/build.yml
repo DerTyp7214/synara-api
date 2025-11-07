@@ -110,6 +110,8 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - id: lower-repo
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
           echo "IMAGE=${GITHUB_REPOSITORY@L}" >> $GITHUB_OUTPUT
 
