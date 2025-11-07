@@ -109,11 +109,15 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - id: lower-repo
+        run: |
+          echo "IMAGE=${GITHUB_REPOSITORY@L}" >> $GITHUB_OUTPUT
+
       - name: Define image name and tags
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository }}
+          images: ghcr.io/${{ steps.lower-repo.IMAGE }}
           tags: |
             type=raw,value=${{ steps.version_info.outputs.APP_VERSION }}
             type=sha,prefix=,suffix=,enable=true,format=short
@@ -127,8 +131,8 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=registry,ref=ghcr.io/${{ github.repository }}:buildcache
-          cache-to: type=registry,ref=ghcr.io/${{ github.repository }}:buildcache,mode=max
+          cache-from: type=registry,ref=ghcr.io/${{ steps.lower-repo.IMAGE }}:buildcache
+          cache-to: type=registry,ref=ghcr.io/${{ steps.lower-repo.IMAGE }}:buildcache,mode=max
 
   create-github-release:
     needs: build-artifact
