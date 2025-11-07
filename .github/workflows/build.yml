@@ -111,6 +111,8 @@ jobs:
 
       - name: Repository to lowercase
         id: lower-repo
+        env:
+          GITHUB_REPOSITORY: "DerTyp7214/synara"
         run: |
           echo "IMAGE=${GITHUB_REPOSITORY@L}" >> $GITHUB_OUTPUT
 
@@ -123,6 +125,7 @@ jobs:
             type=raw,value=${{ steps.version_info.outputs.APP_VERSION }}
             type=sha,prefix=,suffix=,enable=true,format=short
             type=raw,value=latest,enable=${{ github.ref_name == 'release' }}
+            type=raw,value=latest-dev,enable=${{ github.ref_name == 'master' }}
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
