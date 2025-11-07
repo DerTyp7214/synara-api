@@ -20,7 +20,7 @@ import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.util.*
 
-class AlbumService(database: Database): Service() {
+class AlbumService(database: Database) : Service() {
     val albumArtistAlias = ArtistTable.alias("albumArtistAlias")
 
     init {
@@ -77,7 +77,12 @@ class AlbumService(database: Database): Service() {
 
     suspend fun byArtist(page: Int, pageSize: Int, artistId: UUID): PaginatedResponse<Album> =
         queryAlbums(page, pageSize) {
-            where { AlbumArtistTable.artistId eq artistId }
+            val albumIds = AlbumArtistTable
+                .select(AlbumArtistTable.artistId)
+                .where { AlbumArtistTable.artistId eq artistId }
+                .map { it[AlbumArtistTable.artistId].value }
+
+            where { AlbumTable.id inList albumIds }
         }
 
     suspend fun rankedSearch(page: Int, pageSize: Int, query: String): PaginatedResponse<Album> =

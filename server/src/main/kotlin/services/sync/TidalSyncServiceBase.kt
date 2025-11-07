@@ -9,6 +9,7 @@ import dev.dertyp.db.SyncServiceTable
 import io.ktor.client.call.*
 import io.ktor.client.request.*
 import io.ktor.client.request.forms.*
+import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.util.*
@@ -85,9 +86,11 @@ abstract class TidalSyncServiceBase(
                     )
                 )
             )
-        }.body<TidalTokenResponse>().copy(
-            createdAt = System.currentTimeMillis(),
-        )
+        }.loggedCopy {
+            body<TidalTokenResponse>().copy(
+                createdAt = System.currentTimeMillis(),
+            )
+        }
     }
 
     override suspend fun refreshToken(token: Token): Token {
@@ -103,15 +106,29 @@ abstract class TidalSyncServiceBase(
                 FormDataContent(
                     parametersOf(
                         "grant_type" to listOf("refresh_token"),
-                        "refresh_token" to listOf(token.refreshToken)
+                        "refresh_token" to listOf(token.refreshToken),
+                        "client_id" to listOf(clientId!!),
                     )
                 )
             )
-        }.body<TidalTokenResponse>().copy(
-            userId = token.userId,
-            refreshToken = token.refreshToken,
-            createdAt = System.currentTimeMillis(),
-        )
+        }.loggedCopy {
+            body<TidalTokenResponse>().copy(
+                userId = token.userId,
+                refreshToken = token.refreshToken,
+                createdAt = System.currentTimeMillis(),
+            )
+        }
+    }
+
+    suspend fun HttpResponse.loggedCopy(block: suspend HttpResponse.() -> TidalTokenResponse): TidalTokenResponse {
+        try {
+            return block(this)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            println(status)
+            println(bodyAsText())
+            throw e
+        }
     }
 
     override fun mapTableToToken(row: ResultRow): Token = TidalTokenResponse(
@@ -126,7 +143,7 @@ abstract class TidalSyncServiceBase(
 
     @Serializable
     data class TidalTokenResponse(
-        @SerializedName("scope") override val scope: String,
+        @SerializedName("scope") override val scope: String?,
         @SerializedName("access_token") override val accessToken: String,
         @SerializedName("refresh_token") override val refreshToken: String,
         @SerializedName("expires_in") override val expiresIn: Int,

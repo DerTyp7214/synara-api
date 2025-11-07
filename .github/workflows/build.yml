@@ -1,0 +1,145 @@
+name: Ktor Build, Docker, and Release
+
+on:
+  push:
+    branches: [ master, release ]
+  workflow_dispatch:
+
+jobs:
+  build-artifact:
+    runs-on: ubuntu-latest
+    outputs:
+      jar_file_name: ${{ steps.find_jar.outputs.JAR_FILE }}
+      jar_directory: ${{ steps.find_jar.outputs.JAR_DIR }}
+      app_version: ${{ steps.version_info.outputs.APP_VERSION }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          java-version: '25'
+          distribution: 'temurin'
+          cache: 'gradle'
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Build Ktor fat JAR (buildFatJar)
+        run: ./gradlew clean buildFatJar
+
+      - name: Extract Application Version
+        id: version_info
+        run: |
+          VERSION=$(grep -E '^\s*(version|val version)\s*=\s*["']([^"']*)["']' build.gradle build.gradle.kts 2>/dev/null | head -n 1 | sed -E 's/.*=\s*["']([^"']*)["']/\1/')
+          
+          if [ -z "$VERSION" ]; then
+            echo "Error: Application version not found in build.gradle or build.gradle.kts."
+            exit 1 
+          fi
+          
+          echo "APP_VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "Extracted Version: $VERSION"
+
+      - name: Find generated JAR file and set outputs
+        id: find_jar
+        run: |
+          JAR_PATH=$(find server/build/libs -name '*-all.jar' | head -n 1)
+          if [ -z "$JAR_PATH" ]; then
+            echo "Error: Ktor fat JAR not found in server/build/libs/"
+            exit 1
+          fi
+          JAR_FILE_NAME=$(basename $JAR_PATH)
+          JAR_DIR=$(dirname $JAR_PATH)
+          echo "JAR_FILE=$JAR_FILE_NAME" >> $GITHUB_OUTPUT
+          echo "JAR_DIR=$JAR_DIR" >> $GITHUB_OUTPUT
+          echo "Found JAR: $JAR_PATH"
+
+      - name: Upload Ktor fat JAR artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ktor-fat-jar
+          path: ${{ steps.find_jar.outputs.JAR_DIR }}/${{ steps.find_jar.outputs.JAR_FILE }}
+          retention-days: 7
+
+  publish-docker:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Extract Application Version
+        id: version_info
+        run: |
+          VERSION=$(grep -E '^\s*(version|val version)\s*=\s*["']([^"']*)["']' build.gradle build.gradle.kts 2>/dev/null | head -n 1 | sed -E 's/.*=\s*["']([^"']*)["']/\1/')
+          
+          if [ -z "$VERSION" ]; then
+            echo "Error: Application version not found in build.gradle or build.gradle.kts."
+            exit 1 
+          fi
+          
+          echo "APP_VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "Extracted Version: $VERSION"
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Define image name and tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=raw,value=${{ steps.version_info.outputs.APP_VERSION }}
+            type=sha,prefix=,suffix=,enable=true,format=short
+            type=raw,value=latest,enable=${{ github.ref_name == 'release' }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+  create-github-release:
+    needs: build-artifact
+    if: github.ref == 'refs/heads/release' || github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download Ktor fat JAR artifact
+        uses: actions/download-artifact@v5
+        with:
+          name: ktor-fat-jar
+          path: release-asset/
+
+      - name: Get JAR filename from artifact step output
+        id: jar_info
+        run: echo "JAR_NAME=${{ needs.build-artifact.outputs.jar_file_name }}" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release and Upload Asset
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.build-artifact.outputs.app_version }}${{ github.ref_name == 'master' && '-dev' || '' }}-server
+          name: Release v${{ needs.build-artifact.outputs.app_version }} (${{ github.ref_name }})
+          repository: DerTyp7214/synara
+          prerelease: ${{ github.ref_name == 'master' }}
+          target_commitish: server
+          files: release-asset/${{ steps.jar_info.outputs.JAR_NAME }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.SYNARA_GITHUB_TOKEN }}

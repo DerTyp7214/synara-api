@@ -2,7 +2,7 @@ type: http_request
 model: http_request
 id: rq_cK7ztCF6de
 createdAt: 2025-10-14T19:25:16.450189727
-updatedAt: 2025-10-14T19:25:16.450189808
+updatedAt: 2025-11-07T00:58:56.379638204
 workspaceId: wk_9dbKacQT4H
 folderId: fl_YmgN76Fcs6
 authentication: {}
@@ -22,13 +22,17 @@ url: ${[baseUrl]}/song/byAlbum/:albumId
 urlParameters:
 - enabled: true
   name: page
-  value: <integer>
-  id: null
+  value: '0'
+  id: hmQwj5rSM8
 - enabled: true
   name: pageSize
-  value: <integer>
-  id: null
+  value: '250'
+  id: QEbzqViaj2
 - enabled: true
   name: :albumId
-  value: <string>
-  id: null
+  value: 272cd665-df3b-40bf-9052-8e617998ff54
+  id: 0ZP9BMqQJj
+- enabled: true
+  name: ''
+  value: ''
+  id: jIkVXZaNw2
