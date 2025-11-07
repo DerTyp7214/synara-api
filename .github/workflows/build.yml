@@ -82,6 +82,9 @@ jobs:
       contents: read
       packages: write
 
+    env:
+      CONTAINER_REPO: "dertyp7214/synara"
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -109,18 +112,11 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Repository to lowercase
-        id: lower-repo
-        env:
-          GITHUB_REPOSITORY: "DerTyp7214/synara"
-        run: |
-          echo "IMAGE=${GITHUB_REPOSITORY@L}" >> $GITHUB_OUTPUT
-
       - name: Define image name and tags
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ steps.lower-repo.outputs.IMAGE }}
+          images: ghcr.io/${{ env.CONTAINER_REPO }}
           tags: |
             type=raw,value=${{ steps.version_info.outputs.APP_VERSION }}
             type=sha,prefix=,suffix=,enable=true,format=short
@@ -135,8 +131,8 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=registry,ref=ghcr.io/${{ steps.lower-repo.outputs.IMAGE }}:buildcache
-          cache-to: type=registry,ref=ghcr.io/${{ steps.lower-repo.outputs.IMAGE }}:buildcache,mode=max
+          cache-from: type=registry,ref=ghcr.io/${{ env.CONTAINER_REPO }}:buildcache
+          cache-to: type=registry,ref=ghcr.io/${{ env.CONTAINER_REPO }}:buildcache,mode=max
 
   create-github-release:
     needs: build-artifact
