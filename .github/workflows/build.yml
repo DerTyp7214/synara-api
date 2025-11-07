@@ -162,3 +162,15 @@ jobs:
           files: release-asset/${{ steps.jar_info.outputs.JAR_NAME }}
         env:
           GITHUB_TOKEN: ${{ secrets.SYNARA_GITHUB_TOKEN }}
+
+      - name: Create GitHub Release and Upload Asset
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest${{ github.ref_name == 'master' && '-dev' || '' }}-server
+          name: Release v${{ needs.build-artifact.outputs.app_version }}${{ github.ref_name == 'master' && ' (Development Build)' || '' }}
+          repository: DerTyp7214/synara
+          prerelease: ${{ github.ref_name == 'master' }}
+          target_commitish: server
+          files: release-asset/${{ steps.jar_info.outputs.JAR_NAME }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.SYNARA_GITHUB_TOKEN }}
