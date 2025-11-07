@@ -28,13 +28,12 @@ jobs:
         run: chmod +x gradlew
 
       - name: Build Ktor fat JAR (buildFatJar)
-        run: ./gradlew clean buildFatJar
+        run: ./gradlew buildFatJar
 
       - name: Extract Application Version
         id: version_info
         run: |
-          VERSION=$(grep -E '^\s*(version|val version)\s*=\s*["']([^"']*)["']' build.gradle build.gradle.kts 2>/dev/null | head -n 1 | sed -E 's/.*=\s*["']([^"']*)["']/\1/')
-          
+          VERSION=$(grep -E 'version[[:space:]]*=' build.gradle build.gradle.kts 2>/dev/null | head -n 1 | sed -E "s/.*=\s*[\"'\"']([^\"'\"']*)[\"'\"'].*/\1/")          
           if [ -z "$VERSION" ]; then
             echo "Error: Application version not found in build.gradle or build.gradle.kts."
             exit 1 
@@ -80,7 +79,7 @@ jobs:
       - name: Extract Application Version
         id: version_info
         run: |
-          VERSION=$(grep -E '^\s*(version|val version)\s*=\s*["']([^"']*)["']' build.gradle build.gradle.kts 2>/dev/null | head -n 1 | sed -E 's/.*=\s*["']([^"']*)["']/\1/')
+          VERSION=$(grep -E 'version[[:space:]]*=' build.gradle build.gradle.kts 2>/dev/null | head -n 1 | sed -E "s/.*=\s*[\"'\"']([^\"'\"']*)[\"'\"'].*/\1/")          
           
           if [ -z "$VERSION" ]; then
             echo "Error: Application version not found in build.gradle or build.gradle.kts."
