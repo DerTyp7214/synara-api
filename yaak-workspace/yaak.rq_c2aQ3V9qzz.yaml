@@ -2,7 +2,7 @@ type: http_request
 model: http_request
 id: rq_c2aQ3V9qzz
 createdAt: 2025-10-14T19:25:16.450619051
-updatedAt: 2025-11-07T00:58:31.150053355
+updatedAt: 2025-11-07T16:13:54.437204273
 workspaceId: wk_9dbKacQT4H
 folderId: fl_RHZBV9eRzQ
 authentication: {}
@@ -28,7 +28,7 @@ urlParameters:
   name: page
   value: <integer>
   id: 9H63rbCnHd
-- enabled: false
+- enabled: true
   name: pageSize
   value: '5'
   id: Cqh8H4cRV7
@@ -39,4 +39,4 @@ urlParameters:
 - enabled: true
   name: ''
   value: ''
-  id: N2CTTx20dj
+  id: xqxEUx3vER
