@@ -1,11 +1,6 @@
 services:
   api:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        APP_USER_ID: 1000
-        APP_GROUP_ID: 1000
+    image: ghcr.io/dertyp7214/synara:latest-dev
     user: "1000:1000"
     network_mode: host
     env_file:

@@ -92,6 +92,7 @@ class AlbumService(database: Database) : Service() {
                 listOf(10, 5),
                 listOf(AlbumTable.name, albumArtistAlias[ArtistTable.name])
             )
+            andWhere { AlbumTable.songCount greater 1 }
         }
 
     suspend fun allAlbums(page: Int, pageSize: Int): PaginatedResponse<Album> = queryAlbums(page, pageSize)
