@@ -75,14 +75,22 @@ class AlbumService(database: Database) : Service() {
         where { AlbumTable.name eq name }
     }
 
-    suspend fun byArtist(page: Int, pageSize: Int, artistId: UUID): PaginatedResponse<Album> =
+    suspend fun byArtist(
+        page: Int,
+        pageSize: Int,
+        artistId: UUID,
+        singles: Boolean = false
+    ): PaginatedResponse<Album> =
         queryAlbums(page, pageSize) {
             val albumIds = AlbumArtistTable
-                .select(AlbumArtistTable.artistId)
+                .select(AlbumArtistTable.columns)
                 .where { AlbumArtistTable.artistId eq artistId }
-                .map { it[AlbumArtistTable.artistId].value }
+                .map { it[AlbumArtistTable.albumId].value }
 
-            where { AlbumTable.id inList albumIds }
+            if (!singles) where { AlbumTable.songCount greater 1 }
+            else where { AlbumTable.songCount eq 1 }
+            andWhere { AlbumTable.id inList albumIds }
+            orderBy(AlbumTable.releaseDate, SortOrder.DESC_NULLS_LAST)
         }
 
     suspend fun rankedSearch(page: Int, pageSize: Int, query: String): PaginatedResponse<Album> =

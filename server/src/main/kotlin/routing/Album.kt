@@ -63,6 +63,10 @@ fun Route.album(service: AlbumService) {
                     description = "The artist id to search for albums."
                 }
 
+                queryParameter<Boolean>("singles") {
+                    description = "If it should return singles instead of full albums. (default: false)"
+                }
+
                 paging()
             }
             response {
@@ -75,9 +79,11 @@ fun Route.album(service: AlbumService) {
             val artistId = call.parameters["artistId"]?.toUUIDOrNull()
             if (artistId == null) return@get call.respond(HttpStatusCode.BadRequest)
 
+            val singles = call.parameters["singles"]?.toBoolean() ?: false
+
             val (page, pageSize) = call.paging()
 
-            call.respond(service.byArtist(page, pageSize, artistId))
+            call.respond(service.byArtist(page, pageSize, artistId, singles))
         }
         get("/search/{query}", {
             request {
