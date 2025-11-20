@@ -2,6 +2,7 @@ package dev.dertyp.routing
 
 import com.google.gson.Gson
 import com.ucasoft.ktor.simpleCache.cacheOutput
+import dev.dertyp.core.getUser
 import dev.dertyp.services.SongService
 import dev.dertyp.services.sync.SyncService
 import io.github.smiley4.ktoropenapi.get
@@ -68,13 +69,16 @@ fun Route.sync(database: Database, songService: SongService) {
                     }
                 }) {
                     sse {
+                        val user = call.getUser()
+                        if (user == null) return@sse call.respond(HttpStatusCode.Unauthorized)
+
                         val service = SyncService.getInstance(call, database)
 
                         val all = call.request.queryParameters["all"]?.toBoolean() ?: false
 
                         val gson = Gson()
                         service.getLikedSongs { songs ->
-                            all || songService.byTidalTrackIds(songs.map { it.id }).isEmpty()
+                            all || songService.byTidalTrackIds(songs.map { it.id }, user.id).isEmpty()
                         }.collect {
                             send(
                                 ServerSentEvent(

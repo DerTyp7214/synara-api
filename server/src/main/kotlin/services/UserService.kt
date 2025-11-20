@@ -12,6 +12,8 @@ import java.util.*
 
 class UserService(database: Database, environment: ApplicationEnvironment) : Service() {
     init {
+        INSTANCE = this
+
         val clientId = environment.config.propertyOrNull("client.id")?.getString()
         val clientSecret = environment.config.propertyOrNull("client.secret")?.getString()
 
@@ -36,6 +38,9 @@ class UserService(database: Database, environment: ApplicationEnvironment) : Ser
                 passwordHash = row[UserTable.passwordHash]
             )
         }
+
+        var INSTANCE: UserService? = null
+            private set
     }
 
     private fun map(row: ResultRow) = mapUser(row)

@@ -1,0 +1,38 @@
+type: http_request
+model: http_request
+id: rq_YMHJP66auR
+createdAt: 2025-11-20T19:51:09.440852810
+updatedAt: 2025-11-20T19:52:17.293514407
+workspaceId: wk_9dbKacQT4H
+folderId: fl_66FMbgfzr4
+authentication: {}
+authenticationType: null
+body: {}
+bodyType: null
+description: '[object Object]'
+headers:
+- enabled: true
+  name: Accept
+  value: application/json
+  id: null
+method: GET
+name: /song/liked/m3u
+sortPriority: 30.0
+url: ${[baseUrl]}/song/liked/m3u
+urlParameters:
+- enabled: true
+  name: onlyIds
+  value: <boolean>
+  id: null
+- enabled: true
+  name: extM3u
+  value: <boolean>
+  id: null
+- enabled: true
+  name: shuffle
+  value: <boolean>
+  id: null
+- enabled: true
+  name: explicit
+  value: <string>
+  id: null

@@ -1,0 +1,34 @@
+type: http_request
+model: http_request
+id: rq_mc3ZqgSDvE
+createdAt: 2025-11-20T18:54:30.464941324
+updatedAt: 2025-11-20T19:28:52.959030524
+workspaceId: wk_9dbKacQT4H
+folderId: fl_QrUoFyttZM
+authentication: {}
+authenticationType: null
+body:
+  text: |-
+    {
+      "liked": true
+    }
+bodyType: application/json
+description: ''
+headers:
+- enabled: true
+  name: Content-Type
+  value: application/json
+  id: 6whw0cTEUA
+method: POST
+name: /song/setLiked/:id
+sortPriority: 15.9999
+url: ${[ baseUrl ]}/song/setLiked/:id
+urlParameters:
+- enabled: true
+  name: :id
+  value: d45eaaf8-f4f8-440f-87ce-af23d3cc7ca9
+  id: GXvSPS7BSA
+- enabled: true
+  name: ''
+  value: ''
+  id: MQVDHbIWmb

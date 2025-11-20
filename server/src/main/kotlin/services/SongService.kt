@@ -1,17 +1,16 @@
 package dev.dertyp.services
 
+import dev.dertyp.*
 import dev.dertyp.core.foreignKeyOn
 import dev.dertyp.core.rankedSearchQuery
 import dev.dertyp.data.*
 import dev.dertyp.db.*
-import dev.dertyp.dbQuery
-import dev.dertyp.getDateFromISO
-import dev.dertyp.getISOFromDate
 import dev.dertyp.services.AlbumService.Companion.calculateAlbumStats
 import dev.dertyp.services.AlbumService.Companion.mapAlbum
 import dev.dertyp.services.ArtistService.Companion.mapArtist
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.transactions.transaction
+import java.time.LocalDateTime
 import java.util.*
 
 class SongService(database: Database) : Service() {
@@ -21,6 +20,7 @@ class SongService(database: Database) : Service() {
         transaction(database) {
             foreignKeyOn(database)
             SchemaUtils.create(SongTable)
+            SchemaUtils.create(UserSongTable)
             SchemaUtils.create(SongArtistTable)
             SchemaUtils.create(TranscodedSongTable)
         }
@@ -56,21 +56,82 @@ class SongService(database: Database) : Service() {
                 coverId = resultRow[SongTable.cover]?.value,
             )
         }
+
+        fun mapUserSong(resultRow: ResultRow): UserSong {
+            val id = resultRow[SongTable.id].value
+
+            return UserSong(
+                id = id,
+                title = resultRow[SongTable.title].removeSuffix("\uD83C\uDD74"),
+                artists = listOf(),
+                album = null,
+                duration = resultRow[SongTable.duration],
+                explicit = resultRow[SongTable.explicit],
+                releaseDate = getDateFromISO(resultRow[SongTable.releaseDate]),
+                lyrics = resultRow[SongTable.lyrics],
+                path = resultRow[SongTable.filePath],
+                originalUrl = resultRow[SongTable.originalUrl],
+                trackNumber = resultRow[SongTable.trackNumber],
+                discNumber = resultRow[SongTable.discNumber],
+                copyright = resultRow[SongTable.copyright],
+                sampleRate = resultRow[SongTable.sampleRate],
+                bitsPerSample = resultRow[SongTable.bitsPerSample],
+                bitRate = resultRow[SongTable.bitRate],
+                fileSize = resultRow[SongTable.fileSize],
+                coverId = resultRow[SongTable.cover]?.value,
+                isFavourite = resultRow.getOrNull(UserSongTable.isFavourite) ?: false,
+                userSongCreatedAt = getDateTimeFromISO(resultRow.getOrNull(UserSongTable.createdAt)),
+                userSongUpdatedAt = getDateTimeFromISO(resultRow.getOrNull(UserSongTable.updatedAt)),
+            )
+        }
     }
 
-    fun map(resultRow: ResultRow): Song = mapSong(resultRow)
+    inline fun <reified T : BaseSong> map(resultRow: ResultRow): BaseSong =
+        if (T::class == UserSong::class) mapUserSong(resultRow) else mapSong(resultRow)
 
-    suspend fun byId(id: UUID): Song? = querySingle() {
+    private fun ColumnSet.userSong(userId: UUID) = leftJoin(
+        UserSongTable,
+        onColumn = { SongTable.id },
+        otherColumn = { UserSongTable.songId },
+        additionalConstraint = { UserSongTable.userId eq userId }
+    )
+
+    suspend fun setLiked(id: UUID, userId: UUID, liked: Boolean): UserSong? {
+        dbQuery {
+            val inserted = UserSongTable.insertIgnore {
+                it[UserSongTable.songId] = id
+                it[UserSongTable.userId] = userId
+                it[UserSongTable.isFavourite] = liked
+            }.insertedCount == 1
+
+            if (!inserted) {
+                UserSongTable.update({
+                    UserSongTable.userId eq userId and (UserSongTable.songId eq id)
+                }) {
+                    it[UserSongTable.isFavourite] = liked
+                    it[UserSongTable.updatedAt] = getISOFromDateTime(LocalDateTime.now())
+                }
+            }
+        }
+
+        return byId(id, userId)
+    }
+
+    suspend fun byId(id: UUID): Song? = querySingle({ this }) {
         where { SongTable.id eq id }
     }
 
-    suspend fun byTitle(page: Int, pageSize: Int, title: String): PaginatedResponse<Song> =
-        querySongs(page, pageSize, true) {
+    suspend fun byId(id: UUID, userId: UUID): UserSong? = querySingle({ userSong(userId) }) {
+        where { SongTable.id eq id }
+    }
+
+    suspend fun byTitle(page: Int, pageSize: Int, title: String, userId: UUID): PaginatedResponse<UserSong> =
+        querySongs(page, pageSize, true, { userSong(userId) }) {
             where { SongTable.title eq title }
         }
 
-    suspend fun byArtist(page: Int, pageSize: Int, artistId: UUID): PaginatedResponse<Song> =
-        querySongs(page, pageSize, true) {
+    suspend fun byArtist(page: Int, pageSize: Int, artistId: UUID, userId: UUID): PaginatedResponse<UserSong> =
+        querySongs(page, pageSize, true, { userSong(userId) }) {
             val songIds = SongArtistTable
                 .select(SongArtistTable.songId)
                 .where { SongArtistTable.artistId eq artistId }
@@ -85,23 +146,23 @@ class SongService(database: Database) : Service() {
             orWhere { SongTable.albumId inList albumIds }
         }
 
-    suspend fun byAlbum(page: Int, pageSize: Int, albumId: UUID): PaginatedResponse<Song> =
-        querySongs(page, pageSize, true) {
+    suspend fun byAlbum(page: Int, pageSize: Int, albumId: UUID, userId: UUID): PaginatedResponse<UserSong> =
+        querySongs(page, pageSize, true, { userSong(userId) }) {
             where { SongTable.albumId eq albumId }
             orderBy(SongTable.discNumber, SortOrder.ASC)
             orderBy(SongTable.trackNumber, SortOrder.ASC)
         }
 
-    suspend fun byPlaylist(page: Int, pageSize: Int, playlistId: UUID): PaginatedResponse<Song> =
+    suspend fun byPlaylist(page: Int, pageSize: Int, playlistId: UUID, userId: UUID): PaginatedResponse<UserSong> =
         querySongs(page, pageSize, true, {
-            leftJoin(PlaylistSongTable)
+            leftJoin(PlaylistSongTable).userSong(userId)
         }) {
             where { PlaylistSongTable.playlistId eq playlistId }
             orderBy(PlaylistSongTable.position, SortOrder.ASC)
         }
 
-    suspend fun byTidalTrackIds(ids: List<String>): List<Song> =
-        querySongs(0, Int.MAX_VALUE, true) {
+    suspend fun byTidalTrackIds(ids: List<String>, userId: UUID): List<UserSong> =
+        querySongs<UserSong>(0, Int.MAX_VALUE, true, { userSong(userId) }) {
             where {
                 SongTable.originalUrl inList ids.map {
                     "https://tidal.com/browse/track/$it"
@@ -109,27 +170,51 @@ class SongService(database: Database) : Service() {
             }
         }.data
 
-    suspend fun rankedSearch(page: Int, pageSize: Int, query: String, explicit: Boolean): PaginatedResponse<Song> =
-        querySongs(page, pageSize, explicit) {
+    suspend fun rankedSearch(
+        page: Int,
+        pageSize: Int,
+        query: String,
+        explicit: Boolean,
+        userId: UUID,
+        liked: Boolean = false
+    ): PaginatedResponse<UserSong> =
+        querySongs(page, pageSize, explicit, { userSong(userId) }) {
             rankedSearchQuery(
                 query,
                 listOf(10, 5, 5),
                 listOf(SongTable.title, ArtistTable.name, AlbumTable.name)
-            )
+            ).let { it ->
+                if (liked) it.andWhere { UserSongTable.isFavourite eq true }
+                else it
+            }
         }
 
-    suspend fun allSongs(page: Int, pageSize: Int, explicit: Boolean): PaginatedResponse<Song> =
-        querySongs(page, pageSize, explicit)
+    suspend fun likedSongs(page: Int, pageSize: Int, explicit: Boolean, userId: UUID): PaginatedResponse<UserSong> =
+        querySongs(
+            page, pageSize, explicit, { userSong(userId) },
+        ) {
+            where { UserSongTable.isFavourite eq true }
+                .orderBy(UserSongTable.updatedAt to SortOrder.DESC)
+        }
 
-    private suspend fun querySingle(query: Query.() -> Query) =
-        querySongs(0, Int.MAX_VALUE, true, query = query).data.singleOrNull()
+    suspend fun allSongs(page: Int, pageSize: Int, explicit: Boolean, userId: UUID): PaginatedResponse<UserSong> =
+        querySongs(
+            page, pageSize, explicit, { userSong(userId) },
+            query = { this }
+        )
 
-    private suspend fun querySongs(
+    private suspend inline fun <reified T : BaseSong> querySingle(
+        crossinline columnSet: suspend ColumnSet.() -> ColumnSet,
+        crossinline query: Query.() -> Query
+    ) =
+        querySongs<T>(0, Int.MAX_VALUE, true, columnSet = columnSet, query = query).data.singleOrNull()
+
+    private suspend inline fun <reified T : BaseSong> querySongs(
         page: Int,
         pageSize: Int,
         explicit: Boolean,
-        columnSet: suspend ColumnSet.() -> ColumnSet = { this },
-        query: suspend Query.() -> Query = { this }
+        crossinline columnSet: suspend ColumnSet.() -> ColumnSet,
+        crossinline query: suspend Query.() -> Query
     ) = dbQuery {
         val offset = if (pageSize == Int.MAX_VALUE) 0 else 1
 
@@ -156,12 +241,7 @@ class SongService(database: Database) : Service() {
                 otherColumn = { albumArtistAlias[ArtistTable.id] }
             )
             .columnSet()
-            .select(
-                SongTable.columns +
-                        AlbumTable.columns +
-                        ArtistTable.columns +
-                        albumArtistAlias.columns
-            )
+            .selectAll()
             .query()
             .toList()
 
@@ -179,7 +259,7 @@ class SongService(database: Database) : Service() {
             emptyMap()
         }
 
-        val data = mapEagerly(rows, albumArtistAlias, statsByAlbumId, explicit)
+        val data = mapEagerly<T>(rows, albumArtistAlias, statsByAlbumId, explicit)
 
         PaginatedResponse(
             data = data.drop(page * pageSize).take(pageSize),
@@ -189,13 +269,13 @@ class SongService(database: Database) : Service() {
         )
     }
 
-    private fun mapEagerly(
+    private inline fun <reified T : BaseSong> mapEagerly(
         rows: List<ResultRow>,
         albumArtistAlias: Alias<ArtistTable>,
         albumStats: Map<UUID, Pair<Long, Long>>,
         explicit: Boolean = false
-    ): List<Song> {
-        val songMap = mutableMapOf<UUID, Song>()
+    ): List<T> {
+        val songMap = mutableMapOf<UUID, BaseSong>()
         val songArtistsMap = mutableMapOf<UUID, MutableList<Artist>>()
         val albumArtistsMap = mutableMapOf<UUID, MutableList<Artist>>()
 
@@ -205,7 +285,14 @@ class SongService(database: Database) : Service() {
 
             songMap.getOrPut(songId) {
                 val album = mapAlbum(row)
-                map(row).copy(album = album)
+                val song = map<T>(row)
+
+                @Suppress("UNCHECKED_CAST")
+                when (song) {
+                    is UserSong -> song.copy(album = album)
+                    is Song -> song.copy(album = album)
+                    else -> throw Exception("Unknown song type: $row")
+                }
             }
 
             if (row.getOrNull(ArtistTable.id) != null) {
@@ -229,14 +316,15 @@ class SongService(database: Database) : Service() {
 
             val albumWithArtists = song.album?.copy(
                 artists = albumArtists,
-                totalDuration = albumStats[song.album.id]?.first ?: -1L,
-                totalSize = albumStats[song.album.id]?.second ?: -1L
+                totalDuration = albumStats[song.album!!.id]?.first ?: -1L,
+                totalSize = albumStats[song.album!!.id]?.second ?: -1L
             )
 
-            song.copy(
-                album = albumWithArtists,
-                artists = songArtists
-            )
+            when (song) {
+                is Song -> song.copy(album = albumWithArtists, artists = songArtists)
+                is UserSong -> song.copy(album = albumWithArtists, artists = songArtists)
+                else -> throw Exception("Unknown song type: $song")
+            }
         }.groupBy {
             listOf(
                 it.title.removeSuffix("\uD83C\uDD74").trim(),
@@ -247,8 +335,9 @@ class SongService(database: Database) : Service() {
                 it.album?.name
             )
         }.mapNotNull { (_, songList) ->
-            if (explicit) songList.find { it.explicit } ?: songList.first()
-            else songList.find { !it.explicit }
+            @Suppress("UNCHECKED_CAST")
+            if (explicit) songList.find { it.explicit } as? T ?: songList.first() as T
+            else songList.find { !it.explicit } as T
         }
     }
 

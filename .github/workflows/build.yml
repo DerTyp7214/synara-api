@@ -74,7 +74,7 @@ jobs:
         with:
           name: ktor-fat-jar
           path: ${{ steps.find_jar.outputs.JAR_DIR }}/${{ steps.find_jar.outputs.JAR_FILE }}
-          retention-days: 7
+          retention-days: 1
 
   publish-docker:
     runs-on: ubuntu-latest

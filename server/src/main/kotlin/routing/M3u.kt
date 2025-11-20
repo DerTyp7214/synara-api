@@ -13,7 +13,7 @@ fun Route.m3u(
     pathParams: List<Pair<String, String>> = listOf(Pair("id", "")),
     queryParams: List<Pair<String, String>> = listOf(),
     validate: (Map<String, String?>) -> Boolean = { it.none { (_, value) -> value == null } },
-    fetchData: suspend (Map<String, String?>) -> Pair<String, List<PlaylistEntry>>?
+    fetchData: suspend RoutingContext.(Map<String, String?>) -> Pair<String, List<PlaylistEntry>>?
 ) {
     get(path, {
         tags("m3u")

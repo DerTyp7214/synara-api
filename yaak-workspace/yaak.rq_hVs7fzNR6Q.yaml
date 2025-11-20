@@ -1,8 +1,8 @@
 type: http_request
 model: http_request
-id: rq_c2aQ3V9qzz
-createdAt: 2025-10-14T19:25:16.450619051
-updatedAt: 2025-11-20T19:50:58.310530446
+id: rq_hVs7fzNR6Q
+createdAt: 2025-11-20T19:38:35.403119811
+updatedAt: 2025-11-20T19:50:58.317967939
 workspaceId: wk_9dbKacQT4H
 folderId: fl_QrUoFyttZM
 authentication: {}
@@ -16,9 +16,9 @@ headers:
   value: application/json
   id: null
 method: GET
-name: /song/search/:query
-sortPriority: 24.25
-url: ${[baseUrl]}/song/search/:query
+name: /song/searchLiked/:query
+sortPriority: 24.5
+url: ${[baseUrl]}/song/searchLiked/:query
 urlParameters:
 - enabled: true
   name: explicit

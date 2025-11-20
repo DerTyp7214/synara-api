@@ -1,10 +1,10 @@
 type: http_request
 model: http_request
-id: rq_c2aQ3V9qzz
-createdAt: 2025-10-14T19:25:16.450619051
-updatedAt: 2025-11-20T19:50:58.310530446
+id: rq_iEMByWSjV8
+createdAt: 2025-11-20T19:51:09.441019285
+updatedAt: 2025-11-20T19:52:10.550220565
 workspaceId: wk_9dbKacQT4H
-folderId: fl_QrUoFyttZM
+folderId: fl_66FMbgfzr4
 authentication: {}
 authenticationType: null
 body: {}
@@ -16,27 +16,23 @@ headers:
   value: application/json
   id: null
 method: GET
-name: /song/search/:query
-sortPriority: 24.25
-url: ${[baseUrl]}/song/search/:query
+name: /song/liked
+sortPriority: 29.0
+url: ${[baseUrl]}/song/liked
 urlParameters:
 - enabled: true
   name: explicit
   value: 'true'
-  id: 2rQ0ynqE6s
+  id: tGScqhHPir
 - enabled: false
   name: page
   value: <integer>
-  id: 9H63rbCnHd
-- enabled: true
+  id: xeQxI0GU86
+- enabled: false
   name: pageSize
-  value: '50'
-  id: Cqh8H4cRV7
-- enabled: true
-  name: :query
-  value: checkmate
-  id: zXFn5dePsN
+  value: <integer>
+  id: 8gWazEq9zx
 - enabled: true
   name: ''
   value: ''
-  id: McT2isdGts
+  id: qNK8qtse3J
