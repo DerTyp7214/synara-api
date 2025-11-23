@@ -1,10 +1,13 @@
 package dev.dertyp.services
 
+import dev.dertyp.core.date
+import dev.dertyp.core.plus
 import dev.dertyp.data.RefreshToken
 import dev.dertyp.db.RefreshTokenTable
 import dev.dertyp.dbQuery
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.transactions.transaction
+import java.time.Instant
 import java.util.*
 import kotlin.time.Duration
 
@@ -39,7 +42,7 @@ class RefreshTokenService(database: Database) : Service() {
 
     suspend fun validByUserId(userId: UUID): RefreshToken? = queryRefreshToken {
         where { RefreshTokenTable.userId eq userId }
-        andWhere { RefreshTokenTable.expiresAt greater System.currentTimeMillis() }
+        andWhere { RefreshTokenTable.expiresAt greater Instant.now().toEpochMilli() }
         andWhere { RefreshTokenTable.isRevoked eq false }
         orderBy(RefreshTokenTable.expiresAt, SortOrder.DESC)
     }.firstOrNull()
@@ -50,7 +53,7 @@ class RefreshTokenService(database: Database) : Service() {
 
     suspend fun validByTokenHash(tokenHash: String): RefreshToken? = queryRefreshToken {
         where { RefreshTokenTable.tokenHash eq tokenHash }
-        andWhere { RefreshTokenTable.expiresAt greater System.currentTimeMillis() }
+        andWhere { RefreshTokenTable.expiresAt greater Instant.now().toEpochMilli() }
         andWhere { RefreshTokenTable.isRevoked eq false }
         orderBy(RefreshTokenTable.expiresAt, SortOrder.DESC)
     }.firstOrNull()
@@ -64,7 +67,7 @@ class RefreshTokenService(database: Database) : Service() {
     }
 
     suspend fun createToken(userId: UUID, expirationMillis: Duration, tokenHash: String): RefreshToken? = dbQuery {
-        val expirationDate = Date(System.currentTimeMillis() + expirationMillis.inWholeMilliseconds)
+        val expirationDate = Instant.now().toEpochMilli().date + expirationMillis
 
         RefreshTokenTable.batchInsert(listOf(Triple(userId, expirationDate, tokenHash))) {
             this[RefreshTokenTable.userId] = it.first

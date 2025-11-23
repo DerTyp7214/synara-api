@@ -1,5 +1,6 @@
 package dev.dertyp.core
 
+import java.util.*
 import kotlin.math.absoluteValue
 import kotlin.math.log10
 import kotlin.math.pow
@@ -22,3 +23,6 @@ fun Int.digitCount(): Int = when (this) {
 fun Int.zeroPad(length: Int): String {
     return this.toString().padStart(length, '0')
 }
+
+val Long.date get() = Date(this)
+val Long?.date get() = this?.let { Date(this) }

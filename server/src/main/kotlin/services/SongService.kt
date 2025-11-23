@@ -1,16 +1,19 @@
 package dev.dertyp.services
 
-import dev.dertyp.*
+import dev.dertyp.core.date
 import dev.dertyp.core.foreignKeyOn
 import dev.dertyp.core.rankedSearchQuery
 import dev.dertyp.data.*
 import dev.dertyp.db.*
+import dev.dertyp.dbQuery
+import dev.dertyp.getDateFromISO
+import dev.dertyp.getISOFromDate
 import dev.dertyp.services.AlbumService.Companion.calculateAlbumStats
 import dev.dertyp.services.AlbumService.Companion.mapAlbum
 import dev.dertyp.services.ArtistService.Companion.mapArtist
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.transactions.transaction
-import java.time.LocalDateTime
+import java.time.Instant
 import java.util.*
 
 class SongService(database: Database) : Service() {
@@ -80,8 +83,8 @@ class SongService(database: Database) : Service() {
                 fileSize = resultRow[SongTable.fileSize],
                 coverId = resultRow[SongTable.cover]?.value,
                 isFavourite = resultRow.getOrNull(UserSongTable.isFavourite) ?: false,
-                userSongCreatedAt = getDateTimeFromISO(resultRow.getOrNull(UserSongTable.createdAt)),
-                userSongUpdatedAt = getDateTimeFromISO(resultRow.getOrNull(UserSongTable.updatedAt)),
+                userSongCreatedAt = resultRow.getOrNull(UserSongTable.createdAt).date,
+                userSongUpdatedAt = resultRow.getOrNull(UserSongTable.updatedAt).date,
             )
         }
     }
@@ -109,7 +112,7 @@ class SongService(database: Database) : Service() {
                     UserSongTable.userId eq userId and (UserSongTable.songId eq id)
                 }) {
                     it[UserSongTable.isFavourite] = liked
-                    it[UserSongTable.updatedAt] = getISOFromDateTime(LocalDateTime.now())
+                    it[UserSongTable.updatedAt] = Instant.now().toEpochMilli()
                 }
             }
         }

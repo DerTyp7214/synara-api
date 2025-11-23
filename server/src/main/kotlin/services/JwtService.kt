@@ -4,6 +4,8 @@ import at.favre.lib.crypto.bcrypt.BCrypt
 import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
 import dev.dertyp.core.authHeader
+import dev.dertyp.core.date
+import dev.dertyp.core.plus
 import dev.dertyp.data.AuthenticationRequest
 import dev.dertyp.data.AuthenticationResponse
 import dev.dertyp.data.RefreshTokenRequest
@@ -19,6 +21,7 @@ import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import java.security.SecureRandom
+import java.time.Instant
 import java.util.*
 import kotlin.io.encoding.Base64
 import kotlin.time.Duration.Companion.days
@@ -126,7 +129,7 @@ class JwtService(
             val user = userService.findUserById(dbToken.userId)
             if (user == null) return@post call.respond(HttpStatusCode.Unauthorized, "Invalid user")
 
-            val newToken = generateToken(user, true)
+            val newToken = generateToken(user)
             if (newToken == null) return@post call.respond(
                 HttpStatusCode.InternalServerError,
                 "Something went wrong inserting the refresh token."
@@ -167,8 +170,8 @@ class JwtService(
         }
     }
 
-    suspend fun generateToken(user: User, refresh: Boolean = false): AuthenticationResponse? {
-        val expiresAt = Date(System.currentTimeMillis() + 24.hours.inWholeMilliseconds)
+    suspend fun generateToken(user: User): AuthenticationResponse? {
+        val expiresAt = Instant.now().toEpochMilli().date + 24.hours
 
         val token = JWT.create()
             .withAudience(jwtAudience)
@@ -177,20 +180,10 @@ class JwtService(
             .withExpiresAt(expiresAt)
             .sign(Algorithm.HMAC256(jwtSecret))
 
+        val refreshToken = generateRefreshToken()
 
-        var newRefreshToken = refresh
-        val existingToken = refreshTokenService.validByUserId(user.id)
-        newRefreshToken = existingToken?.tokenHash == null || newRefreshToken
-        val refreshToken = if (existingToken?.tokenHash != null) {
-            refreshTokenService.invalidateToken(user.id, existingToken.tokenHash)
-            existingToken.tokenHash
-        } else generateRefreshToken()
-
-
-        if (newRefreshToken) {
-            val tokenId = refreshTokenService.createToken(user.id, 30.days, refreshToken)
-            if (tokenId == null) return null
-        }
+        val tokenId = refreshTokenService.createToken(user.id, 30.days, refreshToken)
+        if (tokenId == null) return null
 
         return AuthenticationResponse(
             token = token,

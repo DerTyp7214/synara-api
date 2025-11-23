@@ -1,12 +1,12 @@
 package dev.dertyp.data
 
 import dev.dertyp.core.contentEquals
+import dev.dertyp.serializers.DateSerializer
 import dev.dertyp.serializers.LocalDateSerializer
-import dev.dertyp.serializers.LocalDateTimeSerializer
 import dev.dertyp.serializers.UUIDSerializer
 import kotlinx.serialization.Serializable
+import java.time.Instant
 import java.time.LocalDate
-import java.time.LocalDateTime
 import java.util.*
 
 abstract class BaseSong() {
@@ -83,10 +83,10 @@ data class UserSong(
     override val coverId: UUID? = null,
 
     val isFavourite: Boolean? = false,
-    @Serializable(with = LocalDateTimeSerializer::class)
-    val userSongCreatedAt: LocalDateTime? = LocalDateTime.now(),
-    @Serializable(with = LocalDateTimeSerializer::class)
-    val userSongUpdatedAt: LocalDateTime? = LocalDateTime.now(),
+    @Serializable(with = DateSerializer::class)
+    val userSongCreatedAt: Date? = Date.from(Instant.now()),
+    @Serializable(with = DateSerializer::class)
+    val userSongUpdatedAt: Date? = Date.from(Instant.now()),
 ): BaseSong()
 
 @Serializable
