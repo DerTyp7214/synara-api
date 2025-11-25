@@ -118,7 +118,7 @@ jobs:
         with:
           images: ghcr.io/${{ env.CONTAINER_REPO }}
           tags: |
-            type=raw,value=${{ steps.version_info.outputs.APP_VERSION }}
+            type=raw,value=${{ steps.version_info.outputs.APP_VERSION }}${{ github.ref_name == 'master' && '-dev' || '' }}
             type=raw,value=latest,enable=${{ github.ref_name == 'release' }}
             type=raw,value=latest-dev,enable=${{ github.ref_name == 'master' }}
 
@@ -128,10 +128,11 @@ jobs:
           context: .
           file: ./Dockerfile
           push: true
+          platforms: linux/amd64,linux/arm64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=registry,ref=ghcr.io/${{ env.CONTAINER_REPO }}:buildcache
-          cache-to: type=registry,ref=ghcr.io/${{ env.CONTAINER_REPO }}:buildcache,mode=max
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
   create-github-release:
     needs: build-artifact
