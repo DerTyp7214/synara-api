@@ -119,7 +119,6 @@ jobs:
           images: ghcr.io/${{ env.CONTAINER_REPO }}
           tags: |
             type=raw,value=${{ steps.version_info.outputs.APP_VERSION }}
-            type=sha,prefix=,suffix=,enable=true,format=short
             type=raw,value=latest,enable=${{ github.ref_name == 'release' }}
             type=raw,value=latest-dev,enable=${{ github.ref_name == 'master' }}
 

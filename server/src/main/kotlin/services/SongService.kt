@@ -147,6 +147,8 @@ class SongService(database: Database) : Service() {
 
             where { SongTable.id inList songIds }
             orWhere { SongTable.albumId inList albumIds }
+            orderBy(SongTable.releaseDate, SortOrder.DESC)
+            orderBy(SongTable.trackNumber, SortOrder.ASC)
         }
 
     suspend fun byAlbum(page: Int, pageSize: Int, albumId: UUID, userId: UUID): PaginatedResponse<UserSong> =
