@@ -5,6 +5,7 @@ import dev.dertyp.core.*
 import kotlinx.coroutines.*
 import java.io.InputStreamReader
 import java.nio.file.Path
+import java.time.Instant
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import kotlin.concurrent.atomics.AtomicBoolean
@@ -34,57 +35,31 @@ class TdnService(private val indexer: Indexer) : Service() {
         aliveCheck: suspend () -> Boolean,
         logProxy: suspend (String) -> Unit
     ): Pair<ProcessExecutionResult, List<Path>> {
+        val startTime = Instant.now().toEpochMilli()
+
         val pathLines = mutableListOf<String>()
         var result = executeTdn(command, aliveCheck) {
             if (!aliveCheck()) throw ClientCloseException()
-            val trimmed = it.trim().removeSurrounding("'")
-            if (indexer.tracksPath != null) {
-                if (
-                    trimmed.endsWith(indexer.audioExtension) &&
-                    trimmed.contains(indexer.tracksPath)
-                ) {
-                    val start = trimmed.indexOf(indexer.tracksPath)
-                    val path = trimmed.substring(start)
-                    pathLines.add(path)
-                } else {
-                    try {
-                        val path = Path(trimmed)
-                        if (path.exists() && path.isSymbolicLink()) {
-                            val destination = path.resolveSymlinkAbsolute()
-                            if (destination.startsWith(indexer.tracksPath)) {
-                                pathLines.add(destination.absolutePathString())
-                            }
-                        }
-                    } catch (_: Throwable) {
-                    }
-                }
-            }
-            if (indexer.playlistsPath != null) {
-                if (
-                    trimmed.endsWith(indexer.playlistExtension) &&
-                    trimmed.contains(indexer.playlistsPath)
-                ) {
-                    val start = when {
-                        trimmed.contains(indexer.playlistsPath) -> trimmed.indexOf(indexer.playlistsPath)
-                        indexer.albumsPath?.let { p -> trimmed.contains(p) }
-                            ?: false -> trimmed.indexOf(indexer.albumsPath)
-
-                        else -> -1
-                    }
-
-                    if (start >= 0) {
-                        val pathString = trimmed.substring(start)
-                        if (trimmed.contains(indexer.playlistsPath)) {
-                            try {
-                                pathLines.add(Path(pathString).absolutePathString())
-                            } catch (_: Throwable) {
-                            }
-                        }
-                    }
-                }
-            }
             logProxy(it)
         }
+
+        if (indexer.tracksPath != null) {
+            val paths = Path(indexer.tracksPath).getModifiedSince(startTime)
+
+            for (path in paths) {
+                pathLines.add(path.absolutePathString())
+            }
+        }
+
+        if (indexer.playlistsPath != null) {
+            val paths = Path(indexer.playlistsPath).getModifiedSince(startTime)
+
+            for (path in paths) {
+                pathLines.add(path.absolutePathString())
+            }
+        }
+
+        logProxy("Found ${pathLines.size} files since the download started.")
 
         val paths = pathLines.map { Path(it) }.filter { it.exists() }.toMutableList()
 
@@ -132,7 +107,7 @@ class TdnService(private val indexer: Indexer) : Service() {
 
         if (result.exitCode == 0 && indexer.isActive.compareAndSet(expectedValue = false, newValue = true)) {
             if (songPaths.isEmpty()) indexer.start(logProxy)
-            else indexer.start(songPaths, playlistPaths.ifEmpty { emptyList() }, stdout = logProxy)
+            else indexer.start(songPaths, playlistPaths, stdout = logProxy)
             indexer.isActive.store(false)
 
             logProxy("Took ${currentTry + 1} tr${if (currentTry == 0) "y" else "ies"} to download.")
@@ -183,7 +158,6 @@ class TdnService(private val indexer: Indexer) : Service() {
                         )
 
                         result = newResult
-                        paths.clear()
                         paths.addAll(newPaths)
                     } else if (!brokenFilePath.isInside(rootPath)) {
                         logProxy("File ($brokenFilePath) not inside $rootPath")
