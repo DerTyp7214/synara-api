@@ -6,6 +6,7 @@ import dev.dertyp.db.ImageTable
 import dev.dertyp.db.SyncServiceTable
 import dev.dertyp.routing.*
 import dev.dertyp.services.*
+import dev.dertyp.services.tdn.TdnService
 import dev.hayden.KHealth
 import io.github.smiley4.ktoropenapi.get
 import io.ktor.http.*

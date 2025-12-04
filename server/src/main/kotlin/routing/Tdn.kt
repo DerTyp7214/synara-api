@@ -1,9 +1,9 @@
 package dev.dertyp.routing
 
 import dev.dertyp.core.*
-import dev.dertyp.services.ProcessExecutionResult
-import dev.dertyp.services.TdnFavoriteType
-import dev.dertyp.services.TdnService
+import dev.dertyp.services.tdn.ProcessExecutionResult
+import dev.dertyp.services.tdn.TdnFavoriteType
+import dev.dertyp.services.tdn.TdnService
 import io.github.smiley4.ktoropenapi.post
 import io.github.smiley4.ktoropenapi.route
 import io.ktor.http.*

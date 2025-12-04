@@ -1,7 +1,8 @@
-package dev.dertyp.services
+package dev.dertyp.services.tdn
 
 import dev.dertyp.Indexer
 import dev.dertyp.core.*
+import dev.dertyp.services.Service
 import kotlinx.coroutines.*
 import java.io.InputStreamReader
 import java.nio.file.Path
