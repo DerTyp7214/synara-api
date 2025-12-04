@@ -1,0 +1,18 @@
+type: http_request
+model: http_request
+id: rq_P5Mijo9ovD
+createdAt: 2025-12-04T21:48:13.781796030
+updatedAt: 2025-12-04T21:48:26.237815628
+workspaceId: wk_9dbKacQT4H
+folderId: null
+authentication: {}
+authenticationType: null
+body: {}
+bodyType: null
+description: '[object Object]'
+headers: []
+method: GET
+name: /userInfo
+sortPriority: 2333.3333333333335
+url: ${[baseUrl]}/userInfo
+urlParameters: []

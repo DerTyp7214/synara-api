@@ -11,7 +11,7 @@ services:
     env_file:
       - .server.env
     environment:
-      - PORT=8080
+      - PORT=8081
       - HOST_UID=1000
       - HOST_GID=1000
       - DB_URL=jdbc:postgresql://127.0.0.1:5432/synara-api-db

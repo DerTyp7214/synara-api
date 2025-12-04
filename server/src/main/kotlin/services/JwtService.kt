@@ -5,12 +5,11 @@ import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
 import dev.dertyp.core.authHeader
 import dev.dertyp.core.date
+import dev.dertyp.core.getUser
 import dev.dertyp.core.plus
-import dev.dertyp.data.AuthenticationRequest
-import dev.dertyp.data.AuthenticationResponse
-import dev.dertyp.data.RefreshTokenRequest
-import dev.dertyp.data.User
+import dev.dertyp.data.*
 import io.github.smiley4.ktoropenapi.config.descriptors.ValueExampleDescriptor
+import io.github.smiley4.ktoropenapi.get
 import io.github.smiley4.ktoropenapi.post
 import io.github.smiley4.ktoropenapi.route
 import io.ktor.http.*
@@ -166,6 +165,19 @@ class JwtService(
                 if (newUser == null) return@post call.respond(HttpStatusCode.BadRequest)
 
                 call.respond(HttpStatusCode.OK, mapOf("userId" to newUser.id.toString()))
+            }
+            get("/userInfo", {
+                response {
+                    HttpStatusCode.OK to {
+                        body<UserInfo> {}
+                    }
+                }
+            }) {
+
+                val user = call.getUser()
+                if (user == null) return@get call.respond(HttpStatusCode.Unauthorized, "Invalid user")
+
+                call.respond(HttpStatusCode.OK, UserInfo.fromUser(user))
             }
         }
     }

@@ -11,3 +11,19 @@ data class User(
     val username: String,
     val passwordHash: String,
 )
+
+@Serializable
+data class UserInfo(
+    @Serializable(with = UUIDSerializer::class)
+    val id: UUID,
+    val username: String,
+) {
+    companion object {
+        fun fromUser(user: User): UserInfo {
+            return UserInfo(
+                id = user.id,
+                username = user.username,
+            )
+        }
+    }
+}

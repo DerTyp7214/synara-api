@@ -3,7 +3,7 @@ model: environment
 id: ev_xVRqZQ78ZV
 workspaceId: wk_9dbKacQT4H
 createdAt: 2025-10-14T19:25:16.452169629
-updatedAt: 2025-11-01T14:51:23.811309628
+updatedAt: 2025-12-01T09:24:49.618398502
 name: Global Variables
 public: true
 base: true
@@ -12,10 +12,11 @@ parentId: null
 variables:
 - enabled: true
   name: baseUrl
-  value: http://localhost:8080
+  value: http://localhost:8081
   id: Ay6f3rsrdM
 - enabled: true
   name: token
   value: ${[ response.body.path(request='rq_E43hSHaxXc', path=b64'JC50b2tlbg', behavior='ttl', ttl=b64'MjQqNjAqNjA') ]}
   id: PfSc5FGw6S
 color: null
+sortPriority: 0.0
