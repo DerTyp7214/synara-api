@@ -91,6 +91,8 @@ ENV AUDIO_PLAYLISTS_PATH="/data/Tidal/Playlists"
 ENV AUDIO_TRANSCODE_PATH="/data/Tidal/Transcode"
 ENV DATA_IMAGES_PATH="/data/Tidal/Images"
 
+ENV AUDIO_TRACKS_SECONDARY_PATH="/data/Synara"
+
 ENV TDN_TOKEN_PATH="/home/appuser/.config/tidal_dl_ng/token.json"
 
 ENV HOME=/home/appuser

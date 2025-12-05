@@ -2,7 +2,7 @@ type: http_request
 model: http_request
 id: rq_xA7VEJGJLM
 createdAt: 2025-10-14T19:25:16.449810820
-updatedAt: 2025-11-05T22:43:04.727687597
+updatedAt: 2025-12-05T02:01:57.668579265
 workspaceId: wk_9dbKacQT4H
 folderId: null
 authentication: {}
@@ -16,15 +16,15 @@ name: /fetchArtistImages/:metadataProvider
 sortPriority: 7000.0
 url: ${[baseUrl]}/fetchArtistImages/:metadataProvider
 urlParameters:
-- enabled: false
+- enabled: true
   name: :metadataProvider
   value: tidal
   id: hUWFrZXs95
-- enabled: true
+- enabled: false
   name: :metadataProvider
   value: spotify
   id: ntREHFtttf
 - enabled: true
   name: ''
   value: ''
-  id: w8sv32h6b2
+  id: murkDd5bSR

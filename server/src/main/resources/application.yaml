@@ -25,7 +25,7 @@ audio:
   albums: ${AUDIO_ALBUMS_PATH}
   playlists: ${AUDIO_PLAYLISTS_PATH}
   transcode: ${AUDIO_TRANSCODE_PATH}
-  secondary-tracks:
+  secondary-tracks: ${AUDIO_TRACKS_SECONDARY_PATH:}
 data:
   images: ${DATA_IMAGES_PATH}
 spotify:
