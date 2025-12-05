@@ -90,15 +90,18 @@ jobs:
       matrix:
         include:
           - platform: linux/amd64
-            runs_on_arch: ubuntu-latest
+            runs_on_arch: ubuntu-24.04
           - platform: linux/arm64
-            runs_on_arch: macos-latest
+            runs_on_arch: ubuntu-24.04-arm
 
     runs-on: ${{ matrix.runs_on_arch }}
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
       - name: Extract Application Version
         id: version_info
