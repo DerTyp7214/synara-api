@@ -84,7 +84,6 @@ jobs:
 
     env:
       CONTAINER_REPO: "dertyp7214/synara"
-      IMAGE_NAME: ghcr.io/${{ env.CONTAINER_REPO }}
 
     strategy:
       fail-fast: false
@@ -131,7 +130,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.IMAGE_NAME }}
+          images: ghcr.io/${{ env.CONTAINER_REPO }}
           tags: |
             type=raw,value=${{ steps.version_info.outputs.APP_VERSION }}${{ github.ref_name == 'master' && '-dev' || '' }}
             type=raw,value=latest,enable=${{ github.ref_name == 'release' }}
@@ -146,9 +145,9 @@ jobs:
           platforms: ${{ matrix.platform }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          outputs: type=image,name=${{ env.IMAGE_NAME }}
-          cache-from: type=registry,ref=${{ env.IMAGE_NAME }}:buildcache
-          cache-to: type=registry,ref=${{ env.IMAGE_NAME }}:buildcache,mode=max
+          outputs: type=image,name=ghcr.io/${{ env.CONTAINER_REPO }}
+          cache-from: type=registry,ref=ghcr.io/${{ env.CONTAINER_REPO }}:buildcache
+          cache-to: type=registry,ref=ghcr.io/${{ env.CONTAINER_REPO }}:buildcache,mode=max
 
   create-github-release:
     needs: build-artifact
