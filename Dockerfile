@@ -21,9 +21,9 @@ FROM debian:bullseye-slim AS ffmpeg-builder
 
 ENV FFMPEG_VERSION 6.1.3
 
-RUN apt-get update
-RUN apt-get install -y --no-install-recommends build-essential pkg-config wget tar zlib1g-dev ca-certificates nasm
-RUN rm -rf /var/lib/apt/lists/*
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends build-essential pkg-config wget tar zlib1g-dev ca-certificates nasm && \
+    rm -rf /var/lib/apt/lists/*
 
 WORKDIR /src
 RUN wget https://ffmpeg.org/releases/ffmpeg-${FFMPEG_VERSION}.tar.xz && \
@@ -53,8 +53,8 @@ FROM amazoncorretto:25 AS runtime
 ARG APP_USER_ID=1000
 ARG APP_GROUP_ID=1000
 
-RUN yum update -y && yum install -y python3.12 python3.12-pip libstdc++ zlib glibc shadow-utils
-RUN yum clean all && rm -rf /var/cache/yum
+RUN yum update -y && yum install -y python3.12 python3.12-pip libstdc++ zlib glibc shadow-utils && \
+    yum clean all && rm -rf /var/cache/yum
 
 RUN ln -sf /usr/bin/python3.12 /usr/bin/python3
 RUN python3 -m pip install --break-system-packages --no-cache-dir tidal-dl-ng
