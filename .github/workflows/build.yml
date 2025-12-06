@@ -7,9 +7,9 @@ concurrency:
 on:
   push:
     paths:
-      - .github
-      - docker
-      - server
+      - .github/**
+      - docker/**
+      - server/**
       - Dockerfile.nobuild
       - build.gradle.kts
       - gradle.properties
