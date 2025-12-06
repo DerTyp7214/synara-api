@@ -2,7 +2,7 @@ type: http_request
 model: http_request
 id: rq_2HEFG5stF8
 createdAt: 2025-10-14T19:25:16.449964932
-updatedAt: 2025-12-03T15:39:14.415617972
+updatedAt: 2025-12-05T04:49:00.227077811
 workspaceId: wk_9dbKacQT4H
 folderId: fl_NXkRVdWsW4
 authentication: {}
@@ -11,7 +11,7 @@ body:
   text: |-
     {
       "urls": [
-        "https://tidal.com/track/84192580"
+        "https://tidal.com/artist/7638399"
       ]
     }
 bodyType: application/json

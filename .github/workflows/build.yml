@@ -88,6 +88,9 @@ jobs:
       CONTAINER_REPO: "dertyp7214/synara"
 
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Download Ktor fat JAR artifact
         uses: actions/download-artifact@v5
         with:
@@ -98,8 +101,8 @@ jobs:
         id: jar_info
         run: echo "JAR_NAME=${{ needs.build-artifact.outputs.jar_file_name }}" >> $GITHUB_OUTPUT
 
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - name: ls
+        run: ls -la
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
