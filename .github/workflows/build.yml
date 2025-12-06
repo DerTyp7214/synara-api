@@ -101,9 +101,6 @@ jobs:
         id: jar_info
         run: echo "JAR_NAME=${{ needs.build-artifact.outputs.jar_file_name }}" >> $GITHUB_OUTPUT
 
-      - name: ls
-        run: ls -la
-
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 

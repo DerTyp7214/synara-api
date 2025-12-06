@@ -39,9 +39,14 @@ class Indexer(
     val albumsPath = environment.config.propertyOrNull("audio.albums")?.getString()?.removeSuffix("/")
     val playlistsPath = environment.config.propertyOrNull("audio.playlists")?.getString()?.removeSuffix("/")
 
-    val secondaryTracksPaths = environment.config.propertyOrNull("audio.secondary-tracks")?.getList()?.map {
-        Path(it.removeSuffix("/"))
-    } ?: emptyList()
+    val secondaryTracksPaths = try {
+        environment.config.propertyOrNull("audio.secondary-tracks")?.getList()?.map {
+            Path(it.removeSuffix("/"))
+        } ?: emptyList()
+    } catch (_: Throwable) {
+        logger.warn("Invalid 'audio.secondary-tracks'")
+        emptyList()
+    }
 
     val audioExtension = "flac"
     val playlistExtension = "m3u"
