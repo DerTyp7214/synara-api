@@ -2,7 +2,7 @@ type: http_request
 model: http_request
 id: rq_nK86XhuvE4
 createdAt: 2025-10-14T19:25:16.449914205
-updatedAt: 2025-10-24T21:12:25.442907003
+updatedAt: 2025-12-08T21:36:41.015759110
 workspaceId: wk_9dbKacQT4H
 folderId: null
 authentication: {}
@@ -13,7 +13,7 @@ description: '[object Object]'
 headers: []
 method: GET
 name: /transcodeAll/:bitrate
-sortPriority: 12000.0
+sortPriority: 15000.0
 url: ${[baseUrl]}/transcodeAll/:bitrate
 urlParameters:
 - enabled: true

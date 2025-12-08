@@ -92,7 +92,8 @@ fun Application.configureDatabases(database: Database, jwtService: JwtService) {
         stream(songService)
 
         jwtService.authenticated(this) {
-            utils(imageService, environment, indexer)
+            utils(indexer)
+            metadata(imageService, environment, indexer)
 
             sync(database, songService)
 

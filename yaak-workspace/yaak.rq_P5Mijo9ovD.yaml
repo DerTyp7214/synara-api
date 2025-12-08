@@ -2,7 +2,7 @@ type: http_request
 model: http_request
 id: rq_P5Mijo9ovD
 createdAt: 2025-12-04T21:48:13.781796030
-updatedAt: 2025-12-04T21:48:26.237815628
+updatedAt: 2025-12-08T21:36:40.922626901
 workspaceId: wk_9dbKacQT4H
 folderId: null
 authentication: {}
@@ -13,6 +13,6 @@ description: '[object Object]'
 headers: []
 method: GET
 name: /userInfo
-sortPriority: 2333.3333333333335
+sortPriority: 3000.0
 url: ${[baseUrl]}/userInfo
 urlParameters: []

@@ -2,6 +2,7 @@ package dev.dertyp.services.metadata
 
 import dev.dertyp.ApiClient
 import dev.dertyp.services.metadata.MetadataService.Artist
+import dev.dertyp.services.models.Image
 import io.ktor.client.call.*
 import io.ktor.client.request.*
 import io.ktor.http.*
@@ -58,6 +59,14 @@ class SpotifyService(
         }
     }
 
+    override suspend fun getAlbumIdByTrackId(trackId: String): String? {
+        TODO("Not yet implemented")
+    }
+
+    override suspend fun getImageUrlByAlbumId(albumId: String): List<Image> {
+        TODO("Not yet implemented")
+    }
+
     @Serializable
     data class SearchResponse(
         val artists: Artists,
@@ -82,11 +91,11 @@ class SpotifyService(
         val name: String,
         val popularity: Int,
         val uri: String,
-        val images: List<Image>,
+        val images: List<SpotifyImage>,
     )
 
     @Serializable
-    data class Image(
+    data class SpotifyImage(
         val url: String,
         val width: Int,
         val height: Int,

@@ -3,6 +3,7 @@ package dev.dertyp.services.metadata
 import com.google.gson.annotations.SerializedName
 import dev.dertyp.ApiClient
 import dev.dertyp.services.Service
+import dev.dertyp.services.models.Image
 import io.ktor.client.call.*
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
@@ -29,6 +30,8 @@ abstract class MetadataService(
 
     protected abstract fun HttpRequestBuilder.getAccessTokenHeader(clientId: String, clientSecret: String)
     abstract suspend fun searchArtists(query: String, limit: Int = 50): List<Artist>
+    abstract suspend fun getAlbumIdByTrackId(trackId: String): String?
+    abstract suspend fun getImageUrlByAlbumId(albumId: String): List<Image>
 
     private var accessToken: Pair<AccessTokenResponse, Long>? = null
 

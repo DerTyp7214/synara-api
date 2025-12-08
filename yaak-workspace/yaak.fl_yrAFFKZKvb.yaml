@@ -2,7 +2,7 @@ type: folder
 model: folder
 id: fl_yrAFFKZKvb
 createdAt: 2025-10-14T19:25:16.452129032
-updatedAt: 2025-10-24T21:12:25.472712380
+updatedAt: 2025-12-08T21:36:41.050585159
 workspaceId: wk_9dbKacQT4H
 folderId: null
 authentication: {}
@@ -10,4 +10,4 @@ authenticationType: null
 description: ''
 headers: []
 name: playlist
-sortPriority: 18000.0
+sortPriority: 21000.0

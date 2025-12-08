@@ -1,10 +1,10 @@
 type: http_request
 model: http_request
-id: rq_VcjYbg4BXV
-createdAt: 2025-10-24T21:12:23.382095699
-updatedAt: 2025-12-08T21:36:40.986778222
+id: rq_skCkNa48VN
+createdAt: 2025-12-08T21:36:29.606319238
+updatedAt: 2025-12-08T21:40:12.708739493
 workspaceId: wk_9dbKacQT4H
-folderId: null
+folderId: fl_xqrmRv49Xr
 authentication: {}
 authenticationType: null
 body: {}
@@ -12,12 +12,12 @@ bodyType: null
 description: '[object Object]'
 headers: []
 method: GET
-name: /sync/me
-sortPriority: 11000.0
-url: ${[baseUrl]}/sync/:service/get/liked/tracks
+name: /imageByTrackId
+sortPriority: 1000.0
+url: ${[baseUrl]}/metadata/:metadataProvider/imageUrl/byTrackId/:trackId
 urlParameters:
 - enabled: true
-  name: :service
+  name: :metadataProvider
   value: tidal
   id: J2PTfXvIAX
 - enabled: false
@@ -25,6 +25,10 @@ urlParameters:
   value: 'true'
   id: 9xwcfzTAGG
 - enabled: true
+  name: :trackId
+  value: '16470478'
+  id: 5Y2W5urkg2
+- enabled: true
   name: ''
   value: ''
-  id: W9mPzwGk95
+  id: 6wsVCThIar

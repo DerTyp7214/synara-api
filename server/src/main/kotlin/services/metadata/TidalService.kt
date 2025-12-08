@@ -2,12 +2,14 @@ package dev.dertyp.services.metadata
 
 import dev.dertyp.ApiClient
 import dev.dertyp.core.parameters
+import dev.dertyp.services.models.Image
 import dev.dertyp.services.models.tidal.*
 import io.ktor.client.call.*
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.server.application.*
+import io.ktor.server.util.*
 import kotlinx.coroutines.delay
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.io.encoding.Base64
@@ -32,18 +34,23 @@ class TidalService(
         encodedPath = "v2"
     }
 
-    override suspend fun searchArtists(query: String, limit: Int): List<Artist> {
-        val url = baseUrl.clone().apply {
-            appendPathSegments("searchResults")
+    private fun getUrl(path: String? = null, block: URLBuilder.() -> Unit = {}): String {
+        return url {
+            takeFrom(baseUrl)
+            if (!path.isNullOrBlank()) appendPathSegments(path)
+            block()
+        }
+    }
 
+    override suspend fun searchArtists(query: String, limit: Int): List<Artist> {
+        val url = getUrl("searchResults") {
             encodedPath += "/" + query.encodeURLParameter()
 
             parameters {
                 append("include", "artists")
                 append("countryCode", "US")
-                append("explicitFilter", "include, exclude")
             }
-        }.build()
+        }
 
         val response =
             ApiClient.instance.get(url) {
@@ -75,7 +82,8 @@ class TidalService(
             }
         }
 
-        val searchResponse = response.body<SearchResultsSingleResourceDataDocument<ArtistsAttributes, ArtistsRelationships>>()
+        val searchResponse =
+            response.body<SearchResultsSingleResourceDataDocument<ArtistsAttributes, ArtistsRelationships>>()
         return searchResponse.included.map { included ->
             Artist(
                 id = included.id,
@@ -100,14 +108,14 @@ class TidalService(
     private suspend fun getImages(urlPath: String?): List<ArtworkFile> {
         if (urlPath == null) return emptyList()
 
-        val url = baseUrl.clone().apply {
+        val url = getUrl {
             appendPathSegments(Url(urlPath).segments)
 
             parameters {
                 append("include", "profileArt")
                 append("countryCode", "US")
             }
-        }.build()
+        }
 
         val response = ApiClient.instance.get(url) {
             val token = getAccessToken()
@@ -125,8 +133,84 @@ class TidalService(
             logger.info(response.bodyAsText())
         }
 
-        val imagesResponse = response.body<ArtworksSingleResourceDataDocument<ArtworksAttributes, ArtworksRelationships>>()
+        val imagesResponse =
+            response.body<ArtworksMultiResourceDataDocument<ArtworksAttributes, ArtworksRelationships>>()
 
         return imagesResponse.included.firstOrNull()?.attributes?.files ?: emptyList()
+    }
+
+    override suspend fun getAlbumIdByTrackId(trackId: String): String? {
+        val url = getUrl("/tracks/${trackId}/relationships/albums") {
+            parameters {
+                append("countryCode", "US")
+                append("locale", "en-US")
+            }
+        }
+
+        val response = ApiClient.instance.get(url) {
+            val token = getAccessToken()
+            header(HttpHeaders.Authorization, "${token.tokenType} ${token.accessToken}")
+            header(HttpHeaders.Accept, "application/vnd.api+json")
+        }
+
+        when (response.status) {
+            HttpStatusCode.OK -> {}
+            HttpStatusCode.TooManyRequests -> {
+                logger.warn("[getAlbumIdByTrackId]: Too many requests, waiting 10 seconds")
+                delay(10.seconds)
+                return getAlbumIdByTrackId(trackId)
+            }
+
+            else -> println("error: ${response.status}")
+        }
+
+        try {
+            val body = response.body<TracksMultiRelationshipDataDocument<ResourceIdentifier, EmptyRelationships>>()
+
+            return body.data.first().id
+        } catch (e: Exception) {
+            e.printStackTrace()
+            println(response.bodyAsText())
+            return null
+        }
+    }
+
+    override suspend fun getImageUrlByAlbumId(albumId: String): List<Image> {
+        val url = getUrl("/albums/${albumId}/relationships/coverArt") {
+            parameters {
+                append("countryCode", "US")
+                append("locale", "en-US")
+                append("include", "coverArt")
+            }
+        }
+
+        val response = ApiClient.instance.get(url) {
+            val token = getAccessToken()
+            header(HttpHeaders.Authorization, "${token.tokenType} ${token.accessToken}")
+            header(HttpHeaders.Accept, "application/vnd.api+json")
+        }
+
+        when (response.status) {
+            HttpStatusCode.OK -> {}
+            HttpStatusCode.TooManyRequests -> {
+                logger.warn("[getImageUrlByAlbumId]: Too many requests, waiting 10 seconds")
+                delay(10.seconds)
+                return getImageUrlByAlbumId(albumId)
+            }
+
+            else -> println("error: ${response.status}")
+        }
+
+        try {
+            val body = response.body<AlbumsMultiRelationshipDataDocument<ArtworksAttributes, ArtworksRelationships>>()
+
+            return body.included.map { i ->
+                i.attributes.files.map { f -> Image(f.href, f.meta.width, f.meta.height) }
+            }.flatten()
+        } catch (e: Exception) {
+            e.printStackTrace()
+            println(response.bodyAsText())
+            return listOf()
+        }
     }
 }

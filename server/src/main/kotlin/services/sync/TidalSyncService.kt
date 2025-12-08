@@ -3,10 +3,12 @@ package dev.dertyp.services.sync
 import dev.dertyp.ApiClient
 import dev.dertyp.core.parameters
 import dev.dertyp.data.User
-import dev.dertyp.services.models.tidal.*
+import dev.dertyp.services.models.tidal.TracksAttributes
+import dev.dertyp.services.models.tidal.TracksRelationships
+import dev.dertyp.services.models.tidal.UserCollectionsTracksMultiRelationshipDataDocument
+import dev.dertyp.services.models.tidal.UsersSingleResourceDataDocument
 import io.ktor.client.call.*
 import io.ktor.client.request.*
-import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.util.*
@@ -133,85 +135,6 @@ class TidalSyncService(
                 delay(500.milliseconds)
                 emitAll(getLikedSongs(body.links.meta.nextCursor))
             }
-        }
-    }
-
-    override suspend fun getAlbumIdByTrackId(trackId: String): String? {
-        val url = getUrl("/tracks/${trackId}/relationships/albums") {
-            parameters {
-                append("countryCode", "US")
-                append("locale", "en-US")
-            }
-        }
-
-        val token = getAccessToken() ?: throw IllegalArgumentException("Invalid access token")
-
-        val response = ApiClient.instance.get(url) {
-            headers {
-                defaultHeaders(token)
-            }
-        }
-
-        when (response.status) {
-            HttpStatusCode.OK -> {}
-            HttpStatusCode.TooManyRequests -> {
-                logger.warn("[getAlbumIdByTrackId]: Too many requests, waiting 10 seconds")
-                delay(10.seconds)
-                return getAlbumIdByTrackId(trackId)
-            }
-
-            else -> println("error: ${response.status}")
-        }
-
-        try {
-            val body = response.body<TracksMultiRelationshipDataDocument<ResourceIdentifier, EmptyRelationships>>()
-
-            return body.data.first().id
-        } catch (e: Exception) {
-            e.printStackTrace()
-            println(response.bodyAsText())
-            return null
-        }
-    }
-
-    override suspend fun getImageUrlByAlbumId(albumId: String): List<Image> {
-        val url = getUrl("/albums/${albumId}/relationships/coverArt") {
-            parameters {
-                append("countryCode", "US")
-                append("locale", "en-US")
-                append("include", "coverArt")
-            }
-        }
-
-        val token = getAccessToken() ?: throw IllegalArgumentException("Invalid access token")
-
-        val response = ApiClient.instance.get(url) {
-            headers {
-                defaultHeaders(token)
-            }
-        }
-
-        when (response.status) {
-            HttpStatusCode.OK -> {}
-            HttpStatusCode.TooManyRequests -> {
-                logger.warn("[getImageUrlByAlbumId]: Too many requests, waiting 10 seconds")
-                delay(10.seconds)
-                return getImageUrlByAlbumId(albumId)
-            }
-
-            else -> println("error: ${response.status}")
-        }
-
-        try {
-            val body = response.body<AlbumsMultiRelationshipDataDocument<ArtworksAttributes, ArtworksRelationships>>()
-
-            return body.included.map { i ->
-                i.attributes.files.map { f -> Image(f.href, f.meta.width, f.meta.height) }
-            }.flatten()
-        } catch (e: Exception) {
-            e.printStackTrace()
-            println(response.bodyAsText())
-            return listOf()
         }
     }
 }

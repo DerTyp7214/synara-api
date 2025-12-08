@@ -2,7 +2,7 @@ type: http_request
 model: http_request
 id: rq_sV2RWJoRCe
 createdAt: 2025-10-14T19:25:16.450882239
-updatedAt: 2025-11-30T01:08:47.857687117
+updatedAt: 2025-12-08T21:36:41.035479889
 workspaceId: wk_9dbKacQT4H
 folderId: null
 authentication: {}
@@ -13,7 +13,7 @@ description: '[object Object]'
 headers: []
 method: GET
 name: /stream/:id
-sortPriority: 15000.0
+sortPriority: 18000.0
 url: ${[baseUrl]}/stream/:id
 urlParameters:
 - enabled: true

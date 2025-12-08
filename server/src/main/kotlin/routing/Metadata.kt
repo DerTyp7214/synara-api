@@ -1,0 +1,174 @@
+package dev.dertyp.routing
+
+import com.ucasoft.ktor.simpleCache.cacheOutput
+import dev.dertyp.ApiClient
+import dev.dertyp.Indexer
+import dev.dertyp.core.safeGet
+import dev.dertyp.core.sha256
+import dev.dertyp.data.InsertableImage
+import dev.dertyp.db.ArtistTable
+import dev.dertyp.dbQuery
+import dev.dertyp.services.ImageService
+import dev.dertyp.services.metadata.MetadataService
+import io.github.smiley4.ktoropenapi.get
+import io.github.smiley4.ktoropenapi.route
+import io.ktor.http.*
+import io.ktor.server.application.*
+import io.ktor.server.response.*
+import io.ktor.server.routing.*
+import io.ktor.server.sse.*
+import io.ktor.utils.io.*
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.launch
+import org.jetbrains.exposed.sql.update
+import java.util.*
+import kotlin.concurrent.atomics.ExperimentalAtomicApi
+import kotlin.time.Duration
+
+@OptIn(ExperimentalAtomicApi::class)
+fun Route.metadata(
+    imageService: ImageService,
+    environment: ApplicationEnvironment,
+    indexer: Indexer,
+) {
+    route("/metadata/{metadataProvider}") {
+        route("/fetchArtistImages", HttpMethod.Get, {
+            request {
+                pathParameter<MetadataService.Companion.MetadataType>("metadataProvider")
+            }
+        }) {
+            sse {
+                if (indexer.isActive.load()) {
+                    call.respond(HttpStatusCode.Conflict, "Index is running")
+                    return@sse
+                }
+
+                val metadataProviderString = call.parameters["metadataProvider"]
+                if (metadataProviderString == null) return@sse call.respond(HttpStatusCode.BadRequest)
+
+                val metadataProvider = MetadataService.Companion.MetadataType.valueOf(metadataProviderString)
+
+                val service = MetadataService.getMetadataService(metadataProvider, environment)
+
+                if (!MetadataService.isFetching.compareAndSet(expectedValue = false, newValue = true)) {
+                    call.respond(HttpStatusCode.Conflict, "Fetching is already in progress.")
+                    return@sse
+                }
+
+                val artists = dbQuery {
+                    ArtistTable
+                        .select(ArtistTable.id, ArtistTable.name, ArtistTable.image)
+                        .where { ArtistTable.image.isNull() }
+                        .map { Pair(it[ArtistTable.id].value, it[ArtistTable.name]) }
+                }
+
+                val artistChannel = Channel<Pair<UUID, String>>(Channel.UNLIMITED)
+
+                try {
+                    coroutineScope {
+                        repeat(1) {
+                            launch {
+                                for ((id, name) in artistChannel) {
+                                    send("Fetching image for: $name")
+                                    val response = service.searchArtists(name)
+                                    val artist = response.sortedByDescending { it.popularity }.firstOrNull { artist ->
+                                        artist.name.replace(".", "")
+                                            .equals(name.replace(".", ""), ignoreCase = true)
+                                    }
+                                    if (artist == null) {
+                                        send("No artist with name \"$name\" ${response.joinToString(", ") { it.name }}")
+                                        continue
+                                    }
+
+                                    val images = artist.images()
+                                    val image = images.maxByOrNull { it.width }
+                                    if (image == null) {
+                                        send("No image for \"$name\" $artist ${images.joinToString(", ")}")
+                                        continue
+                                    }
+
+                                    val imageBytes = ApiClient.instance.safeGet<ByteArray>(image.url)
+                                    if (imageBytes == null) {
+                                        send("No image (null) for \"$name\"")
+                                        continue
+                                    }
+
+                                    val imageId = imageService.createBatch(
+                                        listOf(
+                                            InsertableImage(
+                                                data = imageBytes,
+                                                imageHash = imageBytes.sha256(),
+                                                origin = image.url
+                                            )
+                                        )
+                                    ).firstOrNull()
+                                    if (imageId == null) {
+                                        send("Error inserting image for \"$name\": ${image.url} (${imageBytes.sha256()})")
+                                        continue
+                                    }
+
+                                    val updates = dbQuery {
+                                        ArtistTable.update({ ArtistTable.id eq id }) {
+                                            it[ArtistTable.image] = imageId
+                                        }
+                                    }
+
+                                    if (updates == 1) send("Updated \"$name\" with an image.")
+                                    else send("Something went wrong. $name")
+                                }
+                            }
+                        }
+                        for (artist in artists) {
+                            artistChannel.send(artist)
+                            ensureActive()
+                        }
+
+                        artistChannel.close()
+                    }
+
+                    send("Loading artist images done.")
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: ClosedWriteChannelException) {
+                } catch (e: Throwable) {
+                    e.printStackTrace()
+                } finally {
+                    MetadataService.isFetching.store(false)
+                }
+            }
+        }
+        cacheOutput(Duration.INFINITE) {
+            route("/imageUrl") {
+                get("/byTrackId/{trackId}", {
+                    request {
+                        pathParameter<String>("trackId") {
+                            description = "The service track ID."
+                        }
+                    }
+                }) {
+                    val metadataProviderString = call.parameters["metadataProvider"]
+                    if (metadataProviderString == null) return@get call.respond(HttpStatusCode.BadRequest)
+
+                    val metadataProvider = MetadataService.Companion.MetadataType.valueOf(metadataProviderString)
+
+                    val service = MetadataService.getMetadataService(metadataProvider, environment)
+
+                    val trackId = call.parameters["trackId"]
+                    if (trackId == null) return@get call.respond(HttpStatusCode.BadRequest)
+
+                    val albumId = service.getAlbumIdByTrackId(trackId)
+                    if (albumId == null) return@get call.respond(HttpStatusCode.NotFound)
+
+                    val images = service.getImageUrlByAlbumId(albumId)
+                    if (images.isEmpty()) return@get call.respond(HttpStatusCode.NotFound)
+
+                    val image = images.maxBy { it.height }
+
+                    call.respond(image)
+                }
+            }
+        }
+    }
+}

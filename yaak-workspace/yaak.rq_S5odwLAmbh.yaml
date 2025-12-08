@@ -2,7 +2,7 @@ type: http_request
 model: http_request
 id: rq_S5odwLAmbh
 createdAt: 2025-10-14T19:25:16.449204681
-updatedAt: 2025-10-24T21:12:25.385432254
+updatedAt: 2025-12-08T21:36:40.905405224
 workspaceId: wk_9dbKacQT4H
 folderId: null
 authentication: {}
