@@ -6,6 +6,7 @@ import dev.dertyp.db.ImageTable
 import dev.dertyp.db.SyncServiceTable
 import dev.dertyp.routing.*
 import dev.dertyp.services.*
+import dev.dertyp.services.tdn.DownloadService
 import dev.dertyp.services.tdn.TdnService
 import dev.hayden.KHealth
 import io.github.smiley4.ktoropenapi.get
@@ -13,6 +14,9 @@ import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.transactions.transaction
@@ -29,6 +33,11 @@ fun Application.configureDatabases(database: Database, jwtService: JwtService) {
     val indexer = Indexer(songService, imageService, playlistService)
 
     val tdnService = TdnService(indexer)
+    val downloadService = DownloadService(tdnService)
+
+    CoroutineScope(Dispatchers.IO).launch {
+        downloadService.startService()
+    }
 
     transaction {
         SchemaUtils.create(SyncServiceTable)

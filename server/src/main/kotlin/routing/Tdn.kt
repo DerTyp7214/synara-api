@@ -65,6 +65,8 @@ fun Route.tdn(service: TdnService) {
                 return@post
             }
 
+            if (!service.authorized()) return@post call.respond(HttpStatusCode.Unauthorized)
+
             val bodyUrls = call.receive<DlBody>().urls
             val pathUrls = call.parameters.getAll("url") ?: emptyList()
 
@@ -123,6 +125,8 @@ fun Route.tdn(service: TdnService) {
                 call.respond(HttpStatusCode.Conflict, "Download is already running.")
                 return@post
             }
+
+            if (!service.authorized()) return@post call.respond(HttpStatusCode.Unauthorized)
 
             val type = call.parameters["type"]?.let { TdnFavoriteType.valueOf(it) }
             if (type == null) return@post call.respond(HttpStatusCode.BadRequest)

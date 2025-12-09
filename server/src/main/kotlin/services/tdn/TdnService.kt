@@ -4,6 +4,7 @@ import dev.dertyp.Indexer
 import dev.dertyp.core.*
 import dev.dertyp.services.Service
 import kotlinx.coroutines.*
+import kotlinx.serialization.Serializable
 import java.io.InputStreamReader
 import java.nio.file.Path
 import java.time.Instant
@@ -22,7 +23,16 @@ enum class TdnFavoriteType {
     videos
 }
 
-data class ProcessExecutionResult(val exitCode: Int, val fullOutput: String, val error: String)
+@Serializable
+data class ProcessExecutionResult(val exitCode: Int, val fullOutput: String, val error: String) {
+    companion object {
+        val EMPTY = ProcessExecutionResult(-2, "", "")
+    }
+
+    fun successful(): Boolean = exitCode == 0
+    fun failed(): Boolean = exitCode == 1
+    fun unknown(): Boolean = exitCode == -2
+}
 
 @OptIn(ExperimentalAtomicApi::class)
 class TdnService(private val indexer: Indexer) : Service() {
@@ -37,135 +47,147 @@ class TdnService(private val indexer: Indexer) : Service() {
         logProxy: suspend (String) -> Unit
     ): Pair<ProcessExecutionResult, List<Path>> {
         val startTime = Instant.now().toEpochMilli()
-
         val pathLines = mutableListOf<String>()
-        var result = executeTdn(command, aliveCheck) {
-            if (!aliveCheck()) throw ClientCloseException()
-            logProxy(it)
-        }
 
-        if (indexer.tracksPath != null) {
-            val paths = Path(indexer.tracksPath).getModifiedSince(startTime)
+        val paths = mutableListOf<Path>()
+        val songPaths = mutableListOf<Path>()
+        val playlistPaths = mutableListOf<Path>()
 
-            for (path in paths) {
-                pathLines.add(path.absolutePathString())
+        var result: ProcessExecutionResult = ProcessExecutionResult.EMPTY
+
+        try {
+            result = executeTdn(command, aliveCheck) {
+                if (!aliveCheck()) throw ClientCloseException()
+                logProxy(it)
             }
-        }
 
-        if (indexer.playlistsPath != null) {
-            val paths = Path(indexer.playlistsPath).getModifiedSince(startTime)
+            if (indexer.tracksPath != null) {
+                val paths = Path(indexer.tracksPath).getModifiedSince(startTime)
 
-            for (path in paths) {
-                pathLines.add(path.absolutePathString())
-            }
-        }
-
-        logProxy("Found ${pathLines.size} files since the download started.")
-
-        val paths = pathLines.map { Path(it) }.filter { it.exists() }.toMutableList()
-
-        val pathAlternation =
-            "(${indexer.playlistsPath}|${indexer.albumsPath})"
-
-        val playlistRegex =
-            Regex("${pathAlternation}/([^/]+?)/_[^/]+?\\.m3u", RegexOption.DOT_MATCHES_ALL)
-
-        playlistRegex.findAll(result.fullOutput.oneLine()).forEach { matchResult ->
-            val fullMatch = matchResult.value
-
-            try {
-                val path = Path(fullMatch)
-                if (path.exists()) paths.add(path)
-                else {
-                    val siblings = path.parent.listDirectoryEntries()
-                    val path = siblings.find { it.extension == indexer.playlistExtension }
-                    if (path?.exists() == true) paths.add(path)
-                    else logger.info("PlaylistPath $path ($fullMatch) does not exist")
-                }
-            } catch (e: Throwable) {
-                e.printStackTrace()
-            }
-        }
-
-        for (path in paths.filter { it.extension == indexer.playlistExtension }) {
-            if (!path.exists()) continue
-            for (line in path.readLines()) {
-                try {
-                    val songPath = path.resolveRelativeAbsolute(line)
-                    if (songPath.exists()) paths.add(songPath)
-                } catch (_: Throwable) {
+                for (path in paths) {
+                    pathLines.add(path.absolutePathString())
                 }
             }
-        }
 
-        val songPaths = paths
-            .filter { it.extension == indexer.audioExtension }
-            .distinctBy { it.absolutePathString() }
-        val playlistPaths = paths
-            .filter { it.isInside(indexer.playlistsPath ?: it.parent.absolutePathString()) }
-            .filter { it.extension == indexer.playlistExtension }
-            .distinctBy { it.absolutePathString() }
+            if (indexer.playlistsPath != null) {
+                val paths = Path(indexer.playlistsPath).getModifiedSince(startTime)
 
-        if (result.exitCode == 0 && indexer.isActive.compareAndSet(expectedValue = false, newValue = true)) {
-            if (songPaths.isEmpty()) indexer.start(logProxy)
-            else indexer.start(songPaths, playlistPaths, stdout = logProxy)
-            indexer.isActive.store(false)
+                for (path in paths) {
+                    pathLines.add(path.absolutePathString())
+                }
+            }
 
-            logProxy("Took ${currentTry + 1} tr${if (currentTry == 0) "y" else "ies"} to download.")
-        } else if (result.exitCode == 1 && indexer.playlistsPath != null) {
+            logProxy("Found ${pathLines.size} files since the download started.")
+
+            paths.addAll(pathLines.map { Path(it) }.filter { it.exists() }.toMutableList())
+
             val pathAlternation =
                 "(${indexer.playlistsPath}|${indexer.albumsPath})"
 
-            val rootPath = Path(indexer.playlistsPath).parent.absolute()
+            val playlistRegex =
+                Regex("${pathAlternation}/([^/]+?)/_[^/]+?\\.m3u", RegexOption.DOT_MATCHES_ALL)
 
-            val errorRegex = Regex(
-                "FileNotFoundError:\\s+(\\[.+?])\\s+No\\s+such\\s+file\\s+or\\s+directory:\\s+'" +
-                        "(.+?)'\\s+->\\s+['\"]$pathAlternation/([^/]+?)/(.+?)['\"]"
-            )
-
-            val matchResult = errorRegex.find(result.fullOutput.oneLine())
-            if (matchResult != null) {
-                val relativePathString = matchResult.groupValues[2]
-                val fullPathString =
-                    "${matchResult.groupValues[3]}/${matchResult.groupValues[4]}/${matchResult.groupValues[5]}"
+            playlistRegex.findAll(result.fullOutput.oneLine()).forEach { matchResult ->
+                val fullMatch = matchResult.value
 
                 try {
-                    val fullPath = Path(fullPathString)
-                    val brokenFilePath = fullPath.resolveRelativeAbsolute(relativePathString)
-
-                    if (currentTry < maxRetries && brokenFilePath.isInside(rootPath)) {
-                        if (brokenFilePath.deleteIfExists()) {
-                            logProxy("Deleted file $brokenFilePath")
-                            logger.info("Deleted file $brokenFilePath")
-                        } else {
-                            logProxy("Could not delete file $brokenFilePath")
-                            logger.info("Could not delete file $brokenFilePath")
-                        }
-
-                        logProxy("Retrying (${currentTry + 1}/$maxRetries)")
-
-                        (0 until 10).forEach { i ->
-                            logProxy("Waiting for 500ms (${i + 1}/10)")
-                            if (!aliveCheck()) throw ClientCloseException()
-                            delay(500)
-                        }
-
-                        val (newResult, newPaths) = collectDownloadedFiles(
-                            command,
-                            maxRetries,
-                            currentTry + 1,
-                            aliveCheck,
-                            logProxy
-                        )
-
-                        result = newResult
-                        paths.addAll(newPaths)
-                    } else if (!brokenFilePath.isInside(rootPath)) {
-                        logProxy("File ($brokenFilePath) not inside $rootPath")
+                    val path = Path(fullMatch)
+                    if (path.exists()) paths.add(path)
+                    else {
+                        val siblings = path.parent.listDirectoryEntries()
+                        val path = siblings.find { it.extension == indexer.playlistExtension }
+                        if (path?.exists() == true) paths.add(path)
+                        else logger.info("PlaylistPath $path ($fullMatch) does not exist")
                     }
-                } catch (_: Throwable) {
+                } catch (e: Throwable) {
+                    e.printStackTrace()
                 }
-            } else logger.info(errorRegex.toString())
+            }
+
+            for (path in paths.filter { it.extension == indexer.playlistExtension }) {
+                if (!path.exists()) continue
+                for (line in path.readLines()) {
+                    try {
+                        val songPath = path.resolveRelativeAbsolute(line)
+                        if (songPath.exists()) paths.add(songPath)
+                    } catch (_: Throwable) {
+                    }
+                }
+            }
+
+            songPaths.addAll(
+                paths
+                    .filter { it.extension == indexer.audioExtension }
+                    .distinctBy { it.absolutePathString() }
+            )
+
+            playlistPaths.addAll(
+                paths
+                    .filter { it.isInside(indexer.playlistsPath ?: it.parent.absolutePathString()) }
+                    .filter { it.extension == indexer.playlistExtension }
+                    .distinctBy { it.absolutePathString() }
+            )
+
+            if (result.exitCode == 1 && indexer.playlistsPath != null) {
+                val pathAlternation =
+                    "(${indexer.playlistsPath}|${indexer.albumsPath})"
+
+                val rootPath = Path(indexer.playlistsPath).parent.absolute()
+
+                val errorRegex = Regex(
+                    "FileNotFoundError:\\s+(\\[.+?])\\s+No\\s+such\\s+file\\s+or\\s+directory:\\s+'" +
+                            "(.+?)'\\s+->\\s+['\"]$pathAlternation/([^/]+?)/(.+?)['\"]"
+                )
+
+                val matchResult = errorRegex.find(result.fullOutput.oneLine())
+                if (matchResult != null) {
+                    val relativePathString = matchResult.groupValues[2]
+                    val fullPathString =
+                        "${matchResult.groupValues[3]}/${matchResult.groupValues[4]}/${matchResult.groupValues[5]}"
+
+                    try {
+                        val fullPath = Path(fullPathString)
+                        val brokenFilePath = fullPath.resolveRelativeAbsolute(relativePathString)
+
+                        if (currentTry < maxRetries && brokenFilePath.isInside(rootPath)) {
+                            if (brokenFilePath.deleteIfExists()) {
+                                logProxy("Deleted file $brokenFilePath")
+                                logger.info("Deleted file $brokenFilePath")
+                            } else {
+                                logProxy("Could not delete file $brokenFilePath")
+                                logger.info("Could not delete file $brokenFilePath")
+                            }
+
+                            logProxy("Retrying (${currentTry + 1}/$maxRetries)")
+
+                            (0 until 10).forEach { i ->
+                                logProxy("Waiting for 500ms (${i + 1}/10)")
+                                if (!aliveCheck()) throw ClientCloseException()
+                                delay(500)
+                            }
+                        } else if (!brokenFilePath.isInside(rootPath)) {
+                            logProxy("File ($brokenFilePath) not inside $rootPath")
+                        }
+                    } catch (_: Throwable) {
+                    }
+                } else logger.info(errorRegex.toString())
+
+                val (newResult, newPaths) = collectDownloadedFiles(
+                    command,
+                    maxRetries,
+                    currentTry + 1,
+                    aliveCheck,
+                    logProxy
+                )
+
+                result = newResult
+                paths.addAll(newPaths)
+            }
+        } finally {
+            if (songPaths.isEmpty()) indexer.queue(logProxy).await()
+            else indexer.queue(songPaths, playlistPaths, stdout = logProxy).await()
+
+            logProxy("Took ${currentTry + 1} tr${if (currentTry == 0) "y" else "ies"} to download.")
         }
 
         return Pair(result, paths)
@@ -203,10 +225,17 @@ class TdnService(private val indexer: Indexer) : Service() {
         return executeTdn(command, aliveCheck, onLiveOutput)
     }
 
+    suspend fun authorized(): Boolean {
+        val command = mutableListOf("tdn", "login")
+        val result = executeTdn(command, { true })
+
+        return result.fullOutput.contains("You are logged in")
+    }
+
     private suspend fun executeTdn(
         command: MutableList<String>,
         aliveCheck: suspend () -> Boolean,
-        onLineReceived: suspend (String) -> Unit
+        onLineReceived: suspend (String) -> Unit = {}
     ): ProcessExecutionResult {
         if (command.isEmpty() || (command[0] != "tdn" && command[0] != "python3")) {
             return ProcessExecutionResult(-1, "Error: Command must start with 'tdn'.", "")

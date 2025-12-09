@@ -11,8 +11,9 @@ import dev.dertyp.services.SongService
 import io.ktor.server.application.*
 import io.ktor.server.routing.*
 import io.ktor.util.logging.*
-import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.*
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import org.jaudiotagger.audio.AudioFile
 import org.jaudiotagger.audio.AudioFileIO
 import org.jaudiotagger.tag.FieldKey
@@ -54,6 +55,20 @@ class Indexer(
     @OptIn(ExperimentalAtomicApi::class)
     val isActive = AtomicBoolean(false)
 
+    suspend fun queue(stdout: suspend (String) -> Unit) = coroutineScope {
+        val log = { line: String -> async { stdout(line) } }
+        if (tracksPath == null || playlistsPath == null)
+            return@coroutineScope log("audio paths are not configured")
+
+        val songRootPath = Path(tracksPath)
+        val playlistRootPath = Path(playlistsPath)
+
+        return@coroutineScope queue(
+            listOf(songRootPath, *secondaryTracksPaths.toTypedArray()),
+            listOf(playlistRootPath), stdout
+        )
+    }
+
     suspend fun start(stdout: suspend (String) -> Unit) = coroutineScope {
         val log = { line: String -> async { stdout(line) } }
         if (tracksPath == null || playlistsPath == null)
@@ -68,6 +83,46 @@ class Indexer(
         )
     }
 
+    private val queueMutex = Mutex()
+    private val indexQueue = mutableListOf<IndexQueueItem>()
+
+    private data class IndexQueueItem(
+        val songPaths: List<Path>,
+        val playlistPaths: List<Path>,
+        val stdout: suspend (String) -> Unit
+    )
+
+    @OptIn(ExperimentalAtomicApi::class)
+    suspend fun queue(
+        songPaths: List<Path>,
+        playlistPaths: List<Path>,
+        stdout: suspend (String) -> Unit,
+    ): Deferred<Unit> {
+        queueMutex.withLock {
+            indexQueue.add(IndexQueueItem(songPaths, playlistPaths, stdout))
+            indexQueue.isNotEmpty()
+        }
+
+        return CoroutineScope(Dispatchers.IO + SupervisorJob()).async {
+            startIndexer()
+        }
+    }
+
+    @OptIn(ExperimentalAtomicApi::class)
+    private suspend fun startIndexer() {
+        if (!isActive.compareAndSet(expectedValue = false, newValue = true)) return
+
+        while (queueMutex.withLock { indexQueue.isNotEmpty() }) {
+            val item = queueMutex.withLock { indexQueue.removeFirst() }
+
+            start(item.songPaths, item.playlistPaths, item.stdout)
+        }
+
+        isActive.store(false)
+
+        if (queueMutex.withLock { indexQueue.isNotEmpty() }) startIndexer()
+    }
+
     @OptIn(ExperimentalTime::class)
     suspend fun start(
         songPaths: List<Path>,
@@ -76,7 +131,14 @@ class Indexer(
     ) = coroutineScope {
         AudioFileIO.logger.level = Level.WARNING
 
-        val log = { line: String -> async { stdout(line) } }
+        val log = { line: String ->
+            async {
+                try {
+                    stdout(line)
+                } catch (_: Throwable) {
+                }
+            }
+        }
 
         log("Starting Indexer").await()
 

@@ -1,6 +1,9 @@
 package dev.dertyp.core
 
+import kotlinx.coroutines.delay
 import java.io.Serializable
+import kotlin.concurrent.atomics.AtomicBoolean
+import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.math.ln
 import kotlin.math.pow
 import kotlin.time.TimedValue
@@ -53,4 +56,13 @@ suspend fun <T> logTimeSplitSuspend(label: String, block: suspend () -> T): T {
     println("Time Split (Suspend): | $label | took ${result.duration}")
 
     return result.value
+}
+
+@OptIn(ExperimentalAtomicApi::class)
+suspend fun AtomicBoolean.waitForChange(expected: Boolean = true) {
+    val pollIntervalMs = 100L
+
+    while (load() != expected) {
+        delay(pollIntervalMs)
+    }
 }
