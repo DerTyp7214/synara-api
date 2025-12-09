@@ -5,6 +5,7 @@ import dev.dertyp.ApiClient
 import dev.dertyp.Indexer
 import dev.dertyp.core.safeGet
 import dev.dertyp.core.sha256
+import dev.dertyp.core.toUUIDOrNull
 import dev.dertyp.data.InsertableImage
 import dev.dertyp.db.ArtistTable
 import dev.dertyp.dbQuery
@@ -33,12 +34,42 @@ fun Route.metadata(
     environment: ApplicationEnvironment,
     indexer: Indexer,
 ) {
-    route("/metadata/{metadataProvider}") {
-        route("/fetchArtistImages", HttpMethod.Get, {
+    route("/metadata/{metadataProvider}", {
+        request {
+            pathParameter<MetadataService.Companion.MetadataType>("metadataProvider")
+        }
+    }) {
+        get("/supported") {
+            val metadataProviderString = call.parameters["metadataProvider"]
+            if (metadataProviderString == null) return@get call.respond(HttpStatusCode.BadRequest)
+
+            val metadataProvider = MetadataService.Companion.MetadataType.valueOf(metadataProviderString)
+
+            val service = MetadataService.getMetadataService(metadataProvider, environment)
+
+            call.respond(service.supported())
+        }
+        get("/imageUrlById/{imageId}", {
             request {
-                pathParameter<MetadataService.Companion.MetadataType>("metadataProvider")
+                pathParameter<UUID>("imageId")
             }
         }) {
+            val imageId = call.parameters["imageId"]?.toUUIDOrNull()
+            if (imageId == null) return@get call.respond(HttpStatusCode.BadRequest)
+
+            val metadataProviderString = call.parameters["metadataProvider"]
+            if (metadataProviderString == null) return@get call.respond(HttpStatusCode.BadRequest)
+
+            val metadataProvider = MetadataService.Companion.MetadataType.valueOf(metadataProviderString)
+
+            val service = MetadataService.getMetadataService(metadataProvider, environment)
+
+            val imageUrl = service.getImageUrlByImageId(imageId)
+            if (imageUrl == null) return@get call.respond(HttpStatusCode.NotFound)
+
+            call.respond(imageUrl)
+        }
+        route("/fetchArtistImages", HttpMethod.Get) {
             sse {
                 if (indexer.isActive.load()) {
                     call.respond(HttpStatusCode.Conflict, "Index is running")

@@ -10,6 +10,9 @@ client:
 redis:
   host: ${REDIS_HOST:}
   port: ${REDIS_PORT:}
+imageCache:
+  url: ${IMAGE_CACHE_URL:}
+  token: ${IMAGE_CACHE_TOKEN:}
 jwt:
   issuer: ${JWT_ISSUER}
   audience: ${JWT_AUDIENCE}

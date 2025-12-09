@@ -11,6 +11,7 @@ import io.ktor.http.*
 import io.ktor.server.application.*
 import kotlinx.coroutines.delay
 import kotlinx.serialization.Serializable
+import java.util.*
 import kotlin.concurrent.atomics.AtomicBoolean
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.time.Duration.Companion.seconds
@@ -32,6 +33,7 @@ abstract class MetadataService(
     abstract suspend fun searchArtists(query: String, limit: Int = 50): List<Artist>
     abstract suspend fun getAlbumIdByTrackId(trackId: String): String?
     abstract suspend fun getImageUrlByAlbumId(albumId: String): List<Image>
+    abstract suspend fun getImageUrlByImageId(imageId: UUID): String?
 
     private var accessToken: Pair<AccessTokenResponse, Long>? = null
 
@@ -49,6 +51,7 @@ abstract class MetadataService(
         enum class MetadataType {
             tidal,
             spotify,
+            imageCache,
         }
 
         fun getMetadataService(type: MetadataType, environment: ApplicationEnvironment): MetadataService {
@@ -57,8 +60,13 @@ abstract class MetadataService(
             return when (type) {
                 MetadataType.tidal -> TidalService(environment)
                 MetadataType.spotify -> SpotifyService(environment)
+                MetadataType.imageCache -> ImageCacheService(environment)
             }
         }
+    }
+
+    open fun supported(): Boolean {
+        return true
     }
 
     protected open suspend fun getAccessToken(): AccessTokenResponse {

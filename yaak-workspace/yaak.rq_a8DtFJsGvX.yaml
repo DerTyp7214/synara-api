@@ -1,0 +1,38 @@
+type: http_request
+model: http_request
+id: rq_a8DtFJsGvX
+createdAt: 2025-12-09T14:10:20.842791879
+updatedAt: 2025-12-09T14:14:05.376087249
+workspaceId: wk_9dbKacQT4H
+folderId: fl_xqrmRv49Xr
+authentication: {}
+authenticationType: null
+body: {}
+bodyType: null
+description: '[object Object]'
+headers: []
+method: GET
+name: /imageUrlById
+sortPriority: 0.001
+url: ${[baseUrl]}/metadata/:metadataProvider/imageUrlById/:imageId
+urlParameters:
+- enabled: false
+  name: :metadataProvider
+  value: tidal
+  id: hUWFrZXs95
+- enabled: false
+  name: :metadataProvider
+  value: spotify
+  id: ntREHFtttf
+- enabled: true
+  name: :metadataProvider
+  value: imageCache
+  id: rATHUBf4u6
+- enabled: true
+  name: :imageId
+  value: 4b5491e7-3e10-4d1f-9d58-69579bbbce34
+  id: edBBPqeFte
+- enabled: true
+  name: ''
+  value: ''
+  id: r4GR0gKBeq

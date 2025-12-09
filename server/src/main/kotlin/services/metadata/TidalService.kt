@@ -11,6 +11,7 @@ import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.util.*
 import kotlinx.coroutines.delay
+import java.util.*
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.io.encoding.Base64
 import kotlin.time.Duration.Companion.seconds
@@ -212,5 +213,9 @@ class TidalService(
             println(response.bodyAsText())
             return listOf()
         }
+    }
+
+    override suspend fun getImageUrlByImageId(imageId: UUID): String? {
+        throw NotImplementedError("Not implemented for spotify!")
     }
 }

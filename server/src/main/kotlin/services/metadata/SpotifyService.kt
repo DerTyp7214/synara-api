@@ -9,6 +9,7 @@ import io.ktor.http.*
 import io.ktor.server.application.*
 import kotlinx.coroutines.delay
 import kotlinx.serialization.Serializable
+import java.util.*
 import kotlin.time.Duration.Companion.seconds
 
 class SpotifyService(
@@ -60,11 +61,15 @@ class SpotifyService(
     }
 
     override suspend fun getAlbumIdByTrackId(trackId: String): String? {
-        TODO("Not yet implemented")
+        throw NotImplementedError("Not implemented for spotify!")
     }
 
     override suspend fun getImageUrlByAlbumId(albumId: String): List<Image> {
-        TODO("Not yet implemented")
+        throw NotImplementedError("Not implemented for spotify!")
+    }
+
+    override suspend fun getImageUrlByImageId(imageId: UUID): String? {
+        throw NotImplementedError("Not implemented for spotify!")
     }
 
     @Serializable

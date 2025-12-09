@@ -10,10 +10,12 @@ import java.io.ByteArrayOutputStream
 import kotlin.io.path.Path
 import kotlin.io.path.readBytes
 
+fun Image.bytes(): ByteArray = Path(path).readBytes()
+
 fun Image.sized(size: Int): ByteArray {
     val outputStream = ByteArrayOutputStream()
 
-    val data = Path(path).readBytes()
+    val data = bytes()
 
     if (size == -1) return data
 
