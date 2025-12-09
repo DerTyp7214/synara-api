@@ -1,32 +1,4 @@
-FROM debian:bullseye-slim AS ffmpeg-builder
-
-ENV FFMPEG_VERSION 6.1.3
-
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends build-essential pkg-config wget tar zlib1g-dev ca-certificates nasm && \
-    rm -rf /var/lib/apt/lists/*
-
-WORKDIR /src
-RUN wget https://ffmpeg.org/releases/ffmpeg-${FFMPEG_VERSION}.tar.xz && \
-    tar xf ffmpeg-${FFMPEG_VERSION}.tar.xz
-
-WORKDIR /src/ffmpeg-${FFMPEG_VERSION}
-
-RUN ./configure \
-    --enable-shared \
-    --disable-static \
-    --enable-pic \
-    --enable-avutil \
-    --enable-avcodec \
-    --enable-avformat \
-    --enable-avdevice \
-    --enable-swscale \
-    --enable-swresample \
-    --disable-doc \
-    --disable-ffplay \
-    --extra-libs="-ldl -lm -lz -lrt"
-
-RUN make -j$(nproc) && make install
+FROM mwader/static-ffmpeg:6.1.3 AS ffmpeg-builder
 
 FROM amazoncorretto:25 AS runtime
 
@@ -39,11 +11,8 @@ RUN yum update -y && yum install -y python3.12 python3.12-pip libstdc++ zlib gli
 RUN ln -sf /usr/bin/python3.12 /usr/bin/python3
 RUN python3 -m pip install --break-system-packages --no-cache-dir tidal-dl-ng
 
-COPY --from=ffmpeg-builder /usr/local/lib/libav*.so* /usr/lib/
-COPY --from=ffmpeg-builder /usr/local/lib/libsw*.so* /usr/lib/
-
-COPY --from=ffmpeg-builder /usr/local/bin/ffmpeg /usr/bin/
-COPY --from=ffmpeg-builder /usr/local/bin/ffprobe /usr/bin/
+COPY --from=ffmpeg-builder /ffmpeg /usr/bin/
+COPY --from=ffmpeg-builder /ffprobe /usr/bin/
 
 ENV LD_LIBRARY_PATH="/usr/lib:/usr/local/lib:$LD_LIBRARY_PATH"
 
