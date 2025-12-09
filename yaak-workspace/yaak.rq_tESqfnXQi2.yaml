@@ -1,8 +1,8 @@
 type: http_request
 model: http_request
-id: rq_VcjYbg4BXV
-createdAt: 2025-10-24T21:12:23.382095699
-updatedAt: 2025-12-08T21:36:40.986778222
+id: rq_tESqfnXQi2
+createdAt: 2025-12-09T19:57:24.510720088
+updatedAt: 2025-12-09T20:05:02.591610407
 workspaceId: wk_9dbKacQT4H
 folderId: null
 authentication: {}
@@ -12,19 +12,19 @@ bodyType: null
 description: '[object Object]'
 headers: []
 method: GET
-name: /sync/me
-sortPriority: 11000.0
+name: /sync/get/liked/tracks
+sortPriority: 11000.001
 url: ${[baseUrl]}/sync/:service/get/liked/tracks
 urlParameters:
 - enabled: true
   name: :service
   value: tidal
   id: J2PTfXvIAX
-- enabled: false
+- enabled: true
   name: all
   value: 'true'
   id: 9xwcfzTAGG
 - enabled: true
   name: ''
   value: ''
-  id: W9mPzwGk95
+  id: ckuE6SvBvn

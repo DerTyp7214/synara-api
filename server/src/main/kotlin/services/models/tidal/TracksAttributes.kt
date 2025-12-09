@@ -3,8 +3,8 @@ package dev.dertyp.services.models.tidal
 import dev.dertyp.serializers.DurationSerializer
 import dev.dertyp.serializers.OffsetDateTimeSerializer
 import kotlinx.serialization.Serializable
-import kotlin.time.Duration
 import java.time.OffsetDateTime
+import kotlin.time.Duration
 
 @Serializable
 data class TracksAttributes(
@@ -12,8 +12,8 @@ data class TracksAttributes(
     val duration: Duration,
     val explicit: Boolean,
     val isrc: String,
-    val key: Key,
-    val keyScale: KeyScale,
+    val key: Key? = null,
+    val keyScale: KeyScale? = null,
     val mediaTags: List<String>,
     val popularity: Double,
     val title: String,

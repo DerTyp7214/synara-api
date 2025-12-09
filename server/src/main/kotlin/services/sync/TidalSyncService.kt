@@ -103,7 +103,7 @@ class TidalSyncService(
             HttpStatusCode.TooManyRequests -> {
                 logger.warn("[getLikedSongs]: Too many requests, waiting 10 seconds $cursor")
                 delay(10.seconds)
-                return getLikedSongs(cursor)
+                return getLikedSongs(cursor, continueRequest)
             }
 
             else -> println("error: ${response.status}")
@@ -133,7 +133,7 @@ class TidalSyncService(
             if (body.links.meta?.nextCursor != null && continueRequest(likedSongs)) {
                 logger.info("Fetching with cursor: ${body.links.meta.nextCursor}")
                 delay(500.milliseconds)
-                emitAll(getLikedSongs(body.links.meta.nextCursor))
+                emitAll(getLikedSongs(body.links.meta.nextCursor, continueRequest))
             }
         }
     }
