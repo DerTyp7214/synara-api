@@ -27,6 +27,7 @@ import org.jetbrains.exposed.sql.update
 import java.util.*
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.days
 
 @OptIn(ExperimentalAtomicApi::class)
 fun Route.metadata(
@@ -49,25 +50,27 @@ fun Route.metadata(
 
             call.respond(service.supported())
         }
-        get("/imageUrlById/{imageId}", {
-            request {
-                pathParameter<UUID>("imageId")
+        cacheOutput(1.days) {
+            get("/imageUrlById/{imageId}", {
+                request {
+                    pathParameter<UUID>("imageId")
+                }
+            }) {
+                val imageId = call.parameters["imageId"]?.toUUIDOrNull()
+                if (imageId == null) return@get call.respond(HttpStatusCode.BadRequest)
+
+                val metadataProviderString = call.parameters["metadataProvider"]
+                if (metadataProviderString == null) return@get call.respond(HttpStatusCode.BadRequest)
+
+                val metadataProvider = MetadataService.Companion.MetadataType.valueOf(metadataProviderString)
+
+                val service = MetadataService.getMetadataService(metadataProvider, environment)
+
+                val imageUrl = service.getImageUrlByImageId(imageId)
+                if (imageUrl == null) return@get call.respond(HttpStatusCode.NotFound)
+
+                call.respond(imageUrl)
             }
-        }) {
-            val imageId = call.parameters["imageId"]?.toUUIDOrNull()
-            if (imageId == null) return@get call.respond(HttpStatusCode.BadRequest)
-
-            val metadataProviderString = call.parameters["metadataProvider"]
-            if (metadataProviderString == null) return@get call.respond(HttpStatusCode.BadRequest)
-
-            val metadataProvider = MetadataService.Companion.MetadataType.valueOf(metadataProviderString)
-
-            val service = MetadataService.getMetadataService(metadataProvider, environment)
-
-            val imageUrl = service.getImageUrlByImageId(imageId)
-            if (imageUrl == null) return@get call.respond(HttpStatusCode.NotFound)
-
-            call.respond(imageUrl)
         }
         route("/fetchArtistImages", HttpMethod.Get) {
             sse {
