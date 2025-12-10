@@ -26,6 +26,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      redis-cache:
+        condition: service_healthy
     restart: unless-stopped
   db:
     image: postgres
@@ -48,6 +50,9 @@ services:
     volumes:
       - redis_data:/data
     command: redis-server --appendonly yes --maxmemory 2gb --maxmemory-policy allkeys-lfu
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 1s
     restart: unless-stopped
 
 volumes:
