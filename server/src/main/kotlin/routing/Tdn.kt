@@ -90,10 +90,10 @@ fun Route.tdn(service: DownloadService) {
 
                 coroutineScope {
                     val job = launch {
-                        var index = 1
+                        var index = 0
                         var lastEntry: DownloadQueueEntry? = null
 
-                        val queueSize = service.queueSize()
+                        val queueSize = service.queueSize() + 1
                         service.logs().collect { line ->
                             val indexLine = "${index.zeroPad(queueSize.digitCount())}/${queueSize} "
 
@@ -148,10 +148,10 @@ fun Route.tdn(service: DownloadService) {
 
                 coroutineScope {
                     val job = launch {
-                        var index = 1
+                        var index = 0
                         var lastEntry: DownloadQueueEntry? = null
 
-                        val queueSize = service.queueSize()
+                        val queueSize = service.queueSize() + 1
                         service.logs().collect { line ->
                             val indexLine = "${index.zeroPad(queueSize.digitCount())}/${queueSize} "
 
