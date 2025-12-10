@@ -13,19 +13,24 @@ import io.ktor.server.routing.*
 import io.ktor.util.logging.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.withPermit
 import org.jaudiotagger.audio.AudioFile
 import org.jaudiotagger.audio.AudioFileIO
 import org.jaudiotagger.tag.FieldKey
 import java.nio.file.Path
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
+import java.util.*
+import java.util.concurrent.ConcurrentHashMap
 import java.util.logging.Level
 import kotlin.concurrent.atomics.AtomicBoolean
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.io.path.*
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.DurationUnit
 import kotlin.time.ExperimentalTime
 
 class Indexer(
@@ -155,7 +160,13 @@ class Indexer(
             }s)"
         ).await()
 
+        log("Read songs from disc.").await()
+        val readStart = Clock.System.now()
+
         val (images, albums) = groupByAlbum(songs)
+
+        val readDuration = Clock.System.now().minus(readStart).toString(DurationUnit.SECONDS)
+        log("Reading songs from disc took $readDuration seconds.").await()
 
         log("Saving covers to database.").await()
 
@@ -165,9 +176,18 @@ class Indexer(
 
         log("Grouping songs by albums.").await()
 
-        val songResult = songService.createBatch(albums.entries.map { (album, songs) ->
+        val groupedSongs = albums.entries.map { (album, songs) ->
             songs.map { audioFile -> insertableSongFromFile(audioFile, album) }
-        }.flatten())
+        }.flatten()
+
+        log("Insert songs.").await()
+        val insertStart = Clock.System.now()
+
+        val songResult = songService.createBatch(groupedSongs)
+
+        val insertDuration = Clock.System.now().minus(insertStart).toString(DurationUnit.SECONDS)
+
+        log("Inserting songs took $insertDuration seconds.").await()
 
         val totalSize = songResult.values.fold(0L) { acc, song -> acc + song.fileSize }
 
@@ -210,55 +230,61 @@ class Indexer(
         ).size
     }
 
-    private fun groupByAlbum(files: List<Path>): Pair<Map<String, InsertableImage>, Map<InsertableAlbum, List<AudioFile>>> {
-        val map = mutableMapOf<InsertableAlbum, MutableList<AudioFile>>()
-        val images = mutableMapOf<String, InsertableImage>()
+    private suspend fun groupByAlbum(files: List<Path>): Pair<Map<String, InsertableImage>, Map<InsertableAlbum, List<AudioFile>>> =
+        coroutineScope {
+            val semaphore = Semaphore(2)
 
-        for (file in files.filter { it.extension == audioExtension }) {
-            try {
-                val audioFile = AudioFileIO.read(file.toFile())
+            val map = ConcurrentHashMap<InsertableAlbum, MutableList<AudioFile>>()
+            val images = ConcurrentHashMap<String, InsertableImage>()
 
-                val cover = audioFile.coverImage
-                val hash = cover?.sha256()
-                if (hash != null && !images.containsKey(hash)) images.put(
-                    hash, InsertableImage(
-                        data = cover,
-                        imageHash = hash,
-                        origin = file.absolutePathString()
-                    )
-                )
+            files.filter { it.extension == audioExtension }.map { file ->
+                async(Dispatchers.IO) {
+                    semaphore.withPermit {
+                        try {
+                            val audioFile = AudioFileIO.read(file.toFile())
 
-                val name = audioFile.album ?: audioFile.title
-                val artists = audioFile.albumArtists.ifEmpty { audioFile.artists }
-                val songCount = audioFile.songCount ?: 0
-                val year = audioFile.year
+                            val cover = audioFile.coverImage
+                            val hash = cover?.sha256()
+                            if (hash != null) images.computeIfAbsent(hash) {
+                                InsertableImage(
+                                    data = cover,
+                                    imageHash = hash,
+                                    origin = file.absolutePathString()
+                                )
+                            }
 
-                if (name == null) continue
+                            val name = audioFile.album ?: audioFile.title
+                            val artists = audioFile.albumArtists.ifEmpty { audioFile.artists }
+                            val songCount = audioFile.songCount ?: 0
+                            val year = audioFile.year
 
-                val releaseDate = try {
-                    LocalDate.parse(year!!, DateTimeFormatter.ISO_LOCAL_DATE)
-                } catch (_: Exception) {
-                    null
+                            if (name == null) return@withPermit
+
+                            val releaseDate = try {
+                                LocalDate.parse(year!!, DateTimeFormatter.ISO_LOCAL_DATE)
+                            } catch (_: Exception) {
+                                null
+                            }
+
+                            val album = InsertableAlbum(
+                                name = name,
+                                artists = artists,
+                                releaseDate = releaseDate,
+                                coverHash = hash,
+                                songCount = songCount
+                            )
+
+                            val albumList = map.computeIfAbsent(album) { Collections.synchronizedList(mutableListOf()) }
+                            albumList.add(audioFile)
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                        }
+                    }
                 }
+            }.awaitAll()
 
-                val album = InsertableAlbum(
-                    name = name,
-                    artists = artists,
-                    releaseDate = releaseDate,
-                    coverHash = hash,
-                    songCount = songCount
-                )
-
-                if (!map.hasAlbum(album)) map[album] = mutableListOf()
-
-                map[map.getAlbum(album)]?.add(audioFile)
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
+            Pair(images.toMap(), map.mapValues { (_, list) -> list.toList() }.toMap())
         }
-
-        return Pair(images, map)
-    }
 
     private fun insertableSongFromFile(
         audioFile: AudioFile,
@@ -294,7 +320,7 @@ class Indexer(
             artists = artists,
             album = album,
             duration = duration,
-            explicit = audioFile.file.nameWithoutExtension.endsWith("(Explicit)"),
+            explicit = audioFile.file.nameWithoutExtension.endsWith("(Explicit)") || title.endsWith("\uD83C\uDD74"),
             releaseDate = releaseDate,
             lyrics = lyrics,
             path = audioFile.file.absolutePath,

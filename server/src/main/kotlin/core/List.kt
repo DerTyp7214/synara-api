@@ -6,3 +6,11 @@ fun <T> MutableList<T>.removeFirst(condition: (T) -> Boolean): T? {
 
     return null
 }
+
+fun <K, V> List<Map.Entry<K, V>>.toMap(): Map<K, V> {
+    val map = mutableMapOf<K, V>()
+    forEach { entry ->
+        map[entry.key] = entry.value
+    }
+    return map
+}

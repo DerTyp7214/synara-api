@@ -3,6 +3,7 @@ package dev.dertyp.services
 import dev.dertyp.core.date
 import dev.dertyp.core.foreignKeyOn
 import dev.dertyp.core.rankedSearchQuery
+import dev.dertyp.core.toMap
 import dev.dertyp.data.*
 import dev.dertyp.db.*
 import dev.dertyp.dbQuery
@@ -11,6 +12,9 @@ import dev.dertyp.getISOFromDate
 import dev.dertyp.services.AlbumService.Companion.calculateAlbumStats
 import dev.dertyp.services.AlbumService.Companion.mapAlbum
 import dev.dertyp.services.ArtistService.Companion.mapArtist
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.time.Instant
@@ -396,8 +400,8 @@ class SongService(database: Database) : Service() {
         return@dbQuery existingSongMap
     }
 
-    suspend fun createBatch(songs: List<InsertableSong>): Map<UUID, InsertableSong> {
-        if (songs.isEmpty()) return emptyMap()
+    suspend fun createBatch(songs: List<InsertableSong>): Map<UUID, InsertableSong> = coroutineScope {
+        if (songs.isEmpty()) return@coroutineScope emptyMap()
 
         val uniqueArtistNames = songs.flatMap { it.artists }.distinct()
         val uniqueAlbums = songs.map { it.album }.distinctBy {
@@ -410,16 +414,61 @@ class SongService(database: Database) : Service() {
         }
         val uniqueCoverHashes = songs.map { it.coverHash }.distinct()
 
-        val artistIdMap: Map<String, UUID> = ArtistService.instance?.getOrBulkCreate(uniqueArtistNames) ?: emptyMap()
-        val albumIdMap: Map<InsertableAlbum, UUID> = AlbumService.instance?.getOrBulkCreate(uniqueAlbums) ?: emptyMap()
-        val imageIdMap: Map<String, UUID> =
-            ImageService.instance?.getCoverHashes(uniqueCoverHashes.filterNotNull()) ?: emptyMap()
+        val artistIdMap: Map<String, UUID> = ArtistService.instance?.let { service ->
+            uniqueArtistNames
+                .chunked(maxBatchSize)
+                .map { batch ->
+                    async {
+                        service.getOrBulkCreate(batch).entries
+                    }
+                }
+                .awaitAll()
+                .flatten()
+                .toMap()
+        } ?: emptyMap()
 
-        val existingSongMap = bulkFindExistingSongs(songs)
+        val albumIdMap: Map<InsertableAlbum, UUID> = AlbumService.instance?.let { service ->
+            uniqueAlbums
+                .chunked(maxBatchSize)
+                .map { batch ->
+                    async {
+                        service.getOrBulkCreate(batch).entries
+                    }
+                }
+                .awaitAll()
+                .flatten()
+                .toMap()
+        } ?: emptyMap()
+
+        val imageIdMap: Map<String, UUID> = ImageService.instance?.let { service ->
+            uniqueCoverHashes
+                .filterNotNull()
+                .chunked(maxBatchSize)
+                .map { batch ->
+                    async {
+                        service.getCoverHashes(batch).entries
+                    }
+                }
+                .awaitAll()
+                .flatten()
+                .toMap()
+        } ?: emptyMap()
+
+        val existingSongMap = songs
+            .chunked(maxBatchSize / 3)
+            .map { batch ->
+                async {
+                    logger.info("Checking ${batch.size} songs")
+                    bulkFindExistingSongs(batch).entries
+                }
+            }
+            .awaitAll()
+            .flatten()
+            .toMap()
 
         val newSongs = songs.filter { it !in existingSongMap.keys }
 
-        if (newSongs.isEmpty()) return emptyMap()
+        if (newSongs.isEmpty()) return@coroutineScope emptyMap()
 
         val uniqueSongs = newSongs
             .groupBy { song ->
@@ -484,6 +533,6 @@ class SongService(database: Database) : Service() {
             }
         }
 
-        return insertedSongs.toMap()
+        insertedSongs.toMap()
     }
 }
