@@ -1,15 +1,18 @@
 package dev.dertyp.routing
 
-import dev.dertyp.core.*
-import dev.dertyp.services.tdn.ProcessExecutionResult
-import dev.dertyp.services.tdn.TdnFavoriteType
-import dev.dertyp.services.tdn.TdnService
+import dev.dertyp.core.digitCount
+import dev.dertyp.core.isClientConnected
+import dev.dertyp.core.sendSafe
+import dev.dertyp.core.zeroPad
+import dev.dertyp.services.tdn.*
 import io.github.smiley4.ktoropenapi.post
 import io.github.smiley4.ktoropenapi.route
 import io.ktor.http.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 
@@ -19,12 +22,12 @@ data class DlBody(
 )
 
 @OptIn(ExperimentalAtomicApi::class)
-fun Route.tdn(service: TdnService) {
+fun Route.tdn(service: DownloadService) {
     route("/tdn", {
         tags("tdn")
     }) {
         post("login", {}) {
-            if (!service.isDownloadActive.compareAndSet(expectedValue = false, newValue = true)) {
+            if (!service.tdnService.isDownloadActive.compareAndSet(expectedValue = false, newValue = true)) {
                 call.respond(
                     HttpStatusCode.Conflict,
                     "Download is already running. (If you just closed one, please wait a few seconds)"
@@ -38,11 +41,11 @@ fun Route.tdn(service: TdnService) {
             call.response.header("X-Accel-Buffering", "no")
 
             call.respondBytesWriter(ContentType.Text.EventStream) {
-                service.login({ isClientConnected() }) {
+                service.tdnService.login({ isClientConnected() }) {
                     sendSafe(it)
                 }
 
-                service.isDownloadActive.store(false)
+                service.tdnService.isDownloadActive.store(false)
             }
         }
 
@@ -57,15 +60,7 @@ fun Route.tdn(service: TdnService) {
                 body<DlBody>()
             }
         }) {
-            if (!service.isDownloadActive.compareAndSet(expectedValue = false, newValue = true)) {
-                call.respond(
-                    HttpStatusCode.Conflict,
-                    "Download is already running. (If you just closed one, please wait a few seconds)"
-                )
-                return@post
-            }
-
-            if (!service.authorized()) return@post call.respond(HttpStatusCode.Unauthorized)
+            if (!service.tdnService.authorized()) return@post call.respond(HttpStatusCode.Unauthorized)
 
             val bodyUrls = call.receive<DlBody>().urls
             val pathUrls = call.parameters.getAll("url") ?: emptyList()
@@ -78,7 +73,6 @@ fun Route.tdn(service: TdnService) {
                     null
                 }
             }
-            if (urls.isEmpty()) return@post call.respond(HttpStatusCode.BadRequest)
 
             call.response.header(HttpHeaders.ContentType, ContentType.Text.EventStream.toString())
             call.response.header(HttpHeaders.CacheControl, "no-cache")
@@ -88,26 +82,40 @@ fun Route.tdn(service: TdnService) {
             val maxRetries = call.parameters["maxRetries"]?.toIntOrNull() ?: 5
 
             call.respondBytesWriter(ContentType.Text.EventStream) {
-                val results = mutableListOf<ProcessExecutionResult>()
+                service.addToQueue(*urls.map {
+                    UrlDownloadQueueEntry(url = it.toString(), maxRetries = maxRetries)
+                }.toTypedArray())
 
-                for (url in urls) {
-                    if (isClosedForWrite) break
-                    val indexLine = "${(urls.indexOf(url) + 1).zeroPad(urls.size.digitCount())}/${urls.size} "
-                    sendSafe("Starting download of \"$url\"", indexLine)
+                service.waitForActive()
 
-                    val result = service.downloadContent(url.toString(), maxRetries, { isClientConnected() }) {
-                        sendSafe(it,indexLine)
+                coroutineScope {
+                    val job = launch {
+                        var index = 1
+                        var lastEntry: DownloadQueueEntry? = null
+
+                        val queueSize = service.queueSize()
+                        service.logs().collect { line ->
+                            val indexLine = "${index.zeroPad(queueSize.digitCount())}/${queueSize} "
+
+                            if (lastEntry != line.queueEntry) {
+                                lastEntry = line.queueEntry
+                                index++
+                            } else if (line.line != null) sendSafe(line.line, indexLine)
+                        }
+                    }
+                    val checkJob = launch {
+                        service.waitForInactive()
+
+                        if (job.isActive) job.cancel()
                     }
 
-                    results.add(result)
-
-                    if (result.exitCode == 0) sendSafe("Download complete ($url)", indexLine)
-                    else sendSafe("Download failed: ${result.error} ($url)", indexLine)
+                    job.join()
+                    if (checkJob.isActive) checkJob.cancel()
                 }
 
-                sendSafe("${results.count { it.exitCode == 0 }}/${results.size} successful")
+                val results = service.finishedDownloads().map { it.result }
 
-                service.isDownloadActive.store(false)
+                sendSafe("${results.count { it.exitCode == 0 }}/${results.size} successful")
             }
         }
 
@@ -121,12 +129,7 @@ fun Route.tdn(service: TdnService) {
                 }
             }
         }) {
-            if (!service.isDownloadActive.compareAndSet(expectedValue = false, newValue = true)) {
-                call.respond(HttpStatusCode.Conflict, "Download is already running.")
-                return@post
-            }
-
-            if (!service.authorized()) return@post call.respond(HttpStatusCode.Unauthorized)
+            if (!service.tdnService.authorized()) return@post call.respond(HttpStatusCode.Unauthorized)
 
             val type = call.parameters["type"]?.let { TdnFavoriteType.valueOf(it) }
             if (type == null) return@post call.respond(HttpStatusCode.BadRequest)
@@ -139,16 +142,34 @@ fun Route.tdn(service: TdnService) {
             val maxRetries = call.parameters["maxRetries"]?.toIntOrNull() ?: 5
 
             call.respondBytesWriter(ContentType.Text.EventStream) {
-                sendSafe("Starting download of ${type.name.capitalize()}")
+                service.addToQueue(FavouriteDownloadQueueEntry(tdnFavoriteType = type, maxRetries = maxRetries))
 
-                val result = service.downloadFavoriteCollection(type, maxRetries, { isClientConnected() }) {
-                    sendSafe(it)
+                service.waitForActive()
+
+                coroutineScope {
+                    val job = launch {
+                        var index = 1
+                        var lastEntry: DownloadQueueEntry? = null
+
+                        val queueSize = service.queueSize()
+                        service.logs().collect { line ->
+                            val indexLine = "${index.zeroPad(queueSize.digitCount())}/${queueSize} "
+
+                            if (lastEntry != line.queueEntry) {
+                                lastEntry = line.queueEntry
+                                index++
+                            } else if (line.line != null) sendSafe(line.line, indexLine)
+                        }
+                    }
+                    val checkJob = launch {
+                        service.waitForInactive()
+
+                        if (job.isActive) job.cancel()
+                    }
+
+                    job.join()
+                    if (checkJob.isActive) checkJob.cancel()
                 }
-
-                if (result.exitCode == 0) sendSafe("Download complete")
-                else sendSafe("Download failed: ${result.error}")
-
-                service.isDownloadActive.store(false)
             }
         }
     }

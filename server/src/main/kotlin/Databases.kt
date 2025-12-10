@@ -106,7 +106,7 @@ fun Application.configureDatabases(database: Database, jwtService: JwtService) {
 
             sync(database, songService)
 
-            tdn(tdnService)
+            tdn(downloadService)
 
             song(songService)
             album(albumService)
