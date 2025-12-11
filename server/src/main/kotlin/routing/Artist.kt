@@ -30,11 +30,9 @@ fun Route.artist(service: ArtistService) {
                 }
             }
         }) {
-            val id = call.parameters["id"]?.toUUIDOrNull()
-            if (id == null) return@get call.respond(HttpStatusCode.BadRequest)
+            val id = call.parameters["id"]?.toUUIDOrNull() ?: return@get call.respond(HttpStatusCode.BadRequest)
 
-            val artist = service.byId(id)
-            if (artist == null) return@get call.respond(HttpStatusCode.NotFound)
+            val artist = service.byId(id) ?: return@get call.respond(HttpStatusCode.NotFound)
 
             call.respond(artist)
         }
@@ -52,8 +50,7 @@ fun Route.artist(service: ArtistService) {
                 }
             }
         }) {
-            val id = call.parameters["id"]?.toUUIDOrNull()
-            if (id == null) return@get call.respond(HttpStatusCode.BadRequest)
+            val id = call.parameters["id"]?.toUUIDOrNull() ?: return@get call.respond(HttpStatusCode.BadRequest)
 
             val (page, pageSize) = call.paging()
 
@@ -74,8 +71,7 @@ fun Route.artist(service: ArtistService) {
                 }
             }
         }) {
-            val query = call.parameters["query"]
-            if (query == null) return@get call.respond(HttpStatusCode.BadRequest)
+            val query = call.parameters["query"] ?: return@get call.respond(HttpStatusCode.BadRequest)
 
             val (page, pageSize) = call.paging()
 

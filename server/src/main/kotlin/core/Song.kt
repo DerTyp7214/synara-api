@@ -7,7 +7,7 @@ import dev.dertyp.db.SongTable
 import org.jetbrains.exposed.sql.*
 
 @Suppress("UNCHECKED_CAST")
-fun <T : BaseSong> PaginatedResponse<T>.omitLyrics() = PaginatedResponse<T>(
+fun <T : BaseSong> PaginatedResponse<T>.omitLyrics() = PaginatedResponse(
     data = data.map {
         when (it) {
             is Song -> it.omitLyrics()

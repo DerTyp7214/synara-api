@@ -41,8 +41,8 @@ fun Route.metadata(
         }
     }) {
         get("/supported") {
-            val metadataProviderString = call.parameters["metadataProvider"]
-            if (metadataProviderString == null) return@get call.respond(HttpStatusCode.BadRequest)
+            val metadataProviderString =
+                call.parameters["metadataProvider"] ?: return@get call.respond(HttpStatusCode.BadRequest)
 
             val metadataProvider = MetadataService.Companion.MetadataType.valueOf(metadataProviderString)
 
@@ -56,18 +56,17 @@ fun Route.metadata(
                     pathParameter<UUID>("imageId")
                 }
             }) {
-                val imageId = call.parameters["imageId"]?.toUUIDOrNull()
-                if (imageId == null) return@get call.respond(HttpStatusCode.BadRequest)
+                val imageId =
+                    call.parameters["imageId"]?.toUUIDOrNull() ?: return@get call.respond(HttpStatusCode.BadRequest)
 
-                val metadataProviderString = call.parameters["metadataProvider"]
-                if (metadataProviderString == null) return@get call.respond(HttpStatusCode.BadRequest)
+                val metadataProviderString =
+                    call.parameters["metadataProvider"] ?: return@get call.respond(HttpStatusCode.BadRequest)
 
                 val metadataProvider = MetadataService.Companion.MetadataType.valueOf(metadataProviderString)
 
                 val service = MetadataService.getMetadataService(metadataProvider, environment)
 
-                val imageUrl = service.getImageUrlByImageId(imageId)
-                if (imageUrl == null) return@get call.respond(HttpStatusCode.NotFound)
+                val imageUrl = service.getImageUrlByImageId(imageId) ?: return@get call.respond(HttpStatusCode.NotFound)
 
                 call.respond(imageUrl)
             }
@@ -79,8 +78,8 @@ fun Route.metadata(
                     return@sse
                 }
 
-                val metadataProviderString = call.parameters["metadataProvider"]
-                if (metadataProviderString == null) return@sse call.respond(HttpStatusCode.BadRequest)
+                val metadataProviderString =
+                    call.parameters["metadataProvider"] ?: return@sse call.respond(HttpStatusCode.BadRequest)
 
                 val metadataProvider = MetadataService.Companion.MetadataType.valueOf(metadataProviderString)
 
@@ -182,18 +181,17 @@ fun Route.metadata(
                         }
                     }
                 }) {
-                    val metadataProviderString = call.parameters["metadataProvider"]
-                    if (metadataProviderString == null) return@get call.respond(HttpStatusCode.BadRequest)
+                    val metadataProviderString =
+                        call.parameters["metadataProvider"] ?: return@get call.respond(HttpStatusCode.BadRequest)
 
                     val metadataProvider = MetadataService.Companion.MetadataType.valueOf(metadataProviderString)
 
                     val service = MetadataService.getMetadataService(metadataProvider, environment)
 
-                    val trackId = call.parameters["trackId"]
-                    if (trackId == null) return@get call.respond(HttpStatusCode.BadRequest)
+                    val trackId = call.parameters["trackId"] ?: return@get call.respond(HttpStatusCode.BadRequest)
 
-                    val albumId = service.getAlbumIdByTrackId(trackId)
-                    if (albumId == null) return@get call.respond(HttpStatusCode.NotFound)
+                    val albumId =
+                        service.getAlbumIdByTrackId(trackId) ?: return@get call.respond(HttpStatusCode.NotFound)
 
                     val images = service.getImageUrlByAlbumId(albumId)
                     if (images.isEmpty()) return@get call.respond(HttpStatusCode.NotFound)

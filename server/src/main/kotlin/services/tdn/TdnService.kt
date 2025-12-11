@@ -53,7 +53,7 @@ class TdnService(private val indexer: Indexer) : Service() {
         val songPaths = mutableListOf<Path>()
         val playlistPaths = mutableListOf<Path>()
 
-        var result: ProcessExecutionResult = ProcessExecutionResult.EMPTY
+        var result: ProcessExecutionResult
 
         try {
             result = executeTdn(command, aliveCheck) {

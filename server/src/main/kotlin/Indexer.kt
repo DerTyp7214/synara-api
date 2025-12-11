@@ -176,9 +176,9 @@ class Indexer(
 
         log("Grouping songs by albums.").await()
 
-        val groupedSongs = albums.entries.map { (album, songs) ->
+        val groupedSongs = albums.entries.flatMap { (album, songs) ->
             songs.map { audioFile -> insertableSongFromFile(audioFile, album) }
-        }.flatten()
+        }
 
         log("Insert songs.").await()
         val insertStart = Clock.System.now()
@@ -200,7 +200,7 @@ class Indexer(
 
         val playlistCount = parsePlaylists(playlists)
 
-        log("Parsed and inserted $playlistCount playlists.")
+        log("Parsed and inserted $playlistCount playlists.").await()
     }
 
     private fun buildMap(paths: List<Path>): List<Path> {

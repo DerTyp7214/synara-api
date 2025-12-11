@@ -8,7 +8,6 @@ import dev.dertyp.dbQuery
 import dev.dertyp.serializers.DateSerializer
 import dev.dertyp.services.Service
 import dev.dertyp.services.UserService
-import dev.dertyp.services.models.Image
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.html.*
@@ -77,24 +76,23 @@ abstract class SyncService(
 
         suspend fun getInstance(call: ApplicationCall, database: Database, username: String? = null): SyncService {
             val instance = getInstance(call.parameters["service"], database, call, username)
-            if (instance == null) throw IllegalStateException("Service not found")
+                ?: throw IllegalStateException("Service not found")
+
             return instance
         }
 
         suspend fun handleAuth(call: ApplicationCall, database: Database) {
             val service = getInstance(call.parameters["service"], database, call)
-
-            if (service == null)
-                return call.respond(HttpStatusCode.BadRequest, "Invalid Service")
+                ?: return call.respond(HttpStatusCode.BadRequest, "Invalid Service")
 
             service.handleAuth(call)
         }
 
         suspend fun handleCallback(call: ApplicationCall, database: Database, username: String?) {
-            val service = getInstance(call.parameters["service"], database, call, username)
-
-            if (service == null)
-                return call.respond(HttpStatusCode.BadRequest, "Invalid Service")
+            val service = getInstance(call.parameters["service"], database, call, username) ?: return call.respond(
+                HttpStatusCode.BadRequest,
+                "Invalid Service"
+            )
 
             service.handleCallback(call)
         }

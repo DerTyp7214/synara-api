@@ -58,8 +58,7 @@ fun Route.m3u(
 
         if (!validate(paramMap)) return@get call.respond(HttpStatusCode.BadRequest)
 
-        val playlist = fetchData(paramMap)
-        if (playlist == null) return@get call.respond(HttpStatusCode.NotFound)
+        val playlist = fetchData(paramMap) ?: return@get call.respond(HttpStatusCode.NotFound)
 
         val (name, entries) = playlist
 

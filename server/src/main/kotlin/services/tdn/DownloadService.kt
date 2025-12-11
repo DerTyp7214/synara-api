@@ -64,12 +64,12 @@ class DownloadService(
     suspend fun addToQueue(vararg downloadEntries: DownloadQueueEntry) {
         queueMutex.withLock {
             val existingUrls = downloadQueue
-                .filter { it is UrlDownloadQueueEntry }
-                .map { (it as UrlDownloadQueueEntry).url }
+                .filterIsInstance<UrlDownloadQueueEntry>()
+                .map { it.url }
                 .toMutableList()
             val existingTypes = downloadQueue
-                .filter { it is FavouriteDownloadQueueEntry }
-                .map { (it as FavouriteDownloadQueueEntry).type }
+                .filterIsInstance<FavouriteDownloadQueueEntry>()
+                .map { it.type }
                 .toMutableList()
 
             currentlyDownloading?.let {

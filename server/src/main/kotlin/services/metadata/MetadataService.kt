@@ -19,7 +19,7 @@ import kotlin.time.Duration.Companion.seconds
 @OptIn(ExperimentalAtomicApi::class)
 abstract class MetadataService(
     private val providerName: String,
-    private val metadataType: MetadataService.Companion.MetadataType,
+    metadataType: MetadataType,
     environment: ApplicationEnvironment
 ) : Service() {
     protected abstract val clientIdConfigPath: String

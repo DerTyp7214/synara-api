@@ -1,8 +1,21 @@
+@file:Suppress("UnusedImport")
+
 package dev.dertyp.core
 
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.case
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.plus
+import kotlin.collections.Collection
+import kotlin.collections.List
+import kotlin.collections.component1
+import kotlin.collections.component2
+import kotlin.collections.drop
+import kotlin.collections.filter
+import kotlin.collections.first
+import kotlin.collections.forEachIndexed
+import kotlin.collections.map
+import kotlin.collections.reduce
+import kotlin.collections.windowed
 
 fun Query.paging(page: Int, pageSize: Int, offset: Int = 0) = apply {
     offset((pageSize * page).toLong())
@@ -39,7 +52,7 @@ fun Query.rankedSearchQuery(
             case
         }.Else(zeroLiteral)
 
-        scoreExpression = scoreExpression + tokenScore
+        scoreExpression += tokenScore
     }
 
     if (!queryString.startsWith("-")) {
@@ -51,7 +64,7 @@ fun Query.rankedSearchQuery(
             .When(phraseMatchOp, intLiteral(phraseBonus))
             .Else(zeroLiteral)
 
-        scoreExpression = scoreExpression + bonusExpression
+        scoreExpression += bonusExpression
         whereClause = whereClause?.let { it or phraseMatchOp } ?: phraseMatchOp
 
         if (tokens.size > 1) {
@@ -62,7 +75,7 @@ fun Query.rankedSearchQuery(
                     val consecutiveBonus = weights[index] * 2
                     val consecutiveMatchOp = Op.build { column ilike "%$token1% $token2%" }
 
-                    scoreExpression = scoreExpression + case(null)
+                    scoreExpression += case(null)
                         .When(consecutiveMatchOp, intLiteral(consecutiveBonus))
                         .Else(zeroLiteral)
                 }

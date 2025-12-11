@@ -39,16 +39,13 @@ fun Route.song(service: SongService) {
                 }
             }
         }) {
-            val id = call.parameters["id"]?.toUUIDOrNull()
-            if (id == null) return@post call.respond(HttpStatusCode.BadRequest)
+            val id = call.parameters["id"]?.toUUIDOrNull() ?: return@post call.respond(HttpStatusCode.BadRequest)
 
-            val user = call.getUser()
-            if (user == null) return@post call.respond(HttpStatusCode.Unauthorized)
+            val user = call.getUser() ?: return@post call.respond(HttpStatusCode.Unauthorized)
 
             val liked = call.receive<SetLikedBody>().liked
 
-            val song = service.setLiked(id, user.id, liked)
-            if (song == null) return@post call.respond(HttpStatusCode.BadRequest)
+            val song = service.setLiked(id, user.id, liked) ?: return@post call.respond(HttpStatusCode.BadRequest)
 
             return@post call.respond(song)
         }
@@ -66,14 +63,11 @@ fun Route.song(service: SongService) {
                 }
             }
         }) {
-            val id = call.parameters["id"]?.toUUIDOrNull()
-            if (id == null) return@get call.respond(HttpStatusCode.BadRequest)
+            val id = call.parameters["id"]?.toUUIDOrNull() ?: return@get call.respond(HttpStatusCode.BadRequest)
 
-            val user = call.getUser()
-            if (user == null) return@get call.respond(HttpStatusCode.Unauthorized)
+            val user = call.getUser() ?: return@get call.respond(HttpStatusCode.Unauthorized)
 
-            val song = service.byId(id, user.id)
-            if (song == null) return@get call.respond(HttpStatusCode.NotFound)
+            val song = service.byId(id, user.id) ?: return@get call.respond(HttpStatusCode.NotFound)
 
             call.respond(song)
         }
@@ -92,11 +86,9 @@ fun Route.song(service: SongService) {
                 }
             }
         }) {
-            val id = call.parameters["albumId"]?.toUUIDOrNull()
-            if (id == null) return@get call.respond(HttpStatusCode.BadRequest)
+            val id = call.parameters["albumId"]?.toUUIDOrNull() ?: return@get call.respond(HttpStatusCode.BadRequest)
 
-            val user = call.getUser()
-            if (user == null) return@get call.respond(HttpStatusCode.Unauthorized)
+            val user = call.getUser() ?: return@get call.respond(HttpStatusCode.Unauthorized)
 
             val (page, pageSize) = call.paging()
 
@@ -106,8 +98,7 @@ fun Route.song(service: SongService) {
             path = "/byAlbum/{albumId}/m3u",
             pathParams = listOf(Pair("albumId", "The album id to search all songs for.")),
             validate = { map -> map["albumId"] != null }) { map ->
-            val user = call.getUser()
-            if (user == null) return@m3u null
+            val user = call.getUser() ?: return@m3u null
 
             map["albumId"]?.toUUIDOrNull()?.let {
                 Pair(
@@ -133,11 +124,9 @@ fun Route.song(service: SongService) {
                 }
             }
         }) {
-            val id = call.parameters["playlistId"]?.toUUIDOrNull()
-            if (id == null) return@get call.respond(HttpStatusCode.BadRequest)
+            val id = call.parameters["playlistId"]?.toUUIDOrNull() ?: return@get call.respond(HttpStatusCode.BadRequest)
 
-            val user = call.getUser()
-            if (user == null) return@get call.respond(HttpStatusCode.Unauthorized)
+            val user = call.getUser() ?: return@get call.respond(HttpStatusCode.Unauthorized)
 
             val (page, pageSize) = call.paging()
 
@@ -147,8 +136,7 @@ fun Route.song(service: SongService) {
             path = "/byPlaylist/{playlistId}/m3u",
             pathParams = listOf(Pair("playlistId", "The playlist id to search all songs for.")),
             validate = { map -> map["playlistId"] != null }) { map ->
-            val user = call.getUser()
-            if (user == null) return@m3u null
+            val user = call.getUser() ?: return@m3u null
 
             map["playlistId"]?.toUUIDOrNull()?.let {
                 Pair(
@@ -174,11 +162,9 @@ fun Route.song(service: SongService) {
                 }
             }
         }) {
-            val id = call.parameters["artistId"]?.toUUIDOrNull()
-            if (id == null) return@get call.respond(HttpStatusCode.BadRequest)
+            val id = call.parameters["artistId"]?.toUUIDOrNull() ?: return@get call.respond(HttpStatusCode.BadRequest)
 
-            val user = call.getUser()
-            if (user == null) return@get call.respond(HttpStatusCode.Unauthorized)
+            val user = call.getUser() ?: return@get call.respond(HttpStatusCode.Unauthorized)
 
             val (page, pageSize) = call.paging()
 
@@ -188,8 +174,7 @@ fun Route.song(service: SongService) {
             path = "/byArtist/{artistId}/m3u",
             pathParams = listOf(Pair("artistId", "The artist id to search all songs for.")),
             validate = { map -> map["artistId"] != null }) { map ->
-            val user = call.getUser()
-            if (user == null) return@m3u null
+            val user = call.getUser() ?: return@m3u null
 
             map["artistId"]?.toUUIDOrNull()?.let {
                 Pair(
@@ -215,11 +200,9 @@ fun Route.song(service: SongService) {
                 }
             }
         }) {
-            val title = call.parameters["title"]
-            if (title == null) return@get call.respond(HttpStatusCode.BadRequest)
+            val title = call.parameters["title"] ?: return@get call.respond(HttpStatusCode.BadRequest)
 
-            val user = call.getUser()
-            if (user == null) return@get call.respond(HttpStatusCode.Unauthorized)
+            val user = call.getUser() ?: return@get call.respond(HttpStatusCode.Unauthorized)
 
             val (page, pageSize) = call.paging()
 
@@ -244,11 +227,9 @@ fun Route.song(service: SongService) {
                 }
             }
         }) {
-            val query = call.parameters["query"]
-            if (query == null) return@get call.respond(HttpStatusCode.BadRequest)
+            val query = call.parameters["query"] ?: return@get call.respond(HttpStatusCode.BadRequest)
 
-            val user = call.getUser()
-            if (user == null) return@get call.respond(HttpStatusCode.Unauthorized)
+            val user = call.getUser() ?: return@get call.respond(HttpStatusCode.Unauthorized)
 
             val explicit = call.parameters["explicit"] == "true"
 
@@ -275,11 +256,9 @@ fun Route.song(service: SongService) {
                 }
             }
         }) {
-            val query = call.parameters["query"]
-            if (query == null) return@get call.respond(HttpStatusCode.BadRequest)
+            val query = call.parameters["query"] ?: return@get call.respond(HttpStatusCode.BadRequest)
 
-            val user = call.getUser()
-            if (user == null) return@get call.respond(HttpStatusCode.Unauthorized)
+            val user = call.getUser() ?: return@get call.respond(HttpStatusCode.Unauthorized)
 
             val explicit = call.parameters["explicit"] == "true"
 
@@ -303,8 +282,7 @@ fun Route.song(service: SongService) {
                 }
             }
         }) {
-            val user = call.getUser()
-            if (user == null) return@get call.respond(HttpStatusCode.Unauthorized)
+            val user = call.getUser() ?: return@get call.respond(HttpStatusCode.Unauthorized)
 
             val explicit = call.parameters["explicit"] == "true"
 
@@ -319,8 +297,7 @@ fun Route.song(service: SongService) {
                 Pair("explicit", "Include explicit songs."),
             ),
             validate = { true }) { map ->
-            val user = call.getUser()
-            if (user == null) return@m3u null
+            val user = call.getUser() ?: return@m3u null
 
             Pair(
                 "All Songs",
@@ -345,8 +322,7 @@ fun Route.song(service: SongService) {
                 }
             }
         }) {
-            val user = call.getUser()
-            if (user == null) return@get call.respond(HttpStatusCode.Unauthorized)
+            val user = call.getUser() ?: return@get call.respond(HttpStatusCode.Unauthorized)
 
             val explicit = call.parameters["explicit"] == "true"
 
@@ -361,8 +337,7 @@ fun Route.song(service: SongService) {
                 Pair("explicit", "Include explicit songs."),
             ),
             validate = { true }) { map ->
-            val user = call.getUser()
-            if (user == null) return@m3u null
+            val user = call.getUser() ?: return@m3u null
 
             Pair(
                 "All liked Songs",
@@ -383,8 +358,9 @@ fun Route.song(service: SongService) {
                 }
             }
         }) {
-            val song = service.createBatch(listOf(call.receive())).values.singleOrNull()
-            if (song == null) return@post call.respond(HttpStatusCode.NotFound)
+            val song = service.createBatch(listOf(call.receive())).values.singleOrNull() ?: return@post call.respond(
+                HttpStatusCode.NotFound
+            )
 
             call.respond(song)
         }

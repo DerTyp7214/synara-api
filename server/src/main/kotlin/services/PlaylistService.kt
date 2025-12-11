@@ -96,7 +96,7 @@ class PlaylistService(database: Database) : Service() {
         queryPlaylists(page, pageSize)
 
     suspend fun delete(id: UUID): Boolean = dbQuery {
-        PlaylistTable.deleteWhere() { PlaylistTable.id eq id } == 1
+        PlaylistTable.deleteWhere { PlaylistTable.id eq id } == 1
     }
 
     private suspend fun querySingle(query: Query.() -> Query) =
@@ -189,10 +189,7 @@ class PlaylistService(database: Database) : Service() {
 
         val songEntriesWithPosition = rows
             .mapNotNull { row ->
-                val songId = row.getOrNull(PlaylistSongTable.songId)?.value
-                if (songId == null) {
-                    return@mapNotNull null
-                }
+                val songId = row.getOrNull(PlaylistSongTable.songId)?.value ?: return@mapNotNull null
 
                 Pair(
                     row[PlaylistSongTable.position],

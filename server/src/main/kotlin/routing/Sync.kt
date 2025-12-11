@@ -40,8 +40,7 @@ fun Route.sync(database: Database, songService: SongService) {
                     }
                 }) {
                     sse {
-                        val user = call.getUser()
-                        if (user == null) return@sse call.respond(HttpStatusCode.Unauthorized)
+                        val user = call.getUser() ?: return@sse call.respond(HttpStatusCode.Unauthorized)
 
                         val service = SyncService.getInstance(call, database)
 

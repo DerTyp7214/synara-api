@@ -32,11 +32,9 @@ fun Route.playlist(service: PlaylistService) {
                 }
             }
         }) {
-            val id = call.parameters["id"]?.toUUIDOrNull()
-            if (id == null) return@get call.respond(HttpStatusCode.BadRequest)
+            val id = call.parameters["id"]?.toUUIDOrNull() ?: return@get call.respond(HttpStatusCode.BadRequest)
 
-            val playlist = service.byId(id)
-            if (playlist == null) return@get call.respond(HttpStatusCode.NotFound)
+            val playlist = service.byId(id) ?: return@get call.respond(HttpStatusCode.NotFound)
 
             call.respond(playlist)
         }
@@ -53,11 +51,9 @@ fun Route.playlist(service: PlaylistService) {
                 }
             }
         }) {
-            val name = call.parameters["name"]
-            if (name == null) return@get call.respond(HttpStatusCode.BadRequest)
+            val name = call.parameters["name"] ?: return@get call.respond(HttpStatusCode.BadRequest)
 
-            val playlist = service.byName(name)
-            if (playlist == null) return@get call.respond(HttpStatusCode.NotFound)
+            val playlist = service.byName(name) ?: return@get call.respond(HttpStatusCode.NotFound)
 
             call.respond(playlist)
         }
@@ -76,8 +72,7 @@ fun Route.playlist(service: PlaylistService) {
                 }
             }
         }) {
-            val query = call.parameters["query"]
-            if (query == null) return@get call.respond(HttpStatusCode.BadRequest)
+            val query = call.parameters["query"] ?: return@get call.respond(HttpStatusCode.BadRequest)
 
             val (page, pageSize) = call.paging()
 
@@ -114,11 +109,11 @@ fun Route.playlist(service: PlaylistService) {
         }) {
             val insertablePlaylist = call.receive<InsertablePlaylist>()
 
-            val playlistId = service.createBatch(listOf(insertablePlaylist)).firstOrNull()
-            if (playlistId == null) return@put call.respond(HttpStatusCode.BadRequest)
+            val playlistId = service.createBatch(listOf(insertablePlaylist)).firstOrNull() ?: return@put call.respond(
+                HttpStatusCode.BadRequest
+            )
 
-            val playlist = service.byId(playlistId)
-            if (playlist == null) return@put call.respond(HttpStatusCode.NotFound)
+            val playlist = service.byId(playlistId) ?: return@put call.respond(HttpStatusCode.NotFound)
 
             call.respond(playlist)
         }
@@ -135,8 +130,7 @@ fun Route.playlist(service: PlaylistService) {
                 }
             }
         }) {
-            val id = call.parameters["id"]?.toUUIDOrNull()
-            if (id == null) return@delete call.respond(HttpStatusCode.BadRequest)
+            val id = call.parameters["id"]?.toUUIDOrNull() ?: return@delete call.respond(HttpStatusCode.BadRequest)
 
             val success = service.delete(id)
             if (!success) return@delete call.respond(HttpStatusCode.NotFound)

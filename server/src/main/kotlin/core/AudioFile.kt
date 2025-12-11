@@ -5,9 +5,7 @@ import org.jaudiotagger.tag.FieldKey
 
 fun artistSplitter(input: String): List<String> = when {
     else -> input.split(";")
-    //else -> input.split(",")
-}.map { it.replace("\\p{Cf}".toRegex(), "").trim() }
-    .filter { it.length > 1 }
+}.map { it.replace("\\p{Cf}".toRegex(), "").trim() }.filter { it.length > 1 }
 
 val AudioFile.title: String?
     get() = tag.getFirst(FieldKey.TITLE)
@@ -15,9 +13,9 @@ val AudioFile.title: String?
 val AudioFile.artists: List<String>
     get() {
         val artists = tag.getAll(FieldKey.ARTISTS)?.filterNotNull() ?: emptyList()
-        return artists.ifEmpty { tag.getAll(FieldKey.ARTIST)?.filterNotNull() ?: emptyList() }
-            .map(::artistSplitter)
-            .flatten()
+        return artists
+            .ifEmpty { tag.getAll(FieldKey.ARTIST)?.filterNotNull() ?: emptyList() }
+            .flatMap(::artistSplitter)
     }
 
 val AudioFile.year: String?
@@ -32,9 +30,9 @@ val AudioFile.songCount: Int?
 val AudioFile.albumArtists: List<String>
     get() {
         val artists = tag.getAll(FieldKey.ALBUM_ARTISTS)?.filterNotNull() ?: emptyList()
-        return artists.ifEmpty { tag.getAll(FieldKey.ALBUM_ARTIST)?.filterNotNull() ?: emptyList() }
-            .map(::artistSplitter)
-            .flatten()
+        return artists
+            .ifEmpty { tag.getAll(FieldKey.ALBUM_ARTIST)?.filterNotNull() ?: emptyList() }
+            .flatMap(::artistSplitter)
     }
 
 val AudioFile.coverImage: ByteArray?

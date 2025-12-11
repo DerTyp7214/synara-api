@@ -201,17 +201,15 @@ private class NoOutputWithContentLength(
 fun Route.stream(service: SongService) {
     route("/stream") {
         install(PartialContent) {
-            // Maximum number of ranges that will be accepted from a HTTP request.
+            // Maximum number of ranges that will be accepted from an HTTP request.
             // If the HTTP request specifies more ranges, they will all be merged into a single range.
             maxRangeCount = 10
         }
 
         head("/{id}") {
-            val id = call.parameters["id"]?.toUUIDOrNull()
-            if (id == null) return@head call.respond(HttpStatusCode.BadRequest)
+            val id = call.parameters["id"]?.toUUIDOrNull() ?: return@head call.respond(HttpStatusCode.BadRequest)
 
-            val song = service.byId(id)
-            if (song == null) return@head call.respond(HttpStatusCode.NotFound, "Song not found.")
+            val song = service.byId(id) ?: return@head call.respond(HttpStatusCode.NotFound, "Song not found.")
 
             val bitrate = call.request.queryParameters["bitrate"]?.toIntOrNull()
             val targetKbps = bitrate ?: 0
@@ -258,11 +256,9 @@ fun Route.stream(service: SongService) {
                 }
             }
         }) {
-            val id = call.parameters["id"]?.toUUIDOrNull()
-            if (id == null) return@get call.respond(HttpStatusCode.BadRequest)
+            val id = call.parameters["id"]?.toUUIDOrNull() ?: return@get call.respond(HttpStatusCode.BadRequest)
 
-            val song = service.byId(id)
-            if (song == null) return@get call.respond(HttpStatusCode.NotFound, "Song not found.")
+            val song = service.byId(id) ?: return@get call.respond(HttpStatusCode.NotFound, "Song not found.")
 
             val bitrate = call.request.queryParameters["bitrate"]?.toIntOrNull()
             val targetKbps = bitrate ?: 0

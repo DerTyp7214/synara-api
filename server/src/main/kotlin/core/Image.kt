@@ -36,8 +36,6 @@ suspend fun RoutingCall.respondImageSized(image: Image, size: Int) {
     val sizedImage = image.sized(size)
 
     try {
-        //val bytes = ImmutableImage.loader().fromBytes(sizedImage).bytes(WebpWriter().withZ(6))
-
         respondBytes(sizedImage, ContentType.Image.JPEG)
     } catch (e: Throwable) {
         e.printStackTrace()

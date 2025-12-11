@@ -27,11 +27,9 @@ fun Route.album(service: AlbumService) {
                 }
             }
         }) {
-            val id = call.parameters["id"]?.toUUIDOrNull()
-            if (id == null) return@get call.respond(HttpStatusCode.BadRequest)
+            val id = call.parameters["id"]?.toUUIDOrNull() ?: return@get call.respond(HttpStatusCode.BadRequest)
 
-            val album = service.byId(id)
-            if (album == null) return@get call.respond(HttpStatusCode.NotFound)
+            val album = service.byId(id) ?: return@get call.respond(HttpStatusCode.NotFound)
 
             call.respond(album)
         }
@@ -50,8 +48,7 @@ fun Route.album(service: AlbumService) {
                 }
             }
         }) {
-            val name = call.parameters["name"]
-            if (name == null) return@get call.respond(HttpStatusCode.BadRequest)
+            val name = call.parameters["name"] ?: return@get call.respond(HttpStatusCode.BadRequest)
 
             val (page, pageSize) = call.paging()
 
@@ -76,8 +73,8 @@ fun Route.album(service: AlbumService) {
                 }
             }
         }) {
-            val artistId = call.parameters["artistId"]?.toUUIDOrNull()
-            if (artistId == null) return@get call.respond(HttpStatusCode.BadRequest)
+            val artistId =
+                call.parameters["artistId"]?.toUUIDOrNull() ?: return@get call.respond(HttpStatusCode.BadRequest)
 
             val singles = call.parameters["singles"]?.toBoolean() ?: false
 
@@ -100,8 +97,7 @@ fun Route.album(service: AlbumService) {
                 }
             }
         }) {
-            val query = call.parameters["query"]
-            if (query == null) return@get call.respond(HttpStatusCode.BadRequest)
+            val query = call.parameters["query"] ?: return@get call.respond(HttpStatusCode.BadRequest)
 
             val (page, pageSize) = call.paging()
 

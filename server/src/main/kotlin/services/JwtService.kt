@@ -58,7 +58,7 @@ class JwtService(
                 validate { credential ->
                     if (credential.payload.audience.contains(jwtAudience)) JWTPrincipal(credential.payload) else null
                 }
-                challenge { defaultScheme, realm ->
+                challenge { _, _ ->
                     call.respond(HttpStatusCode.Unauthorized, "Token is not valid or has expired")
                 }
                 skipWhen { call ->
@@ -85,8 +85,10 @@ class JwtService(
         }) {
             val authenticationRequest = call.receive<AuthenticationRequest>()
 
-            val user = userService.findUserByUsername(authenticationRequest.username)
-            if (user == null) return@post call.respond(HttpStatusCode.Unauthorized, "Invalid username or password")
+            val user = userService.findUserByUsername(authenticationRequest.username) ?: return@post call.respond(
+                HttpStatusCode.Unauthorized,
+                "Invalid username or password"
+            )
 
             val passwordMatches = BCrypt.verifyer().verify(
                 authenticationRequest.password.toCharArray(),
@@ -97,8 +99,7 @@ class JwtService(
                 "Invalid username or password"
             )
 
-            val token = generateToken(user)
-            if (token == null) return@post call.respond(
+            val token = generateToken(user) ?: return@post call.respond(
                 HttpStatusCode.InternalServerError,
                 "Something went wrong inserting the refresh token."
             )
@@ -118,18 +119,17 @@ class JwtService(
         }) {
             val refreshToken = call.receive<RefreshTokenRequest>().refreshToken
 
-            val dbToken = refreshTokenService.validByTokenHash(refreshToken)
-
-            if (dbToken == null) return@post call.respond(
+            val dbToken = refreshTokenService.validByTokenHash(refreshToken) ?: return@post call.respond(
                 HttpStatusCode.Unauthorized,
                 "Invalid refresh token"
             )
 
-            val user = userService.findUserById(dbToken.userId)
-            if (user == null) return@post call.respond(HttpStatusCode.Unauthorized, "Invalid user")
+            val user = userService.findUserById(dbToken.userId) ?: return@post call.respond(
+                HttpStatusCode.Unauthorized,
+                "Invalid user"
+            )
 
-            val newToken = generateToken(user)
-            if (newToken == null) return@post call.respond(
+            val newToken = generateToken(user) ?: return@post call.respond(
                 HttpStatusCode.InternalServerError,
                 "Something went wrong inserting the refresh token."
             )
@@ -161,8 +161,8 @@ class JwtService(
                 val user = userService.findUserByUsername(authenticationRequest.username)
                 if (user != null) return@post call.respond(HttpStatusCode.Conflict, "User already exists")
 
-                val newUser = userService.createUser(authenticationRequest)
-                if (newUser == null) return@post call.respond(HttpStatusCode.BadRequest)
+                val newUser =
+                    userService.createUser(authenticationRequest) ?: return@post call.respond(HttpStatusCode.BadRequest)
 
                 call.respond(HttpStatusCode.OK, mapOf("userId" to newUser.id.toString()))
             }
@@ -174,8 +174,7 @@ class JwtService(
                 }
             }) {
 
-                val user = call.getUser()
-                if (user == null) return@get call.respond(HttpStatusCode.Unauthorized, "Invalid user")
+                val user = call.getUser() ?: return@get call.respond(HttpStatusCode.Unauthorized, "Invalid user")
 
                 call.respond(HttpStatusCode.OK, UserInfo.fromUser(user))
             }
@@ -194,8 +193,8 @@ class JwtService(
 
         val refreshToken = generateRefreshToken()
 
-        val tokenId = refreshTokenService.createToken(user.id, 30.days, refreshToken)
-        if (tokenId == null) return null
+        if (refreshTokenService.createToken(user.id, 30.days, refreshToken) == null)
+            return null
 
         return AuthenticationResponse(
             token = token,

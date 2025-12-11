@@ -36,11 +36,10 @@ fun Route.image(service: ImageService) {
             route({ hidden = true }) {
                 cacheOutput(Duration.INFINITE) {
                     get {
-                        val id = call.parameters["id"]?.toUUIDOrNull()
-                        if (id == null) return@get call.respond(HttpStatusCode.BadRequest)
+                        val id =
+                            call.parameters["id"]?.toUUIDOrNull() ?: return@get call.respond(HttpStatusCode.BadRequest)
 
-                        val image = service.byId(id)
-                        if (image == null) return@get call.respond(HttpStatusCode.NotFound)
+                        val image = service.byId(id) ?: return@get call.respond(HttpStatusCode.NotFound)
 
                         val size = call.parameters["size"]?.toIntOrNull() ?: -1
 
@@ -66,11 +65,9 @@ fun Route.image(service: ImageService) {
             route({ hidden = true }) {
                 cacheOutput(Duration.INFINITE) {
                     get {
-                        val id = call.parameters["hash"]
-                        if (id == null) return@get call.respond(HttpStatusCode.BadRequest)
+                        val id = call.parameters["hash"] ?: return@get call.respond(HttpStatusCode.BadRequest)
 
-                        val image = service.byHash(id)
-                        if (image == null) return@get call.respond(HttpStatusCode.NotFound)
+                        val image = service.byHash(id) ?: return@get call.respond(HttpStatusCode.NotFound)
 
                         val size = call.parameters["size"]?.toIntOrNull() ?: -1
 

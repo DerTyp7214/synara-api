@@ -205,9 +205,9 @@ class TidalService(
         try {
             val body = response.body<AlbumsMultiRelationshipDataDocument<ArtworksAttributes, ArtworksRelationships>>()
 
-            return body.included.map { i ->
+            return body.included.flatMap { i ->
                 i.attributes.files.map { f -> Image(f.href, f.meta.width, f.meta.height) }
-            }.flatten()
+            }
         } catch (e: Exception) {
             e.printStackTrace()
             println(response.bodyAsText())
