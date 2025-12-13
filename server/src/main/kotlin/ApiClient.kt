@@ -6,12 +6,21 @@ import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.serialization.kotlinx.protobuf.*
 import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.json.Json
 
 object ApiClient {
     @OptIn(ExperimentalSerializationApi::class)
     val instance = HttpClient(CIO) {
         install(ContentNegotiation) {
-            json()
+            json(Json {
+                encodeDefaults = true
+                isLenient = true
+                allowSpecialFloatingPointValues = true
+                allowStructuredMapKeys = true
+                prettyPrint = false
+                useArrayPolymorphism = false
+                ignoreUnknownKeys = true
+            })
             protobuf()
         }
     }
