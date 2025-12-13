@@ -209,7 +209,9 @@ class SongService(database: Database) : Service() {
     suspend fun allSongs(page: Int, pageSize: Int, explicit: Boolean, userId: UUID): PaginatedResponse<UserSong> =
         querySongs(
             page, pageSize, explicit, { userSong(userId) },
-            query = { this }
+            query = {
+                orderBy(SongTable.id, SortOrder.ASC)
+            }
         )
 
     private suspend inline fun <reified T : BaseSong> querySingle(

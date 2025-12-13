@@ -44,7 +44,7 @@ services:
       - "6379:6379"
     volumes:
       - redis_data:/data
-    command: redis-server --appendonly yes --maxmemory 2gb --maxmemory-policy allkeys-lfu
+    command: redis-server --appendonly yes --maxmemory 4gb --maxmemory-policy allkeys-lfu
     healthcheck:
       test: [ "CMD", "redis-cli", "ping" ]
       interval: 1s
