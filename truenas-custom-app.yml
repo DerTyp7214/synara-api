@@ -39,6 +39,7 @@ services:
         source: config
         target: /home/appuser/.config
         type: volume
+
   db:
     environment:
       POSTGRES_DB: synara-api-db
@@ -60,6 +61,7 @@ services:
         source: postgres
         target: /var/lib/postgresql
         type: volume
+
   redis-cache:
     command: >-
       redis-server --appendonly yes --maxmemory 4gb --maxmemory-policy
@@ -80,67 +82,12 @@ services:
         source: redis_data
         target: /data
         type: volume
+
 volumes:
   config: {}
   postgres: {}
   redis_data: {}
-x-notes: >
-  # iX App
 
-  ## Security
-
-  **Read the following security precautions to ensure that you wish to continue
-  using this application.**
-
-  ---
-
-  ### Container: [api]
-
-  #### Running user/group(s)
-
-  - User: 1000 - Group: 1000 - Supplementary Groups: N/A
-
-  #### Security option [no-new-privileges] is not set
-
-  - Processes can gain additional privileges through setuid/setgid binaries -
-  Can potentially allow privilege escalation attacks within the container
-
-  ---
-
-  ### Container: [db]
-
-  #### Running user/group(s)
-
-  - User: 1000 - Group: 1000
-
-  ### Container: [redis-cache]
-
-  #### Running user/group(s)
-
-  - User: N/A (Runs as default user)
-
-  ---
-
-  ## Important Notes
-
-  * The service **api** now depends on the **db** (PostgreSQL) and
-  **redis-cache** services, which are defined within this custom app. * The host
-  volume path for the API service has been updated from `/mnt/External/Synara`
-  to `/home/typ/Music`. * New volumes (`config`, `postgres`, `redis_data`) are
-  introduced to persist data for the API configuration, PostgreSQL database, and
-  Redis cache, respectively. * The `db` container uses
-  `POSTGRES_HOST_AUTH_METHOD: trust`, which is a security risk as it allows
-  passwordless access to the database from the host network. This should be
-  reviewed for production use.
-
-  ---
-
-  ## Bug Reports and Feature Requests
-
-  If you find a bug in this app or have an idea for a new feature, please file
-  an issue at
-
-  https://github.com/truenas/apps
 x-portals:
   - host: 0.0.0.0
     name: API Stats
