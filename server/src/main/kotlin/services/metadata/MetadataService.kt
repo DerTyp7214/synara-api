@@ -1,6 +1,5 @@
 package dev.dertyp.services.metadata
 
-import com.google.gson.annotations.SerializedName
 import dev.dertyp.ApiClient
 import dev.dertyp.services.Service
 import dev.dertyp.services.models.Image
@@ -10,6 +9,7 @@ import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.server.application.*
 import kotlinx.coroutines.delay
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import java.util.*
 import kotlin.concurrent.atomics.AtomicBoolean
@@ -101,11 +101,11 @@ abstract class MetadataService(
 
     @Serializable
     protected data class AccessTokenResponse(
-        @SerializedName("access_token")
+        @SerialName("access_token")
         val accessToken: String,
-        @SerializedName("token_type")
+        @SerialName("token_type")
         val tokenType: String,
-        @SerializedName("expires_in")
+        @SerialName("expires_in")
         val expiresIn: Int,
     )
 

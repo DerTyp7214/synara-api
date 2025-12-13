@@ -24,7 +24,7 @@ services:
     image: ghcr.io/dertyp7214/synara:latest-dev
     network_mode: host
     platform: linux/amd64
-    pull_policy: missing
+    pull_policy: always
     restart: unless-stopped
     user: '1000:1000'
     volumes:
