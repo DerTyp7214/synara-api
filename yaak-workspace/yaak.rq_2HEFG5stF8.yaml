@@ -2,7 +2,7 @@ type: http_request
 model: http_request
 id: rq_2HEFG5stF8
 createdAt: 2025-10-14T19:25:16.449964932
-updatedAt: 2025-12-14T16:55:11.990936526
+updatedAt: 2025-12-14T23:04:36.874670434
 workspaceId: wk_9dbKacQT4H
 folderId: fl_NXkRVdWsW4
 authentication: {}
@@ -11,6 +11,15 @@ body:
   text: |-
     {
       "urls": [
+        "https://tidal.com/album/478763020",
+        "https://tidal.com/album/481099478",
+        "https://tidal.com/album/458194431",
+        "https://tidal.com/album/476664285",
+        "https://tidal.com/album/479029185",
+        "https://tidal.com/album/480390849",
+        "https://tidal.com/album/481097668",
+        "https://tidal.com/album/481064508",
+        "https://tidal.com/album/472368230"
       ]
     }
 bodyType: application/json

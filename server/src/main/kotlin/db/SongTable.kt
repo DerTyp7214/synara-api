@@ -2,6 +2,7 @@ package dev.dertyp.db
 
 import org.jetbrains.exposed.dao.id.UUIDTable
 import org.jetbrains.exposed.sql.ReferenceOption
+import java.time.Instant
 
 object SongTable : UUIDTable("song") {
     val title = text("title").default("")
@@ -20,4 +21,5 @@ object SongTable : UUIDTable("song") {
     val bitsPerSample = integer("bitsPerSample").default(0)
     val bitRate = long("bitRate").default(0)
     val fileSize = long("fileSize").default(0)
+    val inserted = long("inserted").clientDefault { Instant.now().toEpochMilli() }
 }

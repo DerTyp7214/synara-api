@@ -200,6 +200,7 @@ class SongService : Service() {
             page, pageSize, explicit, { userSong(userId) },
             query = {
                 orderBy(SongTable.id, SortOrder.ASC)
+                    .orderBy(SongTable.inserted, SortOrder.DESC)
             }
         )
 
