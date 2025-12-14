@@ -88,7 +88,7 @@ fun Route.song(service: SongService) {
             response {
                 HttpStatusCode.OK to {
                     description = "The songs with the ids."
-                    body<List<Song>>()
+                    body<List<UserSong>>()
                 }
             }
         }) {

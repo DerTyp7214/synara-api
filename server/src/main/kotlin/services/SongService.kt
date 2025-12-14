@@ -128,7 +128,7 @@ class SongService(database: Database) : Service() {
         where { SongTable.id eq id }
     }
 
-    suspend fun byIds(ids: List<UUID>, userId: UUID): PaginatedResponse<Song> =
+    suspend fun byIds(ids: List<UUID>, userId: UUID): PaginatedResponse<UserSong> =
         querySongs(0, Int.MAX_VALUE, true, { userSong(userId) }) {
             where { SongTable.id inList ids }
         }

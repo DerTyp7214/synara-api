@@ -2,7 +2,7 @@ type: http_request
 model: http_request
 id: rq_4KhicL5Spk
 createdAt: 2025-12-14T04:03:22.883845610
-updatedAt: 2025-12-14T04:16:12.804495703
+updatedAt: 2025-12-14T04:28:06.118096365
 workspaceId: wk_9dbKacQT4H
 folderId: fl_QrUoFyttZM
 authentication: {}
@@ -11,8 +11,8 @@ body:
   text: |-
     {
       "ids": [
-        "0379348f-4ba3-4262-98ab-73b43da04286",
-        "d679a13d-d6e1-4f6a-8ab9-5d1ea8dc29ff"
+        "a2e6e02a-a011-4d97-8e16-fc9261a7c370",
+        "4fea22d0-c606-446d-bdb3-ab9243dbdd85"
       ]
     }
 bodyType: application/json
