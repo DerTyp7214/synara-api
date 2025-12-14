@@ -8,6 +8,7 @@ class StorageService(environment: ApplicationEnvironment) {
     val tracksPath = environment.config.propertyOrNull("audio.tracks")?.getString()?.removeSuffix("/")
     val albumsPath = environment.config.propertyOrNull("audio.albums")?.getString()?.removeSuffix("/")
     val playlistsPath = environment.config.propertyOrNull("audio.playlists")?.getString()?.removeSuffix("/")
+    val imagesPath = environment.config.property("data.images").getString().removeSuffix("/")
 
     fun getTotalStorage(): Long {
         if (tracksPath == null || albumsPath == null || playlistsPath == null) return 0

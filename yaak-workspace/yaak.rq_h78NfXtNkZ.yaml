@@ -1,0 +1,39 @@
+type: http_request
+model: http_request
+id: rq_h78NfXtNkZ
+createdAt: 2025-12-14T21:57:59.285386110
+updatedAt: 2025-12-14T21:59:18.684715251
+workspaceId: wk_9dbKacQT4H
+folderId: null
+authentication: {}
+authenticationType: null
+body:
+  text: |-
+    [
+      "466194923",
+      "466194909"
+    ]
+bodyType: application/json
+description: '[object Object]'
+headers:
+- enabled: true
+  name: Content-Type
+  value: application/json
+  id: 0Mi9HdFDJH
+method: POST
+name: /sync/get/liked/byTidalIds
+sortPriority: 11000.002
+url: ${[baseUrl]}/sync/:service/get/liked/byTidalIds
+urlParameters:
+- enabled: true
+  name: :service
+  value: tidal
+  id: J2PTfXvIAX
+- enabled: false
+  name: all
+  value: 'true'
+  id: 9xwcfzTAGG
+- enabled: true
+  name: ''
+  value: ''
+  id: UipXBIgdMZ

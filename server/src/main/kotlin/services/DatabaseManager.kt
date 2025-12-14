@@ -9,7 +9,7 @@ import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.insertIgnore
 import org.jetbrains.exposed.sql.transactions.transaction
 
-class DatabaseManager(private val environment: ApplicationEnvironment) {
+class DatabaseManager(environment: ApplicationEnvironment) {
     private val database: Database by lazy { getDatabase(environment) }
 
     init {

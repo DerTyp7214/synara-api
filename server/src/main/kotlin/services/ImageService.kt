@@ -6,31 +6,25 @@ import dev.dertyp.data.InsertableImage
 import dev.dertyp.data.PaginatedResponse
 import dev.dertyp.db.ImageTable
 import dev.dertyp.dbQuery
-import io.ktor.server.application.*
 import org.jetbrains.exposed.sql.Query
 import org.jetbrains.exposed.sql.ResultRow
 import org.jetbrains.exposed.sql.batchInsert
 import org.jetbrains.exposed.sql.selectAll
+import org.koin.core.context.GlobalContext
 import java.util.*
 import kotlin.io.path.*
 
-class ImageService(environment: ApplicationEnvironment) : Service() {
-    private val imagesPath = environment.config.property("data.images").getString().removeSuffix("/")
-
+class ImageService : Service() {
     init {
-        Path(imagesPath).toFile().mkdirs()
-
-        instance = this
+        Path(storageService.imagesPath).toFile().mkdirs()
     }
 
     companion object {
-        var instance: ImageService? = null
-            private set
-
+        private val storageService = GlobalContext.get().get<StorageService>()
 
         fun mapImage(resultRow: ResultRow): Image {
             val id = resultRow[ImageTable.id].value
-            val path = Path(instance!!.imagesPath, resultRow[ImageTable.path]).absolutePathString()
+            val path = Path(storageService.imagesPath, resultRow[ImageTable.path]).absolutePathString()
             val imageHash = resultRow[ImageTable.imageHash]
             val origin = resultRow[ImageTable.origin]
 
@@ -96,7 +90,7 @@ class ImageService(environment: ApplicationEnvironment) : Service() {
         return dbQuery {
             ImageTable.batchInsert(newImages.map {
                 val imagePath = Path(
-                    imagesPath,
+                    storageService.imagesPath,
                     *it.imageHash.windowed(2, 2).take(4).toTypedArray(),
                     "${it.imageHash.drop(2 * 4)}.jpeg"
                 )
@@ -107,7 +101,7 @@ class ImageService(environment: ApplicationEnvironment) : Service() {
                 imagePath.writeBytes(it.data)
                 Pair(it, imagePath)
             }) { (image, path) ->
-                this[ImageTable.path] = Path(imagesPath).relativize(path).pathString
+                this[ImageTable.path] = Path(storageService.imagesPath).relativize(path).pathString
                 this[ImageTable.imageHash] = image.imageHash
                 this[ImageTable.origin] = image.origin
             }.map { it[ImageTable.id].value }

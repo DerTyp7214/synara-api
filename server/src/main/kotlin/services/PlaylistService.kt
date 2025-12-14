@@ -13,18 +13,11 @@ import dev.dertyp.dbQuery
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
+import org.koin.core.component.get
 import java.util.*
 
 class PlaylistService : Service() {
-    init {
-        instance = this
-    }
-
     companion object {
-        var instance: PlaylistService? = null
-            private set
-
-
         fun mapPlaylist(resultRow: ResultRow): Playlist {
             val id = resultRow[PlaylistTable.id].value
             val name = resultRow[PlaylistTable.name]
@@ -203,6 +196,8 @@ class PlaylistService : Service() {
     suspend fun createBatch(playlists: List<InsertablePlaylist>): List<UUID> {
         if (playlists.isEmpty()) return emptyList()
 
+        val imageService = get<ImageService>()
+
         val allUniqueImageHashes = playlists.mapNotNull { it.imageHash }.distinct()
         val allUniqueSongPaths = playlists.flatMap { it.songPaths }.distinct()
 
@@ -227,8 +222,7 @@ class PlaylistService : Service() {
             }
         }
 
-        val imageIdMap: Map<String, UUID> = ImageService.instance?.getCoverHashes(allUniqueImageHashes)
-            ?: emptyMap()
+        val imageIdMap: Map<String, UUID> = imageService.getCoverHashes(allUniqueImageHashes)
 
         val songIdByPath: Map<String, UUID> = dbQuery {
             SongTable

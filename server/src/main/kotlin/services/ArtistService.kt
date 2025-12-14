@@ -9,14 +9,7 @@ import org.jetbrains.exposed.sql.*
 import java.util.*
 
 class ArtistService: Service() {
-    init {
-        instance = this
-    }
-
     companion object {
-        var instance: ArtistService? = null
-            private set
-
         fun mapArtist(resultRow: ResultRow, table: ColumnSet = ArtistTable): Artist {
             if (table is Alias<*>) {
                 return Artist(

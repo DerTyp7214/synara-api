@@ -12,10 +12,6 @@ import org.jetbrains.exposed.sql.selectAll
 import java.util.*
 
 class UserService : Service() {
-    init {
-        INSTANCE = this
-    }
-
     companion object {
         fun mapUser(row: ResultRow): User {
             return User(
@@ -24,9 +20,6 @@ class UserService : Service() {
                 passwordHash = row[UserTable.passwordHash]
             )
         }
-
-        var INSTANCE: UserService? = null
-            private set
     }
 
     private fun map(row: ResultRow) = mapUser(row)

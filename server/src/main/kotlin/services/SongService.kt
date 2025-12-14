@@ -15,20 +15,14 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import org.jetbrains.exposed.sql.*
+import org.koin.core.component.get
 import java.time.Instant
 import java.util.*
 
 class SongService : Service() {
     val albumArtistAlias = ArtistTable.alias("album_artist_alias")
 
-    init {
-        instance = this
-    }
-
     companion object {
-        var instance: SongService? = null
-            private set
-
         fun mapSong(resultRow: ResultRow): Song {
             val id = resultRow[SongTable.id].value
 
@@ -400,6 +394,10 @@ class SongService : Service() {
     suspend fun createBatch(songs: List<InsertableSong>): Map<UUID, InsertableSong> = coroutineScope {
         if (songs.isEmpty()) return@coroutineScope emptyMap()
 
+        val artistService = get<ArtistService>()
+        val albumService = get<AlbumService>()
+        val imageService = get<ImageService>()
+
         val uniqueArtistNames = songs.flatMap { it.artists }.distinct()
         val uniqueAlbums = songs.map { it.album }.distinctBy {
             listOf(
@@ -411,45 +409,39 @@ class SongService : Service() {
         }
         val uniqueCoverHashes = songs.map { it.coverHash }.distinct()
 
-        val artistIdMap: Map<String, UUID> = ArtistService.instance?.let { service ->
-            uniqueArtistNames
+        val artistIdMap: Map<String, UUID> = uniqueArtistNames
+            .chunked(maxBatchSize)
+            .map { batch ->
+                async {
+                    artistService.getOrBulkCreate(batch).entries
+                }
+            }
+            .awaitAll()
+            .flatten()
+            .toMap()
+
+        val albumIdMap: Map<InsertableAlbum, UUID> = uniqueAlbums
                 .chunked(maxBatchSize)
                 .map { batch ->
                     async {
-                        service.getOrBulkCreate(batch).entries
+                        albumService.getOrBulkCreate(batch).entries
                     }
                 }
                 .awaitAll()
                 .flatten()
                 .toMap()
-        } ?: emptyMap()
 
-        val albumIdMap: Map<InsertableAlbum, UUID> = AlbumService.instance?.let { service ->
-            uniqueAlbums
-                .chunked(maxBatchSize)
-                .map { batch ->
-                    async {
-                        service.getOrBulkCreate(batch).entries
-                    }
-                }
-                .awaitAll()
-                .flatten()
-                .toMap()
-        } ?: emptyMap()
-
-        val imageIdMap: Map<String, UUID> = ImageService.instance?.let { service ->
-            uniqueCoverHashes
+        val imageIdMap: Map<String, UUID> = uniqueCoverHashes
                 .filterNotNull()
                 .chunked(maxBatchSize)
                 .map { batch ->
                     async {
-                        service.getCoverHashes(batch).entries
+                        imageService.getCoverHashes(batch).entries
                     }
                 }
                 .awaitAll()
                 .flatten()
                 .toMap()
-        } ?: emptyMap()
 
         val existingSongMap = songs
             .chunked(maxBatchSize / 3)

@@ -9,6 +9,7 @@ import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.util.*
+import org.koin.core.context.GlobalContext
 import java.util.*
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 
@@ -33,7 +34,9 @@ class ImageCacheService(
     }
 
     override suspend fun getImageUrlByImageId(imageId: UUID): String? {
-        val image = ImageService.instance?.byId(imageId)
+        val imageService = GlobalContext.get().get<ImageService>()
+
+        val image = imageService.byId(imageId)
         if (image == null) {
             logger.error("Image $imageId not found")
             return null

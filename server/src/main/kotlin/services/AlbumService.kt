@@ -16,19 +16,13 @@ import dev.dertyp.getDateFromISO
 import dev.dertyp.getISOFromDate
 import dev.dertyp.services.ArtistService.Companion.mapArtist
 import org.jetbrains.exposed.sql.*
+import org.koin.core.component.get
 import java.util.*
 
 class AlbumService : Service() {
     val albumArtistAlias = ArtistTable.alias("albumArtistAlias")
 
-    init {
-        instance = this
-    }
-
     companion object {
-        var instance: AlbumService? = null
-            private set
-
         fun mapAlbum(resultRow: ResultRow): Album {
             val id = resultRow[AlbumTable.id].value
 
@@ -174,6 +168,9 @@ class AlbumService : Service() {
     suspend fun getOrBulkCreate(albums: List<InsertableAlbum>): Map<InsertableAlbum, UUID> {
         if (albums.isEmpty()) return emptyMap()
 
+        val artistService = get<ArtistService>()
+        val imageService = get<ImageService>()
+
         val uniqueCoverHashed = albums.distinctBy { it.coverHash }.mapNotNull { it.coverHash }
         val uniqueAlbumMetadata =
             albums.distinctBy {
@@ -189,10 +186,8 @@ class AlbumService : Service() {
         val uniqueReleaseDates = uniqueAlbumMetadata.map { getISOFromDate(it.releaseDate) }
         val allRequiredArtistNames = albums.flatMap { it.artists }.distinct()
 
-        val artistIdMap: Map<String, UUID> =
-            ArtistService.instance?.getOrBulkCreate(allRequiredArtistNames) ?: emptyMap()
-        val imageMap: Map<String, UUID> =
-            ImageService.instance?.getCoverHashes(uniqueCoverHashed) ?: emptyMap()
+        val artistIdMap: Map<String, UUID> = artistService.getOrBulkCreate(allRequiredArtistNames)
+        val imageMap: Map<String, UUID> = imageService.getCoverHashes(uniqueCoverHashed)
 
         val potentialAlbumRows = queryAlbums(0, Int.MAX_VALUE) {
             where { AlbumTable.name inList uniqueAlbumNames }
