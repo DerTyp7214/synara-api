@@ -20,18 +20,21 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import org.koin.ktor.ext.inject
 import java.io.File
 import java.nio.file.Paths
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 
 @OptIn(ExperimentalAtomicApi::class)
-fun Route.utils(indexer: Indexer) {
+fun Route.utils() {
     val maxConcurrentTranscoders = 6
     route("/buildIndex", HttpMethod.Get, {
         request {
         }
     }) {
         sse {
+            val indexer by inject<Indexer>()
+
             if (!indexer.isActive.compareAndSet(expectedValue = false, newValue = true)) {
                 indexer.logger.warn("Indexer is already running.")
                 call.respond(HttpStatusCode.Conflict, "Indexer is already running.")

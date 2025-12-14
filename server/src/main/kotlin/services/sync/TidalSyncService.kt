@@ -16,7 +16,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
-import org.jetbrains.exposed.sql.Database
 import java.time.Instant
 import java.util.*
 import kotlin.time.Duration.Companion.milliseconds
@@ -24,10 +23,9 @@ import kotlin.time.Duration.Companion.seconds
 
 @Suppress("unused")
 class TidalSyncService(
-    database: Database,
     environment: ApplicationEnvironment,
     user: User
-) : TidalSyncServiceBase(database, environment, user) {
+) : TidalSyncServiceBase(environment, user) {
     private val apiBase = "https://openapi.tidal.com/v2"
 
     private var me: Me? = null

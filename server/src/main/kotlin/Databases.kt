@@ -3,7 +3,6 @@ package dev.dertyp
 import dev.dertyp.AudioUtils.getSongsWithTranscodingInfo
 import dev.dertyp.data.ServerStats
 import dev.dertyp.db.ImageTable
-import dev.dertyp.db.SyncServiceTable
 import dev.dertyp.routing.*
 import dev.dertyp.services.*
 import dev.dertyp.services.tdn.DownloadService
@@ -17,30 +16,15 @@ import io.ktor.server.routing.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import org.jetbrains.exposed.sql.Database
-import org.jetbrains.exposed.sql.SchemaUtils
-import org.jetbrains.exposed.sql.transactions.transaction
+import org.koin.ktor.ext.getKoin
+import org.koin.ktor.ext.inject
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 
 @OptIn(ExperimentalAtomicApi::class)
-fun Application.configureDatabases(database: Database, jwtService: JwtService) {
-    val songService = SongService(database)
-    val imageService = ImageService(database, environment)
-    val albumService = AlbumService(database)
-    val artistService = ArtistService(database)
-    val playlistService = PlaylistService(database)
-
-    val indexer = Indexer(songService, imageService, playlistService)
-
-    val tdnService = TdnService(indexer)
-    val downloadService = DownloadService(tdnService)
-
+fun Application.configureDatabases() {
     CoroutineScope(Dispatchers.IO).launch {
+        val downloadService = getKoin().get<DownloadService>()
         downloadService.startService()
-    }
-
-    transaction {
-        SchemaUtils.create(SyncServiceTable)
     }
 
     routing {
@@ -55,12 +39,14 @@ fun Application.configureDatabases(database: Database, jwtService: JwtService) {
 
             readyChecks {
                 check("indexer_ready") {
+                    val indexer by inject<Indexer>()
                     !indexer.isActive.load()
                 }
                 check("transcoder_ready") {
                     !AudioUtils.isTranscoderActive.load()
                 }
                 check("downloader_ready") {
+                    val tdnService by inject<TdnService>()
                     !tdnService.isDownloadActive.load()
                 }
             }
@@ -73,6 +59,11 @@ fun Application.configureDatabases(database: Database, jwtService: JwtService) {
                 }
             }
         }) {
+            val artistService by inject<ArtistService>()
+            val albumService by inject<AlbumService>()
+            val playlistService by inject<PlaylistService>()
+            val storageService by inject<StorageService>()
+
             val allSongs = getSongsWithTranscodingInfo(listOf())
             val allArtists = artistService.allArtists(0, Int.MAX_VALUE)
             val allAlbums = albumService.allAlbums(0, Int.MAX_VALUE)
@@ -80,7 +71,9 @@ fun Application.configureDatabases(database: Database, jwtService: JwtService) {
             val images = dbQuery { ImageTable.select(ImageTable.id).map { it[ImageTable.id].value } }
 
             val totalDuration = allSongs.fold(0L) { acc, song -> acc + song.duration }
-            val totalFileSize = allSongs.fold(0L) { acc, song -> acc + song.fileSize }
+            val indexedFileSize = allSongs.fold(0L) { acc, song -> acc + song.fileSize }
+
+            val totalFileSize = storageService.getTotalStorage()
 
             call.respond(
                 ServerStats(
@@ -91,27 +84,28 @@ fun Application.configureDatabases(database: Database, jwtService: JwtService) {
                     playlistCount = allPlaylists.data.size,
                     totalDuration = totalDuration,
                     totalFileSize = totalFileSize,
+                    indexedFileSize = indexedFileSize,
                     averageSizePerSong = totalFileSize / allSongs.size,
                 )
             )
         }
 
-        image(imageService)
+        image()
 
-        stream(songService)
+        stream()
 
-        jwtService.authenticated(this) {
-            utils(indexer)
-            metadata(imageService, environment, indexer)
+        getKoin().get<JwtService>().authenticated(this) {
+            utils()
+            metadata()
 
-            sync(database, songService)
+            sync()
 
-            tdn(downloadService)
+            tdn()
 
-            song(songService)
-            album(albumService)
-            artist(artistService)
-            playlist(playlistService)
+            song()
+            album()
+            artist()
+            playlist()
         }
     }
 }

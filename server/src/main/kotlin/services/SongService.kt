@@ -1,7 +1,6 @@
 package dev.dertyp.services
 
 import dev.dertyp.core.date
-import dev.dertyp.core.foreignKeyOn
 import dev.dertyp.core.rankedSearchQuery
 import dev.dertyp.core.toMap
 import dev.dertyp.data.*
@@ -16,22 +15,13 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import org.jetbrains.exposed.sql.*
-import org.jetbrains.exposed.sql.transactions.transaction
 import java.time.Instant
 import java.util.*
 
-class SongService(database: Database) : Service() {
+class SongService : Service() {
     val albumArtistAlias = ArtistTable.alias("album_artist_alias")
 
     init {
-        transaction(database) {
-            foreignKeyOn(database)
-            SchemaUtils.create(SongTable)
-            SchemaUtils.create(UserSongTable)
-            SchemaUtils.create(SongArtistTable)
-            SchemaUtils.create(TranscodedSongTable)
-        }
-
         instance = this
     }
 

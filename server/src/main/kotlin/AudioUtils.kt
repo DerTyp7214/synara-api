@@ -22,6 +22,7 @@ import org.bytedeco.ffmpeg.global.avutil
 import org.bytedeco.javacv.FFmpegFrameGrabber
 import org.bytedeco.javacv.FFmpegFrameRecorder
 import org.jetbrains.exposed.sql.batchInsert
+import org.koin.ktor.ext.inject
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.Paths
@@ -198,7 +199,7 @@ private class NoOutputWithContentLength(
 ) : OutgoingContent.NoContent()
 
 @Suppress("LoggingSimilarMessage")
-fun Route.stream(service: SongService) {
+fun Route.stream() {
     route("/stream") {
         install(PartialContent) {
             // Maximum number of ranges that will be accepted from an HTTP request.
@@ -207,6 +208,8 @@ fun Route.stream(service: SongService) {
         }
 
         head("/{id}") {
+            val service by inject<SongService>()
+
             val id = call.parameters["id"]?.toUUIDOrNull() ?: return@head call.respond(HttpStatusCode.BadRequest)
 
             val song = service.byId(id) ?: return@head call.respond(HttpStatusCode.NotFound, "Song not found.")
@@ -256,6 +259,8 @@ fun Route.stream(service: SongService) {
                 }
             }
         }) {
+            val service by inject<SongService>()
+
             val id = call.parameters["id"]?.toUUIDOrNull() ?: return@get call.respond(HttpStatusCode.BadRequest)
 
             val song = service.byId(id) ?: return@get call.respond(HttpStatusCode.NotFound, "Song not found.")

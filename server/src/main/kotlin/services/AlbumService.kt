@@ -2,7 +2,6 @@ package dev.dertyp.services
 
 import dev.dertyp.core.Quadruple
 import dev.dertyp.core.filterValueNotNull
-import dev.dertyp.core.foreignKeyOn
 import dev.dertyp.core.rankedSearchQuery
 import dev.dertyp.data.Album
 import dev.dertyp.data.Artist
@@ -17,19 +16,12 @@ import dev.dertyp.getDateFromISO
 import dev.dertyp.getISOFromDate
 import dev.dertyp.services.ArtistService.Companion.mapArtist
 import org.jetbrains.exposed.sql.*
-import org.jetbrains.exposed.sql.transactions.transaction
 import java.util.*
 
-class AlbumService(database: Database) : Service() {
+class AlbumService : Service() {
     val albumArtistAlias = ArtistTable.alias("albumArtistAlias")
 
     init {
-        transaction(database) {
-            foreignKeyOn(database)
-            SchemaUtils.create(AlbumTable)
-            SchemaUtils.create(AlbumArtistTable)
-        }
-
         instance = this
     }
 

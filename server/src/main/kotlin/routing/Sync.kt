@@ -11,9 +11,9 @@ import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.ktor.server.sse.*
 import io.ktor.sse.*
-import org.jetbrains.exposed.sql.Database
+import org.koin.ktor.ext.inject
 
-fun Route.sync(database: Database, songService: SongService) {
+fun Route.sync() {
     route("/sync/{service}", {
         request {
             pathParameter<String>("service") {
@@ -23,11 +23,11 @@ fun Route.sync(database: Database, songService: SongService) {
         tags("sync")
     }) {
         get("/auth") {
-            SyncService.handleAuth(call, database)
+            SyncService.handleAuth(call)
         }
 
         get("/callback") {
-            SyncService.handleCallback(call, database, call.request.queryParameters["state"])
+            SyncService.handleCallback(call, call.request.queryParameters["state"])
         }
 
         route("/get") {
@@ -40,9 +40,11 @@ fun Route.sync(database: Database, songService: SongService) {
                     }
                 }) {
                     sse {
+                        val songService by inject<SongService>()
+
                         val user = call.getUser() ?: return@sse call.respond(HttpStatusCode.Unauthorized)
 
-                        val service = SyncService.getInstance(call, database)
+                        val service = SyncService.getInstance(call)
 
                         val all = call.request.queryParameters["all"]?.toBoolean() ?: false
 

@@ -6,18 +6,11 @@ import dev.dertyp.data.RefreshToken
 import dev.dertyp.db.RefreshTokenTable
 import dev.dertyp.dbQuery
 import org.jetbrains.exposed.sql.*
-import org.jetbrains.exposed.sql.transactions.transaction
 import java.time.Instant
 import java.util.*
 import kotlin.time.Duration
 
-class RefreshTokenService(database: Database) : Service() {
-    init {
-        transaction(database) {
-            SchemaUtils.create(RefreshTokenTable)
-        }
-    }
-
+class RefreshTokenService : Service() {
     companion object {
         fun mapRefreshToken(row: ResultRow): RefreshToken {
             return RefreshToken(

@@ -14,8 +14,9 @@ import io.ktor.http.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import org.koin.ktor.ext.inject
 
-fun Route.playlist(service: PlaylistService) {
+fun Route.playlist() {
     route("/playlist", {
         tags("playlist")
     }) {
@@ -32,6 +33,8 @@ fun Route.playlist(service: PlaylistService) {
                 }
             }
         }) {
+            val service by inject<PlaylistService>()
+
             val id = call.parameters["id"]?.toUUIDOrNull() ?: return@get call.respond(HttpStatusCode.BadRequest)
 
             val playlist = service.byId(id) ?: return@get call.respond(HttpStatusCode.NotFound)
@@ -51,6 +54,8 @@ fun Route.playlist(service: PlaylistService) {
                 }
             }
         }) {
+            val service by inject<PlaylistService>()
+
             val name = call.parameters["name"] ?: return@get call.respond(HttpStatusCode.BadRequest)
 
             val playlist = service.byName(name) ?: return@get call.respond(HttpStatusCode.NotFound)
@@ -72,6 +77,8 @@ fun Route.playlist(service: PlaylistService) {
                 }
             }
         }) {
+            val service by inject<PlaylistService>()
+
             val query = call.parameters["query"] ?: return@get call.respond(HttpStatusCode.BadRequest)
 
             val (page, pageSize) = call.paging()
@@ -89,11 +96,15 @@ fun Route.playlist(service: PlaylistService) {
                 }
             }
         }) {
+            val service by inject<PlaylistService>()
+
             val (page, pageSize) = call.paging()
             call.respond(service.allPlaylists(page, pageSize))
         }
 
         m3u("/m3u/{id}") { map ->
+            val service by inject<PlaylistService>()
+
             map["id"]?.toUUIDOrNull()?.let { service.byIdFull(it) }
         }
 
@@ -107,6 +118,8 @@ fun Route.playlist(service: PlaylistService) {
                 }
             }
         }) {
+            val service by inject<PlaylistService>()
+
             val insertablePlaylist = call.receive<InsertablePlaylist>()
 
             val playlistId = service.createBatch(listOf(insertablePlaylist)).firstOrNull() ?: return@put call.respond(
@@ -130,6 +143,8 @@ fun Route.playlist(service: PlaylistService) {
                 }
             }
         }) {
+            val service by inject<PlaylistService>()
+
             val id = call.parameters["id"]?.toUUIDOrNull() ?: return@delete call.respond(HttpStatusCode.BadRequest)
 
             val success = service.delete(id)

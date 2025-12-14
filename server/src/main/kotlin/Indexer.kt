@@ -8,8 +8,8 @@ import dev.dertyp.data.InsertableSong
 import dev.dertyp.services.ImageService
 import dev.dertyp.services.PlaylistService
 import dev.dertyp.services.SongService
+import dev.dertyp.services.StorageService
 import io.ktor.server.application.*
-import io.ktor.server.routing.*
 import io.ktor.util.logging.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.Mutex
@@ -37,14 +37,10 @@ class Indexer(
     environment: ApplicationEnvironment,
     private val songService: SongService,
     private val imageService: ImageService,
+    private val storageService: StorageService,
     private val playlistService: PlaylistService,
 ) {
     val logger = KtorSimpleLogger("Indexer")
-
-    val tracksPath = environment.config.propertyOrNull("audio.tracks")?.getString()?.removeSuffix("/")
-    val albumsPath = environment.config.propertyOrNull("audio.albums")?.getString()?.removeSuffix("/")
-    val playlistsPath = environment.config.propertyOrNull("audio.playlists")?.getString()?.removeSuffix("/")
-
     val secondaryTracksPaths = try {
         environment.config.propertyOrNull("audio.secondary-tracks")?.getList()?.map {
             Path(it.removeSuffix("/"))
@@ -62,11 +58,11 @@ class Indexer(
 
     suspend fun queue(stdout: suspend (String) -> Unit) = coroutineScope {
         val log = { line: String -> async { stdout(line) } }
-        if (tracksPath == null || playlistsPath == null)
+        if (storageService.tracksPath == null || storageService.playlistsPath == null)
             return@coroutineScope log("audio paths are not configured")
 
-        val songRootPath = Path(tracksPath)
-        val playlistRootPath = Path(playlistsPath)
+        val songRootPath = Path(storageService.tracksPath)
+        val playlistRootPath = Path(storageService.playlistsPath)
 
         return@coroutineScope queue(
             listOf(songRootPath, *secondaryTracksPaths.toTypedArray()),
@@ -76,11 +72,11 @@ class Indexer(
 
     suspend fun start(stdout: suspend (String) -> Unit) = coroutineScope {
         val log = { line: String -> async { stdout(line) } }
-        if (tracksPath == null || playlistsPath == null)
+        if (storageService.tracksPath == null || storageService.playlistsPath == null)
             return@coroutineScope log("audio paths are not configured").await()
 
-        val songRootPath = Path(tracksPath)
-        val playlistRootPath = Path(playlistsPath)
+        val songRootPath = Path(storageService.tracksPath)
+        val playlistRootPath = Path(storageService.playlistsPath)
 
         start(
             listOf(songRootPath, *secondaryTracksPaths.toTypedArray()),
@@ -336,9 +332,3 @@ class Indexer(
         )
     }
 }
-
-fun Route.Indexer(service: SongService, imageService: ImageService, playlistService: PlaylistService) =
-    Indexer(environment, service, imageService, playlistService)
-
-fun Application.Indexer(service: SongService, imageService: ImageService, playlistService: PlaylistService) =
-    Indexer(environment, service, imageService, playlistService)

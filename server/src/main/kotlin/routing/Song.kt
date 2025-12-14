@@ -16,6 +16,7 @@ import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.ktor.util.logging.*
 import kotlinx.serialization.Serializable
+import org.koin.ktor.ext.inject
 import java.util.*
 
 @Serializable
@@ -27,7 +28,7 @@ data class SongIds(
     val ids: List<UUID>
 )
 
-fun Route.song(service: SongService) {
+fun Route.song() {
     val logger = KtorSimpleLogger("song")
 
     route("/song", {
@@ -46,6 +47,8 @@ fun Route.song(service: SongService) {
                 }
             }
         }) {
+            val service by inject<SongService>()
+
             val id = call.parameters["id"]?.toUUIDOrNull() ?: return@post call.respond(HttpStatusCode.BadRequest)
 
             val user = call.getUser() ?: return@post call.respond(HttpStatusCode.Unauthorized)
@@ -70,6 +73,8 @@ fun Route.song(service: SongService) {
                 }
             }
         }) {
+            val service by inject<SongService>()
+
             val id = call.parameters["id"]?.toUUIDOrNull() ?: return@get call.respond(HttpStatusCode.BadRequest)
 
             val user = call.getUser() ?: return@get call.respond(HttpStatusCode.Unauthorized)
@@ -92,6 +97,8 @@ fun Route.song(service: SongService) {
                 }
             }
         }) {
+            val service by inject<SongService>()
+
             val ids = call.receive<SongIds>()
 
             val user = call.getUser() ?: return@post call.respond(HttpStatusCode.Unauthorized)
@@ -116,6 +123,8 @@ fun Route.song(service: SongService) {
                 }
             }
         }) {
+            val service by inject<SongService>()
+
             val id = call.parameters["albumId"]?.toUUIDOrNull() ?: return@get call.respond(HttpStatusCode.BadRequest)
 
             val user = call.getUser() ?: return@get call.respond(HttpStatusCode.Unauthorized)
@@ -128,6 +137,8 @@ fun Route.song(service: SongService) {
             path = "/byAlbum/{albumId}/m3u",
             pathParams = listOf(Pair("albumId", "The album id to search all songs for.")),
             validate = { map -> map["albumId"] != null }) { map ->
+            val service by inject<SongService>()
+
             val user = call.getUser() ?: return@m3u null
 
             map["albumId"]?.toUUIDOrNull()?.let {
@@ -154,6 +165,8 @@ fun Route.song(service: SongService) {
                 }
             }
         }) {
+            val service by inject<SongService>()
+
             val id = call.parameters["playlistId"]?.toUUIDOrNull() ?: return@get call.respond(HttpStatusCode.BadRequest)
 
             val user = call.getUser() ?: return@get call.respond(HttpStatusCode.Unauthorized)
@@ -166,6 +179,8 @@ fun Route.song(service: SongService) {
             path = "/byPlaylist/{playlistId}/m3u",
             pathParams = listOf(Pair("playlistId", "The playlist id to search all songs for.")),
             validate = { map -> map["playlistId"] != null }) { map ->
+            val service by inject<SongService>()
+
             val user = call.getUser() ?: return@m3u null
 
             map["playlistId"]?.toUUIDOrNull()?.let {
@@ -192,6 +207,8 @@ fun Route.song(service: SongService) {
                 }
             }
         }) {
+            val service by inject<SongService>()
+
             val id = call.parameters["artistId"]?.toUUIDOrNull() ?: return@get call.respond(HttpStatusCode.BadRequest)
 
             val user = call.getUser() ?: return@get call.respond(HttpStatusCode.Unauthorized)
@@ -204,6 +221,8 @@ fun Route.song(service: SongService) {
             path = "/byArtist/{artistId}/m3u",
             pathParams = listOf(Pair("artistId", "The artist id to search all songs for.")),
             validate = { map -> map["artistId"] != null }) { map ->
+            val service by inject<SongService>()
+
             val user = call.getUser() ?: return@m3u null
 
             map["artistId"]?.toUUIDOrNull()?.let {
@@ -230,6 +249,8 @@ fun Route.song(service: SongService) {
                 }
             }
         }) {
+            val service by inject<SongService>()
+
             val title = call.parameters["title"] ?: return@get call.respond(HttpStatusCode.BadRequest)
 
             val user = call.getUser() ?: return@get call.respond(HttpStatusCode.Unauthorized)
@@ -257,6 +278,8 @@ fun Route.song(service: SongService) {
                 }
             }
         }) {
+            val service by inject<SongService>()
+
             val query = call.parameters["query"] ?: return@get call.respond(HttpStatusCode.BadRequest)
 
             val user = call.getUser() ?: return@get call.respond(HttpStatusCode.Unauthorized)
@@ -286,6 +309,8 @@ fun Route.song(service: SongService) {
                 }
             }
         }) {
+            val service by inject<SongService>()
+
             val query = call.parameters["query"] ?: return@get call.respond(HttpStatusCode.BadRequest)
 
             val user = call.getUser() ?: return@get call.respond(HttpStatusCode.Unauthorized)
@@ -312,6 +337,8 @@ fun Route.song(service: SongService) {
                 }
             }
         }) {
+            val service by inject<SongService>()
+
             val user = call.getUser() ?: return@get call.respond(HttpStatusCode.Unauthorized)
 
             val explicit = call.parameters["explicit"] == "true"
@@ -327,6 +354,8 @@ fun Route.song(service: SongService) {
                 Pair("explicit", "Include explicit songs."),
             ),
             validate = { true }) { map ->
+            val service by inject<SongService>()
+
             val user = call.getUser() ?: return@m3u null
 
             Pair(
@@ -352,6 +381,8 @@ fun Route.song(service: SongService) {
                 }
             }
         }) {
+            val service by inject<SongService>()
+
             val user = call.getUser() ?: return@get call.respond(HttpStatusCode.Unauthorized)
 
             val explicit = call.parameters["explicit"] == "true"
@@ -367,6 +398,8 @@ fun Route.song(service: SongService) {
                 Pair("explicit", "Include explicit songs."),
             ),
             validate = { true }) { map ->
+            val service by inject<SongService>()
+
             val user = call.getUser() ?: return@m3u null
 
             Pair(
@@ -388,6 +421,8 @@ fun Route.song(service: SongService) {
                 }
             }
         }) {
+            val service by inject<SongService>()
+
             val song = service.createBatch(listOf(call.receive())).values.singleOrNull() ?: return@post call.respond(
                 HttpStatusCode.NotFound
             )

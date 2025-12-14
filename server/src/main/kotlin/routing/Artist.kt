@@ -11,8 +11,9 @@ import io.ktor.http.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.ktor.util.logging.*
+import org.koin.ktor.ext.inject
 
-fun Route.artist(service: ArtistService) {
+fun Route.artist() {
     val logger = KtorSimpleLogger("artist")
 
     route("/artist", {
@@ -30,6 +31,8 @@ fun Route.artist(service: ArtistService) {
                 }
             }
         }) {
+            val service by inject<ArtistService>()
+
             val id = call.parameters["id"]?.toUUIDOrNull() ?: return@get call.respond(HttpStatusCode.BadRequest)
 
             val artist = service.byId(id) ?: return@get call.respond(HttpStatusCode.NotFound)
@@ -50,6 +53,8 @@ fun Route.artist(service: ArtistService) {
                 }
             }
         }) {
+            val service by inject<ArtistService>()
+
             val id = call.parameters["id"]?.toUUIDOrNull() ?: return@get call.respond(HttpStatusCode.BadRequest)
 
             val (page, pageSize) = call.paging()
@@ -71,6 +76,8 @@ fun Route.artist(service: ArtistService) {
                 }
             }
         }) {
+            val service by inject<ArtistService>()
+
             val query = call.parameters["query"] ?: return@get call.respond(HttpStatusCode.BadRequest)
 
             val (page, pageSize) = call.paging()
@@ -89,6 +96,8 @@ fun Route.artist(service: ArtistService) {
                 }
             }
         }) {
+            val service by inject<ArtistService>()
+
             val (page, pageSize) = call.paging()
             val artists = service.allArtists(page, pageSize)
             call.respond(artists)

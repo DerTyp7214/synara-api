@@ -7,10 +7,11 @@ import dev.dertyp.plugins.redisCache
 import dev.dertyp.services.JwtService
 import io.ktor.server.application.*
 import io.ktor.server.plugins.cors.routing.*
+import org.koin.ktor.ext.getKoin
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.seconds
 
-fun Application.configureHTTP(jwtService: JwtService) {
+fun Application.configureHTTP() {
     install(CORS) {
         anyHeader(true)
         anyMethod()
@@ -32,5 +33,5 @@ fun Application.configureHTTP(jwtService: JwtService) {
         }
     }
 
-    jwtService.authenticate(this)
+    getKoin().get<JwtService>().authenticate(this)
 }

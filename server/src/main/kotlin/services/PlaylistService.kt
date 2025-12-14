@@ -1,6 +1,5 @@
 package dev.dertyp.services
 
-import dev.dertyp.core.foreignKeyOn
 import dev.dertyp.core.paging
 import dev.dertyp.core.rankedSearchQuery
 import dev.dertyp.data.InsertablePlaylist
@@ -14,17 +13,10 @@ import dev.dertyp.dbQuery
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
-import org.jetbrains.exposed.sql.transactions.transaction
 import java.util.*
 
-class PlaylistService(database: Database) : Service() {
+class PlaylistService : Service() {
     init {
-        transaction(database) {
-            foreignKeyOn(database)
-            SchemaUtils.create(PlaylistTable)
-            SchemaUtils.create(PlaylistSongTable)
-        }
-
         instance = this
     }
 

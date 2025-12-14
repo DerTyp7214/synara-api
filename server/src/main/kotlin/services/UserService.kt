@@ -5,29 +5,15 @@ import dev.dertyp.data.AuthenticationRequest
 import dev.dertyp.data.User
 import dev.dertyp.db.UserTable
 import dev.dertyp.dbQuery
-import io.ktor.server.application.*
-import org.jetbrains.exposed.sql.*
-import org.jetbrains.exposed.sql.transactions.transaction
+import org.jetbrains.exposed.sql.Query
+import org.jetbrains.exposed.sql.ResultRow
+import org.jetbrains.exposed.sql.batchInsert
+import org.jetbrains.exposed.sql.selectAll
 import java.util.*
 
-class UserService(database: Database, environment: ApplicationEnvironment) : Service() {
+class UserService : Service() {
     init {
         INSTANCE = this
-
-        val clientId = environment.config.propertyOrNull("client.id")?.getString()
-        val clientSecret = environment.config.propertyOrNull("client.secret")?.getString()
-
-        transaction(database) {
-            SchemaUtils.create(UserTable)
-
-            if (clientId != null && clientSecret != null) {
-                UserTable.insertIgnore {
-                    it[UserTable.username] = clientId
-                    it[UserTable.passwordHash] = BCrypt.withDefaults()
-                        .hashToString(12, clientSecret.toCharArray())
-                }
-            }
-        }
     }
 
     companion object {

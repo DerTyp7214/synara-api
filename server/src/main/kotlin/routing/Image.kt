@@ -9,9 +9,10 @@ import io.github.smiley4.ktoropenapi.route
 import io.ktor.http.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import org.koin.ktor.ext.inject
 import kotlin.time.Duration
 
-fun Route.image(service: ImageService) {
+fun Route.image() {
     route("/image", {
         tags("image")
     }) {
@@ -36,6 +37,8 @@ fun Route.image(service: ImageService) {
             route({ hidden = true }) {
                 cacheOutput(Duration.INFINITE) {
                     get {
+                        val service by inject<ImageService>()
+
                         val id =
                             call.parameters["id"]?.toUUIDOrNull() ?: return@get call.respond(HttpStatusCode.BadRequest)
 
@@ -65,6 +68,8 @@ fun Route.image(service: ImageService) {
             route({ hidden = true }) {
                 cacheOutput(Duration.INFINITE) {
                     get {
+                        val service by inject<ImageService>()
+
                         val id = call.parameters["hash"] ?: return@get call.respond(HttpStatusCode.BadRequest)
 
                         val image = service.byHash(id) ?: return@get call.respond(HttpStatusCode.NotFound)

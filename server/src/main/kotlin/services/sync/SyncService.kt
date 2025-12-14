@@ -16,10 +16,10 @@ import io.ktor.server.util.*
 import kotlinx.coroutines.flow.Flow
 import kotlinx.html.*
 import kotlinx.serialization.Serializable
-import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.ResultRow
 import org.jetbrains.exposed.sql.andWhere
 import org.jetbrains.exposed.sql.upsert
+import org.koin.ktor.ext.get
 import java.security.MessageDigest
 import java.util.*
 import java.util.concurrent.TimeUnit
@@ -28,7 +28,6 @@ import kotlin.time.Duration.Companion.seconds
 
 @Suppress("unused")
 abstract class SyncService(
-    private val database: Database,
     protected val environment: ApplicationEnvironment,
     protected val user: User
 ) : Service() {
@@ -57,39 +56,38 @@ abstract class SyncService(
 
         private suspend fun getInstance(
             name: String?,
-            database: Database,
             call: ApplicationCall,
             username: String? = null
         ): SyncService? {
             return when (name) {
                 SyncServiceType.tidal.name -> {
                     val environment = call.application.environment
-                    val user = UserService(database, environment)
+                    val user = call.get<UserService>()
                         .findUserByUsername(username ?: call.getUsername())
                     if (user == null) return null
-                    TidalSyncService(database, environment, user)
+                    TidalSyncService(environment, user)
                 }
 
                 else -> null
             }
         }
 
-        suspend fun getInstance(call: ApplicationCall, database: Database, username: String? = null): SyncService {
-            val instance = getInstance(call.parameters["service"], database, call, username)
+        suspend fun getInstance(call: ApplicationCall, username: String? = null): SyncService {
+            val instance = getInstance(call.parameters["service"], call, username)
                 ?: throw IllegalStateException("Service not found")
 
             return instance
         }
 
-        suspend fun handleAuth(call: ApplicationCall, database: Database) {
-            val service = getInstance(call.parameters["service"], database, call)
+        suspend fun handleAuth(call: ApplicationCall) {
+            val service = getInstance(call.parameters["service"], call)
                 ?: return call.respond(HttpStatusCode.BadRequest, "Invalid Service")
 
             service.handleAuth(call)
         }
 
-        suspend fun handleCallback(call: ApplicationCall, database: Database, username: String?) {
-            val service = getInstance(call.parameters["service"], database, call, username) ?: return call.respond(
+        suspend fun handleCallback(call: ApplicationCall, username: String?) {
+            val service = getInstance(call.parameters["service"], call, username) ?: return call.respond(
                 HttpStatusCode.BadRequest,
                 "Invalid Service"
             )

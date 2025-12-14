@@ -14,20 +14,24 @@ import io.ktor.server.routing.*
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
+import org.koin.ktor.ext.inject
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
+import kotlin.time.ExperimentalTime
 
 @Serializable
 data class DlBody(
     val urls: List<String> = emptyList(),
 )
 
-@OptIn(ExperimentalAtomicApi::class)
-fun Route.tdn(service: DownloadService) {
+@OptIn(ExperimentalAtomicApi::class, ExperimentalTime::class)
+fun Route.tdn() {
     route("/tdn", {
         tags("tdn")
     }) {
         post("login", {}) {
-            if (!service.tdnService.isDownloadActive.compareAndSet(expectedValue = false, newValue = true)) {
+            val tdnService by inject<TdnService>()
+
+            if (!tdnService.isDownloadActive.compareAndSet(expectedValue = false, newValue = true)) {
                 call.respond(
                     HttpStatusCode.Conflict,
                     "Download is already running. (If you just closed one, please wait a few seconds)"
@@ -41,11 +45,11 @@ fun Route.tdn(service: DownloadService) {
             call.response.header("X-Accel-Buffering", "no")
 
             call.respondBytesWriter(ContentType.Text.EventStream) {
-                service.tdnService.login({ isClientConnected() }) {
+                tdnService.login({ isClientConnected() }) {
                     sendSafe(it)
                 }
 
-                service.tdnService.isDownloadActive.store(false)
+                tdnService.isDownloadActive.store(false)
             }
         }
 
@@ -60,7 +64,10 @@ fun Route.tdn(service: DownloadService) {
                 body<DlBody>()
             }
         }) {
-            if (!service.tdnService.authorized()) return@post call.respond(HttpStatusCode.Unauthorized)
+            val service by inject<DownloadService>()
+            val tdnService by inject<TdnService>()
+
+            if (!tdnService.authorized()) return@post call.respond(HttpStatusCode.Unauthorized)
 
             val bodyUrls = call.receive<DlBody>().urls
             val pathUrls = call.parameters.getAll("url") ?: emptyList()
@@ -129,7 +136,10 @@ fun Route.tdn(service: DownloadService) {
                 }
             }
         }) {
-            if (!service.tdnService.authorized()) return@post call.respond(HttpStatusCode.Unauthorized)
+            val service by inject<DownloadService>()
+            val tdnService by inject<TdnService>()
+
+            if (!tdnService.authorized()) return@post call.respond(HttpStatusCode.Unauthorized)
 
             val type = call.parameters["type"]?.let { TdnFavoriteType.valueOf(it) }
             if (type == null) return@post call.respond(HttpStatusCode.BadRequest)

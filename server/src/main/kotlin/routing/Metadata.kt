@@ -14,7 +14,6 @@ import dev.dertyp.services.metadata.MetadataService
 import io.github.smiley4.ktoropenapi.get
 import io.github.smiley4.ktoropenapi.route
 import io.ktor.http.*
-import io.ktor.server.application.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.ktor.server.sse.*
@@ -24,17 +23,14 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import org.jetbrains.exposed.sql.update
+import org.koin.ktor.ext.inject
 import java.util.*
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.days
 
 @OptIn(ExperimentalAtomicApi::class)
-fun Route.metadata(
-    imageService: ImageService,
-    environment: ApplicationEnvironment,
-    indexer: Indexer,
-) {
+fun Route.metadata() {
     route("/metadata/{metadataProvider}", {
         request {
             pathParameter<MetadataService.Companion.MetadataType>("metadataProvider")
@@ -73,6 +69,9 @@ fun Route.metadata(
         }
         route("/fetchArtistImages", HttpMethod.Get) {
             sse {
+                val indexer by inject<Indexer>()
+                val imageService by inject<ImageService>()
+
                 if (indexer.isActive.load()) {
                     call.respond(HttpStatusCode.Conflict, "Index is running")
                     return@sse

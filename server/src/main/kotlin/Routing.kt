@@ -16,10 +16,11 @@ import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.ktor.server.sse.*
 import kotlinx.serialization.ExperimentalSerializationApi
+import org.koin.ktor.ext.getKoin
 import kotlin.time.ExperimentalTime
 
 @OptIn(ExperimentalSerializationApi::class, ExperimentalTime::class)
-fun Application.configureRouting(jwtService: JwtService) {
+fun Application.configureRouting() {
     install(ContentNegotiation) {
         json()
         protobuf()
@@ -42,6 +43,6 @@ fun Application.configureRouting(jwtService: JwtService) {
             }
         }
 
-        jwtService.authenticate(this)
+        getKoin().get<JwtService>().authenticate(this)
     }
 }

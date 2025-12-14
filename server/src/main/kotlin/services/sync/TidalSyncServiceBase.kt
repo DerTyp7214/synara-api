@@ -14,14 +14,12 @@ import io.ktor.server.application.*
 import io.ktor.server.util.*
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
-import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.ResultRow
 
 abstract class TidalSyncServiceBase(
-    database: Database,
     environment: ApplicationEnvironment,
     user: User
-) : SyncService(database, environment, user) {
+) : SyncService(environment, user) {
     override val clientIdConfigPath: String = "tidal.clientId"
     override val clientSecretConfigPath: String = "tidal.clientSecret"
     override val scopes: List<String> = listOf(

@@ -1,6 +1,5 @@
 package dev.dertyp.services
 
-import dev.dertyp.core.foreignKeyOn
 import dev.dertyp.core.paging
 import dev.dertyp.data.Image
 import dev.dertyp.data.InsertableImage
@@ -8,20 +7,17 @@ import dev.dertyp.data.PaginatedResponse
 import dev.dertyp.db.ImageTable
 import dev.dertyp.dbQuery
 import io.ktor.server.application.*
-import org.jetbrains.exposed.sql.*
-import org.jetbrains.exposed.sql.transactions.transaction
+import org.jetbrains.exposed.sql.Query
+import org.jetbrains.exposed.sql.ResultRow
+import org.jetbrains.exposed.sql.batchInsert
+import org.jetbrains.exposed.sql.selectAll
 import java.util.*
 import kotlin.io.path.*
 
-class ImageService(database: Database, environment: ApplicationEnvironment) : Service() {
+class ImageService(environment: ApplicationEnvironment) : Service() {
     private val imagesPath = environment.config.property("data.images").getString().removeSuffix("/")
 
     init {
-        transaction(database) {
-            foreignKeyOn(database)
-            SchemaUtils.create(ImageTable)
-        }
-
         Path(imagesPath).toFile().mkdirs()
 
         instance = this

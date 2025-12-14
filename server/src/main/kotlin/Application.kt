@@ -1,48 +1,50 @@
 package dev.dertyp
 
 import dev.dertyp.plugins.JmDNSPlugin
-import dev.dertyp.services.JwtService
-import dev.dertyp.services.RefreshTokenService
-import dev.dertyp.services.UserService
+import dev.dertyp.services.*
+import dev.dertyp.services.tdn.DownloadService
+import dev.dertyp.services.tdn.TdnService
 import io.ktor.server.application.*
 import io.ktor.server.plugins.calllogging.*
-import org.jetbrains.exposed.sql.Database
+import org.koin.core.module.dsl.singleOf
+import org.koin.dsl.module
+import org.koin.ktor.plugin.Koin
+import org.koin.logger.slf4jLogger
 
 fun main(args: Array<String>) {
     io.ktor.server.netty.EngineMain.main(args)
 }
 
 fun Application.module() {
-    val database = getDatabase(environment)
-
-    val userService = UserService(database, environment)
-    val refreshTokenService = RefreshTokenService(database)
-    val jwtService = JwtService(environment, userService, refreshTokenService)
-
     install(CallLogging)
     install(JmDNSPlugin) {
         serviceName = "synara-api"
         serviceType = "_synara-api._tcp.local."
     }
 
-    configureHTTP(jwtService)
-    configureRouting(jwtService)
-    configureDatabases(database, jwtService)
-}
+    val databaseManager = DatabaseManager(environment)
 
-fun getDatabase(environment: ApplicationEnvironment): Database {
-    val dbDriver = environment.config.property("storage.driverClassName").getString()
-    val dbUrl = environment.config.property("storage.jdbcURL").getString()
-    val dbUser = environment.config.property("storage.user").getString()
-    val dbPassword = environment.config.property("storage.password").getString()
-
-    return when (dbDriver) {
-        "org.sqlite.JDBC" -> Database.connect(dbUrl, dbDriver)
-        else -> Database.connect(
-            url = dbUrl,
-            driver = dbDriver,
-            user = dbUser,
-            password = dbPassword
-        )
+    install(Koin) {
+        slf4jLogger()
+        modules(module {
+            single<ApplicationEnvironment> { environment }
+            single<DatabaseManager> { databaseManager }
+            singleOf(::StorageService)
+            singleOf(::UserService)
+            singleOf(::RefreshTokenService)
+            singleOf(::JwtService)
+            singleOf(::SongService)
+            singleOf(::ImageService)
+            singleOf(::AlbumService)
+            singleOf(::ArtistService)
+            singleOf(::PlaylistService)
+            singleOf(::Indexer)
+            singleOf(::TdnService)
+            singleOf(::DownloadService)
+        })
     }
+
+    configureHTTP()
+    configureRouting()
+    configureDatabases()
 }

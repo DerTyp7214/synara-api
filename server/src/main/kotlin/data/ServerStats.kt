@@ -10,6 +10,7 @@ data class ServerStats(
     val imagesCount: Int,
     val playlistCount: Int,
     val totalFileSize: Long,
+    val indexedFileSize: Long,
     val averageSizePerSong: Long,
     val totalDuration: Long,
 )

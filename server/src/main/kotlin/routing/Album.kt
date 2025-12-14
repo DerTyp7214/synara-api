@@ -9,8 +9,9 @@ import io.github.smiley4.ktoropenapi.route
 import io.ktor.http.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import org.koin.ktor.ext.inject
 
-fun Route.album(service: AlbumService) {
+fun Route.album() {
     route("/album", {
         tags("album")
     }) {
@@ -27,6 +28,8 @@ fun Route.album(service: AlbumService) {
                 }
             }
         }) {
+            val service by inject<AlbumService>()
+
             val id = call.parameters["id"]?.toUUIDOrNull() ?: return@get call.respond(HttpStatusCode.BadRequest)
 
             val album = service.byId(id) ?: return@get call.respond(HttpStatusCode.NotFound)
@@ -48,6 +51,8 @@ fun Route.album(service: AlbumService) {
                 }
             }
         }) {
+            val service by inject<AlbumService>()
+
             val name = call.parameters["name"] ?: return@get call.respond(HttpStatusCode.BadRequest)
 
             val (page, pageSize) = call.paging()
@@ -73,6 +78,8 @@ fun Route.album(service: AlbumService) {
                 }
             }
         }) {
+            val service by inject<AlbumService>()
+
             val artistId =
                 call.parameters["artistId"]?.toUUIDOrNull() ?: return@get call.respond(HttpStatusCode.BadRequest)
 
@@ -97,6 +104,8 @@ fun Route.album(service: AlbumService) {
                 }
             }
         }) {
+            val service by inject<AlbumService>()
+
             val query = call.parameters["query"] ?: return@get call.respond(HttpStatusCode.BadRequest)
 
             val (page, pageSize) = call.paging()
@@ -114,6 +123,8 @@ fun Route.album(service: AlbumService) {
                 }
             }
         }) {
+            val service by inject<AlbumService>()
+
             val (page, pageSize) = call.paging()
             call.respond(service.allAlbums(page, pageSize))
         }

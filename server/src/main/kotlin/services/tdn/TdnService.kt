@@ -3,6 +3,7 @@ package dev.dertyp.services.tdn
 import dev.dertyp.Indexer
 import dev.dertyp.core.*
 import dev.dertyp.services.Service
+import dev.dertyp.services.StorageService
 import kotlinx.coroutines.*
 import kotlinx.serialization.Serializable
 import java.io.InputStreamReader
@@ -14,6 +15,9 @@ import kotlin.concurrent.atomics.AtomicBoolean
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.io.path.*
+import kotlin.time.Clock
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.ExperimentalTime
 
 @Suppress("EnumEntryName")
 enum class TdnFavoriteType {
@@ -35,7 +39,7 @@ data class ProcessExecutionResult(val exitCode: Int, val fullOutput: String, val
 }
 
 @OptIn(ExperimentalAtomicApi::class)
-class TdnService(private val indexer: Indexer) : Service() {
+class TdnService(private val indexer: Indexer, private val storageService: StorageService) : Service() {
     val isDownloadActive = AtomicBoolean(false)
 
     @OptIn(ExperimentalAtomicApi::class)
@@ -61,16 +65,16 @@ class TdnService(private val indexer: Indexer) : Service() {
                 logProxy(it)
             }
 
-            if (indexer.tracksPath != null) {
-                val paths = Path(indexer.tracksPath).getModifiedSince(startTime)
+            if (storageService.tracksPath != null) {
+                val paths = Path(storageService.tracksPath).getModifiedSince(startTime)
 
                 for (path in paths) {
                     pathLines.add(path.absolutePathString())
                 }
             }
 
-            if (indexer.playlistsPath != null) {
-                val paths = Path(indexer.playlistsPath).getModifiedSince(startTime)
+            if (storageService.playlistsPath != null) {
+                val paths = Path(storageService.playlistsPath).getModifiedSince(startTime)
 
                 for (path in paths) {
                     pathLines.add(path.absolutePathString())
@@ -82,7 +86,7 @@ class TdnService(private val indexer: Indexer) : Service() {
             paths.addAll(pathLines.map { Path(it) }.filter { it.exists() }.toMutableList())
 
             val pathAlternation =
-                "(${indexer.playlistsPath}|${indexer.albumsPath})"
+                "(${storageService.playlistsPath}|${storageService.albumsPath})"
 
             val playlistRegex =
                 Regex("${pathAlternation}/([^/]+?)/_[^/]+?\\.m3u", RegexOption.DOT_MATCHES_ALL)
@@ -123,16 +127,16 @@ class TdnService(private val indexer: Indexer) : Service() {
 
             playlistPaths.addAll(
                 paths
-                    .filter { it.isInside(indexer.playlistsPath ?: it.parent.absolutePathString()) }
+                    .filter { it.isInside(storageService.playlistsPath ?: it.parent.absolutePathString()) }
                     .filter { it.extension == indexer.playlistExtension }
                     .distinctBy { it.absolutePathString() }
             )
 
-            if (result.exitCode == 1 && indexer.playlistsPath != null) {
+            if (result.exitCode == 1 && storageService.playlistsPath != null) {
                 val pathAlternation =
-                    "(${indexer.playlistsPath}|${indexer.albumsPath})"
+                    "(${storageService.playlistsPath}|${storageService.albumsPath})"
 
-                val rootPath = Path(indexer.playlistsPath).parent.absolute()
+                val rootPath = Path(storageService.playlistsPath).parent.absolute()
 
                 val errorRegex = Regex(
                     "FileNotFoundError:\\s+(\\[.+?])\\s+No\\s+such\\s+file\\s+or\\s+directory:\\s+'" +
@@ -225,9 +229,11 @@ class TdnService(private val indexer: Indexer) : Service() {
         return executeTdn(command, aliveCheck, onLiveOutput)
     }
 
+    @ExperimentalTime
     suspend fun authorized(): Boolean {
         val command = mutableListOf("tdn", "login")
-        val result = executeTdn(command, { true })
+        val startTime = Clock.System.now()
+        val result = executeTdn(command, { Clock.System.now().minus(startTime) > 10.seconds })
 
         return result.fullOutput.contains("You are logged in")
     }

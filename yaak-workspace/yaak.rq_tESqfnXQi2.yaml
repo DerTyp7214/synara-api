@@ -2,7 +2,7 @@ type: http_request
 model: http_request
 id: rq_tESqfnXQi2
 createdAt: 2025-12-09T19:57:24.510720088
-updatedAt: 2025-12-09T20:05:02.591610407
+updatedAt: 2025-12-14T17:14:14.128253109
 workspaceId: wk_9dbKacQT4H
 folderId: null
 authentication: {}
@@ -20,11 +20,11 @@ urlParameters:
   name: :service
   value: tidal
   id: J2PTfXvIAX
-- enabled: true
+- enabled: false
   name: all
   value: 'true'
   id: 9xwcfzTAGG
 - enabled: true
   name: ''
   value: ''
-  id: ckuE6SvBvn
+  id: UipXBIgdMZ

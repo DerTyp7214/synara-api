@@ -87,6 +87,8 @@ dependencies {
     implementation ("org.jmdns:jmdns:$jmdns_version")
     implementation("com.sksamuel.scrimage:scrimage-core:4.3.5")
     implementation("com.sksamuel.scrimage:scrimage-webp:4.3.5")
+    implementation("io.insert-koin:koin-ktor:4.1.2-Beta1")
+    implementation("io.insert-koin:koin-logger-slf4j:4.1.2-Beta1")
     testImplementation("io.ktor:ktor-server-test-host")
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit:$kotlin_version")
 }
