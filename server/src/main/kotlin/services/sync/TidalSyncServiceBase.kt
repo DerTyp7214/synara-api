@@ -1,6 +1,5 @@
 package dev.dertyp.services.sync
 
-import com.google.gson.annotations.SerializedName
 import dev.dertyp.ApiClient
 import dev.dertyp.core.getUsername
 import dev.dertyp.core.parameters
@@ -13,6 +12,7 @@ import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.util.*
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.ResultRow
@@ -143,12 +143,12 @@ abstract class TidalSyncServiceBase(
 
     @Serializable
     data class TidalTokenResponse(
-        @SerializedName("scope") override val scope: String?,
-        @SerializedName("access_token") override val accessToken: String,
-        @SerializedName("refresh_token") override val refreshToken: String,
-        @SerializedName("expires_in") override val expiresIn: Int,
-        @SerializedName("token_type") override val tokenType: String,
-        @SerializedName("user_id") override val userId: Long,
+        @SerialName("scope") override val scope: String?,
+        @SerialName("access_token") override val accessToken: String,
+        @SerialName("refresh_token") override val refreshToken: String,
+        @SerialName("expires_in") override val expiresIn: Int,
+        @SerialName("token_type") override val tokenType: String,
+        @SerialName("user_id") override val userId: Long,
         override val createdAt: Long? = null,
     ) : Token
 }

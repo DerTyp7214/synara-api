@@ -2,7 +2,7 @@ type: http_request
 model: http_request
 id: rq_2HEFG5stF8
 createdAt: 2025-10-14T19:25:16.449964932
-updatedAt: 2025-12-13T03:28:24.324075164
+updatedAt: 2025-12-14T16:55:11.990936526
 workspaceId: wk_9dbKacQT4H
 folderId: fl_NXkRVdWsW4
 authentication: {}
@@ -11,21 +11,6 @@ body:
   text: |-
     {
       "urls": [
-        "https://tidal.com/artist/8992",
-        "https://tidal.com/artist/102",
-        "https://tidal.com/artist/27472",
-
-        "https://tidal.com/album/333278716",
-        "https://tidal.com/album/333249373",
-        "https://tidal.com/album/113764115",
-        "https://tidal.com/album/86643080",
-        "https://tidal.com/album/135541721",
-        "https://tidal.com/album/279111515",
-        "https://tidal.com/album/66410563",
-        "https://tidal.com/album/285857956",
-        "https://tidal.com/album/285848118",
-        "https://tidal.com/album/285930916",
-        "https://tidal.com/album/285940615"
       ]
     }
 bodyType: application/json
