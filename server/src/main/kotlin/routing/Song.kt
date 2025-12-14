@@ -5,6 +5,7 @@ import dev.dertyp.core.omitLyrics
 import dev.dertyp.core.paging
 import dev.dertyp.core.toUUIDOrNull
 import dev.dertyp.data.*
+import dev.dertyp.serializers.UUIDListSerializer
 import dev.dertyp.services.SongService
 import io.github.smiley4.ktoropenapi.get
 import io.github.smiley4.ktoropenapi.post
@@ -19,6 +20,12 @@ import java.util.*
 
 @Serializable
 data class SetLikedBody(val liked: Boolean)
+
+@Serializable
+data class SongIds(
+    @Serializable(with = UUIDListSerializer::class)
+    val ids: List<UUID>
+)
 
 fun Route.song(service: SongService) {
     val logger = KtorSimpleLogger("song")
@@ -71,6 +78,29 @@ fun Route.song(service: SongService) {
 
             call.respond(song)
         }
+
+        post("/byIds", {
+            request {
+                body<SongIds> {
+                    description = "The song ids."
+                }
+            }
+            response {
+                HttpStatusCode.OK to {
+                    description = "The songs with the ids."
+                    body<List<Song>>()
+                }
+            }
+        }) {
+            val ids = call.receive<SongIds>()
+
+            val user = call.getUser() ?: return@post call.respond(HttpStatusCode.Unauthorized)
+
+            val songs = service.byIds(ids.ids, user.id).data.associateBy { it.id }
+
+            call.respond(ids.ids.mapNotNull { songs[it] })
+        }
+
         get("/byAlbum/{albumId}", {
             request {
                 pathParameter<String>("albumId") {
