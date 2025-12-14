@@ -1,0 +1,41 @@
+type: http_request
+model: http_request
+id: rq_4KhicL5Spk
+createdAt: 2025-12-14T04:03:22.883845610
+updatedAt: 2025-12-14T04:16:12.804495703
+workspaceId: wk_9dbKacQT4H
+folderId: fl_QrUoFyttZM
+authentication: {}
+authenticationType: null
+body:
+  text: |-
+    {
+      "ids": [
+        "0379348f-4ba3-4262-98ab-73b43da04286",
+        "d679a13d-d6e1-4f6a-8ab9-5d1ea8dc29ff"
+      ]
+    }
+bodyType: application/json
+description: '[object Object]'
+headers:
+- enabled: true
+  name: Accept
+  value: application/json
+  id: null
+- enabled: true
+  name: Content-Type
+  value: application/json
+  id: JEJxevzVpC
+method: POST
+name: /song/byIds
+sortPriority: 17.001
+url: ${[baseUrl]}/song/byIds
+urlParameters:
+- enabled: true
+  name: :id
+  value: fae6de16-232f-4713-bdd0-5da23ee1c600
+  id: u6yAuI348I
+- enabled: true
+  name: ''
+  value: ''
+  id: hEe3wHMUra
