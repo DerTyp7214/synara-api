@@ -2,7 +2,7 @@ type: http_request
 model: http_request
 id: rq_c2aQ3V9qzz
 createdAt: 2025-10-14T19:25:16.450619051
-updatedAt: 2025-12-06T10:10:03.686231110
+updatedAt: 2025-12-14T21:34:04.355579518
 workspaceId: wk_9dbKacQT4H
 folderId: fl_QrUoFyttZM
 authentication: {}
@@ -34,9 +34,9 @@ urlParameters:
   id: Cqh8H4cRV7
 - enabled: true
   name: :query
-  value: ich geh weg joshi
+  value: Section-1 - In Common
   id: zXFn5dePsN
 - enabled: true
   name: ''
   value: ''
-  id: PWk9yXTt4J
+  id: A9tTa8eZQJ

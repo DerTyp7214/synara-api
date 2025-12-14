@@ -83,7 +83,7 @@ fun Query.rankedSearchQuery(
         }
     }
 
-    for (token in tokens.filter { it.startsWith("-") }) {
+    for (token in tokens.filter { it.startsWith("-") && it.length > 1 }) {
         val matches = columns.map { Op.build { it notIlike "%${token.substring(1)}%" } }
 
         val tokenMatchOp = matches.reduce { a, b -> a and b }
