@@ -192,7 +192,7 @@ class SongService : Service() {
             page, pageSize, explicit, { userSong(userId) },
         ) {
             where { UserSongTable.isFavourite eq true }
-                .orderBy(UserSongTable.updatedAt to SortOrder.DESC)
+            orderBy(UserSongTable.updatedAt to SortOrder.DESC)
         }
 
     suspend fun allSongs(page: Int, pageSize: Int, explicit: Boolean, userId: UUID): PaginatedResponse<UserSong> =
@@ -200,6 +200,7 @@ class SongService : Service() {
             page, pageSize, explicit, { userSong(userId) },
             query = {
                 orderBy(SongTable.inserted, SortOrder.DESC)
+                orderBy(SongTable.id, SortOrder.ASC)
             }
         )
 
