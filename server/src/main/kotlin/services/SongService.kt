@@ -199,8 +199,7 @@ class SongService : Service() {
         querySongs(
             page, pageSize, explicit, { userSong(userId) },
             query = {
-                orderBy(SongTable.id, SortOrder.ASC)
-                    .orderBy(SongTable.inserted, SortOrder.DESC)
+                orderBy(SongTable.inserted, SortOrder.DESC)
             }
         )
 
