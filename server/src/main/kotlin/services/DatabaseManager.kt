@@ -64,6 +64,7 @@ class DatabaseManager(private val environment: ApplicationEnvironment) {
         val flyway = Flyway.configure()
             .dataSource(dataSource)
             .locations("classpath:db/migrations", "classpath:dev/dertyp/db/migrations")
+            .baselineOnMigrate(true)
             .load()
 
         flyway.migrate()
