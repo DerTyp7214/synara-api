@@ -2,14 +2,14 @@
 
 import io.ktor.plugin.*
 
-val exposed_version: String by project
-val h2_version: String by project
-val kotlin_version: String by project
-val kotlinx_html_version: String by project
-val kotlinx_rpc_version: String by project
-val logback_version: String by project
-val postgres_version: String by project
-val jmdns_version: String by project
+val exposedVersion: String by project
+val h2Version: String by project
+val kotlinVersion: String by project
+val kotlinxHtmlVersion: String by project
+val kotlinxRpcVersion: String by project
+val logbackVersion: String by project
+val postgresVersion: String by project
+val jmdnsVersion: String by project
 
 plugins {
     kotlin("jvm") version "2.2.20"
@@ -42,6 +42,8 @@ dependencies {
     implementation("io.ktor:ktor-client-cio")
     implementation("io.ktor:ktor-server-cors")
     implementation("io.ktor:ktor-server-core")
+    implementation("org.flywaydb:flyway-core:11.19.0")
+    implementation("com.zaxxer:HikariCP:7.0.2")
     implementation("com.ucasoft.ktor:ktor-simple-cache:0.55.3")
     implementation("com.ucasoft.ktor:ktor-simple-memory-cache:0.55.3")
     implementation("com.ucasoft.ktor:ktor-simple-redis-cache:0.55.3")
@@ -61,21 +63,21 @@ dependencies {
     implementation("io.ktor:ktor-serialization-gson")
     implementation("io.ktor:ktor-serialization-kotlinx-protobuf")
     implementation("io.ktor:ktor-server-html-builder")
-    implementation("org.jetbrains.kotlinx:kotlinx-html:$kotlinx_html_version")
+    implementation("org.jetbrains.kotlinx:kotlinx-html:$kotlinxHtmlVersion")
     implementation("io.ktor:ktor-serialization-kotlinx-json")
-    implementation("org.jetbrains.exposed:exposed-dao:$exposed_version")
-    implementation("org.jetbrains.exposed:exposed-core:$exposed_version")
-    implementation("org.jetbrains.exposed:exposed-jdbc:$exposed_version")
-    implementation("com.h2database:h2:$h2_version")
+    implementation("org.jetbrains.exposed:exposed-dao:$exposedVersion")
+    implementation("org.jetbrains.exposed:exposed-core:$exposedVersion")
+    implementation("org.jetbrains.exposed:exposed-jdbc:$exposedVersion")
+    implementation("com.h2database:h2:$h2Version")
     implementation("org.bytedeco:ffmpeg-platform:6.1.1-1.5.10")
     implementation("org.bytedeco:javacv-platform:1.5.10")
     implementation("net.coobird:thumbnailator:0.4.21")
-    implementation("org.postgresql:postgresql:$postgres_version")
-    implementation("org.jetbrains.kotlinx:kotlinx-rpc-krpc-ktor-server:$kotlinx_rpc_version")
-    implementation("org.jetbrains.kotlinx:kotlinx-rpc-krpc-ktor-client:$kotlinx_rpc_version")
+    implementation("org.postgresql:postgresql:$postgresVersion")
+    implementation("org.jetbrains.kotlinx:kotlinx-rpc-krpc-ktor-server:$kotlinxRpcVersion")
+    implementation("org.jetbrains.kotlinx:kotlinx-rpc-krpc-ktor-client:$kotlinxRpcVersion")
     implementation("io.ktor:ktor-server-netty")
     implementation("at.favre.lib:bcrypt:0.10.2")
-    implementation("ch.qos.logback:logback-classic:$logback_version")
+    implementation("ch.qos.logback:logback-classic:$logbackVersion")
     implementation("io.ktor:ktor-server-config-yaml")
     implementation("net.jthink:jaudiotagger:3.0.1")
     implementation("org.xerial:sqlite-jdbc:3.50.3.0")
@@ -84,13 +86,13 @@ dependencies {
     implementation("io.ktor:ktor-server-sessions:3.3.1")
     implementation("com.github.ben-manes.caffeine:caffeine:3.2.2")
     implementation("io.ktor:ktor-server-partial-content:3.3.1")
-    implementation ("org.jmdns:jmdns:$jmdns_version")
+    implementation ("org.jmdns:jmdns:$jmdnsVersion")
     implementation("com.sksamuel.scrimage:scrimage-core:4.3.5")
     implementation("com.sksamuel.scrimage:scrimage-webp:4.3.5")
     implementation("io.insert-koin:koin-ktor:4.1.2-Beta1")
     implementation("io.insert-koin:koin-logger-slf4j:4.1.2-Beta1")
     testImplementation("io.ktor:ktor-server-test-host")
-    testImplementation("org.jetbrains.kotlin:kotlin-test-junit:$kotlin_version")
+    testImplementation("org.jetbrains.kotlin:kotlin-test-junit:$kotlinVersion")
 }
 
 val ktorBaseImageTag = "synara-api-base:latest"

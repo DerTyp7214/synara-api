@@ -1,10 +1,12 @@
 package dev.dertyp.core
 
-import org.jetbrains.exposed.sql.Database
-import org.jetbrains.exposed.sql.Transaction
+import java.sql.Connection
 
-fun Transaction.foreignKeyOn(database: Database) {
-    when (database.dialect.name) {
-        "SQLite" -> execInBatch(listOf("PRAGMA foreign_keys = ON"))
+fun foreignKeyOn(connection: Connection) {
+    when (connection.metaData.driverName) {
+        "org.sqlite.JDBC" -> {
+            val statement = connection.prepareStatement("PRAGMA foreign_keys = ON")
+            statement.execute()
+        }
     }
 }

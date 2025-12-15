@@ -8,6 +8,7 @@ import io.ktor.server.application.*
 import io.ktor.server.plugins.calllogging.*
 import org.koin.core.module.dsl.singleOf
 import org.koin.dsl.module
+import org.koin.ktor.ext.get
 import org.koin.ktor.plugin.Koin
 import org.koin.logger.slf4jLogger
 
@@ -22,13 +23,11 @@ fun Application.module() {
         serviceType = "_synara-api._tcp.local."
     }
 
-    val databaseManager = DatabaseManager(environment)
-
     install(Koin) {
         slf4jLogger()
         modules(module {
             single<ApplicationEnvironment> { environment }
-            single<DatabaseManager> { databaseManager }
+            singleOf(::DatabaseManager)
             singleOf(::StorageService)
             singleOf(::UserService)
             singleOf(::RefreshTokenService)
@@ -43,6 +42,8 @@ fun Application.module() {
             singleOf(::DownloadService)
         })
     }
+
+    get<DatabaseManager>().init()
 
     configureHTTP()
     configureRouting()

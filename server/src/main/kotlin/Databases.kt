@@ -85,7 +85,7 @@ fun Application.configureDatabases() {
                     totalDuration = totalDuration,
                     totalFileSize = totalFileSize,
                     indexedFileSize = indexedFileSize,
-                    averageSizePerSong = totalFileSize / allSongs.size,
+                    averageSizePerSong = if (allSongs.isNotEmpty()) totalFileSize / allSongs.size else 0,
                 )
             )
         }
