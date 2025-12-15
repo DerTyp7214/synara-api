@@ -34,7 +34,9 @@ tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach 
 }
 
 tasks.shadowJar {
-    mergeServiceFiles()
+    mergeServiceFiles {
+        duplicatesStrategy = DuplicatesStrategy.INCLUDE
+    }
 }
 
 dependencies {
