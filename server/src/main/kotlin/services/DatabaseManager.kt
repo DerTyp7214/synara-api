@@ -61,7 +61,7 @@ class DatabaseManager(private val environment: ApplicationEnvironment) {
     private fun setupDatabase(): Database {
         val dataSource = getDataSource()
 
-        val flyway = Flyway.configure().dataSource(dataSource).locations("classpath:/dev/dertyp/db/migrations").load()
+        val flyway = Flyway.configure().dataSource(dataSource).locations("classpath:dev/dertyp/db/migrations").load()
         flyway.migrate()
 
         return Database.connect(dataSource)
