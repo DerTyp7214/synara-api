@@ -43,7 +43,7 @@ dependencies {
     implementation("io.ktor:ktor-server-cors")
     implementation("io.ktor:ktor-server-core")
     implementation("org.flywaydb:flyway-core:11.19.0")
-    implementation("org.flywaydb:flyway-database-postgresql")
+    implementation("org.flywaydb:flyway-database-postgresql:11.19.0")
     implementation("com.zaxxer:HikariCP:7.0.2")
     implementation("com.ucasoft.ktor:ktor-simple-cache:0.55.3")
     implementation("com.ucasoft.ktor:ktor-simple-memory-cache:0.55.3")
