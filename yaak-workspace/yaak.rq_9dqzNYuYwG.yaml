@@ -1,0 +1,39 @@
+type: http_request
+model: http_request
+id: rq_9dqzNYuYwG
+createdAt: 2025-12-17T16:45:46.693951185
+updatedAt: 2025-12-17T17:01:48.832810732
+workspaceId: wk_9dbKacQT4H
+folderId: fl_QrUoFyttZM
+authentication: {}
+authenticationType: null
+body:
+  text: |-
+    [
+      "de69a106-bf53-4f2d-bffb-2fc4158290d4",
+      "e2c9f51c-8219-48d1-9f30-2d2cb5dc09f9",
+      "7d1a84b3-44c0-4161-b217-30f65a0dbe1e",
+      "715ea881-8bf8-403f-acaa-18b3a1983248",
+      "2acbc4d0-408d-4d06-8ed6-0f4d9feafe75",
+      "33eb598c-7e0d-477d-ba24-b84bd14234ff",
+      "ba05e4cf-f9c0-4760-bf22-a1e60688fe13",
+      "b93998c3-6e32-4736-b904-eaaadefd454a",
+      "9105686f-1f2f-4152-ae9f-adc1901eac08",
+      "a499813e-7c60-429f-a0a7-43315cf50e01",
+      "facf5f2d-50d0-4688-b49f-24b99008924a",
+      "173c049d-5dcf-4946-a8a3-2f1c25aaeaac",
+      "c19129ba-e64e-4107-ae0f-efadcd767115",
+      "cde11ef0-debb-4a2e-a4e8-6c73a5c80889",
+    ]
+bodyType: application/json
+description: ''
+headers:
+- enabled: true
+  name: Content-Type
+  value: application/json
+  id: rKidGxC2fp
+method: DELETE
+name: /
+sortPriority: 5.3333
+url: ${[ baseUrl ]}/song
+urlParameters: []

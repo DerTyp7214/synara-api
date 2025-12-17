@@ -1,0 +1,45 @@
+type: http_request
+model: http_request
+id: rq_rgCXeRWqtp
+createdAt: 2025-12-17T16:50:57.308198952
+updatedAt: 2025-12-17T16:58:02.652819861
+workspaceId: wk_9dbKacQT4H
+folderId: fl_m5uDzfqeJa
+authentication: {}
+authenticationType: null
+body:
+  text: |-
+    [
+      "19a3875b-6927-46f8-ab0a-6011cf3fc9ed",
+      "ab9c099a-b613-491b-b0f5-8a93548209d3",
+      "a7628b2a-886f-435e-a016-b55c3792a7f3",
+      "3b45b8bc-d415-42ff-a3cc-9b49a54ab454"
+    ]
+bodyType: application/json
+description: '[object Object]'
+headers:
+- enabled: true
+  name: Accept
+  value: application/json
+  id: null
+- enabled: true
+  name: Content-Type
+  value: application/json
+  id: xgk5sfz30F
+method: DELETE
+name: /
+sortPriority: 11.0
+url: ${[baseUrl]}/album
+urlParameters:
+- enabled: false
+  name: page
+  value: <integer>
+  id: sGtbmIPcdi
+- enabled: false
+  name: pageSize
+  value: <integer>
+  id: 37jgrsuWx6
+- enabled: true
+  name: ''
+  value: ''
+  id: fgfyhsW3cx
