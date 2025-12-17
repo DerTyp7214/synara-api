@@ -260,6 +260,7 @@ class DownloadService(
     suspend fun downloadTidalIds(
         call: RoutingCall,
         ids: Flow<String>,
+        type: Type = Type.SONG,
         filter: (UserSong) -> Boolean = { true },
         chunkSize: Int = 250,
         callback: suspend (List<String>) -> Unit = {}
@@ -272,17 +273,17 @@ class DownloadService(
         val downloadStage = mutableListOf<String>()
         val downloadStageMutex = Mutex()
 
-        ids.chunked(chunkSize).buffer(UNLIMITED).collect { likedSongs ->
-            logger.info("[${user.username}] Checking for ${likedSongs.size} liked songs")
-            val existingSongs = songService.byTidalTrackIds(likedSongs, user.id)
+        ids.chunked(chunkSize).buffer(UNLIMITED).collect { idChunk ->
+            logger.info("[${user.username}] Checking for ${idChunk.size} liked ${type.value}s")
+            val existingSongs = if (type == Type.SONG) songService.byTidalTrackIds(idChunk, user.id) else emptyList()
             val existingUrls = existingSongs.map { it.originalUrl }
 
             result.addAll(existingSongs.filter(filter))
 
             downloadStageMutex.withLock {
-                downloadStage.addAll(likedSongs.filter { likedSong ->
+                downloadStage.addAll(idChunk.filter { id ->
                     existingUrls.none {
-                        it.split("/").contains(likedSong)
+                        it.split("/").contains(id)
                     }
                 })
             }
@@ -292,10 +293,10 @@ class DownloadService(
                 val urls = downloadStageMutex.withLock { downloadStage.splice(0, 25) }
                 addToQueue(
                     UrlDownloadQueueEntry(
-                        urls = urls.map { "https://tidal.com/track/${it}" }.toMutableList(),
+                        urls = urls.map { "https://tidal.com/${type.value}/${it}" }.toMutableList(),
                         ids = urls,
                         byUser = user.id,
-                        type = Type.SONG
+                        type = type
                     ) {
                         callback(urls)
                     })
@@ -305,16 +306,16 @@ class DownloadService(
         if (downloadStage.isNotEmpty()) {
             addToQueue(
                 UrlDownloadQueueEntry(
-                    urls = downloadStage.map { "https://tidal.com/track/${it}" }.toMutableList(),
+                    urls = downloadStage.map { "https://tidal.com/${type.value}/${it}" }.toMutableList(),
                     ids = downloadStage,
                     byUser = user.id,
-                    type = Type.SONG
+                    type = type
                 ) {
                     callback(downloadStage)
                 })
         }
 
-        logger.info("[${user.username}] Found ${result.size} existing songs")
+        logger.info("[${user.username}] Found ${result.size} existing ${type.value}s")
 
         return Pair(contentToDownload, result)
     }
@@ -339,6 +340,7 @@ class DownloadService(
             val (_, songsToLike) = downloadTidalIds(
                 call = call,
                 ids = service.getLikedSongs().map { it.id },
+                type = Type.SONG,
                 filter = { !(it.isFavourite ?: false) },
                 chunkSize = 25
             ) {
@@ -432,9 +434,15 @@ data class LogLine(
 )
 
 @Serializable
-enum class Type {
-    SONG,
-    ALBUM,
-    PLAYLIST,
-    ARTIST,
+enum class Type(val value: String) {
+    SONG("track"),
+    ALBUM("album"),
+    PLAYLIST("playlist"),
+    ARTIST("artist");
+
+    companion object {
+        fun fromValue(value: String): Type? {
+            return entries.find { it.value == value }
+        }
+    }
 }

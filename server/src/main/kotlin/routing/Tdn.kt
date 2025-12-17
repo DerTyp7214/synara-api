@@ -17,7 +17,6 @@ import kotlinx.serialization.json.encodeToJsonElement
 import org.koin.ktor.ext.inject
 import java.io.File
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
-import kotlin.math.min
 import kotlin.time.ExperimentalTime
 
 @Serializable
@@ -118,25 +117,17 @@ fun Route.tdn() {
             call.response.header(HttpHeaders.Connection, "keep-alive")
             call.response.header("X-Accel-Buffering", "no")
 
-            val maxRetries = call.parameters["maxRetries"]?.toIntOrNull() ?: 5
-
             call.respondBytesWriter(ContentType.Text.EventStream) {
                 sendSafe("Sending urls to DownloadService")
 
-                val (contentToDownload) = service.downloadTidalIds(
-                    call,
-                    urls.map { it.segments.last { s -> s != "u" } }.asFlow()
-                )
-                for ((_, urls) in urls.groupBy { it.segments.first() }) {
-                    for (chunk in urls.map { it.toString().removeSuffix("/u") }.chunked(250)) {
-                        service.addToQueue(
-                            UrlDownloadQueueEntry(
-                                urls = chunk.toMutableList(),
-                                ids = chunk.map { it.split("/").last() },
-                                maxRetries = min(maxRetries * urls.size, 75)
-                            )
-                        )
-                    }
+                var contentToDownload = false
+                for ((type, urls) in urls.groupBy { it.segments.first() }) {
+                    val (dl) = service.downloadTidalIds(
+                        call = call,
+                        ids = urls.map { it.segments.last { s -> s != "u" } }.asFlow(),
+                        type = Type.fromValue(type) ?: Type.SONG,
+                    )
+                    contentToDownload = dl || contentToDownload
                 }
 
                 if (contentToDownload) service.waitForActive()

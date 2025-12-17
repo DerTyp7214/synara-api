@@ -2,7 +2,7 @@ type: http_request
 model: http_request
 id: rq_WWkomC7Shu
 createdAt: 2025-12-16T23:16:40.171814494
-updatedAt: 2025-12-17T00:02:26.837957736
+updatedAt: 2025-12-17T14:14:52.342294320
 workspaceId: wk_9dbKacQT4H
 folderId: fl_NXkRVdWsW4
 authentication: {}
@@ -27,5 +27,9 @@ urlParameters:
   id: IgqGGn9M7v
 - enabled: true
   name: ''
+  value: https://tidal.com/album/58139599
+  id: 0vaur2jk4H
+- enabled: true
+  name: ''
   value: ''
-  id: Q6zsJyeA0b
+  id: PVqju9SYEq
