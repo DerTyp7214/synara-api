@@ -277,13 +277,12 @@ class TdnService(private val indexer: Indexer, private val storageService: Stora
 
         return coroutineScope {
             val checkJob = launch {
-                logger.info("Starting checkJob")
                 while (aliveCheck()) {
                     delay(200)
                     ensureActive()
                 }
 
-                logger.info("Stopping checkJob")
+                logger.info("Parent no longer alive, stoping forcefully")
 
                 if (process?.isAlive == true) process?.destroyForcibly()
                 cancel("Stopping command", ClientCloseException())

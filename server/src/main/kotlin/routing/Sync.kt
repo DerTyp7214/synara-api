@@ -39,7 +39,10 @@ fun Route.sync() {
         get("/liked") {
             val downloadService by inject<DownloadService>()
 
-            if (!downloadService.syncFavouritesAvailable(call)) return@get call.respond(HttpStatusCode.Conflict, "Favourite-Sync not available.")
+            if (!downloadService.syncFavouritesAvailable(call)) return@get call.respond(
+                HttpStatusCode.Conflict,
+                "Favourite-Sync not available."
+            )
 
             downloadService.syncFavourites(call).invokeOnCompletion {}
 
