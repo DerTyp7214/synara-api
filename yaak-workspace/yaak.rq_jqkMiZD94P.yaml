@@ -2,7 +2,7 @@ type: http_request
 model: http_request
 id: rq_jqkMiZD94P
 createdAt: 2025-10-14T19:25:16.451035279
-updatedAt: 2025-10-14T19:25:16.451035370
+updatedAt: 2025-12-17T17:17:45.736756968
 workspaceId: wk_9dbKacQT4H
 folderId: fl_m5uDzfqeJa
 authentication: {}
@@ -22,13 +22,17 @@ url: ${[baseUrl]}/album/byArtist/:artistId
 urlParameters:
 - enabled: true
   name: page
-  value: <integer>
-  id: null
+  value: '0'
+  id: yjKzt7Tt5B
 - enabled: true
   name: pageSize
-  value: <integer>
-  id: null
+  value: '250'
+  id: Bf3yB0VwNW
 - enabled: true
   name: :artistId
-  value: <string>
-  id: null
+  value: 3357bf9d-a32d-474a-b5ce-9f3cf7abfcdc
+  id: 6YYu8ZmtU3
+- enabled: true
+  name: ''
+  value: ''
+  id: s6JXmVkepI

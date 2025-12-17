@@ -2,7 +2,7 @@ type: http_request
 model: http_request
 id: rq_gPwCuHMVsc
 createdAt: 2025-10-14T19:25:16.451289531
-updatedAt: 2025-10-14T19:25:16.451289581
+updatedAt: 2025-12-17T17:16:47.505847575
 workspaceId: wk_9dbKacQT4H
 folderId: fl_MAn552zthQ
 authentication: {}
@@ -20,15 +20,19 @@ name: /artist/search/:query
 sortPriority: 41.0
 url: ${[baseUrl]}/artist/search/:query
 urlParameters:
-- enabled: true
+- enabled: false
   name: page
   value: <integer>
-  id: null
-- enabled: true
+  id: sfqdJvYmps
+- enabled: false
   name: pageSize
   value: <integer>
-  id: null
+  id: j3VmexvxTP
 - enabled: true
   name: :query
-  value: <string>
-  id: null
+  value: hans zimmer
+  id: tUyM5PWR4I
+- enabled: true
+  name: ''
+  value: ''
+  id: qYz7sW5iat

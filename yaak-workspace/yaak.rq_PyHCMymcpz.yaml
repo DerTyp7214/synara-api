@@ -2,7 +2,7 @@ type: http_request
 model: http_request
 id: rq_PyHCMymcpz
 createdAt: 2025-10-14T19:25:16.450298363
-updatedAt: 2025-10-14T19:25:16.450298423
+updatedAt: 2025-12-17T17:17:19.669945400
 workspaceId: wk_9dbKacQT4H
 folderId: fl_MTVZdwaxao
 authentication: {}
@@ -22,13 +22,17 @@ url: ${[baseUrl]}/song/byArtist/:artistId
 urlParameters:
 - enabled: true
   name: page
-  value: <integer>
-  id: null
+  value: '0'
+  id: 9KIeA7qU8x
 - enabled: true
   name: pageSize
-  value: <integer>
-  id: null
+  value: '500'
+  id: rY0NQgxnmz
 - enabled: true
   name: :artistId
-  value: <string>
-  id: null
+  value: 3357bf9d-a32d-474a-b5ce-9f3cf7abfcdc
+  id: Rz3KeqJhKR
+- enabled: true
+  name: ''
+  value: ''
+  id: gQnitJmXwT
