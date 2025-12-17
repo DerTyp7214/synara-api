@@ -1,38 +1,42 @@
 type: http_request
 model: http_request
-id: rq_yndJt4T9ie
-createdAt: 2025-10-14T19:25:16.451085805
-updatedAt: 2025-12-17T16:51:28.303105777
+id: rq_rgCXeRWqtp
+createdAt: 2025-12-17T16:50:57.308198952
+updatedAt: 2025-12-17T16:52:04.900165167
 workspaceId: wk_9dbKacQT4H
 folderId: fl_m5uDzfqeJa
 authentication: {}
 authenticationType: null
-body: {}
-bodyType: null
+body:
+  text: |-
+    [
+      "8e336063-9dbb-450e-8621-3d7e41a6e7e9"
+    ]
+bodyType: application/json
 description: '[object Object]'
 headers:
 - enabled: true
   name: Accept
   value: application/json
   id: null
-method: GET
-name: /album/search/:query
-sortPriority: 36.0
-url: ${[baseUrl]}/album/search/:query
+- enabled: true
+  name: Content-Type
+  value: application/json
+  id: xgk5sfz30F
+method: DELETE
+name: /
+sortPriority: 11.0
+url: ${[baseUrl]}/album
 urlParameters:
 - enabled: false
   name: page
   value: <integer>
-  id: TQxNnEkwRw
+  id: sGtbmIPcdi
 - enabled: false
   name: pageSize
   value: <integer>
-  id: cgkrEZQMwH
-- enabled: true
-  name: :query
-  value: instrumental
-  id: Qwg9Z97j6U
+  id: 37jgrsuWx6
 - enabled: true
   name: ''
   value: ''
-  id: kH9AfTDtnA
+  id: fgfyhsW3cx

@@ -1,0 +1,26 @@
+type: http_request
+model: http_request
+id: rq_9dqzNYuYwG
+createdAt: 2025-12-17T16:45:46.693951185
+updatedAt: 2025-12-17T16:50:28.866952994
+workspaceId: wk_9dbKacQT4H
+folderId: fl_QrUoFyttZM
+authentication: {}
+authenticationType: null
+body:
+  text: |-
+    [
+      "e1ba87b3-2957-45bb-a6c9-6e674983221e"
+    ]
+bodyType: application/json
+description: ''
+headers:
+- enabled: true
+  name: Content-Type
+  value: application/json
+  id: rKidGxC2fp
+method: DELETE
+name: /
+sortPriority: 5.3333
+url: ${[ baseUrl ]}/song
+urlParameters: []

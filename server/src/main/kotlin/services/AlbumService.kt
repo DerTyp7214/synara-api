@@ -16,7 +16,9 @@ import dev.dertyp.getDateFromISO
 import dev.dertyp.getISOFromDate
 import dev.dertyp.services.ArtistService.Companion.mapArtist
 import org.jetbrains.exposed.sql.*
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
 import org.koin.core.component.get
+import java.io.File
 import java.util.*
 
 class AlbumService : Service() {
@@ -90,6 +92,40 @@ class AlbumService : Service() {
         }
 
     suspend fun allAlbums(page: Int, pageSize: Int): PaginatedResponse<Album> = queryAlbums(page, pageSize)
+
+    @Suppress("DuplicatedCode")
+    suspend fun deleteAlbums(ids: List<UUID>) = dbQuery {
+        val paths = SongTable
+            .select(SongTable.albumId, SongTable.filePath)
+            .where { SongTable.albumId inList ids }
+            .map { it[SongTable.filePath] }
+
+        logger.info("Found ${paths.size} files to delete.")
+
+        val deletedSongs = SongTable.deleteWhere {
+            SongTable.albumId inList ids
+        }
+
+        logger.info("Deleted $deletedSongs songs from the database")
+
+        AlbumTable.deleteWhere {
+            notExists(
+                SongTable.select(SongTable.id).where {
+                    SongTable.albumId eq AlbumTable.id
+                }
+            )
+        }
+
+        for (path in paths) {
+            val file = File(path)
+            if (file.exists())
+                logger.info("Trying to delete ${file.absolutePath} (${file.delete()})")
+            if (file.parentFile.list().isEmpty())
+                logger.info("Trying to delete parent ${file.parentFile.absolutePath} (${file.parentFile.delete()})")
+        }
+
+        deletedSongs == ids.size
+    }
 
     private suspend fun querySingle(query: Query.() -> Query) =
         queryAlbums(0, Int.MAX_VALUE, query).data.singleOrNull()

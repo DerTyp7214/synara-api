@@ -7,9 +7,11 @@ import dev.dertyp.services.AlbumService
 import io.github.smiley4.ktoropenapi.get
 import io.github.smiley4.ktoropenapi.route
 import io.ktor.http.*
+import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import org.koin.ktor.ext.inject
+import java.util.*
 
 fun Route.album() {
     route("/album", {
@@ -127,6 +129,14 @@ fun Route.album() {
 
             val (page, pageSize) = call.paging()
             call.respond(service.allAlbums(page, pageSize))
+        }
+
+        delete() {
+            val service by inject<AlbumService>()
+
+            val ids = call.receive<List<String>>().map { UUID.fromString(it) }
+
+            call.respond(service.deleteAlbums(ids))
         }
     }
 }

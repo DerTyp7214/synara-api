@@ -15,7 +15,9 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import org.jetbrains.exposed.sql.*
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
 import org.koin.core.component.get
+import java.io.File
 import java.time.Instant
 import java.util.*
 
@@ -208,6 +210,40 @@ class SongService : Service() {
                 orderBy(SongTable.id, SortOrder.ASC)
             }
         )
+
+    @Suppress("DuplicatedCode")
+    suspend fun deleteSongs(ids: List<UUID>) = dbQuery {
+        val paths = SongTable
+            .select(SongTable.id, SongTable.filePath)
+            .where { SongTable.id inList ids }
+            .map { it[SongTable.filePath] }
+
+        logger.info("Found ${paths.size} files to delete.")
+
+        val deletedSongs = SongTable.deleteWhere {
+            SongTable.id inList ids
+        }
+
+        logger.info("Deleted $deletedSongs songs from the database")
+
+        AlbumTable.deleteWhere {
+            notExists(
+                SongTable.select(SongTable.id).where {
+                    SongTable.albumId eq AlbumTable.id
+                }
+            )
+        }
+
+        for (path in paths) {
+            val file = File(path)
+            if (file.exists())
+                logger.info("Trying to delete ${file.absolutePath} (${file.delete()})")
+            if (file.parentFile.list().isEmpty())
+                logger.info("Trying to delete parent ${file.parentFile.absolutePath} (${file.parentFile.delete()})")
+        }
+
+        deletedSongs == ids.size
+    }
 
     private suspend inline fun <reified T : BaseSong> querySingle(
         crossinline columnSet: suspend ColumnSet.() -> ColumnSet,
@@ -427,27 +463,27 @@ class SongService : Service() {
             .toMap()
 
         val albumIdMap: Map<InsertableAlbum, UUID> = uniqueAlbums
-                .chunked(maxBatchSize)
-                .map { batch ->
-                    async {
-                        albumService.getOrBulkCreate(batch).entries
-                    }
+            .chunked(maxBatchSize)
+            .map { batch ->
+                async {
+                    albumService.getOrBulkCreate(batch).entries
                 }
-                .awaitAll()
-                .flatten()
-                .toMap()
+            }
+            .awaitAll()
+            .flatten()
+            .toMap()
 
         val imageIdMap: Map<String, UUID> = uniqueCoverHashes
-                .filterNotNull()
-                .chunked(maxBatchSize)
-                .map { batch ->
-                    async {
-                        imageService.getCoverHashes(batch).entries
-                    }
+            .filterNotNull()
+            .chunked(maxBatchSize)
+            .map { batch ->
+                async {
+                    imageService.getCoverHashes(batch).entries
                 }
-                .awaitAll()
-                .flatten()
-                .toMap()
+            }
+            .awaitAll()
+            .flatten()
+            .toMap()
 
         val existingSongMap = songs
             .chunked(maxBatchSize / 3)
