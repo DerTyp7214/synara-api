@@ -1,18 +1,14 @@
 type: http_request
 model: http_request
-id: rq_2HEFG5stF8
-createdAt: 2025-10-14T19:25:16.449964932
-updatedAt: 2025-12-16T22:12:33.869653424
+id: rq_945pHfNHTT
+createdAt: 2025-12-16T20:46:44.871160996
+updatedAt: 2025-12-16T20:47:01.466086402
 workspaceId: wk_9dbKacQT4H
 folderId: fl_NXkRVdWsW4
 authentication: {}
 authenticationType: null
 body:
-  text: |-
-    {
-      "urls": [
-      ]
-    }
+  text: ''
 bodyType: application/json
 description: '[object Object]'
 headers:
@@ -20,20 +16,16 @@ headers:
   name: Content-Type
   value: application/json
   id: null
-method: POST
-name: /tdn/dl
-sortPriority: 7.555577777777778
-url: ${[baseUrl]}/tdn/dl
+method: GET
+name: /tdn/authenticated
+sortPriority: 1.4444555555555556
+url: ${[baseUrl]}/tdn/authenticated
 urlParameters:
 - enabled: false
   name: url
   value: <string>
   id: IgqGGn9M7v
 - enabled: true
-  name: maxRetries
-  value: '75'
-  id: XKsrHm78hw
-- enabled: true
   name: ''
   value: ''
-  id: v3XcQ3ck3Q
+  id: R9QzY6r3cx

@@ -2,7 +2,6 @@ package dev.dertyp.services.metadata
 
 import dev.dertyp.ApiClient
 import dev.dertyp.services.metadata.MetadataService.Artist
-import dev.dertyp.services.models.Image
 import io.ktor.client.call.*
 import io.ktor.client.request.*
 import io.ktor.http.*
@@ -49,7 +48,7 @@ class SpotifyService(
                 url = artist.href,
                 images = {
                     artist.images.map { image ->
-                        MetadataService.Artist.Image(
+                        Image(
                             url = image.url,
                             width = image.width,
                             height = image.height,
@@ -68,7 +67,19 @@ class SpotifyService(
         throw NotImplementedError("Not implemented for spotify!")
     }
 
+    override suspend fun getImageUrlsByAlbumIds(albumIds: List<String>): Map<String, List<Image>> {
+        throw NotImplementedError("Not implemented for spotify!")
+    }
+
     override suspend fun getImageUrlByImageId(imageId: UUID): String? {
+        throw NotImplementedError("Not implemented for spotify!")
+    }
+
+    override suspend fun getTrackById(trackId: String): Track? {
+        throw NotImplementedError("Not implemented for spotify!")
+    }
+
+    override suspend fun getTracksByIds(trackIds: List<String>): List<Track> {
         throw NotImplementedError("Not implemented for spotify!")
     }
 

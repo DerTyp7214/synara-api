@@ -104,7 +104,7 @@ abstract class TidalSyncServiceBase(
                 FormDataContent(
                     parametersOf(
                         "grant_type" to listOf("refresh_token"),
-                        "refresh_token" to listOf(token.refreshToken),
+                        "refresh_token" to listOfNotNull(token.refreshToken),
                         "client_id" to listOf(clientId!!),
                     )
                 )
@@ -141,9 +141,9 @@ abstract class TidalSyncServiceBase(
 
     @Serializable
     data class TidalTokenResponse(
-        @SerialName("scope") override val scope: String?,
+        @SerialName("scope") override val scope: String? = null,
         @SerialName("access_token") override val accessToken: String,
-        @SerialName("refresh_token") override val refreshToken: String,
+        @SerialName("refresh_token") override val refreshToken: String? = null,
         @SerialName("expires_in") override val expiresIn: Int,
         @SerialName("token_type") override val tokenType: String,
         @SerialName("user_id") override val userId: Long,

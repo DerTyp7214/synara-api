@@ -6,5 +6,5 @@ import kotlinx.serialization.Serializable
 data class TracksSingleResourceDataDocument<A : BaseAttributes, R : BaseRelationships>(
     val data: TracksResourceObject,
     val links: Links,
-    val included: List<IncludedInner<A, R>>
+    val included: List<IncludedInner<A, R>>? = emptyList()
 )

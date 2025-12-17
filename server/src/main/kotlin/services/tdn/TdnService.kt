@@ -188,8 +188,7 @@ class TdnService(private val indexer: Indexer, private val storageService: Stora
                 paths.addAll(newPaths)
             }
         } finally {
-            if (songPaths.isEmpty()) indexer.queue(logProxy).await()
-            else indexer.queue(songPaths, playlistPaths, stdout = logProxy).await()
+            indexer.queue(songPaths, playlistPaths, stdout = logProxy).await()
 
             logProxy("Took ${currentTry + 1} tr${if (currentTry == 0) "y" else "ies"} to download.")
         }
@@ -205,6 +204,18 @@ class TdnService(private val indexer: Indexer, private val storageService: Stora
         onLiveOutput: suspend (String) -> Unit
     ): ProcessExecutionResult {
         val command = mutableListOf("tdn", "dl", url)
+        val (result) = collectDownloadedFiles(command, maxRetries, 0, aliveCheck, onLiveOutput)
+        return result
+    }
+
+    @OptIn(ExperimentalAtomicApi::class)
+    suspend fun downloadContent(
+        urls: List<String>,
+        maxRetries: Int = 5,
+        aliveCheck: suspend () -> Boolean = { true },
+        onLiveOutput: suspend (String) -> Unit
+    ): ProcessExecutionResult {
+        val command = mutableListOf("tdn", "dl", *urls.toTypedArray())
         val (result) = collectDownloadedFiles(command, maxRetries, 0, aliveCheck, onLiveOutput)
         return result
     }
@@ -233,7 +244,7 @@ class TdnService(private val indexer: Indexer, private val storageService: Stora
     suspend fun authorized(): Boolean {
         val command = mutableListOf("tdn", "login")
         val startTime = Clock.System.now()
-        val result = executeTdn(command, { Clock.System.now().minus(startTime) > 10.seconds })
+        val result = executeTdn(command, { Clock.System.now().minus(startTime) < 10.seconds })
 
         return result.fullOutput.contains("You are logged in")
     }
@@ -266,12 +277,16 @@ class TdnService(private val indexer: Indexer, private val storageService: Stora
 
         return coroutineScope {
             val checkJob = launch {
+                logger.info("Starting checkJob")
                 while (aliveCheck()) {
                     delay(200)
                     ensureActive()
                 }
 
-                cancel("Client disconnected", ClientCloseException())
+                logger.info("Stopping checkJob")
+
+                if (process?.isAlive == true) process?.destroyForcibly()
+                cancel("Stopping command", ClientCloseException())
             }
 
             try {
@@ -317,8 +332,8 @@ class TdnService(private val indexer: Indexer, private val storageService: Stora
             } finally {
                 completionHandle?.dispose()
 
-                if (checkJob.isActive) checkJob.cancel()
                 if (process?.isAlive == true) process.destroyForcibly()
+                if (checkJob.isActive) checkJob.cancel()
             }
         }
     }

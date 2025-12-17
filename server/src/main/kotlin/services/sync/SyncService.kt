@@ -104,7 +104,7 @@ abstract class SyncService(
                     it[this.ownerId] = user.id
                     it[this.scope] = token.scope ?: ""
                     it[this.accessToken] = token.accessToken
-                    it[this.refreshToken] = token.refreshToken
+                    it[this.refreshToken] = token.refreshToken ?: ""
                     it[this.expiresIn] = token.expiresIn
                     it[this.tokenType] = token.tokenType
                     it[this.userId] = token.userId
@@ -122,7 +122,7 @@ abstract class SyncService(
             .map(::mapTableToToken)
     }.singleOrNull()
 
-    protected suspend fun getAccessToken(): Token? {
+    suspend fun getAccessToken(): Token? {
         val token = getToken() ?: return null
         val currentTimeMillis = System.currentTimeMillis()
         val bufferMillis = TimeUnit.MINUTES.toMillis(5)
@@ -218,7 +218,7 @@ abstract class SyncService(
     interface Token {
         val scope: String?
         val accessToken: String
-        val refreshToken: String
+        val refreshToken: String?
         val expiresIn: Int
         val tokenType: String
         val userId: Long

@@ -7,4 +7,5 @@ data class AlbumsResourceObject(
     val id: String,
     val type: String,
     val attributes: AlbumsAttributes? = null,
+    val relationships: AlbumsRelationships<BaseAttributes, BaseRelationships>? = null
 )

@@ -1,0 +1,22 @@
+type: http_request
+model: http_request
+id: rq_izyMY3dPNK
+createdAt: 2025-12-16T21:30:58.606325502
+updatedAt: 2025-12-16T21:31:22.770515857
+workspaceId: wk_9dbKacQT4H
+folderId: null
+authentication: {}
+authenticationType: null
+body: {}
+bodyType: null
+description: '[object Object]'
+headers: []
+method: GET
+name: /sync/liked
+sortPriority: 10000.001
+url: http://localhost:8080/sync/tidal/liked
+urlParameters:
+- enabled: true
+  name: ''
+  value: ''
+  id: ZTzSiuexPy

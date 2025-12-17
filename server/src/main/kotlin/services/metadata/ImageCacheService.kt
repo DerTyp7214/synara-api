@@ -3,7 +3,6 @@ package dev.dertyp.services.metadata
 import dev.dertyp.ApiClient
 import dev.dertyp.core.bytes
 import dev.dertyp.services.ImageService
-import dev.dertyp.services.models.Image
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
@@ -69,6 +68,14 @@ class ImageCacheService(
         return url
     }
 
+    override suspend fun getTrackById(trackId: String): Track? {
+        throw NotImplementedError("Not implemented for ImageCache")
+    }
+
+    override suspend fun getTracksByIds(trackIds: List<String>): List<Track> {
+        throw NotImplementedError("Not implemented for ImageCache")
+    }
+
     override fun supported(): Boolean {
         return !environment.config.propertyOrNull("imageCache.url")?.getString().isNullOrBlank()
     }
@@ -82,6 +89,10 @@ class ImageCacheService(
     }
 
     override suspend fun getImageUrlByAlbumId(albumId: String): List<Image> {
+        throw NotImplementedError("Not implemented for ImageCache")
+    }
+
+    override suspend fun getImageUrlsByAlbumIds(albumIds: List<String>): Map<String, List<Image>> {
         throw NotImplementedError("Not implemented for ImageCache")
     }
 }

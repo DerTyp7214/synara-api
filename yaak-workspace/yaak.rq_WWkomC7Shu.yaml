@@ -1,0 +1,31 @@
+type: http_request
+model: http_request
+id: rq_WWkomC7Shu
+createdAt: 2025-12-16T23:16:40.171814494
+updatedAt: 2025-12-17T00:02:26.837957736
+workspaceId: wk_9dbKacQT4H
+folderId: fl_NXkRVdWsW4
+authentication: {}
+authenticationType: null
+body:
+  text: ''
+bodyType: application/json
+description: '[object Object]'
+headers:
+- enabled: true
+  name: Content-Type
+  value: application/json
+  id: null
+method: GET
+name: /tdn/dlQueue
+sortPriority: 7.556577777777778
+url: ${[baseUrl]}/tdn/dlQueue
+urlParameters:
+- enabled: true
+  name: self
+  value: 'true'
+  id: IgqGGn9M7v
+- enabled: true
+  name: ''
+  value: ''
+  id: Q6zsJyeA0b

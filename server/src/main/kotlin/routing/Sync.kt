@@ -7,6 +7,7 @@ import dev.dertyp.data.UserSong
 import dev.dertyp.services.SongService
 import dev.dertyp.services.sync.SyncService
 import dev.dertyp.services.sync.TidalSyncService
+import dev.dertyp.services.tdn.DownloadService
 import io.github.smiley4.ktoropenapi.get
 import io.github.smiley4.ktoropenapi.post
 import io.github.smiley4.ktoropenapi.route
@@ -33,6 +34,16 @@ fun Route.sync() {
 
         get("/callback") {
             SyncService.handleCallback(call, call.request.queryParameters["state"])
+        }
+
+        get("/liked") {
+            val downloadService by inject<DownloadService>()
+
+            if (!downloadService.syncFavouritesAvailable(call)) return@get call.respond(HttpStatusCode.Conflict, "Favourite-Sync not available.")
+
+            downloadService.syncFavourites(call).invokeOnCompletion {}
+
+            call.respond(HttpStatusCode.Accepted, "Favourite-Sync started")
         }
 
         route("/get") {

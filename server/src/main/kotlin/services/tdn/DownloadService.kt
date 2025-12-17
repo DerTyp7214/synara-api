@@ -1,25 +1,39 @@
 package dev.dertyp.services.tdn
 
-import dev.dertyp.core.removeFirst
-import dev.dertyp.core.waitForChange
+import dev.dertyp.core.*
+import dev.dertyp.data.User
+import dev.dertyp.data.UserSong
+import dev.dertyp.serializers.UUIDSerializer
 import dev.dertyp.services.Service
-import kotlinx.coroutines.FlowPreview
-import kotlinx.coroutines.coroutineScope
+import dev.dertyp.services.SongService
+import dev.dertyp.services.sync.SyncService
+import io.ktor.server.engine.*
+import io.ktor.server.routing.*
+import io.ktor.utils.io.*
+import kotlinx.coroutines.*
+import kotlinx.coroutines.channels.Channel.Factory.UNLIMITED
 import kotlinx.coroutines.flow.*
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.Transient
+import java.util.*
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.concurrent.atomics.AtomicBoolean
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 
 @OptIn(ExperimentalAtomicApi::class)
 class DownloadService(
-    val tdnService: TdnService
+    val tdnService: TdnService,
+    val songService: SongService
 ) : Service() {
     private val maxLogLength: Int = 1000
 
+    private val syncMutex = Mutex()
     private val queueMutex = Mutex()
+    private val finishedMutex = Mutex()
+
+    private val syncMap = ConcurrentHashMap<UUID, AtomicBoolean>()
 
     private val downloadQueue: MutableList<DownloadQueueEntry> = arrayListOf()
     private val finishedDownloads: MutableList<FinishedDownloadQueueEntry> = arrayListOf()
@@ -65,7 +79,7 @@ class DownloadService(
         queueMutex.withLock {
             val existingUrls = downloadQueue
                 .filterIsInstance<UrlDownloadQueueEntry>()
-                .map { it.url }
+                .flatMap { it.urls }
                 .toMutableList()
             val existingTypes = downloadQueue
                 .filterIsInstance<FavouriteDownloadQueueEntry>()
@@ -74,24 +88,35 @@ class DownloadService(
 
             currentlyDownloading?.let {
                 when (it.downloadQueueEntry) {
-                    is UrlDownloadQueueEntry -> existingUrls.add(it.downloadQueueEntry.url)
+                    is UrlDownloadQueueEntry -> existingUrls.addAll(it.downloadQueueEntry.urls)
                     is FavouriteDownloadQueueEntry -> existingTypes.add(it.downloadQueueEntry.type)
                 }
             }
 
             val entries = downloadEntries.filter {
                 when (it) {
-                    is UrlDownloadQueueEntry -> !existingUrls.contains(it.url)
+                    is UrlDownloadQueueEntry -> {
+                        it.urls.removeAll(existingUrls)
+                        it.urls.isNotEmpty()
+                    }
+
                     is FavouriteDownloadQueueEntry -> !existingTypes.contains(it.type)
                 }
             }
 
-            logger.info("Adding ${entries.size} to queue")
+            logger.info(
+                "Adding ${entries.size} to queue (${
+                    entries.sumOf {
+                        if (it is UrlDownloadQueueEntry) it.urls.size
+                        else 1
+                    }
+                } urls)"
+            )
 
             downloadQueue.addAll(entries)
         }
 
-        queueUpdateFlow.emit(Unit)
+        queueUpdateFlow.tryEmit(Unit)
     }
 
     fun isActive(): Boolean {
@@ -129,14 +154,20 @@ class DownloadService(
         }
     }
 
-    suspend fun finishedDownloads(): List<FinishedDownloadQueueEntry> {
+    suspend fun downloadQueue(user: User? = null): List<DownloadQueueEntry> {
         return queueMutex.withLock {
-            finishedDownloads.toList()
+            downloadQueue.filter { user == null || it.byUser == user.id }
+        }
+    }
+
+    suspend fun finishedDownloads(user: User? = null): List<FinishedDownloadQueueEntry> {
+        return finishedMutex.withLock {
+            finishedDownloads.toList().filter { user == null || it.downloadQueueEntry.byUser == user.id }
         }
     }
 
     suspend fun clearErrors() {
-        queueMutex.withLock {
+        finishedMutex.withLock {
             finishedDownloads.removeIf {
                 !it.result.successful()
             }
@@ -144,7 +175,7 @@ class DownloadService(
     }
 
     suspend fun retryErrors() {
-        val errors = queueMutex.withLock {
+        val errors = finishedMutex.withLock {
             finishedDownloads.filter { it.result.failed() }
         }.map { it.downloadQueueEntry }
 
@@ -176,7 +207,7 @@ class DownloadService(
 
             val result = when (entry) {
                 is UrlDownloadQueueEntry -> tdnService.downloadContent(
-                    entry.url,
+                    entry.urls,
                     entry.maxRetries,
                     aliveCheck,
                     logUnit
@@ -193,9 +224,10 @@ class DownloadService(
             _log.emit(null)
 
             currentlyDownloading?.let { currentlyDownloading ->
-                queueMutex.withLock {
-                    currentlyDownloading.result = result
+                currentlyDownloading.result = result
+                if (result.successful()) currentlyDownloading.downloadQueueEntry.callback()
 
+                finishedMutex.withLock {
                     finishedDownloads.add(currentlyDownloading)
                     if (finishedDownloads.count { it.result.successful() } > 100) finishedDownloads.removeFirst {
                         it.result.successful()
@@ -208,12 +240,140 @@ class DownloadService(
         currentlyDownloading = null
         active.store(false)
     }
+
+    suspend fun syncFavouritesAvailable(call: RoutingCall): Boolean {
+        val user = call.getUser() ?: throw IllegalStateException("No user")
+        return !(syncMap[user.id]?.load() ?: false)
+    }
+
+    /**
+     * Downloads and processes Tidal track IDs for the currently authenticated user,
+     * ensuring the tracks are added to the download queue if they are not already
+     * marked as favorites or present in the user's library.
+     *
+     * @param call The routing call containing user authentication information and parameters.
+     * @param ids A list of track IDs to be processed and downloaded from Tidal.
+     * @return A Boolean indicating if something is going to be downloaded, and A list of UUIDs representing the already downloaded songs.
+     * @throws IllegalStateException If the user is not authenticated, or if the service type is not Tidal.
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    suspend fun downloadTidalIds(
+        call: RoutingCall,
+        ids: Flow<String>,
+        filter: (UserSong) -> Boolean = { true },
+        chunkSize: Int = 250,
+        callback: suspend (List<String>) -> Unit = {}
+    ): Pair<Boolean, List<UserSong>> {
+        val user = call.getUser() ?: throw IllegalStateException("No user")
+
+        val result = mutableListOf<UserSong>()
+        var contentToDownload = false
+
+        val downloadStage = mutableListOf<String>()
+        val downloadStageMutex = Mutex()
+
+        ids.chunked(chunkSize).buffer(UNLIMITED).collect { likedSongs ->
+            logger.info("[${user.username}] Checking for ${likedSongs.size} liked songs")
+            val existingSongs = songService.byTidalTrackIds(likedSongs, user.id)
+            val existingUrls = existingSongs.map { it.originalUrl }
+
+            result.addAll(existingSongs.filter(filter))
+
+            downloadStageMutex.withLock {
+                downloadStage.addAll(likedSongs.filter { likedSong ->
+                    existingUrls.none {
+                        it.split("/").contains(likedSong)
+                    }
+                })
+            }
+
+            while (downloadStageMutex.withLock { downloadStage.size > 25 }) {
+                contentToDownload = true
+                val urls = downloadStageMutex.withLock { downloadStage.splice(0, 25) }
+                addToQueue(
+                    UrlDownloadQueueEntry(
+                        urls = urls.map { "https://tidal.com/track/${it}" }.toMutableList(),
+                        ids = urls,
+                        byUser = user.id,
+                        type = Type.SONG
+                    ) {
+                        callback(urls)
+                    })
+            }
+        }
+
+        if (downloadStage.isNotEmpty()) {
+            addToQueue(
+                UrlDownloadQueueEntry(
+                    urls = downloadStage.map { "https://tidal.com/track/${it}" }.toMutableList(),
+                    ids = downloadStage,
+                    byUser = user.id,
+                    type = Type.SONG
+                ) {
+                    callback(downloadStage)
+                })
+        }
+
+        logger.info("[${user.username}] Found ${result.size} existing songs")
+
+        return Pair(contentToDownload, result)
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class, InternalAPI::class)
+    suspend fun syncFavourites(call: RoutingCall): CompletableJob {
+        val user = call.getUser() ?: throw IllegalStateException("No user")
+        if (call.parameters["service"] != SyncService.SyncServiceType.tidal.name) throw IllegalStateException("Only tidal")
+        val service = SyncService.getInstance(call, user.username)
+
+        if (service.getAccessToken() == null) throw IllegalStateException("Tidal not authenticated")
+
+        syncMutex.withLock {
+            if (!syncMap.computeIfAbsent(user.id) { AtomicBoolean(false) }.compareAndSet(
+                    expectedValue = false,
+                    newValue = true
+                )
+            ) throw IllegalStateException("Sync service has already been started")
+        }
+
+        return ApplicationScope.scope.async {
+            val (_, songsToLike) = downloadTidalIds(
+                call = call,
+                ids = service.getLikedSongs().map { it.id },
+                filter = { !(it.isFavourite ?: false) },
+                chunkSize = 25
+            ) {
+                val song = songService.byTidalTrackIds(it, user.id).firstOrNull()
+                    ?: return@downloadTidalIds
+                if (!(song.isFavourite ?: false)) songService.setLiked(song.id, user.id, true)
+            }
+
+            logger.info("[${user.username}] Liking existing songs")
+
+            for (song in songsToLike) {
+                songService.setLiked(song.id, user.id, true)
+            }
+
+            syncMutex.withLock {
+                syncMap[user.id]?.store(false)
+            }
+
+            logger.info("[${user.username}] Sync favourite songs finished.")
+        }.launchOnCancellation {
+            syncMutex.withLock {
+                syncMap[user.id]?.store(false)
+            }
+
+            logger.info("[${user.username}] Sync favourite songs cancelled.")
+        }
+    }
 }
 
 @Serializable
-sealed class DownloadQueueEntry() {
+sealed class DownloadQueueEntry {
     abstract val type: Type?
     abstract val maxRetries: Int
+    abstract val byUser: UUID?
+    abstract val callback: suspend () -> Unit
 
     open fun type(): Type? {
         return type
@@ -222,13 +382,20 @@ sealed class DownloadQueueEntry() {
 
 @Serializable
 data class UrlDownloadQueueEntry(
-    val url: String,
-    val id: String = "",
+    val urls: MutableList<String>,
+    val ids: List<String> = emptyList(),
+    @Serializable(with = UUIDSerializer::class)
+    override val byUser: UUID? = null,
     override val type: Type? = null,
+    @Transient
     override val maxRetries: Int = 5,
+    @Transient
+    override val callback: suspend () -> Unit = {}
 ) : DownloadQueueEntry() {
     override fun type(): Type? {
         if (type != null) return type
+
+        val url = urls.first()
 
         return when {
             url.contains("/track/") -> Type.SONG
@@ -243,8 +410,13 @@ data class UrlDownloadQueueEntry(
 @Serializable
 data class FavouriteDownloadQueueEntry(
     val tdnFavoriteType: TdnFavoriteType,
+    @Serializable(with = UUIDSerializer::class)
+    override val byUser: UUID? = null,
     override val type: Type? = null,
+    @Transient
     override val maxRetries: Int = 5,
+    @Transient
+    override val callback: suspend () -> Unit = {}
 ) : DownloadQueueEntry()
 
 @Serializable

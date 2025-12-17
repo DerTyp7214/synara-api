@@ -133,6 +133,8 @@ class TidalSyncService(
                 delay(500.milliseconds)
                 emitAll(getLikedSongs(body.links.meta.nextCursor, continueRequest))
             }
+
+            if (cursor == null) logger.info("Fetched favourites")
         }
     }
 }

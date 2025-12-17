@@ -1,5 +1,6 @@
 package dev.dertyp
 
+import dev.dertyp.core.ApplicationScope
 import dev.dertyp.services.JwtService
 import io.github.smiley4.ktoropenapi.OpenApi
 import io.github.smiley4.ktoropenapi.openApi
@@ -22,7 +23,7 @@ import kotlin.time.ExperimentalTime
 @OptIn(ExperimentalSerializationApi::class, ExperimentalTime::class)
 fun Application.configureRouting() {
     install(ContentNegotiation) {
-        json()
+        json(ApplicationScope.json)
         protobuf()
     }
     install(SSE)

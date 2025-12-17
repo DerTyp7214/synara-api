@@ -1,8 +1,9 @@
 package dev.dertyp.services.metadata
 
 import dev.dertyp.ApiClient
+import dev.dertyp.serializers.DurationSerializer
+import dev.dertyp.serializers.OffsetDateTimeSerializer
 import dev.dertyp.services.Service
-import dev.dertyp.services.models.Image
 import io.ktor.client.call.*
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
@@ -11,9 +12,12 @@ import io.ktor.server.application.*
 import kotlinx.coroutines.delay
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.Transient
+import java.time.OffsetDateTime
 import java.util.*
 import kotlin.concurrent.atomics.AtomicBoolean
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
 @OptIn(ExperimentalAtomicApi::class)
@@ -33,7 +37,10 @@ abstract class MetadataService(
     abstract suspend fun searchArtists(query: String, limit: Int = 50): List<Artist>
     abstract suspend fun getAlbumIdByTrackId(trackId: String): String?
     abstract suspend fun getImageUrlByAlbumId(albumId: String): List<Image>
+    abstract suspend fun getImageUrlsByAlbumIds(albumIds: List<String>): Map<String, List<Image>>
     abstract suspend fun getImageUrlByImageId(imageId: UUID): String?
+    abstract suspend fun getTrackById(trackId: String): Track?
+    abstract suspend fun getTracksByIds(trackIds: List<String>): List<Track>
 
     private var accessToken: Pair<AccessTokenResponse, Long>? = null
 
@@ -115,13 +122,25 @@ abstract class MetadataService(
         val name: String,
         val popularity: Float,
         val url: String?,
-        val images: suspend () -> List<Image>,
-    ) {
-        @Serializable
-        data class Image(
-            val url: String,
-            val width: Int,
-            val height: Int,
-        )
-    }
+        @Transient
+        val images: suspend () -> List<Image> = { listOf() },
+    )
+
+    @Serializable
+    data class Image(
+        val url: String,
+        val width: Int,
+        val height: Int,
+    )
+
+    @Serializable
+    data class Track(
+        val id: String,
+        val title: String,
+        @Serializable(with = DurationSerializer::class)
+        val duration: Duration,
+        @Serializable(with = OffsetDateTimeSerializer::class)
+        val createdAt: OffsetDateTime? = null,
+        val images: List<Image>,
+    )
 }
