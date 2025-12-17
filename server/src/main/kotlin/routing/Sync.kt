@@ -50,35 +50,35 @@ fun Route.sync() {
         }
 
         route("/get") {
-            route("/liked") {
-                post("/byTidalIds", {
-                    request {
-                        body<List<String>> {
-                            description = "Tidal song ids"
-                        }
+            post("/byTidalIds", {
+                request {
+                    body<List<String>> {
+                        description = "Tidal song ids"
                     }
-
-                    response {
-                        HttpStatusCode.OK to {
-                            description = "Songs that match"
-                            body<List<UserSong>>()
-                        }
-                    }
-                }) {
-                    val songService by inject<SongService>()
-
-                    val user = call.getUser() ?: return@post call.respond(HttpStatusCode.Unauthorized)
-
-                    val service = SyncService.getInstance(call)
-                    if (service !is TidalSyncService) return@post call.respond(
-                        HttpStatusCode.MethodNotAllowed,
-                        "Only Tidal is supported."
-                    )
-
-                    val ids = call.receive<List<String>>()
-
-                    call.respond(songService.byTidalTrackIds(ids, user.id).map { it.omitLyrics() })
                 }
+
+                response {
+                    HttpStatusCode.OK to {
+                        description = "Songs that match"
+                        body<List<UserSong>>()
+                    }
+                }
+            }) {
+                val songService by inject<SongService>()
+
+                val user = call.getUser() ?: return@post call.respond(HttpStatusCode.Unauthorized)
+
+                val service = SyncService.getInstance(call)
+                if (service !is TidalSyncService) return@post call.respond(
+                    HttpStatusCode.MethodNotAllowed,
+                    "Only Tidal is supported."
+                )
+
+                val ids = call.receive<List<String>>()
+
+                call.respond(songService.byTidalTrackIds(ids, user.id).map { it.omitLyrics() })
+            }
+            route("/liked") {
                 route("/tracks", HttpMethod.Get, {
                     request {
                         queryParameter<Boolean>("all") {

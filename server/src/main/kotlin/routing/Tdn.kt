@@ -121,7 +121,12 @@ fun Route.tdn() {
                 sendSafe("Sending urls to DownloadService")
 
                 var contentToDownload = false
-                for ((type, urls) in urls.groupBy { it.segments.first() }) {
+                for ((type, urls) in urls.groupBy {
+                    it.segments.let { segments ->
+                        if (segments.first() == "browse") segments[1]
+                        else segments.first()
+                    }
+                }) {
                     val (dl) = service.downloadTidalIds(
                         call = call,
                         ids = urls.map { it.segments.last { s -> s != "u" } }.asFlow(),

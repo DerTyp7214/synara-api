@@ -1,6 +1,7 @@
 package dev.dertyp.services
 
 import dev.dertyp.core.date
+import dev.dertyp.core.likeAny
 import dev.dertyp.core.rankedSearchQuery
 import dev.dertyp.core.toMap
 import dev.dertyp.data.*
@@ -162,9 +163,7 @@ class SongService : Service() {
     suspend fun byTidalTrackIds(ids: List<String>, userId: UUID): List<UserSong> =
         querySongs<UserSong>(0, Int.MAX_VALUE, true, { userSong(userId) }) {
             where {
-                SongTable.originalUrl inList ids.map {
-                    "https://tidal.com/browse/track/$it"
-                }
+                SongTable.originalUrl likeAny ids.map { "%$it" }
             }
         }.data
 
@@ -422,27 +421,27 @@ class SongService : Service() {
             .toMap()
 
         val albumIdMap: Map<InsertableAlbum, UUID> = uniqueAlbums
-                .chunked(maxBatchSize)
-                .map { batch ->
-                    async {
-                        albumService.getOrBulkCreate(batch).entries
-                    }
+            .chunked(maxBatchSize)
+            .map { batch ->
+                async {
+                    albumService.getOrBulkCreate(batch).entries
                 }
-                .awaitAll()
-                .flatten()
-                .toMap()
+            }
+            .awaitAll()
+            .flatten()
+            .toMap()
 
         val imageIdMap: Map<String, UUID> = uniqueCoverHashes
-                .filterNotNull()
-                .chunked(maxBatchSize)
-                .map { batch ->
-                    async {
-                        imageService.getCoverHashes(batch).entries
-                    }
+            .filterNotNull()
+            .chunked(maxBatchSize)
+            .map { batch ->
+                async {
+                    imageService.getCoverHashes(batch).entries
                 }
-                .awaitAll()
-                .flatten()
-                .toMap()
+            }
+            .awaitAll()
+            .flatten()
+            .toMap()
 
         val existingSongMap = songs
             .chunked(maxBatchSize / 3)
