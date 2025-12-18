@@ -166,7 +166,7 @@ abstract class SyncService(
     suspend fun handleAuth(call: ApplicationCall) {
         try {
             val url = buildAuthUrl(call)
-            call.respondRedirect(url)
+            call.respond(url)
         } catch (e: Exception) {
             call.respond(HttpStatusCode.InternalServerError, e.message ?: "Internal Server Error")
         }
