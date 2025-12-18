@@ -183,6 +183,7 @@ class TidalService(
         } catch (e: Exception) {
             e.printStackTrace()
             println(response.bodyAsText())
+
             return null
         }
     }
@@ -217,11 +218,14 @@ class TidalService(
         } catch (e: Exception) {
             e.printStackTrace()
             println(response.bodyAsText())
+            println(url)
             return listOf()
         }
     }
 
     override suspend fun getImageUrlsByAlbumIds(albumIds: List<String>): Map<String, List<Image>> {
+        if (albumIds.isEmpty()) return emptyMap()
+
         val url = getUrl("/albums") {
             parameters {
                 append("countryCode", "US")
@@ -257,6 +261,7 @@ class TidalService(
         } catch (e: Exception) {
             e.printStackTrace()
             println(response.bodyAsText())
+            println(url)
             return albumIds.associateWith { emptyList() }
         }
     }
@@ -309,6 +314,7 @@ class TidalService(
         } catch (e: Exception) {
             e.printStackTrace()
             println(response.bodyAsText())
+
             return null
         }
     }
@@ -413,6 +419,7 @@ class TidalService(
         } catch (e: Exception) {
             e.printStackTrace()
             println(response.bodyAsText())
+
             return emptyList()
         }
     }
