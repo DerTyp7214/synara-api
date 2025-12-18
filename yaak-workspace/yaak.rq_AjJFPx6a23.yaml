@@ -1,8 +1,8 @@
 type: http_request
 model: http_request
-id: rq_WWkomC7Shu
-createdAt: 2025-12-16T23:16:40.171814494
-updatedAt: 2025-12-18T11:35:16.044866646
+id: rq_AjJFPx6a23
+createdAt: 2025-12-18T11:33:57.038369025
+updatedAt: 2025-12-18T11:35:13.345683133
 workspaceId: wk_9dbKacQT4H
 folderId: fl_NXkRVdWsW4
 authentication: {}
@@ -17,9 +17,9 @@ headers:
   value: application/json
   id: null
 method: GET
-name: /tdn/dlQueue
-sortPriority: 7.556577777777778
-url: ${[baseUrl]}/tdn/dlQueue
+name: /tdn/currentDl
+sortPriority: 7.557577777777778
+url: ${[baseUrl]}/tdn/currentDl
 urlParameters:
 - enabled: true
   name: self
@@ -32,4 +32,4 @@ urlParameters:
 - enabled: true
   name: ''
   value: ''
-  id: II56G9ZaXb
+  id: FhctGN9jit

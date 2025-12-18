@@ -154,6 +154,13 @@ class DownloadService(
         }
     }
 
+    fun currentDownload(user: User? = null): DownloadQueueEntry? {
+        return when (user?.id) {
+            null, currentlyDownloading?.downloadQueueEntry?.byUser -> currentlyDownloading?.downloadQueueEntry
+            else -> null
+        }
+    }
+
     suspend fun downloadQueue(user: User? = null): List<DownloadQueueEntry> {
         return queueMutex.withLock {
             downloadQueue.filter { user == null || it.byUser == user.id }

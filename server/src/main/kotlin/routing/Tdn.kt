@@ -84,6 +84,31 @@ fun Route.tdn() {
             })
         }
 
+        get("/currentDl", {
+            request {
+                queryParameter<Boolean>("self") {
+                    description = "If true, returns only queued downloads by the user that initiated this call."
+                }
+            }
+        }) {
+            val service by inject<DownloadService>()
+            val user = call.getUser()
+
+            val self = call.parameters["self"].toBoolean()
+
+            if (user == null && self) return@get call.respond(HttpStatusCode.BadRequest, "No user found.")
+
+            val currentDownload = service.currentDownload(if (self) user else null)
+            if (currentDownload == null) return@get call.respond(HttpStatusCode.NotFound, "No active download found.")
+
+            call.respond(currentDownload.let {
+                when (it) {
+                    is UrlDownloadQueueEntry -> ApplicationScope.json.encodeToJsonElement(it)
+                    is FavouriteDownloadQueueEntry -> ApplicationScope.json.encodeToJsonElement(it)
+                }
+            })
+        }
+
         post("/dl", {
             request {
                 queryParameter<String>("url") {
