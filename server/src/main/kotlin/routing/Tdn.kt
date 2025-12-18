@@ -121,9 +121,6 @@ fun Route.tdn() {
             }
         }) {
             val service by inject<DownloadService>()
-            val tdnService by inject<TdnService>()
-
-            if (!tdnService.authorized()) return@post call.respond(HttpStatusCode.Unauthorized)
 
             val bodyUrls = call.receive<DlBody>().urls
             val pathUrls = call.parameters.getAll("url") ?: emptyList()
@@ -204,9 +201,6 @@ fun Route.tdn() {
             }
         }) {
             val service by inject<DownloadService>()
-            val tdnService by inject<TdnService>()
-
-            if (!tdnService.authorized()) return@post call.respond(HttpStatusCode.Unauthorized)
 
             val type = call.parameters["type"]?.let { TdnFavoriteType.valueOf(it) }
             if (type == null) return@post call.respond(HttpStatusCode.BadRequest)
