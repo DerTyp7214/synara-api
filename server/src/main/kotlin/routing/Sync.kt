@@ -1,6 +1,6 @@
 package dev.dertyp.routing
 
-import com.google.gson.Gson
+import dev.dertyp.core.ApplicationScope
 import dev.dertyp.core.getUser
 import dev.dertyp.core.omitLyrics
 import dev.dertyp.data.UserSong
@@ -106,13 +106,12 @@ fun Route.sync() {
 
                         val all = call.request.queryParameters["all"]?.toBoolean() ?: false
 
-                        val gson = Gson()
                         service.getLikedSongs { songs ->
                             all || songService.byTidalTrackIds(songs.map { it.id }, user.id).isEmpty()
                         }.collect {
                             send(
                                 ServerSentEvent(
-                                    data = gson.toJson(it),
+                                    data = ApplicationScope.json.encodeToString(it),
                                 )
                             )
                         }
