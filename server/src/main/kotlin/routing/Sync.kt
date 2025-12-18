@@ -28,6 +28,10 @@ fun Route.sync() {
         }
         tags("sync")
     }) {
+        get("/authenticated") {
+            call.respond(SyncService.getInstance(call).getAccessToken() != null)
+        }
+
         get("/auth") {
             SyncService.handleAuth(call)
         }
