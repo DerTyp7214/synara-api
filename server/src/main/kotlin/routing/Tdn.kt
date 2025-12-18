@@ -40,14 +40,6 @@ fun Route.tdn() {
         post("/login", {}) {
             val tdnService by inject<TdnService>()
 
-            if (!tdnService.isDownloadActive.compareAndSet(expectedValue = false, newValue = true)) {
-                call.respond(
-                    HttpStatusCode.Conflict,
-                    "Download is already running. (If you just closed one, please wait a few seconds)"
-                )
-                return@post
-            }
-
             call.response.header(HttpHeaders.ContentType, ContentType.Text.EventStream.toString())
             call.response.header(HttpHeaders.CacheControl, "no-cache")
             call.response.header(HttpHeaders.Connection, "keep-alive")
@@ -57,8 +49,6 @@ fun Route.tdn() {
                 tdnService.login({ isClientConnected() }) {
                     sendSafe(it)
                 }
-
-                tdnService.isDownloadActive.store(false)
             }
         }
 

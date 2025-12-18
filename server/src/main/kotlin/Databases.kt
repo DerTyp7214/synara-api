@@ -6,7 +6,6 @@ import dev.dertyp.db.ImageTable
 import dev.dertyp.routing.*
 import dev.dertyp.services.*
 import dev.dertyp.services.tdn.DownloadService
-import dev.dertyp.services.tdn.TdnService
 import dev.hayden.KHealth
 import io.github.smiley4.ktoropenapi.get
 import io.ktor.http.*
@@ -44,10 +43,6 @@ fun Application.configureDatabases() {
                 }
                 check("transcoder_ready") {
                     !AudioUtils.isTranscoderActive.load()
-                }
-                check("downloader_ready") {
-                    val tdnService by inject<TdnService>()
-                    !tdnService.isDownloadActive.load()
                 }
             }
         }
