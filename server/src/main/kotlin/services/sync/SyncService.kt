@@ -226,6 +226,7 @@ abstract class SyncService(
     }
 
     @Suppress("EnumEntryName")
+    @Serializable
     enum class SyncServiceType {
         tidal,
         unknown

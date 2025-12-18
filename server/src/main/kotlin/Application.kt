@@ -33,19 +33,21 @@ fun Application.module() {
         slf4jLogger()
         modules(module {
             single<ApplicationEnvironment> { environment }
-            singleOf(::DatabaseManager)
-            singleOf(::StorageService)
-            singleOf(::UserService)
-            singleOf(::RefreshTokenService)
+
+            singleOf(::Indexer)
             singleOf(::JwtService)
+            singleOf(::TdnService)
+            singleOf(::UserService)
             singleOf(::SongService)
             singleOf(::ImageService)
             singleOf(::AlbumService)
             singleOf(::ArtistService)
+            singleOf(::StorageService)
+            singleOf(::FavSyncService)
+            singleOf(::DatabaseManager)
             singleOf(::PlaylistService)
-            singleOf(::Indexer)
-            singleOf(::TdnService)
             singleOf(::DownloadService)
+            singleOf(::RefreshTokenService)
 
             single<Gson> {
                 GsonBuilder()

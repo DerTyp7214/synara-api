@@ -4,6 +4,7 @@ import dev.dertyp.core.*
 import dev.dertyp.data.User
 import dev.dertyp.data.UserSong
 import dev.dertyp.serializers.UUIDSerializer
+import dev.dertyp.services.FavSyncService
 import dev.dertyp.services.Service
 import dev.dertyp.services.SongService
 import dev.dertyp.services.sync.SyncService
@@ -18,6 +19,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
+import java.time.Instant
 import java.util.*
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.concurrent.atomics.AtomicBoolean
@@ -26,7 +28,8 @@ import kotlin.concurrent.atomics.ExperimentalAtomicApi
 @OptIn(ExperimentalAtomicApi::class)
 class DownloadService(
     val tdnService: TdnService,
-    val songService: SongService
+    val songService: SongService,
+    val favSyncService: FavSyncService
 ) : Service() {
     private val maxLogLength: Int = 1000
 
@@ -346,9 +349,17 @@ class DownloadService(
         }
 
         return ApplicationScope.scope.async {
+            val latestFavSync = favSyncService.getLatestFavSync(user, SyncService.SyncServiceType.tidal)
+
+            val ids = service.getLikedSongs { songs ->
+                latestFavSync == null || songs.none { it.addedAt < latestFavSync.syncedAt }
+            }
+                .filter { song -> latestFavSync == null || song.addedAt > latestFavSync.syncedAt }
+                .map { it.id }
+
             val (_, songsToLike) = downloadTidalIds(
                 call = call,
-                ids = service.getLikedSongs().map { it.id },
+                ids = ids,
                 type = Type.SONG,
                 filter = { !(it.isFavourite ?: false) },
                 chunkSize = 25
@@ -367,6 +378,8 @@ class DownloadService(
             syncMutex.withLock {
                 syncMap[user.id]?.store(false)
             }
+
+            favSyncService.insertFavSync(user, SyncService.SyncServiceType.tidal, Date.from(Instant.now()))
 
             logger.info("[${user.username}] Sync favourite songs finished.")
         }.launchOnCancellation {
@@ -444,10 +457,17 @@ data class LogLine(
 
 @Serializable
 enum class Type(val value: String) {
-    @SerialName("track") SONG("track"),
-    @SerialName("album") ALBUM("album"),
-    @SerialName("playlist") PLAYLIST("playlist"),
-    @SerialName("artist") ARTIST("artist");
+    @SerialName("track")
+    SONG("track"),
+
+    @SerialName("album")
+    ALBUM("album"),
+
+    @SerialName("playlist")
+    PLAYLIST("playlist"),
+
+    @SerialName("artist")
+    ARTIST("artist");
 
     companion object {
         fun fromValue(value: String): Type? {
