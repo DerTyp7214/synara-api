@@ -296,9 +296,10 @@ class DownloadService(
                 })
             }
 
-            while (downloadStageMutex.withLock { downloadStage.size > 25 }) {
+            val chunkSize = 20
+            while (downloadStageMutex.withLock { downloadStage.size > chunkSize }) {
                 contentToDownload = true
-                val urls = downloadStageMutex.withLock { downloadStage.splice(0, 25) }
+                val urls = downloadStageMutex.withLock { downloadStage.splice(0, chunkSize) }
                 addToQueue(
                     UrlDownloadQueueEntry(
                         urls = urls.map { "https://tidal.com/${type.value}/${it}" }.toMutableList(),

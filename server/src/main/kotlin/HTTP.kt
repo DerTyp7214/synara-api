@@ -3,12 +3,13 @@ package dev.dertyp
 import com.ucasoft.ktor.simpleCache.SimpleCache
 import com.ucasoft.ktor.simpleMemoryCache.memoryCache
 import dev.dertyp.core.anyHeader
+import dev.dertyp.plugins.RedisCacheProvider
 import dev.dertyp.plugins.redisCache
 import dev.dertyp.services.JwtService
 import io.ktor.server.application.*
 import io.ktor.server.plugins.cors.routing.*
 import org.koin.ktor.ext.getKoin
-import kotlin.time.Duration.Companion.days
+import org.koin.ktor.ext.inject
 import kotlin.time.Duration.Companion.seconds
 
 fun Application.configureHTTP() {
@@ -21,9 +22,12 @@ fun Application.configureHTTP() {
         if (!environment.config.propertyOrNull("redis.host")?.getString().isNullOrBlank()) {
             println("Using redis for cache!")
             redisCache {
-                invalidateAt = 30.days
-                host = environment.config.propertyOrNull("redis.host")!!.getString()
-                port = environment.config.propertyOrNull("redis.port")?.getString()?.toInt() ?: port
+                val config by inject<RedisCacheProvider.Config>()
+
+                port = config.port
+                ssl = config.ssl
+                host = config.host
+                invalidateAt = config.invalidateAt
             }
         } else {
             println("Using memory for cache!")

@@ -2,7 +2,7 @@ type: http_request
 model: http_request
 id: rq_3CLGHC65XV
 createdAt: 2025-12-18T13:39:29.110480052
-updatedAt: 2025-12-18T13:47:59.698458135
+updatedAt: 2025-12-18T19:03:39.362595615
 workspaceId: wk_9dbKacQT4H
 folderId: fl_xqrmRv49Xr
 authentication: {}
@@ -11,7 +11,8 @@ body:
   text: |-
     [
       "356883815",
-      "356883829"
+      "356883829",
+      "137560017"
     ]
 bodyType: application/json
 description: '[object Object]'

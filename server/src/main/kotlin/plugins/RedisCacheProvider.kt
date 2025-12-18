@@ -3,6 +3,8 @@ package dev.dertyp.plugins
 import com.google.gson.Gson
 import com.ucasoft.ktor.simpleCache.SimpleCacheConfig
 import com.ucasoft.ktor.simpleCache.SimpleCacheProvider
+import org.koin.core.component.KoinComponent
+import org.koin.java.KoinJavaComponent.inject
 import redis.clients.jedis.JedisPooled
 import kotlin.time.Duration
 
@@ -29,17 +31,18 @@ class RedisCacheProvider(config: Config) : SimpleCacheProvider(config) {
     }
 }
 
-private class RedisCacheObject(val type: String, val content: String) {
-
+class RedisCacheObject(val type: String, val content: String): KoinComponent {
     override fun toString() = "$type%#%$content"
 
     companion object {
+        private val gson by inject<Gson>(Gson::class.java)
 
-        fun fromObject(`object`: Any) = RedisCacheObject(`object`::class.java.name, Gson().toJson(`object`))
+        fun fromObject(`object`: Any) = RedisCacheObject(`object`::class.java.name, gson.toJson(`object`))
 
-        fun fromCache(cache: String): Any {
+        @Suppress("UNCHECKED_CAST")
+        fun <T> fromCache(cache: String): T {
             val data = cache.split("%#%")
-            return Gson().fromJson(data.last(), Class.forName(data.first()))
+            return gson.fromJson(data.last(), Class.forName(data.first())) as T
         }
     }
 }

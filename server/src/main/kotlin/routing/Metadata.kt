@@ -170,7 +170,7 @@ fun Route.metadata() {
                 }
             }
         }
-        cacheOutput(10.days) {
+        //cacheOutput(10.days) {
             post("/tracks", {
                 request {
                     body<List<String>> {
@@ -188,7 +188,7 @@ fun Route.metadata() {
 
                 call.respond(service.getTracksByIds(ids))
             }
-        }
+        //}
         cacheOutput(Duration.INFINITE) {
             route("/imageUrl") {
                 get("/byTrackId/{trackId}", {

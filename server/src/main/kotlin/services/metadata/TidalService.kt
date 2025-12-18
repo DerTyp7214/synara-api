@@ -2,6 +2,8 @@ package dev.dertyp.services.metadata
 
 import dev.dertyp.ApiClient
 import dev.dertyp.core.*
+import dev.dertyp.plugins.RedisCacheObject
+import dev.dertyp.plugins.RedisCacheProvider
 import dev.dertyp.services.models.tidal.*
 import io.ktor.client.call.*
 import io.ktor.client.request.*
@@ -10,9 +12,12 @@ import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.util.*
 import kotlinx.coroutines.delay
+import org.koin.core.component.inject
+import redis.clients.jedis.JedisPooled
 import java.util.*
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.io.encoding.Base64
+import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.seconds
 
 @OptIn(ExperimentalAtomicApi::class)
@@ -22,6 +27,14 @@ class TidalService(
     override val tokenUrl = "https://auth.tidal.com/v1/oauth2/token"
     override val clientIdConfigPath: String = "tidal.clientId"
     override val clientSecretConfigPath: String = "tidal.clientSecret"
+
+    private val jedisConfig by inject<RedisCacheProvider.Config>()
+    private val jedis by lazy {
+        jedisConfig.let {
+            if (jedisConfig.host != "none") JedisPooled(jedisConfig.host, jedisConfig.port, jedisConfig.ssl)
+            else null
+        }
+    }
 
     override fun HttpRequestBuilder.getAccessTokenHeader(clientId: String, clientSecret: String) {
         header(HttpHeaders.Authorization, "Basic ${Base64.encode("$clientId:$clientSecret".toByteArray())}")
@@ -253,6 +266,9 @@ class TidalService(
     }
 
     override suspend fun getTrackById(trackId: String): Track? {
+        val existing = getFromJedis(trackId)
+        if (existing != null) return existing
+
         val url = getUrl("/tracks/$trackId") {
             parameters {
                 append("countryCode", "US")
@@ -289,7 +305,7 @@ class TidalService(
                     artists = body.data.artists(artists),
                     images = imageUrls,
                 )
-            }
+            }?.also { writeToJedis(it) }
         } catch (e: Exception) {
             e.printStackTrace()
             println(response.bodyAsText())
@@ -297,15 +313,68 @@ class TidalService(
         }
     }
 
+    private fun writeToJedis(track: Track) {
+        jedis?.psetex(
+            "tidal_track::${track.id}",
+            30.days.inWholeMilliseconds,
+            RedisCacheObject.fromObject(track).toString()
+        )
+    }
+
+    private fun getFromJedis(trackId: String): Track? {
+        return jedis?.let { jedis ->
+            if (jedis.exists("tidal_track::$trackId")) {
+                RedisCacheObject.fromCache(jedis.get("tidal_track::$trackId"))
+            } else null
+        }
+    }
+
+    private fun List<Track>.cacheTracks(): List<Track> {
+        jedis?.let {
+            for (track in this) writeToJedis(track)
+        }
+
+        return this
+    }
+
+    private fun checkExistingFromCache(trackIds: List<String>): List<String> {
+        if (jedis == null) return listOf()
+
+        val existing = mutableListOf<String>()
+        for (trackId in trackIds) {
+            if (getFromJedis(trackId) != null) existing.add(trackId)
+        }
+        return existing
+    }
+
+    private fun getFromCache(trackIds: List<String>): List<Track> {
+        if (jedis == null) return listOf()
+
+        val tracks = mutableListOf<Track?>()
+        for (trackId in trackIds) {
+            tracks.add(getFromJedis(trackId))
+        }
+        return tracks.filterNotNull()
+    }
+
     override suspend fun getTracksByIds(trackIds: List<String>): List<Track> {
-        if (trackIds.isEmpty()) return listOf()
+        val filteredTrackIds = trackIds.distinct().toMutableList()
+        val existing = checkExistingFromCache(filteredTrackIds)
+
+        filteredTrackIds.removeAll(existing)
+
+        if (filteredTrackIds.isEmpty()) return getFromCache(existing)
+
+        if (filteredTrackIds.size > 20) {
+            return filteredTrackIds.chunked(20).flatMap { getTracksByIds(it) }
+        }
 
         val url = getUrl("/tracks") {
             parameters {
                 append("countryCode", "US")
                 append("locale", "en-US")
                 appendAll("include", listOf("albums", "artists"))
-                appendAll("filter[id]", trackIds)
+                appendAll("filter[id]", filteredTrackIds)
             }
         }
 
@@ -315,7 +384,7 @@ class TidalService(
             HttpStatusCode.TooManyRequests -> {
                 logger.warn("[getTracksByIds]: Too many requests, waiting 10 seconds")
                 delay(10.seconds)
-                return getTracksByIds(trackIds)
+                return getTracksByIds(filteredTrackIds) + getFromCache(existing)
             }
 
             else -> println("error: ${response.status}")
@@ -340,7 +409,7 @@ class TidalService(
                         images = trackObj.images(imageUrls),
                     )
                 }
-            }
+            }.cacheTracks() + getFromCache(existing)
         } catch (e: Exception) {
             e.printStackTrace()
             println(response.bodyAsText())
