@@ -1,5 +1,8 @@
 package dev.dertyp.core
 
+import dev.dertyp.services.models.tidal.*
+import kotlinx.serialization.json.decodeFromJsonElement
+
 fun <T> MutableList<T>.removeFirst(condition: (T) -> Boolean): T? {
     val index = indexOfFirst(condition)
     if (index > -1) return removeAt(index)
@@ -38,3 +41,16 @@ fun <T> MutableList<T>.splice(
 
     return removedElements
 }
+
+inline fun <reified F : BaseAttributes> List<IncludedInner<JsonAttribute, *>>.mapAttributes(): Map<String, F> =
+    mapNotNull { included ->
+        val attribute = when (included.type) {
+            "artists" -> ApplicationScope.json.decodeFromJsonElement<ArtistsAttributes>(included.attributes.element)
+            "albums" -> ApplicationScope.json.decodeFromJsonElement<AlbumsAttributes>(included.attributes.element)
+            "tracks" -> ApplicationScope.json.decodeFromJsonElement<TracksAttributes>(included.attributes.element)
+            else -> null
+        }
+
+        if (attribute is F) included.id to attribute
+        else null
+    }.toMap()

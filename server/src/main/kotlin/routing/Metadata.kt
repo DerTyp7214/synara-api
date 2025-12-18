@@ -3,6 +3,7 @@ package dev.dertyp.routing
 import com.ucasoft.ktor.simpleCache.cacheOutput
 import dev.dertyp.ApiClient
 import dev.dertyp.Indexer
+import dev.dertyp.core.getMetadataProvider
 import dev.dertyp.core.safeGet
 import dev.dertyp.core.sha256
 import dev.dertyp.core.toUUIDOrNull
@@ -11,9 +12,12 @@ import dev.dertyp.db.ArtistTable
 import dev.dertyp.dbQuery
 import dev.dertyp.services.ImageService
 import dev.dertyp.services.metadata.MetadataService
+import dev.dertyp.services.metadata.TidalService
 import io.github.smiley4.ktoropenapi.get
+import io.github.smiley4.ktoropenapi.post
 import io.github.smiley4.ktoropenapi.route
 import io.ktor.http.*
+import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.ktor.server.sse.*
@@ -37,12 +41,7 @@ fun Route.metadata() {
         }
     }) {
         get("/supported") {
-            val metadataProviderString =
-                call.parameters["metadataProvider"] ?: return@get call.respond(HttpStatusCode.BadRequest)
-
-            val metadataProvider = MetadataService.Companion.MetadataType.valueOf(metadataProviderString)
-
-            val service = MetadataService.getMetadataService(metadataProvider, environment)
+            val service = call.getMetadataProvider() ?: return@get call.respond(HttpStatusCode.BadRequest)
 
             call.respond(service.supported())
         }
@@ -169,6 +168,25 @@ fun Route.metadata() {
                 } finally {
                     MetadataService.isFetching.store(false)
                 }
+            }
+        }
+        cacheOutput(10.days) {
+            post("/tracks", {
+                request {
+                    body<List<String>> {
+                        description = "Song ids"
+                    }
+                }
+            }) {
+                val service = call.getMetadataProvider() ?: return@post call.respond(HttpStatusCode.BadRequest)
+                if (service !is TidalService) return@post call.respond(
+                    HttpStatusCode.MethodNotAllowed,
+                    "Only Tidal is supported."
+                )
+
+                val ids = call.receive<List<String>>().filterNot { it.isBlank() }
+
+                call.respond(service.getTracksByIds(ids))
             }
         }
         cacheOutput(Duration.INFINITE) {

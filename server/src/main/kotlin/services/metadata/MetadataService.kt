@@ -137,6 +137,7 @@ abstract class MetadataService(
     data class Track(
         val id: String,
         val title: String,
+        val artists: List<String> = emptyList(),
         @Serializable(with = DurationSerializer::class)
         val duration: Duration,
         @Serializable(with = OffsetDateTimeSerializer::class)

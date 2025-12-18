@@ -36,17 +36,24 @@ fun Route.sync() {
             SyncService.handleCallback(call, call.request.queryParameters["state"])
         }
 
-        get("/liked") {
-            val downloadService by inject<DownloadService>()
+        route("/liked") {
+            get {
+                val downloadService by inject<DownloadService>()
 
-            if (!downloadService.syncFavouritesAvailable(call)) return@get call.respond(
-                HttpStatusCode.Conflict,
-                "Favourite-Sync not available."
-            )
+                if (!downloadService.syncFavouritesAvailable(call)) return@get call.respond(
+                    HttpStatusCode.Conflict,
+                    "Favourite-Sync not available."
+                )
 
-            downloadService.syncFavourites(call).invokeOnCompletion {}
+                downloadService.syncFavourites(call).invokeOnCompletion {}
 
-            call.respond(HttpStatusCode.Accepted, "Favourite-Sync started")
+                call.respond(HttpStatusCode.Accepted, "Favourite-Sync started")
+            }
+            get("/active") {
+                val downloadService by inject<DownloadService>()
+
+                call.respond(HttpStatusCode.OK, downloadService.syncFavouritesAvailable(call))
+            }
         }
 
         route("/get") {

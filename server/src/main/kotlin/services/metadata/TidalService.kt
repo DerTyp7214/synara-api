@@ -1,8 +1,7 @@
 package dev.dertyp.services.metadata
 
 import dev.dertyp.ApiClient
-import dev.dertyp.core.filterValueNotNull
-import dev.dertyp.core.parameters
+import dev.dertyp.core.*
 import dev.dertyp.services.models.tidal.*
 import io.ktor.client.call.*
 import io.ktor.client.request.*
@@ -258,6 +257,7 @@ class TidalService(
             parameters {
                 append("countryCode", "US")
                 append("locale", "en-US")
+                appendAll("include", listOf("albums", "artists"))
             }
         }
 
@@ -274,11 +274,11 @@ class TidalService(
         }
 
         try {
-            val body = response.body<TracksSingleResourceDataDocument<BaseAttributes, EmptyRelationships>>()
+            val body = response.body<TracksSingleResourceDataDocument<JsonAttribute, EmptyRelationships>>()
 
-            val imageUrls = body.data.relationships?.albums?.data?.firstOrNull()?.let {
-                getImageUrlByAlbumId(it.id)
-            } ?: emptyList()
+            val imageUrls = body.data.singleImage(::getImageUrlByAlbumId)
+
+            val artists = body.included?.mapAttributes<ArtistsAttributes>() ?: emptyMap()
 
             return body.data.attributes?.let { track ->
                 Track(
@@ -286,6 +286,7 @@ class TidalService(
                     title = track.title,
                     duration = track.duration,
                     createdAt = track.createdAt,
+                    artists = body.data.artists(artists),
                     images = imageUrls,
                 )
             }
@@ -297,10 +298,13 @@ class TidalService(
     }
 
     override suspend fun getTracksByIds(trackIds: List<String>): List<Track> {
+        if (trackIds.isEmpty()) return listOf()
+
         val url = getUrl("/tracks") {
             parameters {
                 append("countryCode", "US")
                 append("locale", "en-US")
+                appendAll("include", listOf("albums", "artists"))
                 appendAll("filter[id]", trackIds)
             }
         }
@@ -318,10 +322,12 @@ class TidalService(
         }
 
         try {
-            val body = response.body<TracksMultiResourceDataDocument<BaseAttributes, EmptyRelationships>>()
+            val body = response.body<TracksMultiResourceDataDocument<JsonAttribute, EmptyRelationships>>()
 
             val albumIds = body.data.mapNotNull { it.relationships?.albums?.data?.firstOrNull()?.id }
             val imageUrls = getImageUrlsByAlbumIds(albumIds)
+
+            val artists = body.included?.mapAttributes<ArtistsAttributes>() ?: emptyMap()
 
             return body.data.mapNotNull { trackObj ->
                 trackObj.attributes?.let { track ->
@@ -330,7 +336,8 @@ class TidalService(
                         title = track.title,
                         duration = track.duration,
                         createdAt = track.createdAt,
-                        images = imageUrls[trackObj.relationships?.albums?.data?.firstOrNull()?.id] ?: emptyList(),
+                        artists = trackObj.artists(artists),
+                        images = trackObj.images(imageUrls),
                     )
                 }
             }

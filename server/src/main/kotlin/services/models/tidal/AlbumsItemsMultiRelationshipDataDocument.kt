@@ -5,6 +5,6 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class AlbumsItemsMultiRelationshipDataDocument<A : BaseAttributes, R : BaseRelationships>(
     val links: Links,
-    val data: List<AlbumsItemsResourceIdentifier>,
-    val included: List<IncludedInner<A, R>>
+    val data: List<AlbumsItemsResourceIdentifier>? = emptyList(),
+    val included: List<IncludedInner<A, R>>? = emptyList(),
 )

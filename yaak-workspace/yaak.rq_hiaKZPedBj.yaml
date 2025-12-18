@@ -1,0 +1,22 @@
+type: http_request
+model: http_request
+id: rq_hiaKZPedBj
+createdAt: 2025-12-18T13:42:43.696909782
+updatedAt: 2025-12-18T13:42:51.354589567
+workspaceId: wk_9dbKacQT4H
+folderId: null
+authentication: {}
+authenticationType: null
+body: {}
+bodyType: null
+description: '[object Object]'
+headers: []
+method: GET
+name: /sync/likedActive
+sortPriority: 10000.002
+url: ${[baseUrl]}/sync/tidal/likedActive
+urlParameters:
+- enabled: true
+  name: ''
+  value: ''
+  id: ZTzSiuexPy

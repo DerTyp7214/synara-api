@@ -1,0 +1,43 @@
+type: http_request
+model: http_request
+id: rq_3CLGHC65XV
+createdAt: 2025-12-18T13:39:29.110480052
+updatedAt: 2025-12-18T13:47:59.698458135
+workspaceId: wk_9dbKacQT4H
+folderId: fl_xqrmRv49Xr
+authentication: {}
+authenticationType: null
+body:
+  text: |-
+    [
+      "356883815",
+      "356883829"
+    ]
+bodyType: application/json
+description: '[object Object]'
+headers:
+- enabled: true
+  name: Content-Type
+  value: application/json
+  id: EBWg3mpqVi
+method: POST
+name: /tracks
+sortPriority: 0.001
+url: ${[baseUrl]}/metadata/:metadataProvider/tracks
+urlParameters:
+- enabled: true
+  name: :metadataProvider
+  value: tidal
+  id: hUWFrZXs95
+- enabled: false
+  name: :metadataProvider
+  value: spotify
+  id: ntREHFtttf
+- enabled: false
+  name: :metadataProvider
+  value: imageCache
+  id: rATHUBf4u6
+- enabled: true
+  name: ''
+  value: ''
+  id: 3GB605mPed
