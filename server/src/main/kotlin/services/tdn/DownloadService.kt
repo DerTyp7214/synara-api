@@ -15,6 +15,7 @@ import kotlinx.coroutines.channels.Channel.Factory.UNLIMITED
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
 import java.util.*
@@ -442,10 +443,10 @@ data class LogLine(
 
 @Serializable
 enum class Type(val value: String) {
-    SONG("track"),
-    ALBUM("album"),
-    PLAYLIST("playlist"),
-    ARTIST("artist");
+    @SerialName("track") SONG("track"),
+    @SerialName("album") ALBUM("album"),
+    @SerialName("playlist") PLAYLIST("playlist"),
+    @SerialName("artist") ARTIST("artist");
 
     companion object {
         fun fromValue(value: String): Type? {
