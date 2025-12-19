@@ -40,7 +40,7 @@ data class ProcessExecutionResult(val exitCode: Int, val fullOutput: String, val
 
 @OptIn(ExperimentalAtomicApi::class)
 class TdnService(private val indexer: Indexer, private val storageService: StorageService) : Service() {
-    private val loggingIn = AtomicBoolean(false);
+    private val loggingIn = AtomicBoolean(false)
 
     @OptIn(ExperimentalAtomicApi::class)
     private suspend fun collectDownloadedFiles(
@@ -203,7 +203,7 @@ class TdnService(private val indexer: Indexer, private val storageService: Stora
         aliveCheck: suspend () -> Boolean = { true },
         onLiveOutput: suspend (String) -> Unit
     ): ProcessExecutionResult {
-        loggingIn.waitForChange(false);
+        loggingIn.waitForChange(false)
 
         val command = mutableListOf("tdn", "dl", url)
         val (result) = collectDownloadedFiles(command, maxRetries, 0, aliveCheck, onLiveOutput)
@@ -217,7 +217,7 @@ class TdnService(private val indexer: Indexer, private val storageService: Stora
         aliveCheck: suspend () -> Boolean = { true },
         onLiveOutput: suspend (String) -> Unit
     ): ProcessExecutionResult {
-        loggingIn.waitForChange(false);
+        loggingIn.waitForChange(false)
 
         val command = mutableListOf("tdn", "dl", *urls.toTypedArray())
         val (result) = collectDownloadedFiles(command, maxRetries, 0, aliveCheck, onLiveOutput)
@@ -231,7 +231,7 @@ class TdnService(private val indexer: Indexer, private val storageService: Stora
         aliveCheck: suspend () -> Boolean = { true },
         onLiveOutput: suspend (String) -> Unit
     ): ProcessExecutionResult {
-        loggingIn.waitForChange(false);
+        loggingIn.waitForChange(false)
 
         val command = mutableListOf("tdn", "dl_fav", type.name)
         val (result) = collectDownloadedFiles(command, maxRetries, 0, aliveCheck, onLiveOutput)
@@ -242,27 +242,27 @@ class TdnService(private val indexer: Indexer, private val storageService: Stora
         aliveCheck: suspend () -> Boolean = { true },
         onLiveOutput: suspend (String) -> Unit
     ): ProcessExecutionResult {
-        loggingIn.waitForChange(false);
-        loggingIn.store(true);
+        loggingIn.waitForChange(false)
+        loggingIn.store(true)
 
         val command = mutableListOf("tdn", "login")
         val response = executeTdn(command, aliveCheck, onLiveOutput)
 
-        loggingIn.store(false);
+        loggingIn.store(false)
 
         return response
     }
 
     @ExperimentalTime
     suspend fun authorized(): Boolean {
-        loggingIn.waitForChange(false);
-        loggingIn.store(true);
+        loggingIn.waitForChange(false)
+        loggingIn.store(true)
 
         val command = mutableListOf("tdn", "login")
         val startTime = Clock.System.now()
         val result = executeTdn(command, { Clock.System.now().minus(startTime) < 10.seconds })
 
-        loggingIn.store(false);
+        loggingIn.store(false)
 
         return result.fullOutput.contains("You are logged in")
     }
