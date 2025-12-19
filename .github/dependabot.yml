@@ -7,9 +7,11 @@ version: 2
 updates:
   - package-ecosystem: "gradle"
     directory: "/"
+    open-pull-requests-limit: 12
     schedule:
       interval: "weekly"
   - package-ecosystem: "docker"
     directory: "/"
+    open-pull-requests-limit: 12
     schedule:
       interval: "weekly"

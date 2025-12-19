@@ -7,7 +7,7 @@ concurrency:
 on:
   push:
     paths:
-      - .github/**
+      - .github/workflows/build.yml
       - docker/**
       - server/**
       - Dockerfile.nobuild
