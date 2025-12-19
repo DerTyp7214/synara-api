@@ -2,7 +2,7 @@ type: http_request
 model: http_request
 id: rq_cK7ztCF6de
 createdAt: 2025-10-14T19:25:16.450189727
-updatedAt: 2025-12-17T16:51:47.027154613
+updatedAt: 2025-12-19T19:21:36.223321995
 workspaceId: wk_9dbKacQT4H
 folderId: fl_YmgN76Fcs6
 authentication: {}
@@ -30,9 +30,9 @@ urlParameters:
   id: QEbzqViaj2
 - enabled: true
   name: :albumId
-  value: 8e336063-9dbb-450e-8621-3d7e41a6e7e9
+  value: 478900a6-2845-4d6b-b281-f00e64a8d0d1
   id: 0ZP9BMqQJj
 - enabled: true
   name: ''
   value: ''
-  id: uK0Jk96aBm
+  id: Aq9PzxBW5t

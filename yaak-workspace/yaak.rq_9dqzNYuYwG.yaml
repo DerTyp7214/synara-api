@@ -2,7 +2,7 @@ type: http_request
 model: http_request
 id: rq_9dqzNYuYwG
 createdAt: 2025-12-17T16:45:46.693951185
-updatedAt: 2025-12-19T00:27:04.731243955
+updatedAt: 2025-12-19T19:30:30.678537595
 workspaceId: wk_9dbKacQT4H
 folderId: fl_QrUoFyttZM
 authentication: {}
@@ -10,7 +10,8 @@ authenticationType: null
 body:
   text: |-
     [
-      "63672160-edb2-4ac0-85c8-3b4d403253fc"
+      "c558f00a-34d7-4a1d-8856-f5168f3cd2da",
+      "5c9b7af7-5256-4844-afee-2969e54f77fd"
     ]
 bodyType: application/json
 description: ''

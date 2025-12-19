@@ -18,8 +18,12 @@ import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
 import org.koin.core.component.get
 import java.io.File
+import java.nio.file.Paths
 import java.time.Instant
 import java.util.*
+import kotlin.io.path.absolutePathString
+import kotlin.io.path.isSymbolicLink
+import kotlin.io.path.readSymbolicLink
 
 class SongService : Service() {
     val albumArtistAlias = ArtistTable.alias("album_artist_alias")
@@ -234,8 +238,22 @@ class SongService : Service() {
             )
         }
 
-        for (path in paths) {
+        val albumsPath = get<StorageService>().albumsPath?.let { Paths.get(it) }
+        val links = if (albumsPath != null) {
+            val fileNames = paths.map { File(it).nameWithoutExtension }
+            albumsPath.toFile().walkTopDown().filter {
+                it.toPath().isSymbolicLink() && fileNames.contains(it.nameWithoutExtension)
+            }.map { it.absolutePath }.toList()
+        } else emptyList()
+
+        for (path in paths + links) {
             val file = File(path)
+            if (file.toPath().isSymbolicLink())
+                logger.info(
+                    "File is a symbolic link pointing to: ${
+                        file.toPath().readSymbolicLink().absolutePathString()
+                    }"
+                )
             if (file.exists())
                 logger.info("Trying to delete ${file.absolutePath} (${file.delete()})")
             if (file.parentFile.list().isEmpty())
