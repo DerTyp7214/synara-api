@@ -87,7 +87,7 @@ dependencies {
     implementation("io.ktor:ktor-server-compression:3.3.1")
     implementation("io.ktor:ktor-server-auto-head-response:3.3.1")
     implementation("io.ktor:ktor-server-sessions:3.3.1")
-    implementation("com.github.ben-manes.caffeine:caffeine:3.2.2")
+    implementation("com.github.ben-manes.caffeine:caffeine:3.2.3")
     implementation("io.ktor:ktor-server-partial-content:3.3.1")
     implementation ("org.jmdns:jmdns:$jmdnsVersion")
     implementation("com.sksamuel.scrimage:scrimage-core:4.3.5")
