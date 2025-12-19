@@ -13,7 +13,7 @@ val jmdnsVersion: String by project
 
 plugins {
     kotlin("jvm") version "2.2.20"
-    id("io.ktor.plugin") version "3.3.1"
+    id("io.ktor.plugin") version "3.3.3"
     id("org.jetbrains.kotlin.plugin.serialization") version "2.2.20"
     id("org.jetbrains.kotlinx.rpc.plugin") version "0.10.0"
 }
@@ -84,11 +84,11 @@ dependencies {
     implementation("io.ktor:ktor-server-config-yaml")
     implementation("net.jthink:jaudiotagger:3.0.1")
     implementation("org.xerial:sqlite-jdbc:3.50.3.0")
-    implementation("io.ktor:ktor-server-compression:3.3.1")
-    implementation("io.ktor:ktor-server-auto-head-response:3.3.1")
-    implementation("io.ktor:ktor-server-sessions:3.3.1")
+    implementation("io.ktor:ktor-server-compression:3.3.3")
+    implementation("io.ktor:ktor-server-auto-head-response:3.3.3")
+    implementation("io.ktor:ktor-server-sessions:3.3.3")
     implementation("com.github.ben-manes.caffeine:caffeine:3.2.2")
-    implementation("io.ktor:ktor-server-partial-content:3.3.1")
+    implementation("io.ktor:ktor-server-partial-content:3.3.3")
     implementation ("org.jmdns:jmdns:$jmdnsVersion")
     implementation("com.sksamuel.scrimage:scrimage-core:4.3.5")
     implementation("com.sksamuel.scrimage:scrimage-webp:4.3.5")
