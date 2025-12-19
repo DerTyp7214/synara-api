@@ -1,4 +1,4 @@
-FROM mwader/static-ffmpeg:6.1.1 AS ffmpeg-builder
+FROM mwader/static-ffmpeg:7.1.1 AS ffmpeg-builder
 
 FROM amazoncorretto:25 AS runtime
 
