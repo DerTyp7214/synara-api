@@ -119,19 +119,6 @@ class TdnService(private val indexer: Indexer, private val storageService: Stora
                 }
             }
 
-            songPaths.addAll(
-                paths
-                    .filter { it.extension == indexer.audioExtension }
-                    .distinctBy { it.absolutePathString() }
-            )
-
-            playlistPaths.addAll(
-                paths
-                    .filter { it.isInside(storageService.playlistsPath ?: it.parent.absolutePathString()) }
-                    .filter { it.extension == indexer.playlistExtension }
-                    .distinctBy { it.absolutePathString() }
-            )
-
             if (result.exitCode == 1 && storageService.playlistsPath != null) {
                 val pathAlternation =
                     "(${storageService.playlistsPath}|${storageService.albumsPath})"
@@ -188,9 +175,22 @@ class TdnService(private val indexer: Indexer, private val storageService: Stora
                 paths.addAll(newPaths)
             }
         } finally {
-            indexer.queue(songPaths, playlistPaths, stdout = logProxy).await()
+            if (currentTry == 0) {
+                songPaths.addAll(
+                    paths
+                        .filter { it.extension == indexer.audioExtension }
+                        .distinctBy { it.absolutePathString() }
+                )
 
-            logProxy("Took ${currentTry + 1} tr${if (currentTry == 0) "y" else "ies"} to download.")
+                playlistPaths.addAll(
+                    paths
+                        .filter { it.isInside(storageService.playlistsPath ?: it.parent.absolutePathString()) }
+                        .filter { it.extension == indexer.playlistExtension }
+                        .distinctBy { it.absolutePathString() }
+                )
+
+                indexer.queue(songPaths.distinct(), playlistPaths.distinct(), stdout = logProxy).await()
+            }
         }
 
         return Pair(result, paths)
