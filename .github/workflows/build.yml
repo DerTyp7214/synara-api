@@ -16,6 +16,8 @@ on:
       - settings.gradle.kts
     branches: [ master, release ]
   workflow_dispatch:
+  schedule:
+    - cron: '0 0 1 * *'
 
 jobs:
   build-artifact:
@@ -109,6 +111,10 @@ jobs:
         id: jar_info
         run: echo "JAR_NAME=${{ needs.build-artifact.outputs.jar_file_name }}" >> $GITHUB_OUTPUT
 
+      - name: Get current month
+        id: date
+        run: echo "month_year=$(date +'%Y-%m')" >> $GITHUB_OUTPUT
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
@@ -143,6 +149,8 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=registry,ref=ghcr.io/${{ env.CONTAINER_REPO }}:buildcache
           cache-to: type=registry,ref=ghcr.io/${{ env.CONTAINER_REPO }}:buildcache,mode=max
+          build-args: |
+            MONTH_YEAR=${{ steps.date.outputs.month_year }}
 
   create-github-release:
     needs: build-artifact

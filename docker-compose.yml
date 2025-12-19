@@ -2,7 +2,7 @@ services:
   api:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.nobuild
       args:
         APP_USER_ID: 1000
         APP_GROUP_ID: 1000

@@ -5,16 +5,15 @@ FROM amazoncorretto:25 AS runtime
 ARG APP_USER_ID=1000
 ARG APP_GROUP_ID=1000
 
+ARG MONTH_YEAR=unknown
+
 RUN yum update -y && yum install -y python3.12 python3.12-pip libstdc++ zlib glibc shadow-utils && \
     yum clean all && rm -rf /var/cache/yum
 
 RUN ln -sf /usr/bin/python3.12 /usr/bin/python3
-RUN python3 -m pip install --break-system-packages --no-cache-dir tidal-dl-ng
 
 COPY --from=ffmpeg-builder /ffmpeg /usr/bin/
 COPY --from=ffmpeg-builder /ffprobe /usr/bin/
-
-ENV LD_LIBRARY_PATH="/usr/lib:/usr/local/lib:$LD_LIBRARY_PATH"
 
 RUN groupadd -g $APP_GROUP_ID appgroup && useradd -u $APP_USER_ID -g appgroup -s /bin/bash -m -d /home/appuser appuser
 
@@ -31,6 +30,8 @@ RUN chown -R appuser:appgroup /home/appuser
 
 COPY --chown=appuser:appuser docker/tdn-config/settings.json /home/appuser/.config/tidal_dl_ng/settings.json
 COPY --chown=appuser:appgroup *.jar /app/synara-api.jar
+
+RUN python3 -m pip install --break-system-packages --no-cache-dir tidal-dl-ng
 
 USER appuser
 
