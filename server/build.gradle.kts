@@ -5,7 +5,7 @@ import io.ktor.plugin.*
 plugins {
     kotlin("jvm") version "2.2.21"
     id("io.ktor.plugin") version "3.3.3"
-    id("org.jetbrains.kotlin.plugin.serialization") version "2.2.21"
+    id("org.jetbrains.kotlin.plugin.serialization") version "2.3.0"
     id("org.jetbrains.kotlinx.rpc.plugin") version "0.10.1"
 }
 
@@ -86,7 +86,7 @@ dependencies {
     implementation("io.insert-koin:koin-ktor:4.2.0-beta2")
     implementation("io.insert-koin:koin-logger-slf4j:4.2.0-beta2")
     testImplementation("io.ktor:ktor-server-test-host")
-    testImplementation("org.jetbrains.kotlin:kotlin-test-junit:2.2.21")
+    testImplementation("org.jetbrains.kotlin:kotlin-test-junit:2.3.0")
 }
 
 val ktorBaseImageTag = "synara-api-base:latest"
