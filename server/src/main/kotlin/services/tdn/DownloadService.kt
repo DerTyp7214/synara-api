@@ -361,9 +361,10 @@ class DownloadService(
                             )
                             val existingUrls = existingSongs.map { track -> track.originalUrl }
 
-                            if (playlistId != null) ApplicationScope.scope.launch {
-                                userPlaylistService.addToPlaylist(playlistId, existingSongs.map { song -> song.id })
-                            }
+                            if (playlistId != null) userPlaylistService.addToPlaylist(
+                                playlistId,
+                                existingSongs.map { song -> song.id }
+                            )
 
                             ids.filter { id ->
                                 existingUrls.none { url ->
