@@ -113,7 +113,9 @@ jobs:
 
       - name: Get current month
         id: date
-        run: echo "month_year=$(date +'%Y-%m')" >> $GITHUB_OUTPUT
+        run: |
+          echo "month_year=$(date +'%Y-%m')" >> $GITHUB_OUTPUT
+          echo "day_month_year=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -151,6 +153,7 @@ jobs:
           cache-to: type=registry,ref=ghcr.io/${{ env.CONTAINER_REPO }}:buildcache,mode=max
           build-args: |
             MONTH_YEAR=${{ steps.date.outputs.month_year }}
+            DAY_MONTH_YEAR=${{ steps.date.outputs.day_month_year }}
 
   create-github-release:
     needs: build-artifact

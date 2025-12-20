@@ -354,7 +354,7 @@ class DownloadService(
                     idGroup.ids
                         .chunked(20)
                         .map {
-                            val ids = it.toList().distinct()
+                            val ids = it.distinct()
                             val existingSongs = songService.byTidalTrackIds(
                                 ids,
                                 user.id

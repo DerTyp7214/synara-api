@@ -2,7 +2,7 @@ type: http_request
 model: http_request
 id: rq_2HEFG5stF8
 createdAt: 2025-10-14T19:25:16.449964932
-updatedAt: 2025-12-20T21:15:53.503532299
+updatedAt: 2025-12-20T23:33:19.574180089
 workspaceId: wk_9dbKacQT4H
 folderId: fl_NXkRVdWsW4
 authentication: {}
@@ -22,7 +22,9 @@ body:
         "https://tidal.com/playlist/8148f7b0-62b8-4734-a635-074d1b13f00a",
         "https://tidal.com/playlist/bf076733-79c0-4d44-a68d-b01bc8afca2c",
         "https://tidal.com/playlist/1a47099c-6802-4c60-bc1d-c019cd7abe29",
-        "https://tidal.com/playlist/f4768753-d1f9-4469-9b9a-85c629cd185f"
+        "https://tidal.com/playlist/f4768753-d1f9-4469-9b9a-85c629cd185f",
+        "https://tidal.com/playlist/6c9bfbbe-8147-4b2a-832e-baec0af89b4e",
+        "https://tidal.com/playlist/fec1dcec-bbe3-4890-8789-fa0a0484991c"
       ]
     }
 bodyType: application/json
