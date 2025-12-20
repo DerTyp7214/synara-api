@@ -10,6 +10,7 @@ import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.asFlow
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
@@ -17,6 +18,7 @@ import kotlinx.serialization.json.encodeToJsonElement
 import org.koin.ktor.ext.inject
 import java.io.File
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.ExperimentalTime
 
 @Serializable
@@ -165,7 +167,10 @@ fun Route.tdn() {
                         }
                     }
                     val checkJob = launch {
-                        service.waitForInactive()
+                        while (service.isActive()) {
+                            service.waitForInactive()
+                            delay(200.milliseconds)
+                        }
 
                         if (job.isActive) job.cancel()
                     }
