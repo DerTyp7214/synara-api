@@ -322,7 +322,7 @@ class DownloadService(
 
                 filteredIdChunk.idGroups.collect { idGroup ->
                     val playlistId = idGroup.metadata?.let { playlist ->
-                        if (playlist is MetadataService.Playlist) {
+                        if (playlist is MetadataService.FlowPlaylist) {
                             val image = playlist.images.largest
                             val imageBytes = ApiClient.instance.safeGet<ByteArray>(image.url)
 
@@ -351,18 +351,20 @@ class DownloadService(
                         } else null
                     }
 
-                    if (playlistId != null) ApplicationScope.scope.launch {
-                        userPlaylistService.addToPlaylist(playlistId, existingSongs.map { it.id })
-                    }
-
                     idGroup.ids
                         .chunked(20)
                         .map {
                             val ids = it.toList().distinct()
-                            val existingUrls = songService.byTidalTrackIds(
+                            val existingSongs = songService.byTidalTrackIds(
                                 ids,
                                 user.id
-                            ).map { track -> track.originalUrl }
+                            )
+                            val existingUrls = existingSongs.map { track -> track.originalUrl }
+
+                            if (playlistId != null) ApplicationScope.scope.launch {
+                                userPlaylistService.addToPlaylist(playlistId, existingSongs.map { song -> song.id })
+                            }
+
                             ids.filter { id ->
                                 existingUrls.none { url ->
                                     url.split("/").contains(id)
