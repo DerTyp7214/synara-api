@@ -121,20 +121,23 @@ abstract class MetadataService(
     )
 
     @Serializable
+    data class Image(
+        val url: String,
+        val width: Int,
+        val height: Int,
+    )
+
+    @Serializable
+    sealed class BaseMetadata
+
+    @Serializable
     data class Artist(
         val id: String,
         val name: String,
         val popularity: Float,
         val url: String? = null,
         val images: List<Image>,
-    )
-
-    @Serializable
-    data class Image(
-        val url: String,
-        val width: Int,
-        val height: Int,
-    )
+    ): BaseMetadata()
 
     @Serializable
     data class Track(
@@ -146,7 +149,7 @@ abstract class MetadataService(
         @Serializable(with = OffsetDateTimeSerializer::class)
         val createdAt: OffsetDateTime? = null,
         val images: List<Image>,
-    )
+    ): BaseMetadata()
 
     @Serializable
     data class Album(
@@ -160,7 +163,7 @@ abstract class MetadataService(
         @Serializable(with = LocalDateSerializer::class)
         val releaseDate: LocalDate? = null,
         val images: List<Image>,
-    )
+    ): BaseMetadata()
 
     @Serializable
     data class Playlist(
@@ -174,5 +177,5 @@ abstract class MetadataService(
         @Serializable(with = OffsetDateTimeSerializer::class)
         val modifiedAt: OffsetDateTime? = null,
         val images: List<Image>,
-    )
+    ): BaseMetadata()
 }

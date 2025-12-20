@@ -101,6 +101,7 @@ fun Application.configureDatabases() {
             album()
             artist()
             playlist()
+            userPlaylist()
         }
     }
 }

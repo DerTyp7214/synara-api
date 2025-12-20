@@ -1,5 +1,6 @@
 package dev.dertyp.core
 
+import dev.dertyp.services.metadata.MetadataService
 import dev.dertyp.services.models.tidal.*
 import kotlinx.serialization.json.decodeFromJsonElement
 
@@ -55,3 +56,6 @@ inline fun <reified F : BaseAttributes> List<IncludedInner<JsonAttribute, *>>.ma
         if (attribute is F) included.id to attribute
         else null
     }.toMap()
+
+val List<MetadataService.Image>.largest
+    get() = maxByOrNull { it.width } ?: first()

@@ -12,11 +12,13 @@ import org.koin.ktor.ext.inject
 fun ApplicationCall.getUsername(): String = principal<JWTPrincipal>()?.get("username")!!
 suspend fun ApplicationCall.getUser(): User? = get<UserService>().findUserByUsername(getUsername())
 
-fun ApplicationCall.getMetadataProvider(): MetadataService? {
+fun ApplicationCall.getMetadataProvider(providerType: MetadataService.Companion.MetadataType? = null): MetadataService? {
     val environment by inject<ApplicationEnvironment>()
 
-    val metadataProviderString = this.parameters["metadataProvider"] ?: return null
-    val metadataProvider = MetadataService.Companion.MetadataType.valueOf(metadataProviderString)
+    val metadataProvider = if (providerType != null) providerType else {
+        val metadataProviderString = this.parameters["metadataProvider"] ?: return null
+        MetadataService.Companion.MetadataType.valueOf(metadataProviderString)
+    }
 
     return MetadataService.getMetadataService(metadataProvider, environment)
 }

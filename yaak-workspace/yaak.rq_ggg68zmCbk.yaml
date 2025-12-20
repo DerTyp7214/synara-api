@@ -1,0 +1,38 @@
+type: http_request
+model: http_request
+id: rq_ggg68zmCbk
+createdAt: 2025-12-20T20:01:59.672212844
+updatedAt: 2025-12-20T20:03:02.246423171
+workspaceId: wk_9dbKacQT4H
+folderId: fl_HPYV6XxNzV
+authentication: {}
+authenticationType: null
+body: {}
+bodyType: null
+description: '[object Object]'
+headers:
+- enabled: true
+  name: Accept
+  value: application/json
+  id: null
+method: GET
+name: /userPlaylist/search/:query
+sortPriority: 46.0
+url: ${[baseUrl]}/userPlaylist/search/:query
+urlParameters:
+- enabled: true
+  name: page
+  value: <integer>
+  id: fT3ZYfnNFR
+- enabled: true
+  name: pageSize
+  value: <integer>
+  id: WkDpZF90TG
+- enabled: true
+  name: :query
+  value: '80'
+  id: pSX3i6dGMB
+- enabled: true
+  name: ''
+  value: ''
+  id: NiNpdAATXd

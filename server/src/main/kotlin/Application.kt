@@ -47,6 +47,7 @@ fun Application.module() {
             singleOf(::DatabaseManager)
             singleOf(::PlaylistService)
             singleOf(::DownloadService)
+            singleOf(::UserPlaylistService)
             singleOf(::RefreshTokenService)
 
             single<Gson> {

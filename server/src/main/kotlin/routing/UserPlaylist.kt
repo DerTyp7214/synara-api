@@ -1,10 +1,12 @@
 package dev.dertyp.routing
 
+import dev.dertyp.core.getUser
 import dev.dertyp.core.paging
 import dev.dertyp.core.toUUIDOrNull
 import dev.dertyp.data.PaginatedResponse
 import dev.dertyp.data.Playlist
-import dev.dertyp.services.PlaylistService
+import dev.dertyp.data.UserPlaylist
+import dev.dertyp.services.UserPlaylistService
 import io.github.smiley4.ktoropenapi.get
 import io.github.smiley4.ktoropenapi.route
 import io.ktor.http.*
@@ -12,8 +14,8 @@ import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import org.koin.ktor.ext.inject
 
-fun Route.playlist() {
-    route("/playlist", {
+fun Route.userPlaylist() {
+    route("/userPlaylist", {
         tags("playlist")
     }) {
         get("/byId/{id}", {
@@ -25,36 +27,15 @@ fun Route.playlist() {
             response {
                 HttpStatusCode.OK to {
                     description = "The playlist with the id."
-                    body<Playlist>()
+                    body<UserPlaylist>()
                 }
             }
         }) {
-            val service by inject<PlaylistService>()
+            val service by inject<UserPlaylistService>()
 
             val id = call.parameters["id"]?.toUUIDOrNull() ?: return@get call.respond(HttpStatusCode.BadRequest)
 
             val playlist = service.byId(id) ?: return@get call.respond(HttpStatusCode.NotFound)
-
-            call.respond(playlist)
-        }
-        get("/byName/{name}", {
-            request {
-                pathParameter<String>("name") {
-                    description = "The playlist name."
-                }
-            }
-            response {
-                HttpStatusCode.OK to {
-                    description = "The playlist with the name."
-                    body<Playlist>()
-                }
-            }
-        }) {
-            val service by inject<PlaylistService>()
-
-            val name = call.parameters["name"] ?: return@get call.respond(HttpStatusCode.BadRequest)
-
-            val playlist = service.byName(name) ?: return@get call.respond(HttpStatusCode.NotFound)
 
             call.respond(playlist)
         }
@@ -73,13 +54,14 @@ fun Route.playlist() {
                 }
             }
         }) {
-            val service by inject<PlaylistService>()
+            val service by inject<UserPlaylistService>()
+            val user = call.getUser() ?: return@get call.respond(HttpStatusCode.BadRequest, "No user exists.")
 
             val query = call.parameters["query"] ?: return@get call.respond(HttpStatusCode.BadRequest)
 
             val (page, pageSize) = call.paging()
 
-            call.respond(service.rankedSearch(page, pageSize, query))
+            call.respond(service.rankedSearch(user.id, page, pageSize, query))
         }
         get("/list", {
             request {
@@ -92,16 +74,11 @@ fun Route.playlist() {
                 }
             }
         }) {
-            val service by inject<PlaylistService>()
+            val service by inject<UserPlaylistService>()
+            val user = call.getUser() ?: return@get call.respond(HttpStatusCode.BadRequest, "No user exists.")
 
             val (page, pageSize) = call.paging()
-            call.respond(service.allPlaylists(page, pageSize))
-        }
-
-        m3u("/m3u/{id}") { map ->
-            val service by inject<PlaylistService>()
-
-            map["id"]?.toUUIDOrNull()?.let { service.byIdFull(it) }
+            call.respond(service.allPlaylists(user.id, page, pageSize))
         }
     }
 }

@@ -1,0 +1,13 @@
+type: folder
+model: folder
+id: fl_HPYV6XxNzV
+createdAt: 2025-12-20T20:01:59.671121082
+updatedAt: 2025-12-20T20:02:08.251442176
+workspaceId: wk_9dbKacQT4H
+folderId: null
+authentication: {}
+authenticationType: null
+description: ''
+headers: []
+name: userPlaylist
+sortPriority: 21000.001

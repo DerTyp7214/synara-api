@@ -17,6 +17,7 @@ import redis.clients.jedis.RedisClient
 import java.util.*
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.io.encoding.Base64
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 @OptIn(ExperimentalAtomicApi::class)
@@ -513,23 +514,74 @@ class TidalService(
         }
     }
 
+    private suspend fun getTracksFromPlaylist(playlistId: String, cursor: String? = null): List<Track> {
+        val url = getUrl("/playlists/$playlistId/relationships/items") {
+            parameters {
+                append("countryCode", "US")
+                append("locale", "en-US")
+                appendAll("include", listOf("items"))
+                if (cursor != null) append("page[cursor]", cursor)
+            }
+        }
+
+        val response = makeRequest(url)
+        when (response.status) {
+            HttpStatusCode.OK -> {}
+            HttpStatusCode.TooManyRequests -> {
+                logger.warn("[getTracksFromPlaylist]: Too many requests, waiting 10 seconds")
+                delay(10.seconds)
+                return getTracksFromPlaylist(playlistId, cursor)
+            }
+
+            else -> println("error: ${response.status}")
+        }
+
+        try {
+            val body = response.body<PlaylistsItemsMultiRelationshipDataDocument<JsonAttribute, EmptyRelationships>>()
+            val tracks = body.included?.mapAttributes<TracksAttributes>() ?: emptyMap()
+            val nextCursor = body.links.meta?.nextCursor
+
+            return tracks.entries.map { (id, track) ->
+                Track(
+                    id = id,
+                    title = track.title,
+                    duration = track.duration,
+                    createdAt = track.createdAt,
+                    artists = emptyList(),
+                    images = emptyList(),
+                )
+            }.let {
+                if (nextCursor != null) {
+                    logger.info("Fetching tracks for $playlistId with cursor: $nextCursor")
+                    delay(500.milliseconds)
+                    it + getTracksFromPlaylist(playlistId, nextCursor)
+                } else it
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            println(response.bodyAsText())
+
+            return emptyList()
+        }
+    }
+
     override suspend fun getPlaylistsByIds(playlistIds: List<String>, includeTracks: Boolean): List<Playlist> {
         val filteredPlaylistIds = playlistIds.distinct().toMutableList()
-        val existing = checkExistingPlaylistsFromCache(filteredPlaylistIds)
+        val existing = if (!includeTracks) checkExistingPlaylistsFromCache(filteredPlaylistIds) else emptyList()
 
         filteredPlaylistIds.removeAll(existing)
 
         if (filteredPlaylistIds.isEmpty()) return getPlaylistsFromCache(existing)
 
         if (filteredPlaylistIds.size > 20) {
-            return filteredPlaylistIds.chunked(20).flatMap { getPlaylistsByIds(it) }
+            return filteredPlaylistIds.chunked(20).flatMap { getPlaylistsByIds(it, includeTracks) }
         }
 
         val url = getUrl("/playlists") {
             parameters {
                 append("countryCode", "US")
                 append("locale", "en-US")
-                appendAll("include", mutableListOf("coverArt").apply { if (includeTracks) add("items") })
+                appendAll("include", mutableListOf("coverArt"))
                 appendAll("filter[id]", filteredPlaylistIds)
             }
         }
@@ -540,7 +592,7 @@ class TidalService(
             HttpStatusCode.TooManyRequests -> {
                 logger.warn("[getPlaylistsByIds]: Too many requests, waiting 10 seconds")
                 delay(10.seconds)
-                return getPlaylistsByIds(filteredPlaylistIds) + getPlaylistsFromCache(existing)
+                return getPlaylistsByIds(filteredPlaylistIds, includeTracks) + getPlaylistsFromCache(existing)
             }
 
             else -> println("error: ${response.status}")
@@ -550,7 +602,8 @@ class TidalService(
             val body = response.body<PlaylistsMultiRelationshipDataDocument<JsonAttribute, EmptyRelationships>>()
 
             val images = body.included?.mapAttributes<ArtworksAttributes>() ?: emptyMap()
-            val tracks = body.included?.mapAttributes<TracksAttributes>() ?: emptyMap()
+            val tracks =
+                if (includeTracks) body.data.map { it.id }.associateWith { getTracksFromPlaylist(it) } else emptyMap()
 
             return body.data.mapNotNull { playlistObj ->
                 playlistObj.attributes?.let { playlist ->
@@ -559,11 +612,11 @@ class TidalService(
                         name = playlist.name,
                         description = playlist.description ?: "",
                         trackCount = playlist.numberOfItems ?: 0,
-                        tracks = playlistObj.tracks(tracks),
+                        tracks = tracks[playlistObj.id] ?: emptyList(),
                         images = playlistObj.images(images)
                     )
                 }
-            }.cachePlaylists() + getPlaylistsFromCache(existing)
+            }.also { if (!includeTracks) it.cachePlaylists() } + getPlaylistsFromCache(existing)
         } catch (e: Exception) {
             e.printStackTrace()
             println(response.bodyAsText())

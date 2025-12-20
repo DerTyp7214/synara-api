@@ -6,16 +6,43 @@ import kotlinx.serialization.Serializable
 import java.util.*
 
 @Serializable
+sealed class BasePlaylist {
+    @Serializable(with = UUIDSerializer::class)
+    abstract val id: UUID
+    abstract val name: String
+    @Serializable(with = UUIDListSerializer::class)
+    abstract val songs: List<UUID>
+    abstract val totalDuration: Long
+    @Serializable(with = UUIDSerializer::class)
+    abstract val imageId: UUID?
+}
+
+@Serializable
 data class Playlist(
     @Serializable(with = UUIDSerializer::class)
-    val id: UUID,
-    val name: String,
+    override val id: UUID,
+    override val name: String,
     @Serializable(with = UUIDListSerializer::class)
-    val songs: List<UUID>,
-    val totalDuration: Long = -1L,
+    override val songs: List<UUID>,
+    override val totalDuration: Long = -1L,
     @Serializable(with = UUIDSerializer::class)
-    val imageId: UUID? = null,
-)
+    override val imageId: UUID? = null,
+): BasePlaylist()
+
+@Serializable
+data class UserPlaylist(
+    @Serializable(with = UUIDSerializer::class)
+    override val id: UUID,
+    override val name: String,
+    @Serializable(with = UUIDListSerializer::class)
+    override val songs: List<UUID>,
+    override val totalDuration: Long = -1L,
+    @Serializable(with = UUIDSerializer::class)
+    override val imageId: UUID? = null,
+    @Serializable(with = UUIDSerializer::class)
+    val creator: UUID,
+    val description: String,
+): BasePlaylist()
 
 @Serializable
 data class PlaylistEntry(
@@ -28,6 +55,7 @@ data class PlaylistEntry(
 @Serializable
 data class InsertablePlaylist(
     val name: String,
+    val description: String = "",
     val songPaths: List<String>,
     val imageHash: String? = null,
 )
