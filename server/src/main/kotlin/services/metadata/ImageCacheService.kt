@@ -76,6 +76,18 @@ class ImageCacheService(
         throw NotImplementedError("Not implemented for ImageCache")
     }
 
+    override suspend fun getAlbumsByIds(albumIds: List<String>): List<Album> {
+        throw NotImplementedError("Not implemented for ImageCache")
+    }
+
+    override suspend fun getArtistsByIds(artistIds: List<String>): List<Artist> {
+        throw NotImplementedError("Not implemented for ImageCache")
+    }
+
+    override suspend fun getPlaylistsByIds(playlistIds: List<String>, includeTracks: Boolean): List<Playlist> {
+        throw NotImplementedError("Not implemented for ImageCache")
+    }
+
     override fun supported(): Boolean {
         return !environment.config.propertyOrNull("imageCache.url")?.getString().isNullOrBlank()
     }

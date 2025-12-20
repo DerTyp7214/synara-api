@@ -2,7 +2,6 @@ package dev.dertyp.services.metadata
 
 import dev.dertyp.ApiClient
 import dev.dertyp.core.*
-import dev.dertyp.plugins.RedisCacheObject
 import dev.dertyp.plugins.RedisCacheProvider
 import dev.dertyp.services.models.tidal.*
 import io.ktor.client.call.*
@@ -13,11 +12,11 @@ import io.ktor.server.application.*
 import io.ktor.server.util.*
 import kotlinx.coroutines.delay
 import org.koin.core.component.inject
-import redis.clients.jedis.JedisPooled
+import redis.clients.jedis.HostAndPort
+import redis.clients.jedis.RedisClient
 import java.util.*
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.io.encoding.Base64
-import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.seconds
 
 @OptIn(ExperimentalAtomicApi::class)
@@ -29,11 +28,45 @@ class TidalService(
     override val clientSecretConfigPath: String = "tidal.clientSecret"
 
     private val jedisConfig by inject<RedisCacheProvider.Config>()
-    private val jedis by lazy {
+    val jedis by lazy {
         jedisConfig.let {
-            if (jedisConfig.host != "none") JedisPooled(jedisConfig.host, jedisConfig.port, jedisConfig.ssl)
+            if (jedisConfig.host != "none") RedisClient.create(
+                HostAndPort(jedisConfig.host, jedisConfig.port)
+            )
             else null
         }
+    }
+
+    fun List<Track>.cacheTracks(): List<Track> {
+        jedis?.let {
+            for (track in this) writeToJedis(track)
+        }
+
+        return this
+    }
+
+    fun List<Album>.cacheAlbums(): List<Album> {
+        jedis?.let {
+            for (album in this) writeToJedis(album)
+        }
+
+        return this
+    }
+
+    fun List<Artist>.cacheArtists(): List<Artist> {
+        jedis?.let {
+            for (artist in this) writeToJedis(artist)
+        }
+
+        return this
+    }
+
+    fun List<Playlist>.cachePlaylists(): List<Playlist> {
+        jedis?.let {
+            for (playlist in this) writeToJedis(playlist)
+        }
+
+        return this
     }
 
     override fun HttpRequestBuilder.getAccessTokenHeader(clientId: String, clientSecret: String) {
@@ -105,25 +138,8 @@ class TidalService(
 
         val searchResponse =
             response.body<SearchResultsSingleResourceDataDocument<ArtistsAttributes, ArtistsRelationships>>()
-        return searchResponse.included.map { included ->
-            Artist(
-                id = included.id,
-                name = included.attributes.name,
-                popularity = included.attributes.popularity.toFloat(),
-                url = included.attributes.externalLinks?.firstOrNull()?.href,
-                images = {
-                    getImages(
-                        included.relationships.profileArt.links.self
-                    ).map { file ->
-                        Image(
-                            url = file.href,
-                            width = file.meta.width,
-                            height = file.meta.height,
-                        )
-                    }
-                }
-            )
-        }
+
+        return getArtistsByIds(searchResponse.included.map { it.id })
     }
 
     private suspend fun getImages(urlPath: String?): List<ArtworkFile> {
@@ -212,9 +228,9 @@ class TidalService(
         try {
             val body = response.body<AlbumsMultiRelationshipDataDocument<ArtworksAttributes, ArtworksRelationships>>()
 
-            return body.included.flatMap { i ->
+            return body.included?.flatMap { i ->
                 i.attributes.files.map { f -> Image(f.href, f.meta.width, f.meta.height) }
-            }
+            } ?: emptyList()
         } catch (e: Exception) {
             e.printStackTrace()
             println(response.bodyAsText())
@@ -249,7 +265,7 @@ class TidalService(
 
         try {
             val body = response.body<AlbumsMultiRelationshipDataDocument<ArtworksAttributes, ArtworksRelationships>>()
-            val coverMap = body.included.associateBy { it.id }
+            val coverMap = body.included?.associateBy { it.id } ?: emptyMap()
 
             return body.data.associate { album ->
                 Pair(
@@ -271,7 +287,7 @@ class TidalService(
     }
 
     override suspend fun getTrackById(trackId: String): Track? {
-        val existing = getFromJedis(trackId)
+        val existing = getTrackFromJedis(trackId)
         if (existing != null) return existing
 
         val url = getUrl("/tracks/$trackId") {
@@ -319,57 +335,13 @@ class TidalService(
         }
     }
 
-    private fun writeToJedis(track: Track) {
-        jedis?.psetex(
-            "tidal_track::${track.id}",
-            30.days.inWholeMilliseconds,
-            RedisCacheObject.fromObject(track).toString()
-        )
-    }
-
-    private fun getFromJedis(trackId: String): Track? {
-        return jedis?.let { jedis ->
-            if (jedis.exists("tidal_track::$trackId")) {
-                RedisCacheObject.fromCache(jedis.get("tidal_track::$trackId"))
-            } else null
-        }
-    }
-
-    private fun List<Track>.cacheTracks(): List<Track> {
-        jedis?.let {
-            for (track in this) writeToJedis(track)
-        }
-
-        return this
-    }
-
-    private fun checkExistingFromCache(trackIds: List<String>): List<String> {
-        if (jedis == null) return listOf()
-
-        val existing = mutableListOf<String>()
-        for (trackId in trackIds) {
-            if (getFromJedis(trackId) != null) existing.add(trackId)
-        }
-        return existing
-    }
-
-    private fun getFromCache(trackIds: List<String>): List<Track> {
-        if (jedis == null) return listOf()
-
-        val tracks = mutableListOf<Track?>()
-        for (trackId in trackIds) {
-            tracks.add(getFromJedis(trackId))
-        }
-        return tracks.filterNotNull()
-    }
-
     override suspend fun getTracksByIds(trackIds: List<String>): List<Track> {
         val filteredTrackIds = trackIds.distinct().toMutableList()
-        val existing = checkExistingFromCache(filteredTrackIds)
+        val existing = checkExistingTracksFromCache(filteredTrackIds)
 
         filteredTrackIds.removeAll(existing)
 
-        if (filteredTrackIds.isEmpty()) return getFromCache(existing)
+        if (filteredTrackIds.isEmpty()) return getTracksFromCache(existing)
 
         if (filteredTrackIds.size > 20) {
             return filteredTrackIds.chunked(20).flatMap { getTracksByIds(it) }
@@ -390,7 +362,7 @@ class TidalService(
             HttpStatusCode.TooManyRequests -> {
                 logger.warn("[getTracksByIds]: Too many requests, waiting 10 seconds")
                 delay(10.seconds)
-                return getTracksByIds(filteredTrackIds) + getFromCache(existing)
+                return getTracksByIds(filteredTrackIds) + getTracksFromCache(existing)
             }
 
             else -> println("error: ${response.status}")
@@ -415,7 +387,183 @@ class TidalService(
                         images = trackObj.images(imageUrls),
                     )
                 }
-            }.cacheTracks() + getFromCache(existing)
+            }.cacheTracks() + getTracksFromCache(existing)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            println(response.bodyAsText())
+
+            return emptyList()
+        }
+    }
+
+    override suspend fun getAlbumsByIds(albumIds: List<String>): List<Album> {
+        val filteredAlbumIds = albumIds.distinct().toMutableList()
+        val existing = checkExistingAlbumsFromCache(filteredAlbumIds)
+
+        filteredAlbumIds.removeAll(existing)
+
+        if (filteredAlbumIds.isEmpty()) return getAlbumsFromCache(existing)
+
+        if (filteredAlbumIds.size > 20) {
+            return filteredAlbumIds.chunked(20).flatMap { getAlbumsByIds(it) }
+        }
+
+        val url = getUrl("/albums") {
+            parameters {
+                append("countryCode", "US")
+                append("locale", "en-US")
+                appendAll("include", listOf("artists", "coverArt"))
+                appendAll("filter[id]", filteredAlbumIds)
+            }
+        }
+
+        val response = makeRequest(url)
+        when (response.status) {
+            HttpStatusCode.OK -> {}
+            HttpStatusCode.TooManyRequests -> {
+                logger.warn("[getAlbumsByIds]: Too many requests, waiting 10 seconds")
+                delay(10.seconds)
+                return getAlbumsByIds(filteredAlbumIds) + getAlbumsFromCache(existing)
+            }
+
+            else -> println("error: ${response.status}")
+        }
+
+        try {
+            val body = response.body<AlbumsMultiRelationshipDataDocument<JsonAttribute, EmptyRelationships>>()
+
+            val images = body.included?.mapAttributes<ArtworksAttributes>() ?: emptyMap()
+            val artists = body.included?.mapAttributes<ArtistsAttributes>() ?: emptyMap()
+
+            return body.data.mapNotNull { albumObj ->
+                albumObj.attributes?.let { album ->
+                    Album(
+                        id = albumObj.id,
+                        title = album.title,
+                        duration = album.duration,
+                        trackCount = album.numberOfItems,
+                        discCount = album.numberOfVolumes,
+                        releaseDate = album.releaseDate,
+                        artists = albumObj.artists(artists),
+                        images = albumObj.images(images)
+                    )
+                }
+            }.cacheAlbums() + getAlbumsFromCache(existing)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            println(response.bodyAsText())
+
+            return emptyList()
+        }
+    }
+
+    override suspend fun getArtistsByIds(artistIds: List<String>): List<Artist> {
+        val filteredArtistIds = artistIds.distinct().toMutableList()
+        val existing = checkExistingAlbumsFromCache(filteredArtistIds)
+
+        filteredArtistIds.removeAll(existing)
+
+        if (filteredArtistIds.isEmpty()) return getArtistsFromCache(existing)
+
+        if (filteredArtistIds.size > 20) {
+            return filteredArtistIds.chunked(20).flatMap { getArtistsByIds(it) }
+        }
+
+        val url = getUrl("/artists") {
+            parameters {
+                append("countryCode", "US")
+                append("locale", "en-US")
+                appendAll("include", listOf("profileArt"))
+                appendAll("filter[id]", filteredArtistIds)
+            }
+        }
+
+        val response = makeRequest(url)
+        when (response.status) {
+            HttpStatusCode.OK -> {}
+            HttpStatusCode.TooManyRequests -> {
+                logger.warn("[getArtistsByIds]: Too many requests, waiting 10 seconds")
+                delay(10.seconds)
+                return getArtistsByIds(filteredArtistIds) + getArtistsFromCache(existing)
+            }
+
+            else -> println("error: ${response.status}")
+        }
+
+        try {
+            val body = response.body<ArtistsMultiRelationshipDataDocument<JsonAttribute, EmptyRelationships>>()
+
+            val images = body.included?.mapAttributes<ArtworksAttributes>() ?: emptyMap()
+
+            return body.data.mapNotNull { artistObj ->
+                artistObj.attributes?.let { artist ->
+                    Artist(
+                        id = artistObj.id,
+                        name = artist.name,
+                        popularity = artist.popularity.toFloat(),
+                        images = artistObj.images(images)
+                    )
+                }
+            }.cacheArtists() + getArtistsFromCache(existing)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            println(response.bodyAsText())
+
+            return emptyList()
+        }
+    }
+
+    override suspend fun getPlaylistsByIds(playlistIds: List<String>, includeTracks: Boolean): List<Playlist> {
+        val filteredPlaylistIds = playlistIds.distinct().toMutableList()
+        val existing = checkExistingPlaylistsFromCache(filteredPlaylistIds)
+
+        filteredPlaylistIds.removeAll(existing)
+
+        if (filteredPlaylistIds.isEmpty()) return getPlaylistsFromCache(existing)
+
+        if (filteredPlaylistIds.size > 20) {
+            return filteredPlaylistIds.chunked(20).flatMap { getPlaylistsByIds(it) }
+        }
+
+        val url = getUrl("/playlists") {
+            parameters {
+                append("countryCode", "US")
+                append("locale", "en-US")
+                appendAll("include", mutableListOf("coverArt").apply { if (includeTracks) add("items") })
+                appendAll("filter[id]", filteredPlaylistIds)
+            }
+        }
+
+        val response = makeRequest(url)
+        when (response.status) {
+            HttpStatusCode.OK -> {}
+            HttpStatusCode.TooManyRequests -> {
+                logger.warn("[getPlaylistsByIds]: Too many requests, waiting 10 seconds")
+                delay(10.seconds)
+                return getPlaylistsByIds(filteredPlaylistIds) + getPlaylistsFromCache(existing)
+            }
+
+            else -> println("error: ${response.status}")
+        }
+
+        try {
+            val body = response.body<PlaylistsMultiRelationshipDataDocument<JsonAttribute, EmptyRelationships>>()
+
+            val images = body.included?.mapAttributes<ArtworksAttributes>() ?: emptyMap()
+            val tracks = body.included?.mapAttributes<TracksAttributes>() ?: emptyMap()
+
+            return body.data.mapNotNull { playlistObj ->
+                playlistObj.attributes?.let { playlist ->
+                    Playlist(
+                        id = playlistObj.id,
+                        name = playlist.name,
+                        description = playlist.description ?: "",
+                        trackCount = playlist.numberOfItems ?: 0,
+                        tracks = playlistObj.tracks(tracks),
+                        images = playlistObj.images(images)
+                    )
+                }
+            }.cachePlaylists() + getPlaylistsFromCache(existing)
         } catch (e: Exception) {
             e.printStackTrace()
             println(response.bodyAsText())

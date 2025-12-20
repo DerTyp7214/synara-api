@@ -48,6 +48,7 @@ inline fun <reified F : BaseAttributes> List<IncludedInner<JsonAttribute, *>>.ma
             "artists" -> ApplicationScope.json.decodeFromJsonElement<ArtistsAttributes>(included.attributes.element)
             "albums" -> ApplicationScope.json.decodeFromJsonElement<AlbumsAttributes>(included.attributes.element)
             "tracks" -> ApplicationScope.json.decodeFromJsonElement<TracksAttributes>(included.attributes.element)
+            "artworks" -> ApplicationScope.json.decodeFromJsonElement<ArtworksAttributes>(included.attributes.element)
             else -> null
         }
 

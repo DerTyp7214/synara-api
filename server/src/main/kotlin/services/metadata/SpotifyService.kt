@@ -46,14 +46,12 @@ class SpotifyService(
                 name = artist.name,
                 popularity = artist.popularity.toFloat(),
                 url = artist.href,
-                images = {
-                    artist.images.map { image ->
-                        Image(
-                            url = image.url,
-                            width = image.width,
-                            height = image.height,
-                        )
-                    }
+                images = artist.images.map { image ->
+                    Image(
+                        url = image.url,
+                        width = image.width,
+                        height = image.height,
+                    )
                 }
             )
         }
@@ -80,6 +78,18 @@ class SpotifyService(
     }
 
     override suspend fun getTracksByIds(trackIds: List<String>): List<Track> {
+        throw NotImplementedError("Not implemented for spotify!")
+    }
+
+    override suspend fun getAlbumsByIds(albumIds: List<String>): List<Album> {
+        throw NotImplementedError("Not implemented for spotify!")
+    }
+
+    override suspend fun getArtistsByIds(artistIds: List<String>): List<MetadataService.Artist> {
+        throw NotImplementedError("Not implemented for spotify!")
+    }
+
+    override suspend fun getPlaylistsByIds(playlistIds: List<String>, includeTracks: Boolean): List<Playlist> {
         throw NotImplementedError("Not implemented for spotify!")
     }
 

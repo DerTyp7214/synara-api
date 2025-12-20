@@ -2,6 +2,7 @@ package dev.dertyp.services.metadata
 
 import dev.dertyp.ApiClient
 import dev.dertyp.serializers.DurationSerializer
+import dev.dertyp.serializers.LocalDateSerializer
 import dev.dertyp.serializers.OffsetDateTimeSerializer
 import dev.dertyp.services.Service
 import io.ktor.client.call.*
@@ -12,7 +13,7 @@ import io.ktor.server.application.*
 import kotlinx.coroutines.delay
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.Transient
+import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.util.*
 import kotlin.concurrent.atomics.AtomicBoolean
@@ -41,6 +42,9 @@ abstract class MetadataService(
     abstract suspend fun getImageUrlByImageId(imageId: UUID): String?
     abstract suspend fun getTrackById(trackId: String): Track?
     abstract suspend fun getTracksByIds(trackIds: List<String>): List<Track>
+    abstract suspend fun getAlbumsByIds(albumIds: List<String>): List<Album>
+    abstract suspend fun getArtistsByIds(artistIds: List<String>): List<Artist>
+    abstract suspend fun getPlaylistsByIds(playlistIds: List<String>, includeTracks: Boolean = false): List<Playlist>
 
     private var accessToken: Pair<AccessTokenResponse, Long>? = null
 
@@ -121,9 +125,8 @@ abstract class MetadataService(
         val id: String,
         val name: String,
         val popularity: Float,
-        val url: String?,
-        @Transient
-        val images: suspend () -> List<Image> = { listOf() },
+        val url: String? = null,
+        val images: List<Image>,
     )
 
     @Serializable
@@ -142,6 +145,34 @@ abstract class MetadataService(
         val duration: Duration,
         @Serializable(with = OffsetDateTimeSerializer::class)
         val createdAt: OffsetDateTime? = null,
+        val images: List<Image>,
+    )
+
+    @Serializable
+    data class Album(
+        val id: String,
+        val title: String,
+        val artists: List<String> = emptyList(),
+        @Serializable(with = DurationSerializer::class)
+        val duration: Duration,
+        val trackCount: Int,
+        val discCount: Int,
+        @Serializable(with = LocalDateSerializer::class)
+        val releaseDate: LocalDate? = null,
+        val images: List<Image>,
+    )
+
+    @Serializable
+    data class Playlist(
+        val id: String,
+        val name: String,
+        val description: String,
+        val tracks: List<Track> = emptyList(),
+        val trackCount: Int = tracks.size,
+        @Serializable(with = OffsetDateTimeSerializer::class)
+        val createdAt: OffsetDateTime? = null,
+        @Serializable(with = OffsetDateTimeSerializer::class)
+        val modifiedAt: OffsetDateTime? = null,
         val images: List<Image>,
     )
 }

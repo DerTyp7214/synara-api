@@ -5,12 +5,12 @@ import com.ucasoft.ktor.simpleCache.SimpleCacheConfig
 import com.ucasoft.ktor.simpleCache.SimpleCacheProvider
 import org.koin.core.component.KoinComponent
 import org.koin.java.KoinJavaComponent.inject
-import redis.clients.jedis.JedisPooled
+import redis.clients.jedis.HostAndPort
+import redis.clients.jedis.RedisClient
 import kotlin.time.Duration
 
 class RedisCacheProvider(config: Config) : SimpleCacheProvider(config) {
-
-    private val jedis: JedisPooled = JedisPooled(config.host, config.port, config.ssl)
+    private val jedis: RedisClient = RedisClient.create(HostAndPort(config.host, config.port))
 
     override suspend fun getCache(key: String): Any? =
         if (jedis.exists(key)) RedisCacheObject.fromCache(jedis[key]) else null
@@ -31,7 +31,7 @@ class RedisCacheProvider(config: Config) : SimpleCacheProvider(config) {
     }
 }
 
-class RedisCacheObject(val type: String, val content: String): KoinComponent {
+class RedisCacheObject(val type: String, val content: String) : KoinComponent {
     override fun toString() = "$type%#%$content"
 
     companion object {

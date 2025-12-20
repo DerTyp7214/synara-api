@@ -103,7 +103,7 @@ fun Route.metadata() {
                             launch {
                                 for ((id, name) in artistChannel) {
                                     send("Fetching image for: $name")
-                                    val response = service.searchArtists(name)
+                                    val response = service.searchArtists(name, 20)
                                     val artist = response.sortedByDescending { it.popularity }.firstOrNull { artist ->
                                         artist.name.replace(".", "")
                                             .equals(name.replace(".", ""), ignoreCase = true)
@@ -113,7 +113,7 @@ fun Route.metadata() {
                                         continue
                                     }
 
-                                    val images = artist.images()
+                                    val images = artist.images
                                     val image = images.maxByOrNull { it.width }
                                     if (image == null) {
                                         send("No image for \"$name\" $artist ${images.joinToString(", ")}")
@@ -170,25 +170,78 @@ fun Route.metadata() {
                 }
             }
         }
-        //cacheOutput(10.days) {
-            post("/tracks", {
-                request {
-                    body<List<String>> {
-                        description = "Song ids"
-                    }
+        post("/tracks", {
+            request {
+                body<List<String>> {
+                    description = "Track ids"
                 }
-            }) {
-                val service = call.getMetadataProvider() ?: return@post call.respond(HttpStatusCode.BadRequest)
-                if (service !is TidalService) return@post call.respond(
-                    HttpStatusCode.MethodNotAllowed,
-                    "Only Tidal is supported."
-                )
-
-                val ids = call.receive<List<String>>().filterNot { it.isBlank() }
-
-                call.respond(service.getTracksByIds(ids))
             }
-        //}
+        }) {
+            val service = call.getMetadataProvider() ?: return@post call.respond(HttpStatusCode.BadRequest)
+            if (service !is TidalService) return@post call.respond(
+                HttpStatusCode.MethodNotAllowed,
+                "Only Tidal is supported."
+            )
+
+            val ids = call.receive<List<String>>().filterNot { it.isBlank() }
+
+            call.respond(service.getTracksByIds(ids))
+        }
+        post("/albums", {
+            request {
+                body<List<String>> {
+                    description = "Album ids"
+                }
+            }
+        }) {
+            val service = call.getMetadataProvider() ?: return@post call.respond(HttpStatusCode.BadRequest)
+            if (service !is TidalService) return@post call.respond(
+                HttpStatusCode.MethodNotAllowed,
+                "Only Tidal is supported."
+            )
+
+            val ids = call.receive<List<String>>().filterNot { it.isBlank() }
+
+            call.respond(service.getAlbumsByIds(ids))
+        }
+        post("/artists", {
+            request {
+                body<List<String>> {
+                    description = "Artist ids"
+                }
+            }
+        }) {
+            val service = call.getMetadataProvider() ?: return@post call.respond(HttpStatusCode.BadRequest)
+            if (service !is TidalService) return@post call.respond(
+                HttpStatusCode.MethodNotAllowed,
+                "Only Tidal is supported."
+            )
+
+            val ids = call.receive<List<String>>().filterNot { it.isBlank() }
+
+            call.respond(service.getArtistsByIds(ids))
+        }
+        post("/playlists", {
+            request {
+                queryParameter<Boolean>("includeTracks") {
+                    description = "Include tracks in response"
+                }
+                body<List<String>> {
+                    description = "Playlist ids"
+                }
+            }
+        }) {
+            val service = call.getMetadataProvider() ?: return@post call.respond(HttpStatusCode.BadRequest)
+            if (service !is TidalService) return@post call.respond(
+                HttpStatusCode.MethodNotAllowed,
+                "Only Tidal is supported."
+            )
+
+            val ids = call.receive<List<String>>().filterNot { it.isBlank() }
+            val includeTracks = call.queryParameters["includeTracks"]?.toBoolean() ?: false
+
+            call.respond(service.getPlaylistsByIds(ids, includeTracks))
+        }
         cacheOutput(Duration.INFINITE) {
             route("/imageUrl") {
                 get("/byTrackId/{trackId}", {
