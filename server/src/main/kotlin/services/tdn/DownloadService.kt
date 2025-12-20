@@ -359,20 +359,24 @@ class DownloadService(
                             it.split("/").contains(id)
                         }
                     }
-                    addToQueue(
-                        UrlDownloadQueueEntry(
-                            urls = filteredIds
-                                .map { "https://tidal.com/track/${it}" }
-                                .toMutableList(),
-                            ids = filteredIds,
-                            byUser = user.id,
-                            maxRetries = filteredIds.size,
-                            type = Type.SONG
-                        ) {
-                            val songs = songService.byTidalTrackIds(filteredIds, user.id)
-                            if (playlistId != null) userPlaylistService.addToPlaylist(playlistId, songs.map { it.id })
-                        }
-                    )
+                    for (idChunk in filteredIds.chunked(20)) {
+                        addToQueue(
+                            UrlDownloadQueueEntry(
+                                urls = idChunk
+                                    .map { "https://tidal.com/track/${it}" }
+                                    .toMutableList(),
+                                ids = idChunk,
+                                byUser = user.id,
+                                maxRetries = idChunk.size,
+                                type = Type.SONG
+                            ) {
+                                val songs = songService.byTidalTrackIds(idChunk, user.id)
+                                if (playlistId != null) userPlaylistService.addToPlaylist(
+                                    playlistId,
+                                    songs.map { it.id })
+                            }
+                        )
+                    }
                 }
             } else {
                 downloadStageMutex.withLock {
