@@ -296,7 +296,7 @@ class DownloadService(
                 Type.PLAYLIST -> {
                     if (metadataService == null) IdsWrapper.from(type, emptyList())
                     else {
-                        val groups = metadataService.getPlaylistsByIds(idChunk, true).map { playlist ->
+                        val groups = metadataService.getPlaylistsByIds(idChunk, true, user).map { playlist ->
                             IdsGroup(playlist.id, playlist.tracks.map { it.id }, playlist)
                         }
                         IdsWrapper(type, groups)
@@ -304,10 +304,11 @@ class DownloadService(
                 }
             }
 
-            logger.info("[${user.username}] Checking for ${filteredIdChunk.size} liked ${type.value}s")
+            if (filteredIdChunk.type != Type.PLAYLIST)
+                logger.info("[${user.username}] Checking for ${filteredIdChunk.size()} liked ${type.value}s")
 
             val existingSongs = if (filteredIdChunk.fetchExistingSongs()) songService.byTidalTrackIds(
-                filteredIdChunk.getIds(),
+                filteredIdChunk.getIds().toList(),
                 user.id
             ) else emptyList()
 
@@ -319,7 +320,7 @@ class DownloadService(
                 val userPlaylistService by inject<UserPlaylistService>()
                 val imageService by inject<ImageService>()
 
-                for (idGroup in filteredIdChunk.idGroups) {
+                filteredIdChunk.idGroups.collect { idGroup ->
                     val playlistId = idGroup.metadata?.let { playlist ->
                         if (playlist is MetadataService.Playlist) {
                             val image = playlist.images.largest
@@ -350,33 +351,44 @@ class DownloadService(
                         } else null
                     }
 
-                    if (playlistId != null) ApplicationScope.scope.async {
+                    if (playlistId != null) ApplicationScope.scope.launch {
                         userPlaylistService.addToPlaylist(playlistId, existingSongs.map { it.id })
-                    }.invokeOnCompletion { }
+                    }
 
-                    val filteredIds = idGroup.filter { id ->
-                        existingUrls.none {
-                            it.split("/").contains(id)
+                    idGroup.ids
+                        .chunked(20)
+                        .map {
+                            val ids = it.toList().distinct()
+                            val existingUrls = songService.byTidalTrackIds(
+                                ids,
+                                user.id
+                            ).map { track -> track.originalUrl }
+                            ids.filter { id ->
+                                existingUrls.none { url ->
+                                    url.split("/").contains(id)
+                                }
+                            }.asFlow()
                         }
-                    }
-                    for (idChunk in filteredIds.chunked(20)) {
-                        addToQueue(
-                            UrlDownloadQueueEntry(
-                                urls = idChunk
-                                    .map { "https://tidal.com/track/${it}" }
-                                    .toMutableList(),
-                                ids = idChunk,
-                                byUser = user.id,
-                                maxRetries = idChunk.size,
-                                type = Type.SONG
-                            ) {
-                                val songs = songService.byTidalTrackIds(idChunk, user.id)
-                                if (playlistId != null) userPlaylistService.addToPlaylist(
-                                    playlistId,
-                                    songs.map { it.id })
-                            }
-                        )
-                    }
+                        .flattenConcat()
+                        .chunked(20)
+                        .collect { idChunk ->
+                            addToQueue(
+                                UrlDownloadQueueEntry(
+                                    urls = idChunk
+                                        .map { "https://tidal.com/track/${it}" }
+                                        .toMutableList(),
+                                    ids = idChunk,
+                                    byUser = user.id,
+                                    maxRetries = idChunk.size,
+                                    type = Type.SONG
+                                ) {
+                                    val songs = songService.byTidalTrackIds(idChunk, user.id)
+                                    if (playlistId != null) userPlaylistService.addToPlaylist(
+                                        playlistId,
+                                        songs.map { it.id })
+                                }
+                            )
+                        }
                 }
             } else {
                 downloadStageMutex.withLock {
@@ -384,7 +396,7 @@ class DownloadService(
                         existingUrls.none {
                             it.split("/").contains(id)
                         }
-                    })
+                    }.toList())
                 }
 
                 val chunkSize = 20
@@ -483,21 +495,24 @@ class DownloadService(
 
 data class IdsWrapper(
     val type: Type,
-    val idGroups: List<IdsGroup>
+    val idGroups: Flow<IdsGroup>
 ) {
-    val size = idGroups.sumOf { it.ids.size }
+    suspend fun size() = getIds().toList().size
 
-    fun getIds(): List<String> = idGroups.flatMap { it.ids }
+    @OptIn(ExperimentalCoroutinesApi::class)
+    suspend fun getIds(): Flow<String> = idGroups.flatMapConcat { it.ids }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
     fun filter(predicate: (id: String) -> Boolean) =
-        idGroups.map { it.filter(predicate) }.filter { it.isNotEmpty() }.flatten()
+        idGroups.map { it.filter(predicate) }.flattenConcat()
 
     fun applyFilter(predicate: (id: String) -> Boolean) =
         copy(
-            idGroups = idGroups.map { it.copy(ids = it.ids.filter(predicate)) }.filter { it.ids.isNotEmpty() }
+            idGroups = idGroups.map { it.copy(ids = it.ids.filter(predicate)) }.filter { it.ids.toList().isNotEmpty() }
         )
 
     fun fetchExistingSongs() = when (type) {
-        Type.SONG, Type.PLAYLIST -> true
+        Type.SONG -> true
         else -> false
     }
 
@@ -507,9 +522,9 @@ data class IdsWrapper(
                 type = type,
                 idGroups = listOf(
                     IdsGroup(
-                        ids = ids
+                        ids = ids.asFlow()
                     )
-                )
+                ).asFlow()
             )
         }
     }
@@ -517,7 +532,7 @@ data class IdsWrapper(
 
 data class IdsGroup(
     val id: String = UUID.randomUUID().toString(),
-    val ids: List<String>,
+    val ids: Flow<String>,
     val metadata: MetadataService.BaseMetadata? = null
 ) {
     fun filter(predicate: (id: String) -> Boolean) = ids.filter(predicate)

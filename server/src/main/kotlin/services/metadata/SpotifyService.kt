@@ -1,12 +1,14 @@
 package dev.dertyp.services.metadata
 
 import dev.dertyp.ApiClient
+import dev.dertyp.data.User
 import dev.dertyp.services.metadata.MetadataService.Artist
 import io.ktor.client.call.*
 import io.ktor.client.request.*
 import io.ktor.http.*
 import io.ktor.server.application.*
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.serialization.Serializable
 import java.util.*
 import kotlin.time.Duration.Companion.seconds
@@ -89,7 +91,11 @@ class SpotifyService(
         throw NotImplementedError("Not implemented for spotify!")
     }
 
-    override suspend fun getPlaylistsByIds(playlistIds: List<String>, includeTracks: Boolean): List<Playlist> {
+    override fun getPlaylistsByIds(
+        playlistIds: List<String>,
+        includeTracks: Boolean,
+        user: User?
+    ): Flow<FlowPlaylist> {
         throw NotImplementedError("Not implemented for spotify!")
     }
 

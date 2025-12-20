@@ -79,6 +79,13 @@ abstract class SyncService(
             return instance
         }
 
+        fun getInstance(user: User, environment: ApplicationEnvironment, type: SyncServiceType): SyncService {
+            return when (type) {
+                SyncServiceType.tidal -> TidalSyncService(environment, user)
+                else -> throw IllegalArgumentException("Invalid sync service type: $type")
+            }
+        }
+
         suspend fun handleAuth(call: ApplicationCall) {
             val service = getInstance(call.parameters["service"], call)
                 ?: return call.respond(HttpStatusCode.BadRequest, "Invalid Service")

@@ -2,15 +2,20 @@ package dev.dertyp.services.metadata
 
 import dev.dertyp.ApiClient
 import dev.dertyp.core.*
+import dev.dertyp.data.User
 import dev.dertyp.plugins.RedisCacheProvider
 import dev.dertyp.services.models.tidal.*
+import dev.dertyp.services.sync.SyncService
 import io.ktor.client.call.*
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.util.*
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.launch
 import org.koin.core.component.inject
 import redis.clients.jedis.HostAndPort
 import redis.clients.jedis.RedisClient
@@ -22,7 +27,7 @@ import kotlin.time.Duration.Companion.seconds
 
 @OptIn(ExperimentalAtomicApi::class)
 class TidalService(
-    environment: ApplicationEnvironment
+    private val environment: ApplicationEnvironment
 ) : MetadataService("Tidal", Companion.MetadataType.tidal, environment) {
     override val tokenUrl = "https://auth.tidal.com/v1/oauth2/token"
     override val clientIdConfigPath: String = "tidal.clientId"
@@ -70,6 +75,16 @@ class TidalService(
         return this
     }
 
+    fun Flow<FlowPlaylist>.cachePlaylists(): Flow<FlowPlaylist> {
+        return jedis?.let {
+            onEach {
+                ApplicationScope.scope.launch {
+                    writeToJedis(it.collect())
+                }
+            }
+        } ?: this
+    }
+
     override fun HttpRequestBuilder.getAccessTokenHeader(clientId: String, clientSecret: String) {
         header(HttpHeaders.Authorization, "Basic ${Base64.encode("$clientId:$clientSecret".toByteArray())}")
         header("grant_type", "client_credentials")
@@ -89,9 +104,17 @@ class TidalService(
         }
     }
 
-    private suspend fun makeRequest(url: String): HttpResponse {
+    private suspend fun makeRequest(url: String, user: User? = null): HttpResponse {
         return ApiClient.instance.get(url) {
-            val token = getAccessToken()
+            val token = if (user != null) {
+                SyncService.getInstance(user, environment, SyncService.SyncServiceType.tidal).getAccessToken()?.let {
+                    AccessTokenResponse(
+                        tokenType = it.tokenType,
+                        accessToken = it.accessToken,
+                        expiresIn = it.expiresIn
+                    )
+                } ?: getAccessToken()
+            } else getAccessToken()
             header(HttpHeaders.Authorization, "${token.tokenType} ${token.accessToken}")
             header(HttpHeaders.Accept, "application/vnd.api+json")
         }
@@ -514,7 +537,12 @@ class TidalService(
         }
     }
 
-    private suspend fun getTracksFromPlaylist(playlistId: String, cursor: String? = null): List<Track> {
+    private fun getTracksFromPlaylist(
+        playlistId: String,
+        user: User?,
+        cursor: String? = null,
+        depth: Int = 1
+    ): Flow<Track> = flow {
         val url = getUrl("/playlists/$playlistId/relationships/items") {
             parameters {
                 append("countryCode", "US")
@@ -524,13 +552,13 @@ class TidalService(
             }
         }
 
-        val response = makeRequest(url)
+        val response = makeRequest(url, user)
         when (response.status) {
             HttpStatusCode.OK -> {}
             HttpStatusCode.TooManyRequests -> {
                 logger.warn("[getTracksFromPlaylist]: Too many requests, waiting 10 seconds")
-                delay(10.seconds)
-                return getTracksFromPlaylist(playlistId, cursor)
+                delay(10.seconds * depth)
+                return@flow emitAll(getTracksFromPlaylist(playlistId, user, cursor, depth + 1))
             }
 
             else -> println("error: ${response.status}")
@@ -541,7 +569,7 @@ class TidalService(
             val tracks = body.included?.mapAttributes<TracksAttributes>() ?: emptyMap()
             val nextCursor = body.links.meta?.nextCursor
 
-            return tracks.entries.map { (id, track) ->
+            emitAll(tracks.entries.map { (id, track) ->
                 Track(
                     id = id,
                     title = track.title,
@@ -550,32 +578,42 @@ class TidalService(
                     artists = emptyList(),
                     images = emptyList(),
                 )
-            }.let {
-                if (nextCursor != null) {
-                    logger.info("Fetching tracks for $playlistId with cursor: $nextCursor")
-                    delay(500.milliseconds)
-                    it + getTracksFromPlaylist(playlistId, nextCursor)
-                } else it
+            }.asFlow())
+            if (nextCursor != null) {
+                logger.info("Fetching tracks for $playlistId with cursor: $nextCursor")
+                delay(500.milliseconds)
+                emitAll(getTracksFromPlaylist(playlistId, user, nextCursor))
             }
+
+            return@flow
         } catch (e: Exception) {
             e.printStackTrace()
             println(response.bodyAsText())
 
-            return emptyList()
+            return@flow
         }
     }
 
-    override suspend fun getPlaylistsByIds(playlistIds: List<String>, includeTracks: Boolean): List<Playlist> {
+    @OptIn(ExperimentalCoroutinesApi::class)
+    override fun getPlaylistsByIds(
+        playlistIds: List<String>,
+        includeTracks: Boolean,
+        user: User?
+    ): Flow<FlowPlaylist> = flow {
         val filteredPlaylistIds = playlistIds.distinct().toMutableList()
         val existing = if (!includeTracks) checkExistingPlaylistsFromCache(filteredPlaylistIds) else emptyList()
 
         filteredPlaylistIds.removeAll(existing)
 
-        if (filteredPlaylistIds.isEmpty()) return getPlaylistsFromCache(existing)
-
         if (filteredPlaylistIds.size > 20) {
-            return filteredPlaylistIds.chunked(20).flatMap { getPlaylistsByIds(it, includeTracks) }
+            for (chunk in filteredPlaylistIds.chunked(20)) {
+                emitAll(getPlaylistsByIds(chunk, includeTracks, user))
+            }
+            return@flow
         }
+
+        emitAll(getPlaylistsFromCache(existing).toFlow())
+        if (filteredPlaylistIds.isEmpty()) return@flow
 
         val url = getUrl("/playlists") {
             parameters {
@@ -586,13 +624,19 @@ class TidalService(
             }
         }
 
-        val response = makeRequest(url)
+        val response = makeRequest(url, user)
         when (response.status) {
             HttpStatusCode.OK -> {}
             HttpStatusCode.TooManyRequests -> {
                 logger.warn("[getPlaylistsByIds]: Too many requests, waiting 10 seconds")
                 delay(10.seconds)
-                return getPlaylistsByIds(filteredPlaylistIds, includeTracks) + getPlaylistsFromCache(existing)
+                return@flow emitAll(
+                    getPlaylistsByIds(
+                        filteredPlaylistIds,
+                        includeTracks,
+                        user
+                    )
+                )
             }
 
             else -> println("error: ${response.status}")
@@ -603,25 +647,28 @@ class TidalService(
 
             val images = body.included?.mapAttributes<ArtworksAttributes>() ?: emptyMap()
             val tracks =
-                if (includeTracks) body.data.map { it.id }.associateWith { getTracksFromPlaylist(it) } else emptyMap()
+                if (includeTracks) body.data.map { it.id }
+                    .associateWith { getTracksFromPlaylist(it, user) } else emptyMap()
 
-            return body.data.mapNotNull { playlistObj ->
+            return@flow emitAll(body.data.mapNotNull { playlistObj ->
                 playlistObj.attributes?.let { playlist ->
-                    Playlist(
+                    FlowPlaylist(
                         id = playlistObj.id,
                         name = playlist.name,
                         description = playlist.description ?: "",
                         trackCount = playlist.numberOfItems ?: 0,
-                        tracks = tracks[playlistObj.id] ?: emptyList(),
+                        tracks = tracks[playlistObj.id] ?: emptyFlow(),
                         images = playlistObj.images(images)
                     )
                 }
-            }.also { if (!includeTracks) it.cachePlaylists() } + getPlaylistsFromCache(existing)
+            }.asFlow().let {
+                if (!includeTracks) it.cachePlaylists() else it
+            })
         } catch (e: Exception) {
             e.printStackTrace()
             println(response.bodyAsText())
 
-            return emptyList()
+            return@flow
         }
     }
 }

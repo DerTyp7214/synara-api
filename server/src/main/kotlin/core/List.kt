@@ -2,6 +2,8 @@ package dev.dertyp.core
 
 import dev.dertyp.services.metadata.MetadataService
 import dev.dertyp.services.models.tidal.*
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.asFlow
 import kotlinx.serialization.json.decodeFromJsonElement
 
 fun <T> MutableList<T>.removeFirst(condition: (T) -> Boolean): T? {
@@ -59,3 +61,6 @@ inline fun <reified F : BaseAttributes> List<IncludedInner<JsonAttribute, *>>.ma
 
 val List<MetadataService.Image>.largest
     get() = maxByOrNull { it.width } ?: first()
+
+fun List<MetadataService.Playlist>.toFlow(): Flow<MetadataService.FlowPlaylist> =
+    map { MetadataService.FlowPlaylist.fromPlaylist(it) }.asFlow()

@@ -2,12 +2,14 @@ package dev.dertyp.services.metadata
 
 import dev.dertyp.ApiClient
 import dev.dertyp.core.bytes
+import dev.dertyp.data.User
 import dev.dertyp.services.ImageService
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.util.*
+import kotlinx.coroutines.flow.Flow
 import org.koin.core.context.GlobalContext
 import java.util.*
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
@@ -84,7 +86,11 @@ class ImageCacheService(
         throw NotImplementedError("Not implemented for ImageCache")
     }
 
-    override suspend fun getPlaylistsByIds(playlistIds: List<String>, includeTracks: Boolean): List<Playlist> {
+    override fun getPlaylistsByIds(
+        playlistIds: List<String>,
+        includeTracks: Boolean,
+        user: User?
+    ): Flow<FlowPlaylist> {
         throw NotImplementedError("Not implemented for ImageCache")
     }
 

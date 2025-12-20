@@ -1,6 +1,8 @@
 package dev.dertyp.services.metadata
 
 import dev.dertyp.ApiClient
+import dev.dertyp.core.ApplicationScope
+import dev.dertyp.data.User
 import dev.dertyp.serializers.DurationSerializer
 import dev.dertyp.serializers.LocalDateSerializer
 import dev.dertyp.serializers.OffsetDateTimeSerializer
@@ -10,7 +12,12 @@ import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.server.application.*
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.asFlow
+import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.toList
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import java.time.LocalDate
@@ -44,7 +51,11 @@ abstract class MetadataService(
     abstract suspend fun getTracksByIds(trackIds: List<String>): List<Track>
     abstract suspend fun getAlbumsByIds(albumIds: List<String>): List<Album>
     abstract suspend fun getArtistsByIds(artistIds: List<String>): List<Artist>
-    abstract suspend fun getPlaylistsByIds(playlistIds: List<String>, includeTracks: Boolean = false): List<Playlist>
+    abstract fun getPlaylistsByIds(
+        playlistIds: List<String>,
+        includeTracks: Boolean = false,
+        user: User? = null
+    ): Flow<FlowPlaylist>
 
     private var accessToken: Pair<AccessTokenResponse, Long>? = null
 
@@ -137,7 +148,7 @@ abstract class MetadataService(
         val popularity: Float,
         val url: String? = null,
         val images: List<Image>,
-    ): BaseMetadata()
+    ) : BaseMetadata()
 
     @Serializable
     data class Track(
@@ -149,7 +160,7 @@ abstract class MetadataService(
         @Serializable(with = OffsetDateTimeSerializer::class)
         val createdAt: OffsetDateTime? = null,
         val images: List<Image>,
-    ): BaseMetadata()
+    ) : BaseMetadata()
 
     @Serializable
     data class Album(
@@ -163,7 +174,7 @@ abstract class MetadataService(
         @Serializable(with = LocalDateSerializer::class)
         val releaseDate: LocalDate? = null,
         val images: List<Image>,
-    ): BaseMetadata()
+    ) : BaseMetadata()
 
     @Serializable
     data class Playlist(
@@ -177,5 +188,53 @@ abstract class MetadataService(
         @Serializable(with = OffsetDateTimeSerializer::class)
         val modifiedAt: OffsetDateTime? = null,
         val images: List<Image>,
-    ): BaseMetadata()
+    ) : BaseMetadata()
+
+    @Serializable
+    data class FlowPlaylist(
+        val id: String,
+        val name: String,
+        val description: String,
+        val tracks: Flow<Track> = emptyFlow(),
+        val trackCount: Int = 0,
+        @Serializable(with = OffsetDateTimeSerializer::class)
+        val createdAt: OffsetDateTime? = null,
+        @Serializable(with = OffsetDateTimeSerializer::class)
+        val modifiedAt: OffsetDateTime? = null,
+        val images: List<Image>,
+    ) : BaseMetadata() {
+        private val materializedTracks by lazy {
+            ApplicationScope.scope.async {
+                tracks.toList()
+            }
+        }
+
+        suspend fun collect(): Playlist {
+            return Playlist(
+                id = id,
+                name = name,
+                description = description,
+                tracks = materializedTracks.await(),
+                trackCount = trackCount,
+                createdAt = createdAt,
+                modifiedAt = modifiedAt,
+                images = images,
+            )
+        }
+
+        companion object {
+            fun fromPlaylist(playlist: Playlist): FlowPlaylist {
+                return FlowPlaylist(
+                    id = playlist.id,
+                    name = playlist.name,
+                    description = playlist.description,
+                    tracks = playlist.tracks.asFlow(),
+                    trackCount = playlist.tracks.size,
+                    createdAt = playlist.createdAt,
+                    modifiedAt = playlist.modifiedAt,
+                    images = playlist.images,
+                )
+            }
+        }
+    }
 }
