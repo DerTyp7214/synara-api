@@ -2,7 +2,7 @@ type: http_request
 model: http_request
 id: rq_c2aQ3V9qzz
 createdAt: 2025-10-14T19:25:16.450619051
-updatedAt: 2025-12-19T19:30:21.396400319
+updatedAt: 2025-12-21T05:31:26.214095202
 workspaceId: wk_9dbKacQT4H
 folderId: fl_QrUoFyttZM
 authentication: {}
@@ -39,9 +39,9 @@ urlParameters:
   id: Cqh8H4cRV7
 - enabled: true
   name: :query
-  value: () vortex
+  value: ''
   id: zXFn5dePsN
 - enabled: true
   name: ''
   value: ''
-  id: 3sDZBjHFcb
+  id: gCIKAb3vVV

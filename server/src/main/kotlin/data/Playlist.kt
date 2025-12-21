@@ -42,6 +42,7 @@ data class UserPlaylist(
     @Serializable(with = UUIDSerializer::class)
     val creator: UUID,
     val description: String,
+    val origin: String? = null,
 ): BasePlaylist()
 
 @Serializable
@@ -58,4 +59,5 @@ data class InsertablePlaylist(
     val description: String = "",
     val songPaths: List<String>,
     val imageHash: String? = null,
+    val origin: String? = null,
 )

@@ -64,3 +64,17 @@ val List<MetadataService.Image>.largest
 
 fun List<MetadataService.Playlist>.toFlow(): Flow<MetadataService.FlowPlaylist> =
     map { MetadataService.FlowPlaylist.fromPlaylist(it) }.asFlow()
+
+@Suppress("UNCHECKED_CAST")
+fun <K, V> List<Pair<K, V?>>.filterValueNotNull(): List<Pair<K, V>> = filter { (_, v) -> v != null } as List<Pair<K, V>>
+
+val <K, V> List<Pair<K, V>>.keys
+    get() = map { it.first }
+val <K, V> List<Pair<K, V>>.values
+    get() = map { it.second }
+
+fun <T> Iterable<T>.minusOnce(other: Iterable<T>): List<T> {
+    val result = toMutableList()
+    other.forEach { result.remove(it) }
+    return result
+}

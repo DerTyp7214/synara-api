@@ -1,7 +1,9 @@
 package dev.dertyp.services
 
+import dev.dertyp.core.minusOnce
 import dev.dertyp.core.paging
 import dev.dertyp.core.rankedSearchQuery
+import dev.dertyp.core.values
 import dev.dertyp.data.InsertablePlaylist
 import dev.dertyp.data.PaginatedResponse
 import dev.dertyp.data.User
@@ -26,6 +28,7 @@ class UserPlaylistService : Service() {
             val imageId = resultRow[UserPlaylistTable.imageId]?.value
             val creator = resultRow[UserPlaylistTable.creator].value
             val description = resultRow[UserPlaylistTable.description]
+            val origin = resultRow[UserPlaylistTable.origin]
 
             return UserPlaylist(
                 id = id,
@@ -34,6 +37,7 @@ class UserPlaylistService : Service() {
                 imageId = imageId,
                 creator = creator,
                 description = description,
+                origin = origin,
             )
         }
     }
@@ -81,20 +85,21 @@ class UserPlaylistService : Service() {
             this[UserPlaylistTable.description] = playlist.description
             this[UserPlaylistTable.creator] = user.id
             this[UserPlaylistTable.imageId] = coverImageId?.id
+            this[UserPlaylistTable.origin] = playlist.origin
         }.first()[UserPlaylistTable.id].value
     }
 
-    suspend fun addToPlaylist(id: UUID, songIds: Map<Int, UUID>) = dbQuery {
+    suspend fun addToPlaylist(id: UUID, songIds: List<Pair<Long, UUID>>) = dbQuery {
         val existing = UserPlaylistSongTable
-            .select(UserPlaylistSongTable.playlistId, UserPlaylistSongTable.songId, UserPlaylistSongTable.position)
+            .select(UserPlaylistSongTable.playlistId, UserPlaylistSongTable.songId, UserPlaylistSongTable.addedAt)
             .where { UserPlaylistSongTable.playlistId eq id }
             .andWhere { UserPlaylistSongTable.songId inList songIds.values }
-            .associate { Pair(it[UserPlaylistSongTable.position], it[UserPlaylistSongTable.songId].value) }
+            .map { Pair(it[UserPlaylistSongTable.addedAt], it[UserPlaylistSongTable.songId].value) }
 
-        UserPlaylistSongTable.batchInsert((songIds - existing).entries, true) { (position, songId) ->
+        UserPlaylistSongTable.batchInsert(songIds.minusOnce(existing.toSet())) { (addedAt, songId) ->
             this[UserPlaylistSongTable.playlistId] = id
             this[UserPlaylistSongTable.songId] = songId
-            this[UserPlaylistSongTable.position] = position as Int
+            this[UserPlaylistSongTable.addedAt] = addedAt
         }
     }
 
@@ -119,14 +124,15 @@ class UserPlaylistService : Service() {
             val playlistIds = mainPlaylistRows.map { it[UserPlaylistTable.id].value }
 
             val songLinkRows = UserPlaylistSongTable
-                .select(UserPlaylistSongTable.playlistId, UserPlaylistSongTable.songId, UserPlaylistSongTable.position)
+                .select(UserPlaylistSongTable.playlistId, UserPlaylistSongTable.songId, UserPlaylistSongTable.addedAt)
                 .where { UserPlaylistSongTable.playlistId inList playlistIds }
                 .toList()
 
-            val songIds = songLinkRows.map { it[UserPlaylistSongTable.songId].value }.distinct()
+            val songIds = songLinkRows.map { it[UserPlaylistSongTable.songId].value }
+            val distinctSongIds = songIds.distinct()
 
-            val songDurationsById = if (songIds.isNotEmpty()) {
-                getSongDurations(songIds)
+            val songDurationsById = if (distinctSongIds.isNotEmpty()) {
+                getSongDurations(distinctSongIds)
             } else {
                 emptyMap()
             }
@@ -158,7 +164,7 @@ class UserPlaylistService : Service() {
         val songsByPlaylistId = songLinkRows
             .map { row ->
                 row[UserPlaylistSongTable.playlistId].value to
-                        Pair(row[UserPlaylistSongTable.songId].value, row[UserPlaylistSongTable.position])
+                        Pair(row[UserPlaylistSongTable.songId].value, row[UserPlaylistSongTable.addedAt])
             }
             .groupBy({ it.first }, { it.second })
 

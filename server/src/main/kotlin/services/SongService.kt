@@ -170,7 +170,7 @@ class SongService : Service() {
             leftJoin(UserPlaylistSongTable).userSong(userId)
         }) {
             where { UserPlaylistSongTable.playlistId eq playlistId }
-            orderBy(UserPlaylistSongTable.position, SortOrder.ASC)
+            orderBy(UserPlaylistSongTable.addedAt, SortOrder.ASC)
         }
 
     suspend fun byTidalTrackIds(ids: Collection<String>, userId: UUID): List<UserSong> =

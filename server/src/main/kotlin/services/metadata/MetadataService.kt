@@ -159,6 +159,8 @@ abstract class MetadataService(
         val duration: Duration,
         @Serializable(with = OffsetDateTimeSerializer::class)
         val createdAt: OffsetDateTime? = null,
+        @Serializable(with = OffsetDateTimeSerializer::class)
+        val addedAt: OffsetDateTime? = null,
         val images: List<Image>,
     ) : BaseMetadata()
 

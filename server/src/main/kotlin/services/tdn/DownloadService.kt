@@ -26,7 +26,6 @@ import java.time.Instant
 import java.util.*
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.concurrent.atomics.AtomicBoolean
-import kotlin.concurrent.atomics.AtomicInt
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 
 @OptIn(ExperimentalAtomicApi::class)
@@ -291,14 +290,18 @@ class DownloadService(
 
         ids.chunked(chunkSize).buffer(UNLIMITED).collect { idChunk ->
             val filteredIdChunk = when (type) {
-                Type.SONG -> IdsWrapper.from(type, idChunk)
-                Type.ALBUM -> IdsWrapper.from(type, idChunk)
-                Type.ARTIST -> IdsWrapper.from(type, idChunk)
+                Type.SONG -> IdsWrapper.from(type, idChunk.associateBy { 0 })
+                Type.ALBUM -> IdsWrapper.from(type, idChunk.associateBy { 0 })
+                Type.ARTIST -> IdsWrapper.from(type, idChunk.associateBy { 0 })
                 Type.PLAYLIST -> {
-                    if (metadataService == null) IdsWrapper.from(type, emptyList())
+                    if (metadataService == null) IdsWrapper.from(type, emptyMap())
                     else {
                         val groups = metadataService.getPlaylistsByIds(idChunk, true, user).map { playlist ->
-                            IdsGroup(playlist.id, playlist.tracks.map { it.id }, playlist)
+                            IdsGroup(
+                                playlist.id,
+                                playlist.tracks.map { Pair(it.addedAt?.toInstant()?.toEpochMilli() ?: 0, it.id) },
+                                playlist
+                            )
                         }
                         IdsWrapper(type, groups)
                     }
@@ -347,60 +350,59 @@ class DownloadService(
                                     description = playlist.description,
                                     songPaths = emptyList(),
                                     imageHash = imageHash,
+                                    origin = "https://tidal.com/playlist/${playlist.id}"
                                 )
                             )
                         } else null
                     }
-
-                    val songPosition = AtomicInt(0)
 
                     idGroup.ids
                         .buffer(100)
                         .chunked(20)
                         .map { ids ->
                             val existingSongs = songService.byTidalTrackIds(
-                                ids,
+                                ids.map { it.second },
                                 user.id
                             )
                             val existingUrls = existingSongs.map { track -> track.originalUrl }
 
-                            val songIds = ids.mapNotNull { id ->
-                                existingSongs.find { it.originalUrl.endsWith("/$id") }?.id
-                            }
+                            val songIds = ids.map { (added, id) ->
+                                added to existingSongs.find { it.originalUrl.endsWith("/$id") }?.id
+                            }.filterValueNotNull()
 
                             if (playlistId != null) userPlaylistService.addToPlaylist(
                                 playlistId,
-                                songIds.associateBy { songPosition.fetchAndAdd(1) }
+                                songIds
                             ).let { result ->
                                 logger.info("Added ${result.size} songs to playlist $playlistId")
                             }
 
-                            ids.filter { id ->
+                            ids.filter { (_, id) ->
                                 existingUrls.none { url ->
                                     url.endsWith("/$id")
                                 }
                             }.asFlow()
                         }
                         .flattenConcat()
-                        .chunked(200)
+                        .chunked(20)
                         .collect { idChunk ->
                             addToQueue(
                                 UrlDownloadQueueEntry(
                                     urls = idChunk
-                                        .map { "https://tidal.com/track/${it}" }
+                                        .map { (_, id) -> "https://tidal.com/track/${id}" }
                                         .toMutableList(),
-                                    ids = idChunk,
+                                    ids = idChunk.toMap().values,
                                     byUser = user.id,
                                     maxRetries = idChunk.size,
                                     type = Type.SONG
                                 ) {
-                                    val songs = songService.byTidalTrackIds(idChunk, user.id)
-                                    val songIds = idChunk.mapNotNull { id ->
-                                        songs.find { it.originalUrl.endsWith("/$id") }?.id
-                                    }
+                                    val songs = songService.byTidalTrackIds(idChunk.toMap().values, user.id)
+                                    val songIds = idChunk.map { (added, id) ->
+                                        added to songs.find { it.originalUrl.endsWith("/$id") }?.id
+                                    }.filterValueNotNull()
                                     if (playlistId != null) userPlaylistService.addToPlaylist(
                                         playlistId,
-                                        songIds.associateBy { songPosition.fetchAndAdd(1) }
+                                        songIds
                                     )
                                 }
                             )
@@ -408,11 +410,11 @@ class DownloadService(
                 }
             } else {
                 downloadStageMutex.withLock {
-                    downloadStage.addAll(filteredIdChunk.filter { id ->
+                    downloadStage.addAll(filteredIdChunk.filter { (_, id) ->
                         existingUrls.none {
                             it.split("/").contains(id)
                         }
-                    }.toList())
+                    }.map { it.second }.toList())
                 }
 
                 val chunkSize = 20
@@ -516,13 +518,13 @@ data class IdsWrapper(
     suspend fun size() = getIds().toList().size
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    suspend fun getIds(): Flow<String> = idGroups.flatMapConcat { it.ids }
+    fun getIds(): Flow<String> = idGroups.flatMapConcat { it.ids.map { entry -> entry.second } }
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    fun filter(predicate: (id: String) -> Boolean) =
+    fun filter(predicate: (entry: Pair<Long, String>) -> Boolean) =
         idGroups.map { it.filter(predicate) }.flattenConcat()
 
-    fun applyFilter(predicate: (id: String) -> Boolean) =
+    fun applyFilter(predicate: (entry: Pair<Long, String>) -> Boolean) =
         copy(
             idGroups = idGroups.map { it.copy(ids = it.ids.filter(predicate)) }.filter { it.ids.toList().isNotEmpty() }
         )
@@ -533,12 +535,12 @@ data class IdsWrapper(
     }
 
     companion object {
-        fun from(type: Type, ids: List<String>): IdsWrapper {
+        fun from(type: Type, ids: Map<Long, String>): IdsWrapper {
             return IdsWrapper(
                 type = type,
                 idGroups = listOf(
                     IdsGroup(
-                        ids = ids.asFlow()
+                        ids = ids.toList().asFlow()
                     )
                 ).asFlow()
             )
@@ -548,10 +550,10 @@ data class IdsWrapper(
 
 data class IdsGroup(
     val id: String = UUID.randomUUID().toString(),
-    val ids: Flow<String>,
+    val ids: Flow<Pair<Long, String>>,
     val metadata: MetadataService.BaseMetadata? = null
 ) {
-    fun filter(predicate: (id: String) -> Boolean) = ids.filter(predicate)
+    fun filter(predicate: (entry: Pair<Long, String>) -> Boolean) = ids.filter(predicate)
 }
 
 @Serializable
@@ -569,7 +571,7 @@ sealed class DownloadQueueEntry {
 @Serializable
 data class UrlDownloadQueueEntry(
     val urls: MutableList<String>,
-    val ids: List<String> = emptyList(),
+    val ids: Collection<String> = emptyList(),
     @Serializable(with = UUIDSerializer::class)
     override val byUser: UUID? = null,
     override val type: Type? = null,

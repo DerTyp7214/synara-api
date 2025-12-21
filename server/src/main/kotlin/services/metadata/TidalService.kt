@@ -566,6 +566,7 @@ class TidalService(
 
         try {
             val body = response.body<PlaylistsItemsMultiRelationshipDataDocument<JsonAttribute, EmptyRelationships>>()
+            val meta = body.data?.associate { it.id to it.meta }?.filterValueNotNull() ?: emptyMap()
             val tracks = body.included?.mapAttributes<TracksAttributes>() ?: emptyMap()
             val nextCursor = body.links.meta?.nextCursor
 
@@ -575,6 +576,7 @@ class TidalService(
                     title = track.title,
                     duration = track.duration,
                     createdAt = track.createdAt,
+                    addedAt = meta[id]?.addedAt,
                     artists = emptyList(),
                     images = emptyList(),
                 )
