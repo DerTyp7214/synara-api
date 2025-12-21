@@ -192,6 +192,48 @@ fun Route.song() {
                 )
             }
         }
+        get("/byUserPlaylist/{playlistId}", {
+            request {
+                pathParameter<String>("playlistId") {
+                    description = "The userPlaylist id to search all songs for."
+                }
+
+                paging()
+            }
+            response {
+                HttpStatusCode.OK to {
+                    description = "All songs on this playlist."
+                    body<PaginatedResponse<UserSong>>()
+                }
+            }
+        }) {
+            val service by inject<SongService>()
+
+            val id = call.parameters["playlistId"]?.toUUIDOrNull() ?: return@get call.respond(HttpStatusCode.BadRequest)
+
+            val user = call.getUser() ?: return@get call.respond(HttpStatusCode.Unauthorized)
+
+            val (page, pageSize) = call.paging()
+
+            call.respond(service.byUserPlaylist(page, pageSize, id, user.id).omitLyrics())
+        }
+        m3u(
+            path = "/byUserPlaylist/{playlistId}/m3u",
+            pathParams = listOf(Pair("playlistId", "The userPlaylist id to search all songs for.")),
+            validate = { map -> map["playlistId"] != null }) { map ->
+            val service by inject<SongService>()
+
+            val user = call.getUser() ?: return@m3u null
+
+            map["playlistId"]?.toUUIDOrNull()?.let {
+                Pair(
+                    "All Songs on $it",
+                    service.byUserPlaylist(0, Int.MAX_VALUE, it, user.id).data.map { song ->
+                        PlaylistEntry(song.id, song.title, song.duration)
+                    }
+                )
+            }
+        }
         get("/byArtist/{artistId}", {
             request {
                 pathParameter<String>("artistId") {

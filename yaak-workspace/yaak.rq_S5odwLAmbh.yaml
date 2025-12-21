@@ -2,11 +2,11 @@ type: http_request
 model: http_request
 id: rq_S5odwLAmbh
 createdAt: 2025-10-14T19:25:16.449204681
-updatedAt: 2025-12-08T21:36:40.905405224
+updatedAt: 2025-12-21T00:53:11.008540202
 workspaceId: wk_9dbKacQT4H
 folderId: null
 authentication: {}
-authenticationType: none
+authenticationType: null
 body:
   text: |-
     {

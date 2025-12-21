@@ -165,6 +165,14 @@ class SongService : Service() {
             orderBy(PlaylistSongTable.position, SortOrder.ASC)
         }
 
+    suspend fun byUserPlaylist(page: Int, pageSize: Int, playlistId: UUID, userId: UUID): PaginatedResponse<UserSong> =
+        querySongs(page, pageSize, true, {
+            leftJoin(UserPlaylistSongTable).userSong(userId)
+        }) {
+            where { UserPlaylistSongTable.playlistId eq playlistId }
+            orderBy(UserPlaylistSongTable.position, SortOrder.ASC)
+        }
+
     suspend fun byTidalTrackIds(ids: List<String>, userId: UUID): List<UserSong> =
         querySongs<UserSong>(0, Int.MAX_VALUE, true, { userSong(userId) }) {
             where {
