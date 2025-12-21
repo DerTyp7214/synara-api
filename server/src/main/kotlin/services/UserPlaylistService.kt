@@ -81,7 +81,7 @@ class UserPlaylistService : Service() {
         }.first()[UserPlaylistTable.id].value
     }
 
-    suspend fun addToPlaylist(id: UUID, songIds: List<UUID>) {
+    suspend fun addToPlaylist(id: UUID, songIds: List<UUID>): List<ResultRow> {
         var highestPosition = dbQuery {
             UserPlaylistSongTable.select(UserPlaylistSongTable.playlistId, UserPlaylistSongTable.position)
                 .where { UserPlaylistSongTable.playlistId eq id }
@@ -91,8 +91,8 @@ class UserPlaylistService : Service() {
                 .singleOrNull()
         } ?: 0
 
-        dbQuery {
-            UserPlaylistSongTable.batchInsert(songIds) { songId ->
+        return dbQuery {
+            UserPlaylistSongTable.batchInsert(data = songIds, ignore = true) { songId ->
                 this[UserPlaylistSongTable.playlistId] = id
                 this[UserPlaylistSongTable.songId] = songId
                 this[UserPlaylistSongTable.position] = ++highestPosition

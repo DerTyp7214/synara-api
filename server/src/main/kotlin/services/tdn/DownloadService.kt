@@ -364,7 +364,9 @@ class DownloadService(
                             if (playlistId != null) userPlaylistService.addToPlaylist(
                                 playlistId,
                                 existingSongs.map { song -> song.id }
-                            )
+                            ).let { result ->
+                                logger.info("Added ${result.size} songs to playlist $playlistId")
+                            }
 
                             ids.filter { id ->
                                 existingUrls.none { url ->
