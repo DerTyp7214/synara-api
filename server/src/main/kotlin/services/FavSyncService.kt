@@ -6,7 +6,8 @@ import dev.dertyp.data.User
 import dev.dertyp.db.FavSyncTable
 import dev.dertyp.dbQuery
 import dev.dertyp.services.sync.SyncService
-import org.jetbrains.exposed.sql.*
+import org.jetbrains.exposed.v1.core.*
+import org.jetbrains.exposed.v1.jdbc.*
 import java.util.*
 
 class FavSyncService : Service() {

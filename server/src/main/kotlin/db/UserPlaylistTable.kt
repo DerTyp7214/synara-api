@@ -1,6 +1,6 @@
 package dev.dertyp.db
 
-import org.jetbrains.exposed.dao.id.UUIDTable
+import org.jetbrains.exposed.v1.core.dao.id.UUIDTable
 
 object UserPlaylistTable : UUIDTable("userPlaylist") {
     val name = text("name")

@@ -5,7 +5,8 @@ import dev.dertyp.core.plus
 import dev.dertyp.data.RefreshToken
 import dev.dertyp.db.RefreshTokenTable
 import dev.dertyp.dbQuery
-import org.jetbrains.exposed.sql.*
+import org.jetbrains.exposed.v1.core.*
+import org.jetbrains.exposed.v1.jdbc.*
 import java.time.Instant
 import java.util.*
 import kotlin.time.Duration
@@ -52,8 +53,7 @@ class RefreshTokenService : Service() {
     }.firstOrNull()
 
     suspend fun invalidateToken(userId: UUID, tokenHash: String) = dbQuery {
-        val op = Op
-            .build { RefreshTokenTable.userId eq userId }
+        val op = (RefreshTokenTable.userId eq userId)
             .and { RefreshTokenTable.tokenHash eq tokenHash }
 
         RefreshTokenTable.deleteWhere { op }

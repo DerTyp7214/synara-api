@@ -16,9 +16,11 @@ import io.ktor.server.util.*
 import kotlinx.coroutines.flow.Flow
 import kotlinx.html.*
 import kotlinx.serialization.Serializable
-import org.jetbrains.exposed.sql.ResultRow
-import org.jetbrains.exposed.sql.andWhere
-import org.jetbrains.exposed.sql.upsert
+import org.jetbrains.exposed.v1.core.ResultRow
+import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.jdbc.andWhere
+import org.jetbrains.exposed.v1.jdbc.select
+import org.jetbrains.exposed.v1.jdbc.upsert
 import org.koin.ktor.ext.get
 import java.security.MessageDigest
 import java.util.*

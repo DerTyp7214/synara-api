@@ -14,7 +14,7 @@ import io.ktor.server.application.*
 import io.ktor.server.util.*
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
-import org.jetbrains.exposed.sql.ResultRow
+import org.jetbrains.exposed.v1.core.ResultRow
 
 abstract class TidalSyncServiceBase(
     environment: ApplicationEnvironment,

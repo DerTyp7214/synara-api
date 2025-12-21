@@ -2,20 +2,10 @@
 
 package dev.dertyp.core
 
-import org.jetbrains.exposed.sql.*
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.case
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.plus
-import kotlin.collections.Collection
-import kotlin.collections.List
-import kotlin.collections.component1
-import kotlin.collections.component2
-import kotlin.collections.drop
-import kotlin.collections.filter
-import kotlin.collections.first
-import kotlin.collections.forEachIndexed
-import kotlin.collections.map
-import kotlin.collections.reduce
-import kotlin.collections.windowed
+import org.jetbrains.exposed.v1.core.*
+import org.jetbrains.exposed.v1.core.Op.Companion.build
+import org.jetbrains.exposed.v1.core.Op.Companion.nullOp
+import org.jetbrains.exposed.v1.jdbc.Query
 
 fun Query.paging(page: Int, pageSize: Int, offset: Int = 0) = apply {
     offset((pageSize * page).toLong())
@@ -39,12 +29,12 @@ fun Query.rankedSearchQuery(
     var whereClause: Op<Boolean>? = null
 
     for (token in tokens.filter { !it.startsWith("-") }) {
-        val matches = columns.map { Op.build { it ilike "%${token}%" } }
+        val matches = columns.map { (it ilike "%${token}%") as Op<Boolean> }
 
         val tokenMatchOp = matches.reduce { a, b -> a or b }
         whereClause = whereClause?.let { it or tokenMatchOp } ?: tokenMatchOp
 
-        val tokenScore = case(null).let {
+        val tokenScore = case().let {
             var case = it.When(matches.first(), intLiteral(weights.first()))
             matches.drop(1).forEachIndexed { index, op ->
                 case = case.When(op, intLiteral(weights[index + 1]))
@@ -58,9 +48,9 @@ fun Query.rankedSearchQuery(
     if (!queryString.startsWith("-")) {
         val phraseBonus = (weights.first() * tokens.size) + 100
 
-        val phraseMatchOp = Op.build { columns.first() ilike "%$queryString%" }
+        val phraseMatchOp = columns.first() ilike "%$queryString%"
 
-        val bonusExpression = case(null)
+        val bonusExpression = case()
             .When(phraseMatchOp, intLiteral(phraseBonus))
             .Else(zeroLiteral)
 
@@ -73,9 +63,9 @@ fun Query.rankedSearchQuery(
             for ((token1, token2) in bigrams) {
                 columns.forEachIndexed { index, column ->
                     val consecutiveBonus = weights[index] * 2
-                    val consecutiveMatchOp = Op.build { column ilike "%$token1% $token2%" }
+                    val consecutiveMatchOp = column ilike "%$token1% $token2%"
 
-                    scoreExpression += case(null)
+                    scoreExpression += case()
                         .When(consecutiveMatchOp, intLiteral(consecutiveBonus))
                         .Else(zeroLiteral)
                 }
@@ -84,7 +74,7 @@ fun Query.rankedSearchQuery(
     }
 
     for (token in tokens.filter { it.startsWith("-") && it.length > 1 }) {
-        val matches = columns.map { Op.build { it notIlike "%${token.substring(1)}%" } }
+        val matches = columns.map { (it notIlike "%${token.substring(1)}%") as Op<Boolean> }
 
         val tokenMatchOp = matches.reduce { a, b -> a and b }
         whereClause = whereClause?.let { it and tokenMatchOp } ?: tokenMatchOp

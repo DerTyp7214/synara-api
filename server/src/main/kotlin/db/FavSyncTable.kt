@@ -1,8 +1,8 @@
 package dev.dertyp.db
 
 import dev.dertyp.services.sync.SyncService
-import org.jetbrains.exposed.sql.ReferenceOption
-import org.jetbrains.exposed.sql.Table
+import org.jetbrains.exposed.v1.core.ReferenceOption
+import org.jetbrains.exposed.v1.core.Table
 import java.time.Instant
 
 object FavSyncTable : Table("favSync") {

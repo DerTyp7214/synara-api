@@ -15,6 +15,7 @@ import io.ktor.server.routing.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import org.jetbrains.exposed.v1.jdbc.select
 import org.koin.ktor.ext.getKoin
 import org.koin.ktor.ext.inject
 import kotlin.concurrent.atomics.ExperimentalAtomicApi

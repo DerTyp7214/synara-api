@@ -1,7 +1,7 @@
 package dev.dertyp.db
 
-import org.jetbrains.exposed.sql.ReferenceOption
-import org.jetbrains.exposed.sql.Table
+import org.jetbrains.exposed.v1.core.ReferenceOption
+import org.jetbrains.exposed.v1.core.Table
 
 object SongArtistTable : Table("songArtist") {
     val songId = reference("songId", SongTable.id, onDelete = ReferenceOption.CASCADE)

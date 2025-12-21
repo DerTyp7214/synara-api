@@ -26,6 +26,7 @@ import java.time.Instant
 import java.util.*
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.concurrent.atomics.AtomicBoolean
+import kotlin.concurrent.atomics.AtomicInt
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 
 @OptIn(ExperimentalAtomicApi::class)
@@ -320,7 +321,7 @@ class DownloadService(
                 val userPlaylistService by inject<UserPlaylistService>()
                 val imageService by inject<ImageService>()
 
-                filteredIdChunk.idGroups.collect { idGroup ->
+                filteredIdChunk.idGroups.buffer(2).collect { idGroup ->
                     val playlistId = idGroup.metadata?.let { playlist ->
                         if (playlist is MetadataService.FlowPlaylist) {
                             val image = playlist.images.largest
@@ -351,31 +352,37 @@ class DownloadService(
                         } else null
                     }
 
+                    val songPosition = AtomicInt(0)
+
                     idGroup.ids
+                        .buffer(100)
                         .chunked(20)
-                        .map {
-                            val ids = it.distinct()
+                        .map { ids ->
                             val existingSongs = songService.byTidalTrackIds(
                                 ids,
                                 user.id
                             )
                             val existingUrls = existingSongs.map { track -> track.originalUrl }
 
+                            val songIds = ids.mapNotNull { id ->
+                                existingSongs.find { it.originalUrl.endsWith("/$id") }?.id
+                            }
+
                             if (playlistId != null) userPlaylistService.addToPlaylist(
                                 playlistId,
-                                existingSongs.map { song -> song.id }
+                                songIds.associateBy { songPosition.fetchAndAdd(1) }
                             ).let { result ->
                                 logger.info("Added ${result.size} songs to playlist $playlistId")
                             }
 
                             ids.filter { id ->
                                 existingUrls.none { url ->
-                                    url.split("/").contains(id)
+                                    url.endsWith("/$id")
                                 }
                             }.asFlow()
                         }
                         .flattenConcat()
-                        .chunked(20)
+                        .chunked(200)
                         .collect { idChunk ->
                             addToQueue(
                                 UrlDownloadQueueEntry(
@@ -388,9 +395,13 @@ class DownloadService(
                                     type = Type.SONG
                                 ) {
                                     val songs = songService.byTidalTrackIds(idChunk, user.id)
+                                    val songIds = idChunk.mapNotNull { id ->
+                                        songs.find { it.originalUrl.endsWith("/$id") }?.id
+                                    }
                                     if (playlistId != null) userPlaylistService.addToPlaylist(
                                         playlistId,
-                                        songs.map { it.id })
+                                        songIds.associateBy { songPosition.fetchAndAdd(1) }
+                                    )
                                 }
                             )
                         }

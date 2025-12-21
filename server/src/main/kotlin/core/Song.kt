@@ -4,7 +4,10 @@ import dev.dertyp.data.*
 import dev.dertyp.db.ArtistTable
 import dev.dertyp.db.SongArtistTable
 import dev.dertyp.db.SongTable
-import org.jetbrains.exposed.sql.*
+import org.jetbrains.exposed.v1.core.*
+import org.jetbrains.exposed.v1.jdbc.Query
+import org.jetbrains.exposed.v1.jdbc.andWhere
+import org.jetbrains.exposed.v1.jdbc.select
 
 @Suppress("UNCHECKED_CAST")
 fun <T : BaseSong> PaginatedResponse<T>.omitLyrics() = PaginatedResponse(

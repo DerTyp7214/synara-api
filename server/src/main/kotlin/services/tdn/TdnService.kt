@@ -85,6 +85,8 @@ class TdnService(private val indexer: Indexer, private val storageService: Stora
 
             paths.addAll(pathLines.map { Path(it) }.filter { it.exists() }.toMutableList())
 
+            logProxy("Found ${paths.size} valid paths.")
+
             val pathAlternation =
                 "(${storageService.playlistsPath}|${storageService.albumsPath})"
 

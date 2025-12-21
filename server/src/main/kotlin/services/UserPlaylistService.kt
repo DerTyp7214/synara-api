@@ -10,8 +10,11 @@ import dev.dertyp.db.SongTable
 import dev.dertyp.db.UserPlaylistSongTable
 import dev.dertyp.db.UserPlaylistTable
 import dev.dertyp.dbQuery
-import org.jetbrains.exposed.sql.*
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import org.jetbrains.exposed.v1.core.ResultRow
+import org.jetbrains.exposed.v1.core.and
+import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.inList
+import org.jetbrains.exposed.v1.jdbc.*
 import org.koin.core.component.inject
 import java.util.*
 
@@ -81,22 +84,17 @@ class UserPlaylistService : Service() {
         }.first()[UserPlaylistTable.id].value
     }
 
-    suspend fun addToPlaylist(id: UUID, songIds: List<UUID>): List<ResultRow> {
-        var highestPosition = dbQuery {
-            UserPlaylistSongTable.select(UserPlaylistSongTable.playlistId, UserPlaylistSongTable.position)
-                .where { UserPlaylistSongTable.playlistId eq id }
-                .orderBy(UserPlaylistSongTable.position, SortOrder.DESC)
-                .limit(1)
-                .map { it[UserPlaylistSongTable.position] }
-                .singleOrNull()
-        } ?: 0
+    suspend fun addToPlaylist(id: UUID, songIds: Map<Int, UUID>) = dbQuery {
+        val existing = UserPlaylistSongTable
+            .select(UserPlaylistSongTable.playlistId, UserPlaylistSongTable.songId, UserPlaylistSongTable.position)
+            .where { UserPlaylistSongTable.playlistId eq id }
+            .andWhere { UserPlaylistSongTable.songId inList songIds.values }
+            .associate { Pair(it[UserPlaylistSongTable.position], it[UserPlaylistSongTable.songId].value) }
 
-        return dbQuery {
-            UserPlaylistSongTable.batchInsert(data = songIds, ignore = true) { songId ->
-                this[UserPlaylistSongTable.playlistId] = id
-                this[UserPlaylistSongTable.songId] = songId
-                this[UserPlaylistSongTable.position] = ++highestPosition
-            }
+        UserPlaylistSongTable.batchInsert((songIds - existing).entries, true) { (position, songId) ->
+            this[UserPlaylistSongTable.playlistId] = id
+            this[UserPlaylistSongTable.songId] = songId
+            this[UserPlaylistSongTable.position] = position as Int
         }
     }
 

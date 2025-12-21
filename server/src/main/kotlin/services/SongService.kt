@@ -14,8 +14,8 @@ import dev.dertyp.services.ArtistService.Companion.mapArtist
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
-import org.jetbrains.exposed.sql.*
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
+import org.jetbrains.exposed.v1.core.*
+import org.jetbrains.exposed.v1.jdbc.*
 import org.koin.core.component.get
 import java.io.File
 import java.nio.file.Paths
@@ -173,7 +173,7 @@ class SongService : Service() {
             orderBy(UserPlaylistSongTable.position, SortOrder.ASC)
         }
 
-    suspend fun byTidalTrackIds(ids: List<String>, userId: UUID): List<UserSong> =
+    suspend fun byTidalTrackIds(ids: Collection<String>, userId: UUID): List<UserSong> =
         querySongs<UserSong>(0, Int.MAX_VALUE, true, { userSong(userId) }) {
             where {
                 SongTable.originalUrl inList ids.map {
@@ -522,6 +522,16 @@ class SongService : Service() {
             .awaitAll()
             .flatten()
             .toMap()
+
+        try {
+            dbQuery {
+                for ((song, id) in existingSongMap) {
+                    SongTable.update({ SongTable.id eq id }, 1) {
+                        it[SongTable.originalUrl] = song.originalUrl
+                    }
+                }
+            }
+        } catch (_: Throwable) {}
 
         val newSongs = songs.filter { it !in existingSongMap.keys }
 
