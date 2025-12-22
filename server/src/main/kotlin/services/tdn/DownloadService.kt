@@ -216,6 +216,8 @@ class DownloadService(
                 _log.emit(line)
                 logs.add(line)
 
+                logger.debug(line)
+
                 if (logs.size > maxLogLength) logs.removeFirst()
             }
 
