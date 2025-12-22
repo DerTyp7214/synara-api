@@ -143,7 +143,7 @@ fun Route.tdn() {
                 }) {
                     val (dl) = service.downloadTidalIds(
                         call = call,
-                        ids = urls.map { it.segments.last { s -> s != "u" } }.asFlow(),
+                        ids = urls.map { it.tidalId() }.asFlow(),
                         type = Type.fromValue(type) ?: Type.SONG,
                     )
                     contentToDownload = dl || contentToDownload

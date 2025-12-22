@@ -301,7 +301,12 @@ class DownloadService(
                         val groups = metadataService.getPlaylistsByIds(idChunk, true, user).map { playlist ->
                             IdsGroup(
                                 playlist.id,
-                                playlist.sharedTracks.map { Pair(it.addedAt?.toInstant()?.toEpochMilli() ?: UUID.randomUUID().mostSignificantBits, it.id) },
+                                playlist.sharedTracks.map {
+                                    Pair(
+                                        it.addedAt?.toInstant()?.toEpochMilli()
+                                            ?: UUID.randomUUID().mostSignificantBits, it.id
+                                    )
+                                },
                                 playlist
                             )
                         }
@@ -478,22 +483,27 @@ class DownloadService(
         return ApplicationScope.scope.async {
             val latestFavSync = favSyncService.getLatestFavSync(user, SyncService.SyncServiceType.tidal)
 
-            val ids = service.getLikedSongs { songs ->
+            val idMap = ConcurrentHashMap<String, SyncService.LikedSong>()
+
+            val songs = service.getLikedSongs { songs ->
                 latestFavSync == null || songs.none { it.addedAt < latestFavSync.syncedAt }
             }
                 .filter { song -> latestFavSync == null || song.addedAt > latestFavSync.syncedAt }
-                .map { it.id }
+                .onEach { idMap[it.id] = it }
 
             val (_, songsToLike) = downloadTidalIds(
                 call = call,
-                ids = ids,
+                ids = songs.map { it.id },
                 type = Type.SONG,
                 filter = { !(it.isFavourite ?: false) },
                 chunkSize = 25
             ) {
-                val song = songService.byTidalTrackIds(it, user.id).firstOrNull()
-                    ?: return@downloadTidalIds
-                if (!(song.isFavourite ?: false)) songService.setLiked(song.id, user.id, true)
+                for (song in songService.byTidalTrackIds(it, user.id)) {
+                    if (!(song.isFavourite ?: false)) {
+                        val addedAt = idMap[song.originalUrl.tidalId()]?.addedAt?.toInstant()
+                        songService.setLiked(song.id, user.id, true, addedAt)
+                    }
+                }
             }
 
             logger.info("[${user.username}] Liking existing songs")

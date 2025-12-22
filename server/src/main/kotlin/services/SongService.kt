@@ -94,12 +94,13 @@ class SongService : Service() {
         additionalConstraint = { UserSongTable.userId eq userId }
     )
 
-    suspend fun setLiked(id: UUID, userId: UUID, liked: Boolean): UserSong? {
+    suspend fun setLiked(id: UUID, userId: UUID, liked: Boolean, addedAt: Instant? = null): UserSong? {
         dbQuery {
             val inserted = UserSongTable.insertIgnore {
                 it[UserSongTable.songId] = id
                 it[UserSongTable.userId] = userId
                 it[UserSongTable.isFavourite] = liked
+                if (addedAt != null) it[UserSongTable.updatedAt] = addedAt.toEpochMilli()
             }.insertedCount == 1
 
             if (!inserted) {
@@ -107,7 +108,7 @@ class SongService : Service() {
                     UserSongTable.userId eq userId and (UserSongTable.songId eq id)
                 }) {
                     it[UserSongTable.isFavourite] = liked
-                    it[UserSongTable.updatedAt] = Instant.now().toEpochMilli()
+                    it[UserSongTable.updatedAt] = (addedAt ?: Instant.now()).toEpochMilli()
                 }
             }
         }

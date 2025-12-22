@@ -1,5 +1,6 @@
 package dev.dertyp.core
 
+import io.ktor.http.*
 import java.util.*
 
 fun String.toUUIDOrNull(): UUID? {
@@ -12,3 +13,4 @@ fun String.toUUIDOrNull(): UUID? {
 
 fun String.capitalize(): String = replaceFirstChar { it.lowercase() }
 fun String.oneLine(joiner: String = ""): String = split(Regex("[\n\r]")).joinToString(joiner)
+fun String.tidalId(): String = Url(this).tidalId()
