@@ -445,9 +445,11 @@ class SongService : Service() {
             )
             .withDistinct()
             .where { SongTable.originalUrl inList songs.map { it.originalUrl } }
-            //.where { SongTable.title inList songs.map { it.title } }
-            //.andWhere { SongTable.trackNumber inList songs.map { it.trackNumber } }
-            //.andWhere { SongTable.discNumber inList songs.map { it.discNumber } }
+            .orWhere {
+                (SongTable.title inList songs.map { it.title }) and
+                        (SongTable.trackNumber inList songs.map { it.trackNumber }) and
+                        (SongTable.discNumber inList songs.map { it.discNumber })
+            }
             .toList()
 
         val existingSongMap = mutableMapOf<InsertableSong, UUID>()
@@ -457,13 +459,16 @@ class SongService : Service() {
                 val albumName = row[AlbumTable.name]
                 val songId = row[SongTable.id].value
 
-                /*val metadataMatch = row[SongTable.title] == song.title &&
-                        row[SongTable.trackNumber] == song.trackNumber &&
-                        row[SongTable.discNumber] == song.discNumber &&
-                        row[SongTable.explicit] == song.explicit &&
-                        albumName == song.album.name*/
+                val metadataMatch = row[SongTable.originalUrl] == song.originalUrl || (
+                        row[SongTable.originalUrl].isBlank() &&
+                                row[SongTable.title] == song.title &&
+                                row[SongTable.trackNumber] == song.trackNumber &&
+                                row[SongTable.discNumber] == song.discNumber &&
+                                row[SongTable.explicit] == song.explicit &&
+                                albumName == song.album.name
+                        )
 
-                if (row[SongTable.originalUrl] == song.originalUrl) {
+                if (metadataMatch) {
                     existingSongMap[song] = songId
                     return@firstOrNull true
                 }
