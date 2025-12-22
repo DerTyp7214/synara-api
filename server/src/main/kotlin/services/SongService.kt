@@ -486,7 +486,8 @@ class SongService : Service() {
                 it.name,
                 it.releaseDate,
                 it.songCount,
-                it.artists.sorted().joinToString(", ")
+                it.artists.sorted().joinToString(", "),
+                it.originalId
             )
         }
         val uniqueCoverHashes = songs.map { it.coverHash }.distinct()
