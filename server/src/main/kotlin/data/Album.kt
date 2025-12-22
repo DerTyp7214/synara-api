@@ -20,6 +20,7 @@ data class Album(
     val totalSize: Long = 0,
     @Serializable(with = UUIDSerializer::class)
     val coverId: UUID? = null,
+    val originalId: String? = null,
 )
 
 @Serializable
@@ -30,6 +31,7 @@ data class InsertableAlbum(
     val releaseDate: LocalDate? = null,
     val songCount: Int = 0,
     val coverHash: String? = null,
+    val originalId: String? = null,
 ) {
     override fun equals(other: Any?): Boolean {
         return if (other is InsertableAlbum) contentEquals(other) else false
@@ -40,6 +42,7 @@ data class InsertableAlbum(
         result = 31 * result + name.hashCode()
         result = 31 * result + artists.sorted().joinToString(", ").hashCode()
         result = 31 * result + (releaseDate?.hashCode() ?: 0)
+        result = 31 * result + (originalId?.hashCode() ?: 0)
         return result
     }
 }

@@ -292,16 +292,16 @@ class DownloadService(
 
         ids.chunked(chunkSize).buffer(UNLIMITED).collect { idChunk ->
             val filteredIdChunk = when (type) {
-                Type.SONG -> IdsWrapper.from(type, idChunk.associateBy { 0 })
-                Type.ALBUM -> IdsWrapper.from(type, idChunk.associateBy { 0 })
-                Type.ARTIST -> IdsWrapper.from(type, idChunk.associateBy { 0 })
+                Type.SONG -> IdsWrapper.from(type, idChunk.associateBy { UUID.randomUUID().mostSignificantBits })
+                Type.ALBUM -> IdsWrapper.from(type, idChunk.associateBy { UUID.randomUUID().mostSignificantBits })
+                Type.ARTIST -> IdsWrapper.from(type, idChunk.associateBy { UUID.randomUUID().mostSignificantBits })
                 Type.PLAYLIST -> {
                     if (metadataService == null) IdsWrapper.from(type, emptyMap())
                     else {
                         val groups = metadataService.getPlaylistsByIds(idChunk, true, user).map { playlist ->
                             IdsGroup(
                                 playlist.id,
-                                playlist.sharedTracks.map { Pair(it.addedAt?.toInstant()?.toEpochMilli() ?: 0, it.id) },
+                                playlist.sharedTracks.map { Pair(it.addedAt?.toInstant()?.toEpochMilli() ?: UUID.randomUUID().mostSignificantBits, it.id) },
                                 playlist
                             )
                         }
@@ -311,7 +311,7 @@ class DownloadService(
             }
 
             if (filteredIdChunk.type != Type.PLAYLIST)
-                logger.info("[${user.username}] Checking for ${filteredIdChunk.size()} liked ${type.value}s")
+                logger.info("[${user.username}] Checking for ${filteredIdChunk.size()} ${type.value}s")
 
             val existingSongs = if (filteredIdChunk.fetchExistingSongs()) songService.byTidalTrackIds(
                 filteredIdChunk.getIds().toList(),

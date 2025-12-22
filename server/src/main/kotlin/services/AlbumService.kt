@@ -1,6 +1,6 @@
 package dev.dertyp.services
 
-import dev.dertyp.core.Quadruple
+import dev.dertyp.core.Quintuple
 import dev.dertyp.core.filterValueNotNull
 import dev.dertyp.core.rankedSearchQuery
 import dev.dertyp.data.Album
@@ -39,7 +39,8 @@ class AlbumService : Service() {
                 artists = listOf(),
                 songCount = resultRow[AlbumTable.songCount],
                 totalDuration = -1,
-                coverId = resultRow[AlbumTable.cover]?.value
+                coverId = resultRow[AlbumTable.cover]?.value,
+                originalId = resultRow[AlbumTable.originalId],
             )
         }
 
@@ -228,16 +229,18 @@ class AlbumService : Service() {
         val uniqueCoverHashed = albums.distinctBy { it.coverHash }.mapNotNull { it.coverHash }
         val uniqueAlbumMetadata =
             albums.distinctBy {
-                Quadruple(
+                Quintuple(
                     it.name,
                     it.releaseDate,
                     it.songCount,
-                    it.artists.sorted().joinToString(", ")
+                    it.artists.sorted().joinToString(", "),
+                    it.originalId
                 )
             }
         val uniqueAlbumNames = uniqueAlbumMetadata.map { it.name }
         val uniqueSongCounts = uniqueAlbumMetadata.map { it.songCount }
         val uniqueReleaseDates = uniqueAlbumMetadata.map { getISOFromDate(it.releaseDate) }
+        val uniqueOriginalIds = uniqueAlbumMetadata.map { it.originalId }
         val allRequiredArtistNames = albums.flatMap { it.artists }.distinct()
 
         val artistIdMap: Map<String, UUID> = artistService.getOrBulkCreate(allRequiredArtistNames)
@@ -247,6 +250,7 @@ class AlbumService : Service() {
             where { AlbumTable.name inList uniqueAlbumNames }
             andWhere { AlbumTable.releaseDate inList uniqueReleaseDates }
             andWhere { AlbumTable.songCount inList uniqueSongCounts }
+            andWhere { (AlbumTable.originalId inList uniqueOriginalIds) or (AlbumTable.originalId eq null) }
         }.data
 
         val potentialAlbumIds = potentialAlbumRows.map { it.id }.toSet()
@@ -262,34 +266,38 @@ class AlbumService : Service() {
             .groupBy({ it[AlbumArtistTable.albumId].value }, { it[AlbumArtistTable.artistId].value })
             .mapValues { (_, artistIds) -> artistIds.toSet() }
 
-        val finalMatchMap = mutableMapOf<Quadruple<String, String?, Int, String>, UUID>()
+        val finalMatchMap = mutableMapOf<Quintuple<String, String?, Int, String, String?>, UUID>()
 
         for (row in potentialAlbumRows) {
             val albumId = row.id
             val albumArtists = artistsByPotentialAlbumId[albumId] ?: emptySet()
 
             val inputAlbum = albums.firstOrNull {
-                it.name == row.name && getISOFromDate(it.releaseDate) == getISOFromDate(row.releaseDate)
+                it.name == row.name &&
+                        getISOFromDate(it.releaseDate) == getISOFromDate(row.releaseDate)
+                        && (it.originalId == null || it.originalId == row.originalId)
             }
 
             val requiredArtistIdsForInput = inputAlbum?.artists?.mapNotNull { artistIdMap[it] }?.toSet() ?: emptySet()
 
             if (albumArtists == requiredArtistIdsForInput) {
-                finalMatchMap[Quadruple(
+                finalMatchMap[Quintuple(
                     row.name,
                     getISOFromDate(row.releaseDate),
                     row.songCount,
-                    row.artists.joinToString(", ") { it.name }
+                    row.artists.joinToString(", ") { it.name },
+                    row.originalId
                 )] = albumId
             }
         }
 
         val newAlbumsToInsert = albums.filter { album ->
-            val key = Quadruple(
+            val key = Quintuple(
                 album.name,
                 getISOFromDate(album.releaseDate),
                 album.songCount,
-                album.artists.joinToString(", ")
+                album.artists.joinToString(", "),
+                album.originalId
             )
             !finalMatchMap.containsKey(key)
         }.distinctBy { Triple(it.name, it.releaseDate, it.songCount) }
@@ -301,6 +309,7 @@ class AlbumService : Service() {
                     this[AlbumTable.releaseDate] = getISOFromDate(album.releaseDate)
                     this[AlbumTable.songCount] = album.songCount
                     this[AlbumTable.cover] = imageMap[album.coverHash]
+                    this[AlbumTable.originalId] = album.originalId
                 }
             }
         } else {
@@ -330,22 +339,24 @@ class AlbumService : Service() {
         }
 
         val newAlbumIdLookupMap = newAlbumIdMap.entries.associate { (album, id) ->
-            Quadruple(
+            Quintuple(
                 album.name,
                 getISOFromDate(album.releaseDate),
                 album.songCount,
-                album.artists.joinToString(", ")
+                album.artists.joinToString(", "),
+                album.originalId
             ) to id
         }
 
         val finalCombinedIdMap = finalMatchMap + newAlbumIdLookupMap
 
         return albums.associateWith { album ->
-            val key = Quadruple(
+            val key = Quintuple(
                 album.name,
                 getISOFromDate(album.releaseDate),
                 album.songCount,
-                album.artists.joinToString(", ")
+                album.artists.joinToString(", "),
+                album.originalId
             )
             finalCombinedIdMap[key]
         }.filterValueNotNull()

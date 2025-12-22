@@ -440,6 +440,7 @@ class SongService : Service() {
                 SongTable.trackNumber,
                 SongTable.discNumber,
                 SongTable.explicit,
+                SongTable.originalUrl,
                 AlbumTable.name
             )
             .withDistinct()
@@ -456,13 +457,13 @@ class SongService : Service() {
                 val albumName = row[AlbumTable.name]
                 val songId = row[SongTable.id].value
 
-                val metadataMatch = row[SongTable.title] == song.title &&
+                /*val metadataMatch = row[SongTable.title] == song.title &&
                         row[SongTable.trackNumber] == song.trackNumber &&
                         row[SongTable.discNumber] == song.discNumber &&
                         row[SongTable.explicit] == song.explicit &&
-                        albumName == song.album.name
+                        albumName == song.album.name*/
 
-                if (metadataMatch) {
+                if (row[SongTable.originalUrl] == song.originalUrl) {
                     existingSongMap[song] = songId
                     return@firstOrNull true
                 }

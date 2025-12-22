@@ -262,12 +262,18 @@ class Indexer(
                                 null
                             }
 
+                            val originalId = storageService.tracksPath?.let { tracksPath ->
+                                if (file.isInside(tracksPath)) file.parent.name
+                                else null
+                            }
+
                             val album = InsertableAlbum(
                                 name = name,
                                 artists = artists,
                                 releaseDate = releaseDate,
                                 coverHash = hash,
-                                songCount = songCount
+                                songCount = songCount,
+                                originalId = originalId,
                             )
 
                             val albumList = map.computeIfAbsent(album) { Collections.synchronizedList(mutableListOf()) }
