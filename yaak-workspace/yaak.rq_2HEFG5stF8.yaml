@@ -2,7 +2,7 @@ type: http_request
 model: http_request
 id: rq_2HEFG5stF8
 createdAt: 2025-10-14T19:25:16.449964932
-updatedAt: 2025-12-21T06:55:39.489164984
+updatedAt: 2025-12-22T02:14:35.070650146
 workspaceId: wk_9dbKacQT4H
 folderId: fl_NXkRVdWsW4
 authentication: {}
@@ -11,20 +11,8 @@ body:
   text: |-
     {
       "urls": [
-        "https://tidal.com/playlist/7979ffa0-52a4-4598-96ec-0d605b4c3745",
-        "https://tidal.com/playlist/5f2a6201-0f47-49c5-b22d-c832c7820a34",
-        "https://tidal.com/playlist/4197ee17-50f6-48f4-902b-3f43a6c5a4c8",
-        "https://tidal.com/playlist/f05f101b-4d36-4696-9e21-a53b2d9cdefd",
-        "https://tidal.com/playlist/c8a1d209-db74-463d-ac6a-60d48d9b40a4",
-        "https://tidal.com/playlist/9db99687-e10d-4580-9358-da589d836914",
-        "https://tidal.com/playlist/5b3adaf2-b4e0-4018-b4cc-423aa8c5eed4",
-        "https://tidal.com/playlist/32a6d01c-7206-43eb-835e-d32e966f2f67",
-        "https://tidal.com/playlist/8148f7b0-62b8-4734-a635-074d1b13f00a",
-        "https://tidal.com/playlist/bf076733-79c0-4d44-a68d-b01bc8afca2c",
-        "https://tidal.com/playlist/1a47099c-6802-4c60-bc1d-c019cd7abe29",
-        "https://tidal.com/playlist/f4768753-d1f9-4469-9b9a-85c629cd185f",
-        "https://tidal.com/playlist/6c9bfbbe-8147-4b2a-832e-baec0af89b4e",
-        "https://tidal.com/playlist/fec1dcec-bbe3-4890-8789-fa0a0484991c"
+        "https://tidal.com/playlist/6176d070-a6ea-446d-bec8-b34654edcd6f",
+        "https://tidal.com/playlist/fb13ab60-7211-4584-a5a3-669eff2b4357"
       ]
     }
 bodyType: application/json

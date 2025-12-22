@@ -12,12 +12,10 @@ import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.server.application.*
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.asFlow
-import kotlinx.coroutines.flow.emptyFlow
-import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.flow.*
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import java.time.LocalDate
@@ -205,9 +203,25 @@ abstract class MetadataService(
         val modifiedAt: OffsetDateTime? = null,
         val images: List<Image>,
     ) : BaseMetadata() {
-        private val materializedTracks by lazy {
-            ApplicationScope.scope.async {
-                tracks.toList()
+        private val cache = mutableListOf<Track>()
+        private var collectionJob: Deferred<List<Track>>? = null
+
+        private fun getOrStartCollection(): Deferred<List<Track>> {
+            return synchronized(this) {
+                collectionJob ?: ApplicationScope.scope.async {
+                    tracks.onEach { track ->
+                        synchronized(cache) { cache.add(track) }
+                    }.toList()
+                }.also { collectionJob = it }
+            }
+        }
+
+        val sharedTracks: Flow<Track> = flow {
+            val job = getOrStartCollection()
+            val currentCache = synchronized(cache) { cache.toList() }
+            currentCache.forEach { track -> emit(track) }
+            tracks.drop(currentCache.size).collect { track ->
+                emit(track)
             }
         }
 
@@ -216,7 +230,7 @@ abstract class MetadataService(
                 id = id,
                 name = name,
                 description = description,
-                tracks = materializedTracks.await(),
+                tracks = getOrStartCollection().await(),
                 trackCount = trackCount,
                 createdAt = createdAt,
                 modifiedAt = modifiedAt,

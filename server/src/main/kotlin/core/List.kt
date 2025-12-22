@@ -68,6 +68,12 @@ fun List<MetadataService.Playlist>.toFlow(): Flow<MetadataService.FlowPlaylist> 
 @Suppress("UNCHECKED_CAST")
 fun <K, V> List<Pair<K, V?>>.filterValueNotNull(): List<Pair<K, V>> = filter { (_, v) -> v != null } as List<Pair<K, V>>
 
+@Suppress("UNCHECKED_CAST")
+fun <K, V> List<Pair<K?, V>>.filterKeyNotNull(): List<Pair<K, V>> = filter { (k, _) -> k != null } as List<Pair<K, V>>
+
+@Suppress("UNCHECKED_CAST")
+fun <K, V> List<Pair<K?, V?>>.filterNotNull(): List<Pair<K, V>> = filter { (k, v) -> k != null && v != null } as List<Pair<K, V>>
+
 val <K, V> List<Pair<K, V>>.keys
     get() = map { it.first }
 val <K, V> List<Pair<K, V>>.values

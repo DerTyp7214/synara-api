@@ -2,7 +2,7 @@ type: http_request
 model: http_request
 id: rq_yndJt4T9ie
 createdAt: 2025-10-14T19:25:16.451085805
-updatedAt: 2025-12-21T00:49:03.981949395
+updatedAt: 2025-12-22T02:16:06.556619758
 workspaceId: wk_9dbKacQT4H
 folderId: fl_m5uDzfqeJa
 authentication: {}
@@ -30,9 +30,9 @@ urlParameters:
   id: cgkrEZQMwH
 - enabled: true
   name: :query
-  value: hans zimmer
+  value: instrumental
   id: Qwg9Z97j6U
 - enabled: true
   name: ''
   value: ''
-  id: vrFPBzT6cc
+  id: MySuIQRnfc

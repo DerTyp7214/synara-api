@@ -299,7 +299,7 @@ class DownloadService(
                         val groups = metadataService.getPlaylistsByIds(idChunk, true, user).map { playlist ->
                             IdsGroup(
                                 playlist.id,
-                                playlist.tracks.map { Pair(it.addedAt?.toInstant()?.toEpochMilli() ?: 0, it.id) },
+                                playlist.sharedTracks.map { Pair(it.addedAt?.toInstant()?.toEpochMilli() ?: 0, it.id) },
                                 playlist
                             )
                         }
@@ -356,57 +356,63 @@ class DownloadService(
                         } else null
                     }
 
-                    idGroup.ids
-                        .buffer(100)
-                        .chunked(20)
-                        .map { ids ->
-                            val existingSongs = songService.byTidalTrackIds(
-                                ids.map { it.second },
-                                user.id
-                            )
-                            val existingUrls = existingSongs.map { track -> track.originalUrl }
+                    idGroup.metadata?.let { playlist ->
+                        if (playlist is MetadataService.FlowPlaylist) {
+                            playlist.sharedTracks
+                                .buffer(100)
+                                .chunked(20)
+                                .map { tracks ->
+                                    val existingSongs = songService.byTidalTrackIds(
+                                        tracks.map { it.id },
+                                        user.id
+                                    )
+                                    val existingUrls = existingSongs.map { track -> track.originalUrl }
 
-                            val songIds = ids.map { (added, id) ->
-                                added to existingSongs.find { it.originalUrl.endsWith("/$id") }?.id
-                            }.filterValueNotNull()
+                                    val songIds = tracks.map { track ->
+                                        track.addedAt?.toInstant()
+                                            ?.toEpochMilli() to existingSongs.find { it.originalUrl.endsWith("/${track.id}") }?.id
+                                    }.filterNotNull()
 
-                            if (playlistId != null) userPlaylistService.addToPlaylist(
-                                playlistId,
-                                songIds
-                            ).let { result ->
-                                logger.info("Added ${result.size} songs to playlist $playlistId")
-                            }
-
-                            ids.filter { (_, id) ->
-                                existingUrls.none { url ->
-                                    url.endsWith("/$id")
-                                }
-                            }.asFlow()
-                        }
-                        .flattenConcat()
-                        .chunked(20)
-                        .collect { idChunk ->
-                            addToQueue(
-                                UrlDownloadQueueEntry(
-                                    urls = idChunk
-                                        .map { (_, id) -> "https://tidal.com/track/${id}" }
-                                        .toMutableList(),
-                                    ids = idChunk.toMap().values,
-                                    byUser = user.id,
-                                    maxRetries = idChunk.size,
-                                    type = Type.SONG
-                                ) {
-                                    val songs = songService.byTidalTrackIds(idChunk.toMap().values, user.id)
-                                    val songIds = idChunk.map { (added, id) ->
-                                        added to songs.find { it.originalUrl.endsWith("/$id") }?.id
-                                    }.filterValueNotNull()
                                     if (playlistId != null) userPlaylistService.addToPlaylist(
                                         playlistId,
                                         songIds
+                                    ).let { result ->
+                                        logger.info("Added ${result.size} songs to playlist $playlistId")
+                                    }
+
+                                    tracks.filter { track ->
+                                        existingUrls.none { url ->
+                                            url.endsWith("/${track.id}")
+                                        }
+                                    }.asFlow()
+                                }
+                                .flattenConcat()
+                                .chunked(20)
+                                .collect { trackChunk ->
+                                    addToQueue(
+                                        UrlDownloadQueueEntry(
+                                            urls = trackChunk
+                                                .map { track -> "https://tidal.com/track/${track.id}" }
+                                                .toMutableList(),
+                                            ids = trackChunk.map { it.id },
+                                            byUser = user.id,
+                                            maxRetries = trackChunk.size,
+                                            type = Type.SONG
+                                        ) {
+                                            val songs = songService.byTidalTrackIds(trackChunk.map { it.id }, user.id)
+                                            val songIds = trackChunk.map { track ->
+                                                track.addedAt?.toInstant()
+                                                    ?.toEpochMilli() to songs.find { it.originalUrl.endsWith("/${track.id}") }?.id
+                                            }.filterNotNull()
+                                            if (playlistId != null) userPlaylistService.addToPlaylist(
+                                                playlistId,
+                                                songIds
+                                            )
+                                        }
                                     )
                                 }
-                            )
                         }
+                    }
                 }
             } else {
                 downloadStageMutex.withLock {

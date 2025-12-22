@@ -11,6 +11,7 @@ import dev.dertyp.getISOFromDate
 import dev.dertyp.services.AlbumService.Companion.calculateAlbumStats
 import dev.dertyp.services.AlbumService.Companion.mapAlbum
 import dev.dertyp.services.ArtistService.Companion.mapArtist
+import dev.dertyp.services.metadata.MetadataService
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -187,6 +188,17 @@ class SongService : Service() {
             }
         }.data
 
+    suspend fun byTidalTracks(tracks: List<MetadataService.Track>, userId: UUID): List<UserSong> =
+        querySongs<UserSong>(0, Int.MAX_VALUE, true, { userSong(userId) }) {
+            where {
+                tracks.map { track ->
+                    (SongTable.originalUrl eq "https://tidal.com/browse/track/${track.id}") or
+                            ((SongTable.title eq track.title) and
+                                    (SongTable.duration eq track.duration.inWholeMilliseconds))
+                }.reduce { acc, op -> acc or op }
+            }
+        }.data
+
     suspend fun rankedSearch(
         page: Int,
         pageSize: Int,
@@ -260,7 +272,7 @@ class SongService : Service() {
                 logger.info(
                     "File is a symbolic link pointing to: ${
                         file.toPath().readSymbolicLink().absolutePathString()
-                    }"
+                    } (${file.delete()})"
                 )
             if (file.exists())
                 logger.info("Trying to delete ${file.absolutePath} (${file.delete()})")
@@ -431,9 +443,10 @@ class SongService : Service() {
                 AlbumTable.name
             )
             .withDistinct()
-            .where { SongTable.title inList songs.map { it.title } }
-            .andWhere { SongTable.trackNumber inList songs.map { it.trackNumber } }
-            .andWhere { SongTable.discNumber inList songs.map { it.discNumber } }
+            .where { SongTable.originalUrl inList songs.map { it.originalUrl } }
+            //.where { SongTable.title inList songs.map { it.title } }
+            //.andWhere { SongTable.trackNumber inList songs.map { it.trackNumber } }
+            //.andWhere { SongTable.discNumber inList songs.map { it.discNumber } }
             .toList()
 
         val existingSongMap = mutableMapOf<InsertableSong, UUID>()
@@ -522,16 +535,6 @@ class SongService : Service() {
             .awaitAll()
             .flatten()
             .toMap()
-
-        try {
-            dbQuery {
-                for ((song, id) in existingSongMap) {
-                    SongTable.update({ SongTable.id eq id }, 1) {
-                        it[SongTable.originalUrl] = song.originalUrl
-                    }
-                }
-            }
-        } catch (_: Throwable) {}
 
         val newSongs = songs.filter { it !in existingSongMap.keys }
 
