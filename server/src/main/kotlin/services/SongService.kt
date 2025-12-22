@@ -547,6 +547,7 @@ class SongService : Service() {
                 listOf(
                     song.title,
                     song.album.name,
+                    song.album.originalId,
                     song.trackNumber,
                     song.discNumber,
                     song.duration,

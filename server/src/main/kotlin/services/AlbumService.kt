@@ -318,7 +318,7 @@ class AlbumService : Service() {
 
         val newAlbumIdMap: Map<InsertableAlbum, UUID> = newRows.associate { row ->
             val matchedAlbum = newAlbumsToInsert.first {
-                it.name == row[AlbumTable.name] && getISOFromDate(it.releaseDate) == row[AlbumTable.releaseDate]
+                it.name == row[AlbumTable.name] && getISOFromDate(it.releaseDate) == row[AlbumTable.releaseDate] && (it.originalId == null || it.originalId == row[AlbumTable.originalId])
             }
             matchedAlbum to row[AlbumTable.id].value
         }
