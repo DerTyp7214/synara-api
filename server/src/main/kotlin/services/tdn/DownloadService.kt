@@ -1,27 +1,24 @@
 package dev.dertyp.services.tdn
 
-import dev.dertyp.ApiClient
 import dev.dertyp.core.*
-import dev.dertyp.data.InsertableImage
-import dev.dertyp.data.InsertablePlaylist
 import dev.dertyp.data.User
 import dev.dertyp.data.UserSong
 import dev.dertyp.serializers.UUIDSerializer
-import dev.dertyp.services.*
+import dev.dertyp.services.FavSyncService
+import dev.dertyp.services.Service
+import dev.dertyp.services.SongService
 import dev.dertyp.services.metadata.MetadataService
 import dev.dertyp.services.sync.SyncService
 import io.ktor.server.engine.*
 import io.ktor.server.routing.*
 import io.ktor.utils.io.*
 import kotlinx.coroutines.*
-import kotlinx.coroutines.channels.Channel.Factory.UNLIMITED
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
-import org.koin.core.component.inject
 import java.time.Instant
 import java.util.*
 import java.util.concurrent.ConcurrentHashMap
@@ -290,32 +287,10 @@ class DownloadService(
         val downloadStage = mutableListOf<String>()
         val downloadStageMutex = Mutex()
 
-        ids.chunked(chunkSize).buffer(UNLIMITED).collect { idChunk ->
-            val filteredIdChunk = when (type) {
-                Type.SONG -> IdsWrapper.from(type, idChunk.associateBy { UUID.randomUUID().mostSignificantBits })
-                Type.ALBUM -> IdsWrapper.from(type, idChunk.associateBy { UUID.randomUUID().mostSignificantBits })
-                Type.ARTIST -> IdsWrapper.from(type, idChunk.associateBy { UUID.randomUUID().mostSignificantBits })
-                Type.PLAYLIST -> {
-                    if (metadataService == null) IdsWrapper.from(type, emptyMap())
-                    else {
-                        val groups = metadataService.getPlaylistsByIds(idChunk, true, user).map { playlist ->
-                            IdsGroup(
-                                playlist.id,
-                                playlist.sharedTracks.map {
-                                    Pair(
-                                        it.addedAt?.toInstant()?.toEpochMilli()
-                                            ?: UUID.randomUUID().mostSignificantBits, it.id
-                                    )
-                                },
-                                playlist
-                            )
-                        }
-                        IdsWrapper(type, groups)
-                    }
-                }
-            }
+        ids.chunked(chunkSize).buffer(chunkSize * 3).collect { idChunk ->
+            val filteredIdChunk = type.getWrapper(metadataService, user, idChunk)
 
-            if (filteredIdChunk.type != Type.PLAYLIST)
+            if (filteredIdChunk.logSize())
                 logger.info("[${user.username}] Checking for ${filteredIdChunk.size()} ${type.value}s")
 
             val existingSongs = if (filteredIdChunk.fetchExistingSongs()) songService.byTidalTrackIds(
@@ -327,124 +302,15 @@ class DownloadService(
 
             result.addAll(existingSongs.filter(filter))
 
-            if (filteredIdChunk.type == Type.PLAYLIST) {
-                val userPlaylistService by inject<UserPlaylistService>()
-                val imageService by inject<ImageService>()
-
-                filteredIdChunk.idGroups.buffer(2).collect { idGroup ->
-                    val playlistId = idGroup.metadata?.let { playlist ->
-                        if (playlist is MetadataService.FlowPlaylist) {
-                            val image = playlist.images.largest
-                            val imageBytes = ApiClient.instance.safeGet<ByteArray>(image.url)
-
-                            val imageHash = imageBytes?.let { imageBytes ->
-                                val hash = imageBytes.sha256()
-                                imageService.createBatch(
-                                    listOf(
-                                        InsertableImage(
-                                            data = imageBytes,
-                                            imageHash = hash,
-                                            origin = image.url
-                                        )
-                                    )
-                                )
-                                hash
-                            }
-
-                            userPlaylistService.getOrAddPlaylist(
-                                user, idGroup.id, InsertablePlaylist(
-                                    name = playlist.name,
-                                    description = playlist.description,
-                                    songPaths = emptyList(),
-                                    imageHash = imageHash,
-                                    origin = "https://tidal.com/playlist/${playlist.id}"
-                                )
-                            )
-                        } else null
-                    }
-
-                    idGroup.metadata?.let { playlist ->
-                        if (playlist is MetadataService.FlowPlaylist) {
-                            playlist.sharedTracks
-                                .buffer(100)
-                                .chunked(20)
-                                .map { tracks ->
-                                    val existingSongs = songService.byTidalTrackIds(
-                                        tracks.map { it.id },
-                                        user.id
-                                    )
-                                    val existingUrls = existingSongs.map { track -> track.originalUrl }
-
-                                    val songIds = tracks.map { track ->
-                                        track.addedAt?.toInstant()
-                                            ?.toEpochMilli() to existingSongs.find { it.originalUrl.endsWith("/${track.id}") }?.id
-                                    }.filterNotNull()
-
-                                    if (playlistId != null) userPlaylistService.addToPlaylist(
-                                        playlistId,
-                                        songIds
-                                    ).let { result ->
-                                        logger.info("Added ${result.size} songs to playlist $playlistId")
-                                    }
-
-                                    tracks.filter { track ->
-                                        existingUrls.none { url ->
-                                            url.endsWith("/${track.id}")
-                                        }
-                                    }.asFlow()
-                                }
-                                .flattenConcat()
-                                .chunked(20)
-                                .collect { trackChunk ->
-                                    addToQueue(
-                                        UrlDownloadQueueEntry(
-                                            urls = trackChunk
-                                                .map { track -> "https://tidal.com/track/${track.id}" }
-                                                .toMutableList(),
-                                            ids = trackChunk.map { it.id },
-                                            byUser = user.id,
-                                            maxRetries = trackChunk.size,
-                                            type = Type.SONG
-                                        ) {
-                                            val songs = songService.byTidalTrackIds(trackChunk.map { it.id }, user.id)
-                                            val songIds = trackChunk.map { track ->
-                                                track.addedAt?.toInstant()
-                                                    ?.toEpochMilli() to songs.find { it.originalUrl.endsWith("/${track.id}") }?.id
-                                            }.filterNotNull()
-                                            if (playlistId != null) userPlaylistService.addToPlaylist(
-                                                playlistId,
-                                                songIds
-                                            )
-                                        }
-                                    )
-                                }
-                        }
-                    }
-                }
-            } else {
-                downloadStageMutex.withLock {
-                    downloadStage.addAll(filteredIdChunk.filter { (_, id) ->
-                        existingUrls.none {
-                            it.split("/").contains(id)
-                        }
-                    }.map { it.second }.toList())
-                }
-
-                val chunkSize = 20
-                while (downloadStageMutex.withLock { downloadStage.size > chunkSize }) {
-                    contentToDownload = true
-                    val urls = downloadStageMutex.withLock { downloadStage.splice(0, chunkSize) }
-                    addToQueue(
-                        UrlDownloadQueueEntry(
-                            urls = urls.map { "https://tidal.com/${filteredIdChunk.type.value}/${it}" }.toMutableList(),
-                            ids = urls,
-                            byUser = user.id,
-                            type = filteredIdChunk.type
-                        ) {
-                            callback(urls)
-                        })
-                }
-            }
+            contentToDownload = type.download(
+                downloadService = this,
+                wrapper = filteredIdChunk,
+                user = user,
+                existingUrls = existingUrls,
+                downloadStage = downloadStage,
+                downloadStageMutex = downloadStageMutex,
+                callback = callback
+            ) || contentToDownload
         }
 
         if (downloadStage.isNotEmpty()) {
@@ -549,6 +415,11 @@ data class IdsWrapper(
 
     fun fetchExistingSongs() = when (type) {
         Type.SONG -> true
+        else -> false
+    }
+
+    fun logSize() = when (type) {
+        Type.SONG, Type.ARTIST -> true
         else -> false
     }
 
