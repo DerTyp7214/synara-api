@@ -444,7 +444,7 @@ class SongService : Service() {
                 AlbumTable.name
             )
             .withDistinct()
-            .where { SongTable.originalUrl inList songs.map { it.originalUrl } }
+            .where { SongTable.originalUrl inList songs.map { it.originalUrl }.filter { it.isNotBlank() } }
             .orWhere {
                 (SongTable.title inList songs.map { it.title }) and
                         (SongTable.trackNumber inList songs.map { it.trackNumber }) and
@@ -459,14 +459,15 @@ class SongService : Service() {
                 val albumName = row[AlbumTable.name]
                 val songId = row[SongTable.id].value
 
-                val metadataMatch = row[SongTable.originalUrl] == song.originalUrl || (
-                        row[SongTable.originalUrl].isBlank() &&
-                                row[SongTable.title] == song.title &&
-                                row[SongTable.trackNumber] == song.trackNumber &&
-                                row[SongTable.discNumber] == song.discNumber &&
-                                row[SongTable.explicit] == song.explicit &&
-                                albumName == song.album.name
-                        )
+                val metadataMatch =
+                    (song.originalUrl.isNotBlank() && row[SongTable.originalUrl] == song.originalUrl) || (
+                            row[SongTable.originalUrl].isBlank() &&
+                                    row[SongTable.title] == song.title &&
+                                    row[SongTable.trackNumber] == song.trackNumber &&
+                                    row[SongTable.discNumber] == song.discNumber &&
+                                    row[SongTable.explicit] == song.explicit &&
+                                    albumName == song.album.name
+                            )
 
                 if (metadataMatch) {
                     existingSongMap[song] = songId
