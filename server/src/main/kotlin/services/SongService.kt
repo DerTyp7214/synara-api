@@ -613,6 +613,16 @@ class SongService : Service() {
             }
         }
 
+        dbQuery {
+            AlbumTable.deleteWhere {
+                notExists(
+                    SongTable.select(SongTable.id).where {
+                        SongTable.albumId eq AlbumTable.id
+                    }
+                )
+            }
+        }
+
         insertedSongs.toMap()
     }
 }
