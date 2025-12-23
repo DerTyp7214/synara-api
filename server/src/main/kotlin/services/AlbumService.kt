@@ -131,15 +131,15 @@ class AlbumService : Service() {
 
         for (path in paths + links) {
             val file = File(path)
-            if (file.toPath().isSymbolicLink())
+            if (file.exists() && file.toPath().isSymbolicLink())
                 logger.info(
                     "File is a symbolic link pointing to: ${
                         file.toPath().readSymbolicLink().absolutePathString()
-                    }"
+                    } (${file.delete()})"
                 )
             if (file.exists())
                 logger.info("Trying to delete ${file.absolutePath} (${file.delete()})")
-            if (file.parentFile.list().isEmpty())
+            if (file.parentFile.exists() && file.parentFile.list().isEmpty())
                 logger.info("Trying to delete parent ${file.parentFile.absolutePath} (${file.parentFile.delete()})")
         }
 
