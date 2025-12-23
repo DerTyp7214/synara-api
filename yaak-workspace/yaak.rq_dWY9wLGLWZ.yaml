@@ -1,8 +1,8 @@
 type: http_request
 model: http_request
-id: rq_skCkNa48VN
-createdAt: 2025-12-08T21:36:29.606319238
-updatedAt: 2025-12-23T03:28:26.381528740
+id: rq_dWY9wLGLWZ
+createdAt: 2025-12-23T03:38:17.198097978
+updatedAt: 2025-12-23T03:39:26.364719945
 workspaceId: wk_9dbKacQT4H
 folderId: fl_xqrmRv49Xr
 authentication: {}
@@ -12,9 +12,9 @@ bodyType: null
 description: '[object Object]'
 headers: []
 method: GET
-name: /imageByTrackId
-sortPriority: 2000.0
-url: ${[baseUrl]}/metadata/:metadataProvider/imageUrl/byTrackId/:trackId
+name: /animatedByTrack
+sortPriority: 2000.001
+url: ${[baseUrl]}/metadata/:metadataProvider/imageUrl/animatedByTrack/:trackId
 urlParameters:
 - enabled: true
   name: :metadataProvider
@@ -26,13 +26,9 @@ urlParameters:
   id: 9xwcfzTAGG
 - enabled: true
   name: :trackId
-  value: '59279863'
+  value: f0783256-acb6-4148-a32a-4691f2a834f1
   id: 5Y2W5urkg2
-- enabled: true
-  name: animated
-  value: 'true'
-  id: W323vR4mRk
 - enabled: true
   name: ''
   value: ''
-  id: 3Ug2AbyiW5
+  id: 8SYve6AtgV

@@ -3,14 +3,12 @@ package dev.dertyp.routing
 import com.ucasoft.ktor.simpleCache.cacheOutput
 import dev.dertyp.ApiClient
 import dev.dertyp.Indexer
-import dev.dertyp.core.getMetadataProvider
-import dev.dertyp.core.safeGet
-import dev.dertyp.core.sha256
-import dev.dertyp.core.toUUIDOrNull
+import dev.dertyp.core.*
 import dev.dertyp.data.InsertableImage
 import dev.dertyp.db.ArtistTable
 import dev.dertyp.dbQuery
 import dev.dertyp.services.ImageService
+import dev.dertyp.services.SongService
 import dev.dertyp.services.metadata.MetadataService
 import dev.dertyp.services.metadata.TidalService
 import io.github.smiley4.ktoropenapi.get
@@ -26,6 +24,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
+import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.isNull
 import org.jetbrains.exposed.v1.jdbc.select
@@ -35,6 +34,13 @@ import java.util.*
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.days
+
+@Serializable
+data class AnimatedCover(
+    val url: String?,
+    val fallbackUrl: String,
+    val animated: Boolean
+)
 
 @OptIn(ExperimentalAtomicApi::class)
 fun Route.metadata() {
@@ -247,10 +253,54 @@ fun Route.metadata() {
         }
         cacheOutput(Duration.INFINITE) {
             route("/imageUrl") {
+                get("/animatedByTrack/{trackId}", {
+                    request {
+                        pathParameter<String>("trackId") {
+                            description = "The (synara) track ID."
+                        }
+                    }
+                }) {
+                    val songService by inject<SongService>()
+
+                    val metadataProviderString =
+                        call.parameters["metadataProvider"] ?: return@get call.respond(HttpStatusCode.BadRequest)
+
+                    val metadataProvider = MetadataService.Companion.MetadataType.valueOf(metadataProviderString)
+
+                    val service = MetadataService.getMetadataService(metadataProvider, environment)
+
+                    val trackId =
+                        call.parameters["trackId"]?.toUUIDOrNull() ?: return@get call.respond(HttpStatusCode.BadRequest)
+
+                    val track = songService.byId(trackId) ?: return@get call.respond(HttpStatusCode.NotFound)
+                    val tidalTrackId = track.originalUrl.tidalId()
+
+                    val albumId =
+                        service.getAlbumIdByTrackId(tidalTrackId) ?: return@get call.respond(HttpStatusCode.NotFound)
+
+                    val images = service.getImageUrlByAlbumId(albumId)
+                    if (images.isEmpty()) return@get call.respond(HttpStatusCode.NotFound)
+
+                    val animated = images.filter { it.animated }.maxByOrNull { it.height }
+                    val fallback = images.filter { !it.animated }.maxByOrNull { it.height }
+
+                    if (fallback == null) return@get call.respond(HttpStatusCode.NotFound)
+
+                    call.respond(
+                        AnimatedCover(
+                            url = animated?.url,
+                            fallbackUrl = fallback.url,
+                            animated = animated != null
+                        )
+                    )
+                }
                 get("/byTrackId/{trackId}", {
                     request {
                         pathParameter<String>("trackId") {
                             description = "The service track ID."
+                        }
+                        pathParameter<Boolean>("animated") {
+                            description = "Whether to include animated images. Defaults to false."
                         }
                     }
                 }) {
@@ -262,11 +312,12 @@ fun Route.metadata() {
                     val service = MetadataService.getMetadataService(metadataProvider, environment)
 
                     val trackId = call.parameters["trackId"] ?: return@get call.respond(HttpStatusCode.BadRequest)
+                    val animated = call.parameters["animated"]?.toBoolean() ?: false
 
                     val albumId =
                         service.getAlbumIdByTrackId(trackId) ?: return@get call.respond(HttpStatusCode.NotFound)
 
-                    val images = service.getImageUrlByAlbumId(albumId)
+                    val images = service.getImageUrlByAlbumId(albumId).filter { it.animated == animated }
                     if (images.isEmpty()) return@get call.respond(HttpStatusCode.NotFound)
 
                     val image = images.maxBy { it.height }

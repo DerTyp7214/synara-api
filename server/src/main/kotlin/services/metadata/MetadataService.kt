@@ -136,6 +136,7 @@ abstract class MetadataService(
         val url: String,
         val width: Int,
         val height: Int,
+        val animated: Boolean = url.endsWith(".mp4")
     )
 
     @Serializable
