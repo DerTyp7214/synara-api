@@ -36,6 +36,7 @@ import org.jetbrains.exposed.v1.jdbc.update
 import org.koin.ktor.ext.inject
 import java.util.*
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.days
 
 @Serializable
@@ -299,7 +300,7 @@ fun Route.metadata() {
             )
         }
 
-        cacheOutput(10.days) {
+        cacheOutput(Duration.INFINITE) {
             route("/imageUrl") {
                 get("/animatedByTrack/{trackId}", {
                     request {
