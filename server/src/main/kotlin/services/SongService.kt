@@ -27,7 +27,8 @@ import kotlin.io.path.isSymbolicLink
 import kotlin.io.path.readSymbolicLink
 
 class SongService : Service() {
-    val albumArtistAlias = ArtistTable.alias("album_artist_alias")
+    val albumArtistAlias = ArtistTable.alias("albumArtistAlias")
+    val albumArtistAliasAlias = ArtistTable.alias("albumArtistAliasAlias")
 
     companion object {
         fun mapSong(resultRow: ResultRow): Song {
@@ -211,8 +212,14 @@ class SongService : Service() {
         querySongs(page, pageSize, explicit, { userSong(userId) }) {
             rankedSearchQuery(
                 query,
-                listOf(10, 5, 5),
-                listOf(SongTable.title, ArtistTable.name, AlbumTable.name)
+                listOf(10, 5, 5, 5, 5),
+                listOf(
+                    SongTable.title,
+                    ArtistTable.name,
+                    AlbumTable.name,
+                    ArtistAliasTable.name,
+                    albumArtistAliasAlias[ArtistAliasTable.name]
+                )
             ).let { it ->
                 if (liked) it.andWhere { UserSongTable.isFavourite eq true }
                 else it
@@ -311,6 +318,7 @@ class SongService : Service() {
                 onColumn = { SongArtistTable.artistId },
                 otherColumn = { ArtistTable.id }
             )
+            .leftJoin(ArtistAliasTable)
             .leftJoin(
                 AlbumArtistTable,
                 onColumn = { AlbumTable.id },
@@ -321,10 +329,16 @@ class SongService : Service() {
                 onColumn = { AlbumArtistTable.artistId },
                 otherColumn = { albumArtistAlias[ArtistTable.id] }
             )
+            .leftJoin(
+                albumArtistAliasAlias,
+                onColumn = { AlbumArtistTable.artistId },
+                otherColumn = { albumArtistAliasAlias[ArtistAliasTable.artistId] }
+            )
             .columnSet()
             .selectAll()
             .query()
             .toList()
+            .distinctBy { it[SongTable.id] }
 
         if (rows.isEmpty()) return@dbQuery PaginatedResponse(
             data = listOf(),

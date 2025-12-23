@@ -1,15 +1,22 @@
 package dev.dertyp.services
 
-import dev.dertyp.core.rankedSearchQuery
+import dev.dertyp.ApiClient
+import dev.dertyp.core.*
 import dev.dertyp.data.Artist
+import dev.dertyp.data.InsertableImage
+import dev.dertyp.data.MergeArtists
 import dev.dertyp.data.PaginatedResponse
+import dev.dertyp.db.AlbumArtistTable
+import dev.dertyp.db.ArtistAliasTable
 import dev.dertyp.db.ArtistTable
+import dev.dertyp.db.SongArtistTable
 import dev.dertyp.dbQuery
 import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.jdbc.*
+import org.koin.core.component.inject
 import java.util.*
 
-class ArtistService: Service() {
+class ArtistService : Service() {
     companion object {
         fun mapArtist(resultRow: ResultRow, table: ColumnSet = ArtistTable): Artist {
             if (table is Alias<*>) {
@@ -44,8 +51,8 @@ class ArtistService: Service() {
         queryArtists(page, pageSize) {
             rankedSearchQuery(
                 query,
-                listOf(10),
-                listOf(ArtistTable.name)
+                listOf(10, 8),
+                listOf(ArtistTable.name, ArtistAliasTable.name)
             )
         }
 
@@ -53,6 +60,87 @@ class ArtistService: Service() {
         queryArtists(page, pageSize) {
             where { ArtistTable.groupId eq groupId }
         }
+
+    suspend fun mergeArtists(mergeArtists: MergeArtists) = dbQuery {
+        val currentArtists = ArtistTable
+            .select(ArtistTable.id, ArtistTable.name)
+            .where { ArtistTable.id inList mergeArtists.artistIds }
+            .map { Pair(it[ArtistTable.id].value, it[ArtistTable.name]) }
+
+        if (currentArtists.isEmpty()) return@dbQuery null
+
+        val image = mergeArtists.image?.let {
+            when {
+                it.toUUIDOrNull() != null -> {
+                    val imageService by inject<ImageService>()
+                    imageService.byId(it.toUUIDOrNull()!!)?.id
+                }
+
+                it.isURL() -> {
+                    val imageService by inject<ImageService>()
+
+                    val imageData = ApiClient.instance.safeGet<ByteArray>(it) ?: return@let null
+                    imageService.createBatch(
+                        listOf(
+                            InsertableImage(
+                                data = imageData,
+                                imageHash = imageData.sha256(),
+                                origin = it
+                            )
+                        )
+                    ).firstOrNull()
+                }
+
+                else -> null
+            }
+        }
+
+        val newArtist = ArtistTable.insertAndGetId {
+            it[ArtistTable.name] = mergeArtists.name
+            it[ArtistTable.image] = image
+        }.value
+
+        val alias = currentArtists.flatMap { (_, artistName) ->
+            listOf(artistName, artistName.stripAccents())
+        }.distinct() - mergeArtists.name
+
+        ArtistAliasTable.batchInsert(alias) {
+            this[ArtistAliasTable.artistId] = newArtist
+            this[ArtistAliasTable.name] = it
+        }
+
+        val currentArtistIds = currentArtists.map { it.first }
+
+        val songIds = SongArtistTable
+            .select(SongArtistTable.songId, SongArtistTable.artistId)
+            .where { SongArtistTable.artistId inList currentArtistIds }
+            .map { it[SongArtistTable.songId].value }
+            .distinct()
+
+        SongArtistTable.batchInsert(songIds) { songId ->
+            this[SongArtistTable.songId] = songId
+            this[SongArtistTable.artistId] = newArtist
+        }
+
+        val albumIds = AlbumArtistTable
+            .select(AlbumArtistTable.albumId, AlbumArtistTable.artistId)
+            .where { AlbumArtistTable.artistId inList currentArtistIds }
+            .map { it[AlbumArtistTable.albumId].value }
+            .distinct()
+
+        AlbumArtistTable.batchInsert(albumIds) { albumId ->
+            this[AlbumArtistTable.albumId] = albumId
+            this[AlbumArtistTable.artistId] = newArtist
+        }
+
+        SongArtistTable.deleteWhere { SongArtistTable.artistId inList currentArtistIds }
+        AlbumArtistTable.deleteWhere { AlbumArtistTable.artistId inList currentArtistIds }
+
+        ArtistTable.deleteWhere { ArtistTable.id inList currentArtistIds }
+        ArtistAliasTable.deleteWhere { ArtistAliasTable.artistId inList currentArtistIds }
+
+        return@dbQuery byId(newArtist)
+    }
 
     suspend fun allArtists(page: Int, pageSize: Int): PaginatedResponse<Artist> = queryArtists(page, pageSize)
 
@@ -62,8 +150,10 @@ class ArtistService: Service() {
     private suspend fun queryArtists(page: Int, pageSize: Int, query: Query.() -> Query = { this }) = dbQuery {
         val offset = if (pageSize == Int.MAX_VALUE) 0 else 1
         val mainArtistRows = ArtistTable
-            .selectAll()
+            .leftJoin(ArtistAliasTable)
+            .select(ArtistTable.columns)
             .query()
+            .groupBy(ArtistTable.id)
             .toList()
 
         val groupIds = mainArtistRows.filter { it[ArtistTable.isGroup] }

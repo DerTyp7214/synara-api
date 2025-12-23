@@ -3,11 +3,14 @@ package dev.dertyp.routing
 import dev.dertyp.core.paging
 import dev.dertyp.core.toUUIDOrNull
 import dev.dertyp.data.Artist
+import dev.dertyp.data.MergeArtists
 import dev.dertyp.data.PaginatedResponse
 import dev.dertyp.services.ArtistService
 import io.github.smiley4.ktoropenapi.get
+import io.github.smiley4.ktoropenapi.post
 import io.github.smiley4.ktoropenapi.route
 import io.ktor.http.*
+import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.ktor.util.logging.*
@@ -101,6 +104,27 @@ fun Route.artist() {
             val (page, pageSize) = call.paging()
             val artists = service.allArtists(page, pageSize)
             call.respond(artists)
+        }
+
+        post("/merge", {
+            request {
+                body<MergeArtists> {
+                    description = "The artist to merge with the existing artist."
+                }
+            }
+            response {
+                HttpStatusCode.OK to {
+                    body<Artist>()
+                }
+            }
+        }) {
+            val service by inject<ArtistService>()
+
+            val mergeArtists = call.receive<MergeArtists>()
+
+            val mergedArtist = service.mergeArtists(mergeArtists) ?: return@post call.respond(HttpStatusCode.BadRequest)
+
+            call.respond(mergedArtist)
         }
     }
 }

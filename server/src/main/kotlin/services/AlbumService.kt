@@ -7,10 +7,7 @@ import dev.dertyp.data.Album
 import dev.dertyp.data.Artist
 import dev.dertyp.data.InsertableAlbum
 import dev.dertyp.data.PaginatedResponse
-import dev.dertyp.db.AlbumArtistTable
-import dev.dertyp.db.AlbumTable
-import dev.dertyp.db.ArtistTable
-import dev.dertyp.db.SongTable
+import dev.dertyp.db.*
 import dev.dertyp.dbQuery
 import dev.dertyp.getDateFromISO
 import dev.dertyp.getISOFromDate
@@ -26,8 +23,6 @@ import kotlin.io.path.isSymbolicLink
 import kotlin.io.path.readSymbolicLink
 
 class AlbumService : Service() {
-    val albumArtistAlias = ArtistTable.alias("albumArtistAlias")
-
     companion object {
         fun mapAlbum(resultRow: ResultRow): Album {
             val id = resultRow[AlbumTable.id].value
@@ -90,8 +85,12 @@ class AlbumService : Service() {
         queryAlbums(page, pageSize) {
             rankedSearchQuery(
                 query,
-                listOf(10, 5),
-                listOf(AlbumTable.name, albumArtistAlias[ArtistTable.name])
+                listOf(10, 5, 5),
+                listOf(
+                    AlbumTable.name,
+                    ArtistTable.name,
+                    ArtistAliasTable.name,
+                )
             )
             andWhere { AlbumTable.songCount greater 1 }
         }
@@ -154,13 +153,15 @@ class AlbumService : Service() {
         val rows = AlbumTable
             .leftJoin(AlbumArtistTable, onColumn = { id }, otherColumn = { AlbumArtistTable.albumId })
             .leftJoin(
-                albumArtistAlias,
+                ArtistTable,
                 onColumn = { AlbumArtistTable.artistId },
-                otherColumn = { albumArtistAlias[ArtistTable.id] }
+                otherColumn = { ArtistTable.id }
             )
-            .select(AlbumTable.columns + albumArtistAlias.columns)
+            .leftJoin(ArtistAliasTable)
+            .select(AlbumTable.columns + ArtistTable.columns)
             .query()
             .toList()
+            .distinctBy { it[AlbumTable.id] }
 
         if (rows.isEmpty()) return@dbQuery PaginatedResponse(
             data = listOf(),
@@ -176,7 +177,7 @@ class AlbumService : Service() {
             emptyMap()
         }
 
-        val data = mapEagerly(rows, statsByAlbumId, albumArtistAlias)
+        val data = mapEagerly(rows, statsByAlbumId)
 
         PaginatedResponse(
             data = data.take(pageSize),
@@ -189,7 +190,6 @@ class AlbumService : Service() {
     private fun mapEagerly(
         rows: List<ResultRow>,
         albumStats: Map<UUID, Pair<Long, Long>>,
-        albumArtistAlias: Alias<ArtistTable>
     ): List<Album> {
         val albumMap = mutableMapOf<UUID, Album>()
         val albumArtistsMap = mutableMapOf<UUID, MutableList<Artist>>()
@@ -201,8 +201,8 @@ class AlbumService : Service() {
                 mapAlbum(row)
             }
 
-            if (row.getOrNull(albumArtistAlias[ArtistTable.id]) != null) {
-                val artist = mapArtist(row, albumArtistAlias)
+            if (row.getOrNull(ArtistTable.id) != null) {
+                val artist = mapArtist(row)
                 if (artist !in albumArtistsMap.getOrDefault(albumId, emptyList())) {
                     albumArtistsMap.getOrPut(albumId) { mutableListOf() }.add(artist)
                 }

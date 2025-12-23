@@ -1,0 +1,47 @@
+type: http_request
+model: http_request
+id: rq_T3nTnMo7hf
+createdAt: 2025-12-23T20:59:11.262504352
+updatedAt: 2025-12-23T21:49:19.567323881
+workspaceId: wk_9dbKacQT4H
+folderId: fl_MAn552zthQ
+authentication: {}
+authenticationType: null
+body:
+  text: |-
+    {
+      "name": "Yung Kafa & Kücük Efendi",
+      "image": "574b5f57-2010-4206-991c-f38f4f7ee2f2",
+      "artistIds": [
+        "dbe0b218-9b83-4b1b-a711-79e81a311186",
+        "5b238735-bc90-486d-9ec2-5347fb29d1dc"
+      ]
+    }
+bodyType: application/json
+description: '[object Object]'
+headers:
+- enabled: true
+  name: Accept
+  value: application/json
+  id: null
+- enabled: true
+  name: Content-Type
+  value: application/json
+  id: JcIGfTDpIx
+method: POST
+name: /merge
+sortPriority: 42.001
+url: ${[baseUrl]}/artist/merge
+urlParameters:
+- enabled: false
+  name: page
+  value: <integer>
+  id: mD3IN0vJaV
+- enabled: false
+  name: pageSize
+  value: <integer>
+  id: hBbS0P04Ay
+- enabled: true
+  name: ''
+  value: ''
+  id: XUHGhkYJ55

@@ -2,7 +2,7 @@ type: http_request
 model: http_request
 id: rq_gPwCuHMVsc
 createdAt: 2025-10-14T19:25:16.451289531
-updatedAt: 2025-12-17T17:16:47.505847575
+updatedAt: 2025-12-23T21:55:59.939527589
 workspaceId: wk_9dbKacQT4H
 folderId: fl_MAn552zthQ
 authentication: {}
@@ -30,9 +30,9 @@ urlParameters:
   id: j3VmexvxTP
 - enabled: true
   name: :query
-  value: hans zimmer
+  value: efendi
   id: tUyM5PWR4I
 - enabled: true
   name: ''
   value: ''
-  id: qYz7sW5iat
+  id: 9WqXpk0bjZ

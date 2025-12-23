@@ -1,5 +1,6 @@
 package dev.dertyp.data
 
+import dev.dertyp.serializers.UUIDListSerializer
 import dev.dertyp.serializers.UUIDSerializer
 import kotlinx.serialization.Serializable
 import java.util.*
@@ -14,4 +15,13 @@ data class Artist(
     val about: String = "",
     @Serializable(with = UUIDSerializer::class)
     val imageId: UUID? = null,
+)
+
+
+@Serializable
+data class MergeArtists(
+    val name: String,
+    val image: String? = null,
+    @Serializable(with = UUIDListSerializer::class)
+    val artistIds: List<UUID>,
 )
