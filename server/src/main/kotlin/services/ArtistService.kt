@@ -67,7 +67,10 @@ class ArtistService : Service() {
             .where { ArtistTable.id inList mergeArtists.artistIds }
             .map { Pair(it[ArtistTable.id].value, it[ArtistTable.name]) }
 
-        if (currentArtists.isEmpty()) return@dbQuery null
+        if (currentArtists.isEmpty()) {
+            logger.info("No artist matched to $mergeArtists")
+            return@dbQuery null
+        }
 
         val image = mergeArtists.image?.let {
             when {
@@ -145,6 +148,8 @@ class ArtistService : Service() {
         ArtistTable.deleteWhere { ArtistTable.id inList currentArtistIds }
         ArtistAliasTable.deleteWhere { ArtistAliasTable.artistId inList currentArtistIds }
 
+        logger.info("Merged artists $mergeArtists into $newArtist")
+
         return@dbQuery byId(newArtist)
     }
 
@@ -161,8 +166,10 @@ class ArtistService : Service() {
             .query()
             .toList()
 
-        val groupIds = mainArtistRows.filter { it[ArtistTable.isGroup] }
+        val groupIds = mainArtistRows
+            .filter { it[ArtistTable.isGroup] }
             .map { it[ArtistTable.id].value }
+            .distinct()
 
         if (groupIds.isEmpty()) {
             return@dbQuery mainArtistRows.map { map(it) }.let {

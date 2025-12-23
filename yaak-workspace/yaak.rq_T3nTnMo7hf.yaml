@@ -2,7 +2,7 @@ type: http_request
 model: http_request
 id: rq_T3nTnMo7hf
 createdAt: 2025-12-23T20:59:11.262504352
-updatedAt: 2025-12-23T22:57:10.058349009
+updatedAt: 2025-12-23T23:21:54.333644929
 workspaceId: wk_9dbKacQT4H
 folderId: fl_MAn552zthQ
 authentication: {}
@@ -11,9 +11,11 @@ body:
   text: |-
     {
       "name": "Yung Kafa & Kücük Efendi",
-      "image": "574b5f57-2010-4206-991c-f38f4f7ee2f2",
+      "image": "1d051c2e-c931-469d-a6bb-a2e5daf26e8c",
       "artistIds": [
-        ""
+        "d5daf0eb-fe51-4824-ba09-528d1fcf83ae",
+        "c3219530-93fb-4c6b-a991-4cd9d5f283c9",
+        "9912cfdb-80d4-470d-b486-acb7512c67a1"
       ]
     }
 bodyType: application/json
