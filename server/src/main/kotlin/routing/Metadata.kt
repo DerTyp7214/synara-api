@@ -12,13 +12,17 @@ import dev.dertyp.services.SongService
 import dev.dertyp.services.metadata.MetadataService
 import dev.dertyp.services.metadata.TidalService
 import io.github.smiley4.ktoropenapi.get
+import io.github.smiley4.ktoropenapi.head
 import io.github.smiley4.ktoropenapi.post
 import io.github.smiley4.ktoropenapi.route
+import io.ktor.client.request.*
+import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.ktor.server.sse.*
+import io.ktor.util.*
 import io.ktor.utils.io.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
@@ -32,7 +36,6 @@ import org.jetbrains.exposed.v1.jdbc.update
 import org.koin.ktor.ext.inject
 import java.util.*
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
-import kotlin.time.Duration
 import kotlin.time.Duration.Companion.days
 
 @Serializable
@@ -251,7 +254,52 @@ fun Route.metadata() {
 
             call.respond(service.getPlaylistsByIds(ids, includeTracks))
         }
-        cacheOutput(Duration.INFINITE) {
+        head("/proxy/{url}", {
+            request {
+                pathParameter<String>("url") {
+                    description = "The URL to proxy."
+                }
+            }
+        }) {
+            val base64 = call.parameters["url"] ?: return@head call.respond(HttpStatusCode.BadRequest)
+            val url = base64.decodeBase64String()
+
+            val response = ApiClient.instance.head(url)
+
+            val contentType = response.headers[HttpHeaders.ContentType]
+            val status = response.status
+            val bytes = response.bodyAsBytes()
+
+            call.respondBytes(
+                bytes = bytes,
+                contentType = contentType?.let { ContentType.parse(it) },
+                status = status
+            )
+        }
+        get("/proxy/{url}", {
+            request {
+                pathParameter<String>("url") {
+                    description = "The URL to proxy."
+                }
+            }
+        }) {
+            val base64 = call.parameters["url"] ?: return@get call.respond(HttpStatusCode.BadRequest)
+            val url = base64.decodeBase64String()
+
+            val response = ApiClient.instance.get(url)
+
+            val contentType = response.headers[HttpHeaders.ContentType]
+            val status = response.status
+            val bytes = response.bodyAsBytes()
+
+            call.respondBytes(
+                bytes = bytes,
+                contentType = contentType?.let { ContentType.parse(it) },
+                status = status
+            )
+        }
+
+        cacheOutput(10.days) {
             route("/imageUrl") {
                 get("/animatedByTrack/{trackId}", {
                     request {

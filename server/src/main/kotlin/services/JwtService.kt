@@ -62,7 +62,7 @@ class JwtService(
                     call.respond(HttpStatusCode.Unauthorized, "Token is not valid or has expired")
                 }
                 skipWhen { call ->
-                    call.request.path().endsWith("/callback")
+                    call.request.path().endsWith("/callback") || call.request.path().contains("/proxy/")
                 }
             }
         }

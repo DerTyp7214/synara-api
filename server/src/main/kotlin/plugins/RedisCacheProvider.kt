@@ -16,6 +16,7 @@ class RedisCacheProvider(config: Config) : SimpleCacheProvider(config) {
         if (jedis.exists(key)) RedisCacheObject.fromCache(jedis[key]) else null
 
     override suspend fun setCache(key: String, content: Any, invalidateAt: Duration?) {
+        if (invalidateAt == Duration.ZERO) return
         if (invalidateAt != null && !invalidateAt.isInfinite())
             jedis.psetex(key, invalidateAt.inWholeMilliseconds, RedisCacheObject.fromObject(content).toString())
         else jedis.set(key, RedisCacheObject.fromObject(content).toString())
