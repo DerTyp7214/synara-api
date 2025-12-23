@@ -159,7 +159,6 @@ class ArtistService : Service() {
             .leftJoin(ArtistAliasTable)
             .selectAll()
             .query()
-            .withDistinct()
             .toList()
 
         val groupIds = mainArtistRows.filter { it[ArtistTable.isGroup] }
@@ -181,7 +180,7 @@ class ArtistService : Service() {
             .where { ArtistTable.groupId inList groupIds }
             .toList()
 
-        val data = mapEagerly(mainArtistRows, memberDataRows)
+        val data = mapEagerly(mainArtistRows, memberDataRows).distinctBy { it.id }
 
         PaginatedResponse(
             data = data.take(pageSize),

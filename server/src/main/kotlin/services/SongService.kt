@@ -337,7 +337,6 @@ class SongService : Service() {
             .columnSet()
             .selectAll()
             .query()
-            .withDistinct()
             .toList()
 
         if (rows.isEmpty()) return@dbQuery PaginatedResponse(
@@ -354,7 +353,7 @@ class SongService : Service() {
             emptyMap()
         }
 
-        val data = mapEagerly<T>(rows, albumArtistAlias, statsByAlbumId, explicit)
+        val data = mapEagerly<T>(rows, albumArtistAlias, statsByAlbumId, explicit).distinctBy { it.id }
 
         PaginatedResponse(
             data = data.drop(page * pageSize).take(pageSize),

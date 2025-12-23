@@ -160,7 +160,6 @@ class AlbumService : Service() {
             .leftJoin(ArtistAliasTable)
             .selectAll()
             .query()
-            .withDistinct()
             .toList()
 
         if (rows.isEmpty()) return@dbQuery PaginatedResponse(
@@ -177,7 +176,7 @@ class AlbumService : Service() {
             emptyMap()
         }
 
-        val data = mapEagerly(rows, statsByAlbumId)
+        val data = mapEagerly(rows, statsByAlbumId).distinctBy { it.id }
 
         PaginatedResponse(
             data = data.take(pageSize),
