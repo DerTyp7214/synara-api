@@ -95,21 +95,27 @@ class ArtistService : Service() {
             }
         }
 
+        val currentArtistIds = currentArtists.map { it.first }
+
         val newArtist = ArtistTable.insertAndGetId {
             it[ArtistTable.name] = mergeArtists.name
             it[ArtistTable.image] = image
         }.value
 
+        val existingAlias = ArtistAliasTable
+            .select(ArtistAliasTable.name, ArtistAliasTable.artistId)
+            .where { ArtistAliasTable.artistId inList currentArtistIds }
+            .map { it[ArtistAliasTable.name] }
+            .distinct()
+
         val alias = currentArtists.flatMap { (_, artistName) ->
             listOf(artistName, artistName.stripAccents())
-        }.distinct() - mergeArtists.name
+        } + existingAlias
 
-        ArtistAliasTable.batchInsert(alias) {
+        ArtistAliasTable.batchInsert(alias.distinct() - mergeArtists.name) {
             this[ArtistAliasTable.artistId] = newArtist
             this[ArtistAliasTable.name] = it
         }
-
-        val currentArtistIds = currentArtists.map { it.first }
 
         val songIds = SongArtistTable
             .select(SongArtistTable.songId, SongArtistTable.artistId)
@@ -209,13 +215,20 @@ class ArtistService : Service() {
     suspend fun getOrBulkCreate(artistNames: List<String>): Map<String, UUID> {
         val existingRows = dbQuery {
             ArtistTable
-                .select(ArtistTable.id, ArtistTable.name)
+                .leftJoin(ArtistAliasTable)
+                .select(ArtistTable.id, ArtistTable.name, ArtistAliasTable.name)
                 .where { ArtistTable.name inList artistNames }
+                .orWhere { ArtistAliasTable.name inList artistNames }
                 .toList()
         }
 
-        val existingNames = existingRows.map { it[ArtistTable.name] }.toSet()
-        val existingMap = existingRows.associate { it[ArtistTable.name] to it[ArtistTable.id].value }
+        val existingNames = existingRows.flatMap { listOf(it[ArtistTable.name], it[ArtistAliasTable.name]) }.toSet()
+        val existingMap = existingRows.flatMap {
+            listOf(
+                Pair(it[ArtistTable.name], it[ArtistTable.id].value),
+                Pair(it[ArtistAliasTable.name], it[ArtistTable.id].value)
+            )
+        }.distinct().toMap()
 
         val newNames = artistNames.filter { it !in existingNames }
 
@@ -223,6 +236,15 @@ class ArtistService : Service() {
             dbQuery {
                 ArtistTable.batchInsert(newNames) { name ->
                     this[ArtistTable.name] = name
+                }.also { rows ->
+                    val artists = rows.associate { row ->
+                        row[ArtistTable.name].stripAccents() to row[ArtistTable.id].value
+                    }.filter { (name) -> !newNames.contains(name) }
+
+                    ArtistAliasTable.batchInsert(artists.entries) { (name, artistId) ->
+                        this[ArtistAliasTable.name] = name
+                        this[ArtistAliasTable.artistId] = artistId
+                    }
                 }
             }
         } else {
