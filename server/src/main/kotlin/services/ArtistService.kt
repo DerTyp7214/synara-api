@@ -157,7 +157,7 @@ class ArtistService : Service() {
         val offset = if (pageSize == Int.MAX_VALUE) 0 else 1
         val mainArtistRows = ArtistTable
             .leftJoin(ArtistAliasTable)
-            .select(ArtistTable.columns)
+            .selectAll()
             .query()
             .withDistinct()
             .toList()

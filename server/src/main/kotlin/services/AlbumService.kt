@@ -158,7 +158,7 @@ class AlbumService : Service() {
                 otherColumn = { ArtistTable.id }
             )
             .leftJoin(ArtistAliasTable)
-            .select(AlbumTable.columns + ArtistTable.columns)
+            .selectAll()
             .query()
             .withDistinct()
             .toList()
