@@ -23,6 +23,7 @@ import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.ktor.server.sse.*
 import io.ktor.util.*
+import io.ktor.util.logging.*
 import io.ktor.utils.io.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
@@ -311,6 +312,7 @@ fun Route.metadata() {
                 }) {
                     val songService by inject<SongService>()
 
+
                     val metadataProviderString =
                         call.parameters["metadataProvider"] ?: return@get call.respond(HttpStatusCode.BadRequest)
 
@@ -321,17 +323,27 @@ fun Route.metadata() {
                     val trackId =
                         call.parameters["trackId"]?.toUUIDOrNull() ?: return@get call.respond(HttpStatusCode.BadRequest)
 
+                    val logger = KtorSimpleLogger("animatedImageByTrack[$trackId]")
+
+                    logger.info("Fetching animated image for track with id $trackId")
+
                     val track = songService.byId(trackId) ?: return@get call.respond(HttpStatusCode.NotFound)
                     val tidalTrackId = track.originalUrl.tidalId()
 
+                    logger.info("Fetching image for track ${track.title} with id $tidalTrackId")
+
                     val albumId =
                         service.getAlbumIdByTrackId(tidalTrackId) ?: return@get call.respond(HttpStatusCode.NotFound)
+
+                    logger.info("Found album id $albumId for track ${track.title}")
 
                     val images = service.getImageUrlByAlbumId(albumId)
                     if (images.isEmpty()) return@get call.respond(HttpStatusCode.NotFound)
 
                     val animated = images.filter { it.animated }.maxByOrNull { it.height }
                     val fallback = images.filter { !it.animated }.maxByOrNull { it.height }
+
+                    logger.info("Found ${images.size} images for album ${albumId}, animated: ${animated != null}, fallback: ${fallback != null}")
 
                     if (fallback == null) return@get call.respond(HttpStatusCode.NotFound)
 
