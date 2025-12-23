@@ -614,13 +614,13 @@ class SongService : Service() {
         val songArtistLinks = insertedSongs.flatMap { (songId, songData) ->
             songData.artists.mapNotNull { artistName ->
                 artistIdMap[artistName]?.let { artistId ->
-                    Triple(songId, artistId, artistName)
+                    Pair(songId, artistId)
                 }
             }
         }.distinct()
 
         dbQuery {
-            SongArtistTable.batchInsert(songArtistLinks) { (songId, artistId, _) ->
+            SongArtistTable.batchInsert(songArtistLinks) { (songId, artistId) ->
                 this[SongArtistTable.songId] = songId
                 this[SongArtistTable.artistId] = artistId
             }
