@@ -2,7 +2,7 @@ type: http_request
 model: http_request
 id: rq_7mSrGHMwap
 createdAt: 2025-10-14T19:25:16.451189552
-updatedAt: 2025-11-05T21:20:50.618652134
+updatedAt: 2025-12-23T23:36:54.666042769
 workspaceId: wk_9dbKacQT4H
 folderId: fl_MAn552zthQ
 authentication: {}
@@ -22,9 +22,9 @@ url: ${[baseUrl]}/artist/byId/:id
 urlParameters:
 - enabled: true
   name: :id
-  value: 60d4b8a6-a47d-476a-be33-79abe4b4a22c
+  value: 0b4a5f28-0fbe-4058-bacc-e1860cd39979
   id: weaEjYbUnB
 - enabled: true
   name: ''
   value: ''
-  id: hVdZvNSCn9
+  id: fVGc6ekyQw

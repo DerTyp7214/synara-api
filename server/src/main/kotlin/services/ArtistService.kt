@@ -172,14 +172,17 @@ class ArtistService : Service() {
             .distinct()
 
         if (groupIds.isEmpty()) {
-            return@dbQuery mainArtistRows.map { map(it) }.let {
-                PaginatedResponse(
-                    data = it.take(pageSize),
-                    page = page,
-                    pageSize = pageSize,
-                    hasNextPage = it.size == pageSize + offset,
-                )
-            }
+            return@dbQuery mainArtistRows
+                .map { map(it) }
+                .distinctBy { it.id }
+                .let {
+                    PaginatedResponse(
+                        data = it.take(pageSize),
+                        page = page,
+                        pageSize = pageSize,
+                        hasNextPage = it.size == pageSize + offset,
+                    )
+                }
         }
 
         val memberDataRows = ArtistTable
