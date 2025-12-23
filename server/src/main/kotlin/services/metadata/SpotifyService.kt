@@ -91,6 +91,10 @@ class SpotifyService(
         throw NotImplementedError("Not implemented for spotify!")
     }
 
+    override suspend fun getAlbumTracks(albumId: String): Flow<Track> {
+        throw NotImplementedError("Not implemented for spotify!")
+    }
+
     override fun getPlaylistsByIds(
         playlistIds: List<String>,
         includeTracks: Boolean,

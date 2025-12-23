@@ -86,6 +86,10 @@ class ImageCacheService(
         throw NotImplementedError("Not implemented for ImageCache")
     }
 
+    override suspend fun getAlbumTracks(albumId: String): Flow<Track> {
+        throw NotImplementedError("Not implemented for ImageCache")
+    }
+
     override fun getPlaylistsByIds(
         playlistIds: List<String>,
         includeTracks: Boolean,

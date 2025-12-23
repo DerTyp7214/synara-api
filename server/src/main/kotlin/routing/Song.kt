@@ -103,7 +103,7 @@ fun Route.song() {
 
             val user = call.getUser() ?: return@post call.respond(HttpStatusCode.Unauthorized)
 
-            val songs = service.byIds(ids.ids, user.id).data.associateBy { it.id }
+            val songs = service.byIds(ids.ids.distinct(), user.id).data.associateBy { it.id }
 
             call.respond(ids.ids.mapNotNull { songs[it] })
         }

@@ -475,6 +475,7 @@ data class UrlDownloadQueueEntry(
         val url = urls.first()
 
         return when {
+            url.contains("/mix/") -> Type.MIX
             url.contains("/track/") -> Type.SONG
             url.contains("/album/") -> Type.ALBUM
             url.contains("/artist/") -> Type.ARTIST
@@ -510,6 +511,9 @@ data class LogLine(
 
 @Serializable
 enum class Type(val value: String) {
+    @SerialName("mix")
+    MIX("mix"),
+
     @SerialName("track")
     SONG("track"),
 

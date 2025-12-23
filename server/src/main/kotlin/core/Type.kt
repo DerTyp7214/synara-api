@@ -18,9 +18,27 @@ import java.util.*
 
 fun Type.getWrapper(metadataService: MetadataService?, user: User, ids: List<String>): IdsWrapper {
     return when (this) {
+        Type.MIX -> IdsWrapper.from(this, ids.associateBy { UUID.randomUUID().mostSignificantBits })
         Type.SONG -> IdsWrapper.from(this, ids.associateBy { UUID.randomUUID().mostSignificantBits })
         Type.ARTIST -> IdsWrapper.from(this, ids.associateBy { UUID.randomUUID().mostSignificantBits })
-        Type.ALBUM -> IdsWrapper.from(this, ids.associateBy { UUID.randomUUID().mostSignificantBits })
+        Type.ALBUM -> {
+            if (metadataService == null) IdsWrapper.from(this, emptyMap())
+            else {
+                val groups = ids.asFlow().map { id ->
+                    IdsGroup(
+                        id,
+                        emptyFlow(),
+                        MetadataService.Album(
+                            id = id,
+                            title = "",
+                            tracks = metadataService.getAlbumTracks(id),
+                        )
+                    )
+                }
+                IdsWrapper(this, groups)
+            }
+        }
+
         Type.PLAYLIST -> {
             if (metadataService == null) IdsWrapper.from(this, emptyMap())
             else {
@@ -95,35 +113,19 @@ suspend fun Type.download(
                     if (playlist is MetadataService.FlowPlaylist) {
                         playlist.sharedTracks
                             .buffer(100)
-                            .chunked(20)
-                            .map { tracks ->
-                                val existingSongs = songService.byTidalTrackIds(
-                                    tracks.map { it.id },
-                                    user.id
-                                )
-                                val existingUrls = existingSongs.map { track -> track.originalUrl }
-
-                                val songIds = tracks.map { track ->
-                                    track.addedAt?.toInstant()
-                                        ?.toEpochMilli() to existingSongs.find { it.originalUrl.endsWith("/${track.id}") }?.id
-                                }.filterNotNull()
-
+                            .filterExisting(
+                                songService = songService,
+                                user = user
+                            ) { songIds ->
                                 if (playlistId != null) userPlaylistService.addToPlaylist(
                                     playlistId,
                                     songIds
                                 ).let { result ->
                                     downloadService.logger.info("Added ${result.size} songs to playlist $playlistId")
                                 }
-
-                                tracks.filter { track ->
-                                    existingUrls.none { url ->
-                                        url.endsWith("/${track.id}")
-                                    }
-                                }.asFlow()
                             }
-                            .flattenConcat()
-                            .chunked(20)
                             .collect { trackChunk ->
+                                contentToDownload = true
                                 downloadService.addToQueue(
                                     UrlDownloadQueueEntry(
                                         urls = trackChunk
@@ -151,7 +153,37 @@ suspend fun Type.download(
             }
         }
 
-        Type.ALBUM, Type.SONG, Type.ARTIST -> {
+        Type.ALBUM -> {
+            val songService = GlobalContext.get().get<SongService>()
+
+            wrapper.idGroups.buffer(2).collect { idGroup ->
+                idGroup.metadata?.let { metadata ->
+                    when (metadata) {
+                        is MetadataService.Album -> metadata.tracks
+                        else -> emptyFlow()
+                    }
+                        .buffer(100)
+                        .filterExisting(
+                            songService = songService,
+                            user = user,
+                        ).collect { trackChunk ->
+                            downloadService.addToQueue(
+                                UrlDownloadQueueEntry(
+                                    urls = trackChunk
+                                        .map { track -> "https://tidal.com/track/${track.id}" }
+                                        .toMutableList(),
+                                    ids = trackChunk.map { it.id },
+                                    byUser = user.id,
+                                    maxRetries = trackChunk.size,
+                                    type = Type.SONG
+                                )
+                            )
+                        }
+                }
+            }
+        }
+
+        Type.MIX, Type.SONG, Type.ARTIST -> {
             downloadStageMutex.withLock {
                 downloadStage.addAll(wrapper.filter { (_, id) ->
                     existingUrls.none {

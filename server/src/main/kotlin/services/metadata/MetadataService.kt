@@ -18,6 +18,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.Transient
 import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.util.*
@@ -49,6 +50,7 @@ abstract class MetadataService(
     abstract suspend fun getTracksByIds(trackIds: List<String>): List<Track>
     abstract suspend fun getAlbumsByIds(albumIds: List<String>): List<Album>
     abstract suspend fun getArtistsByIds(artistIds: List<String>): List<Artist>
+    abstract suspend fun getAlbumTracks(albumId: String): Flow<Track>
     abstract fun getPlaylistsByIds(
         playlistIds: List<String>,
         includeTracks: Boolean = false,
@@ -159,6 +161,8 @@ abstract class MetadataService(
         val createdAt: OffsetDateTime? = null,
         @Serializable(with = OffsetDateTimeSerializer::class)
         val addedAt: OffsetDateTime? = null,
+        val trackNumber: Int? = null,
+        val discNumber: Int? = null,
         val images: List<Image>,
     ) : BaseMetadata()
 
@@ -167,12 +171,23 @@ abstract class MetadataService(
         val id: String,
         val title: String,
         val artists: List<String> = emptyList(),
+        @Transient
+        val tracks: Flow<Track> = emptyFlow(),
         @Serializable(with = DurationSerializer::class)
-        val duration: Duration,
-        val trackCount: Int,
-        val discCount: Int,
+        val duration: Duration = Duration.ZERO,
+        val trackCount: Int = 0,
+        val discCount: Int = 0,
         @Serializable(with = LocalDateSerializer::class)
         val releaseDate: LocalDate? = null,
+        val images: List<Image> = emptyList(),
+    ) : BaseMetadata()
+
+    @Serializable
+    data class Mix(
+        val id: String,
+        val name: String,
+        @Transient
+        val tracks: Flow<Track> = emptyFlow(),
         val images: List<Image>,
     ) : BaseMetadata()
 
@@ -195,6 +210,7 @@ abstract class MetadataService(
         val id: String,
         val name: String,
         val description: String,
+        @Transient
         val tracks: Flow<Track> = emptyFlow(),
         val trackCount: Int = 0,
         @Serializable(with = OffsetDateTimeSerializer::class)
@@ -223,6 +239,7 @@ abstract class MetadataService(
             tracks.drop(currentCache.size).collect { track ->
                 emit(track)
             }
+            job.join()
         }
 
         suspend fun collect(): Playlist {

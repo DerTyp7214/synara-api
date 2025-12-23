@@ -537,6 +537,64 @@ class TidalService(
         }
     }
 
+    override suspend fun getAlbumTracks(albumId: String): Flow<Track> = flow {
+        var cursor: String? = null
+        var depth = 1
+
+        do {
+            val url = getUrl("/albums/${albumId}/relationships/items") {
+                parameters {
+                    append("countryCode", "US")
+                    append("locale", "en-US")
+                    appendAll("include", listOf("items"))
+                    cursor?.let { append("page[cursor]", it) }
+                }
+            }
+
+            val response = makeRequest(url)
+            when (response.status) {
+                HttpStatusCode.OK -> {}
+                HttpStatusCode.TooManyRequests -> {
+                    logger.warn("[getAlbumTracks]: Too many requests, waiting ${10 * depth} seconds")
+                    delay(10.seconds * depth)
+                    depth++
+                    continue
+                }
+
+                else -> println("error: ${response.status}")
+            }
+
+            try {
+                val body = response.body<AlbumsItemsMultiRelationshipDataDocument<JsonAttribute, EmptyRelationships>>()
+                val meta = body.data?.associate { it.id to it.meta }?.filterValueNotNull() ?: emptyMap()
+                val tracks = body.included?.mapAttributes<TracksAttributes>() ?: emptyMap()
+
+                cursor = body.links.meta?.nextCursor
+
+                emitAll(tracks.entries.map { (id, track) ->
+                    Track(
+                        id = id,
+                        title = track.title,
+                        duration = track.duration,
+                        createdAt = track.createdAt,
+                        trackNumber = meta[id]?.trackNumber,
+                        discNumber = meta[id]?.volumeNumber,
+                        artists = emptyList(),
+                        images = emptyList(),
+                    )
+                }.asFlow())
+
+                if (cursor != null) {
+                    logger.info("Fetching tracks for $albumId with cursor: $cursor")
+                    delay(500.milliseconds)
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                println(response.bodyAsText())
+            }
+        } while (cursor != null)
+    }
+
     private fun getTracksFromPlaylist(
         playlistId: String,
         user: User?,
@@ -556,7 +614,7 @@ class TidalService(
         when (response.status) {
             HttpStatusCode.OK -> {}
             HttpStatusCode.TooManyRequests -> {
-                logger.warn("[getTracksFromPlaylist]: Too many requests, waiting 10 seconds")
+                logger.warn("[getTracksFromPlaylist]: Too many requests, waiting ${10 * depth} seconds")
                 delay(10.seconds * depth)
                 return@flow emitAll(getTracksFromPlaylist(playlistId, user, cursor, depth + 1))
             }
