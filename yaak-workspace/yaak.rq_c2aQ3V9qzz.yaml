@@ -2,7 +2,7 @@ type: http_request
 model: http_request
 id: rq_c2aQ3V9qzz
 createdAt: 2025-10-14T19:25:16.450619051
-updatedAt: 2025-12-23T22:00:11.632579776
+updatedAt: 2025-12-23T22:55:54.246965676
 workspaceId: wk_9dbKacQT4H
 folderId: fl_QrUoFyttZM
 authentication: {}
@@ -44,4 +44,4 @@ urlParameters:
 - enabled: true
   name: ''
   value: ''
-  id: ySeuvVvCw4
+  id: h6PRsHH2Rt

@@ -28,7 +28,7 @@ import kotlin.io.path.readSymbolicLink
 
 class SongService : Service() {
     val albumArtistAlias = ArtistTable.alias("albumArtistAlias")
-    val albumArtistAliasAlias = ArtistTable.alias("albumArtistAliasAlias")
+    val albumArtistAliasAlias = ArtistAliasTable.alias("albumArtistAliasAlias")
 
     companion object {
         fun mapSong(resultRow: ResultRow): Song {
@@ -337,8 +337,8 @@ class SongService : Service() {
             .columnSet()
             .selectAll()
             .query()
+            .withDistinct()
             .toList()
-            .distinctBy { it[SongTable.id] }
 
         if (rows.isEmpty()) return@dbQuery PaginatedResponse(
             data = listOf(),
@@ -458,13 +458,13 @@ class SongService : Service() {
                 SongTable.originalUrl,
                 AlbumTable.name
             )
+            .withDistinct()
             .where { SongTable.originalUrl inList songs.map { it.originalUrl }.filter { it.isNotBlank() } }
             .orWhere {
                 (SongTable.title inList songs.map { it.title }) and
                         (SongTable.trackNumber inList songs.map { it.trackNumber }) and
                         (SongTable.discNumber inList songs.map { it.discNumber })
             }
-            .withDistinct()
             .toList()
 
         val existingSongMap = mutableMapOf<InsertableSong, UUID>()
