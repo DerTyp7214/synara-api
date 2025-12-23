@@ -458,13 +458,13 @@ class SongService : Service() {
                 SongTable.originalUrl,
                 AlbumTable.name
             )
-            .withDistinct()
             .where { SongTable.originalUrl inList songs.map { it.originalUrl }.filter { it.isNotBlank() } }
             .orWhere {
                 (SongTable.title inList songs.map { it.title }) and
                         (SongTable.trackNumber inList songs.map { it.trackNumber }) and
                         (SongTable.discNumber inList songs.map { it.discNumber })
             }
+            .withDistinct()
             .toList()
 
         val existingSongMap = mutableMapOf<InsertableSong, UUID>()

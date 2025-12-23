@@ -160,8 +160,8 @@ class AlbumService : Service() {
             .leftJoin(ArtistAliasTable)
             .select(AlbumTable.columns + ArtistTable.columns)
             .query()
+            .withDistinct()
             .toList()
-            .distinctBy { it[AlbumTable.id] }
 
         if (rows.isEmpty()) return@dbQuery PaginatedResponse(
             data = listOf(),

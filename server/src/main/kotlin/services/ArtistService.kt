@@ -159,7 +159,7 @@ class ArtistService : Service() {
             .leftJoin(ArtistAliasTable)
             .select(ArtistTable.columns)
             .query()
-            .groupBy(ArtistTable.id)
+            .withDistinct()
             .toList()
 
         val groupIds = mainArtistRows.filter { it[ArtistTable.isGroup] }
