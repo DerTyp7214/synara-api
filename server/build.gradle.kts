@@ -117,7 +117,7 @@ val buildTimestamp: String = DateTimeFormatter
     .format(Instant.now())
 
 buildConfig {
-    packageName("dev.dertyp")
+    packageName("dev.dertyp.server")
     buildConfigField("VERSION", project.version.toString())
     buildConfigField("APP_NAME", "Synara API")
     buildConfigField("BUILD_TIME", buildTimestamp)

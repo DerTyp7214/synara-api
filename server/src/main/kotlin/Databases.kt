@@ -4,6 +4,7 @@ import dev.dertyp.AudioUtils.getSongsWithTranscodingInfo
 import dev.dertyp.data.ServerStats
 import dev.dertyp.db.ImageTable
 import dev.dertyp.routing.*
+import dev.dertyp.server.BuildConfig
 import dev.dertyp.services.*
 import dev.dertyp.services.tdn.DownloadService
 import dev.hayden.KHealth

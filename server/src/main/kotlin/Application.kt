@@ -5,6 +5,7 @@ import com.google.gson.GsonBuilder
 import dev.dertyp.plugins.JmDNSPlugin
 import dev.dertyp.plugins.RedisCacheProvider
 import dev.dertyp.serializers.OffsetDateTimeAdapter
+import dev.dertyp.server.BuildConfig
 import dev.dertyp.services.*
 import dev.dertyp.services.tdn.DownloadService
 import dev.dertyp.services.tdn.TdnService
