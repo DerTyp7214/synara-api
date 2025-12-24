@@ -1,5 +1,6 @@
 package dev.dertyp.services
 
+import dev.dertyp.core.Quadruple
 import dev.dertyp.core.Quintuple
 import dev.dertyp.core.filterValueNotNull
 import dev.dertyp.core.rankedSearchQuery
@@ -265,7 +266,7 @@ class AlbumService : Service() {
             .groupBy({ it[AlbumArtistTable.albumId].value }, { it[AlbumArtistTable.artistId].value })
             .mapValues { (_, artistIds) -> artistIds.toSet() }
 
-        val finalMatchMap = mutableMapOf<Quintuple<String, String?, Int, String, String?>, UUID>()
+        val finalMatchMap = mutableMapOf<Quadruple<String, String?, Int, String?>, UUID>()
 
         for (row in potentialAlbumRows) {
             val albumId = row.id
@@ -280,26 +281,24 @@ class AlbumService : Service() {
             val requiredArtistIdsForInput = inputAlbum?.artists?.mapNotNull { artistIdMap[it] }?.toSet() ?: emptySet()
 
             if (albumArtists == requiredArtistIdsForInput) {
-                finalMatchMap[Quintuple(
+                finalMatchMap[Quadruple(
                     row.name,
                     getISOFromDate(row.releaseDate),
                     row.songCount,
-                    row.artists.joinToString(", ") { it.name },
                     row.originalId
                 )] = albumId
             }
         }
 
         val newAlbumsToInsert = albums.filter { album ->
-            val key = Quintuple(
+            val key = Quadruple(
                 album.name,
                 getISOFromDate(album.releaseDate),
                 album.songCount,
-                album.artists.joinToString(", "),
                 album.originalId
             )
             !finalMatchMap.containsKey(key)
-        }.distinctBy { Triple(it.name, it.releaseDate, it.songCount) }
+        }.distinctBy { Quadruple(it.name, it.releaseDate, it.songCount, it.originalId) }
 
         val newRows = if (newAlbumsToInsert.isNotEmpty()) {
             dbQuery {
@@ -325,7 +324,7 @@ class AlbumService : Service() {
         val newAlbumArtistLinks = newAlbumIdMap.flatMap { (albumData, albumId) ->
             albumData.artists.mapNotNull { artistName ->
                 artistIdMap[artistName]?.let { artistId ->
-                    Triple(albumId, artistId, albumData)
+                    Pair(albumId, artistId)
                 }
             }
         }.distinct()
