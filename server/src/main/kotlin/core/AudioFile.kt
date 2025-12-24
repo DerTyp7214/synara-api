@@ -36,4 +36,4 @@ val AudioFile.albumArtists: List<String>
     }
 
 val AudioFile.coverImage: ByteArray?
-    get() = tag.firstArtwork.binaryData
+    get() = tag.firstArtwork?.binaryData

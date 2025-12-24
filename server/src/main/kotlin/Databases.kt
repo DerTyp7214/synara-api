@@ -82,6 +82,10 @@ fun Application.configureDatabases() {
                     totalFileSize = totalFileSize,
                     indexedFileSize = indexedFileSize,
                     averageSizePerSong = if (allSongs.isNotEmpty()) totalFileSize / allSongs.size else 0,
+                    version = ServerStats.Version(
+                        version = BuildConfig.VERSION,
+                        buildTime = BuildConfig.BUILD_TIME
+                    )
                 )
             )
         }

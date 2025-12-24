@@ -23,6 +23,11 @@ fun main(args: Array<String>) {
 }
 
 fun Application.module() {
+    val version = BuildConfig.VERSION
+    val buildTime = BuildConfig.BUILD_TIME
+
+    log.info("Starting Synara API v$version built at $buildTime")
+
     install(CallLogging)
     install(JmDNSPlugin) {
         serviceName = "synara-api"

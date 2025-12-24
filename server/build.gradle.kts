@@ -1,13 +1,18 @@
 @file:OptIn(OpenApiPreview::class)
 
 import io.ktor.plugin.*
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
 plugins {
     kotlin("jvm") version "2.2.21"
     id("io.ktor.plugin") version "3.3.3"
     id("org.jetbrains.kotlin.plugin.serialization") version "2.2.21"
     id("org.jetbrains.kotlinx.rpc.plugin") version "0.10.1"
-}
+    id("com.github.gmazzo.buildconfig")}
 
 application {
     mainClass = "io.ktor.server.netty.EngineMain"
@@ -18,9 +23,9 @@ java {
     targetCompatibility = JavaVersion.VERSION_24
 }
 
-tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
+tasks.withType<KotlinCompile>().configureEach {
     compilerOptions {
-        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_24)
+        jvmTarget.set(JvmTarget.JVM_24)
     }
 }
 
@@ -99,4 +104,16 @@ ktor {
         imageTag.set(ktorBaseImageTag.split(":").last())
         jreVersion.set(JavaVersion.VERSION_24)
     }
+}
+
+val buildTimestamp: String = DateTimeFormatter
+    .ofPattern("yyyy-MM-dd HH:mm:ss")
+    .withZone(ZoneId.systemDefault())
+    .format(Instant.now())
+
+buildConfig {
+    packageName("dev.dertyp")
+    buildConfigField("VERSION", project.version.toString())
+    buildConfigField("APP_NAME", "Synara API")
+    buildConfigField("BUILD_TIME", buildTimestamp)
 }

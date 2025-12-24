@@ -4,6 +4,7 @@ plugins {
     id("io.ktor.plugin") version "3.3.3" apply false
     id("org.jetbrains.kotlin.plugin.serialization") version "2.2.21" apply false
     id("org.jetbrains.kotlinx.rpc.plugin") version "0.10.1" apply false
+    id("com.github.gmazzo.buildconfig") version "6.0.7" apply false
 }
 
 subprojects {

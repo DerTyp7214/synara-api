@@ -13,4 +13,11 @@ data class ServerStats(
     val indexedFileSize: Long,
     val averageSizePerSong: Long,
     val totalDuration: Long,
-)
+    val version: Version
+) {
+    @Serializable
+    data class Version(
+        val version: String,
+        val buildTime: String
+    )
+}
