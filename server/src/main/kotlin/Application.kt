@@ -23,10 +23,20 @@ fun main(args: Array<String>) {
 }
 
 fun Application.module() {
-    val version = BuildConfig.VERSION
-    val buildTime = BuildConfig.BUILD_TIME
+    val osName = System.getProperty("os.name")
+    val osVersion = System.getProperty("os.version")
+    val osArch = System.getProperty("os.arch")
 
-    log.info("Starting Synara API v$version built at $buildTime")
+    log.info("""
+
+        -------------------------------------------------------
+        Synara API Started
+        Version: ${BuildConfig.VERSION}
+        Commit:  ${BuildConfig.GIT_HASH}
+        Build:   ${BuildConfig.BUILD_TIME}
+        Runtime: $osName ($osArch) | Kernel: $osVersion
+        -------------------------------------------------------
+    """.trimIndent())
 
     install(CallLogging)
     install(JmDNSPlugin) {

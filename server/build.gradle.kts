@@ -106,6 +106,11 @@ ktor {
     }
 }
 
+val gitHashProvider: Provider<String> = providers.exec {
+    commandLine("git", "rev-parse", "HEAD")
+    isIgnoreExitValue = true
+}.standardOutput.asText.map { it.trim().ifEmpty { "unknown" } }
+
 val buildTimestamp: String = DateTimeFormatter
     .ofPattern("yyyy-MM-dd HH:mm:ss")
     .withZone(ZoneId.systemDefault())
@@ -116,4 +121,5 @@ buildConfig {
     buildConfigField("VERSION", project.version.toString())
     buildConfigField("APP_NAME", "Synara API")
     buildConfigField("BUILD_TIME", buildTimestamp)
+    buildConfigField("GIT_HASH", gitHashProvider.get())
 }

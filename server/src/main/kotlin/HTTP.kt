@@ -20,7 +20,7 @@ fun Application.configureHTTP() {
     }
     install(SimpleCache) {
         if (!environment.config.propertyOrNull("redis.host")?.getString().isNullOrBlank()) {
-            println("Using redis for cache!")
+            log.info("Using redis for cache!")
             redisCache {
                 val config by inject<RedisCacheProvider.Config>()
 
@@ -30,7 +30,7 @@ fun Application.configureHTTP() {
                 invalidateAt = config.invalidateAt
             }
         } else {
-            println("Using memory for cache!")
+            log.info("Using memory for cache!")
             memoryCache {
                 invalidateAt = 10.seconds
             }

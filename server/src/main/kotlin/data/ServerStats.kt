@@ -18,6 +18,9 @@ data class ServerStats(
     @Serializable
     data class Version(
         val version: String,
-        val buildTime: String
+        val buildTime: String,
+        val commitHash: String,
+        val runtime: String,
+        val kernel: String,
     )
 }

@@ -84,7 +84,10 @@ fun Application.configureDatabases() {
                     averageSizePerSong = if (allSongs.isNotEmpty()) totalFileSize / allSongs.size else 0,
                     version = ServerStats.Version(
                         version = BuildConfig.VERSION,
-                        buildTime = BuildConfig.BUILD_TIME
+                        buildTime = BuildConfig.BUILD_TIME,
+                        commitHash = BuildConfig.GIT_HASH,
+                        runtime = "${System.getProperty("os.name")} (${System.getProperty("os.arch")})",
+                        kernel = System.getProperty("os.version")
                     )
                 )
             )
