@@ -337,11 +337,10 @@ class AlbumService : Service() {
         }
 
         val newAlbumIdLookupMap = newAlbumIdMap.entries.associate { (album, id) ->
-            Quintuple(
+            Quadruple(
                 album.name,
                 getISOFromDate(album.releaseDate),
                 album.songCount,
-                album.artists.joinToString(", "),
                 album.originalId
             ) to id
         }
@@ -349,11 +348,10 @@ class AlbumService : Service() {
         val finalCombinedIdMap = finalMatchMap + newAlbumIdLookupMap
 
         return albums.associateWith { album ->
-            val key = Quintuple(
+            val key = Quadruple(
                 album.name,
                 getISOFromDate(album.releaseDate),
                 album.songCount,
-                album.artists.joinToString(", "),
                 album.originalId
             )
             finalCombinedIdMap[key]
