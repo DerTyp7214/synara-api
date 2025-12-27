@@ -18,7 +18,6 @@ import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
 import java.time.Instant
 import java.util.*
-import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 @Suppress("unused")
@@ -130,7 +129,6 @@ class TidalSyncService(
 
             if (body.links.meta?.nextCursor != null && continueRequest(likedSongs)) {
                 logger.info("Fetching with cursor: ${body.links.meta.nextCursor}")
-                delay(500.milliseconds)
                 emitAll(getLikedSongs(body.links.meta.nextCursor, continueRequest))
             }
 

@@ -22,7 +22,6 @@ import redis.clients.jedis.RedisClient
 import java.util.*
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.io.encoding.Base64
-import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 @OptIn(ExperimentalAtomicApi::class)
@@ -581,7 +580,6 @@ class TidalService(
 
                 if (cursor != null) {
                     logger.info("Fetching tracks for $albumId with cursor: $cursor")
-                    delay(500.milliseconds)
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -636,7 +634,6 @@ class TidalService(
             }.asFlow())
             if (nextCursor != null) {
                 logger.info("Fetching tracks for $playlistId with cursor: $nextCursor")
-                delay(500.milliseconds)
                 emitAll(getTracksFromPlaylist(playlistId, user, nextCursor))
             }
 
