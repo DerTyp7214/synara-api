@@ -2,7 +2,7 @@ type: http_request
 model: http_request
 id: rq_2HEFG5stF8
 createdAt: 2025-10-14T19:25:16.449964932
-updatedAt: 2025-12-24T03:02:16.219806286
+updatedAt: 2025-12-27T01:44:19.907707844
 workspaceId: wk_9dbKacQT4H
 folderId: fl_NXkRVdWsW4
 authentication: {}
@@ -11,13 +11,38 @@ body:
   text: |-
     {
       "urls": [
-        "https://tidal.com/album/418470617/u",
-        "https://tidal.com/album/450023344/u",
-        "https://tidal.com/album/337792267/u",
-        "https://tidal.com/album/365247929/u",
-        "https://tidal.com/album/365255829/u",
-        "https://tidal.com/album/368503179/u",
-        "https://tidal.com/album/368485349/u"
+        "https://tidal.com/album/389329854/u",
+        "https://tidal.com/album/249626621/u",
+        "https://tidal.com/album/219201451/u",
+        "https://tidal.com/album/188130533/u",
+        "https://tidal.com/album/152108671/u",
+        "https://tidal.com/album/137835027/u",
+        "https://tidal.com/album/119502932/u",
+        "https://tidal.com/album/104717676/u",
+        "https://tidal.com/album/349753256/u",
+        "https://tidal.com/album/102866655/u",
+        "https://tidal.com/album/105507625/u",
+        "https://tidal.com/album/105507719/u",
+        "https://tidal.com/album/105507552/u",
+        "https://tidal.com/album/484209775/u",
+        "https://tidal.com/album/481116615/u",
+        "https://tidal.com/album/481116431/u",
+        "https://tidal.com/album/479066102/u",
+        "https://tidal.com/album/466195070/u",
+        "https://tidal.com/album/454889763/u",
+        "https://tidal.com/album/428076033/u",
+        "https://tidal.com/album/417679071/u",
+        "https://tidal.com/album/411919515/u",
+        "https://tidal.com/album/412371569/u",
+        "https://tidal.com/album/373200452/u",
+        "https://tidal.com/album/360715158/u",
+        "https://tidal.com/album/356813818/u",
+        "https://tidal.com/album/480093280/u",
+        "https://tidal.com/album/484121114/u",
+        "https://tidal.com/album/481075829/u",
+        "https://tidal.com/album/482360224/u",
+        "https://tidal.com/album/481187888/u",
+        "https://tidal.com/album/478523242/u"
       ]
     }
 bodyType: application/json

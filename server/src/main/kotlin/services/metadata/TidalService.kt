@@ -105,7 +105,7 @@ class TidalService(
     }
 
     private suspend fun makeRequest(url: String, user: User? = null): HttpResponse {
-        return ApiClient.instance.get(url) {
+        return ApiClient.instance.queuedGet(url) {
             val token = if (user != null) {
                 SyncService.getInstance(user, environment, SyncService.SyncServiceType.tidal).getAccessToken()?.let {
                     AccessTokenResponse(

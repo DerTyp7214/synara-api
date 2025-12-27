@@ -1,6 +1,7 @@
 package dev.dertyp
 
 import dev.dertyp.core.ApplicationScope
+import dev.dertyp.core.HttpClientQueueService
 import io.ktor.client.*
 import io.ktor.client.engine.cio.*
 import io.ktor.client.plugins.contentnegotiation.*
@@ -16,4 +17,6 @@ object ApiClient {
             protobuf()
         }
     }
+
+    val queueInstance = HttpClientQueueService()
 }
