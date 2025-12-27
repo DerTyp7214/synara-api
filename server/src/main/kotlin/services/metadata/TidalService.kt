@@ -130,12 +130,7 @@ class TidalService(
             }
         }
 
-        val response =
-            ApiClient.instance.get(url) {
-                val token = getAccessToken()
-                header(HttpHeaders.Authorization, "${token.tokenType} ${token.accessToken}")
-                header(HttpHeaders.Accept, "application/vnd.api+json")
-            }
+        val response = makeRequest(url)
 
         if (response.status == HttpStatusCode.TooManyRequests) {
             delay(30.seconds)

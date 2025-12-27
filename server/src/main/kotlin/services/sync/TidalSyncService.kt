@@ -49,7 +49,7 @@ class TidalSyncService(
         val url = getUrl("/users/me")
         val token = getAccessToken() ?: throw IllegalArgumentException("Invalid access token")
 
-        val response = ApiClient.instance.get(url) {
+        val response = ApiClient.queueInstance.enqueue(url) {
             headers {
                 defaultHeaders(token)
             }
@@ -90,7 +90,7 @@ class TidalSyncService(
 
         val token = getAccessToken() ?: throw IllegalArgumentException("Invalid access token")
 
-        val response = ApiClient.instance.get(url) {
+        val response = ApiClient.queueInstance.enqueue(url) {
             headers {
                 defaultHeaders(token)
             }
