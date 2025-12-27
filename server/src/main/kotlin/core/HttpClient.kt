@@ -16,6 +16,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlin.concurrent.atomics.AtomicBoolean
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
 
 suspend inline fun <reified T> HttpClient.safeGet(url: String) = try {
@@ -55,7 +56,6 @@ class HttpClientQueueService : Service() {
                     .debounce(100)
                     .takeWhile { !stopped.load() }
                     .collect {
-                        logger.info("Trying to execute api calls")
                         execute { !stopped.load() }
                     }
             }
@@ -99,7 +99,8 @@ class HttpClientQueueService : Service() {
                 try {
                     val waitTime = Clock.System.now() - queuedAt
 
-                    logger.debug("Request ($urlString) was ${waitTime.inWholeMilliseconds}ms in queue")
+                    if (waitTime > 2.seconds)
+                        logger.info("Request ($urlString) was ${waitTime.inWholeMilliseconds}ms in queue")
 
                     val response = ApiClient.instance.get(urlString) { block() }
                     deferred.complete(response)
