@@ -134,7 +134,7 @@ fun Route.album() {
         delete() {
             val service by inject<AlbumService>()
 
-            val ids = call.receive<List<String>>().map { UUID.fromString(it) }
+            val ids = call.receive<List<String>>().mapNotNull { it.toUUIDOrNull() }
 
             call.respond(service.deleteAlbums(ids))
         }

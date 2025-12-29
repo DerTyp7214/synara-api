@@ -2,7 +2,7 @@ type: http_request
 model: http_request
 id: rq_c2aQ3V9qzz
 createdAt: 2025-10-14T19:25:16.450619051
-updatedAt: 2025-12-25T04:27:33.483709687
+updatedAt: 2025-12-29T14:36:49.672429679
 workspaceId: wk_9dbKacQT4H
 folderId: fl_QrUoFyttZM
 authentication: {}
@@ -39,9 +39,9 @@ urlParameters:
   id: Cqh8H4cRV7
 - enabled: true
   name: :query
-  value: diamant
+  value: like us ayo
   id: zXFn5dePsN
 - enabled: true
   name: ''
   value: ''
-  id: Q4TFAVUFdG
+  id: 6i6NfFUcwA

@@ -475,7 +475,7 @@ fun Route.song() {
         delete() {
             val service by inject<SongService>()
 
-            val ids = call.receive<List<String>>().map { UUID.fromString(it) }
+            val ids = call.receive<List<String>>().mapNotNull { it.toUUIDOrNull() }
 
             call.respond(service.deleteSongs(ids))
         }

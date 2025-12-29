@@ -103,6 +103,12 @@ class UserPlaylistService : Service() {
         }
     }
 
+    suspend fun removeFromPlaylist(id: UUID, songIds: List<UUID>) = dbQuery {
+        UserPlaylistSongTable.deleteWhere {
+            UserPlaylistSongTable.playlistId eq id and (UserPlaylistSongTable.songId inList songIds)
+        }
+    }
+
     private suspend fun querySingle(query: Query.() -> Query) =
         queryPlaylists(0, Int.MAX_VALUE, query).data.singleOrNull()
 
