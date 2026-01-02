@@ -118,6 +118,7 @@ class UserPlaylistService : Service() {
             val mainPlaylistRows = UserPlaylistTable
                 .selectAll()
                 .query()
+                .orderBy(UserPlaylistTable.name)
                 .paging(page, pageSize, offset)
                 .toList()
 
