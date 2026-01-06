@@ -5,6 +5,7 @@ import dev.dertyp.core.getUsername
 import dev.dertyp.core.parameters
 import dev.dertyp.data.User
 import dev.dertyp.db.SyncServiceTable
+import dev.dertyp.services.ISyncService
 import io.ktor.client.call.*
 import io.ktor.client.request.*
 import io.ktor.client.request.forms.*
@@ -55,7 +56,7 @@ abstract class TidalSyncServiceBase(
         }
     }
 
-    override suspend fun getToken(call: ApplicationCall): Token {
+    override suspend fun getToken(call: ApplicationCall): ISyncService.Token {
         val code = call.request.queryParameters["code"]
         val state = call.request.queryParameters["state"]
 
@@ -91,7 +92,7 @@ abstract class TidalSyncServiceBase(
         }
     }
 
-    override suspend fun refreshToken(token: Token): Token {
+    override suspend fun refreshToken(token: ISyncService.Token): ISyncService.Token {
         val url = url {
             protocol = URLProtocol.HTTPS
             host = "auth.tidal.com"
@@ -129,7 +130,7 @@ abstract class TidalSyncServiceBase(
         }
     }
 
-    override fun mapTableToToken(row: ResultRow): Token = TidalTokenResponse(
+    override fun mapTableToToken(row: ResultRow): ISyncService.Token = TidalTokenResponse(
         scope = row[SyncServiceTable.scope],
         accessToken = row[SyncServiceTable.accessToken],
         refreshToken = row[SyncServiceTable.refreshToken],
@@ -148,5 +149,5 @@ abstract class TidalSyncServiceBase(
         @SerialName("token_type") override val tokenType: String,
         @SerialName("user_id") override val userId: Long,
         override val createdAt: Long? = null,
-    ) : Token
+    ) : ISyncService.Token
 }

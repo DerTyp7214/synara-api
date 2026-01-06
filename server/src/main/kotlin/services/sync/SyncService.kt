@@ -5,7 +5,7 @@ import dev.dertyp.core.getUsername
 import dev.dertyp.data.User
 import dev.dertyp.db.SyncServiceTable
 import dev.dertyp.dbQuery
-import dev.dertyp.serializers.DateSerializer
+import dev.dertyp.services.ISyncService
 import dev.dertyp.services.Service
 import dev.dertyp.services.UserService
 import io.ktor.http.*
@@ -15,7 +15,6 @@ import io.ktor.server.response.*
 import io.ktor.server.util.*
 import kotlinx.coroutines.flow.Flow
 import kotlinx.html.*
-import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.andWhere
@@ -23,7 +22,6 @@ import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.jdbc.upsert
 import org.koin.ktor.ext.get
 import java.security.MessageDigest
-import java.util.*
 import java.util.concurrent.TimeUnit
 import kotlin.io.encoding.Base64
 import kotlin.time.Duration.Companion.seconds
@@ -32,23 +30,19 @@ import kotlin.time.Duration.Companion.seconds
 abstract class SyncService(
     protected val environment: ApplicationEnvironment,
     protected val user: User
-) : Service() {
+) : ISyncService, Service() {
     abstract val clientIdConfigPath: String
     abstract val clientSecretConfigPath: String
     abstract val scopes: List<String>
 
-    private val serviceType: SyncServiceType
+    private val serviceType: ISyncService.SyncServiceType = when {
+        this is TidalSyncService -> ISyncService.SyncServiceType.tidal
+        else -> ISyncService.SyncServiceType.unknown
+    }
     private val redirectPath: String by lazy { "/sync/${serviceType.name}/callback" }
 
     protected val clientId by lazy { environment.config.propertyOrNull(clientIdConfigPath)?.getString() }
     protected val clientSecret by lazy { environment.config.propertyOrNull(clientSecretConfigPath)?.getString() }
-
-    init {
-        serviceType = when {
-            this is TidalSyncService -> SyncServiceType.tidal
-            else -> SyncServiceType.unknown
-        }
-    }
 
     companion object {
         val authFlowCache = Caffeine.newBuilder()
@@ -62,7 +56,7 @@ abstract class SyncService(
             username: String? = null
         ): SyncService? {
             return when (name) {
-                SyncServiceType.tidal.name -> {
+                ISyncService.SyncServiceType.tidal.name -> {
                     val environment = call.application.environment
                     val user = call.get<UserService>()
                         .findUserByUsername(username ?: call.getUsername())
@@ -81,9 +75,9 @@ abstract class SyncService(
             return instance
         }
 
-        fun getInstance(user: User, environment: ApplicationEnvironment, type: SyncServiceType): SyncService {
+        fun getInstance(user: User, environment: ApplicationEnvironment, type: ISyncService.SyncServiceType): SyncService {
             return when (type) {
-                SyncServiceType.tidal -> TidalSyncService(environment, user)
+                ISyncService.SyncServiceType.tidal -> TidalSyncService(environment, user)
                 else -> throw IllegalArgumentException("Invalid sync service type: $type")
             }
         }
@@ -105,7 +99,7 @@ abstract class SyncService(
         }
     }
 
-    protected suspend fun setToken(token: Token) {
+    protected suspend fun setToken(token: ISyncService.Token) {
         if (token.createdAt != null) {
             dbQuery {
                 SyncServiceTable.upsert {
@@ -123,7 +117,7 @@ abstract class SyncService(
         }
     }
 
-    protected suspend fun getToken(): Token? = dbQuery {
+    protected suspend fun getToken(): ISyncService.Token? = dbQuery {
         SyncServiceTable
             .select(SyncServiceTable.columns)
             .where { SyncServiceTable.ownerId eq user.id }
@@ -131,7 +125,7 @@ abstract class SyncService(
             .map(::mapTableToToken)
     }.singleOrNull()
 
-    suspend fun getAccessToken(): Token? {
+    suspend fun getAccessToken(): ISyncService.Token? {
         val token = getToken() ?: return null
         val currentTimeMillis = System.currentTimeMillis()
         val bufferMillis = TimeUnit.MINUTES.toMillis(5)
@@ -214,46 +208,13 @@ abstract class SyncService(
     }
 
     abstract fun buildAuthUrl(call: ApplicationCall): String
-    abstract suspend fun getToken(call: ApplicationCall): Token
-    abstract suspend fun refreshToken(token: Token): Token
-    abstract fun mapTableToToken(row: ResultRow): Token
+    abstract suspend fun getToken(call: ApplicationCall): ISyncService.Token
+    abstract suspend fun refreshToken(token: ISyncService.Token): ISyncService.Token
+    abstract fun mapTableToToken(row: ResultRow): ISyncService.Token
 
-    abstract suspend fun getMe(): Me
+    abstract suspend fun getMe(): ISyncService.Me
     abstract suspend fun getLikedSongs(
         cursor: String? = null,
-        continueRequest: suspend (List<LikedSong>) -> Boolean = { true }
-    ): Flow<LikedSong>
-
-    interface Token {
-        val scope: String?
-        val accessToken: String
-        val refreshToken: String?
-        val expiresIn: Int
-        val tokenType: String
-        val userId: Long
-        val createdAt: Long?
-    }
-
-    @Suppress("EnumEntryName")
-    @Serializable
-    enum class SyncServiceType {
-        tidal,
-        unknown
-    }
-
-    @Serializable
-    data class Me(
-        val id: String,
-        val username: String,
-        val email: String,
-    )
-
-    @Serializable
-    data class LikedSong(
-        val id: String,
-        val title: String,
-        @Serializable(with = DateSerializer::class)
-        val addedAt: Date,
-        val explicit: Boolean,
-    )
+        continueRequest: suspend (List<ISyncService.LikedSong>) -> Boolean = { true }
+    ): Flow<ISyncService.LikedSong>
 }

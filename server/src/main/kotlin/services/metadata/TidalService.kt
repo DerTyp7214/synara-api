@@ -4,6 +4,7 @@ import dev.dertyp.ApiClient
 import dev.dertyp.core.*
 import dev.dertyp.data.User
 import dev.dertyp.plugins.RedisCacheProvider
+import dev.dertyp.services.ISyncService
 import dev.dertyp.services.models.tidal.*
 import dev.dertyp.services.sync.SyncService
 import io.ktor.client.call.*
@@ -106,7 +107,7 @@ class TidalService(
     private suspend fun makeRequest(url: String, user: User? = null): HttpResponse {
         return ApiClient.instance.queuedGet(url) {
             val token = if (user != null) {
-                SyncService.getInstance(user, environment, SyncService.SyncServiceType.tidal).getAccessToken()?.let {
+                SyncService.getInstance(user, environment, ISyncService.SyncServiceType.tidal).getAccessToken()?.let {
                     AccessTokenResponse(
                         tokenType = it.tokenType,
                         accessToken = it.accessToken,

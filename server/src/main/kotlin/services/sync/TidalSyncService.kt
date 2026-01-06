@@ -3,6 +3,7 @@ package dev.dertyp.services.sync
 import dev.dertyp.ApiClient
 import dev.dertyp.core.parameters
 import dev.dertyp.data.User
+import dev.dertyp.services.ISyncService
 import dev.dertyp.services.models.tidal.TracksAttributes
 import dev.dertyp.services.models.tidal.TracksRelationships
 import dev.dertyp.services.models.tidal.UserCollectionsTracksMultiRelationshipDataDocument
@@ -27,9 +28,9 @@ class TidalSyncService(
 ) : TidalSyncServiceBase(environment, user) {
     private val apiBase = "https://openapi.tidal.com/v2"
 
-    private var me: Me? = null
+    private var me: ISyncService.Me? = null
 
-    private fun HeadersBuilder.defaultHeaders(token: Token) {
+    private fun HeadersBuilder.defaultHeaders(token: ISyncService.Token) {
         append("Accept", "application/vnd.api+json")
         append("Authorization", "${token.tokenType} ${token.accessToken}")
     }
@@ -42,7 +43,7 @@ class TidalSyncService(
         }
     }
 
-    override suspend fun getMe(): Me {
+    override suspend fun getMe(): ISyncService.Me {
         if (me != null) return me!!
 
         val url = getUrl("/users/me")
@@ -62,7 +63,7 @@ class TidalSyncService(
 
         val body = response.body<UsersSingleResourceDataDocument>()
 
-        me = Me(
+        me = ISyncService.Me(
             id = body.data.id,
             username = body.data.attributes.username,
             email = body.data.attributes.email,
@@ -73,8 +74,8 @@ class TidalSyncService(
 
     override suspend fun getLikedSongs(
         cursor: String?,
-        continueRequest: suspend (List<LikedSong>) -> Boolean
-    ): Flow<LikedSong> {
+        continueRequest: suspend (List<ISyncService.LikedSong>) -> Boolean
+    ): Flow<ISyncService.LikedSong> {
         val me = getMe()
 
         val url = getUrl("/userCollections/${me.id}/relationships/tracks") {
@@ -114,7 +115,7 @@ class TidalSyncService(
         val likedSongs = body.data.map { d ->
             val date = d.meta?.addedAt?.toInstant() ?: Instant.now()
 
-            LikedSong(
+            ISyncService.LikedSong(
                 id = d.id,
                 addedAt = Date.from(date) ?: Date(),
                 title = songMap[d.id]?.attributes?.title ?: "",
@@ -128,8 +129,8 @@ class TidalSyncService(
             }
 
             if (body.links.meta?.nextCursor != null && continueRequest(likedSongs)) {
-                logger.info("Fetching with cursor: ${body.links.meta.nextCursor}")
-                emitAll(getLikedSongs(body.links.meta.nextCursor, continueRequest))
+                logger.info("Fetching with cursor: ${body.links.meta!!.nextCursor}")
+                emitAll(getLikedSongs(body.links.meta!!.nextCursor, continueRequest))
             }
 
             if (cursor == null) logger.info("Fetched favourites")

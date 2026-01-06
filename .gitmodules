@@ -1,0 +1,3 @@
+[submodule "common-rpc"]
+	path = common-rpc
+	url = git@github.com:DerTyp7214/synara-common-rpc.git

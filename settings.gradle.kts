@@ -8,3 +8,4 @@ dependencyResolutionManagement {
 }
 
 include(":server")
+include(":common-rpc")

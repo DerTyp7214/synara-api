@@ -5,9 +5,14 @@ import dev.dertyp.data.FavSync
 import dev.dertyp.data.User
 import dev.dertyp.db.FavSyncTable
 import dev.dertyp.dbQuery
-import dev.dertyp.services.sync.SyncService
-import org.jetbrains.exposed.v1.core.*
-import org.jetbrains.exposed.v1.jdbc.*
+import org.jetbrains.exposed.v1.core.ColumnSet
+import org.jetbrains.exposed.v1.core.ResultRow
+import org.jetbrains.exposed.v1.core.SortOrder
+import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.jdbc.Query
+import org.jetbrains.exposed.v1.jdbc.andWhere
+import org.jetbrains.exposed.v1.jdbc.selectAll
+import org.jetbrains.exposed.v1.jdbc.upsert
 import java.util.*
 
 class FavSyncService : Service() {
@@ -23,14 +28,14 @@ class FavSyncService : Service() {
 
     fun map(resultRow: ResultRow) = mapFavSync(resultRow)
 
-    suspend fun getLatestFavSync(user: User, service: SyncService.SyncServiceType) = queryFavSync {
+    suspend fun getLatestFavSync(user: User, service: ISyncService.SyncServiceType) = queryFavSync {
         where { FavSyncTable.userId eq user.id }
         andWhere { FavSyncTable.service eq service }
         orderBy(FavSyncTable.syncedAt, SortOrder.DESC)
         limit(1)
     }.singleOrNull()
 
-    suspend fun insertFavSync(user: User, service: SyncService.SyncServiceType, syncedAt: Date) = dbQuery {
+    suspend fun insertFavSync(user: User, service: ISyncService.SyncServiceType, syncedAt: Date) = dbQuery {
         FavSyncTable.upsert {
             it[FavSyncTable.userId] = user.id
             it[FavSyncTable.service] = service

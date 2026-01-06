@@ -5,6 +5,7 @@ import dev.dertyp.data.User
 import dev.dertyp.data.UserSong
 import dev.dertyp.serializers.UUIDSerializer
 import dev.dertyp.services.FavSyncService
+import dev.dertyp.services.ISyncService
 import dev.dertyp.services.Service
 import dev.dertyp.services.SongService
 import dev.dertyp.services.metadata.MetadataService
@@ -333,7 +334,7 @@ class DownloadService(
     @OptIn(ExperimentalCoroutinesApi::class, InternalAPI::class)
     suspend fun syncFavourites(call: RoutingCall): CompletableJob {
         val user = call.getUser() ?: throw IllegalStateException("No user")
-        if (call.parameters["service"] != SyncService.SyncServiceType.tidal.name) throw IllegalStateException("Only tidal")
+        if (call.parameters["service"] != ISyncService.SyncServiceType.tidal.name) throw IllegalStateException("Only tidal")
         val service = SyncService.getInstance(call, user.username)
 
         if (service.getAccessToken() == null) throw IllegalStateException("Tidal not authenticated")
@@ -347,9 +348,9 @@ class DownloadService(
         }
 
         return ApplicationScope.scope.async {
-            val latestFavSync = favSyncService.getLatestFavSync(user, SyncService.SyncServiceType.tidal)
+            val latestFavSync = favSyncService.getLatestFavSync(user, ISyncService.SyncServiceType.tidal)
 
-            val idMap = ConcurrentHashMap<String, SyncService.LikedSong>()
+            val idMap = ConcurrentHashMap<String, ISyncService.LikedSong>()
 
             val songs = service.getLikedSongs { songs ->
                 latestFavSync == null || songs.none { it.addedAt < latestFavSync.syncedAt }
@@ -382,7 +383,7 @@ class DownloadService(
                 syncMap[user.id]?.store(false)
             }
 
-            favSyncService.insertFavSync(user, SyncService.SyncServiceType.tidal, Date.from(Instant.now()))
+            favSyncService.insertFavSync(user, ISyncService.SyncServiceType.tidal, Date.from(Instant.now()))
 
             logger.info("[${user.username}] Sync favourite songs finished.")
         }.launchOnCancellation {
