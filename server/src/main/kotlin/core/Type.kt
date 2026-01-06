@@ -7,6 +7,7 @@ import dev.dertyp.data.User
 import dev.dertyp.services.ImageService
 import dev.dertyp.services.SongService
 import dev.dertyp.services.UserPlaylistService
+import dev.dertyp.services.metadata.IMetadataService
 import dev.dertyp.services.metadata.MetadataService
 import dev.dertyp.services.tdn.*
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -28,7 +29,7 @@ fun Type.getWrapper(metadataService: MetadataService?, user: User, ids: List<Str
                     IdsGroup(
                         id,
                         emptyFlow(),
-                        MetadataService.Album(
+                        IMetadataService.Album(
                             id = id,
                             title = "",
                             tracks = metadataService.getAlbumTracks(id),
@@ -79,7 +80,7 @@ suspend fun Type.download(
 
             wrapper.idGroups.buffer(2).collect { idGroup ->
                 val playlistId = idGroup.metadata?.let { playlist ->
-                    if (playlist is MetadataService.FlowPlaylist) {
+                    if (playlist is IMetadataService.FlowPlaylist) {
                         val image = playlist.images.largest
                         val imageBytes = ApiClient.instance.safeGet<ByteArray>(image.url)
 
@@ -110,7 +111,7 @@ suspend fun Type.download(
                 }
 
                 idGroup.metadata?.let { playlist ->
-                    if (playlist is MetadataService.FlowPlaylist) {
+                    if (playlist is IMetadataService.FlowPlaylist) {
                         playlist.sharedTracks
                             .buffer(100)
                             .filterExisting(
@@ -159,7 +160,7 @@ suspend fun Type.download(
             wrapper.idGroups.buffer(2).collect { idGroup ->
                 idGroup.metadata?.let { metadata ->
                     when (metadata) {
-                        is MetadataService.Album -> metadata.tracks
+                        is IMetadataService.Album -> metadata.tracks
                         else -> emptyFlow()
                     }
                         .buffer(100)

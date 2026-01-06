@@ -1,30 +1,18 @@
 package dev.dertyp.services.metadata
 
 import dev.dertyp.ApiClient
-import dev.dertyp.core.ApplicationScope
 import dev.dertyp.data.User
-import dev.dertyp.serializers.DurationSerializer
-import dev.dertyp.serializers.LocalDateSerializer
-import dev.dertyp.serializers.OffsetDateTimeSerializer
 import dev.dertyp.services.Service
 import io.ktor.client.call.*
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.server.application.*
-import kotlinx.coroutines.Deferred
-import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.*
-import kotlinx.serialization.SerialName
-import kotlinx.serialization.Serializable
-import kotlinx.serialization.Transient
-import java.time.LocalDate
-import java.time.OffsetDateTime
+import kotlinx.coroutines.flow.Flow
 import java.util.*
 import kotlin.concurrent.atomics.AtomicBoolean
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
-import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
 @OptIn(ExperimentalAtomicApi::class)
@@ -41,23 +29,23 @@ abstract class MetadataService(
     private val clientSecret by lazy { environment.config.propertyOrNull(clientSecretConfigPath)?.getString() }
 
     protected abstract fun HttpRequestBuilder.getAccessTokenHeader(clientId: String, clientSecret: String)
-    abstract suspend fun searchArtists(query: String, limit: Int = 50): List<Artist>
+    abstract suspend fun searchArtists(query: String, limit: Int = 50): List<IMetadataService.Artist>
     abstract suspend fun getAlbumIdByTrackId(trackId: String): String?
-    abstract suspend fun getImageUrlByAlbumId(albumId: String): List<Image>
-    abstract suspend fun getImageUrlsByAlbumIds(albumIds: List<String>): Map<String, List<Image>>
+    abstract suspend fun getImageUrlByAlbumId(albumId: String): List<IMetadataService.Image>
+    abstract suspend fun getImageUrlsByAlbumIds(albumIds: List<String>): Map<String, List<IMetadataService.Image>>
     abstract suspend fun getImageUrlByImageId(imageId: UUID): String?
-    abstract suspend fun getTrackById(trackId: String): Track?
-    abstract suspend fun getTracksByIds(trackIds: List<String>): List<Track>
-    abstract suspend fun getAlbumsByIds(albumIds: List<String>): List<Album>
-    abstract suspend fun getArtistsByIds(artistIds: List<String>): List<Artist>
-    abstract suspend fun getAlbumTracks(albumId: String): Flow<Track>
+    abstract suspend fun getTrackById(trackId: String): IMetadataService.Track?
+    abstract suspend fun getTracksByIds(trackIds: List<String>): List<IMetadataService.Track>
+    abstract suspend fun getAlbumsByIds(albumIds: List<String>): List<IMetadataService.Album>
+    abstract suspend fun getArtistsByIds(artistIds: List<String>): List<IMetadataService.Artist>
+    abstract suspend fun getAlbumTracks(albumId: String): Flow<IMetadataService.Track>
     abstract fun getPlaylistsByIds(
         playlistIds: List<String>,
         includeTracks: Boolean = false,
         user: User? = null
-    ): Flow<FlowPlaylist>
+    ): Flow<IMetadataService.FlowPlaylist>
 
-    private var accessToken: Pair<AccessTokenResponse, Long>? = null
+    private var accessToken: Pair<IMetadataService.AccessTokenResponse, Long>? = null
 
     init {
         logger.info("Initializing MetadataService for $providerName")
@@ -91,7 +79,7 @@ abstract class MetadataService(
         return true
     }
 
-    protected open suspend fun getAccessToken(): AccessTokenResponse {
+    protected open suspend fun getAccessToken(): IMetadataService.AccessTokenResponse {
         if (clientId == null || clientSecret == null) throw NullPointerException("$providerName credentials are null. ($clientIdConfigPath & $clientSecretConfigPath)")
 
         if ((accessToken?.second ?: 0) > System.currentTimeMillis()) return accessToken!!.first
@@ -110,7 +98,7 @@ abstract class MetadataService(
             return getAccessToken()
         }
 
-        val tokenResponse = response.body<AccessTokenResponse>()
+        val tokenResponse = response.body<IMetadataService.AccessTokenResponse>()
 
         logger.info("Got new access token for $providerName")
 
@@ -119,156 +107,5 @@ abstract class MetadataService(
             System.currentTimeMillis() + tokenResponse.expiresIn.seconds.inWholeMilliseconds
         )
         return tokenResponse
-    }
-
-    @Serializable
-    protected data class AccessTokenResponse(
-        @SerialName("access_token")
-        val accessToken: String,
-        @SerialName("token_type")
-        val tokenType: String,
-        @SerialName("expires_in")
-        val expiresIn: Int,
-    )
-
-    @Serializable
-    data class Image(
-        val url: String,
-        val width: Int,
-        val height: Int,
-        val animated: Boolean = url.endsWith(".mp4")
-    )
-
-    @Serializable
-    sealed class BaseMetadata
-
-    @Serializable
-    data class Artist(
-        val id: String,
-        val name: String,
-        val popularity: Float,
-        val url: String? = null,
-        val images: List<Image>,
-    ) : BaseMetadata()
-
-    @Serializable
-    data class Track(
-        val id: String,
-        val title: String,
-        val artists: List<String> = emptyList(),
-        @Serializable(with = DurationSerializer::class)
-        val duration: Duration,
-        @Serializable(with = OffsetDateTimeSerializer::class)
-        val createdAt: OffsetDateTime? = null,
-        @Serializable(with = OffsetDateTimeSerializer::class)
-        val addedAt: OffsetDateTime? = null,
-        val trackNumber: Int? = null,
-        val discNumber: Int? = null,
-        val images: List<Image>,
-    ) : BaseMetadata()
-
-    @Serializable
-    data class Album(
-        val id: String,
-        val title: String,
-        val artists: List<String> = emptyList(),
-        @Transient
-        val tracks: Flow<Track> = emptyFlow(),
-        @Serializable(with = DurationSerializer::class)
-        val duration: Duration = Duration.ZERO,
-        val trackCount: Int = 0,
-        val discCount: Int = 0,
-        @Serializable(with = LocalDateSerializer::class)
-        val releaseDate: LocalDate? = null,
-        val images: List<Image> = emptyList(),
-    ) : BaseMetadata()
-
-    @Serializable
-    data class Mix(
-        val id: String,
-        val name: String,
-        @Transient
-        val tracks: Flow<Track> = emptyFlow(),
-        val images: List<Image>,
-    ) : BaseMetadata()
-
-    @Serializable
-    data class Playlist(
-        val id: String,
-        val name: String,
-        val description: String,
-        val tracks: List<Track> = emptyList(),
-        val trackCount: Int = tracks.size,
-        @Serializable(with = OffsetDateTimeSerializer::class)
-        val createdAt: OffsetDateTime? = null,
-        @Serializable(with = OffsetDateTimeSerializer::class)
-        val modifiedAt: OffsetDateTime? = null,
-        val images: List<Image>,
-    ) : BaseMetadata()
-
-    @Serializable
-    data class FlowPlaylist(
-        val id: String,
-        val name: String,
-        val description: String,
-        @Transient
-        val tracks: Flow<Track> = emptyFlow(),
-        val trackCount: Int = 0,
-        @Serializable(with = OffsetDateTimeSerializer::class)
-        val createdAt: OffsetDateTime? = null,
-        @Serializable(with = OffsetDateTimeSerializer::class)
-        val modifiedAt: OffsetDateTime? = null,
-        val images: List<Image>,
-    ) : BaseMetadata() {
-        private val cache = mutableListOf<Track>()
-        private var collectionJob: Deferred<List<Track>>? = null
-
-        private fun getOrStartCollection(): Deferred<List<Track>> {
-            return synchronized(this) {
-                collectionJob ?: ApplicationScope.scope.async {
-                    tracks.onEach { track ->
-                        synchronized(cache) { cache.add(track) }
-                    }.toList()
-                }.also { collectionJob = it }
-            }
-        }
-
-        val sharedTracks: Flow<Track> = flow {
-            val job = getOrStartCollection()
-            val currentCache = synchronized(cache) { cache.toList() }
-            currentCache.forEach { track -> emit(track) }
-            tracks.drop(currentCache.size).collect { track ->
-                emit(track)
-            }
-            job.join()
-        }
-
-        suspend fun collect(): Playlist {
-            return Playlist(
-                id = id,
-                name = name,
-                description = description,
-                tracks = getOrStartCollection().await(),
-                trackCount = trackCount,
-                createdAt = createdAt,
-                modifiedAt = modifiedAt,
-                images = images,
-            )
-        }
-
-        companion object {
-            fun fromPlaylist(playlist: Playlist): FlowPlaylist {
-                return FlowPlaylist(
-                    id = playlist.id,
-                    name = playlist.name,
-                    description = playlist.description,
-                    tracks = playlist.tracks.asFlow(),
-                    trackCount = playlist.tracks.size,
-                    createdAt = playlist.createdAt,
-                    modifiedAt = playlist.modifiedAt,
-                    images = playlist.images,
-                )
-            }
-        }
     }
 }

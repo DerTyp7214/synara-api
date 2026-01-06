@@ -8,6 +8,7 @@ import dev.dertyp.services.FavSyncService
 import dev.dertyp.services.ISyncService
 import dev.dertyp.services.Service
 import dev.dertyp.services.SongService
+import dev.dertyp.services.metadata.IMetadataService
 import dev.dertyp.services.metadata.MetadataService
 import dev.dertyp.services.sync.SyncService
 import io.ktor.server.engine.*
@@ -441,7 +442,7 @@ data class IdsWrapper(
 data class IdsGroup(
     val id: String = UUID.randomUUID().toString(),
     val ids: Flow<Pair<Long, String>>,
-    val metadata: MetadataService.BaseMetadata? = null
+    val metadata: IMetadataService.BaseMetadata? = null
 ) {
     fun filter(predicate: (entry: Pair<Long, String>) -> Boolean) = ids.filter(predicate)
 }

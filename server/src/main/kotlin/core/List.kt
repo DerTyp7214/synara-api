@@ -1,6 +1,6 @@
 package dev.dertyp.core
 
-import dev.dertyp.services.metadata.MetadataService
+import dev.dertyp.services.metadata.IMetadataService
 import dev.dertyp.services.models.tidal.*
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.asFlow
@@ -59,11 +59,11 @@ inline fun <reified F : BaseAttributes> List<IncludedInner<JsonAttribute, *>>.ma
         else null
     }.toMap()
 
-val List<MetadataService.Image>.largest
+val List<IMetadataService.Image>.largest
     get() = maxByOrNull { it.width } ?: first()
 
-fun List<MetadataService.Playlist>.toFlow(): Flow<MetadataService.FlowPlaylist> =
-    map { MetadataService.FlowPlaylist.fromPlaylist(it) }.asFlow()
+fun List<IMetadataService.Playlist>.toFlow(): Flow<IMetadataService.FlowPlaylist> =
+    map { IMetadataService.FlowPlaylist.fromPlaylist(it) }.asFlow()
 
 @Suppress("UNCHECKED_CAST")
 fun <K, V> List<Pair<K, V?>>.filterValueNotNull(): List<Pair<K, V>> = filter { (_, v) -> v != null } as List<Pair<K, V>>

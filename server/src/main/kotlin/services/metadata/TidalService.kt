@@ -43,7 +43,7 @@ class TidalService(
         }
     }
 
-    fun List<Track>.cacheTracks(): List<Track> {
+    fun List<IMetadataService.Track>.cacheTracks(): List<IMetadataService.Track> {
         jedis?.let {
             for (track in this) writeToJedis(track)
         }
@@ -51,7 +51,7 @@ class TidalService(
         return this
     }
 
-    fun List<Album>.cacheAlbums(): List<Album> {
+    fun List<IMetadataService.Album>.cacheAlbums(): List<IMetadataService.Album> {
         jedis?.let {
             for (album in this) writeToJedis(album)
         }
@@ -59,7 +59,7 @@ class TidalService(
         return this
     }
 
-    fun List<Artist>.cacheArtists(): List<Artist> {
+    fun List<IMetadataService.Artist>.cacheArtists(): List<IMetadataService.Artist> {
         jedis?.let {
             for (artist in this) writeToJedis(artist)
         }
@@ -67,7 +67,7 @@ class TidalService(
         return this
     }
 
-    fun List<Playlist>.cachePlaylists(): List<Playlist> {
+    fun List<IMetadataService.Playlist>.cachePlaylists(): List<IMetadataService.Playlist> {
         jedis?.let {
             for (playlist in this) writeToJedis(playlist)
         }
@@ -75,7 +75,7 @@ class TidalService(
         return this
     }
 
-    fun Flow<FlowPlaylist>.cachePlaylists(): Flow<FlowPlaylist> {
+    fun Flow<IMetadataService.FlowPlaylist>.cachePlaylists(): Flow<IMetadataService.FlowPlaylist> {
         return jedis?.let {
             onEach {
                 ApplicationScope.scope.launch {
@@ -108,7 +108,7 @@ class TidalService(
         return ApiClient.instance.queuedGet(url) {
             val token = if (user != null) {
                 SyncService.getInstance(user, environment, ISyncService.SyncServiceType.tidal).getAccessToken()?.let {
-                    AccessTokenResponse(
+                    IMetadataService.AccessTokenResponse(
                         tokenType = it.tokenType,
                         accessToken = it.accessToken,
                         expiresIn = it.expiresIn
@@ -120,7 +120,7 @@ class TidalService(
         }
     }
 
-    override suspend fun searchArtists(query: String, limit: Int): List<Artist> {
+    override suspend fun searchArtists(query: String, limit: Int): List<IMetadataService.Artist> {
         val url = getUrl("searchResults") {
             encodedPath += "/" + query.encodeURLParameter()
 
@@ -223,7 +223,7 @@ class TidalService(
         }
     }
 
-    override suspend fun getImageUrlByAlbumId(albumId: String): List<Image> {
+    override suspend fun getImageUrlByAlbumId(albumId: String): List<IMetadataService.Image> {
         val url = getUrl("/albums/${albumId}/relationships/coverArt") {
             parameters {
                 append("countryCode", "US")
@@ -248,7 +248,7 @@ class TidalService(
             val body = response.body<AlbumsMultiRelationshipDataDocument<ArtworksAttributes, ArtworksRelationships>>()
 
             return body.included?.flatMap { i ->
-                i.attributes.files.map { f -> Image(f.href, f.meta.width, f.meta.height) }
+                i.attributes.files.map { f -> IMetadataService.Image(f.href, f.meta.width, f.meta.height) }
             } ?: emptyList()
         } catch (e: Exception) {
             e.printStackTrace()
@@ -258,7 +258,7 @@ class TidalService(
         }
     }
 
-    override suspend fun getImageUrlsByAlbumIds(albumIds: List<String>): Map<String, List<Image>> {
+    override suspend fun getImageUrlsByAlbumIds(albumIds: List<String>): Map<String, List<IMetadataService.Image>> {
         if (albumIds.isEmpty()) return emptyMap()
 
         val url = getUrl("/albums") {
@@ -290,7 +290,7 @@ class TidalService(
                 Pair(
                     album.id,
                     coverMap[album.relationships?.coverArt?.data?.firstOrNull()?.id]?.attributes?.files?.map { file ->
-                        Image(file.href, file.meta.width, file.meta.height)
+                        IMetadataService.Image(file.href, file.meta.width, file.meta.height)
                     })
             }.filterValueNotNull()
         } catch (e: Exception) {
@@ -305,7 +305,7 @@ class TidalService(
         throw NotImplementedError("Not implemented for tidal!")
     }
 
-    override suspend fun getTrackById(trackId: String): Track? {
+    override suspend fun getTrackById(trackId: String): IMetadataService.Track? {
         val existing = getTrackFromJedis(trackId)
         if (existing != null) return existing
 
@@ -337,7 +337,7 @@ class TidalService(
             val artists = body.included?.mapAttributes<ArtistsAttributes>() ?: emptyMap()
 
             return body.data.attributes?.let { track ->
-                Track(
+                IMetadataService.Track(
                     id = body.data.id,
                     title = track.title,
                     duration = track.duration,
@@ -354,7 +354,7 @@ class TidalService(
         }
     }
 
-    override suspend fun getTracksByIds(trackIds: List<String>): List<Track> {
+    override suspend fun getTracksByIds(trackIds: List<String>): List<IMetadataService.Track> {
         val filteredTrackIds = trackIds.distinct().toMutableList()
         val existing = checkExistingTracksFromCache(filteredTrackIds)
 
@@ -397,7 +397,7 @@ class TidalService(
 
             return body.data.mapNotNull { trackObj ->
                 trackObj.attributes?.let { track ->
-                    Track(
+                    IMetadataService.Track(
                         id = trackObj.id,
                         title = track.title,
                         duration = track.duration,
@@ -415,7 +415,7 @@ class TidalService(
         }
     }
 
-    override suspend fun getAlbumsByIds(albumIds: List<String>): List<Album> {
+    override suspend fun getAlbumsByIds(albumIds: List<String>): List<IMetadataService.Album> {
         val filteredAlbumIds = albumIds.distinct().toMutableList()
         val existing = checkExistingAlbumsFromCache(filteredAlbumIds)
 
@@ -456,7 +456,7 @@ class TidalService(
 
             return body.data.mapNotNull { albumObj ->
                 albumObj.attributes?.let { album ->
-                    Album(
+                    IMetadataService.Album(
                         id = albumObj.id,
                         title = album.title,
                         duration = album.duration,
@@ -476,7 +476,7 @@ class TidalService(
         }
     }
 
-    override suspend fun getArtistsByIds(artistIds: List<String>): List<Artist> {
+    override suspend fun getArtistsByIds(artistIds: List<String>): List<IMetadataService.Artist> {
         val filteredArtistIds = artistIds.distinct().toMutableList()
         val existing = checkExistingAlbumsFromCache(filteredArtistIds)
 
@@ -516,7 +516,7 @@ class TidalService(
 
             return body.data.mapNotNull { artistObj ->
                 artistObj.attributes?.let { artist ->
-                    Artist(
+                    IMetadataService.Artist(
                         id = artistObj.id,
                         name = artist.name,
                         popularity = artist.popularity.toFloat(),
@@ -532,7 +532,7 @@ class TidalService(
         }
     }
 
-    override suspend fun getAlbumTracks(albumId: String): Flow<Track> = flow {
+    override suspend fun getAlbumTracks(albumId: String): Flow<IMetadataService.Track> = flow {
         var cursor: String? = null
         var depth = 1
 
@@ -567,7 +567,7 @@ class TidalService(
                 cursor = body.links.meta?.nextCursor
 
                 emitAll(tracks.entries.map { (id, track) ->
-                    Track(
+                    IMetadataService.Track(
                         id = id,
                         title = track.title,
                         duration = track.duration,
@@ -594,7 +594,7 @@ class TidalService(
         user: User?,
         cursor: String? = null,
         depth: Int = 1
-    ): Flow<Track> = flow {
+    ): Flow<IMetadataService.Track> = flow {
         val url = getUrl("/playlists/$playlistId/relationships/items") {
             parameters {
                 append("countryCode", "US")
@@ -623,7 +623,7 @@ class TidalService(
             val nextCursor = body.links.meta?.nextCursor
 
             emitAll(tracks.entries.map { (id, track) ->
-                Track(
+                IMetadataService.Track(
                     id = id,
                     title = track.title,
                     duration = track.duration,
@@ -652,7 +652,7 @@ class TidalService(
         playlistIds: List<String>,
         includeTracks: Boolean,
         user: User?
-    ): Flow<FlowPlaylist> = flow {
+    ): Flow<IMetadataService.FlowPlaylist> = flow {
         val filteredPlaylistIds = playlistIds.distinct().toMutableList()
         val existing = if (!includeTracks) checkExistingPlaylistsFromCache(filteredPlaylistIds) else emptyList()
 
@@ -705,7 +705,7 @@ class TidalService(
 
             return@flow emitAll(body.data.mapNotNull { playlistObj ->
                 playlistObj.attributes?.let { playlist ->
-                    FlowPlaylist(
+                    IMetadataService.FlowPlaylist(
                         id = playlistObj.id,
                         name = playlist.name,
                         description = playlist.description ?: "",

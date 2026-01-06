@@ -2,7 +2,6 @@ package dev.dertyp.services.metadata
 
 import dev.dertyp.ApiClient
 import dev.dertyp.data.User
-import dev.dertyp.services.metadata.MetadataService.Artist
 import io.ktor.client.call.*
 import io.ktor.client.request.*
 import io.ktor.http.*
@@ -25,7 +24,7 @@ class SpotifyService(
         parameter("client_secret", clientSecret)
     }
 
-    override suspend fun searchArtists(query: String, limit: Int): List<MetadataService.Artist> {
+    override suspend fun searchArtists(query: String, limit: Int): List<IMetadataService.Artist> {
         val response = ApiClient.instance.get("https://api.spotify.com/v1/search") {
             val token = getAccessToken()
             header(HttpHeaders.Authorization, "${token.tokenType} ${token.accessToken}")
@@ -43,13 +42,13 @@ class SpotifyService(
         val searchResponse = response.body<SearchResponse>()
 
         return searchResponse.artists.items.map { artist ->
-            Artist(
+            IMetadataService.Artist(
                 id = artist.id,
                 name = artist.name,
                 popularity = artist.popularity.toFloat(),
                 url = artist.href,
                 images = artist.images.map { image ->
-                    Image(
+                    IMetadataService.Image(
                         url = image.url,
                         width = image.width,
                         height = image.height,
@@ -63,11 +62,11 @@ class SpotifyService(
         throw NotImplementedError("Not implemented for spotify!")
     }
 
-    override suspend fun getImageUrlByAlbumId(albumId: String): List<Image> {
+    override suspend fun getImageUrlByAlbumId(albumId: String): List<IMetadataService.Image> {
         throw NotImplementedError("Not implemented for spotify!")
     }
 
-    override suspend fun getImageUrlsByAlbumIds(albumIds: List<String>): Map<String, List<Image>> {
+    override suspend fun getImageUrlsByAlbumIds(albumIds: List<String>): Map<String, List<IMetadataService.Image>> {
         throw NotImplementedError("Not implemented for spotify!")
     }
 
@@ -75,23 +74,23 @@ class SpotifyService(
         throw NotImplementedError("Not implemented for spotify!")
     }
 
-    override suspend fun getTrackById(trackId: String): Track? {
+    override suspend fun getTrackById(trackId: String): IMetadataService.Track? {
         throw NotImplementedError("Not implemented for spotify!")
     }
 
-    override suspend fun getTracksByIds(trackIds: List<String>): List<Track> {
+    override suspend fun getTracksByIds(trackIds: List<String>): List<IMetadataService.Track> {
         throw NotImplementedError("Not implemented for spotify!")
     }
 
-    override suspend fun getAlbumsByIds(albumIds: List<String>): List<Album> {
+    override suspend fun getAlbumsByIds(albumIds: List<String>): List<IMetadataService.Album> {
         throw NotImplementedError("Not implemented for spotify!")
     }
 
-    override suspend fun getArtistsByIds(artistIds: List<String>): List<MetadataService.Artist> {
+    override suspend fun getArtistsByIds(artistIds: List<String>): List<IMetadataService.Artist> {
         throw NotImplementedError("Not implemented for spotify!")
     }
 
-    override suspend fun getAlbumTracks(albumId: String): Flow<Track> {
+    override suspend fun getAlbumTracks(albumId: String): Flow<IMetadataService.Track> {
         throw NotImplementedError("Not implemented for spotify!")
     }
 
@@ -99,7 +98,7 @@ class SpotifyService(
         playlistIds: List<String>,
         includeTracks: Boolean,
         user: User?
-    ): Flow<FlowPlaylist> {
+    ): Flow<IMetadataService.FlowPlaylist> {
         throw NotImplementedError("Not implemented for spotify!")
     }
 

@@ -70,23 +70,23 @@ class ImageCacheService(
         return url
     }
 
-    override suspend fun getTrackById(trackId: String): Track? {
+    override suspend fun getTrackById(trackId: String): IMetadataService.Track? {
         throw NotImplementedError("Not implemented for ImageCache")
     }
 
-    override suspend fun getTracksByIds(trackIds: List<String>): List<Track> {
+    override suspend fun getTracksByIds(trackIds: List<String>): List<IMetadataService.Track> {
         throw NotImplementedError("Not implemented for ImageCache")
     }
 
-    override suspend fun getAlbumsByIds(albumIds: List<String>): List<Album> {
+    override suspend fun getAlbumsByIds(albumIds: List<String>): List<IMetadataService.Album> {
         throw NotImplementedError("Not implemented for ImageCache")
     }
 
-    override suspend fun getArtistsByIds(artistIds: List<String>): List<Artist> {
+    override suspend fun getArtistsByIds(artistIds: List<String>): List<IMetadataService.Artist> {
         throw NotImplementedError("Not implemented for ImageCache")
     }
 
-    override suspend fun getAlbumTracks(albumId: String): Flow<Track> {
+    override suspend fun getAlbumTracks(albumId: String): Flow<IMetadataService.Track> {
         throw NotImplementedError("Not implemented for ImageCache")
     }
 
@@ -94,7 +94,7 @@ class ImageCacheService(
         playlistIds: List<String>,
         includeTracks: Boolean,
         user: User?
-    ): Flow<FlowPlaylist> {
+    ): Flow<IMetadataService.FlowPlaylist> {
         throw NotImplementedError("Not implemented for ImageCache")
     }
 
@@ -102,7 +102,7 @@ class ImageCacheService(
         return !environment.config.propertyOrNull("imageCache.url")?.getString().isNullOrBlank()
     }
 
-    override suspend fun searchArtists(query: String, limit: Int): List<Artist> {
+    override suspend fun searchArtists(query: String, limit: Int): List<IMetadataService.Artist> {
         throw NotImplementedError("Not implemented for ImageCache")
     }
 
@@ -110,11 +110,11 @@ class ImageCacheService(
         throw NotImplementedError("Not implemented for ImageCache")
     }
 
-    override suspend fun getImageUrlByAlbumId(albumId: String): List<Image> {
+    override suspend fun getImageUrlByAlbumId(albumId: String): List<IMetadataService.Image> {
         throw NotImplementedError("Not implemented for ImageCache")
     }
 
-    override suspend fun getImageUrlsByAlbumIds(albumIds: List<String>): Map<String, List<Image>> {
+    override suspend fun getImageUrlsByAlbumIds(albumIds: List<String>): Map<String, List<IMetadataService.Image>> {
         throw NotImplementedError("Not implemented for ImageCache")
     }
 }

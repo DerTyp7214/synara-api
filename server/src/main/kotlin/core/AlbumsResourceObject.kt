@@ -1,6 +1,6 @@
 package dev.dertyp.core
 
-import dev.dertyp.services.metadata.MetadataService
+import dev.dertyp.services.metadata.IMetadataService
 import dev.dertyp.services.models.tidal.AlbumsResourceObject
 import dev.dertyp.services.models.tidal.ArtistsAttributes
 import dev.dertyp.services.models.tidal.ArtworksAttributes
@@ -13,7 +13,7 @@ fun AlbumsResourceObject.artists(artists: Map<String, ArtistsAttributes>) =
 fun AlbumsResourceObject.images(artworks: Map<String, ArtworksAttributes>) =
     relationships?.coverArt?.data?.firstNotNullOf { data ->
         artworks[data.id]?.files?.map {
-            MetadataService.Image(
+            IMetadataService.Image(
                 url = it.href,
                 width = it.meta.width,
                 height = it.meta.height

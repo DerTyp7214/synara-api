@@ -11,11 +11,10 @@ import dev.dertyp.getISOFromDate
 import dev.dertyp.services.AlbumService.Companion.calculateAlbumStats
 import dev.dertyp.services.AlbumService.Companion.mapAlbum
 import dev.dertyp.services.ArtistService.Companion.mapArtist
-import dev.dertyp.services.metadata.MetadataService
+import dev.dertyp.services.metadata.IMetadataService
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
-import kotlinx.rpc.annotations.Rpc
 import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.jdbc.*
 import org.koin.core.component.get
@@ -26,33 +25,6 @@ import java.util.*
 import kotlin.io.path.absolutePathString
 import kotlin.io.path.isSymbolicLink
 import kotlin.io.path.readSymbolicLink
-
-@Rpc
-interface ISongService {
-    suspend fun setLiked(id: UUID, userId: UUID, liked: Boolean, addedAt: Instant? = null): UserSong?
-    suspend fun byId(id: UUID, userId: UUID): UserSong?
-    suspend fun byIds(ids: Collection<UUID>, userId: UUID): PaginatedResponse<UserSong>
-    suspend fun byTitle(page: Int, pageSize: Int, title: String, userId: UUID): PaginatedResponse<UserSong>
-    suspend fun byArtist(page: Int, pageSize: Int, artistId: UUID, userId: UUID): PaginatedResponse<UserSong>
-    suspend fun byAlbum(page: Int, pageSize: Int, albumId: UUID, userId: UUID): PaginatedResponse<UserSong>
-    suspend fun byPlaylist(page: Int, pageSize: Int, playlistId: UUID, userId: UUID): PaginatedResponse<UserSong>
-    suspend fun byUserPlaylist(page: Int, pageSize: Int, playlistId: UUID, userId: UUID): PaginatedResponse<UserSong>
-    suspend fun byTidalTrackIds(ids: Collection<String>, userId: UUID): List<UserSong>
-    suspend fun byTidalTracks(tracks: Collection<MetadataService.Track>, userId: UUID): List<UserSong>
-    suspend fun likedSongs(page: Int, pageSize: Int, explicit: Boolean, userId: UUID): PaginatedResponse<UserSong>
-    suspend fun allSongs(page: Int, pageSize: Int, explicit: Boolean, userId: UUID): PaginatedResponse<UserSong>
-
-    suspend fun deleteSongs(ids: Collection<UUID>): Boolean
-
-    suspend fun rankedSearch(
-        page: Int,
-        pageSize: Int,
-        query: String,
-        explicit: Boolean,
-        userId: UUID,
-        liked: Boolean = false
-    ): PaginatedResponse<UserSong>
-}
 
 class SongService : ISongService, Service() {
     val albumArtistAlias = ArtistTable.alias("albumArtistAlias")
@@ -218,7 +190,7 @@ class SongService : ISongService, Service() {
             }
         }.data
 
-    override suspend fun byTidalTracks(tracks: Collection<MetadataService.Track>, userId: UUID): List<UserSong> =
+    override suspend fun byTidalTracks(tracks: Collection<IMetadataService.Track>, userId: UUID): List<UserSong> =
         querySongs<UserSong>(0, Int.MAX_VALUE, true, { userSong(userId) }) {
             where {
                 tracks.map { track ->

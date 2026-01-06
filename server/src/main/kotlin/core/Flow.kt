@@ -2,7 +2,7 @@ package dev.dertyp.core
 
 import dev.dertyp.data.User
 import dev.dertyp.services.SongService
-import dev.dertyp.services.metadata.MetadataService
+import dev.dertyp.services.metadata.IMetadataService
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import java.util.*
@@ -11,11 +11,11 @@ import java.util.*
 operator fun <T> Flow<T>.plus(other: Flow<T>): Flow<T> = flowOf(this, other).flattenConcat()
 
 @OptIn(ExperimentalCoroutinesApi::class)
-fun Flow<MetadataService.Track>.filterExisting(
+fun Flow<IMetadataService.Track>.filterExisting(
     songService: SongService,
     user: User,
     existingCallback: suspend (List<Pair<Long, UUID>>) -> Unit = {}
-): Flow<List<MetadataService.Track>> {
+): Flow<List<IMetadataService.Track>> {
     return chunked(20)
         .map { tracks ->
             val existingSongs = songService.byTidalTrackIds(

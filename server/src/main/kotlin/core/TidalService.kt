@@ -1,11 +1,11 @@
 package dev.dertyp.core
 
 import dev.dertyp.plugins.RedisCacheObject
-import dev.dertyp.services.metadata.MetadataService
+import dev.dertyp.services.metadata.IMetadataService
 import dev.dertyp.services.metadata.TidalService
 import kotlin.time.Duration.Companion.days
 
-fun TidalService.writeToJedis(track: MetadataService.Track) {
+fun TidalService.writeToJedis(track: IMetadataService.Track) {
     jedis?.psetex(
         "tidal_track::${track.id}",
         30.days.inWholeMilliseconds,
@@ -13,7 +13,7 @@ fun TidalService.writeToJedis(track: MetadataService.Track) {
     )
 }
 
-fun TidalService.getTrackFromJedis(trackId: String): MetadataService.Track? {
+fun TidalService.getTrackFromJedis(trackId: String): IMetadataService.Track? {
     return jedis?.let { jedis ->
         if (jedis.exists("tidal_track::$trackId")) {
             RedisCacheObject.fromCache(jedis.get("tidal_track::$trackId"))
@@ -31,10 +31,10 @@ fun TidalService.checkExistingTracksFromCache(trackIds: List<String>): List<Stri
     return existing
 }
 
-fun TidalService.getTracksFromCache(trackIds: List<String>): List<MetadataService.Track> {
+fun TidalService.getTracksFromCache(trackIds: List<String>): List<IMetadataService.Track> {
     if (jedis == null) return listOf()
 
-    val tracks = mutableListOf<MetadataService.Track?>()
+    val tracks = mutableListOf<IMetadataService.Track?>()
     for (trackId in trackIds) {
         tracks.add(getTrackFromJedis(trackId))
     }
@@ -43,7 +43,7 @@ fun TidalService.getTracksFromCache(trackIds: List<String>): List<MetadataServic
 
 // ALBUMS
 
-fun TidalService.writeToJedis(album: MetadataService.Album) {
+fun TidalService.writeToJedis(album: IMetadataService.Album) {
     jedis?.psetex(
         "tidal_album::${album.id}",
         30.days.inWholeMilliseconds,
@@ -51,7 +51,7 @@ fun TidalService.writeToJedis(album: MetadataService.Album) {
     )
 }
 
-fun TidalService.getAlbumFromJedis(albumId: String): MetadataService.Album? {
+fun TidalService.getAlbumFromJedis(albumId: String): IMetadataService.Album? {
     return jedis?.let { jedis ->
         if (jedis.exists("tidal_album::$albumId")) {
             RedisCacheObject.fromCache(jedis.get("tidal_album::$albumId"))
@@ -69,10 +69,10 @@ fun TidalService.checkExistingAlbumsFromCache(albumIds: List<String>): List<Stri
     return existing
 }
 
-fun TidalService.getAlbumsFromCache(albumIds: List<String>): List<MetadataService.Album> {
+fun TidalService.getAlbumsFromCache(albumIds: List<String>): List<IMetadataService.Album> {
     if (jedis == null) return listOf()
 
-    val albums = mutableListOf<MetadataService.Album?>()
+    val albums = mutableListOf<IMetadataService.Album?>()
     for (albumId in albumIds) {
         albums.add(getAlbumFromJedis(albumId))
     }
@@ -81,7 +81,7 @@ fun TidalService.getAlbumsFromCache(albumIds: List<String>): List<MetadataServic
 
 // ARTISTS
 
-fun TidalService.writeToJedis(artist: MetadataService.Artist) {
+fun TidalService.writeToJedis(artist: IMetadataService.Artist) {
     jedis?.psetex(
         "tidal_artist::${artist.id}",
         30.days.inWholeMilliseconds,
@@ -89,7 +89,7 @@ fun TidalService.writeToJedis(artist: MetadataService.Artist) {
     )
 }
 
-fun TidalService.getArtistFromJedis(artistId: String): MetadataService.Artist? {
+fun TidalService.getArtistFromJedis(artistId: String): IMetadataService.Artist? {
     return jedis?.let { jedis ->
         if (jedis.exists("tidal_artist::$artistId")) {
             RedisCacheObject.fromCache(jedis.get("tidal_artist::$artistId"))
@@ -107,10 +107,10 @@ fun TidalService.checkExistingArtistsFromCache(artistIds: List<String>): List<St
     return existing
 }
 
-fun TidalService.getArtistsFromCache(artistIds: List<String>): List<MetadataService.Artist> {
+fun TidalService.getArtistsFromCache(artistIds: List<String>): List<IMetadataService.Artist> {
     if (jedis == null) return listOf()
 
-    val artists = mutableListOf<MetadataService.Artist?>()
+    val artists = mutableListOf<IMetadataService.Artist?>()
     for (artistId in artistIds) {
         artists.add(getArtistFromJedis(artistId))
     }
@@ -119,7 +119,7 @@ fun TidalService.getArtistsFromCache(artistIds: List<String>): List<MetadataServ
 
 // PLAYLISTS
 
-fun TidalService.writeToJedis(playlist: MetadataService.Playlist) {
+fun TidalService.writeToJedis(playlist: IMetadataService.Playlist) {
     jedis?.psetex(
         "tidal_playlist::${playlist.id}",
         30.days.inWholeMilliseconds,
@@ -127,7 +127,7 @@ fun TidalService.writeToJedis(playlist: MetadataService.Playlist) {
     )
 }
 
-fun TidalService.getPlaylistFromJedis(playlistId: String): MetadataService.Playlist? {
+fun TidalService.getPlaylistFromJedis(playlistId: String): IMetadataService.Playlist? {
     return jedis?.let { jedis ->
         if (jedis.exists("tidal_playlist::$playlistId")) {
             RedisCacheObject.fromCache(jedis.get("tidal_playlist::$playlistId"))
@@ -145,10 +145,10 @@ fun TidalService.checkExistingPlaylistsFromCache(playlistIds: List<String>): Lis
     return existing
 }
 
-fun TidalService.getPlaylistsFromCache(playlistIds: List<String>): List<MetadataService.Playlist> {
+fun TidalService.getPlaylistsFromCache(playlistIds: List<String>): List<IMetadataService.Playlist> {
     if (jedis == null) return listOf()
 
-    val playlists = mutableListOf<MetadataService.Playlist?>()
+    val playlists = mutableListOf<IMetadataService.Playlist?>()
     for (playlistId in playlistIds) {
         playlists.add(getPlaylistFromJedis(playlistId))
     }
