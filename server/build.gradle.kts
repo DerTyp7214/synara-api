@@ -12,7 +12,8 @@ plugins {
     id("io.ktor.plugin") version "3.3.3"
     id("org.jetbrains.kotlin.plugin.serialization") version "2.2.21"
     id("org.jetbrains.kotlinx.rpc.plugin") version "0.10.1"
-    id("com.github.gmazzo.buildconfig")}
+    id("com.github.gmazzo.buildconfig")
+}
 
 application {
     mainClass = "io.ktor.server.netty.EngineMain"
@@ -74,8 +75,9 @@ dependencies {
     implementation("org.bytedeco:javacv-platform:1.5.12")
     implementation("net.coobird:thumbnailator:0.4.21")
     implementation("org.postgresql:postgresql:42.7.8")
-    implementation("org.jetbrains.kotlinx:kotlinx-rpc-krpc-ktor-server:0.10.0")
-    implementation("org.jetbrains.kotlinx:kotlinx-rpc-krpc-ktor-client:0.10.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-rpc-krpc-serialization-json:0.10.1")
+    implementation("org.jetbrains.kotlinx:kotlinx-rpc-krpc-ktor-server:0.10.1")
+    implementation("org.jetbrains.kotlinx:kotlinx-rpc-krpc-ktor-client:0.10.1")
     implementation("io.ktor:ktor-server-netty")
     implementation("at.favre.lib:bcrypt:0.10.2")
     implementation("ch.qos.logback:logback-classic:1.5.22")
@@ -87,7 +89,7 @@ dependencies {
     implementation("io.ktor:ktor-server-sessions:3.3.3")
     implementation("io.ktor:ktor-server-partial-content:3.3.3")
     implementation("com.github.ben-manes.caffeine:caffeine:3.2.3")
-    implementation ("org.jmdns:jmdns:3.6.1")
+    implementation("org.jmdns:jmdns:3.6.1")
     implementation("com.sksamuel.scrimage:scrimage-core:4.3.5")
     implementation("com.sksamuel.scrimage:scrimage-webp:4.3.5")
     implementation("io.insert-koin:koin-ktor:4.2.0-beta2")

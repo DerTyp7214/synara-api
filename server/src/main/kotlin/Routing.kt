@@ -16,6 +16,8 @@ import io.ktor.server.plugins.statuspages.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.ktor.server.sse.*
+import kotlinx.rpc.krpc.ktor.server.Krpc
+import kotlinx.rpc.krpc.serialization.json.json
 import kotlinx.serialization.ExperimentalSerializationApi
 import org.koin.ktor.ext.getKoin
 import kotlin.time.ExperimentalTime
@@ -27,6 +29,11 @@ fun Application.configureRouting() {
         protobuf()
     }
     install(SSE)
+    install(Krpc) {
+        serialization {
+            json(ApplicationScope.json)
+        }
+    }
     install(OpenApi)
     install(Compression)
     install(StatusPages) {

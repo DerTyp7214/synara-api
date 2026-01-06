@@ -15,6 +15,7 @@ import dev.dertyp.services.metadata.MetadataService
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.rpc.annotations.Rpc
 import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.jdbc.*
 import org.koin.core.component.get
@@ -26,7 +27,34 @@ import kotlin.io.path.absolutePathString
 import kotlin.io.path.isSymbolicLink
 import kotlin.io.path.readSymbolicLink
 
-class SongService : Service() {
+@Rpc
+interface ISongService {
+    suspend fun setLiked(id: UUID, userId: UUID, liked: Boolean, addedAt: Instant? = null): UserSong?
+    suspend fun byId(id: UUID, userId: UUID): UserSong?
+    suspend fun byIds(ids: Collection<UUID>, userId: UUID): PaginatedResponse<UserSong>
+    suspend fun byTitle(page: Int, pageSize: Int, title: String, userId: UUID): PaginatedResponse<UserSong>
+    suspend fun byArtist(page: Int, pageSize: Int, artistId: UUID, userId: UUID): PaginatedResponse<UserSong>
+    suspend fun byAlbum(page: Int, pageSize: Int, albumId: UUID, userId: UUID): PaginatedResponse<UserSong>
+    suspend fun byPlaylist(page: Int, pageSize: Int, playlistId: UUID, userId: UUID): PaginatedResponse<UserSong>
+    suspend fun byUserPlaylist(page: Int, pageSize: Int, playlistId: UUID, userId: UUID): PaginatedResponse<UserSong>
+    suspend fun byTidalTrackIds(ids: Collection<String>, userId: UUID): List<UserSong>
+    suspend fun byTidalTracks(tracks: Collection<MetadataService.Track>, userId: UUID): List<UserSong>
+    suspend fun likedSongs(page: Int, pageSize: Int, explicit: Boolean, userId: UUID): PaginatedResponse<UserSong>
+    suspend fun allSongs(page: Int, pageSize: Int, explicit: Boolean, userId: UUID): PaginatedResponse<UserSong>
+
+    suspend fun deleteSongs(ids: Collection<UUID>): Boolean
+
+    suspend fun rankedSearch(
+        page: Int,
+        pageSize: Int,
+        query: String,
+        explicit: Boolean,
+        userId: UUID,
+        liked: Boolean = false
+    ): PaginatedResponse<UserSong>
+}
+
+class SongService : ISongService, Service() {
     val albumArtistAlias = ArtistTable.alias("albumArtistAlias")
     val albumArtistAliasAlias = ArtistAliasTable.alias("albumArtistAliasAlias")
 
@@ -95,7 +123,7 @@ class SongService : Service() {
         additionalConstraint = { UserSongTable.userId eq userId }
     )
 
-    suspend fun setLiked(id: UUID, userId: UUID, liked: Boolean, addedAt: Instant? = null): UserSong? {
+    override suspend fun setLiked(id: UUID, userId: UUID, liked: Boolean, addedAt: Instant?): UserSong? {
         dbQuery {
             val inserted = UserSongTable.insertIgnore {
                 it[UserSongTable.songId] = id
@@ -121,21 +149,21 @@ class SongService : Service() {
         where { SongTable.id eq id }
     }
 
-    suspend fun byIds(ids: List<UUID>, userId: UUID): PaginatedResponse<UserSong> =
+    override suspend fun byIds(ids: Collection<UUID>, userId: UUID): PaginatedResponse<UserSong> =
         querySongs(0, Int.MAX_VALUE, true, { userSong(userId) }) {
             where { SongTable.id inList ids }
         }
 
-    suspend fun byId(id: UUID, userId: UUID): UserSong? = querySingle({ userSong(userId) }) {
+    override suspend fun byId(id: UUID, userId: UUID): UserSong? = querySingle({ userSong(userId) }) {
         where { SongTable.id eq id }
     }
 
-    suspend fun byTitle(page: Int, pageSize: Int, title: String, userId: UUID): PaginatedResponse<UserSong> =
+    override suspend fun byTitle(page: Int, pageSize: Int, title: String, userId: UUID): PaginatedResponse<UserSong> =
         querySongs(page, pageSize, true, { userSong(userId) }) {
             where { SongTable.title eq title }
         }
 
-    suspend fun byArtist(page: Int, pageSize: Int, artistId: UUID, userId: UUID): PaginatedResponse<UserSong> =
+    override suspend fun byArtist(page: Int, pageSize: Int, artistId: UUID, userId: UUID): PaginatedResponse<UserSong> =
         querySongs(page, pageSize, true, { userSong(userId) }) {
             val songIds = SongArtistTable
                 .select(SongArtistTable.songId)
@@ -153,14 +181,14 @@ class SongService : Service() {
             orderBy(SongTable.trackNumber, SortOrder.ASC)
         }
 
-    suspend fun byAlbum(page: Int, pageSize: Int, albumId: UUID, userId: UUID): PaginatedResponse<UserSong> =
+    override suspend fun byAlbum(page: Int, pageSize: Int, albumId: UUID, userId: UUID): PaginatedResponse<UserSong> =
         querySongs(page, pageSize, true, { userSong(userId) }) {
             where { SongTable.albumId eq albumId }
             orderBy(SongTable.discNumber, SortOrder.ASC)
             orderBy(SongTable.trackNumber, SortOrder.ASC)
         }
 
-    suspend fun byPlaylist(page: Int, pageSize: Int, playlistId: UUID, userId: UUID): PaginatedResponse<UserSong> =
+    override suspend fun byPlaylist(page: Int, pageSize: Int, playlistId: UUID, userId: UUID): PaginatedResponse<UserSong> =
         querySongs(page, pageSize, true, {
             leftJoin(PlaylistSongTable).userSong(userId)
         }) {
@@ -168,7 +196,7 @@ class SongService : Service() {
             orderBy(PlaylistSongTable.position, SortOrder.ASC)
         }
 
-    suspend fun byUserPlaylist(page: Int, pageSize: Int, playlistId: UUID, userId: UUID): PaginatedResponse<UserSong> =
+    override suspend fun byUserPlaylist(page: Int, pageSize: Int, playlistId: UUID, userId: UUID): PaginatedResponse<UserSong> =
         querySongs(page, pageSize, true, {
             leftJoin(UserPlaylistSongTable).userSong(userId)
         }) {
@@ -176,7 +204,7 @@ class SongService : Service() {
             orderBy(UserPlaylistSongTable.addedAt, SortOrder.ASC)
         }
 
-    suspend fun byTidalTrackIds(ids: Collection<String>, userId: UUID): List<UserSong> =
+    override suspend fun byTidalTrackIds(ids: Collection<String>, userId: UUID): List<UserSong> =
         querySongs<UserSong>(0, Int.MAX_VALUE, true, { userSong(userId) }) {
             where {
                 SongTable.originalUrl inList ids.map {
@@ -190,7 +218,7 @@ class SongService : Service() {
             }
         }.data
 
-    suspend fun byTidalTracks(tracks: List<MetadataService.Track>, userId: UUID): List<UserSong> =
+    override suspend fun byTidalTracks(tracks: Collection<MetadataService.Track>, userId: UUID): List<UserSong> =
         querySongs<UserSong>(0, Int.MAX_VALUE, true, { userSong(userId) }) {
             where {
                 tracks.map { track ->
@@ -201,13 +229,13 @@ class SongService : Service() {
             }
         }.data
 
-    suspend fun rankedSearch(
+    override suspend fun rankedSearch(
         page: Int,
         pageSize: Int,
         query: String,
         explicit: Boolean,
         userId: UUID,
-        liked: Boolean = false
+        liked: Boolean
     ): PaginatedResponse<UserSong> =
         querySongs(page, pageSize, explicit, { userSong(userId) }) {
             rankedSearchQuery(
@@ -226,7 +254,7 @@ class SongService : Service() {
             }
         }
 
-    suspend fun likedSongs(page: Int, pageSize: Int, explicit: Boolean, userId: UUID): PaginatedResponse<UserSong> =
+    override suspend fun likedSongs(page: Int, pageSize: Int, explicit: Boolean, userId: UUID): PaginatedResponse<UserSong> =
         querySongs(
             page, pageSize, explicit, { userSong(userId) },
         ) {
@@ -234,7 +262,7 @@ class SongService : Service() {
             orderBy(UserSongTable.updatedAt to SortOrder.DESC)
         }
 
-    suspend fun allSongs(page: Int, pageSize: Int, explicit: Boolean, userId: UUID): PaginatedResponse<UserSong> =
+    override suspend fun allSongs(page: Int, pageSize: Int, explicit: Boolean, userId: UUID): PaginatedResponse<UserSong> =
         querySongs(
             page, pageSize, explicit, { userSong(userId) },
             query = {
@@ -244,7 +272,7 @@ class SongService : Service() {
         )
 
     @Suppress("DuplicatedCode")
-    suspend fun deleteSongs(ids: List<UUID>) = dbQuery {
+    override suspend fun deleteSongs(ids: Collection<UUID>): Boolean = dbQuery {
         val paths = SongTable
             .select(SongTable.id, SongTable.filePath)
             .where { SongTable.id inList ids }

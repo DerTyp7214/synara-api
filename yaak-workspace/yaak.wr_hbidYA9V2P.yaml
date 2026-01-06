@@ -1,0 +1,16 @@
+type: websocket_request
+model: websocket_request
+id: wr_hbidYA9V2P
+createdAt: 2026-01-06T01:15:34.505363795
+updatedAt: 2026-01-06T01:21:27.869907731
+workspaceId: wk_9dbKacQT4H
+folderId: fl_QrUoFyttZM
+authentication: {}
+authenticationType: null
+description: ''
+headers: []
+message: '{"type":"org.jetbrains.krpc.internal.transport.RPCGenericMessage","connectionId":1,"pluginParams":{"-32762":"1","-32761":"dev.dertyp.services.ISongService/1:allSongs:1"},"payload":{"page":0,"pageSize":25,"explicit":true,"userId":"3c73a2b0-c65c-4aa8-a8f8-5b56c1276eb3"}}'
+name: ''
+sortPriority: 24.25
+url: ws://${[ baseHost ]}/song
+urlParameters: []

@@ -1,9 +1,13 @@
 package dev.dertyp.core
 
+import dev.dertyp.serializers.UUIDListSerializer
+import dev.dertyp.serializers.UUIDSerializer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.modules.SerializersModule
+import kotlinx.serialization.modules.contextual
 
 object ApplicationScope {
     val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -17,5 +21,10 @@ object ApplicationScope {
         prettyPrint = false
         useArrayPolymorphism = false
         ignoreUnknownKeys = true
+
+        serializersModule = SerializersModule {
+            contextual(UUIDSerializer)
+            contextual(UUIDListSerializer)
+        }
     }
 }
