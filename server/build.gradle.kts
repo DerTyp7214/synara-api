@@ -80,7 +80,7 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-rpc-krpc-ktor-client:0.10.1")
     implementation("io.ktor:ktor-server-netty")
     implementation("at.favre.lib:bcrypt:0.10.2")
-    implementation("ch.qos.logback:logback-classic:1.5.22")
+    implementation("ch.qos.logback:logback-classic:1.5.23")
     implementation("io.ktor:ktor-server-config-yaml")
     implementation("net.jthink:jaudiotagger:3.0.1")
     implementation("org.xerial:sqlite-jdbc:3.50.3.0")
