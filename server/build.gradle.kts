@@ -89,7 +89,7 @@ dependencies {
     implementation("io.ktor:ktor-server-sessions:3.3.3")
     implementation("io.ktor:ktor-server-partial-content:3.3.3")
     implementation("com.github.ben-manes.caffeine:caffeine:3.2.3")
-    implementation("org.jmdns:jmdns:3.6.1")
+    implementation("org.jmdns:jmdns:3.6.3")
     implementation("com.sksamuel.scrimage:scrimage-core:4.3.5")
     implementation("com.sksamuel.scrimage:scrimage-webp:4.3.5")
     implementation("io.insert-koin:koin-ktor:4.2.0-beta2")
