@@ -7,6 +7,7 @@ import dev.dertyp.core.toUUIDOrNull
 import dev.dertyp.data.*
 import dev.dertyp.serializers.UUIDListSerializer
 import dev.dertyp.services.ISongService
+import dev.dertyp.services.SongRpcService
 import dev.dertyp.services.SongService
 import io.github.smiley4.ktoropenapi.get
 import io.github.smiley4.ktoropenapi.post
@@ -37,8 +38,10 @@ fun Route.song() {
         tags("song")
     }) {
         rpc {
-            val service by inject<SongService>()
-            registerService<ISongService> { service }
+            val songService by inject<SongService>()
+            val user = call.getUser() ?: return@rpc call.respond(HttpStatusCode.BadRequest)
+
+            registerService<ISongService> { SongRpcService(songService = songService, user = user) }
         }
 
         post("/setLiked/{id}", {

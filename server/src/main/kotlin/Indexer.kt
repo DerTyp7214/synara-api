@@ -12,6 +12,8 @@ import dev.dertyp.services.StorageService
 import io.ktor.server.application.*
 import io.ktor.util.logging.*
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
@@ -32,6 +34,27 @@ import kotlin.time.Clock
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.DurationUnit
 import kotlin.time.ExperimentalTime
+
+class RpcIndexer(private val indexer: Indexer) : IIndexer {
+    @OptIn(ExperimentalAtomicApi::class)
+    override fun start(): Flow<String> = flow {
+        if (!indexer.isActive.compareAndSet(expectedValue = false, newValue = true)) {
+            indexer.logger.warn("Indexer is already running.")
+            emit("Indexer is already running.")
+            return@flow
+        }
+
+        indexer.logger.info("Starting indexing...")
+        emit("Starting indexing...")
+        indexer.start { stdout ->
+            emit(stdout)
+        }
+
+        indexer.logger.info("Finished indexing...")
+        emit("Finished indexing...")
+        indexer.isActive.store(false)
+    }
+}
 
 class Indexer(
     environment: ApplicationEnvironment,

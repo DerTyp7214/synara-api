@@ -13,6 +13,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.asFlow
 import kotlinx.coroutines.launch
+import kotlinx.rpc.krpc.ktor.server.rpc
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.encodeToJsonElement
 import org.koin.ktor.ext.inject
@@ -31,6 +32,13 @@ fun Route.tdn() {
     route("/tdn", {
         tags("tdn")
     }) {
+        rpc {
+            val downloadService by inject<DownloadService>()
+            val user = call.getUser() ?: return@rpc call.respond(HttpStatusCode.BadRequest)
+
+            registerService<IDownloadService> { DownloadRpcService(user, call, downloadService) }
+        }
+
         get("/authenticated") {
             val tdnService by inject<TdnService>()
 
@@ -163,7 +171,7 @@ fun Route.tdn() {
                             val indexLine = "${(finishedSize + 1).zeroPad(totalSize.digitCount())}/${totalSize} "
 
                             if (lastEntry != line.queueEntry) lastEntry = line.queueEntry
-                            else if (line.line != null) sendSafe(line.line, indexLine)
+                            else if (line.line != null) sendSafe(line.line!!, indexLine)
                         }
                     }
                     val checkJob = launch {
@@ -226,7 +234,7 @@ fun Route.tdn() {
                             val indexLine = "${(finishedSize + 1).zeroPad(totalSize.digitCount())}/${totalSize} "
 
                             if (lastEntry != line.queueEntry) lastEntry = line.queueEntry
-                            else if (line.line != null) sendSafe(line.line, indexLine)
+                            else if (line.line != null) sendSafe(line.line!!, indexLine)
                         }
                     }
                     val checkJob = launch {

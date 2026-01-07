@@ -4,10 +4,15 @@ import dev.dertyp.core.ApplicationScope
 import dev.dertyp.core.getUser
 import dev.dertyp.core.omitLyrics
 import dev.dertyp.data.UserSong
+import dev.dertyp.services.FavSyncRpcService
+import dev.dertyp.services.FavSyncService
+import dev.dertyp.services.IFavSyncService
 import dev.dertyp.services.SongService
 import dev.dertyp.services.sync.SyncService
 import dev.dertyp.services.sync.TidalSyncService
+import dev.dertyp.services.tdn.DownloadRpcService
 import dev.dertyp.services.tdn.DownloadService
+import dev.dertyp.services.tdn.IDownloadService
 import io.github.smiley4.ktoropenapi.get
 import io.github.smiley4.ktoropenapi.post
 import io.github.smiley4.ktoropenapi.route
@@ -17,6 +22,7 @@ import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.ktor.server.sse.*
 import io.ktor.sse.*
+import kotlinx.rpc.krpc.ktor.server.rpc
 import org.koin.ktor.ext.inject
 
 fun Route.sync() {
@@ -28,6 +34,15 @@ fun Route.sync() {
         }
         tags("sync")
     }) {
+        rpc {
+            val favSyncService by inject<FavSyncService>()
+            val downloadService by inject<DownloadService>()
+            val user = call.getUser() ?: return@rpc call.respond(HttpStatusCode.BadRequest)
+
+            registerService<IFavSyncService> { FavSyncRpcService(user, favSyncService) }
+            registerService<IDownloadService> { DownloadRpcService(user, call, downloadService) }
+        }
+
         get("/authenticated") {
             call.respond(SyncService.getInstance(call).getAccessToken() != null)
         }

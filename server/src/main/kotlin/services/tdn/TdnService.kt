@@ -5,7 +5,6 @@ import dev.dertyp.core.*
 import dev.dertyp.services.Service
 import dev.dertyp.services.StorageService
 import kotlinx.coroutines.*
-import kotlinx.serialization.Serializable
 import java.io.InputStreamReader
 import java.nio.file.Path
 import java.time.Instant
@@ -18,25 +17,6 @@ import kotlin.io.path.*
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
-
-@Suppress("EnumEntryName")
-enum class TdnFavoriteType {
-    tracks,
-    artists,
-    albums,
-    videos
-}
-
-@Serializable
-data class ProcessExecutionResult(val exitCode: Int, val fullOutput: String, val error: String) {
-    companion object {
-        val EMPTY = ProcessExecutionResult(-2, "", "")
-    }
-
-    fun successful(): Boolean = exitCode == 0
-    fun failed(): Boolean = exitCode == 1
-    fun unknown(): Boolean = exitCode == -2
-}
 
 @OptIn(ExperimentalAtomicApi::class)
 class TdnService(private val indexer: Indexer, private val storageService: StorageService) : Service() {

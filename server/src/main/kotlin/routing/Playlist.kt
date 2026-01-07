@@ -4,18 +4,26 @@ import dev.dertyp.core.paging
 import dev.dertyp.core.toUUIDOrNull
 import dev.dertyp.data.PaginatedResponse
 import dev.dertyp.data.Playlist
+import dev.dertyp.services.IPlaylistService
 import dev.dertyp.services.PlaylistService
 import io.github.smiley4.ktoropenapi.get
 import io.github.smiley4.ktoropenapi.route
 import io.ktor.http.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import kotlinx.rpc.krpc.ktor.server.rpc
 import org.koin.ktor.ext.inject
 
 fun Route.playlist() {
     route("/playlist", {
         tags("playlist")
     }) {
+        rpc {
+            val service by inject<PlaylistService>()
+
+            registerService<IPlaylistService> { service }
+        }
+
         get("/byId/{id}", {
             request {
                 pathParameter<String>("id") {

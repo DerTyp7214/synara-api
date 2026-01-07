@@ -16,7 +16,7 @@ import org.jetbrains.exposed.v1.jdbc.*
 import org.koin.core.component.inject
 import java.util.*
 
-class ArtistService : Service() {
+class ArtistService : IArtistService, Service() {
     companion object {
         fun mapArtist(resultRow: ResultRow, table: ColumnSet = ArtistTable): Artist {
             if (table is Alias<*>) {
@@ -43,11 +43,11 @@ class ArtistService : Service() {
 
     fun map(resultRow: ResultRow): Artist = mapArtist(resultRow)
 
-    suspend fun byId(id: UUID): Artist? = querySingle {
+    override suspend fun byId(id: UUID): Artist? = querySingle {
         where { ArtistTable.id eq id }
     }
 
-    suspend fun rankedSearch(page: Int, pageSize: Int, query: String): PaginatedResponse<Artist> =
+    override suspend fun rankedSearch(page: Int, pageSize: Int, query: String): PaginatedResponse<Artist> =
         queryArtists(page, pageSize) {
             rankedSearchQuery(
                 query,
@@ -56,12 +56,12 @@ class ArtistService : Service() {
             )
         }
 
-    suspend fun byGroup(page: Int, pageSize: Int, groupId: UUID): PaginatedResponse<Artist> =
+    override suspend fun byGroup(page: Int, pageSize: Int, groupId: UUID): PaginatedResponse<Artist> =
         queryArtists(page, pageSize) {
             where { ArtistTable.groupId eq groupId }
         }
 
-    suspend fun mergeArtists(mergeArtists: MergeArtists) = dbQuery {
+    override suspend fun mergeArtists(mergeArtists: MergeArtists): Artist? = dbQuery {
         val currentArtists = ArtistTable
             .select(ArtistTable.id, ArtistTable.name)
             .where { ArtistTable.id inList mergeArtists.artistIds }
@@ -153,7 +153,7 @@ class ArtistService : Service() {
         return@dbQuery byId(newArtist)
     }
 
-    suspend fun allArtists(page: Int, pageSize: Int): PaginatedResponse<Artist> = queryArtists(page, pageSize)
+    override suspend fun allArtists(page: Int, pageSize: Int): PaginatedResponse<Artist> = queryArtists(page, pageSize)
 
     private suspend fun querySingle(query: Query.() -> Query) =
         queryArtists(0, Int.MAX_VALUE, query).data.singleOrNull()

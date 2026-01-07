@@ -23,7 +23,7 @@ import kotlin.io.path.absolutePathString
 import kotlin.io.path.isSymbolicLink
 import kotlin.io.path.readSymbolicLink
 
-class AlbumService : Service() {
+class AlbumService : IAlbumService, Service() {
     companion object {
         fun mapAlbum(resultRow: ResultRow): Album {
             val id = resultRow[AlbumTable.id].value
@@ -56,19 +56,19 @@ class AlbumService : Service() {
 
     fun map(resultRow: ResultRow): Album = mapAlbum(resultRow)
 
-    suspend fun byId(id: UUID): Album? = querySingle {
+    override suspend fun byId(id: UUID): Album? = querySingle {
         where { AlbumTable.id eq id }
     }
 
-    suspend fun byName(page: Int, pageSize: Int, name: String): PaginatedResponse<Album> = queryAlbums(page, pageSize) {
+    override suspend fun byName(page: Int, pageSize: Int, name: String): PaginatedResponse<Album> = queryAlbums(page, pageSize) {
         where { AlbumTable.name eq name }
     }
 
-    suspend fun byArtist(
+    override suspend fun byArtist(
         page: Int,
         pageSize: Int,
         artistId: UUID,
-        singles: Boolean = false
+        singles: Boolean
     ): PaginatedResponse<Album> =
         queryAlbums(page, pageSize) {
             val albumIds = AlbumArtistTable
@@ -82,7 +82,7 @@ class AlbumService : Service() {
             orderBy(AlbumTable.releaseDate, SortOrder.DESC_NULLS_LAST)
         }
 
-    suspend fun rankedSearch(page: Int, pageSize: Int, query: String): PaginatedResponse<Album> =
+    override suspend fun rankedSearch(page: Int, pageSize: Int, query: String): PaginatedResponse<Album> =
         queryAlbums(page, pageSize) {
             rankedSearchQuery(
                 query,
@@ -96,10 +96,10 @@ class AlbumService : Service() {
             andWhere { AlbumTable.songCount greater 1 }
         }
 
-    suspend fun allAlbums(page: Int, pageSize: Int): PaginatedResponse<Album> = queryAlbums(page, pageSize)
+    override suspend fun allAlbums(page: Int, pageSize: Int): PaginatedResponse<Album> = queryAlbums(page, pageSize)
 
     @Suppress("DuplicatedCode")
-    suspend fun deleteAlbums(ids: List<UUID>) = dbQuery {
+    override suspend fun deleteAlbums(ids: List<UUID>): Boolean = dbQuery {
         val paths = SongTable
             .select(SongTable.albumId, SongTable.filePath)
             .where { SongTable.albumId inList ids }

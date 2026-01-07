@@ -17,7 +17,7 @@ import org.koin.core.context.GlobalContext
 import java.util.*
 import kotlin.io.path.*
 
-class ImageService : Service() {
+class ImageService : IImageService, Service() {
     init {
         Path(storageService.imagesPath).toFile().mkdirs()
     }
@@ -42,11 +42,11 @@ class ImageService : Service() {
 
     fun map(resultRow: ResultRow): Image = mapImage(resultRow)
 
-    suspend fun byId(id: UUID): Image? = querySingle {
+    override suspend fun byId(id: UUID): Image? = querySingle {
         where { ImageTable.id eq id }
     }
 
-    suspend fun byHash(hash: String): Image? = querySingle {
+    override suspend fun byHash(hash: String): Image? = querySingle {
         where { ImageTable.imageHash eq hash }
     }
 
@@ -69,7 +69,7 @@ class ImageService : Service() {
         )
     }
 
-    suspend fun getCoverHashes(hashes: List<String>): Map<String, UUID> = dbQuery {
+    override suspend fun getCoverHashes(hashes: List<String>): Map<String, UUID> = dbQuery {
         ImageTable
             .select(ImageTable.id, ImageTable.imageHash)
             .where { ImageTable.imageHash inList hashes }

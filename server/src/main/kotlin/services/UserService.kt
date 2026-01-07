@@ -5,11 +5,14 @@ import dev.dertyp.data.AuthenticationRequest
 import dev.dertyp.data.User
 import dev.dertyp.db.UserTable
 import dev.dertyp.dbQuery
-import org.jetbrains.exposed.v1.core.*
-import org.jetbrains.exposed.v1.jdbc.*
+import org.jetbrains.exposed.v1.core.ResultRow
+import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.jdbc.Query
+import org.jetbrains.exposed.v1.jdbc.batchInsert
+import org.jetbrains.exposed.v1.jdbc.selectAll
 import java.util.*
 
-class UserService : Service() {
+class UserService : IUserService, Service() {
     companion object {
         fun mapUser(row: ResultRow): User {
             return User(
@@ -22,11 +25,11 @@ class UserService : Service() {
 
     private fun map(row: ResultRow) = mapUser(row)
 
-    suspend fun findUserById(id: UUID): User? = queryUser {
+    override suspend fun findUserById(id: UUID): User? = queryUser {
         where { UserTable.id eq id }
     }.singleOrNull()
 
-    suspend fun findUserByUsername(username: String): User? = queryUser {
+    override suspend fun findUserByUsername(username: String): User? = queryUser {
         where { UserTable.username eq username }
     }.singleOrNull()
 

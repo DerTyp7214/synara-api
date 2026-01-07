@@ -3,29 +3,49 @@ package dev.dertyp.services.tdn
 import dev.dertyp.core.*
 import dev.dertyp.data.User
 import dev.dertyp.data.UserSong
-import dev.dertyp.serializers.UUIDSerializer
 import dev.dertyp.services.FavSyncService
 import dev.dertyp.services.ISyncService
 import dev.dertyp.services.Service
 import dev.dertyp.services.SongService
-import dev.dertyp.services.metadata.IMetadataService
 import dev.dertyp.services.metadata.MetadataService
 import dev.dertyp.services.sync.SyncService
+import io.ktor.server.application.*
 import io.ktor.server.engine.*
-import io.ktor.server.routing.*
 import io.ktor.utils.io.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.serialization.SerialName
-import kotlinx.serialization.Serializable
-import kotlinx.serialization.Transient
 import java.time.Instant
 import java.util.*
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.concurrent.atomics.AtomicBoolean
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
+
+class DownloadRpcService(
+    private val user: User,
+    private val call: ApplicationCall,
+    private val downloadService: DownloadService,
+) : IDownloadService {
+    override fun logs(): Flow<LogLine> = downloadService.logs()
+    override suspend fun currentDownload(): DownloadQueueEntry? = downloadService.currentDownload(user)
+    override suspend fun downloadQueue(): List<DownloadQueueEntry> = downloadService.downloadQueue(user)
+    override suspend fun finishedDownloads(): List<FinishedDownloadQueueEntry> = downloadService.finishedDownloads(user)
+    override suspend fun syncFavouritesAvailable(): Boolean = downloadService.syncFavouritesAvailable(call)
+    override suspend fun syncFavourites(): CompletableJob = downloadService.syncFavourites(call, true)
+    override suspend fun downloadTidalIds(
+        ids: List<String>,
+        type: Type,
+        callback: suspend (List<String>) -> Unit
+    ) {
+        downloadService.downloadTidalIds(
+            call = call,
+            ids = ids.asFlow(),
+            type = type,
+            callback = callback
+        )
+    }
+}
 
 @OptIn(ExperimentalAtomicApi::class)
 class DownloadService(
@@ -94,7 +114,7 @@ class DownloadService(
 
             currentlyDownloading?.let {
                 when (it.downloadQueueEntry) {
-                    is UrlDownloadQueueEntry -> existingUrls.addAll(it.downloadQueueEntry.urls)
+                    is UrlDownloadQueueEntry -> existingUrls.addAll((it.downloadQueueEntry as UrlDownloadQueueEntry).urls)
                     is FavouriteDownloadQueueEntry -> existingTypes.add(it.downloadQueueEntry.type)
                 }
             }
@@ -256,7 +276,7 @@ class DownloadService(
         active.store(false)
     }
 
-    suspend fun syncFavouritesAvailable(call: RoutingCall): Boolean {
+    suspend fun syncFavouritesAvailable(call: ApplicationCall): Boolean {
         val user = call.getUser() ?: throw IllegalStateException("No user")
         return !(syncMap[user.id]?.load() ?: false)
     }
@@ -273,7 +293,7 @@ class DownloadService(
      */
     @OptIn(ExperimentalCoroutinesApi::class)
     suspend fun downloadTidalIds(
-        call: RoutingCall,
+        call: ApplicationCall,
         ids: Flow<String>,
         type: Type = Type.SONG,
         filter: (UserSong) -> Boolean = { true },
@@ -333,10 +353,16 @@ class DownloadService(
     }
 
     @OptIn(ExperimentalCoroutinesApi::class, InternalAPI::class)
-    suspend fun syncFavourites(call: RoutingCall): CompletableJob {
+    suspend fun syncFavourites(call: ApplicationCall, ignoreService: Boolean = false): CompletableJob {
         val user = call.getUser() ?: throw IllegalStateException("No user")
-        if (call.parameters["service"] != ISyncService.SyncServiceType.tidal.name) throw IllegalStateException("Only tidal")
-        val service = SyncService.getInstance(call, user.username)
+        if (!ignoreService && call.parameters["service"] != ISyncService.SyncServiceType.tidal.name) throw IllegalStateException(
+            "Only tidal"
+        )
+        val service = if (ignoreService) SyncService.getInstance(
+            user,
+            call.application.environment,
+            ISyncService.SyncServiceType.tidal
+        ) else SyncService.getInstance(call, user.username)
 
         if (service.getAccessToken() == null) throw IllegalStateException("Tidal not authenticated")
 
@@ -393,144 +419,6 @@ class DownloadService(
             }
 
             logger.info("[${user.username}] Sync favourite songs cancelled.")
-        }
-    }
-}
-
-data class IdsWrapper(
-    val type: Type,
-    val idGroups: Flow<IdsGroup>
-) {
-    suspend fun size() = getIds().toList().size
-
-    @OptIn(ExperimentalCoroutinesApi::class)
-    fun getIds(): Flow<String> = idGroups.flatMapConcat { it.ids.map { entry -> entry.second } }
-
-    @OptIn(ExperimentalCoroutinesApi::class)
-    fun filter(predicate: (entry: Pair<Long, String>) -> Boolean) =
-        idGroups.map { it.filter(predicate) }.flattenConcat()
-
-    fun applyFilter(predicate: (entry: Pair<Long, String>) -> Boolean) =
-        copy(
-            idGroups = idGroups.map { it.copy(ids = it.ids.filter(predicate)) }.filter { it.ids.toList().isNotEmpty() }
-        )
-
-    fun fetchExistingSongs() = when (type) {
-        Type.SONG -> true
-        else -> false
-    }
-
-    fun logSize() = when (type) {
-        Type.SONG, Type.ARTIST -> true
-        else -> false
-    }
-
-    companion object {
-        fun from(type: Type, ids: Map<Long, String>): IdsWrapper {
-            return IdsWrapper(
-                type = type,
-                idGroups = listOf(
-                    IdsGroup(
-                        ids = ids.toList().asFlow()
-                    )
-                ).asFlow()
-            )
-        }
-    }
-}
-
-data class IdsGroup(
-    val id: String = UUID.randomUUID().toString(),
-    val ids: Flow<Pair<Long, String>>,
-    val metadata: IMetadataService.BaseMetadata? = null
-) {
-    fun filter(predicate: (entry: Pair<Long, String>) -> Boolean) = ids.filter(predicate)
-}
-
-@Serializable
-sealed class DownloadQueueEntry {
-    abstract val type: Type?
-    abstract val maxRetries: Int
-    abstract val byUser: UUID?
-    abstract val callback: suspend () -> Unit
-
-    open fun type(): Type? {
-        return type
-    }
-}
-
-@Serializable
-data class UrlDownloadQueueEntry(
-    val urls: MutableList<String>,
-    val ids: Collection<String> = emptyList(),
-    @Serializable(with = UUIDSerializer::class)
-    override val byUser: UUID? = null,
-    override val type: Type? = null,
-    @Transient
-    override val maxRetries: Int = 5,
-    @Transient
-    override val callback: suspend () -> Unit = {}
-) : DownloadQueueEntry() {
-    override fun type(): Type? {
-        if (type != null) return type
-
-        val url = urls.first()
-
-        return when {
-            url.contains("/mix/") -> Type.MIX
-            url.contains("/track/") -> Type.SONG
-            url.contains("/album/") -> Type.ALBUM
-            url.contains("/artist/") -> Type.ARTIST
-            url.contains("/playlist/") -> Type.PLAYLIST
-            else -> null
-        }
-    }
-}
-
-@Serializable
-data class FavouriteDownloadQueueEntry(
-    val tdnFavoriteType: TdnFavoriteType,
-    @Serializable(with = UUIDSerializer::class)
-    override val byUser: UUID? = null,
-    override val type: Type? = null,
-    @Transient
-    override val maxRetries: Int = 5,
-    @Transient
-    override val callback: suspend () -> Unit = {}
-) : DownloadQueueEntry()
-
-@Serializable
-data class FinishedDownloadQueueEntry(
-    val downloadQueueEntry: DownloadQueueEntry,
-    var result: ProcessExecutionResult,
-    val logs: List<String>,
-)
-
-data class LogLine(
-    val queueEntry: DownloadQueueEntry,
-    val line: String?,
-)
-
-@Serializable
-enum class Type(val value: String) {
-    @SerialName("mix")
-    MIX("mix"),
-
-    @SerialName("track")
-    SONG("track"),
-
-    @SerialName("album")
-    ALBUM("album"),
-
-    @SerialName("playlist")
-    PLAYLIST("playlist"),
-
-    @SerialName("artist")
-    ARTIST("artist");
-
-    companion object {
-        fun fromValue(value: String): Type? {
-            return entries.find { it.value == value }
         }
     }
 }

@@ -4,19 +4,26 @@ import dev.dertyp.core.paging
 import dev.dertyp.core.toUUIDOrNull
 import dev.dertyp.data.Album
 import dev.dertyp.services.AlbumService
+import dev.dertyp.services.IAlbumService
 import io.github.smiley4.ktoropenapi.get
 import io.github.smiley4.ktoropenapi.route
 import io.ktor.http.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import kotlinx.rpc.krpc.ktor.server.rpc
 import org.koin.ktor.ext.inject
-import java.util.*
 
 fun Route.album() {
     route("/album", {
         tags("album")
     }) {
+        rpc {
+            val service by inject<AlbumService>()
+
+            registerService<IAlbumService> { service }
+        }
+
         get("/byId/{id}", {
             request {
                 pathParameter<String>("id") {

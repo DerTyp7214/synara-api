@@ -10,12 +10,15 @@ import dev.dertyp.db.PlaylistSongTable
 import dev.dertyp.db.PlaylistTable
 import dev.dertyp.db.SongTable
 import dev.dertyp.dbQuery
-import org.jetbrains.exposed.v1.core.*
+import org.jetbrains.exposed.v1.core.ResultRow
+import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.inList
+import org.jetbrains.exposed.v1.core.leftJoin
 import org.jetbrains.exposed.v1.jdbc.*
 import org.koin.core.component.get
 import java.util.*
 
-class PlaylistService : Service() {
+class PlaylistService : IPlaylistService, Service() {
     companion object {
         fun mapPlaylist(resultRow: ResultRow): Playlist {
             val id = resultRow[PlaylistTable.id].value
@@ -33,11 +36,11 @@ class PlaylistService : Service() {
 
     fun map(resultRow: ResultRow): Playlist = mapPlaylist(resultRow)
 
-    suspend fun byId(id: UUID): Playlist? = querySingle {
+    override suspend fun byId(id: UUID): Playlist? = querySingle {
         where { PlaylistTable.id eq id }
     }
 
-    suspend fun byIdFull(id: UUID): Pair<String, List<PlaylistEntry>>? = dbQuery {
+    override suspend fun byIdFull(id: UUID): Pair<String, List<PlaylistEntry>>? = dbQuery {
         val rows = PlaylistTable
             .leftJoin(
                 PlaylistSongTable,
@@ -63,11 +66,11 @@ class PlaylistService : Service() {
         mapFullEagerly(rows)
     }
 
-    suspend fun byName(name: String): Playlist? = querySingle {
+    override suspend fun byName(name: String): Playlist? = querySingle {
         where { PlaylistTable.name eq name }
     }
 
-    suspend fun rankedSearch(page: Int, pageSize: Int, query: String): PaginatedResponse<Playlist> =
+    override suspend fun rankedSearch(page: Int, pageSize: Int, query: String): PaginatedResponse<Playlist> =
         queryPlaylists(page, pageSize) {
             rankedSearchQuery(
                 query,
@@ -76,10 +79,10 @@ class PlaylistService : Service() {
             )
         }
 
-    suspend fun allPlaylists(page: Int, pageSize: Int): PaginatedResponse<Playlist> =
+    override suspend fun allPlaylists(page: Int, pageSize: Int): PaginatedResponse<Playlist> =
         queryPlaylists(page, pageSize)
 
-    suspend fun delete(id: UUID): Boolean = dbQuery {
+    override suspend fun delete(id: UUID): Boolean = dbQuery {
         PlaylistTable.deleteWhere { PlaylistTable.id eq id } == 1
     }
 

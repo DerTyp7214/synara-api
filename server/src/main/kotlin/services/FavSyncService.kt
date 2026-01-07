@@ -15,6 +15,17 @@ import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.upsert
 import java.util.*
 
+class FavSyncRpcService(private val user: User, private val favSyncService: FavSyncService) : IFavSyncService {
+    override suspend fun getLatestFavSync(
+        service: ISyncService.SyncServiceType
+    ): FavSync? = favSyncService.getLatestFavSync(user, service)
+
+    override suspend fun insertFavSync(
+        service: ISyncService.SyncServiceType,
+        syncedAt: Date
+    ): Int = favSyncService.insertFavSync(user, service, syncedAt)
+}
+
 class FavSyncService : Service() {
     companion object {
         fun mapFavSync(resultRow: ResultRow): FavSync {
@@ -28,19 +39,19 @@ class FavSyncService : Service() {
 
     fun map(resultRow: ResultRow) = mapFavSync(resultRow)
 
-    suspend fun getLatestFavSync(user: User, service: ISyncService.SyncServiceType) = queryFavSync {
+    suspend fun getLatestFavSync(user: User, service: ISyncService.SyncServiceType): FavSync? = queryFavSync {
         where { FavSyncTable.userId eq user.id }
         andWhere { FavSyncTable.service eq service }
         orderBy(FavSyncTable.syncedAt, SortOrder.DESC)
         limit(1)
     }.singleOrNull()
 
-    suspend fun insertFavSync(user: User, service: ISyncService.SyncServiceType, syncedAt: Date) = dbQuery {
+    suspend fun insertFavSync(user: User, service: ISyncService.SyncServiceType, syncedAt: Date): Int = dbQuery {
         FavSyncTable.upsert {
             it[FavSyncTable.userId] = user.id
             it[FavSyncTable.service] = service
             it[FavSyncTable.syncedAt] = syncedAt.toInstant().toEpochMilli()
-        }
+        }.insertedCount
     }
 
     private suspend fun queryFavSync(

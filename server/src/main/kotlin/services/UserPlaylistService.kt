@@ -1,9 +1,6 @@
 package dev.dertyp.services
 
-import dev.dertyp.core.minusOnce
-import dev.dertyp.core.paging
-import dev.dertyp.core.rankedSearchQuery
-import dev.dertyp.core.values
+import dev.dertyp.core.*
 import dev.dertyp.data.InsertablePlaylist
 import dev.dertyp.data.PaginatedResponse
 import dev.dertyp.data.User
@@ -18,9 +15,10 @@ import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.jdbc.*
 import org.koin.core.component.inject
+import java.time.Instant
 import java.util.*
 
-class UserPlaylistService : Service() {
+class UserPlaylistService : IUserPlaylistService, Service() {
     companion object {
         fun mapPlaylist(resultRow: ResultRow): UserPlaylist {
             val id = resultRow[UserPlaylistTable.id].value
@@ -44,11 +42,11 @@ class UserPlaylistService : Service() {
 
     fun map(resultRow: ResultRow) = mapPlaylist(resultRow)
 
-    suspend fun byId(id: UUID): UserPlaylist? = querySingle {
+    override suspend fun byId(id: UUID): UserPlaylist? = querySingle {
         where { UserPlaylistTable.id eq id }
     }
 
-    suspend fun rankedSearch(creator: UUID?, page: Int, pageSize: Int, query: String): PaginatedResponse<UserPlaylist> =
+    override suspend fun rankedSearch(creator: UUID?, page: Int, pageSize: Int, query: String): PaginatedResponse<UserPlaylist> =
         queryPlaylists(page, pageSize) {
             rankedSearchQuery(
                 query,
@@ -59,16 +57,16 @@ class UserPlaylistService : Service() {
             else this
         }
 
-    suspend fun allPlaylists(creator: UUID?, page: Int, pageSize: Int): PaginatedResponse<UserPlaylist> =
+    override suspend fun allPlaylists(creator: UUID?, page: Int, pageSize: Int): PaginatedResponse<UserPlaylist> =
         queryPlaylists(page, pageSize) {
             if (creator != null) where { UserPlaylistTable.creator eq creator } else this
         }
 
-    suspend fun delete(id: UUID): Boolean = dbQuery {
+    override suspend fun delete(id: UUID): Boolean = dbQuery {
         UserPlaylistTable.deleteWhere { UserPlaylistTable.id eq id } == 1
     }
 
-    suspend fun getOrAddPlaylist(user: User, customIdentifier: String?, playlist: InsertablePlaylist) = dbQuery {
+    override suspend fun getOrAddPlaylist(user: User, customIdentifier: String?, playlist: InsertablePlaylist): UUID = dbQuery {
         if (customIdentifier != null) querySingle {
             where { UserPlaylistTable.creator eq user.id and (UserPlaylistTable.customIdentifier eq customIdentifier) }
         }.let { result ->
@@ -89,7 +87,7 @@ class UserPlaylistService : Service() {
         }.first()[UserPlaylistTable.id].value
     }
 
-    suspend fun addToPlaylist(id: UUID, songIds: List<Pair<Long, UUID>>) = dbQuery {
+    override suspend fun addToPlaylist(id: UUID, songIds: List<Pair<Long, UUID>>): List<UUID> = dbQuery {
         val existing = UserPlaylistSongTable
             .select(UserPlaylistSongTable.playlistId, UserPlaylistSongTable.songId, UserPlaylistSongTable.addedAt)
             .where { UserPlaylistSongTable.playlistId eq id }
@@ -100,10 +98,10 @@ class UserPlaylistService : Service() {
             this[UserPlaylistSongTable.playlistId] = id
             this[UserPlaylistSongTable.songId] = songId
             this[UserPlaylistSongTable.addedAt] = addedAt
-        }
+        }.map { it[UserPlaylistSongTable.songId].value }
     }
 
-    suspend fun removeFromPlaylist(id: UUID, songIds: List<UUID>) = dbQuery {
+    override suspend fun removeFromPlaylist(id: UUID, songIds: List<UUID>): Int = dbQuery {
         UserPlaylistSongTable.deleteWhere {
             UserPlaylistSongTable.playlistId eq id and (UserPlaylistSongTable.songId inList songIds)
         }
@@ -186,13 +184,13 @@ class UserPlaylistService : Service() {
 
             val songs = songsByPlaylistId[playlist.id]
                 ?.sortedBy { it.second }
-                ?.map { it.first }
                 ?: listOf()
 
             playlist.copy(
-                songs = songs,
+                songs = songs.map { it.first },
                 totalDuration = totalDuration,
+                modifiedAt = songs.lastOrNull()?.second.date ?: Date.from(Instant.EPOCH)
             )
-        }
+        }.sortedByDescending { it.modifiedAt }
     }
 }
