@@ -16,7 +16,7 @@ class LyricsSearch : ILyricsSearch, Service() {
         syncedOnly: Boolean,
         onLineReceived: suspend (String) -> Unit
     ): List<String> = withContext(Dispatchers.IO) {
-        val command = mutableListOf("syncedlyrics")
+        val command = mutableListOf("python3", "-u", "-m", "syncedlyrics")
 
         val lyricsFile = File.createTempFile(
             "$title - $artist".hashCode().toHexString(HexFormat.UpperCase),
