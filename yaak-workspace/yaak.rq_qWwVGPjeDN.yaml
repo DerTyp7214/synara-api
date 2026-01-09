@@ -1,17 +1,14 @@
 type: http_request
 model: http_request
-id: rq_mc3ZqgSDvE
-createdAt: 2025-11-20T18:54:30.464941324
-updatedAt: 2026-01-09T08:04:14.165431389
+id: rq_qWwVGPjeDN
+createdAt: 2026-01-09T08:04:12.812281794
+updatedAt: 2026-01-09T08:04:27.455003607
 workspaceId: wk_9dbKacQT4H
 folderId: fl_QrUoFyttZM
 authentication: {}
 authenticationType: null
 body:
-  text: |-
-    {
-      "liked": true
-    }
+  text: '[]'
 bodyType: application/json
 description: ''
 headers:
@@ -20,9 +17,9 @@ headers:
   value: application/json
   id: 6whw0cTEUA
 method: POST
-name: /song/setLiked/:id
-sortPriority: 1000.0
-url: ${[ baseUrl ]}/song/setLiked/:id
+name: /song/setLyrics/:id
+sortPriority: 2000.0
+url: ${[ baseUrl ]}/song/setLyrics/:id
 urlParameters:
 - enabled: true
   name: :id

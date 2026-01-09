@@ -2,7 +2,7 @@ type: folder
 model: folder
 id: fl_MTVZdwaxao
 createdAt: 2025-10-14T19:25:16.451991712
-updatedAt: 2025-10-14T19:25:16.451991762
+updatedAt: 2026-01-09T08:04:14.200613479
 workspaceId: wk_9dbKacQT4H
 folderId: fl_QrUoFyttZM
 authentication: {}
@@ -10,4 +10,4 @@ authenticationType: null
 description: ''
 headers: []
 name: byArtist/{artistId}
-sortPriority: 21.0
+sortPriority: 7000.0

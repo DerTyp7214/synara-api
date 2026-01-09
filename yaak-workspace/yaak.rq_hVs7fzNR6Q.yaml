@@ -2,7 +2,7 @@ type: http_request
 model: http_request
 id: rq_hVs7fzNR6Q
 createdAt: 2025-11-20T19:38:35.403119811
-updatedAt: 2025-11-20T19:50:58.317967939
+updatedAt: 2026-01-09T08:04:14.216398435
 workspaceId: wk_9dbKacQT4H
 folderId: fl_QrUoFyttZM
 authentication: {}
@@ -17,7 +17,7 @@ headers:
   id: null
 method: GET
 name: /song/searchLiked/:query
-sortPriority: 24.5
+sortPriority: 10000.0
 url: ${[baseUrl]}/song/searchLiked/:query
 urlParameters:
 - enabled: true

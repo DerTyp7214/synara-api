@@ -2,7 +2,7 @@ type: http_request
 model: http_request
 id: rq_c2aQ3V9qzz
 createdAt: 2025-10-14T19:25:16.450619051
-updatedAt: 2026-01-09T08:02:46.248526275
+updatedAt: 2026-01-09T08:04:14.211229015
 workspaceId: wk_9dbKacQT4H
 folderId: fl_QrUoFyttZM
 authentication: {}
@@ -22,7 +22,7 @@ headers:
   id: HwnrcXA9aI
 method: GET
 name: /song/search/:query
-sortPriority: 24.25
+sortPriority: 9000.0
 url: ${[baseUrl]}/song/search/:query
 urlParameters:
 - enabled: true
