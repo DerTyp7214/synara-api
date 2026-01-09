@@ -15,6 +15,8 @@ import dev.dertyp.services.metadata.IMetadataService
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import org.jaudiotagger.audio.AudioFileIO
+import org.jaudiotagger.tag.FieldKey
 import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.jdbc.*
 import org.koin.core.component.get
@@ -32,6 +34,9 @@ class SongRpcService(private val user: User, private val songService: SongServic
         liked: Boolean,
         addedAt: Instant?
     ): UserSong? = songService.setLiked(id, user.id, liked, addedAt)
+
+    override suspend fun setLyrics(id: UUID, lyrics: List<String>): UserSong? =
+        songService.setLyrics(id, user.id, lyrics)
 
     override suspend fun byId(id: UUID): UserSong? = songService.byId(id, user.id)
 
@@ -185,6 +190,27 @@ class SongService : Service() {
         }
 
         return byId(id, userId)
+    }
+
+    suspend fun setLyrics(id: UUID, userId: UUID, lyrics: List<String>) = dbQuery {
+        val lyricsString = lyrics.joinToString("\n")
+        SongTable.update({ SongTable.id eq id }) {
+            it[SongTable.lyrics] = lyricsString
+        }
+
+        return@dbQuery byId(id, userId).also {
+            it?.let { song ->
+                try {
+                    val file = AudioFileIO.read(File(song.path))
+
+                    file.tag.setField(FieldKey.LYRICS, lyricsString)
+
+                    file.commit()
+                } catch (e: Exception) {
+                    logger.error("Failed to set lyrics for $id: ${e.message}", e)
+                }
+            }
+        }
     }
 
     suspend fun byId(id: UUID): Song? = querySingle({ this }) {

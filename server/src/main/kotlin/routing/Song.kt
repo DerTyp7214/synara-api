@@ -16,7 +16,6 @@ import io.ktor.http.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
-import io.ktor.util.logging.*
 import kotlinx.rpc.krpc.ktor.server.rpc
 import kotlinx.serialization.Serializable
 import org.koin.ktor.ext.inject
@@ -32,8 +31,6 @@ data class SongIds(
 )
 
 fun Route.song() {
-    val logger = KtorSimpleLogger("song")
-
     route("/song", {
         tags("song")
     }) {
@@ -53,7 +50,7 @@ fun Route.song() {
             response {
                 HttpStatusCode.OK to {
                     description = "The song with the id."
-                    body<Song>()
+                    body<UserSong>()
                 }
             }
         }) {
@@ -66,6 +63,35 @@ fun Route.song() {
             val liked = call.receive<SetLikedBody>().liked
 
             val song = service.setLiked(id, user.id, liked) ?: return@post call.respond(HttpStatusCode.BadRequest)
+
+            return@post call.respond(song)
+        }
+
+        post("/setLyrics/{id}", {
+            request {
+                pathParameter<String>("id") {
+                    description = "The song id."
+                }
+                body<List<String>> {
+                    description = "The lyrics to set for the song."
+                }
+            }
+            response {
+                HttpStatusCode.OK to {
+                    description = "The song with the id."
+                    body<UserSong>()
+                }
+            }
+        }) {
+            val service by inject<SongService>()
+
+            val id = call.parameters["id"]?.toUUIDOrNull() ?: return@post call.respond(HttpStatusCode.BadRequest)
+
+            val user = call.getUser() ?: return@post call.respond(HttpStatusCode.Unauthorized)
+
+            val lyrics = call.receive<List<String>>()
+
+            val song = service.setLyrics(id, user.id, lyrics) ?: return@post call.respond(HttpStatusCode.BadRequest)
 
             return@post call.respond(song)
         }
