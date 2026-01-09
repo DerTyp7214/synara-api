@@ -23,6 +23,8 @@ class LyricsSearch : ILyricsSearch, Service() {
             ".lrc"
         )
 
+        logger.info("Searching lyrics for $title by $artist ($syncedOnly) -> $lyricsFile")
+
         command.add("-v")
         command.add("-o")
         command.add(lyricsFile.absolutePath)
@@ -37,13 +39,14 @@ class LyricsSearch : ILyricsSearch, Service() {
         }.exitCode
 
         if (exitCode != 0) {
-            lyricsFile.delete()
+            logger.info("Search failed, exitCode=$exitCode")
+            logger.info("Deleting temp lyrics file (${lyricsFile.absolutePath}): ${lyricsFile.delete()}")
             throw RuntimeException("Lyrics search failed with exit code $exitCode")
         }
 
         val lyrics = lyricsFile.readLines()
 
-        lyricsFile.delete()
+        logger.info("Deleting temp lyrics file (${lyricsFile.absolutePath}): ${lyricsFile.delete()}")
 
         return@withContext lyrics
     }
