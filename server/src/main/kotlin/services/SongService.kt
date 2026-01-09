@@ -196,6 +196,7 @@ class SongService : Service() {
         val lyricsString = lyrics.joinToString("\n")
         SongTable.update({ SongTable.id eq id }) {
             it[SongTable.lyrics] = lyricsString
+            it[UserSongTable.updatedAt] = Instant.now().toEpochMilli()
         }
 
         return@dbQuery byId(id, userId).also {

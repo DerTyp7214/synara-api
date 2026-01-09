@@ -2,7 +2,7 @@ type: http_request
 model: http_request
 id: rq_wc95MDMJp9
 createdAt: 2026-01-09T00:22:57.302467531
-updatedAt: 2026-01-09T08:02:56.694442420
+updatedAt: 2026-01-09T08:30:55.882634195
 workspaceId: wk_9dbKacQT4H
 folderId: fl_xqrmRv49Xr
 authentication: {}
@@ -18,9 +18,9 @@ url: ${[baseUrl]}/metadata/lyrics/:id
 urlParameters:
 - enabled: true
   name: :id
-  value: 1befa240-7aeb-4cb9-95a6-074c1406558d
+  value: aa9dbc42-0fe0-4dc9-ba36-2ad72403611b
   id: 0p6iExW3FP
 - enabled: true
   name: ''
   value: ''
-  id: zkes5Pb3jB
+  id: 0Isd9vTRf3

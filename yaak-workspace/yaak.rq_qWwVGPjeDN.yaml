@@ -2,13 +2,91 @@ type: http_request
 model: http_request
 id: rq_qWwVGPjeDN
 createdAt: 2026-01-09T08:04:12.812281794
-updatedAt: 2026-01-09T08:04:27.455003607
+updatedAt: 2026-01-09T08:31:13.686362849
 workspaceId: wk_9dbKacQT4H
 folderId: fl_QrUoFyttZM
 authentication: {}
 authenticationType: null
 body:
-  text: '[]'
+  text: |-
+    [
+      "[00:02.50] (Juh-Juh-Dee on the beat)",
+      "[00:05.54] (young mesh macht die 808)",
+      "[00:07.95] Sie will mich heut Nacht wiederseh'n (Seh'n)",
+      "[00:10.07] Jung, reich, Playboy-Spieler-Gen (Gen)",
+      "[00:12.29] Lieber Gott, lass das nie vergeh'n (Nein)",
+      "[00:13.98] Lieber Gott, lass das nie vergeh'n",
+      "[00:16.21] Sie will nicht, dass ich geh' (Geh')",
+      "[00:20.40] Playboy-Spieler-Gen (Gen) (E-ey)",
+      "[00:23.86] Bres, die dei'm Girl den Kopf verdreh'n (Dreh'n)",
+      "[00:25.84] Jung, reich, Playboy-Spieler-Gen (Gen)",
+      "[00:27.79] Lieber Gott, lass das nie vergeh'n (Nein)",
+      "[00:29.69] Lieber Gott, lass das nie vergeh'n",
+      "[00:32.14] Sie will nicht, dass ich geh' (Geh')",
+      "[00:36.20] Playboy-Spieler-Gen (Gen) (E-ey)",
+      "[00:40.26] Sie will ihr'n Booty shaken",
+      "[00:42.39] Oh, ich liebe ihren Fake-Ass",
+      "[00:44.37] Sie will es hart, Baby, say less",
+      "[00:46.40] Dreh'n ein'n Film in High-Res",
+      "[00:48.35] Kafabey macht sie horny, ah",
+      "[00:50.31] Was 'ne verrückte Domina",
+      "[00:52.21] Braun im Winter dank Florida",
+      "[00:54.29] Diamant kalt wie Jupiter (Uh-ah)",
+      "[00:55.92] Big Benzino, als hätt ich Beef mit Eminem (Hey-ya)",
+      "[00:59.82] Sie macht heimlich Bilder, ah, mit ihrer Handycam (Oh Boy)",
+      "[01:04.41] Zweifelsohne ist sie Kücük-Efendi-Fan (Uh-ah)",
+      "[01:08.43] Kann's nicht verübeln, ja, er ist der fucking Mac",
+      "[01:11.25] Sie will nur First, tausende Girls",
+      "[01:13.40] Haben schon lange nix von mir gehört",
+      "[01:15.33] Komm' ich dort an, werd' ich verhört",
+      "[01:17.33] Schenk' ihr 'ne Goyard und sie ist geturnt",
+      "[01:19.15] Schenk' 'n Tausi in Gläser (Hm)",
+      "[01:21.53] Hass das Spiel, nicht die Player (Yeah)",
+      "[01:23.47] Unterm Treter ein Käfer (Fendi)",
+      "[01:25.21] Rest in Piss an den Hater (Uh-ah)",
+      "[01:27.99] Sie will mich heut Nacht wiederseh'n (Seh'n)",
+      "[01:29.96] Jung, reich, Playboy-Spieler-Gen (Gen)",
+      "[01:31.98] Lieber Gott, lass das nie vergeh'n (Nein)",
+      "[01:33.99] Lieber Gott, lass das nie vergeh'n",
+      "[01:36.45] Sie will nicht, dass ich geh' (Geh')",
+      "[01:40.24] Playboy-Spieler-Gen (Gen) (E-ey)",
+      "[01:43.94] Bres, die dei'm Girl den Kopf verdreh'n (Dreh'n)",
+      "[01:45.94] Jung, reich, Playboy-Spieler-Gen (Gen)",
+      "[01:47.85] Lieber Gott, lass das nie vergeh'n (Nein)",
+      "[01:49.88] Lieber Gott, lass das nie vergeh'n",
+      "[01:52.35] Sie will nicht, dass ich geh' (Geh')",
+      "[01:56.32] Playboy-Spieler-Gen (Gen)",
+      "[01:59.97] Oh God, wir sind blessed, seh' aus wie Sex",
+      "[02:01.92] Rieche nach Geld, sitz' hinten rechts",
+      "[02:04.03] Zieh' an dem Jay, weil ich bin leicht gestresst",
+      "[02:05.95] Doch lavish, kill' alles, entscheide ich selbst",
+      "[02:08.07] Steig' aus dem Private und rein in den Club",
+      "[02:09.97] Brauche kein'n Stylist, nur weil du es musst",
+      "[02:11.89] Wir brauchen nicht streiten, ich hab' keine Lust",
+      "[02:14.08] Babe, ich muss weiter, was bleibt, ist mein Duft (Ninio)",
+      "[02:16.43] Mein Leben 'ne Symphonie, check' in die Fünf-Sterne-Suite",
+      "[02:19.82] Ich bin schon am Gate und warte auf den nächsten Flug",
+      "[02:22.39] Während sie noch im Zimmer liegt",
+      "[02:24.39] Shawty ist blind vor Liebe, doch wirkt auf mich instabil",
+      "[02:27.91] Sie wollt auf die Malediven, doch war nur für die Winter-Season",
+      "[02:32.21] Paparazzi woll'n mein Lächeln mit 'ner Linse catchen",
+      "[02:36.16] Doch seh' nur Model-Silhouetten in der Ninio-Mansion",
+      "[02:40.93] Speicher' ihre Nummer auf mei'm zweiten Handy",
+      "[02:44.36] Kafa leş, doch ich bleib' efendi",
+      "[02:47.93] Sie will mich heut Nacht wiederseh'n (Seh'n)",
+      "[02:50.06] Jung, reich, Playboy-Spieler-Gen (Gen)",
+      "[02:52.16] Lieber Gott, lass das nie vergeh'n (Nein)",
+      "[02:54.09] Lieber Gott, lass das nie vergeh'n",
+      "[02:56.67] Sie will nicht, dass ich geh' (Geh')",
+      "[03:00.67] Playboy-Spieler-Gen (Gen) (E-ey)",
+      "[03:04.08] Bres, die dei'm Girl den Kopf verdreh'n (Dreh'n)",
+      "[03:05.96] Jung, reich, Playboy-Spieler-Gen (Gen)",
+      "[03:07.93] Lieber Gott, lass das nie vergeh'n (Nein)",
+      "[03:09.82] Lieber Gott, lass das nie vergeh'n",
+      "[03:12.46] Sie will nicht, dass ich geh' (Geh')",
+      "[03:16.24] Playboy-Spieler-Gen (Gen) (E-ey)",
+      "[03:21.38] "
+    ]
 bodyType: application/json
 description: ''
 headers:
@@ -23,9 +101,9 @@ url: ${[ baseUrl ]}/song/setLyrics/:id
 urlParameters:
 - enabled: true
   name: :id
-  value: b34522e1-d945-499f-9259-511d0fd12dcb
+  value: aa9dbc42-0fe0-4dc9-ba36-2ad72403611b
   id: GXvSPS7BSA
 - enabled: true
   name: ''
   value: ''
-  id: dbRHXhhSGv
+  id: 3EY7qUIj6d

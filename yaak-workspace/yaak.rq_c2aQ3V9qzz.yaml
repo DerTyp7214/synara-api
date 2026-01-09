@@ -2,7 +2,7 @@ type: http_request
 model: http_request
 id: rq_c2aQ3V9qzz
 createdAt: 2025-10-14T19:25:16.450619051
-updatedAt: 2026-01-09T08:04:14.211229015
+updatedAt: 2026-01-09T08:30:48.027267832
 workspaceId: wk_9dbKacQT4H
 folderId: fl_QrUoFyttZM
 authentication: {}
@@ -39,9 +39,9 @@ urlParameters:
   id: Cqh8H4cRV7
 - enabled: true
   name: :query
-  value: ozean ykke
+  value: psg ykke
   id: zXFn5dePsN
 - enabled: true
   name: ''
   value: ''
-  id: nqbvAzqu2X
+  id: U8MZIe4qUI
