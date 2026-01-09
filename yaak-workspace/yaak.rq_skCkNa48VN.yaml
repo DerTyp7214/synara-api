@@ -2,7 +2,7 @@ type: http_request
 model: http_request
 id: rq_skCkNa48VN
 createdAt: 2025-12-08T21:36:29.606319238
-updatedAt: 2025-12-23T03:28:26.381528740
+updatedAt: 2026-01-09T00:22:59.820820360
 workspaceId: wk_9dbKacQT4H
 folderId: fl_xqrmRv49Xr
 authentication: {}
@@ -13,7 +13,7 @@ description: '[object Object]'
 headers: []
 method: GET
 name: /imageByTrackId
-sortPriority: 2000.0
+sortPriority: 5000.0
 url: ${[baseUrl]}/metadata/:metadataProvider/imageUrl/byTrackId/:trackId
 urlParameters:
 - enabled: true

@@ -2,7 +2,7 @@ type: http_request
 model: http_request
 id: rq_xA7VEJGJLM
 createdAt: 2025-10-14T19:25:16.449810820
-updatedAt: 2025-12-09T14:06:37.364936675
+updatedAt: 2026-01-09T00:22:59.815292381
 workspaceId: wk_9dbKacQT4H
 folderId: fl_xqrmRv49Xr
 authentication: {}
@@ -13,7 +13,7 @@ description: '[object Object]'
 headers: []
 method: GET
 name: /fetchArtistImages
-sortPriority: 1000.0
+sortPriority: 4000.0
 url: ${[baseUrl]}/metadata/:metadataProvider/fetchArtistImages
 urlParameters:
 - enabled: true

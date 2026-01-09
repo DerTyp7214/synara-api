@@ -2,7 +2,7 @@ type: http_request
 model: http_request
 id: rq_a8DtFJsGvX
 createdAt: 2025-12-09T14:10:20.842791879
-updatedAt: 2025-12-23T03:22:58.555957465
+updatedAt: 2026-01-09T00:22:59.809926830
 workspaceId: wk_9dbKacQT4H
 folderId: fl_xqrmRv49Xr
 authentication: {}
@@ -13,7 +13,7 @@ description: '[object Object]'
 headers: []
 method: GET
 name: /imageUrlById
-sortPriority: 0.001
+sortPriority: 3000.0
 url: ${[baseUrl]}/metadata/:metadataProvider/imageUrlById/:imageId
 urlParameters:
 - enabled: false

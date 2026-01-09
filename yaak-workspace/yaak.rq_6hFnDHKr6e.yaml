@@ -2,7 +2,7 @@ type: http_request
 model: http_request
 id: rq_6hFnDHKr6e
 createdAt: 2025-12-09T14:06:28.363861789
-updatedAt: 2025-12-09T14:07:12.831303113
+updatedAt: 2026-01-09T00:22:59.798454322
 workspaceId: wk_9dbKacQT4H
 folderId: fl_xqrmRv49Xr
 authentication: {}
@@ -13,7 +13,7 @@ description: '[object Object]'
 headers: []
 method: GET
 name: /supported
-sortPriority: 0.0
+sortPriority: 1000.0
 url: ${[baseUrl]}/metadata/:metadataProvider/supported
 urlParameters:
 - enabled: false

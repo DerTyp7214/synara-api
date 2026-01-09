@@ -2,7 +2,7 @@ type: http_request
 model: http_request
 id: rq_dWY9wLGLWZ
 createdAt: 2025-12-23T03:38:17.198097978
-updatedAt: 2025-12-23T06:07:48.675953103
+updatedAt: 2026-01-09T00:22:59.826076052
 workspaceId: wk_9dbKacQT4H
 folderId: fl_xqrmRv49Xr
 authentication: {}
@@ -13,7 +13,7 @@ description: '[object Object]'
 headers: []
 method: GET
 name: /animatedByTrack
-sortPriority: 2000.001
+sortPriority: 6000.0
 url: ${[baseUrl]}/metadata/:metadataProvider/imageUrl/animatedByTrack/:trackId
 urlParameters:
 - enabled: true

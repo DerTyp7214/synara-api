@@ -2,17 +2,14 @@ package dev.dertyp.services.tdn
 
 import dev.dertyp.Indexer
 import dev.dertyp.core.*
+import dev.dertyp.executeCommand
 import dev.dertyp.services.Service
 import dev.dertyp.services.StorageService
-import kotlinx.coroutines.*
-import java.io.InputStreamReader
+import kotlinx.coroutines.delay
 import java.nio.file.Path
 import java.time.Instant
-import java.time.LocalTime
-import java.time.format.DateTimeFormatter
 import kotlin.concurrent.atomics.AtomicBoolean
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
-import kotlin.coroutines.cancellation.CancellationException
 import kotlin.io.path.*
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.seconds
@@ -265,75 +262,6 @@ class TdnService(private val indexer: Indexer, private val storageService: Stora
             command.add(2, "-m")
         }
 
-        val timeString = LocalTime.now().format(DateTimeFormatter.ISO_LOCAL_TIME).split(".").first()
-        logger.info("[$timeString] Starting command: ${command.joinToString(" ")}")
-
-        val fullOutput = StringBuilder()
-
-        val currentJob = currentCoroutineContext().job
-        var completionHandle: DisposableHandle? = null
-
-        var process: Process? = null
-
-        return coroutineScope {
-            val checkJob = launch {
-                while (aliveCheck()) {
-                    delay(200)
-                    ensureActive()
-                }
-
-                logger.info("Parent no longer alive, stoping forcefully")
-
-                if (process?.isAlive == true) process?.destroyForcibly()
-                cancel("Stopping command", ClientCloseException())
-            }
-
-            try {
-                process = ProcessBuilder(command)
-                    .redirectErrorStream(true)
-                    .apply { environment()["COLUMNS"] = "500" }
-                    .start()
-
-                completionHandle = currentJob.invokeOnCompletion { cause ->
-                    if (cause is CancellationException) {
-                        process?.destroyForcibly()
-                    }
-                }
-
-                val outputJob = launch {
-                    val reader = InputStreamReader(process.inputStream)
-
-                    try {
-                        reader.lineFlow().collect { line ->
-                            currentCoroutineContext().ensureActive()
-
-                            fullOutput.appendLine(line)
-                            if (line.isNotBlank()) onLineReceived(line)
-                        }
-                    } catch (e: Exception) {
-                        if (e is CancellationException) throw e
-                    }
-                }
-
-                val exitCode = process.waitFor()
-                outputJob.join()
-
-                return@coroutineScope ProcessExecutionResult(exitCode, fullOutput.toString(), "")
-
-            } catch (e: Exception) {
-                if (e is ClientCloseException || e.cause is ClientCloseException) logger.info("Client disconnected.")
-                else e.printStackTrace()
-                return@coroutineScope ProcessExecutionResult(
-                    -2,
-                    fullOutput.toString(),
-                    "Failed to execute 'tdn'. Error: ${e.message}"
-                )
-            } finally {
-                completionHandle?.dispose()
-
-                if (process?.isAlive == true) process.destroyForcibly()
-                if (checkJob.isActive) checkJob.cancel()
-            }
-        }
+        return executeCommand(command, aliveCheck, logger, onLineReceived)
     }
 }

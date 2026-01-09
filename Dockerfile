@@ -57,7 +57,7 @@ RUN yum update -y && yum install -y python3.12 python3.12-pip libstdc++ zlib gli
     yum clean all && rm -rf /var/cache/yum
 
 RUN ln -sf /usr/bin/python3.12 /usr/bin/python3
-RUN python3 -m pip install --break-system-packages --no-cache-dir tidal-dl-ng
+RUN python3 -m pip install --break-system-packages --no-cache-dir tidal-dl-ng syncedlyrics
 
 COPY --from=ffmpeg-builder /usr/local/lib/libav*.so* /usr/lib/
 COPY --from=ffmpeg-builder /usr/local/lib/libsw*.so* /usr/lib/

@@ -1,0 +1,26 @@
+type: http_request
+model: http_request
+id: rq_wc95MDMJp9
+createdAt: 2026-01-09T00:22:57.302467531
+updatedAt: 2026-01-09T00:24:09.836149600
+workspaceId: wk_9dbKacQT4H
+folderId: fl_xqrmRv49Xr
+authentication: {}
+authenticationType: null
+body: {}
+bodyType: null
+description: '[object Object]'
+headers: []
+method: GET
+name: /lyrics
+sortPriority: 0.0
+url: ${[baseUrl]}/metadata/lyrics/:id
+urlParameters:
+- enabled: true
+  name: :id
+  value: bcb66635-8287-4195-9ae6-778d2876b10c
+  id: 0p6iExW3FP
+- enabled: true
+  name: ''
+  value: ''
+  id: qGsbnTHXuA

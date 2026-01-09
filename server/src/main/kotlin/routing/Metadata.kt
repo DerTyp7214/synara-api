@@ -8,6 +8,7 @@ import dev.dertyp.data.InsertableImage
 import dev.dertyp.db.ArtistTable
 import dev.dertyp.dbQuery
 import dev.dertyp.services.ImageService
+import dev.dertyp.services.LyricsSearch
 import dev.dertyp.services.SongService
 import dev.dertyp.services.metadata.MetadataService
 import dev.dertyp.services.metadata.TidalService
@@ -49,341 +50,368 @@ data class AnimatedCover(
 
 @OptIn(ExperimentalAtomicApi::class)
 fun Route.metadata() {
-    route("/metadata/{metadataProvider}", {
-        request {
-            pathParameter<MetadataService.Companion.MetadataType>("metadataProvider")
-        }
-    }) {
-        get("/supported") {
-            val service = call.getMetadataProvider() ?: return@get call.respond(HttpStatusCode.BadRequest)
-
-            call.respond(service.supported())
-        }
-        cacheOutput(1.days) {
-            get("/imageUrlById/{imageId}", {
-                request {
-                    pathParameter<UUID>("imageId")
+    route("/metadata") {
+        get("/lyrics/{id}", {
+            request {
+                pathParameter<String>("id") {
+                    description = "The id of the song."
                 }
-            }) {
-                val imageId =
-                    call.parameters["imageId"]?.toUUIDOrNull() ?: return@get call.respond(HttpStatusCode.BadRequest)
-
-                val metadataProviderString =
-                    call.parameters["metadataProvider"] ?: return@get call.respond(HttpStatusCode.BadRequest)
-
-                val metadataProvider = MetadataService.Companion.MetadataType.valueOf(metadataProviderString)
-
-                val service = MetadataService.getMetadataService(metadataProvider, environment)
-
-                val imageUrl = service.getImageUrlByImageId(imageId) ?: return@get call.respond(HttpStatusCode.NotFound)
-
-                call.respond(imageUrl)
             }
+        }) {
+            val songService by inject<SongService>()
+
+            val id = call.parameters["id"]?.toUUIDOrNull() ?: return@get call.respond(HttpStatusCode.NotFound)
+
+            val song = songService.byId(id) ?: return@get call.respond(HttpStatusCode.NotFound)
+
+            val lyrics = LyricsSearch().searchLyrics(
+                song.artists.joinToString(", ") { it.name },
+                song.title
+            )
+
+            call.respond(lyrics)
         }
-        route("/fetchArtistImages", HttpMethod.Get) {
-            sse {
-                val indexer by inject<Indexer>()
-                val imageService by inject<ImageService>()
 
-                if (indexer.isActive.load()) {
-                    call.respond(HttpStatusCode.Conflict, "Index is running")
-                    return@sse
+        route("/{metadataProvider}", {
+            request {
+                pathParameter<MetadataService.Companion.MetadataType>("metadataProvider")
+            }
+        }) {
+            get("/supported") {
+                val service = call.getMetadataProvider() ?: return@get call.respond(HttpStatusCode.BadRequest)
+
+                call.respond(service.supported())
+            }
+            cacheOutput(1.days) {
+                get("/imageUrlById/{imageId}", {
+                    request {
+                        pathParameter<UUID>("imageId")
+                    }
+                }) {
+                    val imageId =
+                        call.parameters["imageId"]?.toUUIDOrNull() ?: return@get call.respond(HttpStatusCode.BadRequest)
+
+                    val metadataProviderString =
+                        call.parameters["metadataProvider"] ?: return@get call.respond(HttpStatusCode.BadRequest)
+
+                    val metadataProvider = MetadataService.Companion.MetadataType.valueOf(metadataProviderString)
+
+                    val service = MetadataService.getMetadataService(metadataProvider, environment)
+
+                    val imageUrl =
+                        service.getImageUrlByImageId(imageId) ?: return@get call.respond(HttpStatusCode.NotFound)
+
+                    call.respond(imageUrl)
                 }
+            }
+            route("/fetchArtistImages", HttpMethod.Get) {
+                sse {
+                    val indexer by inject<Indexer>()
+                    val imageService by inject<ImageService>()
 
-                val metadataProviderString =
-                    call.parameters["metadataProvider"] ?: return@sse call.respond(HttpStatusCode.BadRequest)
+                    if (indexer.isActive.load()) {
+                        call.respond(HttpStatusCode.Conflict, "Index is running")
+                        return@sse
+                    }
 
-                val metadataProvider = MetadataService.Companion.MetadataType.valueOf(metadataProviderString)
+                    val metadataProviderString =
+                        call.parameters["metadataProvider"] ?: return@sse call.respond(HttpStatusCode.BadRequest)
 
-                val service = MetadataService.getMetadataService(metadataProvider, environment)
+                    val metadataProvider = MetadataService.Companion.MetadataType.valueOf(metadataProviderString)
 
-                if (!MetadataService.isFetching.compareAndSet(expectedValue = false, newValue = true)) {
-                    call.respond(HttpStatusCode.Conflict, "Fetching is already in progress.")
-                    return@sse
-                }
+                    val service = MetadataService.getMetadataService(metadataProvider, environment)
 
-                val artists = dbQuery {
-                    ArtistTable
-                        .select(ArtistTable.id, ArtistTable.name, ArtistTable.image)
-                        .where { ArtistTable.image.isNull() }
-                        .map { Pair(it[ArtistTable.id].value, it[ArtistTable.name]) }
-                }
+                    if (!MetadataService.isFetching.compareAndSet(expectedValue = false, newValue = true)) {
+                        call.respond(HttpStatusCode.Conflict, "Fetching is already in progress.")
+                        return@sse
+                    }
 
-                val artistChannel = Channel<Pair<UUID, String>>(Channel.UNLIMITED)
+                    val artists = dbQuery {
+                        ArtistTable
+                            .select(ArtistTable.id, ArtistTable.name, ArtistTable.image)
+                            .where { ArtistTable.image.isNull() }
+                            .map { Pair(it[ArtistTable.id].value, it[ArtistTable.name]) }
+                    }
 
-                try {
-                    coroutineScope {
-                        repeat(1) {
-                            launch {
-                                for ((id, name) in artistChannel) {
-                                    send("Fetching image for: $name")
-                                    val response = service.searchArtists(name, 20)
-                                    val artist = response.sortedByDescending { it.popularity }.firstOrNull { artist ->
-                                        artist.name.replace(".", "")
-                                            .equals(name.replace(".", ""), ignoreCase = true)
-                                    }
-                                    if (artist == null) {
-                                        send("No artist with name \"$name\" ${response.joinToString(", ") { it.name }}")
-                                        continue
-                                    }
+                    val artistChannel = Channel<Pair<UUID, String>>(Channel.UNLIMITED)
 
-                                    val images = artist.images
-                                    val image = images.maxByOrNull { it.width }
-                                    if (image == null) {
-                                        send("No image for \"$name\" $artist ${images.joinToString(", ")}")
-                                        continue
-                                    }
-
-                                    val imageBytes = ApiClient.instance.safeGet<ByteArray>(image.url)
-                                    if (imageBytes == null) {
-                                        send("No image (null) for \"$name\"")
-                                        continue
-                                    }
-
-                                    val imageId = imageService.createBatch(
-                                        listOf(
-                                            InsertableImage(
-                                                data = imageBytes,
-                                                imageHash = imageBytes.sha256(),
-                                                origin = image.url
-                                            )
-                                        )
-                                    ).firstOrNull()
-                                    if (imageId == null) {
-                                        send("Error inserting image for \"$name\": ${image.url} (${imageBytes.sha256()})")
-                                        continue
-                                    }
-
-                                    val updates = dbQuery {
-                                        ArtistTable.update({ ArtistTable.id eq id }) {
-                                            it[ArtistTable.image] = imageId
+                    try {
+                        coroutineScope {
+                            repeat(1) {
+                                launch {
+                                    for ((id, name) in artistChannel) {
+                                        send("Fetching image for: $name")
+                                        val response = service.searchArtists(name, 20)
+                                        val artist =
+                                            response.sortedByDescending { it.popularity }.firstOrNull { artist ->
+                                                artist.name.replace(".", "")
+                                                    .equals(name.replace(".", ""), ignoreCase = true)
+                                            }
+                                        if (artist == null) {
+                                            send("No artist with name \"$name\" ${response.joinToString(", ") { it.name }}")
+                                            continue
                                         }
-                                    }
 
-                                    if (updates == 1) send("Updated \"$name\" with an image.")
-                                    else send("Something went wrong. $name")
+                                        val images = artist.images
+                                        val image = images.maxByOrNull { it.width }
+                                        if (image == null) {
+                                            send("No image for \"$name\" $artist ${images.joinToString(", ")}")
+                                            continue
+                                        }
+
+                                        val imageBytes = ApiClient.instance.safeGet<ByteArray>(image.url)
+                                        if (imageBytes == null) {
+                                            send("No image (null) for \"$name\"")
+                                            continue
+                                        }
+
+                                        val imageId = imageService.createBatch(
+                                            listOf(
+                                                InsertableImage(
+                                                    data = imageBytes,
+                                                    imageHash = imageBytes.sha256(),
+                                                    origin = image.url
+                                                )
+                                            )
+                                        ).firstOrNull()
+                                        if (imageId == null) {
+                                            send("Error inserting image for \"$name\": ${image.url} (${imageBytes.sha256()})")
+                                            continue
+                                        }
+
+                                        val updates = dbQuery {
+                                            ArtistTable.update({ ArtistTable.id eq id }) {
+                                                it[ArtistTable.image] = imageId
+                                            }
+                                        }
+
+                                        if (updates == 1) send("Updated \"$name\" with an image.")
+                                        else send("Something went wrong. $name")
+                                    }
                                 }
                             }
-                        }
-                        for (artist in artists) {
-                            artistChannel.send(artist)
-                            ensureActive()
+                            for (artist in artists) {
+                                artistChannel.send(artist)
+                                ensureActive()
+                            }
+
+                            artistChannel.close()
                         }
 
-                        artistChannel.close()
+                        send("Loading artist images done.")
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (_: ClosedWriteChannelException) {
+                    } catch (e: Throwable) {
+                        e.printStackTrace()
+                    } finally {
+                        MetadataService.isFetching.store(false)
                     }
-
-                    send("Loading artist images done.")
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (_: ClosedWriteChannelException) {
-                } catch (e: Throwable) {
-                    e.printStackTrace()
-                } finally {
-                    MetadataService.isFetching.store(false)
                 }
             }
-        }
-        post("/tracks", {
-            request {
-                body<List<String>> {
-                    description = "Track ids"
-                }
-            }
-        }) {
-            val service = call.getMetadataProvider() ?: return@post call.respond(HttpStatusCode.BadRequest)
-            if (service !is TidalService) return@post call.respond(
-                HttpStatusCode.MethodNotAllowed,
-                "Only Tidal is supported."
-            )
-
-            val ids = call.receive<List<String>>().filterNot { it.isBlank() }
-
-            call.respond(service.getTracksByIds(ids))
-        }
-        post("/albums", {
-            request {
-                body<List<String>> {
-                    description = "Album ids"
-                }
-            }
-        }) {
-            val service = call.getMetadataProvider() ?: return@post call.respond(HttpStatusCode.BadRequest)
-            if (service !is TidalService) return@post call.respond(
-                HttpStatusCode.MethodNotAllowed,
-                "Only Tidal is supported."
-            )
-
-            val ids = call.receive<List<String>>().filterNot { it.isBlank() }
-
-            call.respond(service.getAlbumsByIds(ids))
-        }
-        post("/artists", {
-            request {
-                body<List<String>> {
-                    description = "Artist ids"
-                }
-            }
-        }) {
-            val service = call.getMetadataProvider() ?: return@post call.respond(HttpStatusCode.BadRequest)
-            if (service !is TidalService) return@post call.respond(
-                HttpStatusCode.MethodNotAllowed,
-                "Only Tidal is supported."
-            )
-
-            val ids = call.receive<List<String>>().filterNot { it.isBlank() }
-
-            call.respond(service.getArtistsByIds(ids))
-        }
-        post("/playlists", {
-            request {
-                queryParameter<Boolean>("includeTracks") {
-                    description = "Include tracks in response"
-                }
-                body<List<String>> {
-                    description = "Playlist ids"
-                }
-            }
-        }) {
-            val service = call.getMetadataProvider() ?: return@post call.respond(HttpStatusCode.BadRequest)
-            if (service !is TidalService) return@post call.respond(
-                HttpStatusCode.MethodNotAllowed,
-                "Only Tidal is supported."
-            )
-
-            val ids = call.receive<List<String>>().filterNot { it.isBlank() }
-            val includeTracks = call.queryParameters["includeTracks"]?.toBoolean() ?: false
-
-            call.respond(service.getPlaylistsByIds(ids, includeTracks))
-        }
-        head("/proxy/{url}", {
-            request {
-                pathParameter<String>("url") {
-                    description = "The URL to proxy."
-                }
-            }
-        }) {
-            val base64 = call.parameters["url"] ?: return@head call.respond(HttpStatusCode.BadRequest)
-            val url = base64.decodeBase64String()
-
-            val response = ApiClient.instance.head(url)
-
-            val contentType = response.headers[HttpHeaders.ContentType]
-            val status = response.status
-            val bytes = response.bodyAsBytes()
-
-            call.respondBytes(
-                bytes = bytes,
-                contentType = contentType?.let { ContentType.parse(it) },
-                status = status
-            )
-        }
-        get("/proxy/{url}", {
-            request {
-                pathParameter<String>("url") {
-                    description = "The URL to proxy."
-                }
-            }
-        }) {
-            val base64 = call.parameters["url"] ?: return@get call.respond(HttpStatusCode.BadRequest)
-            val url = base64.decodeBase64String()
-
-            val response = ApiClient.instance.get(url)
-
-            val contentType = response.headers[HttpHeaders.ContentType]
-            val status = response.status
-            val bytes = response.bodyAsBytes()
-
-            call.respondBytes(
-                bytes = bytes,
-                contentType = contentType?.let { ContentType.parse(it) },
-                status = status
-            )
-        }
-
-        cacheOutput(Duration.INFINITE) {
-            route("/imageUrl") {
-                get("/animatedByTrack/{trackId}", {
-                    request {
-                        pathParameter<String>("trackId") {
-                            description = "The (synara) track ID."
-                        }
+            post("/tracks", {
+                request {
+                    body<List<String>> {
+                        description = "Track ids"
                     }
-                }) {
-                    val songService by inject<SongService>()
+                }
+            }) {
+                val service = call.getMetadataProvider() ?: return@post call.respond(HttpStatusCode.BadRequest)
+                if (service !is TidalService) return@post call.respond(
+                    HttpStatusCode.MethodNotAllowed,
+                    "Only Tidal is supported."
+                )
+
+                val ids = call.receive<List<String>>().filterNot { it.isBlank() }
+
+                call.respond(service.getTracksByIds(ids))
+            }
+            post("/albums", {
+                request {
+                    body<List<String>> {
+                        description = "Album ids"
+                    }
+                }
+            }) {
+                val service = call.getMetadataProvider() ?: return@post call.respond(HttpStatusCode.BadRequest)
+                if (service !is TidalService) return@post call.respond(
+                    HttpStatusCode.MethodNotAllowed,
+                    "Only Tidal is supported."
+                )
+
+                val ids = call.receive<List<String>>().filterNot { it.isBlank() }
+
+                call.respond(service.getAlbumsByIds(ids))
+            }
+            post("/artists", {
+                request {
+                    body<List<String>> {
+                        description = "Artist ids"
+                    }
+                }
+            }) {
+                val service = call.getMetadataProvider() ?: return@post call.respond(HttpStatusCode.BadRequest)
+                if (service !is TidalService) return@post call.respond(
+                    HttpStatusCode.MethodNotAllowed,
+                    "Only Tidal is supported."
+                )
+
+                val ids = call.receive<List<String>>().filterNot { it.isBlank() }
+
+                call.respond(service.getArtistsByIds(ids))
+            }
+            post("/playlists", {
+                request {
+                    queryParameter<Boolean>("includeTracks") {
+                        description = "Include tracks in response"
+                    }
+                    body<List<String>> {
+                        description = "Playlist ids"
+                    }
+                }
+            }) {
+                val service = call.getMetadataProvider() ?: return@post call.respond(HttpStatusCode.BadRequest)
+                if (service !is TidalService) return@post call.respond(
+                    HttpStatusCode.MethodNotAllowed,
+                    "Only Tidal is supported."
+                )
+
+                val ids = call.receive<List<String>>().filterNot { it.isBlank() }
+                val includeTracks = call.queryParameters["includeTracks"]?.toBoolean() ?: false
+
+                call.respond(service.getPlaylistsByIds(ids, includeTracks))
+            }
+            head("/proxy/{url}", {
+                request {
+                    pathParameter<String>("url") {
+                        description = "The URL to proxy."
+                    }
+                }
+            }) {
+                val base64 = call.parameters["url"] ?: return@head call.respond(HttpStatusCode.BadRequest)
+                val url = base64.decodeBase64String()
+
+                val response = ApiClient.instance.head(url)
+
+                val contentType = response.headers[HttpHeaders.ContentType]
+                val status = response.status
+                val bytes = response.bodyAsBytes()
+
+                call.respondBytes(
+                    bytes = bytes,
+                    contentType = contentType?.let { ContentType.parse(it) },
+                    status = status
+                )
+            }
+            get("/proxy/{url}", {
+                request {
+                    pathParameter<String>("url") {
+                        description = "The URL to proxy."
+                    }
+                }
+            }) {
+                val base64 = call.parameters["url"] ?: return@get call.respond(HttpStatusCode.BadRequest)
+                val url = base64.decodeBase64String()
+
+                val response = ApiClient.instance.get(url)
+
+                val contentType = response.headers[HttpHeaders.ContentType]
+                val status = response.status
+                val bytes = response.bodyAsBytes()
+
+                call.respondBytes(
+                    bytes = bytes,
+                    contentType = contentType?.let { ContentType.parse(it) },
+                    status = status
+                )
+            }
+
+            cacheOutput(Duration.INFINITE) {
+                route("/imageUrl") {
+                    get("/animatedByTrack/{trackId}", {
+                        request {
+                            pathParameter<String>("trackId") {
+                                description = "The (synara) track ID."
+                            }
+                        }
+                    }) {
+                        val songService by inject<SongService>()
 
 
-                    val metadataProviderString =
-                        call.parameters["metadataProvider"] ?: return@get call.respond(HttpStatusCode.BadRequest)
+                        val metadataProviderString =
+                            call.parameters["metadataProvider"] ?: return@get call.respond(HttpStatusCode.BadRequest)
 
-                    val metadataProvider = MetadataService.Companion.MetadataType.valueOf(metadataProviderString)
+                        val metadataProvider = MetadataService.Companion.MetadataType.valueOf(metadataProviderString)
 
-                    val service = MetadataService.getMetadataService(metadataProvider, environment)
+                        val service = MetadataService.getMetadataService(metadataProvider, environment)
 
-                    val trackId =
-                        call.parameters["trackId"]?.toUUIDOrNull() ?: return@get call.respond(HttpStatusCode.BadRequest)
+                        val trackId =
+                            call.parameters["trackId"]?.toUUIDOrNull()
+                                ?: return@get call.respond(HttpStatusCode.BadRequest)
 
-                    val logger = KtorSimpleLogger("animatedImageByTrack[$trackId]")
+                        val logger = KtorSimpleLogger("animatedImageByTrack[$trackId]")
 
-                    logger.info("Fetching animated image for track with id $trackId")
+                        logger.info("Fetching animated image for track with id $trackId")
 
-                    val track = songService.byId(trackId) ?: return@get call.respond(HttpStatusCode.NotFound)
-                    val tidalTrackId = track.originalUrl.tidalId()
+                        val track = songService.byId(trackId) ?: return@get call.respond(HttpStatusCode.NotFound)
+                        val tidalTrackId = track.originalUrl.tidalId()
 
-                    logger.info("Fetching image for track ${track.title} with id $tidalTrackId")
+                        logger.info("Fetching image for track ${track.title} with id $tidalTrackId")
 
-                    val albumId =
-                        service.getAlbumIdByTrackId(tidalTrackId) ?: return@get call.respond(HttpStatusCode.NotFound)
+                        val albumId =
+                            service.getAlbumIdByTrackId(tidalTrackId)
+                                ?: return@get call.respond(HttpStatusCode.NotFound)
 
-                    logger.info("Found album id $albumId for track ${track.title}")
+                        logger.info("Found album id $albumId for track ${track.title}")
 
-                    val images = service.getImageUrlByAlbumId(albumId)
-                    if (images.isEmpty()) return@get call.respond(HttpStatusCode.NotFound)
+                        val images = service.getImageUrlByAlbumId(albumId)
+                        if (images.isEmpty()) return@get call.respond(HttpStatusCode.NotFound)
 
-                    val animated = images.filter { it.animated }.maxByOrNull { it.height }
-                    val fallback = images.filter { !it.animated }.maxByOrNull { it.height }
+                        val animated = images.filter { it.animated }.maxByOrNull { it.height }
+                        val fallback = images.filter { !it.animated }.maxByOrNull { it.height }
 
-                    logger.info("Found ${images.size} images for album ${albumId}, animated: ${animated != null}, fallback: ${fallback != null}")
+                        logger.info("Found ${images.size} images for album ${albumId}, animated: ${animated != null}, fallback: ${fallback != null}")
 
-                    if (fallback == null) return@get call.respond(HttpStatusCode.NotFound)
+                        if (fallback == null) return@get call.respond(HttpStatusCode.NotFound)
 
-                    call.respond(
-                        AnimatedCover(
-                            url = animated?.url,
-                            fallbackUrl = fallback.url,
-                            animated = animated != null
+                        call.respond(
+                            AnimatedCover(
+                                url = animated?.url,
+                                fallbackUrl = fallback.url,
+                                animated = animated != null
+                            )
                         )
-                    )
-                }
-                get("/byTrackId/{trackId}", {
-                    request {
-                        pathParameter<String>("trackId") {
-                            description = "The service track ID."
-                        }
-                        pathParameter<Boolean>("animated") {
-                            description = "Whether to include animated images. Defaults to false."
-                        }
                     }
-                }) {
-                    val metadataProviderString =
-                        call.parameters["metadataProvider"] ?: return@get call.respond(HttpStatusCode.BadRequest)
+                    get("/byTrackId/{trackId}", {
+                        request {
+                            pathParameter<String>("trackId") {
+                                description = "The service track ID."
+                            }
+                            pathParameter<Boolean>("animated") {
+                                description = "Whether to include animated images. Defaults to false."
+                            }
+                        }
+                    }) {
+                        val metadataProviderString =
+                            call.parameters["metadataProvider"] ?: return@get call.respond(HttpStatusCode.BadRequest)
 
-                    val metadataProvider = MetadataService.Companion.MetadataType.valueOf(metadataProviderString)
+                        val metadataProvider = MetadataService.Companion.MetadataType.valueOf(metadataProviderString)
 
-                    val service = MetadataService.getMetadataService(metadataProvider, environment)
+                        val service = MetadataService.getMetadataService(metadataProvider, environment)
 
-                    val trackId = call.parameters["trackId"] ?: return@get call.respond(HttpStatusCode.BadRequest)
-                    val animated = call.parameters["animated"]?.toBoolean() ?: false
+                        val trackId = call.parameters["trackId"] ?: return@get call.respond(HttpStatusCode.BadRequest)
+                        val animated = call.parameters["animated"]?.toBoolean() ?: false
 
-                    val albumId =
-                        service.getAlbumIdByTrackId(trackId) ?: return@get call.respond(HttpStatusCode.NotFound)
+                        val albumId =
+                            service.getAlbumIdByTrackId(trackId) ?: return@get call.respond(HttpStatusCode.NotFound)
 
-                    val images = service.getImageUrlByAlbumId(albumId).filter { it.animated == animated }
-                    if (images.isEmpty()) return@get call.respond(HttpStatusCode.NotFound)
+                        val images = service.getImageUrlByAlbumId(albumId).filter { it.animated == animated }
+                        if (images.isEmpty()) return@get call.respond(HttpStatusCode.NotFound)
 
-                    val image = images.maxBy { it.height }
+                        val image = images.maxBy { it.height }
 
-                    call.respond(image)
+                        call.respond(image)
+                    }
                 }
             }
         }

@@ -30,7 +30,7 @@ RUN chown -R appuser:appgroup /home/appuser
 
 ARG DAY_MONTH_YEAR=unknown
 
-RUN python3 -m pip install --break-system-packages --no-cache-dir tidal-dl-ng
+RUN python3 -m pip install --break-system-packages --no-cache-dir tidal-dl-ng syncedlyrics
 
 COPY --chown=appuser:appuser docker/tdn-config/settings.json /home/appuser/.config/tidal_dl_ng/settings.json
 COPY --chown=appuser:appgroup *.jar /app/synara-api.jar
