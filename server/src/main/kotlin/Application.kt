@@ -7,10 +7,14 @@ import dev.dertyp.plugins.RedisCacheProvider
 import dev.dertyp.serializers.OffsetDateTimeAdapter
 import dev.dertyp.server.BuildConfig
 import dev.dertyp.services.*
+import dev.dertyp.services.schedule.ScheduleService
 import dev.dertyp.services.tdn.DownloadService
 import dev.dertyp.services.tdn.TdnService
 import io.ktor.server.application.*
 import io.ktor.server.plugins.calllogging.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import org.koin.core.module.dsl.singleOf
 import org.koin.dsl.module
 import org.koin.ktor.ext.get
@@ -65,6 +69,7 @@ fun Application.module() {
             singleOf(::DatabaseManager)
             singleOf(::PlaylistService)
             singleOf(::DownloadService)
+            singleOf(::ScheduleService)
             singleOf(::UserPlaylistService)
             singleOf(::RefreshTokenService)
 
@@ -87,6 +92,10 @@ fun Application.module() {
     }
 
     get<DatabaseManager>().init()
+
+    CoroutineScope(Dispatchers.IO).launch {
+        get<ScheduleService>().startService()
+    }
 
     configureHTTP()
     configureRouting()

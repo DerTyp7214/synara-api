@@ -7,4 +7,7 @@ open class Service: KoinComponent {
     val maxBatchSize = 30000
 
     val logger = KtorSimpleLogger(this::class.simpleName!!)
+
+    open suspend fun startService() {}
+    open suspend fun stopService() {}
 }

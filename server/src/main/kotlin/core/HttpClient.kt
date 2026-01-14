@@ -45,7 +45,7 @@ class HttpClientQueueService : Service() {
         }
     }
 
-    suspend fun startService() {
+    override suspend fun startService() {
         if (!stopped.compareAndSet(expectedValue = true, newValue = false)) return
         logger.info("Starting service")
 
@@ -65,7 +65,7 @@ class HttpClientQueueService : Service() {
         stopped.store(true)
     }
 
-    fun stopService() {
+    override suspend fun stopService() {
         stopped.store(true)
     }
 

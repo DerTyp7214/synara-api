@@ -76,7 +76,7 @@ class DownloadService(
         private set
 
     @OptIn(FlowPreview::class)
-    suspend fun startService() {
+    override suspend fun startService() {
         if (!stopped.compareAndSet(expectedValue = true, newValue = false)) return
         logger.info("Starting service")
 
@@ -97,7 +97,7 @@ class DownloadService(
         stopped.store(true)
     }
 
-    fun stopService() {
+    override suspend fun stopService() {
         stopped.store(true)
     }
 
