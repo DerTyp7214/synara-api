@@ -10,10 +10,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.time.withTimeoutOrNull
 import org.jetbrains.annotations.Range
-import services.schedule.CronTrigger
-import services.schedule.EventTrigger
-import services.schedule.ScheduleTrigger
-import services.schedule.Trigger
+import services.schedule.*
 import java.time.Duration
 import java.time.Instant
 import java.util.*
@@ -62,6 +59,7 @@ data class ScheduledTask(
 class ScheduleService : Service() {
     private val stopped: AtomicBoolean = AtomicBoolean(true)
     private val schedules: PriorityBlockingQueue<ScheduledTask> = PriorityBlockingQueue()
+    private val eventRegistry = mutableMapOf<String, MutableSet<CustomTrigger>>()
 
     private val queueUpdateNotifier = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
 
@@ -147,9 +145,37 @@ class ScheduleService : Service() {
     }
 
     fun unscheduleTask(id: UUID) {
-        schedules.removeIf { it.id == id }
-        queueUpdateNotifier.tryEmit(Unit)
+        val task = schedules.find { it.id == id }
+        if (task != null) {
+            schedules.remove(task)
+            eventRegistry.values.forEach { it.remove(task.trigger) }
+            queueUpdateNotifier.tryEmit(Unit)
+        }
     }
 
     fun getScheduledTasks() = schedules.sorted()
+
+    fun register(key: String, task: Task): ScheduledTask {
+        val trigger = CustomTrigger(true)
+
+        eventRegistry.getOrPut(key) { mutableSetOf() }.add(trigger)
+
+        val scheduledTask = ScheduledTask(trigger = trigger, task = task)
+        schedule(scheduledTask)
+        return scheduledTask
+    }
+
+    fun signal(key: String) {
+        val triggers = eventRegistry[key] ?: return
+
+        schedules
+            .filter { it.trigger in triggers }.toList()
+            .forEach { task ->
+                schedules.remove(task)
+                (task.trigger as CustomTrigger).signal()
+                schedule(task)
+            }
+
+        queueUpdateNotifier.tryEmit(Unit)
+    }
 }

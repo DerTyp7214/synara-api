@@ -68,3 +68,21 @@ data class EventTrigger(
 
     fun fire(): EventTrigger = copy(scheduledTime = Instant.now())
 }
+
+
+data class CustomTrigger(
+    private val autoRepeat: Boolean = true,
+) : Trigger() {
+    private var activatedTime: Instant = Instant.MAX
+
+    override val scheduledTime: Instant
+        get() = activatedTime
+
+    override fun nextExecution(from: Instant) = activatedTime
+    override fun doesRepeat(): Boolean = autoRepeat
+    override fun updateForNextRun(time: Instant) = CustomTrigger(autoRepeat)
+
+    fun signal() {
+        activatedTime = Instant.now()
+    }
+}
