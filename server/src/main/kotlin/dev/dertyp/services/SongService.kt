@@ -12,10 +12,7 @@ import dev.dertyp.services.AlbumService.Companion.calculateAlbumStats
 import dev.dertyp.services.AlbumService.Companion.mapAlbum
 import dev.dertyp.services.ArtistService.Companion.mapArtist
 import dev.dertyp.services.metadata.IMetadataService
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
@@ -104,7 +101,7 @@ class SongRpcService(private val user: User, private val songService: SongServic
         liked: Boolean
     ): PaginatedResponse<UserSong> = songService.rankedSearch(page, pageSize, query, explicit, user.id, liked)
 
-    override suspend fun streamSong(id: UUID): Flow<ByteArray>? = songService.streamSong(id)
+    override fun streamSong(id: UUID): Flow<ByteArray>? = songService.streamSong(id)
 }
 
 class SongService : Service() {
@@ -394,8 +391,8 @@ class SongService : Service() {
         deletedSongs == ids.size
     }
 
-    suspend fun streamSong(id: UUID): Flow<ByteArray>? {
-        val song = byId(id) ?: return null
+    fun streamSong(id: UUID): Flow<ByteArray>? {
+        val song = runBlocking { byId(id) } ?: return null
         val file = File(song.path)
         if (!file.exists()) return null
 
