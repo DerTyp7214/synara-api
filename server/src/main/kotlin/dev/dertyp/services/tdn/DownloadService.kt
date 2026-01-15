@@ -33,16 +33,12 @@ class DownloadRpcService(
     override suspend fun finishedDownloads(): List<FinishedDownloadQueueEntry> = downloadService.finishedDownloads(user)
     override suspend fun syncFavouritesAvailable(): Boolean = downloadService.syncFavouritesAvailable(call)
     override suspend fun syncFavourites(): CompletableJob = downloadService.syncFavourites(call, true)
-    override suspend fun downloadTidalIds(
-        ids: List<String>,
-        type: Type,
-        callback: suspend (List<String>) -> Unit
-    ) {
+    override suspend fun downloadTidalIds(ids: List<String>, type: Type) {
         downloadService.downloadTidalIds(
             call = call,
             ids = ids.asFlow(),
             type = type,
-            callback = callback
+            callback = {}
         )
     }
 }
