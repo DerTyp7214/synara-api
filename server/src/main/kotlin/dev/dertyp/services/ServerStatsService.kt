@@ -47,4 +47,6 @@ class ServerStatsService(private val storageService: StorageService) : IServerSt
             )
         )
     }
+
+    override suspend fun health(): Boolean = true
 }
