@@ -12,9 +12,13 @@ import dev.dertyp.services.AlbumService.Companion.calculateAlbumStats
 import dev.dertyp.services.AlbumService.Companion.mapAlbum
 import dev.dertyp.services.ArtistService.Companion.mapArtist
 import dev.dertyp.services.metadata.IMetadataService
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
 import org.jaudiotagger.audio.AudioFileIO
 import org.jaudiotagger.tag.FieldKey
 import org.jetbrains.exposed.v1.core.*
@@ -99,6 +103,8 @@ class SongRpcService(private val user: User, private val songService: SongServic
         explicit: Boolean,
         liked: Boolean
     ): PaginatedResponse<UserSong> = songService.rankedSearch(page, pageSize, query, explicit, user.id, liked)
+
+    override suspend fun streamSong(id: UUID): Flow<ByteArray>? = songService.streamSong(id)
 }
 
 class SongService : Service() {
@@ -386,6 +392,23 @@ class SongService : Service() {
         }
 
         deletedSongs == ids.size
+    }
+
+    suspend fun streamSong(id: UUID): Flow<ByteArray>? {
+        val song = byId(id) ?: return null
+        val file = File(song.path)
+        if (!file.exists()) return null
+
+        return flow {
+            val buffer = ByteArray(4096)
+            file.inputStream().use { input ->
+                var bytesRead = input.read(buffer)
+                while (bytesRead != -1) {
+                    emit(buffer.copyOf(bytesRead))
+                    bytesRead = input.read(buffer)
+                }
+            }
+        }.flowOn(Dispatchers.IO)
     }
 
     private suspend inline fun <reified T : BaseSong> querySingle(
