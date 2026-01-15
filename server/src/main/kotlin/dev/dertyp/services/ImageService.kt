@@ -6,6 +6,8 @@ import dev.dertyp.data.InsertableImage
 import dev.dertyp.data.PaginatedResponse
 import dev.dertyp.db.ImageTable
 import dev.dertyp.dbQuery
+import dev.dertyp.plugins.RedisCacheProvider
+import net.coobird.thumbnailator.Thumbnails
 import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.inList
@@ -14,6 +16,9 @@ import org.jetbrains.exposed.v1.jdbc.batchInsert
 import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.koin.core.context.GlobalContext
+import redis.clients.jedis.HostAndPort
+import redis.clients.jedis.RedisClient
+import java.io.ByteArrayOutputStream
 import java.util.*
 import kotlin.io.path.*
 
@@ -24,6 +29,12 @@ class ImageService : IImageService, Service() {
 
     companion object {
         private val storageService = GlobalContext.get().get<StorageService>()
+        private val redisConfig = GlobalContext.get().get<RedisCacheProvider.Config>()
+        private val jedis by lazy {
+            if (redisConfig.host != "none") RedisClient.create(
+                HostAndPort(redisConfig.host, redisConfig.port)
+            ) else null
+        }
 
         fun mapImage(resultRow: ResultRow): Image {
             val id = resultRow[ImageTable.id].value
@@ -48,6 +59,31 @@ class ImageService : IImageService, Service() {
 
     override suspend fun byHash(hash: String): Image? = querySingle {
         where { ImageTable.imageHash eq hash }
+    }
+
+    override suspend fun getImageData(id: UUID, size: Int): ByteArray? {
+        val image = byId(id) ?: return null
+
+        val cacheKey = "image:${image.imageHash}:$size"
+        val cached = jedis?.get(cacheKey)
+        if (cached != null) return cached.toByteArray(Charsets.ISO_8859_1)
+
+        val path = Path(image.path)
+        if (!path.exists()) return null
+
+        val bytes = if (size > 0) {
+            val outputStream = ByteArrayOutputStream()
+            Thumbnails.of(path.toFile())
+                .size(size, size)
+                .outputFormat("jpeg")
+                .toOutputStream(outputStream)
+            outputStream.toByteArray()
+        } else {
+            path.readBytes()
+        }
+
+        jedis?.set(cacheKey, bytes.toString(Charsets.ISO_8859_1))
+        return bytes
     }
 
     private suspend fun querySingle(query: Query.() -> Query) =
