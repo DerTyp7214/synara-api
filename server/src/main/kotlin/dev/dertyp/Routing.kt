@@ -66,7 +66,12 @@ fun Application.configureRouting() {
         val favSyncService by inject<FavSyncService>()
         val playlistService by inject<PlaylistService>()
         val downloadService by inject<DownloadService>()
+        val serverStatsService by inject<ServerStatsService>()
         val userPlaylistService by inject<UserPlaylistService>()
+
+        rpc("/rpc") {
+            registerService<IServerStatsService> { serverStatsService }
+        }
 
         rpc("/rpc/auth") {
             registerService<IAuthService> { authService }

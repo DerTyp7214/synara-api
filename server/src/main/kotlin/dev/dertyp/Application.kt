@@ -71,6 +71,7 @@ fun Application.module() {
             singleOf(::PlaylistService)
             singleOf(::DownloadService)
             singleOf(::ScheduleService)
+            singleOf(::ServerStatsService)
             singleOf(::UserPlaylistService)
             singleOf(::RefreshTokenService)
 
