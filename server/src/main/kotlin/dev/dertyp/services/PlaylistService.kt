@@ -122,10 +122,10 @@ class PlaylistService : IPlaylistService, Service() {
             val data = mapEagerly(mainPlaylistRows, songLinkRows, songDurationsById)
 
             PaginatedResponse(
-                data = data.take(pageSize),
+                data = data.drop(page * pageSize).take(pageSize),
                 page = page,
                 pageSize = pageSize,
-                hasNextPage = data.size == pageSize + offset
+                hasNextPage = data.drop(page * pageSize).size >= pageSize + offset,
             )
         }
 

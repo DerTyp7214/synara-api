@@ -177,10 +177,10 @@ class ArtistService : IArtistService, Service() {
                 .distinctBy { it.id }
                 .let {
                     PaginatedResponse(
-                        data = it.take(pageSize),
+                        data = it.drop(page * pageSize).take(pageSize),
                         page = page,
                         pageSize = pageSize,
-                        hasNextPage = it.size == pageSize + offset,
+                        hasNextPage = it.drop(page * pageSize).size >= pageSize + offset,
                     )
                 }
         }
@@ -193,10 +193,10 @@ class ArtistService : IArtistService, Service() {
         val data = mapEagerly(mainArtistRows, memberDataRows).distinctBy { it.id }
 
         PaginatedResponse(
-            data = data.take(pageSize),
+            data = data.drop(page * pageSize).take(pageSize),
             page = page,
             pageSize = pageSize,
-            hasNextPage = data.size == pageSize + offset,
+            hasNextPage = data.drop(page * pageSize).size >= pageSize + offset,
         )
     }
 

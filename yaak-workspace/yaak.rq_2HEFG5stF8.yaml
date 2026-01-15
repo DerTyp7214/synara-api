@@ -2,7 +2,7 @@ type: http_request
 model: http_request
 id: rq_2HEFG5stF8
 createdAt: 2025-10-14T19:25:16.449964932
-updatedAt: 2026-01-14T07:47:59.398249649
+updatedAt: 2026-01-15T03:41:49.113336770
 workspaceId: wk_9dbKacQT4H
 folderId: fl_NXkRVdWsW4
 authentication: {}
@@ -11,7 +11,7 @@ body:
   text: |-
     {
       "urls": [
-        "https://tidal.com/album/489127543/u"
+        "https://tidal.com/album/487235280/u"
       ]
     }
 bodyType: application/json

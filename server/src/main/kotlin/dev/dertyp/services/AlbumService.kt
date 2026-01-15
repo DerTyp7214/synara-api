@@ -180,10 +180,10 @@ class AlbumService : IAlbumService, Service() {
         val data = mapEagerly(rows, statsByAlbumId).distinctBy { it.id }
 
         PaginatedResponse(
-            data = data.take(pageSize),
+            data = data.drop(page * pageSize).take(pageSize),
             page = page,
             pageSize = pageSize,
-            hasNextPage = data.size == pageSize + offset,
+            hasNextPage = data.drop(page * pageSize).size >= pageSize + offset,
         )
     }
 
