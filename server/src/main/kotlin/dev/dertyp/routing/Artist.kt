@@ -6,7 +6,6 @@ import dev.dertyp.data.Artist
 import dev.dertyp.data.MergeArtists
 import dev.dertyp.data.PaginatedResponse
 import dev.dertyp.services.ArtistService
-import dev.dertyp.services.IArtistService
 import io.github.smiley4.ktoropenapi.get
 import io.github.smiley4.ktoropenapi.post
 import io.github.smiley4.ktoropenapi.route
@@ -15,7 +14,6 @@ import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.ktor.util.logging.*
-import kotlinx.rpc.krpc.ktor.server.rpc
 import org.koin.ktor.ext.inject
 
 fun Route.artist() {
@@ -24,12 +22,6 @@ fun Route.artist() {
     route("/artist", {
         tags("artist")
     }) {
-        rpc {
-            val service by inject<ArtistService>()
-
-            registerService<IArtistService> { service }
-        }
-
         get("/byId/{id}", {
             request {
                 pathParameter<String>("id") {

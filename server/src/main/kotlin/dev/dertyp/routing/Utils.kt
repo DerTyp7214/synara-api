@@ -4,9 +4,7 @@ import dev.dertyp.AudioUtils
 import dev.dertyp.AudioUtils.getSongsWithTranscodingInfo
 import dev.dertyp.AudioUtils.insertTranscodedSong
 import dev.dertyp.AudioUtils.transcodeFlacToWebm
-import dev.dertyp.IIndexer
 import dev.dertyp.Indexer
-import dev.dertyp.RpcIndexer
 import dev.dertyp.core.roundToNDecimals
 import dev.dertyp.core.toHumanReadableSize
 import dev.dertyp.data.SimpleSong
@@ -22,7 +20,6 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.rpc.krpc.ktor.server.rpc
 import org.koin.ktor.ext.inject
 import java.io.File
 import java.nio.file.Paths
@@ -35,11 +32,6 @@ fun Route.utils() {
         request {
         }
     }) {
-        rpc {
-            val indexer by inject<Indexer>()
-
-            registerService<IIndexer> { RpcIndexer(indexer) }
-        }
         sse {
             val indexer by inject<Indexer>()
 

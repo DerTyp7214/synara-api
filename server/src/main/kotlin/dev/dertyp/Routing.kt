@@ -1,9 +1,11 @@
 package dev.dertyp
 
 import dev.dertyp.core.ApplicationScope
-import dev.dertyp.services.AuthService
-import dev.dertyp.services.IAuthService
-import dev.dertyp.services.JwtService
+import dev.dertyp.core.getUser
+import dev.dertyp.services.*
+import dev.dertyp.services.tdn.DownloadRpcService
+import dev.dertyp.services.tdn.DownloadService
+import dev.dertyp.services.tdn.IDownloadService
 import io.github.smiley4.ktoropenapi.OpenApi
 import io.github.smiley4.ktoropenapi.openApi
 import io.github.smiley4.ktoropenapi.route
@@ -22,7 +24,6 @@ import kotlinx.rpc.krpc.ktor.server.Krpc
 import kotlinx.rpc.krpc.ktor.server.rpc
 import kotlinx.rpc.krpc.serialization.json.json
 import kotlinx.serialization.ExperimentalSerializationApi
-import org.koin.ktor.ext.getKoin
 import org.koin.ktor.ext.inject
 import kotlin.time.ExperimentalTime
 
@@ -55,12 +56,38 @@ fun Application.configureRouting() {
             }
         }
 
-        rpc("/api/rpc") {
-            val service by inject<AuthService>()
+        val indexer by inject<Indexer>()
+        val jwtService by inject<JwtService>()
+        val authService by inject<AuthService>()
+        val songService by inject<SongService>()
+        val albumService by inject<AlbumService>()
+        val imageService by inject<ImageService>()
+        val artistService by inject<ArtistService>()
+        val favSyncService by inject<FavSyncService>()
+        val playlistService by inject<PlaylistService>()
+        val downloadService by inject<DownloadService>()
+        val userPlaylistService by inject<UserPlaylistService>()
 
-            registerService<IAuthService> { service }
+        rpc("/rpc/auth") {
+            registerService<IAuthService> { authService }
         }
 
-        getKoin().get<JwtService>().authenticate(this)
+        jwtService.authenticated(this) {
+            rpc("/rpc/services") {
+                val user = call.getUser() ?: throw IllegalArgumentException("No user found")
+
+                registerService<IIndexer> { RpcIndexer(indexer) }
+                registerService<IAlbumService> { albumService }
+                registerService<IImageService> { imageService }
+                registerService<IArtistService> { artistService }
+                registerService<IPlaylistService> { playlistService }
+                registerService<IUserPlaylistService> { userPlaylistService }
+                registerService<IFavSyncService> { FavSyncRpcService(user, favSyncService) }
+                registerService<IDownloadService> { DownloadRpcService(user, call, downloadService) }
+                registerService<ISongService> { SongRpcService(songService = songService, user = user) }
+            }
+        }
+
+        jwtService.authenticate(this)
     }
 }

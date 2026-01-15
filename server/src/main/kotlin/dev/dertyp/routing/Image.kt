@@ -3,14 +3,12 @@ package dev.dertyp.routing
 import com.ucasoft.ktor.simpleCache.cacheOutput
 import dev.dertyp.core.respondImageSized
 import dev.dertyp.core.toUUIDOrNull
-import dev.dertyp.services.IImageService
 import dev.dertyp.services.ImageService
 import io.github.smiley4.ktoropenapi.get
 import io.github.smiley4.ktoropenapi.route
 import io.ktor.http.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
-import kotlinx.rpc.krpc.ktor.server.rpc
 import org.koin.ktor.ext.inject
 import kotlin.time.Duration
 
@@ -18,12 +16,6 @@ fun Route.image() {
     route("/image", {
         tags("image")
     }) {
-        rpc {
-            val service by inject<ImageService>()
-
-            registerService<IImageService> { service }
-        }
-
         route("/byId/{id}", HttpMethod.Get, {
             request {
                 pathParameter<String>("id") {

@@ -6,8 +6,6 @@ import dev.dertyp.core.paging
 import dev.dertyp.core.toUUIDOrNull
 import dev.dertyp.data.*
 import dev.dertyp.serializers.UUIDListSerializer
-import dev.dertyp.services.ISongService
-import dev.dertyp.services.SongRpcService
 import dev.dertyp.services.SongService
 import io.github.smiley4.ktoropenapi.get
 import io.github.smiley4.ktoropenapi.post
@@ -16,7 +14,6 @@ import io.ktor.http.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
-import kotlinx.rpc.krpc.ktor.server.rpc
 import kotlinx.serialization.Serializable
 import org.koin.ktor.ext.inject
 import java.util.*
@@ -34,13 +31,6 @@ fun Route.song() {
     route("/song", {
         tags("song")
     }) {
-        rpc {
-            val songService by inject<SongService>()
-            val user = call.getUser() ?: return@rpc call.respond(HttpStatusCode.BadRequest)
-
-            registerService<ISongService> { SongRpcService(songService = songService, user = user) }
-        }
-
         post("/setLiked/{id}", {
             request {
                 pathParameter<String>("id") {
