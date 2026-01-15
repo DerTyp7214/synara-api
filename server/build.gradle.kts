@@ -8,10 +8,10 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 plugins {
-    kotlin("jvm") version "2.2.21"
+    alias(libs.plugins.kotlin.jvm)
     id("io.ktor.plugin") version "3.3.3"
-    id("org.jetbrains.kotlin.plugin.serialization") version "2.2.21"
-    id("org.jetbrains.kotlinx.rpc.plugin") version "0.10.1"
+    alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.kotlinx.rpc)
     id("com.github.gmazzo.buildconfig")
 }
 
@@ -75,9 +75,9 @@ dependencies {
     implementation("org.bytedeco:javacv-platform:1.5.12")
     implementation("net.coobird:thumbnailator:0.4.21")
     implementation("org.postgresql:postgresql:42.7.8")
-    implementation("org.jetbrains.kotlinx:kotlinx-rpc-krpc-serialization-json:0.10.1")
-    implementation("org.jetbrains.kotlinx:kotlinx-rpc-krpc-ktor-server:0.10.1")
-    implementation("org.jetbrains.kotlinx:kotlinx-rpc-krpc-ktor-client:0.10.1")
+    implementation(libs.kotlinx.rpc.krpc.serialization.json)
+    implementation(libs.kotlinx.rpc.krpc.ktor.server)
+    implementation(libs.kotlinx.rpc.krpc.ktor.client)
     implementation("io.ktor:ktor-server-netty")
     implementation("at.favre.lib:bcrypt:0.10.2")
     implementation("ch.qos.logback:logback-classic:1.5.22")

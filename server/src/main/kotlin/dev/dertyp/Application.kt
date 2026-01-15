@@ -60,6 +60,7 @@ fun Application.module() {
             singleOf(::JwtService)
             singleOf(::TdnService)
             singleOf(::UserService)
+            singleOf(::AuthService)
             singleOf(::SongService)
             singleOf(::ImageService)
             singleOf(::AlbumService)

@@ -1,6 +1,8 @@
 package dev.dertyp
 
 import dev.dertyp.core.ApplicationScope
+import dev.dertyp.services.AuthService
+import dev.dertyp.services.IAuthService
 import dev.dertyp.services.JwtService
 import io.github.smiley4.ktoropenapi.OpenApi
 import io.github.smiley4.ktoropenapi.openApi
@@ -17,9 +19,11 @@ import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.ktor.server.sse.*
 import kotlinx.rpc.krpc.ktor.server.Krpc
+import kotlinx.rpc.krpc.ktor.server.rpc
 import kotlinx.rpc.krpc.serialization.json.json
 import kotlinx.serialization.ExperimentalSerializationApi
 import org.koin.ktor.ext.getKoin
+import org.koin.ktor.ext.inject
 import kotlin.time.ExperimentalTime
 
 @OptIn(ExperimentalSerializationApi::class, ExperimentalTime::class)
@@ -49,6 +53,12 @@ fun Application.configureRouting() {
             swaggerUI("/api.json") {
 
             }
+        }
+
+        rpc("/api/rpc") {
+            val service by inject<AuthService>()
+
+            registerService<IAuthService> { service }
         }
 
         getKoin().get<JwtService>().authenticate(this)
