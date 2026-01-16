@@ -458,6 +458,7 @@ class SongService : Service() {
 
         if (rows.isEmpty()) return@dbQuery PaginatedResponse(
             data = listOf(),
+            total = 0,
             page = page,
             pageSize = pageSize,
         )
@@ -474,6 +475,7 @@ class SongService : Service() {
 
         PaginatedResponse(
             data = data.drop(page * pageSize).take(pageSize),
+            total = data.size,
             page = page,
             pageSize = pageSize,
             hasNextPage = data.drop(page * pageSize).size >= pageSize + offset,

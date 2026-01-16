@@ -34,6 +34,7 @@ fun <T : BaseSong> PaginatedResponse<T>.omitLyrics() = PaginatedResponse(
             else -> it
         }
     } as List<T>,
+    total = total,
     page = page,
     pageSize = pageSize,
     hasNextPage = hasNextPage,

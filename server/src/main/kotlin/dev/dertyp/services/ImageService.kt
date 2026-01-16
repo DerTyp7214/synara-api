@@ -98,10 +98,11 @@ class ImageService : IImageService, Service() {
             .map { map(it) }
 
         PaginatedResponse(
-            data = data.take(pageSize),
+            data = data.drop(page * pageSize).take(pageSize),
+            total = data.size,
             page = page,
             pageSize = pageSize,
-            hasNextPage = data.size == pageSize + offset,
+            hasNextPage = data.drop(page * pageSize).size >= pageSize + offset,
         )
     }
 

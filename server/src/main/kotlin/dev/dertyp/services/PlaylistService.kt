@@ -100,6 +100,7 @@ class PlaylistService : IPlaylistService, Service() {
 
             if (mainPlaylistRows.isEmpty()) return@dbQuery PaginatedResponse(
                 data = listOf(),
+                total = 0,
                 page = page,
                 pageSize = pageSize
             )
@@ -123,6 +124,7 @@ class PlaylistService : IPlaylistService, Service() {
 
             PaginatedResponse(
                 data = data.drop(page * pageSize).take(pageSize),
+                total = data.size,
                 page = page,
                 pageSize = pageSize,
                 hasNextPage = data.drop(page * pageSize).size >= pageSize + offset,

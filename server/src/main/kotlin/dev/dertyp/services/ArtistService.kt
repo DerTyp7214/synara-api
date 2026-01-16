@@ -178,6 +178,7 @@ class ArtistService : IArtistService, Service() {
                 .let {
                     PaginatedResponse(
                         data = it.drop(page * pageSize).take(pageSize),
+                        total = it.size,
                         page = page,
                         pageSize = pageSize,
                         hasNextPage = it.drop(page * pageSize).size >= pageSize + offset,
@@ -194,6 +195,7 @@ class ArtistService : IArtistService, Service() {
 
         PaginatedResponse(
             data = data.drop(page * pageSize).take(pageSize),
+            total = data.size,
             page = page,
             pageSize = pageSize,
             hasNextPage = data.drop(page * pageSize).size >= pageSize + offset,
