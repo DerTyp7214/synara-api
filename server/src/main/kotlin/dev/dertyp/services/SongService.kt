@@ -101,7 +101,9 @@ class SongRpcService(private val user: User, private val songService: SongServic
         liked: Boolean
     ): PaginatedResponse<UserSong> = songService.rankedSearch(page, pageSize, query, explicit, user.id, liked)
 
-    override fun streamSong(id: UUID): Flow<ByteArray>? = songService.streamSong(id)
+    override fun streamSong(id: UUID, offset: Long): Flow<ByteArray>? = songService.streamSong(id, offset)
+
+    override suspend fun getStreamSize(id: UUID): Long = songService.getStreamSize(id)
 }
 
 class SongService : Service() {
@@ -391,7 +393,7 @@ class SongService : Service() {
         deletedSongs == ids.size
     }
 
-    fun streamSong(id: UUID): Flow<ByteArray>? {
+    fun streamSong(id: UUID, offset: Long): Flow<ByteArray>? {
         val song = runBlocking { byId(id) } ?: return null
         val file = File(song.path)
         if (!file.exists()) return null
@@ -399,6 +401,7 @@ class SongService : Service() {
         return flow {
             val buffer = ByteArray(4096)
             file.inputStream().use { input ->
+                input.skip(offset)
                 var bytesRead = input.read(buffer)
                 while (bytesRead != -1) {
                     emit(buffer.copyOf(bytesRead))
@@ -406,6 +409,13 @@ class SongService : Service() {
                 }
             }
         }.flowOn(Dispatchers.IO)
+    }
+
+    suspend fun getStreamSize(id: UUID): Long {
+        val song = byId(id) ?: return 0
+        val file = File(song.path)
+        if (!file.exists()) return 0
+        return file.length()
     }
 
     private suspend inline fun <reified T : BaseSong> querySingle(

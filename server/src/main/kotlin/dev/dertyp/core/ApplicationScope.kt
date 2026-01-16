@@ -5,6 +5,8 @@ import dev.dertyp.serializers.UUIDSerializer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.cbor.Cbor
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.modules.SerializersModule
 import kotlinx.serialization.modules.contextual
@@ -20,6 +22,18 @@ object ApplicationScope {
         allowStructuredMapKeys = true
         prettyPrint = false
         useArrayPolymorphism = false
+        ignoreUnknownKeys = true
+
+        serializersModule = SerializersModule {
+            contextual(UUIDSerializer)
+            contextual(UUIDListSerializer)
+        }
+    }
+
+    @OptIn(ExperimentalSerializationApi::class)
+    val cbor = Cbor {
+        encodeDefaults = true
+        alwaysUseByteString = true
         ignoreUnknownKeys = true
 
         serializersModule = SerializersModule {

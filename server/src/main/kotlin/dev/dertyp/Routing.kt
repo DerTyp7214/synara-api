@@ -22,7 +22,7 @@ import io.ktor.server.routing.*
 import io.ktor.server.sse.*
 import kotlinx.rpc.krpc.ktor.server.Krpc
 import kotlinx.rpc.krpc.ktor.server.rpc
-import kotlinx.rpc.krpc.serialization.json.json
+import kotlinx.rpc.krpc.serialization.cbor.cbor
 import kotlinx.serialization.ExperimentalSerializationApi
 import org.koin.ktor.ext.inject
 import kotlin.time.ExperimentalTime
@@ -36,7 +36,7 @@ fun Application.configureRouting() {
     install(SSE)
     install(Krpc) {
         serialization {
-            json(ApplicationScope.json)
+            cbor(ApplicationScope.cbor)
         }
     }
     install(OpenApi)

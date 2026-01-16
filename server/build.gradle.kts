@@ -76,6 +76,7 @@ dependencies {
     implementation(libs.thumbnailator)
     implementation(libs.postgresql)
     implementation(libs.kotlinx.rpc.krpc.serialization.json)
+    implementation(libs.kotlinx.rpc.krpc.serialization.cbor)
     implementation(libs.kotlinx.rpc.krpc.ktor.server)
     implementation(libs.kotlinx.rpc.krpc.ktor.client)
     implementation(libs.ktor.server.netty)
