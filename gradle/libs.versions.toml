@@ -24,7 +24,7 @@ caffeine = "3.2.3"
 jmdns = "3.6.1"
 cron-utils = "9.2.1"
 scrimage = "4.3.5"
-koin = "4.2.0-beta2"
+koin = "4.2.0-beta3"
 buildconfig = "6.0.7"
 
 [libraries]
