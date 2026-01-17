@@ -6,6 +6,7 @@ import dev.dertyp.services.*
 import dev.dertyp.services.tdn.DownloadRpcService
 import dev.dertyp.services.tdn.DownloadService
 import dev.dertyp.services.tdn.IDownloadService
+import dev.dertyp.utils.withLogging
 import io.github.smiley4.ktoropenapi.OpenApi
 import io.github.smiley4.ktoropenapi.openApi
 import io.github.smiley4.ktoropenapi.route
@@ -70,26 +71,26 @@ fun Application.configureRouting() {
         val userPlaylistService by inject<UserPlaylistService>()
 
         rpc("/rpc") {
-            registerService<IServerStatsService> { serverStatsService }
+            registerService<IServerStatsService> { serverStatsService.withLogging<IServerStatsService>() }
         }
 
         rpc("/rpc/auth") {
-            registerService<IAuthService> { authService }
+            registerService<IAuthService> { authService.withLogging<IAuthService>() }
         }
 
         jwtService.authenticated(this) {
             rpc("/rpc/services") {
                 val user = call.getUser() ?: throw IllegalArgumentException("No user found")
 
-                registerService<IIndexer> { RpcIndexer(indexer) }
-                registerService<IAlbumService> { albumService }
-                registerService<IImageService> { imageService }
-                registerService<IArtistService> { artistService }
-                registerService<IPlaylistService> { playlistService }
-                registerService<IUserPlaylistService> { userPlaylistService }
-                registerService<IFavSyncService> { FavSyncRpcService(user, favSyncService) }
-                registerService<IDownloadService> { DownloadRpcService(user, call, downloadService) }
-                registerService<ISongService> { SongRpcService(songService = songService, user = user) }
+                registerService<IIndexer> { RpcIndexer(indexer).withLogging<IIndexer>() }
+                registerService<IAlbumService> { albumService.withLogging<IAlbumService>() }
+                registerService<IImageService> { imageService.withLogging<IImageService>() }
+                registerService<IArtistService> { artistService.withLogging<IArtistService>() }
+                registerService<IPlaylistService> { playlistService.withLogging<IPlaylistService>() }
+                registerService<IUserPlaylistService> { userPlaylistService.withLogging<IUserPlaylistService>() }
+                registerService<IFavSyncService> { FavSyncRpcService(user, favSyncService).withLogging<IFavSyncService>() }
+                registerService<IDownloadService> { DownloadRpcService(user, call, downloadService).withLogging<IDownloadService>() }
+                registerService<ISongService> { SongRpcService(songService = songService, user = user).withLogging<ISongService>() }
             }
         }
 
