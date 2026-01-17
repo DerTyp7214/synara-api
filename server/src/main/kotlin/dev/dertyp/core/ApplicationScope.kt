@@ -1,7 +1,6 @@
 package dev.dertyp.core
 
-import dev.dertyp.serializers.UUIDListSerializer
-import dev.dertyp.serializers.UUIDSerializer
+import dev.dertyp.serializers.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -26,7 +25,12 @@ object ApplicationScope {
 
         serializersModule = SerializersModule {
             contextual(UUIDSerializer)
-            contextual(UUIDListSerializer)
+            contextual(DateSerializer)
+            contextual(LocalDateSerializer)
+            contextual(LocalDateTimeSerializer)
+            contextual(OffsetDateTimeSerializer)
+            contextual(DurationSerializer)
+            contextual(InstantSerializer)
         }
     }
 
@@ -38,7 +42,12 @@ object ApplicationScope {
 
         serializersModule = SerializersModule {
             contextual(UUIDSerializer)
-            contextual(UUIDListSerializer)
+            contextual(DateSerializer)
+            contextual(LocalDateSerializer)
+            contextual(LocalDateTimeSerializer)
+            contextual(OffsetDateTimeSerializer)
+            contextual(DurationSerializer)
+            contextual(InstantSerializer)
         }
     }
 }
