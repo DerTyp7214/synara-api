@@ -104,6 +104,16 @@ class SongRpcService(private val user: User, private val songService: SongServic
     override fun streamSong(id: UUID, offset: Long): Flow<ByteArray>? = songService.streamSong(id, offset)
 
     override suspend fun getStreamSize(id: UUID): Long = songService.getStreamSize(id)
+
+    override fun likedSongIds(explicit: Boolean): Flow<UUID> = songService.likedSongIds(explicit, user.id)
+
+    override fun songIdsByArtist(artistId: UUID): Flow<UUID> = songService.songIdsByArtist(artistId)
+
+    override fun songIdsByAlbum(albumId: UUID): Flow<UUID> = songService.songIdsByAlbum(albumId)
+
+    override fun songIdsByPlaylist(playlistId: UUID): Flow<UUID> = songService.songIdsByPlaylist(playlistId)
+
+    override fun songIdsByUserPlaylist(playlistId: UUID): Flow<UUID> = songService.songIdsByUserPlaylist(playlistId)
 }
 
 class SongService : Service() {
@@ -416,6 +426,111 @@ class SongService : Service() {
         val file = File(song.path)
         if (!file.exists()) return 0
         return file.length()
+    }
+
+    fun likedSongIds(explicit: Boolean, userId: UUID): Flow<UUID> = flow {
+        dbQuery {
+            SongTable
+                .leftJoin(UserSongTable, onColumn = { SongTable.id }, otherColumn = { UserSongTable.songId })
+                .select(SongTable.id)
+                .where { UserSongTable.userId eq userId }
+                .andWhere { UserSongTable.isFavourite eq true }
+                .let {
+                    if (!explicit) it.andWhere { SongTable.explicit eq false }
+                    else it
+                }
+                .orderBy(UserSongTable.updatedAt, SortOrder.DESC)
+                .fetchBatchedResults(1000)
+                .forEach { batch ->
+                    batch.forEach {
+                        emit(it[SongTable.id].value)
+                    }
+                }
+        }
+    }
+
+    fun songIdsByArtist(artistId: UUID): Flow<UUID> = flow {
+        val (songIds, albumIds) = dbQuery {
+            val s = SongArtistTable
+                .select(SongArtistTable.songId)
+                .where { SongArtistTable.artistId eq artistId }
+                .map { it[SongArtistTable.songId].value }
+
+            val a = AlbumArtistTable
+                .select(AlbumArtistTable.albumId)
+                .where { AlbumArtistTable.artistId eq artistId }
+                .map { it[AlbumArtistTable.albumId].value }
+            s to a
+        }
+
+        if (songIds.isEmpty() && albumIds.isEmpty()) return@flow
+
+        dbQuery {
+            val query = SongTable.select(SongTable.id)
+            val op1 = if (songIds.isNotEmpty()) (SongTable.id inList songIds) else null
+            val op2 = if (albumIds.isNotEmpty()) (SongTable.albumId inList albumIds) else null
+
+            val op = if (op1 != null && op2 != null) op1 or op2
+            else op1 ?: op2
+
+            if (op != null) {
+                query.where(op)
+                    .orderBy(SongTable.releaseDate, SortOrder.DESC)
+                    .orderBy(SongTable.trackNumber, SortOrder.ASC)
+                    .fetchBatchedResults(1000)
+                    .forEach { batch ->
+                        batch.forEach {
+                            emit(it[SongTable.id].value)
+                        }
+                    }
+            }
+        }
+    }
+
+    fun songIdsByAlbum(albumId: UUID): Flow<UUID> = flow {
+        dbQuery {
+            SongTable
+                .select(SongTable.id)
+                .where { SongTable.albumId eq albumId }
+                .orderBy(SongTable.discNumber, SortOrder.ASC)
+                .orderBy(SongTable.trackNumber, SortOrder.ASC)
+                .fetchBatchedResults(1000)
+                .forEach { batch ->
+                    batch.forEach {
+                        emit(it[SongTable.id].value)
+                    }
+                }
+        }
+    }
+
+    fun songIdsByPlaylist(playlistId: UUID): Flow<UUID> = flow {
+        dbQuery {
+            PlaylistSongTable
+                .select(PlaylistSongTable.songId)
+                .where { PlaylistSongTable.playlistId eq playlistId }
+                .orderBy(PlaylistSongTable.position, SortOrder.ASC)
+                .fetchBatchedResults(1000)
+                .forEach { batch ->
+                    batch.forEach {
+                        emit(it[SongTable.id].value)
+                    }
+                }
+        }
+    }
+
+    fun songIdsByUserPlaylist(playlistId: UUID): Flow<UUID> = flow {
+        dbQuery {
+            UserPlaylistSongTable
+                .select(UserPlaylistSongTable.songId)
+                .where { UserPlaylistSongTable.playlistId eq playlistId }
+                .orderBy(UserPlaylistSongTable.addedAt, SortOrder.ASC)
+                .fetchBatchedResults(1000)
+                .forEach { batch ->
+                    batch.forEach {
+                        emit(it[SongTable.id].value)
+                    }
+                }
+        }
     }
 
     private suspend inline fun <reified T : BaseSong> querySingle(
