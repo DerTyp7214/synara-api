@@ -1,6 +1,7 @@
 package dev.dertyp.services
 
 import dev.dertyp.core.date
+import dev.dertyp.core.fetchBatchedResults
 import dev.dertyp.core.rankedSearchQuery
 import dev.dertyp.core.toMap
 import dev.dertyp.data.*
@@ -429,24 +430,21 @@ class SongService : Service() {
     }
 
     fun likedSongIds(explicit: Boolean, userId: UUID): Flow<UUID> = flow {
-        dbQuery {
-            SongTable
-                .leftJoin(UserSongTable, onColumn = { SongTable.id }, otherColumn = { UserSongTable.songId })
-                .select(SongTable.id)
-                .where { UserSongTable.userId eq userId }
-                .andWhere { UserSongTable.isFavourite eq true }
-                .let {
-                    if (!explicit) it.andWhere { SongTable.explicit eq false }
-                    else it
+        SongTable
+            .leftJoin(UserSongTable, onColumn = { SongTable.id }, otherColumn = { UserSongTable.songId })
+            .select(SongTable.id)
+            .where { UserSongTable.userId eq userId }
+            .andWhere { UserSongTable.isFavourite eq true }
+            .let {
+                if (!explicit) it.andWhere { SongTable.explicit eq false }
+                else it
+            }
+            .orderBy(UserSongTable.updatedAt, SortOrder.DESC)
+            .fetchBatchedResults(1000) { batch ->
+                batch.forEach {
+                    emit(it[SongTable.id].value)
                 }
-                .orderBy(UserSongTable.updatedAt, SortOrder.DESC)
-                .fetchBatchedResults(1000)
-                .forEach { batch ->
-                    batch.forEach {
-                        emit(it[SongTable.id].value)
-                    }
-                }
-        }
+            }
     }
 
     fun songIdsByArtist(artistId: UUID): Flow<UUID> = flow {
@@ -465,72 +463,60 @@ class SongService : Service() {
 
         if (songIds.isEmpty() && albumIds.isEmpty()) return@flow
 
-        dbQuery {
-            val query = SongTable.select(SongTable.id)
-            val op1 = if (songIds.isNotEmpty()) (SongTable.id inList songIds) else null
-            val op2 = if (albumIds.isNotEmpty()) (SongTable.albumId inList albumIds) else null
+        val query = SongTable.select(SongTable.id)
+        val op1 = if (songIds.isNotEmpty()) (SongTable.id inList songIds) else null
+        val op2 = if (albumIds.isNotEmpty()) (SongTable.albumId inList albumIds) else null
 
-            val op = if (op1 != null && op2 != null) op1 or op2
-            else op1 ?: op2
+        val op = if (op1 != null && op2 != null) op1 or op2
+        else op1 ?: op2
 
-            if (op != null) {
-                query.where(op)
-                    .orderBy(SongTable.releaseDate, SortOrder.DESC)
-                    .orderBy(SongTable.trackNumber, SortOrder.ASC)
-                    .fetchBatchedResults(1000)
-                    .forEach { batch ->
-                        batch.forEach {
-                            emit(it[SongTable.id].value)
-                        }
+        if (op != null) {
+            query.where(op)
+                .orderBy(SongTable.releaseDate, SortOrder.DESC)
+                .orderBy(SongTable.trackNumber, SortOrder.ASC)
+                .fetchBatchedResults(1000) { batch ->
+                    batch.forEach {
+                        emit(it[SongTable.id].value)
                     }
-            }
+                }
         }
     }
 
     fun songIdsByAlbum(albumId: UUID): Flow<UUID> = flow {
-        dbQuery {
-            SongTable
-                .select(SongTable.id)
-                .where { SongTable.albumId eq albumId }
-                .orderBy(SongTable.discNumber, SortOrder.ASC)
-                .orderBy(SongTable.trackNumber, SortOrder.ASC)
-                .fetchBatchedResults(1000)
-                .forEach { batch ->
-                    batch.forEach {
-                        emit(it[SongTable.id].value)
-                    }
+        SongTable
+            .select(SongTable.id)
+            .where { SongTable.albumId eq albumId }
+            .orderBy(SongTable.discNumber, SortOrder.ASC)
+            .orderBy(SongTable.trackNumber, SortOrder.ASC)
+            .fetchBatchedResults(1000) { batch ->
+                batch.forEach {
+                    emit(it[SongTable.id].value)
                 }
-        }
+            }
     }
 
     fun songIdsByPlaylist(playlistId: UUID): Flow<UUID> = flow {
-        dbQuery {
-            PlaylistSongTable
-                .select(PlaylistSongTable.songId)
-                .where { PlaylistSongTable.playlistId eq playlistId }
-                .orderBy(PlaylistSongTable.position, SortOrder.ASC)
-                .fetchBatchedResults(1000)
-                .forEach { batch ->
-                    batch.forEach {
-                        emit(it[SongTable.id].value)
-                    }
+        PlaylistSongTable
+            .select(PlaylistSongTable.songId)
+            .where { PlaylistSongTable.playlistId eq playlistId }
+            .orderBy(PlaylistSongTable.position, SortOrder.ASC)
+            .fetchBatchedResults(1000) { batch ->
+                batch.forEach {
+                    emit(it[SongTable.id].value)
                 }
-        }
+            }
     }
 
     fun songIdsByUserPlaylist(playlistId: UUID): Flow<UUID> = flow {
-        dbQuery {
-            UserPlaylistSongTable
-                .select(UserPlaylistSongTable.songId)
-                .where { UserPlaylistSongTable.playlistId eq playlistId }
-                .orderBy(UserPlaylistSongTable.addedAt, SortOrder.ASC)
-                .fetchBatchedResults(1000)
-                .forEach { batch ->
-                    batch.forEach {
-                        emit(it[SongTable.id].value)
-                    }
+        UserPlaylistSongTable
+            .select(UserPlaylistSongTable.songId)
+            .where { UserPlaylistSongTable.playlistId eq playlistId }
+            .orderBy(UserPlaylistSongTable.addedAt, SortOrder.ASC)
+            .fetchBatchedResults(1000) { batch ->
+                batch.forEach {
+                    emit(it[SongTable.id].value)
                 }
-        }
+            }
     }
 
     private suspend inline fun <reified T : BaseSong> querySingle(

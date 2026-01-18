@@ -2,9 +2,8 @@
 
 package dev.dertyp.core
 
+import dev.dertyp.dbQuery
 import org.jetbrains.exposed.v1.core.*
-import org.jetbrains.exposed.v1.core.Op.Companion.build
-import org.jetbrains.exposed.v1.core.Op.Companion.nullOp
 import org.jetbrains.exposed.v1.jdbc.Query
 
 fun Query.paging(page: Int, pageSize: Int, offset: Int = 0) = apply {
@@ -87,4 +86,34 @@ fun Query.rankedSearchQuery(
     }, SortOrder.DESC)
 
     return this
+}
+
+suspend inline fun Query.fetchBatchedResults(
+    batchSize: Int,
+    body: (List<ResultRow>) -> Unit
+) {
+    var offset = 0L
+    var hasMore = true
+
+    while (hasMore) {
+        val batchQuery = this.copy().apply {
+            limit(batchSize)
+            offset(offset)
+        }
+
+        val results = dbQuery {
+            batchQuery.toList()
+        }
+
+        if (results.isNotEmpty()) {
+            body(results)
+            offset += batchSize
+
+            if (results.size < batchSize) {
+                hasMore = false
+            }
+        } else {
+            hasMore = false
+        }
+    }
 }
