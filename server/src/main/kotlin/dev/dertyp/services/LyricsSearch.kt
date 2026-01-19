@@ -13,8 +13,7 @@ class LyricsSearch : ILyricsSearch, Service() {
     override suspend fun searchLyrics(
         artist: String,
         title: String,
-        syncedOnly: Boolean,
-        onLineReceived: suspend (String) -> Unit
+        syncedOnly: Boolean
     ): List<String> = withContext(Dispatchers.IO) {
         val command = mutableListOf("python3", "-u", "-m", "syncedlyrics")
 
@@ -34,7 +33,6 @@ class LyricsSearch : ILyricsSearch, Service() {
         command.add("$title - $artist")
 
         val exitCode = runCommand(command) {
-            onLineReceived(it)
             logger.info(it)
         }.exitCode
 
