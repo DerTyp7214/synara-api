@@ -234,8 +234,13 @@ class SongService : Service() {
     }
 
     suspend fun byIds(ids: Collection<UUID>, userId: UUID): PaginatedResponse<UserSong> =
-        querySongs(0, Int.MAX_VALUE, true, { userSong(userId) }) {
+        querySongs<UserSong>(0, Int.MAX_VALUE, true, { userSong(userId) }) {
             where { SongTable.id inList ids }
+        }.let { response ->
+            val songMap = response.data.associateBy { it.id }
+            response.copy(
+                data = ids.mapNotNull { songMap[it] }
+            )
         }
 
     suspend fun byId(id: UUID, userId: UUID): UserSong? = querySingle({ userSong(userId) }) {
