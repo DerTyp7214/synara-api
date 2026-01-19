@@ -63,6 +63,7 @@ fun Application.configureRouting() {
         val songService by inject<SongService>()
         val albumService by inject<AlbumService>()
         val imageService by inject<ImageService>()
+        val lyricsSearch by inject<LyricsSearch>()
         val artistService by inject<ArtistService>()
         val favSyncService by inject<FavSyncService>()
         val playlistService by inject<PlaylistService>()
@@ -85,6 +86,7 @@ fun Application.configureRouting() {
                 registerService<IIndexer> { RpcIndexer(indexer).withLogging<IIndexer>() }
                 registerService<IAlbumService> { albumService.withLogging<IAlbumService>() }
                 registerService<IImageService> { imageService.withLogging<IImageService>() }
+                registerService<ILyricsSearch> { lyricsSearch.withLogging<ILyricsSearch>() }
                 registerService<IArtistService> { artistService.withLogging<IArtistService>() }
                 registerService<IPlaylistService> { playlistService.withLogging<IPlaylistService>() }
                 registerService<IUserPlaylistService> { userPlaylistService.withLogging<IUserPlaylistService>() }

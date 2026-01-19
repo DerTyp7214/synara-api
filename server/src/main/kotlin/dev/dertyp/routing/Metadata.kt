@@ -59,12 +59,13 @@ fun Route.metadata() {
             }
         }) {
             val songService by inject<SongService>()
+            val lyricsSearch by inject<LyricsSearch>()
 
             val id = call.parameters["id"]?.toUUIDOrNull() ?: return@get call.respond(HttpStatusCode.NotFound)
 
             val song = songService.byId(id) ?: return@get call.respond(HttpStatusCode.NotFound)
 
-            val lyrics = LyricsSearch().searchLyrics(
+            val lyrics = lyricsSearch.searchLyrics(
                 song.artists.joinToString(", ") { it.name },
                 song.title
             )
