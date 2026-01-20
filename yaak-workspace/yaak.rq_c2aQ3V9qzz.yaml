@@ -2,7 +2,7 @@ type: http_request
 model: http_request
 id: rq_c2aQ3V9qzz
 createdAt: 2025-10-14T19:25:16.450619051
-updatedAt: 2026-01-19T07:31:08.146638090
+updatedAt: 2026-01-20T23:19:58.465739735
 workspaceId: wk_9dbKacQT4H
 folderId: fl_QrUoFyttZM
 authentication: {}
@@ -39,9 +39,9 @@ urlParameters:
   id: Cqh8H4cRV7
 - enabled: true
   name: :query
-  value: future crazy cli
+  value: bonez pi ra te
   id: zXFn5dePsN
 - enabled: true
   name: ''
   value: ''
-  id: jMmmsVYZZj
+  id: a8Q93Ux46b

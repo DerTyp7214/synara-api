@@ -53,11 +53,11 @@ FROM amazoncorretto:25 AS runtime
 ARG APP_USER_ID=1000
 ARG APP_GROUP_ID=1000
 
-RUN yum update -y && yum install -y python3.12 python3.12-pip libstdc++ zlib glibc shadow-utils && \
+RUN yum update -y && yum install -y python3.13 python3.13-pip libstdc++ zlib glibc shadow-utils && \
     yum clean all && rm -rf /var/cache/yum
 
-RUN ln -sf /usr/bin/python3.12 /usr/bin/python3
-RUN python3 -m pip install --break-system-packages --no-cache-dir tidal-dl-ng syncedlyrics
+RUN ln -sf /usr/bin/python3.13 /usr/bin/python3
+RUN python3 -m pip install --break-system-packages --no-cache-dir tidal-dl-ng syncedlyrics tiddl
 
 COPY --from=ffmpeg-builder /usr/local/lib/libav*.so* /usr/lib/
 COPY --from=ffmpeg-builder /usr/local/lib/libsw*.so* /usr/lib/
@@ -77,9 +77,11 @@ RUN chown appuser:appgroup /app
 RUN mkdir /data
 RUN chown appuser:appgroup /data
 
+RUN mkdir -p /home/appuser/.tiddl
 RUN mkdir -p /home/appuser/.config/tidal_dl_ng
 RUN chown -R appuser:appgroup /home/appuser
 
+COPY --chown=appuser:appuser docker/tiddl/config.toml /home/appuser/.tiddl/config.toml
 COPY --chown=appuser:appuser docker/tdn-config/settings.json /home/appuser/.config/tidal_dl_ng/settings.json
 COPY --from=build --chown=appuser:appgroup /home/gradle/src/server/build/libs/*.jar /app/synara-api.jar
 
@@ -92,8 +94,6 @@ ENV AUDIO_TRANSCODE_PATH="/data/Tidal/Transcode"
 ENV DATA_IMAGES_PATH="/data/Tidal/Images"
 
 ENV AUDIO_TRACKS_SECONDARY_PATH="/data/Synara"
-
-ENV TDN_TOKEN_PATH="/home/appuser/.config/tidal_dl_ng/token.json"
 
 ENV HOME=/home/appuser
 ENTRYPOINT ["java","--enable-native-access=ALL-UNNAMED","-jar","/app/synara-api.jar"]

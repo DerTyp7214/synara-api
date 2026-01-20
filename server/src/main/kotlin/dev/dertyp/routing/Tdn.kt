@@ -17,7 +17,6 @@ import kotlinx.rpc.krpc.ktor.server.rpc
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.encodeToJsonElement
 import org.koin.ktor.ext.inject
-import java.io.File
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.ExperimentalTime
@@ -34,21 +33,19 @@ fun Route.tdn() {
     }) {
         rpc {
             val downloadService by inject<DownloadService>()
+            val tidalDownloaderProxy by inject<TidalDownloaderProxy>()
             val user = call.getUser() ?: return@rpc call.respond(HttpStatusCode.BadRequest)
 
-            registerService<IDownloadService> { DownloadRpcService(user, call, downloadService) }
+            registerService<IDownloadService> { DownloadRpcService(user, call, downloadService, tidalDownloaderProxy) }
         }
 
         get("/authenticated") {
-            val tdnService by inject<TdnService>()
+            val tidalDownloadService by inject<TidalDownloaderProxy>()
 
-            val homeDir = System.getProperty("user.home")
-            val tdnTokenJson = File(homeDir, ".config/tidal_dl_ng/token.json")
-
-            call.respond(tdnTokenJson.exists() && tdnService.authorized())
+            call.respond(tidalDownloadService.tokenFileExists() && tidalDownloadService.authorized())
         }
         post("/login", {}) {
-            val tdnService by inject<TdnService>()
+            val tdnService by inject<TidalDownloaderProxy>()
 
             call.response.header(HttpHeaders.ContentType, ContentType.Text.EventStream.toString())
             call.response.header(HttpHeaders.CacheControl, "no-cache")
@@ -56,7 +53,7 @@ fun Route.tdn() {
             call.response.header("X-Accel-Buffering", "no")
 
             call.respondBytesWriter(ContentType.Text.EventStream) {
-                tdnService.login({ isClientConnected() }) {
+                tdnService.login(aliveCheck = { isClientConnected() }) {
                     sendSafe(it)
                 }
             }
@@ -195,7 +192,7 @@ fun Route.tdn() {
 
         post("/dl_fav/{type}", {
             request {
-                pathParameter<TdnFavoriteType>("type") {
+                pathParameter<TidalFavType>("type") {
                     description = "The type of fav to download."
                 }
                 queryParameter<Int>("maxRetries") {
@@ -205,7 +202,7 @@ fun Route.tdn() {
         }) {
             val service by inject<DownloadService>()
 
-            val type = call.parameters["type"]?.let { TdnFavoriteType.valueOf(it) }
+            val type = call.parameters["type"]?.let { TidalFavType.valueOf(it) }
             if (type == null) return@post call.respond(HttpStatusCode.BadRequest)
 
             call.response.header(HttpHeaders.ContentType, ContentType.Text.EventStream.toString())

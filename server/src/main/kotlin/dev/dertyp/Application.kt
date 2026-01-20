@@ -10,6 +10,8 @@ import dev.dertyp.services.*
 import dev.dertyp.services.schedule.ScheduleService
 import dev.dertyp.services.tdn.DownloadService
 import dev.dertyp.services.tdn.TdnService
+import dev.dertyp.services.tdn.TidalDownloaderProxy
+import dev.dertyp.services.tdn.TiddlService
 import io.ktor.server.application.*
 import io.ktor.server.plugins.calllogging.*
 import kotlinx.coroutines.CoroutineScope
@@ -62,6 +64,7 @@ fun Application.module() {
             singleOf(::UserService)
             singleOf(::AuthService)
             singleOf(::SongService)
+            singleOf(::TiddlService)
             singleOf(::ImageService)
             singleOf(::AlbumService)
             singleOf(::LyricsSearch)
@@ -75,6 +78,7 @@ fun Application.module() {
             singleOf(::ServerStatsService)
             singleOf(::UserPlaylistService)
             singleOf(::RefreshTokenService)
+            singleOf(::TidalDownloaderProxy)
 
             single<Gson> {
                 GsonBuilder()

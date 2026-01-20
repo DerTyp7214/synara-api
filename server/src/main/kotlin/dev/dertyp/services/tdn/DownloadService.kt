@@ -26,6 +26,7 @@ class DownloadRpcService(
     private val user: User,
     private val call: ApplicationCall,
     private val downloadService: DownloadService,
+    private val tidalDownloadService: TidalDownloaderProxy
 ) : IDownloadService {
     override fun logs(): Flow<LogLine> = downloadService.logs()
     override suspend fun currentDownload(): DownloadQueueEntry? = downloadService.currentDownload(user)
@@ -41,11 +42,16 @@ class DownloadRpcService(
             callback = {}
         )
     }
+
+    override fun getTidalDownloadService(): TidalDownloadService = tidalDownloadService.defaultService
+    override fun setTidalDownloadService(service: TidalDownloadService) {
+        tidalDownloadService.defaultService = service
+    }
 }
 
 @OptIn(ExperimentalAtomicApi::class)
 class DownloadService(
-    val tdnService: TdnService,
+    val tidalDownloadService: TidalDownloaderProxy,
     val songService: SongService,
     val favSyncService: FavSyncService
 ) : Service() {
@@ -237,18 +243,18 @@ class DownloadService(
             }
 
             val result = when (entry) {
-                is UrlDownloadQueueEntry -> tdnService.downloadContent(
-                    entry.urls,
-                    entry.maxRetries,
-                    aliveCheck,
-                    logUnit
+                is UrlDownloadQueueEntry -> tidalDownloadService.downloadContent(
+                    urls = entry.urls,
+                    maxRetries = entry.maxRetries,
+                    aliveCheck = aliveCheck,
+                    onLiveOutput = logUnit
                 )
 
-                is FavouriteDownloadQueueEntry -> tdnService.downloadFavoriteCollection(
-                    entry.tdnFavoriteType,
-                    entry.maxRetries,
-                    aliveCheck,
-                    logUnit
+                is FavouriteDownloadQueueEntry -> tidalDownloadService.downloadFavoriteCollection(
+                    type = entry.tdnFavoriteType,
+                    maxRetries = entry.maxRetries,
+                    aliveCheck = aliveCheck,
+                    onLiveOutput = logUnit
                 )
             }
 

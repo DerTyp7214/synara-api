@@ -7,6 +7,7 @@ import io.ktor.util.logging.*
 import io.ktor.utils.io.CancellationException
 import kotlinx.coroutines.*
 import org.jetbrains.exposed.v1.jdbc.transactions.suspendTransaction
+import java.io.File
 import java.io.InputStreamReader
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -108,4 +109,14 @@ suspend fun executeCommand(
             if (checkJob.isActive) checkJob.cancel()
         }
     }
+}
+
+fun findInPath(executableName: String): String? {
+    val systemPath = System.getenv("PATH") ?: return null
+    val pathSeparator = File.pathSeparator
+
+    return systemPath.split(pathSeparator)
+        .map { File(it, executableName) }
+        .firstOrNull { it.exists() && it.canExecute() }
+        ?.absolutePath
 }

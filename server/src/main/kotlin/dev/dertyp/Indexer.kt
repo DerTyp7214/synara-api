@@ -324,7 +324,11 @@ class Indexer(
         val trackNumber = tag.getFirst(FieldKey.TRACK).toIntOrNull() ?: 1
         val discNumber = tag.getFirst(FieldKey.DISC_NO).toIntOrNull() ?: 1
 
-        val url = tag.getFirst("URL") ?: ""
+        val url = tag.getFirst("URL").ifEmpty {
+            "https://tidal.com/browse/track/${
+                audioFile.file.nameWithoutExtension.split(Regex("[ _()-]")).first()
+            }"
+        }
         val cover = audioFile.coverImage
         val lyrics = tag.getFirst(FieldKey.LYRICS) ?: ""
         val year = tag.getFirst(FieldKey.YEAR)
