@@ -6,6 +6,7 @@ import dev.dertyp.services.*
 import dev.dertyp.services.tdn.DownloadRpcService
 import dev.dertyp.services.tdn.DownloadService
 import dev.dertyp.services.tdn.IDownloadService
+import dev.dertyp.services.tdn.TidalDownloaderProxy
 import dev.dertyp.utils.withLogging
 import io.github.smiley4.ktoropenapi.OpenApi
 import io.github.smiley4.ktoropenapi.openApi
@@ -70,6 +71,7 @@ fun Application.configureRouting() {
         val downloadService by inject<DownloadService>()
         val serverStatsService by inject<ServerStatsService>()
         val userPlaylistService by inject<UserPlaylistService>()
+        val tidalDownloaderProxy by inject<TidalDownloaderProxy>()
 
         rpc("/rpc") {
             registerService<IServerStatsService> { serverStatsService.withLogging<IServerStatsService>() }
@@ -91,7 +93,7 @@ fun Application.configureRouting() {
                 registerService<IPlaylistService> { playlistService.withLogging<IPlaylistService>() }
                 registerService<IUserPlaylistService> { userPlaylistService.withLogging<IUserPlaylistService>() }
                 registerService<IFavSyncService> { FavSyncRpcService(user, favSyncService).withLogging<IFavSyncService>() }
-                registerService<IDownloadService> { DownloadRpcService(user, call, downloadService).withLogging<IDownloadService>() }
+                registerService<IDownloadService> { DownloadRpcService(user, call, downloadService, tidalDownloaderProxy).withLogging<IDownloadService>() }
                 registerService<ISongService> { SongRpcService(songService = songService, user = user).withLogging<ISongService>() }
             }
         }
