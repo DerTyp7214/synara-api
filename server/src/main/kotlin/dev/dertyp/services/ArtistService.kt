@@ -47,6 +47,10 @@ class ArtistService : IArtistService, Service() {
         where { ArtistTable.id eq id }
     }
 
+    override suspend fun byIds(ids: List<UUID>): List<Artist> = queryArtists(0, Int.MAX_VALUE) {
+        where { ArtistTable.id inList ids }
+    }.data
+
     override suspend fun rankedSearch(page: Int, pageSize: Int, query: String): PaginatedResponse<Artist> =
         queryArtists(page, pageSize) {
             rankedSearchQuery(

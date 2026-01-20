@@ -60,6 +60,10 @@ class AlbumService : IAlbumService, Service() {
         where { AlbumTable.id eq id }
     }
 
+    override suspend fun byIds(ids: List<UUID>): List<Album> = queryAlbums(0, Int.MAX_VALUE) {
+        where { AlbumTable.id inList ids }
+    }.data
+
     override suspend fun byName(page: Int, pageSize: Int, name: String): PaginatedResponse<Album> = queryAlbums(page, pageSize) {
         where { AlbumTable.name eq name }
     }

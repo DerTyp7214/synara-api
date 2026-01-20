@@ -46,6 +46,10 @@ class UserPlaylistService : IUserPlaylistService, Service() {
         where { UserPlaylistTable.id eq id }
     }
 
+    override suspend fun byIds(ids: List<UUID>): List<UserPlaylist> = queryPlaylists(0, Int.MAX_VALUE) {
+        where { UserPlaylistTable.id inList ids }
+    }.data
+
     override suspend fun rankedSearch(creator: UUID?, page: Int, pageSize: Int, query: String): PaginatedResponse<UserPlaylist> =
         queryPlaylists(page, pageSize) {
             rankedSearchQuery(

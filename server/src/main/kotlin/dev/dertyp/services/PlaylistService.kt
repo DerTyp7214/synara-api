@@ -40,6 +40,10 @@ class PlaylistService : IPlaylistService, Service() {
         where { PlaylistTable.id eq id }
     }
 
+    override suspend fun byIds(ids: List<UUID>): List<Playlist> = queryPlaylists(0, Int.MAX_VALUE) {
+        where { PlaylistTable.id inList ids }
+    }.data
+
     override suspend fun byIdFull(id: UUID): Pair<String, List<PlaylistEntry>>? = dbQuery {
         val rows = PlaylistTable
             .leftJoin(
