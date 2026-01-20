@@ -43,8 +43,8 @@ class DownloadRpcService(
         )
     }
 
-    override fun getTidalDownloadService(): TidalDownloadService = tidalDownloadService.defaultService
-    override fun setTidalDownloadService(service: TidalDownloadService) {
+    override suspend fun getTidalDownloadService(): TidalDownloadService = tidalDownloadService.defaultService
+    override suspend fun setTidalDownloadService(service: TidalDownloadService) {
         tidalDownloadService.defaultService = service
     }
 }
