@@ -37,6 +37,25 @@ fun Route.album() {
 
             call.respond(album)
         }
+        get("/versions/{id}", {
+            request {
+                pathParameter<String>("id") {
+                    description = "The album id."
+                }
+            }
+            response {
+                HttpStatusCode.OK to {
+                    description = "The versions of the album."
+                    body<List<Album>>()
+                }
+            }
+        }) {
+            val service by inject<AlbumService>()
+
+            val id = call.parameters["id"]?.toUUIDOrNull() ?: return@get call.respond(HttpStatusCode.BadRequest)
+
+            call.respond(service.versions(id))
+        }
         get("/byName/{name}", {
             request {
                 pathParameter<String>("name") {

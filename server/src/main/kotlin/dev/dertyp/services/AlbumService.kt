@@ -13,6 +13,7 @@ import dev.dertyp.dbQuery
 import dev.dertyp.getDateFromISO
 import dev.dertyp.getISOFromDate
 import dev.dertyp.services.ArtistService.Companion.mapArtist
+import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.jdbc.*
 import org.koin.core.component.get
@@ -62,6 +63,13 @@ class AlbumService : IAlbumService, Service() {
 
     override suspend fun byIds(ids: List<UUID>): List<Album> = queryAlbums(0, Int.MAX_VALUE) {
         where { AlbumTable.id inList ids }
+    }.data
+
+    override suspend fun versions(id: UUID): List<Album> = queryAlbums(0, Int.MAX_VALUE) {
+        val album = runBlocking { dbQuery { byId(id) } }
+        if (album == null) return@queryAlbums where { Op.FALSE }
+        where { AlbumTable.cover eq album.coverId }
+        andWhere { AlbumTable.id neq id }
     }.data
 
     override suspend fun byName(page: Int, pageSize: Int, name: String): PaginatedResponse<Album> = queryAlbums(page, pageSize) {

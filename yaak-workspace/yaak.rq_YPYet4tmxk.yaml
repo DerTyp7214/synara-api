@@ -1,0 +1,30 @@
+type: http_request
+model: http_request
+id: rq_YPYet4tmxk
+createdAt: 2026-01-20T13:15:45.948868502
+updatedAt: 2026-01-20T13:16:02.936852611
+workspaceId: wk_9dbKacQT4H
+folderId: fl_m5uDzfqeJa
+authentication: {}
+authenticationType: null
+body: {}
+bodyType: null
+description: '[object Object]'
+headers:
+- enabled: true
+  name: Accept
+  value: application/json
+  id: null
+method: GET
+name: /album/versions/:id
+sortPriority: 33.001
+url: ${[baseUrl]}/album/versions/:id
+urlParameters:
+- enabled: true
+  name: :id
+  value: 1f71f94a-3611-40c4-996f-cfd4ce6688a3
+  id: rXNnFsppAs
+- enabled: true
+  name: ''
+  value: ''
+  id: 4mrVR9aIEV
