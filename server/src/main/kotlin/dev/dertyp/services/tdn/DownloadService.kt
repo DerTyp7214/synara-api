@@ -16,6 +16,8 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import org.koin.core.component.KoinComponent
+import org.koin.core.component.inject
 import java.time.Instant
 import java.util.*
 import java.util.concurrent.ConcurrentHashMap
@@ -26,8 +28,17 @@ class DownloadRpcService(
     private val user: User,
     private val call: ApplicationCall,
     private val downloadService: DownloadService,
-    private val tidalDownloadService: TidalDownloaderProxy
-) : IDownloadService {
+    private val tidalDownloadService: TidalDownloaderProxy,
+) : IDownloadService, KoinComponent {
+    private val applicationEnvironment by inject<ApplicationEnvironment>()
+    private val syncService by lazy {
+        SyncService.getInstance(
+            user,
+            applicationEnvironment,
+            ISyncService.SyncServiceType.tidal
+        )
+    }
+
     override fun logs(): Flow<LogLine> = downloadService.logs()
     override suspend fun currentDownload(): DownloadQueueEntry? = downloadService.currentDownload(user)
     override suspend fun downloadQueue(): List<DownloadQueueEntry> = downloadService.downloadQueue(user)
@@ -47,6 +58,14 @@ class DownloadRpcService(
     override suspend fun setTidalDownloadService(service: TidalDownloadService) {
         tidalDownloadService.defaultService = service
     }
+
+    override suspend fun tidalDownloadAuthorized(): Boolean = tidalDownloadService.authorized()
+    override fun tidalDownloadLogin() =
+        flow { tidalDownloadService.login(aliveCheck = { true }, onLiveOutput = { emit(it) }) }
+
+
+    override suspend fun tidalSyncAuthorized(): Boolean = syncService.getAccessToken() != null
+    override suspend fun getAuthUrl(): String = syncService.buildAuthUrl(call)
 }
 
 @OptIn(ExperimentalAtomicApi::class)
