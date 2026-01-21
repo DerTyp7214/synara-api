@@ -25,6 +25,7 @@ object ApplicationScope {
 
         serializersModule = SerializersModule {
             contextual(UUIDSerializer)
+            contextual(UUIDListSerializer)
             contextual(DateSerializer)
             contextual(LocalDateSerializer)
             contextual(LocalDateTimeSerializer)
@@ -41,7 +42,8 @@ object ApplicationScope {
         ignoreUnknownKeys = true
 
         serializersModule = SerializersModule {
-            contextual(UUIDSerializer)
+            contextual(UUIDByteSerializer)
+            contextual(UUIDByteListSerializer)
             contextual(DateSerializer)
             contextual(LocalDateSerializer)
             contextual(LocalDateTimeSerializer)
