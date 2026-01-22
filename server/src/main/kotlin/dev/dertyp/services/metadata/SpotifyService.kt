@@ -82,6 +82,10 @@ class SpotifyService(
         throw NotImplementedError("Not implemented for spotify!")
     }
 
+    override suspend fun albumExistsById(albumId: String): Boolean {
+        throw NotImplementedError("Not implemented for spotify!")
+    }
+
     override suspend fun getAlbumsByIds(albumIds: List<String>): List<IMetadataService.Album> {
         throw NotImplementedError("Not implemented for spotify!")
     }

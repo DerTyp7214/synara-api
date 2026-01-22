@@ -37,6 +37,7 @@ abstract class MetadataService(
     abstract suspend fun getTrackById(trackId: String): IMetadataService.Track?
     abstract suspend fun getTracksByIds(trackIds: List<String>): List<IMetadataService.Track>
     abstract suspend fun getAlbumsByIds(albumIds: List<String>): List<IMetadataService.Album>
+    abstract suspend fun albumExistsById(albumId: String): Boolean
     abstract suspend fun getArtistsByIds(artistIds: List<String>): List<IMetadataService.Artist>
     abstract suspend fun getAlbumTracks(albumId: String): Flow<IMetadataService.Track>
     abstract fun getPlaylistsByIds(

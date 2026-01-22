@@ -47,6 +47,7 @@ class DownloadRpcService(
     override suspend fun syncFavourites() {
         downloadService.syncFavourites(call, true).invokeOnCompletion {}
     }
+
     override suspend fun downloadTidalIds(ids: List<String>, type: Type) {
         downloadService.downloadTidalIds(
             call = call,
@@ -54,6 +55,15 @@ class DownloadRpcService(
             type = type,
             callback = {}
         )
+    }
+
+    override suspend fun existsByTidalId(id: String, type: Type): Boolean {
+        val metadataService = call.getMetadataProvider(MetadataService.Companion.MetadataType.tidal) ?: return false
+        return when (type) {
+            Type.SONG -> metadataService.getTrackById(id) != null
+            Type.ALBUM -> metadataService.albumExistsById(id)
+            else -> false
+        }
     }
 
     override suspend fun getTidalDownloadService(): TidalDownloadService = tidalDownloadService.defaultService

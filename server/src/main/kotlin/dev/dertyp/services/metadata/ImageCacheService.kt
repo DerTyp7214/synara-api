@@ -78,6 +78,10 @@ class ImageCacheService(
         throw NotImplementedError("Not implemented for ImageCache")
     }
 
+    override suspend fun albumExistsById(albumId: String): Boolean {
+        throw NotImplementedError("Not implemented for ImageCache")
+    }
+
     override suspend fun getAlbumsByIds(albumIds: List<String>): List<IMetadataService.Album> {
         throw NotImplementedError("Not implemented for ImageCache")
     }

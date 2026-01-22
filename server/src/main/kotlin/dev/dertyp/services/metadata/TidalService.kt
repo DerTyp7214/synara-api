@@ -326,7 +326,10 @@ class TidalService(
                 return getTrackById(trackId)
             }
 
-            else -> println("error: ${response.status}")
+            else -> {
+                println("error: ${response.status}")
+                return null
+            }
         }
 
         try {
@@ -415,6 +418,31 @@ class TidalService(
         }
     }
 
+    override suspend fun albumExistsById(albumId: String): Boolean {
+        val url = getUrl("/albums") {
+            parameters {
+                append("countryCode", "US")
+                append("locale", "en-US")
+                appendAll("filter[id]", listOf(albumId))
+            }
+        }
+
+        val response = makeRequest(url)
+        when (response.status) {
+            HttpStatusCode.OK -> return true
+            HttpStatusCode.TooManyRequests -> {
+                logger.warn("[albumExistsById]: Too many requests, waiting 10 seconds")
+                delay(10.seconds)
+                return albumExistsById(albumId)
+            }
+
+            else -> {
+                println("error: ${response.status}")
+                return false
+            }
+        }
+    }
+
     override suspend fun getAlbumsByIds(albumIds: List<String>): List<IMetadataService.Album> {
         val filteredAlbumIds = albumIds.distinct().toMutableList()
         val existing = checkExistingAlbumsFromCache(filteredAlbumIds)
@@ -445,7 +473,10 @@ class TidalService(
                 return getAlbumsByIds(filteredAlbumIds) + getAlbumsFromCache(existing)
             }
 
-            else -> println("error: ${response.status}")
+            else -> {
+                println("error: ${response.status}")
+                return getAlbumsFromCache(existing)
+            }
         }
 
         try {
