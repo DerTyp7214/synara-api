@@ -60,6 +60,7 @@ fun Application.configureRouting() {
 
         val indexer by inject<Indexer>()
         val jwtService by inject<JwtService>()
+        val userService by inject<UserService>()
         val authService by inject<AuthService>()
         val songService by inject<SongService>()
         val albumService by inject<AlbumService>()
@@ -86,15 +87,16 @@ fun Application.configureRouting() {
                 val user = call.getUser() ?: throw IllegalArgumentException("No user found")
 
                 registerService<IIndexer> { RpcIndexer(indexer).withLogging<IIndexer>() }
+                registerService<IUserService> { RpcUserService(user, userService).withLogging<IUserService>() }
+                registerService<ISongService> { SongRpcService(songService = songService, user = user).withLogging<ISongService>() }
                 registerService<IAlbumService> { albumService.withLogging<IAlbumService>() }
                 registerService<IImageService> { imageService.withLogging<IImageService>() }
                 registerService<ILyricsSearch> { lyricsSearch.withLogging<ILyricsSearch>() }
                 registerService<IArtistService> { artistService.withLogging<IArtistService>() }
-                registerService<IPlaylistService> { playlistService.withLogging<IPlaylistService>() }
-                registerService<IUserPlaylistService> { userPlaylistService.withLogging<IUserPlaylistService>() }
                 registerService<IFavSyncService> { FavSyncRpcService(user, favSyncService).withLogging<IFavSyncService>() }
                 registerService<IDownloadService> { DownloadRpcService(user, call, downloadService, tidalDownloaderProxy).withLogging<IDownloadService>() }
-                registerService<ISongService> { SongRpcService(songService = songService, user = user).withLogging<ISongService>() }
+                registerService<IPlaylistService> { playlistService.withLogging<IPlaylistService>() }
+                registerService<IUserPlaylistService> { userPlaylistService.withLogging<IUserPlaylistService>() }
             }
         }
 

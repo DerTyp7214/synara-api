@@ -12,7 +12,13 @@ import org.jetbrains.exposed.v1.jdbc.batchInsert
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import java.util.*
 
-class UserService : IUserService, Service() {
+class RpcUserService(private val user: User, private val userService: UserService): IUserService {
+    override suspend fun findUserById(id: UUID) = userService.findUserById(id)
+    override suspend fun findUserByUsername(username: String) = userService.findUserByUsername(username)
+    override suspend fun me() = user
+}
+
+class UserService : Service() {
     companion object {
         fun mapUser(row: ResultRow): User {
             return User(
@@ -25,11 +31,11 @@ class UserService : IUserService, Service() {
 
     private fun map(row: ResultRow) = mapUser(row)
 
-    override suspend fun findUserById(id: UUID): User? = queryUser {
+    suspend fun findUserById(id: UUID): User? = queryUser {
         where { UserTable.id eq id }
     }.singleOrNull()
 
-    override suspend fun findUserByUsername(username: String): User? = queryUser {
+    suspend fun findUserByUsername(username: String): User? = queryUser {
         where { UserTable.username eq username }
     }.singleOrNull()
 

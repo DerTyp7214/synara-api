@@ -70,6 +70,7 @@ class AlbumService : IAlbumService, Service() {
         if (album == null) return@queryAlbums where { Op.FALSE }
         where { AlbumTable.cover eq album.coverId }
         andWhere { AlbumTable.id neq id }
+        andWhere { AlbumTable.songCount greater 1 }
     }.data
 
     override suspend fun byName(page: Int, pageSize: Int, name: String): PaginatedResponse<Album> = queryAlbums(page, pageSize) {
