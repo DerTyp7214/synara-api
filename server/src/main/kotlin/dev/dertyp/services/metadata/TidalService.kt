@@ -208,7 +208,10 @@ class TidalService(
                 return getAlbumIdByTrackId(trackId)
             }
 
-            else -> println("error: ${response.status}")
+            else -> {
+                println("error: ${response.status}")
+                return null
+            }
         }
 
         try {
@@ -241,7 +244,10 @@ class TidalService(
                 return getImageUrlByAlbumId(albumId)
             }
 
-            else -> println("error: ${response.status}")
+            else -> {
+                println("error: ${response.status}")
+                return emptyList()
+            }
         }
 
         try {
@@ -279,7 +285,10 @@ class TidalService(
                 return getImageUrlsByAlbumIds(albumIds)
             }
 
-            else -> println("error: ${response.status}")
+            else -> {
+                println("error: ${response.status}")
+                return emptyMap()
+            }
         }
 
         try {
@@ -387,7 +396,10 @@ class TidalService(
                 return getTracksByIds(filteredTrackIds) + getTracksFromCache(existing)
             }
 
-            else -> println("error: ${response.status}")
+            else -> {
+                println("error: ${response.status}")
+                return getTracksFromCache(existing)
+            }
         }
 
         try {
@@ -419,11 +431,10 @@ class TidalService(
     }
 
     override suspend fun albumExistsById(albumId: String): Boolean {
-        val url = getUrl("/albums") {
+        val url = getUrl("/albums/${albumId}") {
             parameters {
                 append("countryCode", "US")
                 append("locale", "en-US")
-                appendAll("filter[id]", listOf(albumId))
             }
         }
 
@@ -436,10 +447,7 @@ class TidalService(
                 return albumExistsById(albumId)
             }
 
-            else -> {
-                println("error: ${response.status}")
-                return false
-            }
+            else -> return false
         }
     }
 
@@ -537,7 +545,10 @@ class TidalService(
                 return getArtistsByIds(filteredArtistIds) + getArtistsFromCache(existing)
             }
 
-            else -> println("error: ${response.status}")
+            else -> {
+                println("error: ${response.status}")
+                return getArtistsFromCache(existing)
+            }
         }
 
         try {
@@ -587,7 +598,10 @@ class TidalService(
                     continue
                 }
 
-                else -> println("error: ${response.status}")
+                else -> {
+                    println("error: ${response.status}")
+                    continue
+                }
             }
 
             try {
@@ -644,7 +658,7 @@ class TidalService(
                 return@flow emitAll(getTracksFromPlaylist(playlistId, user, cursor, depth + 1))
             }
 
-            else -> println("error: ${response.status}")
+            else -> return@flow println("error: ${response.status}")
         }
 
         try {
@@ -723,7 +737,7 @@ class TidalService(
                 )
             }
 
-            else -> println("error: ${response.status}")
+            else -> return@flow println("error: ${response.status}")
         }
 
         try {
