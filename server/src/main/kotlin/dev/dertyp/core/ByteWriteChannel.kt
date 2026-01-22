@@ -6,9 +6,9 @@ import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 
 suspend fun ByteWriteChannel.isClientConnected(): Boolean = try {
-    writeStringUtf8("")
+    writeStringUtf8("\n")
     flush()
-    true
+    !isClosedForWrite
 } catch (_: IOException) {
     false
 } catch (_: NullPointerException) {

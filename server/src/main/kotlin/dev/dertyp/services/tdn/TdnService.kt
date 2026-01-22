@@ -6,6 +6,7 @@ import dev.dertyp.core.isInside
 import dev.dertyp.core.oneLine
 import dev.dertyp.core.resolveRelativeAbsolute
 import dev.dertyp.executeCommand
+import dev.dertyp.findInPath
 import dev.dertyp.services.StorageService
 import kotlinx.coroutines.delay
 import java.nio.file.Path
@@ -88,6 +89,8 @@ class TdnService(indexer: Indexer, storageService: StorageService) : BaseDownloa
         return newResult
     }
 
+    private val tdnPath = findInPath("tdn")
+
     override suspend fun executeDownloader(
         command: Collection<String>,
         aliveCheck: suspend () -> Boolean,
@@ -98,11 +101,14 @@ class TdnService(indexer: Indexer, storageService: StorageService) : BaseDownloa
             return ProcessExecutionResult(-1, "Error: Command must start with 'tdn'.", "")
         }
 
+        if (tdnPath == null) {
+            return ProcessExecutionResult(-1, "Error: The tdn path does not exist.", "")
+        }
+
         if (cmd[0] != "python3") {
-            cmd[0] = "tidal_dl_ng.cli"
+            cmd[0] = tdnPath
             cmd.add(0, "python3")
             cmd.add(1, "-u")
-            cmd.add(2, "-m")
         }
 
         return executeCommand(cmd, aliveCheck, logger, onLineReceived)

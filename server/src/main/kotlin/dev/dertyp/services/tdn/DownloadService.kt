@@ -3,6 +3,7 @@ package dev.dertyp.services.tdn
 import dev.dertyp.core.*
 import dev.dertyp.data.User
 import dev.dertyp.data.UserSong
+import dev.dertyp.killAll
 import dev.dertyp.services.FavSyncService
 import dev.dertyp.services.ISyncService
 import dev.dertyp.services.Service
@@ -72,14 +73,25 @@ class DownloadRpcService(
     }
 
     override suspend fun tidalDownloadAuthorized(): Boolean =
-        tidalDownloadService.tokenFileExists() && tidalDownloadService.authorized()
+        tidalDownloadService.tokenFileExists() && tidalDownloadService.authorized(aliveCheck = {
+            currentCoroutineContext().isActive
+        })
 
-    override fun tidalDownloadLogin() =
-        flow { tidalDownloadService.login(aliveCheck = { true }, onLiveOutput = { emit(it) }) }
-
+    override fun tidalDownloadLogin() = channelFlow {
+        tidalDownloadService.login(
+            aliveCheck = { currentCoroutineContext().isActive },
+            onLiveOutput = {
+                trySend(it)
+                trySend("\n")
+                yield()
+            }
+        )
+    }
 
     override suspend fun tidalSyncAuthorized(): Boolean = syncService.getAccessToken() != null
     override suspend fun getAuthUrl(): String = syncService.buildAuthUrl(call)
+
+    override suspend fun killAllChildProcesses() = killAll()
 }
 
 @OptIn(ExperimentalAtomicApi::class)

@@ -1,11 +1,14 @@
 package dev.dertyp
 
 import dev.dertyp.core.ClientCloseException
+import dev.dertyp.core.kill
 import dev.dertyp.core.lineFlow
 import dev.dertyp.services.tdn.ProcessExecutionResult
 import io.ktor.util.logging.*
 import io.ktor.utils.io.CancellationException
 import kotlinx.coroutines.*
+import kotlinx.coroutines.channels.Channel.Factory.UNLIMITED
+import kotlinx.coroutines.flow.buffer
 import org.jetbrains.exposed.v1.jdbc.transactions.suspendTransaction
 import java.io.File
 import java.io.InputStreamReader
@@ -33,6 +36,14 @@ fun getISOFromDateTime(date: LocalDateTime): String {
 suspend fun <T> dbQuery(block: suspend () -> T): T =
     suspendTransaction { withContext(Dispatchers.IO) { block() } }
 
+private val processes: MutableList<Process> = mutableListOf()
+
+fun killAll() {
+    while (processes.isNotEmpty()) {
+        processes.removeFirst().kill()
+    }
+}
+
 suspend fun executeCommand(
     command: List<String>,
     aliveCheck: suspend () -> Boolean,
@@ -50,15 +61,17 @@ suspend fun executeCommand(
     var process: Process? = null
 
     return coroutineScope {
-        val checkJob = launch {
-            while (aliveCheck()) {
-                delay(200)
-                ensureActive()
+        val checkJob = launch(Dispatchers.Default) {
+            try {
+                while (aliveCheck()) {
+                    delay(200)
+                    yield()
+                }
+            } catch (_: Exception) {
+                logger.info("Parent no longer alive, stoping forcefully")
             }
 
-            logger.info("Parent no longer alive, stoping forcefully")
-
-            if (process?.isAlive == true) process?.destroyForcibly()
+            if (process?.isAlive == true) process?.kill()
             cancel("Stopping command", ClientCloseException())
         }
 
@@ -68,19 +81,20 @@ suspend fun executeCommand(
                 .apply { environment()["COLUMNS"] = "500" }
                 .start()
 
+            process?.let(processes::add)
+
             completionHandle = currentJob.invokeOnCompletion { cause ->
                 if (cause is CancellationException) {
                     process?.destroyForcibly()
                 }
             }
 
-            val outputJob = launch {
+            val outputJob = launch(Dispatchers.IO) {
                 val reader = InputStreamReader(process.inputStream)
 
                 try {
-                    reader.lineFlow().collect { line ->
-                        currentCoroutineContext().ensureActive()
-
+                    reader.lineFlow().buffer(UNLIMITED).collect { line ->
+                        logger.info(line)
                         fullOutput.appendLine(line)
                         if (line.isNotBlank()) onLineReceived(line)
                     }
@@ -105,8 +119,10 @@ suspend fun executeCommand(
         } finally {
             completionHandle?.dispose()
 
-            if (process?.isAlive == true) process.destroyForcibly()
+            if (process?.isAlive == true) process.kill()
             if (checkJob.isActive) checkJob.cancel()
+
+            process?.let(processes::remove)
         }
     }
 }

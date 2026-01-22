@@ -4,12 +4,14 @@ import dev.dertyp.Indexer
 import dev.dertyp.core.*
 import dev.dertyp.services.Service
 import dev.dertyp.services.StorageService
+import kotlinx.coroutines.yield
 import java.nio.file.Path
 import java.time.Instant
 import kotlin.concurrent.atomics.AtomicBoolean
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.io.path.*
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
 
@@ -140,7 +142,7 @@ abstract class BaseDownloader(internal val indexer: Indexer, internal val storag
     @OptIn(ExperimentalAtomicApi::class)
     suspend fun downloadContent(
         url: String,
-        maxRetries: Int ,
+        maxRetries: Int,
         aliveCheck: suspend () -> Boolean,
         onLiveOutput: suspend (String) -> Unit
     ): ProcessExecutionResult {
@@ -179,6 +181,7 @@ abstract class BaseDownloader(internal val indexer: Indexer, internal val storag
         return result
     }
 
+    @OptIn(ExperimentalTime::class)
     suspend fun login(
         aliveCheck: suspend () -> Boolean,
         onLiveOutput: suspend (String) -> Unit
@@ -187,23 +190,38 @@ abstract class BaseDownloader(internal val indexer: Indexer, internal val storag
         loggingIn.store(true)
 
         val command = loginCommand
-        val response = executeDownloader(command, aliveCheck, onLiveOutput)
-
-        loggingIn.store(false)
+        val startTime = Clock.System.now()
+        val response = try {
+            executeDownloader(command, {
+                Clock.System.now().minus(startTime) < 3.minutes && aliveCheck()
+            }, {
+                onLiveOutput(it)
+                yield()
+            })
+        } finally {
+            loggingIn.store(false)
+        }
 
         return response
     }
 
     @ExperimentalTime
-    suspend fun authorized(): Boolean {
+    suspend fun authorized(
+        aliveCheck: suspend () -> Boolean = { true },
+    ): Boolean {
         loggingIn.waitForChange(false)
         loggingIn.store(true)
 
         val command = loginCommand
         val startTime = Clock.System.now()
-        val result = executeDownloader(command, { Clock.System.now().minus(startTime) < 10.seconds })
+        val result = try {
+            executeDownloader(command, { Clock.System.now().minus(startTime) < 10.seconds && aliveCheck() }) {
+                yield()
+            }
+        } finally {
+            loggingIn.store(false)
+        }
 
-        loggingIn.store(false)
 
         return authorizedCheck(result)
     }

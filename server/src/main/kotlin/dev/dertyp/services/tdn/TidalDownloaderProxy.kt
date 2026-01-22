@@ -39,10 +39,11 @@ class TidalDownloaderProxy(
 
     @OptIn(ExperimentalTime::class)
     suspend fun authorized(
+        aliveCheck: suspend () -> Boolean = { true },
         service: TidalDownloadService = defaultService
     ): Boolean = when (service) {
-        TidalDownloadService.Tdn -> tdnService.authorized()
-        TidalDownloadService.Tiddl -> tiddlService.authorized()
+        TidalDownloadService.Tdn -> tdnService.authorized(aliveCheck)
+        TidalDownloadService.Tiddl -> tiddlService.authorized(aliveCheck)
     }
 
     suspend fun login(
@@ -60,6 +61,7 @@ class TidalDownloaderProxy(
             val tdnTokenJson = File(homeDir, ".config/tidal_dl_ng/token.json")
             tdnTokenJson.exists()
         }
+
         TidalDownloadService.Tiddl -> {
             val homeDir = System.getProperty("user.home")
             val tdnTokenJson = File(homeDir, ".tiddl/auth.json")

@@ -9,6 +9,7 @@ import io.ktor.http.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import io.ktor.util.logging.*
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.asFlow
@@ -53,9 +54,12 @@ fun Route.tdn() {
             call.response.header("X-Accel-Buffering", "no")
 
             call.respondBytesWriter(ContentType.Text.EventStream) {
+                val logger = KtorSimpleLogger("tdn/login")
                 tdnService.login(aliveCheck = { isClientConnected() }) {
+                    logger.info(it)
                     sendSafe(it)
                 }
+                logger.info("Login finished/cancelled")
             }
         }
 
