@@ -44,7 +44,9 @@ class DownloadRpcService(
     override suspend fun downloadQueue(): List<DownloadQueueEntry> = downloadService.downloadQueue(user)
     override suspend fun finishedDownloads(): List<FinishedDownloadQueueEntry> = downloadService.finishedDownloads(user)
     override suspend fun syncFavouritesAvailable(): Boolean = downloadService.syncFavouritesAvailable(call)
-    override suspend fun syncFavourites(): CompletableJob = downloadService.syncFavourites(call, true)
+    override suspend fun syncFavourites() {
+        downloadService.syncFavourites(call, true).invokeOnCompletion {}
+    }
     override suspend fun downloadTidalIds(ids: List<String>, type: Type) {
         downloadService.downloadTidalIds(
             call = call,
