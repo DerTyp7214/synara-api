@@ -71,7 +71,9 @@ class DownloadRpcService(
         tidalDownloadService.defaultService = service
     }
 
-    override suspend fun tidalDownloadAuthorized(): Boolean = tidalDownloadService.authorized()
+    override suspend fun tidalDownloadAuthorized(): Boolean =
+        tidalDownloadService.tokenFileExists() && tidalDownloadService.authorized()
+
     override fun tidalDownloadLogin() =
         flow { tidalDownloadService.login(aliveCheck = { true }, onLiveOutput = { emit(it) }) }
 

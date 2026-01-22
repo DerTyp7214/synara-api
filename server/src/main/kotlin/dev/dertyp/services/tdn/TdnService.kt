@@ -20,7 +20,7 @@ class TdnService(indexer: Indexer, storageService: StorageService) : BaseDownloa
     override val downloadCommand: MutableList<String> = mutableListOf("tdn", "dl")
     override val favDownloadCommand: MutableList<String> = mutableListOf("tdn", "dl_fav")
 
-    override fun authorizedCheck(result: ProcessExecutionResult) = result.fullOutput.contains("You are logged in")
+    override fun authorizedCheck(result: ProcessExecutionResult) = result.fullOutput.contains("You are logged in.")
 
     override suspend fun handleErrors(
         command: Collection<String>,
