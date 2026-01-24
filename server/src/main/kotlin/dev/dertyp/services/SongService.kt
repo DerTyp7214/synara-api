@@ -106,6 +106,8 @@ class SongRpcService(private val user: User, private val songService: SongServic
 
     override suspend fun getStreamSize(id: UUID): Long = songService.getStreamSize(id)
 
+    override fun allSongIds(explicit: Boolean): Flow<UUID> = songService.allSongIds(explicit)
+
     override fun likedSongIds(explicit: Boolean): Flow<UUID> = songService.likedSongIds(explicit, user.id)
 
     override fun songIdsByArtist(artistId: UUID): Flow<UUID> = songService.songIdsByArtist(artistId)
@@ -431,6 +433,22 @@ class SongService : Service() {
         val file = File(song.path)
         if (!file.exists()) return 0
         return file.length()
+    }
+
+    fun allSongIds(explicit: Boolean): Flow<UUID> = flow {
+        SongTable
+            .select(SongTable.id)
+            .let {
+                if (!explicit) it.where { SongTable.explicit eq false }
+                else it
+            }
+            .orderBy(SongTable.inserted, SortOrder.DESC)
+            .orderBy(SongTable.id, SortOrder.ASC)
+            .fetchBatchedResults(1000) { batch ->
+                batch.forEach {
+                    emit(it[SongTable.id].value)
+                }
+            }
     }
 
     fun likedSongIds(explicit: Boolean, userId: UUID): Flow<UUID> = flow {
