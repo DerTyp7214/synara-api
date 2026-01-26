@@ -524,7 +524,7 @@ class SongService : Service() {
             .orderBy(PlaylistSongTable.position, SortOrder.ASC)
             .fetchBatchedResults(1000) { batch ->
                 batch.forEach {
-                    emit(it[SongTable.id].value)
+                    emit(it[PlaylistSongTable.songId].value)
                 }
             }
     }
@@ -536,7 +536,7 @@ class SongService : Service() {
             .orderBy(UserPlaylistSongTable.addedAt, SortOrder.ASC)
             .fetchBatchedResults(1000) { batch ->
                 batch.forEach {
-                    emit(it[SongTable.id].value)
+                    emit(it[UserPlaylistSongTable.songId].value)
                 }
             }
     }
