@@ -110,6 +110,10 @@ class ImageCacheService(
         throw NotImplementedError("Not implemented for ImageCache")
     }
 
+    override suspend fun search(query: String, limit: Int): List<IMetadataService.Track> {
+        throw NotImplementedError("Not implemented for ImageCache")
+    }
+
     override suspend fun getAlbumIdByTrackId(trackId: String): String? {
         throw NotImplementedError("Not implemented for ImageCache")
     }

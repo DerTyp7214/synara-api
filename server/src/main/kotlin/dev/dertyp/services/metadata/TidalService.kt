@@ -161,6 +161,47 @@ class TidalService(
         return getArtistsByIds(searchResponse.included.map { it.id })
     }
 
+    override suspend fun search(query: String, limit: Int): List<IMetadataService.Track> {
+        val url = getUrl("searchResults") {
+            encodedPath += "/" + query.encodeURLParameter()
+
+            parameters {
+                append("include", "tracks")
+                append("countryCode", "US")
+            }
+        }
+
+        val response = makeRequest(url)
+
+        if (response.status == HttpStatusCode.TooManyRequests) {
+            delay(30.seconds)
+            return search(query, limit)
+        }
+
+        if (response.status != HttpStatusCode.OK) {
+            logger.info("Searching tracks for $query: $url")
+            logger.info(response.bodyAsText())
+
+            when (response.status) {
+                HttpStatusCode.BadRequest -> {
+                    logger.error("Searching tracks for $query failed")
+                    logger.error("Status: ${response.status}")
+                    return emptyList()
+                }
+
+                else -> {
+                    delay(30.seconds)
+                    return search(query, limit)
+                }
+            }
+        }
+
+        val searchResponse =
+            response.body<SearchResultsSingleResourceDataDocument<TracksAttributes, TracksRelationships>>()
+
+        return getTracksByIds(searchResponse.included.map { it.id })
+    }
+
     private suspend fun getImages(urlPath: String?): List<ArtworkFile> {
         if (urlPath == null) return emptyList()
 

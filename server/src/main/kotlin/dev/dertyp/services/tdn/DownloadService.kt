@@ -89,6 +89,15 @@ class DownloadRpcService(
     override suspend fun getAuthUrl(): String = syncService.buildAuthUrl(call)
 
     override suspend fun killAllChildProcesses() = killAll()
+
+    override suspend fun searchTidal(
+        query: String?,
+        title: String?,
+        artist: String?,
+        count: Int
+    ): List<TidalSong> {
+        return downloadService.searchTidal(call, query, title, artist, count)
+    }
 }
 
 @OptIn(ExperimentalAtomicApi::class)
@@ -463,6 +472,36 @@ class DownloadService(
             }
 
             logger.info("[${user.username}] Sync favourite songs cancelled.")
+        }
+    }
+
+    suspend fun searchTidal(
+        call: ApplicationCall,
+        query: String?,
+        title: String?,
+        artist: String?,
+        count: Int
+    ): List<TidalSong> {
+        val metadataService = call.getMetadataProvider(MetadataService.Companion.MetadataType.tidal)
+            ?: throw IllegalStateException("Tidal metadata service not available")
+
+        val searchResults = if (query != null) {
+            metadataService.search(query, count)
+        } else if (title != null && artist != null) {
+            metadataService.search("$title - $artist", count)
+        } else if (title != null) {
+            metadataService.search(title, count)
+        } else {
+            emptyList()
+        }
+
+        return searchResults.map {
+            TidalSong(
+                id = it.id,
+                title = it.title,
+                artists = it.artists,
+                cover = it.images.associate { image -> image.width to image.url },
+            )
         }
     }
 }

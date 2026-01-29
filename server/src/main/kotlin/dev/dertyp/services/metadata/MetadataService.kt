@@ -30,6 +30,7 @@ abstract class MetadataService(
 
     protected abstract fun HttpRequestBuilder.getAccessTokenHeader(clientId: String, clientSecret: String)
     abstract suspend fun searchArtists(query: String, limit: Int = 50): List<IMetadataService.Artist>
+    abstract suspend fun search(query: String, limit: Int = 50): List<IMetadataService.Track>
     abstract suspend fun getAlbumIdByTrackId(trackId: String): String?
     abstract suspend fun getImageUrlByAlbumId(albumId: String): List<IMetadataService.Image>
     abstract suspend fun getImageUrlsByAlbumIds(albumIds: List<String>): Map<String, List<IMetadataService.Image>>
