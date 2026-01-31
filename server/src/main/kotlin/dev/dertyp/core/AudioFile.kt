@@ -3,8 +3,13 @@ package dev.dertyp.core
 import org.jaudiotagger.audio.AudioFile
 import org.jaudiotagger.tag.FieldKey
 
+enum class ArtistDelimiter(val delimiter: String) {
+    Tdn(";"),
+    Tiddle(",")
+}
+
 fun artistSplitter(input: String): List<String> = when {
-    else -> input.split(";")
+    else -> input.split(ArtistDelimiter.Tiddle.delimiter)
 }.map { it.replace("\\p{Cf}".toRegex(), "").trim() }.filter { it.length > 1 }
 
 val AudioFile.title: String?
