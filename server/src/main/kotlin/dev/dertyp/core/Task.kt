@@ -4,8 +4,8 @@ import dev.dertyp.services.schedule.CronPresets
 import dev.dertyp.services.schedule.ScheduledTask
 import org.jetbrains.annotations.Range
 import org.koin.core.component.KoinComponent
-import services.schedule.CronTrigger
-import services.schedule.ScheduleTrigger
+import dev.dertyp.services.schedule.CronTrigger
+import dev.dertyp.services.schedule.ScheduleTrigger
 import java.time.Duration
 import java.time.Instant
 import kotlin.time.Duration as KDuration

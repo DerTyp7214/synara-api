@@ -10,7 +10,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.time.withTimeoutOrNull
 import org.jetbrains.annotations.Range
-import services.schedule.*
 import java.time.Duration
 import java.time.Instant
 import java.util.*
@@ -25,7 +24,7 @@ object CronPresets {
         hour: @Range(from = 0, to = 23) Int,
         minute: @Range(from = 0, to = 59) Int = 0
     ): CronTrigger {
-        return create("0 $minute $hour * * *")
+        return create("$minute $hour * * *")
     }
 
     fun weeklyOn(
@@ -34,11 +33,11 @@ object CronPresets {
         minute: @Range(from = 0, to = 59) Int = 0
     ): CronTrigger {
         require(dayOfWeek in 1..7)
-        return create("0 $minute $hour * * $dayOfWeek")
+        return create("$minute $hour * * $dayOfWeek")
     }
 
     fun hourlyAt(minute: @Range(from = 0, to = 59) Int = 0): CronTrigger {
-        return create("0 $minute * * * *")
+        return create("$minute * * * *")
     }
 
     private fun create(expression: String): CronTrigger {

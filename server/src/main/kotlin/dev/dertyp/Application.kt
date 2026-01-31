@@ -7,7 +7,9 @@ import dev.dertyp.plugins.RedisCacheProvider
 import dev.dertyp.serializers.OffsetDateTimeAdapter
 import dev.dertyp.server.BuildConfig
 import dev.dertyp.services.*
+import dev.dertyp.services.schedule.CronPresets
 import dev.dertyp.services.schedule.ScheduleService
+import dev.dertyp.services.schedule.ScheduledTask
 import dev.dertyp.services.tdn.DownloadService
 import dev.dertyp.services.tdn.TdnService
 import dev.dertyp.services.tdn.TidalDownloaderProxy
@@ -79,6 +81,7 @@ fun Application.module() {
             singleOf(::UserPlaylistService)
             singleOf(::RefreshTokenService)
             singleOf(::TidalDownloaderProxy)
+            singleOf(::SessionService)
 
             single<Gson> {
                 GsonBuilder()
@@ -100,8 +103,18 @@ fun Application.module() {
 
     get<DatabaseManager>().init()
 
+    val scheduleService = get<ScheduleService>()
+    val sessionService = get<SessionService>()
+
+    scheduleService.schedule(
+        ScheduledTask(
+            trigger = CronPresets.dailyAt(0, 0),
+            task = { sessionService.cleanupOldSessions() }
+        )
+    )
+
     CoroutineScope(Dispatchers.IO).launch {
-        get<ScheduleService>().startService()
+        scheduleService.startService()
     }
 
     configureHTTP()

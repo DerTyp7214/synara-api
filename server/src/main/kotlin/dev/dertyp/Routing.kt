@@ -73,13 +73,14 @@ fun Application.configureRouting() {
         val serverStatsService by inject<ServerStatsService>()
         val userPlaylistService by inject<UserPlaylistService>()
         val tidalDownloaderProxy by inject<TidalDownloaderProxy>()
+        val sessionService by inject<SessionService>()
 
         rpc("/rpc") {
             registerService<IServerStatsService> { serverStatsService.withLogging<IServerStatsService>() }
         }
 
         rpc("/rpc/auth") {
-            registerService<IAuthService> { authService.withLogging<IAuthService>() }
+            registerService<IAuthService> { RpcAuthService(call, authService, sessionService, jwtService).withLogging<IAuthService>() }
         }
 
         jwtService.authenticated(this) {
@@ -97,6 +98,7 @@ fun Application.configureRouting() {
                 registerService<IDownloadService> { DownloadRpcService(user, call, downloadService, tidalDownloaderProxy).withLogging<IDownloadService>() }
                 registerService<IPlaylistService> { playlistService.withLogging<IPlaylistService>() }
                 registerService<IUserPlaylistService> { userPlaylistService.withLogging<IUserPlaylistService>() }
+                registerService<ISessionService> { RpcSessionService(user, sessionService).withLogging<ISessionService>() }
             }
         }
 

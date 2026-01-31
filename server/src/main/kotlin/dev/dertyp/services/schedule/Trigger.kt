@@ -1,4 +1,4 @@
-package services.schedule
+package dev.dertyp.services.schedule
 
 import com.cronutils.model.CronType
 import com.cronutils.model.definition.CronDefinitionBuilder

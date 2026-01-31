@@ -2,7 +2,7 @@ type: http_request
 model: http_request
 id: rq_S5odwLAmbh
 createdAt: 2025-10-14T19:25:16.449204681
-updatedAt: 2025-12-21T00:53:11.008540202
+updatedAt: 2026-01-31T16:02:57.440612050
 workspaceId: wk_9dbKacQT4H
 folderId: null
 authentication: {}
@@ -10,7 +10,7 @@ authenticationType: null
 body:
   text: |-
     {
-      "refreshToken": "<string>"
+      "refreshToken": "OV7GBiWfzm4-kalB9MojmzNZrxjkSnAAmMxjUanBh5CnlCegn87-gz4VlRvR9zQuhsGGvrIKxUtSX-x3lleFI616wHg51NuLU4eqT07iZYdfGZf4tvqaGxvq63Aq7XzyLUjk5S3s2jYObaBUQxicohewShzg18GA8lHwZ2rncEL7XpMr3iOH3HS-eK-j5OixVAwrRsQH965ts4LTCdfB0uuCvNXHWQCcLfQyDqCclbyngygZQuqcnEK-d20qA0u"
     }
 bodyType: application/json
 description: '[object Object]'

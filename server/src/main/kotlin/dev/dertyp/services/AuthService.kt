@@ -2,13 +2,15 @@ package dev.dertyp.services
 
 import at.favre.lib.crypto.bcrypt.BCrypt
 import dev.dertyp.data.AuthenticationResponse
+import dev.dertyp.data.User
 
 class AuthService(
     private val userService: UserService,
     private val jwtService: JwtService,
     private val refreshTokenService: RefreshTokenService
-) : IAuthService, Service() {
-    override suspend fun authenticate(username: String, password: String): AuthenticationResponse {
+) : Service() {
+
+    suspend fun validateUser(username: String, password: String): User {
         val user = userService.findUserByUsername(username)
             ?: throw IllegalArgumentException("Invalid username or password")
 
@@ -19,19 +21,19 @@ class AuthService(
         if (!passwordMatches.verified) {
             throw IllegalArgumentException("Invalid username or password")
         }
-
-        return jwtService.generateToken(user)
-            ?: throw IllegalStateException("Something went wrong inserting the refresh token.")
+        return user
     }
 
-    override suspend fun refreshToken(refreshToken: String): AuthenticationResponse {
+    suspend fun refreshToken(refreshToken: String): AuthenticationResponse {
         val dbToken = refreshTokenService.validByTokenHash(refreshToken)
             ?: throw IllegalArgumentException("Invalid refresh token")
 
         val user = userService.findUserById(dbToken.userId)
             ?: throw IllegalArgumentException("Invalid user")
 
-        return jwtService.generateToken(user)
+        val sessionId = refreshTokenService.getSessionId(refreshToken)
+
+        return jwtService.generateToken(user, sessionId)
             ?: throw IllegalStateException("Something went wrong inserting the refresh token.")
     }
 }

@@ -1,0 +1,18 @@
+type: http_request
+model: http_request
+id: rq_F6tfu65fFo
+createdAt: 2026-01-31T15:46:12.639546084
+updatedAt: 2026-01-31T15:46:21.070475917
+workspaceId: wk_9dbKacQT4H
+folderId: null
+authentication: {}
+authenticationType: null
+body: {}
+bodyType: null
+description: '[object Object]'
+headers: []
+method: GET
+name: /sessions
+sortPriority: 3000.001
+url: ${[baseUrl]}/sessions
+urlParameters: []

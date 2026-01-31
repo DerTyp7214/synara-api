@@ -52,6 +52,14 @@ class RefreshTokenService : Service() {
         orderBy(RefreshTokenTable.expiresAt, SortOrder.DESC)
     }.firstOrNull()
 
+    suspend fun getSessionId(tokenHash: String): UUID? = dbQuery {
+        RefreshTokenTable.select(RefreshTokenTable.sessionId)
+            .where { RefreshTokenTable.tokenHash eq tokenHash }
+            .singleOrNull()
+            ?.get(RefreshTokenTable.sessionId)
+            ?.value
+    }
+
     suspend fun invalidateToken(userId: UUID, tokenHash: String) = dbQuery {
         val op = (RefreshTokenTable.userId eq userId)
             .and { RefreshTokenTable.tokenHash eq tokenHash }
@@ -59,15 +67,16 @@ class RefreshTokenService : Service() {
         RefreshTokenTable.deleteWhere { op }
     }
 
-    suspend fun createToken(userId: UUID, expirationMillis: Duration, tokenHash: String): RefreshToken? = dbQuery {
+    suspend fun createToken(userId: UUID, expirationMillis: Duration, tokenHash: String, sessionId: UUID?): RefreshToken? = dbQuery {
         val expirationDate = Instant.now().toEpochMilli().date + expirationMillis
 
-        RefreshTokenTable.batchInsert(listOf(Triple(userId, expirationDate, tokenHash))) {
-            this[RefreshTokenTable.userId] = it.first
-            this[RefreshTokenTable.expiresAt] = it.second.time
-            this[RefreshTokenTable.tokenHash] = it.third
-        }.map(::map)
-    }.singleOrNull()
+        RefreshTokenTable.insert {
+            it[RefreshTokenTable.userId] = userId
+            it[RefreshTokenTable.expiresAt] = expirationDate.time
+            it[RefreshTokenTable.tokenHash] = tokenHash
+            it[RefreshTokenTable.sessionId] = sessionId
+        }.resultedValues?.singleOrNull()?.let(::map)
+    }
 
     private suspend fun queryRefreshToken(query: Query.() -> Query = { this }): List<RefreshToken> {
         return dbQuery {
