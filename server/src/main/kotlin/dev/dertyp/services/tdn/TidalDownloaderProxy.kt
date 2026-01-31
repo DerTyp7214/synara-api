@@ -8,7 +8,7 @@ class TidalDownloaderProxy(
     private val tdnService: TdnService,
     private val tiddlService: TiddlService
 ) : Service() {
-    var defaultService: TidalDownloadService = TidalDownloadService.Tdn
+    var defaultService: TidalDownloadService = TidalDownloadService.Tiddl
 
     suspend fun downloadContent(
         urls: List<String>,

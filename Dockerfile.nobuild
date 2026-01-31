@@ -31,7 +31,7 @@ RUN chown -R appuser:appgroup /home/appuser
 
 ARG DAY_MONTH_YEAR=unknown
 
-RUN python3 -m pip install --break-system-packages --no-cache-dir tidal-dl-ng syncedlyrics tiddl
+RUN python3 -m pip install --break-system-packages --no-cache-dir syncedlyrics tiddl #  tidal-dl-ng
 
 COPY --chown=appuser:appuser docker/tiddl/config.toml /home/appuser/.tiddl/config.toml
 COPY --chown=appuser:appuser docker/tdn-config/settings.json /home/appuser/.config/tidal_dl_ng/settings.json
