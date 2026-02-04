@@ -1,0 +1,31 @@
+type: http_request
+model: http_request
+id: rq_playbackSet01
+createdAt: 2026-02-04T12:00:00
+updatedAt: 2026-02-04T16:00:56.614904657
+workspaceId: wk_9dbKacQT4H
+folderId: fl_playback001
+authentication: {}
+authenticationType: null
+body:
+  text: |-
+    {
+      "queue": [],
+      "currentIndex": 0,
+      "isPlaying": true,
+      "positionMs": 1000,
+      "shuffleMode": false,
+      "repeatMode": "OFF"
+    }
+bodyType: application/json
+description: ''
+headers:
+- enabled: true
+  name: Content-Type
+  value: application/json
+  id: null
+method: POST
+name: Set Playback State
+sortPriority: 2.0
+url: ${[baseUrl]}/playback/:sessionId
+urlParameters: []

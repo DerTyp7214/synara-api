@@ -1,0 +1,18 @@
+type: http_request
+model: http_request
+id: rq_playbackGet01
+createdAt: 2026-02-04T12:00:00
+updatedAt: 2026-02-04T16:00:48.068020296
+workspaceId: wk_9dbKacQT4H
+folderId: fl_playback001
+authentication: {}
+authenticationType: null
+body: {}
+bodyType: null
+description: ''
+headers: []
+method: GET
+name: Get Playback State
+sortPriority: 1.0
+url: ${[baseUrl]}/playback/:sessionId
+urlParameters: []
