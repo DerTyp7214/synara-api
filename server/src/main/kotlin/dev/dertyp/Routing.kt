@@ -74,6 +74,7 @@ fun Application.configureRouting() {
         val userPlaylistService by inject<UserPlaylistService>()
         val tidalDownloaderProxy by inject<TidalDownloaderProxy>()
         val sessionService by inject<SessionService>()
+        val playbackService by inject<PlaybackService>()
 
         rpc("/rpc") {
             registerService<IServerStatsService> { serverStatsService.withLogging<IServerStatsService>() }
@@ -99,6 +100,7 @@ fun Application.configureRouting() {
                 registerService<IPlaylistService> { playlistService.withLogging<IPlaylistService>() }
                 registerService<IUserPlaylistService> { userPlaylistService.withLogging<IUserPlaylistService>() }
                 registerService<ISessionService> { RpcSessionService(user, sessionService).withLogging<ISessionService>() }
+                registerService<IPlaybackService> { RpcPlaybackService(playbackService).withLogging<IPlaybackService>() }
             }
         }
 
