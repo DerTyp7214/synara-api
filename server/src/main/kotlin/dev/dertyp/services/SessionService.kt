@@ -61,7 +61,7 @@ class SessionService : Service() {
 
     private fun mapSession(row: ResultRow): Session {
         return Session(
-            id = row[SessionTable.id].value.toString(),
+            id = row[SessionTable.id].value,
             userAgent = row[SessionTable.userAgent],
             ipAddress = row[SessionTable.ipAddress],
             lastActive = row[SessionTable.lastActive],
