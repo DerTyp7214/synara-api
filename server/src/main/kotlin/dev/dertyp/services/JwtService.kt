@@ -3,12 +3,10 @@ package dev.dertyp.services
 import at.favre.lib.crypto.bcrypt.BCrypt
 import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
-import dev.dertyp.core.authHeader
-import dev.dertyp.core.date
-import dev.dertyp.core.getUser
-import dev.dertyp.core.plus
+import dev.dertyp.core.*
 import dev.dertyp.data.*
 import io.github.smiley4.ktoropenapi.config.descriptors.ValueExampleDescriptor
+import io.github.smiley4.ktoropenapi.delete
 import io.github.smiley4.ktoropenapi.get
 import io.github.smiley4.ktoropenapi.post
 import io.github.smiley4.ktoropenapi.route
@@ -195,7 +193,6 @@ class JwtService(
                     }
                 }
             }) {
-
                 val user = call.getUser() ?: return@get call.respond(HttpStatusCode.Unauthorized, "Invalid user")
 
                 call.respond(HttpStatusCode.OK, UserInfo.fromUser(user))
@@ -210,6 +207,24 @@ class JwtService(
                 val user = call.getUser() ?: return@get call.respond(HttpStatusCode.Unauthorized, "Invalid user")
                 val sessions = sessionService.getSessions(user.id)
                 call.respond(HttpStatusCode.OK, sessions)
+            }
+            delete("/sessions/{sessionId}", {
+                request {
+                    pathParameter<String>("sessionId") {
+                        description = "The session id to deactivate."
+                    }
+                }
+                response {
+                    HttpStatusCode.OK to {
+                        description = "Session deactivated."
+                    }
+                }
+            }) {
+                val user = call.getUser() ?: return@delete call.respond(HttpStatusCode.Unauthorized, "Invalid user")
+                val sessionId = call.parameters["sessionId"]?.toUUIDOrNull() ?: return@delete call.respond(HttpStatusCode.BadRequest)
+
+                sessionService.deactivateSession(sessionId, user.id)
+                call.respond(HttpStatusCode.OK)
             }
         }
     }

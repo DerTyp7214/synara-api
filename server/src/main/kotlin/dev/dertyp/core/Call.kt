@@ -17,7 +17,7 @@ import java.util.*
 fun ApplicationCall.getUsername(): String = principal<JWTPrincipal>()?.get("usr")!!
 fun ApplicationCall.getSessionId(): UUID? = principal<JWTPrincipal>()?.get("ses")?.let { UUID.fromString(it) }
 
-suspend fun ApplicationCall.getUser(): User? {
+suspend fun ApplicationCall.getUser(): User? = try {
     val user = get<UserService>().findUserByUsername(getUsername())
     val sessionId = getSessionId()
 
@@ -28,7 +28,9 @@ suspend fun ApplicationCall.getUser(): User? {
         }
     }
 
-    return user
+    user
+} catch (_: Throwable) {
+    null
 }
 
 fun ApplicationCall.getMetadataProvider(providerType: MetadataService.Companion.MetadataType? = null): MetadataService? {

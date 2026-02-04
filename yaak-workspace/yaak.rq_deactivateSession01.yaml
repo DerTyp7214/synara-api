@@ -1,0 +1,18 @@
+type: http_request
+model: http_request
+id: rq_deactivateSession01
+createdAt: 2026-02-04T12:00:00
+updatedAt: 2026-02-04T16:23:51.296754874
+workspaceId: wk_9dbKacQT4H
+folderId: fl_sessions001
+authentication: {}
+authenticationType: null
+body: {}
+bodyType: null
+description: ''
+headers: []
+method: DELETE
+name: Deactivate Session
+sortPriority: 2.0
+url: ${[baseUrl]}/sessions/:sessionId
+urlParameters: []

@@ -1,0 +1,18 @@
+type: http_request
+model: http_request
+id: rq_getSessions01
+createdAt: 2026-02-04T12:00:00.000
+updatedAt: 2026-02-04T12:00:00.000
+workspaceId: wk_9dbKacQT4H
+folderId: fl_sessions001
+authentication: {}
+authenticationType: null
+body: {}
+bodyType: null
+description: ''
+headers: []
+method: GET
+name: Get Sessions
+sortPriority: 1.0
+url: ${[baseUrl]}/sessions
+urlParameters: []
