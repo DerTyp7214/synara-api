@@ -22,11 +22,13 @@ import io.ktor.server.plugins.statuspages.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.ktor.server.sse.*
+import io.ktor.server.websocket.*
 import kotlinx.rpc.krpc.ktor.server.Krpc
 import kotlinx.rpc.krpc.ktor.server.rpc
 import kotlinx.rpc.krpc.serialization.cbor.cbor
 import kotlinx.serialization.ExperimentalSerializationApi
 import org.koin.ktor.ext.inject
+import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
 
 @OptIn(ExperimentalSerializationApi::class, ExperimentalTime::class)
@@ -36,6 +38,12 @@ fun Application.configureRouting() {
         protobuf()
     }
     install(SSE)
+    install(WebSockets) {
+        pingPeriod = 15.seconds
+        timeout = 15.seconds
+        maxFrameSize = Long.MAX_VALUE
+        masking = false
+    }
     install(Krpc) {
         serialization {
             cbor(ApplicationScope.cbor)
