@@ -3,10 +3,7 @@ package dev.dertyp.services
 import dev.dertyp.data.Session
 import dev.dertyp.db.SessionTable
 import dev.dertyp.dbQuery
-import org.jetbrains.exposed.v1.core.ResultRow
-import org.jetbrains.exposed.v1.core.and
-import org.jetbrains.exposed.v1.core.eq
-import org.jetbrains.exposed.v1.core.less
+import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.selectAll
@@ -58,7 +55,7 @@ class SessionService : Service() {
     suspend fun cleanupOldSessions() = dbQuery {
         val oneMonthAgo = Instant.now().minusMillis(30.days.inWholeMilliseconds).toEpochMilli()
         SessionTable.deleteWhere {
-            lastActive less oneMonthAgo
+            (lastActive less oneMonthAgo) or (isActive eq false)
         }
     }
 
