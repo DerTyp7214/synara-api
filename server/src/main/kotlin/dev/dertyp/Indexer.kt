@@ -9,6 +9,7 @@ import dev.dertyp.services.ImageService
 import dev.dertyp.services.PlaylistService
 import dev.dertyp.services.SongService
 import dev.dertyp.services.StorageService
+import dev.dertyp.services.metadata.MetadataService
 import io.ktor.server.application.*
 import io.ktor.util.logging.*
 import kotlinx.coroutines.*
@@ -57,7 +58,7 @@ class RpcIndexer(private val indexer: Indexer) : IIndexer {
 }
 
 class Indexer(
-    environment: ApplicationEnvironment,
+    private val environment: ApplicationEnvironment,
     private val songService: SongService,
     private val imageService: ImageService,
     private val storageService: StorageService,
@@ -256,6 +257,11 @@ class Indexer(
             val map = ConcurrentHashMap<InsertableAlbum, MutableList<AudioFile>>()
             val images = ConcurrentHashMap<String, InsertableImage>()
 
+            val tidalService = MetadataService.getMetadataService(
+                MetadataService.Companion.MetadataType.tidal,
+                environment
+            )
+
             files.filter { it.extension == audioExtension }.map { file ->
                 async(Dispatchers.IO) {
                     semaphore.withPermit {
@@ -308,7 +314,43 @@ class Indexer(
                 }
             }.awaitAll()
 
-            Pair(images.toMap(), map.mapValues { (_, list) -> list.toList() }.toMap())
+            val albumsToUpdate = map.keys.filter {
+                it.originalId != null && (it.songCount == 0 || it.releaseDate == null)
+            }.mapNotNull { it.originalId }.distinct()
+
+            val tidalAlbums = if (albumsToUpdate.isNotEmpty()) {
+                try {
+                    tidalService.getAlbumsByIds(albumsToUpdate).associateBy { it.id }
+                } catch (e: Exception) {
+                    emptyMap()
+                }
+            } else {
+                emptyMap()
+            }
+
+            val albums = map.entries.asSequence()
+                .map { (album, list) ->
+                    var finalAlbum = album
+
+                    if (finalAlbum.originalId != null && (finalAlbum.songCount == 0 || finalAlbum.releaseDate == null)) {
+                        tidalAlbums[finalAlbum.originalId]?.let { tidalAlbum ->
+                            finalAlbum = finalAlbum.copy(
+                                songCount = if (finalAlbum.songCount == 0) tidalAlbum.trackCount else finalAlbum.songCount,
+                                releaseDate = finalAlbum.releaseDate ?: tidalAlbum.releaseDate
+                            )
+                        }
+                    }
+
+                    if (finalAlbum.songCount == 0) {
+                        finalAlbum = finalAlbum.copy(songCount = list.size)
+                    }
+
+                    finalAlbum to list
+                }
+                .groupBy({ it.first }, { it.second })
+                .mapValues { (_, lists) -> lists.flatten() }
+
+            Pair(images.toMap(), albums)
         }
 
     private fun insertableSongFromFile(

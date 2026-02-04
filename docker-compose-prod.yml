@@ -17,6 +17,7 @@ services:
       - REDIS_PORT=6379
     volumes:
       - /home/typ/Music:/data
+      - tiddl:/home/appuser/.tiddl
       - config:/home/appuser/.config
     depends_on:
       db:
@@ -51,6 +52,7 @@ services:
     restart: unless-stopped
 
 volumes:
+  tiddl:
   config:
   postgres:
   redis_data:
