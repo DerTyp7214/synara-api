@@ -408,7 +408,7 @@ class Indexer(
             album = album,
             duration = duration,
             explicit = audioFile.file.nameWithoutExtension.endsWith("(Explicit)") || title.endsWith("\uD83C\uDD74"),
-            releaseDate = releaseDate,
+            releaseDate = releaseDate ?: album.releaseDate,
             lyrics = lyrics,
             path = audioFile.file.absolutePath,
             originalUrl = url,
