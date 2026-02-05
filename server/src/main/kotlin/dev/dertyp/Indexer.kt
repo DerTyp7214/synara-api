@@ -57,6 +57,7 @@ class RpcIndexer(private val indexer: Indexer) : IIndexer {
     }
 }
 
+@Suppress("unused")
 class Indexer(
     private val environment: ApplicationEnvironment,
     private val songService: SongService,
@@ -321,7 +322,7 @@ class Indexer(
             val tidalAlbums = if (albumsToUpdate.isNotEmpty()) {
                 try {
                     tidalService.getAlbumsByIds(albumsToUpdate).associateBy { it.id }
-                } catch (e: Exception) {
+                } catch (_: Exception) {
                     emptyMap()
                 }
             } else {
