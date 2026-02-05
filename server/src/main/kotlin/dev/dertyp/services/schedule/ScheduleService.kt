@@ -82,6 +82,7 @@ class ScheduleService : Service() {
 
                     if (waitTime <= Duration.ZERO) {
                         val scheduledTask = schedules.poll() ?: continue
+                        logger.info("Executing task: ${scheduledTask.id}")
                         launch {
                             try {
                                 scheduledTask.task(this@ScheduleService)
@@ -89,6 +90,7 @@ class ScheduleService : Service() {
                                 logger.error("Error executing scheduled task", e)
 
                                 if (!scheduledTask.trigger.doesRepeat()) {
+                                    logger.info("Rescheduling failed task: ${scheduledTask.id}")
                                     val nextTrigger = ScheduleTrigger(
                                         scheduledTime = Instant.now() + 10.minutes
                                     )
@@ -98,6 +100,7 @@ class ScheduleService : Service() {
                         }
 
                         if (scheduledTask.trigger.doesRepeat()) {
+                            logger.info("Rescheduling repeating task: ${scheduledTask.id}")
                             val updateTrigger = scheduledTask.trigger.updateForNextRun()
                             schedule(scheduledTask.copy(trigger = updateTrigger))
                         }
@@ -115,11 +118,13 @@ class ScheduleService : Service() {
     }
 
     override suspend fun stopService() {
+        logger.info("Stopping service requested")
         stopped.store(true)
         queueUpdateNotifier.tryEmit(Unit)
     }
 
     fun schedule(task: ScheduledTask) {
+        logger.info("Scheduling task: ${task.id} with trigger: ${task.trigger}")
         schedules.add(task)
         queueUpdateNotifier.tryEmit(Unit)
     }
@@ -134,6 +139,7 @@ class ScheduleService : Service() {
     }
 
     fun fireEvent(id: UUID) {
+        logger.info("Firing event for task: $id")
         val scheduledTask = schedules.find { it.id == id } ?: return
         val trigger = scheduledTask.trigger
 
@@ -144,17 +150,21 @@ class ScheduleService : Service() {
     }
 
     fun unscheduleTask(id: UUID) {
+        logger.info("Unscheduling task: $id")
         val task = schedules.find { it.id == id }
         if (task != null) {
             schedules.remove(task)
             eventRegistry.values.forEach { it.remove(task.trigger) }
             queueUpdateNotifier.tryEmit(Unit)
+        } else {
+            logger.warn("Task with id $id not found for unscheduling")
         }
     }
 
     fun getScheduledTasks() = schedules.sorted()
 
     fun register(key: String, task: Task): ScheduledTask {
+        logger.info("Registering task for key: $key")
         val trigger = CustomTrigger(true)
 
         eventRegistry.getOrPut(key) { mutableSetOf() }.add(trigger)
@@ -165,6 +175,7 @@ class ScheduleService : Service() {
     }
 
     fun signal(key: String) {
+        logger.info("Signaling key: $key")
         val triggers = eventRegistry[key] ?: return
 
         schedules
