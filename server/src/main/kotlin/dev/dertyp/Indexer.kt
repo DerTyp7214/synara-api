@@ -279,7 +279,7 @@ class Indexer(
                             }
 
                             val name = audioFile.album ?: audioFile.title
-                            val artists = audioFile.albumArtists.ifEmpty { audioFile.artists }
+                            val artists = audioFile.albumArtists.ifEmpty { audioFile.artists }.sorted()
                             val songCount = audioFile.songCount ?: 0
                             val year = audioFile.year
 
@@ -347,8 +347,23 @@ class Indexer(
 
                     finalAlbum to list
                 }
-                .groupBy({ it.first }, { it.second })
-                .mapValues { (_, lists) -> lists.flatten() }
+                .groupBy { (album, _) ->
+                    listOf(
+                        album.name,
+                        album.artists.sorted().joinToString(", "),
+                        album.releaseDate,
+                        album.songCount
+                    )
+                }
+                .mapValues { (_, lists) ->
+                    val mergedAlbum = lists.first().first.copy(
+                        coverHash = lists.firstNotNullOfOrNull { it.first.coverHash },
+                        originalId = lists.firstNotNullOfOrNull { it.first.originalId }
+                    )
+                    mergedAlbum to lists.flatMap { it.second }
+                }
+                .values
+                .associate { it }
 
             Pair(images.toMap(), albums)
         }
