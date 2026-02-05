@@ -4,6 +4,8 @@ import com.google.gson.Gson
 import com.google.gson.GsonBuilder
 import dev.dertyp.plugins.JmDNSPlugin
 import dev.dertyp.plugins.RedisCacheProvider
+import dev.dertyp.serializers.DurationAdapter
+import dev.dertyp.serializers.LocalDateAdapter
 import dev.dertyp.serializers.OffsetDateTimeAdapter
 import dev.dertyp.server.BuildConfig
 import dev.dertyp.services.*
@@ -24,7 +26,9 @@ import org.koin.dsl.module
 import org.koin.ktor.ext.get
 import org.koin.ktor.plugin.Koin
 import org.koin.logger.slf4jLogger
+import java.time.LocalDate
 import java.time.OffsetDateTime
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.days
 
 fun main(args: Array<String>) {
@@ -87,6 +91,8 @@ fun Application.module() {
             single<Gson> {
                 GsonBuilder()
                     .registerTypeAdapter(OffsetDateTime::class.java, OffsetDateTimeAdapter())
+                    .registerTypeAdapter(LocalDate::class.java, LocalDateAdapter())
+                    .registerTypeAdapter(Duration::class.java, DurationAdapter())
                     .create()
             }
 
