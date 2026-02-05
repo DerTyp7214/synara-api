@@ -1,6 +1,8 @@
 package dev.dertyp.services
 
 import dev.dertyp.data.AuthenticationResponse
+import dev.dertyp.utils.LogMode
+import dev.dertyp.utils.LogParam
 import io.ktor.server.application.*
 import io.ktor.server.plugins.*
 
@@ -10,7 +12,10 @@ class RpcAuthService(
     private val sessionService: SessionService,
     private val jwtService: JwtService
 ) : IAuthService {
-    override suspend fun authenticate(username: String, password: String): AuthenticationResponse {
+    override suspend fun authenticate(
+        username: String,
+        @LogParam(mode = LogMode.MASK) password: String
+    ): AuthenticationResponse {
         val user = authService.validateUser(username, password)
 
         val sessionId = sessionService.createSession(

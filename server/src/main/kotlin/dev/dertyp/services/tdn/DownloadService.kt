@@ -10,6 +10,7 @@ import dev.dertyp.services.Service
 import dev.dertyp.services.SongService
 import dev.dertyp.services.metadata.MetadataService
 import dev.dertyp.services.sync.SyncService
+import dev.dertyp.utils.LogParam
 import io.ktor.server.application.*
 import io.ktor.server.engine.*
 import io.ktor.utils.io.*
@@ -49,7 +50,7 @@ class DownloadRpcService(
         downloadService.syncFavourites(call, true).invokeOnCompletion {}
     }
 
-    override suspend fun downloadTidalIds(ids: List<String>, type: Type) {
+    override suspend fun downloadTidalIds(@LogParam("size") ids: List<String>, type: Type) {
         downloadService.downloadTidalIds(
             call = call,
             ids = ids.asFlow(),

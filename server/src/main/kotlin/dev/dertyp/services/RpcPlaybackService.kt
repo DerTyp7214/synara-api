@@ -1,6 +1,7 @@
 package dev.dertyp.services
 
 import dev.dertyp.data.PlaybackState
+import dev.dertyp.utils.LogParam
 import kotlinx.coroutines.flow.Flow
 import java.util.*
 
@@ -11,7 +12,10 @@ class RpcPlaybackService(
         return playbackService.getPlaybackState(sessionId)
     }
 
-    override suspend fun setPlaybackState(sessionId: UUID, state: PlaybackState): Boolean {
+    override suspend fun setPlaybackState(
+        sessionId: UUID,
+        @LogParam("sourceId") state: PlaybackState
+    ): Boolean {
         return playbackService.setPlaybackState(sessionId, state)
     }
 

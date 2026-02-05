@@ -13,6 +13,7 @@ import dev.dertyp.services.AlbumService.Companion.calculateAlbumStats
 import dev.dertyp.services.AlbumService.Companion.mapAlbum
 import dev.dertyp.services.ArtistService.Companion.mapArtist
 import dev.dertyp.services.metadata.IMetadataService
+import dev.dertyp.utils.LogParam
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -37,12 +38,13 @@ class SongRpcService(private val user: User, private val songService: SongServic
         addedAt: Instant?
     ): UserSong? = songService.setLiked(id, user.id, liked, addedAt)
 
-    override suspend fun setLyrics(id: UUID, lyrics: List<String>): UserSong? =
+    override suspend fun setLyrics(id: UUID, @LogParam("size") lyrics: List<String>): UserSong? =
         songService.setLyrics(id, user.id, lyrics)
 
     override suspend fun byId(id: UUID): UserSong? = songService.byId(id, user.id)
 
-    override suspend fun byIds(ids: Collection<UUID>): PaginatedResponse<UserSong> = songService.byIds(ids, user.id)
+    override suspend fun byIds(@LogParam("size") ids: Collection<UUID>): PaginatedResponse<UserSong> =
+        songService.byIds(ids, user.id)
 
     override suspend fun byTitle(
         page: Int,
@@ -74,10 +76,10 @@ class SongRpcService(private val user: User, private val songService: SongServic
         playlistId: UUID
     ): PaginatedResponse<UserSong> = songService.byUserPlaylist(page, pageSize, playlistId, user.id)
 
-    override suspend fun byTidalTrackIds(ids: Collection<String>): List<UserSong> =
+    override suspend fun byTidalTrackIds(@LogParam("size") ids: Collection<String>): List<UserSong> =
         songService.byTidalTrackIds(ids, user.id)
 
-    override suspend fun byTidalTracks(tracks: Collection<IMetadataService.Track>): List<UserSong> =
+    override suspend fun byTidalTracks(@LogParam("size") tracks: Collection<IMetadataService.Track>): List<UserSong> =
         songService.byTidalTracks(tracks, user.id)
 
     override suspend fun likedSongs(
@@ -92,7 +94,7 @@ class SongRpcService(private val user: User, private val songService: SongServic
         explicit: Boolean
     ): PaginatedResponse<UserSong> = songService.allSongs(page, pageSize, explicit, user.id)
 
-    override suspend fun deleteSongs(ids: Collection<UUID>): Boolean = songService.deleteSongs(ids)
+    override suspend fun deleteSongs(@LogParam("size") ids: Collection<UUID>): Boolean = songService.deleteSongs(ids)
 
     override suspend fun rankedSearch(
         page: Int,
