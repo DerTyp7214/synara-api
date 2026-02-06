@@ -287,6 +287,7 @@ class SongService : Service() {
         }) {
             where { PlaylistSongTable.playlistId eq playlistId }
             orderBy(PlaylistSongTable.position, SortOrder.ASC)
+            orderBy(SongTable.id, SortOrder.ASC)
         }
 
     suspend fun byUserPlaylist(page: Int, pageSize: Int, playlistId: UUID, userId: UUID): PaginatedResponse<UserSong> =
@@ -295,6 +296,7 @@ class SongService : Service() {
         }) {
             where { UserPlaylistSongTable.playlistId eq playlistId }
             orderBy(UserPlaylistSongTable.addedAt, SortOrder.ASC)
+            orderBy(SongTable.id, SortOrder.ASC)
         }
 
     suspend fun byTidalTrackIds(ids: Collection<String>, userId: UUID): List<UserSong> =
@@ -524,6 +526,7 @@ class SongService : Service() {
             .select(PlaylistSongTable.songId)
             .where { PlaylistSongTable.playlistId eq playlistId }
             .orderBy(PlaylistSongTable.position, SortOrder.ASC)
+            .orderBy(PlaylistSongTable.songId, SortOrder.ASC)
             .fetchBatchedResults(1000) { batch ->
                 batch.forEach {
                     emit(it[PlaylistSongTable.songId].value)
@@ -536,6 +539,7 @@ class SongService : Service() {
             .select(UserPlaylistSongTable.songId)
             .where { UserPlaylistSongTable.playlistId eq playlistId }
             .orderBy(UserPlaylistSongTable.addedAt, SortOrder.ASC)
+            .orderBy(UserPlaylistSongTable.songId, SortOrder.ASC)
             .fetchBatchedResults(1000) { batch ->
                 batch.forEach {
                     emit(it[UserPlaylistSongTable.songId].value)

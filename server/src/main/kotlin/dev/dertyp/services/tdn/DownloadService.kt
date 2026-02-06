@@ -64,6 +64,7 @@ class DownloadRpcService(
         return when (type) {
             Type.SONG -> metadataService.getTrackById(id) != null
             Type.ALBUM -> metadataService.albumExistsById(id)
+            Type.PLAYLIST -> metadataService.getPlaylistsByIds(listOf(id)).firstOrNull() != null
             else -> false
         }
     }
