@@ -105,6 +105,7 @@ class ScheduleService : Service() {
                             schedule(scheduledTask.copy(trigger = updateTrigger))
                         }
                     } else {
+                        logger.info("Next task in $waitTime")
                         withTimeoutOrNull(waitTime) {
                             queueUpdateNotifier.first()
                         }
