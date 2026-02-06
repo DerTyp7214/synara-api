@@ -9,6 +9,13 @@ class StorageService(environment: ApplicationEnvironment): IStorageService {
     val albumsPath = environment.config.propertyOrNull("audio.albums")?.getString()?.removeSuffix("/")
     val playlistsPath = environment.config.propertyOrNull("audio.playlists")?.getString()?.removeSuffix("/")
     val imagesPath = environment.config.property("data.images").getString().removeSuffix("/")
+    val secondaryTracksPaths = try {
+        environment.config.propertyOrNull("audio.secondary-tracks")?.getList()?.map {
+            it.removeSuffix("/")
+        } ?: emptyList()
+    } catch (_: Throwable) {
+        emptyList()
+    }
 
     override suspend fun getTotalStorage(): Long {
         if (tracksPath == null || albumsPath == null || playlistsPath == null) return 0
@@ -16,7 +23,8 @@ class StorageService(environment: ApplicationEnvironment): IStorageService {
         val tracks = File(tracksPath).getTotalSize()
         val albums = File(albumsPath).getTotalSize()
         val playlists = File(playlistsPath).getTotalSize()
+        val secondaryTracks = secondaryTracksPaths.sumOf { File(it).getTotalSize() }
 
-        return tracks + albums + playlists
+        return tracks + albums + playlists + secondaryTracks
     }
 }

@@ -66,14 +66,7 @@ class Indexer(
     private val playlistService: PlaylistService,
 ) {
     val logger = KtorSimpleLogger("Indexer")
-    val secondaryTracksPaths = try {
-        environment.config.propertyOrNull("audio.secondary-tracks")?.getList()?.map {
-            Path(it.removeSuffix("/"))
-        } ?: emptyList()
-    } catch (_: Throwable) {
-        logger.warn("Invalid 'audio.secondary-tracks'")
-        emptyList()
-    }
+    val secondaryTracksPaths = storageService.secondaryTracksPaths.map { Path(it) }
 
     val audioExtension = "flac"
     val playlistExtension = "m3u"
