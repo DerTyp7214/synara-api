@@ -1,6 +1,7 @@
 package dev.dertyp.services
 
 import dev.dertyp.data.Session
+import dev.dertyp.db.RefreshTokenTable
 import dev.dertyp.db.SessionTable
 import dev.dertyp.dbQuery
 import org.jetbrains.exposed.v1.core.*
@@ -54,8 +55,13 @@ class SessionService : Service() {
 
     suspend fun cleanupOldSessions() = dbQuery {
         val oneMonthAgo = Instant.now().minusMillis(30.days.inWholeMilliseconds).toEpochMilli()
-        SessionTable.deleteWhere {
-            (lastActive less oneMonthAgo) or (isActive eq false)
+        val sessionsToDelete = SessionTable.selectAll().where {
+            (SessionTable.lastActive less oneMonthAgo) or (SessionTable.isActive eq false)
+        }.map { it[SessionTable.id] }
+
+        if (sessionsToDelete.isNotEmpty()) {
+            RefreshTokenTable.deleteWhere { sessionId inList sessionsToDelete }
+            SessionTable.deleteWhere { id inList sessionsToDelete }
         }
     }
 
