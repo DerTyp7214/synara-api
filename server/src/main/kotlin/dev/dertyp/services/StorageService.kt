@@ -8,6 +8,7 @@ class StorageService(environment: ApplicationEnvironment): IStorageService {
     val tracksPath = environment.config.propertyOrNull("audio.tracks")?.getString()?.removeSuffix("/")
     val albumsPath = environment.config.propertyOrNull("audio.albums")?.getString()?.removeSuffix("/")
     val playlistsPath = environment.config.propertyOrNull("audio.playlists")?.getString()?.removeSuffix("/")
+    val customAudioPath = environment.config.property("audio.custom").getString().removeSuffix("/")
     val imagesPath = environment.config.property("data.images").getString().removeSuffix("/")
     val secondaryTracksPaths = try {
         environment.config.propertyOrNull("audio.secondary-tracks")?.getList()?.map {
@@ -24,7 +25,8 @@ class StorageService(environment: ApplicationEnvironment): IStorageService {
         val albums = File(albumsPath).getTotalSize()
         val playlists = File(playlistsPath).getTotalSize()
         val secondaryTracks = secondaryTracksPaths.sumOf { File(it).getTotalSize() }
+        val customAudio = File(customAudioPath).getTotalSize()
 
-        return tracks + albums + playlists + secondaryTracks
+        return tracks + albums + playlists + secondaryTracks + customAudio
     }
 }

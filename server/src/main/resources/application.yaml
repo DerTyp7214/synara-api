@@ -28,6 +28,7 @@ audio:
   albums: ${AUDIO_ALBUMS_PATH}
   playlists: ${AUDIO_PLAYLISTS_PATH}
   transcode: ${AUDIO_TRANSCODE_PATH}
+  custom: ${AUDIO_CUSTOM_PATH}
   secondary-tracks:
     - ${AUDIO_TRACKS_SECONDARY_PATH:}
 data:

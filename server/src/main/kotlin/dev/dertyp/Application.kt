@@ -87,6 +87,7 @@ fun Application.module() {
             singleOf(::TidalDownloaderProxy)
             singleOf(::SessionService)
             singleOf(::PlaybackService)
+            singleOf(::CustomAudioService)
 
             single<Gson> {
                 GsonBuilder()

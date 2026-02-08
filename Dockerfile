@@ -91,6 +91,7 @@ ENV AUDIO_TRACKS_PATH="/data/Tidal/Tracks"
 ENV AUDIO_ALBUMS_PATH="/data/Tidal/Albums"
 ENV AUDIO_PLAYLISTS_PATH="/data/Tidal/Playlists"
 ENV AUDIO_TRANSCODE_PATH="/data/Tidal/Transcode"
+ENV AUDIO_CUSTOM_PATH="/data/Synara/custom"
 ENV DATA_IMAGES_PATH="/data/Tidal/Images"
 
 ENV AUDIO_TRACKS_SECONDARY_PATH="/data/Synara"
