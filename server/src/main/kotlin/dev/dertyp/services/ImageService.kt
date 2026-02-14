@@ -64,9 +64,9 @@ class ImageService : IImageService, Service() {
     override suspend fun getImageData(id: UUID, size: Int): ByteArray? {
         val image = byId(id) ?: return null
 
-        val cacheKey = "image:${image.imageHash}:$size"
+        val cacheKey = "image:${image.imageHash}:$size".toByteArray()
         val cached = jedis?.get(cacheKey)
-        if (cached != null) return cached.toByteArray(Charsets.ISO_8859_1)
+        if (cached != null) return cached
 
         val path = Path(image.path)
         if (!path.exists()) return null
@@ -82,7 +82,7 @@ class ImageService : IImageService, Service() {
             path.readBytes()
         }
 
-        jedis?.set(cacheKey, bytes.toString(Charsets.ISO_8859_1))
+        jedis?.set(cacheKey, bytes)
         return bytes
     }
 
