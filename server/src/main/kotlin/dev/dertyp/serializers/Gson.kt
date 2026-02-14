@@ -4,6 +4,7 @@ import com.google.gson.TypeAdapter
 import com.google.gson.stream.JsonReader
 import com.google.gson.stream.JsonToken
 import com.google.gson.stream.JsonWriter
+import java.nio.charset.StandardCharsets
 import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.time.format.DateTimeFormatter
@@ -64,5 +65,24 @@ class DurationAdapter : TypeAdapter<Duration>() {
             return null
         }
         return Duration.parseIsoString(reader.nextString())
+    }
+}
+
+class ByteArrayISO8859TypeAdapter : TypeAdapter<ByteArray>() {
+    override fun write(out: JsonWriter, value: ByteArray?) {
+        if (value == null) {
+            out.nullValue()
+        } else {
+            out.value(String(value, StandardCharsets.ISO_8859_1))
+        }
+    }
+
+    override fun read(reader: JsonReader): ByteArray? {
+        if (reader.peek() == JsonToken.NULL) {
+            reader.nextNull()
+            return null
+        }
+        val stringValue = reader.nextString()
+        return stringValue.toByteArray(StandardCharsets.ISO_8859_1)
     }
 }

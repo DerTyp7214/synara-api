@@ -2,7 +2,7 @@ type: http_request
 model: http_request
 id: rq_R9thwpZGhB
 createdAt: 2025-10-14T19:25:16.449334718
-updatedAt: 2026-02-06T15:13:12.744746729
+updatedAt: 2026-02-14T20:13:37.498784050
 workspaceId: wk_9dbKacQT4H
 folderId: null
 authentication: {}
@@ -10,8 +10,8 @@ authenticationType: null
 body:
   text: |-
     {
-      "password": "123456",
-      "username": "ines"
+      "password": "admin",
+      "username": "admin"
     }
 bodyType: application/json
 description: '[object Object]'

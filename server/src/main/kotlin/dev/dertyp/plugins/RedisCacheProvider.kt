@@ -13,7 +13,12 @@ class RedisCacheProvider(config: Config) : SimpleCacheProvider(config) {
     private val jedis: RedisClient = RedisClient.create(HostAndPort(config.host, config.port))
 
     override suspend fun getCache(key: String): Any? =
-        if (jedis.exists(key)) RedisCacheObject.fromCache(jedis[key]) else null
+        if (jedis.exists(key)) try {
+            RedisCacheObject.fromCache(jedis[key])
+        } catch (_: Exception) {
+            jedis.del(key)
+            null
+        } else null
 
     override suspend fun setCache(key: String, content: Any, invalidateAt: Duration?) {
         if (invalidateAt == Duration.ZERO) return
@@ -33,7 +38,7 @@ class RedisCacheProvider(config: Config) : SimpleCacheProvider(config) {
 }
 
 class RedisCacheObject(val type: String, val content: String) : KoinComponent {
-    override fun toString() = "$type%#%$content"
+    override fun toString() = "${type.length}:$type$content"
 
     companion object {
         private val gson by inject<Gson>(Gson::class.java)
@@ -42,8 +47,12 @@ class RedisCacheObject(val type: String, val content: String) : KoinComponent {
 
         @Suppress("UNCHECKED_CAST")
         fun <T> fromCache(cache: String): T {
-            val data = cache.split("%#%")
-            return gson.fromJson(data.last(), Class.forName(data.first())) as T
+            val colonIndex = cache.indexOf(":")
+            val typeLength = cache.substring(0, colonIndex).toInt()
+
+            val type = cache.substring(colonIndex + 1, colonIndex + 1 + typeLength)
+            val jsonString = cache.substring(colonIndex + 1 + typeLength)
+            return gson.fromJson(jsonString, Class.forName(type)) as T
         }
     }
 }

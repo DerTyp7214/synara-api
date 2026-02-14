@@ -62,11 +62,11 @@ class ImageService : IImageService, Service() {
     }
 
     override suspend fun getImageData(id: UUID, size: Int): ByteArray? {
-        val image = byId(id) ?: return null
-
-        val cacheKey = "image:${image.imageHash}:$size".toByteArray()
+        val cacheKey = "image:$id:$size".toByteArray()
         val cached = jedis?.get(cacheKey)
         if (cached != null) return cached
+
+        val image = byId(id) ?: return null
 
         val path = Path(image.path)
         if (!path.exists()) return null

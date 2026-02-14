@@ -2,7 +2,7 @@ type: http_request
 model: http_request
 id: rq_a8DtFJsGvX
 createdAt: 2025-12-09T14:10:20.842791879
-updatedAt: 2026-01-09T00:22:59.809926830
+updatedAt: 2026-02-14T20:30:12.362959414
 workspaceId: wk_9dbKacQT4H
 folderId: fl_xqrmRv49Xr
 authentication: {}
@@ -30,9 +30,9 @@ urlParameters:
   id: rATHUBf4u6
 - enabled: true
   name: :imageId
-  value: c2cabf03-6bca-41ee-a3c1-f78a8a3454a8
+  value: 7f8d598b-4662-4b7c-88f2-b350c0e896a2
   id: edBBPqeFte
 - enabled: true
   name: ''
   value: ''
-  id: Ujvu3X6JRj
+  id: wEtCSJpNRT
