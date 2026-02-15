@@ -9,6 +9,7 @@ enum class ArtistDelimiter(val delimiter: String) {
 }
 
 fun artistSplitter(input: String): List<String> = when {
+    input.contains(ArtistDelimiter.Tdn.delimiter) -> input.split(ArtistDelimiter.Tdn.delimiter)
     else -> input.split(ArtistDelimiter.Tiddle.delimiter)
 }.map { it.replace("\\p{Cf}".toRegex(), "").trim() }.filter { it.length > 1 }
 

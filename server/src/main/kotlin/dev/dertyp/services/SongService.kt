@@ -606,10 +606,14 @@ class SongService : Service() {
             pageSize = pageSize,
         )
 
-        val sortExpressions = q.orderByExpressions.map { it.first }
-        val idQuery = Query(Slice(q.set.source, listOf(SongTable.id) + sortExpressions), q.where)
+        val sortAliases = q.orderByExpressions.mapIndexed { index, (expr, _) ->
+            expr.alias("sort_$index")
+        }
+        val idQuery = Query(Slice(q.set.source, listOf(SongTable.id) + sortAliases), q.where)
         q.having?.let { h -> idQuery.having { h } }
-        q.orderByExpressions.forEach { idQuery.orderBy(it) }
+        q.orderByExpressions.forEachIndexed { index, (_, order) ->
+            idQuery.orderBy(sortAliases[index], order)
+        }
         idQuery.withDistinct(true)
 
         if (pageSize != Int.MAX_VALUE) {
