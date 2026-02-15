@@ -56,7 +56,8 @@ class ArtistService : IArtistService, Service() {
             rankedSearchQuery(
                 query,
                 listOf(10, 8),
-                listOf(ArtistTable.name, ArtistAliasTable.name)
+                listOf(ArtistTable.name, ArtistAliasTable.name),
+                ArtistTable.id
             )
         }
 

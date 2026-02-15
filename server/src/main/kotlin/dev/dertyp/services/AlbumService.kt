@@ -104,7 +104,8 @@ class AlbumService : IAlbumService, Service() {
                     AlbumTable.name,
                     ArtistTable.name,
                     ArtistAliasTable.name,
-                )
+                ),
+                AlbumTable.id
             )
             andWhere { AlbumTable.songCount greater 1 }
         }

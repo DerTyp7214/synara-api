@@ -1,5 +1,3 @@
-@file:Suppress("UnusedImport")
-
 package dev.dertyp.core
 
 import dev.dertyp.dbQuery
@@ -15,6 +13,7 @@ fun Query.rankedSearchQuery(
     queryString: String,
     weights: List<Int>,
     columns: Collection<Column<String>>,
+    sortFallback: Column<*>? = null
 ): Query {
     val tokens = queryString
         .split(Regex("\\s+"))
@@ -84,6 +83,7 @@ fun Query.rankedSearchQuery(
         if (it is LiteralOp && it.value == 0) intLiteral(1)
         else it
     }, SortOrder.DESC)
+    sortFallback?.let { orderBy(it, SortOrder.ASC) }
 
     return this
 }

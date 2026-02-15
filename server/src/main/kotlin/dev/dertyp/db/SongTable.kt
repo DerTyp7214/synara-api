@@ -1,7 +1,7 @@
 package dev.dertyp.db
 
 import org.jetbrains.exposed.v1.core.ReferenceOption
-import org.jetbrains.exposed.v1.core.dao.id.UUIDTable
+import org.jetbrains.exposed.v1.core.dao.id.java.UUIDTable
 import java.time.Instant
 
 object SongTable : UUIDTable("song") {

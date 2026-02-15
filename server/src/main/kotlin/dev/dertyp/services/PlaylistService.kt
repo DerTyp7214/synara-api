@@ -79,7 +79,8 @@ class PlaylistService : IPlaylistService, Service() {
             rankedSearchQuery(
                 query,
                 listOf(10),
-                listOf(PlaylistTable.name)
+                listOf(PlaylistTable.name),
+                PlaylistTable.id
             )
         }
 

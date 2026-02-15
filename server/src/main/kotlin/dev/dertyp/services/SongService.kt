@@ -342,7 +342,8 @@ class SongService : Service() {
                     AlbumTable.name,
                     ArtistAliasTable.name,
                     albumArtistAliasAlias[ArtistAliasTable.name]
-                )
+                ),
+                SongTable.id
             ).let { it ->
                 if (liked) it.andWhere { UserSongTable.isFavourite eq true }
                 else it
@@ -560,9 +561,7 @@ class SongService : Service() {
         crossinline columnSet: suspend ColumnSet.() -> ColumnSet,
         crossinline query: suspend Query.() -> Query
     ) = dbQuery {
-        val offset = if (pageSize == Int.MAX_VALUE) 0 else 1
-
-        val rows = SongTable
+        val base = SongTable
             .leftJoin(
                 AlbumTable,
                 onColumn = { SongTable.albumId },
@@ -591,16 +590,44 @@ class SongService : Service() {
                 otherColumn = { albumArtistAliasAlias[ArtistAliasTable.artistId] }
             )
             .columnSet()
-            .selectAll()
-            .query()
-            .toList()
 
-        if (rows.isEmpty()) return@dbQuery PaginatedResponse(
+        val q = base.selectAll().query()
+
+        val countQuery = q.copy()
+        countQuery.adjustSelect { select(SongTable.id) }
+        countQuery.withDistinct(true)
+
+        val total = countQuery.count()
+
+        if (total == 0L) return@dbQuery PaginatedResponse(
             data = listOf(),
             total = 0,
             page = page,
             pageSize = pageSize,
         )
+
+        val idQuery = q.copy()
+        idQuery.adjustSelect { select(SongTable.id) }
+        idQuery.withDistinct(true)
+
+        if (pageSize != Int.MAX_VALUE) {
+            idQuery.limit(pageSize)
+            idQuery.offset((page * pageSize.toLong()))
+        }
+
+        val ids = idQuery.map { it[SongTable.id].value }
+
+        if (ids.isEmpty()) return@dbQuery PaginatedResponse(
+            data = listOf(),
+            total = total.toInt(),
+            page = page,
+            pageSize = pageSize,
+        )
+
+        val rows = base
+            .selectAll()
+            .where { SongTable.id inList ids }
+            .toList()
 
         val albumIds = rows.mapNotNull { it.getOrNull(AlbumTable.id)?.value }.distinct()
 
@@ -610,14 +637,16 @@ class SongService : Service() {
             emptyMap()
         }
 
-        val data = mapEagerly<T>(rows, albumArtistAlias, statsByAlbumId, explicit).distinctBy { it.id }
+        val unsortedData = mapEagerly<T>(rows, albumArtistAlias, statsByAlbumId, explicit)
+
+        val data = ids.mapNotNull { id -> unsortedData.find { it.id == id } }
 
         PaginatedResponse(
-            data = data.drop(page * pageSize).take(pageSize),
-            total = data.size,
+            data = data,
+            total = total.toInt(),
             page = page,
             pageSize = pageSize,
-            hasNextPage = data.drop(page * pageSize).size >= pageSize + offset,
+            hasNextPage = (page + 1).toLong() * pageSize < total,
         )
     }
 

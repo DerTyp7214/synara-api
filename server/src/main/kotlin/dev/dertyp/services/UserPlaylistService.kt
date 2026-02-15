@@ -55,7 +55,8 @@ class UserPlaylistService : IUserPlaylistService, Service() {
             rankedSearchQuery(
                 query,
                 listOf(10),
-                listOf(UserPlaylistTable.name)
+                listOf(UserPlaylistTable.name),
+                UserPlaylistTable.id
             )
             if (creator != null) andWhere { UserPlaylistTable.creator eq creator }
             else this
