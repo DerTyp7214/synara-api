@@ -593,11 +593,11 @@ class SongService : Service() {
 
         val q = base.selectAll().query()
 
-        val countQuery = q.copy()
-        countQuery.adjustSelect { select(SongTable.id) }
-        countQuery.withDistinct(true)
+        val countExpression = SongTable.id.countDistinct()
+        val countQuery = Query(Slice(q.set.source, listOf(countExpression)), q.where)
+        q.having?.let { h -> countQuery.having { h } }
 
-        val total = countQuery.count()
+        val total = countQuery.first()[countExpression]
 
         if (total == 0L) return@dbQuery PaginatedResponse(
             data = listOf(),
@@ -606,16 +606,18 @@ class SongService : Service() {
             pageSize = pageSize,
         )
 
-        val idQuery = q.copy()
-        idQuery.adjustSelect { select(SongTable.id) }
+        val sortExpressions = q.orderByExpressions.map { it.first }
+        val idQuery = Query(Slice(q.set.source, listOf(SongTable.id) + sortExpressions), q.where)
+        q.having?.let { h -> idQuery.having { h } }
+        q.orderByExpressions.forEach { idQuery.orderBy(it) }
         idQuery.withDistinct(true)
 
         if (pageSize != Int.MAX_VALUE) {
             idQuery.limit(pageSize)
-            idQuery.offset((page * pageSize.toLong()))
+            idQuery.offset((page * pageSize).toLong())
         }
 
-        val ids = idQuery.map { it[SongTable.id].value }
+        val ids = idQuery.map { it[SongTable.id].value }.distinct()
 
         if (ids.isEmpty()) return@dbQuery PaginatedResponse(
             data = listOf(),
@@ -624,8 +626,7 @@ class SongService : Service() {
             pageSize = pageSize,
         )
 
-        val rows = base
-            .selectAll()
+        val rows = base.selectAll()
             .where { SongTable.id inList ids }
             .toList()
 
