@@ -1,12 +1,14 @@
 package dev.dertyp.services
 
 import dev.dertyp.core.paging
+import dev.dertyp.core.sha256
 import dev.dertyp.data.Image
 import dev.dertyp.data.InsertableImage
 import dev.dertyp.data.PaginatedResponse
 import dev.dertyp.db.ImageTable
 import dev.dertyp.dbQuery
 import dev.dertyp.plugins.RedisCacheProvider
+import dev.dertyp.utils.LogParam
 import net.coobird.thumbnailator.Thumbnails
 import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.eq
@@ -84,6 +86,12 @@ class ImageService : IImageService, Service() {
 
         jedis?.set(cacheKey, bytes)
         return bytes
+    }
+
+    override suspend fun createImage(@LogParam("size") bytes: ByteArray, origin: String): UUID {
+        val hash = bytes.sha256()
+        val insertableImage = InsertableImage(bytes, hash, origin)
+        return createBatch(listOf(insertableImage)).first()
     }
 
     private suspend fun querySingle(query: Query.() -> Query) =
