@@ -112,6 +112,12 @@ class UserPlaylistService : IUserPlaylistService, Service() {
         }
     }
 
+    override suspend fun setPlaylistImage(id: UUID, imageId: UUID?): Boolean = dbQuery {
+        UserPlaylistTable.update({ UserPlaylistTable.id eq id }) {
+            it[UserPlaylistTable.imageId] = imageId
+        } == 1
+    }
+
     private suspend fun querySingle(query: Query.() -> Query) =
         queryPlaylists(0, Int.MAX_VALUE, query).data.singleOrNull()
 
