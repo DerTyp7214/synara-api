@@ -48,6 +48,7 @@ object CronPresets {
 
 data class ScheduledTask(
     val id: UUID = UUID.randomUUID(),
+    val name: String? = null,
     val trigger: Trigger,
     val task: Task
 ) : Comparable<ScheduledTask> {
@@ -82,15 +83,17 @@ class ScheduleService : Service() {
 
                     if (waitTime <= Duration.ZERO) {
                         val scheduledTask = schedules.poll() ?: continue
-                        logger.info("Executing task: ${scheduledTask.id}")
+                        val taskName = if (scheduledTask.name != null) "${scheduledTask.name} (${scheduledTask.id})" else "${scheduledTask.id}"
+                        logger.info("Executing task: $taskName")
                         launch {
                             try {
                                 scheduledTask.task(this@ScheduleService)
+                                notifyTaskCompletion(scheduledTask.id)
                             } catch (e: Exception) {
                                 logger.error("Error executing scheduled task", e)
 
                                 if (!scheduledTask.trigger.doesRepeat()) {
-                                    logger.info("Rescheduling failed task: ${scheduledTask.id}")
+                                    logger.info("Rescheduling failed task: $taskName")
                                     val nextTrigger = ScheduleTrigger(
                                         scheduledTime = Instant.now() + 10.minutes
                                     )
@@ -100,7 +103,7 @@ class ScheduleService : Service() {
                         }
 
                         if (scheduledTask.trigger.doesRepeat()) {
-                            logger.info("Rescheduling repeating task: ${scheduledTask.id}")
+                            logger.info("Rescheduling repeating task: $taskName")
                             val updateTrigger = scheduledTask.trigger.updateForNextRun()
                             schedule(scheduledTask.copy(trigger = updateTrigger))
                         }
@@ -124,10 +127,12 @@ class ScheduleService : Service() {
         queueUpdateNotifier.tryEmit(Unit)
     }
 
-    fun schedule(task: ScheduledTask) {
-        logger.info("Scheduling task: ${task.id} with trigger: ${task.trigger}")
+    fun schedule(task: ScheduledTask): ScheduledTask {
+        val taskName = if (task.name != null) "${task.name} (${task.id})" else "${task.id}"
+        logger.info("Scheduling task: $taskName with trigger: ${task.trigger}")
         schedules.add(task)
         queueUpdateNotifier.tryEmit(Unit)
+        return task
     }
 
     fun scheduleTask(trigger: ScheduleTrigger, task: Task): ScheduledTask {
@@ -188,5 +193,18 @@ class ScheduleService : Service() {
             }
 
         queueUpdateNotifier.tryEmit(Unit)
+    }
+
+    private fun notifyTaskCompletion(completedTaskId: UUID) {
+        val dependentTasks = schedules.filter {
+            val trigger = it.trigger
+            trigger is TaskCompletionTrigger && trigger.dependencyId == completedTaskId
+        }
+
+        dependentTasks.forEach { task ->
+            schedules.remove(task)
+            (task.trigger as TaskCompletionTrigger).activate()
+            schedule(task)
+        }
     }
 }

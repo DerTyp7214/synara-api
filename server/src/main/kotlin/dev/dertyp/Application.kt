@@ -13,6 +13,7 @@ import dev.dertyp.services.*
 import dev.dertyp.services.schedule.CronPresets
 import dev.dertyp.services.schedule.ScheduleService
 import dev.dertyp.services.schedule.ScheduledTask
+import dev.dertyp.services.schedule.TaskCompletionTrigger
 import dev.dertyp.services.tdn.DownloadService
 import dev.dertyp.services.tdn.TdnService
 import dev.dertyp.services.tdn.TidalDownloaderProxy
@@ -115,11 +116,39 @@ fun Application.module() {
 
     val scheduleService = get<ScheduleService>()
     val sessionService = get<SessionService>()
+    val imageService = get<ImageService>()
+    val artistService = get<ArtistService>()
+    val albumService = get<AlbumService>()
 
     scheduleService.schedule(
         ScheduledTask(
+            name = "Session Cleanup",
             trigger = CronPresets.dailyAt(0, 0),
             task = { sessionService.cleanupOldSessions() }
+        )
+    )
+
+    val cleanAlbumTask = scheduleService.schedule(
+        ScheduledTask(
+            name = "Delete Empty Albums",
+            trigger = CronPresets.dailyAt(0, 0),
+            task = { albumService.deleteEmptyAlbums() }
+        )
+    )
+
+    val cleanArtistsTask = scheduleService.schedule(
+        ScheduledTask(
+            name = "Delete Unreferenced Artists",
+            trigger = TaskCompletionTrigger(cleanAlbumTask.id),
+            task = { artistService.deleteUnreferencedArtists() }
+        )
+    )
+
+    scheduleService.schedule(
+        ScheduledTask(
+            name = "Delete Unreferenced Images",
+            trigger = TaskCompletionTrigger(cleanArtistsTask.id),
+            task = { imageService.deleteUnreferencedImages() }
         )
     )
 

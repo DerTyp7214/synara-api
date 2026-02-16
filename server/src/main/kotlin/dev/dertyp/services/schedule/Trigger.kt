@@ -7,6 +7,7 @@ import com.cronutils.parser.CronParser
 import java.time.Duration
 import java.time.Instant
 import java.time.ZoneId
+import java.util.*
 import kotlin.time.ExperimentalTime
 
 private val cronDefinition = CronDefinitionBuilder.instanceDefinitionFor(CronType.UNIX)
@@ -83,6 +84,23 @@ data class CustomTrigger(
     override fun updateForNextRun(time: Instant) = CustomTrigger(autoRepeat)
 
     fun signal() {
+        activatedTime = Instant.now()
+    }
+}
+
+data class TaskCompletionTrigger(
+    val dependencyId: UUID,
+) : Trigger() {
+    private var activatedTime: Instant = Instant.MAX
+
+    override val scheduledTime: Instant
+        get() = activatedTime
+
+    override fun nextExecution(from: Instant): Instant = scheduledTime
+    override fun doesRepeat(): Boolean = true
+    override fun updateForNextRun(time: Instant): Trigger = also { activatedTime = Instant.MAX }
+
+    fun activate() {
         activatedTime = Instant.now()
     }
 }

@@ -271,5 +271,21 @@ class ArtistService : IArtistService, Service() {
 
         return existingMap + newMap
     }
-}
 
+    suspend fun deleteUnreferencedArtists() = dbQuery {
+        val referencedArtists = mutableSetOf<UUID>()
+        referencedArtists.addAll(SongArtistTable.select(SongArtistTable.artistId).map { it[SongArtistTable.artistId].value })
+        referencedArtists.addAll(AlbumArtistTable.select(AlbumArtistTable.artistId).map { it[AlbumArtistTable.artistId].value })
+        referencedArtists.addAll(ArtistTable.select(ArtistTable.groupId).mapNotNull { it[ArtistTable.groupId]?.value })
+
+        val allArtists = ArtistTable.select(ArtistTable.id).map { it[ArtistTable.id].value }
+
+        val unreferencedArtists = allArtists.filter { it !in referencedArtists }
+
+        unreferencedArtists.chunked(5000).forEach { batch ->
+            ArtistTable.deleteWhere { ArtistTable.id inList batch }
+            ArtistAliasTable.deleteWhere { ArtistAliasTable.artistId inList batch }
+        }
+        logger.info("Deleted ${unreferencedArtists.size} unreferenced artists")
+    }
+}

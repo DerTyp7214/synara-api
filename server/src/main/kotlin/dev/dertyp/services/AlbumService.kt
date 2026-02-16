@@ -373,4 +373,23 @@ class AlbumService : IAlbumService, Service() {
             finalCombinedIdMap[key]
         }.filterValueNotNull()
     }
+
+    suspend fun deleteEmptyAlbums() = dbQuery {
+        val emptyAlbums = AlbumTable
+            .select(AlbumTable.id)
+            .where {
+                notExists(
+                    SongTable.select(SongTable.id).where {
+                        SongTable.albumId eq AlbumTable.id
+                    }
+                )
+            }
+            .map { it[AlbumTable.id].value }
+
+        emptyAlbums.chunked(5000).forEach { batch ->
+            AlbumTable.deleteWhere { AlbumTable.id inList batch }
+            AlbumArtistTable.deleteWhere { AlbumArtistTable.albumId inList batch }
+        }
+        logger.info("Deleted ${emptyAlbums.size} empty albums")
+    }
 }

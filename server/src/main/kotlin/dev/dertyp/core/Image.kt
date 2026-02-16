@@ -8,6 +8,7 @@ import net.coobird.thumbnailator.Thumbnails
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import kotlin.io.path.Path
+import kotlin.io.path.extension
 import kotlin.io.path.readBytes
 
 fun Image.bytes(): ByteArray = Path(path).readBytes()
@@ -23,7 +24,12 @@ fun Image.sized(size: Int): ByteArray {
         Thumbnails
             .of(ByteArrayInputStream(data))
             .size(size, size)
-            .outputFormat("jpeg")
+            .outputFormat(when (Path(path).extension) {
+                "jpg" -> "jpeg"
+                "jpeg" -> "jpeg"
+                "png" -> "png"
+                else -> "jpeg"
+            })
             .toOutputStream(outputStream)
         outputStream.toByteArray()
     } catch (_: Throwable) {
@@ -35,10 +41,17 @@ fun Image.sized(size: Int): ByteArray {
 suspend fun RoutingCall.respondImageSized(image: Image, size: Int) {
     val sizedImage = image.sized(size)
 
+    val contentType = when (Path(image.path).extension) {
+        "jpg" -> ContentType.Image.JPEG
+        "jpeg" -> ContentType.Image.JPEG
+        "png" -> ContentType.Image.PNG
+        else -> ContentType.Image.JPEG
+    }
+
     try {
-        respondBytes(sizedImage, ContentType.Image.JPEG)
+        respondBytes(sizedImage, contentType)
     } catch (e: Throwable) {
         e.printStackTrace()
-        respondBytes(sizedImage, ContentType.Image.JPEG)
+        respondBytes(sizedImage, contentType)
     }
 }

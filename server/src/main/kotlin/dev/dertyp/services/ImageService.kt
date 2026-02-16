@@ -5,7 +5,7 @@ import dev.dertyp.core.sha256
 import dev.dertyp.data.Image
 import dev.dertyp.data.InsertableImage
 import dev.dertyp.data.PaginatedResponse
-import dev.dertyp.db.ImageTable
+import dev.dertyp.db.*
 import dev.dertyp.dbQuery
 import dev.dertyp.plugins.RedisCacheProvider
 import dev.dertyp.utils.LogParam
@@ -13,15 +13,14 @@ import net.coobird.thumbnailator.Thumbnails
 import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.inList
-import org.jetbrains.exposed.v1.jdbc.Query
-import org.jetbrains.exposed.v1.jdbc.batchInsert
-import org.jetbrains.exposed.v1.jdbc.select
-import org.jetbrains.exposed.v1.jdbc.selectAll
+import org.jetbrains.exposed.v1.jdbc.*
 import org.koin.core.context.GlobalContext
 import redis.clients.jedis.HostAndPort
 import redis.clients.jedis.RedisClient
+import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.util.*
+import javax.imageio.ImageIO
 import kotlin.io.path.*
 
 class ImageService : IImageService, Service() {
@@ -77,7 +76,12 @@ class ImageService : IImageService, Service() {
             val outputStream = ByteArrayOutputStream()
             Thumbnails.of(path.toFile())
                 .size(size, size)
-                .outputFormat("jpeg")
+                .outputFormat(when (path.extension) {
+                    "jpg" -> "jpeg"
+                    "jpeg" -> "jpeg"
+                    "png" -> "png"
+                    else -> "jpeg"
+                })
                 .toOutputStream(outputStream)
             outputStream.toByteArray()
         } else {
@@ -137,10 +141,24 @@ class ImageService : IImageService, Service() {
 
         return dbQuery {
             ImageTable.batchInsert(newImages.map {
+                val extension = try {
+                    val inputStream = ByteArrayInputStream(it.data)
+                    val imageInputStream = ImageIO.createImageInputStream(inputStream)
+                    val readers = ImageIO.getImageReaders(imageInputStream)
+                    if (readers.hasNext()) {
+                        val reader = readers.next()
+                        reader.formatName.lowercase()
+                    } else {
+                        "jpeg"
+                    }
+                } catch (e: Exception) {
+                    "jpeg"
+                }
+
                 val imagePath = Path(
                     storageService.imagesPath,
                     *it.imageHash.windowed(2, 2).take(4).toTypedArray(),
-                    "${it.imageHash.drop(2 * 4)}.jpeg"
+                    "${it.imageHash.drop(2 * 4)}.$extension"
                 )
                 if (imagePath.exists()) return@map Pair(it, imagePath)
 
@@ -154,5 +172,34 @@ class ImageService : IImageService, Service() {
                 this[ImageTable.origin] = image.origin
             }.map { it[ImageTable.id].value }
         } + existingImages
+    }
+
+    suspend fun deleteUnreferencedImages() = dbQuery {
+        val referencedImages = mutableSetOf<UUID>()
+
+        referencedImages.addAll(AlbumTable.select(AlbumTable.cover).mapNotNull { it[AlbumTable.cover]?.value })
+        referencedImages.addAll(ArtistTable.select(ArtistTable.image).mapNotNull { it[ArtistTable.image]?.value })
+        referencedImages.addAll(SongTable.select(SongTable.cover).mapNotNull { it[SongTable.cover]?.value })
+        referencedImages.addAll(PlaylistTable.select(PlaylistTable.imageId).mapNotNull { it[PlaylistTable.imageId]?.value })
+        referencedImages.addAll(UserPlaylistTable.select(UserPlaylistTable.imageId).mapNotNull { it[UserPlaylistTable.imageId]?.value })
+
+        val allImages = ImageTable.select(ImageTable.id, ImageTable.path).map {
+            it[ImageTable.id].value to it[ImageTable.path]
+        }
+
+        val unreferencedImages = allImages.filter { (id, _) -> id !in referencedImages }
+
+        unreferencedImages.chunked(5000).forEach { batch ->
+            val idsToDelete = batch.map { it.first }
+
+            batch.forEach { (_, path) ->
+                val imagePath = Path(storageService.imagesPath, path)
+                if (imagePath.exists()) imagePath.deleteIfExists()
+            }
+
+            ImageTable.deleteWhere { ImageTable.id inList idsToDelete }
+        }
+
+        logger.info("Deleted ${unreferencedImages.size} unreferenced images")
     }
 }
