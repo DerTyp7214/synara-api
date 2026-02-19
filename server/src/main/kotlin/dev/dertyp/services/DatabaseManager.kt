@@ -30,15 +30,12 @@ class DatabaseManager(private val environment: ApplicationEnvironment) {
     }
 
     fun <T> tempConnection(block: JdbcTransaction.() -> T): T {
-        val dataSource = getDataSource()
-        val database = Database.connect(dataSource)
-
-        val result = transaction(database) {
-            block()
+        return getDataSource().use { dataSource ->
+            val database = Database.connect(dataSource)
+            transaction(database) {
+                block()
+            }
         }
-
-        dataSource.close()
-        return result
     }
 
     private fun getDataSource(): HikariDataSource {
@@ -50,6 +47,7 @@ class DatabaseManager(private val environment: ApplicationEnvironment) {
         val config = HikariConfig().apply {
             jdbcUrl = dbUrl
             driverClassName = dbDriver
+            maximumPoolSize = 100
             if (dbDriver != "org.sqlite.JDBC") {
                 username = dbUser
                 password = dbPassword

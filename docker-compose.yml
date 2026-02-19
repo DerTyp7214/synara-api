@@ -36,7 +36,8 @@ services:
       - postgres:/var/lib/postgresql
     environment:
       POSTGRES_DB: synara-api-db
-      POSTGRES_HOST_AUTH_METHOD: trust
+      POSTGRES_PASSWORD: password
+    command: -N 1000
     ports:
       - "5432:5432"
     healthcheck:
