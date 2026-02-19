@@ -6,11 +6,12 @@ import com.ucasoft.ktor.simpleCache.SimpleCacheProvider
 import org.koin.core.component.KoinComponent
 import org.koin.java.KoinJavaComponent.inject
 import redis.clients.jedis.HostAndPort
-import redis.clients.jedis.RedisClient
+import redis.clients.jedis.RedisClusterClient
+import redis.clients.jedis.params.SetParams
 import kotlin.time.Duration
 
 class RedisCacheProvider(config: Config) : SimpleCacheProvider(config) {
-    private val jedis: RedisClient = RedisClient.create(HostAndPort(config.host, config.port))
+    private val jedis: RedisClusterClient = RedisClusterClient.create(HostAndPort(config.host, config.port))
 
     override suspend fun getCache(key: String): Any? =
         if (jedis.exists(key)) try {
@@ -23,7 +24,11 @@ class RedisCacheProvider(config: Config) : SimpleCacheProvider(config) {
     override suspend fun setCache(key: String, content: Any, invalidateAt: Duration?) {
         if (invalidateAt == Duration.ZERO) return
         if (invalidateAt != null && !invalidateAt.isInfinite())
-            jedis.psetex(key, invalidateAt.inWholeMilliseconds, RedisCacheObject.fromObject(content).toString())
+            jedis.set(
+                key,
+                RedisCacheObject.fromObject(content).toString(),
+                SetParams().px(invalidateAt.inWholeMilliseconds)
+            )
         else jedis.set(key, RedisCacheObject.fromObject(content).toString())
     }
 

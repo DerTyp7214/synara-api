@@ -16,7 +16,7 @@ import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.jdbc.*
 import org.koin.core.context.GlobalContext
 import redis.clients.jedis.HostAndPort
-import redis.clients.jedis.RedisClient
+import redis.clients.jedis.RedisClusterClient
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.util.*
@@ -32,7 +32,7 @@ class ImageService : IImageService, Service() {
         private val storageService = GlobalContext.get().get<StorageService>()
         private val redisConfig = GlobalContext.get().get<RedisCacheProvider.Config>()
         private val jedis by lazy {
-            if (redisConfig.host != "none") RedisClient.create(
+            if (redisConfig.host != "none") RedisClusterClient.create(
                 HostAndPort(redisConfig.host, redisConfig.port)
             ) else null
         }

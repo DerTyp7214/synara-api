@@ -19,16 +19,20 @@ services:
       - DB_PASSWORD=password
       - DB_DRIVER=org.postgresql.Driver
       - REDIS_HOST=127.0.0.1
-      - REDIS_PORT=6379
+      - REDIS_PORT=7000
     volumes:
       - /home/typ/Music:/data
       - config:/home/appuser/.config
     depends_on:
       db:
         condition: service_healthy
-      redis-cache:
+      redis-cluster:
         condition: service_healthy
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 5G
   db:
     image: postgres
     user: "1000:1000"
@@ -42,19 +46,37 @@ services:
       - "5432:5432"
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U postgres" ]
-      interval: 1s
+      interval: 30s
+      start_interval: 1s
+      start_period: 15s
     restart: unless-stopped
-  redis-cache:
-    image: redis:alpine
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+  redis-cluster:
+    image: ghcr.io/dertyp7214/synara-redis-cluster:latest-dev
+    environment:
+      - NODES=6
+      - REPLICAS=0
+      - PORT_START=7000
+      - HOST=127.0.0.1
+      - MAXMEMORY=2gb
+      - MAXMEMORY_POLICY=allkeys-lfu
     ports:
-      - "6379:6379"
+      - "7000-7010:7000-7010"
     volumes:
       - redis_data:/data
-    command: redis-server --appendonly yes --maxmemory 4gb --maxmemory-policy allkeys-lfu
     healthcheck:
-      test: [ "CMD", "redis-cli", "ping" ]
-      interval: 1s
+      test: ["CMD-SHELL", "redis-cli -p 7000 cluster info | grep -E 'cluster_state:ok|cluster_slots_assigned:16384' | wc -l | grep '2'"]
+      interval: 10s
+      start_interval: 1s
+      start_period: 15s
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 13G
 
 volumes:
   config:

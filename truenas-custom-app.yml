@@ -3,7 +3,7 @@ services:
     depends_on:
       db:
         condition: service_healthy
-      redis-cache:
+      redis-cluster:
         condition: service_healthy
     environment:
       CLIENT_ID: test-id
@@ -48,8 +48,12 @@ services:
     environment:
       POSTGRES_DB: synara-api-db
       POSTGRES_HOST_AUTH_METHOD: trust
+    command: >-
+      -N 1000
     healthcheck:
-      interval: 1s
+      interval: 30s
+      start_interval: 1s
+      start_period: 15s
       test:
         - CMD-SHELL
         - pg_isready -U postgres
@@ -66,24 +70,30 @@ services:
         target: /var/lib/postgresql
         type: volume
 
-  redis-cache:
-    command: >-
-      redis-server --appendonly yes --maxmemory 4gb --maxmemory-policy
-      allkeys-lfu
+  redis-cluster:
+    environment:
+      NODES: 6
+      REPLICAS: 0
+      PORT_START: 7000
+      HOST: 127.0.0.1
+      MAXMEMORY: 2gb
+      MAXMEMORY_POLICY: allkeys-lfu
     healthcheck:
-      interval: 1s
+      interval: 10s
+      start_interval: 1s
+      start_period: 15s
       test:
         - CMD-SHELL
-        - redis-cli ping
-    image: redis:alpine
+        - redis-cli -p 7000 cluster info | grep -E 'cluster_state:ok|cluster_slots_assigned:16384' | wc -l | grep '2'
+    image: ghcr.io/dertyp7214/synara-redis-cluster:latest-dev
     platform: linux/amd64
     ports:
-      - '7379:6379'
+      - "7000-7010:7000-7010"
     pull_policy: missing
     restart: unless-stopped
     volumes:
       - read_only: False
-        source: redis_data
+        source: redis_cluster_data
         target: /data
         type: volume
 
@@ -91,7 +101,7 @@ volumes:
   tiddl: {}
   config: {}
   postgres: {}
-  redis_data: {}
+  redis_cluster_data: {}
 
 x-portals:
   - host: 0.0.0.0

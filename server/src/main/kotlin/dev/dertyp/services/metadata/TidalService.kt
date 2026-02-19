@@ -19,7 +19,7 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import org.koin.core.component.inject
 import redis.clients.jedis.HostAndPort
-import redis.clients.jedis.RedisClient
+import redis.clients.jedis.RedisClusterClient
 import java.util.*
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.io.encoding.Base64
@@ -36,7 +36,7 @@ class TidalService(
     private val jedisConfig by inject<RedisCacheProvider.Config>()
     val jedis by lazy {
         jedisConfig.let {
-            if (jedisConfig.host != "none") RedisClient.create(
+            if (jedisConfig.host != "none") RedisClusterClient.create(
                 HostAndPort(jedisConfig.host, jedisConfig.port)
             )
             else null
