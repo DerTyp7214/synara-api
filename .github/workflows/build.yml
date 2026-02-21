@@ -10,6 +10,7 @@ on:
       - .github/workflows/build.yml
       - docker/**
       - server/**
+      - common-rpc
       - Dockerfile.nobuild
       - build.gradle.kts
       - gradle.properties
