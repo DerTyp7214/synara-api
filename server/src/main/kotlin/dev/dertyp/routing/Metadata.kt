@@ -23,7 +23,6 @@ import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.ktor.server.sse.*
-import io.ktor.util.*
 import io.ktor.util.logging.*
 import io.ktor.utils.io.*
 import kotlinx.coroutines.channels.Channel
@@ -40,6 +39,7 @@ import java.util.*
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.days
+import kotlin.io.encoding.Base64
 
 @Serializable
 data class AnimatedCover(
@@ -290,7 +290,7 @@ fun Route.metadata() {
                 }
             }) {
                 val base64 = call.parameters["url"] ?: return@head call.respond(HttpStatusCode.BadRequest)
-                val url = base64.decodeBase64String()
+                val url = Base64.decode(base64).decodeToString()
 
                 val response = ApiClient.instance.head(url)
 
@@ -312,7 +312,7 @@ fun Route.metadata() {
                 }
             }) {
                 val base64 = call.parameters["url"] ?: return@get call.respond(HttpStatusCode.BadRequest)
-                val url = base64.decodeBase64String()
+                val url = Base64.decode(base64).decodeToString()
 
                 val response = ApiClient.instance.get(url)
 

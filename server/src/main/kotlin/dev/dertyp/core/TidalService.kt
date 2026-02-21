@@ -3,13 +3,14 @@ package dev.dertyp.core
 import dev.dertyp.plugins.RedisCacheObject
 import dev.dertyp.services.metadata.IMetadataService
 import dev.dertyp.services.metadata.TidalService
+import redis.clients.jedis.params.SetParams
 import kotlin.time.Duration.Companion.days
 
 fun TidalService.writeToJedis(track: IMetadataService.Track) {
-    jedis?.psetex(
+    jedis?.set(
         "tidal_track::${track.id}",
-        30.days.inWholeMilliseconds,
-        RedisCacheObject.fromObject(track).toString()
+        RedisCacheObject.fromObject(track).toString(),
+        SetParams().px(30.days.inWholeMilliseconds),
     )
 }
 
@@ -44,10 +45,10 @@ fun TidalService.getTracksFromCache(trackIds: List<String>): List<IMetadataServi
 // ALBUMS
 
 fun TidalService.writeToJedis(album: IMetadataService.Album) {
-    jedis?.psetex(
+    jedis?.set(
         "tidal_album::${album.id}",
-        30.days.inWholeMilliseconds,
-        RedisCacheObject.fromObject(album).toString()
+        RedisCacheObject.fromObject(album).toString(),
+        SetParams().px(30.days.inWholeMilliseconds),
     )
 }
 
@@ -82,10 +83,10 @@ fun TidalService.getAlbumsFromCache(albumIds: List<String>): List<IMetadataServi
 // ARTISTS
 
 fun TidalService.writeToJedis(artist: IMetadataService.Artist) {
-    jedis?.psetex(
+    jedis?.set(
         "tidal_artist::${artist.id}",
-        30.days.inWholeMilliseconds,
-        RedisCacheObject.fromObject(artist).toString()
+        RedisCacheObject.fromObject(artist).toString(),
+        SetParams().px(30.days.inWholeMilliseconds),
     )
 }
 
@@ -120,10 +121,10 @@ fun TidalService.getArtistsFromCache(artistIds: List<String>): List<IMetadataSer
 // PLAYLISTS
 
 fun TidalService.writeToJedis(playlist: IMetadataService.Playlist) {
-    jedis?.psetex(
+    jedis?.set(
         "tidal_playlist::${playlist.id}",
-        30.days.inWholeMilliseconds,
-        RedisCacheObject.fromObject(playlist).toString()
+        RedisCacheObject.fromObject(playlist).toString(),
+        SetParams().px(30.days.inWholeMilliseconds),
     )
 }
 
