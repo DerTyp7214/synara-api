@@ -2,7 +2,7 @@ type: http_request
 model: http_request
 id: rq_2HEFG5stF8
 createdAt: 2025-10-14T19:25:16.449964932
-updatedAt: 2026-02-01T09:38:32.729707380
+updatedAt: 2026-02-20T17:11:59.967008751
 workspaceId: wk_9dbKacQT4H
 folderId: fl_NXkRVdWsW4
 authentication: {}
@@ -11,7 +11,9 @@ body:
   text: |-
     {
       "urls": [
-        "https://tidal.com/playlist/5daeca68-189a-4c94-b925-b28ba960877a"
+        "https://tidal.com/album/441091651",
+        "https://tidal.com/playlist/ff793619-c313-4625-88f3-87adc31bb6dd",
+        "https://tidal.com/playlist/f0450591-38bd-4b8c-9bda-8ac4b1648685"
       ]
     }
 bodyType: application/json

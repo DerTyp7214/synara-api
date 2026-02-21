@@ -4,6 +4,8 @@ plugins {
     alias(libs.plugins.kotlin.serialization) apply false
     alias(libs.plugins.kotlinx.rpc) apply false
     alias(libs.plugins.buildconfig) apply false
+
+    alias(libs.plugins.kotlin.multiplatform) apply false
 }
 
 subprojects {

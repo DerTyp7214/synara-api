@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="KotlinPluginsSettings">
+    <option name="repositories">
+      <map>
+        <entry key="Maven Central" value="https://repo1.maven.org/maven2;URL" />
+        <entry key="kotlinx-rpc for IDE" value="https://redirector.kotlinlang.org/maven/kxrpc-for-ide;URL" />
+      </map>
+    </option>
+    <option name="plugins">
+      <map>
+        <entry key="kotlinx-rpc" value="EXACT;true;false;org.jetbrains.kotlinx:kotlinx-rpc-compiler-plugin-cli;org.jetbrains.kotlinx:kotlinx-rpc-compiler-plugin-k2;org.jetbrains.kotlinx:kotlinx-rpc-compiler-plugin-backend;org.jetbrains.kotlinx:kotlinx-rpc-compiler-plugin-common" />
+      </map>
+    </option>
+    <option name="pluginsRepos">
+      <map>
+        <entry key="kotlinx-rpc" value="kotlinx-rpc for IDE" />
+      </map>
+    </option>
+  </component>
+</project>
