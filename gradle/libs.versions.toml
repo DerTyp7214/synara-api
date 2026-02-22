@@ -22,10 +22,12 @@ jaudiotagger = "3.0.1"
 sqlite = "3.51.2.0"
 caffeine = "3.2.3"
 jmdns = "3.6.3"
+ksp = "2.3.5"
 cron-utils = "9.2.1"
 scrimage = "4.3.6"
 koin = "4.2.0-beta4"
 buildconfig = "6.0.7"
+symbolProcessingApi = "2.3.5"
 
 [libraries]
 kotlinx-rpc-core = { module = "org.jetbrains.kotlinx:kotlinx-rpc-core", version.ref = "kotlinx-rpc" }
@@ -93,6 +95,7 @@ scrimage-core = { module = "com.sksamuel.scrimage:scrimage-core", version.ref = 
 scrimage-webp = { module = "com.sksamuel.scrimage:scrimage-webp", version.ref = "scrimage" }
 koin-ktor = { module = "io.insert-koin:koin-ktor", version.ref = "koin" }
 koin-logger-slf4j = { module = "io.insert-koin:koin-logger-slf4j", version.ref = "koin" }
+symbol-processing-api = { module = "com.google.devtools.ksp:symbol-processing-api", version.ref = "symbolProcessingApi" }
 
 [plugins]
 kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
@@ -102,3 +105,4 @@ kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", versi
 kotlinx-rpc = { id = "org.jetbrains.kotlinx.rpc.plugin", version.ref = "kotlinx-rpc" }
 ktor = { id = "io.ktor.plugin", version.ref = "ktor" }
 buildconfig = { id = "com.github.gmazzo.buildconfig", version.ref = "buildconfig" }
+ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }

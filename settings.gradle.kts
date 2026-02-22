@@ -24,3 +24,4 @@ dependencyResolutionManagement {
 
 include(":server")
 include(":common-rpc")
+include(":common-rpc:compiler")
