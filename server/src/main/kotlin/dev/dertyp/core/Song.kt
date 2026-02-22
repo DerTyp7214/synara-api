@@ -1,3 +1,5 @@
+@file:JvmName("ServerSong")
+
 package dev.dertyp.core
 
 import dev.dertyp.data.*

@@ -1,3 +1,5 @@
+@file:JvmName("ServerFlow")
+
 package dev.dertyp.core
 
 import dev.dertyp.data.User
@@ -6,9 +8,6 @@ import dev.dertyp.services.metadata.IMetadataService
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import java.util.*
-
-@OptIn(ExperimentalCoroutinesApi::class)
-operator fun <T> Flow<T>.plus(other: Flow<T>): Flow<T> = flowOf(this, other).flattenConcat()
 
 @OptIn(ExperimentalCoroutinesApi::class)
 fun Flow<IMetadataService.Track>.filterExisting(

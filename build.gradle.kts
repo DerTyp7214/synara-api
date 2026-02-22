@@ -12,10 +12,3 @@ subprojects {
     group = "dev.dertyp"
     version = "0.0.1"
 }
-
-tasks.register<Exec>("checkUpdates") {
-    group = "verification"
-    description = "Checks for dependency updates using check_updates.py"
-    commandLine("python3", "check_updates.py")
-    standardOutput = File("updates.txt").outputStream()
-}
