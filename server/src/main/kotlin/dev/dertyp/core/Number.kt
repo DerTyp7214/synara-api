@@ -24,5 +24,6 @@ fun Int.zeroPad(length: Int): String {
     return this.toString().padStart(length, '0')
 }
 
-val Long.date get() = Date(this)
-val Long?.date get() = this?.let { Date(this) }
+val Number.date get() = Date(toLong())
+@get:JvmName("dateNullable")
+val Number?.date get() = this?.let { Date(toLong()) }
