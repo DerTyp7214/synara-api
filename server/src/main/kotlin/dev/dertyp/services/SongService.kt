@@ -58,6 +58,13 @@ class SongRpcService(private val user: User, private val songService: SongServic
         artistId: UUID
     ): PaginatedResponse<UserSong> = songService.byArtist(page, pageSize, artistId, user.id)
 
+    override suspend fun likedByArtist(
+        page: Int,
+        pageSize: Int,
+        artistId: UUID,
+        explicit: Boolean
+    ): PaginatedResponse<UserSong> = songService.likedByArtist(page, pageSize, artistId, explicit, user.id)
+
     override suspend fun byAlbum(
         page: Int,
         pageSize: Int,
@@ -270,6 +277,25 @@ class SongService : Service() {
 
             where { SongTable.id inList songIds }
             orWhere { SongTable.albumId inList albumIds }
+            orderBy(SongTable.releaseDate, SortOrder.DESC)
+            orderBy(SongTable.trackNumber, SortOrder.ASC)
+        }
+
+    suspend fun likedByArtist(page: Int, pageSize: Int, artistId: UUID, explicit: Boolean, userId: UUID): PaginatedResponse<UserSong> =
+        querySongs(page, pageSize, explicit, { userSong(userId) }) {
+            val songIds = SongArtistTable
+                .select(SongArtistTable.songId)
+                .where { SongArtistTable.artistId eq artistId }
+                .map { it[SongArtistTable.songId].value }
+
+            val albumIds = AlbumArtistTable
+                .select(AlbumArtistTable.albumId)
+                .where { AlbumArtistTable.artistId eq artistId }
+                .map { it[AlbumArtistTable.albumId].value }
+
+            where { SongTable.id inList songIds }
+            orWhere { SongTable.albumId inList albumIds }
+            andWhere { UserSongTable.isFavourite eq true }
             orderBy(SongTable.releaseDate, SortOrder.DESC)
             orderBy(SongTable.trackNumber, SortOrder.ASC)
         }
