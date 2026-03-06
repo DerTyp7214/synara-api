@@ -99,25 +99,33 @@ class BackupService(
     }
 
     override suspend fun createBackup() {
+        logger.info("Starting backup creation")
         withContext(Dispatchers.IO) {
             val dbData = dbManagementService.exportData()
+            logger.info("Database exported")
 
             val fileTrees = audioPaths.associate { path ->
+                logger.debug("Generating file tree for $path")
                 path.name to generateFileTree(path)
             }
             val fileTreeBytes = compressZstd(Cbor.encodeToByteArray(fileTrees))
+            logger.debug("File tree compressed")
 
             val imageIndex = if (imagePath != null && imagePath.exists()) {
+                logger.info("Backing up images from $imagePath")
                 backupImages(imagePath)
             } else {
+                logger.debug("No images path specified or exists")
                 emptyList()
             }
             val imageIndexBytes = compressZstd(Cbor.encodeToByteArray(imageIndex))
+            logger.debug("Image index compressed")
 
             val timestamp = java.time.LocalDateTime.now()
                 .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss"))
             val backupFile = backupDir.resolve("backup-$timestamp.zip")
 
+            logger.info("Writing backup to $backupFile")
             ZipOutputStream(backupFile.outputStream()).use { zip ->
                 zip.putNextEntry(ZipEntry("database.cbor.zst"))
                 zip.write(dbData)
@@ -132,6 +140,7 @@ class BackupService(
                 zip.closeEntry()
             }
 
+            logger.info("Backup created: ${backupFile.name}")
             rotateBackups()
         }
     }
@@ -215,9 +224,11 @@ class BackupService(
     }
 
     override suspend fun loadBackup(fileName: String) {
+        logger.info("Loading backup: $fileName")
         withContext(Dispatchers.IO) {
             val backupFile = backupDir.resolve(fileName)
             if (!backupFile.exists()) {
+                logger.error("Backup file not found: $fileName")
                 throw IllegalArgumentException("Backup file not found: $fileName")
             }
 
@@ -226,12 +237,14 @@ class BackupService(
                 while (entry != null) {
                     when (entry.name) {
                         "database.cbor.zst" -> {
+                            logger.info("Restoring database from $fileName")
                             val dbData = zip.readBytes()
                             dbManagementService.importData(dbData)
                         }
 
                         "images.index.cbor.zst" -> {
                             if (imagePath != null) {
+                                logger.info("Restoring images from $fileName")
                                 val indexCborBytes = decompressZstd(zip.readBytes())
                                 val index = Cbor.decodeFromByteArray<List<ImageEntry>>(indexCborBytes)
                                 restoreImages(index)
@@ -241,6 +254,7 @@ class BackupService(
                     entry = zip.nextEntry
                 }
             }
+            logger.info("Backup loaded successfully: $fileName")
         }
     }
 
@@ -264,6 +278,7 @@ class BackupService(
     }
 
     private fun rotateBackups() {
+        logger.debug("Rotating backups")
         val backups = backupDir
             .listFiles { it.isFile && it.name.endsWith(".zip") }
             .map { it to it.lastModified() }
@@ -272,7 +287,11 @@ class BackupService(
 
         if (backups.size > maxBackups) {
             val toDelete = backups.take(backups.size - maxBackups)
-            toDelete.forEach { it.delete() }
+            logger.info("Deleting ${toDelete.size} old backups")
+            toDelete.forEach {
+                logger.debug("Deleting backup file: ${it.name}")
+                it.delete()
+            }
         }
 
         val remainingBackups = if (backups.size > maxBackups) {
@@ -298,16 +317,24 @@ class BackupService(
                     }
                 }
             } catch (e: Exception) {
-                e.printStackTrace()
+                logger.error("Error checking referenced hashes in backup ${backupFile.name}", e)
             }
         }
 
         if (blobsDir.exists()) {
+            logger.debug("Cleaning up unreferenced blobs")
+            var deletedCount = 0
             blobsDir.walk()
                 .filter { it.isFile }
                 .forEach { blob ->
-                    if (blob.name !in referencedHashes) blob.delete()
+                    if (blob.name !in referencedHashes) {
+                        blob.delete()
+                        deletedCount++
+                    }
                 }
+            if (deletedCount > 0) {
+                logger.info("Deleted $deletedCount unreferenced blobs")
+            }
         }
     }
 }
