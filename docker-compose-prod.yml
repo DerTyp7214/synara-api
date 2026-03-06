@@ -14,11 +14,13 @@ services:
       - DB_PASSWORD=password
       - DB_DRIVER=org.postgresql.Driver
       - REDIS_HOST=127.0.0.1
-      - REDIS_PORT=6379
+      - REDIS_PORT=7000
+      - BACKUP_DIR=/backups
     volumes:
       - /home/typ/Music:/data
       - tiddl:/home/appuser/.tiddl
       - config:/home/appuser/.config
+      - backups:/backups
     depends_on:
       db:
         condition: service_healthy
@@ -78,3 +80,4 @@ volumes:
   config:
   postgres:
   redis_data:
+  backups:

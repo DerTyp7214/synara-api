@@ -84,6 +84,8 @@ fun Application.configureRouting() {
         val sessionService by inject<SessionService>()
         val playbackService by inject<PlaybackService>()
         val customAudioService by inject<CustomAudioService>()
+        val dbManagementService by inject<DbManagementService>()
+        val backupService by inject<BackupService>()
 
         rpc("/rpc") {
             registerService<IServerStatsService> { serverStatsService.withLogging<IServerStatsService>() }
@@ -111,6 +113,8 @@ fun Application.configureRouting() {
                 registerService<ISessionService> { RpcSessionService(user, sessionService).withLogging<ISessionService>() }
                 registerService<IPlaybackService> { RpcPlaybackService(playbackService).withLogging<IPlaybackService>() }
                 registerService<ICustomAudioService> { CustomAudioRpcService(customAudioService).withLogging<ICustomAudioService>() }
+                registerService<IDbManagementService> { dbManagementService.withLogging<IDbManagementService>() }
+                registerService<IBackupService> { RpcBackupService(user, backupService).withLogging<IBackupService>() }
             }
         }
 

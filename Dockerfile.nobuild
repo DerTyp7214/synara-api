@@ -25,6 +25,9 @@ RUN chown appuser:appgroup /app
 RUN mkdir /data
 RUN chown appuser:appgroup /data
 
+RUN mkdir /backups
+RUN chown appuser:appgroup /backups
+
 RUN mkdir -p /home/appuser/.tiddl
 RUN mkdir -p /home/appuser/.config/tidal_dl_ng
 RUN chown -R appuser:appgroup /home/appuser
@@ -45,6 +48,7 @@ ENV AUDIO_PLAYLISTS_PATH="/data/Tidal/Playlists"
 ENV AUDIO_TRANSCODE_PATH="/data/Tidal/Transcode"
 ENV AUDIO_CUSTOM_PATH="/data/Synara/custom"
 ENV DATA_IMAGES_PATH="/data/Tidal/Images"
+ENV BACKUP_DIR="/backups"
 
 ENV AUDIO_TRACKS_SECONDARY_PATH="/data/Synara"
 

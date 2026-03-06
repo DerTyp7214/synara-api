@@ -7,6 +7,8 @@ ktor:
 client:
   id: ${CLIENT_ID}
   secret: ${CLIENT_SECRET}
+backup:
+  dir: ${BACKUP_DIR:}
 redis:
   host: ${REDIS_HOST:}
   port: ${REDIS_PORT:}

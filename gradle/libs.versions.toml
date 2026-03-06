@@ -28,6 +28,7 @@ scrimage = "4.3.6"
 koin = "4.2.0-beta4"
 buildconfig = "6.0.7"
 symbolProcessingApi = "2.3.5"
+zstd = "1.5.5-11"
 
 [libraries]
 kotlinx-rpc-core = { module = "org.jetbrains.kotlinx:kotlinx-rpc-core", version.ref = "kotlinx-rpc" }
@@ -96,6 +97,7 @@ scrimage-webp = { module = "com.sksamuel.scrimage:scrimage-webp", version.ref = 
 koin-ktor = { module = "io.insert-koin:koin-ktor", version.ref = "koin" }
 koin-logger-slf4j = { module = "io.insert-koin:koin-logger-slf4j", version.ref = "koin" }
 symbol-processing-api = { module = "com.google.devtools.ksp:symbol-processing-api", version.ref = "symbolProcessingApi" }
+zstd-jni = { module = "com.github.luben:zstd-jni", version.ref = "zstd" }
 
 [plugins]
 kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }

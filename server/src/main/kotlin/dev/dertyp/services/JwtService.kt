@@ -176,6 +176,9 @@ class JwtService(
                     }
                 }
             }) {
+                val callingUser = call.getUser() ?: return@post call.respond(HttpStatusCode.Unauthorized, "Invalid user")
+                if (!callingUser.isAdmin) return@post call.respond(HttpStatusCode.Forbidden, "Only admins can register new users")
+
                 val authenticationRequest = call.receive<AuthenticationRequest>()
 
                 val user = userService.findUserByUsername(authenticationRequest.username)

@@ -24,7 +24,8 @@ class UserService : Service() {
             return User(
                 id = row[UserTable.id].value,
                 username = row[UserTable.username],
-                passwordHash = row[UserTable.passwordHash]
+                passwordHash = row[UserTable.passwordHash],
+                isAdmin = row[UserTable.isAdmin]
             )
         }
     }
@@ -44,6 +45,7 @@ class UserService : Service() {
             this[UserTable.username] = it.username
             this[UserTable.passwordHash] = BCrypt.withDefaults()
                 .hashToString(12, it.password.toCharArray())
+            this[UserTable.isAdmin] = false
         }.map(::map)
     }.singleOrNull()
 

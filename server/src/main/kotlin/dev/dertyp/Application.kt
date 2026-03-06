@@ -90,6 +90,8 @@ fun Application.module() {
             singleOf(::SessionService)
             singleOf(::PlaybackService)
             singleOf(::CustomAudioService)
+            singleOf(::DbManagementService)
+            singleOf(::BackupService)
 
             single<Gson> {
                 GsonBuilder()
@@ -119,6 +121,15 @@ fun Application.module() {
     val imageService = get<ImageService>()
     val artistService = get<ArtistService>()
     val albumService = get<AlbumService>()
+    val backupService = get<BackupService>()
+
+    scheduleService.schedule(
+        ScheduledTask(
+            name = "Database Backup",
+            trigger = CronPresets.dailyAt(19, 27),
+            task = { backupService.createBackup() }
+        )
+    )
 
     scheduleService.schedule(
         ScheduledTask(
