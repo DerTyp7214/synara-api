@@ -126,7 +126,7 @@ fun Application.module() {
     scheduleService.schedule(
         ScheduledTask(
             name = "Database Backup",
-            trigger = CronPresets.dailyAt(19, 27),
+            trigger = CronPresets.dailyAt(2, 0),
             task = { backupService.createBackup() }
         )
     )
