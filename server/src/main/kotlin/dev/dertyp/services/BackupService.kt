@@ -69,6 +69,11 @@ class RpcBackupService(
         checkAdmin()
         backupService.loadBackup(fileName)
     }
+
+    override suspend fun deleteBackup(fileName: String) {
+        checkAdmin()
+        backupService.deleteBackup(fileName)
+    }
 }
 
 @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
@@ -105,7 +110,7 @@ class BackupService(
             logger.info("Database exported")
 
             val fileTrees = audioPaths.associate { path ->
-                logger.debug("Generating file tree for $path")
+                logger.debug("Generating file tree for {}", path)
                 path.name to generateFileTree(path)
             }
             val fileTreeBytes = compressZstd(Cbor.encodeToByteArray(fileTrees))
@@ -190,7 +195,9 @@ class BackupService(
 
                 val hash = hashParts.joinToString("") + filenameWithoutExt
 
-                file.copyTo(getBlobPath(hash))
+                getBlobPath(hash).let { blob ->
+                    if (!blob.exists()) file.copyTo(blob)
+                }
 
                 entries.add(ImageEntry(relativePath.toString(), hash))
             }
@@ -255,6 +262,20 @@ class BackupService(
                 }
             }
             logger.info("Backup loaded successfully: $fileName")
+        }
+    }
+
+    override suspend fun deleteBackup(fileName: String) {
+        logger.info("Deleting backup: $fileName")
+        withContext(Dispatchers.IO) {
+            val backupFile = backupDir.resolve(fileName)
+            if (backupFile.exists()) {
+                backupFile.delete()
+                logger.info("Backup file deleted: $fileName")
+                rotateBackups()
+            } else {
+                logger.warn("Backup file not found for deletion: $fileName")
+            }
         }
     }
 
