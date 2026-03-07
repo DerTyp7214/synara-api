@@ -1,0 +1,5 @@
+FROM amazoncorretto:25 AS runtime
+EXPOSE 8081
+RUN mkdir /app
+COPY *.jar /app/proxy.jar
+ENTRYPOINT ["java", "--enable-native-access=ALL-UNNAMED", "-jar", "/app/proxy.jar"]

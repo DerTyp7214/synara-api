@@ -7,12 +7,16 @@ import dev.dertyp.services.metadata.MetadataService
 import io.ktor.server.application.*
 import io.ktor.server.auth.*
 import io.ktor.server.auth.jwt.*
+import io.ktor.util.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import org.koin.ktor.ext.get
 import org.koin.ktor.ext.inject
 import java.util.*
+
+val ProxiedKey = AttributeKey<Boolean>("Proxied")
+val ApplicationCall.isProxied: Boolean get() = attributes.getOrNull(ProxiedKey) ?: false
 
 fun ApplicationCall.getUsername(): String = principal<JWTPrincipal>()?.get("usr")!!
 fun ApplicationCall.getSessionId(): UUID? = principal<JWTPrincipal>()?.get("ses")?.let { UUID.fromString(it) }

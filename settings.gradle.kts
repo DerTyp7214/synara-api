@@ -25,3 +25,5 @@ dependencyResolutionManagement {
 include(":server")
 include(":common-rpc")
 include(":common-rpc:compiler")
+include(":proxy")
+include(":common-proxy")

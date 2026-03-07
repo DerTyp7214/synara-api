@@ -1,6 +1,8 @@
 package dev.dertyp.utils
 
-import io.ktor.util.logging.*
+import dev.dertyp.core.isProxied
+import io.ktor.server.application.ApplicationCall
+import io.ktor.util.logging.KtorSimpleLogger
 import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Proxy
 import kotlin.coroutines.Continuation
@@ -14,10 +16,11 @@ enum class LogMode {
 annotation class LogParam(val property: String = "", val mode: LogMode = LogMode.DEFAULT)
 
 @Suppress("PLATFORM_CLASS_MAPPED_TO_KOTLIN")
-inline fun <reified T : Any> T.withLogging(): T {
+inline fun <reified T : Any> T.withLogging(call: ApplicationCall? = null): T {
     val interfaceClass = T::class.java
     val logger = KtorSimpleLogger(interfaceClass.simpleName)
     val target = this
+    val prefix = if (call?.isProxied == true) "[Proxy] " else ""
 
     return Proxy.newProxyInstance(interfaceClass.classLoader, arrayOf(interfaceClass)) { proxy, method, args ->
         if (method.declaringClass == Object::class.java) {
@@ -85,7 +88,7 @@ inline fun <reified T : Any> T.withLogging(): T {
             }
         } ?: emptyList()
 
-        logger.info("${method.name}(${logArgs.joinToString(", ")})")
+        logger.info("$prefix${method.name}(${logArgs.joinToString(", ")})")
 
         try {
             method.invoke(target, *(args ?: emptyArray()))

@@ -14,6 +14,7 @@ plugins {
 
 application {
     mainClass = "io.ktor.server.netty.EngineMain"
+    applicationDefaultJvmArgs = listOf("--enable-native-access=ALL-UNNAMED")
 }
 
 java {
@@ -97,6 +98,7 @@ dependencies {
     implementation(libs.kotlinx.serialization.cbor)
 
     implementation(project(":common-rpc"))
+    implementation(project(":common-proxy"))
 }
 
 val ktorBaseImageTag = "synara-api-base:latest"

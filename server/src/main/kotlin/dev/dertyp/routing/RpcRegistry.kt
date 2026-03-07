@@ -1,0 +1,107 @@
+package dev.dertyp.routing
+
+import dev.dertyp.IIndexer
+import dev.dertyp.Indexer
+import dev.dertyp.RpcIndexer
+import dev.dertyp.core.getUser
+import dev.dertyp.data.User
+import dev.dertyp.services.*
+import dev.dertyp.services.tdn.DownloadRpcService
+import dev.dertyp.services.tdn.DownloadService
+import dev.dertyp.services.tdn.IDownloadService
+import dev.dertyp.services.tdn.TidalDownloaderProxy
+import dev.dertyp.utils.withLogging
+import io.ktor.server.application.ApplicationCall
+import kotlinx.rpc.RpcServer
+import kotlinx.rpc.annotations.Rpc
+import kotlinx.rpc.krpc.ktor.server.KrpcRoute
+import org.koin.core.Koin
+import kotlin.reflect.KClass
+
+private interface ServiceRegistrar {
+    fun <@Rpc T : Any> register(serviceKClass: KClass<T>, serviceFactory: () -> T)
+}
+
+fun KrpcRoute.registerPublicServices(koin: Koin) {
+    val registrar = object : ServiceRegistrar {
+        override fun <@Rpc T : Any> register(serviceKClass: KClass<T>, serviceFactory: () -> T) {
+            registerService(serviceKClass, serviceFactory)
+        }
+    }
+    registerPublic(koin, call, registrar)
+}
+
+fun RpcServer.registerPublicServices(koin: Koin, call: ApplicationCall) {
+    val registrar = object : ServiceRegistrar {
+        override fun <@Rpc T : Any> register(serviceKClass: KClass<T>, serviceFactory: () -> T) {
+            registerService(serviceKClass, serviceFactory)
+        }
+    }
+    registerPublic(koin, call, registrar)
+}
+
+private fun registerPublic(koin: Koin, call: ApplicationCall, registrar: ServiceRegistrar) {
+    val serverStatsService = koin.get<ServerStatsService>()
+    val authService = koin.get<AuthService>()
+    val sessionService = koin.get<SessionService>()
+    val jwtService = koin.get<JwtService>()
+
+    registrar.register(IServerStatsService::class) { serverStatsService.withLogging<IServerStatsService>(call) }
+    registrar.register(IAuthService::class) { RpcAuthService(call, authService, sessionService, jwtService).withLogging<IAuthService>(call) }
+}
+
+suspend fun KrpcRoute.registerAuthenticatedServices(koin: Koin) {
+    val user = call.getUser() ?: throw IllegalArgumentException("No user found")
+    val registrar = object : ServiceRegistrar {
+        override fun <@Rpc T : Any> register(serviceKClass: KClass<T>, serviceFactory: () -> T) {
+            registerService(serviceKClass, serviceFactory)
+        }
+    }
+    registerAuthenticated(koin, call, user, registrar)
+}
+
+fun RpcServer.registerAuthenticatedServices(koin: Koin, call: ApplicationCall, user: User) {
+    val registrar = object : ServiceRegistrar {
+        override fun <@Rpc T : Any> register(serviceKClass: KClass<T>, serviceFactory: () -> T) {
+            registerService(serviceKClass, serviceFactory)
+        }
+    }
+    registerAuthenticated(koin, call, user, registrar)
+}
+
+private fun registerAuthenticated(koin: Koin, call: ApplicationCall, user: User, registrar: ServiceRegistrar) {
+    val indexer = koin.get<Indexer>()
+    val userService = koin.get<UserService>()
+    val songService = koin.get<SongService>()
+    val albumService = koin.get<AlbumService>()
+    val imageService = koin.get<ImageService>()
+    val lyricsSearch = koin.get<LyricsSearch>()
+    val artistService = koin.get<ArtistService>()
+    val favSyncService = koin.get<FavSyncService>()
+    val playlistService = koin.get<PlaylistService>()
+    val downloadService = koin.get<DownloadService>()
+    val userPlaylistService = koin.get<UserPlaylistService>()
+    val tidalDownloaderProxy = koin.get<TidalDownloaderProxy>()
+    val sessionService = koin.get<SessionService>()
+    val playbackService = koin.get<PlaybackService>()
+    val customAudioService = koin.get<CustomAudioService>()
+    val dbManagementService = koin.get<DbManagementService>()
+    val backupService = koin.get<BackupService>()
+
+    registrar.register(IIndexer::class) { RpcIndexer(indexer).withLogging<IIndexer>(call) }
+    registrar.register(IUserService::class) { RpcUserService(user, userService).withLogging<IUserService>(call) }
+    registrar.register(ISongService::class) { SongRpcService(songService = songService, user = user).withLogging<ISongService>(call) }
+    registrar.register(IAlbumService::class) { albumService.withLogging<IAlbumService>(call) }
+    registrar.register(IImageService::class) { imageService.withLogging<IImageService>(call) }
+    registrar.register(ILyricsSearch::class) { lyricsSearch.withLogging<ILyricsSearch>(call) }
+    registrar.register(IArtistService::class) { artistService.withLogging<IArtistService>(call) }
+    registrar.register(IFavSyncService::class) { FavSyncRpcService(user, favSyncService).withLogging<IFavSyncService>(call) }
+    registrar.register(IDownloadService::class) { DownloadRpcService(user, call, downloadService, tidalDownloaderProxy).withLogging<IDownloadService>(call) }
+    registrar.register(IPlaylistService::class) { playlistService.withLogging<IPlaylistService>(call) }
+    registrar.register(IUserPlaylistService::class) { userPlaylistService.withLogging<IUserPlaylistService>(call) }
+    registrar.register(ISessionService::class) { RpcSessionService(user, sessionService).withLogging<ISessionService>(call) }
+    registrar.register(IPlaybackService::class) { RpcPlaybackService(playbackService).withLogging<IPlaybackService>(call) }
+    registrar.register(ICustomAudioService::class) { CustomAudioRpcService(customAudioService).withLogging<ICustomAudioService>(call) }
+    registrar.register(IDbManagementService::class) { dbManagementService.withLogging<IDbManagementService>(call) }
+    registrar.register(IBackupService::class) { RpcBackupService(user, backupService).withLogging<IBackupService>(call) }
+}

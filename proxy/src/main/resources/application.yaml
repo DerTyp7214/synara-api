@@ -1,0 +1,8 @@
+ktor:
+    application:
+        modules:
+            - dev.dertyp.proxy.ApplicationKt.module
+    deployment:
+        port: $PORT:8081
+proxy:
+    key: ${PROXY_KEY:}

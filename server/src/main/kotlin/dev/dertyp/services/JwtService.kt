@@ -10,17 +10,22 @@ import io.github.smiley4.ktoropenapi.delete
 import io.github.smiley4.ktoropenapi.get
 import io.github.smiley4.ktoropenapi.post
 import io.github.smiley4.ktoropenapi.route
-import io.ktor.http.*
-import io.ktor.server.application.*
-import io.ktor.server.auth.*
-import io.ktor.server.auth.jwt.*
-import io.ktor.server.plugins.*
-import io.ktor.server.request.*
-import io.ktor.server.response.*
-import io.ktor.server.routing.*
+import io.ktor.http.HttpStatusCode
+import io.ktor.server.application.Application
+import io.ktor.server.application.ApplicationEnvironment
+import io.ktor.server.auth.authenticate
+import io.ktor.server.auth.authentication
+import io.ktor.server.auth.jwt.JWTPrincipal
+import io.ktor.server.auth.jwt.jwt
+import io.ktor.server.plugins.origin
+import io.ktor.server.request.path
+import io.ktor.server.request.receive
+import io.ktor.server.request.userAgent
+import io.ktor.server.response.respond
+import io.ktor.server.routing.Route
 import java.security.SecureRandom
 import java.time.Instant
-import java.util.*
+import java.util.UUID
 import kotlin.io.encoding.Base64
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.hours
@@ -56,16 +61,7 @@ class JwtService(
                         .build()
                 )
                 validate { credential ->
-                    if (credential.payload.audience.contains(jwtAudience)) {
-                        val sessionId = credential.payload
-                            .getClaim("ses").asString()
-                            ?.let { UUID.fromString(it) } ?: return@validate null
-
-                        val isActive = sessionService.isSessionActive(sessionId)
-                        if (!isActive) return@validate null
-
-                        JWTPrincipal(credential.payload)
-                    } else null
+                    validateToken(credential.payload)
                 }
                 challenge { _, _ ->
                     call.respond(HttpStatusCode.Unauthorized, "Token is not valid or has expired")
@@ -75,6 +71,34 @@ class JwtService(
                 }
             }
         }
+
+    suspend fun validateToken(payload: com.auth0.jwt.interfaces.Payload): JWTPrincipal? {
+        if (payload.audience.contains(jwtAudience)) {
+            val sessionId = payload
+                .getClaim("ses").asString()
+                ?.let { UUID.fromString(it) } ?: return null
+
+            val isActive = sessionService.isSessionActive(sessionId)
+            if (!isActive) return null
+
+            return JWTPrincipal(payload)
+        }
+        return null
+    }
+
+    suspend fun validateToken(token: String): JWTPrincipal? {
+        return try {
+            val verifier = JWT
+                .require(Algorithm.HMAC256(jwtSecret))
+                .withAudience(jwtAudience)
+                .withIssuer(jwtIssuer)
+                .build()
+            val decoded = verifier.verify(token)
+            validateToken(decoded)
+        } catch (_: Exception) {
+            null
+        }
+    }
 
     fun authenticate(route: Route) = route.apply {
         post("/authenticate", {

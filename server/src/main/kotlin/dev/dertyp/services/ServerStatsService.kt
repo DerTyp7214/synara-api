@@ -1,5 +1,6 @@
 package dev.dertyp.services
 
+import dev.dertyp.data.ProxyInfo
 import dev.dertyp.data.ServerStats
 import dev.dertyp.db.*
 import dev.dertyp.dbQuery
@@ -8,7 +9,10 @@ import org.jetbrains.exposed.v1.core.sum
 import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.jdbc.selectAll
 
-class ServerStatsService(private val storageService: StorageService) : IServerStatsService, Service() {
+class ServerStatsService(
+    private val storageService: StorageService,
+    private val reverseProxyService: ReverseProxyService,
+) : IServerStatsService, Service() {
     override suspend fun getStats(): ServerStats = dbQuery {
         val songCount = SongTable.selectAll().count().toInt()
         val albumCount = AlbumTable.selectAll().count().toInt()
@@ -49,4 +53,15 @@ class ServerStatsService(private val storageService: StorageService) : IServerSt
     }
 
     override suspend fun health(): Boolean = true
+
+    override suspend fun getProxyInfo(): ProxyInfo? {
+        val host = reverseProxyService.proxyHost ?: return null
+        val port = reverseProxyService.controlPort ?: return null
+        return ProxyInfo(
+            host = host,
+            controlPort = port,
+            ssl = reverseProxyService.proxySsl,
+            id = reverseProxyService.proxyId
+        )
+    }
 }

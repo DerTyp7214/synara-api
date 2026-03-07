@@ -1,0 +1,9 @@
+services:
+  proxy:
+    image: ghcr.io/dertyp7214/synara-proxy:latest-dev
+    ports:
+      - "8081:8081"
+    environment:
+      - PORT=8081
+      - PROXY_KEY=${PROXY_KEY}
+    restart: unless-stopped

@@ -41,3 +41,10 @@ spotify:
 tidal:
   clientId: ${TIDAL_CLIENT_ID}
   clientSecret: ${TIDAL_CLIENT_SECRET}
+proxy:
+  hostname: ${PROXY_HOSTNAME:}
+  controlPort: ${PROXY_CONTROL_PORT:8081}
+  ssl: ${PROXY_SSL:false}
+  name: ${PROXY_NAME:}
+  id: ${PROXY_ID:}
+  key: ${PROXY_KEY:}

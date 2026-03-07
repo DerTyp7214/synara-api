@@ -4,6 +4,8 @@ import dev.dertyp.serializers.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.rpc.krpc.rpcServerConfig
+import kotlinx.rpc.krpc.serialization.cbor.cbor
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.cbor.Cbor
 import kotlinx.serialization.json.Json
@@ -48,6 +50,13 @@ object ApplicationScope {
             contextual(OffsetDateTimeSerializer)
             contextual(DurationSerializer)
             contextual(InstantSerializer)
+        }
+    }
+
+    @OptIn(ExperimentalSerializationApi::class)
+    val rpcConfig = rpcServerConfig {
+        serialization {
+            cbor(cbor)
         }
     }
 }

@@ -40,3 +40,5 @@ out/
 .*.env
 tmp
 .kotlin/
+
+local.properties

@@ -18,8 +18,11 @@ import dev.dertyp.services.tdn.DownloadService
 import dev.dertyp.services.tdn.TdnService
 import dev.dertyp.services.tdn.TidalDownloaderProxy
 import dev.dertyp.services.tdn.TiddlService
-import io.ktor.server.application.*
-import io.ktor.server.plugins.calllogging.*
+import io.ktor.server.application.Application
+import io.ktor.server.application.ApplicationEnvironment
+import io.ktor.server.application.install
+import io.ktor.server.application.log
+import io.ktor.server.plugins.calllogging.CallLogging
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -61,10 +64,13 @@ fun Application.module() {
         serviceType = "_synara-api._tcp.local."
     }
 
+    val application = this
     install(Koin) {
         slf4jLogger()
         modules(module {
+            single<Application> { application }
             single<ApplicationEnvironment> { environment }
+            single { environment.config }
 
             singleOf(::Indexer)
             singleOf(::JwtService)
@@ -90,6 +96,7 @@ fun Application.module() {
             singleOf(::SessionService)
             singleOf(::PlaybackService)
             singleOf(::CustomAudioService)
+            singleOf(::ReverseProxyService)
             singleOf(::DbManagementService)
             singleOf(::BackupService)
 
@@ -122,6 +129,7 @@ fun Application.module() {
     val artistService = get<ArtistService>()
     val albumService = get<AlbumService>()
     val backupService = get<BackupService>()
+    val reverseProxyService = get<ReverseProxyService>()
 
     scheduleService.schedule(
         ScheduledTask(
@@ -164,7 +172,8 @@ fun Application.module() {
     )
 
     CoroutineScope(Dispatchers.IO).launch {
-        scheduleService.startService()
+        launch { scheduleService.startService() }
+        launch { reverseProxyService.startService() }
     }
 
     configureHTTP()

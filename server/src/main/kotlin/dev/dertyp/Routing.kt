@@ -1,33 +1,33 @@
 package dev.dertyp
 
 import dev.dertyp.core.ApplicationScope
-import dev.dertyp.core.getUser
-import dev.dertyp.services.*
-import dev.dertyp.services.tdn.DownloadRpcService
-import dev.dertyp.services.tdn.DownloadService
-import dev.dertyp.services.tdn.IDownloadService
-import dev.dertyp.services.tdn.TidalDownloaderProxy
-import dev.dertyp.utils.withLogging
+import dev.dertyp.routing.registerAuthenticatedServices
+import dev.dertyp.routing.registerPublicServices
+import dev.dertyp.services.JwtService
 import io.github.smiley4.ktoropenapi.OpenApi
 import io.github.smiley4.ktoropenapi.openApi
 import io.github.smiley4.ktoropenapi.route
 import io.github.smiley4.ktorswaggerui.swaggerUI
-import io.ktor.http.*
-import io.ktor.serialization.kotlinx.json.*
-import io.ktor.serialization.kotlinx.protobuf.*
-import io.ktor.server.application.*
-import io.ktor.server.plugins.compression.*
-import io.ktor.server.plugins.contentnegotiation.*
-import io.ktor.server.plugins.statuspages.*
-import io.ktor.server.response.*
-import io.ktor.server.routing.*
-import io.ktor.server.sse.*
-import io.ktor.server.websocket.*
+import io.ktor.http.HttpStatusCode
+import io.ktor.serialization.kotlinx.json.json
+import io.ktor.serialization.kotlinx.protobuf.protobuf
+import io.ktor.server.application.Application
+import io.ktor.server.application.install
+import io.ktor.server.plugins.compression.Compression
+import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.server.plugins.statuspages.StatusPages
+import io.ktor.server.response.respondText
+import io.ktor.server.routing.routing
+import io.ktor.server.sse.SSE
+import io.ktor.server.websocket.WebSockets
+import io.ktor.server.websocket.pingPeriod
+import io.ktor.server.websocket.timeout
 import kotlinx.rpc.krpc.ktor.server.Krpc
 import kotlinx.rpc.krpc.ktor.server.rpc
 import kotlinx.rpc.krpc.serialization.cbor.cbor
 import kotlinx.serialization.ExperimentalSerializationApi
 import org.koin.ktor.ext.inject
+import org.koin.ktor.plugin.koin
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
 
@@ -66,55 +66,20 @@ fun Application.configureRouting() {
             }
         }
 
-        val indexer by inject<Indexer>()
+        val koin = koin()
         val jwtService by inject<JwtService>()
-        val userService by inject<UserService>()
-        val authService by inject<AuthService>()
-        val songService by inject<SongService>()
-        val albumService by inject<AlbumService>()
-        val imageService by inject<ImageService>()
-        val lyricsSearch by inject<LyricsSearch>()
-        val artistService by inject<ArtistService>()
-        val favSyncService by inject<FavSyncService>()
-        val playlistService by inject<PlaylistService>()
-        val downloadService by inject<DownloadService>()
-        val serverStatsService by inject<ServerStatsService>()
-        val userPlaylistService by inject<UserPlaylistService>()
-        val tidalDownloaderProxy by inject<TidalDownloaderProxy>()
-        val sessionService by inject<SessionService>()
-        val playbackService by inject<PlaybackService>()
-        val customAudioService by inject<CustomAudioService>()
-        val dbManagementService by inject<DbManagementService>()
-        val backupService by inject<BackupService>()
 
         rpc("/rpc") {
-            registerService<IServerStatsService> { serverStatsService.withLogging<IServerStatsService>() }
+            registerPublicServices(koin)
         }
 
         rpc("/rpc/auth") {
-            registerService<IAuthService> { RpcAuthService(call, authService, sessionService, jwtService).withLogging<IAuthService>() }
+            registerPublicServices(koin)
         }
 
         jwtService.authenticated(this) {
             rpc("/rpc/services") {
-                val user = call.getUser() ?: throw IllegalArgumentException("No user found")
-
-                registerService<IIndexer> { RpcIndexer(indexer).withLogging<IIndexer>() }
-                registerService<IUserService> { RpcUserService(user, userService).withLogging<IUserService>() }
-                registerService<ISongService> { SongRpcService(songService = songService, user = user).withLogging<ISongService>() }
-                registerService<IAlbumService> { albumService.withLogging<IAlbumService>() }
-                registerService<IImageService> { imageService.withLogging<IImageService>() }
-                registerService<ILyricsSearch> { lyricsSearch.withLogging<ILyricsSearch>() }
-                registerService<IArtistService> { artistService.withLogging<IArtistService>() }
-                registerService<IFavSyncService> { FavSyncRpcService(user, favSyncService).withLogging<IFavSyncService>() }
-                registerService<IDownloadService> { DownloadRpcService(user, call, downloadService, tidalDownloaderProxy).withLogging<IDownloadService>() }
-                registerService<IPlaylistService> { playlistService.withLogging<IPlaylistService>() }
-                registerService<IUserPlaylistService> { userPlaylistService.withLogging<IUserPlaylistService>() }
-                registerService<ISessionService> { RpcSessionService(user, sessionService).withLogging<ISessionService>() }
-                registerService<IPlaybackService> { RpcPlaybackService(playbackService).withLogging<IPlaybackService>() }
-                registerService<ICustomAudioService> { CustomAudioRpcService(customAudioService).withLogging<ICustomAudioService>() }
-                registerService<IDbManagementService> { dbManagementService.withLogging<IDbManagementService>() }
-                registerService<IBackupService> { RpcBackupService(user, backupService).withLogging<IBackupService>() }
+                registerAuthenticatedServices(koin)
             }
         }
 
