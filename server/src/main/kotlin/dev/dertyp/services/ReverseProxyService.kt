@@ -2,7 +2,6 @@ package dev.dertyp.services
 
 import dev.dertyp.core.ApplicationScope
 import dev.dertyp.core.ProxiedKey
-import dev.dertyp.core.prefixIfNotBlank
 import dev.dertyp.proxy.ProxyMessage
 import dev.dertyp.routing.registerAuthenticatedServices
 import dev.dertyp.routing.registerPublicServices
@@ -74,28 +73,24 @@ class ReverseProxyService(
     }
 
     private suspend fun connectToProxy() {
-        val queryParams = buildString {
-            append("id=$requestedId")
-            if (serverName != null) {
-                append("&")
-                append("name=$serverName")
-            }
-            if (proxyKey != null) {
-                append("&")
-                append("key=$proxyKey")
-            }
-        }.prefixIfNotBlank("?")
+        logger.info("Attempting to connect to reverse proxy at $proxyHost:$controlPort (SSL=$proxySsl)")
 
         client.webSocket(
-            method = HttpMethod.Get,
-            host = proxyHost!!,
-            port = controlPort!!,
-            path = "/proxy/server$queryParams",
             request = {
-                url.protocol = if (proxySsl) URLProtocol.WSS else URLProtocol.WS
+                url {
+                    protocol = if (proxySsl) URLProtocol.WSS else URLProtocol.WS
+                    host = proxyHost!!
+                    port = controlPort!!
+                    path("/proxy/server")
+                    
+                    parameters.append("id", requestedId)
+                    serverName?.let { parameters.append("name", it) }
+                    proxyKey?.let { parameters.append("key", it) }
+                }
             }
         ) {
             val activeServers = ConcurrentHashMap<UUID, ProxyKrpcServer>()
+            logger.info("Connected to reverse proxy control at $proxyHost:$controlPort")
 
             try {
                 for (frame in incoming) {
