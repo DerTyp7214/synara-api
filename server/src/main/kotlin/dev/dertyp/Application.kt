@@ -10,6 +10,7 @@ import dev.dertyp.serializers.LocalDateAdapter
 import dev.dertyp.serializers.OffsetDateTimeAdapter
 import dev.dertyp.server.BuildConfig
 import dev.dertyp.services.*
+import dev.dertyp.services.metadata.MetadataService
 import dev.dertyp.services.schedule.CronPresets
 import dev.dertyp.services.schedule.ScheduleService
 import dev.dertyp.services.schedule.ScheduledTask
@@ -99,6 +100,7 @@ fun Application.module() {
             singleOf(::ReverseProxyService)
             singleOf(::DbManagementService)
             singleOf(::BackupService)
+            singleOf(::MetadataFetchingService)
 
             single<Gson> {
                 GsonBuilder()
@@ -130,6 +132,7 @@ fun Application.module() {
     val albumService = get<AlbumService>()
     val backupService = get<BackupService>()
     val reverseProxyService = get<ReverseProxyService>()
+    val metadataFetchingService = get<MetadataFetchingService>()
 
     scheduleService.schedule(
         ScheduledTask(
@@ -144,6 +147,22 @@ fun Application.module() {
             name = "Session Cleanup",
             trigger = CronPresets.dailyAt(0, 0),
             task = { sessionService.cleanupOldSessions() }
+        )
+    )
+
+    scheduleService.schedule(
+        ScheduledTask(
+            name = "Fetch Artist Images (Tidal)",
+            trigger = CronPresets.dailyAt(4, 0),
+            task = {
+                try {
+                    metadataFetchingService.fetchArtistImages(MetadataService.Companion.MetadataType.tidal) {
+                        log.info(it)
+                    }
+                } catch (e: Exception) {
+                    log.error("Error during scheduled Tidal artist image fetch", e)
+                }
+            }
         )
     )
 

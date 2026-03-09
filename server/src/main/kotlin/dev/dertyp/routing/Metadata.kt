@@ -3,12 +3,11 @@ package dev.dertyp.routing
 import com.ucasoft.ktor.simpleCache.cacheOutput
 import dev.dertyp.ApiClient
 import dev.dertyp.Indexer
-import dev.dertyp.core.*
-import dev.dertyp.data.InsertableImage
-import dev.dertyp.db.ArtistTable
-import dev.dertyp.dbQuery
-import dev.dertyp.services.ImageService
+import dev.dertyp.core.getMetadataProvider
+import dev.dertyp.core.tidalId
+import dev.dertyp.core.toUUIDOrNull
 import dev.dertyp.services.LyricsSearch
+import dev.dertyp.services.MetadataFetchingService
 import dev.dertyp.services.SongService
 import dev.dertyp.services.metadata.MetadataService
 import dev.dertyp.services.metadata.TidalService
@@ -16,30 +15,26 @@ import io.github.smiley4.ktoropenapi.get
 import io.github.smiley4.ktoropenapi.head
 import io.github.smiley4.ktoropenapi.post
 import io.github.smiley4.ktoropenapi.route
-import io.ktor.client.request.*
-import io.ktor.client.statement.*
-import io.ktor.http.*
-import io.ktor.server.request.*
-import io.ktor.server.response.*
-import io.ktor.server.routing.*
-import io.ktor.server.sse.*
-import io.ktor.util.logging.*
-import io.ktor.utils.io.*
-import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.ensureActive
-import kotlinx.coroutines.launch
+import io.ktor.client.request.get
+import io.ktor.client.request.head
+import io.ktor.client.statement.bodyAsBytes
+import io.ktor.http.ContentType
+import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpMethod
+import io.ktor.http.HttpStatusCode
+import io.ktor.server.request.receive
+import io.ktor.server.response.respond
+import io.ktor.server.response.respondBytes
+import io.ktor.server.routing.Route
+import io.ktor.server.sse.sse
+import io.ktor.util.logging.KtorSimpleLogger
 import kotlinx.serialization.Serializable
-import org.jetbrains.exposed.v1.core.eq
-import org.jetbrains.exposed.v1.core.isNull
-import org.jetbrains.exposed.v1.jdbc.select
-import org.jetbrains.exposed.v1.jdbc.update
 import org.koin.ktor.ext.inject
-import java.util.*
+import java.util.UUID
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
+import kotlin.io.encoding.Base64
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.days
-import kotlin.io.encoding.Base64
 
 @Serializable
 data class AnimatedCover(
@@ -108,7 +103,7 @@ fun Route.metadata() {
             route("/fetchArtistImages", HttpMethod.Get) {
                 sse {
                     val indexer by inject<Indexer>()
-                    val imageService by inject<ImageService>()
+                    val metadataFetchingService by inject<MetadataFetchingService>()
 
                     if (indexer.isActive.load()) {
                         call.respond(HttpStatusCode.Conflict, "Index is running")
@@ -120,93 +115,8 @@ fun Route.metadata() {
 
                     val metadataProvider = MetadataService.Companion.MetadataType.valueOf(metadataProviderString)
 
-                    val service = MetadataService.getMetadataService(metadataProvider, environment)
-
-                    if (!MetadataService.isFetching.compareAndSet(expectedValue = false, newValue = true)) {
-                        call.respond(HttpStatusCode.Conflict, "Fetching is already in progress.")
-                        return@sse
-                    }
-
-                    val artists = dbQuery {
-                        ArtistTable
-                            .select(ArtistTable.id, ArtistTable.name, ArtistTable.image)
-                            .where { ArtistTable.image.isNull() }
-                            .map { Pair(it[ArtistTable.id].value, it[ArtistTable.name]) }
-                    }
-
-                    val artistChannel = Channel<Pair<UUID, String>>(Channel.UNLIMITED)
-
-                    try {
-                        coroutineScope {
-                            repeat(1) {
-                                launch {
-                                    for ((id, name) in artistChannel) {
-                                        send("Fetching image for: $name")
-                                        val response = service.searchArtists(name, 20)
-                                        val artist =
-                                            response.sortedByDescending { it.popularity }.firstOrNull { artist ->
-                                                artist.name.replace(".", "")
-                                                    .equals(name.replace(".", ""), ignoreCase = true)
-                                            }
-                                        if (artist == null) {
-                                            send("No artist with name \"$name\" ${response.joinToString(", ") { it.name }}")
-                                            continue
-                                        }
-
-                                        val images = artist.images
-                                        val image = images.maxByOrNull { it.width }
-                                        if (image == null) {
-                                            send("No image for \"$name\" $artist ${images.joinToString(", ")}")
-                                            continue
-                                        }
-
-                                        val imageBytes = ApiClient.instance.safeGet<ByteArray>(image.url)
-                                        if (imageBytes == null) {
-                                            send("No image (null) for \"$name\"")
-                                            continue
-                                        }
-
-                                        val imageId = imageService.createBatch(
-                                            listOf(
-                                                InsertableImage(
-                                                    data = imageBytes,
-                                                    imageHash = imageBytes.sha256(),
-                                                    origin = image.url
-                                                )
-                                            )
-                                        ).firstOrNull()
-                                        if (imageId == null) {
-                                            send("Error inserting image for \"$name\": ${image.url} (${imageBytes.sha256()})")
-                                            continue
-                                        }
-
-                                        val updates = dbQuery {
-                                            ArtistTable.update({ ArtistTable.id eq id }) {
-                                                it[ArtistTable.image] = imageId
-                                            }
-                                        }
-
-                                        if (updates == 1) send("Updated \"$name\" with an image.")
-                                        else send("Something went wrong. $name")
-                                    }
-                                }
-                            }
-                            for (artist in artists) {
-                                artistChannel.send(artist)
-                                ensureActive()
-                            }
-
-                            artistChannel.close()
-                        }
-
-                        send("Loading artist images done.")
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (_: ClosedWriteChannelException) {
-                    } catch (e: Throwable) {
-                        e.printStackTrace()
-                    } finally {
-                        MetadataService.isFetching.store(false)
+                    metadataFetchingService.fetchArtistImages(metadataProvider) {
+                        send(it)
                     }
                 }
             }

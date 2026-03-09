@@ -86,15 +86,13 @@ fun Application.module() {
             val serverName = call.request.queryParameters["name"]
             
             var assignedId = requestedId ?: UUID.randomUUID().toString().take(8)
-            
-            // Ensure uniqueness
+
             if (tunnels.containsKey(assignedId)) {
                 if (requestedId != null) {
                     logger.warn("Server connection rejected: ID {} already in use", assignedId)
                     close(CloseReason(CloseReason.Codes.CANNOT_ACCEPT, "Requested ID already in use"))
                     return@webSocket
                 } else {
-                    // Try another one if it was random
                     assignedId = UUID.randomUUID().toString().take(8)
                 }
             }
@@ -102,8 +100,7 @@ fun Application.module() {
             logger.info("Server connected: ID={}, Name={}", assignedId, serverName)
             val tunnel = ServerTunnel(assignedId, serverName, this)
             tunnels[assignedId] = tunnel
-            
-            // Inform the server about its ID
+
             send(ProxyMessage.AssignedId(assignedId).toFrame())
 
             try {
