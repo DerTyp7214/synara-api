@@ -15,13 +15,33 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.koin.core.context.GlobalContext
-import java.util.*
+import java.util.UUID
 
 fun Type.getWrapper(metadataService: MetadataService?, user: User, ids: List<String>): IdsWrapper {
     return when (this) {
         Type.MIX -> IdsWrapper.from(this, ids.associateBy { UUID.randomUUID().mostSignificantBits })
-        Type.SONG -> IdsWrapper.from(this, ids.associateBy { UUID.randomUUID().mostSignificantBits })
-        Type.ARTIST -> IdsWrapper.from(this, ids.associateBy { UUID.randomUUID().mostSignificantBits })
+        Type.SONG -> IdsWrapper.from(
+            this,
+            ids.associateBy { UUID.randomUUID().mostSignificantBits })
+
+        Type.ARTIST -> {
+            if (metadataService == null) IdsWrapper.from(this, emptyMap())
+            else {
+                val groups = ids.asFlow().map { id ->
+                    val tracks = metadataService.getArtistTracks(id)
+                    IdsGroup(
+                        id,
+                        emptyFlow(),
+                        IMetadataService.FlowArtist(
+                            id = id,
+                            tracks = tracks
+                        )
+                    )
+                }
+                IdsWrapper(this, groups)
+            }
+        }
+
         Type.ALBUM -> {
             if (metadataService == null) IdsWrapper.from(this, emptyMap())
             else {
@@ -137,10 +157,17 @@ suspend fun Type.download(
                                         maxRetries = trackChunk.size,
                                         type = Type.SONG
                                     ) {
-                                        val songs = songService.byTidalTrackIds(trackChunk.map { it.id }, user.id)
+                                        val songs = songService.byTidalTrackIds(
+                                            trackChunk.map { it.id },
+                                            user.id
+                                        )
                                         val songIds = trackChunk.map { track ->
                                             track.addedAt?.toInstant()
-                                                ?.toEpochMilli() to songs.find { it.originalUrl.endsWith("/${track.id}") }?.id
+                                                ?.toEpochMilli() to songs.find {
+                                                it.originalUrl.endsWith(
+                                                    "/${track.id}"
+                                                )
+                                            }?.id
                                         }.filterNotNull()
                                         if (playlistId != null) userPlaylistService.addToPlaylist(
                                             playlistId,
@@ -184,7 +211,37 @@ suspend fun Type.download(
             }
         }
 
-        Type.MIX, Type.SONG, Type.ARTIST -> {
+        Type.ARTIST -> {
+            val songService = GlobalContext.get().get<SongService>()
+
+            wrapper.idGroups.buffer(2).collect { idGroup ->
+                idGroup.metadata?.let { metadata ->
+                    when (metadata) {
+                        is IMetadataService.FlowArtist -> metadata.sharedTracks
+                        else -> emptyFlow()
+                    }
+                        .buffer(100)
+                        .filterExisting(
+                            songService = songService,
+                            user = user,
+                        ).collect { trackChunk ->
+                            downloadService.addToQueue(
+                                UrlDownloadQueueEntry(
+                                    urls = trackChunk
+                                        .map { track -> "https://tidal.com/track/${track.id}" }
+                                        .toMutableList(),
+                                    ids = trackChunk.map { it.id },
+                                    byUser = user.id,
+                                    maxRetries = trackChunk.size,
+                                    type = Type.SONG
+                                )
+                            )
+                        }
+                }
+            }
+        }
+
+        Type.MIX, Type.SONG -> {
             downloadStageMutex.withLock {
                 downloadStage.addAll(wrapper.filter { (_, id) ->
                     existingUrls.none {
@@ -199,7 +256,8 @@ suspend fun Type.download(
                 val urls = downloadStageMutex.withLock { downloadStage.splice(0, chunkSize) }
                 downloadService.addToQueue(
                     UrlDownloadQueueEntry(
-                        urls = urls.map { "https://tidal.com/${wrapper.type.value}/${it}" }.toMutableList(),
+                        urls = urls.map { "https://tidal.com/${wrapper.type.value}/${it}" }
+                            .toMutableList(),
                         ids = urls,
                         byUser = user.id,
                         type = wrapper.type

@@ -3,14 +3,19 @@ package dev.dertyp.services.metadata
 import dev.dertyp.ApiClient
 import dev.dertyp.data.User
 import dev.dertyp.services.Service
-import io.ktor.client.call.*
-import io.ktor.client.request.*
-import io.ktor.client.statement.*
-import io.ktor.http.*
-import io.ktor.server.application.*
+import io.ktor.client.call.body
+import io.ktor.client.request.HttpRequestBuilder
+import io.ktor.client.request.header
+import io.ktor.client.request.parameter
+import io.ktor.client.request.post
+import io.ktor.client.statement.bodyAsText
+import io.ktor.http.ContentType
+import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpStatusCode
+import io.ktor.server.application.ApplicationEnvironment
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
-import java.util.*
+import java.util.UUID
 import kotlin.concurrent.atomics.AtomicBoolean
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.time.Duration.Companion.seconds
@@ -41,6 +46,7 @@ abstract class MetadataService(
     abstract suspend fun albumExistsById(albumId: String): Boolean
     abstract suspend fun getArtistsByIds(artistIds: List<String>): List<IMetadataService.Artist>
     abstract suspend fun getAlbumTracks(albumId: String): Flow<IMetadataService.Track>
+    abstract suspend fun getArtistTracks(artistId: String): Flow<IMetadataService.Track>
     abstract fun getPlaylistsByIds(
         playlistIds: List<String>,
         includeTracks: Boolean = false,

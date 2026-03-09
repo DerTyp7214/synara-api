@@ -7,12 +7,14 @@ import dev.dertyp.plugins.RedisCacheProvider
 import dev.dertyp.services.ISyncService
 import dev.dertyp.services.models.tidal.*
 import dev.dertyp.services.sync.SyncService
-import io.ktor.client.call.*
-import io.ktor.client.request.*
-import io.ktor.client.statement.*
+import io.ktor.client.call.body
+import io.ktor.client.request.HttpRequestBuilder
+import io.ktor.client.request.header
+import io.ktor.client.statement.HttpResponse
+import io.ktor.client.statement.bodyAsText
 import io.ktor.http.*
-import io.ktor.server.application.*
-import io.ktor.server.util.*
+import io.ktor.server.application.ApplicationEnvironment
+import io.ktor.server.util.url
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
@@ -20,9 +22,10 @@ import kotlinx.coroutines.launch
 import org.koin.core.component.inject
 import redis.clients.jedis.HostAndPort
 import redis.clients.jedis.RedisClusterClient
-import java.util.*
+import java.util.UUID
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.io.encoding.Base64
+import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 
 @OptIn(ExperimentalAtomicApi::class)
@@ -86,7 +89,10 @@ class TidalService(
     }
 
     override fun HttpRequestBuilder.getAccessTokenHeader(clientId: String, clientSecret: String) {
-        header(HttpHeaders.Authorization, "Basic ${Base64.encode("$clientId:$clientSecret".toByteArray())}")
+        header(
+            HttpHeaders.Authorization,
+            "Basic ${Base64.encode("$clientId:$clientSecret".toByteArray())}"
+        )
         header("grant_type", "client_credentials")
     }
 
@@ -107,13 +113,14 @@ class TidalService(
     private suspend fun makeRequest(url: String, user: User? = null): HttpResponse {
         return ApiClient.instance.queuedGet(url) {
             val token = if (user != null) {
-                SyncService.getInstance(user, environment, ISyncService.SyncServiceType.tidal).getAccessToken()?.let {
-                    IMetadataService.AccessTokenResponse(
-                        tokenType = it.tokenType,
-                        accessToken = it.accessToken,
-                        expiresIn = it.expiresIn
-                    )
-                } ?: getAccessToken()
+                SyncService.getInstance(user, environment, ISyncService.SyncServiceType.tidal)
+                    .getAccessToken()?.let {
+                        IMetadataService.AccessTokenResponse(
+                            tokenType = it.tokenType,
+                            accessToken = it.accessToken,
+                            expiresIn = it.expiresIn
+                        )
+                    } ?: getAccessToken()
             } else getAccessToken()
             header(HttpHeaders.Authorization, "${token.tokenType} ${token.accessToken}")
             header(HttpHeaders.Accept, "application/vnd.api+json")
@@ -256,7 +263,8 @@ class TidalService(
         }
 
         try {
-            val body = response.body<TracksMultiRelationshipDataDocument<ResourceIdentifier, EmptyRelationships>>()
+            val body =
+                response.body<TracksMultiRelationshipDataDocument<ResourceIdentifier, EmptyRelationships>>()
 
             return body.data.first().id
         } catch (e: Exception) {
@@ -292,10 +300,17 @@ class TidalService(
         }
 
         try {
-            val body = response.body<AlbumsMultiRelationshipDataDocument<ArtworksAttributes, ArtworksRelationships>>()
+            val body =
+                response.body<AlbumsMultiRelationshipDataDocument<ArtworksAttributes, ArtworksRelationships>>()
 
             return body.included?.flatMap { i ->
-                i.attributes.files.map { f -> IMetadataService.Image(f.href, f.meta.width, f.meta.height) }
+                i.attributes.files.map { f ->
+                    IMetadataService.Image(
+                        f.href,
+                        f.meta.width,
+                        f.meta.height
+                    )
+                }
             } ?: emptyList()
         } catch (e: Exception) {
             e.printStackTrace()
@@ -333,7 +348,8 @@ class TidalService(
         }
 
         try {
-            val body = response.body<AlbumsMultiRelationshipDataDocument<ArtworksAttributes, ArtworksRelationships>>()
+            val body =
+                response.body<AlbumsMultiRelationshipDataDocument<ArtworksAttributes, ArtworksRelationships>>()
             val coverMap = body.included?.associateBy { it.id } ?: emptyMap()
 
             return body.data.associate { album ->
@@ -383,7 +399,8 @@ class TidalService(
         }
 
         try {
-            val body = response.body<TracksSingleResourceDataDocument<JsonAttribute, EmptyRelationships>>()
+            val body =
+                response.body<TracksSingleResourceDataDocument<JsonAttribute, EmptyRelationships>>()
 
             val imageUrls = body.data.singleImage(::getImageUrlByAlbumId)
 
@@ -444,9 +461,11 @@ class TidalService(
         }
 
         try {
-            val body = response.body<TracksMultiResourceDataDocument<JsonAttribute, EmptyRelationships>>()
+            val body =
+                response.body<TracksMultiResourceDataDocument<JsonAttribute, EmptyRelationships>>()
 
-            val albumIds = body.data.mapNotNull { it.relationships?.albums?.data?.firstOrNull()?.id }
+            val albumIds =
+                body.data.mapNotNull { it.relationships?.albums?.data?.firstOrNull()?.id }
             val imageUrls = getImageUrlsByAlbumIds(albumIds)
 
             val artists = body.included?.mapAttributes<ArtistsAttributes>() ?: emptyMap()
@@ -529,7 +548,8 @@ class TidalService(
         }
 
         try {
-            val body = response.body<AlbumsMultiRelationshipDataDocument<JsonAttribute, EmptyRelationships>>()
+            val body =
+                response.body<AlbumsMultiRelationshipDataDocument<JsonAttribute, EmptyRelationships>>()
 
             val images = body.included?.mapAttributes<ArtworksAttributes>() ?: emptyMap()
             val artists = body.included?.mapAttributes<ArtistsAttributes>() ?: emptyMap()
@@ -593,7 +613,8 @@ class TidalService(
         }
 
         try {
-            val body = response.body<ArtistsMultiRelationshipDataDocument<JsonAttribute, EmptyRelationships>>()
+            val body =
+                response.body<ArtistsMultiRelationshipDataDocument<JsonAttribute, EmptyRelationships>>()
 
             val images = body.included?.mapAttributes<ArtworksAttributes>() ?: emptyMap()
 
@@ -615,6 +636,70 @@ class TidalService(
         }
     }
 
+    override suspend fun getArtistTracks(artistId: String): Flow<IMetadataService.Track> = flow {
+        var cursor: String? = null
+        var depth = 1
+
+        do {
+            val url = getUrl("/artists/${artistId}/relationships/tracks") {
+                parameters {
+                    append("countryCode", "US")
+                    append("collapseBy", "FINGERPRINT")
+                    appendAll("include", listOf("tracks"))
+                    cursor?.let { append("page[cursor]", it) }
+                }
+            }
+
+            val response = makeRequest(url)
+            when (response.status) {
+                HttpStatusCode.OK -> {}
+                HttpStatusCode.TooManyRequests -> {
+                    val delayDuration = (10.seconds * depth).coerceAtMost(2.minutes)
+                    logger.warn("[getArtistTracks]: Too many requests, waiting ${delayDuration.inWholeSeconds} seconds")
+                    delay(delayDuration)
+                    depth++
+                    continue
+                }
+
+                else -> {
+                    println("error: ${response.status}")
+                    continue
+                }
+            }
+
+            try {
+                val body =
+                    response.body<ArtistsMultiRelationshipDataDocument<TracksAttributes, TracksRelationships>>()
+                val tracks = body.included?.map {
+                    val track = it.attributes
+
+                    IMetadataService.Track(
+                        id = it.id,
+                        title = track.title,
+                        duration = track.duration,
+                        createdAt = track.createdAt,
+                        artists = emptyList(),
+                        images = emptyList(),
+                    )
+                } ?: emptyList()
+
+                cursor = body.links.meta?.nextCursor
+
+                emitAll(tracks.asFlow())
+
+                if (cursor != null) {
+                    logger.info("Fetching tracks for $artistId with cursor: $cursor")
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                println(response.bodyAsText())
+                depth += 10
+            } finally {
+                if (depth > 1000) break
+            }
+        } while (cursor != null)
+    }
+
     override suspend fun getAlbumTracks(albumId: String): Flow<IMetadataService.Track> = flow {
         var cursor: String? = null
         var depth = 1
@@ -633,8 +718,9 @@ class TidalService(
             when (response.status) {
                 HttpStatusCode.OK -> {}
                 HttpStatusCode.TooManyRequests -> {
-                    logger.warn("[getAlbumTracks]: Too many requests, waiting ${10 * depth} seconds")
-                    delay(10.seconds * depth)
+                    val delayDuration = (10.seconds * depth).coerceAtMost(2.minutes)
+                    logger.warn("[getAlbumTracks]: Too many requests, waiting ${delayDuration.inWholeSeconds} seconds")
+                    delay(delayDuration)
                     depth++
                     continue
                 }
@@ -646,8 +732,10 @@ class TidalService(
             }
 
             try {
-                val body = response.body<AlbumsItemsMultiRelationshipDataDocument<JsonAttribute, EmptyRelationships>>()
-                val meta = body.data?.associate { it.id to it.meta }?.filterValueNotNull() ?: emptyMap()
+                val body =
+                    response.body<AlbumsItemsMultiRelationshipDataDocument<JsonAttribute, EmptyRelationships>>()
+                val meta =
+                    body.data?.associate { it.id to it.meta }?.filterValueNotNull() ?: emptyMap()
                 val tracks = body.included?.mapAttributes<TracksAttributes>() ?: emptyMap()
 
                 cursor = body.links.meta?.nextCursor
@@ -671,6 +759,9 @@ class TidalService(
             } catch (e: Exception) {
                 e.printStackTrace()
                 println(response.bodyAsText())
+                depth += 10
+            } finally {
+                if (depth > 1000) break
             }
         } while (cursor != null)
     }
@@ -703,7 +794,8 @@ class TidalService(
         }
 
         try {
-            val body = response.body<PlaylistsItemsMultiRelationshipDataDocument<JsonAttribute, EmptyRelationships>>()
+            val body =
+                response.body<PlaylistsItemsMultiRelationshipDataDocument<JsonAttribute, EmptyRelationships>>()
             val meta = body.data?.associate { it.id to it.meta }?.filterValueNotNull() ?: emptyMap()
             val tracks = body.included?.mapAttributes<TracksAttributes>() ?: emptyMap()
             val nextCursor = body.links.meta?.nextCursor
@@ -740,7 +832,8 @@ class TidalService(
         user: User?
     ): Flow<IMetadataService.FlowPlaylist> = flow {
         val filteredPlaylistIds = playlistIds.distinct().toMutableList()
-        val existing = if (!includeTracks) checkExistingPlaylistsFromCache(filteredPlaylistIds) else emptyList()
+        val existing =
+            if (!includeTracks) checkExistingPlaylistsFromCache(filteredPlaylistIds) else emptyList()
 
         filteredPlaylistIds.removeAll(existing)
 
@@ -782,7 +875,8 @@ class TidalService(
         }
 
         try {
-            val body = response.body<PlaylistsMultiRelationshipDataDocument<JsonAttribute, EmptyRelationships>>()
+            val body =
+                response.body<PlaylistsMultiRelationshipDataDocument<JsonAttribute, EmptyRelationships>>()
 
             val images = body.included?.mapAttributes<ArtworksAttributes>() ?: emptyMap()
             val tracks =

@@ -5,13 +5,13 @@ import dev.dertyp.core.bytes
 import dev.dertyp.data.User
 import dev.dertyp.services.ImageService
 import io.ktor.client.request.*
-import io.ktor.client.statement.*
+import io.ktor.client.statement.bodyAsText
 import io.ktor.http.*
-import io.ktor.server.application.*
-import io.ktor.server.util.*
+import io.ktor.server.application.ApplicationEnvironment
+import io.ktor.server.util.url
 import kotlinx.coroutines.flow.Flow
 import org.koin.core.context.GlobalContext
-import java.util.*
+import java.util.UUID
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 
 @OptIn(ExperimentalAtomicApi::class)
@@ -91,6 +91,10 @@ class ImageCacheService(
     }
 
     override suspend fun getAlbumTracks(albumId: String): Flow<IMetadataService.Track> {
+        throw NotImplementedError("Not implemented for ImageCache")
+    }
+
+    override suspend fun getArtistTracks(artistId: String): Flow<IMetadataService.Track> {
         throw NotImplementedError("Not implemented for ImageCache")
     }
 
