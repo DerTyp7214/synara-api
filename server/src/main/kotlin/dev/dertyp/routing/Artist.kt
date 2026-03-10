@@ -5,15 +5,16 @@ import dev.dertyp.core.toUUIDOrNull
 import dev.dertyp.data.Artist
 import dev.dertyp.data.MergeArtists
 import dev.dertyp.data.PaginatedResponse
+import dev.dertyp.data.SplitArtist
 import dev.dertyp.services.ArtistService
 import io.github.smiley4.ktoropenapi.get
 import io.github.smiley4.ktoropenapi.post
 import io.github.smiley4.ktoropenapi.route
-import io.ktor.http.*
-import io.ktor.server.request.*
-import io.ktor.server.response.*
-import io.ktor.server.routing.*
-import io.ktor.util.logging.*
+import io.ktor.http.HttpStatusCode
+import io.ktor.server.request.receive
+import io.ktor.server.response.respond
+import io.ktor.server.routing.Route
+import io.ktor.util.logging.KtorSimpleLogger
 import org.koin.ktor.ext.inject
 
 fun Route.artist() {
@@ -125,6 +126,27 @@ fun Route.artist() {
             val mergedArtist = service.mergeArtists(mergeArtists) ?: return@post call.respond(HttpStatusCode.BadRequest)
 
             call.respond(mergedArtist)
+        }
+
+        post("/split", {
+            request {
+                body<SplitArtist> {
+                    description = "The artist to split into multiple artists."
+                }
+            }
+            response {
+                HttpStatusCode.OK to {
+                    body<List<Artist>>()
+                }
+            }
+        }) {
+            val service by inject<ArtistService>()
+
+            val splitArtist = call.receive<SplitArtist>()
+
+            val splitArtists = service.splitArtist(splitArtist)
+
+            call.respond(splitArtists)
         }
     }
 }

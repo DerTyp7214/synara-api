@@ -1,0 +1,46 @@
+type: http_request
+model: http_request
+id: rq_f9K5fChgBn
+createdAt: 2026-03-10T09:41:59.986383691
+updatedAt: 2026-03-10T09:44:44.700426547
+workspaceId: wk_9dbKacQT4H
+folderId: fl_MAn552zthQ
+authentication: {}
+authenticationType: null
+body:
+  text: |-
+    {
+      "artistId": "21a3753e-036b-4227-b30d-0b45e1bd9ec6",
+      "newArtists": {
+        "Lucry": null,
+        "Suena": null
+      }
+    }
+bodyType: application/json
+description: '[object Object]'
+headers:
+- enabled: true
+  name: Accept
+  value: application/json
+  id: null
+- enabled: true
+  name: Content-Type
+  value: application/json
+  id: JcIGfTDpIx
+method: POST
+name: /split
+sortPriority: 42.001999999999995
+url: ${[baseUrl]}/artist/split
+urlParameters:
+- enabled: false
+  name: page
+  value: <integer>
+  id: mD3IN0vJaV
+- enabled: false
+  name: pageSize
+  value: <integer>
+  id: hBbS0P04Ay
+- enabled: true
+  name: ''
+  value: ''
+  id: XUHGhkYJ55

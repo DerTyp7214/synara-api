@@ -2,10 +2,7 @@ package dev.dertyp.services
 
 import dev.dertyp.ApiClient
 import dev.dertyp.core.*
-import dev.dertyp.data.Artist
-import dev.dertyp.data.InsertableImage
-import dev.dertyp.data.MergeArtists
-import dev.dertyp.data.PaginatedResponse
+import dev.dertyp.data.*
 import dev.dertyp.db.AlbumArtistTable
 import dev.dertyp.db.ArtistAliasTable
 import dev.dertyp.db.ArtistTable
@@ -14,7 +11,7 @@ import dev.dertyp.dbQuery
 import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.jdbc.*
 import org.koin.core.component.inject
-import java.util.*
+import java.util.UUID
 
 class ArtistService : IArtistService, Service() {
     companion object {
@@ -156,6 +153,88 @@ class ArtistService : IArtistService, Service() {
         logger.info("Merged artists $mergeArtists into $newArtist")
 
         return@dbQuery byId(newArtist)
+    }
+
+    override suspend fun splitArtist(splitArtist: SplitArtist): List<Artist> {
+        val originalArtistId = splitArtist.artistId
+
+        val exists = dbQuery {
+            ArtistTable.select(ArtistTable.id).where { ArtistTable.id eq originalArtistId }.singleOrNull() != null
+        }
+
+        if (!exists) return emptyList()
+
+        val targetArtistIds = mutableListOf<UUID>()
+        val namesToResolve = mutableListOf<String>()
+
+        splitArtist.newArtists.forEach { (name, id) ->
+            if (id != null) {
+                targetArtistIds.add(id)
+            } else {
+                namesToResolve.add(name)
+            }
+        }
+
+        if (namesToResolve.isNotEmpty()) {
+            targetArtistIds.addAll(getOrBulkCreate(namesToResolve).values)
+        }
+
+        val finalTargetIds = targetArtistIds.distinct()
+
+        dbQuery {
+            val songIds = SongArtistTable
+                .select(SongArtistTable.songId)
+                .where { SongArtistTable.artistId eq originalArtistId }
+                .map { it[SongArtistTable.songId].value }
+
+            val albumIds = AlbumArtistTable
+                .select(AlbumArtistTable.albumId)
+                .where { AlbumArtistTable.artistId eq originalArtistId }
+                .map { it[AlbumArtistTable.albumId].value }
+
+            finalTargetIds.forEach { targetId ->
+                if (targetId == originalArtistId) return@forEach
+
+                val existingSongIds = SongArtistTable
+                    .select(SongArtistTable.songId)
+                    .where { (SongArtistTable.artistId eq targetId) and (SongArtistTable.songId inList songIds) }
+                    .map { it[SongArtistTable.songId].value }
+                    .toSet()
+
+                val songsToInsert = songIds.filter { it !in existingSongIds }
+                if (songsToInsert.isNotEmpty()) {
+                    SongArtistTable.batchInsert(songsToInsert) { songId ->
+                        this[SongArtistTable.songId] = songId
+                        this[SongArtistTable.artistId] = targetId
+                    }
+                }
+
+                val existingAlbumIds = AlbumArtistTable
+                    .select(AlbumArtistTable.albumId)
+                    .where { (AlbumArtistTable.artistId eq targetId) and (AlbumArtistTable.albumId inList albumIds) }
+                    .map { it[AlbumArtistTable.albumId].value }
+                    .toSet()
+
+                val albumsToInsert = albumIds.filter { it !in existingAlbumIds }
+                if (albumsToInsert.isNotEmpty()) {
+                    AlbumArtistTable.batchInsert(albumsToInsert) { albumId ->
+                        this[AlbumArtistTable.albumId] = albumId
+                        this[AlbumArtistTable.artistId] = targetId
+                    }
+                }
+            }
+
+            if (originalArtistId !in finalTargetIds) {
+                SongArtistTable.deleteWhere { SongArtistTable.artistId eq originalArtistId }
+                AlbumArtistTable.deleteWhere { AlbumArtistTable.artistId eq originalArtistId }
+                ArtistTable.deleteWhere { ArtistTable.id eq originalArtistId }
+                ArtistAliasTable.deleteWhere { ArtistAliasTable.artistId eq originalArtistId }
+            }
+
+            logger.info("Split artist $originalArtistId into $finalTargetIds")
+        }
+
+        return byIds(finalTargetIds)
     }
 
     override suspend fun allArtists(page: Int, pageSize: Int): PaginatedResponse<Artist> = queryArtists(page, pageSize)
