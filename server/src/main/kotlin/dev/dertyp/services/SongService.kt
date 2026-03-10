@@ -26,7 +26,7 @@ import org.koin.core.component.get
 import java.io.File
 import java.nio.file.Paths
 import java.time.Instant
-import java.util.*
+import java.util.UUID
 import kotlin.io.path.absolutePathString
 import kotlin.io.path.isSymbolicLink
 import kotlin.io.path.readSymbolicLink
@@ -830,7 +830,7 @@ class SongService : Service() {
         }
         val uniqueCoverHashes = songs.map { it.coverHash }.distinct()
 
-        val artistIdMap: Map<String, UUID> = uniqueArtistNames
+        val artistIdMap: Map<String, List<UUID>> = uniqueArtistNames
             .chunked(maxBatchSize)
             .map { batch ->
                 async {
@@ -839,7 +839,8 @@ class SongService : Service() {
             }
             .awaitAll()
             .flatten()
-            .toMap()
+            .groupBy({ it.key }, { it.value })
+            .mapValues { (_, values) -> values.flatten() }
 
         val albumIdMap: Map<InsertableAlbum, UUID> = uniqueAlbums
             .chunked(maxBatchSize)
@@ -930,10 +931,10 @@ class SongService : Service() {
             songInsertResult.map { it[SongTable.id].value to filteredSongs[songInsertResult.indexOf(it)] }
 
         val songArtistLinks = insertedSongs.flatMap { (songId, songData) ->
-            songData.artists.mapNotNull { artistName ->
-                artistIdMap[artistName]?.let { artistId ->
+            songData.artists.flatMap { artistName ->
+                artistIdMap[artistName]?.map { artistId ->
                     Pair(songId, artistId)
-                }
+                } ?: emptyList()
             }
         }.distinct()
 

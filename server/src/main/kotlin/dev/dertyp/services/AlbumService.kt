@@ -19,7 +19,7 @@ import org.jetbrains.exposed.v1.jdbc.*
 import org.koin.core.component.get
 import java.io.File
 import java.nio.file.Paths
-import java.util.*
+import java.util.UUID
 import kotlin.io.path.absolutePathString
 import kotlin.io.path.isSymbolicLink
 import kotlin.io.path.readSymbolicLink
@@ -259,7 +259,7 @@ class AlbumService : IAlbumService, Service() {
         val uniqueOriginalIds = uniqueAlbumMetadata.map { it.originalId }
         val allRequiredArtistNames = albums.flatMap { it.artists }.distinct()
 
-        val artistIdMap: Map<String, UUID> = artistService.getOrBulkCreate(allRequiredArtistNames)
+        val artistIdMap: Map<String, List<UUID>> = artistService.getOrBulkCreate(allRequiredArtistNames)
         val imageMap: Map<String, UUID> = imageService.getCoverHashes(uniqueCoverHashed)
 
         val potentialAlbumRows = queryAlbums(0, Int.MAX_VALUE) {
@@ -294,7 +294,7 @@ class AlbumService : IAlbumService, Service() {
                         && (it.originalId == null || it.originalId == row.originalId)
             }
 
-            val requiredArtistIdsForInput = inputAlbum?.artists?.mapNotNull { artistIdMap[it] }?.toSet() ?: emptySet()
+            val requiredArtistIdsForInput = inputAlbum?.artists?.flatMap { artistIdMap[it] ?: emptyList() }?.toSet() ?: emptySet()
 
             if (albumArtists == requiredArtistIdsForInput) {
                 finalMatchMap[Quadruple(
@@ -338,10 +338,10 @@ class AlbumService : IAlbumService, Service() {
         }
 
         val newAlbumArtistLinks = newAlbumIdMap.flatMap { (albumData, albumId) ->
-            albumData.artists.mapNotNull { artistName ->
-                artistIdMap[artistName]?.let { artistId ->
+            albumData.artists.flatMap { artistName ->
+                artistIdMap[artistName]?.map { artistId ->
                     Pair(albumId, artistId)
-                }
+                } ?: emptyList()
             }
         }.distinct()
 

@@ -3,10 +3,7 @@ package dev.dertyp.services
 import dev.dertyp.ApiClient
 import dev.dertyp.core.*
 import dev.dertyp.data.*
-import dev.dertyp.db.AlbumArtistTable
-import dev.dertyp.db.ArtistAliasTable
-import dev.dertyp.db.ArtistTable
-import dev.dertyp.db.SongArtistTable
+import dev.dertyp.db.*
 import dev.dertyp.dbQuery
 import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.jdbc.*
@@ -158,11 +155,19 @@ class ArtistService : IArtistService, Service() {
     override suspend fun splitArtist(splitArtist: SplitArtist): List<Artist> {
         val originalArtistId = splitArtist.artistId
 
-        val exists = dbQuery {
-            ArtistTable.select(ArtistTable.id).where { ArtistTable.id eq originalArtistId }.singleOrNull() != null
-        }
+        val originalArtistData = dbQuery {
+            val mainRow = ArtistTable
+                .select(ArtistTable.name)
+                .where { ArtistTable.id eq originalArtistId }
+                .singleOrNull() ?: return@dbQuery null
 
-        if (!exists) return emptyList()
+            val aliases = ArtistAliasTable
+                .select(ArtistAliasTable.name)
+                .where { ArtistAliasTable.artistId eq originalArtistId }
+                .map { it[ArtistAliasTable.name] }
+
+            listOf(mainRow[ArtistTable.name]) + aliases
+        } ?: return emptyList()
 
         val targetArtistIds = mutableListOf<UUID>()
         val namesToResolve = mutableListOf<String>()
@@ -176,7 +181,7 @@ class ArtistService : IArtistService, Service() {
         }
 
         if (namesToResolve.isNotEmpty()) {
-            targetArtistIds.addAll(getOrBulkCreate(namesToResolve).values)
+            targetArtistIds.addAll(getOrBulkCreate(namesToResolve).values.flatten())
         }
 
         val finalTargetIds = targetArtistIds.distinct()
@@ -220,6 +225,14 @@ class ArtistService : IArtistService, Service() {
                     AlbumArtistTable.batchInsert(albumsToInsert) { albumId ->
                         this[AlbumArtistTable.albumId] = albumId
                         this[AlbumArtistTable.artistId] = targetId
+                    }
+                }
+
+                // Register split aliases
+                originalArtistData.forEach { name ->
+                    ArtistSplitAliasTable.insertIgnore {
+                        it[ArtistSplitAliasTable.name] = name
+                        it[ArtistSplitAliasTable.artistId] = targetId
                     }
                 }
             }
@@ -307,25 +320,38 @@ class ArtistService : IArtistService, Service() {
         }
     }
 
-    suspend fun getOrBulkCreate(artistNames: List<String>): Map<String, UUID> {
+    suspend fun getOrBulkCreate(artistNames: List<String>): Map<String, List<UUID>> {
+        val existingSplits = dbQuery {
+            ArtistSplitAliasTable
+                .select(ArtistSplitAliasTable.name, ArtistSplitAliasTable.artistId)
+                .where { ArtistSplitAliasTable.name inList artistNames }
+                .toList()
+                .groupBy({ it[ArtistSplitAliasTable.name] }, { it[ArtistSplitAliasTable.artistId].value })
+        }
+
+        val namesToResolve = artistNames.filter { it !in existingSplits.keys }
+
         val existingRows = dbQuery {
             ArtistTable
                 .leftJoin(ArtistAliasTable)
                 .select(ArtistTable.id, ArtistTable.name, ArtistAliasTable.name)
-                .where { ArtistTable.name inList artistNames }
-                .orWhere { ArtistAliasTable.name inList artistNames }
+                .where { ArtistTable.name inList namesToResolve }
+                .orWhere { ArtistAliasTable.name inList namesToResolve }
                 .toList()
         }
 
-        val existingNames = existingRows.flatMap { listOf(it[ArtistTable.name], it[ArtistAliasTable.name]) }.toSet()
+        val existingNames = existingRows.flatMap { listOfNotNull(it[ArtistTable.name], it.getOrNull(ArtistAliasTable.name)) }.toSet()
         val existingMap = existingRows.flatMap {
-            listOf(
-                Pair(it[ArtistTable.name], it[ArtistTable.id].value),
-                Pair(it[ArtistAliasTable.name], it[ArtistTable.id].value)
+            val mainName = it[ArtistTable.name]
+            val aliasName = it.getOrNull(ArtistAliasTable.name)
+            val artistId = it[ArtistTable.id].value
+            listOfNotNull(
+                mainName to artistId,
+                aliasName?.let { name -> name to artistId }
             )
-        }.distinct().toMap()
+        }.distinct().groupBy({ it.first }, { it.second })
 
-        val newNames = artistNames.filter { it !in existingNames }
+        val newNames = namesToResolve.filter { it !in existingNames }
 
         val newRows = if (newNames.isNotEmpty()) {
             dbQuery {
@@ -346,9 +372,9 @@ class ArtistService : IArtistService, Service() {
             emptyList()
         }
 
-        val newMap = newRows.associate { it[ArtistTable.name] to it[ArtistTable.id].value }
+        val newMap = newRows.associate { it[ArtistTable.name] to listOf(it[ArtistTable.id].value) }
 
-        return existingMap + newMap
+        return existingSplits + existingMap + newMap
     }
 
     suspend fun deleteUnreferencedArtists() = dbQuery {
