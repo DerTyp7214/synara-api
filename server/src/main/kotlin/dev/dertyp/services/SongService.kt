@@ -98,8 +98,10 @@ class SongRpcService(private val user: User, private val songService: SongServic
     override suspend fun allSongs(
         page: Int,
         pageSize: Int,
-        explicit: Boolean
-    ): PaginatedResponse<UserSong> = songService.allSongs(page, pageSize, explicit, user.id)
+        explicit: Boolean,
+        tags: List<SongTag>,
+        invertTags: Boolean
+    ): PaginatedResponse<UserSong> = songService.allSongs(page, pageSize, explicit, user.id, tags, invertTags)
 
     override suspend fun deleteSongs(@LogParam("size") ids: Collection<UUID>): Boolean = songService.deleteSongs(ids)
 
@@ -115,7 +117,8 @@ class SongRpcService(private val user: User, private val songService: SongServic
 
     override suspend fun getStreamSize(id: UUID): Long = songService.getStreamSize(id)
 
-    override fun allSongIds(explicit: Boolean): Flow<UUID> = songService.allSongIds(explicit)
+    override fun allSongIds(explicit: Boolean, tags: List<SongTag>, invertTags: Boolean): Flow<UUID> =
+        songService.allSongIds(explicit, tags, invertTags)
 
     override fun likedSongIds(explicit: Boolean): Flow<UUID> = songService.likedSongIds(explicit, user.id)
 
@@ -384,10 +387,18 @@ class SongService : Service() {
             orderBy(UserSongTable.updatedAt to SortOrder.DESC)
         }
 
-    suspend fun allSongs(page: Int, pageSize: Int, explicit: Boolean, userId: UUID): PaginatedResponse<UserSong> =
+    suspend fun allSongs(
+        page: Int,
+        pageSize: Int,
+        explicit: Boolean,
+        userId: UUID,
+        tags: List<SongTag> = emptyList(),
+        invertTags: Boolean = false
+    ): PaginatedResponse<UserSong> =
         querySongs(
             page, pageSize, explicit, { userSong(userId) },
             query = {
+                applyTags(tags, invertTags)
                 orderBy(SongTable.inserted, SortOrder.DESC)
                 orderBy(SongTable.id, SortOrder.ASC)
             }
@@ -466,13 +477,18 @@ class SongService : Service() {
         return file.length()
     }
 
-    fun allSongIds(explicit: Boolean): Flow<UUID> = flow {
+    fun allSongIds(
+        explicit: Boolean,
+        tags: List<SongTag> = emptyList(),
+        invertTags: Boolean = false
+    ): Flow<UUID> = flow {
         SongTable
             .select(SongTable.id)
             .let {
                 if (!explicit) it.where { SongTable.explicit eq false }
                 else it
             }
+            .applyTags(tags, invertTags)
             .orderBy(SongTable.inserted, SortOrder.DESC)
             .orderBy(SongTable.id, SortOrder.ASC)
             .fetchBatchedResults(1000) { batch ->
@@ -480,6 +496,29 @@ class SongService : Service() {
                     emit(it[SongTable.id].value)
                 }
             }
+    }
+
+    private fun Query.applyTags(tags: List<SongTag>, invert: Boolean): Query {
+        if (tags.isNotEmpty()) {
+            val customAudioPath = get<StorageService>().customAudioPath
+
+            val conditions = tags.map { tag ->
+                when (tag) {
+                    SongTag.Q_44_48 -> (SongTable.sampleRate eq 44100) or (SongTable.sampleRate eq 48000)
+                    SongTag.Q_96 -> (SongTable.sampleRate eq 96000)
+                    SongTag.Q_192 -> (SongTable.sampleRate eq 192000)
+                    SongTag.B_16 -> (SongTable.bitsPerSample eq 16)
+                    SongTag.B_24 -> (SongTable.bitsPerSample eq 24)
+                    SongTag.HAS_LYRICS -> (SongTable.lyrics neq "")
+                    SongTag.CUSTOM_UPLOAD -> (SongTable.filePath like "$customAudioPath%")
+                }
+            }
+            
+            val combinedCondition = conditions.reduce { acc, op -> acc or op }
+            if (invert) andWhere { not(combinedCondition) }
+            else andWhere { combinedCondition }
+        }
+        return this
     }
 
     fun likedSongIds(explicit: Boolean, userId: UUID): Flow<UUID> = flow {
