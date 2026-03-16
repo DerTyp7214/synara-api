@@ -3,6 +3,7 @@ package dev.dertyp.services.schedule
 import dev.dertyp.services.SongService
 import dev.dertyp.services.UserService
 import io.ktor.util.logging.KtorSimpleLogger
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeoutOrNull
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
@@ -29,6 +30,7 @@ class MusicBrainzWorker : KoinComponent {
                     if (song?.musicBrainzId != null) {
                         count++
                     }
+                    delay(250)
                 } catch (e: Exception) {
                     logger.error("Error fetching MusicBrainz ID for song $songId: ${e.message}", e)
                 }

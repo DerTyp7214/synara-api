@@ -75,8 +75,8 @@ class MusicBrainzService : Service() {
                 return response.body<T>()
             } catch (e: Exception) {
                 logger.error("Error during MusicBrainz request: ${e.message}", e)
-                retries++
                 delay(1000)
+                retries++
             }
         }
         return null
