@@ -528,6 +528,7 @@ class SongService : Service() {
         invertTags: Boolean = false
     ): Flow<UUID> = flow {
         SongTable
+            .leftJoin(SongMusicBrainzTable)
             .select(SongTable.id)
             .let {
                 if (!explicit) it.where { SongTable.explicit eq false }
@@ -556,6 +557,7 @@ class SongService : Service() {
                     SongTag.B_24 -> (SongTable.bitsPerSample eq 24)
                     SongTag.HAS_LYRICS -> (SongTable.lyrics neq "")
                     SongTag.CUSTOM_UPLOAD -> (SongTable.filePath like "$customAudioPath%")
+                    SongTag.HAS_MUSICBRAINZ_ID -> (SongMusicBrainzTable.musicBrainzId.isNotNull())
                 }
             }
             
