@@ -26,6 +26,7 @@ The application uses `kotlinx.rpc` with Ktor for RPC communication.
 *   **Interface:**
     *   `getStats()`: Returns `ServerStats` object containing server metrics.
     *   `health()`: Returns a boolean indicating if the server is healthy.
+    *   `getProxyInfo()`: Returns information about the reverse proxy status.
 
 ### IAuthService
 *   **Path:** `/rpc/auth`
@@ -59,14 +60,15 @@ The application uses `kotlinx.rpc` with Ktor for RPC communication.
     *   `setLiked(id, liked, addedAt)`: Marks a song as liked/unliked.
     *   `setLyrics(id, lyrics)`: Updates lyrics for a song.
     *   `byId(id)`: Gets a song by ID.
-    *   `byIds(ids)`: Gets multiple songs by IDs. **Preserves order of input IDs.**
-    *   `byTitle`, `byArtist`, `byAlbum`, `byPlaylist`, `byUserPlaylist`: Search/Filter songs by various criteria with pagination.
+    *   `byIds(ids)`: Gets multiple songs by IDs. Returns `PaginatedResponse<UserSong>`. **Preserves order of input IDs.**
+    *   `byTitle`, `byArtist`, `likedByArtist`, `byAlbum`, `byPlaylist`, `byUserPlaylist`: Search/Filter songs by various criteria with pagination.
     *   `byTidalTrackIds`, `byTidalTracks`: Retrieves songs based on Tidal metadata.
-    *   `likedSongs`, `allSongs`: Retrieves lists of songs.
+    *   `likedSongs`, `allSongs`: Retrieves lists of songs (supports filtering by `explicit` and `tags`).
     *   `deleteSongs(ids)`: Deletes specified songs.
     *   `rankedSearch(...)`: Performs a ranked search for songs.
-    *   `streamSong(id, offset)`: Returns a `Flow<ByteArray>` for streaming song audio.
-    *   `getStreamSize(id)`: Gets the size of the song stream.
+    *   `setMusicBrainzId(id, mbId)`, `fetchMusicBrainzId(id)`, `byMusicBrainzId(mbId)`: Manage and retrieve songs using MusicBrainz identifiers.
+    *   `streamSong(id, offset)`, `downloadSong(id, quality, offset)`: Returns a `Flow<ByteArray>` for streaming or downloading song audio.
+    *   `getStreamSize(id)`, `getDownloadSize(id, quality)`: Gets the size of the song stream or download.
     *   `allSongIds`, `likedSongIds`, `songIdsBy...`: Returns Flows of UUIDs for various song collections.
 
 ### IAlbumService
@@ -81,7 +83,7 @@ The application uses `kotlinx.rpc` with Ktor for RPC communication.
     *   `rankedSearch(...)`: Ranked search for albums.
     *   `allAlbums(...)`: Retrieves all albums paginated.
     *   `deleteAlbums(ids)`: Deletes albums.
-    *   `byArtist(...)`: Gets albums by a specific artist.
+    *   `byArtist(artistId, singles)`: Gets albums by a specific artist, with an option to include/exclude singles.
 
 ### IImageService
 *   **Path:** `/rpc/services`
@@ -111,6 +113,7 @@ The application uses `kotlinx.rpc` with Ktor for RPC communication.
     *   `rankedSearch(...)`: Ranked search for artists.
     *   `byGroup(...)`: Gets artists belonging to a group.
     *   `mergeArtists(mergeArtists)`: Merges multiple artist records into a single new artist record. This process involves creating a new artist, reassigning all songs and albums from the source artists to the new one, creating aliases for the old names, and then deleting the original source artist records.
+    *   `splitArtist(splitArtist)`: Splits an artist record into multiple artists based on specified criteria.
     *   `allArtists(...)`: Retrieves all artists paginated.
 
 ### IFavSyncService
@@ -160,8 +163,8 @@ The application uses `kotlinx.rpc` with Ktor for RPC communication.
 *   **Interface:**
     *   `byId(id)`: Gets a user playlist by ID.
     *   `byIds(ids)`: Gets multiple user playlists.
-    *   `rankedSearch(...)`: Ranked search for user playlists.
-    *   `allPlaylists(...)`: Retrieves all user playlists paginated.
+    *   `rankedSearch(creator, ...)`: Ranked search for user playlists, optionally filtered by creator.
+    *   `allPlaylists(creator, ...)`: Retrieves all user playlists paginated, optionally filtered by creator.
     *   `delete(id)`: Deletes a user playlist.
     *   `getOrAddPlaylist(...)`: Gets or creates a playlist.
     *   `addToPlaylist(...)`: Adds songs to a playlist.
@@ -191,3 +194,21 @@ The application uses `kotlinx.rpc` with Ktor for RPC communication.
 *   **Description:** Handles uploading of custom audio files.
 *   **Interface:**
     *   `uploadCustomAudio(fileData, fileName, metadata)`: Uploads a custom audio file and returns its UUID.
+
+### IDbManagementService
+*   **Path:** `/rpc/services`
+*   **Authentication:** Required (JWT)
+*   **Description:** Provides administrative database operations.
+*   **Interface:**
+    *   `exportData()`: Exports the entire database as a `ByteArray`.
+    *   `importData(data)`: Imports database data from a `ByteArray`.
+
+### IBackupService
+*   **Path:** `/rpc/services`
+*   **Authentication:** Required (JWT)
+*   **Description:** Manages server backups.
+*   **Interface:**
+    *   `listBackups()`: Returns a list of available backups.
+    *   `createBackup()`: Triggers a new backup creation.
+    *   `loadBackup(fileName)`: Restores the server from a specific backup file.
+    *   `deleteBackup(fileName)`: Deletes a specific backup file.

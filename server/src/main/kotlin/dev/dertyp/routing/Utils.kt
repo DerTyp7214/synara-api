@@ -3,7 +3,7 @@ package dev.dertyp.routing
 import dev.dertyp.AudioUtils
 import dev.dertyp.AudioUtils.getSongsWithTranscodingInfo
 import dev.dertyp.AudioUtils.insertTranscodedSong
-import dev.dertyp.AudioUtils.transcodeFlacToWebm
+import dev.dertyp.AudioUtils.transcodeFlacToOpus
 import dev.dertyp.Indexer
 import dev.dertyp.core.roundToNDecimals
 import dev.dertyp.core.toHumanReadableSize
@@ -86,7 +86,7 @@ fun Route.utils() {
                                 send("""Worker $workerId: Starting transcode of "${song.title}" (${file.absolutePath})""")
 
                                 try {
-                                    val (newFile) = transcodeFlacToWebm(file, bitrate)
+                                    val (newFile) = transcodeFlacToOpus(file, bitrate)
 
                                     transcodedSongsMutex.withLock {
                                         transcodedSongs.add(Triple(song, newFile, bitrate))

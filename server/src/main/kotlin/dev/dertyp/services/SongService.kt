@@ -1,5 +1,6 @@
 package dev.dertyp.services
 
+import dev.dertyp.AudioUtils
 import dev.dertyp.core.date
 import dev.dertyp.core.fetchBatchedResults
 import dev.dertyp.core.rankedSearchQuery
@@ -15,6 +16,7 @@ import dev.dertyp.services.ArtistService.Companion.mapArtist
 import dev.dertyp.services.metadata.IMetadataService
 import dev.dertyp.services.metadata.MusicBrainzService
 import dev.dertyp.utils.LogParam
+import io.ktor.server.application.ApplicationEnvironment
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -128,7 +130,11 @@ class SongRpcService(private val user: User, private val songService: SongServic
 
     override fun streamSong(id: UUID, offset: Long): Flow<ByteArray>? = songService.streamSong(id, offset)
 
+    override fun downloadSong(id: UUID, quality: Int, offset: Long): Flow<ByteArray>? = songService.downloadSong(id, quality, offset)
+
     override suspend fun getStreamSize(id: UUID): Long = songService.getStreamSize(id)
+
+    override suspend fun getDownloadSize(id: UUID, quality: Int): Long = songService.getDownloadSize(id, quality)
 
     override fun allSongIds(explicit: Boolean, tags: List<SongTag>, invertTags: Boolean): Flow<UUID> =
         songService.allSongIds(explicit, tags, invertTags)
@@ -145,6 +151,7 @@ class SongRpcService(private val user: User, private val songService: SongServic
 }
 
 class SongService : Service() {
+    private val environment by inject<ApplicationEnvironment>()
     private val musicBrainzService by inject<MusicBrainzService>()
 
     val albumArtistAlias = ArtistTable.alias("albumArtistAlias")
@@ -523,11 +530,38 @@ class SongService : Service() {
         }.flowOn(Dispatchers.IO)
     }
 
+    fun downloadSong(id: UUID, quality: Int, offset: Long = 0): Flow<ByteArray>? {
+        val song = runBlocking { byId(id) } ?: return null
+        val file = File(song.path)
+        if (!file.exists()) return null
+
+        return flow {
+            val streamInfo = AudioUtils.transcodeFlacToOpus(environment, file, quality)
+            val buffer = ByteArray(4096)
+            streamInfo.file.inputStream().use { input ->
+                input.skip(offset)
+                var bytesRead = input.read(buffer)
+                while (bytesRead != -1) {
+                    emit(buffer.copyOf(bytesRead))
+                    bytesRead = input.read(buffer)
+                }
+            }
+        }.flowOn(Dispatchers.IO)
+    }
+
     suspend fun getStreamSize(id: UUID): Long {
         val song = byId(id) ?: return 0
         val file = File(song.path)
         if (!file.exists()) return 0
         return file.length()
+    }
+
+    suspend fun getDownloadSize(id: UUID, quality: Int): Long {
+        val song = byId(id) ?: return 0
+        val file = File(song.path)
+        if (!file.exists()) return 0
+        val streamInfo = AudioUtils.transcodeFlacToOpus(environment, file, quality)
+        return streamInfo.file.length()
     }
 
     fun allSongIds(

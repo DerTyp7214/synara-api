@@ -1,6 +1,6 @@
 package dev.dertyp
 
-import dev.dertyp.AudioUtils.transcodeFlacToWebm
+import dev.dertyp.AudioUtils.transcodeFlacToOpus
 import dev.dertyp.core.deleteOnExitRecursive
 import dev.dertyp.core.toUUIDOrNull
 import dev.dertyp.data.SimpleSong
@@ -8,17 +8,26 @@ import dev.dertyp.db.SongTable
 import dev.dertyp.db.TranscodedSongTable
 import dev.dertyp.services.SongService
 import io.github.smiley4.ktoropenapi.get
-import io.ktor.http.*
-import io.ktor.http.content.*
-import io.ktor.server.application.*
-import io.ktor.server.plugins.partialcontent.*
-import io.ktor.server.response.*
-import io.ktor.server.routing.*
-import io.ktor.util.logging.*
+import io.ktor.http.ContentDisposition
+import io.ktor.http.ContentType
+import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpStatusCode
+import io.ktor.http.content.OutgoingContent
+import io.ktor.server.application.Application
+import io.ktor.server.application.ApplicationEnvironment
+import io.ktor.server.plugins.partialcontent.PartialContent
+import io.ktor.server.response.header
+import io.ktor.server.response.respond
+import io.ktor.server.response.respondFile
+import io.ktor.server.routing.Route
+import io.ktor.server.routing.head
+import io.ktor.server.routing.route
+import io.ktor.util.logging.KtorSimpleLogger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.bytedeco.ffmpeg.global.avcodec
 import org.bytedeco.ffmpeg.global.avutil
+import org.bytedeco.ffmpeg.global.avutil.AV_SAMPLE_FMT_S16
 import org.bytedeco.javacv.FFmpegFrameGrabber
 import org.bytedeco.javacv.FFmpegFrameRecorder
 import org.jetbrains.exposed.v1.core.inList
@@ -54,17 +63,17 @@ object AudioUtils {
         return supported.minByOrNull { abs(it - rate) } ?: supported.first()
     }
 
-    suspend fun Application.transcodeFlacToWebm(
+    suspend fun Application.transcodeFlacToOpus(
         flacFile: File,
         targetKbps: Int
-    ) = transcodeFlacToWebm(environment, flacFile, targetKbps)
+    ) = transcodeFlacToOpus(environment, flacFile, targetKbps)
 
-    suspend fun Route.transcodeFlacToWebm(
+    suspend fun Route.transcodeFlacToOpus(
         flacFile: File,
         targetKbps: Int
-    ) = transcodeFlacToWebm(environment, flacFile, targetKbps)
+    ) = transcodeFlacToOpus(environment, flacFile, targetKbps)
 
-    suspend fun transcodeFlacToWebm(
+    suspend fun transcodeFlacToOpus(
         environment: ApplicationEnvironment,
         flacFile: File,
         targetKbps: Int,
@@ -111,6 +120,7 @@ object AudioUtils {
                 format = "ogg"
                 sampleRate = closestSampleRate(grabber.sampleRate)
                 audioBitrate = targetKbps * 1000
+                sampleFormat = AV_SAMPLE_FMT_S16
 
                 frameRate = 1.0
 
@@ -224,7 +234,7 @@ fun Route.stream() {
             if (!flacFile.exists()) return@head call.respond(HttpStatusCode.NotFound, "File not found.")
 
             val (_, contentType, fullSize) = if (targetKbps > 0) {
-                transcodeFlacToWebm(flacFile, targetKbps)
+                transcodeFlacToOpus(flacFile, targetKbps)
             } else {
                 StreamInfo(
                     flacFile,
@@ -275,7 +285,7 @@ fun Route.stream() {
             if (!flacFile.exists()) return@get call.respond(HttpStatusCode.NotFound, "File not found.")
 
             val (serveFile, _, _, fileName) = if (targetKbps > 0) {
-                transcodeFlacToWebm(flacFile, targetKbps)
+                transcodeFlacToOpus(flacFile, targetKbps)
             } else {
                 StreamInfo(
                     flacFile,
