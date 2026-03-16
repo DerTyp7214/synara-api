@@ -10,8 +10,8 @@ import dev.dertyp.services.PlaylistService
 import dev.dertyp.services.SongService
 import dev.dertyp.services.StorageService
 import dev.dertyp.services.metadata.MetadataService
-import io.ktor.server.application.*
-import io.ktor.util.logging.*
+import io.ktor.server.application.ApplicationEnvironment
+import io.ktor.util.logging.KtorSimpleLogger
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -25,7 +25,7 @@ import org.jaudiotagger.tag.FieldKey
 import java.nio.file.Path
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
-import java.util.*
+import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
 import java.util.logging.Level
 import kotlin.concurrent.atomics.AtomicBoolean
@@ -384,6 +384,7 @@ class Indexer(
         val cover = audioFile.coverImage
         val lyrics = tag.getFirst(FieldKey.LYRICS) ?: ""
         val year = tag.getFirst(FieldKey.YEAR)
+        val musicBrainzId = tag.getFirst(FieldKey.MUSICBRAINZ_TRACK_ID).ifBlank { null }
 
         val duration = header.preciseTrackLength.seconds.inWholeMilliseconds
         val sampleRate = header.sampleRateAsNumber
@@ -413,7 +414,8 @@ class Indexer(
             bitsPerSample = bitsPerSample,
             bitRate = bitRate,
             fileSize = audioFile.file.length(),
-            coverHash = cover?.sha256()
+            coverHash = cover?.sha256(),
+            musicBrainzId = musicBrainzId
         )
     }
 }

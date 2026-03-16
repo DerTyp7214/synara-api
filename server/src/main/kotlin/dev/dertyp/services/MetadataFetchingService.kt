@@ -18,6 +18,7 @@ import org.jetbrains.exposed.v1.jdbc.update
 import org.koin.core.component.inject
 import java.util.UUID
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
+import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
 
 @OptIn(ExperimentalAtomicApi::class)
@@ -36,11 +37,11 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
         }
 
         try {
-            val thirtyDaysAgo = System.currentTimeMillis() - 30.days.inWholeMilliseconds
+            val thirtyDaysAgo = Clock.System.now() - 30.days
             val artists = dbQuery {
                 ArtistTable
                     .select(ArtistTable.id, ArtistTable.name)
-                    .where { ArtistTable.image.isNull() and (ArtistTable.lastImageCheck eq 0L or (ArtistTable.lastImageCheck less thirtyDaysAgo)) }
+                    .where { ArtistTable.image.isNull() and (ArtistTable.lastImageCheck eq 0L or (ArtistTable.lastImageCheck less thirtyDaysAgo.toEpochMilliseconds())) }
                     .map { Pair(it[ArtistTable.id].value, it[ArtistTable.name]) }
             }
 

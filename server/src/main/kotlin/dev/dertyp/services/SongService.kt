@@ -13,6 +13,7 @@ import dev.dertyp.services.AlbumService.Companion.calculateAlbumStats
 import dev.dertyp.services.AlbumService.Companion.mapAlbum
 import dev.dertyp.services.ArtistService.Companion.mapArtist
 import dev.dertyp.services.metadata.IMetadataService
+import dev.dertyp.services.metadata.MusicBrainzService
 import dev.dertyp.utils.LogParam
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.Flow
@@ -23,6 +24,7 @@ import org.jaudiotagger.tag.FieldKey
 import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.jdbc.*
 import org.koin.core.component.get
+import org.koin.core.component.inject
 import java.io.File
 import java.nio.file.Paths
 import java.time.Instant
@@ -30,6 +32,8 @@ import java.util.UUID
 import kotlin.io.path.absolutePathString
 import kotlin.io.path.isSymbolicLink
 import kotlin.io.path.readSymbolicLink
+import kotlin.time.Clock
+import kotlin.time.Duration.Companion.days
 
 class SongRpcService(private val user: User, private val songService: SongService) : ISongService {
     override suspend fun setLiked(
@@ -40,6 +44,12 @@ class SongRpcService(private val user: User, private val songService: SongServic
 
     override suspend fun setLyrics(id: UUID, @LogParam("size") lyrics: List<String>): UserSong? =
         songService.setLyrics(id, user.id, lyrics)
+
+    override suspend fun setMusicBrainzId(id: UUID, musicBrainzId: String?): UserSong? =
+        songService.setMusicBrainzId(id, musicBrainzId, user.id)
+
+    override suspend fun fetchMusicBrainzId(id: UUID): UserSong? =
+        songService.fetchMusicBrainzId(id, user.id)
 
     override suspend fun byId(id: UUID): UserSong? = songService.byId(id, user.id)
 
@@ -132,6 +142,8 @@ class SongRpcService(private val user: User, private val songService: SongServic
 }
 
 class SongService : Service() {
+    private val musicBrainzService by inject<MusicBrainzService>()
+
     val albumArtistAlias = ArtistTable.alias("albumArtistAlias")
     val albumArtistAliasAlias = ArtistAliasTable.alias("albumArtistAliasAlias")
 
@@ -158,6 +170,7 @@ class SongService : Service() {
                 bitRate = resultRow[SongTable.bitRate],
                 fileSize = resultRow[SongTable.fileSize],
                 coverId = resultRow[SongTable.cover]?.value,
+                musicBrainzId = resultRow.getOrNull(SongMusicBrainzTable.musicBrainzId),
             )
         }
 
@@ -183,6 +196,7 @@ class SongService : Service() {
                 bitRate = resultRow[SongTable.bitRate],
                 fileSize = resultRow[SongTable.fileSize],
                 coverId = resultRow[SongTable.cover]?.value,
+                musicBrainzId = resultRow.getOrNull(SongMusicBrainzTable.musicBrainzId),
                 isFavourite = resultRow.getOrNull(UserSongTable.isFavourite) ?: false,
                 userSongCreatedAt = resultRow.getOrNull(UserSongTable.createdAt).date,
                 userSongUpdatedAt = resultRow.getOrNull(UserSongTable.updatedAt).date,
@@ -241,6 +255,37 @@ class SongService : Service() {
                 }
             }
         }
+    }
+
+    suspend fun setMusicBrainzId(id: UUID, musicBrainzId: String?, userId: UUID): UserSong? {
+        dbQuery {
+            val exists = SongMusicBrainzTable.select(SongMusicBrainzTable.songId)
+                .where { SongMusicBrainzTable.songId eq id }
+                .any()
+
+            if (exists) {
+                SongMusicBrainzTable.update({ SongMusicBrainzTable.songId eq id }) {
+                    it[SongMusicBrainzTable.musicBrainzId] = musicBrainzId
+                    it[SongMusicBrainzTable.lastCheck] = System.currentTimeMillis()
+                }
+            } else {
+                SongMusicBrainzTable.insert {
+                    it[SongMusicBrainzTable.songId] = id
+                    it[SongMusicBrainzTable.musicBrainzId] = musicBrainzId
+                    it[SongMusicBrainzTable.lastCheck] = System.currentTimeMillis()
+                }
+            }
+        }
+        return byId(id, userId)
+    }
+
+    suspend fun fetchMusicBrainzId(id: UUID, userId: UUID): UserSong? {
+        val song = byId(id, userId) ?: return null
+        if (song.musicBrainzId != null) return song
+
+        val recording = musicBrainzService.searchMb(song)
+
+        return setMusicBrainzId(id, recording?.id, userId)
     }
 
     suspend fun byId(id: UUID): Song? = querySingle({ this }) {
@@ -613,6 +658,24 @@ class SongService : Service() {
             }
     }
 
+    fun songIdsWithoutMusicBrainzId(): Flow<UUID> = flow {
+        val oneWeekAgo = Clock.System.now() - 7.days
+
+        SongTable
+            .leftJoin(SongMusicBrainzTable)
+            .select(SongTable.id)
+            .where {
+                SongMusicBrainzTable.songId.isNull() or
+                        (SongMusicBrainzTable.musicBrainzId.isNull() and (SongMusicBrainzTable.lastCheck less oneWeekAgo.toEpochMilliseconds()))
+            }
+            .orderBy(SongTable.inserted, SortOrder.DESC)
+            .fetchBatchedResults(1000) { batch ->
+                batch.forEach {
+                    emit(it[SongTable.id].value)
+                }
+            }
+    }
+
     private suspend inline fun <reified T : BaseSong> querySingle(
         crossinline columnSet: suspend ColumnSet.() -> ColumnSet,
         crossinline query: Query.() -> Query
@@ -654,6 +717,7 @@ class SongService : Service() {
                 onColumn = { AlbumArtistTable.artistId },
                 otherColumn = { albumArtistAliasAlias[ArtistAliasTable.artistId] }
             )
+            .leftJoin(SongMusicBrainzTable)
             .columnSet()
 
         val q = base.selectAll().query()
@@ -968,6 +1032,19 @@ class SongService : Service() {
 
         val insertedSongs: List<Pair<UUID, InsertableSong>> =
             songInsertResult.map { it[SongTable.id].value to filteredSongs[songInsertResult.indexOf(it)] }
+
+        val musicBrainzBatch = insertedSongs.mapNotNull { (songId, songData) ->
+            songData.musicBrainzId?.let { mbId -> songId to mbId }
+        }
+
+        if (musicBrainzBatch.isNotEmpty()) {
+            dbQuery {
+                SongMusicBrainzTable.batchInsert(musicBrainzBatch) { (songId, mbId) ->
+                    this[SongMusicBrainzTable.songId] = songId
+                    this[SongMusicBrainzTable.musicBrainzId] = mbId
+                }
+            }
+        }
 
         val songArtistLinks = insertedSongs.flatMap { (songId, songData) ->
             songData.artists.flatMap { artistName ->

@@ -3,16 +3,14 @@ package dev.dertyp.services.schedule
 import dev.dertyp.core.Task
 import dev.dertyp.core.plus
 import dev.dertyp.services.Service
-import kotlinx.coroutines.FlowPreview
-import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.time.withTimeoutOrNull
 import org.jetbrains.annotations.Range
 import java.time.Duration
 import java.time.Instant
-import java.util.*
+import java.util.UUID
 import java.util.concurrent.PriorityBlockingQueue
 import kotlin.concurrent.atomics.AtomicBoolean
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
@@ -153,6 +151,21 @@ class ScheduleService : Service() {
             schedules.remove(scheduledTask)
             schedule(scheduledTask.copy(trigger = trigger.fire()))
         }
+    }
+
+    fun triggerTask(id: UUID): Boolean {
+        val scheduledTask = schedules.find { it.id == id } ?: return false
+        val taskName = if (scheduledTask.name != null) "${scheduledTask.name} (${scheduledTask.id})" else "${scheduledTask.id}"
+        logger.info("Manually triggering task: $taskName")
+        CoroutineScope(Dispatchers.Default).launch {
+            try {
+                scheduledTask.task(this@ScheduleService)
+                notifyTaskCompletion(scheduledTask.id)
+            } catch (e: Exception) {
+                logger.error("Error executing manually triggered task: $taskName", e)
+            }
+        }
+        return true
     }
 
     fun unscheduleTask(id: UUID) {

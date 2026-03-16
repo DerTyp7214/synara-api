@@ -10,7 +10,7 @@ import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.Query
 import org.jetbrains.exposed.v1.jdbc.batchInsert
 import org.jetbrains.exposed.v1.jdbc.selectAll
-import java.util.*
+import java.util.UUID
 
 class RpcUserService(private val user: User, private val userService: UserService): IUserService {
     override suspend fun findUserById(id: UUID) = userService.findUserById(id)
@@ -39,6 +39,14 @@ class UserService : Service() {
     suspend fun findUserByUsername(username: String): User? = queryUser {
         where { UserTable.username eq username }
     }.singleOrNull()
+
+    suspend fun findAdmin(): User? = dbQuery {
+        UserTable
+            .selectAll()
+            .where { UserTable.isAdmin eq true }
+            .map(::map)
+            .firstOrNull()
+    }
 
     suspend fun createUser(user: AuthenticationRequest): User? = dbQuery {
         UserTable.batchInsert(listOf(user)) {

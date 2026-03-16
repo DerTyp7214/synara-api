@@ -11,10 +11,8 @@ import dev.dertyp.serializers.OffsetDateTimeAdapter
 import dev.dertyp.server.BuildConfig
 import dev.dertyp.services.*
 import dev.dertyp.services.metadata.MetadataService
-import dev.dertyp.services.schedule.CronPresets
-import dev.dertyp.services.schedule.ScheduleService
-import dev.dertyp.services.schedule.ScheduledTask
-import dev.dertyp.services.schedule.TaskCompletionTrigger
+import dev.dertyp.services.metadata.MusicBrainzService
+import dev.dertyp.services.schedule.*
 import dev.dertyp.services.tdn.DownloadService
 import dev.dertyp.services.tdn.TdnService
 import dev.dertyp.services.tdn.TidalDownloaderProxy
@@ -101,6 +99,8 @@ fun Application.module() {
             singleOf(::DbManagementService)
             singleOf(::BackupService)
             singleOf(::MetadataFetchingService)
+            singleOf(::MusicBrainzService)
+            singleOf(::MusicBrainzWorker)
 
             single<Gson> {
                 GsonBuilder()
@@ -133,6 +133,7 @@ fun Application.module() {
     val backupService = get<BackupService>()
     val reverseProxyService = get<ReverseProxyService>()
     val metadataFetchingService = get<MetadataFetchingService>()
+    val musicBrainzWorker = get<MusicBrainzWorker>()
 
     scheduleService.schedule(
         ScheduledTask(
@@ -165,6 +166,16 @@ fun Application.module() {
             }
         )
     )
+
+    val musicBrainzTask = scheduleService.schedule(
+        ScheduledTask(
+            name = "MusicBrainz Worker",
+            trigger = CronPresets.dailyAt(0, 0),
+            task = { musicBrainzWorker.run() }
+        )
+    )
+
+    scheduleService.triggerTask(musicBrainzTask.id)
 
     val cleanAlbumTask = scheduleService.schedule(
         ScheduledTask(
