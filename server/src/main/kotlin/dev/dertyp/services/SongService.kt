@@ -53,6 +53,9 @@ class SongRpcService(private val user: User, private val songService: SongServic
 
     override suspend fun byId(id: UUID): UserSong? = songService.byId(id, user.id)
 
+    override suspend fun byMusicBrainzId(musicBrainzId: String): List<UserSong> =
+        songService.byMusicBrainzId(musicBrainzId, user.id)
+
     override suspend fun byIds(@LogParam("size") ids: Collection<UUID>): PaginatedResponse<UserSong> =
         songService.byIds(ids, user.id)
 
@@ -305,6 +308,11 @@ class SongService : Service() {
     suspend fun byId(id: UUID, userId: UUID): UserSong? = querySingle({ userSong(userId) }) {
         where { SongTable.id eq id }
     }
+
+    suspend fun byMusicBrainzId(musicBrainzId: String, userId: UUID): List<UserSong> =
+        querySongs<UserSong>(0, Int.MAX_VALUE, true, { userSong(userId) }) {
+            where { SongMusicBrainzTable.musicBrainzId eq musicBrainzId }
+        }.data
 
     suspend fun byTitle(page: Int, pageSize: Int, title: String, userId: UUID): PaginatedResponse<UserSong> =
         querySongs(page, pageSize, true, { userSong(userId) }) {
