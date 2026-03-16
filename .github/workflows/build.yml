@@ -185,8 +185,7 @@ jobs:
           target_commitish: server
           files: |
             release-asset/*.jar
-        env:
-          GITHUB_TOKEN: ${{ secrets.SYNARA_GITHUB_TOKEN }}
+          token: ${{ secrets.SYNARA_GITHUB_TOKEN }}
 
       - name: Update Latest Release
         uses: softprops/action-gh-release@v2
@@ -198,5 +197,4 @@ jobs:
           target_commitish: server
           files: |
             release-asset/*.jar
-        env:
-          GITHUB_TOKEN: ${{ secrets.SYNARA_GITHUB_TOKEN }}
+          token: ${{ secrets.SYNARA_GITHUB_TOKEN }}
