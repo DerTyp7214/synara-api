@@ -15,6 +15,8 @@ RUN ln -sf /usr/bin/python3.13 /usr/bin/python3
 COPY --from=ffmpeg-builder /ffmpeg /usr/bin/
 COPY --from=ffmpeg-builder /ffprobe /usr/bin/
 
+ENV LD_LIBRARY_PATH="/usr/lib:/usr/local/lib:$LD_LIBRARY_PATH"
+
 RUN groupadd -g $APP_GROUP_ID appgroup && useradd -u $APP_USER_ID -g appgroup -s /bin/bash -m -d /home/appuser appuser
 
 EXPOSE 8080
