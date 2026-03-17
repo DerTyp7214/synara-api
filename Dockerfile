@@ -12,9 +12,8 @@ FROM gradle:latest AS build
 COPY --from=cache /home/gradle/cache_home /home/gradle/.gradle
 COPY --chown=gradle:gradle . /home/gradle/src
 WORKDIR /home/gradle/src
-# Build the fat JAR, Gradle also supports shadow
-# and boot JAR by default.
-RUN gradle buildFatJar --no-daemon
+# Build the fat JAR using shadowJar for better native library support
+RUN gradle :server:shadowJar --no-daemon
 
 # Stage 3: FFmpeg-Builder
 FROM debian:bullseye-slim AS ffmpeg-builder

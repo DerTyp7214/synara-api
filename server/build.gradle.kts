@@ -69,6 +69,7 @@ dependencies {
     implementation(libs.exposed.migration.core)
     implementation(libs.exposed.migration.jdbc)
     implementation(libs.h2)
+    implementation(libs.ffmpeg)
     implementation(libs.ffmpeg.platform)
     implementation(libs.javacv.platform)
     implementation(libs.thumbnailator)

@@ -54,7 +54,7 @@ jobs:
         run: chmod +x gradlew
 
       - name: Build Ktor fat JARs
-        run: ./gradlew buildFatJar
+        run: ./gradlew :server:shadowJar :proxy:shadowJar
 
       - name: Extract Application Version
         id: version_info

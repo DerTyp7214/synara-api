@@ -30,7 +30,7 @@ class MusicBrainzWorker : KoinComponent {
                     if (song?.musicBrainzId != null) {
                         count++
                     }
-                    delay(250)
+                    delay(750)
                 } catch (e: Exception) {
                     logger.error("Error fetching MusicBrainz ID for song $songId: ${e.message}", e)
                 }

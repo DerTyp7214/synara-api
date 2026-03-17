@@ -82,6 +82,7 @@ exposed-jdbc = { module = "org.jetbrains.exposed:exposed-jdbc", version.ref = "e
 exposed-migration-core = { module = "org.jetbrains.exposed:exposed-migration-core", version.ref = "exposed" }
 exposed-migration-jdbc = { module = "org.jetbrains.exposed:exposed-migration-jdbc", version.ref = "exposed" }
 h2 = { module = "com.h2database:h2", version.ref = "h2" }
+ffmpeg = { module = "org.bytedeco:ffmpeg", version.ref = "ffmpeg" }
 ffmpeg-platform = { module = "org.bytedeco:ffmpeg-platform", version.ref = "ffmpeg" }
 javacv-platform = { module = "org.bytedeco:javacv-platform", version.ref = "javacv" }
 thumbnailator = { module = "net.coobird:thumbnailator", version.ref = "thumbnailator" }
