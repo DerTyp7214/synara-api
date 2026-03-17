@@ -13,7 +13,6 @@ RUN apt-get update && apt-get install -y \
     libstdc++6 \
     zlib1g \
     libc6 \
-    shadow-utils \
     libva-drm2 \
     libva2 \
     libdrm2 \
