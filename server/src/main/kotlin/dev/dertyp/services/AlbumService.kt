@@ -153,7 +153,7 @@ class AlbumService : IAlbumService, Service() {
                 )
             if (file.exists())
                 logger.info("Trying to delete ${file.absolutePath} (${file.delete()})")
-            if (file.parentFile.exists() && file.parentFile.list().isEmpty())
+            if (file.parentFile.exists() && file.parentFile.list().isNullOrEmpty())
                 logger.info("Trying to delete parent ${file.parentFile.absolutePath} (${file.parentFile.delete()})")
         }
 
