@@ -1,14 +1,23 @@
 FROM mwader/static-ffmpeg:7.1.1 AS ffmpeg-builder
 
-FROM amazoncorretto:25 AS runtime
+FROM eclipse-temurin:25-jre-bookworm AS runtime
 
 ARG APP_USER_ID=1000
 ARG APP_GROUP_ID=1000
 
 ARG MONTH_YEAR=unknown
 
-RUN yum update -y && yum install -y python3.13 python3.13-pip libstdc++ zlib glibc shadow-utils && \
-    yum clean all && rm -rf /var/cache/yum
+RUN apt-get update && apt-get install -y \
+    python3 \
+    python3-pip \
+    libstdc++6 \
+    zlib1g \
+    libc6 \
+    shadow-utils \
+    libva-drm2 \
+    libva2 \
+    libdrm2 \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 RUN ln -sf /usr/bin/python3.13 /usr/bin/python3
 
@@ -21,14 +30,11 @@ RUN groupadd -g $APP_GROUP_ID appgroup && useradd -u $APP_USER_ID -g appgroup -s
 
 EXPOSE 8080
 
-RUN mkdir /app
-RUN chown appuser:appgroup /app
+RUN mkdir /app && chown appuser:appgroup /app
 
-RUN mkdir /data
-RUN chown appuser:appgroup /data
+RUN mkdir /data && chown appuser:appgroup /data
 
-RUN mkdir /backups
-RUN chown appuser:appgroup /backups
+RUN mkdir /backups && chown appuser:appgroup /backups
 
 RUN mkdir -p /home/appuser/.tiddl
 RUN mkdir -p /home/appuser/.config/tidal_dl_ng
