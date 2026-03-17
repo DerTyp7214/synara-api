@@ -1,6 +1,6 @@
 FROM mwader/static-ffmpeg:7.1.1 AS ffmpeg-builder
 
-FROM eclipse-temurin:25-jre-bookworm AS runtime
+FROM eclipse-temurin:25-jre AS runtime
 
 ARG APP_USER_ID=1000
 ARG APP_GROUP_ID=1000
