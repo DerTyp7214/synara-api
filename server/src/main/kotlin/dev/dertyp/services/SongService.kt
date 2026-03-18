@@ -127,9 +127,9 @@ class SongRpcService(private val user: User, private val songService: SongServic
         liked: Boolean
     ): PaginatedResponse<UserSong> = songService.rankedSearch(page, pageSize, query, explicit, user.id, liked)
 
-    override fun streamSong(id: UUID, offset: Long): Flow<ByteArray>? = songService.streamSong(id, offset)
+    override fun streamSong(id: UUID, offset: Long, chunkSize: Int): Flow<ByteArray>? = songService.streamSong(id, offset, chunkSize)
 
-    override fun downloadSong(id: UUID, quality: Int, offset: Long): Flow<ByteArray>? = songService.downloadSong(id, quality, offset)
+    override fun downloadSong(id: UUID, quality: Int, offset: Long, chunkSize: Int): Flow<ByteArray>? = songService.downloadSong(id, quality, offset, chunkSize)
 
     override suspend fun getStreamSize(id: UUID): Long = songService.getStreamSize(id)
 
@@ -525,13 +525,13 @@ class SongService : Service() {
         deletedSongs == ids.size
     }
 
-    fun streamSong(id: UUID, offset: Long): Flow<ByteArray>? {
+    fun streamSong(id: UUID, offset: Long, chunkSize: Int = 4096): Flow<ByteArray>? {
         val song = runBlocking { byId(id) } ?: return null
         val file = File(song.path)
         if (!file.exists()) return null
 
         return flow {
-            val buffer = ByteArray(4096)
+            val buffer = ByteArray(chunkSize)
             file.inputStream().use { input ->
                 input.skip(offset)
                 var bytesRead = input.read(buffer)
@@ -543,14 +543,14 @@ class SongService : Service() {
         }.flowOn(Dispatchers.IO)
     }
 
-    fun downloadSong(id: UUID, quality: Int, offset: Long = 0): Flow<ByteArray>? {
+    fun downloadSong(id: UUID, quality: Int, offset: Long = 0, chunkSize: Int = 4096): Flow<ByteArray>? {
         val song = runBlocking { byId(id) } ?: return null
         val file = File(song.path)
         if (!file.exists()) return null
 
         return flow {
             val streamInfo = AudioUtils.transcodeFlacToOpus(environment, file, quality)
-            val buffer = ByteArray(4096)
+            val buffer = ByteArray(chunkSize)
             streamInfo.file.inputStream().use { input ->
                 input.skip(offset)
                 var bytesRead = input.read(buffer)

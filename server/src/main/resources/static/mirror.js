@@ -207,6 +207,7 @@ function updateProgress(progress) {
     const task = document.getElementById('current-task');
     const detail = document.getElementById('task-detail');
     const speed = document.getElementById('current-speed');
+    const eta = document.getElementById('current-eta');
     const log = document.getElementById('status-log');
     const errorContainer = document.getElementById('error-container');
     const errorMessage = document.getElementById('error-message');
@@ -250,6 +251,13 @@ function updateProgress(progress) {
         speed.classList.remove('hidden');
     } else {
         speed.classList.add('hidden');
+    }
+
+    if (progress.eta) {
+        eta.innerText = 'ETA: ' + progress.eta;
+        eta.classList.remove('hidden');
+    } else {
+        eta.classList.add('hidden');
     }
 
     if (progress.isFinished) {

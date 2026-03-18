@@ -8,15 +8,14 @@ import io.ktor.client.plugins.websocket.WebSockets
 import io.ktor.client.request.header
 import io.ktor.http.HttpHeaders
 import kotlinx.coroutines.*
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.*
 import kotlinx.rpc.krpc.ktor.client.Krpc
 import kotlinx.rpc.krpc.ktor.client.rpc
 import kotlinx.rpc.krpc.serialization.cbor.cbor
 import kotlinx.rpc.withService
 import kotlinx.serialization.ExperimentalSerializationApi
 import org.koin.core.component.inject
+import java.io.File
 import kotlin.io.path.Path
 import kotlin.io.path.absolutePathString
 import kotlin.io.path.outputStream
@@ -126,7 +125,7 @@ class RemoteMirrorService : Service() {
         return _activeProgress.filterNotNull()
     }
 
-    @OptIn(ExperimentalSerializationApi::class)
+    @OptIn(ExperimentalSerializationApi::class, ExperimentalCoroutinesApi::class)
     private suspend fun performMirror(config: RemoteServerConfig) {
         withRemoteClient { client ->
             logger.info("Authenticating with remote server at ${config.toFullUrl("/rpc/auth")}")
@@ -182,23 +181,43 @@ class RemoteMirrorService : Service() {
                     return "%.2f %s".format(size, units[unitIndex])
                 }
 
+                fun formatDuration(seconds: Long): String {
+                    if (seconds < 0) return "0s"
+                    if (seconds < 60) return "${seconds}s"
+                    val mins = seconds / 60
+                    val secs = seconds % 60
+                    if (mins < 60) return "${mins}m ${secs}s"
+                    val hours = mins / 60
+                    val remainingMins = mins % 60
+                    return "${hours}h ${remainingMins}m"
+                }
+
                 fun resolveLocalPath(remotePath: String, id: String, quality: Int): String {
                     val extension = if (quality == -1) remotePath.substringAfterLast('.', "flac") else "ogg"
 
+                    fun String.fixExtension(): String {
+                        if (quality == -1) return this
+                        return if (this.contains('.')) {
+                            this.substringBeforeLast('.') + ".ogg"
+                        } else {
+                            "$this.ogg"
+                        }
+                    }
+
                     if (remotePaths.customAudioPath != null && remotePath.startsWith(remotePaths.customAudioPath!!)) {
                         val relative = remotePath.removePrefix(remotePaths.customAudioPath!!).trimStart('/', '\\')
-                        return Path(storageService.customAudioPath, relative).absolutePathString()
+                        return Path(storageService.customAudioPath, relative.fixExtension()).absolutePathString()
                     }
 
                     if (remotePaths.tracksPath != null && remotePath.startsWith(remotePaths.tracksPath!!)) {
                         val relative = remotePath.removePrefix(remotePaths.tracksPath!!).trimStart('/', '\\')
-                        return Path(storageService.tracksPath!!, relative).absolutePathString()
+                        return Path(storageService.tracksPath!!, relative.fixExtension()).absolutePathString()
                     }
 
                     for (secondaryRemote in remotePaths.secondaryTracksPaths) {
                         if (remotePath.startsWith(secondaryRemote)) {
                             val relative = remotePath.removePrefix(secondaryRemote).trimStart('/', '\\')
-                            return Path(storageService.tracksPath!!, relative).absolutePathString()
+                            return Path(storageService.tracksPath!!, relative.fixExtension()).absolutePathString()
                         }
                     }
 
@@ -226,8 +245,16 @@ class RemoteMirrorService : Service() {
                         }
                     } else null
 
+                    val etaStr = if (elapsed > 1.0 && processed > 0 && total > processed) {
+                        val itemsProgress = (processed.toDouble() + (itemProgress ?: 0f)) / total
+                        val remainingSeconds = if (itemsProgress > 0) (elapsed / itemsProgress) - elapsed else null
+                        if (remainingSeconds != null && remainingSeconds > 0) {
+                            formatDuration(remainingSeconds.toLong())
+                        } else null
+                    } else null
+
                     val progress =
-                        MirrorProgress(task, processed, total, false, null, item, itemProgress, speedStr)
+                        MirrorProgress(task, processed, total, false, null, item, itemProgress, speedStr, etaStr)
                     _activeProgress.value = progress
                 }
 
@@ -343,14 +370,18 @@ class RemoteMirrorService : Service() {
                 updateProgress("Mirroring Songs", 0, remoteStats.songCount)
                 var songCount = 0
                 var totalBytesSynced = 0L
-                mirrorService.getSongs().collect { song: Song ->
+
+                mirrorService.getSongs().flatMapMerge(concurrency = 6) { song ->
+                    flow {
+                        val expectedSize = if (config.quality == -1) song.fileSize
+                        else remoteSongService.getDownloadSize(song.id, config.quality)
+                        emit(song to expectedSize)
+                    }
+                }.collect { (song, expectedSize) ->
                     val localPathString = resolveLocalPath(song.path, song.id.toString(), config.quality)
                     val localPath = Path(localPathString)
                     val songDisplayName =
                         "${song.artists.firstOrNull()?.name ?: "Unknown"} - ${song.title}"
-
-                    val expectedSize = if (config.quality == -1) song.fileSize
-                    else remoteSongService.getDownloadSize(song.id, config.quality)
 
                     logger.debug(
                         "Syncing song: {} (ID: {}, Target: {}, Expected size: {} bytes)",
@@ -359,30 +390,45 @@ class RemoteMirrorService : Service() {
                         localPathString,
                         expectedSize
                     )
-                    localPath.parent.toFile().mkdirs()
-                    localPath.outputStream().use { output ->
-                        var downloadedInSong = 0L
-                        mirrorService.getSongData(song.id, config.quality).collect { chunk ->
-                            withContext(Dispatchers.IO) {
-                                output.write(chunk)
-                                delay(1.nanoseconds)
-                                yield()
+
+                    val localFile = File(localPathString)
+                    val isAlreadyComplete = localFile.exists() && expectedSize > 0 && localFile.length() == expectedSize
+
+                    if (isAlreadyComplete) {
+                        logger.info("Song already exists and is complete, skipping download: {}", songDisplayName)
+                    } else {
+                        localPath.parent.toFile().mkdirs()
+                        localPath.outputStream().use { output ->
+                            var downloadedInSong = 0L
+                            logger.info("Downloading {}", songDisplayName)
+                            mirrorService.getSongData(song.id, config.quality, 64 * 1024).collect { chunk ->
+                                withContext(Dispatchers.IO) {
+                                    output.write(chunk)
+                                    if (downloadedInSong % (16 * 1024) > chunk.size) {
+                                        delay(1.nanoseconds)
+                                    }
+                                    yield()
+                                }
+                                downloadedInSong += chunk.size
+                                totalBytesSynced += chunk.size
+
+                                if (downloadedInSong % (96 * 1024) > chunk.size) {
+                                    val itemProgress = if (expectedSize > 0) {
+                                        downloadedInSong.toFloat() / expectedSize
+                                    } else null
+
+                                    delay(1.nanoseconds)
+                                    updateProgress(
+                                        "Mirroring Songs",
+                                        songCount,
+                                        remoteStats.songCount,
+                                        songDisplayName,
+                                        itemProgress,
+                                        totalBytesSynced
+                                    )
+                                    yield()
+                                }
                             }
-                            downloadedInSong += chunk.size
-                            totalBytesSynced += chunk.size
-
-                            val itemProgress = if (expectedSize > 0) {
-                                downloadedInSong.toFloat() / expectedSize
-                            } else null
-
-                            updateProgress(
-                                "Mirroring Songs",
-                                songCount,
-                                remoteStats.songCount,
-                                songDisplayName,
-                                itemProgress,
-                                totalBytesSynced
-                            )
                         }
                     }
 
@@ -397,6 +443,7 @@ class RemoteMirrorService : Service() {
                         1.0f,
                         totalBytesSynced
                     )
+                    yield()
                 }
                 logger.info("Song synchronization finished (Processed: $songCount, Total bytes: $totalBytesSynced)")
                 updateProgress("Mirroring Songs", remoteStats.songCount, remoteStats.songCount)

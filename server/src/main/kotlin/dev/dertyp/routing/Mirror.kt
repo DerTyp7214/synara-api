@@ -15,10 +15,13 @@ import io.ktor.server.routing.post
 import io.ktor.server.routing.route
 import io.ktor.server.sse.sse
 import io.ktor.sse.ServerSentEvent
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.debounce
 import kotlinx.html.*
 import org.koin.ktor.ext.inject
 
+@OptIn(FlowPreview::class)
 fun Route.mirrorRouting() {
     val remoteMirrorService by inject<RemoteMirrorService>()
 
@@ -28,13 +31,6 @@ fun Route.mirrorRouting() {
                 head {
                     title("Synara Mirror")
                     script { src = "https://cdn.tailwindcss.com" }
-                    style {
-                        unsafe {
-                            +"""
-                                .progress-transition { transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1); }
-                            """.trimIndent()
-                        }
-                    }
                 }
                 body("bg-zinc-950 text-slate-200 min-h-screen p-4 md:p-8") {
                     div("max-w-4xl mx-auto space-y-8") {
@@ -157,12 +153,15 @@ fun Route.mirrorRouting() {
                                             div("flex justify-between items-end mb-2") {
                                                 div("flex items-center gap-3") {
                                                     span("text-sm font-medium text-amber-400") { id = "current-task"; +"Initializing" }
-                                                    span("text-[10px] font-mono text-slate-500 bg-zinc-800/50 px-1.5 py-0.5 rounded border border-zinc-700/30 hidden") { id = "current-speed"; +"-" }
+                                                    div("flex items-center gap-1.5") {
+                                                        span("text-[10px] font-mono text-slate-500 bg-zinc-800/50 px-1.5 py-0.5 rounded border border-zinc-700/30 hidden") { id = "current-speed"; +"-" }
+                                                        span("text-[10px] font-mono text-slate-500 bg-zinc-800/50 px-1.5 py-0.5 rounded border border-zinc-700/30 hidden") { id = "current-eta"; +"-" }
+                                                    }
                                                 }
                                                 span("text-xs font-mono text-slate-500") { id = "task-detail"; +"0 / 0" }
                                             }
                                             div("w-full bg-zinc-800 rounded-full h-3 overflow-hidden") {
-                                                div("bg-amber-500 h-full w-0 progress-transition shadow-[0_0_10px_rgba(251,191,36,0.5)]") { id = "progress-fill" }
+                                                div("bg-amber-500 h-full w-0 shadow-[0_0_10px_rgba(251,191,36,0.5)]") { id = "progress-fill" }
                                             }
                                         }
 
@@ -347,7 +346,7 @@ fun Route.mirrorRouting() {
                 val user = call.getUser() ?: return@sse call.respond(HttpStatusCode.Unauthorized)
                 if (!user.isAdmin) return@sse call.respond(HttpStatusCode.Forbidden)
 
-                remoteMirrorService.getActiveMirrorProgress()?.collectLatest { progress ->
+                remoteMirrorService.getActiveMirrorProgress()?.debounce(20)?.collectLatest { progress ->
                     send(ServerSentEvent(data = ApplicationScope.json.encodeToString(progress)))
                 }
             }
