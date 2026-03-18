@@ -17,8 +17,9 @@ import io.ktor.server.application.install
 import io.ktor.server.plugins.compression.Compression
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.server.plugins.statuspages.StatusPages
+import io.ktor.server.http.content.*
 import io.ktor.server.response.respondText
-import io.ktor.server.routing.routing
+import io.ktor.server.routing.*
 import io.ktor.server.sse.SSE
 import io.ktor.server.websocket.WebSockets
 import io.ktor.server.websocket.pingPeriod
@@ -58,6 +59,8 @@ fun Application.configureRouting() {
         }
     }
     routing {
+        staticResources("/static", "static")
+
         route("api.json") {
             openApi()
         }

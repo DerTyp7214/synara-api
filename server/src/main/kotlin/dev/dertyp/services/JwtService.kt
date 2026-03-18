@@ -11,12 +11,14 @@ import io.github.smiley4.ktoropenapi.get
 import io.github.smiley4.ktoropenapi.post
 import io.github.smiley4.ktoropenapi.route
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.auth.HttpAuthHeader
 import io.ktor.server.application.Application
 import io.ktor.server.application.ApplicationEnvironment
 import io.ktor.server.auth.authenticate
 import io.ktor.server.auth.authentication
 import io.ktor.server.auth.jwt.JWTPrincipal
 import io.ktor.server.auth.jwt.jwt
+import io.ktor.server.auth.parseAuthorizationHeader
 import io.ktor.server.plugins.origin
 import io.ktor.server.request.path
 import io.ktor.server.request.receive
@@ -60,6 +62,11 @@ class JwtService(
                         .withIssuer(jwtIssuer)
                         .build()
                 )
+                authHeader { call ->
+                    val token = call.request.cookies["synara-auth"]
+                    if (token != null) return@authHeader HttpAuthHeader.Single("Bearer", token)
+                    call.request.parseAuthorizationHeader()
+                }
                 validate { credential ->
                     validateToken(credential.payload)
                 }

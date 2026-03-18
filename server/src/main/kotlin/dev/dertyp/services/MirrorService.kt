@@ -17,6 +17,11 @@ class MirrorRpcService(
     private val user: User,
     private val mirrorService: MirrorService
 ) : IMirrorService {
+    override suspend fun getServerPaths(): RemoteServerPaths {
+        if (!user.isAdmin) throw IllegalStateException("Only admins can mirror")
+        return mirrorService.getServerPaths()
+    }
+
     override fun getSongs(): Flow<Song> {
         if (!user.isAdmin) throw IllegalStateException("Only admins can mirror")
         return mirrorService.getSongs()
@@ -70,6 +75,15 @@ class MirrorService : Service() {
     private val playlistService by inject<PlaylistService>()
     private val userPlaylistService by inject<UserPlaylistService>()
     private val imageService by inject<ImageService>()
+    private val storageService by inject<StorageService>()
+
+    fun getServerPaths(): RemoteServerPaths = RemoteServerPaths(
+        tracksPath = storageService.tracksPath,
+        albumsPath = storageService.albumsPath,
+        playlistsPath = storageService.playlistsPath,
+        customAudioPath = storageService.customAudioPath,
+        secondaryTracksPaths = storageService.secondaryTracksPaths
+    )
 
     fun getSongs(): Flow<Song> = songService.allSongsFlow()
 

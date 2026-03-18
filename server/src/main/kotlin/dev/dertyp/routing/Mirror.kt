@@ -1,9 +1,11 @@
 package dev.dertyp.routing
 
 import dev.dertyp.core.ApplicationScope
+import dev.dertyp.core.getUser
 import dev.dertyp.data.RemoteServerConfig
 import dev.dertyp.services.RemoteMirrorService
 import io.ktor.http.HttpStatusCode
+import io.ktor.server.auth.authenticate
 import io.ktor.server.html.respondHtml
 import io.ktor.server.request.receiveParameters
 import io.ktor.server.response.respond
@@ -41,13 +43,43 @@ fun Route.mirrorRouting() {
                                 h1("text-3xl font-bold text-amber-400 tracking-tight") { +"Remote Mirror" }
                                 p("text-slate-400 mt-1") { +"Synchronize data between Synara instances" }
                             }
-                            div("bg-zinc-900 px-3 py-1 rounded-full border border-zinc-800 flex items-center gap-2") {
-                                div("w-2 h-2 rounded-full bg-emerald-500 animate-pulse") { id = "status-dot" }
-                                span("text-xs font-medium text-slate-300 uppercase tracking-wider") { id = "status-text"; +"System Ready" }
+                            div("bg-zinc-900 px-3 py-1 rounded-full border border-zinc-800 flex items-center gap-4") {
+                                div("flex items-center gap-2") {
+                                    div("w-2 h-2 rounded-full bg-emerald-500 animate-pulse") { id = "status-dot" }
+                                    span("text-xs font-medium text-slate-300 uppercase tracking-wider") { id = "status-text"; +"System Ready" }
+                                }
+                                button(classes = "hidden text-[10px] font-bold text-amber-500/50 hover:text-amber-500 uppercase tracking-widest transition-colors") {
+                                    id = "header-logout-btn"
+                                    attributes["onclick"] = "logout()"
+                                    +"Logout"
+                                }
                             }
                         }
 
-                        div("grid grid-cols-1 md:grid-cols-2 gap-8 transition-all duration-500") {
+                        // Login Section
+                        div("hidden bg-zinc-900 border border-zinc-800 rounded-2xl p-8 shadow-xl max-w-md mx-auto space-y-6") {
+                            id = "login-section"
+                            h2("text-2xl font-bold text-amber-400 text-center") { +"Admin Login" }
+                            div("space-y-4") {
+                                div {
+                                    label("block text-sm font-medium text-slate-400 mb-1.5") { +"Username" }
+                                    input(type = InputType.text, classes = "w-full bg-zinc-800 border-zinc-700 rounded-lg px-4 py-2 focus:ring-2 focus:ring-amber-500 outline-none transition-all text-white") { id = "login-username" }
+                                }
+                                div {
+                                    label("block text-sm font-medium text-slate-400 mb-1.5") { +"Password" }
+                                    input(type = InputType.password, classes = "w-full bg-zinc-800 border-zinc-700 rounded-lg px-4 py-2 focus:ring-2 focus:ring-amber-500 outline-none transition-all text-white") { 
+                                        id = "login-password"
+                                        attributes["onkeydown"] = "if(event.key === 'Enter') login()"
+                                    }
+                                }
+                                button(classes = "w-full bg-amber-600 hover:bg-amber-500 text-black font-bold py-3 rounded-xl shadow-lg transition-all") {
+                                    attributes["onclick"] = "login()"
+                                    +"Sign In"
+                                }
+                            }
+                        }
+
+                        div("hidden grid grid-cols-1 md:grid-cols-2 gap-8 transition-all duration-500") {
                             id = "main-grid"
                             
                             // Left Column: Configuration or Active Progress
@@ -123,7 +155,10 @@ fun Route.mirrorRouting() {
                                     div("space-y-6") {
                                         div {
                                             div("flex justify-between items-end mb-2") {
-                                                span("text-sm font-medium text-amber-400") { id = "current-task"; +"Initializing" }
+                                                div("flex items-center gap-3") {
+                                                    span("text-sm font-medium text-amber-400") { id = "current-task"; +"Initializing" }
+                                                    span("text-[10px] font-mono text-slate-500 bg-zinc-800/50 px-1.5 py-0.5 rounded border border-zinc-700/30 hidden") { id = "current-speed"; +"-" }
+                                                }
                                                 span("text-xs font-mono text-slate-500") { id = "task-detail"; +"0 / 0" }
                                             }
                                             div("w-full bg-zinc-800 rounded-full h-3 overflow-hidden") {
@@ -244,330 +279,77 @@ fun Route.mirrorRouting() {
                         }
                     }
 
-                    script {
-                        unsafe {
-                            +$$"""
-                                function getFormData() {
-                                    const data = new URLSearchParams();
-                                    data.append('host', document.getElementById('host').value);
-                                    data.append('port', document.getElementById('port').value);
-                                    data.append('username', document.getElementById('username').value);
-                                    data.append('password', document.getElementById('password').value);
-                                    data.append('secure', document.getElementById('secure').checked ? 'true' : 'false');
-                                    data.append('quality', document.getElementById('quality').value);
-                                    return data;
-                                }
-
-                                async function fetchStats() {
-                                    const btn = document.getElementById('connect-btn');
-                                    const startBtn = document.getElementById('start-btn');
-                                    btn.disabled = true;
-                                    btn.innerText = 'Connecting...';
-                                    
-                                    try {
-                                        const response = await fetch('/admin/mirror/stats', {
-                                            method: 'POST',
-                                            body: getFormData()
-                                        });
-                                        
-                                        if (!response.ok) throw new Error(await response.text());
-                                        
-                                        const stats = await response.json();
-                                        document.getElementById('remote-songs').innerText = stats.songCount;
-                                        document.getElementById('remote-albums').innerText = stats.albumCount;
-                                        document.getElementById('remote-artists').innerText = stats.artistCount;
-                                        document.getElementById('remote-images').innerText = stats.imagesCount;
-                                        
-                                        startBtn.disabled = false;
-                                    } catch (e) {
-                                        alert("Connection failed: " + e.message);
-                                        startBtn.disabled = true;
-                                    } finally {
-                                        btn.disabled = false;
-                                        btn.innerText = 'Connect & Preview';
-                                    }
-                                }
-
-                                async function startMirror() {
-                                    const btn = document.getElementById('start-btn');
-                                    const stopBtn = document.getElementById('stop-btn');
-                                    const configSection = document.getElementById('config-section');
-                                    const activeState = document.getElementById('active-state');
-                                    const connInfo = document.getElementById('connection-info');
-                                    const resetBtn = document.getElementById('reset-btn');
-                                    
-                                    btn.disabled = true;
-                                    btn.innerText = 'Starting Mirror...';
-                                    
-                                    try {
-                                        const response = await fetch('/admin/mirror/start', {
-                                            method: 'POST',
-                                            body: getFormData()
-                                        });
-                                        if (!response.ok) throw new Error(await response.text());
-                                        
-                                        configSection.classList.add('hidden');
-                                        activeState.classList.remove('hidden');
-                                        
-                                        btn.classList.add('hidden');
-                                        stopBtn.classList.remove('hidden');
-                                        resetBtn.classList.add('hidden');
-                                        
-                                        document.getElementById('status-dot').className = "w-2 h-2 rounded-full bg-amber-500 animate-pulse";
-                                        document.getElementById('status-text').innerText = "Sync Active";
-                                        
-                                        document.getElementById('info-host').innerText = document.getElementById('host').value;
-                                        document.getElementById('info-quality').innerText = 'Quality: ' + document.getElementById('quality').value;
-                                        connInfo.classList.remove('hidden');
-                                    } catch (e) {
-                                        alert("Start failed: " + e.message);
-                                        btn.disabled = false;
-                                        btn.innerText = 'Start Synchronization';
-                                    }
-                                }
-
-                                async function stopMirror() {
-                                    const stopBtn = document.getElementById('stop-btn');
-                                    stopBtn.disabled = true;
-                                    stopBtn.innerText = 'Stopping...';
-                                    
-                                    try {
-                                        await fetch('/admin/mirror/stop', { method: 'POST' });
-                                    } catch (e) {
-                                        console.error("Stop failed", e);
-                                    }
-                                }
-
-                                async function resetMirror() {
-                                    const resetBtn = document.getElementById('reset-btn');
-                                    resetBtn.disabled = true;
-                                    resetBtn.innerText = 'Resetting...';
-                                    
-                                    try {
-                                        await fetch('/admin/mirror/reset', { method: 'POST' });
-                                        window.location.reload();
-                                    } catch (e) {
-                                        alert("Reset failed: " + e.message);
-                                        resetBtn.disabled = false;
-                                        resetBtn.innerText = 'Reset & Reconfigure';
-                                    }
-                                }
-
-                                function updateProgress(progress) {
-                                    const idle = document.getElementById('idle-state');
-                                    const active = document.getElementById('active-state');
-                                    const config = document.getElementById('config-section');
-                                    const fill = document.getElementById('progress-fill');
-                                    const task = document.getElementById('current-task');
-                                    const detail = document.getElementById('task-detail');
-                                    const log = document.getElementById('status-log');
-                                    const errorContainer = document.getElementById('error-container');
-                                    const errorMessage = document.getElementById('error-message');
-                                    
-                                    const startBtn = document.getElementById('start-btn');
-                                    const stopBtn = document.getElementById('stop-btn');
-                                    const resetBtn = document.getElementById('reset-btn');
-                                    const connInfo = document.getElementById('connection-info');
-                                    
-                                    const statusDot = document.getElementById('status-dot');
-                                    const statusText = document.getElementById('status-text');
-                                    
-                                    const itemContainer = document.getElementById('item-progress-container');
-                                    const currentItemText = document.getElementById('current-item');
-                                    const itemPercentText = document.getElementById('item-percent');
-                                    const itemFill = document.getElementById('item-progress-fill');
-
-                                    if (!progress) {
-                                        config.classList.remove('hidden');
-                                        active.classList.add('hidden');
-                                        idle.classList.add('hidden');
-
-                                        startBtn.classList.remove('hidden');
-                                        stopBtn.classList.add('hidden');
-                                        resetBtn.classList.add('hidden');
-                                        connInfo.classList.add('hidden');
-                                        
-                                        statusDot.className = "w-2 h-2 rounded-full bg-emerald-500 animate-pulse";
-                                        statusText.innerText = "System Ready";
-                                        return;
-                                    }
-
-                                    config.classList.add('hidden');
-                                    active.classList.remove('hidden');
-                                    idle.classList.add('hidden');
-                                    
-                                    connInfo.classList.remove('hidden');
-                                    
-                                    if (progress.isFinished) {
-                                        statusDot.className = "w-2 h-2 rounded-full bg-emerald-500";
-                                        statusText.innerText = progress.error === "Stopped" ? "Sync Stopped" : "Sync Completed";
-                                    } else if (progress.error) {
-                                        statusDot.className = "w-2 h-2 rounded-full bg-red-500 animate-pulse";
-                                        statusText.innerText = "Sync Error";
-                                    } else {
-                                        statusDot.className = "w-2 h-2 rounded-full bg-amber-500 animate-pulse";
-                                        statusText.innerText = "Sync Active";
-                                    }
-
-                                    const percent = progress.totalItems > 0 ? (progress.processedItems / progress.totalItems) * 100 : 0;
-                                    fill.style.width = `${percent}%`;
-                                    task.innerText = progress.currentTask;
-                                    detail.innerText = `${progress.processedItems} / ${progress.totalItems}`;
-
-                                    if (progress.currentItem) {
-                                        itemContainer.classList.remove('hidden');
-                                        currentItemText.innerText = progress.currentItem;
-                                        if (progress.currentItemProgress !== null && progress.currentItemProgress !== undefined) {
-                                            const itemPercent = Math.round(progress.currentItemProgress * 100);
-                                            itemPercentText.innerText = `${itemPercent}%`;
-                                            itemFill.style.width = `${itemPercent}%`;
-                                            itemFill.parentElement.classList.remove('hidden');
-                                        } else {
-                                            itemPercentText.innerText = "";
-                                            itemFill.parentElement.classList.add('hidden');
-                                        }
-                                    } else {
-                                        itemContainer.classList.add('hidden');
-                                    }
-
-                                    const stages = [
-                                        "Mirroring Images",
-                                        "Mirroring Artists",
-                                        "Mirroring Artist Aliases",
-                                        "Mirroring Artist Split Aliases",
-                                        "Mirroring Albums",
-                                        "Mirroring Songs",
-                                        "Mirroring Playlists",
-                                        "Mirroring User Playlists"
-                                    ];
-
-                                    let currentTaskIndex = stages.indexOf(progress.currentTask);
-                                    if (progress.isFinished) currentTaskIndex = stages.length;
-                                    
-                                    stages.forEach((stage, index) => {
-                                        const dot = document.getElementById(`stage-dot-${index}`);
-                                        const text = document.getElementById(`stage-text-${index}`);
-                                        const container = document.getElementById(`stage-${index}`);
-
-                                        if (index < currentTaskIndex) {
-                                            dot.classList.remove('bg-zinc-700', 'bg-amber-500', 'animate-pulse');
-                                            dot.classList.add('bg-emerald-500');
-                                            text.classList.remove('text-slate-400', 'text-amber-400', 'font-bold');
-                                            text.classList.add('text-emerald-400');
-                                            container.classList.add('bg-emerald-500/5', 'border-emerald-500/20');
-                                            container.classList.remove('bg-zinc-800/30', 'border-zinc-700/20', 'bg-amber-500/5', 'border-amber-500/20');
-                                        } else if (index === currentTaskIndex) {
-                                            dot.classList.remove('bg-zinc-700', 'bg-emerald-500');
-                                            dot.classList.add('bg-amber-500', 'animate-pulse');
-                                            text.classList.remove('text-slate-400', 'text-emerald-400');
-                                            text.classList.add('text-amber-400', 'font-bold');
-                                            container.classList.add('bg-amber-500/5', 'border-amber-500/20');
-                                            container.classList.remove('bg-zinc-800/30', 'border-zinc-700/20', 'bg-emerald-500/5', 'border-emerald-500/20');
-                                        } else {
-                                            dot.classList.remove('bg-amber-500', 'bg-emerald-500', 'animate-pulse');
-                                            dot.classList.add('bg-zinc-700');
-                                            text.classList.remove('text-amber-400', 'text-emerald-400', 'font-bold');
-                                            text.classList.add('text-slate-400');
-                                            container.classList.add('bg-zinc-800/30', 'border-zinc-700/20');
-                                            container.classList.remove('bg-amber-500/5', 'border-amber-500/20', 'bg-emerald-500/5', 'border-emerald-500/20');
-                                        }
-                                    });
-
-                                    if (progress.error) {
-                                        errorContainer.classList.remove('hidden');
-                                        errorMessage.innerText = progress.error;
-                                        fill.classList.replace('bg-amber-500', 'bg-red-500');
-                                        stopBtn.classList.add('hidden');
-                                        resetBtn.classList.remove('hidden');
-                                    } else {
-                                        errorContainer.classList.add('hidden');
-                                        fill.classList.replace('bg-red-500', 'bg-amber-500');
-                                        
-                                        if (progress.isFinished) {
-                                            stopBtn.classList.add('hidden');
-                                            resetBtn.classList.remove('hidden');
-                                        } else {
-                                            stopBtn.classList.remove('hidden');
-                                            resetBtn.classList.add('hidden');
-                                        }
-                                    }
-
-                                    if (progress.isFinished) {
-                                        fill.classList.replace('bg-amber-500', 'bg-emerald-500');
-                                        task.innerText = "Mirror Synchronized";
-                                        task.classList.add('text-emerald-400');
-                                        log.innerText = progress.error === "Stopped" ? "Mirror stopped." : "All data synchronized successfully.";
-                                    }
-                                }
-
-                                function setupSSE() {
-                                    const evtSource = new EventSource("/admin/mirror/progress");
-                                    evtSource.onmessage = (event) => {
-                                        try {
-                                            const progress = JSON.parse(event.data);
-                                            updateProgress(progress);
-                                        } catch (e) {
-                                            console.error("Progress parse error", e);
-                                        }
-                                    };
-                                }
-                                setupSSE();
-                            """.trimIndent()
-                        }
-                    }
+                    script { src = "/static/mirror.js" }
                 }
             }
         }
 
-        post("/start") {
-            val params = call.receiveParameters()
-            val config = RemoteServerConfig(
-                host = params["host"] ?: "",
-                port = params["port"]?.toIntOrNull() ?: 80,
-                username = params["username"] ?: "",
-                password = params["password"] ?: "",
-                secure = params["secure"] == "true",
-                quality = params["quality"]?.toIntOrNull() ?: -1
-            )
-            remoteMirrorService.startMirror(config)
-            call.respond(HttpStatusCode.OK)
-        }
+        authenticate("synara-auth") {
+            post("/start") {
+                val user = call.getUser() ?: return@post call.respond(HttpStatusCode.Unauthorized)
+                if (!user.isAdmin) return@post call.respond(HttpStatusCode.Forbidden)
 
-        post("/stop") {
-            remoteMirrorService.stopMirror()
-            call.respond(HttpStatusCode.OK)
-        }
-
-        post("/reset") {
-            try {
-                remoteMirrorService.resetMirror()
+                val params = call.receiveParameters()
+                val config = RemoteServerConfig(
+                    host = params["host"] ?: "",
+                    port = params["port"]?.toIntOrNull() ?: 8080,
+                    username = params["username"] ?: "",
+                    password = params["password"] ?: "",
+                    secure = params["secure"] == "true",
+                    quality = params["quality"]?.toIntOrNull() ?: -1
+                )
+                remoteMirrorService.startMirror(config)
                 call.respond(HttpStatusCode.OK)
-            } catch (e: Exception) {
-                call.respond(HttpStatusCode.BadRequest, e.message ?: "Reset failed")
             }
-        }
 
-        post("/stats") {
-            val params = call.receiveParameters()
-            val config = RemoteServerConfig(
-                host = params["host"] ?: "",
-                port = params["port"]?.toIntOrNull() ?: 80,
-                username = params["username"] ?: "",
-                password = params["password"] ?: "",
-                secure = params["secure"] == "true",
-                quality = params["quality"]?.toIntOrNull() ?: -1
-            )
-            try {
-                val stats = remoteMirrorService.getRemoteStats(config)
-                call.respond(stats)
-            } catch (e: Exception) {
-                call.respond(HttpStatusCode.BadRequest, e.message ?: "Failed to fetch stats")
+            post("/stop") {
+                val user = call.getUser() ?: return@post call.respond(HttpStatusCode.Unauthorized)
+                if (!user.isAdmin) return@post call.respond(HttpStatusCode.Forbidden)
+
+                remoteMirrorService.stopMirror()
+                call.respond(HttpStatusCode.OK)
             }
-        }
 
-        sse("/progress") {
-            remoteMirrorService.getActiveMirrorProgress()?.collectLatest { progress ->
-                send(ServerSentEvent(data = ApplicationScope.json.encodeToString(progress)))
+            post("/reset") {
+                val user = call.getUser() ?: return@post call.respond(HttpStatusCode.Unauthorized)
+                if (!user.isAdmin) return@post call.respond(HttpStatusCode.Forbidden)
+
+                try {
+                    remoteMirrorService.resetMirror()
+                    call.respond(HttpStatusCode.OK)
+                } catch (e: Exception) {
+                    call.respond(HttpStatusCode.BadRequest, e.message ?: "Reset failed")
+                }
+            }
+
+            post("/stats") {
+                val user = call.getUser() ?: return@post call.respond(HttpStatusCode.Unauthorized)
+                if (!user.isAdmin) return@post call.respond(HttpStatusCode.Forbidden)
+
+                val params = call.receiveParameters()
+                val config = RemoteServerConfig(
+                    host = params["host"] ?: "",
+                    port = params["port"]?.toIntOrNull() ?: 8080,
+                    username = params["username"] ?: "",
+                    password = params["password"] ?: "",
+                    secure = params["secure"] == "true",
+                    quality = params["quality"]?.toIntOrNull() ?: -1
+                )
+                try {
+                    val stats = remoteMirrorService.getRemoteStats(config)
+                    call.respond(stats)
+                } catch (e: Exception) {
+                    call.respond(HttpStatusCode.BadRequest, e.message ?: "Failed to fetch stats")
+                }
+            }
+
+            sse("/progress") {
+                val user = call.getUser() ?: return@sse call.respond(HttpStatusCode.Unauthorized)
+                if (!user.isAdmin) return@sse call.respond(HttpStatusCode.Forbidden)
+
+                remoteMirrorService.getActiveMirrorProgress()?.collectLatest { progress ->
+                    send(ServerSentEvent(data = ApplicationScope.json.encodeToString(progress)))
+                }
             }
         }
     }
