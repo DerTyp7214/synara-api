@@ -103,6 +103,7 @@ fun Application.module() {
             singleOf(::RemoteMirrorService)
             singleOf(::MusicBrainzService)
             singleOf(::MusicBrainzWorker)
+            singleOf(::AutoTranscodeWorker)
 
             single<Gson> {
                 GsonBuilder()
@@ -136,6 +137,7 @@ fun Application.module() {
     val reverseProxyService = get<ReverseProxyService>()
     val metadataFetchingService = get<MetadataFetchingService>()
     val musicBrainzWorker = get<MusicBrainzWorker>()
+    val autoTranscodeWorker = get<AutoTranscodeWorker>()
 
     scheduleService.schedule(
         ScheduledTask(
@@ -166,6 +168,14 @@ fun Application.module() {
                     log.error("Error during scheduled Tidal artist image fetch", e)
                 }
             }
+        )
+    )
+
+    scheduleService.schedule(
+        ScheduledTask(
+            name = "Auto Transcoding",
+            trigger = CronPresets.dailyAt(3, 0),
+            task = { autoTranscodeWorker.run() }
         )
     )
 
