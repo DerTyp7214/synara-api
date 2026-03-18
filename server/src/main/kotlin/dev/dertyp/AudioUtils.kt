@@ -24,6 +24,8 @@ import io.ktor.server.routing.head
 import io.ktor.server.routing.route
 import io.ktor.util.logging.KtorSimpleLogger
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.bytedeco.ffmpeg.global.avcodec
 import org.bytedeco.ffmpeg.global.avutil
@@ -38,6 +40,7 @@ import org.koin.ktor.ext.inject
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.Paths
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.concurrent.atomics.AtomicBoolean
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.io.path.Path
@@ -56,6 +59,8 @@ object AudioUtils {
     val logger = KtorSimpleLogger("AudioUtils")
 
     val isTranscoderActive = AtomicBoolean(false)
+
+    private val transcodeMutexes = ConcurrentHashMap<Pair<String, Int>, Mutex>()
 
     private fun closestSampleRate(rate: Int): Int {
         val supported = listOf(8000, 12000, 16000, 24000, 48000)
@@ -78,83 +83,87 @@ object AudioUtils {
         flacFile: File,
         targetKbps: Int,
     ): StreamInfo = withContext(Dispatchers.IO) {
-        val tracksPath = environment.config.propertyOrNull("audio.tracks")?.getString()
-        val transcoderPath = environment.config.propertyOrNull("audio.transcode")?.getString() ?: ""
+        val mutex = transcodeMutexes.computeIfAbsent(flacFile.absolutePath to targetKbps) { Mutex() }
 
-        val parent = if (tracksPath != null)
-            flacFile.parentFile.absolutePath.removePrefix(tracksPath)
-        else flacFile.parentFile.name
+        mutex.withLock {
+            val tracksPath = environment.config.propertyOrNull("audio.tracks")?.getString()
+            val transcoderPath = environment.config.propertyOrNull("audio.transcode")?.getString() ?: ""
 
-        val fileName =
-            Paths.get(transcoderPath, "${targetKbps}kbps", parent, "${flacFile.nameWithoutExtension}.ogg").toFile()
-        val tempFolder =
-            if (fileName.isRooted) Paths.get("/").toFile()
-            else Files.createTempDirectory("transcoder_").toFile().apply {
-                deleteOnExitRecursive()
-            }
-        val tempFile = tempFolder.resolve(fileName)
+            val parent = if (tracksPath != null)
+                flacFile.parentFile.absolutePath.removePrefix(tracksPath)
+            else flacFile.parentFile.name
 
-        if (tempFile.exists()) return@withContext StreamInfo(
-            tempFile,
-            ContentType.Audio.MPEG,
-            tempFile.length(),
-            tempFile.name,
-        )
-
-        tempFile.parentFile.mkdirs()
-        tempFile.createNewFile()
-
-        try {
-            avutil.av_log_set_level(avutil.AV_LOG_QUIET)
-
-            val grabber = FFmpegFrameGrabber(flacFile.absolutePath).apply { start() }
-
-            val inputMetadata: Map<String, String> = grabber.metadata.toMap()
-
-            val recorder = FFmpegFrameRecorder(tempFile.absolutePath, grabber.audioChannels).apply {
-                imageWidth = 0
-                imageHeight = 0
-                videoCodec = avcodec.AV_CODEC_ID_NONE
-
-                audioCodec = avcodec.AV_CODEC_ID_OPUS
-                format = "ogg"
-                sampleRate = closestSampleRate(grabber.sampleRate)
-                audioBitrate = targetKbps * 1000
-                sampleFormat = AV_SAMPLE_FMT_S16
-
-                frameRate = 1.0
-
-                inputMetadata.forEach { (key, value) ->
-                    setMetadata(key.lowercase(), value)
+            val fileName =
+                Paths.get(transcoderPath, "${targetKbps}kbps", parent, "${flacFile.nameWithoutExtension}.ogg").toFile()
+            val tempFolder =
+                if (fileName.isRooted) Paths.get("/").toFile()
+                else Files.createTempDirectory("transcoder_").toFile().apply {
+                    deleteOnExitRecursive()
                 }
+            val tempFile = tempFolder.resolve(fileName)
 
-                setOption("id3v2_version", "0")
-                setMetadata("encoder", "Lavc-Ogg-Opus")
-
-                start()
-            }
-
-            var frame = grabber.grabFrame(true, false, true, false)
-            while (frame != null) {
-                recorder.record(frame)
-                frame = grabber.grabFrame(true, false, true, false)
-            }
-
-            recorder.stop()
-            recorder.release()
-            grabber.stop()
-            grabber.release()
-
-            return@withContext StreamInfo(
+            if (tempFile.exists() && tempFile.length() > 0) return@withLock StreamInfo(
                 tempFile,
                 ContentType.Audio.MPEG,
                 tempFile.length(),
-                tempFile.name
+                tempFile.name,
             )
-        } catch (e: Throwable) {
-            tempFile.delete()
-            e.printStackTrace()
-            throw e
+
+            tempFile.parentFile.mkdirs()
+            tempFile.createNewFile()
+
+            try {
+                avutil.av_log_set_level(avutil.AV_LOG_QUIET)
+
+                val grabber = FFmpegFrameGrabber(flacFile.absolutePath).apply { start() }
+
+                val inputMetadata: Map<String, String> = grabber.metadata.toMap()
+
+                val recorder = FFmpegFrameRecorder(tempFile.absolutePath, grabber.audioChannels).apply {
+                    imageWidth = 0
+                    imageHeight = 0
+                    videoCodec = avcodec.AV_CODEC_ID_NONE
+
+                    audioCodec = avcodec.AV_CODEC_ID_OPUS
+                    format = "ogg"
+                    sampleRate = closestSampleRate(grabber.sampleRate)
+                    audioBitrate = targetKbps * 1000
+                    sampleFormat = AV_SAMPLE_FMT_S16
+
+                    frameRate = 1.0
+
+                    inputMetadata.forEach { (key, value) ->
+                        setMetadata(key.lowercase(), value)
+                    }
+
+                    setOption("id3v2_version", "0")
+                    setMetadata("encoder", "Lavc-Ogg-Opus")
+
+                    start()
+                }
+
+                var frame = grabber.grabFrame(true, false, true, false)
+                while (frame != null) {
+                    recorder.record(frame)
+                    frame = grabber.grabFrame(true, false, true, false)
+                }
+
+                recorder.stop()
+                recorder.release()
+                grabber.stop()
+                grabber.release()
+
+                StreamInfo(
+                    tempFile,
+                    ContentType.Audio.MPEG,
+                    tempFile.length(),
+                    tempFile.name
+                )
+            } catch (e: Throwable) {
+                tempFile.delete()
+                e.printStackTrace()
+                throw e
+            }
         }
     }
 

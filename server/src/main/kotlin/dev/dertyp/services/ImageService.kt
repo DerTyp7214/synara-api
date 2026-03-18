@@ -19,7 +19,7 @@ import redis.clients.jedis.HostAndPort
 import redis.clients.jedis.RedisClusterClient
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
-import java.util.*
+import java.util.UUID
 import javax.imageio.ImageIO
 import kotlin.io.path.*
 
@@ -57,6 +57,10 @@ class ImageService : IImageService, Service() {
     override suspend fun byId(id: UUID): Image? = querySingle {
         where { ImageTable.id eq id }
     }
+
+    suspend fun byIds(ids: List<UUID>): List<Image> = queryImages(0, ids.size) {
+        where { ImageTable.id inList ids }
+    }.data
 
     override suspend fun byHash(hash: String): Image? = querySingle {
         where { ImageTable.imageHash eq hash }
@@ -125,6 +129,40 @@ class ImageService : IImageService, Service() {
             .associate { it[ImageTable.imageHash] to it[ImageTable.id].value }
     }
 
+    suspend fun upsertImage(image: Image, data: ByteArray) = dbQuery {
+        val extension = try {
+            val inputStream = ByteArrayInputStream(data)
+            val imageInputStream = ImageIO.createImageInputStream(inputStream)
+            val readers = ImageIO.getImageReaders(imageInputStream)
+            if (readers.hasNext()) {
+                val reader = readers.next()
+                reader.formatName.lowercase()
+            } else {
+                "jpeg"
+            }
+        } catch (_: Exception) {
+            "jpeg"
+        }
+
+        val imagePath = Path(
+            storageService.imagesPath,
+            *image.imageHash.windowed(2, 2).take(4).toTypedArray(),
+            "${image.imageHash.drop(2 * 4)}.$extension"
+        )
+
+        if (!imagePath.exists()) {
+            imagePath.parent.toFile().mkdirs()
+            imagePath.writeBytes(data)
+        }
+
+        ImageTable.upsert(ImageTable.id) {
+            it[id] = image.id
+            it[path] = Path(storageService.imagesPath).relativize(imagePath).pathString
+            it[imageHash] = image.imageHash
+            it[origin] = image.origin
+        }
+    }
+
     suspend fun createBatch(insertableImages: List<InsertableImage>): List<UUID> {
         if (insertableImages.isEmpty()) return emptyList()
 
@@ -151,7 +189,7 @@ class ImageService : IImageService, Service() {
                     } else {
                         "jpeg"
                     }
-                } catch (e: Exception) {
+                } catch (_: Exception) {
                     "jpeg"
                 }
 

@@ -2,7 +2,7 @@ type: http_request
 model: http_request
 id: rq_nK86XhuvE4
 createdAt: 2025-10-14T19:25:16.449914205
-updatedAt: 2025-12-08T21:36:41.015759110
+updatedAt: 2026-03-18T22:13:41.692200266
 workspaceId: wk_9dbKacQT4H
 folderId: null
 authentication: {}
@@ -18,9 +18,9 @@ url: ${[baseUrl]}/transcodeAll/:bitrate
 urlParameters:
 - enabled: true
   name: :bitrate
-  value: '256'
+  value: '320'
   id: EX2gyKsMx6
 - enabled: true
   name: ''
   value: ''
-  id: 8xzNyVIJFV
+  id: 4s4HHTBZvc

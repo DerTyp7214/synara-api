@@ -4,7 +4,7 @@ import at.favre.lib.crypto.bcrypt.BCrypt
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
 import dev.dertyp.db.UserTable
-import io.ktor.server.application.*
+import io.ktor.server.application.ApplicationEnvironment
 import org.flywaydb.core.Flyway
 import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.JdbcTransaction
@@ -47,8 +47,13 @@ class DatabaseManager(private val environment: ApplicationEnvironment) {
         val config = HikariConfig().apply {
             jdbcUrl = dbUrl
             driverClassName = dbDriver
-            maximumPoolSize = 100
-            if (dbDriver != "org.sqlite.JDBC") {
+            
+            if (dbDriver == "org.sqlite.JDBC") {
+                maximumPoolSize = 1
+                addDataSourceProperty("journal_mode", "WAL")
+                addDataSourceProperty("busy_timeout", "5000")
+            } else {
+                maximumPoolSize = 100
                 username = dbUser
                 password = dbPassword
             }

@@ -262,9 +262,16 @@ class RemoteMirrorService : Service() {
                 stageStartTime = System.currentTimeMillis()
                 updateProgress("Mirroring Images", 0, remoteStats.imagesCount)
                 var imageCount = 0
-                mirrorService.getImageMetadata().collect { remoteImage: Image ->
-                    val localImage = imageService.byId(remoteImage.id)
-                    if (localImage == null || localImage.imageHash != remoteImage.imageHash) {
+                mirrorService.getImageMetadata().chunked(100).flatMapConcat { images ->
+                    flow {
+                        val existingImages = imageService.byIds(images.map { it.id }).map { it.id to it.imageHash }
+                        images.forEach {
+                            val exists = (it.id to it.imageHash) in existingImages
+                            emit(it to exists)
+                        }
+                    }
+                }.collect { (remoteImage: Image, exists: Boolean) ->
+                    if (!exists) {
                         logger.debug(
                             "Downloading image {} (Hash: {})",
                             remoteImage.id,
@@ -273,15 +280,7 @@ class RemoteMirrorService : Service() {
                         val imageData = remoteImageService.getImageData(remoteImage.id, 0)
                         yield()
                         if (imageData != null) {
-                            imageService.createBatch(
-                                listOf(
-                                    InsertableImage(
-                                        imageData,
-                                        remoteImage.id.toString(),
-                                        "Mirror"
-                                    )
-                                )
-                            )
+                            imageService.upsertImage(remoteImage, imageData)
                         }
                     }
                     imageCount++
@@ -371,7 +370,7 @@ class RemoteMirrorService : Service() {
                 var songCount = 0
                 var totalBytesSynced = 0L
 
-                mirrorService.getSongs().flatMapMerge(concurrency = 6) { song ->
+                mirrorService.getSongs().flatMapMerge(concurrency = 16) { song ->
                     flow {
                         val expectedSize = if (config.quality == -1) song.fileSize
                         else remoteSongService.getDownloadSize(song.id, config.quality)
@@ -404,15 +403,13 @@ class RemoteMirrorService : Service() {
                             mirrorService.getSongData(song.id, config.quality, 64 * 1024).collect { chunk ->
                                 withContext(Dispatchers.IO) {
                                     output.write(chunk)
-                                    if (downloadedInSong % (16 * 1024) > chunk.size) {
-                                        delay(1.nanoseconds)
-                                    }
+                                    delay(1.nanoseconds)
                                     yield()
                                 }
                                 downloadedInSong += chunk.size
                                 totalBytesSynced += chunk.size
 
-                                if (downloadedInSong % (96 * 1024) > chunk.size) {
+                                if (downloadedInSong % (256 * 1024) > chunk.size) {
                                     val itemProgress = if (expectedSize > 0) {
                                         downloadedInSong.toFloat() / expectedSize
                                     } else null
@@ -426,7 +423,6 @@ class RemoteMirrorService : Service() {
                                         itemProgress,
                                         totalBytesSynced
                                     )
-                                    yield()
                                 }
                             }
                         }
@@ -443,7 +439,6 @@ class RemoteMirrorService : Service() {
                         1.0f,
                         totalBytesSynced
                     )
-                    yield()
                 }
                 logger.info("Song synchronization finished (Processed: $songCount, Total bytes: $totalBytesSynced)")
                 updateProgress("Mirroring Songs", remoteStats.songCount, remoteStats.songCount)
