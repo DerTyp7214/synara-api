@@ -99,6 +99,8 @@ fun Application.module() {
             singleOf(::DbManagementService)
             singleOf(::BackupService)
             singleOf(::MetadataFetchingService)
+            singleOf(::MirrorService)
+            singleOf(::RemoteMirrorService)
             singleOf(::MusicBrainzService)
             singleOf(::MusicBrainzWorker)
 

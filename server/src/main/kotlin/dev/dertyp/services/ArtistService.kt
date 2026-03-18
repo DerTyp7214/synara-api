@@ -5,7 +5,10 @@ import dev.dertyp.core.*
 import dev.dertyp.data.*
 import dev.dertyp.db.*
 import dev.dertyp.dbQuery
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.*
 import org.jetbrains.exposed.v1.core.*
+import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import org.jetbrains.exposed.v1.jdbc.*
 import org.koin.core.component.inject
 import java.util.UUID
@@ -252,6 +255,19 @@ class ArtistService : IArtistService, Service() {
 
     override suspend fun allArtists(page: Int, pageSize: Int): PaginatedResponse<Artist> = queryArtists(page, pageSize)
 
+    fun allArtistIds(): Flow<UUID> = flow {
+        ArtistTable
+            .select(ArtistTable.id)
+            .fetchBatchedResults(1000) { batch ->
+                batch.forEach { emit(it[ArtistTable.id].value) }
+            }
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun allArtistsFlow(): Flow<Artist> = allArtistIds().chunked(100).flatMapConcat { ids ->
+        byIds(ids).asFlow()
+    }
+
     private suspend fun querySingle(query: Query.() -> Query) =
         queryArtists(0, Int.MAX_VALUE, query).data.singleOrNull()
 
@@ -392,5 +408,29 @@ class ArtistService : IArtistService, Service() {
             ArtistAliasTable.deleteWhere { ArtistAliasTable.artistId inList batch }
         }
         logger.info("Deleted ${unreferencedArtists.size} unreferenced artists")
+    }
+
+    suspend fun upsertArtist(artist: Artist) = dbQuery {
+        ArtistTable.upsert(ArtistTable.id) {
+            it[id] = artist.id
+            it[name] = artist.name
+            it[isGroup] = artist.isGroup
+            it[about] = artist.about
+            it[image] = artist.imageId?.let { imageId -> EntityID(imageId, ImageTable) }
+        }
+    }
+
+    suspend fun upsertArtistAlias(alias: ArtistAlias) = dbQuery {
+        ArtistAliasTable.upsert(ArtistAliasTable.artistId, ArtistAliasTable.name) {
+            it[artistId] = alias.artistId
+            it[name] = alias.name
+        }
+    }
+
+    suspend fun upsertArtistSplitAlias(alias: ArtistSplitAlias) = dbQuery {
+        ArtistSplitAliasTable.upsert(ArtistSplitAliasTable.artistId, ArtistSplitAliasTable.name) {
+            it[artistId] = alias.artistId
+            it[name] = alias.name
+        }
     }
 }

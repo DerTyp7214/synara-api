@@ -1,6 +1,7 @@
 package dev.dertyp
 
 import dev.dertyp.core.ApplicationScope
+import dev.dertyp.routing.mirrorRouting
 import dev.dertyp.routing.registerAuthenticatedServices
 import dev.dertyp.routing.registerPublicServices
 import dev.dertyp.services.JwtService
@@ -84,5 +85,7 @@ fun Application.configureRouting() {
         }
 
         jwtService.authenticate(this)
+
+        mirrorRouting()
     }
 }

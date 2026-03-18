@@ -5,18 +5,18 @@ import dev.dertyp.data.InsertablePlaylist
 import dev.dertyp.data.PaginatedResponse
 import dev.dertyp.data.User
 import dev.dertyp.data.UserPlaylist
-import dev.dertyp.db.SongTable
-import dev.dertyp.db.UserPlaylistSongTable
-import dev.dertyp.db.UserPlaylistTable
+import dev.dertyp.db.*
 import dev.dertyp.dbQuery
 import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.and
+import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.jdbc.*
 import org.koin.core.component.inject
 import java.time.Instant
-import java.util.*
+import java.util.Date
+import java.util.UUID
 
 class UserPlaylistService : IUserPlaylistService, Service() {
     companion object {
@@ -205,5 +205,23 @@ class UserPlaylistService : IUserPlaylistService, Service() {
                 modifiedAt = songs.lastOrNull()?.second.date ?: Date.from(Instant.EPOCH)
             )
         }.sortedByDescending { it.modifiedAt }
+    }
+
+    suspend fun upsertUserPlaylist(playlist: UserPlaylist) = dbQuery {
+        UserPlaylistTable.upsert(UserPlaylistTable.id) {
+            it[id] = playlist.id
+            it[name] = playlist.name
+            it[imageId] = playlist.imageId?.let { imgId -> EntityID(imgId, ImageTable) }
+            it[creator] = EntityID(playlist.creator, UserTable)
+            it[description] = playlist.description
+            it[origin] = playlist.origin
+        }
+
+        UserPlaylistSongTable.deleteWhere { UserPlaylistSongTable.playlistId eq playlist.id }
+        UserPlaylistSongTable.batchInsert(playlist.songs) { songId ->
+            this[UserPlaylistSongTable.playlistId] = playlist.id
+            this[UserPlaylistSongTable.songId] = songId
+            this[UserPlaylistSongTable.addedAt] = System.currentTimeMillis()
+        }
     }
 }

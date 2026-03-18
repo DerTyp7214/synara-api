@@ -1,9 +1,6 @@
 package dev.dertyp.services
 
-import dev.dertyp.core.Quadruple
-import dev.dertyp.core.Quintuple
-import dev.dertyp.core.filterValueNotNull
-import dev.dertyp.core.rankedSearchQuery
+import dev.dertyp.core.*
 import dev.dertyp.data.Album
 import dev.dertyp.data.Artist
 import dev.dertyp.data.InsertableAlbum
@@ -13,8 +10,11 @@ import dev.dertyp.dbQuery
 import dev.dertyp.getDateFromISO
 import dev.dertyp.getISOFromDate
 import dev.dertyp.services.ArtistService.Companion.mapArtist
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.core.*
+import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import org.jetbrains.exposed.v1.jdbc.*
 import org.koin.core.component.get
 import java.io.File
@@ -111,6 +111,19 @@ class AlbumService : IAlbumService, Service() {
         }
 
     override suspend fun allAlbums(page: Int, pageSize: Int): PaginatedResponse<Album> = queryAlbums(page, pageSize)
+
+    fun allAlbumIds(): Flow<UUID> = flow {
+        AlbumTable
+            .select(AlbumTable.id)
+            .fetchBatchedResults(1000) { batch ->
+                batch.forEach { emit(it[AlbumTable.id].value) }
+            }
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun allAlbumsFlow(): Flow<Album> = allAlbumIds().chunked(100).flatMapConcat { ids ->
+        byIds(ids).asFlow()
+    }
 
     @Suppress("DuplicatedCode")
     override suspend fun deleteAlbums(ids: List<UUID>): Boolean = dbQuery {
@@ -391,5 +404,22 @@ class AlbumService : IAlbumService, Service() {
             AlbumArtistTable.deleteWhere { AlbumArtistTable.albumId inList batch }
         }
         logger.info("Deleted ${emptyAlbums.size} empty albums")
+    }
+
+    suspend fun upsertAlbum(album: Album) = dbQuery {
+        AlbumTable.upsert(AlbumTable.id) {
+            it[id] = album.id
+            it[name] = album.name
+            it[releaseDate] = getISOFromDate(album.releaseDate)
+            it[songCount] = album.songCount
+            it[cover] = album.coverId?.let { coverId -> EntityID(coverId, ImageTable) }
+            it[originalId] = album.originalId
+        }
+
+        AlbumArtistTable.deleteWhere { AlbumArtistTable.albumId eq album.id }
+        AlbumArtistTable.batchInsert(album.artists) { artist ->
+            this[AlbumArtistTable.albumId] = album.id
+            this[AlbumArtistTable.artistId] = artist.id
+        }
     }
 }

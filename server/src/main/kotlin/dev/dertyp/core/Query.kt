@@ -90,7 +90,7 @@ fun Query.rankedSearchQuery(
 
 suspend inline fun Query.fetchBatchedResults(
     batchSize: Int,
-    body: (List<ResultRow>) -> Unit
+    crossinline body: suspend (List<ResultRow>) -> Unit
 ) {
     var offset = 0L
     var hasMore = true

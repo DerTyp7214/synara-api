@@ -18,12 +18,11 @@ import dev.dertyp.services.metadata.MusicBrainzService
 import dev.dertyp.utils.LogParam
 import io.ktor.server.application.ApplicationEnvironment
 import kotlinx.coroutines.*
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.*
 import org.jaudiotagger.audio.AudioFileIO
 import org.jaudiotagger.tag.FieldKey
 import org.jetbrains.exposed.v1.core.*
+import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import org.jetbrains.exposed.v1.jdbc.*
 import org.koin.core.component.get
 import org.koin.core.component.inject
@@ -310,6 +309,20 @@ class SongService : Service() {
             response.copy(
                 data = ids.mapNotNull { songMap[it] }
             )
+        }
+
+    suspend fun byIds(ids: Collection<UUID>): List<Song> =
+        querySongs<Song>(0, Int.MAX_VALUE, true, { this }) {
+            where { SongTable.id inList ids }
+        }.let { response ->
+            val songMap = response.data.associateBy { it.id }
+            ids.mapNotNull { songMap[it] }
+        }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun allSongsFlow(explicit: Boolean = true): Flow<Song> =
+        allSongIds(explicit).chunked(100).flatMapConcat { ids ->
+            byIds(ids).asFlow()
         }
 
     suspend fun byId(id: UUID, userId: UUID): UserSong? = querySingle({ userSong(userId) }) {
@@ -1116,5 +1129,41 @@ class SongService : Service() {
         }
 
         insertedSongs.toMap()
+    }
+
+    suspend fun upsertSong(song: Song) = dbQuery {
+        SongTable.upsert(SongTable.id) {
+            it[id] = song.id
+            it[title] = song.title
+            it[albumId] = song.album?.id?.let { albumId -> EntityID(albumId, AlbumTable) }!!
+            it[duration] = song.duration
+            it[explicit] = song.explicit
+            it[releaseDate] = getISOFromDate(song.releaseDate)
+            it[lyrics] = song.lyrics
+            it[filePath] = song.path
+            it[originalUrl] = song.originalUrl
+            it[trackNumber] = song.trackNumber
+            it[discNumber] = song.discNumber
+            it[copyright] = song.copyright
+            it[sampleRate] = song.sampleRate
+            it[bitsPerSample] = song.bitsPerSample
+            it[bitRate] = song.bitRate
+            it[fileSize] = song.fileSize
+            it[cover] = song.coverId?.let { coverId -> EntityID(coverId, ImageTable) }
+        }
+
+        SongArtistTable.deleteWhere { SongArtistTable.songId eq song.id }
+        SongArtistTable.batchInsert(song.artists) { artist ->
+            this[SongArtistTable.songId] = song.id
+            this[SongArtistTable.artistId] = artist.id
+        }
+
+        if (song.musicBrainzId != null) {
+            SongMusicBrainzTable.upsert(SongMusicBrainzTable.songId) {
+                it[songId] = song.id
+                it[musicBrainzId] = song.musicBrainzId
+                it[lastCheck] = System.currentTimeMillis()
+            }
+        }
     }
 }

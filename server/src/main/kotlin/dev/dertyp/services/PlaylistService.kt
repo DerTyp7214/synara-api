@@ -6,17 +6,19 @@ import dev.dertyp.data.InsertablePlaylist
 import dev.dertyp.data.PaginatedResponse
 import dev.dertyp.data.Playlist
 import dev.dertyp.data.PlaylistEntry
+import dev.dertyp.db.ImageTable
 import dev.dertyp.db.PlaylistSongTable
 import dev.dertyp.db.PlaylistTable
 import dev.dertyp.db.SongTable
 import dev.dertyp.dbQuery
 import org.jetbrains.exposed.v1.core.ResultRow
+import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.core.leftJoin
 import org.jetbrains.exposed.v1.jdbc.*
 import org.koin.core.component.get
-import java.util.*
+import java.util.UUID
 
 class PlaylistService : IPlaylistService, Service() {
     companion object {
@@ -275,5 +277,21 @@ class PlaylistService : IPlaylistService, Service() {
         }
 
         return insertedPlaylistIds
+    }
+
+    suspend fun upsertPlaylist(playlist: Playlist) = dbQuery {
+        PlaylistTable.upsert(PlaylistTable.id) {
+            it[id] = playlist.id
+            it[name] = playlist.name
+            it[imageId] = playlist.imageId?.let { imgId -> EntityID(imgId, ImageTable) }
+        }
+
+        PlaylistSongTable.deleteWhere { PlaylistSongTable.playlistId eq playlist.id }
+        var position = 1
+        PlaylistSongTable.batchInsert(playlist.songs) { songId ->
+            this[PlaylistSongTable.playlistId] = playlist.id
+            this[PlaylistSongTable.songId] = songId
+            this[PlaylistSongTable.position] = position++
+        }
     }
 }
