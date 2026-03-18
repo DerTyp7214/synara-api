@@ -421,14 +421,20 @@ class ArtistService : IArtistService, Service() {
     }
 
     suspend fun upsertArtistAlias(alias: ArtistAlias) = dbQuery {
-        ArtistAliasTable.upsert(ArtistAliasTable.artistId, ArtistAliasTable.name) {
-            it[artistId] = alias.artistId
-            it[name] = alias.name
+        val exists = ArtistAliasTable.selectAll()
+            .where { (ArtistAliasTable.artistId eq alias.artistId) and (ArtistAliasTable.name eq alias.name) }
+            .any()
+        
+        if (!exists) {
+            ArtistAliasTable.insert {
+                it[artistId] = alias.artistId
+                it[name] = alias.name
+            }
         }
     }
 
     suspend fun upsertArtistSplitAlias(alias: ArtistSplitAlias) = dbQuery {
-        ArtistSplitAliasTable.upsert(ArtistSplitAliasTable.artistId, ArtistSplitAliasTable.name) {
+        ArtistSplitAliasTable.upsert(ArtistSplitAliasTable.name, ArtistSplitAliasTable.artistId) {
             it[artistId] = alias.artistId
             it[name] = alias.name
         }

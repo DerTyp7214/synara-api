@@ -52,9 +52,9 @@ class MirrorRpcService(
         return mirrorService.getUserPlaylists()
     }
 
-    override fun getImages(): Flow<ImageStreamItem> {
+    override fun getImageMetadata(): Flow<Image> {
         if (!user.isAdmin) throw IllegalStateException("Only admins can mirror")
-        return mirrorService.getImages()
+        return mirrorService.getImageMetadata()
     }
 
     override fun getSongData(songId: UUID, quality: Int): Flow<ByteArray> {
@@ -107,14 +107,10 @@ class MirrorService : Service() {
         userPlaylistService.allPlaylists(null, 0, Int.MAX_VALUE).data.forEach { emit(it) }
     }
 
-    fun getImages(): Flow<ImageStreamItem> = flow {
-        ImageTable.selectAll().fetchBatchedResults(50) { batch ->
+    fun getImageMetadata(): Flow<Image> = flow {
+        ImageTable.selectAll().fetchBatchedResults(1000) { batch ->
             batch.forEach { row ->
-                val id = row[ImageTable.id].value
-                val data = imageService.getImageData(id, 0)
-                if (data != null) {
-                    emit(ImageStreamItem(id, data))
-                }
+                emit(imageService.map(row))
             }
         }
     }.flowOn(Dispatchers.IO)
