@@ -6,9 +6,8 @@ import dev.dertyp.db.ArtistAliasTable
 import dev.dertyp.db.ArtistSplitAliasTable
 import dev.dertyp.db.ImageTable
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.*
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.koin.core.component.inject
 import java.util.UUID
@@ -66,8 +65,29 @@ class MirrorRpcService(
         if (!user.isAdmin) throw IllegalStateException("Only admins can mirror")
         return mirrorService.getSongData(songId, quality, chunkSize)
     }
+
+    override fun getUsers(): Flow<User> {
+        if (!user.isAdmin) throw IllegalStateException("Only admins can mirror")
+        return mirrorService.getUsers()
+    }
+
+    override fun getSongsByPlaylist(playlistId: UUID): Flow<Song> {
+        if (!user.isAdmin) throw IllegalStateException("Only admins can mirror")
+        return mirrorService.getSongsByPlaylist(playlistId)
+    }
+
+    override fun getSongsByUserPlaylist(playlistId: UUID): Flow<Song> {
+        if (!user.isAdmin) throw IllegalStateException("Only admins can mirror")
+        return mirrorService.getSongsByUserPlaylist(playlistId)
+    }
+
+    override fun getLikedSongs(userId: UUID): Flow<Song> {
+        if (!user.isAdmin) throw IllegalStateException("Only admins can mirror")
+        return mirrorService.getLikedSongs(userId)
+    }
 }
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class MirrorService : Service() {
     private val songService by inject<SongService>()
     private val artistService by inject<ArtistService>()
@@ -76,6 +96,7 @@ class MirrorService : Service() {
     private val userPlaylistService by inject<UserPlaylistService>()
     private val imageService by inject<ImageService>()
     private val storageService by inject<StorageService>()
+    private val userService by inject<UserService>()
 
     fun getServerPaths(): RemoteServerPaths = RemoteServerPaths(
         tracksPath = storageService.tracksPath,
@@ -84,6 +105,19 @@ class MirrorService : Service() {
         customAudioPath = storageService.customAudioPath,
         secondaryTracksPaths = storageService.secondaryTracksPaths
     )
+
+    fun getUsers(): Flow<User> = flow {
+        userService.queryUser().forEach { emit(it.copy(passwordHash = "")) }
+    }.flowOn(Dispatchers.IO)
+
+    fun getSongsByPlaylist(playlistId: UUID): Flow<Song> =
+        songService.songIdsByPlaylist(playlistId).chunked(100).flatMapConcat { songService.byIds(it).asFlow() }
+
+    fun getSongsByUserPlaylist(playlistId: UUID): Flow<Song> =
+        songService.songIdsByUserPlaylist(playlistId).chunked(100).flatMapConcat { songService.byIds(it).asFlow() }
+
+    fun getLikedSongs(userId: UUID): Flow<Song> =
+        songService.likedSongIds(true, userId).chunked(100).flatMapConcat { songService.byIds(it).asFlow() }
 
     fun getSongs(): Flow<Song> = songService.allSongsFlow()
 
@@ -113,13 +147,9 @@ class MirrorService : Service() {
 
     fun getAlbums(): Flow<Album> = albumService.allAlbumsFlow()
 
-    fun getPlaylists(): Flow<Playlist> = flow {
-        playlistService.allPlaylists(0, Int.MAX_VALUE).data.forEach { emit(it) }
-    }
+    fun getPlaylists(): Flow<Playlist> = playlistService.allPlaylistsFlow()
 
-    fun getUserPlaylists(): Flow<UserPlaylist> = flow {
-        userPlaylistService.allPlaylists(null, 0, Int.MAX_VALUE).data.forEach { emit(it) }
-    }
+    fun getUserPlaylists(): Flow<UserPlaylist> = userPlaylistService.allPlaylistsFlow()
 
     fun getImageMetadata(): Flow<Image> = flow {
         ImageTable.selectAll().fetchBatchedResults(1000) { batch ->

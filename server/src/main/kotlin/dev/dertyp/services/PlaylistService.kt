@@ -11,6 +11,10 @@ import dev.dertyp.db.PlaylistSongTable
 import dev.dertyp.db.PlaylistTable
 import dev.dertyp.db.SongTable
 import dev.dertyp.dbQuery
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
 import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import org.jetbrains.exposed.v1.core.eq
@@ -88,6 +92,16 @@ class PlaylistService : IPlaylistService, Service() {
 
     override suspend fun allPlaylists(page: Int, pageSize: Int): PaginatedResponse<Playlist> =
         queryPlaylists(page, pageSize)
+
+    fun allPlaylistsFlow(): Flow<Playlist> = flow {
+        val total = allPlaylists(0, 0).total
+        var page = 0
+        val pageSize = 100
+        while (page * pageSize < total) {
+            allPlaylists(page, pageSize).data.forEach { emit(it) }
+            page++
+        }
+    }.flowOn(Dispatchers.IO)
 
     override suspend fun delete(id: UUID): Boolean = dbQuery {
         PlaylistTable.deleteWhere { PlaylistTable.id eq id } == 1

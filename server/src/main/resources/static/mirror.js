@@ -101,6 +101,17 @@ function getFormData() {
     data.append('password', document.getElementById('password').value);
     data.append('secure', document.getElementById('secure').checked ? 'true' : 'false');
     data.append('quality', document.getElementById('quality').value);
+
+    // Filter selections
+    const playlists = document.querySelectorAll('#playlist-selection input:checked');
+    playlists.forEach(cb => data.append('playlistIds', cb.value));
+
+    const userPlaylists = document.querySelectorAll('#user-playlist-selection input:checked');
+    userPlaylists.forEach(cb => data.append('userPlaylistIds', cb.value));
+
+    const likedUsers = document.querySelectorAll('#user-liked-selection input:checked');
+    likedUsers.forEach(cb => data.append('likedByUserIds', cb.value));
+
     return data;
 }
 
@@ -110,10 +121,20 @@ async function fetchStats() {
     btn.disabled = true;
     btn.innerText = 'Connecting...';
 
+    const selectionContainers = document.getElementById('selection-containers');
+    const playlistSelection = document.getElementById('playlist-selection');
+    const userPlaylistSelection = document.getElementById('user-playlist-selection');
+    const userLikedSelection = document.getElementById('user-liked-selection');
+
+    playlistSelection.innerHTML = '';
+    userPlaylistSelection.innerHTML = '';
+    userLikedSelection.innerHTML = '';
+
     try {
+        const formData = getFormData();
         const response = await apiFetch('/admin/mirror/stats', {
             method: 'POST',
-            body: getFormData()
+            body: formData
         });
 
         if (!response.ok) throw new Error(await response.text());
@@ -124,14 +145,61 @@ async function fetchStats() {
         document.getElementById('remote-artists').innerText = stats.artistCount;
         document.getElementById('remote-images').innerText = stats.imagesCount;
 
+        // Fetch extra data for filtering
+        const [usersResp, playlistsResp, userPlaylistsResp] = await Promise.all([
+            apiFetch('/admin/mirror/remote-users', { method: 'POST', body: formData }),
+            apiFetch('/admin/mirror/remote-playlists', { method: 'POST', body: formData }),
+            apiFetch('/admin/mirror/remote-user-playlists', { method: 'POST', body: formData })
+        ]);
+
+        if (usersResp.ok) {
+            const users = await usersResp.json();
+            users.forEach(user => {
+                userLikedSelection.appendChild(createCheckboxItem(user.id, user.username));
+            });
+        }
+
+        if (playlistsResp.ok) {
+            const playlists = await playlistsResp.json();
+            playlists.forEach(p => {
+                playlistSelection.appendChild(createCheckboxItem(p.id, p.name));
+            });
+        }
+
+        if (userPlaylistsResp.ok) {
+            const userPlaylists = await userPlaylistsResp.json();
+            userPlaylists.forEach(p => {
+                userPlaylistSelection.appendChild(createCheckboxItem(p.id, p.name + ` (${p.user?.username || 'Unknown'})`));
+            });
+        }
+
+        selectionContainers.classList.remove('hidden');
         startBtn.disabled = false;
     } catch (e) {
         if (e.message !== "Unauthorized") alert("Connection failed: " + e.message);
         startBtn.disabled = true;
+        selectionContainers.classList.add('hidden');
     } finally {
         btn.disabled = false;
         btn.innerText = 'Connect & Preview';
     }
+}
+
+function createCheckboxItem(id, label) {
+    const div = document.createElement('label');
+    div.className = 'custom-checkbox flex items-center gap-2 px-2 py-1 rounded hover:bg-zinc-800/50 cursor-pointer transition-colors group';
+    div.innerHTML = `
+        <input type="checkbox" value="${id}">
+        <span class="checkmark"></span>
+        <span class="text-xs text-slate-400 group-hover:text-slate-200 truncate">${label}</span>
+    `;
+    return div;
+}
+
+function toggleAll(containerId, checked) {
+    const container = document.getElementById(containerId);
+    const checkboxes = container.querySelectorAll('input[type="checkbox"]');
+    checkboxes.forEach(cb => cb.checked = checked);
 }
 
 async function startMirror() {

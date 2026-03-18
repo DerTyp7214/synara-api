@@ -7,6 +7,10 @@ import dev.dertyp.data.User
 import dev.dertyp.data.UserPlaylist
 import dev.dertyp.db.*
 import dev.dertyp.dbQuery
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
 import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.dao.id.EntityID
@@ -66,6 +70,16 @@ class UserPlaylistService : IUserPlaylistService, Service() {
         queryPlaylists(page, pageSize) {
             if (creator != null) where { UserPlaylistTable.creator eq creator } else this
         }
+
+    fun allPlaylistsFlow(creator: UUID? = null): Flow<UserPlaylist> = flow {
+        val total = allPlaylists(creator, 0, 0).total
+        var page = 0
+        val pageSize = 100
+        while (page * pageSize < total) {
+            allPlaylists(creator, page, pageSize).data.forEach { emit(it) }
+            page++
+        }
+    }.flowOn(Dispatchers.IO)
 
     override suspend fun delete(id: UUID): Boolean = dbQuery {
         UserPlaylistTable.deleteWhere { UserPlaylistTable.id eq id } == 1

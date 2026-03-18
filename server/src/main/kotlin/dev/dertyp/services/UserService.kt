@@ -57,7 +57,7 @@ class UserService : Service() {
         }.map(::map)
     }.singleOrNull()
 
-    private suspend fun queryUser(query: Query.() -> Query = { this }): List<User> {
+    suspend fun queryUser(query: Query.() -> Query = { this }): List<User> {
         return dbQuery {
             UserTable
                 .selectAll()

@@ -2,6 +2,7 @@ package dev.dertyp.routing
 
 import dev.dertyp.core.ApplicationScope
 import dev.dertyp.core.getUser
+import dev.dertyp.core.toUUIDOrNull
 import dev.dertyp.data.RemoteServerConfig
 import dev.dertyp.services.RemoteMirrorService
 import io.ktor.http.HttpStatusCode
@@ -31,8 +32,65 @@ fun Route.mirrorRouting() {
                 head {
                     title("Synara Mirror")
                     script { src = "https://cdn.tailwindcss.com" }
+                    style {
+                        unsafe {
+                            +"""
+                            .custom-scrollbar::-webkit-scrollbar { width: 6px; background: transparent; }
+                            .custom-scrollbar::-webkit-scrollbar-track { background: transparent; border: none; }
+                            .custom-scrollbar::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 10px; }
+                            .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #52525b; }
+                            .custom-scrollbar { scrollbar-width: thin; scrollbar-color: #3f3f46 transparent; }
+                            
+                            .custom-checkbox {
+                                position: relative;
+                                cursor: pointer;
+                                display: flex;
+                                align-items: center;
+                            }
+                            .custom-checkbox input {
+                                position: absolute;
+                                opacity: 0;
+                                cursor: pointer;
+                                height: 0;
+                                width: 0;
+                            }
+                            .checkmark {
+                                height: 14px;
+                                width: 14px;
+                                flex-shrink: 0;
+                                background-color: #18181b;
+                                border: 1px solid #3f3f46;
+                                border-radius: 4px;
+                                transition: all 0.2s;
+                                display: flex;
+                                align-items: center;
+                                justify-content: center;
+                            }
+                            .custom-checkbox:hover input ~ .checkmark {
+                                border-color: #fbbf24;
+                            }
+                            .custom-checkbox input:checked ~ .checkmark {
+                                background-color: #d97706;
+                                border-color: #d97706;
+                            }
+                            .checkmark:after {
+                                content: "";
+                                display: none;
+                                width: 4px;
+                                height: 8px;
+                                border: solid white;
+                                border-width: 0 2px 2px 0;
+                                transform: rotate(45deg) translateY(-1px);
+                            }
+                            .custom-checkbox input:checked ~ .checkmark:after {
+                                display: block;
+                            }
+                            """
+                        }
+                    }
                 }
                 body("bg-zinc-950 text-slate-200 min-h-screen p-4 md:p-8") {
+                    style = "color-scheme: dark;"
                     div("max-w-4xl mx-auto space-y-8") {
                         header("flex items-center justify-between") {
                             div {
@@ -125,8 +183,9 @@ fun Route.mirrorRouting() {
                                             input(type = InputType.password, classes = "w-full bg-zinc-800 border-zinc-700 rounded-lg px-4 py-2 focus:ring-2 focus:ring-amber-500 outline-none transition-all text-white") { id = "password" }
                                         }
 
-                                        label("flex items-center gap-3 cursor-pointer group") {
-                                            input(type = InputType.checkBox, classes = "w-5 h-5 rounded border-zinc-700 bg-zinc-800 text-amber-500 focus:ring-amber-500 transition-all") { id = "secure" }
+                                        label("custom-checkbox flex items-center gap-3 group") {
+                                            input(type = InputType.checkBox) { id = "secure" }
+                                            span("checkmark")
                                             span("text-sm text-slate-300 group-hover:text-white transition-colors") { +"Secure Connection (HTTPS/WSS)" }
                                         }
 
@@ -248,6 +307,44 @@ fun Route.mirrorRouting() {
                                         }
                                     }
 
+                                    // Selection Containers
+                                    div("hidden grid grid-cols-1 gap-4 mt-6") {
+                                        id = "selection-containers"
+                                        
+                                        div("bg-zinc-800/30 p-4 rounded-xl border border-zinc-700/20 space-y-3") {
+                                            div("flex items-center justify-between") {
+                                                h3("text-xs font-bold text-slate-500 uppercase tracking-widest") { +"Filter by Playlists" }
+                                                label("custom-checkbox") {
+                                                    input(type = InputType.checkBox) {
+                                                        attributes["onclick"] = "toggleAll('playlist-selection', this.checked)"
+                                                    }
+                                                    span("checkmark")
+                                                    span("text-[10px] text-slate-500 font-bold ml-2 uppercase") { +"All" }
+                                                }
+                                            }
+                                            div("max-h-40 overflow-y-auto space-y-1.5 pr-2 custom-scrollbar") { id = "playlist-selection" }
+                                        }
+                                        
+                                        div("bg-zinc-800/30 p-4 rounded-xl border border-zinc-700/20 space-y-3") {
+                                            div("flex items-center justify-between") {
+                                                h3("text-xs font-bold text-slate-500 uppercase tracking-widest") { +"Filter by User Playlists" }
+                                                label("custom-checkbox") {
+                                                    input(type = InputType.checkBox) {
+                                                        attributes["onclick"] = "toggleAll('user-playlist-selection', this.checked)"
+                                                    }
+                                                    span("checkmark")
+                                                    span("text-[10px] text-slate-500 font-bold ml-2 uppercase") { +"All" }
+                                                }
+                                            }
+                                            div("max-h-40 overflow-y-auto space-y-1.5 pr-2 custom-scrollbar") { id = "user-playlist-selection" }
+                                        }
+                                        
+                                        div("bg-zinc-800/30 p-4 rounded-xl border border-zinc-700/20 space-y-3") {
+                                            h3("text-xs font-bold text-slate-500 uppercase tracking-widest") { +"Filter by Liked Songs (Per User)" }
+                                            div("max-h-40 overflow-y-auto space-y-1.5 pr-2 custom-scrollbar") { id = "user-liked-selection" }
+                                        }
+                                    }
+
                                     button(classes = "w-full mt-6 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-xl shadow-lg transition-all transform active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed") {
                                         id = "start-btn"
                                         disabled = true
@@ -295,7 +392,10 @@ fun Route.mirrorRouting() {
                     username = params["username"] ?: "",
                     password = params["password"] ?: "",
                     secure = params["secure"] == "true",
-                    quality = params["quality"]?.toIntOrNull() ?: -1
+                    quality = params["quality"]?.toIntOrNull() ?: -1,
+                    playlistIds = params.getAll("playlistIds")?.mapNotNull { it.toUUIDOrNull() },
+                    userPlaylistIds = params.getAll("userPlaylistIds")?.mapNotNull { it.toUUIDOrNull() },
+                    likedByUserIds = params.getAll("likedByUserIds")?.mapNotNull { it.toUUIDOrNull() }
                 )
                 remoteMirrorService.startMirror(config)
                 call.respond(HttpStatusCode.OK)
@@ -339,6 +439,69 @@ fun Route.mirrorRouting() {
                     call.respond(stats)
                 } catch (e: Exception) {
                     call.respond(HttpStatusCode.BadRequest, e.message ?: "Failed to fetch stats")
+                }
+            }
+
+            post("/remote-users") {
+                val user = call.getUser() ?: return@post call.respond(HttpStatusCode.Unauthorized)
+                if (!user.isAdmin) return@post call.respond(HttpStatusCode.Forbidden)
+
+                val params = call.receiveParameters()
+                val config = RemoteServerConfig(
+                    host = params["host"] ?: "",
+                    port = params["port"]?.toIntOrNull() ?: 8080,
+                    username = params["username"] ?: "",
+                    password = params["password"] ?: "",
+                    secure = params["secure"] == "true",
+                    quality = params["quality"]?.toIntOrNull() ?: -1
+                )
+                try {
+                    val users = remoteMirrorService.getRemoteUsers(config)
+                    call.respond(users)
+                } catch (e: Exception) {
+                    call.respond(HttpStatusCode.BadRequest, e.message ?: "Failed to fetch users")
+                }
+            }
+
+            post("/remote-playlists") {
+                val user = call.getUser() ?: return@post call.respond(HttpStatusCode.Unauthorized)
+                if (!user.isAdmin) return@post call.respond(HttpStatusCode.Forbidden)
+
+                val params = call.receiveParameters()
+                val config = RemoteServerConfig(
+                    host = params["host"] ?: "",
+                    port = params["port"]?.toIntOrNull() ?: 8080,
+                    username = params["username"] ?: "",
+                    password = params["password"] ?: "",
+                    secure = params["secure"] == "true",
+                    quality = params["quality"]?.toIntOrNull() ?: -1
+                )
+                try {
+                    val playlists = remoteMirrorService.getRemotePlaylists(config)
+                    call.respond(playlists)
+                } catch (e: Exception) {
+                    call.respond(HttpStatusCode.BadRequest, e.message ?: "Failed to fetch playlists")
+                }
+            }
+
+            post("/remote-user-playlists") {
+                val user = call.getUser() ?: return@post call.respond(HttpStatusCode.Unauthorized)
+                if (!user.isAdmin) return@post call.respond(HttpStatusCode.Forbidden)
+
+                val params = call.receiveParameters()
+                val config = RemoteServerConfig(
+                    host = params["host"] ?: "",
+                    port = params["port"]?.toIntOrNull() ?: 8080,
+                    username = params["username"] ?: "",
+                    password = params["password"] ?: "",
+                    secure = params["secure"] == "true",
+                    quality = params["quality"]?.toIntOrNull() ?: -1
+                )
+                try {
+                    val playlists = remoteMirrorService.getRemoteUserPlaylists(config)
+                    call.respond(playlists)
+                } catch (e: Exception) {
+                    call.respond(HttpStatusCode.BadRequest, e.message ?: "Failed to fetch user playlists")
                 }
             }
 
