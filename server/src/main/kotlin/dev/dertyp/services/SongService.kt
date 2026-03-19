@@ -549,7 +549,9 @@ class SongService : Service() {
         if (!file.exists()) return null
 
         return flow {
-            val streamInfo = AudioUtils.transcodeFlacToOpus(environment, file, quality)
+            val streamInfo = AudioUtils.transcodeFlacToOpus(environment, file, quality).also {
+                AudioUtils.insertTranscodedSong(id, it.file, quality)
+            }
             val buffer = ByteArray(chunkSize)
             streamInfo.file.inputStream().use { input ->
                 input.skip(offset)
@@ -573,7 +575,9 @@ class SongService : Service() {
         val song = byId(id) ?: return 0
         val file = File(song.path)
         if (!file.exists()) return 0
-        val streamInfo = AudioUtils.transcodeFlacToOpus(environment, file, quality)
+        val streamInfo = AudioUtils.transcodeFlacToOpus(environment, file, quality).also {
+            AudioUtils.insertTranscodedSong(id, it.file, quality)
+        }
         return streamInfo.file.length()
     }
 
