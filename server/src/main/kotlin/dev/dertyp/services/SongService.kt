@@ -552,14 +552,21 @@ class SongService : Service() {
             val streamInfo = AudioUtils.transcodeFlacToOpus(environment, file, quality).also {
                 AudioUtils.insertTranscodedSong(id, it.file, quality)
             }
-            val buffer = ByteArray(chunkSize)
-            streamInfo.file.inputStream().use { input ->
-                input.skip(offset)
-                var bytesRead = input.read(buffer)
-                while (bytesRead != -1) {
-                    emit(buffer.copyOf(bytesRead))
-                    bytesRead = input.read(buffer)
+
+            val tempFile = File.createTempFile("stream_${id}_", ".ogg")
+            try {
+                streamInfo.file.copyTo(tempFile, overwrite = true)
+                val buffer = ByteArray(chunkSize)
+                tempFile.inputStream().use { input ->
+                    input.skip(offset)
+                    var bytesRead = input.read(buffer)
+                    while (bytesRead != -1) {
+                        emit(buffer.copyOf(bytesRead))
+                        bytesRead = input.read(buffer)
+                    }
                 }
+            } finally {
+                tempFile.delete()
             }
         }.flowOn(Dispatchers.IO)
     }

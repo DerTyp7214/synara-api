@@ -133,9 +133,10 @@ class ScheduleService : Service() {
         return task
     }
 
-    fun scheduleTask(trigger: ScheduleTrigger, task: Task): ScheduledTask {
+    fun scheduleTask(trigger: ScheduleTrigger, name: String? = null, task: Task): ScheduledTask {
         val scheduledTask = ScheduledTask(
             trigger = trigger,
+            name = name,
             task = task
         )
         schedule(scheduledTask)

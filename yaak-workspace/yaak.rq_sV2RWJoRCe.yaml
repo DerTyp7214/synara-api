@@ -2,7 +2,7 @@ type: http_request
 model: http_request
 id: rq_sV2RWJoRCe
 createdAt: 2025-10-14T19:25:16.450882239
-updatedAt: 2025-12-08T21:36:41.035479889
+updatedAt: 2026-03-19T18:14:53.843991447
 workspaceId: wk_9dbKacQT4H
 folderId: null
 authentication: {}
@@ -22,9 +22,9 @@ urlParameters:
   id: BA37kca2a2
 - enabled: true
   name: :id
-  value: dcde3141-c0ba-48f2-922b-81404816cca2
+  value: 80fa4d81-3013-4ed4-a109-400efcd317dc
   id: uR6bPyezIh
 - enabled: true
   name: ''
   value: ''
-  id: 79cwz8mbGw
+  id: SZAX9sXSYv

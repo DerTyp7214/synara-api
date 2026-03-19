@@ -10,6 +10,9 @@ import dev.dertyp.services.PlaylistService
 import dev.dertyp.services.SongService
 import dev.dertyp.services.StorageService
 import dev.dertyp.services.metadata.MetadataService
+import dev.dertyp.services.schedule.MusicBrainzWorker
+import dev.dertyp.services.schedule.ScheduleService
+import dev.dertyp.services.schedule.ScheduleTrigger
 import io.ktor.server.application.ApplicationEnvironment
 import io.ktor.util.logging.KtorSimpleLogger
 import kotlinx.coroutines.*
@@ -23,6 +26,7 @@ import org.jaudiotagger.audio.AudioFile
 import org.jaudiotagger.audio.AudioFileIO
 import org.jaudiotagger.tag.FieldKey
 import java.nio.file.Path
+import java.time.Instant
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Collections
@@ -64,6 +68,8 @@ class Indexer(
     private val imageService: ImageService,
     private val storageService: StorageService,
     private val playlistService: PlaylistService,
+    private val scheduleService: ScheduleService,
+    private val musicBrainzWorker: MusicBrainzWorker,
 ) {
     val logger = KtorSimpleLogger("Indexer")
     val secondaryTracksPaths = storageService.secondaryTracksPaths.map { Path(it) }
@@ -206,6 +212,16 @@ class Indexer(
         val totalSize = songResult.values.fold(0L) { acc, song -> acc + song.fileSize }
 
         log("Saved ${songResult.size} of ${albums.values.flatten().size} songs. (${totalSize.toHumanReadableSize()})").await()
+
+        if (songResult.isNotEmpty()) {
+            log("Scheduling MusicBrainz matching.").await()
+            scheduleService.scheduleTask(
+                trigger = ScheduleTrigger(Instant.now()),
+                name = "MusicBrainzWorker-AfterIndex"
+            ) {
+                musicBrainzWorker.run()
+            }
+        }
 
         log("Found ${images.size} unique images.").await()
         log("Found ${albums.size} unique albums.").await()
