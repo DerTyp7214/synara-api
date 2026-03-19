@@ -91,7 +91,7 @@ private fun registerAuthenticated(koin: Koin, call: ApplicationCall, user: User,
     val remoteMirrorService = koin.get<RemoteMirrorService>()
 
     registrar.register(IIndexer::class) { RpcIndexer(indexer).withLogging<IIndexer>(call) }
-    registrar.register(IUserService::class) { RpcUserService(user, userService).withLogging<IUserService>(call) }
+    registrar.register(IUserService::class) { RpcUserService(user, userService, imageService).withLogging<IUserService>(call) }
     registrar.register(ISongService::class) { SongRpcService(songService = songService, user = user).withLogging<ISongService>(call) }
     registrar.register(IAlbumService::class) { albumService.withLogging<IAlbumService>(call) }
     registrar.register(IImageService::class) { imageService.withLogging<IImageService>(call) }

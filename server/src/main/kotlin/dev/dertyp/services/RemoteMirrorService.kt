@@ -179,9 +179,9 @@ class RemoteMirrorService : Service() {
     }
 
     @OptIn(ExperimentalSerializationApi::class)
-    private suspend fun <T> withAuthenticatedMirrorService(
+    private suspend fun <T> withAuthenticatedClient(
         config: RemoteServerConfig,
-        block: suspend (IMirrorService) -> T
+        block: suspend (HttpClient, String) -> T
     ): T {
         return withRemoteClient { client ->
             val authService = client.rpc(config.toFullUrl("/rpc/auth")).withService<IAuthService>()
@@ -198,11 +198,30 @@ class RemoteMirrorService : Service() {
             }
 
             authenticatedClient.use { authClient ->
-                val mirrorService = authClient.rpc(config.toFullUrl("/rpc/services")) {
-                    header(HttpHeaders.Authorization, "Bearer $token")
-                }.withService<IMirrorService>()
-                block(mirrorService)
+                block(authClient, token)
             }
+        }
+    }
+
+    @OptIn(ExperimentalSerializationApi::class)
+    private suspend fun <T> withAuthenticatedMirrorService(
+        config: RemoteServerConfig,
+        block: suspend (IMirrorService) -> T
+    ): T {
+        return withAuthenticatedClient(config) { authClient, token ->
+            val mirrorService = authClient.rpc(config.toFullUrl("/rpc/services")) {
+                header(HttpHeaders.Authorization, "Bearer $token")
+            }.withService<IMirrorService>()
+            block(mirrorService)
+        }
+    }
+
+    suspend fun getRemoteImageData(config: RemoteServerConfig, imageId: PlatformUUID, size: Int = 0): ByteArray? {
+        return withAuthenticatedClient(config) { authClient, token ->
+            val remoteImageService = authClient.rpc(config.toFullUrl("/rpc/services")) {
+                header(HttpHeaders.Authorization, "Bearer $token")
+            }.withService<IImageService>()
+            remoteImageService.getImageData(imageId, size)
         }
     }
 

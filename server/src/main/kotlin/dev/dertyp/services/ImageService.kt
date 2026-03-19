@@ -220,6 +220,7 @@ class ImageService : IImageService, Service() {
         referencedImages.addAll(SongTable.select(SongTable.cover).mapNotNull { it[SongTable.cover]?.value })
         referencedImages.addAll(PlaylistTable.select(PlaylistTable.imageId).mapNotNull { it[PlaylistTable.imageId]?.value })
         referencedImages.addAll(UserPlaylistTable.select(UserPlaylistTable.imageId).mapNotNull { it[UserPlaylistTable.imageId]?.value })
+        referencedImages.addAll(UserTable.select(UserTable.profileImage).mapNotNull { it[UserTable.profileImage]?.value })
 
         val allImages = ImageTable.select(ImageTable.id, ImageTable.path).map {
             it[ImageTable.id].value to it[ImageTable.path]

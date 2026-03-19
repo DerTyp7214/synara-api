@@ -6,12 +6,14 @@ import dev.dertyp.core.toUUIDOrNull
 import dev.dertyp.data.RemoteServerConfig
 import dev.dertyp.services.RemoteMirrorService
 import dev.dertyp.services.UserService
+import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.Parameters
 import io.ktor.server.auth.authenticate
 import io.ktor.server.html.respondHtml
 import io.ktor.server.request.receiveParameters
 import io.ktor.server.response.respond
+import io.ktor.server.response.respondBytes
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
@@ -501,6 +503,23 @@ fun Route.mirrorRouting() {
 
                     script { src = "/static/mirror.js" }
                 }
+            }
+        }
+
+        get("/remote-image/{imageId}") {
+            val imageId = call.parameters["imageId"]?.toUUIDOrNull() ?: return@get call.respond(HttpStatusCode.BadRequest)
+            val size = call.request.queryParameters["size"]?.toIntOrNull() ?: 0
+            val config = call.request.queryParameters.toMirrorConfig()
+
+            try {
+                val imageData = remoteMirrorService.getRemoteImageData(config, imageId, size)
+                if (imageData != null) {
+                    call.respondBytes(imageData, ContentType.Image.Any)
+                } else {
+                    call.respond(HttpStatusCode.NotFound)
+                }
+            } catch (e: Exception) {
+                call.respond(HttpStatusCode.BadRequest, e.message ?: "Failed to fetch remote image")
             }
         }
 

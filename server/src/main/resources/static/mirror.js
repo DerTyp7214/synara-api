@@ -135,7 +135,8 @@ async function fetchLocalUsers() {
         optionsContainer.appendChild(noneOption);
 
         users.forEach(user => {
-            const opt = createCustomOption(user.id, user.username);
+            const name = user.displayName || user.username;
+            const opt = createCustomOption(user.id, name, user.profileImageId);
             optionsContainer.appendChild(opt);
         });
     } catch (e) {
@@ -198,11 +199,20 @@ async function fetchInstances() {
     }
 }
 
-function createCustomOption(value, label) {
+function createCustomOption(value, label, imageId = null) {
     const div = document.createElement('div');
-    div.className = 'select-option';
+    div.className = 'select-option flex items-center gap-3';
     div.dataset.value = value;
-    div.innerText = label;
+
+    let imgHtml = '';
+    if (imageId) {
+        imgHtml = `<img src="/image/byId/${imageId}?size=64" class="w-5 h-5 flex-shrink-0 rounded-full object-cover border border-zinc-700">`;
+    } else if (value !== "") {
+        const initials = label.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+        imgHtml = `<div class="w-5 h-5 flex-shrink-0 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-[8px] text-zinc-500 font-bold">${initials}</div>`;
+    }
+
+    div.innerHTML = `${imgHtml}<span>${label}</span>`;
     div.onclick = function() { selectOption(this); };
     return div;
 }
@@ -231,7 +241,7 @@ function selectOption(option) {
     const options = container.querySelectorAll('.select-option');
 
     const value = option.dataset.value;
-    const label = option.innerText;
+    const label = option.querySelector('span')?.innerText || option.innerText;
 
     hiddenInput.value = value;
     triggerText.innerText = label;
@@ -292,15 +302,16 @@ async function fetchStats() {
         if (usersResp.ok) {
             const users = await usersResp.json();
             users.forEach(user => {
-                userMap[user.id] = user.username;
-                userLikedSelection.appendChild(createCheckboxItem(user.id, user.username));
+                const name = user.displayName || user.username;
+                userMap[user.id] = name;
+                userLikedSelection.appendChild(createCheckboxItem(user.id, name, user.profileImageId, true));
             });
         }
 
         if (playlistsResp.ok) {
             const playlists = await playlistsResp.json();
             playlists.forEach(p => {
-                playlistSelection.appendChild(createCheckboxItem(p.id, p.name));
+                playlistSelection.appendChild(createCheckboxItem(p.id, p.name, p.imageId, true));
             });
         }
 
@@ -308,7 +319,7 @@ async function fetchStats() {
             const userPlaylists = await userPlaylistsResp.json();
             userPlaylists.forEach(p => {
                 const creatorName = userMap[p.creator] || 'Unknown';
-                userPlaylistSelection.appendChild(createCheckboxItem(p.id, p.name + ` (${creatorName})`));
+                userPlaylistSelection.appendChild(createCheckboxItem(p.id, p.name + ` (${creatorName})`, p.imageId, true));
             });
         }
 
@@ -324,12 +335,28 @@ async function fetchStats() {
     }
 }
 
-function createCheckboxItem(id, label) {
+function createCheckboxItem(id, label, imageId = null, isRemote = false) {
     const div = document.createElement('label');
-    div.className = 'custom-checkbox flex items-center gap-2 px-2 py-1 rounded hover:bg-zinc-800/50 cursor-pointer transition-colors group';
+    div.className = 'custom-checkbox flex items-center gap-3 px-2 py-1 rounded hover:bg-zinc-800/50 cursor-pointer transition-colors group';
+
+    let imgHtml = '';
+    if (imageId) {
+        let src = `/image/byId/${imageId}?size=64`;
+        if (isRemote) {
+            const formData = getFormData();
+            formData.append('size', '64');
+            src = `/admin/mirror/remote-image/${imageId}?${formData.toString()}`;
+        }
+        imgHtml = `<img src="${src}" class="w-6 h-6 flex-shrink-0 rounded-full object-cover border border-zinc-700">`;
+    } else {
+        const initials = label.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+        imgHtml = `<div class="w-6 h-6 flex-shrink-0 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-[10px] text-zinc-500 font-bold">${initials}</div>`;
+    }
+
     div.innerHTML = `
         <input type="checkbox" value="${id}">
         <span class="checkmark"></span>
+        ${imgHtml}
         <span class="text-xs text-slate-400 group-hover:text-slate-200 truncate">${label}</span>
     `;
     return div;
