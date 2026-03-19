@@ -101,6 +101,8 @@ function getFormData() {
     data.append('password', document.getElementById('password').value);
     data.append('secure', document.getElementById('secure').checked ? 'true' : 'false');
     data.append('quality', document.getElementById('quality').value);
+    data.append('useProxy', document.getElementById('use-proxy').checked ? 'true' : 'false');
+    data.append('proxyInstanceId', document.getElementById('proxy-instance').value);
 
     // Filter selections
     const playlists = document.querySelectorAll('#playlist-selection input:checked');
@@ -113,6 +115,114 @@ function getFormData() {
     likedUsers.forEach(cb => data.append('likedByUserIds', cb.value));
 
     return data;
+}
+
+function toggleProxyFields(show) {
+    const fields = document.getElementById('proxy-fields');
+    if (show) {
+        fields.classList.remove('hidden');
+        fetchInstances();
+    } else {
+        fields.classList.add('hidden');
+    }
+}
+
+async function fetchInstances() {
+    const optionsContainer = document.getElementById('proxy-instance-options');
+    const trigger = document.querySelector('#proxy-instance-select .select-trigger span');
+    const hiddenInput = document.getElementById('proxy-instance');
+    const originalValue = hiddenInput.value;
+
+    optionsContainer.innerHTML = '<div class="select-option" data-value="">Loading instances...</div>';
+
+    try {
+        const response = await apiFetch('/admin/mirror/remote-instances', {
+            method: 'POST',
+            body: getFormData()
+        });
+
+        if (!response.ok) throw new Error(await response.text());
+
+        const instances = await response.json();
+        optionsContainer.innerHTML = '';
+
+        // Add default option
+        const defaultOpt = createCustomOption("", "Select an instance...");
+        if (!originalValue) defaultOpt.classList.add('selected');
+        optionsContainer.appendChild(defaultOpt);
+
+        instances.forEach(inst => {
+            const label = inst.name ? `${inst.name} (${inst.id})` : inst.id;
+            const opt = createCustomOption(inst.id, label);
+            if (inst.id === originalValue) {
+                opt.classList.add('selected');
+                trigger.innerText = label;
+            }
+            optionsContainer.appendChild(opt);
+        });
+
+        if (!instances.find(i => i.id === originalValue) && originalValue !== "") {
+            hiddenInput.value = "";
+            trigger.innerText = "Select an instance...";
+        }
+
+    } catch (e) {
+        optionsContainer.innerHTML = '<div class="select-option" data-value="">Failed to load instances</div>';
+        console.error("Instance fetch failed", e);
+    }
+}
+
+function createCustomOption(value, label) {
+    const div = document.createElement('div');
+    div.className = 'select-option';
+    div.dataset.value = value;
+    div.innerText = label;
+    div.onclick = function() { selectOption(this); };
+    return div;
+}
+
+function toggleSelect(trigger) {
+    const container = trigger.parentElement;
+    const options = container.querySelector('.select-options');
+
+    // Close other selects
+    document.querySelectorAll('.select-options.show').forEach(el => {
+        if (el !== options) el.classList.remove('show');
+    });
+    document.querySelectorAll('.select-trigger.active').forEach(el => {
+        if (el !== trigger) el.classList.remove('active');
+    });
+
+    options.classList.toggle('show');
+    trigger.classList.toggle('active');
+}
+
+function selectOption(option) {
+    const container = option.closest('.custom-select');
+    const trigger = container.querySelector('.select-trigger');
+    const triggerText = trigger.querySelector('span');
+    const hiddenInput = container.querySelector('input[type="hidden"]');
+    const options = container.querySelectorAll('.select-option');
+
+    const value = option.dataset.value;
+    const label = option.innerText;
+
+    hiddenInput.value = value;
+    triggerText.innerText = label;
+
+    options.forEach(opt => opt.classList.remove('selected'));
+    option.classList.add('selected');
+
+    container.querySelector('.select-options').classList.remove('show');
+    trigger.classList.remove('active');
+}
+
+// Close dropdowns on click outside
+window.onclick = function(event) {
+    if (!event.target.closest('.custom-select')) {
+        document.querySelectorAll('.select-options.show').forEach(el => el.classList.remove('show'));
+        document.querySelectorAll('.select-trigger.active').forEach(el => el.classList.remove('active'));
+    }
 }
 
 async function fetchStats() {
@@ -152,9 +262,11 @@ async function fetchStats() {
             apiFetch('/admin/mirror/remote-user-playlists', { method: 'POST', body: formData })
         ]);
 
+        let userMap = {};
         if (usersResp.ok) {
             const users = await usersResp.json();
             users.forEach(user => {
+                userMap[user.id] = user.username;
                 userLikedSelection.appendChild(createCheckboxItem(user.id, user.username));
             });
         }
@@ -169,7 +281,8 @@ async function fetchStats() {
         if (userPlaylistsResp.ok) {
             const userPlaylists = await userPlaylistsResp.json();
             userPlaylists.forEach(p => {
-                userPlaylistSelection.appendChild(createCheckboxItem(p.id, p.name + ` (${p.user?.username || 'Unknown'})`));
+                const creatorName = userMap[p.creator] || 'Unknown';
+                userPlaylistSelection.appendChild(createCheckboxItem(p.id, p.name + ` (${creatorName})`));
             });
         }
 
@@ -213,6 +326,9 @@ async function startMirror() {
     btn.disabled = true;
     btn.innerText = 'Starting Mirror...';
 
+    const allCheckboxes = document.querySelectorAll('#selection-containers input[type="checkbox"]');
+    allCheckboxes.forEach(cb => cb.disabled = true);
+
     try {
         const response = await apiFetch('/admin/mirror/start', {
             method: 'POST',
@@ -237,6 +353,7 @@ async function startMirror() {
         if (e.message !== "Unauthorized") alert("Start failed: " + e.message);
         btn.disabled = false;
         btn.innerText = 'Start Synchronization';
+        allCheckboxes.forEach(cb => cb.disabled = false);
     }
 }
 
@@ -293,6 +410,8 @@ function updateProgress(progress) {
     const itemPercentText = document.getElementById('item-percent');
     const itemFill = document.getElementById('item-progress-fill');
 
+    const allCheckboxes = document.querySelectorAll('#selection-containers input[type="checkbox"]');
+
     if (!progress) {
         config.classList.remove('hidden');
         active.classList.add('hidden');
@@ -305,6 +424,10 @@ function updateProgress(progress) {
 
         statusDot.className = "w-2 h-2 rounded-full bg-emerald-500 animate-pulse";
         statusText.innerText = "System Ready";
+        log.innerText = "Awaiting stream from remote...";
+        document.getElementById('sync-summary').classList.add('hidden');
+
+        allCheckboxes.forEach(cb => cb.disabled = false);
         return;
     }
 
@@ -313,6 +436,12 @@ function updateProgress(progress) {
     idle.classList.add('hidden');
 
     connInfo.classList.remove('hidden');
+
+    if (progress.isFinished) {
+        allCheckboxes.forEach(cb => cb.disabled = false);
+    } else {
+        allCheckboxes.forEach(cb => cb.disabled = true);
+    }
 
     if (progress.speed) {
         speed.innerText = progress.speed;
@@ -350,6 +479,10 @@ function updateProgress(progress) {
     fill.style.width = `${percent}%`;
     task.innerText = progress.currentTask;
     detail.innerText = `${progress.processedItems} / ${progress.totalItems}`;
+
+    if (progress.statusMessage) {
+        log.innerText = progress.statusMessage;
+    }
 
     if (progress.currentItem) {
         itemContainer.classList.remove('hidden');
@@ -442,7 +575,42 @@ function updateProgress(progress) {
             task.innerText = progress.error === "Stopped" ? "Mirror Stopped" : "Mirror Synchronized";
             task.classList.add('text-emerald-400');
             log.innerText = progress.error === "Stopped" ? "Mirror stopped." : "All data synchronized successfully.";
+
+            if (!progress.error && progress.syncBreakdown) {
+                showSyncSummary(progress.syncBreakdown);
+            }
         }
+    }
+}
+
+function showSyncSummary(breakdown) {
+    const summary = document.getElementById('sync-summary');
+    const grid = document.getElementById('summary-grid');
+    grid.innerHTML = '';
+
+    const items = [
+        { label: 'Songs', value: breakdown.songs },
+        { label: 'Albums', value: breakdown.albums },
+        { label: 'Artists', value: breakdown.artists },
+        { label: 'Images', value: breakdown.images },
+        { label: 'Playlists', value: breakdown.playlists },
+        { label: 'User Playlists', value: breakdown.userPlaylists }
+    ];
+
+    items.forEach(item => {
+        if (item.value > 0) {
+            const div = document.createElement('div');
+            div.className = 'flex justify-between items-center bg-zinc-800/30 px-3 py-2 rounded-lg border border-zinc-700/20';
+            div.innerHTML = `
+                <span class="text-[10px] uppercase font-bold text-slate-500">${item.label}</span>
+                <span class="text-sm font-mono text-amber-400">${item.value}</span>
+            `;
+            grid.appendChild(div);
+        }
+    });
+
+    if (grid.children.length > 0) {
+        summary.classList.remove('hidden');
     }
 }
 

@@ -6,6 +6,7 @@ import dev.dertyp.core.toUUIDOrNull
 import dev.dertyp.data.RemoteServerConfig
 import dev.dertyp.services.RemoteMirrorService
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.Parameters
 import io.ktor.server.auth.authenticate
 import io.ktor.server.html.respondHtml
 import io.ktor.server.request.receiveParameters
@@ -26,73 +27,96 @@ import org.koin.ktor.ext.inject
 fun Route.mirrorRouting() {
     val remoteMirrorService by inject<RemoteMirrorService>()
 
+    fun Parameters.toMirrorConfig() = RemoteServerConfig(
+        host = this["host"] ?: "",
+        port = this["port"]?.toIntOrNull() ?: 8080,
+        username = this["username"] ?: "",
+        password = this["password"] ?: "",
+        secure = this["secure"] == "true",
+        quality = this["quality"]?.toIntOrNull() ?: -1,
+        playlistIds = this.getAll("playlistIds")?.mapNotNull { it.toUUIDOrNull() },
+        userPlaylistIds = this.getAll("userPlaylistIds")?.mapNotNull { it.toUUIDOrNull() },
+        likedByUserIds = this.getAll("likedByUserIds")?.mapNotNull { it.toUUIDOrNull() },
+        useProxy = this["useProxy"] == "true",
+        proxyInstanceId = this["proxyInstanceId"]
+    )
+
     route("/admin/mirror") {
         get {
             call.respondHtml {
                 head {
                     title("Synara Mirror")
-                    script { src = "https://cdn.tailwindcss.com" }
-                    style {
+                    script { src = "https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4" }
+                    style("text/tailwindcss") {
                         unsafe {
                             +"""
-                            .custom-scrollbar::-webkit-scrollbar { width: 6px; background: transparent; }
-                            .custom-scrollbar::-webkit-scrollbar-track { background: transparent; border: none; }
-                            .custom-scrollbar::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 10px; }
-                            .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #52525b; }
-                            .custom-scrollbar { scrollbar-width: thin; scrollbar-color: #3f3f46 transparent; }
-                            
-                            .custom-checkbox {
-                                position: relative;
-                                cursor: pointer;
-                                display: flex;
-                                align-items: center;
+                            @import "tailwindcss";
+
+                            @layer base {
+                                ::selection {
+                                    @apply bg-amber-400 text-black;
+                                }
                             }
-                            .custom-checkbox input {
-                                position: absolute;
-                                opacity: 0;
-                                cursor: pointer;
-                                height: 0;
-                                width: 0;
-                            }
-                            .checkmark {
-                                height: 14px;
-                                width: 14px;
-                                flex-shrink: 0;
-                                background-color: #18181b;
-                                border: 1px solid #3f3f46;
-                                border-radius: 4px;
-                                transition: all 0.2s;
-                                display: flex;
-                                align-items: center;
-                                justify-content: center;
-                            }
-                            .custom-checkbox:hover input ~ .checkmark {
-                                border-color: #fbbf24;
-                            }
-                            .custom-checkbox input:checked ~ .checkmark {
-                                background-color: #d97706;
-                                border-color: #d97706;
-                            }
-                            .checkmark:after {
-                                content: "";
-                                display: none;
-                                width: 4px;
-                                height: 8px;
-                                border: solid white;
-                                border-width: 0 2px 2px 0;
-                                transform: rotate(45deg) translateY(-1px);
-                            }
-                            .custom-checkbox input:checked ~ .checkmark:after {
-                                display: block;
+
+                            @layer components {
+                                .custom-scrollbar {
+                                    @apply overflow-y-auto;
+                                    &::-webkit-scrollbar { @apply w-1.5 bg-transparent; }
+                                    &::-webkit-scrollbar-track { @apply bg-transparent border-none; }
+                                    &::-webkit-scrollbar-thumb { @apply bg-zinc-700 rounded-full; }
+                                    &::-webkit-scrollbar-thumb:hover { @apply bg-zinc-600; }
+                                }
+
+                                .custom-checkbox {
+                                    @apply relative flex items-center cursor-pointer select-none;
+                                    & input { @apply absolute opacity-0 h-0 w-0; }
+                                    & .checkmark {
+                                        @apply h-3.5 w-3.5 flex-shrink-0 bg-zinc-900 border border-zinc-600 rounded transition-all flex items-center justify-center;
+                                    }
+                                    &:hover .checkmark { @apply border-amber-400; }
+                                    & input:checked ~ .checkmark { @apply bg-amber-600 border-amber-600; }
+                                    & .checkmark:after {
+                                        content: "";
+                                        @apply hidden w-1.5 h-2.5 border-white border-r-2 border-b-2 rotate-45 -translate-y-[1px];
+                                    }
+                                    & input:checked ~ .checkmark:after { @apply block; }
+                                    & input:disabled ~ .checkmark,
+                                    & input:disabled ~ span {
+                                        @apply opacity-50 cursor-not-allowed bg-zinc-800;
+                                    }
+                                }
+
+                                .custom-select {
+                                    @apply relative w-full;
+                                }
+
+                                .select-trigger {
+                                    @apply w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2 flex items-center justify-between cursor-pointer transition-all text-white text-sm min-h-[42px];
+                                    &:hover { @apply border-zinc-600; }
+                                    &.active { @apply border-amber-500 ring-2 ring-amber-500/20; }
+                                    & svg { @apply transition-transform duration-200; }
+                                    &.active svg { @apply rotate-180; }
+                                }
+
+                                .select-options {
+                                    @apply absolute top-full left-0 right-0 bg-zinc-900 border border-zinc-700 rounded-lg mt-1 p-1 z-50 hidden shadow-2xl max-h-60 overflow-y-auto;
+                                    &.show { @apply block; }
+                                }
+
+                                .select-option {
+                                    @apply px-3 py-2 rounded-md cursor-pointer transition-all text-slate-400 text-sm;
+                                    &:hover { @apply bg-zinc-800 text-white; }
+                                    &.selected { @apply bg-amber-500/10 text-amber-400 font-medium; }
+                                }
                             }
                             """
                         }
                     }
                 }
-                body("bg-zinc-950 text-slate-200 min-h-screen p-4 md:p-8") {
+                body("bg-zinc-950 text-slate-200 min-h-screen p-4 md:p-8 selection:bg-amber-400 selection:text-black") {
                     style = "color-scheme: dark;"
                     div("max-w-4xl mx-auto space-y-8") {
-                        header("flex items-center justify-between") {
+                        header("flex items-center justify-between select-none") {
                             div {
                                 h1("text-3xl font-bold text-amber-400 tracking-tight") { +"Remote Mirror" }
                                 p("text-slate-400 mt-1") { +"Synchronize data between Synara instances" }
@@ -102,7 +126,7 @@ fun Route.mirrorRouting() {
                                     div("w-2 h-2 rounded-full bg-emerald-500 animate-pulse") { id = "status-dot" }
                                     span("text-xs font-medium text-slate-300 uppercase tracking-wider") { id = "status-text"; +"System Ready" }
                                 }
-                                button(classes = "hidden text-[10px] font-bold text-amber-500/50 hover:text-amber-500 uppercase tracking-widest transition-colors") {
+                                button(classes = "hidden text-[10px] font-bold text-amber-500/50 hover:text-amber-500 uppercase tracking-widest transition-colors select-none") {
                                     id = "header-logout-btn"
                                     attributes["onclick"] = "logout()"
                                     +"Logout"
@@ -111,22 +135,22 @@ fun Route.mirrorRouting() {
                         }
 
                         // Login Section
-                        div("hidden bg-zinc-900 border border-zinc-800 rounded-2xl p-8 shadow-xl max-w-md mx-auto space-y-6") {
+                        div("hidden bg-zinc-900 border border-zinc-800 rounded-2xl p-8 shadow-xl max-w-md mx-auto space-y-6 select-none") {
                             id = "login-section"
                             h2("text-2xl font-bold text-amber-400 text-center") { +"Admin Login" }
                             div("space-y-4") {
                                 div {
                                     label("block text-sm font-medium text-slate-400 mb-1.5") { +"Username" }
-                                    input(type = InputType.text, classes = "w-full bg-zinc-800 border-zinc-700 rounded-lg px-4 py-2 focus:ring-2 focus:ring-amber-500 outline-none transition-all text-white") { id = "login-username" }
+                                    input(type = InputType.text, classes = "w-full bg-zinc-800 border-zinc-700 rounded-lg px-4 py-2 focus:ring-2 focus:ring-amber-500 outline-none transition-all text-white select-text") { id = "login-username" }
                                 }
                                 div {
                                     label("block text-sm font-medium text-slate-400 mb-1.5") { +"Password" }
-                                    input(type = InputType.password, classes = "w-full bg-zinc-800 border-zinc-700 rounded-lg px-4 py-2 focus:ring-2 focus:ring-amber-500 outline-none transition-all text-white") { 
+                                    input(type = InputType.password, classes = "w-full bg-zinc-800 border-zinc-700 rounded-lg px-4 py-2 focus:ring-2 focus:ring-amber-500 outline-none transition-all text-white select-text") { 
                                         id = "login-password"
                                         attributes["onkeydown"] = "if(event.key === 'Enter') login()"
                                     }
                                 }
-                                button(classes = "w-full bg-amber-600 hover:bg-amber-500 text-black font-bold py-3 rounded-xl shadow-lg transition-all") {
+                                button(classes = "w-full bg-amber-600 hover:bg-amber-500 text-black font-bold py-3 rounded-xl shadow-lg transition-all active:scale-[0.98]") {
                                     attributes["onclick"] = "login()"
                                     +"Sign In"
                                 }
@@ -138,7 +162,7 @@ fun Route.mirrorRouting() {
                             
                             // Left Column: Configuration or Active Progress
                             div("relative") {
-                                div("bg-zinc-900 border border-zinc-800 rounded-2xl p-6 shadow-xl space-y-6 transition-all duration-500") {
+                                div("bg-zinc-900 border border-zinc-800 rounded-2xl p-6 shadow-xl space-y-6 transition-all duration-500 select-none") {
                                     id = "config-section"
                                     h2("text-xl font-semibold flex items-center gap-2") {
                                         unsafe { +"""<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" /></svg>""" }
@@ -148,7 +172,7 @@ fun Route.mirrorRouting() {
                                     div("space-y-4") {
                                         div {
                                             label("block text-sm font-medium text-slate-400 mb-1.5") { +"Target Host" }
-                                            input(type = InputType.text, classes = "w-full bg-zinc-800 border-zinc-700 rounded-lg px-4 py-2 focus:ring-2 focus:ring-amber-500 outline-none transition-all text-white") { 
+                                            input(type = InputType.text, classes = "w-full bg-zinc-800 border-zinc-700 rounded-lg px-4 py-2 focus:ring-2 focus:ring-amber-500 outline-none transition-all text-white select-text") { 
                                                 id = "host"; value = "localhost"; placeholder = "e.g. synara.example.com"
                                             }
                                         }
@@ -156,37 +180,82 @@ fun Route.mirrorRouting() {
                                         div("grid grid-cols-2 gap-4") {
                                             div {
                                                 label("block text-sm font-medium text-slate-400 mb-1.5") { +"Port" }
-                                                input(type = InputType.number, classes = "w-full bg-zinc-800 border-zinc-700 rounded-lg px-4 py-2 focus:ring-2 focus:ring-amber-500 outline-none transition-all text-white") { 
+                                                input(type = InputType.number, classes = "w-full bg-zinc-800 border-zinc-700 rounded-lg px-4 py-2 focus:ring-2 focus:ring-amber-500 outline-none transition-all text-white select-text") { 
                                                     id = "port"; value = "8080" 
                                                 }
                                             }
                                             div {
                                                 label("block text-sm font-medium text-slate-400 mb-1.5") { +"Quality" }
-                                                select("w-full bg-zinc-800 border-zinc-700 rounded-lg px-4 py-2 focus:ring-2 focus:ring-amber-500 outline-none transition-all text-white") {
-                                                    id = "quality"
-                                                    option { value = "-1"; +"Source (Original)" }
-                                                    option { value = "510"; +"Opus Max (510)" }
-                                                    option { value = "320"; +"Opus High (320)" }
-                                                    option { value = "256"; +"Opus Balanced (256)" }
-                                                    option { value = "128"; +"Opus Low (128)" }
+                                                div("custom-select") {
+                                                    id = "quality-select"
+                                                    input(type = InputType.hidden) { id = "quality"; value = "-1" }
+                                                    div("select-trigger") {
+                                                        attributes["onclick"] = "toggleSelect(this)"
+                                                        span { +"Source (Original)" }
+                                                        unsafe { +"""<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>""" }
+                                                    }
+                                                    div("select-options custom-scrollbar") {
+                                                        div("select-option selected") { attributes["data-value"] = "-1"; attributes["onclick"] = "selectOption(this)"; +"Source (Original)" }
+                                                        div("select-option") { attributes["data-value"] = "510"; attributes["onclick"] = "selectOption(this)"; +"Opus Max (510)" }
+                                                        div("select-option") { attributes["data-value"] = "320"; attributes["onclick"] = "selectOption(this)"; +"Opus High (320)" }
+                                                        div("select-option") { attributes["data-value"] = "256"; attributes["onclick"] = "selectOption(this)"; +"Opus Balanced (256)" }
+                                                        div("select-option") { attributes["data-value"] = "128"; attributes["onclick"] = "selectOption(this)"; +"Opus Low (128)" }
+                                                    }
                                                 }
                                             }
                                         }
 
                                         div {
                                             label("block text-sm font-medium text-slate-400 mb-1.5") { +"Admin Username" }
-                                            input(type = InputType.text, classes = "w-full bg-zinc-800 border-zinc-700 rounded-lg px-4 py-2 focus:ring-2 focus:ring-amber-500 outline-none transition-all text-white") { id = "username" }
+                                            input(type = InputType.text, classes = "w-full bg-zinc-800 border-zinc-700 rounded-lg px-4 py-2 focus:ring-2 focus:ring-amber-500 outline-none transition-all text-white select-text") { id = "username" }
                                         }
 
                                         div {
                                             label("block text-sm font-medium text-slate-400 mb-1.5") { +"Admin Password" }
-                                            input(type = InputType.password, classes = "w-full bg-zinc-800 border-zinc-700 rounded-lg px-4 py-2 focus:ring-2 focus:ring-amber-500 outline-none transition-all text-white") { id = "password" }
+                                            input(type = InputType.password, classes = "w-full bg-zinc-800 border-zinc-700 rounded-lg px-4 py-2 focus:ring-2 focus:ring-amber-500 outline-none transition-all text-white select-text") { id = "password" }
                                         }
 
-                                        label("custom-checkbox flex items-center gap-3 group") {
-                                            input(type = InputType.checkBox) { id = "secure" }
-                                            span("checkmark")
-                                            span("text-sm text-slate-300 group-hover:text-white transition-colors") { +"Secure Connection (HTTPS/WSS)" }
+                                        div("flex flex-col gap-3") {
+                                            label("custom-checkbox flex items-center gap-3 group") {
+                                                input(type = InputType.checkBox) { id = "secure" }
+                                                span("checkmark")
+                                                span("text-sm text-slate-300 group-hover:text-white transition-colors") { +"Secure Connection (HTTPS/WSS)" }
+                                            }
+
+                                            label("custom-checkbox flex items-center gap-3 group") {
+                                                input(type = InputType.checkBox) {
+                                                    id = "use-proxy"
+                                                    attributes["onclick"] = "toggleProxyFields(this.checked)"
+                                                }
+                                                span("checkmark")
+                                                span("text-sm text-slate-300 group-hover:text-white transition-colors") { +"Use Proxy" }
+                                            }
+                                        }
+
+                                        div("hidden space-y-4 pt-2 border-t border-zinc-800") {
+                                            id = "proxy-fields"
+                                            div {
+                                                label("block text-sm font-medium text-slate-400 mb-1.5") { +"Proxy Instance" }
+                                                div("flex gap-2") {
+                                                    div("custom-select flex-1") {
+                                                        id = "proxy-instance-select"
+                                                        input(type = InputType.hidden) { id = "proxy-instance"; value = "" }
+                                                        div("select-trigger") {
+                                                            attributes["onclick"] = "toggleSelect(this)"
+                                                            span { +"Select an instance..." }
+                                                            unsafe { +"""<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>""" }
+                                                        }
+                                                        div("select-options custom-scrollbar") {
+                                                            id = "proxy-instance-options"
+                                                            div("select-option selected") { attributes["data-value"] = ""; attributes["onclick"] = "selectOption(this)"; +"Select an instance..." }
+                                                        }
+                                                    }
+                                                    button(classes = "bg-zinc-800 hover:bg-zinc-700 p-2 rounded-lg border border-zinc-700 transition-all") {
+                                                        attributes["onclick"] = "fetchInstances()"
+                                                        unsafe { +"""<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>""" }
+                                                    }
+                                                }
+                                            }
                                         }
 
                                         div("pt-2") {
@@ -200,7 +269,7 @@ fun Route.mirrorRouting() {
                                 }
 
                                 // Active Progress Container
-                                div("hidden bg-zinc-900 border border-zinc-800 rounded-2xl p-6 shadow-xl flex flex-col transition-all duration-500") {
+                                div("hidden bg-zinc-900 border border-zinc-800 rounded-2xl p-6 shadow-xl flex flex-col transition-all duration-500 select-none") {
                                     id = "active-state"
                                     h2("text-xl font-semibold mb-6 flex items-center gap-2") {
                                         unsafe { +"""<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>""" }
@@ -213,11 +282,11 @@ fun Route.mirrorRouting() {
                                                 div("flex items-center gap-3") {
                                                     span("text-sm font-medium text-amber-400") { id = "current-task"; +"Initializing" }
                                                     div("flex items-center gap-1.5") {
-                                                        span("text-[10px] font-mono text-slate-500 bg-zinc-800/50 px-1.5 py-0.5 rounded border border-zinc-700/30 hidden") { id = "current-speed"; +"-" }
-                                                        span("text-[10px] font-mono text-slate-500 bg-zinc-800/50 px-1.5 py-0.5 rounded border border-zinc-700/30 hidden") { id = "current-eta"; +"-" }
+                                                        span("text-[10px] font-mono text-slate-500 bg-zinc-800/50 px-1.5 py-0.5 rounded border border-zinc-700/30 hidden select-text") { id = "current-speed"; +"-" }
+                                                        span("text-[10px] font-mono text-slate-500 bg-zinc-800/50 px-1.5 py-0.5 rounded border border-zinc-700/30 hidden select-text") { id = "current-eta"; +"-" }
                                                     }
                                                 }
-                                                span("text-xs font-mono text-slate-500") { id = "task-detail"; +"0 / 0" }
+                                                span("text-xs font-mono text-slate-500 select-text") { id = "task-detail"; +"0 / 0" }
                                             }
                                             div("w-full bg-zinc-800 rounded-full h-3 overflow-hidden") {
                                                 div("bg-amber-500 h-full w-0 shadow-[0_0_10px_rgba(251,191,36,0.5)]") { id = "progress-fill" }
@@ -228,8 +297,8 @@ fun Route.mirrorRouting() {
                                         div("bg-zinc-900/50 border border-zinc-800 rounded-xl p-4 space-y-3 hidden") {
                                             id = "item-progress-container"
                                             div("flex justify-between items-center") {
-                                                span("text-xs font-medium text-slate-300 truncate pr-4") { id = "current-item"; +"-" }
-                                                span("text-[10px] font-mono text-slate-500 whitespace-nowrap") { id = "item-percent"; +"" }
+                                                span("text-xs font-medium text-slate-300 truncate pr-4 select-text") { id = "current-item"; +"-" }
+                                                span("text-[10px] font-mono text-slate-500 whitespace-nowrap select-text") { id = "item-percent"; +"" }
                                             }
                                             div("w-full bg-zinc-800/50 rounded-full h-1 overflow-hidden") {
                                                 div("bg-amber-400/50 h-full w-0 transition-all duration-200") { id = "item-progress-fill" }
@@ -260,9 +329,20 @@ fun Route.mirrorRouting() {
                                             }
                                         }
 
-                                        div("bg-zinc-800/50 rounded-xl p-4 border border-zinc-700/50 text-sm text-slate-400") {
+                                        div("bg-zinc-800/50 rounded-xl p-4 border border-zinc-700/50 text-sm text-slate-400 select-text") {
                                             id = "status-log"
                                             +"Awaiting stream from remote..."
+                                        }
+
+                                        div("hidden bg-zinc-900/50 border border-zinc-800 rounded-xl p-4 space-y-3 select-none") {
+                                            id = "sync-summary"
+                                            div("flex items-center gap-2 mb-1") {
+                                                unsafe { +"""<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>""" }
+                                                span("text-xs font-bold text-slate-300 uppercase tracking-widest") { +"Sync Summary" }
+                                            }
+                                            div("grid grid-cols-2 gap-2 select-text") {
+                                                id = "summary-grid"
+                                            }
                                         }
                                     }
                                     
@@ -277,7 +357,7 @@ fun Route.mirrorRouting() {
                             }
 
                             // Right Column: Stats Card & Idle State
-                            div("space-y-8") {
+                            div("space-y-8 select-none") {
                                 // Stats Card
                                 div("bg-zinc-900 border border-zinc-800 rounded-2xl p-6 shadow-xl") {
                                     id = "stats-card"
@@ -290,10 +370,10 @@ fun Route.mirrorRouting() {
                                     // Connection Info (Compact)
                                     div("hidden mb-6 grid grid-cols-2 gap-2 text-[10px] uppercase font-bold text-slate-500") {
                                         id = "connection-info"
-                                        div("bg-zinc-800/30 px-2 py-1 rounded border border-zinc-700/20 truncate") {
+                                        div("bg-zinc-800/30 px-2 py-1 rounded border border-zinc-700/20 truncate select-text") {
                                             id = "info-host"; +"-"
                                         }
-                                        div("bg-zinc-800/30 px-2 py-1 rounded border border-zinc-700/20") {
+                                        div("bg-zinc-800/30 px-2 py-1 rounded border border-zinc-700/20 select-text") {
                                             id = "info-quality"; +"-"
                                         }
                                     }
@@ -302,7 +382,7 @@ fun Route.mirrorRouting() {
                                         listOf("Songs" to "remote-songs", "Albums" to "remote-albums", "Artists" to "remote-artists", "Images" to "remote-images").forEach { (label, id) ->
                                             div("bg-zinc-800/50 p-3 rounded-xl border border-zinc-700/30 text-center") {
                                                 p("text-xs text-slate-500 uppercase font-bold") { +label }
-                                                p("text-xl font-mono text-amber-300") { this.id = id; +"-" }
+                                                p("text-xl font-mono text-amber-300 select-text") { this.id = id; +"-" }
                                             }
                                         }
                                     }
@@ -385,18 +465,7 @@ fun Route.mirrorRouting() {
                 val user = call.getUser() ?: return@post call.respond(HttpStatusCode.Unauthorized)
                 if (!user.isAdmin) return@post call.respond(HttpStatusCode.Forbidden)
 
-                val params = call.receiveParameters()
-                val config = RemoteServerConfig(
-                    host = params["host"] ?: "",
-                    port = params["port"]?.toIntOrNull() ?: 8080,
-                    username = params["username"] ?: "",
-                    password = params["password"] ?: "",
-                    secure = params["secure"] == "true",
-                    quality = params["quality"]?.toIntOrNull() ?: -1,
-                    playlistIds = params.getAll("playlistIds")?.mapNotNull { it.toUUIDOrNull() },
-                    userPlaylistIds = params.getAll("userPlaylistIds")?.mapNotNull { it.toUUIDOrNull() },
-                    likedByUserIds = params.getAll("likedByUserIds")?.mapNotNull { it.toUUIDOrNull() }
-                )
+                val config = call.receiveParameters().toMirrorConfig()
                 remoteMirrorService.startMirror(config)
                 call.respond(HttpStatusCode.OK)
             }
@@ -425,15 +494,7 @@ fun Route.mirrorRouting() {
                 val user = call.getUser() ?: return@post call.respond(HttpStatusCode.Unauthorized)
                 if (!user.isAdmin) return@post call.respond(HttpStatusCode.Forbidden)
 
-                val params = call.receiveParameters()
-                val config = RemoteServerConfig(
-                    host = params["host"] ?: "",
-                    port = params["port"]?.toIntOrNull() ?: 8080,
-                    username = params["username"] ?: "",
-                    password = params["password"] ?: "",
-                    secure = params["secure"] == "true",
-                    quality = params["quality"]?.toIntOrNull() ?: -1
-                )
+                val config = call.receiveParameters().toMirrorConfig()
                 try {
                     val stats = remoteMirrorService.getRemoteStats(config)
                     call.respond(stats)
@@ -446,15 +507,7 @@ fun Route.mirrorRouting() {
                 val user = call.getUser() ?: return@post call.respond(HttpStatusCode.Unauthorized)
                 if (!user.isAdmin) return@post call.respond(HttpStatusCode.Forbidden)
 
-                val params = call.receiveParameters()
-                val config = RemoteServerConfig(
-                    host = params["host"] ?: "",
-                    port = params["port"]?.toIntOrNull() ?: 8080,
-                    username = params["username"] ?: "",
-                    password = params["password"] ?: "",
-                    secure = params["secure"] == "true",
-                    quality = params["quality"]?.toIntOrNull() ?: -1
-                )
+                val config = call.receiveParameters().toMirrorConfig()
                 try {
                     val users = remoteMirrorService.getRemoteUsers(config)
                     call.respond(users)
@@ -467,15 +520,7 @@ fun Route.mirrorRouting() {
                 val user = call.getUser() ?: return@post call.respond(HttpStatusCode.Unauthorized)
                 if (!user.isAdmin) return@post call.respond(HttpStatusCode.Forbidden)
 
-                val params = call.receiveParameters()
-                val config = RemoteServerConfig(
-                    host = params["host"] ?: "",
-                    port = params["port"]?.toIntOrNull() ?: 8080,
-                    username = params["username"] ?: "",
-                    password = params["password"] ?: "",
-                    secure = params["secure"] == "true",
-                    quality = params["quality"]?.toIntOrNull() ?: -1
-                )
+                val config = call.receiveParameters().toMirrorConfig()
                 try {
                     val playlists = remoteMirrorService.getRemotePlaylists(config)
                     call.respond(playlists)
@@ -488,20 +533,25 @@ fun Route.mirrorRouting() {
                 val user = call.getUser() ?: return@post call.respond(HttpStatusCode.Unauthorized)
                 if (!user.isAdmin) return@post call.respond(HttpStatusCode.Forbidden)
 
-                val params = call.receiveParameters()
-                val config = RemoteServerConfig(
-                    host = params["host"] ?: "",
-                    port = params["port"]?.toIntOrNull() ?: 8080,
-                    username = params["username"] ?: "",
-                    password = params["password"] ?: "",
-                    secure = params["secure"] == "true",
-                    quality = params["quality"]?.toIntOrNull() ?: -1
-                )
+                val config = call.receiveParameters().toMirrorConfig()
                 try {
                     val playlists = remoteMirrorService.getRemoteUserPlaylists(config)
                     call.respond(playlists)
                 } catch (e: Exception) {
                     call.respond(HttpStatusCode.BadRequest, e.message ?: "Failed to fetch user playlists")
+                }
+            }
+
+            post("/remote-instances") {
+                val user = call.getUser() ?: return@post call.respond(HttpStatusCode.Unauthorized)
+                if (!user.isAdmin) return@post call.respond(HttpStatusCode.Forbidden)
+
+                val config = call.receiveParameters().toMirrorConfig()
+                try {
+                    val instances = remoteMirrorService.getProxyInstances(config)
+                    call.respond(instances)
+                } catch (e: Exception) {
+                    call.respond(HttpStatusCode.BadRequest, e.message ?: "Failed to fetch instances")
                 }
             }
 
