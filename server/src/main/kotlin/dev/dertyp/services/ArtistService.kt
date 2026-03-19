@@ -5,6 +5,7 @@ import dev.dertyp.core.*
 import dev.dertyp.data.*
 import dev.dertyp.db.*
 import dev.dertyp.dbQuery
+import dev.dertyp.utils.LogParam
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import org.jetbrains.exposed.v1.core.*
@@ -44,7 +45,7 @@ class ArtistService : IArtistService, Service() {
         where { ArtistTable.id eq id }
     }
 
-    override suspend fun byIds(ids: List<UUID>): List<Artist> = queryArtists(0, Int.MAX_VALUE) {
+    override suspend fun byIds(@LogParam("size") ids: List<UUID>): List<Artist> = queryArtists(0, Int.MAX_VALUE) {
         where { ArtistTable.id inList ids }
     }.data
 

@@ -10,6 +10,7 @@ import dev.dertyp.dbQuery
 import dev.dertyp.getDateFromISO
 import dev.dertyp.getISOFromDate
 import dev.dertyp.services.ArtistService.Companion.mapArtist
+import dev.dertyp.utils.LogParam
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.runBlocking
@@ -61,7 +62,7 @@ class AlbumService : IAlbumService, Service() {
         where { AlbumTable.id eq id }
     }
 
-    override suspend fun byIds(ids: List<UUID>): List<Album> = queryAlbums(0, Int.MAX_VALUE) {
+    override suspend fun byIds(@LogParam("size") ids: List<UUID>): List<Album> = queryAlbums(0, Int.MAX_VALUE) {
         where { AlbumTable.id inList ids }
     }.data
 
