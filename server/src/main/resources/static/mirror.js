@@ -554,6 +554,7 @@ function updateProgress(progress) {
     }
 
     const stages = [
+        "Analyzing Selection",
         "Mirroring Images",
         "Mirroring Artists",
         "Mirroring Artist Aliases",

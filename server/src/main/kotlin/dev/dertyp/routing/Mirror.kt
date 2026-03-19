@@ -1,5 +1,6 @@
 package dev.dertyp.routing
 
+import com.ucasoft.ktor.simpleCache.cacheOutput
 import dev.dertyp.core.ApplicationScope
 import dev.dertyp.core.getUser
 import dev.dertyp.core.toUUIDOrNull
@@ -25,6 +26,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.debounce
 import kotlinx.html.*
 import org.koin.ktor.ext.inject
+import kotlin.time.Duration.Companion.days
 
 @OptIn(FlowPreview::class)
 fun Route.mirrorRouting() {
@@ -127,8 +129,12 @@ fun Route.mirrorRouting() {
                             }
                             div("bg-zinc-900 px-3 py-1 rounded-full border border-zinc-800 flex items-center gap-4") {
                                 div("flex items-center gap-2") {
-                                    div("w-2 h-2 rounded-full bg-emerald-500 animate-pulse") { id = "status-dot" }
-                                    span("text-xs font-medium text-slate-300 uppercase tracking-wider") { id = "status-text"; +"System Ready" }
+                                    div("w-2 h-2 rounded-full bg-emerald-500 animate-pulse") {
+                                        id = "status-dot"
+                                    }
+                                    span("text-xs font-medium text-slate-300 uppercase tracking-wider") {
+                                        id = "status-text"; +"System Ready"
+                                    }
                                 }
                                 button(classes = "hidden text-[10px] font-bold text-amber-500/50 hover:text-amber-500 uppercase tracking-widest transition-colors select-none") {
                                     id = "header-logout-btn"
@@ -145,13 +151,20 @@ fun Route.mirrorRouting() {
                             div("space-y-4") {
                                 div {
                                     label("block text-sm font-medium text-slate-400 mb-1.5") { +"Username" }
-                                    input(type = InputType.text, classes = "w-full bg-zinc-800 border-zinc-700 rounded-lg px-4 py-2 focus:ring-2 focus:ring-amber-500 outline-none transition-all text-white select-text") { id = "login-username" }
+                                    input(
+                                        type = InputType.text,
+                                        classes = "w-full bg-zinc-800 border-zinc-700 rounded-lg px-4 py-2 focus:ring-2 focus:ring-amber-500 outline-none transition-all text-white select-text"
+                                    ) { id = "login-username" }
                                 }
                                 div {
                                     label("block text-sm font-medium text-slate-400 mb-1.5") { +"Password" }
-                                    input(type = InputType.password, classes = "w-full bg-zinc-800 border-zinc-700 rounded-lg px-4 py-2 focus:ring-2 focus:ring-amber-500 outline-none transition-all text-white select-text") { 
+                                    input(
+                                        type = InputType.password,
+                                        classes = "w-full bg-zinc-800 border-zinc-700 rounded-lg px-4 py-2 focus:ring-2 focus:ring-amber-500 outline-none transition-all text-white select-text"
+                                    ) {
                                         id = "login-password"
-                                        attributes["onkeydown"] = "if(event.key === 'Enter') login()"
+                                        attributes["onkeydown"] =
+                                            "if(event.key === 'Enter') login()"
                                     }
                                 }
                                 button(classes = "w-full bg-amber-600 hover:bg-amber-500 text-black font-bold py-3 rounded-xl shadow-lg transition-all active:scale-[0.98]") {
@@ -163,7 +176,7 @@ fun Route.mirrorRouting() {
 
                         div("hidden grid grid-cols-1 md:grid-cols-2 gap-8 transition-all duration-500") {
                             id = "main-grid"
-                            
+
                             // Left Column: Configuration or Active Progress
                             div("relative") {
                                 div("bg-zinc-900 border border-zinc-800 rounded-2xl p-6 shadow-xl space-y-6 transition-all duration-500 select-none") {
@@ -172,20 +185,27 @@ fun Route.mirrorRouting() {
                                         unsafe { +"""<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" /></svg>""" }
                                         +"Remote Server"
                                     }
-                                    
+
                                     div("space-y-4") {
                                         div {
                                             label("block text-sm font-medium text-slate-400 mb-1.5") { +"Target Host" }
-                                            input(type = InputType.text, classes = "w-full bg-zinc-800 border-zinc-700 rounded-lg px-4 py-2 focus:ring-2 focus:ring-amber-500 outline-none transition-all text-white select-text") { 
-                                                id = "host"; value = "localhost"; placeholder = "e.g. synara.example.com"
+                                            input(
+                                                type = InputType.text,
+                                                classes = "w-full bg-zinc-800 border-zinc-700 rounded-lg px-4 py-2 focus:ring-2 focus:ring-amber-500 outline-none transition-all text-white select-text"
+                                            ) {
+                                                id = "host"; value = "localhost"; placeholder =
+                                                "e.g. synara.example.com"
                                             }
                                         }
-                                        
+
                                         div("grid grid-cols-2 gap-4") {
                                             div {
                                                 label("block text-sm font-medium text-slate-400 mb-1.5") { +"Port" }
-                                                input(type = InputType.number, classes = "w-full bg-zinc-800 border-zinc-700 rounded-lg px-4 py-2 focus:ring-2 focus:ring-amber-500 outline-none transition-all text-white select-text") { 
-                                                    id = "port"; value = "8080" 
+                                                input(
+                                                    type = InputType.number,
+                                                    classes = "w-full bg-zinc-800 border-zinc-700 rounded-lg px-4 py-2 focus:ring-2 focus:ring-amber-500 outline-none transition-all text-white select-text"
+                                                ) {
+                                                    id = "port"; value = "8080"
                                                 }
                                             }
                                             div {
@@ -200,18 +220,40 @@ fun Route.mirrorRouting() {
                                                 }
                                                 div("custom-select") {
                                                     id = "quality-select"
-                                                    input(type = InputType.hidden) { id = "quality"; value = "-1" }
+                                                    input(type = InputType.hidden) {
+                                                        id = "quality"; value = "-1"
+                                                    }
                                                     div("select-trigger") {
                                                         attributes["onclick"] = "toggleSelect(this)"
                                                         span { +"Source (Original)" }
                                                         unsafe { +"""<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>""" }
                                                     }
                                                     div("select-options custom-scrollbar") {
-                                                        div("select-option selected") { attributes["data-value"] = "-1"; attributes["onclick"] = "selectOption(this)"; +"Source (Original)" }
-                                                        div("select-option") { attributes["data-value"] = "510"; attributes["onclick"] = "selectOption(this)"; +"Opus Max (510)" }
-                                                        div("select-option") { attributes["data-value"] = "320"; attributes["onclick"] = "selectOption(this)"; +"Opus High (320)" }
-                                                        div("select-option") { attributes["data-value"] = "256"; attributes["onclick"] = "selectOption(this)"; +"Opus Balanced (256)" }
-                                                        div("select-option") { attributes["data-value"] = "128"; attributes["onclick"] = "selectOption(this)"; +"Opus Low (128)" }
+                                                        div("select-option selected") {
+                                                            attributes["data-value"] =
+                                                                "-1"; attributes["onclick"] =
+                                                            "selectOption(this)"; +"Source (Original)"
+                                                        }
+                                                        div("select-option") {
+                                                            attributes["data-value"] =
+                                                                "510"; attributes["onclick"] =
+                                                            "selectOption(this)"; +"Opus Max (510)"
+                                                        }
+                                                        div("select-option") {
+                                                            attributes["data-value"] =
+                                                                "320"; attributes["onclick"] =
+                                                            "selectOption(this)"; +"Opus High (320)"
+                                                        }
+                                                        div("select-option") {
+                                                            attributes["data-value"] =
+                                                                "256"; attributes["onclick"] =
+                                                            "selectOption(this)"; +"Opus Balanced (256)"
+                                                        }
+                                                        div("select-option") {
+                                                            attributes["data-value"] =
+                                                                "128"; attributes["onclick"] =
+                                                            "selectOption(this)"; +"Opus Low (128)"
+                                                        }
                                                     }
                                                 }
                                             }
@@ -219,12 +261,18 @@ fun Route.mirrorRouting() {
 
                                         div {
                                             label("block text-sm font-medium text-slate-400 mb-1.5") { +"Admin Username" }
-                                            input(type = InputType.text, classes = "w-full bg-zinc-800 border-zinc-700 rounded-lg px-4 py-2 focus:ring-2 focus:ring-amber-500 outline-none transition-all text-white select-text") { id = "username" }
+                                            input(
+                                                type = InputType.text,
+                                                classes = "w-full bg-zinc-800 border-zinc-700 rounded-lg px-4 py-2 focus:ring-2 focus:ring-amber-500 outline-none transition-all text-white select-text"
+                                            ) { id = "username" }
                                         }
 
                                         div {
                                             label("block text-sm font-medium text-slate-400 mb-1.5") { +"Admin Password" }
-                                            input(type = InputType.password, classes = "w-full bg-zinc-800 border-zinc-700 rounded-lg px-4 py-2 focus:ring-2 focus:ring-amber-500 outline-none transition-all text-white select-text") { id = "password" }
+                                            input(
+                                                type = InputType.password,
+                                                classes = "w-full bg-zinc-800 border-zinc-700 rounded-lg px-4 py-2 focus:ring-2 focus:ring-amber-500 outline-none transition-all text-white select-text"
+                                            ) { id = "password" }
                                         }
 
                                         div("flex flex-col gap-3") {
@@ -237,7 +285,8 @@ fun Route.mirrorRouting() {
                                             label("custom-checkbox flex items-center gap-3 group") {
                                                 input(type = InputType.checkBox) {
                                                     id = "use-proxy"
-                                                    attributes["onclick"] = "toggleProxyFields(this.checked)"
+                                                    attributes["onclick"] =
+                                                        "toggleProxyFields(this.checked)"
                                                 }
                                                 span("checkmark")
                                                 span("text-sm text-slate-300 group-hover:text-white transition-colors") { +"Use Proxy" }
@@ -259,15 +308,22 @@ fun Route.mirrorRouting() {
                                                 div("flex gap-2") {
                                                     div("custom-select flex-1") {
                                                         id = "proxy-instance-select"
-                                                        input(type = InputType.hidden) { id = "proxy-instance"; value = "" }
+                                                        input(type = InputType.hidden) {
+                                                            id = "proxy-instance"; value = ""
+                                                        }
                                                         div("select-trigger") {
-                                                            attributes["onclick"] = "toggleSelect(this)"
+                                                            attributes["onclick"] =
+                                                                "toggleSelect(this)"
                                                             span { +"Select an instance..." }
                                                             unsafe { +"""<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>""" }
                                                         }
                                                         div("select-options custom-scrollbar") {
                                                             id = "proxy-instance-options"
-                                                            div("select-option selected") { attributes["data-value"] = ""; attributes["onclick"] = "selectOption(this)"; +"Select an instance..." }
+                                                            div("select-option selected") {
+                                                                attributes["data-value"] =
+                                                                    ""; attributes["onclick"] =
+                                                                "selectOption(this)"; +"Select an instance..."
+                                                            }
                                                         }
                                                     }
                                                     button(classes = "bg-zinc-800 hover:bg-zinc-700 p-2 rounded-lg border border-zinc-700 transition-all") {
@@ -290,7 +346,9 @@ fun Route.mirrorRouting() {
                                             }
                                             div("custom-select") {
                                                 id = "target-user-select"
-                                                input(type = InputType.hidden) { id = "target-user-id"; value = "" }
+                                                input(type = InputType.hidden) {
+                                                    id = "target-user-id"; value = ""
+                                                }
                                                 div("select-trigger") {
                                                     attributes["onclick"] = "toggleSelect(this)"
                                                     span { +"Select local user (optional)..." }
@@ -298,7 +356,11 @@ fun Route.mirrorRouting() {
                                                 }
                                                 div("select-options custom-scrollbar") {
                                                     id = "target-user-options"
-                                                    div("select-option selected") { attributes["data-value"] = ""; attributes["onclick"] = "selectOption(this)"; +"None" }
+                                                    div("select-option selected") {
+                                                        attributes["data-value"] =
+                                                            ""; attributes["onclick"] =
+                                                        "selectOption(this)"; +"None"
+                                                    }
                                                 }
                                             }
                                         }
@@ -325,16 +387,26 @@ fun Route.mirrorRouting() {
                                         div {
                                             div("flex justify-between items-end mb-2") {
                                                 div("flex items-center gap-3") {
-                                                    span("text-sm font-medium text-amber-400") { id = "current-task"; +"Initializing" }
+                                                    span("text-sm font-medium text-amber-400") {
+                                                        id = "current-task"; +"Initializing"
+                                                    }
                                                     div("flex items-center gap-1.5") {
-                                                        span("text-[10px] font-mono text-slate-500 bg-zinc-800/50 px-1.5 py-0.5 rounded border border-zinc-700/30 hidden select-text") { id = "current-speed"; +"-" }
-                                                        span("text-[10px] font-mono text-slate-500 bg-zinc-800/50 px-1.5 py-0.5 rounded border border-zinc-700/30 hidden select-text") { id = "current-eta"; +"-" }
+                                                        span("text-[10px] font-mono text-slate-500 bg-zinc-800/50 px-1.5 py-0.5 rounded border border-zinc-700/30 hidden select-text") {
+                                                            id = "current-speed"; +"-"
+                                                        }
+                                                        span("text-[10px] font-mono text-slate-500 bg-zinc-800/50 px-1.5 py-0.5 rounded border border-zinc-700/30 hidden select-text") {
+                                                            id = "current-eta"; +"-"
+                                                        }
                                                     }
                                                 }
-                                                span("text-xs font-mono text-slate-500 select-text") { id = "task-detail"; +"0 / 0" }
+                                                span("text-xs font-mono text-slate-500 select-text") {
+                                                    id = "task-detail"; +"0 / 0"
+                                                }
                                             }
                                             div("w-full bg-zinc-800 rounded-full h-3 overflow-hidden") {
-                                                div("bg-amber-500 h-full w-0 shadow-[0_0_10px_rgba(251,191,36,0.5)]") { id = "progress-fill" }
+                                                div("bg-amber-500 h-full w-0 shadow-[0_0_10px_rgba(251,191,36,0.5)]") {
+                                                    id = "progress-fill"
+                                                }
                                             }
                                         }
 
@@ -342,11 +414,17 @@ fun Route.mirrorRouting() {
                                         div("bg-zinc-900/50 border border-zinc-800 rounded-xl p-4 space-y-3 hidden") {
                                             id = "item-progress-container"
                                             div("flex justify-between items-center") {
-                                                span("text-xs font-medium text-slate-300 truncate pr-4 select-text") { id = "current-item"; +"-" }
-                                                span("text-[10px] font-mono text-slate-500 whitespace-nowrap select-text") { id = "item-percent"; +"" }
+                                                span("text-xs font-medium text-slate-300 truncate pr-4 select-text") {
+                                                    id = "current-item"; +"-"
+                                                }
+                                                span("text-[10px] font-mono text-slate-500 whitespace-nowrap select-text") {
+                                                    id = "item-percent"; +""
+                                                }
                                             }
                                             div("w-full bg-zinc-800/50 rounded-full h-1 overflow-hidden") {
-                                                div("bg-amber-400/50 h-full w-0 transition-all duration-200") { id = "item-progress-fill" }
+                                                div("bg-amber-400/50 h-full w-0 transition-all duration-200") {
+                                                    id = "item-progress-fill"
+                                                }
                                             }
                                         }
 
@@ -355,6 +433,7 @@ fun Route.mirrorRouting() {
                                             div("space-y-2") {
                                                 id = "stages-list"
                                                 val stages = listOf(
+                                                    "Analyzing Selection",
                                                     "Mirroring Images",
                                                     "Mirroring Artists",
                                                     "Mirroring Artist Aliases",
@@ -368,8 +447,12 @@ fun Route.mirrorRouting() {
                                                 stages.forEachIndexed { index, stage ->
                                                     div("flex items-center gap-3 p-2 rounded-lg bg-zinc-800/30 border border-zinc-700/20 text-sm") {
                                                         id = "stage-$index"
-                                                        div("w-2 h-2 rounded-full bg-zinc-700") { id = "stage-dot-$index" }
-                                                        span("text-slate-400") { id = "stage-text-$index"; +stage }
+                                                        div("w-2 h-2 rounded-full bg-zinc-700") {
+                                                            id = "stage-dot-$index"
+                                                        }
+                                                        span("text-slate-400") {
+                                                            id = "stage-text-$index"; +stage
+                                                        }
                                                     }
                                                 }
                                             }
@@ -391,7 +474,7 @@ fun Route.mirrorRouting() {
                                             }
                                         }
                                     }
-                                    
+
                                     div("hidden mt-6 p-4 bg-red-900/20 border border-red-900/50 rounded-xl") {
                                         id = "error-container"
                                         p("text-red-400 text-sm font-medium flex items-center gap-2") {
@@ -407,10 +490,10 @@ fun Route.mirrorRouting() {
                                 // Stats Card
                                 div("bg-zinc-900 border border-zinc-800 rounded-2xl p-6 shadow-xl") {
                                     id = "stats-card"
-                                    
+
                                     h2("text-lg font-semibold mb-4 flex items-center gap-2") {
                                         unsafe { +"""<svg xmlns="http://www.w3.org/2000/svg" class="text-amber-400 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>""" }
-                                        +"Remote Library Preview" 
+                                        +"Remote Library Preview"
                                     }
 
                                     // Connection Info (Compact)
@@ -423,12 +506,19 @@ fun Route.mirrorRouting() {
                                             id = "info-quality"; +"-"
                                         }
                                     }
-                                    
+
                                     div("grid grid-cols-2 gap-4") {
-                                        listOf("Songs" to "remote-songs", "Albums" to "remote-albums", "Artists" to "remote-artists", "Images" to "remote-images").forEach { (label, id) ->
+                                        listOf(
+                                            "Songs" to "remote-songs",
+                                            "Albums" to "remote-albums",
+                                            "Artists" to "remote-artists",
+                                            "Images" to "remote-images"
+                                        ).forEach { (label, id) ->
                                             div("bg-zinc-800/50 p-3 rounded-xl border border-zinc-700/30 text-center") {
                                                 p("text-xs text-slate-500 uppercase font-bold") { +label }
-                                                p("text-xl font-mono text-amber-300 select-text") { this.id = id; +"-" }
+                                                p("text-xl font-mono text-amber-300 select-text") {
+                                                    this.id = id; +"-"
+                                                }
                                             }
                                         }
                                     }
@@ -436,38 +526,46 @@ fun Route.mirrorRouting() {
                                     // Selection Containers
                                     div("hidden grid grid-cols-1 gap-4 mt-6") {
                                         id = "selection-containers"
-                                        
+
                                         div("bg-zinc-800/30 p-4 rounded-xl border border-zinc-700/20 space-y-3") {
                                             div("flex items-center justify-between") {
                                                 h3("text-xs font-bold text-slate-500 uppercase tracking-widest") { +"Filter by Playlists" }
                                                 label("custom-checkbox") {
                                                     input(type = InputType.checkBox) {
-                                                        attributes["onclick"] = "toggleAll('playlist-selection', this.checked)"
+                                                        attributes["onclick"] =
+                                                            "toggleAll('playlist-selection', this.checked)"
                                                     }
                                                     span("checkmark")
                                                     span("text-[10px] text-slate-500 font-bold ml-2 uppercase") { +"All" }
                                                 }
                                             }
-                                            div("max-h-40 overflow-y-auto space-y-1.5 pr-2 custom-scrollbar") { id = "playlist-selection" }
+                                            div("max-h-40 overflow-y-auto space-y-1.5 pr-2 custom-scrollbar") {
+                                                id = "playlist-selection"
+                                            }
                                         }
-                                        
+
                                         div("bg-zinc-800/30 p-4 rounded-xl border border-zinc-700/20 space-y-3") {
                                             div("flex items-center justify-between") {
                                                 h3("text-xs font-bold text-slate-500 uppercase tracking-widest") { +"Filter by User Playlists" }
                                                 label("custom-checkbox") {
                                                     input(type = InputType.checkBox) {
-                                                        attributes["onclick"] = "toggleAll('user-playlist-selection', this.checked)"
+                                                        attributes["onclick"] =
+                                                            "toggleAll('user-playlist-selection', this.checked)"
                                                     }
                                                     span("checkmark")
                                                     span("text-[10px] text-slate-500 font-bold ml-2 uppercase") { +"All" }
                                                 }
                                             }
-                                            div("max-h-40 overflow-y-auto space-y-1.5 pr-2 custom-scrollbar") { id = "user-playlist-selection" }
+                                            div("max-h-40 overflow-y-auto space-y-1.5 pr-2 custom-scrollbar") {
+                                                id = "user-playlist-selection"
+                                            }
                                         }
-                                        
+
                                         div("bg-zinc-800/30 p-4 rounded-xl border border-zinc-700/20 space-y-3") {
                                             h3("text-xs font-bold text-slate-500 uppercase tracking-widest") { +"Filter by Liked Songs (Per User)" }
-                                            div("max-h-40 overflow-y-auto space-y-1.5 pr-2 custom-scrollbar") { id = "user-liked-selection" }
+                                            div("max-h-40 overflow-y-auto space-y-1.5 pr-2 custom-scrollbar") {
+                                                id = "user-liked-selection"
+                                            }
                                         }
                                     }
 
@@ -506,20 +604,27 @@ fun Route.mirrorRouting() {
             }
         }
 
-        get("/remote-image/{imageId}") {
-            val imageId = call.parameters["imageId"]?.toUUIDOrNull() ?: return@get call.respond(HttpStatusCode.BadRequest)
-            val size = call.request.queryParameters["size"]?.toIntOrNull() ?: 0
-            val config = call.request.queryParameters.toMirrorConfig()
+        cacheOutput(invalidateAt = 14.days) {
+            get("/remote-image/{imageId}") {
+                val imageId = call.parameters["imageId"]?.toUUIDOrNull() ?: return@get call.respond(
+                    HttpStatusCode.BadRequest
+                )
+                val size = call.request.queryParameters["size"]?.toIntOrNull() ?: 0
+                val config = call.request.queryParameters.toMirrorConfig()
 
-            try {
-                val imageData = remoteMirrorService.getRemoteImageData(config, imageId, size)
-                if (imageData != null) {
-                    call.respondBytes(imageData, ContentType.Image.Any)
-                } else {
-                    call.respond(HttpStatusCode.NotFound)
+                try {
+                    val imageData = remoteMirrorService.getRemoteImageData(config, imageId, size)
+                    if (imageData != null) {
+                        call.respondBytes(imageData, ContentType.Image.Any)
+                    } else {
+                        call.respond(HttpStatusCode.NotFound)
+                    }
+                } catch (e: Exception) {
+                    call.respond(
+                        HttpStatusCode.BadRequest,
+                        e.message ?: "Failed to fetch remote image"
+                    )
                 }
-            } catch (e: Exception) {
-                call.respond(HttpStatusCode.BadRequest, e.message ?: "Failed to fetch remote image")
             }
         }
 
@@ -588,7 +693,10 @@ fun Route.mirrorRouting() {
                     val playlists = remoteMirrorService.getRemotePlaylists(config)
                     call.respond(playlists)
                 } catch (e: Exception) {
-                    call.respond(HttpStatusCode.BadRequest, e.message ?: "Failed to fetch playlists")
+                    call.respond(
+                        HttpStatusCode.BadRequest,
+                        e.message ?: "Failed to fetch playlists"
+                    )
                 }
             }
 
@@ -601,7 +709,10 @@ fun Route.mirrorRouting() {
                     val playlists = remoteMirrorService.getRemoteUserPlaylists(config)
                     call.respond(playlists)
                 } catch (e: Exception) {
-                    call.respond(HttpStatusCode.BadRequest, e.message ?: "Failed to fetch user playlists")
+                    call.respond(
+                        HttpStatusCode.BadRequest,
+                        e.message ?: "Failed to fetch user playlists"
+                    )
                 }
             }
 
@@ -614,7 +725,10 @@ fun Route.mirrorRouting() {
                     val instances = remoteMirrorService.getProxyInstances(config)
                     call.respond(instances)
                 } catch (e: Exception) {
-                    call.respond(HttpStatusCode.BadRequest, e.message ?: "Failed to fetch instances")
+                    call.respond(
+                        HttpStatusCode.BadRequest,
+                        e.message ?: "Failed to fetch instances"
+                    )
                 }
             }
 
@@ -627,7 +741,10 @@ fun Route.mirrorRouting() {
                     val users = userService.queryUser().map { it.copy(passwordHash = "") }
                     call.respond(users)
                 } catch (e: Exception) {
-                    call.respond(HttpStatusCode.BadRequest, e.message ?: "Failed to fetch local users")
+                    call.respond(
+                        HttpStatusCode.BadRequest,
+                        e.message ?: "Failed to fetch local users"
+                    )
                 }
             }
 
@@ -635,9 +752,10 @@ fun Route.mirrorRouting() {
                 val user = call.getUser() ?: return@sse call.respond(HttpStatusCode.Unauthorized)
                 if (!user.isAdmin) return@sse call.respond(HttpStatusCode.Forbidden)
 
-                remoteMirrorService.getActiveMirrorProgress()?.debounce(20)?.collectLatest { progress ->
-                    send(ServerSentEvent(data = ApplicationScope.json.encodeToString(progress)))
-                }
+                remoteMirrorService.getActiveMirrorProgress()?.debounce(20)
+                    ?.collectLatest { progress ->
+                        send(ServerSentEvent(data = ApplicationScope.json.encodeToString(progress)))
+                    }
             }
         }
     }

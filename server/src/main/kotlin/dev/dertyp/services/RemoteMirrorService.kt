@@ -85,6 +85,30 @@ class RemoteMirrorService : Service() {
     private val playlistService by inject<PlaylistService>()
     private val userPlaylistService by inject<UserPlaylistService>()
 
+    @OptIn(ExperimentalSerializationApi::class)
+    private val httpClient = HttpClient(CIO) {
+        install(WebSockets)
+        install(ContentNegotiation) {
+            json(ApplicationScope.json)
+        }
+        install(Krpc) {
+            serialization {
+                cbor(ApplicationScope.cbor)
+            }
+        }
+    }
+
+    private val tokenCache = java.util.concurrent.ConcurrentHashMap<String, String>()
+
+    private class RemoteConnection(
+        val token: String,
+        val mirrorService: IMirrorService,
+        val imageService: IImageService,
+    )
+
+    private val connectionCache = java.util.concurrent.ConcurrentHashMap<String, RemoteConnection>()
+    private val statsServiceCache = java.util.concurrent.ConcurrentHashMap<String, IServerStatsService>()
+
     private val _activeProgress = MutableStateFlow<MirrorProgress?>(null)
     private var isMirroring = false
     private var mirrorJob: Job? = null
@@ -103,11 +127,11 @@ class RemoteMirrorService : Service() {
     }
 
     suspend fun getRemoteStats(config: RemoteServerConfig): ServerStats {
-        return withRemoteClient { client ->
-            val statsService =
-                client.rpc(config.toFullUrl("/rpc")).withService<IServerStatsService>()
-            statsService.getStats()
+        val key = "${config.host}:${config.port}"
+        val statsService = statsServiceCache.getOrPut(key) {
+            httpClient.rpc(config.toFullUrl("/rpc")).withService<IServerStatsService>()
         }
+        return statsService.getStats()
     }
 
     fun startMirror(config: RemoteServerConfig) {
@@ -158,13 +182,13 @@ class RemoteMirrorService : Service() {
     }
 
     suspend fun getRemoteUsers(config: RemoteServerConfig): List<User> =
-        withAuthenticatedMirrorService(config) { it.getUsers().toList() }
+        getAuthenticatedConnection(config).mirrorService.getUsers().toList()
 
     suspend fun getRemotePlaylists(config: RemoteServerConfig): List<Playlist> =
-        withAuthenticatedMirrorService(config) { it.getPlaylists().toList() }
+        getAuthenticatedConnection(config).mirrorService.getPlaylists().toList()
 
     suspend fun getRemoteUserPlaylists(config: RemoteServerConfig): List<UserPlaylist> =
-        withAuthenticatedMirrorService(config) { it.getUserPlaylists().toList() }
+        getAuthenticatedConnection(config).mirrorService.getUserPlaylists().toList()
 
     @Suppress("HttpUrlsUsage")
     suspend fun getProxyInstances(config: RemoteServerConfig): List<ProxyInstanceInfo> {
@@ -179,90 +203,66 @@ class RemoteMirrorService : Service() {
     }
 
     @OptIn(ExperimentalSerializationApi::class)
-    private suspend fun <T> withAuthenticatedClient(
-        config: RemoteServerConfig,
-        block: suspend (HttpClient, String) -> T
-    ): T {
-        return withRemoteClient { client ->
-            val authService = client.rpc(config.toFullUrl("/rpc/auth")).withService<IAuthService>()
-            val authResponse = authService.authenticate(config.username, config.password)
-            val token = authResponse.token
+    private suspend fun getAuthenticatedConnection(config: RemoteServerConfig): RemoteConnection {
+        val key = "${config.host}:${config.port}:${config.username}"
+        val token = getOrFetchToken(config)
 
-            val authenticatedClient = HttpClient(CIO) {
-                install(WebSockets)
-                install(Krpc) {
-                    serialization {
-                        cbor(ApplicationScope.cbor)
-                    }
-                }
-            }
-
-            authenticatedClient.use { authClient ->
-                block(authClient, token)
-            }
+        connectionCache[key]?.let {
+            if (it.token == token) return it
         }
+
+        val rpcClient = httpClient.rpc(config.toFullUrl("/rpc/services")) {
+            header(HttpHeaders.Authorization, "Bearer $token")
+        }
+
+        val connection = RemoteConnection(
+            token,
+            rpcClient.withService<IMirrorService>(),
+            rpcClient.withService<IImageService>()
+        )
+        connectionCache[key] = connection
+        return connection
     }
 
-    @OptIn(ExperimentalSerializationApi::class)
-    private suspend fun <T> withAuthenticatedMirrorService(
-        config: RemoteServerConfig,
-        block: suspend (IMirrorService) -> T
-    ): T {
-        return withAuthenticatedClient(config) { authClient, token ->
-            val mirrorService = authClient.rpc(config.toFullUrl("/rpc/services")) {
-                header(HttpHeaders.Authorization, "Bearer $token")
-            }.withService<IMirrorService>()
-            block(mirrorService)
-        }
+    private suspend fun getOrFetchToken(config: RemoteServerConfig): String {
+        val key = "${config.host}:${config.port}:${config.username}"
+        tokenCache[key]?.let { return it }
+
+        val authService = httpClient.rpc(config.toFullUrl("/rpc/auth")).withService<IAuthService>()
+        val authResponse = authService.authenticate(config.username, config.password)
+        tokenCache[key] = authResponse.token
+        return authResponse.token
     }
 
     suspend fun getRemoteImageData(config: RemoteServerConfig, imageId: PlatformUUID, size: Int = 0): ByteArray? {
-        return withAuthenticatedClient(config) { authClient, token ->
-            val remoteImageService = authClient.rpc(config.toFullUrl("/rpc/services")) {
-                header(HttpHeaders.Authorization, "Bearer $token")
-            }.withService<IImageService>()
-            remoteImageService.getImageData(imageId, size)
-        }
+        return getAuthenticatedConnection(config).imageService.getImageData(imageId, size)
     }
 
     @OptIn(ExperimentalSerializationApi::class, ExperimentalCoroutinesApi::class)
     private suspend fun performMirror(config: RemoteServerConfig) {
-        withRemoteClient { client ->
-            logger.info("Authenticating with remote server at ${config.toFullUrl("/rpc/auth")}")
-            val authService = client.rpc(config.toFullUrl("/rpc/auth")).withService<IAuthService>()
+        val client = httpClient
+        logger.info("Authenticating with remote server at ${config.toFullUrl("/rpc/auth")}")
+        val token = getOrFetchToken(config)
+        logger.info("Successfully authenticated as ${config.username}")
 
-            val authResponse = authService.authenticate(config.username, config.password)
-            val token = authResponse.token
-            logger.info("Successfully authenticated as ${config.username}")
+        val mirrorService =
+            client.rpc(config.toFullUrl("/rpc/services")) {
+                header(HttpHeaders.Authorization, "Bearer $token")
+            }.withService<IMirrorService>()
 
-            val authenticatedClient = HttpClient(CIO) {
-                install(WebSockets)
-                install(Krpc) {
-                    serialization {
-                        cbor(ApplicationScope.cbor)
-                    }
-                }
-            }
+        val remoteImageService =
+            client.rpc(config.toFullUrl("/rpc/services")) {
+                header(HttpHeaders.Authorization, "Bearer $token")
+            }.withService<IImageService>()
 
-            authenticatedClient.use { authClient ->
-                val mirrorService =
-                    authClient.rpc(config.toFullUrl("/rpc/services")) {
-                        header(HttpHeaders.Authorization, "Bearer $token")
-                    }.withService<IMirrorService>()
+        val remoteSongService =
+            client.rpc(config.toFullUrl("/rpc/services")) {
+                header(HttpHeaders.Authorization, "Bearer $token")
+            }.withService<ISongService>()
 
-                val remoteImageService =
-                    authClient.rpc(config.toFullUrl("/rpc/services")) {
-                        header(HttpHeaders.Authorization, "Bearer $token")
-                    }.withService<IImageService>()
-
-                val remoteSongService =
-                    authClient.rpc(config.toFullUrl("/rpc/services")) {
-                        header(HttpHeaders.Authorization, "Bearer $token")
-                    }.withService<ISongService>()
-
-                val statsService = authClient.rpc(config.toFullUrl("/rpc")) {
-                    header(HttpHeaders.Authorization, "Bearer $token")
-                }.withService<IServerStatsService>()
+        val statsService = client.rpc(config.toFullUrl("/rpc")) {
+            header(HttpHeaders.Authorization, "Bearer $token")
+        }.withService<IServerStatsService>()
 
                 logger.info("Fetching remote statistics...")
                 val remoteStats = statsService.getStats()
@@ -447,19 +447,37 @@ class RemoteMirrorService : Service() {
 
                 if (isFiltered) {
                     logger.info("Applying filters to mirror operation")
+                    updateProgress("Analyzing Selection", 0, 0, newStatus = "Identifying required songs and metadata based on selection...")
                     val songFlows = mutableListOf<Flow<Song>>()
-                    config.playlistIds?.forEach { songFlows.add(mirrorService.getSongsByPlaylist(it)) }
+                    config.playlistIds?.forEach {
+                        logger.info("Adding songs from playlist: $it")
+                        songFlows.add(mirrorService.getSongsByPlaylist(it))
+                        delay(1.nanoseconds)
+                        yield()
+                    }
                     config.userPlaylistIds?.forEach {
+                        logger.info("Adding songs from user playlist: $it")
                         songFlows.add(
                             mirrorService.getSongsByUserPlaylist(
                                 it
                             )
                         )
+                        delay(1.nanoseconds)
+                        yield()
                     }
-                    config.likedByUserIds?.forEach { songFlows.add(mirrorService.getLikedSongs(it)) }
+                    config.likedByUserIds?.forEach {
+                        logger.info("Adding liked songs from user: $it")
+                        songFlows.add(mirrorService.getLikedSongs(it))
+                        delay(1.nanoseconds)
+                        yield()
+                    }
 
-                    songFlows.merge().collect { song ->
-                        if (requiredSongIds.add(song.id)) {
+                    logger.info("Collecting and deduplicating required songs and metadata from ${songFlows.size} sources...")
+                    updateProgress("Analyzing Selection", 0, 0, newStatus = "Collecting songs from ${songFlows.size} remote sources...")
+                    var identifyingCount = 0
+                    songFlows.asFlow().flattenMerge(concurrency = 4).buffer(128).collect { song ->
+                        val isNew = requiredSongIds.add(song.id)
+                        if (isNew) {
                             song.artists.forEach { a ->
                                 if (requiredArtistIds.add(a.id)) {
                                     a.imageId?.let { requiredImageIds.add(it) }
@@ -472,18 +490,36 @@ class RemoteMirrorService : Service() {
                             }
                             song.coverId?.let { requiredImageIds.add(it) }
                         }
+                        
+                        identifyingCount++
+                        if (identifyingCount == 1 || identifyingCount % 10 == 0) {
+                            logger.info("Analyzed $identifyingCount songs... (Current: ${song.title})")
+                            updateProgress("Analyzing Selection", identifyingCount, 0, song.title)
+                            yield()
+                        }
                     }
+                    logger.info("Metadata analysis complete. Found ${requiredSongIds.size} unique songs.")
+                    delay(1.nanoseconds)
+                    yield()
 
                     if (!config.playlistIds.isNullOrEmpty()) {
+                        logger.info("Fetching cover images for selected playlists...")
+                        updateProgress("Analyzing Selection", identifyingCount, 0, newStatus = "Identifying playlist cover images...")
                         mirrorService.getPlaylists()
                             .filter { it.id in config.playlistIds!! }
                             .collect { it.imageId?.let { id -> requiredImageIds.add(id) } }
+                        delay(1.nanoseconds)
+                        yield()
                     }
 
                     if (!config.userPlaylistIds.isNullOrEmpty()) {
+                        logger.info("Fetching cover images for selected user playlists...")
+                        updateProgress("Analyzing Selection", identifyingCount, 0, newStatus = "Identifying user playlist cover images...")
                         mirrorService.getUserPlaylists()
                             .filter { it.id in config.userPlaylistIds!! }
                             .collect { it.imageId?.let { id -> requiredImageIds.add(id) } }
+                        delay(1.nanoseconds)
+                        yield()
                     }
 
                     val filterLog =
@@ -825,16 +861,49 @@ class RemoteMirrorService : Service() {
                         "Syncing User Preferences",
                         0,
                         config.likedByUserIds!!.size,
-                        newStatus = "Mapping remote liked songs to local user..."
+                        newStatus = "Fetching remote user information..."
                     )
+
+                    val remoteUserMap = try {
+                        mirrorService.getUsers().toList().associate { it.id to (it.displayName ?: it.username) }
+                    } catch (e: Exception) {
+                        logger.warn("Failed to fetch remote user list for display names: ${e.message}")
+                        emptyMap()
+                    }
+
                     config.likedByUserIds!!.forEachIndexed { index, userId ->
+                        val remoteUserName = remoteUserMap[userId] ?: userId.toString()
+                        logger.info("Syncing liked songs for remote user: $remoteUserName")
+                        
+                        updateProgress(
+                            "Syncing User Preferences",
+                            index,
+                            config.likedByUserIds!!.size,
+                            newStatus = "Mapping remote liked songs for $remoteUserName...",
+                            item = "User: $remoteUserName"
+                        )
+
+                        var likedCount = 0
                         mirrorService.getLikedSongs(userId).collect { song ->
                             songService.setLiked(song.id, config.targetUserId!!, true)
+                            likedCount++
+                            if (likedCount % 50 == 0) {
+                                updateProgress(
+                                    "Syncing User Preferences",
+                                    index,
+                                    config.likedByUserIds!!.size,
+                                    item = "User: $remoteUserName ($likedCount likes...)"
+                                )
+                                yield()
+                            }
                         }
+                        logger.info("Successfully synced $likedCount liked songs for $remoteUserName")
+                        
                         updateProgress(
                             "Syncing User Preferences",
                             index + 1,
-                            config.likedByUserIds!!.size
+                            config.likedByUserIds!!.size,
+                            item = "Completed: $remoteUserName ($likedCount likes)"
                         )
                         delay(1.nanoseconds)
                         yield()
@@ -849,25 +918,10 @@ class RemoteMirrorService : Service() {
                     newStatus = "Mirror operation from ${config.host} successfully completed."
                 )
                 logger.info("Mirror operation from ${config.host} successfully completed.")
-            }
-        }
     }
 
     @OptIn(ExperimentalSerializationApi::class)
     private suspend fun <T> withRemoteClient(block: suspend (HttpClient) -> T): T {
-        val client = HttpClient(CIO) {
-            install(WebSockets)
-            install(ContentNegotiation) {
-                json(ApplicationScope.json)
-            }
-            install(Krpc) {
-                serialization {
-                    cbor(ApplicationScope.cbor)
-                }
-            }
-        }
-        return client.use {
-            block(it)
-        }
+        return block(httpClient)
     }
 }
