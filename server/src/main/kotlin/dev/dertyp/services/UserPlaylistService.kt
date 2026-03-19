@@ -54,6 +54,10 @@ class UserPlaylistService : IUserPlaylistService, Service() {
         where { UserPlaylistTable.id inList ids }
     }.data
 
+    suspend fun byName(name: String, creator: UUID): UserPlaylist? = querySingle {
+        where { UserPlaylistTable.name eq name and (UserPlaylistTable.creator eq creator) }
+    }
+
     override suspend fun rankedSearch(creator: UUID?, page: Int, pageSize: Int, query: String): PaginatedResponse<UserPlaylist> =
         queryPlaylists(page, pageSize) {
             rankedSearchQuery(

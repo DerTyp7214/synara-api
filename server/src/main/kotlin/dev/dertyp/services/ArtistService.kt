@@ -419,6 +419,12 @@ class ArtistService : IArtistService, Service() {
             it[about] = artist.about
             it[image] = artist.imageId?.let { imageId -> EntityID(imageId, ImageTable) }
         }
+
+        artist.artists.forEach { member ->
+            ArtistTable.update({ ArtistTable.id eq member.id }) {
+                it[groupId] = artist.id
+            }
+        }
     }
 
     suspend fun upsertArtistAlias(alias: ArtistAlias) = dbQuery {
