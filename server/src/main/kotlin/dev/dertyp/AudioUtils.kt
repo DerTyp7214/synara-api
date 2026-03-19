@@ -95,6 +95,11 @@ object AudioUtils {
 
             val fileName =
                 Paths.get(transcoderPath, "${targetKbps}kbps", parent, "${flacFile.nameWithoutExtension}.ogg").toFile()
+
+            val transcodingFile = Files.createTempDirectory("transcoder_").toFile().apply {
+                deleteOnExitRecursive()
+            }.resolve("transcoding_$fileName")
+
             val tempFolder =
                 if (fileName.isRooted) Paths.get("/").toFile()
                 else Files.createTempDirectory("transcoder_").toFile().apply {
@@ -112,6 +117,9 @@ object AudioUtils {
             tempFile.parentFile.mkdirs()
             tempFile.createNewFile()
 
+            transcodingFile.parentFile.mkdirs()
+            transcodingFile.createNewFile()
+
             try {
                 avutil.av_log_set_level(avutil.AV_LOG_QUIET)
 
@@ -119,7 +127,7 @@ object AudioUtils {
 
                 val inputMetadata: Map<String, String> = grabber.metadata.toMap()
 
-                val recorder = FFmpegFrameRecorder(tempFile.absolutePath, grabber.audioChannels).apply {
+                val recorder = FFmpegFrameRecorder(transcodingFile.absolutePath, grabber.audioChannels).apply {
                     imageWidth = 0
                     imageHeight = 0
                     videoCodec = avcodec.AV_CODEC_ID_NONE
@@ -153,6 +161,8 @@ object AudioUtils {
                 grabber.stop()
                 grabber.release()
 
+                transcodingFile.copyTo(tempFile, true)
+
                 StreamInfo(
                     tempFile,
                     ContentType.Audio.MPEG,
@@ -163,6 +173,8 @@ object AudioUtils {
                 tempFile.delete()
                 e.printStackTrace()
                 throw e
+            } finally {
+                transcodingFile.delete()
             }
         }
     }
