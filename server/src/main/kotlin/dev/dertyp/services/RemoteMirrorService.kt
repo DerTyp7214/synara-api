@@ -876,26 +876,45 @@ class RemoteMirrorService : Service() {
                             val newId = if (config.isImport) randomPlatformUUID() else song.id
                             val localPathString =
                                 resolveLocalPath(song.path, newId.toString(), config.quality)
-                            val localPath = Path(localPathString)
+
+                            val baseLocalPath = localPathString.substringBeforeLast('.')
+                            val flacPath = "$baseLocalPath.flac"
+                            val oggPath = "$baseLocalPath.ogg"
+                            val flacFile = File(flacPath)
+                            val oggFile = File(oggPath)
+
+                            val existingFile = when {
+                                flacFile.exists() && flacFile.length() > 0 -> flacFile
+                                oggFile.exists() && oggFile.length() > 0 -> oggFile
+                                else -> null
+                            }
+
+                            val isAlreadyComplete = when {
+                                existingFile == null -> false
+                                existingFile.absolutePath == File(localPathString).absolutePath ->
+                                    expectedSize > 0 && existingFile.length() == expectedSize
+                                else -> true
+                            }
+
+                            val targetPathString = existingFile?.absolutePath ?: localPathString
 
                             logger.debug(
-                                "Syncing song: {} (ID: {}, Target: {}, Expected size: {} bytes)",
+                                "Syncing song: {} (ID: {}, Target: {}, Expected size: {} bytes, Already complete: {})",
                                 songDisplayName,
                                 song.id,
-                                localPathString,
-                                expectedSize
+                                targetPathString,
+                                expectedSize,
+                                isAlreadyComplete
                             )
-
-                            val localFile = File(localPathString)
-                            val isAlreadyComplete =
-                                localFile.exists() && expectedSize > 0 && localFile.length() == expectedSize
 
                             if (isAlreadyComplete) {
                                 logger.info(
-                                    "Song already exists and is complete, skipping download: {}",
-                                    songDisplayName
+                                    "Song already exists and is complete, skipping download: {} ({})",
+                                    songDisplayName,
+                                    targetPathString
                                 )
                             } else {
+                                val localPath = Path(localPathString)
                                 localPath.parent.toFile().mkdirs()
                                 localPath.outputStream().use { output ->
                                     var downloadedInSong = 0L
@@ -941,7 +960,7 @@ class RemoteMirrorService : Service() {
                             songService.upsertSong(
                                 song.copy(
                                     id = newId,
-                                    path = localPathString,
+                                    path = targetPathString,
                                     album = song.album?.copy(id = localAlbumId!!),
                                     artists = song.artists.mapNotNull { sub ->
                                         artistIdMap[sub.id]?.let { sub.copy(id = it) }
