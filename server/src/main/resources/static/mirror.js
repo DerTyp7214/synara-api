@@ -102,6 +102,7 @@ function getFormData() {
     data.append('secure', document.getElementById('secure').checked ? 'true' : 'false');
     data.append('quality', document.getElementById('quality').value);
     data.append('useProxy', document.getElementById('use-proxy').checked ? 'true' : 'false');
+    data.append('isImport', document.getElementById('is-import').checked ? 'true' : 'false');
     data.append('proxyInstanceId', document.getElementById('proxy-instance').value);
 
     // Filter selections

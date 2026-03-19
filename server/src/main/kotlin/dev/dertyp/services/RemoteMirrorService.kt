@@ -3,6 +3,7 @@ package dev.dertyp.services
 import dev.dertyp.PlatformUUID
 import dev.dertyp.core.ApplicationScope
 import dev.dertyp.data.*
+import dev.dertyp.randomPlatformUUID
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.engine.cio.CIO
@@ -453,6 +454,13 @@ class RemoteMirrorService : Service() {
                 val requiredAlbumIds = mutableSetOf<PlatformUUID>()
                 val requiredImageIds = mutableSetOf<PlatformUUID>()
 
+                val imageIdMap = mutableMapOf<PlatformUUID, PlatformUUID>()
+                val artistIdMap = mutableMapOf<PlatformUUID, PlatformUUID>()
+                val albumIdMap = mutableMapOf<PlatformUUID, PlatformUUID>()
+                val songIdMap = mutableMapOf<PlatformUUID, PlatformUUID>()
+                val playlistIdMap = mutableMapOf<PlatformUUID, PlatformUUID>()
+                val userPlaylistIdMap = mutableMapOf<PlatformUUID, PlatformUUID>()
+
                 if (isFiltered) {
                     logger.info("Applying filters to mirror operation")
                     updateProgress("Analyzing Selection", 0, 0, newStatus = "Identifying required songs and metadata based on selection...")
@@ -558,11 +566,20 @@ class RemoteMirrorService : Service() {
 
                 imagesFlow.chunked(100).flatMapConcat { images ->
                     flow {
-                        val existingImages =
-                            imageService.byIds(images.map { it.id }).map { it.id to it.imageHash }
+                        val existingImages = if (config.isImport) {
+                            imageService.getCoverHashes(images.map { it.imageHash })
+                        } else {
+                            imageService.byIds(images.map { it.id }).associate { it.imageHash to it.id }
+                        }
+
                         images.forEach {
-                            val exists = (it.id to it.imageHash) in existingImages
-                            emit(it to exists)
+                            val localId = existingImages[it.imageHash]
+                            if (localId != null) {
+                                imageIdMap[it.id] = localId
+                                emit(it to true)
+                            } else {
+                                emit(it to false)
+                            }
                         }
                     }
                 }.collect { (remoteImage: Image, exists: Boolean) ->
@@ -576,7 +593,9 @@ class RemoteMirrorService : Service() {
                             val imageData = remoteImageService.getImageData(remoteImage.id, 0)
                             yield()
                             if (imageData != null) {
-                                imageService.upsertImage(remoteImage, imageData)
+                                val newId = if (config.isImport) randomPlatformUUID() else remoteImage.id
+                                imageService.upsertImage(remoteImage.copy(id = newId), imageData)
+                                imageIdMap[remoteImage.id] = newId
                                 syncedImages++
                             }
                         }
@@ -617,8 +636,26 @@ class RemoteMirrorService : Service() {
                     .filter { it.id in requiredArtistIds } else mirrorService.getArtists()
                 artistsFlow.collect { artist: Artist ->
                     try {
-                        artistService.upsertArtist(artist)
-                        syncedArtists++
+                        val localId = if (config.isImport) {
+                            artistService.getOrBulkCreate(listOf(artist.name))[artist.name]?.firstOrNull()
+                        } else {
+                            null
+                        }
+
+                        if (localId != null) {
+                            artistIdMap[artist.id] = localId
+                        } else {
+                            val newId = if (config.isImport) randomPlatformUUID() else artist.id
+                            artistService.upsertArtist(
+                                artist.copy(
+                                    id = newId,
+                                    imageId = artist.imageId?.let { imageIdMap[it] ?: it },
+                                    artists = artist.artists.map { it.copy(id = artistIdMap[it.id] ?: it.id) }
+                                )
+                            )
+                            artistIdMap[artist.id] = newId
+                            syncedArtists++
+                        }
                     } catch (e: Exception) {
                         logger.error("Failed to mirror artist ${artist.name}: ${e.message}", e)
                         progressMutex.withLock {
@@ -653,7 +690,8 @@ class RemoteMirrorService : Service() {
                     .filter { it.artistId in requiredArtistIds } else mirrorService.getArtistAliases()
                 artistAliasesFlow.collect { alias: ArtistAlias ->
                     try {
-                        artistService.upsertArtistAlias(alias)
+                        val localArtistId = artistIdMap[alias.artistId] ?: alias.artistId
+                        artistService.upsertArtistAlias(alias.copy(artistId = localArtistId))
                     } catch (e: Exception) {
                         logger.error("Failed to mirror artist alias ${alias.name}: ${e.message}", e)
                         progressMutex.withLock {
@@ -683,7 +721,8 @@ class RemoteMirrorService : Service() {
                     .filter { it.artistId in requiredArtistIds } else mirrorService.getArtistSplitAliases()
                 artistSplitAliasesFlow.collect { alias: ArtistSplitAlias ->
                     try {
-                        artistService.upsertArtistSplitAlias(alias)
+                        val localArtistId = artistIdMap[alias.artistId] ?: alias.artistId
+                        artistService.upsertArtistSplitAlias(alias.copy(artistId = localArtistId))
                     } catch (e: Exception) {
                         logger.error("Failed to mirror artist split alias ${alias.name}: ${e.message}", e)
                         progressMutex.withLock {
@@ -714,8 +753,29 @@ class RemoteMirrorService : Service() {
                     .filter { it.id in requiredAlbumIds } else mirrorService.getAlbums()
                 albumsFlow.collect { album: Album ->
                     try {
-                        albumService.upsertAlbum(album)
-                        syncedAlbums++
+                        val localId = if (config.isImport) {
+                            albumService.byName(0, 10, album.name).data.firstOrNull { existing ->
+                                existing.name == album.name &&
+                                        existing.artists.map { it.id }.toSet() == album.artists.map {
+                                    artistIdMap[it.id] ?: it.id
+                                }.toSet()
+                            }?.id
+                        } else null
+
+                        if (localId != null) {
+                            albumIdMap[album.id] = localId
+                        } else {
+                            val newId = if (config.isImport) randomPlatformUUID() else album.id
+                            albumService.upsertAlbum(
+                                album.copy(
+                                    id = newId,
+                                    coverId = album.coverId?.let { imageIdMap[it] ?: it },
+                                    artists = album.artists.map { it.copy(id = artistIdMap[it.id] ?: it.id) }
+                                )
+                            )
+                            albumIdMap[album.id] = newId
+                            syncedAlbums++
+                        }
                     } catch (e: Exception) {
                         logger.error("Failed to mirror album ${album.name}: ${e.message}", e)
                         progressMutex.withLock {
@@ -764,8 +824,9 @@ class RemoteMirrorService : Service() {
                         val songDisplayName =
                             "${song.artists.firstOrNull()?.name ?: "Unknown"} - ${song.title}"
                         try {
+                            val newId = if (config.isImport) randomPlatformUUID() else song.id
                             val localPathString =
-                                resolveLocalPath(song.path, song.id.toString(), config.quality)
+                                resolveLocalPath(song.path, newId.toString(), config.quality)
                             val localPath = Path(localPathString)
 
                             logger.debug(
@@ -826,7 +887,16 @@ class RemoteMirrorService : Service() {
                                 progressMutex.withLock { syncedSongs++ }
                             }
 
-                            songService.upsertSong(song.copy(path = localPathString))
+                            songService.upsertSong(
+                                song.copy(
+                                    id = newId,
+                                    path = localPathString,
+                                    album = song.album?.copy(id = albumIdMap[song.album?.id] ?: song.album!!.id),
+                                    artists = song.artists.map { it.copy(id = artistIdMap[it.id] ?: it.id) },
+                                    coverId = song.coverId?.let { imageIdMap[it] ?: it }
+                                )
+                            )
+                            songIdMap[song.id] = newId
 
                             progressMutex.withLock {
                                 songCount++
@@ -883,8 +953,24 @@ class RemoteMirrorService : Service() {
                 var playlistCount = 0
                 playlistsToSyncFlow.collect { playlist: Playlist ->
                     try {
-                        playlistService.upsertPlaylist(playlist)
-                        syncedPlaylists++
+                        val localId = if (config.isImport) {
+                            playlistService.byName(playlist.name)?.id
+                        } else null
+
+                        if (localId != null) {
+                            playlistIdMap[playlist.id] = localId
+                        } else {
+                            val newId = if (config.isImport) randomPlatformUUID() else playlist.id
+                            playlistService.upsertPlaylist(
+                                playlist.copy(
+                                    id = newId,
+                                    imageId = playlist.imageId?.let { imageIdMap[it] ?: it },
+                                    songs = playlist.songs.map { songIdMap[it] ?: it }
+                                )
+                            )
+                            playlistIdMap[playlist.id] = newId
+                            syncedPlaylists++
+                        }
                     } catch (e: Exception) {
                         logger.error("Failed to mirror playlist ${playlist.name}: ${e.message}", e)
                         progressMutex.withLock {
@@ -926,7 +1012,16 @@ class RemoteMirrorService : Service() {
                 var userPlaylistCount = 0
                 userPlaylistsToSyncFlow.collect { playlist: UserPlaylist ->
                     try {
-                        userPlaylistService.upsertUserPlaylist(playlist, config.targetUserId)
+                        val newId = if (config.isImport) randomPlatformUUID() else playlist.id
+                        userPlaylistService.upsertUserPlaylist(
+                            playlist.copy(
+                                id = newId,
+                                imageId = playlist.imageId?.let { imageIdMap[it] ?: it },
+                                songs = playlist.songs.map { songIdMap[it] ?: it }
+                            ),
+                            config.targetUserId
+                        )
+                        userPlaylistIdMap[playlist.id] = newId
                         syncedUserPlaylists++
                     } catch (e: Exception) {
                         logger.error("Failed to mirror user playlist ${playlist.name}: ${e.message}", e)
@@ -977,7 +1072,8 @@ class RemoteMirrorService : Service() {
 
                         var likedCount = 0
                         mirrorService.getLikedSongs(userId).collect { song ->
-                            songService.setLiked(song.id, config.targetUserId!!, true)
+                            val localSongId = songIdMap[song.id] ?: song.id
+                            songService.setLiked(localSongId, config.targetUserId!!, true)
                             likedCount++
                             if (likedCount % 50 == 0) {
                                 updateProgress(

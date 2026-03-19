@@ -44,7 +44,8 @@ fun Route.mirrorRouting() {
         likedByUserIds = this.getAll("likedByUserIds")?.mapNotNull { it.toUUIDOrNull() },
         useProxy = this["useProxy"] == "true",
         proxyInstanceId = this["proxyInstanceId"],
-        targetUserId = this["targetUserId"]?.toUUIDOrNull()
+        targetUserId = this["targetUserId"]?.toUUIDOrNull(),
+        isImport = this["isImport"] == "true"
     )
 
     route("/admin/mirror") {
@@ -276,6 +277,12 @@ fun Route.mirrorRouting() {
                                         }
 
                                         div("flex flex-col gap-3") {
+                                            label("custom-checkbox flex items-center gap-3 group") {
+                                                input(type = InputType.checkBox) { id = "is-import" }
+                                                span("checkmark")
+                                                span("text-sm text-slate-300 group-hover:text-white transition-colors") { +"Import Mode (Merge with existing data)" }
+                                            }
+
                                             label("custom-checkbox flex items-center gap-3 group") {
                                                 input(type = InputType.checkBox) { id = "secure" }
                                                 span("checkmark")
