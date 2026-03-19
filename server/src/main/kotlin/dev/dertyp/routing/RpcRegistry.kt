@@ -87,6 +87,7 @@ private fun registerAuthenticated(koin: Koin, call: ApplicationCall, user: User,
     val customAudioService = koin.get<CustomAudioService>()
     val dbManagementService = koin.get<DbManagementService>()
     val backupService = koin.get<BackupService>()
+    val userPlaylistBackupService = koin.get<UserPlaylistBackupService>()
     val mirrorService = koin.get<MirrorService>()
     val remoteMirrorService = koin.get<RemoteMirrorService>()
 
@@ -106,6 +107,7 @@ private fun registerAuthenticated(koin: Koin, call: ApplicationCall, user: User,
     registrar.register(ICustomAudioService::class) { CustomAudioRpcService(customAudioService).withLogging<ICustomAudioService>(call) }
     registrar.register(IDbManagementService::class) { dbManagementService.withLogging<IDbManagementService>(call) }
     registrar.register(IBackupService::class) { RpcBackupService(user, backupService).withLogging<IBackupService>(call) }
+    registrar.register(IUserPlaylistBackupService::class) { RpcUserPlaylistBackupService(user, userPlaylistBackupService).withLogging<IUserPlaylistBackupService>(call) }
     registrar.register(IMirrorService::class) { MirrorRpcService(user, mirrorService).withLogging<IMirrorService>(call) }
     registrar.register(IRemoteMirrorService::class) { RemoteMirrorRpcService(user, remoteMirrorService).withLogging<IRemoteMirrorService>(call) }
 }

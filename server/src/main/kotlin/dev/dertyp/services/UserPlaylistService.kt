@@ -1,10 +1,7 @@
 package dev.dertyp.services
 
 import dev.dertyp.core.*
-import dev.dertyp.data.InsertablePlaylist
-import dev.dertyp.data.PaginatedResponse
-import dev.dertyp.data.User
-import dev.dertyp.data.UserPlaylist
+import dev.dertyp.data.*
 import dev.dertyp.db.*
 import dev.dertyp.dbQuery
 import kotlinx.coroutines.Dispatchers
@@ -219,6 +216,7 @@ class UserPlaylistService : IUserPlaylistService, Service() {
 
             playlist.copy(
                 songs = songs.map { it.first },
+                songEntries = songs.map { UserPlaylistSong(it.first, it.second) },
                 totalDuration = totalDuration,
                 modifiedAt = songs.lastOrNull()?.second.date ?: Date.from(Instant.EPOCH)
             )
@@ -236,10 +234,18 @@ class UserPlaylistService : IUserPlaylistService, Service() {
         }
 
         UserPlaylistSongTable.deleteWhere { UserPlaylistSongTable.playlistId eq playlist.id }
-        UserPlaylistSongTable.batchInsert(playlist.songs) { songId ->
-            this[UserPlaylistSongTable.playlistId] = playlist.id
-            this[UserPlaylistSongTable.songId] = songId
-            this[UserPlaylistSongTable.addedAt] = System.currentTimeMillis()
+        if (playlist.songEntries != null) {
+            UserPlaylistSongTable.batchInsert(playlist.songEntries!!) { entry ->
+                this[UserPlaylistSongTable.playlistId] = playlist.id
+                this[UserPlaylistSongTable.songId] = entry.songId
+                this[UserPlaylistSongTable.addedAt] = entry.addedAt
+            }
+        } else {
+            UserPlaylistSongTable.batchInsert(playlist.songs) { songId ->
+                this[UserPlaylistSongTable.playlistId] = playlist.id
+                this[UserPlaylistSongTable.songId] = songId
+                this[UserPlaylistSongTable.addedAt] = System.currentTimeMillis()
+            }
         }
     }
 }

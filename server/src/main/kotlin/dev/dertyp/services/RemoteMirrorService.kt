@@ -873,7 +873,18 @@ class RemoteMirrorService : Service() {
                         val songDisplayName =
                             "${song.artists.firstOrNull()?.name ?: "Unknown"} - ${song.title}"
                         try {
-                            val newId = if (config.isImport) randomPlatformUUID() else song.id
+                            val localAlbumId = song.album?.id?.let { albumIdMap[it] } ?: if (config.isImport) return@flow else song.album?.id
+
+                            val newId = if (config.isImport) {
+                                songService.findSongIdByMetadata(
+                                    song.title,
+                                    localAlbumId!!,
+                                    song.trackNumber,
+                                    song.discNumber,
+                                    song.explicit
+                                ) ?: randomPlatformUUID()
+                            } else song.id
+
                             val localPathString =
                                 resolveLocalPath(song.path, newId.toString(), config.quality)
 
@@ -954,8 +965,6 @@ class RemoteMirrorService : Service() {
                                 }
                                 progressMutex.withLock { syncedSongs++ }
                             }
-
-                            val localAlbumId = song.album?.id?.let { albumIdMap[it] } ?: if (config.isImport) return@flow else song.album?.id
 
                             songService.upsertSong(
                                 song.copy(

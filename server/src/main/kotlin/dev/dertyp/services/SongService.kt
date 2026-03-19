@@ -298,6 +298,24 @@ class SongService : Service() {
         return setMusicBrainzId(id, recording?.id, userId)
     }
 
+    suspend fun findSongIdByMetadata(
+        title: String,
+        albumId: UUID,
+        trackNumber: Int,
+        discNumber: Int,
+        explicit: Boolean
+    ): UUID? = dbQuery {
+        SongTable.select(SongTable.id)
+            .where {
+                (SongTable.title eq title) and
+                        (SongTable.albumId eq albumId) and
+                        (SongTable.trackNumber eq trackNumber) and
+                        (SongTable.discNumber eq discNumber) and
+                        (SongTable.explicit eq explicit)
+            }
+            .singleOrNull()?.get(SongTable.id)?.value
+    }
+
     suspend fun byId(id: UUID): Song? = querySingle({ this }) {
         where { SongTable.id eq id }
     }

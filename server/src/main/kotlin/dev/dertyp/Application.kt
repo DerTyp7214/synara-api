@@ -86,6 +86,7 @@ fun Application.module() {
             singleOf(::FavSyncService)
             singleOf(::DatabaseManager)
             singleOf(::PlaylistService)
+            singleOf(::LibraryMergeService)
             singleOf(::DownloadService)
             singleOf(::ScheduleService)
             singleOf(::ServerStatsService)
@@ -98,6 +99,7 @@ fun Application.module() {
             singleOf(::ReverseProxyService)
             singleOf(::DbManagementService)
             singleOf(::BackupService)
+            singleOf(::UserPlaylistBackupService)
             singleOf(::MetadataFetchingService)
             singleOf(::MirrorService)
             singleOf(::RemoteMirrorService)
@@ -131,9 +133,11 @@ fun Application.module() {
     val scheduleService = get<ScheduleService>()
     val sessionService = get<SessionService>()
     val imageService = get<ImageService>()
+    val libraryMergeService = get<LibraryMergeService>()
     val artistService = get<ArtistService>()
     val albumService = get<AlbumService>()
     val backupService = get<BackupService>()
+    val userPlaylistBackupService = get<UserPlaylistBackupService>()
     val reverseProxyService = get<ReverseProxyService>()
     val metadataFetchingService = get<MetadataFetchingService>()
     val musicBrainzWorker = get<MusicBrainzWorker>()
@@ -149,11 +153,29 @@ fun Application.module() {
 
     scheduleService.schedule(
         ScheduledTask(
+            name = "User Playlist Backup",
+            trigger = CronPresets.dailyAt(2, 0),
+            task = { userPlaylistBackupService.backupAllUsers() }
+        )
+    )
+
+    scheduleService.schedule(
+        ScheduledTask(
             name = "Session Cleanup",
             trigger = CronPresets.dailyAt(0, 0),
             task = { sessionService.cleanupOldSessions() }
         )
     )
+
+    val mergeDuplicates = scheduleService.schedule(
+        ScheduledTask(
+            name = "Merge Library Duplicates",
+            trigger = CronPresets.dailyAt(1, 0),
+            task = { libraryMergeService.mergeDuplicates() }
+        )
+    )
+
+    scheduleService.triggerTask(mergeDuplicates.id)
 
     scheduleService.schedule(
         ScheduledTask(
