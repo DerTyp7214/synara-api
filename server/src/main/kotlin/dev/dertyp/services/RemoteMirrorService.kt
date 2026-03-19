@@ -517,12 +517,16 @@ class RemoteMirrorService : Service() {
                         }
                     }
                     imageCount++
-                    if (imageCount % 10 == 0) updateProgress(
-                        "Mirroring Images",
-                        imageCount,
-                        totalImages,
-                        "Image ${remoteImage.imageHash}"
-                    )
+                    if (imageCount % 10 == 0) {
+                        updateProgress(
+                            "Mirroring Images",
+                            imageCount,
+                            totalImages,
+                            "Image ${remoteImage.imageHash}"
+                        )
+                        delay(1.nanoseconds)
+                        yield()
+                    }
                 }
                 logger.info("Image synchronization finished (Processed: $imageCount)")
                 updateProgress("Mirroring Images", totalImages, totalImages)
@@ -544,12 +548,16 @@ class RemoteMirrorService : Service() {
                     artistService.upsertArtist(artist)
                     artistCount++
                     syncedArtists++
-                    if (artistCount % 10 == 0) updateProgress(
-                        "Mirroring Artists",
-                        artistCount,
-                        totalArtists,
-                        artist.name
-                    )
+                    if (artistCount % 10 == 0) {
+                        updateProgress(
+                            "Mirroring Artists",
+                            artistCount,
+                            totalArtists,
+                            artist.name
+                        )
+                        delay(1.nanoseconds)
+                        yield()
+                    }
                 }
                 logger.info("Artist synchronization finished (Processed: $artistCount)")
                 updateProgress(
@@ -567,12 +575,16 @@ class RemoteMirrorService : Service() {
                 artistAliasesFlow.collect { alias: ArtistAlias ->
                     artistService.upsertArtistAlias(alias)
                     aliasCount++
-                    if (aliasCount % 50 == 0) updateProgress(
-                        "Mirroring Artist Aliases",
-                        aliasCount,
-                        0,
-                        alias.name
-                    )
+                    if (aliasCount % 50 == 0) {
+                        updateProgress(
+                            "Mirroring Artist Aliases",
+                            aliasCount,
+                            0,
+                            alias.name
+                        )
+                        delay(1.nanoseconds)
+                        yield()
+                    }
                 }
                 logger.info("Artist alias synchronization finished (Processed: $aliasCount)")
 
@@ -585,12 +597,16 @@ class RemoteMirrorService : Service() {
                 artistSplitAliasesFlow.collect { alias: ArtistSplitAlias ->
                     artistService.upsertArtistSplitAlias(alias)
                     splitAliasCount++
-                    if (splitAliasCount % 50 == 0) updateProgress(
-                        "Mirroring Artist Split Aliases",
-                        splitAliasCount,
-                        0,
-                        alias.name
-                    )
+                    if (splitAliasCount % 50 == 0) {
+                        updateProgress(
+                            "Mirroring Artist Split Aliases",
+                            splitAliasCount,
+                            0,
+                            alias.name
+                        )
+                        delay(1.nanoseconds)
+                        yield()
+                    }
                 }
                 logger.info("Artist split alias synchronization finished (Processed: $splitAliasCount)")
 
@@ -605,12 +621,16 @@ class RemoteMirrorService : Service() {
                     albumService.upsertAlbum(album)
                     albumCount++
                     syncedAlbums++
-                    if (albumCount % 10 == 0) updateProgress(
-                        "Mirroring Albums",
-                        albumCount,
-                        totalAlbums,
-                        album.name
-                    )
+                    if (albumCount % 10 == 0) {
+                        updateProgress(
+                            "Mirroring Albums",
+                            albumCount,
+                            totalAlbums,
+                            album.name
+                        )
+                        delay(1.nanoseconds)
+                        yield()
+                    }
                 }
                 logger.info("Album synchronization finished (Processed: $albumCount)")
                 updateProgress("Mirroring Albums", totalAlbums, totalAlbums)
@@ -740,6 +760,8 @@ class RemoteMirrorService : Service() {
                         playlistsToSyncCount,
                         playlist.name
                     )
+                    delay(1.nanoseconds)
+                    yield()
                 }
                 logger.info("Playlist synchronization finished (Processed: $playlistCount)")
 
@@ -764,7 +786,7 @@ class RemoteMirrorService : Service() {
                 )
                 var userPlaylistCount = 0
                 userPlaylistsToSyncFlow.collect { playlist: UserPlaylist ->
-                    userPlaylistService.upsertUserPlaylist(playlist)
+                    userPlaylistService.upsertUserPlaylist(playlist, config.targetUserId)
                     userPlaylistCount++
                     syncedUserPlaylists++
                     updateProgress(
@@ -773,8 +795,32 @@ class RemoteMirrorService : Service() {
                         userPlaylistsToSyncCount,
                         playlist.name
                     )
+                    delay(1.nanoseconds)
+                    yield()
                 }
                 logger.info("User playlist synchronization finished (Processed: $userPlaylistCount)")
+
+                if (config.targetUserId != null && !config.likedByUserIds.isNullOrEmpty()) {
+                    logger.info("Starting user preference synchronization stage...")
+                    updateProgress(
+                        "Syncing User Preferences",
+                        0,
+                        config.likedByUserIds!!.size,
+                        newStatus = "Mapping remote liked songs to local user..."
+                    )
+                    config.likedByUserIds!!.forEachIndexed { index, userId ->
+                        mirrorService.getLikedSongs(userId).collect { song ->
+                            songService.setLiked(song.id, config.targetUserId!!, true)
+                        }
+                        updateProgress(
+                            "Syncing User Preferences",
+                            index + 1,
+                            config.likedByUserIds!!.size
+                        )
+                        delay(1.nanoseconds)
+                        yield()
+                    }
+                }
 
                 updateProgress(
                     "Mirror complete",

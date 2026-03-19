@@ -5,6 +5,7 @@ import dev.dertyp.core.getUser
 import dev.dertyp.core.toUUIDOrNull
 import dev.dertyp.data.RemoteServerConfig
 import dev.dertyp.services.RemoteMirrorService
+import dev.dertyp.services.UserService
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.Parameters
 import io.ktor.server.auth.authenticate
@@ -38,7 +39,8 @@ fun Route.mirrorRouting() {
         userPlaylistIds = this.getAll("userPlaylistIds")?.mapNotNull { it.toUUIDOrNull() },
         likedByUserIds = this.getAll("likedByUserIds")?.mapNotNull { it.toUUIDOrNull() },
         useProxy = this["useProxy"] == "true",
-        proxyInstanceId = this["proxyInstanceId"]
+        proxyInstanceId = this["proxyInstanceId"],
+        targetUserId = this["targetUserId"]?.toUUIDOrNull()
     )
 
     route("/admin/mirror") {
@@ -185,7 +187,15 @@ fun Route.mirrorRouting() {
                                                 }
                                             }
                                             div {
-                                                label("block text-sm font-medium text-slate-400 mb-1.5") { +"Quality" }
+                                                div("flex items-center gap-2 mb-1.5") {
+                                                    label("block text-sm font-medium text-slate-400") { +"Quality" }
+                                                    div("group relative cursor-help") {
+                                                        unsafe { +"""<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-slate-500 hover:text-amber-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>""" }
+                                                        div("absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-3 bg-zinc-900 text-xs text-slate-300 rounded-xl shadow-2xl border border-zinc-800 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-[60] font-normal normal-case") {
+                                                            +"Determines the audio quality of the mirrored songs. 'Source' will mirror the original file without transcoding."
+                                                        }
+                                                    }
+                                                }
                                                 div("custom-select") {
                                                     id = "quality-select"
                                                     input(type = InputType.hidden) { id = "quality"; value = "-1" }
@@ -235,7 +245,15 @@ fun Route.mirrorRouting() {
                                         div("hidden space-y-4 pt-2 border-t border-zinc-800") {
                                             id = "proxy-fields"
                                             div {
-                                                label("block text-sm font-medium text-slate-400 mb-1.5") { +"Proxy Instance" }
+                                                div("flex items-center gap-2 mb-1.5") {
+                                                    label("block text-sm font-medium text-slate-400") { +"Proxy Instance" }
+                                                    div("group relative cursor-help") {
+                                                        unsafe { +"""<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-slate-500 hover:text-amber-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>""" }
+                                                        div("absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-3 bg-zinc-900 text-xs text-slate-300 rounded-xl shadow-2xl border border-zinc-800 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-[60] font-normal normal-case") {
+                                                            +"If using a proxy, select which instance to route the traffic through."
+                                                        }
+                                                    }
+                                                }
                                                 div("flex gap-2") {
                                                     div("custom-select flex-1") {
                                                         id = "proxy-instance-select"
@@ -254,6 +272,31 @@ fun Route.mirrorRouting() {
                                                         attributes["onclick"] = "fetchInstances()"
                                                         unsafe { +"""<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>""" }
                                                     }
+                                                }
+                                            }
+                                        }
+
+                                        div {
+                                            div("flex items-center gap-2 mb-1.5") {
+                                                label("block text-sm font-medium text-slate-400") { +"Target Local User" }
+                                                div("group relative cursor-help") {
+                                                    unsafe { +"""<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-slate-500 hover:text-amber-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>""" }
+                                                    div("absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-3 bg-zinc-900 text-xs text-slate-300 rounded-xl shadow-2xl border border-zinc-800 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-[60] font-normal normal-case") {
+                                                        +"Selecting a local user here will map all imported data (like playlists or likes) to the chosen local user instead of the user who originally created them on the remote instance."
+                                                    }
+                                                }
+                                            }
+                                            div("custom-select") {
+                                                id = "target-user-select"
+                                                input(type = InputType.hidden) { id = "target-user-id"; value = "" }
+                                                div("select-trigger") {
+                                                    attributes["onclick"] = "toggleSelect(this)"
+                                                    span { +"Select local user (optional)..." }
+                                                    unsafe { +"""<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>""" }
+                                                }
+                                                div("select-options custom-scrollbar") {
+                                                    id = "target-user-options"
+                                                    div("select-option selected") { attributes["data-value"] = ""; attributes["onclick"] = "selectOption(this)"; +"None" }
                                                 }
                                             }
                                         }
@@ -317,7 +360,8 @@ fun Route.mirrorRouting() {
                                                     "Mirroring Albums",
                                                     "Mirroring Songs",
                                                     "Mirroring Playlists",
-                                                    "Mirroring User Playlists"
+                                                    "Mirroring User Playlists",
+                                                    "Syncing User Preferences"
                                                 )
                                                 stages.forEachIndexed { index, stage ->
                                                     div("flex items-center gap-3 p-2 rounded-lg bg-zinc-800/30 border border-zinc-700/20 text-sm") {
@@ -552,6 +596,19 @@ fun Route.mirrorRouting() {
                     call.respond(instances)
                 } catch (e: Exception) {
                     call.respond(HttpStatusCode.BadRequest, e.message ?: "Failed to fetch instances")
+                }
+            }
+
+            get("/local-users") {
+                val user = call.getUser() ?: return@get call.respond(HttpStatusCode.Unauthorized)
+                if (!user.isAdmin) return@get call.respond(HttpStatusCode.Forbidden)
+
+                val userService by inject<UserService>()
+                try {
+                    val users = userService.queryUser().map { it.copy(passwordHash = "") }
+                    call.respond(users)
+                } catch (e: Exception) {
+                    call.respond(HttpStatusCode.BadRequest, e.message ?: "Failed to fetch local users")
                 }
             }
 

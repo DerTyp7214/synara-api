@@ -114,7 +114,33 @@ function getFormData() {
     const likedUsers = document.querySelectorAll('#user-liked-selection input:checked');
     likedUsers.forEach(cb => data.append('likedByUserIds', cb.value));
 
+    data.append('targetUserId', document.getElementById('target-user-id').value);
+
     return data;
+}
+
+async function fetchLocalUsers() {
+    const optionsContainer = document.getElementById('target-user-options');
+    const trigger = document.querySelector('#target-user-select .select-trigger span');
+
+    try {
+        const response = await apiFetch('/admin/mirror/local-users');
+        if (!response.ok) throw new Error(await response.text());
+
+        const users = await response.json();
+
+        // Clear except first (None)
+        const noneOption = optionsContainer.firstElementChild;
+        optionsContainer.innerHTML = '';
+        optionsContainer.appendChild(noneOption);
+
+        users.forEach(user => {
+            const opt = createCustomOption(user.id, user.username);
+            optionsContainer.appendChild(opt);
+        });
+    } catch (e) {
+        console.error("Local users fetch failed", e);
+    }
 }
 
 function toggleProxyFields(show) {
@@ -508,7 +534,8 @@ function updateProgress(progress) {
         "Mirroring Albums",
         "Mirroring Songs",
         "Mirroring Playlists",
-        "Mirroring User Playlists"
+        "Mirroring User Playlists",
+        "Syncing User Preferences"
     ];
 
     let currentTaskIndex = stages.indexOf(progress.currentTask);
@@ -631,6 +658,7 @@ function setupSSE() {
     evtSource.onerror = (e) => {
         console.error("SSE Error", e);
     };
+    fetchLocalUsers();
 }
 
 if (hasAuth()) {

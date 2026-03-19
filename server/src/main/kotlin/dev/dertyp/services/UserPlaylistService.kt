@@ -221,12 +221,12 @@ class UserPlaylistService : IUserPlaylistService, Service() {
         }.sortedByDescending { it.modifiedAt }
     }
 
-    suspend fun upsertUserPlaylist(playlist: UserPlaylist) = dbQuery {
+    suspend fun upsertUserPlaylist(playlist: UserPlaylist, creatorOverride: UUID? = null) = dbQuery {
         UserPlaylistTable.upsert(UserPlaylistTable.id) {
             it[id] = playlist.id
             it[name] = playlist.name
             it[imageId] = playlist.imageId?.let { imgId -> EntityID(imgId, ImageTable) }
-            it[creator] = EntityID(playlist.creator, UserTable)
+            it[creator] = EntityID(creatorOverride ?: playlist.creator, UserTable)
             it[description] = playlist.description
             it[origin] = playlist.origin
         }
