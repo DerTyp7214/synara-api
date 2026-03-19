@@ -14,6 +14,8 @@ import io.ktor.http.HttpHeaders
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.rpc.krpc.ktor.client.Krpc
 import kotlinx.rpc.krpc.ktor.client.rpc
 import kotlinx.rpc.krpc.serialization.cbor.cbor
@@ -348,6 +350,9 @@ class RemoteMirrorService : Service() {
                 var syncedImages = 0
                 var syncedPlaylists = 0
                 var syncedUserPlaylists = 0
+                var syncedErrors = 0
+                val failedItemNames = mutableListOf<String>()
+                val progressMutex = Mutex()
 
                 fun updateProgress(
                     task: String,
@@ -357,7 +362,8 @@ class RemoteMirrorService : Service() {
                     itemProgress: Float? = null,
                     byteCount: Long? = null,
                     newStatus: String? = null,
-                    isFinished: Boolean = false
+                    isFinished: Boolean = false,
+                    error: String? = null
                 ) {
                     val now = System.currentTimeMillis()
                     if (lastTask != task) {
@@ -418,7 +424,7 @@ class RemoteMirrorService : Service() {
                             processed,
                             total,
                             isFinished,
-                            null,
+                            error,
                             item,
                             itemProgress,
                             speedStr,
@@ -430,7 +436,9 @@ class RemoteMirrorService : Service() {
                                 albums = syncedAlbums,
                                 images = syncedImages,
                                 playlists = syncedPlaylists,
-                                userPlaylists = syncedUserPlaylists
+                                userPlaylists = syncedUserPlaylists,
+                                errors = syncedErrors,
+                                failedItems = failedItemNames.toList()
                             ) else null
                         )
                     _activeProgress.value = progress
@@ -558,17 +566,25 @@ class RemoteMirrorService : Service() {
                         }
                     }
                 }.collect { (remoteImage: Image, exists: Boolean) ->
-                    if (!exists) {
-                        logger.debug(
-                            "Downloading image {} (Hash: {})",
-                            remoteImage.id,
-                            remoteImage.imageHash
-                        )
-                        val imageData = remoteImageService.getImageData(remoteImage.id, 0)
-                        yield()
-                        if (imageData != null) {
-                            imageService.upsertImage(remoteImage, imageData)
-                            syncedImages++
+                    try {
+                        if (!exists) {
+                            logger.debug(
+                                "Downloading image {} (Hash: {})",
+                                remoteImage.id,
+                                remoteImage.imageHash
+                            )
+                            val imageData = remoteImageService.getImageData(remoteImage.id, 0)
+                            yield()
+                            if (imageData != null) {
+                                imageService.upsertImage(remoteImage, imageData)
+                                syncedImages++
+                            }
+                        }
+                    } catch (e: Exception) {
+                        logger.error("Failed to mirror image ${remoteImage.id}: ${e.message}", e)
+                        progressMutex.withLock {
+                            syncedErrors++
+                            failedItemNames.add("Image ${remoteImage.imageHash} (${remoteImage.id})")
                         }
                     }
                     imageCount++
@@ -600,9 +616,17 @@ class RemoteMirrorService : Service() {
                 val artistsFlow = if (isFiltered) mirrorService.getArtists()
                     .filter { it.id in requiredArtistIds } else mirrorService.getArtists()
                 artistsFlow.collect { artist: Artist ->
-                    artistService.upsertArtist(artist)
+                    try {
+                        artistService.upsertArtist(artist)
+                        syncedArtists++
+                    } catch (e: Exception) {
+                        logger.error("Failed to mirror artist ${artist.name}: ${e.message}", e)
+                        progressMutex.withLock {
+                            syncedErrors++
+                            failedItemNames.add("Artist ${artist.name}")
+                        }
+                    }
                     artistCount++
-                    syncedArtists++
                     if (artistCount % 10 == 0) {
                         updateProgress(
                             "Mirroring Artists",
@@ -628,7 +652,15 @@ class RemoteMirrorService : Service() {
                 val artistAliasesFlow = if (isFiltered) mirrorService.getArtistAliases()
                     .filter { it.artistId in requiredArtistIds } else mirrorService.getArtistAliases()
                 artistAliasesFlow.collect { alias: ArtistAlias ->
-                    artistService.upsertArtistAlias(alias)
+                    try {
+                        artistService.upsertArtistAlias(alias)
+                    } catch (e: Exception) {
+                        logger.error("Failed to mirror artist alias ${alias.name}: ${e.message}", e)
+                        progressMutex.withLock {
+                            syncedErrors++
+                            failedItemNames.add("Artist Alias ${alias.name}")
+                        }
+                    }
                     aliasCount++
                     if (aliasCount % 50 == 0) {
                         updateProgress(
@@ -650,7 +682,15 @@ class RemoteMirrorService : Service() {
                 val artistSplitAliasesFlow = if (isFiltered) mirrorService.getArtistSplitAliases()
                     .filter { it.artistId in requiredArtistIds } else mirrorService.getArtistSplitAliases()
                 artistSplitAliasesFlow.collect { alias: ArtistSplitAlias ->
-                    artistService.upsertArtistSplitAlias(alias)
+                    try {
+                        artistService.upsertArtistSplitAlias(alias)
+                    } catch (e: Exception) {
+                        logger.error("Failed to mirror artist split alias ${alias.name}: ${e.message}", e)
+                        progressMutex.withLock {
+                            syncedErrors++
+                            failedItemNames.add("Artist Split Alias ${alias.name}")
+                        }
+                    }
                     splitAliasCount++
                     if (splitAliasCount % 50 == 0) {
                         updateProgress(
@@ -673,9 +713,17 @@ class RemoteMirrorService : Service() {
                 val albumsFlow = if (isFiltered) mirrorService.getAlbums()
                     .filter { it.id in requiredAlbumIds } else mirrorService.getAlbums()
                 albumsFlow.collect { album: Album ->
-                    albumService.upsertAlbum(album)
+                    try {
+                        albumService.upsertAlbum(album)
+                        syncedAlbums++
+                    } catch (e: Exception) {
+                        logger.error("Failed to mirror album ${album.name}: ${e.message}", e)
+                        progressMutex.withLock {
+                            syncedErrors++
+                            failedItemNames.add("Album ${album.name}")
+                        }
+                    }
                     albumCount++
-                    syncedAlbums++
                     if (albumCount % 10 == 0) {
                         updateProgress(
                             "Mirroring Albums",
@@ -711,79 +759,107 @@ class RemoteMirrorService : Service() {
                         else remoteSongService.getDownloadSize(song.id, config.quality)
                         emit(song to expectedSize)
                     }
-                }.buffer(1024).collect { (song, expectedSize) ->
-                    val localPathString =
-                        resolveLocalPath(song.path, song.id.toString(), config.quality)
-                    val localPath = Path(localPathString)
-                    val songDisplayName =
-                        "${song.artists.firstOrNull()?.name ?: "Unknown"} - ${song.title}"
+                }.buffer(2048).flatMapMerge(concurrency = 5) { (song, expectedSize) ->
+                    flow {
+                        val songDisplayName =
+                            "${song.artists.firstOrNull()?.name ?: "Unknown"} - ${song.title}"
+                        try {
+                            val localPathString =
+                                resolveLocalPath(song.path, song.id.toString(), config.quality)
+                            val localPath = Path(localPathString)
 
-                    logger.debug(
-                        "Syncing song: {} (ID: {}, Target: {}, Expected size: {} bytes)",
-                        songDisplayName,
-                        song.id,
-                        localPathString,
-                        expectedSize
-                    )
+                            logger.debug(
+                                "Syncing song: {} (ID: {}, Target: {}, Expected size: {} bytes)",
+                                songDisplayName,
+                                song.id,
+                                localPathString,
+                                expectedSize
+                            )
 
-                    val localFile = File(localPathString)
-                    val isAlreadyComplete =
-                        localFile.exists() && expectedSize > 0 && localFile.length() == expectedSize
+                            val localFile = File(localPathString)
+                            val isAlreadyComplete =
+                                localFile.exists() && expectedSize > 0 && localFile.length() == expectedSize
 
-                    if (isAlreadyComplete) {
-                        logger.info(
-                            "Song already exists and is complete, skipping download: {}",
-                            songDisplayName
-                        )
-                    } else {
-                        localPath.parent.toFile().mkdirs()
-                        localPath.outputStream().use { output ->
-                            var downloadedInSong = 0L
-                            logger.info("Downloading {}", songDisplayName)
-                            mirrorService.getSongData(song.id, config.quality, 64 * 1024)
-                                .collect { chunk ->
-                                    withContext(Dispatchers.IO) {
-                                        output.write(chunk)
-                                        delay(1.nanoseconds)
-                                        yield()
-                                    }
-                                    downloadedInSong += chunk.size
-                                    totalBytesSynced += chunk.size
+                            if (isAlreadyComplete) {
+                                logger.info(
+                                    "Song already exists and is complete, skipping download: {}",
+                                    songDisplayName
+                                )
+                            } else {
+                                localPath.parent.toFile().mkdirs()
+                                localPath.outputStream().use { output ->
+                                    var downloadedInSong = 0L
+                                    logger.info("Downloading {}", songDisplayName)
+                                    mirrorService.getSongData(song.id, config.quality, 64 * 1024)
+                                        .collect { chunk ->
+                                            withContext(Dispatchers.IO) {
+                                                output.write(chunk)
+                                                delay(1.nanoseconds)
+                                                yield()
+                                            }
+                                            downloadedInSong += chunk.size
 
-                                    if (downloadedInSong % (256 * 1024) > chunk.size) {
-                                        val itemProgress = if (expectedSize > 0) {
-                                            downloadedInSong.toFloat() / expectedSize
-                                        } else null
+                                            val needsProgressUpdate = progressMutex.withLock {
+                                                totalBytesSynced += chunk.size
+                                                downloadedInSong % (256 * 1024) > chunk.size
+                                            }
 
-                                        delay(1.nanoseconds)
-                                        updateProgress(
-                                            "Mirroring Songs",
-                                            songCount,
-                                            totalSongs,
-                                            songDisplayName,
-                                            itemProgress,
-                                            totalBytesSynced
-                                        )
-                                    }
+                                            if (needsProgressUpdate) {
+                                                val itemProgress = if (expectedSize > 0) {
+                                                    downloadedInSong.toFloat() / expectedSize
+                                                } else null
+
+                                                delay(1.nanoseconds)
+                                                progressMutex.withLock {
+                                                    updateProgress(
+                                                        "Mirroring Songs",
+                                                        songCount,
+                                                        totalSongs,
+                                                        songDisplayName,
+                                                        itemProgress,
+                                                        totalBytesSynced
+                                                    )
+                                                }
+                                            }
+                                        }
                                 }
+                                progressMutex.withLock { syncedSongs++ }
+                            }
+
+                            songService.upsertSong(song.copy(path = localPathString))
+
+                            progressMutex.withLock {
+                                songCount++
+                                updateProgress(
+                                    "Mirroring Songs",
+                                    songCount,
+                                    totalSongs,
+                                    songDisplayName,
+                                    1.0f,
+                                    totalBytesSynced
+                                )
+                            }
+                        } catch (e: Exception) {
+                            logger.error("Failed to mirror song \"$songDisplayName\": ${e.message}", e)
+                            progressMutex.withLock {
+                                syncedErrors++
+                                failedItemNames.add(songDisplayName)
+                                songCount++
+                                updateProgress(
+                                    "Mirroring Songs",
+                                    songCount,
+                                    totalSongs,
+                                    songDisplayName,
+                                    1.0f,
+                                    totalBytesSynced
+                                )
+                            }
                         }
-                        syncedSongs++
+                        delay(1.nanoseconds)
+                        yield()
+                        emit(Unit)
                     }
-
-                    songService.upsertSong(song.copy(path = localPathString))
-
-                    songCount++
-                    updateProgress(
-                        "Mirroring Songs",
-                        songCount,
-                        totalSongs,
-                        songDisplayName,
-                        1.0f,
-                        totalBytesSynced
-                    )
-                    delay(1.nanoseconds)
-                    yield()
-                }
+                }.collect()
                 logger.info("Song synchronization finished (Processed: $songCount, Total bytes: $totalBytesSynced)")
                 updateProgress("Mirroring Songs", totalSongs, totalSongs)
 
@@ -806,9 +882,17 @@ class RemoteMirrorService : Service() {
                 )
                 var playlistCount = 0
                 playlistsToSyncFlow.collect { playlist: Playlist ->
-                    playlistService.upsertPlaylist(playlist)
+                    try {
+                        playlistService.upsertPlaylist(playlist)
+                        syncedPlaylists++
+                    } catch (e: Exception) {
+                        logger.error("Failed to mirror playlist ${playlist.name}: ${e.message}", e)
+                        progressMutex.withLock {
+                            syncedErrors++
+                            failedItemNames.add("Playlist ${playlist.name}")
+                        }
+                    }
                     playlistCount++
-                    syncedPlaylists++
                     updateProgress(
                         "Mirroring Playlists",
                         playlistCount,
@@ -841,9 +925,17 @@ class RemoteMirrorService : Service() {
                 )
                 var userPlaylistCount = 0
                 userPlaylistsToSyncFlow.collect { playlist: UserPlaylist ->
-                    userPlaylistService.upsertUserPlaylist(playlist, config.targetUserId)
+                    try {
+                        userPlaylistService.upsertUserPlaylist(playlist, config.targetUserId)
+                        syncedUserPlaylists++
+                    } catch (e: Exception) {
+                        logger.error("Failed to mirror user playlist ${playlist.name}: ${e.message}", e)
+                        progressMutex.withLock {
+                            syncedErrors++
+                            failedItemNames.add("User Playlist ${playlist.name}")
+                        }
+                    }
                     userPlaylistCount++
-                    syncedUserPlaylists++
                     updateProgress(
                         "Mirroring User Playlists",
                         userPlaylistCount,
@@ -910,14 +1002,25 @@ class RemoteMirrorService : Service() {
                     }
                 }
 
+                val finalStatus = if (syncedErrors > 0) {
+                    "Mirror operation from ${config.host} finished with $syncedErrors errors."
+                } else {
+                    "Mirror operation from ${config.host} successfully completed."
+                }
+                
+                val finalError = if (syncedErrors > 0) {
+                    "Completed with $syncedErrors errors. Failed items: ${failedItemNames.take(3).joinToString(", ")}${if (failedItemNames.size > 3) "..." else ""}"
+                } else null
+
                 updateProgress(
                     "Mirror complete",
                     totalSongs,
                     totalSongs,
                     isFinished = true,
-                    newStatus = "Mirror operation from ${config.host} successfully completed."
+                    newStatus = finalStatus,
+                    error = finalError
                 )
-                logger.info("Mirror operation from ${config.host} successfully completed.")
+                logger.info(finalStatus)
     }
 
     @OptIn(ExperimentalSerializationApi::class)

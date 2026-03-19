@@ -2,7 +2,7 @@ type: http_request
 model: http_request
 id: rq_c2aQ3V9qzz
 createdAt: 2025-10-14T19:25:16.450619051
-updatedAt: 2026-03-10T09:45:05.412573161
+updatedAt: 2026-03-19T20:23:24.677869011
 workspaceId: wk_9dbKacQT4H
 folderId: fl_QrUoFyttZM
 authentication: {}
@@ -39,9 +39,9 @@ urlParameters:
   id: Cqh8H4cRV7
 - enabled: true
   name: :query
-  value: SELFIE STICK (ANTHEM)
+  value: John Murphy - Mantis Reveals Her Secret
   id: zXFn5dePsN
 - enabled: true
   name: ''
   value: ''
-  id: 996WYs2M0q
+  id: saCm89qjA5

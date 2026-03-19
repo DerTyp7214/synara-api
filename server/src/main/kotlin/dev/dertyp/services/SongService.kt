@@ -19,6 +19,7 @@ import dev.dertyp.utils.LogParam
 import io.ktor.server.application.ApplicationEnvironment
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
+import kotlinx.io.IOException
 import org.jaudiotagger.audio.AudioFileIO
 import org.jaudiotagger.tag.FieldKey
 import org.jetbrains.exposed.v1.core.*
@@ -553,11 +554,9 @@ class SongService : Service() {
                 AudioUtils.insertTranscodedSong(id, it.file, quality)
             }
 
-            val tempFile = File.createTempFile("stream_${id}_", ".ogg")
             try {
-                streamInfo.file.copyTo(tempFile, overwrite = true)
                 val buffer = ByteArray(chunkSize)
-                tempFile.inputStream().use { input ->
+                streamInfo.file.inputStream().use { input ->
                     input.skip(offset)
                     var bytesRead = input.read(buffer)
                     while (bytesRead != -1) {
@@ -565,8 +564,11 @@ class SongService : Service() {
                         bytesRead = input.read(buffer)
                     }
                 }
-            } finally {
-                tempFile.delete()
+            } catch (e: IOException) {
+                if (streamInfo.file.exists()) {
+                    streamInfo.file.delete()
+                }
+                throw e
             }
         }.flowOn(Dispatchers.IO)
     }

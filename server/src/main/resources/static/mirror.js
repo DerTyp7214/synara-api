@@ -537,6 +537,10 @@ function updateProgress(progress) {
         log.innerText = progress.statusMessage;
     }
 
+    if (progress.syncBreakdown) {
+        showSyncSummary(progress.syncBreakdown);
+    }
+
     if (progress.currentItem) {
         itemContainer.classList.remove('hidden');
         currentItemText.innerText = progress.currentItem;
@@ -630,10 +634,6 @@ function updateProgress(progress) {
             task.innerText = progress.error === "Stopped" ? "Mirror Stopped" : "Mirror Synchronized";
             task.classList.add('text-emerald-400');
             log.innerText = progress.error === "Stopped" ? "Mirror stopped." : "All data synchronized successfully.";
-
-            if (!progress.error && progress.syncBreakdown) {
-                showSyncSummary(progress.syncBreakdown);
-            }
         }
     }
 }
@@ -641,6 +641,10 @@ function updateProgress(progress) {
 function showSyncSummary(breakdown) {
     const summary = document.getElementById('sync-summary');
     const grid = document.getElementById('summary-grid');
+    const failedContainer = document.getElementById('failed-items-container');
+    const failedList = document.getElementById('failed-items-list');
+    const icon = document.getElementById('summary-icon');
+
     grid.innerHTML = '';
 
     const items = [
@@ -649,20 +653,38 @@ function showSyncSummary(breakdown) {
         { label: 'Artists', value: breakdown.artists },
         { label: 'Images', value: breakdown.images },
         { label: 'Playlists', value: breakdown.playlists },
-        { label: 'User Playlists', value: breakdown.userPlaylists }
+        { label: 'User Playlists', value: breakdown.userPlaylists },
+        { label: 'Errors', value: breakdown.errors, isError: true }
     ];
 
     items.forEach(item => {
         if (item.value > 0) {
             const div = document.createElement('div');
-            div.className = 'flex justify-between items-center bg-zinc-800/30 px-3 py-2 rounded-lg border border-zinc-700/20';
+            div.className = `flex justify-between items-center bg-zinc-800/30 px-3 py-2 rounded-lg border border-zinc-700/20 ${item.isError ? 'border-red-500/20' : ''}`;
             div.innerHTML = `
-                <span class="text-[10px] uppercase font-bold text-slate-500">${item.label}</span>
-                <span class="text-sm font-mono text-amber-400">${item.value}</span>
+                <span class="text-[10px] uppercase font-bold ${item.isError ? 'text-red-500' : 'text-slate-500'}">${item.label}</span>
+                <span class="text-sm font-mono ${item.isError ? 'text-red-400' : 'text-amber-400'}">${item.value}</span>
             `;
             grid.appendChild(div);
         }
     });
+
+    if (breakdown.errors > 0 && breakdown.failedItems && breakdown.failedItems.length > 0) {
+        failedContainer.classList.remove('hidden');
+        failedList.innerHTML = breakdown.failedItems.map(item => `
+            <div class="flex gap-2 py-1 border-b border-zinc-800 last:border-0">
+                <span class="text-red-500 select-none">•</span>
+                <span class="custom-scrollbar">${item}</span>
+            </div>
+        `).join('');
+
+        icon.classList.remove('text-emerald-400');
+        icon.classList.add('text-amber-400');
+    } else {
+        failedContainer.classList.add('hidden');
+        icon.classList.remove('text-amber-400');
+        icon.classList.add('text-emerald-400');
+    }
 
     if (grid.children.length > 0) {
         summary.classList.remove('hidden');
