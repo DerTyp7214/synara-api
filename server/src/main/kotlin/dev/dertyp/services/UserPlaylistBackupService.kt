@@ -1,5 +1,6 @@
 package dev.dertyp.services
 
+import dev.dertyp.data.BackupImage
 import dev.dertyp.data.User
 import dev.dertyp.data.UserPlaylistBackup
 import dev.dertyp.serializers.AppJson
@@ -28,10 +29,19 @@ class RpcUserPlaylistBackupService(
     override suspend fun restoreBackup(fileName: String?) {
         userPlaylistBackupService.restoreBackup(user, fileName)
     }
+
+    override suspend fun getBackupContent(fileName: String): UserPlaylistBackup? {
+        return userPlaylistBackupService.getBackupContent(user, fileName)
+    }
+
+    override suspend fun deleteBackup(fileName: String) {
+        userPlaylistBackupService.deleteBackup(user, fileName)
+    }
 }
 
 class UserPlaylistBackupService(
     private val userPlaylistService: UserPlaylistService,
+    private val imageService: ImageService,
     environment: ApplicationEnvironment
 ) : Service() {
     private val backupDir =
@@ -48,7 +58,17 @@ class UserPlaylistBackupService(
     suspend fun createBackup(user: User) = withContext(Dispatchers.IO) {
         logger.info("Creating user playlist backup for user: ${user.username} (${user.id})")
         val playlists = userPlaylistService.allPlaylistsFlow(user.id).toList()
-        val backup = UserPlaylistBackup(user.id, playlists)
+
+        val imageIds = playlists.mapNotNull { it.imageId }.distinct()
+        val images = imageIds.mapNotNull { id ->
+            val image = imageService.byId(id)
+            val data = imageService.getImageData(id, 0)
+            if (image != null && data != null) {
+                BackupImage(image, data)
+            } else null
+        }
+
+        val backup = UserPlaylistBackup(user.id, playlists, images)
 
         val timestamp = LocalDateTime.now()
             .format(DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss"))
@@ -110,9 +130,30 @@ class UserPlaylistBackupService(
         logger.info("Restoring user playlist backup from ${backupFile.name} for user: ${user.username} (${user.id})")
         val backup = AppJson.decodeFromString<UserPlaylistBackup>(backupFile.readText())
 
+        backup.images?.forEach { backupImage ->
+            imageService.upsertImage(backupImage.image, backupImage.data)
+        }
+
         backup.playlists.forEach { playlist ->
             userPlaylistService.upsertUserPlaylist(playlist, creatorOverride = user.id)
         }
         logger.info("Restored ${backup.playlists.size} playlists for user: ${user.id}")
+    }
+
+    suspend fun getBackupContent(user: User, fileName: String): UserPlaylistBackup? = withContext(Dispatchers.IO) {
+        val file = File(backupDir, fileName)
+        if (!file.exists() || !file.name.startsWith("playlists-${user.id}")) {
+            return@withContext null
+        }
+        logger.info("Reading backup content from ${file.name} for user: ${user.id}")
+        AppJson.decodeFromString<UserPlaylistBackup>(file.readText())
+    }
+
+    suspend fun deleteBackup(user: User, fileName: String) = withContext(Dispatchers.IO) {
+        val file = File(backupDir, fileName)
+        if (file.exists() && file.name.startsWith("playlists-${user.id}")) {
+            logger.info("Deleting user playlist backup ${file.name} for user: ${user.id}")
+            file.delete()
+        }
     }
 }
