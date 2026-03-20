@@ -2,11 +2,11 @@ package dev.dertyp.services
 
 import dev.dertyp.data.User
 import dev.dertyp.data.UserPlaylistBackup
+import dev.dertyp.serializers.AppJson
 import io.ktor.server.application.ApplicationEnvironment
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.json.Json
 import org.koin.core.component.inject
 import java.io.File
 import java.nio.file.Paths
@@ -49,13 +49,12 @@ class UserPlaylistBackupService(
         logger.info("Creating user playlist backup for user: ${user.username} (${user.id})")
         val playlists = userPlaylistService.allPlaylistsFlow(user.id).toList()
         val backup = UserPlaylistBackup(user.id, playlists)
-        val json = Json { prettyPrint = true }
 
         val timestamp = LocalDateTime.now()
             .format(DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss"))
         val backupFile = File(backupDir, "playlists-${user.id}-$timestamp.json")
 
-        backupFile.writeText(json.encodeToString(backup))
+        backupFile.writeText(AppJson.encodeToString(backup))
         logger.info("Backup created: ${backupFile.absolutePath}")
         rotateBackups(user)
     }
@@ -109,8 +108,7 @@ class UserPlaylistBackupService(
         }
 
         logger.info("Restoring user playlist backup from ${backupFile.name} for user: ${user.username} (${user.id})")
-        val json = Json { ignoreUnknownKeys = true }
-        val backup = json.decodeFromString<UserPlaylistBackup>(backupFile.readText())
+        val backup = AppJson.decodeFromString<UserPlaylistBackup>(backupFile.readText())
 
         backup.playlists.forEach { playlist ->
             userPlaylistService.upsertUserPlaylist(playlist, creatorOverride = user.id)
