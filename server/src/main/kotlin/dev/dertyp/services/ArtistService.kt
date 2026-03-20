@@ -337,7 +337,9 @@ class ArtistService : IArtistService, Service() {
         }
     }
 
-    suspend fun getOrBulkCreate(artistNames: List<String>): Map<String, List<UUID>> {
+    data class BulkCreateResult(val nameToIds: Map<String, List<UUID>>, val newlyCreated: Set<String>)
+
+    suspend fun getOrBulkCreateWithResult(artistNames: List<String>): BulkCreateResult {
         val existingSplits = dbQuery {
             ArtistSplitAliasTable
                 .select(ArtistSplitAliasTable.name, ArtistSplitAliasTable.artistId)
@@ -391,8 +393,10 @@ class ArtistService : IArtistService, Service() {
 
         val newMap = newRows.associate { it[ArtistTable.name] to listOf(it[ArtistTable.id].value) }
 
-        return existingSplits + existingMap + newMap
+        return BulkCreateResult(existingSplits + existingMap + newMap, newNames.toSet())
     }
+
+    suspend fun getOrBulkCreate(artistNames: List<String>): Map<String, List<UUID>> = getOrBulkCreateWithResult(artistNames).nameToIds
 
     suspend fun deleteUnreferencedArtists() = dbQuery {
         val referencedArtists = mutableSetOf<UUID>()

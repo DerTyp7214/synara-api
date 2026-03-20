@@ -22,8 +22,7 @@ import io.ktor.server.routing.route
 import io.ktor.server.sse.sse
 import io.ktor.sse.ServerSentEvent
 import kotlinx.coroutines.FlowPreview
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.conflate
 import kotlinx.html.*
 import org.koin.ktor.ext.inject
 import kotlin.time.Duration.Companion.days
@@ -766,10 +765,9 @@ fun Route.mirrorRouting() {
                 val user = call.getUser() ?: return@sse call.respond(HttpStatusCode.Unauthorized)
                 if (!user.isAdmin) return@sse call.respond(HttpStatusCode.Forbidden)
 
-                remoteMirrorService.getActiveMirrorProgress()?.debounce(20)
-                    ?.collectLatest { progress ->
-                        send(ServerSentEvent(data = ApplicationScope.json.encodeToString(progress)))
-                    }
+                remoteMirrorService.getActiveMirrorProgress()?.conflate()?.collect { progress ->
+                    send(ServerSentEvent(data = ApplicationScope.json.encodeToString(progress)))
+                }
             }
         }
     }

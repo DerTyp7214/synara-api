@@ -649,22 +649,31 @@ function showSyncSummary(breakdown) {
     grid.innerHTML = '';
 
     const items = [
-        { label: 'Songs', value: breakdown.songs },
-        { label: 'Albums', value: breakdown.albums },
-        { label: 'Artists', value: breakdown.artists },
-        { label: 'Images', value: breakdown.images },
-        { label: 'Playlists', value: breakdown.playlists },
-        { label: 'User Playlists', value: breakdown.userPlaylists },
+        { label: 'Songs', value: breakdown.songs, existing: breakdown.existingSongs },
+        { label: 'Albums', value: breakdown.albums, existing: breakdown.existingAlbums },
+        { label: 'Artists', value: breakdown.artists, existing: breakdown.existingArtists },
+        { label: 'Images', value: breakdown.images, existing: breakdown.existingImages },
+        { label: 'Playlists', value: breakdown.playlists, existing: breakdown.existingPlaylists },
+        { label: 'User PLs', value: breakdown.userPlaylists, existing: breakdown.existingUserPlaylists },
         { label: 'Errors', value: breakdown.errors, isError: true }
     ];
 
     items.forEach(item => {
-        if (item.value > 0) {
+        if (item.value > 0 || (item.existing > 0)) {
             const div = document.createElement('div');
-            div.className = `flex justify-between items-center bg-zinc-800/30 px-3 py-2 rounded-lg border border-zinc-700/20 ${item.isError ? 'border-red-500/20' : ''}`;
+            div.className = `flex flex-col gap-1 bg-zinc-800/30 p-2.5 rounded-xl border border-zinc-700/20 ${item.isError ? 'border-red-500/20' : ''}`;
+
+            let existingText = '';
+            if (item.existing > 0) {
+                existingText = `<span class="text-[10px] text-slate-500 font-medium whitespace-nowrap">+${item.existing} existing</span>`;
+            }
+
             div.innerHTML = `
-                <span class="text-[10px] uppercase font-bold ${item.isError ? 'text-red-500' : 'text-slate-500'}">${item.label}</span>
-                <span class="text-sm font-mono ${item.isError ? 'text-red-400' : 'text-amber-400'}">${item.value}</span>
+                <span class="text-[9px] uppercase font-bold tracking-widest leading-none ${item.isError ? 'text-red-500' : 'text-slate-500'}">${item.label}</span>
+                <div class="flex items-baseline justify-between mt-0.5">
+                    <span class="text-lg font-mono leading-none ${item.isError ? 'text-red-400' : 'text-amber-400'}">${item.value || 0}</span>
+                    ${existingText}
+                </div>
             `;
             grid.appendChild(div);
         }

@@ -250,8 +250,10 @@ class AlbumService : IAlbumService, Service() {
         }
     }
 
-    suspend fun getOrBulkCreate(albums: List<InsertableAlbum>): Map<InsertableAlbum, UUID> {
-        if (albums.isEmpty()) return emptyMap()
+    data class BulkCreateAlbumResult(val albumToIds: Map<InsertableAlbum, UUID>, val newlyCreated: Set<InsertableAlbum>)
+
+    suspend fun getOrBulkCreateWithResult(albums: List<InsertableAlbum>): BulkCreateAlbumResult {
+        if (albums.isEmpty()) return BulkCreateAlbumResult(emptyMap(), emptySet())
 
         val artistService = get<ArtistService>()
         val imageService = get<ImageService>()
@@ -377,7 +379,7 @@ class AlbumService : IAlbumService, Service() {
 
         val finalCombinedIdMap = finalMatchMap + newAlbumIdLookupMap
 
-        return albums.associateWith { album ->
+        val resultMap = albums.associateWith { album ->
             val key = Quadruple(
                 album.name,
                 getISOFromDate(album.releaseDate),
@@ -386,7 +388,11 @@ class AlbumService : IAlbumService, Service() {
             )
             finalCombinedIdMap[key]
         }.filterValueNotNull()
+
+        return BulkCreateAlbumResult(resultMap, newAlbumsToInsert.toSet())
     }
+
+    suspend fun getOrBulkCreate(albums: List<InsertableAlbum>): Map<InsertableAlbum, UUID> = getOrBulkCreateWithResult(albums).albumToIds
 
     suspend fun deleteEmptyAlbums() = dbQuery {
         val emptyAlbums = AlbumTable
