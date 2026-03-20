@@ -513,8 +513,12 @@ function updateProgress(progress) {
 
     if (progress.isFinished) {
         const isActualError = progress.error && progress.error !== "Stopped";
+        const isPartialSuccess = isActualError && progress.error.includes("Completed with");
 
-        if (isActualError) {
+        if (isPartialSuccess) {
+            statusDot.className = "w-2 h-2 rounded-full bg-emerald-500";
+            statusText.innerText = "Sync Completed";
+        } else if (isActualError) {
             statusDot.className = "w-2 h-2 rounded-full bg-red-500 animate-pulse";
             statusText.innerText = "Sync Error";
         } else {
@@ -624,8 +628,14 @@ function updateProgress(progress) {
 
     if (progress.isFinished) {
         const isActualError = progress.error && progress.error !== "Stopped";
+        const isPartialSuccess = isActualError && progress.error.includes("Completed with");
 
-        if (isActualError) {
+        if (isPartialSuccess) {
+            fill.classList.replace('bg-amber-500', 'bg-emerald-500');
+            task.innerText = "Mirror Completed";
+            task.classList.add('text-emerald-400');
+            log.innerText = progress.error;
+        } else if (isActualError) {
             fill.classList.replace('bg-amber-500', 'bg-red-500');
             task.innerText = "Mirror Failed";
             task.classList.add('text-red-400');

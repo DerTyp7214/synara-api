@@ -447,7 +447,20 @@ class RemoteMirrorService : Service() {
         val flow = if (session.isFiltered) session.mirrorService.getSongs().filter { it.id in session.requiredSongIds } else session.mirrorService.getSongs()
 
         flow.flatMapMerge(16) { song ->
-            flow { emit(song to if (session.config.quality == -1) song.fileSize else session.remoteSongService.getDownloadSize(song.id, session.config.quality)) }
+            flow {
+                try {
+                    val size = if (session.config.quality == -1) song.fileSize
+                    else session.remoteSongService.getDownloadSize(song.id, session.config.quality)
+                    emit(song to size)
+                } catch (e: Exception) {
+                    val displayName = "${song.artists.firstOrNull()?.name} - ${song.title}"
+                    session.recordError(displayName, e)
+                    session.progressMutex.withLock {
+                        session.songCount++
+                        session.updateProgress("Mirroring Songs", session.songCount, total, displayName, 1.0f, session.totalBytesSynced)
+                    }
+                }
+            }
         }.buffer(2048).flatMapMerge(3) { (song, size) ->
             flow {
                 val displayName = "${song.artists.firstOrNull()?.name} - ${song.title}"
