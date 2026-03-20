@@ -157,9 +157,13 @@ object AudioUtils {
             transcodingFile.createNewFile()
 
             try {
-                avutil.av_log_set_level(avutil.AV_LOG_QUIET)
+                avutil.av_log_set_level(avutil.AV_LOG_ERROR)
 
                 val grabber = FFmpegFrameGrabber(flacFile.absolutePath).apply { start() }
+
+                if (grabber.audioChannels <= 0) {
+                    throw IllegalStateException("Invalid audio channels: ${grabber.audioChannels} for file ${flacFile.absolutePath}")
+                }
 
                 val inputMetadata: Map<String, String> = grabber.metadata.toMap()
 
@@ -184,7 +188,12 @@ object AudioUtils {
                         setOption("id3v2_version", "0")
                         setMetadata("encoder", "Lavc-Ogg-Opus")
 
-                        start()
+                        try {
+                            start()
+                        } catch (e: Exception) {
+                            logger.error("FFmpeg recorder failed to start for ${transcodingFile.absolutePath}. grabber.audioChannels=${grabber.audioChannels}, grabber.sampleRate=${grabber.sampleRate}, targetKbps=$targetKbps")
+                            throw e
+                        }
                     }
 
                 var frame = grabber.grabFrame(true, false, true, false)
