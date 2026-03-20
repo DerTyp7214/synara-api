@@ -38,7 +38,6 @@ class RemoteMirrorRpcService(
     }
 
     override suspend fun getRemoteStats(config: RemoteServerConfig): ServerStats {
-        ensureAdmin()
         return remoteMirrorService.getRemoteStats(config)
     }
 
@@ -57,7 +56,7 @@ class RemoteMirrorRpcService(
         remoteMirrorService.resetMirror()
     }
 
-    override fun getActiveMirrorProgress(): Flow<MirrorProgress>? {
+    override fun getActiveMirrorProgress(): Flow<MirrorProgress> {
         ensureAdmin()
         return remoteMirrorService.getActiveMirrorProgress()
     }
@@ -80,6 +79,14 @@ class RemoteMirrorRpcService(
     override suspend fun getProxyInstances(config: RemoteServerConfig): List<ProxyInstanceInfo> {
         ensureAdmin()
         return remoteMirrorService.getProxyInstances(config)
+    }
+
+    override suspend fun getRemoteImageData(
+        config: RemoteServerConfig,
+        imageId: PlatformUUID,
+        size: Int
+    ): ByteArray? {
+        return remoteMirrorService.getRemoteImageData(config, imageId, size)
     }
 }
 
@@ -174,8 +181,8 @@ class RemoteMirrorService : Service() {
         _activeProgress.value = null
     }
 
-    fun getActiveMirrorProgress(): Flow<MirrorProgress>? {
-        if (!isMirroring && (_activeProgress.value == null || _activeProgress.value?.isFinished == false)) return null
+    fun getActiveMirrorProgress(): Flow<MirrorProgress> {
+        if (!isMirroring && (_activeProgress.value == null || _activeProgress.value?.isFinished == false)) return emptyFlow()
         return _activeProgress.filterNotNull()
     }
 

@@ -162,7 +162,8 @@ object AudioUtils {
                 val grabber = FFmpegFrameGrabber(flacFile.absolutePath).apply { start() }
 
                 if (grabber.audioChannels <= 0) {
-                    throw IllegalStateException("Invalid audio channels: ${grabber.audioChannels} for file ${flacFile.absolutePath}")
+                    val fileSize = flacFile.length()
+                    throw IllegalStateException("Invalid audio channels: ${grabber.audioChannels} for file ${flacFile.absolutePath} (Size: $fileSize bytes)")
                 }
 
                 val inputMetadata: Map<String, String> = grabber.metadata.toMap()

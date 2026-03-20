@@ -765,7 +765,7 @@ fun Route.mirrorRouting() {
                 val user = call.getUser() ?: return@sse call.respond(HttpStatusCode.Unauthorized)
                 if (!user.isAdmin) return@sse call.respond(HttpStatusCode.Forbidden)
 
-                remoteMirrorService.getActiveMirrorProgress()?.conflate()?.collect { progress ->
+                remoteMirrorService.getActiveMirrorProgress().conflate().collect { progress ->
                     send(ServerSentEvent(data = ApplicationScope.json.encodeToString(progress)))
                 }
             }

@@ -23,6 +23,11 @@ class RpcUserService(
         userService.findUserByUsername(username)
 
     override suspend fun me() = userService.findUserById(user.id)!!.copy(passwordHash = "")
+    override suspend fun getAllUsers(): List<User> {
+        if (!user.isAdmin) throw IllegalStateException("Only admins can list all users")
+        return userService.queryUser().map { it.copy(passwordHash = "") }
+    }
+
     override suspend fun setProfileImage(bytes: ByteArray) {
         val imageId = imageService.createImage(bytes, "profile")
         userService.updateProfileImage(user.id, imageId)
