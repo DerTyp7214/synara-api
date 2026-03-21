@@ -2,6 +2,7 @@ package dev.dertyp
 
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
+import dev.dertyp.core.logTask
 import dev.dertyp.plugins.JmDNSPlugin
 import dev.dertyp.plugins.RedisCacheProvider
 import dev.dertyp.serializers.ByteArrayISO8859TypeAdapter
@@ -92,6 +93,7 @@ fun Application.module() {
             singleOf(::ServerStatsService)
             singleOf(::UserPlaylistService)
             singleOf(::RefreshTokenService)
+            singleOf(::ScheduledTaskLogService)
             singleOf(::TidalDownloaderProxy)
             singleOf(::SessionService)
             singleOf(::PlaybackService)
@@ -147,7 +149,12 @@ fun Application.module() {
         ScheduledTask(
             name = "Database Backup",
             trigger = CronPresets.dailyAt(2, 0),
-            task = { backupService.createBackup() }
+            task = {
+                logTask("Database Backup") {
+                    val res = backupService.createBackup()
+                    mapOf("fileName" to res.fileName, "size" to res.size, "imageCount" to res.imageCount)
+                }
+            }
         )
     )
 
@@ -155,7 +162,12 @@ fun Application.module() {
         ScheduledTask(
             name = "User Playlist Backup",
             trigger = CronPresets.dailyAt(2, 0),
-            task = { userPlaylistBackupService.backupAllUsers() }
+            task = {
+                logTask("User Playlist Backup") {
+                    val count = userPlaylistBackupService.backupAllUsers()
+                    mapOf("userCount" to count)
+                }
+            }
         )
     )
 
@@ -163,7 +175,12 @@ fun Application.module() {
         ScheduledTask(
             name = "Session Cleanup",
             trigger = CronPresets.dailyAt(0, 0),
-            task = { sessionService.cleanupOldSessions() }
+            task = {
+                logTask("Session Cleanup") {
+                    val count = sessionService.cleanupOldSessions()
+                    mapOf("sessionsDeleted" to count)
+                }
+            }
         )
     )
 
@@ -171,7 +188,11 @@ fun Application.module() {
         ScheduledTask(
             name = "Merge Library Duplicates",
             trigger = CronPresets.dailyAt(1, 0),
-            task = { libraryMergeService.mergeDuplicates() }
+            task = {
+                logTask("Merge Library Duplicates") {
+                    libraryMergeService.mergeDuplicates()
+                }
+            }
         )
     )
 
@@ -182,12 +203,10 @@ fun Application.module() {
             name = "Fetch Artist Images (Tidal)",
             trigger = CronPresets.dailyAt(4, 0),
             task = {
-                try {
+                logTask("Fetch Artist Images (Tidal)") {
                     metadataFetchingService.fetchArtistImages(MetadataService.Companion.MetadataType.tidal) {
                         log.info(it)
                     }
-                } catch (e: Exception) {
-                    log.error("Error during scheduled Tidal artist image fetch", e)
                 }
             }
         )
@@ -197,7 +216,11 @@ fun Application.module() {
         ScheduledTask(
             name = "Auto Transcoding",
             trigger = CronPresets.dailyAt(3, 0),
-            task = { autoTranscodeWorker.run() }
+            task = {
+                logTask("Auto Transcoding") {
+                    autoTranscodeWorker.run()
+                }
+            }
         )
     )
 
@@ -205,7 +228,11 @@ fun Application.module() {
         ScheduledTask(
             name = "MusicBrainz Worker",
             trigger = CronPresets.dailyAt(0, 0),
-            task = { musicBrainzWorker.run() }
+            task = {
+                logTask("MusicBrainz Worker") {
+                    musicBrainzWorker.run()
+                }
+            }
         )
     )
 
@@ -215,7 +242,12 @@ fun Application.module() {
         ScheduledTask(
             name = "Delete Empty Albums",
             trigger = CronPresets.dailyAt(0, 0),
-            task = { albumService.deleteEmptyAlbums() }
+            task = {
+                logTask("Delete Empty Albums") {
+                    val count = albumService.deleteEmptyAlbums()
+                    mapOf("albumsDeleted" to count)
+                }
+            }
         )
     )
 
@@ -223,7 +255,12 @@ fun Application.module() {
         ScheduledTask(
             name = "Delete Unreferenced Artists",
             trigger = TaskCompletionTrigger(cleanAlbumTask.id),
-            task = { artistService.deleteUnreferencedArtists() }
+            task = {
+                logTask("Delete Unreferenced Artists") {
+                    val count = artistService.deleteUnreferencedArtists()
+                    mapOf("artistsDeleted" to count)
+                }
+            }
         )
     )
 
@@ -231,7 +268,12 @@ fun Application.module() {
         ScheduledTask(
             name = "Delete Unreferenced Images",
             trigger = TaskCompletionTrigger(cleanArtistsTask.id),
-            task = { imageService.deleteUnreferencedImages() }
+            task = {
+                logTask("Delete Unreferenced Images") {
+                    val count = imageService.deleteUnreferencedImages()
+                    mapOf("imagesDeleted" to count)
+                }
+            }
         )
     )
 

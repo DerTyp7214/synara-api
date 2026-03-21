@@ -398,7 +398,7 @@ class ArtistService : IArtistService, Service() {
 
     suspend fun getOrBulkCreate(artistNames: List<String>): Map<String, List<UUID>> = getOrBulkCreateWithResult(artistNames).nameToIds
 
-    suspend fun deleteUnreferencedArtists() = dbQuery {
+    suspend fun deleteUnreferencedArtists(): Int = dbQuery {
         val referencedArtists = mutableSetOf<UUID>()
         referencedArtists.addAll(SongArtistTable.select(SongArtistTable.artistId).map { it[SongArtistTable.artistId].value })
         referencedArtists.addAll(AlbumArtistTable.select(AlbumArtistTable.artistId).map { it[AlbumArtistTable.artistId].value })
@@ -413,6 +413,7 @@ class ArtistService : IArtistService, Service() {
             ArtistAliasTable.deleteWhere { ArtistAliasTable.artistId inList batch }
         }
         logger.info("Deleted ${unreferencedArtists.size} unreferenced artists")
+        unreferencedArtists.size
     }
 
     suspend fun upsertArtist(artist: Artist) = dbQuery {

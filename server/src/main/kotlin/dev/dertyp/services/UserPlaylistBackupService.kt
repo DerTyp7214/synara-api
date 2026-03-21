@@ -93,12 +93,13 @@ class UserPlaylistBackupService(
         }
     }
 
-    suspend fun backupAllUsers() {
+    suspend fun backupAllUsers(): Int {
         val userService by inject<UserService>()
         val users = userService.queryUser()
         for (user in users) {
             createBackup(user)
         }
+        return users.size
     }
 
     suspend fun listBackups(user: User): List<BackupInfo> = withContext(Dispatchers.IO) {

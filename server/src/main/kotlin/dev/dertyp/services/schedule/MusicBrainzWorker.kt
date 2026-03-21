@@ -20,26 +20,26 @@ class MusicBrainzWorker : KoinComponent {
 
     private val isRunning = AtomicBoolean(false)
 
-    suspend fun run() {
+    suspend fun run(): Map<String, Int> {
         if (!isRunning.compareAndSet(expectedValue = false, newValue = true)) {
             logger.info("MusicBrainzWorker is already running. Skipping this run.")
-            return
+            return emptyMap()
         }
 
+        var taggedCount = 0
+        var totalChecked = 0
         try {
-            val admin = userService.findAdmin() ?: return
+            val admin = userService.findAdmin() ?: return emptyMap()
             val start = Clock.System.now()
             logger.info("Starting MusicBrainzWorker")
 
-            var count = 0
-            var total = 0
             withTimeoutOrNull(3.hours) {
                 songService.songIdsWithoutMusicBrainzId().collect { songId ->
                     try {
                         val song = songService.fetchMusicBrainzId(songId, admin.id)
-                        total++
+                        totalChecked++
                         if (song?.musicBrainzId != null) {
-                            count++
+                            taggedCount++
                         }
                         delay(750)
                     } catch (e: Exception) {
@@ -48,9 +48,13 @@ class MusicBrainzWorker : KoinComponent {
                 }
             }
 
-            logger.info("MusicBrainzWorker finished after ${Clock.System.now() - start}. Checked $total songs, tagged $count.")
+            logger.info("MusicBrainzWorker finished after ${Clock.System.now() - start}. Checked $totalChecked songs, tagged $taggedCount.")
         } finally {
             isRunning.store(false)
         }
+        return mapOf(
+            "checked" to totalChecked,
+            "tagged" to taggedCount
+        )
     }
 }

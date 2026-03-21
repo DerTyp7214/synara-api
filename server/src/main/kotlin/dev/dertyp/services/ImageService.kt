@@ -212,7 +212,7 @@ class ImageService : IImageService, Service() {
         } + existingImages
     }
 
-    suspend fun deleteUnreferencedImages() = dbQuery {
+    suspend fun deleteUnreferencedImages(): Int = dbQuery {
         val referencedImages = mutableSetOf<UUID>()
 
         referencedImages.addAll(AlbumTable.select(AlbumTable.cover).mapNotNull { it[AlbumTable.cover]?.value })
@@ -240,5 +240,6 @@ class ImageService : IImageService, Service() {
         }
 
         logger.info("Deleted ${unreferencedImages.size} unreferenced images")
+        unreferencedImages.size
     }
 }

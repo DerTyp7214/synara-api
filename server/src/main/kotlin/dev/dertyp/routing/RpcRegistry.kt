@@ -90,6 +90,7 @@ private fun registerAuthenticated(koin: Koin, call: ApplicationCall, user: User,
     val userPlaylistBackupService = koin.get<UserPlaylistBackupService>()
     val mirrorService = koin.get<MirrorService>()
     val remoteMirrorService = koin.get<RemoteMirrorService>()
+    val scheduledTaskLogService = koin.get<ScheduledTaskLogService>()
 
     registrar.register(IIndexer::class) { RpcIndexer(indexer).withLogging<IIndexer>(call) }
     registrar.register(IUserService::class) { RpcUserService(user, userService, imageService).withLogging<IUserService>(call) }
@@ -110,4 +111,5 @@ private fun registerAuthenticated(koin: Koin, call: ApplicationCall, user: User,
     registrar.register(IUserPlaylistBackupService::class) { RpcUserPlaylistBackupService(user, userPlaylistBackupService).withLogging<IUserPlaylistBackupService>(call) }
     registrar.register(IMirrorService::class) { MirrorRpcService(user, mirrorService).withLogging<IMirrorService>(call) }
     registrar.register(IRemoteMirrorService::class) { RemoteMirrorRpcService(user, remoteMirrorService).withLogging<IRemoteMirrorService>(call) }
+    registrar.register(IScheduledTaskLogService::class) { RpcScheduledTaskLogService(user, scheduledTaskLogService).withLogging<IScheduledTaskLogService>(call) }
 }

@@ -28,14 +28,16 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
     suspend fun fetchArtistImages(
         metadataProvider: MetadataService.Companion.MetadataType,
         onProgress: suspend (String) -> Unit
-    ) {
+    ): Map<String, Int> {
         val service = MetadataService.getMetadataService(metadataProvider, environment)
 
         if (!MetadataService.isFetching.compareAndSet(expectedValue = false, newValue = true)) {
             onProgress("Fetching is already in progress.")
-            return
+            return emptyMap()
         }
 
+        var foundCount = 0
+        var totalChecked = 0
         try {
             val thirtyDaysAgo = Clock.System.now() - 30.days
             val artists = dbQuery {
@@ -51,6 +53,7 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
                 repeat(1) {
                     launch {
                         for ((id, name) in artistChannel) {
+                            totalChecked++
                             onProgress("Fetching image for: $name")
                             val response = try {
                                 service.searchArtists(name, 20)
@@ -108,7 +111,10 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
                                 }
                             }
 
-                            if (updates == 1) onProgress("Updated \"$name\" with an image.")
+                            if (updates == 1) {
+                                onProgress("Updated \"$name\" with an image.")
+                                foundCount++
+                            }
                             else onProgress("Something went wrong updating $name")
                         }
                     }
@@ -126,6 +132,10 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
         } finally {
             MetadataService.isFetching.store(false)
         }
+        return mapOf(
+            "checked" to totalChecked,
+            "found" to foundCount
+        )
     }
 
     private suspend fun updateLastCheck(id: UUID) = dbQuery {

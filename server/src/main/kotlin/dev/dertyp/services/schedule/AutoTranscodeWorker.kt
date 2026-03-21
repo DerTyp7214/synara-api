@@ -4,6 +4,7 @@ import dev.dertyp.AudioUtils
 import dev.dertyp.AudioUtils.getSongsWithTranscodingInfo
 import dev.dertyp.AudioUtils.insertTranscodedSong
 import dev.dertyp.AudioUtils.transcodeFlacToOpus
+import dev.dertyp.core.nullIfEmpty
 import dev.dertyp.data.SimpleSong
 import io.ktor.server.application.ApplicationEnvironment
 import io.ktor.util.logging.KtorSimpleLogger
@@ -23,20 +24,21 @@ class AutoTranscodeWorker : KoinComponent {
     private val logger = KtorSimpleLogger("AutoTranscodeWorker")
     private val environment by inject<ApplicationEnvironment>()
 
-    suspend fun run() {
+    suspend fun run(): Map<String, Int> {
         val qualities = environment.config.propertyOrNull("audio.autoTranscode")?.getString()
             ?.split(",")
             ?.mapNotNull { it.trim().toIntOrNull() }
-            ?.filter { it > 0 } ?: return
-
-        if (qualities.isEmpty()) return
+            ?.filter { it > 0 }
+            ?.nullIfEmpty() ?: return emptyMap()
 
         logger.info("Starting AutoTranscodeWorker for qualities: $qualities")
 
+        val results = mutableMapOf<String, Int>()
         for (quality in qualities) {
             val songs = getSongsWithTranscodingInfo(listOf(quality))
             if (songs.isEmpty()) {
                 logger.info("No songs to transcode for quality: $quality")
+                results["quality_$quality"] = 0
                 continue
             }
 
@@ -49,6 +51,7 @@ class AutoTranscodeWorker : KoinComponent {
 
             if (!AudioUtils.isTranscoderActive.compareAndSet(expectedValue = false, newValue = true)) {
                 logger.warn("Transcoding is already in progress, skipping quality: $quality")
+                results["quality_$quality"] = 0
                 continue
             }
 
@@ -75,6 +78,7 @@ class AutoTranscodeWorker : KoinComponent {
                     }
                     songChannel.close()
                 }
+                results["quality_$quality"] = transcodedSongs.size
             } finally {
                 insertTranscodedSong(transcodedSongs)
                 AudioUtils.isTranscoderActive.store(false)
@@ -82,5 +86,6 @@ class AutoTranscodeWorker : KoinComponent {
         }
 
         logger.info("AutoTranscodeWorker finished")
+        return results
     }
 }

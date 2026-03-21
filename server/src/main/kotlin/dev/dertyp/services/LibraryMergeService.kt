@@ -10,12 +10,17 @@ import java.util.UUID
 
 class LibraryMergeService : Service() {
 
-    suspend fun mergeDuplicates() = dbQuery {
-        mergeDuplicateSongs()
-        mergeDuplicateImages()
+    suspend fun mergeDuplicates(): Map<String, Any?> = dbQuery {
+        val songsMerged = mergeDuplicateSongs()
+        val imagesMerged = mergeDuplicateImages()
+        mapOf(
+            "songsMerged" to songsMerged,
+            "imagesMerged" to imagesMerged,
+            "totalMerged" to (songsMerged + imagesMerged)
+        )
     }
 
-    private fun mergeDuplicateSongs() {
+    private fun mergeDuplicateSongs(): Int {
         logger.info("Starting duplicate song merge check")
 
         val duplicates = SongTable
@@ -42,11 +47,12 @@ class LibraryMergeService : Service() {
 
         if (duplicates.isEmpty()) {
             logger.info("No duplicate songs found")
-            return
+            return 0
         }
 
         logger.info("Found ${duplicates.size} groups of duplicate songs")
 
+        var totalMerged = 0
         for (duplicateGroup in duplicates) {
             val songsInGroup = SongTable
                 .select(SongTable.id, SongTable.inserted)
@@ -72,12 +78,14 @@ class LibraryMergeService : Service() {
             for (oldSongId in songsToMerge) {
                 mergeSongReferences(oldSongId, keptSongId)
                 SongTable.deleteWhere { SongTable.id eq oldSongId }
+                totalMerged++
             }
         }
         logger.info("Duplicate song merge completed")
+        return totalMerged
     }
 
-    private fun mergeDuplicateImages() {
+    private fun mergeDuplicateImages(): Int {
         logger.info("Starting duplicate image merge check")
 
         val duplicates = ImageTable
@@ -88,11 +96,12 @@ class LibraryMergeService : Service() {
 
         if (duplicates.isEmpty()) {
             logger.info("No duplicate images found")
-            return
+            return 0
         }
 
         logger.info("Found ${duplicates.size} groups of duplicate images")
 
+        var totalMerged = 0
         for (duplicateGroup in duplicates) {
             val hash = duplicateGroup[ImageTable.imageHash]
             val imagesInGroup = ImageTable
@@ -110,9 +119,11 @@ class LibraryMergeService : Service() {
             for (oldImageId in imagesToMerge) {
                 mergeImageReferences(oldImageId, keptImageId)
                 ImageTable.deleteWhere { ImageTable.id eq oldImageId }
+                totalMerged++
             }
         }
         logger.info("Duplicate image merge completed")
+        return totalMerged
     }
 
     private fun mergeSongReferences(oldSongId: UUID, keptSongId: UUID) {

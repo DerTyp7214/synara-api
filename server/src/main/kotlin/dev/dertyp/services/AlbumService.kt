@@ -394,7 +394,7 @@ class AlbumService : IAlbumService, Service() {
 
     suspend fun getOrBulkCreate(albums: List<InsertableAlbum>): Map<InsertableAlbum, UUID> = getOrBulkCreateWithResult(albums).albumToIds
 
-    suspend fun deleteEmptyAlbums() = dbQuery {
+    suspend fun deleteEmptyAlbums(): Int = dbQuery {
         val emptyAlbums = AlbumTable
             .select(AlbumTable.id)
             .where {
@@ -411,6 +411,7 @@ class AlbumService : IAlbumService, Service() {
             AlbumArtistTable.deleteWhere { AlbumArtistTable.albumId inList batch }
         }
         logger.info("Deleted ${emptyAlbums.size} empty albums")
+        emptyAlbums.size
     }
 
     suspend fun upsertAlbum(album: Album) = dbQuery {

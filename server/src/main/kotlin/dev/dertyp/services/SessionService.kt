@@ -10,7 +10,7 @@ import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.update
 import java.time.Instant
-import java.util.*
+import java.util.UUID
 import kotlin.time.Duration.Companion.days
 
 class SessionService : Service() {
@@ -53,7 +53,7 @@ class SessionService : Service() {
             ?.get(SessionTable.isActive) ?: false
     }
 
-    suspend fun cleanupOldSessions() = dbQuery {
+    suspend fun cleanupOldSessions(): Int = dbQuery {
         val oneMonthAgo = Instant.now().minusMillis(30.days.inWholeMilliseconds).toEpochMilli()
         val sessionsToDelete = SessionTable.selectAll().where {
             (SessionTable.lastActive less oneMonthAgo) or (SessionTable.isActive eq false)
@@ -63,6 +63,7 @@ class SessionService : Service() {
             RefreshTokenTable.deleteWhere { sessionId inList sessionsToDelete }
             SessionTable.deleteWhere { id inList sessionsToDelete }
         }
+        sessionsToDelete.size
     }
 
     private fun mapSession(row: ResultRow): Session {

@@ -3,7 +3,7 @@ package dev.dertyp.services
 import com.github.luben.zstd.ZstdInputStream
 import com.github.luben.zstd.ZstdOutputStream
 import dev.dertyp.data.User
-import io.ktor.server.application.*
+import io.ktor.server.application.ApplicationEnvironment
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
@@ -55,9 +55,9 @@ class RpcBackupService(
         }
     }
 
-    override suspend fun createBackup() {
+    override suspend fun createBackup(): BackupResult {
         checkAdmin()
-        backupService.createBackup()
+        return backupService.createBackup()
     }
 
     override suspend fun listBackups(): List<BackupInfo> {
@@ -103,51 +103,55 @@ class BackupService(
         blobsDir.mkdirs()
     }
 
-    override suspend fun createBackup() {
+    override suspend fun createBackup(): BackupResult = withContext(Dispatchers.IO) {
         logger.info("Starting backup creation")
-        withContext(Dispatchers.IO) {
-            val dbData = dbManagementService.exportData()
-            logger.info("Database exported")
+        val dbData = dbManagementService.exportData()
+        logger.info("Database exported")
 
-            val fileTrees = audioPaths.associate { path ->
-                logger.debug("Generating file tree for {}", path)
-                path.name to generateFileTree(path)
-            }
-            val fileTreeBytes = compressZstd(Cbor.encodeToByteArray(fileTrees))
-            logger.debug("File tree compressed")
-
-            val imageIndex = if (imagePath != null && imagePath.exists()) {
-                logger.info("Backing up images from $imagePath")
-                backupImages(imagePath)
-            } else {
-                logger.debug("No images path specified or exists")
-                emptyList()
-            }
-            val imageIndexBytes = compressZstd(Cbor.encodeToByteArray(imageIndex))
-            logger.debug("Image index compressed")
-
-            val timestamp = java.time.LocalDateTime.now()
-                .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss"))
-            val backupFile = backupDir.resolve("backup-$timestamp.zip")
-
-            logger.info("Writing backup to $backupFile")
-            ZipOutputStream(backupFile.outputStream()).use { zip ->
-                zip.putNextEntry(ZipEntry("database.cbor.zst"))
-                zip.write(dbData)
-                zip.closeEntry()
-
-                zip.putNextEntry(ZipEntry("files.tree.cbor.zst"))
-                zip.write(fileTreeBytes)
-                zip.closeEntry()
-
-                zip.putNextEntry(ZipEntry("images.index.cbor.zst"))
-                zip.write(imageIndexBytes)
-                zip.closeEntry()
-            }
-
-            logger.info("Backup created: ${backupFile.name}")
-            rotateBackups()
+        val fileTrees = audioPaths.associate { path ->
+            logger.debug("Generating file tree for {}", path)
+            path.name to generateFileTree(path)
         }
+        val fileTreeBytes = compressZstd(Cbor.encodeToByteArray(fileTrees))
+        logger.debug("File tree compressed")
+
+        val imageIndex = if (imagePath != null && imagePath.exists()) {
+            logger.info("Backing up images from $imagePath")
+            backupImages(imagePath)
+        } else {
+            logger.debug("No images path specified or exists")
+            emptyList()
+        }
+        val imageIndexBytes = compressZstd(Cbor.encodeToByteArray(imageIndex))
+        logger.debug("Image index compressed")
+
+        val timestamp = java.time.LocalDateTime.now()
+            .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss"))
+        val backupFile = backupDir.resolve("backup-$timestamp.zip")
+
+        logger.info("Writing backup to $backupFile")
+        ZipOutputStream(backupFile.outputStream()).use { zip ->
+            zip.putNextEntry(ZipEntry("database.cbor.zst"))
+            zip.write(dbData)
+            zip.closeEntry()
+
+            zip.putNextEntry(ZipEntry("files.tree.cbor.zst"))
+            zip.write(fileTreeBytes)
+            zip.closeEntry()
+
+            zip.putNextEntry(ZipEntry("images.index.cbor.zst"))
+            zip.write(imageIndexBytes)
+            zip.closeEntry()
+        }
+
+        logger.info("Backup created: ${backupFile.name}")
+        rotateBackups()
+
+        BackupResult(
+            fileName = backupFile.name,
+            size = backupFile.length(),
+            imageCount = imageIndex.size
+        )
     }
 
     private fun generateFileTree(path: Path): FileNode? {

@@ -574,7 +574,17 @@ class RemoteMirrorService : Service() {
                     existing.id
                 } else {
                     val id = if (session.config.isImport) randomPlatformUUID() else playlist.id
-                    userPlaylistService.upsertUserPlaylist(playlist.copy(id = id, imageId = playlist.imageId?.let { session.imageIdMap[it] }, songs = playlist.songs.mapNotNull { session.songIdMap[it] }), session.config.targetUserId)
+                    userPlaylistService.upsertUserPlaylist(
+                        playlist.copy(
+                            id = id,
+                            imageId = playlist.imageId?.let { session.imageIdMap[it] },
+                            songs = playlist.songs.mapNotNull { session.songIdMap[it] },
+                            songEntries = playlist.songEntries?.mapNotNull { entry ->
+                                session.songIdMap[entry.songId]?.let { entry.copy(songId = it) }
+                            }
+                        ),
+                        session.config.targetUserId
+                    )
                     session.syncedUserPlaylists++
                     id
                 }
