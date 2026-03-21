@@ -47,7 +47,7 @@ RUN ./configure \
 RUN make -j$(nproc) && make install
 
 # Stage 4: Create the Runtime Image
-FROM amazoncorretto:25 AS runtime
+FROM amazoncorretto:26 AS runtime
 
 ARG APP_USER_ID=1000
 ARG APP_GROUP_ID=1000
