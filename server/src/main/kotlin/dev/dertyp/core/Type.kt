@@ -194,6 +194,7 @@ suspend fun Type.download(
                         .filterExisting(
                             songService = songService,
                             user = user,
+                            chunkSize = 100
                         ).collect { trackChunk ->
                             downloadService.addToQueue(
                                 UrlDownloadQueueEntry(

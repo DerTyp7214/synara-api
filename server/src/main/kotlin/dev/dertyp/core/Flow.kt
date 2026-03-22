@@ -7,12 +7,13 @@ import dev.dertyp.services.SongService
 import dev.dertyp.services.metadata.IMetadataService
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
-import java.util.*
+import java.util.UUID
 
 @OptIn(ExperimentalCoroutinesApi::class)
 fun Flow<IMetadataService.Track>.filterExisting(
     songService: SongService,
     user: User,
+    chunkSize: Int = 20,
     existingCallback: suspend (List<Pair<Long, UUID>>) -> Unit = {}
 ): Flow<List<IMetadataService.Track>> {
     return chunked(20)
@@ -37,5 +38,5 @@ fun Flow<IMetadataService.Track>.filterExisting(
             }.asFlow()
         }
         .flattenConcat()
-        .chunked(20)
+        .chunked(chunkSize)
 }
