@@ -163,13 +163,13 @@ class UserPlaylistService : IUserPlaylistService, Service() {
             val songIds = songLinkRows.map { it[UserPlaylistSongTable.songId].value }
             val distinctSongIds = songIds.distinct()
 
-            val songDurationsById = if (distinctSongIds.isNotEmpty()) {
-                getSongDurations(distinctSongIds)
+            val songInfoById = if (distinctSongIds.isNotEmpty()) {
+                getSongInfoForPlaylist(distinctSongIds)
             } else {
                 emptyMap()
             }
 
-            val data = mapEagerly(mainPlaylistRows, songLinkRows, songDurationsById)
+            val data = mapEagerly(mainPlaylistRows, songLinkRows, songInfoById)
 
             PaginatedResponse(
                 data = data.drop(page * pageSize).take(pageSize),
@@ -180,19 +180,23 @@ class UserPlaylistService : IUserPlaylistService, Service() {
             )
         }
 
-    private suspend fun getSongDurations(songIds: List<UUID>): Map<UUID, Long> = dbQuery {
+    private suspend fun getSongInfoForPlaylist(songIds: List<UUID>): Map<UUID, Pair<Long, String?>> = dbQuery {
         SongTable
-            .select(SongTable.id, SongTable.duration)
+            .leftJoin(SongMusicBrainzTable)
+            .select(SongTable.id, SongTable.duration, SongMusicBrainzTable.musicBrainzId)
             .where { SongTable.id inList songIds }
             .associate { row ->
-                row[SongTable.id].value to row[SongTable.duration]
+                row[SongTable.id].value to Pair(
+                    row[SongTable.duration],
+                    row.getOrNull(SongMusicBrainzTable.musicBrainzId)
+                )
             }
     }
 
     private fun mapEagerly(
         mainRows: List<ResultRow>,
         songLinkRows: List<ResultRow>,
-        songDurationsById: Map<UUID, Long>
+        songInfoById: Map<UUID, Pair<Long, String?>>
     ): List<UserPlaylist> {
         val songsByPlaylistId = songLinkRows
             .map { row ->
@@ -207,7 +211,7 @@ class UserPlaylistService : IUserPlaylistService, Service() {
 
             val totalDuration = links
                 .sumOf { (songId, _) ->
-                    songDurationsById[songId] ?: 0L
+                    songInfoById[songId]?.first ?: 0L
                 }.takeIf { it > 0L } ?: -1L
 
             val songs = songsByPlaylistId[playlist.id]
@@ -216,7 +220,7 @@ class UserPlaylistService : IUserPlaylistService, Service() {
 
             playlist.copy(
                 songs = songs.map { it.first },
-                songEntries = songs.map { UserPlaylistSong(it.first, it.second) },
+                songEntries = songs.map { UserPlaylistSong(it.first, it.second, songInfoById[it.first]?.second) },
                 totalDuration = totalDuration,
                 modifiedAt = songs.lastOrNull()?.second.date ?: Date.from(Instant.EPOCH)
             )
@@ -234,14 +238,38 @@ class UserPlaylistService : IUserPlaylistService, Service() {
         }
 
         UserPlaylistSongTable.deleteWhere { UserPlaylistSongTable.playlistId eq playlist.id }
+
+        val allRequestedSongIds = (playlist.songEntries?.map { it.songId } ?: playlist.songs).distinct()
+        val existingSongIds = SongTable.select(SongTable.id)
+            .where { SongTable.id inList allRequestedSongIds }
+            .map { it[SongTable.id].value }
+            .toSet()
+
         if (playlist.songEntries != null) {
-            UserPlaylistSongTable.batchInsert(playlist.songEntries!!) { entry ->
+            val mbIdToSongId = playlist.songEntries!!
+                .filter { it.songId !in existingSongIds && it.musicBrainzId != null }
+                .mapNotNull { it.musicBrainzId }
+                .takeIf { it.isNotEmpty() }
+                ?.let { mbIds ->
+                    SongMusicBrainzTable
+                        .select(SongMusicBrainzTable.songId, SongMusicBrainzTable.musicBrainzId)
+                        .where { SongMusicBrainzTable.musicBrainzId inList mbIds }
+                        .associate { it[SongMusicBrainzTable.musicBrainzId]!! to it[SongMusicBrainzTable.songId].value }
+                } ?: emptyMap()
+
+            val entriesWithResolvedSongs = playlist.songEntries!!.mapNotNull { entry ->
+                val songId = if (entry.songId in existingSongIds) entry.songId else mbIdToSongId[entry.musicBrainzId]
+                if (songId != null) entry.copy(songId = songId) else null
+            }
+
+            UserPlaylistSongTable.batchInsert(entriesWithResolvedSongs) { entry ->
                 this[UserPlaylistSongTable.playlistId] = playlist.id
                 this[UserPlaylistSongTable.songId] = entry.songId
                 this[UserPlaylistSongTable.addedAt] = entry.addedAt
             }
         } else {
-            UserPlaylistSongTable.batchInsert(playlist.songs) { songId ->
+            val existingSongsToInsert = playlist.songs.filter { it in existingSongIds }
+            UserPlaylistSongTable.batchInsert(existingSongsToInsert) { songId ->
                 this[UserPlaylistSongTable.playlistId] = playlist.id
                 this[UserPlaylistSongTable.songId] = songId
                 this[UserPlaylistSongTable.addedAt] = System.currentTimeMillis()
