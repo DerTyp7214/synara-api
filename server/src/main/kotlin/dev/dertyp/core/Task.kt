@@ -18,6 +18,7 @@ typealias Task = suspend KoinComponent.() -> Unit
 suspend fun KoinComponent.logTask(name: String, block: suspend () -> Map<String, Any?>) {
     val logService by inject<ScheduledTaskLogService>()
     val startTime = Instant.now().toEpochMilli()
+    val runningId = logService.startLog(name, startTime).value
     try {
         val details = block()
         logService.logTask(
@@ -25,7 +26,8 @@ suspend fun KoinComponent.logTask(name: String, block: suspend () -> Map<String,
             startTime,
             Instant.now().toEpochMilli(),
             TaskStatus.SUCCESS,
-            details = details.mapValues { it.value.toString() }
+            details = details.mapValues { it.value.toString() },
+            runningId = runningId
         )
     } catch (e: Throwable) {
         logService.logTask(
@@ -33,7 +35,8 @@ suspend fun KoinComponent.logTask(name: String, block: suspend () -> Map<String,
             startTime,
             Instant.now().toEpochMilli(),
             TaskStatus.FAILURE,
-            message = e.message
+            message = e.message,
+            runningId = runningId
         )
         throw e
     }

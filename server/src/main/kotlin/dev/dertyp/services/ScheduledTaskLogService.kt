@@ -19,6 +19,7 @@ import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
+import java.util.UUID
 
 class RpcScheduledTaskLogService(
     private val user: User,
@@ -33,15 +34,29 @@ class RpcScheduledTaskLogService(
 }
 
 class ScheduledTaskLogService : Service() {
+    fun startLog(taskName: String, startTime: Long) = transaction {
+        ScheduledTaskLogTable.insert {
+            it[ScheduledTaskLogTable.taskName] = taskName
+            it[ScheduledTaskLogTable.startTime] = startTime
+            it[ScheduledTaskLogTable.endTime] = 0
+            it[ScheduledTaskLogTable.status] = TaskStatus.RUNNING
+        } get ScheduledTaskLogTable.id
+    }
+
     fun logTask(
         taskName: String,
         startTime: Long,
         endTime: Long,
         status: TaskStatus,
         message: String? = null,
-        details: Map<String, String>? = null
+        details: Map<String, String>? = null,
+        runningId: UUID? = null
     ) {
         transaction {
+            if (runningId != null) {
+                ScheduledTaskLogTable.deleteWhere { ScheduledTaskLogTable.id eq runningId }
+            }
+
             ScheduledTaskLogTable.insert {
                 it[ScheduledTaskLogTable.taskName] = taskName
                 it[ScheduledTaskLogTable.startTime] = startTime
