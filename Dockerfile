@@ -18,7 +18,7 @@ RUN gradle :server:shadowJar --no-daemon
 # Stage 3: FFmpeg-Builder
 FROM debian:bullseye-slim AS ffmpeg-builder
 
-ENV FFMPEG_VERSION 7.1.1
+ENV FFMPEG_VERSION 8.0.1
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends build-essential pkg-config wget tar zlib1g-dev ca-certificates nasm && \

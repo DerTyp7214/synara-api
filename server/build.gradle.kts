@@ -10,6 +10,7 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.kotlinx.rpc)
     alias(libs.plugins.buildconfig)
+    alias(libs.plugins.kover)
 }
 
 application {
