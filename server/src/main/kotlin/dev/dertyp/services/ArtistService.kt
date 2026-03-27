@@ -64,6 +64,25 @@ class ArtistService : IArtistService, Service() {
             where { ArtistTable.groupId eq groupId }
         }
 
+    override suspend fun setGroup(id: UUID, artistIds: List<UUID>?): Artist? {
+        dbQuery {
+            ArtistTable.update({ ArtistTable.id eq id }) {
+                it[isGroup] = artistIds != null
+            }
+
+            ArtistTable.update({ ArtistTable.groupId eq id }) {
+                it[groupId] = null
+            }
+
+            if (artistIds != null) {
+                ArtistTable.update({ ArtistTable.id inList artistIds }) {
+                    it[groupId] = id
+                }
+            }
+        }
+        return byId(id)
+    }
+
     override suspend fun mergeArtists(mergeArtists: MergeArtists): Artist? = dbQuery {
         val currentArtists = ArtistTable
             .select(ArtistTable.id, ArtistTable.name)

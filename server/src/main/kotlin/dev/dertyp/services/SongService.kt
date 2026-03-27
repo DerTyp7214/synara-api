@@ -47,6 +47,9 @@ class SongRpcService(private val user: User, private val songService: SongServic
     override suspend fun setLyrics(id: UUID, @LogParam("size") lyrics: List<String>): UserSong? =
         songService.setLyrics(id, user.id, lyrics)
 
+    override suspend fun setArtists(id: UUID, artistIds: List<UUID>): UserSong? =
+        songService.setArtists(id, artistIds, user.id)
+
     override suspend fun setMusicBrainzId(id: UUID, musicBrainzId: String?): UserSong? =
         songService.setMusicBrainzId(id, musicBrainzId, user.id)
 
@@ -243,6 +246,17 @@ class SongService : Service() {
             }
         }
 
+        return byId(id, userId)
+    }
+
+    suspend fun setArtists(id: UUID, artistIds: List<UUID>, userId: UUID): UserSong? {
+        dbQuery {
+            SongArtistTable.deleteWhere { SongArtistTable.songId eq id }
+            SongArtistTable.batchInsert(artistIds) { artistId ->
+                this[SongArtistTable.songId] = id
+                this[SongArtistTable.artistId] = artistId
+            }
+        }
         return byId(id, userId)
     }
 
