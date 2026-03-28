@@ -31,6 +31,7 @@ import org.koin.dsl.module
 import org.koin.ktor.ext.get
 import org.koin.ktor.plugin.Koin
 import org.koin.logger.slf4jLogger
+import org.slf4j.bridge.SLF4JBridgeHandler
 import java.time.LocalDate
 import java.time.OffsetDateTime
 import kotlin.time.Duration
@@ -41,6 +42,9 @@ fun main(args: Array<String>) {
 }
 
 fun Application.module() {
+    SLF4JBridgeHandler.removeHandlersForRootLogger()
+    SLF4JBridgeHandler.install()
+
     val osName = System.getProperty("os.name")
     val osVersion = System.getProperty("os.version")
     val osArch = System.getProperty("os.arch")

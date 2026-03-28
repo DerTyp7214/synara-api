@@ -82,6 +82,7 @@ dependencies {
     implementation(libs.ktor.server.netty)
     implementation(libs.bcrypt)
     implementation(libs.logback.classic)
+    implementation(libs.jul.to.slf4j)
     implementation(libs.ktor.server.config.yaml)
     implementation(libs.jaudiotagger)
     implementation(libs.sqlite.jdbc)

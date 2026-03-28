@@ -19,6 +19,7 @@ thumbnailator = "0.4.21"
 postgresql = "42.7.10"
 bcrypt = "0.10.2"
 logback = "1.5.32"
+slf4j = "2.0.12"
 jaudiotagger = "3.0.1"
 sqlite = "3.51.3.0"
 caffeine = "3.2.3"
@@ -94,6 +95,7 @@ thumbnailator = { module = "net.coobird:thumbnailator", version.ref = "thumbnail
 postgresql = { module = "org.postgresql:postgresql", version.ref = "postgresql" }
 bcrypt = { module = "at.favre.lib:bcrypt", version.ref = "bcrypt" }
 logback-classic = { module = "ch.qos.logback:logback-classic", version.ref = "logback" }
+jul-to-slf4j = { module = "org.slf4j:jul-to-slf4j", version.ref = "slf4j" }
 jaudiotagger = { module = "net.jthink:jaudiotagger", version.ref = "jaudiotagger" }
 sqlite-jdbc = { module = "org.xerial:sqlite-jdbc", version.ref = "sqlite" }
 caffeine = { module = "com.github.ben-manes.caffeine:caffeine", version.ref = "caffeine" }
