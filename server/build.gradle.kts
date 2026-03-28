@@ -19,13 +19,13 @@ application {
 }
 
 java {
-    sourceCompatibility = JavaVersion.VERSION_24
-    targetCompatibility = JavaVersion.VERSION_24
+    sourceCompatibility = JavaVersion.VERSION_25
+    targetCompatibility = JavaVersion.VERSION_25
 }
 
 tasks.withType<KotlinCompile>().configureEach {
     compilerOptions {
-        jvmTarget.set(JvmTarget.JVM_24)
+        jvmTarget.set(JvmTarget.JVM_25)
     }
 }
 
@@ -101,6 +101,17 @@ dependencies {
 
     implementation(project(":common-rpc"))
     implementation(project(":common-proxy"))
+
+    testImplementation(libs.junit.jupiter.api)
+    testRuntimeOnly(libs.junit.jupiter.engine)
+    testImplementation(libs.koin.test)
+    testImplementation(libs.koin.test.junit5)
+    testImplementation(libs.mockk)
+    testImplementation(libs.kotlin.test)
+}
+
+tasks.test {
+    useJUnitPlatform()
 }
 
 val ktorBaseImageTag = "synara-api-base:latest"
@@ -109,7 +120,7 @@ ktor {
     docker {
         localImageName.set(ktorBaseImageTag.split(":").first())
         imageTag.set(ktorBaseImageTag.split(":").last())
-        jreVersion.set(JavaVersion.VERSION_24)
+        jreVersion.set(JavaVersion.VERSION_25)
     }
 }
 

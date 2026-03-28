@@ -108,6 +108,7 @@ fun Application.module() {
             singleOf(::MusicBrainzService)
             singleOf(::MusicBrainzWorker)
             singleOf(::AutoTranscodeWorker)
+            singleOf(::CustomMigrationService)
 
             single<Gson> {
                 GsonBuilder()
@@ -131,6 +132,11 @@ fun Application.module() {
     }
 
     get<DatabaseManager>().init()
+
+    val customMigrationService = get<CustomMigrationService>()
+    CoroutineScope(Dispatchers.IO).launch {
+        customMigrationService.runMigrations()
+    }
 
     val scheduleService = get<ScheduleService>()
     val sessionService = get<SessionService>()

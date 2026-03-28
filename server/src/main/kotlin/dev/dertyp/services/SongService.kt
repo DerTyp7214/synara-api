@@ -249,15 +249,32 @@ class SongService : Service() {
         return byId(id, userId)
     }
 
-    suspend fun setArtists(id: UUID, artistIds: List<UUID>, userId: UUID): UserSong? {
-        dbQuery {
-            SongArtistTable.deleteWhere { SongArtistTable.songId eq id }
-            SongArtistTable.batchInsert(artistIds) { artistId ->
-                this[SongArtistTable.songId] = id
-                this[SongArtistTable.artistId] = artistId
+    suspend fun setArtists(id: UUID, artistIds: List<UUID>, userId: UUID): UserSong? = dbQuery {
+        SongArtistTable.deleteWhere { SongArtistTable.songId eq id }
+        SongArtistTable.batchInsert(artistIds) { artistId ->
+            this[SongArtistTable.songId] = id
+            this[SongArtistTable.artistId] = artistId
+        }
+
+        return@dbQuery byId(id, userId).also {
+            it?.let { song ->
+                if (!song.path.endsWith(".flac", true)) return@let
+                try {
+                    val file = AudioFileIO.read(File(song.path))
+
+                    file.tag.apply {
+                        deleteField(FieldKey.ARTIST)
+                        for (name in song.artists.map { artist -> artist.name }.sorted()) {
+                            addField(FieldKey.ARTIST, name)
+                        }
+                    }
+
+                    file.commit()
+                } catch (e: Exception) {
+                    logger.error("Failed to set artists for $id: ${e.message}", e)
+                }
             }
         }
-        return byId(id, userId)
     }
 
     suspend fun setLyrics(id: UUID, userId: UUID, lyrics: List<String>) = dbQuery {
@@ -268,6 +285,7 @@ class SongService : Service() {
 
         return@dbQuery byId(id, userId).also {
             it?.let { song ->
+                if (!song.path.endsWith(".flac", true)) return@let
                 try {
                     val file = AudioFileIO.read(File(song.path))
 
@@ -281,26 +299,42 @@ class SongService : Service() {
         }
     }
 
-    suspend fun setMusicBrainzId(id: UUID, musicBrainzId: String?, userId: UUID): UserSong? {
-        dbQuery {
-            val exists = SongMusicBrainzTable.select(SongMusicBrainzTable.songId)
-                .where { SongMusicBrainzTable.songId eq id }
-                .any()
+    suspend fun setMusicBrainzId(id: UUID, musicBrainzId: String?, userId: UUID): UserSong? = dbQuery {
+        val exists = SongMusicBrainzTable.select(SongMusicBrainzTable.songId)
+            .where { SongMusicBrainzTable.songId eq id }
+            .any()
 
-            if (exists) {
-                SongMusicBrainzTable.update({ SongMusicBrainzTable.songId eq id }) {
-                    it[SongMusicBrainzTable.musicBrainzId] = musicBrainzId
-                    it[SongMusicBrainzTable.lastCheck] = System.currentTimeMillis()
-                }
-            } else {
-                SongMusicBrainzTable.insert {
-                    it[SongMusicBrainzTable.songId] = id
-                    it[SongMusicBrainzTable.musicBrainzId] = musicBrainzId
-                    it[SongMusicBrainzTable.lastCheck] = System.currentTimeMillis()
+        if (exists) {
+            SongMusicBrainzTable.update({ SongMusicBrainzTable.songId eq id }) {
+                it[SongMusicBrainzTable.musicBrainzId] = musicBrainzId
+                it[SongMusicBrainzTable.lastCheck] = System.currentTimeMillis()
+            }
+        } else {
+            SongMusicBrainzTable.insert {
+                it[SongMusicBrainzTable.songId] = id
+                it[SongMusicBrainzTable.musicBrainzId] = musicBrainzId
+                it[SongMusicBrainzTable.lastCheck] = System.currentTimeMillis()
+            }
+        }
+
+        return@dbQuery byId(id, userId).also {
+            it?.let { song ->
+                if (!song.path.endsWith(".flac", true)) return@let
+                try {
+                    val file = AudioFileIO.read(File(song.path))
+
+                    if (musicBrainzId != null) {
+                        file.tag.setField(FieldKey.MUSICBRAINZ_TRACK_ID, musicBrainzId)
+                    } else {
+                        file.tag.deleteField(FieldKey.MUSICBRAINZ_TRACK_ID)
+                    }
+
+                    file.commit()
+                } catch (e: Exception) {
+                    logger.error("Failed to set musicBrainzId for $id: ${e.message}", e)
                 }
             }
         }
-        return byId(id, userId)
     }
 
     suspend fun fetchMusicBrainzId(id: UUID, userId: UUID): UserSong? {

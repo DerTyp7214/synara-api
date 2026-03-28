@@ -1,0 +1,118 @@
+package dev.dertyp.services
+
+import dev.dertyp.core.CustomMigration
+import dev.dertyp.core.Migration
+import dev.dertyp.db.CustomMigrationTable
+import kotlinx.coroutines.runBlocking
+import org.jetbrains.exposed.v1.jdbc.Database
+import org.jetbrains.exposed.v1.jdbc.SchemaUtils
+import org.jetbrains.exposed.v1.jdbc.selectAll
+import org.jetbrains.exposed.v1.jdbc.transactions.transaction
+import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
+
+class CustomMigrationServiceTest {
+    private lateinit var database: Database
+    private val service = CustomMigrationService()
+
+    @BeforeEach
+    fun setup() {
+        database = Database.connect("jdbc:h2:mem:test;DB_CLOSE_DELAY=-1", "org.h2.Driver")
+        transaction(database) {
+            SchemaUtils.create(CustomMigrationTable)
+        }
+    }
+
+    @AfterEach
+    fun tearDown() {
+        transaction(database) {
+            SchemaUtils.drop(CustomMigrationTable)
+        }
+    }
+
+    @Migration("1.0")
+    class Migration1(val orderList: MutableList<String>) : CustomMigration() {
+        override suspend fun migrate() {
+            orderList.add("1.0")
+        }
+    }
+
+    @Migration("2.0")
+    class Migration2(val orderList: MutableList<String>) : CustomMigration() {
+        override suspend fun migrate() {
+            orderList.add("2.0")
+        }
+    }
+
+    @Migration("1.1")
+    class Migration1_1(val orderList: MutableList<String>) : CustomMigration() {
+        override suspend fun migrate() {
+            orderList.add("1.1")
+        }
+    }
+
+    @Test
+    fun `migrations should be executed in correct order`() = runBlocking {
+        val executionOrder = mutableListOf<String>()
+        val m1 = Migration1(executionOrder)
+        val m1_1 = Migration1_1(executionOrder)
+        val m2 = Migration2(executionOrder)
+
+        service.runMigrations(listOf(m2, m1, m1_1))
+
+        assertEquals(listOf("1.0", "1.1", "2.0"), executionOrder)
+    }
+
+    @Test
+    fun `migrations should only be executed once`() = runBlocking {
+        val list = mutableListOf<String>()
+        val m1 = Migration1(list)
+
+        // First run
+        service.runMigrations(listOf(m1))
+        assertEquals(1, list.size)
+
+        // Second run
+        service.runMigrations(listOf(m1))
+        assertEquals(1, list.size) // Should not increase
+
+        transaction(database) {
+            val executedIds = CustomMigrationTable.selectAll().map { it[CustomMigrationTable.id] }
+            assertTrue(executedIds.contains("Migration1"))
+            assertEquals(1, executedIds.size)
+        }
+    }
+
+    @Test
+    fun `version comparison should work correctly`() {
+        val compareVersions = service.javaClass.getDeclaredMethod("compareVersions", String::class.java, String::class.java).apply {
+            isAccessible = true
+        }
+
+        fun invokeCompare(v1: String, v2: String) = compareVersions.invoke(service, v1, v2) as Int
+
+        assertTrue(invokeCompare("1.0", "1.1") < 0)
+        assertTrue(invokeCompare("1.1", "1.0") > 0)
+        assertEquals(invokeCompare("1.0", "1.0.0"), 0)
+        assertTrue(invokeCompare("1.2", "1.10") < 0)
+        assertTrue(invokeCompare("2.0", "1.9.9") > 0)
+        assertTrue(invokeCompare("1_1", "1.2") < 0)
+    }
+
+    @Test
+    fun `duration formatting should work correctly`() {
+        val formatDuration = service.javaClass.getDeclaredMethod("formatDuration", Long::class.java).apply {
+            isAccessible = true
+        }
+
+        fun invokeFormat(ms: Long) = formatDuration.invoke(service, ms) as String
+
+        assertEquals("500ms", invokeFormat(500))
+        assertEquals("1s", invokeFormat(1000))
+        assertEquals("1m 5s", invokeFormat(65000))
+        assertEquals("1h 1m 5s", invokeFormat(3600000 + 60000 + 5000))
+    }
+}
