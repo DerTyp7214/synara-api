@@ -5,6 +5,7 @@ import dev.dertyp.core.*
 import dev.dertyp.data.*
 import dev.dertyp.db.*
 import dev.dertyp.dbQuery
+import dev.dertyp.services.metadata.MusicBrainzService
 import dev.dertyp.utils.LogParam
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
@@ -13,6 +14,8 @@ import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import org.jetbrains.exposed.v1.jdbc.*
 import org.koin.core.component.inject
 import java.util.UUID
+import kotlin.time.Clock
+import kotlin.time.Duration.Companion.days
 
 class ArtistService : IArtistService, Service() {
     companion object {
@@ -34,12 +37,45 @@ class ArtistService : IArtistService, Service() {
                     artists = listOf(),
                     about = resultRow[ArtistTable.about],
                     imageId = resultRow[ArtistTable.image]?.value,
+                    musicbrainzId = resultRow.getOrNull(ArtistMusicBrainzTable.musicBrainzId),
                 )
             }
         }
     }
 
     fun map(resultRow: ResultRow): Artist = mapArtist(resultRow)
+    
+    suspend fun fetchMusicBrainzId(id: UUID): Artist? {
+        val artist = byId(id) ?: return null
+        if (artist.musicbrainzId != null) return artist
+        
+        val musicBrainzService: MusicBrainzService by inject()
+        val recording = musicBrainzService.searchArtistMb(artist)
+        
+        if (recording != null) {
+            dbQuery {
+                ArtistMusicBrainzTable.upsert(ArtistMusicBrainzTable.artistId) {
+                    it[artistId] = id
+                    it[musicBrainzId] = recording.id
+                    it[lastCheck] = Clock.System.now().toEpochMilliseconds()
+                }
+            }
+        } else {
+            dbQuery {
+                ArtistMusicBrainzTable.upsert(ArtistMusicBrainzTable.artistId) {
+                    it[artistId] = id
+                    it[lastCheck] = Clock.System.now().toEpochMilliseconds()
+                }
+            }
+        }
+        
+        return byId(id)
+    }
+
+    override suspend fun searchArtistOnMusicBrainz(query: String, page: Int, pageSize: Int): PaginatedResponse<MusicBrainzArtist> {
+        val musicBrainzService: MusicBrainzService by inject()
+        return musicBrainzService.searchArtistsMbPaged(query, page, pageSize)
+    }
 
     override suspend fun byId(id: UUID): Artist? = querySingle {
         where { ArtistTable.id eq id }
@@ -164,11 +200,25 @@ class ArtistService : IArtistService, Service() {
             this[AlbumArtistTable.artistId] = newArtist
         }
 
+        val existingMbIds = ArtistMusicBrainzTable
+            .select(ArtistMusicBrainzTable.musicBrainzId)
+            .where { ArtistMusicBrainzTable.artistId inList currentArtistIds }
+            .mapNotNull { it[ArtistMusicBrainzTable.musicBrainzId] }
+            .distinct()
+            
+        if (existingMbIds.isNotEmpty()) {
+            ArtistMusicBrainzTable.insert { 
+                it[artistId] = newArtist
+                it[musicBrainzId] = existingMbIds.first()
+            }
+        }
+
         SongArtistTable.deleteWhere { SongArtistTable.artistId inList currentArtistIds }
         AlbumArtistTable.deleteWhere { AlbumArtistTable.artistId inList currentArtistIds }
 
         ArtistTable.deleteWhere { ArtistTable.id inList currentArtistIds }
         ArtistAliasTable.deleteWhere { ArtistAliasTable.artistId inList currentArtistIds }
+        ArtistMusicBrainzTable.deleteWhere { ArtistMusicBrainzTable.artistId inList currentArtistIds }
 
         logger.info("Merged artists $mergeArtists into $newArtist")
 
@@ -287,6 +337,23 @@ class ArtistService : IArtistService, Service() {
     fun allArtistsFlow(): Flow<Artist> = allArtistIds().chunked(100).flatMapConcat { ids ->
         byIds(ids).asFlow()
     }
+    
+    fun artistIdsWithoutMusicBrainzId(): Flow<UUID> = flow {
+        val oneWeekAgo = Clock.System.now() - 7.days
+
+        ArtistTable
+            .leftJoin(ArtistMusicBrainzTable)
+            .select(ArtistTable.id)
+            .where {
+                ArtistMusicBrainzTable.artistId.isNull() or
+                        (ArtistMusicBrainzTable.musicBrainzId.isNull() and (ArtistMusicBrainzTable.lastCheck less oneWeekAgo.toEpochMilliseconds()))
+            }
+            .fetchBatchedResults(1000) { batch ->
+                batch.forEach {
+                    emit(it[ArtistTable.id].value)
+                }
+            }
+    }
 
     private suspend fun querySingle(query: Query.() -> Query) =
         queryArtists(0, Int.MAX_VALUE, query).data.singleOrNull()
@@ -295,6 +362,7 @@ class ArtistService : IArtistService, Service() {
         val offset = if (pageSize == Int.MAX_VALUE) 0 else 1
         val mainArtistRows = ArtistTable
             .leftJoin(ArtistAliasTable)
+            .leftJoin(ArtistMusicBrainzTable)
             .selectAll()
             .query()
             .toList()
@@ -320,6 +388,7 @@ class ArtistService : IArtistService, Service() {
         }
 
         val memberDataRows = ArtistTable
+            .leftJoin(ArtistMusicBrainzTable)
             .selectAll()
             .where { ArtistTable.groupId inList groupIds }
             .toList()
@@ -442,6 +511,13 @@ class ArtistService : IArtistService, Service() {
             it[isGroup] = artist.isGroup
             it[about] = artist.about
             it[image] = artist.imageId?.let { imageId -> EntityID(imageId, ImageTable) }
+        }
+        
+        if (artist.musicbrainzId != null) {
+            ArtistMusicBrainzTable.upsert(ArtistMusicBrainzTable.artistId) {
+                it[artistId] = artist.id
+                it[musicBrainzId] = artist.musicbrainzId
+            }
         }
 
         artist.artists.forEach { member ->

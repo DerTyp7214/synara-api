@@ -346,7 +346,7 @@ class Indexer(
                         tidalAlbums[finalAlbum.originalId]?.let { tidalAlbum ->
                             finalAlbum = finalAlbum.copy(
                                 songCount = if (finalAlbum.songCount == 0) tidalAlbum.trackCount else finalAlbum.songCount,
-                                releaseDate = finalAlbum.releaseDate ?: tidalAlbum.releaseDate,
+                                releaseDate = tidalAlbum.releaseDate ?: finalAlbum.releaseDate,
                                 artists = tidalAlbum.artists.ifEmpty { finalAlbum.artists }.sorted()
                             )
                         }

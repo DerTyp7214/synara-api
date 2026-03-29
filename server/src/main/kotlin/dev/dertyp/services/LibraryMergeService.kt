@@ -2,21 +2,30 @@ package dev.dertyp.services
 
 import dev.dertyp.db.*
 import dev.dertyp.dbQuery
+import dev.dertyp.getISOFromDate
+import dev.dertyp.services.metadata.MetadataService
+import dev.dertyp.services.metadata.TidalService
+import io.ktor.server.application.ApplicationEnvironment
 import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.select
+import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.update
 import java.util.UUID
 
-class LibraryMergeService : Service() {
+class LibraryMergeService(
+    private val environment: ApplicationEnvironment
+) : Service() {
 
     suspend fun mergeDuplicates(): Map<String, Any?> = dbQuery {
         val songsMerged = mergeDuplicateSongs()
         val imagesMerged = mergeDuplicateImages()
+        val albumsMerged = mergeDuplicateAlbums()
         mapOf(
             "songsMerged" to songsMerged,
             "imagesMerged" to imagesMerged,
-            "totalMerged" to (songsMerged + imagesMerged)
+            "albumsMerged" to albumsMerged,
+            "totalMerged" to (songsMerged + imagesMerged + albumsMerged),
         )
     }
 
@@ -65,7 +74,7 @@ class LibraryMergeService : Service() {
                             (SongTable.discNumber eq duplicateGroup[SongTable.discNumber]) and
                             (SongTable.fileSize eq duplicateGroup[SongTable.fileSize])
                 }
-                .orderBy(SongTable.inserted, SortOrder.ASC) // Oldest first
+                .orderBy(SongTable.inserted, SortOrder.ASC)
                 .map { it[SongTable.id].value }
 
             if (songsInGroup.size <= 1) continue
@@ -85,9 +94,184 @@ class LibraryMergeService : Service() {
         return totalMerged
     }
 
+    private suspend fun mergeDuplicateAlbums(): Int {
+        logger.info("Starting duplicate album merge check")
+        var totalMerged = 0
+
+        val allAlbums = AlbumTable.leftJoin(AlbumMusicBrainzTable).selectAll().toList()
+
+        val originalIdGroups = allAlbums
+            .filter { it[AlbumTable.originalId] != null }
+            .groupBy { it[AlbumTable.originalId]!! }
+            .filter { it.value.size > 1 }
+
+        val tidalService = MetadataService.getMetadataService(MetadataService.Companion.MetadataType.tidal, environment) as TidalService
+
+        for ((originalId, group) in originalIdGroups) {
+            val sortedGroup = group.sortedByDescending {
+                var score = 0
+                if (it[AlbumTable.releaseDate] != null) score++
+                if (it[AlbumTable.cover] != null) score++
+                if (it.getOrNull(AlbumMusicBrainzTable.musicBrainzId) != null) score++
+                (score * 1000) + it[AlbumTable.songCount]
+            }
+
+            val keptAlbum = sortedGroup.first()
+            val keptAlbumId = keptAlbum[AlbumTable.id].value
+            val albumsToMerge = sortedGroup.drop(1)
+
+            logger.info("Merging ${albumsToMerge.size} albums with originalId $originalId into $keptAlbumId")
+
+            for (oldAlbum in albumsToMerge) {
+                mergeAlbumReferences(oldAlbum[AlbumTable.id].value, keptAlbumId)
+                AlbumTable.deleteWhere { AlbumTable.id eq oldAlbum[AlbumTable.id].value }
+                totalMerged++
+            }
+
+            try {
+                val tidalAlbums = tidalService.getAlbumsByIds(listOf(originalId))
+                val tidalAlbum = tidalAlbums.firstOrNull()
+                if (tidalAlbum != null) {
+                    AlbumTable.update({ AlbumTable.id eq keptAlbumId }) {
+                        it[AlbumTable.songCount] = tidalAlbum.trackCount
+                        it[AlbumTable.releaseDate] = getISOFromDate(tidalAlbum.releaseDate)
+                    }
+                }
+            } catch (e: Exception) {
+                logger.error("Failed to query Tidal API for album $originalId: ${e.message}")
+            }
+        }
+
+        val albumsWithArtists = allAlbums.map { albumRow ->
+            val albumId = albumRow[AlbumTable.id].value
+            val artists = AlbumArtistTable
+                .select(AlbumArtistTable.artistId)
+                .where { AlbumArtistTable.albumId eq albumId }
+                .map { it[AlbumArtistTable.artistId].value }
+            albumRow to artists
+        }
+
+        val processedAlbumIds = mutableSetOf<UUID>()
+        val groups = mutableListOf<MutableList<ResultRow>>()
+
+        for (i in albumsWithArtists.indices) {
+            val (albumA, artistsA) = albumsWithArtists[i]
+            val albumAId = albumA[AlbumTable.id].value
+            if (albumAId in processedAlbumIds) continue
+
+            val currentGroup = mutableListOf(albumA)
+            processedAlbumIds.add(albumAId)
+
+            for (j in i + 1 until albumsWithArtists.size) {
+                val (albumB, artistsB) = albumsWithArtists[j]
+                val albumBId = albumB[AlbumTable.id].value
+                if (albumBId in processedAlbumIds) continue
+
+                if (calculateSimilarity(albumA, albumB, artistsA, artistsB) > 140) {
+                    currentGroup.add(albumB)
+                    processedAlbumIds.add(albumBId)
+                }
+            }
+            if (currentGroup.size > 1) {
+                groups.add(currentGroup)
+            }
+        }
+
+        for (group in groups) {
+            logger.info("Found a group of ${group.size} similar albums to merge.")
+
+            val sortedGroup = group.sortedByDescending {
+                var score = 0
+                if (it[AlbumTable.releaseDate] != null) score++
+                if (it[AlbumTable.cover] != null) score++
+                if (it.getOrNull(AlbumMusicBrainzTable.musicBrainzId) != null) score++
+                (score * 1000) + it[AlbumTable.songCount]
+            }
+
+            val keptAlbum = sortedGroup.first()
+            val keptAlbumId = keptAlbum[AlbumTable.id].value
+            val albumsToMerge = sortedGroup.drop(1)
+            
+            logger.info("Merging ${albumsToMerge.size} albums into $keptAlbumId")
+
+            for (oldAlbum in albumsToMerge) {
+                mergeAlbumReferences(oldAlbum[AlbumTable.id].value, keptAlbumId)
+                AlbumTable.deleteWhere { AlbumTable.id eq oldAlbum[AlbumTable.id].value }
+                totalMerged++
+            }
+        }
+
+        logger.info("Duplicate album merge completed")
+        return totalMerged
+    }
+
+    private fun calculateSimilarity(albumA: ResultRow, albumB: ResultRow, artistsA: List<UUID>, artistsB: List<UUID>): Int {
+        var score = 0
+
+        val coverA = albumA.getOrNull(AlbumTable.cover)?.value
+        val coverB = albumB.getOrNull(AlbumTable.cover)?.value
+        if (coverA != null && coverA == coverB) {
+            score += 100
+        }
+
+        val nameA = albumA[AlbumTable.name]
+        val nameB = albumB[AlbumTable.name]
+        val dateA = albumA.getOrNull(AlbumTable.releaseDate)
+        val dateB = albumB.getOrNull(AlbumTable.releaseDate)
+        if (nameA.equals(nameB, ignoreCase = true) && dateA != null && dateA == dateB) {
+            score += 70
+        }
+
+        if (nameA.equals(nameB, ignoreCase = true)) {
+            score += 20
+        }
+        if (dateA != null && dateA == dateB) {
+            score += 10
+        }
+
+        val intersection = artistsA.intersect(artistsB.toSet()).size
+        val union = artistsA.size + artistsB.size - intersection
+        if (union > 0) {
+            val jaccard = intersection.toDouble() / union
+            score += (jaccard * 50).toInt()
+        }
+
+        return score
+    }
+
+    private fun mergeAlbumReferences(oldAlbumId: UUID, keptAlbumId: UUID) {
+        val songsForOld = SongTable.select(SongTable.id).where { SongTable.albumId eq oldAlbumId }.map { it[SongTable.id].value }
+        if (songsForOld.isNotEmpty()) {
+            SongTable.update({ SongTable.albumId eq oldAlbumId }) {
+                it[SongTable.albumId] = keptAlbumId
+            }
+        }
+
+        val artistsForOld = AlbumArtistTable.select(AlbumArtistTable.artistId).where { AlbumArtistTable.albumId eq oldAlbumId }.map { it[AlbumArtistTable.artistId].value }
+        val artistsForKept = AlbumArtistTable.select(AlbumArtistTable.artistId).where { AlbumArtistTable.albumId eq keptAlbumId }.map { it[AlbumArtistTable.artistId].value }.toSet()
+
+        for (artistId in artistsForOld) {
+            if (artistId !in artistsForKept) {
+                AlbumArtistTable.update({ (AlbumArtistTable.albumId eq oldAlbumId) and (AlbumArtistTable.artistId eq artistId) }) {
+                    it[AlbumArtistTable.albumId] = keptAlbumId
+                }
+            }
+        }
+        AlbumArtistTable.deleteWhere { AlbumArtistTable.albumId eq oldAlbumId }
+
+        val hasMbKept = AlbumMusicBrainzTable.select(AlbumMusicBrainzTable.albumId).where { AlbumMusicBrainzTable.albumId eq keptAlbumId }.any()
+        if (!hasMbKept) {
+            AlbumMusicBrainzTable.update({ AlbumMusicBrainzTable.albumId eq oldAlbumId }) {
+                it[AlbumMusicBrainzTable.albumId] = keptAlbumId
+            }
+        }
+        AlbumMusicBrainzTable.deleteWhere { AlbumMusicBrainzTable.albumId eq oldAlbumId }
+    }
+
     private fun mergeDuplicateImages(): Int {
         logger.info("Starting duplicate image merge check")
 
+        var totalMerged = 0
         val duplicates = ImageTable
             .select(ImageTable.imageHash)
             .groupBy(ImageTable.imageHash)
@@ -101,7 +285,6 @@ class LibraryMergeService : Service() {
 
         logger.info("Found ${duplicates.size} groups of duplicate images")
 
-        var totalMerged = 0
         for (duplicateGroup in duplicates) {
             val hash = duplicateGroup[ImageTable.imageHash]
             val imagesInGroup = ImageTable

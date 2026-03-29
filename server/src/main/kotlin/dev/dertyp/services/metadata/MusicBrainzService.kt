@@ -2,8 +2,7 @@ package dev.dertyp.services.metadata
 
 import dev.dertyp.ApiClient
 import dev.dertyp.core.cleanTitle
-import dev.dertyp.data.Album
-import dev.dertyp.data.BaseSong
+import dev.dertyp.data.*
 import dev.dertyp.server.BuildConfig
 import dev.dertyp.services.Service
 import io.ktor.client.call.body
@@ -27,6 +26,13 @@ data class MusicBrainzReleaseSearchResponse(
 )
 
 @Serializable
+data class MusicBrainzArtistSearchResponse(
+    val count: Int? = null,
+    val offset: Int? = null,
+    val artists: List<MusicBrainzArtist>? = null
+)
+
+@Serializable
 data class MusicBrainzRecording(
     val id: String,
     val title: String? = null,
@@ -41,12 +47,6 @@ data class MusicBrainzArtistCredit(
     val name: String? = null,
     val joinphrase: String? = null,
     val artist: MusicBrainzArtist? = null
-)
-
-@Serializable
-data class MusicBrainzArtist(
-    val id: String,
-    val name: String? = null
 )
 
 @Serializable
@@ -132,5 +132,59 @@ class MusicBrainzService : Service() {
             logger.error("Error searching MusicBrainz for $query", e)
             null
         }
+    }
+
+    suspend fun searchArtistMb(artist: Artist): MusicBrainzArtist? {
+        val queryParts = mutableListOf<String>()
+        queryParts.add("artist:\"${artist.name}\"")
+        queryParts.add("artistaccent:\"${artist.name}\"")
+
+        if (artist.isGroup) {
+            queryParts.add("type:\"group\"")
+        }
+
+        val query = queryParts.joinToString(" AND ")
+
+        return try {
+            val response = retryableGet<MusicBrainzArtistSearchResponse>("$mbBaseUrl/artist") {
+                parameter("query", query)
+                parameter("limit", 1)
+                parameter("fmt", "json")
+                header("User-Agent", "Synara/${BuildConfig.VERSION} ( https://github.com/dertyp7214/synara )")
+            }
+
+            response?.artists?.firstOrNull()
+        } catch (e: Exception) {
+            logger.error("Error searching MusicBrainz for $query", e)
+            null
+        }
+    }
+
+    suspend fun searchArtistsMbPaged(query: String, page: Int, pageSize: Int): PaginatedResponse<MusicBrainzArtist> {
+        val offset = page * pageSize
+
+        val response = try {
+            retryableGet<MusicBrainzArtistSearchResponse>("$mbBaseUrl/artist") {
+                parameter("query", query)
+                parameter("limit", pageSize)
+                parameter("offset", offset)
+                parameter("fmt", "json")
+                header("User-Agent", "Synara/${BuildConfig.VERSION} ( https://github.com/dertyp7214/synara )")
+            }
+        } catch (e: Exception) {
+            logger.error("Error searching MusicBrainz for artists: $query", e)
+            null
+        }
+
+        val total = response?.count ?: 0
+        val items = response?.artists ?: emptyList()
+
+        return PaginatedResponse(
+            data = items,
+            total = total,
+            page = page,
+            pageSize = pageSize,
+            hasNextPage = (offset + items.size) < total
+        )
     }
 }

@@ -10,6 +10,7 @@ import dev.dertyp.dbQuery
 import dev.dertyp.getDateFromISO
 import dev.dertyp.getISOFromDate
 import dev.dertyp.services.ArtistService.Companion.mapArtist
+import dev.dertyp.services.metadata.MusicBrainzService
 import dev.dertyp.utils.LogParam
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
@@ -18,12 +19,15 @@ import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import org.jetbrains.exposed.v1.jdbc.*
 import org.koin.core.component.get
+import org.koin.core.component.inject
 import java.io.File
 import java.nio.file.Paths
 import java.util.UUID
 import kotlin.io.path.absolutePathString
 import kotlin.io.path.isSymbolicLink
 import kotlin.io.path.readSymbolicLink
+import kotlin.time.Clock
+import kotlin.time.Duration.Companion.days
 
 class AlbumService : IAlbumService, Service() {
     companion object {
@@ -39,6 +43,7 @@ class AlbumService : IAlbumService, Service() {
                 totalDuration = -1,
                 coverId = resultRow[AlbumTable.cover]?.value,
                 originalId = resultRow[AlbumTable.originalId],
+                musicbrainzId = resultRow.getOrNull(AlbumMusicBrainzTable.musicBrainzId),
             )
         }
 
@@ -57,6 +62,33 @@ class AlbumService : IAlbumService, Service() {
     }
 
     fun map(resultRow: ResultRow): Album = mapAlbum(resultRow)
+    
+    suspend fun fetchMusicBrainzId(id: UUID): Album? {
+        val album = byId(id) ?: return null
+        if (album.musicbrainzId != null) return album
+        
+        val musicBrainzService: MusicBrainzService by inject()
+        val recording = musicBrainzService.searchAlbumMb(album)
+        
+        if (recording != null) {
+            dbQuery {
+                AlbumMusicBrainzTable.upsert(AlbumMusicBrainzTable.albumId) {
+                    it[albumId] = id
+                    it[musicBrainzId] = recording.id
+                    it[lastCheck] = Clock.System.now().toEpochMilliseconds()
+                }
+            }
+        } else {
+            dbQuery {
+                AlbumMusicBrainzTable.upsert(AlbumMusicBrainzTable.albumId) {
+                    it[albumId] = id
+                    it[lastCheck] = Clock.System.now().toEpochMilliseconds()
+                }
+            }
+        }
+        
+        return byId(id)
+    }
 
     override suspend fun byId(id: UUID): Album? = querySingle {
         where { AlbumTable.id eq id }
@@ -125,6 +157,23 @@ class AlbumService : IAlbumService, Service() {
     fun allAlbumsFlow(): Flow<Album> = allAlbumIds().chunked(100).flatMapConcat { ids ->
         byIds(ids).asFlow()
     }
+    
+    fun albumIdsWithoutMusicBrainzId(): Flow<UUID> = flow {
+        val oneWeekAgo = Clock.System.now() - 7.days
+
+        AlbumTable
+            .leftJoin(AlbumMusicBrainzTable)
+            .select(AlbumTable.id)
+            .where {
+                AlbumMusicBrainzTable.albumId.isNull() or
+                        (AlbumMusicBrainzTable.musicBrainzId.isNull() and (AlbumMusicBrainzTable.lastCheck less oneWeekAgo.toEpochMilliseconds()))
+            }
+            .fetchBatchedResults(1000) { batch ->
+                batch.forEach {
+                    emit(it[AlbumTable.id].value)
+                }
+            }
+    }
 
     @Suppress("DuplicatedCode")
     override suspend fun deleteAlbums(ids: List<UUID>): Boolean = dbQuery {
@@ -187,6 +236,7 @@ class AlbumService : IAlbumService, Service() {
                 otherColumn = { ArtistTable.id }
             )
             .leftJoin(ArtistAliasTable)
+            .leftJoin(AlbumMusicBrainzTable)
             .selectAll()
             .query()
             .toList()
@@ -422,6 +472,13 @@ class AlbumService : IAlbumService, Service() {
             it[songCount] = album.songCount
             it[cover] = album.coverId?.let { coverId -> EntityID(coverId, ImageTable) }
             it[originalId] = album.originalId
+        }
+        
+        if (album.musicbrainzId != null) {
+            AlbumMusicBrainzTable.upsert(AlbumMusicBrainzTable.albumId) {
+                it[albumId] = album.id
+                it[musicBrainzId] = album.musicbrainzId
+            }
         }
 
         AlbumArtistTable.deleteWhere { AlbumArtistTable.albumId eq album.id }
