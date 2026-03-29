@@ -18,27 +18,42 @@ import kotlin.time.Clock
 
 class ArtistService : IArtistService, Service() {
     companion object {
-        fun mapArtist(resultRow: ResultRow, table: ColumnSet = ArtistTable): Artist {
+        fun mapArtist(
+            resultRow: ResultRow,
+            table: ColumnSet = ArtistTable,
+            musicbrainzId: String? = null
+        ): Artist {
+            val id: UUID
+            val name: String
+            val isGroup: Boolean
+            val about: String
+            val imageId: UUID?
+
             if (table is Alias<*>) {
-                return Artist(
-                    id = resultRow[table[ArtistTable.id]].value,
-                    name = resultRow[table[ArtistTable.name]],
-                    isGroup = resultRow[table[ArtistTable.isGroup]],
-                    artists = listOf(),
-                    about = resultRow[table[ArtistTable.about]],
-                    imageId = resultRow[table[ArtistTable.image]]?.value,
-                )
+                id = resultRow[table[ArtistTable.id]].value
+                name = resultRow[table[ArtistTable.name]]
+                isGroup = resultRow[table[ArtistTable.isGroup]]
+                about = resultRow[table[ArtistTable.about]]
+                imageId = resultRow[table[ArtistTable.image]]?.value
             } else {
-                return Artist(
-                    id = resultRow[ArtistTable.id].value,
-                    name = resultRow[ArtistTable.name],
-                    isGroup = resultRow[ArtistTable.isGroup],
-                    artists = listOf(),
-                    about = resultRow[ArtistTable.about],
-                    imageId = resultRow[ArtistTable.image]?.value,
-                    musicbrainzId = resultRow.getOrNull(ArtistMusicBrainzTable.musicBrainzId),
-                )
+                id = resultRow[ArtistTable.id].value
+                name = resultRow[ArtistTable.name]
+                isGroup = resultRow[ArtistTable.isGroup]
+                about = resultRow[ArtistTable.about]
+                imageId = resultRow[ArtistTable.image]?.value
             }
+
+            return Artist(
+                id = id,
+                name = name,
+                isGroup = isGroup,
+                artists = listOf(),
+                about = about,
+                imageId = imageId,
+                musicbrainzId = musicbrainzId ?: if (table == ArtistTable) resultRow.getOrNull(
+                    ArtistMusicBrainzTable.musicBrainzId
+                ) else null,
+            )
         }
     }
 

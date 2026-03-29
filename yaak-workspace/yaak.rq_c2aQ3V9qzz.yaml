@@ -2,7 +2,7 @@ type: http_request
 model: http_request
 id: rq_c2aQ3V9qzz
 createdAt: 2025-10-14T19:25:16.450619051
-updatedAt: 2026-03-19T20:23:24.677869011
+updatedAt: 2026-03-29T13:32:04.335893539
 workspaceId: wk_9dbKacQT4H
 folderId: fl_QrUoFyttZM
 authentication: {}
@@ -35,13 +35,13 @@ urlParameters:
   id: 9H63rbCnHd
 - enabled: true
   name: pageSize
-  value: '2'
+  value: '25'
   id: Cqh8H4cRV7
 - enabled: true
   name: :query
-  value: John Murphy - Mantis Reveals Her Secret
+  value: ''
   id: zXFn5dePsN
 - enabled: true
   name: ''
   value: ''
-  id: saCm89qjA5
+  id: NIJyMzvufP

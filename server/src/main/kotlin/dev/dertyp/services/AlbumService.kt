@@ -235,6 +235,11 @@ class AlbumService : IAlbumService, Service() {
                 onColumn = { AlbumArtistTable.artistId },
                 otherColumn = { ArtistTable.id }
             )
+            .leftJoin(
+                ArtistMusicBrainzTable,
+                onColumn = { ArtistTable.id },
+                otherColumn = { ArtistMusicBrainzTable.artistId }
+            )
             .leftJoin(ArtistAliasTable)
             .leftJoin(AlbumMusicBrainzTable)
             .selectAll()

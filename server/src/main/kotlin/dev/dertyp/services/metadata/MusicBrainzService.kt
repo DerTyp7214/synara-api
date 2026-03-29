@@ -85,14 +85,28 @@ class MusicBrainzService : Service() {
     suspend fun searchMb(song: BaseSong): MusicBrainzRecording? {
         val queryParts = mutableListOf<String>()
         queryParts.add("recording:\"${song.title.cleanTitle()}\"")
-        song.artists.forEach { queryParts.add("artist:\"${it.name}\"") }
-
-        song.album?.name?.takeIf { it != song.title }?.let {
-            queryParts.add("release:\"${it.cleanTitle()}\"")
+        song.artists.forEach {
+            if (it.musicbrainzId != null) {
+                queryParts.add("arid:${it.musicbrainzId}")
+            } else {
+                queryParts.add("artist:\"${it.name}\"")
+            }
         }
 
-        song.album?.artists?.forEach { artist ->
-            queryParts.add("artistname:\"${artist.name}\"")
+        song.album?.let { album ->
+            if (album.musicbrainzId != null) {
+                queryParts.add("reid:${album.musicbrainzId}")
+            } else {
+                if (album.name != song.title) {
+                    queryParts.add("release:\"${album.name}\"")
+                }
+
+                album.artists.forEach { artist ->
+                    if (artist.musicbrainzId == null) {
+                        queryParts.add("artistname:\"${artist.name}\"")
+                    }
+                }
+            }
         }
 
         val query = queryParts.joinToString(" AND ")
@@ -115,7 +129,13 @@ class MusicBrainzService : Service() {
     suspend fun searchAlbumMb(album: Album): MusicBrainzRelease? {
         val queryParts = mutableListOf<String>()
         queryParts.add("release:\"${album.name.cleanTitle()}\"")
-        album.artists.forEach { queryParts.add("artist:\"${it.name}\"") }
+        album.artists.forEach {
+            if (it.musicbrainzId != null) {
+                queryParts.add("arid:${it.musicbrainzId}")
+            } else {
+                queryParts.add("artist:\"${it.name}\"")
+            }
+        }
 
         val query = queryParts.joinToString(" AND ")
 

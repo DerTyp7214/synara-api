@@ -158,6 +158,7 @@ class SongService : Service() {
     private val musicBrainzService by inject<MusicBrainzService>()
 
     val albumArtistAlias = ArtistTable.alias("albumArtistAlias")
+    val albumArtistMusicBrainzAlias = ArtistMusicBrainzTable.alias("albumArtistMusicBrainzAlias")
     val albumArtistAliasAlias = ArtistAliasTable.alias("albumArtistAliasAlias")
 
     companion object {
@@ -504,8 +505,9 @@ class SongService : Service() {
         querySongs(page, pageSize, explicit, { userSong(userId) }) {
             rankedSearchQuery(
                 query,
-                listOf(10, 5, 5, 5, 5),
+                listOf(20, 10, 5, 5, 5, 5),
                 listOf(
+                    SongMusicBrainzTable.musicBrainzId,
                     SongTable.title,
                     ArtistTable.name,
                     AlbumTable.name,
@@ -831,11 +833,21 @@ class SongService : Service() {
                 onColumn = { SongTable.albumId },
                 otherColumn = { AlbumTable.id }
             )
+            .leftJoin(
+                AlbumMusicBrainzTable,
+                onColumn = { AlbumTable.id },
+                otherColumn = { AlbumMusicBrainzTable.albumId }
+            )
             .leftJoin(SongArtistTable)
             .leftJoin(
                 ArtistTable,
                 onColumn = { SongArtistTable.artistId },
                 otherColumn = { ArtistTable.id }
+            )
+            .leftJoin(
+                ArtistMusicBrainzTable,
+                onColumn = { ArtistTable.id },
+                otherColumn = { ArtistMusicBrainzTable.artistId }
             )
             .leftJoin(ArtistAliasTable)
             .leftJoin(
@@ -847,6 +859,11 @@ class SongService : Service() {
                 albumArtistAlias,
                 onColumn = { AlbumArtistTable.artistId },
                 otherColumn = { albumArtistAlias[ArtistTable.id] }
+            )
+            .leftJoin(
+                albumArtistMusicBrainzAlias,
+                onColumn = { albumArtistAlias[ArtistTable.id] },
+                otherColumn = { albumArtistMusicBrainzAlias[ArtistMusicBrainzTable.artistId] }
             )
             .leftJoin(
                 albumArtistAliasAlias,
@@ -954,7 +971,11 @@ class SongService : Service() {
             }
 
             if (row.getOrNull(albumArtistAlias[ArtistTable.id]) != null) {
-                val artist = mapArtist(row, albumArtistAlias)
+                val artist = mapArtist(
+                    row,
+                    albumArtistAlias,
+                    row.getOrNull(albumArtistMusicBrainzAlias[ArtistMusicBrainzTable.musicBrainzId])
+                )
                 if (artist !in albumArtistsMap.getOrDefault(albumId, emptyList())) {
                     albumArtistsMap.getOrPut(albumId) { mutableListOf() }.add(artist)
                 }
