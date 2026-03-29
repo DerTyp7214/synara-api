@@ -351,6 +351,29 @@ class ArtistService : IArtistService, Service() {
 
     override suspend fun allArtists(page: Int, pageSize: Int): PaginatedResponse<Artist> = queryArtists(page, pageSize)
 
+    override suspend fun createArtist(
+        name: String,
+        isGroup: Boolean,
+        about: String,
+        musicBrainzId: String?
+    ): Artist = dbQuery {
+        val newId = ArtistTable.insertAndGetId {
+            it[ArtistTable.name] = name
+            it[ArtistTable.isGroup] = isGroup
+            it[ArtistTable.about] = about
+        }.value
+
+        if (musicBrainzId != null) {
+            ArtistMusicBrainzTable.insert {
+                it[artistId] = newId
+                it[ArtistMusicBrainzTable.musicBrainzId] = musicBrainzId
+                it[lastCheck] = Clock.System.now().toEpochMilliseconds()
+            }
+        }
+
+        byId(newId)!!
+    }
+
     fun allArtistIds(): Flow<UUID> = flow {
         ArtistTable
             .select(ArtistTable.id)

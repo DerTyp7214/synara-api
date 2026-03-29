@@ -145,6 +145,11 @@ class AlbumService : IAlbumService, Service() {
 
     override suspend fun allAlbums(page: Int, pageSize: Int): PaginatedResponse<Album> = queryAlbums(page, pageSize)
 
+    override suspend fun updateAlbum(album: Album): Album? {
+        upsertAlbum(album)
+        return byId(album.id)
+    }
+
     fun allAlbumIds(): Flow<UUID> = flow {
         AlbumTable
             .select(AlbumTable.id)

@@ -1,5 +1,7 @@
 package dev.dertyp.services
 
+import dev.dertyp.DbDialect
+import dev.dertyp.TestDatabase
 import dev.dertyp.core.CustomMigration
 import dev.dertyp.core.Migration
 import dev.dertyp.db.CustomMigrationTable
@@ -9,8 +11,9 @@ import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.jupiter.api.AfterEach
-import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.EnumSource
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
@@ -18,9 +21,8 @@ class CustomMigrationServiceTest {
     private lateinit var database: Database
     private val service = CustomMigrationService()
 
-    @BeforeEach
-    fun setup() {
-        database = Database.connect("jdbc:h2:mem:test;DB_CLOSE_DELAY=-1", "org.h2.Driver")
+    fun setup(dialect: DbDialect) {
+        database = TestDatabase.connect(dialect, "migration_test")
         transaction(database) {
             SchemaUtils.create(CustomMigrationTable)
         }
@@ -28,9 +30,7 @@ class CustomMigrationServiceTest {
 
     @AfterEach
     fun tearDown() {
-        transaction(database) {
-            SchemaUtils.drop(CustomMigrationTable)
-        }
+        TestDatabase.cleanUp()
     }
 
     @Migration("1.0")
@@ -54,8 +54,10 @@ class CustomMigrationServiceTest {
         }
     }
 
-    @Test
-    fun `migrations should be executed in correct order`() = runBlocking {
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `migrations should be executed in correct order`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
         val executionOrder = mutableListOf<String>()
         val m1 = Migration1(executionOrder)
         val m1_1 = Migration1_1(executionOrder)
@@ -66,8 +68,10 @@ class CustomMigrationServiceTest {
         assertEquals(listOf("1.0", "1.1", "2.0"), executionOrder)
     }
 
-    @Test
-    fun `migrations should only be executed once`() = runBlocking {
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `migrations should only be executed once`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
         val list = mutableListOf<String>()
         val m1 = Migration1(list)
 

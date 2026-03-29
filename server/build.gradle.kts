@@ -104,6 +104,7 @@ dependencies {
     implementation(project(":common-proxy"))
 
     testImplementation(libs.junit.jupiter.api)
+    testImplementation(libs.junit.jupiter.params)
     testRuntimeOnly(libs.junit.jupiter.engine)
     testImplementation(libs.koin.test)
     testImplementation(libs.koin.test.junit5)

@@ -1,5 +1,7 @@
 package dev.dertyp.services
 
+import dev.dertyp.DbDialect
+import dev.dertyp.TestDatabase
 import dev.dertyp.data.User
 import dev.dertyp.db.*
 import dev.dertyp.services.metadata.MusicBrainzService
@@ -13,8 +15,8 @@ import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
-import org.junit.jupiter.api.BeforeEach
-import org.junit.jupiter.api.Test
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.EnumSource
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
 import org.koin.dsl.module
@@ -35,9 +37,8 @@ class SongRpcServiceTest {
         isAdmin = true
     )
 
-    @BeforeEach
-    fun setup() {
-        database = Database.connect("jdbc:h2:mem:song_rpc_test_${UUID.randomUUID().toString().replace("-", "")};MODE=MYSQL;DB_CLOSE_DELAY=-1", "org.h2.Driver")
+    fun setup(dialect: DbDialect) {
+        database = TestDatabase.connect(dialect, "song_rpc_test")
         transaction(database) {
             SchemaUtils.create(
                 UserTable,
@@ -82,10 +83,13 @@ class SongRpcServiceTest {
     @AfterEach
     fun tearDown() {
         stopKoin()
+        TestDatabase.cleanUp()
     }
 
-    @Test
-    fun `byId should return song with full metadata`() = runBlocking {
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `byId should return song with full metadata`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
         val artistId = UUID.randomUUID()
         val albumId = UUID.randomUUID()
         val songId = UUID.randomUUID()
@@ -125,8 +129,10 @@ class SongRpcServiceTest {
         assertEquals("Test Artist", song?.artists?.firstOrNull()?.name)
     }
 
-    @Test
-    fun `setLiked should update UserSongTable`() = runBlocking {
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `setLiked should update UserSongTable`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
         val songId = UUID.randomUUID()
         val albumId = UUID.randomUUID()
         transaction(database) {
@@ -149,8 +155,10 @@ class SongRpcServiceTest {
         assertEquals(true, retrieved?.isFavourite)
     }
 
-    @Test
-    fun `rankedSearch should return matching songs by title`() = runBlocking {
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `rankedSearch should return matching songs by title`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
         val albumId = UUID.randomUUID()
         transaction(database) {
             AlbumTable.insert {
@@ -174,8 +182,10 @@ class SongRpcServiceTest {
         assertEquals("Searching for this", result.data[0].title)
     }
 
-    @Test
-    fun `rankedSearch should find songs by artist and album`() = runBlocking {
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `rankedSearch should find songs by artist and album`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
         val artistId = UUID.randomUUID()
         val albumId = UUID.randomUUID()
         val songId = UUID.randomUUID()
@@ -213,8 +223,10 @@ class SongRpcServiceTest {
         assertEquals("Some Track", albumResult.data[0].title)
     }
 
-    @Test
-    fun `rankedSearch should find songs by MusicBrainz ID`() = runBlocking {
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `rankedSearch should find songs by MusicBrainz ID`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
         val songId = UUID.randomUUID()
         val albumId = UUID.randomUUID()
         val mbId = "550e8400-e29b-41d4-a716-446655440000"
@@ -240,8 +252,10 @@ class SongRpcServiceTest {
         assertEquals("MBID Song", result.data[0].title)
     }
 
-    @Test
-    fun `rankedSearch should support negative keywords`() = runBlocking {
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `rankedSearch should support negative keywords`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
         val albumId = UUID.randomUUID()
         transaction(database) {
             AlbumTable.insert {
@@ -267,8 +281,10 @@ class SongRpcServiceTest {
         assertEquals("Keep This", result.data[0].title)
     }
 
-    @Test
-    fun `rankedSearch should return one song for multiple artists`() = runBlocking {
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `rankedSearch should return one song for multiple artists`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
         val songId = UUID.randomUUID()
         val albumId = UUID.randomUUID()
         val artistId1 = UUID.randomUUID()
