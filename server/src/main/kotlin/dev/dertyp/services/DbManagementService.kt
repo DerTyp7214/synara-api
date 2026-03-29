@@ -15,7 +15,7 @@ import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.DataInputStream
 import java.io.DataOutputStream
-import java.util.*
+import java.util.UUID
 
 @Serializable
 sealed class DbValue {
@@ -118,13 +118,13 @@ class DbManagementService : IDbManagementService {
                         transaction {
                             table.deleteAll()
                             tableData.rows.forEach { rowMap ->
-                                table.insert {
+                                table.insert { iTable ->
                                     table.columns.forEach { column ->
                                         val dbValue = rowMap[column.name]
                                         if (dbValue != null) {
                                             val value = convertFromDbValue(dbValue)
                                             @Suppress("UNCHECKED_CAST")
-                                            it[column as Column<Any?>] = value
+                                            iTable[column as Column<Any?>] = value?.let { column.columnType.valueFromDB(it) }
                                         }
                                     }
                                 }

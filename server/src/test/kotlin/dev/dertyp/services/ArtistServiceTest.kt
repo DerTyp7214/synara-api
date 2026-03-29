@@ -42,14 +42,10 @@ class ArtistServiceTest {
             )
         }
         
-        try {
-            startKoin {
-                modules(module {
-                    single { musicBrainzService }
-                })
-            }
-        } catch (_: Exception) {
-            // Might be already started in some environments
+        startKoin {
+            modules(module {
+                single { musicBrainzService }
+            })
         }
         
         service = ArtistService()

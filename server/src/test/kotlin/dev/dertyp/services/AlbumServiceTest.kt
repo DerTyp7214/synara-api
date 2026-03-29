@@ -25,8 +25,8 @@ import java.util.UUID
 class AlbumServiceTest {
     private lateinit var database: Database
     private lateinit var service: AlbumService
-    private val musicBrainzService = mockk<MusicBrainzService>()
-    private val storageService = mockk<StorageService>()
+    private val musicBrainzService = mockk<MusicBrainzService>(relaxed = true)
+    private val storageService = mockk<StorageService>(relaxed = true)
 
     fun setup(dialect: DbDialect) {
         database = TestDatabase.connect(dialect, "album_test")
@@ -45,20 +45,14 @@ class AlbumServiceTest {
             )
         }
         
-        try {
-            startKoin {
-                modules(module {
-                    single { musicBrainzService }
-                    single { storageService }
-                })
-            }
-        } catch (_: Exception) {
-            // Might be already started
+        startKoin {
+            modules(module {
+                single { musicBrainzService }
+                single { storageService }
+            })
         }
         
-        try {
-            every { storageService.albumsPath } returns null
-        } catch (_: Exception) {}
+        every { storageService.albumsPath } returns null
         
         service = AlbumService()
     }

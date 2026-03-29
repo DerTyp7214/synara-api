@@ -114,6 +114,7 @@ dependencies {
 
 tasks.test {
     useJUnitPlatform()
+    systemProperty("net.bytebuddy.experimental", "true")
 }
 
 val ktorBaseImageTag = "synara-api-base:latest"

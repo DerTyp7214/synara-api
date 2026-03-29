@@ -65,15 +65,11 @@ class SongRpcServiceTest {
             }
         }
 
-        try {
-            startKoin {
-                modules(module {
-                    single { environment }
-                    single { musicBrainzService }
-                })
-            }
-        } catch (_: Exception) {
-            // Already started
+        startKoin {
+            modules(module {
+                single { environment }
+                single { musicBrainzService }
+            })
         }
 
         songService = SongService()
