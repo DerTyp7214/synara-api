@@ -44,7 +44,7 @@ class ArtistService : IArtistService, Service() {
 
     fun map(resultRow: ResultRow): Artist = mapArtist(resultRow)
     
-    suspend fun fetchMusicBrainzId(id: UUID): Artist? {
+    override suspend fun fetchMusicBrainzId(id: UUID): Artist? {
         val artist = byId(id) ?: return null
         if (artist.musicbrainzId != null) return artist
         
