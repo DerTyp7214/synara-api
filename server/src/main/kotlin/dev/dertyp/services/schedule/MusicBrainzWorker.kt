@@ -13,6 +13,8 @@ import kotlin.concurrent.atomics.AtomicBoolean
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.hours
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 
 @OptIn(ExperimentalAtomicApi::class)
 class MusicBrainzWorker : KoinComponent {
@@ -51,12 +53,13 @@ class MusicBrainzWorker : KoinComponent {
                             val songResult = songIdsChannel.receiveCatching()
                             songResult.getOrNull()?.let { songId ->
                                 try {
+                                    val start = Clock.System.now()
                                     val song = songService.fetchMusicBrainzId(songId, admin.id)
                                     totalSongsChecked++
                                     if (song?.musicBrainzId != null) {
                                         taggedSongs++
                                     }
-                                    delay(750)
+                                    delay((1.seconds - (Clock.System.now() - start)).coerceAtLeast(500.milliseconds))
                                 } catch (e: Exception) {
                                     logger.error("Error fetching MusicBrainz ID for song $songId: ${e.message}", e)
                                 }
@@ -68,12 +71,13 @@ class MusicBrainzWorker : KoinComponent {
                             val albumResult = albumIdsChannel.receiveCatching()
                             albumResult.getOrNull()?.let { albumId ->
                                 try {
+                                    val start = Clock.System.now()
                                     val album = albumService.fetchMusicBrainzId(albumId)
                                     totalAlbumsChecked++
                                     if (album?.musicbrainzId != null) {
                                         taggedAlbums++
                                     }
-                                    delay(750)
+                                    delay((1.seconds - (Clock.System.now() - start)).coerceAtLeast(500.milliseconds))
                                 } catch (e: Exception) {
                                     logger.error("Error fetching MusicBrainz ID for album $albumId: ${e.message}", e)
                                 }

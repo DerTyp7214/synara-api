@@ -11,6 +11,7 @@ import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.update
+import org.koin.core.component.get
 import java.util.UUID
 
 class LibraryMergeService(
@@ -19,13 +20,15 @@ class LibraryMergeService(
 
     suspend fun mergeDuplicates(): Map<String, Any?> = dbQuery {
         val songsMerged = mergeDuplicateSongs()
+        val sameAlbumSongsMerged = mergeSameAlbumSongs()
         val imagesMerged = mergeDuplicateImages()
         val albumsMerged = mergeDuplicateAlbums()
         mapOf(
             "songsMerged" to songsMerged,
+            "sameAlbumSongsMerged" to sameAlbumSongsMerged,
             "imagesMerged" to imagesMerged,
             "albumsMerged" to albumsMerged,
-            "totalMerged" to (songsMerged + imagesMerged + albumsMerged),
+            "totalMerged" to (songsMerged + sameAlbumSongsMerged + imagesMerged + albumsMerged),
         )
     }
 
@@ -91,6 +94,73 @@ class LibraryMergeService(
             }
         }
         logger.info("Duplicate song merge completed")
+        return totalMerged
+    }
+
+    private suspend fun mergeSameAlbumSongs(): Int {
+        logger.info("Starting same-album duplicate song merge check")
+
+        val duplicates = SongTable
+            .select(
+                SongTable.albumId,
+                SongTable.title,
+                SongTable.trackNumber,
+                SongTable.discNumber
+            )
+            .groupBy(
+                SongTable.albumId,
+                SongTable.title,
+                SongTable.trackNumber,
+                SongTable.discNumber
+            )
+            .having { SongTable.id.count() greater 1L }
+            .toList()
+
+        if (duplicates.isEmpty()) {
+            logger.info("No same-album duplicate songs found")
+            return 0
+        }
+
+        logger.info("Found ${duplicates.size} groups of same-album duplicate songs")
+
+        val allSongsToDelete = mutableListOf<UUID>()
+        var totalMerged = 0
+
+        for (duplicateGroup in duplicates) {
+            val songsInGroup = SongTable
+                .select(SongTable.id, SongTable.fileSize, SongTable.inserted)
+                .where {
+                    (SongTable.albumId eq duplicateGroup[SongTable.albumId]) and
+                            (SongTable.title eq duplicateGroup[SongTable.title]) and
+                            (SongTable.trackNumber eq duplicateGroup[SongTable.trackNumber]) and
+                            (SongTable.discNumber eq duplicateGroup[SongTable.discNumber])
+                }
+                .orderBy(SongTable.fileSize, SortOrder.DESC)
+                .orderBy(SongTable.inserted, SortOrder.ASC)
+                .map { it[SongTable.id].value }
+
+            if (songsInGroup.size <= 1) continue
+
+            val keptSongId = songsInGroup.first()
+            val songsToMerge = songsInGroup.drop(1)
+
+            logger.info("Merging ${songsToMerge.size} songs into $keptSongId")
+
+            for (oldSongId in songsToMerge) {
+                mergeSongReferences(oldSongId, keptSongId)
+                allSongsToDelete.add(oldSongId)
+                totalMerged++
+            }
+        }
+
+        if (allSongsToDelete.isNotEmpty()) {
+            val songService = get<SongService>()
+            allSongsToDelete.chunked(10000).forEach {
+                songService.deleteSongs(it)
+            }
+        }
+
+        logger.info("Same-album duplicate song merge completed")
         return totalMerged
     }
 
