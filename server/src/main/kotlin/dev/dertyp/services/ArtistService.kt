@@ -71,6 +71,18 @@ class ArtistService : IArtistService, Service() {
         return byId(id)
     }
 
+    override suspend fun setMusicBrainzId(id: UUID, musicBrainzId: String?): Artist? {
+        dbQuery {
+            ArtistMusicBrainzTable.upsert(ArtistMusicBrainzTable.artistId) {
+                it[artistId] = id
+                it[ArtistMusicBrainzTable.musicBrainzId] = musicBrainzId
+                it[lastCheck] = Clock.System.now().toEpochMilliseconds()
+            }
+        }
+        
+        return byId(id)
+    }
+
     override suspend fun searchArtistOnMusicBrainz(query: String, page: Int, pageSize: Int): PaginatedResponse<MusicBrainzArtist> {
         val musicBrainzService: MusicBrainzService by inject()
         return musicBrainzService.searchArtistsMbPaged(query, page, pageSize)
