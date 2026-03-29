@@ -157,6 +157,17 @@ class SongRpcServiceTest {
         setup(dialect)
         val albumId = UUID.randomUUID()
         transaction(database) {
+            val unrelatedGroupId = UUID.randomUUID()
+            ArtistTable.insert {
+                it[id] = unrelatedGroupId
+                it[name] = "The Beatles"
+                it[isGroup] = true
+            }
+            ArtistTable.insert {
+                it[id] = UUID.randomUUID()
+                it[name] = "John Lennon"
+                it[groupId] = unrelatedGroupId
+            }
             AlbumTable.insert {
                 it[id] = albumId
                 it[name] = "Album"
@@ -217,6 +228,86 @@ class SongRpcServiceTest {
         val albumResult = rpcService.rankedSearch(0, 10, "Legendary", explicit = false, liked = false)
         assertEquals(1, albumResult.data.size)
         assertEquals("Some Track", albumResult.data[0].title)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `rankedSearch should find songs by artist member name`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val testGroupId = UUID.randomUUID()
+        val testMemberId = UUID.randomUUID()
+        val testAlbumId = UUID.randomUUID()
+        val testSongId = UUID.randomUUID()
+
+        transaction(database) {
+            ArtistTable.insert {
+                it[id] = testGroupId
+                it[name] = "The Beatles"
+                it[isGroup] = true
+            }
+            ArtistTable.insert {
+                it[id] = testMemberId
+                it[name] = "John Lennon"
+                it[groupId] = testGroupId
+            }
+            AlbumTable.insert {
+                it[id] = testAlbumId
+                it[name] = "Abbey Road"
+            }
+            SongTable.insert {
+                it[id] = testSongId
+                it[title] = "Come Together"
+                it[SongTable.albumId] = testAlbumId
+            }
+            SongArtistTable.insert {
+                it[SongArtistTable.songId] = testSongId
+                it[SongArtistTable.artistId] = testGroupId
+            }
+        }
+
+        val result = rpcService.rankedSearch(0, 10, "Lennon", explicit = false, liked = false)
+        assertEquals(1, result.data.size)
+        assertEquals("Come Together", result.data[0].title)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `rankedSearch should find songs by artist group name`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val testGroupId = UUID.randomUUID()
+        val testMemberId = UUID.randomUUID()
+        val testAlbumId = UUID.randomUUID()
+        val testSongId = UUID.randomUUID()
+
+        transaction(database) {
+            ArtistTable.insert {
+                it[id] = testGroupId
+                it[name] = "The Beatles"
+                it[isGroup] = true
+            }
+            ArtistTable.insert {
+                it[id] = testMemberId
+                it[name] = "John Lennon"
+                it[groupId] = testGroupId
+            }
+            AlbumTable.insert {
+                it[id] = testAlbumId
+                it[name] = "Imagine Album"
+            }
+            SongTable.insert {
+                it[id] = testSongId
+                it[title] = "Imagine"
+                it[SongTable.albumId] = testAlbumId
+            }
+            SongArtistTable.insert {
+                it[SongArtistTable.songId] = testSongId
+                it[SongArtistTable.artistId] = testMemberId
+            }
+        }
+
+        val result = rpcService.rankedSearch(0, 10, "Beatles", explicit = false, liked = false)
+        assertEquals(1, result.data.size)
+        assertEquals("Imagine", result.data[0].title)
     }
 
     @ParameterizedTest

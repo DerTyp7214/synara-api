@@ -82,6 +82,19 @@ class ArtistServiceTest {
     fun `rankedSearch should find artists by name`(dialect: DbDialect) = runBlocking {
         setup(dialect)
         transaction(database) {
+            val unrelatedGroupId = UUID.randomUUID()
+            ArtistTable.insert {
+                it[id] = unrelatedGroupId
+                it[name] = "The Beatles"
+                it[isGroup] = true
+                it[about] = ""
+            }
+            ArtistTable.insert {
+                it[id] = UUID.randomUUID()
+                it[name] = "John Lennon"
+                it[isGroup] = false
+                it[groupId] = unrelatedGroupId
+            }
             ArtistTable.insert {
                 it[id] = UUID.randomUUID()
                 it[name] = "Metallica"
@@ -99,6 +112,119 @@ class ArtistServiceTest {
         val result = service.rankedSearch(0, 10, "Metal")
         assertEquals(1, result.data.size)
         assertEquals("Metallica", result.data[0].name)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `rankedSearch should find groups by member name`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val testGroupId = UUID.randomUUID()
+        val testMemberId = UUID.randomUUID()
+        
+        transaction(database) {
+            ArtistTable.insert {
+                it[id] = testGroupId
+                it[name] = "The Beatles"
+                it[isGroup] = true
+            }
+            ArtistTable.insert {
+                it[id] = testMemberId
+                it[name] = "John Lennon"
+                it[groupId] = testGroupId
+            }
+        }
+
+        val result = service.rankedSearch(0, 10, "Lennon")
+        assertTrue(result.data.any { it.name == "The Beatles" }, "Should find the group by member name")
+        assertTrue(result.data.any { it.name == "John Lennon" }, "Should find the member by its own name")
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `rankedSearch should find members by group name`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val testGroupId = UUID.randomUUID()
+        val testMemberId = UUID.randomUUID()
+        
+        transaction(database) {
+            ArtistTable.insert {
+                it[id] = testGroupId
+                it[name] = "The Beatles"
+                it[isGroup] = true
+            }
+            ArtistTable.insert {
+                it[id] = testMemberId
+                it[name] = "John Lennon"
+                it[groupId] = testGroupId
+            }
+        }
+
+        val result = service.rankedSearch(0, 10, "Beatles")
+        assertTrue(result.data.any { it.name == "John Lennon" }, "Should find the member by group name")
+        assertTrue(result.data.any { it.name == "The Beatles" }, "Should find the group by its own name")
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `rankedSearch should support negative keywords with group member name`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val testGroupId = UUID.randomUUID()
+        val testMemberId = UUID.randomUUID()
+        val testArtistId = UUID.randomUUID()
+        
+        transaction(database) {
+            ArtistTable.insert {
+                it[id] = testGroupId
+                it[name] = "The Beatles"
+                it[isGroup] = true
+            }
+            ArtistTable.insert {
+                it[id] = testMemberId
+                it[name] = "John Lennon"
+                it[groupId] = testGroupId
+            }
+            ArtistTable.insert {
+                it[id] = testArtistId
+                it[name] = "Beatles Tribute"
+            }
+        }
+
+        val result = service.rankedSearch(0, 10, "Beatles -Lennon")
+        assertTrue(result.data.any { it.name == "Beatles Tribute" })
+        assertFalse(result.data.any { it.name == "John Lennon" })
+        assertFalse(result.data.any { it.name == "The Beatles" })
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `rankedSearch should find all members by group name`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val testGroupId = UUID.randomUUID()
+        val testMember1Id = UUID.randomUUID()
+        val testMember2Id = UUID.randomUUID()
+        
+        transaction(database) {
+            ArtistTable.insert {
+                it[id] = testGroupId
+                it[name] = "The Beatles"
+                it[isGroup] = true
+            }
+            ArtistTable.insert {
+                it[id] = testMember1Id
+                it[name] = "John Lennon"
+                it[groupId] = testGroupId
+            }
+            ArtistTable.insert {
+                it[id] = testMember2Id
+                it[name] = "Paul McCartney"
+                it[groupId] = testGroupId
+            }
+        }
+
+        val result = service.rankedSearch(0, 10, "Beatles")
+        assertTrue(result.data.any { it.name == "John Lennon" })
+        assertTrue(result.data.any { it.name == "Paul McCartney" })
+        assertTrue(result.data.any { it.name == "The Beatles" })
     }
 
     @ParameterizedTest

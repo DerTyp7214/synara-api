@@ -17,6 +17,9 @@ import java.util.UUID
 import kotlin.time.Clock
 
 class ArtistService : IArtistService, Service() {
+    val artistGroupAlias = ArtistTable.alias("artistGroup")
+    val artistMemberAlias = ArtistTable.alias("artistMember")
+
     companion object {
         fun mapArtist(
             resultRow: ResultRow,
@@ -112,11 +115,19 @@ class ArtistService : IArtistService, Service() {
     }.data
 
     override suspend fun rankedSearch(page: Int, pageSize: Int, query: String): PaginatedResponse<Artist> =
-        queryArtists(page, pageSize) {
+        queryArtists(page, pageSize, columnSet = {
+            leftJoin(artistGroupAlias, { ArtistTable.groupId }, { artistGroupAlias[ArtistTable.id] })
+                .leftJoin(artistMemberAlias, { ArtistTable.id }, { artistMemberAlias[ArtistTable.groupId] })
+        }) {
             rankedSearchQuery(
                 query,
-                listOf(10, 8),
-                listOf(ArtistTable.name, ArtistAliasTable.name),
+                listOf(10, 8, 6, 6),
+                listOf(
+                    ArtistTable.name,
+                    ArtistAliasTable.name,
+                    artistGroupAlias[ArtistTable.name],
+                    artistMemberAlias[ArtistTable.name]
+                ),
                 ArtistTable.id
             )
         }
@@ -407,13 +418,19 @@ class ArtistService : IArtistService, Service() {
     }
 
     private suspend fun querySingle(query: Query.() -> Query) =
-        queryArtists(0, Int.MAX_VALUE, query).data.singleOrNull()
+        queryArtists(0, Int.MAX_VALUE, query = query).data.singleOrNull()
 
-    private suspend fun queryArtists(page: Int, pageSize: Int, query: Query.() -> Query = { this }) = dbQuery {
+    private suspend fun queryArtists(
+        page: Int,
+        pageSize: Int,
+        columnSet: ColumnSet.() -> ColumnSet = { this },
+        query: Query.() -> Query = { this }
+    ) = dbQuery {
         val offset = if (pageSize == Int.MAX_VALUE) 0 else 1
         val mainArtistRows = ArtistTable
             .leftJoin(ArtistAliasTable)
             .leftJoin(ArtistMusicBrainzTable)
+            .columnSet()
             .selectAll()
             .query()
             .toList()

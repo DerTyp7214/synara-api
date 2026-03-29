@@ -30,6 +30,9 @@ import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
 
 class AlbumService : IAlbumService, Service() {
+    val artistGroupAlias = ArtistTable.alias("artistGroup")
+    val artistMemberAlias = ArtistTable.alias("artistMember")
+
     companion object {
         fun mapAlbum(resultRow: ResultRow): Album {
             val id = resultRow[AlbumTable.id].value
@@ -129,14 +132,19 @@ class AlbumService : IAlbumService, Service() {
         }
 
     override suspend fun rankedSearch(page: Int, pageSize: Int, query: String): PaginatedResponse<Album> =
-        queryAlbums(page, pageSize) {
+        queryAlbums(page, pageSize, columnSet = {
+            leftJoin(artistGroupAlias, { ArtistTable.groupId }, { artistGroupAlias[ArtistTable.id] })
+                .leftJoin(artistMemberAlias, { ArtistTable.id }, { artistMemberAlias[ArtistTable.groupId] })
+        }) {
             rankedSearchQuery(
                 query,
-                listOf(10, 5, 5),
+                listOf(10, 5, 5, 3, 3),
                 listOf(
                     AlbumTable.name,
                     ArtistTable.name,
                     ArtistAliasTable.name,
+                    artistGroupAlias[ArtistTable.name],
+                    artistMemberAlias[ArtistTable.name]
                 ),
                 AlbumTable.id
             )
@@ -229,9 +237,14 @@ class AlbumService : IAlbumService, Service() {
     }
 
     private suspend fun querySingle(query: Query.() -> Query) =
-        queryAlbums(0, Int.MAX_VALUE, query).data.singleOrNull()
+        queryAlbums(0, Int.MAX_VALUE, query = query).data.singleOrNull()
 
-    private suspend fun queryAlbums(page: Int, pageSize: Int, query: Query.() -> Query = { this }) = dbQuery {
+    private suspend fun queryAlbums(
+        page: Int,
+        pageSize: Int,
+        columnSet: ColumnSet.() -> ColumnSet = { this },
+        query: Query.() -> Query = { this }
+    ) = dbQuery {
         val offset = if (pageSize == Int.MAX_VALUE) 0 else 1
         val rows = AlbumTable
             .leftJoin(AlbumArtistTable, onColumn = { id }, otherColumn = { AlbumArtistTable.albumId })
@@ -247,6 +260,7 @@ class AlbumService : IAlbumService, Service() {
             )
             .leftJoin(ArtistAliasTable)
             .leftJoin(AlbumMusicBrainzTable)
+            .columnSet()
             .selectAll()
             .query()
             .toList()
