@@ -15,7 +15,6 @@ import org.jetbrains.exposed.v1.jdbc.*
 import org.koin.core.component.inject
 import java.util.UUID
 import kotlin.time.Clock
-import kotlin.time.Duration.Companion.days
 
 class ArtistService : IArtistService, Service() {
     companion object {
@@ -337,22 +336,24 @@ class ArtistService : IArtistService, Service() {
     fun allArtistsFlow(): Flow<Artist> = allArtistIds().chunked(100).flatMapConcat { ids ->
         byIds(ids).asFlow()
     }
-    
-    fun artistIdsWithoutMusicBrainzId(): Flow<UUID> = flow {
-        val oneWeekAgo = Clock.System.now() - 7.days
 
+    override fun artistIdsWithoutMusicBrainzId(): Flow<UUID> = flow {
         ArtistTable
             .leftJoin(ArtistMusicBrainzTable)
             .select(ArtistTable.id)
             .where {
-                ArtistMusicBrainzTable.artistId.isNull() or
-                        (ArtistMusicBrainzTable.musicBrainzId.isNull() and (ArtistMusicBrainzTable.lastCheck less oneWeekAgo.toEpochMilliseconds()))
+                ArtistMusicBrainzTable.artistId.isNull() or (ArtistMusicBrainzTable.musicBrainzId.isNull())
             }
             .fetchBatchedResults(1000) { batch ->
                 batch.forEach {
                     emit(it[ArtistTable.id].value)
                 }
             }
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    override fun artistsWithoutMusicBrainzIdFlow(): Flow<Artist> = artistIdsWithoutMusicBrainzId().chunked(100).flatMapConcat { ids ->
+        byIds(ids).asFlow()
     }
 
     private suspend fun querySingle(query: Query.() -> Query) =
