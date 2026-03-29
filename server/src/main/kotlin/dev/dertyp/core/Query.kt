@@ -72,7 +72,7 @@ fun Query.rankedSearchQuery(
     }
 
     for (token in tokens.filter { it.startsWith("-") && it.length > 1 }) {
-        val matches = columns.map { (it notIlike "%${token.substring(1)}%") as Op<Boolean> }
+        val matches = columns.map { it.isNull() or (it notIlike "%${token.substring(1)}%") }
 
         val tokenMatchOp = matches.reduce { a, b -> a and b }
         whereClause = whereClause?.let { it and tokenMatchOp } ?: tokenMatchOp
