@@ -39,6 +39,8 @@ jobs:
           cache: 'gradle'
 
       - name: Run Tests and Generate Coverage
+        env:
+          DOCKER_HOST: unix:///var/run/docker.sock
         run: ./gradlew test koverXmlReport koverHtmlReport
 
       - name: Publish Test Report

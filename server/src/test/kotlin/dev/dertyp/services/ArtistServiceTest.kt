@@ -19,20 +19,30 @@ import org.junit.jupiter.params.provider.EnumSource
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
 import org.koin.dsl.module
+import org.koin.test.KoinTest
 import java.util.UUID
 
-class ArtistServiceTest {
+class ArtistServiceTest : KoinTest {
     private lateinit var database: Database
     private lateinit var service: ArtistService
     private val musicBrainzService = mockk<MusicBrainzService>()
 
     fun setup(dialect: DbDialect) {
+        startKoin {
+            modules(module {
+                single { musicBrainzService }
+                single { mockk<ImageService>(relaxed = true) }
+            })
+        }
+
         database = TestDatabase.connect(dialect, "artist_test")
         transaction(database) {
             SchemaUtils.create(
+                UserTable,
                 ArtistTable,
                 ArtistMusicBrainzTable,
                 ArtistAliasTable,
+                FollowedArtistTable,
                 ArtistSplitAliasTable,
                 ImageTable,
                 SongTable,
@@ -40,12 +50,6 @@ class ArtistServiceTest {
                 AlbumTable,
                 AlbumArtistTable
             )
-        }
-        
-        startKoin {
-            modules(module {
-                single { musicBrainzService }
-            })
         }
         
         service = ArtistService()
@@ -382,5 +386,175 @@ class ArtistServiceTest {
         
         val updated = service.byId(id)
         assertEquals(mbId, updated?.musicbrainzId)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `byId should return isFollowed true if artist is followed by user`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val artistId = UUID.randomUUID()
+        val userId = UUID.randomUUID()
+        
+        transaction(database) {
+            UserTable.insert {
+                it[id] = userId
+                it[username] = "user1"
+                it[passwordHash] = "hash"
+            }
+            ArtistTable.insert {
+                it[id] = artistId
+                it[name] = "Followed Artist"
+            }
+            FollowedArtistTable.insert {
+                it[FollowedArtistTable.artistId] = artistId
+                it[FollowedArtistTable.userId] = userId
+            }
+        }
+
+        val artist = service.byId(artistId, userId)
+        assertNotNull(artist)
+        assertEquals(true, artist?.isFollowed)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `byId should return isFollowed false if artist is not followed by user`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val artistId = UUID.randomUUID()
+        val userId = UUID.randomUUID()
+        val otherUserId = UUID.randomUUID()
+        
+        transaction(database) {
+            UserTable.insert {
+                it[id] = userId
+                it[username] = "user1"
+                it[passwordHash] = "hash"
+            }
+            UserTable.insert {
+                it[id] = otherUserId
+                it[username] = "user2"
+                it[passwordHash] = "hash"
+            }
+            ArtistTable.insert {
+                it[id] = artistId
+                it[name] = "Unfollowed Artist"
+            }
+            FollowedArtistTable.insert {
+                it[FollowedArtistTable.artistId] = artistId
+                it[FollowedArtistTable.userId] = otherUserId
+            }
+        }
+
+        val artist = service.byId(artistId, userId)
+        assertNotNull(artist)
+        assertEquals(false, artist?.isFollowed)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `splitArtist should split one artist into multiple`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val artistId = UUID.randomUUID()
+        val songId = UUID.randomUUID()
+        
+        transaction(database) {
+            ArtistTable.insert {
+                it[id] = artistId
+                it[name] = "Artist A & Artist B"
+            }
+            SongTable.insert {
+                it[id] = songId
+                it[title] = "Shared Song"
+                it[albumId] = UUID.randomUUID().also { albumId ->
+                    AlbumTable.insert { album ->
+                        album[id] = albumId
+                        album[name] = "Album"
+                    }
+                }
+            }
+            SongArtistTable.insert {
+                it[SongArtistTable.songId] = songId
+                it[SongArtistTable.artistId] = artistId
+            }
+        }
+
+        val splitArtist = dev.dertyp.data.SplitArtist(
+            artistId = artistId,
+            newArtists = mapOf(
+                "Artist A" to null,
+                "Artist B" to null
+            )
+        )
+
+        val result = service.splitArtist(splitArtist)
+        assertEquals(2, result.size)
+        
+        val newArtistIds = result.map { it.id }
+        transaction(database) {
+            val linkedArtists = SongArtistTable.selectAll().where { SongArtistTable.songId eq songId }.map { it[SongArtistTable.artistId].value }
+            assertEquals(2, linkedArtists.size)
+            assertTrue(linkedArtists.containsAll(newArtistIds))
+
+            assertNull(ArtistTable.selectAll().where { ArtistTable.id eq artistId }.singleOrNull())
+        }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `getOrBulkCreate should return existing and create new`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val existingId = UUID.randomUUID()
+        transaction(database) {
+            ArtistTable.insert {
+                it[id] = existingId
+                it[name] = "Existing"
+            }
+        }
+
+        val names = listOf("Existing", "New Artist")
+        val result = service.getOrBulkCreate(names)
+        
+        assertEquals(2, result.size)
+        assertTrue(result["Existing"]!!.contains(existingId))
+        assertTrue(result.containsKey("New Artist"))
+        
+        val newArtistId = result["New Artist"]!!.first()
+        assertNotNull(service.byId(newArtistId))
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `deleteUnreferencedArtists should remove artists with no songs or albums`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        transaction(database) {
+            ArtistTable.insert {
+                it[id] = UUID.randomUUID()
+                it[name] = "Unreferenced"
+            }
+            val referencedId = UUID.randomUUID()
+            ArtistTable.insert {
+                it[id] = referencedId
+                it[name] = "Referenced"
+            }
+            val songId = UUID.randomUUID()
+            SongTable.insert {
+                it[id] = songId
+                it[title] = "Song"
+                it[albumId] = UUID.randomUUID().also { albumId ->
+                    AlbumTable.insert { album -> album[id] = albumId; album[name] = "Album" }
+                }
+            }
+            SongArtistTable.insert {
+                it[SongArtistTable.songId] = songId
+                it[SongArtistTable.artistId] = referencedId
+            }
+        }
+
+        val deletedCount = service.deleteUnreferencedArtists()
+        assertEquals(1, deletedCount)
+        
+        val artists = service.allArtists(0, 10).data
+        assertEquals(1, artists.size)
+        assertEquals("Referenced", artists[0].name)
     }
 }

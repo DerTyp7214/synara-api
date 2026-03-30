@@ -209,6 +209,70 @@ class TidalService(
         return getTracksByIds(searchResponse.included.map { it.id })
     }
 
+    override suspend fun searchAlbums(
+        query: String,
+        limit: Int,
+        includeTracks: Boolean
+    ): List<IMetadataService.Album> {
+        val url = getUrl("searchResults") {
+            encodedPath += "/" + query.encodeURLParameter()
+
+            parameters {
+                append("include", if (includeTracks) "albums,tracks" else "albums")
+                append("countryCode", "US")
+            }
+        }
+
+        val response = makeRequest(url)
+
+        if (response.status == HttpStatusCode.TooManyRequests) {
+            delay(30.seconds)
+            return searchAlbums(query, limit, includeTracks)
+        }
+
+        if (response.status != HttpStatusCode.OK) {
+            logger.info("Searching albums for $query: $url")
+            logger.info(response.bodyAsText())
+
+            when (response.status) {
+                HttpStatusCode.BadRequest -> {
+                    logger.error("Searching albums for $query failed")
+                    logger.error("Status: ${response.status}")
+                    return emptyList()
+                }
+
+                else -> {
+                    delay(30.seconds)
+                    return searchAlbums(query, limit, includeTracks)
+                }
+            }
+        }
+
+        val searchResponse =
+            response.body<SearchResultsSingleResourceDataDocument<JsonAttribute, JsonAttribute>>()
+        val included = searchResponse.included
+
+        val albumIds = mutableSetOf<String>()
+
+        albumIds.addAll(included.mapAttributes<AlbumsAttributes>().keys)
+
+        if (includeTracks) {
+            included.forEach { item ->
+                if (item.type == "tracks") {
+                    val relationshipsElement = item.relationships?.element ?: return@forEach
+                    val relationships =
+                        ApplicationScope.json.decodeFromJsonElement(
+                            TracksRelationships.serializer(),
+                            relationshipsElement
+                        )
+                    relationships.albums?.data?.firstOrNull()?.id?.let { albumIds.add(it) }
+                }
+            }
+        }
+
+        return getAlbumsByIds(albumIds.toList())
+    }
+
     private suspend fun getImages(urlPath: String?): List<ArtworkFile> {
         if (urlPath == null) return emptyList()
 
@@ -304,13 +368,13 @@ class TidalService(
                 response.body<AlbumsMultiRelationshipDataDocument<ArtworksAttributes, ArtworksRelationships>>()
 
             return body.included?.flatMap { i ->
-                i.attributes.files.map { f ->
+                i.attributes?.files?.map { f ->
                     IMetadataService.Image(
                         f.href,
                         f.meta.width,
                         f.meta.height
                     )
-                }
+                } ?: emptyList()
             } ?: emptyList()
         } catch (e: Exception) {
             e.printStackTrace()
@@ -670,8 +734,8 @@ class TidalService(
             try {
                 val body =
                     response.body<ArtistsMultiRelationshipDataDocument<TracksAttributes, TracksRelationships>>()
-                val tracks = body.included?.map {
-                    val track = it.attributes
+                val tracks = body.included?.mapNotNull {
+                    val track = it.attributes ?: return@mapNotNull null
 
                     IMetadataService.Track(
                         id = it.id,

@@ -2,22 +2,23 @@ package dev.dertyp.core
 
 import dev.dertyp.ApiClient
 import dev.dertyp.services.Service
-import io.ktor.client.*
-import io.ktor.client.call.*
-import io.ktor.client.request.*
-import io.ktor.client.statement.*
+import io.ktor.client.HttpClient
+import io.ktor.client.call.body
+import io.ktor.client.request.HttpRequestBuilder
+import io.ktor.client.request.get
+import io.ktor.client.statement.HttpResponse
+import io.ktor.http.Url
 import kotlinx.coroutines.*
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.debounce
-import kotlinx.coroutines.flow.onStart
-import kotlinx.coroutines.flow.takeWhile
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.concurrent.atomics.AtomicBoolean
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
+import kotlin.time.Instant
 
 suspend inline fun <reified T> HttpClient.safeGet(url: String) = try {
     get(url).body<T>()
@@ -30,12 +31,10 @@ suspend inline fun <reified T> HttpClient.queuedGet(
     noinline block: suspend HttpRequestBuilder.() -> Unit = {}
 ) = ApiClient.queueInstance.enqueue(urlString, block).body<T>()
 
-@OptIn(ExperimentalAtomicApi::class, FlowPreview::class, ExperimentalTime::class)
+@OptIn(ExperimentalAtomicApi::class, ExperimentalTime::class)
 class HttpClientQueueService : Service() {
-    private val _queue = mutableListOf<suspend () -> Unit>()
-    private val queueMutex = Mutex()
-
-    private val queueUpdateFlow: MutableSharedFlow<Unit> = MutableSharedFlow(extraBufferCapacity = 1)
+    private val hostLocks = ConcurrentHashMap<String, Mutex>()
+    private val hostLastRequest = ConcurrentHashMap<String, Instant>()
 
     private val stopped = AtomicBoolean(true)
 
@@ -48,70 +47,58 @@ class HttpClientQueueService : Service() {
     override suspend fun startService() {
         if (!stopped.compareAndSet(expectedValue = true, newValue = false)) return
         logger.info("Starting service")
-
-        coroutineScope {
-            launch {
-                queueUpdateFlow
-                    .onStart { emit(Unit) }
-                    .debounce(100)
-                    .takeWhile { !stopped.load() }
-                    .collect {
-                        execute { !stopped.load() }
-                    }
-            }
-        }
-
-        logger.info("Stopping service")
-        stopped.store(true)
     }
 
     override suspend fun stopService() {
         stopped.store(true)
-    }
-
-    private suspend fun execute(isAlive: () -> Boolean) {
-        while (isAlive()) {
-            val task = queueMutex.withLock {
-                if (_queue.isEmpty()) null else _queue.removeAt(0)
-            }
-
-            if (task == null) break
-
-            delay(250)
-
-            try {
-                task()
-            } catch (e: Exception) {
-                logger.error("Error executing queued request", e)
-            }
-        }
+        logger.info("Stopping service")
     }
 
     suspend fun enqueue(
         urlString: String,
         block: suspend HttpRequestBuilder.() -> Unit = {}
     ): HttpResponse {
-        val deferred = CompletableDeferred<HttpResponse>()
         val queuedAt = Clock.System.now()
-
-        queueMutex.withLock {
-            _queue.add {
-                try {
-                    val waitTime = Clock.System.now() - queuedAt
-
-                    if (waitTime > 2.seconds)
-                        logger.info("Request ($urlString) was ${waitTime.inWholeMilliseconds}ms in queue")
-
-                    val response = ApiClient.instance.get(urlString) { block() }
-                    deferred.complete(response)
-                } catch (e: Exception) {
-                    deferred.completeExceptionally(e)
-                }
-            }
+        val host = try {
+            Url(urlString).host
+        } catch (_: Exception) {
+            urlString
         }
 
-        queueUpdateFlow.tryEmit(Unit)
+        val lock = hostLocks.computeIfAbsent(host) { Mutex() }
 
-        return deferred.await()
+        return lock.withLock {
+            if (stopped.load()) throw CancellationException("Service is stopped")
+
+            val waitTime = Clock.System.now() - queuedAt
+
+            if (waitTime > 2.seconds)
+                logger.info("Request ($urlString) was ${waitTime.inWholeMilliseconds}ms in queue")
+
+            val last = hostLastRequest[host]
+            val now = Clock.System.now()
+
+            val delayTime = when {
+                host.contains("musicbrainz.org") -> 1.seconds
+                host.contains("api.song.link") -> 6.seconds
+                else -> 250.milliseconds
+            }
+
+            if (last != null) {
+                val diff = now - last
+                if (diff < delayTime) {
+                    delay(delayTime - diff)
+                }
+            }
+
+            try {
+                val response = ApiClient.instance.get(urlString) { block() }
+                hostLastRequest[host] = Clock.System.now()
+                response
+            } catch (e: Exception) {
+                logger.error("Error executing queued request for $host", e)
+                throw e
+            }
+        }
     }
 }

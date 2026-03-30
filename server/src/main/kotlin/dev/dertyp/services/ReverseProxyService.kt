@@ -53,7 +53,7 @@ class ReverseProxyService(
         private set
 
     override suspend fun startService() {
-        if (proxyHost == null || controlPort == null) {
+        if (proxyHost.isNullOrBlank() || controlPort == null) {
             logger.info("Reverse proxy not fully configured (host=$proxyHost, controlPort=$controlPort, id=$requestedId, name=$serverName)")
             return
         }

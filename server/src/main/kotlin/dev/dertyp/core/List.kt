@@ -10,11 +10,12 @@ import kotlinx.serialization.json.decodeFromJsonElement
 
 inline fun <reified F : BaseAttributes> List<IncludedInner<JsonAttribute, *>>.mapAttributes(): Map<String, F> =
     mapNotNull { included ->
+        val element = included.attributes?.element ?: return@mapNotNull null
         val attribute = when (included.type) {
-            "artists" -> ApplicationScope.json.decodeFromJsonElement<ArtistsAttributes>(included.attributes.element)
-            "albums" -> ApplicationScope.json.decodeFromJsonElement<AlbumsAttributes>(included.attributes.element)
-            "tracks" -> ApplicationScope.json.decodeFromJsonElement<TracksAttributes>(included.attributes.element)
-            "artworks" -> ApplicationScope.json.decodeFromJsonElement<ArtworksAttributes>(included.attributes.element)
+            "artists" -> ApplicationScope.json.decodeFromJsonElement<ArtistsAttributes>(element)
+            "albums" -> ApplicationScope.json.decodeFromJsonElement<AlbumsAttributes>(element)
+            "tracks" -> ApplicationScope.json.decodeFromJsonElement<TracksAttributes>(element)
+            "artworks" -> ApplicationScope.json.decodeFromJsonElement<ArtworksAttributes>(element)
             else -> null
         }
 

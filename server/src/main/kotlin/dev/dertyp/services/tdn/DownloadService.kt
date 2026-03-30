@@ -4,16 +4,14 @@ import dev.dertyp.core.*
 import dev.dertyp.data.User
 import dev.dertyp.data.UserSong
 import dev.dertyp.killAll
-import dev.dertyp.services.FavSyncService
-import dev.dertyp.services.ISyncService
-import dev.dertyp.services.Service
-import dev.dertyp.services.SongService
+import dev.dertyp.services.*
 import dev.dertyp.services.metadata.MetadataService
 import dev.dertyp.services.sync.SyncService
 import dev.dertyp.utils.LogParam
-import io.ktor.server.application.*
-import io.ktor.server.engine.*
-import io.ktor.utils.io.*
+import io.ktor.server.application.ApplicationCall
+import io.ktor.server.application.ApplicationEnvironment
+import io.ktor.server.engine.launchOnCancellation
+import io.ktor.utils.io.InternalAPI
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.sync.Mutex
@@ -21,7 +19,8 @@ import kotlinx.coroutines.sync.withLock
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 import java.time.Instant
-import java.util.*
+import java.util.Date
+import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.concurrent.atomics.AtomicBoolean
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
@@ -106,7 +105,9 @@ class DownloadRpcService(
 class DownloadService(
     val tidalDownloadService: TidalDownloaderProxy,
     val songService: SongService,
-    val favSyncService: FavSyncService
+    val favSyncService: FavSyncService,
+    val userPlaylistService: UserPlaylistService,
+    val imageService: ImageService
 ) : Service() {
     private val maxLogLength: Int = 1000
 
@@ -386,6 +387,9 @@ class DownloadService(
                 existingUrls = existingUrls,
                 downloadStage = downloadStage,
                 downloadStageMutex = downloadStageMutex,
+                userPlaylistService = userPlaylistService,
+                imageService = imageService,
+                songService = songService,
                 callback = callback
             ) || contentToDownload
         }

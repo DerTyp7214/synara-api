@@ -49,7 +49,7 @@ class ImageServiceTest {
             SchemaUtils.create(ImageTable, AlbumTable, ArtistTable, SongTable, PlaylistTable, UserPlaylistTable, UserTable)
         }
 
-        service = ImageService()
+        service = ImageService(storageService, redisConfig)
     }
 
     @AfterEach

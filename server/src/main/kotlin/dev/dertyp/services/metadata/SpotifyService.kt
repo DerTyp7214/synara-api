@@ -44,9 +44,14 @@ class SpotifyService(
             return searchArtists(query, limit)
         }
 
+        if (response.status != HttpStatusCode.OK) {
+            logger.error("Searching artists for $query failed with status ${response.status}")
+            return emptyList()
+        }
+
         val searchResponse = response.body<SearchResponse>()
 
-        return searchResponse.artists.items.map { artist ->
+        return searchResponse.artists?.items?.map { artist ->
             IMetadataService.Artist(
                 id = artist.id,
                 name = artist.name,
@@ -60,11 +65,54 @@ class SpotifyService(
                     )
                 }
             )
-        }
+        } ?: emptyList()
     }
 
     override suspend fun search(query: String, limit: Int): List<IMetadataService.Track> {
         throw NotImplementedError("Not implemented for spotify!")
+    }
+
+    override suspend fun searchAlbums(
+        query: String,
+        limit: Int,
+        includeTracks: Boolean
+    ): List<IMetadataService.Album> {
+        val response = ApiClient.instance.get("https://api.spotify.com/v1/search") {
+            val token = getAccessToken()
+            header(HttpHeaders.Authorization, "${token.tokenType} ${token.accessToken}")
+            header(HttpHeaders.ContentType, ContentType.Application.Json)
+            parameter("q", query)
+            parameter("type", "album")
+            parameter("limit", limit)
+        }
+
+        if (response.status == HttpStatusCode.TooManyRequests) {
+            delay(30.seconds)
+            return searchAlbums(query, limit, includeTracks)
+        }
+
+        if (response.status != HttpStatusCode.OK) {
+            logger.error("Searching albums for $query failed with status ${response.status}")
+            return emptyList()
+        }
+
+        val searchResponse = response.body<SearchResponse>()
+
+        return searchResponse.albums?.items?.map { album ->
+            IMetadataService.Album(
+                id = album.id,
+                title = album.name,
+                artists = album.artists.map { it.name },
+                trackCount = album.total_tracks,
+                images = album.images.map { image ->
+                    IMetadataService.Image(
+                        url = image.url,
+                        width = image.width,
+                        height = image.height,
+                    )
+                }
+            )
+        } ?: emptyList()
     }
 
     override suspend fun getAlbumIdByTrackId(trackId: String): String? {
@@ -121,7 +169,29 @@ class SpotifyService(
 
     @Serializable
     data class SearchResponse(
-        val artists: Artists,
+        val artists: Artists? = null,
+        val albums: Albums? = null
+    )
+
+    @Serializable
+    data class Albums(
+        val href: String,
+        val limit: Int,
+        val next: String?,
+        val offset: Int,
+        val previous: String?,
+        val total: Int,
+        val items: List<Album>
+    )
+
+    @Serializable
+    data class Album(
+        val id: String,
+        val name: String,
+        val artists: List<Artist>,
+        val images: List<SpotifyImage>,
+        val total_tracks: Int,
+        val href: String
     )
 
     @Serializable
@@ -138,12 +208,12 @@ class SpotifyService(
     @Serializable
     data class Artist(
         val id: String,
-        val genres: List<String>,
+        val genres: List<String> = emptyList(),
         val href: String,
         val name: String,
-        val popularity: Int,
+        val popularity: Int = 0,
         val uri: String,
-        val images: List<SpotifyImage>,
+        val images: List<SpotifyImage> = emptyList(),
     )
 
     @Serializable

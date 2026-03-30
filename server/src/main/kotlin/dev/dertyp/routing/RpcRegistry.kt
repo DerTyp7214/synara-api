@@ -91,14 +91,15 @@ private fun registerAuthenticated(koin: Koin, call: ApplicationCall, user: User,
     val mirrorService = koin.get<MirrorService>()
     val remoteMirrorService = koin.get<RemoteMirrorService>()
     val scheduledTaskLogService = koin.get<ScheduledTaskLogService>()
+    val releaseService = koin.get<ReleaseService>()
 
     registrar.register(IIndexer::class) { RpcIndexer(indexer).withLogging<IIndexer>(call) }
     registrar.register(IUserService::class) { RpcUserService(user, userService, imageService).withLogging<IUserService>(call) }
     registrar.register(ISongService::class) { SongRpcService(songService = songService, user = user).withLogging<ISongService>(call) }
-    registrar.register(IAlbumService::class) { albumService.withLogging<IAlbumService>(call) }
+    registrar.register(IAlbumService::class) { AlbumRpcService(user, albumService).withLogging<IAlbumService>(call) }
     registrar.register(IImageService::class) { imageService.withLogging<IImageService>(call) }
     registrar.register(ILyricsSearch::class) { lyricsSearch.withLogging<ILyricsSearch>(call) }
-    registrar.register(IArtistService::class) { artistService.withLogging<IArtistService>(call) }
+    registrar.register(IArtistService::class) { ArtistRpcService(user, artistService).withLogging<IArtistService>(call) }
     registrar.register(IFavSyncService::class) { FavSyncRpcService(user, favSyncService).withLogging<IFavSyncService>(call) }
     registrar.register(IDownloadService::class) { DownloadRpcService(user, call, downloadService, tidalDownloaderProxy).withLogging<IDownloadService>(call) }
     registrar.register(IPlaylistService::class) { playlistService.withLogging<IPlaylistService>(call) }
@@ -112,4 +113,5 @@ private fun registerAuthenticated(koin: Koin, call: ApplicationCall, user: User,
     registrar.register(IMirrorService::class) { MirrorRpcService(user, mirrorService).withLogging<IMirrorService>(call) }
     registrar.register(IRemoteMirrorService::class) { RemoteMirrorRpcService(user, remoteMirrorService).withLogging<IRemoteMirrorService>(call) }
     registrar.register(IScheduledTaskLogService::class) { RpcScheduledTaskLogService(user, scheduledTaskLogService).withLogging<IScheduledTaskLogService>(call) }
+    registrar.register(IReleaseService::class) { RpcReleaseService(user, releaseService).withLogging<IReleaseService>(call) }
 }

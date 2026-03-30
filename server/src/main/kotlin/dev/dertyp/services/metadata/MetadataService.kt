@@ -36,6 +36,11 @@ abstract class MetadataService(
     protected abstract fun HttpRequestBuilder.getAccessTokenHeader(clientId: String, clientSecret: String)
     abstract suspend fun searchArtists(query: String, limit: Int = 50): List<IMetadataService.Artist>
     abstract suspend fun search(query: String, limit: Int = 50): List<IMetadataService.Track>
+    abstract suspend fun searchAlbums(
+        query: String,
+        limit: Int = 50,
+        includeTracks: Boolean = false
+    ): List<IMetadataService.Album>
     abstract suspend fun getAlbumIdByTrackId(trackId: String): String?
     abstract suspend fun getImageUrlByAlbumId(albumId: String): List<IMetadataService.Image>
     abstract suspend fun getImageUrlsByAlbumIds(albumIds: List<String>): Map<String, List<IMetadataService.Image>>
@@ -69,6 +74,7 @@ abstract class MetadataService(
         enum class MetadataType {
             tidal,
             spotify,
+            appleMusic,
             imageCache,
         }
 
@@ -78,6 +84,7 @@ abstract class MetadataService(
             return when (type) {
                 MetadataType.tidal -> TidalService(environment)
                 MetadataType.spotify -> SpotifyService(environment)
+                MetadataType.appleMusic -> AppleMusicService(environment)
                 MetadataType.imageCache -> ImageCacheService(environment)
             }
         }

@@ -1,10 +1,7 @@
 package dev.dertyp.services
 
 import dev.dertyp.core.*
-import dev.dertyp.data.Album
-import dev.dertyp.data.Artist
-import dev.dertyp.data.InsertableAlbum
-import dev.dertyp.data.PaginatedResponse
+import dev.dertyp.data.*
 import dev.dertyp.db.*
 import dev.dertyp.dbQuery
 import dev.dertyp.getDateFromISO
@@ -29,9 +26,36 @@ import kotlin.io.path.readSymbolicLink
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
 
-class AlbumService : IAlbumService, Service() {
+class AlbumRpcService(private val user: User, private val albumService: AlbumService) : IAlbumService {
+    override suspend fun byId(id: UUID): Album? = albumService.byId(id, user.id)
+    override suspend fun byIds(ids: List<UUID>): List<Album> = albumService.byIds(ids, user.id)
+    override suspend fun versions(id: UUID): List<Album> = albumService.versions(id, user.id)
+    override suspend fun byName(page: Int, pageSize: Int, name: String): PaginatedResponse<Album> =
+        albumService.byName(page, pageSize, name, user.id)
+
+    override suspend fun rankedSearch(page: Int, pageSize: Int, query: String): PaginatedResponse<Album> =
+        albumService.rankedSearch(page, pageSize, query, user.id)
+
+    override suspend fun allAlbums(page: Int, pageSize: Int): PaginatedResponse<Album> =
+        albumService.allAlbums(page, pageSize, user.id)
+
+    override suspend fun updateAlbum(album: Album): Album? = albumService.updateAlbum(album, user.id)
+    override suspend fun deleteAlbums(ids: List<UUID>): Boolean = albumService.deleteAlbums(ids)
+
+    override suspend fun byArtist(
+        page: Int,
+        pageSize: Int,
+        artistId: UUID,
+        singles: Boolean
+    ): PaginatedResponse<Album> = albumService.byArtist(page, pageSize, artistId, singles, user.id)
+
+    override suspend fun fetchMusicBrainzId(id: UUID): Album? = albumService.fetchMusicBrainzId(id, user.id)
+}
+
+class AlbumService : Service() {
     val artistGroupAlias = ArtistTable.alias("artistGroup")
     val artistMemberAlias = ArtistTable.alias("artistMember")
+    val followedArtistAlias = FollowedArtistTable.alias("followedArtist")
 
     companion object {
         fun mapAlbum(resultRow: ResultRow): Album {
@@ -65,9 +89,18 @@ class AlbumService : IAlbumService, Service() {
     }
 
     fun map(resultRow: ResultRow): Album = mapAlbum(resultRow)
-    
-    suspend fun fetchMusicBrainzId(id: UUID): Album? {
-        val album = byId(id) ?: return null
+
+    private fun ColumnSet.followedArtist(userId: UUID?) = if (userId != null) {
+        leftJoin(
+            followedArtistAlias,
+            onColumn = { ArtistTable.id },
+            otherColumn = { followedArtistAlias[FollowedArtistTable.artistId] },
+            additionalConstraint = { followedArtistAlias[FollowedArtistTable.userId] eq userId }
+        )
+    } else this
+
+    suspend fun fetchMusicBrainzId(id: UUID, userId: UUID? = null): Album? {
+        val album = byId(id, userId) ?: return null
         if (album.musicbrainzId != null) return album
         
         val musicBrainzService: MusicBrainzService by inject()
@@ -90,36 +123,37 @@ class AlbumService : IAlbumService, Service() {
             }
         }
         
-        return byId(id)
+        return byId(id, userId)
     }
 
-    override suspend fun byId(id: UUID): Album? = querySingle {
+    suspend fun byId(id: UUID, userId: UUID? = null): Album? = querySingle(userId = userId) {
         where { AlbumTable.id eq id }
     }
 
-    override suspend fun byIds(@LogParam("size") ids: List<UUID>): List<Album> = queryAlbums(0, Int.MAX_VALUE) {
+    suspend fun byIds(@LogParam("size") ids: List<UUID>, userId: UUID? = null): List<Album> = queryAlbums(0, Int.MAX_VALUE, userId = userId) {
         where { AlbumTable.id inList ids }
     }.data
 
-    override suspend fun versions(id: UUID): List<Album> = queryAlbums(0, Int.MAX_VALUE) {
-        val album = runBlocking { dbQuery { byId(id) } }
+    suspend fun versions(id: UUID, userId: UUID? = null): List<Album> = queryAlbums(0, Int.MAX_VALUE, userId = userId) {
+        val album = runBlocking { dbQuery { byId(id, userId) } }
         if (album == null) return@queryAlbums where { Op.FALSE }
         where { AlbumTable.cover eq album.coverId }
         andWhere { AlbumTable.id neq id }
         andWhere { AlbumTable.songCount greater 1 }
     }.data
 
-    override suspend fun byName(page: Int, pageSize: Int, name: String): PaginatedResponse<Album> = queryAlbums(page, pageSize) {
+    suspend fun byName(page: Int, pageSize: Int, name: String, userId: UUID? = null): PaginatedResponse<Album> = queryAlbums(page, pageSize, userId = userId) {
         where { AlbumTable.name eq name }
     }
 
-    override suspend fun byArtist(
+    suspend fun byArtist(
         page: Int,
         pageSize: Int,
         artistId: UUID,
-        singles: Boolean
+        singles: Boolean,
+        userId: UUID? = null
     ): PaginatedResponse<Album> =
-        queryAlbums(page, pageSize) {
+        queryAlbums(page, pageSize, userId = userId) {
             val albumIds = AlbumArtistTable
                 .select(AlbumArtistTable.columns)
                 .where { AlbumArtistTable.artistId eq artistId }
@@ -131,8 +165,8 @@ class AlbumService : IAlbumService, Service() {
             orderBy(AlbumTable.releaseDate, SortOrder.DESC_NULLS_LAST)
         }
 
-    override suspend fun rankedSearch(page: Int, pageSize: Int, query: String): PaginatedResponse<Album> =
-        queryAlbums(page, pageSize, columnSet = {
+    suspend fun rankedSearch(page: Int, pageSize: Int, query: String, userId: UUID? = null): PaginatedResponse<Album> =
+        queryAlbums(page, pageSize, userId = userId, columnSet = {
             leftJoin(artistGroupAlias, { ArtistTable.groupId }, { artistGroupAlias[ArtistTable.id] })
                 .leftJoin(artistMemberAlias, { ArtistTable.id }, { artistMemberAlias[ArtistTable.groupId] })
         }) {
@@ -151,11 +185,11 @@ class AlbumService : IAlbumService, Service() {
             andWhere { AlbumTable.songCount greater 1 }
         }
 
-    override suspend fun allAlbums(page: Int, pageSize: Int): PaginatedResponse<Album> = queryAlbums(page, pageSize)
+    suspend fun allAlbums(page: Int, pageSize: Int, userId: UUID? = null): PaginatedResponse<Album> = queryAlbums(page, pageSize, userId = userId)
 
-    override suspend fun updateAlbum(album: Album): Album? {
+    suspend fun updateAlbum(album: Album, userId: UUID? = null): Album? {
         upsertAlbum(album)
-        return byId(album.id)
+        return byId(album.id, userId)
     }
 
     fun allAlbumIds(): Flow<UUID> = flow {
@@ -189,7 +223,7 @@ class AlbumService : IAlbumService, Service() {
     }
 
     @Suppress("DuplicatedCode")
-    override suspend fun deleteAlbums(ids: List<UUID>): Boolean = dbQuery {
+    suspend fun deleteAlbums(ids: List<UUID>): Boolean = dbQuery {
         val paths = SongTable
             .select(SongTable.albumId, SongTable.filePath)
             .where { SongTable.albumId inList ids }
@@ -236,23 +270,27 @@ class AlbumService : IAlbumService, Service() {
         deletedSongs == ids.size
     }
 
-    private suspend fun querySingle(query: Query.() -> Query) =
-        queryAlbums(0, Int.MAX_VALUE, query = query).data.singleOrNull()
+    private suspend fun querySingle(
+        userId: UUID? = null,
+        query: Query.() -> Query = { this }
+    ) = queryAlbums(0, Int.MAX_VALUE, userId = userId, query = query).data.singleOrNull()
 
     private suspend fun queryAlbums(
         page: Int,
         pageSize: Int,
+        userId: UUID? = null,
         columnSet: ColumnSet.() -> ColumnSet = { this },
         query: Query.() -> Query = { this }
     ) = dbQuery {
         val offset = if (pageSize == Int.MAX_VALUE) 0 else 1
         val rows = AlbumTable
-            .leftJoin(AlbumArtistTable, onColumn = { id }, otherColumn = { AlbumArtistTable.albumId })
+            .leftJoin(AlbumArtistTable, onColumn = { AlbumTable.id }, otherColumn = { AlbumArtistTable.albumId })
             .leftJoin(
                 ArtistTable,
                 onColumn = { AlbumArtistTable.artistId },
                 otherColumn = { ArtistTable.id }
             )
+            .followedArtist(userId)
             .leftJoin(
                 ArtistMusicBrainzTable,
                 onColumn = { ArtistTable.id },
@@ -293,7 +331,7 @@ class AlbumService : IAlbumService, Service() {
 
     private fun mapEagerly(
         rows: List<ResultRow>,
-        albumStats: Map<UUID, Pair<Long, Long>>,
+        albumStats: Map<UUID, Pair<Long, Long>>
     ): List<Album> {
         val albumMap = mutableMapOf<UUID, Album>()
         val albumArtistsMap = mutableMapOf<UUID, MutableList<Artist>>()
@@ -306,7 +344,7 @@ class AlbumService : IAlbumService, Service() {
             }
 
             if (row.getOrNull(ArtistTable.id) != null) {
-                val artist = mapArtist(row)
+                val artist = mapArtist(row, followedTable = followedArtistAlias)
                 if (artist !in albumArtistsMap.getOrDefault(albumId, emptyList())) {
                     albumArtistsMap.getOrPut(albumId) { mutableListOf() }.add(artist)
                 }

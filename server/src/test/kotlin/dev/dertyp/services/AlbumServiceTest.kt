@@ -2,16 +2,14 @@ package dev.dertyp.services
 
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
+import dev.dertyp.data.InsertableAlbum
 import dev.dertyp.db.*
 import dev.dertyp.services.metadata.MusicBrainzService
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.core.eq
-import org.jetbrains.exposed.v1.jdbc.Database
-import org.jetbrains.exposed.v1.jdbc.SchemaUtils
-import org.jetbrains.exposed.v1.jdbc.insert
-import org.jetbrains.exposed.v1.jdbc.selectAll
+import org.jetbrains.exposed.v1.jdbc.*
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.*
@@ -20,36 +18,42 @@ import org.junit.jupiter.params.provider.EnumSource
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
 import org.koin.dsl.module
+import org.koin.test.KoinTest
 import java.util.UUID
 
-class AlbumServiceTest {
+class AlbumServiceTest : KoinTest {
     private lateinit var database: Database
     private lateinit var service: AlbumService
     private val musicBrainzService = mockk<MusicBrainzService>(relaxed = true)
     private val storageService = mockk<StorageService>(relaxed = true)
 
     fun setup(dialect: DbDialect) {
+        startKoin {
+            modules(module {
+                single { musicBrainzService }
+                single { storageService }
+                single { mockk<ImageService>(relaxed = true) }
+                single { ArtistService() }
+            })
+        }
+
         database = TestDatabase.connect(dialect, "album_test")
         transaction(database) {
             SchemaUtils.create(
+                UserTable,
                 AlbumTable,
                 AlbumArtistTable,
                 ArtistTable,
                 ArtistMusicBrainzTable,
                 ArtistAliasTable,
+                FollowedArtistTable,
                 AlbumMusicBrainzTable,
                 ImageTable,
                 SongTable,
                 SongArtistTable,
-                SongMusicBrainzTable
+                SongMusicBrainzTable,
+                ArtistSplitAliasTable
             )
-        }
-        
-        startKoin {
-            modules(module {
-                single { musicBrainzService }
-                single { storageService }
-            })
         }
         
         every { storageService.albumsPath } returns null
@@ -80,6 +84,45 @@ class AlbumServiceTest {
         assertNotNull(album)
         assertEquals(id, album?.id)
         assertEquals("Test Album", album?.name)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `byId should return album with isFollowed true for artist if artist is followed by user`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val albumId = UUID.randomUUID()
+        val artistId = UUID.randomUUID()
+        val userId = UUID.randomUUID()
+        
+        transaction(database) {
+            UserTable.insert {
+                it[id] = userId
+                it[username] = "user1"
+                it[passwordHash] = "hash"
+            }
+            ArtistTable.insert {
+                it[id] = artistId
+                it[name] = "Followed Artist"
+            }
+            FollowedArtistTable.insert {
+                it[FollowedArtistTable.artistId] = artistId
+                it[FollowedArtistTable.userId] = userId
+            }
+            AlbumTable.insert {
+                it[id] = albumId
+                it[name] = "Followed Artist Album"
+                it[songCount] = 1
+            }
+            AlbumArtistTable.insert {
+                it[AlbumArtistTable.albumId] = albumId
+                it[AlbumArtistTable.artistId] = artistId
+            }
+        }
+
+        val album = service.byId(albumId, userId)
+        assertNotNull(album)
+        assertEquals(1, album?.artists?.size)
+        assertEquals(true, album?.artists?.firstOrNull()?.isFollowed)
     }
 
     @ParameterizedTest
@@ -389,5 +432,83 @@ class AlbumServiceTest {
         val result = service.byArtist(0, 10, artistId, singles = false)
         assertEquals(1, result.data.size)
         assertEquals("Artist Album", result.data[0].name)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `getOrBulkCreate should match existing album by metadata and artists`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val artistName = "Test Artist"
+        val albumName = "Matching Album"
+        val releaseDate = java.time.LocalDate.of(2024, 1, 1)
+        val isoDate = "2024-01-01"
+        
+        val artistId = transaction(database) {
+            ArtistTable.insertAndGetId {
+                it[ArtistTable.name] = artistName
+            }.value
+        }
+        val albumId = transaction(database) {
+            val aId = AlbumTable.insertAndGetId {
+                it[AlbumTable.name] = albumName
+                it[AlbumTable.songCount] = 10
+                it[AlbumTable.releaseDate] = isoDate
+            }.value
+            AlbumArtistTable.insert {
+                it[AlbumArtistTable.albumId] = aId
+                it[AlbumArtistTable.artistId] = artistId
+            }
+            aId
+        }
+
+        val albums = listOf(
+            InsertableAlbum(albumName, listOf(artistName), songCount = 10, releaseDate = releaseDate)
+        )
+        val result = service.getOrBulkCreate(albums)
+        
+        assertEquals(1, result.size)
+        assertEquals(albumId, result.values.first(), "Should return existing album ID when metadata and artists match")
+
+        val albumsDifferentArtist = listOf(
+            InsertableAlbum(albumName, listOf("Different Artist"), songCount = 10, releaseDate = releaseDate)
+        )
+        val result2 = service.getOrBulkCreate(albumsDifferentArtist)
+        
+        assertEquals(1, result2.size)
+        assertNotEquals(albumId, result2.values.first(), "Should create a new album if artists don't match")
+        
+        val newAlbum = service.byId(result2.values.first())
+        assertNotNull(newAlbum)
+        assertEquals("Different Artist", newAlbum?.artists?.firstOrNull()?.name)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `deleteEmptyAlbums should remove albums with no songs`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        transaction(database) {
+            AlbumTable.insert {
+                it[id] = UUID.randomUUID()
+                it[name] = "Empty"
+            }
+            val nonEmptyId = UUID.randomUUID()
+            AlbumTable.insert {
+                it[id] = nonEmptyId
+                it[name] = "Non-Empty"
+            }
+            SongTable.insert {
+                it[id] = UUID.randomUUID()
+                it[title] = "Song"
+                it[SongTable.albumId] = nonEmptyId
+                it[filePath] = "path"
+            }
+        }
+
+        val deletedCount = service.deleteEmptyAlbums()
+        assertEquals(1, deletedCount)
+        
+        val albums = service.allAlbums(0, 10).data
+        assertEquals(1, albums.size)
+        assertEquals("Non-Empty", albums[0].name)
     }
 }

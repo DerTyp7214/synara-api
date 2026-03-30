@@ -111,6 +111,8 @@ fun Application.module() {
             singleOf(::RemoteMirrorService)
             singleOf(::MusicBrainzService)
             singleOf(::MusicBrainzWorker)
+            singleOf(::RecentReleaseWorker)
+            singleOf(::ReleaseService)
             singleOf(::AutoTranscodeWorker)
             singleOf(::CustomMigrationService)
 
@@ -153,6 +155,7 @@ fun Application.module() {
     val reverseProxyService = get<ReverseProxyService>()
     val metadataFetchingService = get<MetadataFetchingService>()
     val musicBrainzWorker = get<MusicBrainzWorker>()
+    val recentReleaseWorker = get<RecentReleaseWorker>()
     val autoTranscodeWorker = get<AutoTranscodeWorker>()
 
     scheduleService.schedule(
@@ -247,6 +250,20 @@ fun Application.module() {
     )
 
     scheduleService.triggerTask(musicBrainzTask.id)
+
+    val recentReleaseTask = scheduleService.schedule(
+        ScheduledTask(
+            name = "Recent Release Worker",
+            trigger = CronPresets.dailyAt(1, 0),
+            task = {
+                logTask("Recent Release Worker") {
+                    recentReleaseWorker.run()
+                }
+            }
+        )
+    )
+
+    scheduleService.triggerTask(recentReleaseTask.id)
 
     val cleanAlbumTask = scheduleService.schedule(
         ScheduledTask(

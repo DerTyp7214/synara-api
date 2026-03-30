@@ -166,6 +166,9 @@ class SongService : Service() {
     val albumArtistGroupAlias = ArtistTable.alias("albumArtistGroup")
     val albumArtistMemberAlias = ArtistTable.alias("albumArtistMember")
 
+    val followedArtistAlias = FollowedArtistTable.alias("followedArtist")
+    val albumFollowedArtistAlias = FollowedArtistTable.alias("albumFollowedArtist")
+
     companion object {
         fun mapSong(resultRow: ResultRow): Song {
             val id = resultRow[SongTable.id].value
@@ -226,12 +229,32 @@ class SongService : Service() {
     inline fun <reified T : BaseSong> map(resultRow: ResultRow): BaseSong =
         if (T::class == UserSong::class) mapUserSong(resultRow) else mapSong(resultRow)
 
-    private fun ColumnSet.userSong(userId: UUID) = leftJoin(
-        UserSongTable,
-        onColumn = { SongTable.id },
-        otherColumn = { UserSongTable.songId },
-        additionalConstraint = { UserSongTable.userId eq userId }
-    )
+    private fun ColumnSet.userSong(userId: UUID?) = if (userId != null) {
+        leftJoin(
+            UserSongTable,
+            onColumn = { SongTable.id },
+            otherColumn = { UserSongTable.songId },
+            additionalConstraint = { UserSongTable.userId eq userId }
+        )
+    } else this
+
+    private fun ColumnSet.followedArtist(userId: UUID?) = if (userId != null) {
+        leftJoin(
+            followedArtistAlias,
+            onColumn = { ArtistTable.id },
+            otherColumn = { followedArtistAlias[FollowedArtistTable.artistId] },
+            additionalConstraint = { followedArtistAlias[FollowedArtistTable.userId] eq userId }
+        )
+    } else this
+
+    private fun ColumnSet.albumFollowedArtist(userId: UUID?) = if (userId != null) {
+        leftJoin(
+            albumFollowedArtistAlias,
+            onColumn = { albumArtistAlias[ArtistTable.id] },
+            otherColumn = { albumFollowedArtistAlias[FollowedArtistTable.artistId] },
+            additionalConstraint = { albumFollowedArtistAlias[FollowedArtistTable.userId] eq userId }
+        )
+    } else this
 
     suspend fun setLiked(id: UUID, userId: UUID, liked: Boolean, addedAt: Instant? = Instant.now()): UserSong? {
         dbQuery {
@@ -370,12 +393,12 @@ class SongService : Service() {
             .singleOrNull()?.get(SongTable.id)?.value
     }
 
-    suspend fun byId(id: UUID): Song? = querySingle({ this }) {
+    suspend fun byId(id: UUID): Song? = querySingle {
         where { SongTable.id eq id }
     }
 
     suspend fun byIds(ids: Collection<UUID>, userId: UUID): PaginatedResponse<UserSong> =
-        querySongs<UserSong>(0, Int.MAX_VALUE, true, { userSong(userId) }) {
+        querySongs<UserSong>(0, Int.MAX_VALUE, true, userId) {
             where { SongTable.id inList ids }
         }.let { response ->
             val songMap = response.data.associateBy { it.id }
@@ -385,7 +408,7 @@ class SongService : Service() {
         }
 
     suspend fun byIds(ids: Collection<UUID>): List<Song> =
-        querySongs<Song>(0, Int.MAX_VALUE, true, { this }) {
+        querySongs<Song>(0, Int.MAX_VALUE, true) {
             where { SongTable.id inList ids }
         }.let { response ->
             val songMap = response.data.associateBy { it.id }
@@ -398,22 +421,22 @@ class SongService : Service() {
             byIds(ids).asFlow()
         }
 
-    suspend fun byId(id: UUID, userId: UUID): UserSong? = querySingle({ userSong(userId) }) {
+    suspend fun byId(id: UUID, userId: UUID): UserSong? = querySingle(userId) {
         where { SongTable.id eq id }
     }
 
     suspend fun byMusicBrainzId(musicBrainzId: String, userId: UUID): List<UserSong> =
-        querySongs<UserSong>(0, Int.MAX_VALUE, true, { userSong(userId) }) {
+        querySongs<UserSong>(0, Int.MAX_VALUE, true, userId) {
             where { SongMusicBrainzTable.musicBrainzId eq musicBrainzId }
         }.data
 
     suspend fun byTitle(page: Int, pageSize: Int, title: String, userId: UUID): PaginatedResponse<UserSong> =
-        querySongs(page, pageSize, true, { userSong(userId) }) {
+        querySongs(page, pageSize, true, userId) {
             where { SongTable.title eq title }
         }
 
     suspend fun byArtist(page: Int, pageSize: Int, artistId: UUID, userId: UUID): PaginatedResponse<UserSong> =
-        querySongs(page, pageSize, true, { userSong(userId) }) {
+        querySongs(page, pageSize, true, userId) {
             val songIds = SongArtistTable
                 .select(SongArtistTable.songId)
                 .where { SongArtistTable.artistId eq artistId }
@@ -431,7 +454,7 @@ class SongService : Service() {
         }
 
     suspend fun likedByArtist(page: Int, pageSize: Int, artistId: UUID, explicit: Boolean, userId: UUID): PaginatedResponse<UserSong> =
-        querySongs(page, pageSize, explicit, { userSong(userId) }) {
+        querySongs(page, pageSize, explicit, userId) {
             val songIds = SongArtistTable
                 .select(SongArtistTable.songId)
                 .where { SongArtistTable.artistId eq artistId }
@@ -450,15 +473,15 @@ class SongService : Service() {
         }
 
     suspend fun byAlbum(page: Int, pageSize: Int, albumId: UUID, userId: UUID): PaginatedResponse<UserSong> =
-        querySongs(page, pageSize, true, { userSong(userId) }) {
+        querySongs(page, pageSize, true, userId) {
             where { SongTable.albumId eq albumId }
             orderBy(SongTable.discNumber, SortOrder.ASC)
             orderBy(SongTable.trackNumber, SortOrder.ASC)
         }
 
     suspend fun byPlaylist(page: Int, pageSize: Int, playlistId: UUID, userId: UUID): PaginatedResponse<UserSong> =
-        querySongs(page, pageSize, true, {
-            leftJoin(PlaylistSongTable).userSong(userId)
+        querySongs(page, pageSize, true, userId, {
+            leftJoin(PlaylistSongTable)
         }) {
             where { PlaylistSongTable.playlistId eq playlistId }
             orderBy(PlaylistSongTable.position, SortOrder.ASC)
@@ -466,8 +489,8 @@ class SongService : Service() {
         }
 
     suspend fun byUserPlaylist(page: Int, pageSize: Int, playlistId: UUID, userId: UUID): PaginatedResponse<UserSong> =
-        querySongs(page, pageSize, true, {
-            leftJoin(UserPlaylistSongTable).userSong(userId)
+        querySongs(page, pageSize, true, userId, {
+            leftJoin(UserPlaylistSongTable)
         }) {
             where { UserPlaylistSongTable.playlistId eq playlistId }
             orderBy(UserPlaylistSongTable.addedAt, SortOrder.ASC)
@@ -475,7 +498,7 @@ class SongService : Service() {
         }
 
     suspend fun byTidalTrackIds(ids: Collection<String>, userId: UUID): List<UserSong> =
-        querySongs<UserSong>(0, Int.MAX_VALUE, true, { userSong(userId) }) {
+        querySongs<UserSong>(0, Int.MAX_VALUE, true, userId) {
             where {
                 SongTable.originalUrl inList ids.map {
                     "https://tidal.com/browse/track/$it"
@@ -489,7 +512,7 @@ class SongService : Service() {
         }.data
 
     suspend fun byTidalTracks(tracks: Collection<IMetadataService.Track>, userId: UUID): List<UserSong> =
-        querySongs<UserSong>(0, Int.MAX_VALUE, true, { userSong(userId) }) {
+        querySongs<UserSong>(0, Int.MAX_VALUE, true, userId) {
             where {
                 tracks.map { track ->
                     (SongTable.originalUrl eq "https://tidal.com/browse/track/${track.id}") or
@@ -507,7 +530,7 @@ class SongService : Service() {
         userId: UUID,
         liked: Boolean = false
     ): PaginatedResponse<UserSong> =
-        querySongs(page, pageSize, explicit, { userSong(userId) }) {
+        querySongs(page, pageSize, explicit, userId) {
             rankedSearchQuery(
                 query,
                 listOf(20, 10, 5, 5, 5, 5, 3, 3, 3, 3),
@@ -532,7 +555,7 @@ class SongService : Service() {
 
     suspend fun likedSongs(page: Int, pageSize: Int, explicit: Boolean, userId: UUID): PaginatedResponse<UserSong> =
         querySongs(
-            page, pageSize, explicit, { userSong(userId) },
+            page, pageSize, explicit, userId
         ) {
             where { UserSongTable.isFavourite eq true }
             orderBy(UserSongTable.updatedAt to SortOrder.DESC)
@@ -547,7 +570,7 @@ class SongService : Service() {
         invertTags: Boolean = false
     ): PaginatedResponse<UserSong> =
         querySongs(
-            page, pageSize, explicit, { userSong(userId) },
+            page, pageSize, explicit, userId,
             query = {
                 applyTags(tags, invertTags)
                 orderBy(SongTable.inserted, SortOrder.DESC)
@@ -824,17 +847,19 @@ class SongService : Service() {
     }
 
     private suspend inline fun <reified T : BaseSong> querySingle(
-        crossinline columnSet: suspend ColumnSet.() -> ColumnSet,
-        crossinline query: Query.() -> Query
+        userId: UUID? = null,
+        crossinline columnSet: ColumnSet.() -> ColumnSet = { this },
+        crossinline query: Query.() -> Query = { this }
     ) =
-        querySongs<T>(0, Int.MAX_VALUE, true, columnSet = columnSet, query = query).data.singleOrNull()
+        querySongs<T>(0, Int.MAX_VALUE, true, userId, columnSet, query).data.singleOrNull()
 
     private suspend inline fun <reified T : BaseSong> querySongs(
         page: Int,
         pageSize: Int,
         explicit: Boolean,
-        crossinline columnSet: suspend ColumnSet.() -> ColumnSet,
-        crossinline query: suspend Query.() -> Query
+        userId: UUID? = null,
+        crossinline columnSet: ColumnSet.() -> ColumnSet = { this },
+        crossinline query: Query.() -> Query = { this }
     ) = dbQuery {
         val base = SongTable
             .leftJoin(
@@ -900,6 +925,9 @@ class SongService : Service() {
                 otherColumn = { albumArtistMemberAlias[ArtistTable.groupId] }
             )
             .leftJoin(SongMusicBrainzTable)
+            .userSong(userId)
+            .followedArtist(userId)
+            .albumFollowedArtist(userId)
             .columnSet()
 
         val q = base.selectAll().query()
@@ -993,7 +1021,7 @@ class SongService : Service() {
             }
 
             if (row.getOrNull(ArtistTable.id) != null) {
-                val artist = mapArtist(row, ArtistTable)
+                val artist = mapArtist(row, ArtistTable, followedTable = followedArtistAlias)
                 if (artist !in songArtistsMap.getOrDefault(songId, emptyList())) {
                     songArtistsMap.getOrPut(songId) { mutableListOf() }.add(artist)
                 }
@@ -1003,7 +1031,8 @@ class SongService : Service() {
                 val artist = mapArtist(
                     row,
                     albumArtistAlias,
-                    row.getOrNull(albumArtistMusicBrainzAlias[ArtistMusicBrainzTable.musicBrainzId])
+                    row.getOrNull(albumArtistMusicBrainzAlias[ArtistMusicBrainzTable.musicBrainzId]),
+                    followedTable = albumFollowedArtistAlias
                 )
                 if (artist !in albumArtistsMap.getOrDefault(albumId, emptyList())) {
                     albumArtistsMap.getOrPut(albumId) { mutableListOf() }.add(artist)

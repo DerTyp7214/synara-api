@@ -68,7 +68,14 @@ class DbManagementService : IDbManagementService {
         RefreshTokenTable,
         UserPlaylistTable,
         TranscodedSongTable,
-        UserPlaylistSongTable
+        UserPlaylistSongTable,
+        ArtistMusicBrainzTable,
+        AlbumMusicBrainzTable,
+        SongMusicBrainzTable,
+        ArtistSplitAliasTable,
+        ScheduledTaskLogTable,
+        FollowedArtistTable,
+        RecentReleaseTable
     )
 
     @OptIn(ExperimentalSerializationApi::class)

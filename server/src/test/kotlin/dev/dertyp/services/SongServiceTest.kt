@@ -1,0 +1,849 @@
+package dev.dertyp.services
+
+import dev.dertyp.DbDialect
+import dev.dertyp.TestDatabase
+import dev.dertyp.data.InsertableAlbum
+import dev.dertyp.data.InsertableSong
+import dev.dertyp.data.SongTag
+import dev.dertyp.data.User
+import dev.dertyp.db.*
+import dev.dertyp.services.metadata.MusicBrainzService
+import io.ktor.server.application.ApplicationEnvironment
+import io.mockk.every
+import io.mockk.mockk
+import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.runBlocking
+import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.jdbc.Database
+import org.jetbrains.exposed.v1.jdbc.SchemaUtils
+import org.jetbrains.exposed.v1.jdbc.insert
+import org.jetbrains.exposed.v1.jdbc.selectAll
+import org.jetbrains.exposed.v1.jdbc.transactions.transaction
+import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.Assertions.*
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.EnumSource
+import org.koin.core.context.startKoin
+import org.koin.core.context.stopKoin
+import org.koin.dsl.module
+import org.koin.test.KoinTest
+import java.util.UUID
+
+class SongServiceTest : KoinTest {
+    private lateinit var database: Database
+    private lateinit var songService: SongService
+    private lateinit var rpcService: SongRpcService
+    
+    private val musicBrainzService = mockk<MusicBrainzService>(relaxed = true)
+    private val environment = mockk<ApplicationEnvironment>()
+    private val storageService = mockk<StorageService>(relaxed = true)
+    
+    private val user = User(
+        id = UUID.randomUUID(),
+        username = "testuser",
+        passwordHash = "hash",
+        isAdmin = true
+    )
+
+    fun setup(dialect: DbDialect) {
+        startKoin {
+            modules(module {
+                single { environment }
+                single { musicBrainzService }
+                single { mockk<ImageService>(relaxed = true) }
+                single { storageService }
+                single { AlbumService() }
+                single { ArtistService() }
+            })
+        }
+
+        database = TestDatabase.connect(dialect, "song_rpc_test")
+        transaction(database) {
+            SchemaUtils.create(
+                UserTable,
+                SongTable,
+                AlbumTable,
+                ArtistTable,
+                SongArtistTable,
+                AlbumArtistTable,
+                SongMusicBrainzTable,
+                AlbumMusicBrainzTable,
+                ArtistMusicBrainzTable,
+                UserSongTable,
+                ArtistAliasTable,
+                FollowedArtistTable,
+                PlaylistSongTable,
+                UserPlaylistSongTable,
+                ImageTable,
+                ArtistSplitAliasTable
+            )
+            
+            UserTable.insert {
+                it[id] = user.id
+                it[username] = user.username
+                it[passwordHash] = user.passwordHash
+                it[isAdmin] = user.isAdmin
+            }
+        }
+
+        songService = SongService()
+        rpcService = SongRpcService(user, songService)
+    }
+
+    @AfterEach
+    fun tearDown() {
+        stopKoin()
+        TestDatabase.cleanUp()
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `byId should return song with full metadata`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val artistId = UUID.randomUUID()
+        val albumId = UUID.randomUUID()
+        val songId = UUID.randomUUID()
+
+        transaction(database) {
+            ArtistTable.insert {
+                it[id] = artistId
+                it[name] = "Test Artist"
+            }
+            AlbumTable.insert {
+                it[id] = albumId
+                it[name] = "Test Album"
+                it[songCount] = 1
+            }
+            AlbumArtistTable.insert {
+                it[AlbumArtistTable.albumId] = albumId
+                it[AlbumArtistTable.artistId] = artistId
+            }
+            SongTable.insert {
+                it[id] = songId
+                it[title] = "Test Song"
+                it[SongTable.albumId] = albumId
+                it[filePath] = "/path/to/song.mp3"
+                it[duration] = 180000
+            }
+            SongArtistTable.insert {
+                it[SongArtistTable.songId] = songId
+                it[SongArtistTable.artistId] = artistId
+            }
+        }
+
+        val song = rpcService.byId(songId)
+        assertNotNull(song)
+        assertEquals("Test Song", song?.title)
+        assertEquals("Test Album", song?.album?.name)
+        assertEquals(1, song?.artists?.size)
+        assertEquals("Test Artist", song?.artists?.firstOrNull()?.name)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `byId should return song with followed artist`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val artistId = UUID.randomUUID()
+        val albumId = UUID.randomUUID()
+        val songId = UUID.randomUUID()
+
+        transaction(database) {
+            ArtistTable.insert {
+                it[id] = artistId
+                it[name] = "Followed Artist"
+            }
+            FollowedArtistTable.insert {
+                it[FollowedArtistTable.artistId] = artistId
+                it[FollowedArtistTable.userId] = user.id
+            }
+            AlbumTable.insert {
+                it[id] = albumId
+                it[name] = "Test Album"
+                it[songCount] = 1
+            }
+            AlbumArtistTable.insert {
+                it[AlbumArtistTable.albumId] = albumId
+                it[AlbumArtistTable.artistId] = artistId
+            }
+            SongTable.insert {
+                it[id] = songId
+                it[title] = "Test Song"
+                it[SongTable.albumId] = albumId
+            }
+            SongArtistTable.insert {
+                it[SongArtistTable.songId] = songId
+                it[SongArtistTable.artistId] = artistId
+            }
+        }
+
+        val song = rpcService.byId(songId)
+        assertNotNull(song)
+        assertEquals(true, song?.artists?.firstOrNull()?.isFollowed)
+        assertEquals(true, song?.album?.artists?.firstOrNull()?.isFollowed)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `setLiked should update UserSongTable`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val songId = UUID.randomUUID()
+        val albumId = UUID.randomUUID()
+        transaction(database) {
+            AlbumTable.insert {
+                it[id] = albumId
+                it[name] = "Album"
+            }
+            SongTable.insert {
+                it[id] = songId
+                it[title] = "Likable Song"
+                it[SongTable.albumId] = albumId
+            }
+        }
+
+        val updated = rpcService.setLiked(songId, true, null)
+        assertNotNull(updated)
+        assertEquals(true, updated?.isFavourite)
+
+        val retrieved = rpcService.byId(songId)
+        assertEquals(true, retrieved?.isFavourite)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `rankedSearch should return matching songs by title`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val albumId = UUID.randomUUID()
+        transaction(database) {
+            val unrelatedGroupId = UUID.randomUUID()
+            ArtistTable.insert {
+                it[id] = unrelatedGroupId
+                it[name] = "The Beatles"
+                it[isGroup] = true
+            }
+            ArtistTable.insert {
+                it[id] = UUID.randomUUID()
+                it[name] = "John Lennon"
+                it[groupId] = unrelatedGroupId
+            }
+            AlbumTable.insert {
+                it[id] = albumId
+                it[name] = "Album"
+            }
+            SongTable.insert {
+                it[id] = UUID.randomUUID()
+                it[title] = "Searching for this"
+                it[SongTable.albumId] = albumId
+            }
+            SongTable.insert {
+                it[id] = UUID.randomUUID()
+                it[title] = "Not this one"
+                it[SongTable.albumId] = albumId
+            }
+        }
+
+        val result = rpcService.rankedSearch(0, 10, "Searching", explicit = false, liked = false)
+        assertEquals(1, result.data.size)
+        assertEquals("Searching for this", result.data[0].title)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `rankedSearch should find songs by artist and album`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val artistId = UUID.randomUUID()
+        val albumId = UUID.randomUUID()
+        val songId = UUID.randomUUID()
+
+        transaction(database) {
+            ArtistTable.insert {
+                it[id] = artistId
+                it[name] = "Unique Artist"
+            }
+            AlbumTable.insert {
+                it[id] = albumId
+                it[name] = "Legendary Album"
+            }
+            AlbumArtistTable.insert {
+                it[AlbumArtistTable.albumId] = albumId
+                it[AlbumArtistTable.artistId] = artistId
+            }
+            SongTable.insert {
+                it[id] = songId
+                it[title] = "Some Track"
+                it[SongTable.albumId] = albumId
+            }
+            SongArtistTable.insert {
+                it[SongArtistTable.songId] = songId
+                it[SongArtistTable.artistId] = artistId
+            }
+        }
+
+        val artistResult = rpcService.rankedSearch(0, 10, "Unique", explicit = false, liked = false)
+        assertEquals(1, artistResult.data.size)
+        assertEquals("Some Track", artistResult.data[0].title)
+
+        val albumResult = rpcService.rankedSearch(0, 10, "Legendary", explicit = false, liked = false)
+        assertEquals(1, albumResult.data.size)
+        assertEquals("Some Track", albumResult.data[0].title)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `rankedSearch should find songs by artist member name`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val testGroupId = UUID.randomUUID()
+        val testMemberId = UUID.randomUUID()
+        val testAlbumId = UUID.randomUUID()
+        val testSongId = UUID.randomUUID()
+
+        transaction(database) {
+            ArtistTable.insert {
+                it[id] = testGroupId
+                it[name] = "The Beatles"
+                it[isGroup] = true
+            }
+            ArtistTable.insert {
+                it[id] = testMemberId
+                it[name] = "John Lennon"
+                it[groupId] = testGroupId
+            }
+            AlbumTable.insert {
+                it[id] = testAlbumId
+                it[name] = "Abbey Road"
+            }
+            SongTable.insert {
+                it[id] = testSongId
+                it[title] = "Come Together"
+                it[SongTable.albumId] = testAlbumId
+            }
+            SongArtistTable.insert {
+                it[SongArtistTable.songId] = testSongId
+                it[SongArtistTable.artistId] = testGroupId
+            }
+        }
+
+        val result = rpcService.rankedSearch(0, 10, "Lennon", explicit = false, liked = false)
+        assertEquals(1, result.data.size)
+        assertEquals("Come Together", result.data[0].title)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `rankedSearch should find songs by artist group name`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val testGroupId = UUID.randomUUID()
+        val testMemberId = UUID.randomUUID()
+        val testAlbumId = UUID.randomUUID()
+        val testSongId = UUID.randomUUID()
+
+        transaction(database) {
+            ArtistTable.insert {
+                it[id] = testGroupId
+                it[name] = "The Beatles"
+                it[isGroup] = true
+            }
+            ArtistTable.insert {
+                it[id] = testMemberId
+                it[name] = "John Lennon"
+                it[groupId] = testGroupId
+            }
+            AlbumTable.insert {
+                it[id] = testAlbumId
+                it[name] = "Imagine Album"
+            }
+            SongTable.insert {
+                it[id] = testSongId
+                it[title] = "Imagine"
+                it[SongTable.albumId] = testAlbumId
+            }
+            SongArtistTable.insert {
+                it[SongArtistTable.songId] = testSongId
+                it[SongArtistTable.artistId] = testMemberId
+            }
+        }
+
+        val result = rpcService.rankedSearch(0, 10, "Beatles", explicit = false, liked = false)
+        assertEquals(1, result.data.size)
+        assertEquals("Imagine", result.data[0].title)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `rankedSearch should find songs by MusicBrainz ID`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val songId = UUID.randomUUID()
+        val albumId = UUID.randomUUID()
+        val mbId = "550e8400-e29b-41d4-a716-446655440000"
+
+        transaction(database) {
+            AlbumTable.insert {
+                it[id] = albumId
+                it[name] = "Album"
+            }
+            SongTable.insert {
+                it[id] = songId
+                it[title] = "MBID Song"
+                it[SongTable.albumId] = albumId
+            }
+            SongMusicBrainzTable.insert {
+                it[SongMusicBrainzTable.songId] = songId
+                it[musicBrainzId] = mbId
+            }
+        }
+
+        val result = rpcService.rankedSearch(0, 10, mbId, explicit = false, liked = false)
+        assertEquals(1, result.data.size)
+        assertEquals("MBID Song", result.data[0].title)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `rankedSearch should support negative keywords`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val albumId = UUID.randomUUID()
+        transaction(database) {
+            AlbumTable.insert {
+                it[id] = albumId
+                it[name] = "Album"
+            }
+            SongTable.insert {
+                it[id] = UUID.randomUUID()
+                it[title] = "Keep This"
+                it[SongTable.albumId] = albumId
+                it[filePath] = "/keep"
+            }
+            SongTable.insert {
+                it[id] = UUID.randomUUID()
+                it[title] = "Remove This"
+                it[SongTable.albumId] = albumId
+                it[filePath] = "/remove"
+            }
+        }
+
+        val result = rpcService.rankedSearch(0, 10, "This -Remove", explicit = false, liked = false)
+        assertEquals(1, result.data.size)
+        assertEquals("Keep This", result.data[0].title)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `rankedSearch should return one song for multiple artists`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val songId = UUID.randomUUID()
+        val albumId = UUID.randomUUID()
+        val artistId1 = UUID.randomUUID()
+        val artistId2 = UUID.randomUUID()
+
+        transaction(database) {
+            ArtistTable.insert {
+                it[id] = artistId1
+                it[name] = "Artist One"
+            }
+            ArtistTable.insert {
+                it[id] = artistId2
+                it[name] = "Artist Two"
+            }
+            AlbumTable.insert {
+                it[id] = albumId
+                it[name] = "Test Album"
+            }
+            SongTable.insert {
+                it[id] = songId
+                it[title] = "Multiple Artists Track"
+                it[SongTable.albumId] = albumId
+                it[filePath] = "/path"
+            }
+            SongArtistTable.insert {
+                it[SongArtistTable.songId] = songId
+                it[SongArtistTable.artistId] = artistId1
+            }
+            SongArtistTable.insert {
+                it[SongArtistTable.songId] = songId
+                it[SongArtistTable.artistId] = artistId2
+            }
+        }
+
+        val result = rpcService.rankedSearch(0, 10, "Multiple Artists", explicit = false, liked = false)
+        assertEquals(1, result.data.size)
+        val song = result.data[0]
+        assertEquals("Multiple Artists Track", song.title)
+        assertEquals(2, song.artists.size)
+
+        val result2 = rpcService.rankedSearch(0, 10, "Artist", explicit = false, liked = false)
+        assertEquals(1, result2.data.size)
+        val song2 = result2.data[0]
+        assertEquals("Multiple Artists Track", song2.title)
+        assertEquals(2, song2.artists.size)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `createBatch should handle new songs and bitrate comparison`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val album = InsertableAlbum("Batch Album", listOf("Batch Artist"))
+        val songs = listOf(
+            InsertableSong(
+                title = "Song 1",
+                artists = listOf("Batch Artist"),
+                album = album,
+                duration = 100,
+                explicit = false,
+                path = "/path/1",
+                bitRate = 128000
+            ),
+            InsertableSong(
+                title = "Song 1",
+                artists = listOf("Batch Artist"),
+                album = album,
+                duration = 100,
+                explicit = false,
+                path = "/path/1-high",
+                bitRate = 320000
+            ),
+            InsertableSong(
+                title = "Song 2",
+                artists = listOf("Batch Artist"),
+                album = album,
+                duration = 200,
+                explicit = false,
+                path = "/path/2",
+                bitRate = 256000
+            )
+        )
+
+        val result = songService.createBatch(songs)
+        assertEquals(2, result.size)
+        
+        val insertedSongs = result.map { it.value.title }.toSet()
+        assertTrue(insertedSongs.contains("Song 1"))
+        assertTrue(insertedSongs.contains("Song 2"))
+        
+        val song1 = rpcService.rankedSearch(0, 10, "Song 1", explicit = false, liked = false).data[0]
+        assertEquals(320000, song1.bitRate)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `createBatch should skip existing songs`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val albumId = UUID.randomUUID()
+        val artistId = UUID.randomUUID()
+        
+        transaction(database) {
+            ArtistTable.insert {
+                it[id] = artistId
+                it[name] = "Existing Artist"
+            }
+            AlbumTable.insert {
+                it[id] = albumId
+                it[name] = "Existing Album"
+            }
+            AlbumArtistTable.insert {
+                it[AlbumArtistTable.albumId] = albumId
+                it[AlbumArtistTable.artistId] = artistId
+            }
+            val existingSongId = SongTable.insert {
+                it[id] = UUID.randomUUID()
+                it[title] = "Existing Song"
+                it[SongTable.albumId] = albumId
+                it[trackNumber] = 1
+                it[discNumber] = 1
+            }[SongTable.id].value
+            SongArtistTable.insert {
+                it[SongArtistTable.songId] = existingSongId
+                it[SongArtistTable.artistId] = artistId
+            }
+        }
+
+        val album = InsertableAlbum("Existing Album", listOf("Existing Artist"))
+        val songs = listOf(
+            InsertableSong(
+                title = "Existing Song",
+                artists = listOf("Existing Artist"),
+                album = album,
+                duration = 100,
+                explicit = false,
+                path = "/path/exists",
+                trackNumber = 1,
+                discNumber = 1
+            ),
+            InsertableSong(
+                title = "New Song",
+                artists = listOf("Existing Artist"),
+                album = album,
+                duration = 200,
+                explicit = false,
+                path = "/path/new",
+                trackNumber = 2,
+                discNumber = 1
+            )
+        )
+
+        val result = songService.createBatch(songs)
+        assertEquals(1, result.size)
+        assertEquals("New Song", result.values.first().title)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `allSongIds should filter by tags`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val albumId = UUID.randomUUID()
+        transaction(database) {
+            AlbumTable.insert {
+                it[id] = albumId
+                it[name] = "Album"
+            }
+            SongTable.insert {
+                it[id] = UUID.randomUUID()
+                it[title] = "High Quality"
+                it[SongTable.albumId] = albumId
+                it[sampleRate] = 96000
+                it[bitsPerSample] = 24
+            }
+            SongTable.insert {
+                it[id] = UUID.randomUUID()
+                it[title] = "Normal Quality"
+                it[SongTable.albumId] = albumId
+                it[sampleRate] = 44100
+                it[bitsPerSample] = 16
+            }
+            SongTable.insert {
+                it[id] = UUID.randomUUID()
+                it[title] = "With Lyrics"
+                it[SongTable.albumId] = albumId
+                it[lyrics] = "La la la"
+            }
+        }
+
+        val highQuality = songService.allSongIds(true, tags = listOf(SongTag.Q_96)).toList()
+        assertEquals(1, highQuality.size)
+        
+        val bitDepth24 = songService.allSongIds(true, tags = listOf(SongTag.B_24)).toList()
+        assertEquals(1, bitDepth24.size)
+
+        val withLyrics = songService.allSongIds(true, tags = listOf(SongTag.HAS_LYRICS)).toList()
+        assertEquals(1, withLyrics.size)
+
+        val notHighQuality = songService.allSongIds(true, tags = listOf(SongTag.Q_96), invertTags = true).toList()
+        assertEquals(2, notHighQuality.size)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `allSongIds should filter by custom upload tag`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val customPath = "/custom/path"
+        every { storageService.customAudioPath } returns customPath
+        
+        val albumId = UUID.randomUUID()
+        transaction(database) {
+            AlbumTable.insert {
+                it[id] = albumId
+                it[name] = "Album"
+            }
+            SongTable.insert {
+                it[id] = UUID.randomUUID()
+                it[title] = "Custom Upload"
+                it[SongTable.albumId] = albumId
+                it[filePath] = "$customPath/song.mp3"
+            }
+            SongTable.insert {
+                it[id] = UUID.randomUUID()
+                it[title] = "Normal Song"
+                it[SongTable.albumId] = albumId
+                it[filePath] = "/other/path/song.mp3"
+            }
+        }
+
+        val customSongs = songService.allSongIds(true, tags = listOf(SongTag.CUSTOM_UPLOAD)).toList()
+        assertEquals(1, customSongs.size)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `deleteSongs should clean up empty albums`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val albumId = UUID.randomUUID()
+        val songId = UUID.randomUUID()
+        
+        transaction(database) {
+            AlbumTable.insert {
+                it[id] = albumId
+                it[name] = "To Be Deleted"
+            }
+            SongTable.insert {
+                it[id] = songId
+                it[title] = "Only Song"
+                it[SongTable.albumId] = albumId
+                it[filePath] = "/tmp/song.mp3"
+            }
+        }
+
+        songService.deleteSongs(listOf(songId))
+        
+        val album = transaction(database) {
+            AlbumTable.selectAll().where { AlbumTable.id eq albumId }.singleOrNull()
+        }
+        assertNull(album, "Album should be deleted when its last song is removed")
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `querySongs should handle explicit and non-explicit versions correctly`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val albumId = UUID.randomUUID()
+        transaction(database) {
+            AlbumTable.insert {
+                it[id] = albumId
+                it[name] = "Shared Album"
+            }
+            SongTable.insert {
+                it[id] = UUID.randomUUID()
+                it[title] = "Versioned Song"
+                it[SongTable.albumId] = albumId
+                it[explicit] = true
+                it[duration] = 100
+                it[trackNumber] = 1
+            }
+            SongTable.insert {
+                it[id] = UUID.randomUUID()
+                it[title] = "Versioned Song"
+                it[SongTable.albumId] = albumId
+                it[explicit] = false
+                it[duration] = 100
+                it[trackNumber] = 1
+            }
+        }
+
+        val resultExplicit = rpcService.allSongs(0, 10, explicit = true, tags = emptyList(), invertTags = false)
+        assertEquals(1, resultExplicit.data.size)
+        assertTrue(resultExplicit.data[0].explicit)
+
+        val resultNonExplicit = rpcService.allSongs(0, 10, explicit = false, tags = emptyList(), invertTags = false)
+        assertEquals(1, resultNonExplicit.data.size)
+        assertFalse(resultNonExplicit.data[0].explicit)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `allSongs should support pagination`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val albumId = UUID.randomUUID()
+        transaction(database) {
+            AlbumTable.insert {
+                it[id] = albumId
+                it[name] = "Album"
+            }
+            repeat(5) { i ->
+                SongTable.insert {
+                    it[id] = UUID.randomUUID()
+                    it[title] = "Song $i"
+                    it[SongTable.albumId] = albumId
+                }
+            }
+        }
+
+        val firstPage = rpcService.allSongs(0, 2, true, emptyList(), false)
+        assertEquals(2, firstPage.data.size)
+        assertTrue(firstPage.hasNextPage)
+        assertEquals(5, firstPage.total)
+
+        val secondPage = rpcService.allSongs(1, 2, true, emptyList(), false)
+        assertEquals(2, secondPage.data.size)
+        assertTrue(secondPage.hasNextPage)
+
+        val lastPage = rpcService.allSongs(2, 2, true, emptyList(), false)
+        assertEquals(1, lastPage.data.size)
+        assertFalse(lastPage.hasNextPage)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `songIdsByArtist should find songs via song-artist and album-artist links`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val artistId = UUID.randomUUID()
+        val albumId = UUID.randomUUID()
+        val directSongId = UUID.randomUUID()
+        val albumSongId = UUID.randomUUID()
+
+        transaction(database) {
+            ArtistTable.insert {
+                it[id] = artistId
+                it[name] = "Artist"
+            }
+            AlbumTable.insert {
+                it[id] = albumId
+                it[name] = "Album"
+            }
+            AlbumArtistTable.insert {
+                it[AlbumArtistTable.albumId] = albumId
+                it[AlbumArtistTable.artistId] = artistId
+            }
+            SongTable.insert {
+                it[id] = albumSongId
+                it[title] = "Album Song"
+                it[SongTable.albumId] = albumId
+            }
+            
+            val otherAlbumId = UUID.randomUUID()
+            AlbumTable.insert {
+                it[id] = otherAlbumId
+                it[name] = "Other Album"
+            }
+            SongTable.insert {
+                it[id] = directSongId
+                it[title] = "Direct Song"
+                it[SongTable.albumId] = otherAlbumId
+            }
+            SongArtistTable.insert {
+                it[SongArtistTable.songId] = directSongId
+                it[SongArtistTable.artistId] = artistId
+            }
+        }
+
+        val result = songService.songIdsByArtist(artistId).toList()
+        assertEquals(2, result.size)
+        assertTrue(result.contains(directSongId))
+        assertTrue(result.contains(albumSongId))
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `allSongIds should handle all quality tags`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val albumId = UUID.randomUUID()
+        transaction(database) {
+            AlbumTable.insert { it[id] = albumId; it[name] = "Album" }
+            SongTable.insert {
+                it[id] = UUID.randomUUID()
+                it[title] = "44.1kHz"
+                it[SongTable.albumId] = albumId
+                it[sampleRate] = 44100
+                it[bitsPerSample] = 16
+            }
+            SongTable.insert {
+                it[id] = UUID.randomUUID()
+                it[title] = "192kHz"
+                it[SongTable.albumId] = albumId
+                it[sampleRate] = 192000
+                it[bitsPerSample] = 24
+            }
+            val mbSongId = UUID.randomUUID()
+            SongTable.insert {
+                it[id] = mbSongId
+                it[title] = "MBID"
+                it[SongTable.albumId] = albumId
+            }
+            SongMusicBrainzTable.insert {
+                it[SongMusicBrainzTable.songId] = mbSongId
+                it[musicBrainzId] = "mb-id"
+            }
+        }
+
+        assertEquals(1, songService.allSongIds(true, tags = listOf(SongTag.Q_44_48)).toList().size)
+        assertEquals(1, songService.allSongIds(true, tags = listOf(SongTag.Q_192)).toList().size)
+        assertEquals(1, songService.allSongIds(true, tags = listOf(SongTag.B_16)).toList().size)
+        assertEquals(1, songService.allSongIds(true, tags = listOf(SongTag.HAS_MUSICBRAINZ_ID)).toList().size)
+    }
+}

@@ -7,8 +7,9 @@ import org.junit.jupiter.api.Test
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
 import org.koin.dsl.module
+import org.koin.test.KoinTest
 
-class RemoteMirrorServiceTest {
+class RemoteMirrorServiceTest : KoinTest {
     private lateinit var songService: SongService
     private lateinit var artistService: ArtistService
     private lateinit var albumService: AlbumService

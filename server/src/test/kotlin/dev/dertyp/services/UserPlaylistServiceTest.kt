@@ -3,6 +3,7 @@ package dev.dertyp.services
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
 import dev.dertyp.db.*
+import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.SchemaUtils
@@ -13,13 +14,23 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.EnumSource
+import org.koin.core.context.startKoin
+import org.koin.core.context.stopKoin
+import org.koin.dsl.module
+import org.koin.test.KoinTest
 import java.util.UUID
 
-class UserPlaylistServiceTest {
+class UserPlaylistServiceTest : KoinTest {
     private lateinit var database: Database
     private lateinit var service: UserPlaylistService
 
     fun setup(dialect: DbDialect) {
+        startKoin {
+            modules(module {
+                single { mockk<ImageService>(relaxed = true) }
+            })
+        }
+
         database = TestDatabase.connect(dialect, "user_playlist_test")
         transaction(database) {
             SchemaUtils.create(
@@ -39,6 +50,7 @@ class UserPlaylistServiceTest {
 
     @AfterEach
     fun tearDown() {
+        stopKoin()
         TestDatabase.cleanUp()
     }
 

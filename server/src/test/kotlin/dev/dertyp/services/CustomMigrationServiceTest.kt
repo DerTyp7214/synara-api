@@ -5,6 +5,7 @@ import dev.dertyp.TestDatabase
 import dev.dertyp.core.CustomMigration
 import dev.dertyp.core.Migration
 import dev.dertyp.db.CustomMigrationTable
+import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.SchemaUtils
@@ -14,14 +15,24 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.EnumSource
+import org.koin.core.context.startKoin
+import org.koin.core.context.stopKoin
+import org.koin.dsl.module
+import org.koin.test.KoinTest
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-class CustomMigrationServiceTest {
+class CustomMigrationServiceTest : KoinTest {
     private lateinit var database: Database
     private val service = CustomMigrationService()
 
     fun setup(dialect: DbDialect) {
+        startKoin {
+            modules(module {
+                single { mockk<ImageService>(relaxed = true) }
+            })
+        }
+
         database = TestDatabase.connect(dialect, "migration_test")
         transaction(database) {
             SchemaUtils.create(CustomMigrationTable)
@@ -30,6 +41,7 @@ class CustomMigrationServiceTest {
 
     @AfterEach
     fun tearDown() {
+        stopKoin()
         TestDatabase.cleanUp()
     }
 
@@ -75,13 +87,11 @@ class CustomMigrationServiceTest {
         val list = mutableListOf<String>()
         val m1 = Migration1(list)
 
-        // First run
         service.runMigrations(listOf(m1))
         assertEquals(1, list.size)
 
-        // Second run
         service.runMigrations(listOf(m1))
-        assertEquals(1, list.size) // Should not increase
+        assertEquals(1, list.size)
 
         transaction(database) {
             val executedIds = CustomMigrationTable.selectAll().map { it[CustomMigrationTable.id] }

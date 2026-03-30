@@ -14,7 +14,6 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import org.koin.core.context.GlobalContext
 import java.util.UUID
 
 fun Type.getWrapper(metadataService: MetadataService?, user: User, ids: List<String>): IdsWrapper {
@@ -89,15 +88,14 @@ suspend fun Type.download(
     existingUrls: List<String> = emptyList(),
     downloadStage: MutableList<String>,
     downloadStageMutex: Mutex,
+    userPlaylistService: UserPlaylistService,
+    imageService: ImageService,
+    songService: SongService,
     callback: suspend (List<String>) -> Unit
 ): Boolean {
     var contentToDownload = false
     when (this) {
         Type.PLAYLIST -> {
-            val userPlaylistService = GlobalContext.get().get<UserPlaylistService>()
-            val imageService = GlobalContext.get().get<ImageService>()
-            val songService = GlobalContext.get().get<SongService>()
-
             wrapper.idGroups.buffer(2).collect { idGroup ->
                 val playlistId = idGroup.metadata?.let { playlist ->
                     if (playlist is IMetadataService.FlowPlaylist) {
@@ -182,8 +180,6 @@ suspend fun Type.download(
         }
 
         Type.ALBUM -> {
-            val songService = GlobalContext.get().get<SongService>()
-
             wrapper.idGroups.buffer(2).collect { idGroup ->
                 idGroup.metadata?.let { metadata ->
                     when (metadata) {
@@ -213,8 +209,6 @@ suspend fun Type.download(
         }
 
         Type.ARTIST -> {
-            val songService = GlobalContext.get().get<SongService>()
-
             wrapper.idGroups.buffer(2).collect { idGroup ->
                 idGroup.metadata?.let { metadata ->
                     when (metadata) {

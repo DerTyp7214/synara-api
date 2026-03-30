@@ -14,7 +14,6 @@ import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.jdbc.*
-import org.koin.core.context.GlobalContext
 import redis.clients.jedis.HostAndPort
 import redis.clients.jedis.RedisClusterClient
 import java.io.ByteArrayInputStream
@@ -23,36 +22,33 @@ import java.util.UUID
 import javax.imageio.ImageIO
 import kotlin.io.path.*
 
-class ImageService : IImageService, Service() {
+class ImageService(
+    private val storageService: StorageService,
+    private val redisConfig: RedisCacheProvider.Config
+) : IImageService, Service() {
     init {
         Path(storageService.imagesPath).toFile().mkdirs()
     }
 
-    companion object {
-        private val storageService = GlobalContext.get().get<StorageService>()
-        private val redisConfig = GlobalContext.get().get<RedisCacheProvider.Config>()
-        private val jedis by lazy {
-            if (redisConfig.host != "none") RedisClusterClient.create(
-                HostAndPort(redisConfig.host, redisConfig.port)
-            ) else null
-        }
-
-        fun mapImage(resultRow: ResultRow): Image {
-            val id = resultRow[ImageTable.id].value
-            val path = Path(storageService.imagesPath, resultRow[ImageTable.path]).absolutePathString()
-            val imageHash = resultRow[ImageTable.imageHash]
-            val origin = resultRow[ImageTable.origin]
-
-            return Image(
-                id = id,
-                path = path,
-                imageHash = imageHash,
-                origin = origin,
-            )
-        }
+    private val jedis by lazy {
+        if (redisConfig.host != "none") RedisClusterClient.create(
+            HostAndPort(redisConfig.host, redisConfig.port)
+        ) else null
     }
 
-    fun map(resultRow: ResultRow): Image = mapImage(resultRow)
+    fun map(resultRow: ResultRow): Image {
+        val id = resultRow[ImageTable.id].value
+        val path = Path(storageService.imagesPath, resultRow[ImageTable.path]).absolutePathString()
+        val imageHash = resultRow[ImageTable.imageHash]
+        val origin = resultRow[ImageTable.origin]
+
+        return Image(
+            id = id,
+            path = path,
+            imageHash = imageHash,
+            origin = origin,
+        )
+    }
 
     override suspend fun byId(id: UUID): Image? = querySingle {
         where { ImageTable.id eq id }

@@ -33,6 +33,39 @@ data class MusicBrainzArtistSearchResponse(
 )
 
 @Serializable
+data class MusicBrainzReleaseGroupResponse(
+    @SerialName("release-group-count")
+    val count: Int? = null,
+    @SerialName("release-groups")
+    val releaseGroups: List<MusicBrainzReleaseGroup>? = null
+)
+
+@Serializable
+data class MusicBrainzReleaseGroup(
+    val id: String,
+    val title: String,
+    @SerialName("primary-type")
+    val primaryType: String? = null,
+    @SerialName("first-release-date")
+    val firstReleaseDate: String? = null,
+    val relations: List<MusicBrainzRelation>? = null
+)
+
+@Serializable
+data class MusicBrainzRelation(
+    val type: String? = null,
+    val url: MusicBrainzRelationUrl? = null,
+    @SerialName("release_group")
+    val releaseGroup: MusicBrainzReleaseGroup? = null
+)
+
+@Serializable
+data class MusicBrainzRelationUrl(
+    val id: String,
+    val resource: String
+)
+
+@Serializable
 data class MusicBrainzRecording(
     val id: String,
     val title: String? = null,
@@ -52,7 +85,17 @@ data class MusicBrainzArtistCredit(
 @Serializable
 data class MusicBrainzRelease(
     val id: String,
-    val title: String? = null
+    val title: String? = null,
+    @SerialName("release-group")
+    val releaseGroup: MusicBrainzReleaseGroup? = null,
+    val relations: List<MusicBrainzRelation>? = null
+)
+
+@Serializable
+data class MusicBrainzReleaseResponse(
+    @SerialName("release-count")
+    val count: Int? = null,
+    val releases: List<MusicBrainzRelease>? = null
 )
 
 class MusicBrainzService : Service() {
@@ -206,5 +249,80 @@ class MusicBrainzService : Service() {
             pageSize = pageSize,
             hasNextPage = (offset + items.size) < total
         )
+    }
+
+    suspend fun fetchReleaseGroups(artistMbId: String): List<MusicBrainzReleaseGroup> {
+        return try {
+            val response = retryableGet<MusicBrainzReleaseGroupResponse>("$mbBaseUrl/release-group") {
+                parameter("artist", artistMbId)
+                parameter("inc", "url-rels+release-group-rels")
+                parameter("limit", 100)
+                parameter("fmt", "json")
+                header("User-Agent", "Synara/${BuildConfig.VERSION} ( https://github.com/dertyp7214/synara )")
+            }
+            response?.releaseGroups ?: emptyList()
+        } catch (e: Exception) {
+            logger.error("Error fetching release groups for artist $artistMbId", e)
+            emptyList()
+        }
+    }
+
+    suspend fun fetchArtistById(mbId: String): MusicBrainzArtist? {
+        return try {
+            retryableGet<MusicBrainzArtist>("$mbBaseUrl/artist/$mbId") {
+                parameter("fmt", "json")
+                header("User-Agent", "Synara/${BuildConfig.VERSION} ( https://github.com/dertyp7214/synara )")
+            }
+        } catch (e: Exception) {
+            logger.error("Error fetching artist by ID $mbId", e)
+            null
+        }
+    }
+
+    suspend fun fetchReleasesByArtist(artistMbId: String): List<MusicBrainzRelease> {
+        return try {
+            val response = retryableGet<MusicBrainzReleaseResponse>("$mbBaseUrl/release") {
+                parameter("artist", artistMbId)
+                parameter("inc", "release-groups")
+                parameter("limit", 100)
+                parameter("fmt", "json")
+                header("User-Agent", "Synara/${BuildConfig.VERSION} ( https://github.com/dertyp7214/synara )")
+            }
+            response?.releases ?: emptyList()
+        } catch (e: Exception) {
+            logger.error("Error fetching releases for artist $artistMbId", e)
+            emptyList()
+        }
+    }
+
+    suspend fun fetchReleasesByReleaseGroup(releaseGroupId: String): List<MusicBrainzRelease> {
+        return try {
+            val response = retryableGet<MusicBrainzReleaseResponse>("$mbBaseUrl/release") {
+                parameter("release-group", releaseGroupId)
+                parameter("inc", "url-rels")
+                parameter("limit", 100)
+                parameter("fmt", "json")
+                header("User-Agent", "Synara/${BuildConfig.VERSION} ( https://github.com/dertyp7214/synara )")
+            }
+            response?.releases ?: emptyList()
+        } catch (e: Exception) {
+            logger.error("Error fetching releases for release group $releaseGroupId", e)
+            emptyList()
+        }
+    }
+
+    suspend fun fetchRecordingsByReleaseGroup(releaseGroupId: String): List<MusicBrainzRecording> {
+        return try {
+            val response = retryableGet<MusicBrainzSearchResponse>("$mbBaseUrl/recording") {
+                parameter("release-group", releaseGroupId)
+                parameter("inc", "releases+release-groups")
+                parameter("fmt", "json")
+                header("User-Agent", "Synara/${BuildConfig.VERSION} ( https://github.com/dertyp7214/synara )")
+            }
+            response?.recordings ?: emptyList()
+        } catch (e: Exception) {
+            logger.error("Error fetching recordings for release group $releaseGroupId", e)
+            emptyList()
+        }
     }
 }

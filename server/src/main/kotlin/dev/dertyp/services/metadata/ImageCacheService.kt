@@ -10,7 +10,7 @@ import io.ktor.http.*
 import io.ktor.server.application.ApplicationEnvironment
 import io.ktor.server.util.url
 import kotlinx.coroutines.flow.Flow
-import org.koin.core.context.GlobalContext
+import org.koin.core.component.inject
 import java.util.UUID
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 
@@ -35,7 +35,7 @@ class ImageCacheService(
     }
 
     override suspend fun getImageUrlByImageId(imageId: UUID): String? {
-        val imageService = GlobalContext.get().get<ImageService>()
+        val imageService by inject<ImageService>()
 
         val image = imageService.byId(imageId)
         if (image == null) {
@@ -115,6 +115,10 @@ class ImageCacheService(
     }
 
     override suspend fun search(query: String, limit: Int): List<IMetadataService.Track> {
+        throw NotImplementedError("Not implemented for ImageCache")
+    }
+
+    override suspend fun searchAlbums(query: String, limit: Int, includeTracks: Boolean): List<IMetadataService.Album> {
         throw NotImplementedError("Not implemented for ImageCache")
     }
 
