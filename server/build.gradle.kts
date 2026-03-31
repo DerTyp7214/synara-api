@@ -111,6 +111,8 @@ dependencies {
     testImplementation(libs.mockk)
     testImplementation(libs.kotlin.test)
     testImplementation(libs.ktor.client.mock)
+    testImplementation(libs.ktor.server.testingHost)
+    testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.testcontainers.junit.jupiter)
     testImplementation(libs.testcontainers.postgresql)
 }

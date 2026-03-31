@@ -159,8 +159,10 @@ fun Application.module() {
 
     get<DatabaseManager>().init()
 
+    val logService = get<ScheduledTaskLogService>()
     val customMigrationService = get<CustomMigrationService>()
     CoroutineScope(Dispatchers.IO).launch {
+        logService.cleanupRunningLogs()
         customMigrationService.runMigrations()
     }
 

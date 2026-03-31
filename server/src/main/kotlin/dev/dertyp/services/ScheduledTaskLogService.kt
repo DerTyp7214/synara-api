@@ -14,7 +14,7 @@ import kotlinx.serialization.encodeToByteArray
 import org.jetbrains.exposed.v1.core.SortOrder
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
-import org.jetbrains.exposed.v1.core.less
+import org.jetbrains.exposed.v1.core.notInList
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.selectAll
@@ -72,9 +72,9 @@ class ScheduledTaskLogService : Service() {
                 .toList()
 
             if (taskLogs.size > 100) {
-                val oldestToKeepTime = taskLogs[99][ScheduledTaskLogTable.logTime]
+                val idsToKeep = taskLogs.take(100).map { it[ScheduledTaskLogTable.id] }
                 ScheduledTaskLogTable.deleteWhere {
-                    (ScheduledTaskLogTable.taskName eq taskName) and (logTime less oldestToKeepTime)
+                    (ScheduledTaskLogTable.taskName eq taskName) and (id notInList idsToKeep)
                 }
             }
         }
@@ -96,5 +96,10 @@ class ScheduledTaskLogService : Service() {
                 )
             }
             .groupBy { it.taskName }
+    }
+
+    suspend fun cleanupRunningLogs() = dbQuery {
+        logger.info("Cleaning up stuck running task logs")
+        ScheduledTaskLogTable.deleteWhere { status eq TaskStatus.RUNNING }
     }
 }

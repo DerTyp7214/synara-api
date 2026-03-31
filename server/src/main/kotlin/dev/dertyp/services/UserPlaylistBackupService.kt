@@ -71,7 +71,7 @@ class UserPlaylistBackupService(
         val backup = UserPlaylistBackup(user.id, playlists, images)
 
         val timestamp = LocalDateTime.now()
-            .format(DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss"))
+            .format(DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss-SSS"))
         val backupFile = File(backupDir, "playlists-${user.id}-$timestamp.json")
 
         backupFile.writeText(AppJson.encodeToString(backup))

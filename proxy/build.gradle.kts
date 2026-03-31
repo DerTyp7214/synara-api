@@ -41,4 +41,17 @@ dependencies {
     implementation(libs.ktor.server.config.yaml)
     implementation(libs.logback.classic)
     implementation(libs.kotlinx.serialization.json)
+
+    testImplementation(libs.junit.jupiter.api)
+    testImplementation(libs.junit.jupiter.params)
+    testImplementation(libs.ktor.server.testingHost)
+    testImplementation(libs.kotlin.test)
+    testImplementation(libs.mockk)
+    testImplementation(libs.ktor.client.content.negotiation)
+    testImplementation(libs.ktor.serialization.kotlinx.json)
+    testRuntimeOnly(libs.junit.jupiter.engine)
+}
+
+tasks.test {
+    useJUnitPlatform()
 }

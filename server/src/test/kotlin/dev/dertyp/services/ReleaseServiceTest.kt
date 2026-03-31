@@ -2,6 +2,7 @@ package dev.dertyp.services
 
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
+import dev.dertyp.core.ApplicationScope
 import dev.dertyp.data.MusicBrainzArtist
 import dev.dertyp.db.*
 import dev.dertyp.plugins.RedisCacheProvider
@@ -24,6 +25,7 @@ import org.koin.core.context.stopKoin
 import org.koin.dsl.module
 import org.koin.test.KoinTest
 import org.koin.test.get
+import java.time.LocalDate
 import java.util.UUID
 import dev.dertyp.data.Artist as DataArtist
 
@@ -45,13 +47,13 @@ class ReleaseServiceTest : KoinTest {
                 single<StorageService> { mockk(relaxed = true) }
                 single<RedisCacheProvider.Config> { mockk(relaxed = true) }
                 
-                single { mockk<MusicBrainzService>() }
-                single { mockk<ArtistService>() }
-                single { mockk<ImageService>() }
-                single { mockk<SpotifyService>() }
-                single { mockk<AppleMusicService>() }
-                single { mockk<ApplicationEnvironment>() }
-                single { mockk<TidalService>() }
+                single { mockk<MusicBrainzService>(relaxed = true) }
+                single { mockk<ArtistService>(relaxed = true) }
+                single { mockk<ImageService>(relaxed = true) }
+                single { mockk<SpotifyService>(relaxed = true) }
+                single { mockk<AppleMusicService>(relaxed = true) }
+                single { mockk<ApplicationEnvironment>(relaxed = true) }
+                single { mockk<TidalService>(relaxed = true) }
             })
         }
 
@@ -154,10 +156,8 @@ class ReleaseServiceTest : KoinTest {
         setup(dialect)
 
         mockkObject(MetadataService.Companion)
-        val tidalType = MetadataService.Companion.MetadataType.tidal
-        every { MetadataService.getMetadataService(tidalType, any()) } returns tidalService
-        val spotifyType = MetadataService.Companion.MetadataType.spotify
-        every { MetadataService.getMetadataService(spotifyType, any()) } returns spotifyService
+        every { MetadataService.getMetadataService(MetadataService.Companion.MetadataType.tidal, any()) } returns tidalService
+        every { MetadataService.getMetadataService(MetadataService.Companion.MetadataType.appleMusic, any()) } returns appleMusicService
 
         val mbId = "mb-artist-1"
         val releaseId = "mb-release-1"
@@ -184,14 +184,9 @@ class ReleaseServiceTest : KoinTest {
                 )
             )
         )
-        coEvery { musicBrainzService.fetchReleasesByArtist(mbId) } returns emptyList()
-        coEvery { musicBrainzService.fetchReleasesByReleaseGroup(any()) } returns emptyList()
-        coEvery { musicBrainzService.fetchRecordingsByReleaseGroup(any()) } returns emptyList()
 
         val spiedService = spyk(service, recordPrivateCalls = true)
         coEvery { spiedService["resolvePlatformLinks"](any<String>()) } returns listOf("https://tidal.com/album/456")
-        coEvery { tidalService.searchAlbums(any(), any(), any()) } returns emptyList()
-        coEvery { spotifyService.searchAlbums(any(), any(), any()) } returns emptyList()
         
         val dummyImageId = UUID.randomUUID()
         transaction(database) {
@@ -218,10 +213,8 @@ class ReleaseServiceTest : KoinTest {
         setup(dialect)
 
         mockkObject(MetadataService.Companion)
-        val tidalType = MetadataService.Companion.MetadataType.tidal
-        every { MetadataService.getMetadataService(tidalType, any()) } returns tidalService
-        val appleMusicType = MetadataService.Companion.MetadataType.appleMusic
-        every { MetadataService.getMetadataService(appleMusicType, any()) } returns appleMusicService
+        every { MetadataService.getMetadataService(MetadataService.Companion.MetadataType.tidal, any()) } returns tidalService
+        every { MetadataService.getMetadataService(MetadataService.Companion.MetadataType.appleMusic, any()) } returns appleMusicService
 
         val mbId = "mb-artist-1"
         val releaseIdInAlbumDb = "mb-release-in-album-db"
@@ -281,14 +274,10 @@ class ReleaseServiceTest : KoinTest {
                 firstReleaseDate = "2023-01-01"
             )
         )
-        coEvery { musicBrainzService.fetchReleasesByReleaseGroup(any()) } returns emptyList()
-        coEvery { musicBrainzService.fetchRecordingsByReleaseGroup(any()) } returns emptyList()
 
         val spiedService = spyk(service, recordPrivateCalls = true)
         coEvery { spiedService["resolvePlatformLinks"](any<String>()) } returns emptyList<String>()
         coEvery { spiedService.fetchReleaseGroupImage(any()) } returns null
-        coEvery { tidalService.searchAlbums(any(), any(), any()) } returns emptyList()
-        coEvery { appleMusicService.searchAlbums(any(), any(), any()) } returns emptyList()
 
         spiedService.fetchNewReleases()
 
@@ -429,5 +418,77 @@ class ReleaseServiceTest : KoinTest {
 
         val followed = service.getFollowedArtists(userId)
         assertTrue(followed.isEmpty())
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `fetchNewReleases should handle MusicBrainz API failure`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val mbId = "mb-artist-fail"
+        val artistId = UUID.randomUUID()
+        val userId = UUID.randomUUID()
+
+        mockkObject(MetadataService.Companion)
+        every { MetadataService.getMetadataService(MetadataService.Companion.MetadataType.tidal, any()) } returns tidalService
+        every { MetadataService.getMetadataService(MetadataService.Companion.MetadataType.appleMusic, any()) } returns appleMusicService
+
+        transaction(database) {
+            UserTable.insert { it[id] = userId; it[username] = "user"; it[passwordHash] = "hash" }
+            ArtistTable.insert { it[id] = artistId; it[name] = "Artist" }
+            ArtistMusicBrainzTable.insert { it[this.artistId] = artistId; it[musicBrainzId] = mbId }
+            FollowedArtistTable.insert { it[this.userId] = userId; it[this.artistId] = artistId }
+        }
+
+        coEvery { musicBrainzService.fetchReleaseGroups(mbId) } throws Exception("MB Failure")
+        
+        val result = service.fetchNewReleases()
+        assertTrue(result.isEmpty())
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `fetchNewReleases should handle title matching ambiguity`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        mockkObject(MetadataService.Companion)
+        every { MetadataService.getMetadataService(MetadataService.Companion.MetadataType.tidal, any()) } returns tidalService
+        every { MetadataService.getMetadataService(MetadataService.Companion.MetadataType.appleMusic, any()) } returns appleMusicService
+
+        val mbId = "mb-artist-1"
+        val artistId = UUID.randomUUID()
+        val userId = UUID.randomUUID()
+        transaction(database) {
+            UserTable.insert { it[id] = userId; it[username] = "user"; it[passwordHash] = "hash" }
+            ArtistTable.insert { it[id] = artistId; it[name] = "Test Artist" }
+            ArtistMusicBrainzTable.insert { it[this.artistId] = artistId; it[musicBrainzId] = mbId }
+            FollowedArtistTable.insert { it[this.userId] = userId; it[this.artistId] = artistId }
+        }
+
+        coEvery { musicBrainzService.fetchReleaseGroups(mbId) } returns listOf(
+            MusicBrainzReleaseGroup(id = "1", title = "The Title", firstReleaseDate = "2023-01-01", primaryType = "Single")
+        )
+        
+        coEvery { appleMusicService.searchAlbums(any(), any(), any()) } returns listOf(
+            IMetadataService.Album(
+                id = "apple-1",
+                title = "The Title - Single",
+                artists = listOf("Test Artist"),
+                additionalTitles = emptyList(),
+                trackCount = 1,
+                releaseDate = LocalDate.parse("2023-01-01")
+            )
+        )
+        
+        val spiedService = spyk(service, recordPrivateCalls = true)
+        coEvery { spiedService["resolvePlatformLinks"](any<String>()) } returns emptyList<String>()
+        coEvery { spiedService.fetchReleaseGroupImage(any()) } returns null
+
+        val result = spiedService.fetchNewReleases()
+        assertEquals(1, result["Test Artist"])
+        
+        transaction(database) {
+            val release = RecentReleaseTable.selectAll().single()
+            val links = ApplicationScope.json.decodeFromString<List<String>>(release[RecentReleaseTable.links])
+            assertTrue(links.any { it.contains("apple-1") })
+        }
     }
 }

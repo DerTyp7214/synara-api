@@ -2,6 +2,7 @@ package dev.dertyp.core
 
 import java.io.File
 import java.nio.file.Files
+import java.nio.file.LinkOption
 
 fun File.deleteOnExitRecursive() {
     if (isDirectory) {
@@ -16,5 +17,5 @@ fun File.deleteOnExitRecursive() {
 fun File.getTotalSize(): Long {
     if (isFile) return length()
 
-    return walkTopDown().filter { it.isFile && Files.isSymbolicLink(it.toPath()) }.sumOf { it.length() }
+    return walkTopDown().filter { Files.isRegularFile(it.toPath(), LinkOption.NOFOLLOW_LINKS) }.sumOf { it.length() }
 }

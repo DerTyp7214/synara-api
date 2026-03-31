@@ -66,7 +66,7 @@ object AudioUtils {
 
     private val transcodeMutexes = ConcurrentHashMap<Pair<String, Int>, Mutex>()
 
-    private fun closestSampleRate(rate: Int): Int {
+    internal fun closestSampleRate(rate: Int): Int {
         val supported = listOf(8000, 12000, 16000, 24000, 48000)
 
         return supported.minByOrNull { abs(it - rate) } ?: supported.first()
