@@ -2,6 +2,10 @@ package dev.dertyp
 
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
+import com.google.gson.TypeAdapter
+import com.google.gson.stream.JsonReader
+import com.google.gson.stream.JsonToken
+import com.google.gson.stream.JsonWriter
 import dev.dertyp.core.logTask
 import dev.dertyp.plugins.JmDNSPlugin
 import dev.dertyp.plugins.RedisCacheProvider
@@ -25,6 +29,8 @@ import io.ktor.server.application.log
 import io.ktor.server.plugins.calllogging.CallLogging
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.launch
 import org.koin.core.module.dsl.singleOf
 import org.koin.dsl.module
@@ -122,6 +128,20 @@ fun Application.module() {
                     .registerTypeAdapter(ByteArray::class.java, ByteArrayISO8859TypeAdapter())
                     .registerTypeAdapter(LocalDate::class.java, LocalDateAdapter())
                     .registerTypeAdapter(Duration::class.java, DurationAdapter())
+                    .registerTypeHierarchyAdapter(Flow::class.java, object : TypeAdapter<Flow<*>>() {
+                        override fun write(out: JsonWriter, value: Flow<*>?) {
+                            out.nullValue()
+                        }
+
+                        override fun read(reader: JsonReader): Flow<*> {
+                            if (reader.peek() == JsonToken.NULL) {
+                                reader.nextNull()
+                            } else {
+                                reader.skipValue()
+                            }
+                            return emptyFlow<Any>()
+                        }
+                    })
                     .create()
             }
 
