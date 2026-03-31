@@ -13,6 +13,8 @@ object RecentReleaseTable : Table("recent_release") {
     val type = enumerationByName<ReleaseType>("type", 50).default(ReleaseType.Unknown)
     val imageId = reference("imageId", ImageTable.id, onDelete = ReferenceOption.SET_NULL).nullable()
     val links = text("links").default("[]")
+    val albumId = reference("albumId", AlbumTable.id, onDelete = ReferenceOption.SET_NULL).nullable()
+    val songId = reference("songId", SongTable.id, onDelete = ReferenceOption.SET_NULL).nullable()
 
     override val primaryKey = PrimaryKey(releaseId)
 }

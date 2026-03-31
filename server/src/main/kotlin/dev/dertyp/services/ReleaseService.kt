@@ -116,7 +116,9 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
                         ApplicationScope.json.decodeFromString<List<String>>(it[RecentReleaseTable.links])
                     } catch (_: Exception) {
                         emptyList()
-                    }
+                    },
+                    albumId = it[RecentReleaseTable.albumId]?.value,
+                    songId = it[RecentReleaseTable.songId]?.value
                 )
             }
 
@@ -159,25 +161,22 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
                 logger.info("Fetching releases for artist: $artistName")
 
                 val mbReleases = musicBrainzService.fetchReleasesByArtist(mbId)
-                val releaseIdToGroupId = mbReleases.mapNotNull { r -> r.releaseGroup?.id?.let { rg -> r.id to rg } }.toMap()
 
-                val artistLibraryMbIds = dbQuery {
-                    val albumMbIds = AlbumMusicBrainzTable.join(AlbumArtistTable, JoinType.INNER, AlbumMusicBrainzTable.albumId, AlbumArtistTable.albumId)
+                val albumMappings = dbQuery {
+                    AlbumMusicBrainzTable.join(AlbumArtistTable, JoinType.INNER, AlbumMusicBrainzTable.albumId, AlbumArtistTable.albumId)
                         .selectAll()
                         .where { AlbumArtistTable.artistId eq artistId }
-                        .mapNotNull { it[AlbumMusicBrainzTable.musicBrainzId] }
-
-                    val songMbIds = SongMusicBrainzTable.join(SongArtistTable, JoinType.INNER, SongMusicBrainzTable.songId, SongArtistTable.songId)
-                        .selectAll()
-                        .where { SongArtistTable.artistId eq artistId }
-                        .mapNotNull { it[SongMusicBrainzTable.musicBrainzId] }
-
-                    (albumMbIds + songMbIds).distinct()
+                        .mapNotNull { it[AlbumMusicBrainzTable.musicBrainzId]?.let { mbId -> mbId to it[AlbumMusicBrainzTable.albumId].value } }
+                        .toMap()
                 }
 
-                val releaseGroupIdsInLibrary = artistLibraryMbIds.mapNotNull { id ->
-                    releaseIdToGroupId[id] ?: if (mbReleases.any { it.releaseGroup?.id == id }) id else null
-                }.toSet()
+                val songMappings = dbQuery {
+                    SongMusicBrainzTable.join(SongArtistTable, JoinType.INNER, SongMusicBrainzTable.songId, SongArtistTable.songId)
+                        .selectAll()
+                        .where { SongArtistTable.artistId eq artistId }
+                        .mapNotNull { it[SongMusicBrainzTable.musicBrainzId]?.let { mbId -> mbId to it[SongMusicBrainzTable.songId].value } }
+                        .toMap()
+                }
 
                 val groups = musicBrainzService.fetchReleaseGroups(mbId)
                 val newReleasesCount = groups.map { group ->
@@ -189,10 +188,8 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
                         }
                         if (alreadyExists) return@async false
 
-                        if (releaseGroupIdsInLibrary.contains(group.id)) {
-                            logger.info("Skipping $artistName: ${group.title} because it's already in library")
-                            return@async false
-                        }
+                        val groupReleases = mbReleases.filter { it.releaseGroup?.id == group.id }
+                        val groupReleaseIds = (groupReleases.map { it.id } + group.id).toSet()
 
                         logger.info("New release found for $artistName: ${group.title}")
 
@@ -229,8 +226,21 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
                         val isSingle = group.primaryType?.lowercase() == "single" || group.primaryType == null || 
                                 group.relations?.any { it.type == "single from" } == true
 
+                        val groupRecordings = if (isSingle) {
+                            musicBrainzService.fetchRecordingsByReleaseGroup(group.id)
+                        } else emptyList()
+                        val groupRecordingIds = groupRecordings.map { it.id }.toSet()
+
+                        val libraryAlbumId = albumMappings.entries.find { (mbId, _) ->
+                            groupReleaseIds.contains(mbId)
+                        }?.value
+
+                        val librarySongId = songMappings.entries.find { (mbId, _) ->
+                            groupReleaseIds.contains(mbId) || groupRecordingIds.contains(mbId)
+                        }?.value
+
                         val albumNames = if (isSingle) {
-                            val recordingAlbums = musicBrainzService.fetchRecordingsByReleaseGroup(group.id)
+                            val recordingAlbums = groupRecordings
                                 .asSequence()
                                 .flatMap { it.releases ?: emptyList() }
                                 .mapNotNull { it.releaseGroup }
@@ -330,6 +340,8 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
                                 it[type] = determinedType
                                 it[RecentReleaseTable.imageId] = imageId
                                 it[RecentReleaseTable.links] = ApplicationScope.json.encodeToString(distinctLinks)
+                                it[RecentReleaseTable.albumId] = libraryAlbumId
+                                it[RecentReleaseTable.songId] = librarySongId
                             }
                         }
                         true

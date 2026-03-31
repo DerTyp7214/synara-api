@@ -35,6 +35,7 @@ class ReleaseServiceTest : KoinTest {
     private lateinit var imageService: ImageService
     private lateinit var environment: ApplicationEnvironment
     private lateinit var tidalService: TidalService
+    private lateinit var appleMusicService: AppleMusicService
     private lateinit var spotifyService: SpotifyService
 
     fun setup(dialect: DbDialect) {
@@ -47,6 +48,7 @@ class ReleaseServiceTest : KoinTest {
                 single { mockk<ArtistService>() }
                 single { mockk<ImageService>() }
                 single { mockk<SpotifyService>() }
+                single { mockk<AppleMusicService>() }
                 single { mockk<ApplicationEnvironment>() }
                 single { mockk<TidalService>() }
             })
@@ -58,6 +60,7 @@ class ReleaseServiceTest : KoinTest {
         environment = get()
         tidalService = get()
         spotifyService = get()
+        appleMusicService = get()
 
         database = TestDatabase.connect(dialect, "release_test")
         transaction(database) {
@@ -210,14 +213,14 @@ class ReleaseServiceTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `fetchNewReleases should skip releases already in library`(dialect: DbDialect) = runBlocking {
+    fun `fetchNewReleases should include releases already in library but link them`(dialect: DbDialect) = runBlocking {
         setup(dialect)
 
         mockkObject(MetadataService.Companion)
         val tidalType = MetadataService.Companion.MetadataType.tidal
         every { MetadataService.getMetadataService(tidalType, any()) } returns tidalService
-        val spotifyType = MetadataService.Companion.MetadataType.spotify
-        every { MetadataService.getMetadataService(spotifyType, any()) } returns spotifyService
+        val appleMusicType = MetadataService.Companion.MetadataType.appleMusic
+        every { MetadataService.getMetadataService(appleMusicType, any()) } returns appleMusicService
 
         val mbId = "mb-artist-1"
         val releaseIdInAlbumDb = "mb-release-in-album-db"
@@ -226,6 +229,9 @@ class ReleaseServiceTest : KoinTest {
         val userId = UUID.randomUUID()
         val artistId = UUID.randomUUID()
 
+        var existingAlbumId: UUID? = null
+        var existingSongId: UUID? = null
+
         transaction(database) {
             UserTable.insert { it[id] = userId; it[username] = "user"; it[passwordHash] = "hash" }
             ArtistTable.insert { it[id] = artistId; it[name] = "Test Artist" }
@@ -233,6 +239,7 @@ class ReleaseServiceTest : KoinTest {
             FollowedArtistTable.insert { it[this.userId] = userId; it[this.artistId] = artistId }
 
             val albumId = AlbumTable.insert { it[name] = "Existing Album" }[AlbumTable.id]
+            existingAlbumId = albumId.value
             AlbumArtistTable.insert { it[this.albumId] = albumId; it[this.artistId] = artistId }
             AlbumMusicBrainzTable.insert { it[this.albumId] = albumId; it[musicBrainzId] = releaseIdInAlbumDb }
 
@@ -240,6 +247,7 @@ class ReleaseServiceTest : KoinTest {
                 it[title] = "Existing Song"
                 it[this.albumId] = albumId
             }[SongTable.id]
+            existingSongId = songId.value
             SongArtistTable.insert { it[this.songId] = songId; it[this.artistId] = artistId }
             SongMusicBrainzTable.insert { it[this.songId] = songId; it[musicBrainzId] = releaseIdInSongDb }
         }
@@ -276,13 +284,22 @@ class ReleaseServiceTest : KoinTest {
         coEvery { spiedService["resolvePlatformLinks"](any<String>()) } returns emptyList<String>()
         coEvery { spiedService.fetchReleaseGroupImage(any()) } returns null
         coEvery { tidalService.searchAlbums(any(), any(), any()) } returns emptyList()
-        coEvery { spotifyService.searchAlbums(any(), any(), any()) } returns emptyList()
+        coEvery { appleMusicService.searchAlbums(any(), any(), any()) } returns emptyList()
 
         spiedService.fetchNewReleases()
 
-        val releases = service.getRecentReleases(userId).data
-        assertEquals(1, releases.size)
-        assertEquals("Truly New Album", releases[0].title)
+        val releases = service.getRecentReleases(userId).data.sortedBy { it.title }
+        assertEquals(3, releases.size)
+        
+        val albumWithExistingSong = releases.find { it.title == "Album with existing song" }
+        assertEquals(existingSongId, albumWithExistingSong?.songId)
+
+        val existingAlbum = releases.find { it.title == "Existing Album" }
+        assertEquals(existingAlbumId, existingAlbum?.albumId)
+
+        val trulyNewAlbum = releases.find { it.title == "Truly New Album" }
+        assertEquals(null, trulyNewAlbum?.albumId)
+        assertEquals(null, trulyNewAlbum?.songId)
     }
 
     @ParameterizedTest
