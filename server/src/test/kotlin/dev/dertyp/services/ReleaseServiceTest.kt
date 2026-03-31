@@ -12,6 +12,7 @@ import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.insert
+import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -266,15 +267,18 @@ class ReleaseServiceTest : KoinTest {
         coEvery { musicBrainzService.fetchReleaseGroups(mbId) } returns listOf(
             MusicBrainzReleaseGroup(
                 id = releaseIdInAlbumDb,
-                title = "Existing Album"
+                title = "Existing Album",
+                firstReleaseDate = "2023-01-01"
             ),
             MusicBrainzReleaseGroup(
                 id = "some-other-group-id",
-                title = "Album with existing song"
+                title = "Album with existing song",
+                firstReleaseDate = "2023-01-01"
             ),
             MusicBrainzReleaseGroup(
                 id = releaseIdNew,
-                title = "Truly New Album"
+                title = "Truly New Album",
+                firstReleaseDate = "2023-01-01"
             )
         )
         coEvery { musicBrainzService.fetchReleasesByReleaseGroup(any()) } returns emptyList()
@@ -288,18 +292,81 @@ class ReleaseServiceTest : KoinTest {
 
         spiedService.fetchNewReleases()
 
-        val releases = service.getRecentReleases(userId).data.sortedBy { it.title }
-        assertEquals(3, releases.size)
+        val releases = service.getRecentReleases(userId).data
+        assertEquals(1, releases.size)
+        assertEquals("Truly New Album", releases[0].title)
+        assertEquals(null, releases[0].albumId)
+        assertEquals(null, releases[0].songId)
         
-        val albumWithExistingSong = releases.find { it.title == "Album with existing song" }
-        assertEquals(existingSongId, albumWithExistingSong?.songId)
+        transaction(database) {
+            val allInDb = RecentReleaseTable.selectAll().map { it[RecentReleaseTable.title] to (it[RecentReleaseTable.albumId]?.value to it[RecentReleaseTable.songId]?.value) }
+            assertEquals(3, allInDb.size)
+            
+            val albumWithExistingSong = allInDb.find { it.first == "Album with existing song" }
+            assertEquals(existingSongId, albumWithExistingSong?.second?.second)
 
-        val existingAlbum = releases.find { it.title == "Existing Album" }
-        assertEquals(existingAlbumId, existingAlbum?.albumId)
+            val existingAlbum = allInDb.find { it.first == "Existing Album" }
+            assertEquals(existingAlbumId, existingAlbum?.second?.first)
+        }
+    }
 
-        val trulyNewAlbum = releases.find { it.title == "Truly New Album" }
-        assertEquals(null, trulyNewAlbum?.albumId)
-        assertEquals(null, trulyNewAlbum?.songId)
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `getRecentReleases should only return valid releases`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val userId = UUID.randomUUID()
+        val artistId = UUID.randomUUID()
+
+        transaction(database) {
+            UserTable.insert { it[id] = userId; it[username] = "user"; it[passwordHash] = "hash" }
+            ArtistTable.insert { it[id] = artistId; it[name] = "Artist" }
+            FollowedArtistTable.insert { it[FollowedArtistTable.userId] = userId; it[FollowedArtistTable.artistId] = artistId }
+
+            val dummyAlbumId = AlbumTable.insert { 
+                it[id] = UUID.randomUUID()
+                it[name] = "Dummy Album" 
+            }[AlbumTable.id]
+
+            val dummySongId = SongTable.insert { 
+                it[id] = UUID.randomUUID()
+                it[title] = "Dummy Song"
+                it[SongTable.albumId] = dummyAlbumId
+            }[SongTable.id]
+
+            RecentReleaseTable.insert {
+                it[RecentReleaseTable.releaseId] = "release-valid"
+                it[RecentReleaseTable.artistId] = artistId
+                it[RecentReleaseTable.title] = "New Release"
+                it[RecentReleaseTable.releaseDate] = 1000L
+            }
+
+            RecentReleaseTable.insert {
+                it[RecentReleaseTable.releaseId] = "release-no-date"
+                it[RecentReleaseTable.artistId] = artistId
+                it[RecentReleaseTable.title] = "No Date Release"
+                it[RecentReleaseTable.releaseDate] = null
+            }
+
+            RecentReleaseTable.insert {
+                it[RecentReleaseTable.releaseId] = "release-album"
+                it[RecentReleaseTable.artistId] = artistId
+                it[RecentReleaseTable.title] = "Existing Album"
+                it[RecentReleaseTable.albumId] = dummyAlbumId
+                it[RecentReleaseTable.releaseDate] = 1000L
+            }
+
+            RecentReleaseTable.insert {
+                it[RecentReleaseTable.releaseId] = "release-song"
+                it[RecentReleaseTable.artistId] = artistId
+                it[RecentReleaseTable.title] = "Existing Song"
+                it[RecentReleaseTable.songId] = dummySongId
+                it[RecentReleaseTable.releaseDate] = 1000L
+            }
+        }
+
+        val releases = service.getRecentReleases(userId).data
+        assertEquals(1, releases.size)
+        assertEquals("New Release", releases[0].title)
     }
 
     @ParameterizedTest

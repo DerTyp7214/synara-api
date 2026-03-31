@@ -95,11 +95,11 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
             .map { it[FollowedArtistTable.artistId].value }
 
         val total = RecentReleaseTable.selectAll()
-            .where { RecentReleaseTable.artistId inList followedArtistIds }
+            .where { (RecentReleaseTable.artistId inList followedArtistIds) and (RecentReleaseTable.albumId.isNull()) and (RecentReleaseTable.songId.isNull()) and (RecentReleaseTable.releaseDate.isNotNull()) }
             .count()
 
         val data = RecentReleaseTable.selectAll()
-            .where { RecentReleaseTable.artistId inList followedArtistIds }
+            .where { (RecentReleaseTable.artistId inList followedArtistIds) and (RecentReleaseTable.albumId.isNull()) and (RecentReleaseTable.songId.isNull()) and (RecentReleaseTable.releaseDate.isNotNull()) }
             .orderBy(RecentReleaseTable.releaseDate to SortOrder.DESC)
             .limit(pageSize)
             .offset((page * pageSize).toLong())
