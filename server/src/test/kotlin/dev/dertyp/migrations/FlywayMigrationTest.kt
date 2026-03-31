@@ -78,5 +78,6 @@ class FlywayMigrationTest : KoinTest {
         assertDoesNotThrow {
             databaseManager.init()
         }
+        databaseManager.close()
     }
 }

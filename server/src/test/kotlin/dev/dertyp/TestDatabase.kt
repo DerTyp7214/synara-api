@@ -8,10 +8,12 @@ import java.util.UUID
 
 object TestDatabase {
     private var currentFile: File? = null
+    private var currentDbName: String? = null
     
     val postgresContainer: PostgreSQLContainer<*>? by lazy {
         try {
             PostgreSQLContainer("postgres:15-alpine").apply {
+                withCommand("postgres", "-c", "max_connections=1000")
                 withReuse(true)
                 start()
             }
@@ -39,6 +41,7 @@ object TestDatabase {
         return when (dialect) {
             DbDialect.POSTGRES -> {
                 val dbName = "${name}_${UUID.randomUUID().toString().replace("-", "")}".lowercase()
+                currentDbName = dbName
                 val freshDbUrl = getPostgresDbUrl(dbName)
                 
                 val driver = if (postgresContainer != null) "org.postgresql.Driver" else "org.h2.Driver"
@@ -62,6 +65,33 @@ object TestDatabase {
     fun cleanUp() {
         currentFile?.delete()
         currentFile = null
+
+        currentDbName?.let { dbName ->
+            postgresContainer?.let { container ->
+                try {
+                    DriverManager.getConnection(
+                        container.jdbcUrl,
+                        container.username,
+                        container.password
+                    ).use { conn ->
+                        conn.createStatement().use { stmt ->
+                            stmt.execute(
+                                """
+                                SELECT pg_terminate_backend(pg_stat_activity.pid)
+                                FROM pg_stat_activity
+                                WHERE pg_stat_activity.datname = '$dbName'
+                                AND pid <> pg_backend_pid();
+                                """.trimIndent()
+                            )
+                            stmt.execute("DROP DATABASE $dbName")
+                        }
+                    }
+                } catch (e: Exception) {
+                    println("WARNING: Could not drop test database $dbName: ${e.message}")
+                }
+            }
+        }
+        currentDbName = null
     }
 }
 

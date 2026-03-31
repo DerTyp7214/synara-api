@@ -10,8 +10,11 @@ import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.JdbcTransaction
 import org.jetbrains.exposed.v1.jdbc.insertIgnore
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
+import java.io.Closeable
 
-class DatabaseManager(private val environment: ApplicationEnvironment) {
+class DatabaseManager(private val environment: ApplicationEnvironment) : Closeable {
+    private var mainDataSource: HikariDataSource? = null
+
     fun init() {
         val database = setupDatabase()
 
@@ -64,6 +67,7 @@ class DatabaseManager(private val environment: ApplicationEnvironment) {
 
     private fun setupDatabase(): Database {
         val dataSource = getDataSource()
+        mainDataSource = dataSource
 
         val flyway = Flyway.configure()
             .dataSource(dataSource)
@@ -74,5 +78,9 @@ class DatabaseManager(private val environment: ApplicationEnvironment) {
         flyway.migrate()
 
         return Database.connect(dataSource)
+    }
+
+    override fun close() {
+        mainDataSource?.close()
     }
 }
