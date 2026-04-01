@@ -53,16 +53,26 @@ class SessionService : Service() {
             ?.get(SessionTable.isActive) ?: false
     }
 
-    suspend fun cleanupOldSessions(): Int = dbQuery {
+    suspend fun cleanupOldSessions(onProgress: suspend (Double, String) -> Unit = { _, _ -> }): Int = dbQuery {
         val oneMonthAgo = Instant.now().minusMillis(30.days.inWholeMilliseconds).toEpochMilli()
         val sessionsToDelete = SessionTable.selectAll().where {
             (SessionTable.lastActive less oneMonthAgo) or (SessionTable.isActive eq false)
         }.map { it[SessionTable.id] }
 
+        onProgress(0.0, "Found ${sessionsToDelete.size} sessions to clean up")
+
         if (sessionsToDelete.isNotEmpty()) {
-            RefreshTokenTable.deleteWhere { sessionId inList sessionsToDelete }
-            SessionTable.deleteWhere { id inList sessionsToDelete }
+            val chunks = sessionsToDelete.chunked(100)
+            chunks.forEachIndexed { index, chunk ->
+                val progress = (index.toDouble() / chunks.size) * 100.0
+                onProgress(progress, "Cleaning up sessions batch ${index + 1}/${chunks.size}")
+                
+                RefreshTokenTable.deleteWhere { sessionId inList chunk }
+                SessionTable.deleteWhere { id inList chunk }
+            }
         }
+        
+        onProgress(100.0, "Cleaned up ${sessionsToDelete.size} sessions")
         sessionsToDelete.size
     }
 

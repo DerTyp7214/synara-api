@@ -55,18 +55,22 @@ class UserPlaylistBackupService(
         }
     }
 
-    suspend fun createBackup(user: User) = withContext(Dispatchers.IO) {
+    suspend fun createBackup(user: User, onProgress: suspend (Double, String) -> Unit = { _, _ -> }) = withContext(Dispatchers.IO) {
         logger.info("Creating user playlist backup for user: ${user.username} (${user.id})")
+        onProgress(0.0, "Creating playlist backup for: ${user.username}")
         val playlists = userPlaylistService.allPlaylistsFlow(user.id).toList()
+        onProgress(33.0, "Playlists fetched")
 
         val imageIds = playlists.mapNotNull { it.imageId }.distinct()
-        val images = imageIds.mapNotNull { id ->
+        val images = imageIds.mapIndexedNotNull { index, id ->
             val image = imageService.byId(id)
             val data = imageService.getImageData(id, 0)
+            onProgress(33.0 + (index.toDouble() / imageIds.size) * 33.0, "Processing image ${index + 1}/${imageIds.size}")
             if (image != null && data != null) {
                 BackupImage(image, data)
             } else null
         }
+        onProgress(66.0, "Images processed")
 
         val backup = UserPlaylistBackup(user.id, playlists, images)
 
@@ -76,7 +80,9 @@ class UserPlaylistBackupService(
 
         backupFile.writeText(AppJson.encodeToString(backup))
         logger.info("Backup created: ${backupFile.absolutePath}")
+        onProgress(90.0, "Rotating old backups...")
         rotateBackups(user)
+        onProgress(100.0, "Backup finished for ${user.username}")
     }
 
     private fun rotateBackups(user: User) {
@@ -93,12 +99,16 @@ class UserPlaylistBackupService(
         }
     }
 
-    suspend fun backupAllUsers(): Int {
+    suspend fun backupAllUsers(onProgress: suspend (Double, String) -> Unit = { _, _ -> }): Int {
         val userService by inject<UserService>()
         val users = userService.queryUser()
-        for (user in users) {
-            createBackup(user)
+        for ((index, user) in users.withIndex()) {
+            val userProgress = (index.toDouble() / users.size) * 100.0
+            createBackup(user) { p, l -> 
+                onProgress(userProgress + (p / users.size), l)
+            }
         }
+        onProgress(100.0, "Finished backing up ${users.size} users")
         return users.size
     }
 

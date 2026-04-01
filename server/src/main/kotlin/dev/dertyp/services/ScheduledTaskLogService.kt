@@ -2,6 +2,7 @@
 
 package dev.dertyp.services
 
+import dev.dertyp.core.ApplicationScope
 import dev.dertyp.data.ScheduledTaskLog
 import dev.dertyp.data.TaskStatus
 import dev.dertyp.data.User
@@ -19,6 +20,8 @@ import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
+import org.jetbrains.exposed.v1.jdbc.update
+import java.time.Instant
 import java.util.UUID
 
 class RpcScheduledTaskLogService(
@@ -43,6 +46,13 @@ class ScheduledTaskLogService : Service() {
         } get ScheduledTaskLogTable.id
     }
 
+    fun updateProgress(runningId: UUID, progress: Double, logs: List<String>) = transaction {
+        ScheduledTaskLogTable.update({ ScheduledTaskLogTable.id eq runningId }) {
+            it[ScheduledTaskLogTable.progress] = progress
+            it[ScheduledTaskLogTable.logs] = ApplicationScope.json.encodeToString(logs)
+        }
+    }
+
     fun logTask(
         taskName: String,
         startTime: Long,
@@ -50,20 +60,34 @@ class ScheduledTaskLogService : Service() {
         status: TaskStatus,
         message: String? = null,
         details: Map<String, String>? = null,
+        progress: Double = 0.0,
+        logs: List<String> = emptyList(),
         runningId: UUID? = null
     ) {
         transaction {
             if (runningId != null) {
-                ScheduledTaskLogTable.deleteWhere { ScheduledTaskLogTable.id eq runningId }
-            }
-
-            ScheduledTaskLogTable.insert {
-                it[ScheduledTaskLogTable.taskName] = taskName
-                it[ScheduledTaskLogTable.startTime] = startTime
-                it[ScheduledTaskLogTable.endTime] = endTime
-                it[ScheduledTaskLogTable.status] = status
-                it[ScheduledTaskLogTable.message] = message
-                it[ScheduledTaskLogTable.details] = details?.let { AppCbor.encodeToByteArray(it) }
+                ScheduledTaskLogTable.update({ ScheduledTaskLogTable.id eq runningId }) {
+                    it[ScheduledTaskLogTable.taskName] = taskName
+                    it[ScheduledTaskLogTable.startTime] = startTime
+                    it[ScheduledTaskLogTable.endTime] = endTime
+                    it[ScheduledTaskLogTable.status] = status
+                    it[ScheduledTaskLogTable.message] = message
+                    it[ScheduledTaskLogTable.details] = details?.let { details -> AppCbor.encodeToByteArray(details) }
+                    it[ScheduledTaskLogTable.progress] = progress
+                    it[ScheduledTaskLogTable.logs] = ApplicationScope.json.encodeToString(logs)
+                    it[ScheduledTaskLogTable.logTime] = Instant.now().toEpochMilli()
+                }
+            } else {
+                ScheduledTaskLogTable.insert {
+                    it[ScheduledTaskLogTable.taskName] = taskName
+                    it[ScheduledTaskLogTable.startTime] = startTime
+                    it[ScheduledTaskLogTable.endTime] = endTime
+                    it[ScheduledTaskLogTable.status] = status
+                    it[ScheduledTaskLogTable.message] = message
+                    it[ScheduledTaskLogTable.details] = details?.let { details -> AppCbor.encodeToByteArray(details) }
+                    it[ScheduledTaskLogTable.progress] = progress
+                    it[ScheduledTaskLogTable.logs] = ApplicationScope.json.encodeToString(logs)
+                }
             }
 
             val taskLogs = ScheduledTaskLogTable.selectAll()
@@ -92,6 +116,12 @@ class ScheduledTaskLogService : Service() {
                     status = it[ScheduledTaskLogTable.status],
                     message = it[ScheduledTaskLogTable.message],
                     details = it[ScheduledTaskLogTable.details]?.let { bytes -> AppCbor.decodeFromByteArray<Map<String, String>>(bytes) },
+                    progress = it[ScheduledTaskLogTable.progress],
+                    logs = try {
+                        ApplicationScope.json.decodeFromString<List<String>>(it[ScheduledTaskLogTable.logs])
+                    } catch (_: Exception) {
+                        emptyList()
+                    },
                     logTime = it[ScheduledTaskLogTable.logTime]
                 )
             }

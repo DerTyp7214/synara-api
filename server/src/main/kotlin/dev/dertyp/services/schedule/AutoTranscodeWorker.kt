@@ -24,7 +24,7 @@ class AutoTranscodeWorker : KoinComponent {
     private val logger = KtorSimpleLogger("AutoTranscodeWorker")
     private val environment by inject<ApplicationEnvironment>()
 
-    suspend fun run(): Map<String, Int> {
+    suspend fun run(onProgress: suspend (Double, String) -> Unit = { _, _ -> }): Map<String, Int> {
         val qualities = environment.config.propertyOrNull("audio.autoTranscode")?.getString()
             ?.split(",")
             ?.mapNotNull { it.trim().toIntOrNull() }
@@ -32,6 +32,7 @@ class AutoTranscodeWorker : KoinComponent {
             ?.nullIfEmpty() ?: return emptyMap()
 
         logger.info("Starting AutoTranscodeWorker for qualities: $qualities")
+        onProgress(0.0, "Starting AutoTranscodeWorker for qualities: $qualities")
 
         val results = mutableMapOf<String, Int>()
         for (quality in qualities) {
@@ -43,11 +44,13 @@ class AutoTranscodeWorker : KoinComponent {
             }
 
             logger.info("Auto transcoding ${songs.size} songs for quality: $quality")
+            onProgress(0.0, "Auto transcoding ${songs.size} songs for quality: $quality")
 
             val songChannel = Channel<SimpleSong>(Channel.UNLIMITED)
             val transcodedSongs = mutableListOf<Triple<SimpleSong, File, Int>>()
             val transcodedSongsMutex = Mutex()
             val maxConcurrentTranscoders = 6
+            var processedCount = 0
 
             if (!AudioUtils.isTranscoderActive.compareAndSet(expectedValue = false, newValue = true)) {
                 logger.warn("Transcoding is already in progress, skipping quality: $quality")
@@ -65,6 +68,9 @@ class AutoTranscodeWorker : KoinComponent {
                                     val (newFile) = transcodeFlacToOpus(environment, file, quality)
                                     transcodedSongsMutex.withLock {
                                         transcodedSongs.add(Triple(song, newFile, quality))
+                                        processedCount++
+                                        val progress = (processedCount.toDouble() / songs.size) * 100.0
+                                        onProgress(progress, "Transcoding quality $quality: $processedCount/${songs.size} songs")
                                     }
                                 } catch (e: Exception) {
                                     logger.error("Failed to auto transcode \"${song.title}\": ${e.message}")
@@ -85,6 +91,7 @@ class AutoTranscodeWorker : KoinComponent {
             }
         }
 
+        onProgress(100.0, "AutoTranscodeWorker finished")
         logger.info("AutoTranscodeWorker finished")
         return results
     }

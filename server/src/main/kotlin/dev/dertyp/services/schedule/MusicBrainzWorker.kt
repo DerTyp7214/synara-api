@@ -25,7 +25,7 @@ class MusicBrainzWorker : KoinComponent {
 
     private val isRunning = AtomicBoolean(false)
 
-    suspend fun run(): Map<String, Int> {
+    suspend fun run(onProgress: suspend (Double, String) -> Unit = { _, _ -> }): Map<String, Int> {
         if (!isRunning.compareAndSet(expectedValue = false, newValue = true)) {
             logger.info("MusicBrainzWorker is already running. Skipping this run.")
             return emptyMap()
@@ -40,6 +40,7 @@ class MusicBrainzWorker : KoinComponent {
             val admin = userService.findAdmin() ?: return emptyMap()
             val start = Clock.System.now()
             logger.info("Starting MusicBrainzWorker")
+            onProgress(0.0, "Starting MusicBrainzWorker")
 
             withTimeoutOrNull(3.hours) {
                 val songIdsChannel = songService.songIdsWithoutMusicBrainzId().produceIn(this)
@@ -59,6 +60,7 @@ class MusicBrainzWorker : KoinComponent {
                                     if (song?.musicBrainzId != null) {
                                         taggedSongs++
                                     }
+                                    onProgress(0.0, "Checked $totalSongsChecked songs ($taggedSongs tagged), $totalAlbumsChecked albums ($taggedAlbums tagged)")
                                     delay((1.seconds - (Clock.System.now() - start)).coerceAtLeast(500.milliseconds))
                                 } catch (e: Exception) {
                                     logger.error("Error fetching MusicBrainz ID for song $songId: ${e.message}", e)
@@ -77,6 +79,7 @@ class MusicBrainzWorker : KoinComponent {
                                     if (album?.musicbrainzId != null) {
                                         taggedAlbums++
                                     }
+                                    onProgress(0.0, "Checked $totalSongsChecked songs ($taggedSongs tagged), $totalAlbumsChecked albums ($taggedAlbums tagged)")
                                     delay((1.seconds - (Clock.System.now() - start)).coerceAtLeast(500.milliseconds))
                                 } catch (e: Exception) {
                                     logger.error("Error fetching MusicBrainz ID for album $albumId: ${e.message}", e)
@@ -91,6 +94,7 @@ class MusicBrainzWorker : KoinComponent {
                 }
             }
 
+            onProgress(100.0, "Finished: $totalSongsChecked songs ($taggedSongs tagged), $totalAlbumsChecked albums ($taggedAlbums tagged)")
             logger.info("MusicBrainzWorker finished after ${Clock.System.now() - start}. Checked $totalSongsChecked songs (tagged $taggedSongs), $totalAlbumsChecked albums (tagged $taggedAlbums).")
         } finally {
             isRunning.store(false)

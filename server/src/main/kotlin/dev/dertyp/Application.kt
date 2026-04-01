@@ -186,7 +186,7 @@ fun Application.module() {
             trigger = CronPresets.dailyAt(2, 0),
             task = {
                 logTask("Database Backup") {
-                    val res = backupService.createBackup()
+                    val res = backupService.createBackup { p, l -> updateProgress(p, l) }
                     mapOf("fileName" to res.fileName, "size" to res.size, "imageCount" to res.imageCount)
                 }
             }
@@ -199,7 +199,7 @@ fun Application.module() {
             trigger = CronPresets.dailyAt(2, 0),
             task = {
                 logTask("User Playlist Backup") {
-                    val count = userPlaylistBackupService.backupAllUsers()
+                    val count = userPlaylistBackupService.backupAllUsers { p, l -> updateProgress(p, l) }
                     mapOf("userCount" to count)
                 }
             }
@@ -212,7 +212,7 @@ fun Application.module() {
             trigger = CronPresets.dailyAt(0, 0),
             task = {
                 logTask("Session Cleanup") {
-                    val count = sessionService.cleanupOldSessions()
+                    val count = sessionService.cleanupOldSessions { p, l -> updateProgress(p, l) }
                     mapOf("sessionsDeleted" to count)
                 }
             }
@@ -225,7 +225,7 @@ fun Application.module() {
             trigger = CronPresets.dailyAt(1, 0),
             task = {
                 logTask("Merge Library Duplicates") {
-                    libraryMergeService.mergeDuplicates()
+                    libraryMergeService.mergeDuplicates { p, l -> updateProgress(p, l) }
                 }
             }
         )
@@ -239,8 +239,8 @@ fun Application.module() {
             trigger = CronPresets.dailyAt(4, 0),
             task = {
                 logTask("Fetch Artist Images (Tidal)") {
-                    metadataFetchingService.fetchArtistImages(MetadataService.Companion.MetadataType.tidal) {
-                        log.info(it)
+                    metadataFetchingService.fetchArtistImages(MetadataService.Companion.MetadataType.tidal) { p, l ->
+                        updateProgress(p, l)
                     }
                 }
             }
@@ -253,7 +253,7 @@ fun Application.module() {
             trigger = CronPresets.dailyAt(3, 0),
             task = {
                 logTask("Auto Transcoding") {
-                    autoTranscodeWorker.run()
+                    autoTranscodeWorker.run { p, l -> updateProgress(p, l) }
                 }
             }
         )
@@ -265,7 +265,7 @@ fun Application.module() {
             trigger = CronPresets.dailyAt(0, 0),
             task = {
                 logTask("MusicBrainz Worker") {
-                    musicBrainzWorker.run()
+                    musicBrainzWorker.run { p, l -> updateProgress(p, l) }
                 }
             }
         )
@@ -279,7 +279,7 @@ fun Application.module() {
             trigger = CronPresets.dailyAt(1, 0),
             task = {
                 logTask("Recent Release Worker") {
-                    recentReleaseWorker.run()
+                    recentReleaseWorker.run { p, l -> updateProgress(p, l) }
                 }
             }
         )
@@ -293,7 +293,7 @@ fun Application.module() {
             trigger = CronPresets.dailyAt(0, 0),
             task = {
                 logTask("Delete Empty Albums") {
-                    val count = albumService.deleteEmptyAlbums()
+                    val count = albumService.deleteEmptyAlbums { p, l -> updateProgress(p, l) }
                     mapOf("albumsDeleted" to count)
                 }
             }
@@ -306,7 +306,7 @@ fun Application.module() {
             trigger = TaskCompletionTrigger(cleanAlbumTask.id),
             task = {
                 logTask("Delete Unreferenced Artists") {
-                    val count = artistService.deleteUnreferencedArtists()
+                    val count = artistService.deleteUnreferencedArtists { p, l -> updateProgress(p, l) }
                     mapOf("artistsDeleted" to count)
                 }
             }
@@ -319,7 +319,9 @@ fun Application.module() {
             trigger = TaskCompletionTrigger(cleanArtistsTask.id),
             task = {
                 logTask("Delete Unreferenced Images") {
-                    val count = imageService.deleteUnreferencedImages()
+                    val count = imageService.deleteUnreferencedImages { p, l ->
+                        updateProgress(p, l)
+                    }
                     mapOf("imagesDeleted" to count)
                 }
             }

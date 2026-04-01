@@ -13,7 +13,7 @@ class RecentReleaseWorker : KoinComponent {
     private val releaseService by inject<ReleaseService>()
     private val isRunning = AtomicBoolean(false)
 
-    suspend fun run(): Map<String, Int> {
+    suspend fun run(onProgress: suspend (Double, String) -> Unit = { _, _ -> }): Map<String, Int> {
         if (!isRunning.compareAndSet(expectedValue = false, newValue = true)) {
             logger.info("RecentReleaseWorker is already running. Skipping this run.")
             return emptyMap()
@@ -21,7 +21,7 @@ class RecentReleaseWorker : KoinComponent {
 
         return try {
             logger.info("Starting RecentReleaseWorker")
-            val results = releaseService.fetchNewReleases()
+            val results = releaseService.fetchNewReleases(onProgress)
             logger.info("RecentReleaseWorker finished")
             results
         } catch (e: Exception) {

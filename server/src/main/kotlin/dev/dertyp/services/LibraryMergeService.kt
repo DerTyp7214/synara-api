@@ -18,11 +18,20 @@ class LibraryMergeService(
     private val environment: ApplicationEnvironment
 ) : Service() {
 
-    suspend fun mergeDuplicates(): Map<String, Any?> = dbQuery {
+    suspend fun mergeDuplicates(onProgress: suspend (Double, String) -> Unit = { _, _ -> }): Map<String, Any?> = dbQuery {
+        onProgress(0.0, "Merging duplicate songs...")
         val songsMerged = mergeDuplicateSongs()
+        
+        onProgress(25.0, "Merging same album songs...")
         val sameAlbumSongsMerged = mergeSameAlbumSongs()
+        
+        onProgress(50.0, "Merging duplicate images...")
         val imagesMerged = mergeDuplicateImages()
+        
+        onProgress(75.0, "Merging duplicate albums...")
         val albumsMerged = mergeDuplicateAlbums()
+        
+        onProgress(100.0, "Library merge completed")
         mapOf(
             "songsMerged" to songsMerged,
             "sameAlbumSongsMerged" to sameAlbumSongsMerged,

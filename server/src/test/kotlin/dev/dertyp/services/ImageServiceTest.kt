@@ -7,8 +7,11 @@ import dev.dertyp.plugins.RedisCacheProvider
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
+import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.SchemaUtils
+import org.jetbrains.exposed.v1.jdbc.insert
+import org.jetbrains.exposed.v1.jdbc.insertAndGetId
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -46,7 +49,7 @@ class ImageServiceTest {
 
         database = TestDatabase.connect(dialect, "image_test")
         transaction(database) {
-            SchemaUtils.create(ImageTable, AlbumTable, ArtistTable, SongTable, PlaylistTable, UserPlaylistTable, UserTable)
+            SchemaUtils.create(ImageTable, AlbumTable, ArtistTable, SongTable, PlaylistTable, UserPlaylistTable, UserTable, RecentReleaseTable)
         }
 
         service = ImageService(storageService, redisConfig)
@@ -88,5 +91,43 @@ class ImageServiceTest {
         
         val found = service.byHash(image!!.imageHash)
         assertEquals(id, found?.id)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `deleteUnreferencedImages should not delete images referenced in RecentReleaseTable`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        
+        val data = byteArrayOf(9, 10, 11, 12)
+        val imageId = service.createImage(data, "release_origin")
+        
+        transaction(database) {
+            val aId = ArtistTable.insertAndGetId {
+                it[ArtistTable.name] = "Artist"
+            }
+            RecentReleaseTable.insert {
+                it[RecentReleaseTable.releaseId] = "release-1"
+                it[RecentReleaseTable.artistId] = aId
+                it[RecentReleaseTable.title] = "Title"
+                it[RecentReleaseTable.imageId] = EntityID(imageId, ImageTable)
+            }
+        }
+        
+        val deletedCount = service.deleteUnreferencedImages()
+        assertEquals(0, deletedCount)
+        assertNotNull(service.byId(imageId))
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `deleteUnreferencedImages should delete unreferenced images`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        
+        val data = byteArrayOf(13, 14, 15, 16)
+        val imageId = service.createImage(data, "unreferenced")
+        
+        val deletedCount = service.deleteUnreferencedImages()
+        assertEquals(1, deletedCount)
+        assertEquals(null, service.byId(imageId))
     }
 }

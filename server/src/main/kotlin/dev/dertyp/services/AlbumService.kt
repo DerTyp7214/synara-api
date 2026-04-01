@@ -506,7 +506,7 @@ class AlbumService : Service() {
 
     suspend fun getOrBulkCreate(albums: List<InsertableAlbum>): Map<InsertableAlbum, UUID> = getOrBulkCreateWithResult(albums).albumToIds
 
-    suspend fun deleteEmptyAlbums(): Int = dbQuery {
+    suspend fun deleteEmptyAlbums(onProgress: suspend (Double, String) -> Unit = { _, _ -> }): Int = dbQuery {
         val emptyAlbums = AlbumTable
             .select(AlbumTable.id)
             .where {
@@ -518,10 +518,18 @@ class AlbumService : Service() {
             }
             .map { it[AlbumTable.id].value }
 
-        emptyAlbums.chunked(5000).forEach { batch ->
+        onProgress(0.0, "Found ${emptyAlbums.size} empty albums")
+
+        val chunks = emptyAlbums.chunked(5000)
+        chunks.forEachIndexed { index, batch ->
+            val progress = (index.toDouble() / chunks.size) * 100.0
+            onProgress(progress, "Deleting batch ${index + 1}/${chunks.size} (${batch.size} albums)")
+
             AlbumTable.deleteWhere { AlbumTable.id inList batch }
             AlbumArtistTable.deleteWhere { AlbumArtistTable.albumId inList batch }
         }
+
+        onProgress(100.0, "Deleted ${emptyAlbums.size} albums")
         logger.info("Deleted ${emptyAlbums.size} empty albums")
         emptyAlbums.size
     }

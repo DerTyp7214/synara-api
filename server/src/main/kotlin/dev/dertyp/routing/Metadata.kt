@@ -115,8 +115,8 @@ fun Route.metadata() {
 
                     val metadataProvider = MetadataService.Companion.MetadataType.valueOf(metadataProviderString)
 
-                    metadataFetchingService.fetchArtistImages(metadataProvider) {
-                        send(it)
+                    metadataFetchingService.fetchArtistImages(metadataProvider) { _, l ->
+                        send(l)
                     }
                 }
             }

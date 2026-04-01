@@ -15,18 +15,48 @@ import kotlin.time.Duration as KDuration
 
 typealias Task = suspend KoinComponent.() -> Unit
 
-suspend fun KoinComponent.logTask(name: String, block: suspend () -> Map<String, Any?>) {
+interface TaskContext {
+    fun updateProgress(progress: Double, vararg logs: String)
+    fun log(line: String)
+}
+
+suspend fun KoinComponent.logTask(name: String, block: suspend TaskContext.() -> Map<String, Any?>) {
     val logService by inject<ScheduledTaskLogService>()
     val startTime = Instant.now().toEpochMilli()
     val runningId = logService.startLog(name, startTime).value
+    
+    class TaskContextImpl : TaskContext {
+        var currentProgress = 0.0
+        val currentLogs = mutableListOf<String>()
+
+        override fun updateProgress(progress: Double, vararg logs: String) {
+            currentProgress = progress
+            if (logs.isNotEmpty()) {
+                currentLogs.clear()
+                currentLogs.addAll(logs.takeLast(5))
+            }
+            logService.updateProgress(runningId, currentProgress, currentLogs)
+        }
+
+        override fun log(line: String) {
+            currentLogs.add(line)
+            if (currentLogs.size > 5) currentLogs.removeAt(0)
+            logService.updateProgress(runningId, currentProgress, currentLogs)
+        }
+    }
+
+    val context = TaskContextImpl()
+
     try {
-        val details = block()
+        val details = block(context)
         logService.logTask(
             name,
             startTime,
             Instant.now().toEpochMilli(),
             TaskStatus.SUCCESS,
             details = details.mapValues { it.value.toString() },
+            progress = context.currentProgress,
+            logs = context.currentLogs,
             runningId = runningId
         )
     } catch (e: Throwable) {
@@ -36,6 +66,8 @@ suspend fun KoinComponent.logTask(name: String, block: suspend () -> Map<String,
             Instant.now().toEpochMilli(),
             TaskStatus.FAILURE,
             message = e.message,
+            progress = context.currentProgress,
+            logs = context.currentLogs,
             runningId = runningId
         )
         throw e

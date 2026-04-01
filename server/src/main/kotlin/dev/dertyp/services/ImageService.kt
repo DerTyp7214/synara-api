@@ -208,23 +208,29 @@ class ImageService(
         } + existingImages
     }
 
-    suspend fun deleteUnreferencedImages(): Int = dbQuery {
+    suspend fun deleteUnreferencedImages(onProgress: suspend (Double, String) -> Unit = { _, _ -> }): Int = dbQuery {
         val referencedImages = mutableSetOf<UUID>()
 
-        referencedImages.addAll(AlbumTable.select(AlbumTable.cover).mapNotNull { it[AlbumTable.cover]?.value })
-        referencedImages.addAll(ArtistTable.select(ArtistTable.image).mapNotNull { it[ArtistTable.image]?.value })
-        referencedImages.addAll(SongTable.select(SongTable.cover).mapNotNull { it[SongTable.cover]?.value })
-        referencedImages.addAll(PlaylistTable.select(PlaylistTable.imageId).mapNotNull { it[PlaylistTable.imageId]?.value })
-        referencedImages.addAll(UserPlaylistTable.select(UserPlaylistTable.imageId).mapNotNull { it[UserPlaylistTable.imageId]?.value })
-        referencedImages.addAll(UserTable.select(UserTable.profileImage).mapNotNull { it[UserTable.profileImage]?.value })
+        referencedImages.addAll(AlbumTable.selectAll().mapNotNull { it[AlbumTable.cover]?.value })
+        referencedImages.addAll(ArtistTable.selectAll().mapNotNull { it[ArtistTable.image]?.value })
+        referencedImages.addAll(SongTable.selectAll().mapNotNull { it[SongTable.cover]?.value })
+        referencedImages.addAll(PlaylistTable.selectAll().mapNotNull { it[PlaylistTable.imageId]?.value })
+        referencedImages.addAll(UserPlaylistTable.selectAll().mapNotNull { it[UserPlaylistTable.imageId]?.value })
+        referencedImages.addAll(UserTable.selectAll().mapNotNull { it[UserTable.profileImage]?.value })
+        referencedImages.addAll(RecentReleaseTable.selectAll().mapNotNull { it[RecentReleaseTable.imageId]?.value })
 
-        val allImages = ImageTable.select(ImageTable.id, ImageTable.path).map {
+        val allImages = ImageTable.selectAll().map {
             it[ImageTable.id].value to it[ImageTable.path]
         }
 
         val unreferencedImages = allImages.filter { (id, _) -> id !in referencedImages }
+        onProgress(0.0, "Found ${unreferencedImages.size} unreferenced images")
 
-        unreferencedImages.chunked(5000).forEach { batch ->
+        val chunks = unreferencedImages.chunked(5000)
+        chunks.forEachIndexed { index, batch ->
+            val progress = (index.toDouble() / chunks.size) * 100.0
+            onProgress(progress, "Deleting batch ${index + 1}/${chunks.size} (${batch.size} images)")
+
             val idsToDelete = batch.map { it.first }
 
             batch.forEach { (_, path) ->
@@ -235,6 +241,7 @@ class ImageService(
             ImageTable.deleteWhere { ImageTable.id inList idsToDelete }
         }
 
+        onProgress(100.0, "Deleted ${unreferencedImages.size} images")
         logger.info("Deleted ${unreferencedImages.size} unreferenced images")
         unreferencedImages.size
     }

@@ -11,5 +11,7 @@ object ScheduledTaskLogTable : UUIDTable("scheduled_task_log") {
     val status = enumerationByName("status", 20, TaskStatus::class)
     val message = text("message").nullable()
     val details = binary("details", 65535).nullable()
+    val progress = double("progress").default(0.0)
+    val logs = text("logs").default("")
     val logTime = long("logTime").clientDefault { Instant.now().toEpochMilli() }
 }

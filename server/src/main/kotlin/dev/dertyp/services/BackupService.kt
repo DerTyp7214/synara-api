@@ -103,20 +103,28 @@ class BackupService(
         blobsDir.mkdirs()
     }
 
-    override suspend fun createBackup(): BackupResult = withContext(Dispatchers.IO) {
+    override suspend fun createBackup(): BackupResult = createBackup { _, _ -> }
+
+    suspend fun createBackup(onProgress: suspend (Double, String) -> Unit): BackupResult = withContext(Dispatchers.IO) {
         logger.info("Starting backup creation")
+        onProgress(0.0, "Starting backup creation")
+        
         val dbData = dbManagementService.exportData()
         logger.info("Database exported")
+        onProgress(20.0, "Database exported")
 
         val fileTrees = audioPaths.associate { path ->
             logger.debug("Generating file tree for {}", path)
+            onProgress(20.0 + (audioPaths.indexOf(path) + 1).toDouble() / audioPaths.size * 20.0, "Generating file tree for ${path.name}")
             path.name to generateFileTree(path)
         }
         val fileTreeBytes = compressZstd(Cbor.encodeToByteArray(fileTrees))
         logger.debug("File tree compressed")
+        onProgress(45.0, "File tree compressed")
 
         val imageIndex = if (imagePath != null && imagePath.exists()) {
             logger.info("Backing up images from $imagePath")
+            onProgress(50.0, "Backing up images...")
             backupImages(imagePath)
         } else {
             logger.debug("No images path specified or exists")
@@ -124,12 +132,14 @@ class BackupService(
         }
         val imageIndexBytes = compressZstd(Cbor.encodeToByteArray(imageIndex))
         logger.debug("Image index compressed")
+        onProgress(75.0, "Image index compressed")
 
         val timestamp = java.time.LocalDateTime.now()
             .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss"))
         val backupFile = backupDir.resolve("backup-$timestamp.zip")
 
         logger.info("Writing backup to $backupFile")
+        onProgress(80.0, "Writing backup to zip...")
         ZipOutputStream(backupFile.outputStream()).use { zip ->
             zip.putNextEntry(ZipEntry("database.cbor.zst"))
             zip.write(dbData)
@@ -145,8 +155,10 @@ class BackupService(
         }
 
         logger.info("Backup created: ${backupFile.name}")
+        onProgress(95.0, "Rotating old backups...")
         rotateBackups()
 
+        onProgress(100.0, "Backup created: ${backupFile.name}")
         BackupResult(
             fileName = backupFile.name,
             size = backupFile.length(),

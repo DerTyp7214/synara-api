@@ -23,7 +23,7 @@ class RecentReleaseWorkerTest : KoinTest {
     @Test
     fun `worker should call fetchNewReleases`() = runBlocking {
         val releaseService = mockk<ReleaseService>()
-        coEvery { releaseService.fetchNewReleases() } returns emptyMap()
+        coEvery { releaseService.fetchNewReleases(any()) } returns emptyMap()
 
         startKoin {
             modules(module {
@@ -35,6 +35,6 @@ class RecentReleaseWorkerTest : KoinTest {
         val worker = RecentReleaseWorker()
         worker.run()
 
-        coVerify { releaseService.fetchNewReleases() }
+        coVerify { releaseService.fetchNewReleases(any()) }
     }
 }

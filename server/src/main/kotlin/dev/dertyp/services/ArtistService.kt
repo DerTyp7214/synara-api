@@ -615,20 +615,27 @@ class ArtistService : Service() {
 
     suspend fun getOrBulkCreate(artistNames: List<String>): Map<String, List<UUID>> = getOrBulkCreateWithResult(artistNames).nameToIds
 
-    suspend fun deleteUnreferencedArtists(): Int = dbQuery {
+    suspend fun deleteUnreferencedArtists(onProgress: suspend (Double, String) -> Unit = { _, _ -> }): Int = dbQuery {
         val referencedArtists = mutableSetOf<UUID>()
-        referencedArtists.addAll(SongArtistTable.select(SongArtistTable.artistId).map { it[SongArtistTable.artistId].value })
-        referencedArtists.addAll(AlbumArtistTable.select(AlbumArtistTable.artistId).map { it[AlbumArtistTable.artistId].value })
-        referencedArtists.addAll(ArtistTable.select(ArtistTable.groupId).mapNotNull { it[ArtistTable.groupId]?.value })
+        referencedArtists.addAll(SongArtistTable.selectAll().map { it[SongArtistTable.artistId].value })
+        referencedArtists.addAll(AlbumArtistTable.selectAll().map { it[AlbumArtistTable.artistId].value })
+        referencedArtists.addAll(ArtistTable.selectAll().mapNotNull { it[ArtistTable.groupId]?.value })
 
-        val allArtists = ArtistTable.select(ArtistTable.id).map { it[ArtistTable.id].value }
+        val allArtists = ArtistTable.selectAll().map { it[ArtistTable.id].value }
 
         val unreferencedArtists = allArtists.filter { it !in referencedArtists }
+        onProgress(0.0, "Found ${unreferencedArtists.size} unreferenced artists")
 
-        unreferencedArtists.chunked(5000).forEach { batch ->
+        val chunks = unreferencedArtists.chunked(5000)
+        chunks.forEachIndexed { index, batch ->
+            val progress = (index.toDouble() / chunks.size) * 100.0
+            onProgress(progress, "Deleting batch ${index + 1}/${chunks.size} (${batch.size} artists)")
+
             ArtistTable.deleteWhere { ArtistTable.id inList batch }
             ArtistAliasTable.deleteWhere { ArtistAliasTable.artistId inList batch }
         }
+        
+        onProgress(100.0, "Deleted ${unreferencedArtists.size} artists")
         logger.info("Deleted ${unreferencedArtists.size} unreferenced artists")
         unreferencedArtists.size
     }
