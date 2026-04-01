@@ -173,7 +173,7 @@ class MusicBrainzService : Service() {
 
     suspend fun searchAlbumMb(album: Album, priority: HttpClientPriority = HttpClientPriority.NORMAL): MusicBrainzRelease? {
         val queryParts = mutableListOf<String>()
-        queryParts.add("release:\"${album.name.cleanTitle()}\"")
+        queryParts.add("release:\"${album.name}\"")
         album.artists.forEach {
             if (it.musicbrainzId != null) {
                 queryParts.add("arid:${it.musicbrainzId}")
