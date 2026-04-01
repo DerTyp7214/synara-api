@@ -73,7 +73,6 @@ jobs:
             **/build/reports/kover/html/
 
   build-artifact:
-    needs: run-tests
     runs-on: ubuntu-latest
     outputs:
       app_version: ${{ steps.version_info.outputs.APP_VERSION }}
@@ -133,7 +132,7 @@ jobs:
           retention-days: 1
 
   build-publish-docker:
-    needs: build-artifact
+    needs: [run-tests, build-artifact]
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -208,7 +207,7 @@ jobs:
             DAY_MONTH_YEAR=${{ steps.date.outputs.day_month_year }}
 
   create-github-release:
-    needs: build-artifact
+    needs: [run-tests, build-artifact]
     if: github.ref == 'refs/heads/release' || github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
 
