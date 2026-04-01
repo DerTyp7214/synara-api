@@ -3,6 +3,7 @@ package dev.dertyp.services
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
 import dev.dertyp.core.ApplicationScope
+import dev.dertyp.core.HttpClientPriority
 import dev.dertyp.data.MusicBrainzArtist
 import dev.dertyp.db.*
 import dev.dertyp.plugins.RedisCacheProvider
@@ -171,7 +172,7 @@ class ReleaseServiceTest : KoinTest {
             FollowedArtistTable.insert { it[this.userId] = userId; it[this.artistId] = artistId }
         }
 
-        coEvery { musicBrainzService.fetchReleaseGroups(mbId) } returns listOf(
+        coEvery { musicBrainzService.fetchReleaseGroups(mbId, priority = HttpClientPriority.LOW) } returns listOf(
             MusicBrainzReleaseGroup(
                 id = releaseId,
                 title = "New Album",
@@ -186,7 +187,7 @@ class ReleaseServiceTest : KoinTest {
         )
 
         val spiedService = spyk(service, recordPrivateCalls = true)
-        coEvery { spiedService["resolvePlatformLinks"](any<String>()) } returns listOf("https://tidal.com/album/456")
+        coEvery { spiedService.resolvePlatformLinks(any(), priority = HttpClientPriority.LOW) } returns listOf("https://tidal.com/album/456")
         
         val dummyImageId = UUID.randomUUID()
         transaction(database) {
@@ -246,7 +247,7 @@ class ReleaseServiceTest : KoinTest {
             SongMusicBrainzTable.insert { it[this.songId] = songId; it[musicBrainzId] = releaseIdInSongDb }
         }
 
-        coEvery { musicBrainzService.fetchReleasesByArtist(mbId) } returns listOf(
+        coEvery { musicBrainzService.fetchReleasesByArtist(mbId, priority = HttpClientPriority.LOW) } returns listOf(
             MusicBrainzRelease(
                 id = releaseIdInAlbumDb,
                 releaseGroup = MusicBrainzReleaseGroup(id = releaseIdInAlbumDb, title = "Existing Album")
@@ -257,7 +258,7 @@ class ReleaseServiceTest : KoinTest {
             )
         )
 
-        coEvery { musicBrainzService.fetchReleaseGroups(mbId) } returns listOf(
+        coEvery { musicBrainzService.fetchReleaseGroups(mbId, priority = HttpClientPriority.LOW) } returns listOf(
             MusicBrainzReleaseGroup(
                 id = releaseIdInAlbumDb,
                 title = "Existing Album",
@@ -276,7 +277,7 @@ class ReleaseServiceTest : KoinTest {
         )
 
         val spiedService = spyk(service, recordPrivateCalls = true)
-        coEvery { spiedService["resolvePlatformLinks"](any<String>()) } returns emptyList<String>()
+        coEvery { spiedService.resolvePlatformLinks(any(), priority = HttpClientPriority.LOW) } returns emptyList()
         coEvery { spiedService.fetchReleaseGroupImage(any()) } returns null
 
         spiedService.fetchNewReleases()
@@ -439,7 +440,7 @@ class ReleaseServiceTest : KoinTest {
             FollowedArtistTable.insert { it[this.userId] = userId; it[this.artistId] = artistId }
         }
 
-        coEvery { musicBrainzService.fetchReleaseGroups(mbId) } throws Exception("MB Failure")
+        coEvery { musicBrainzService.fetchReleaseGroups(mbId, priority = HttpClientPriority.LOW) } throws Exception("MB Failure")
         
         val result = service.fetchNewReleases()
         assertTrue(result.isEmpty())
@@ -463,11 +464,11 @@ class ReleaseServiceTest : KoinTest {
             FollowedArtistTable.insert { it[this.userId] = userId; it[this.artistId] = artistId }
         }
 
-        coEvery { musicBrainzService.fetchReleaseGroups(mbId) } returns listOf(
+        coEvery { musicBrainzService.fetchReleaseGroups(mbId, priority = HttpClientPriority.LOW) } returns listOf(
             MusicBrainzReleaseGroup(id = "1", title = "The Title", firstReleaseDate = "2023-01-01", primaryType = "Single")
         )
         
-        coEvery { appleMusicService.searchAlbums(any(), any(), any()) } returns listOf(
+        coEvery { appleMusicService.searchAlbums(any(), any(), any(), priority = HttpClientPriority.LOW) } returns listOf(
             IMetadataService.Album(
                 id = "apple-1",
                 title = "The Title - Single",
@@ -479,7 +480,7 @@ class ReleaseServiceTest : KoinTest {
         )
         
         val spiedService = spyk(service, recordPrivateCalls = true)
-        coEvery { spiedService["resolvePlatformLinks"](any<String>()) } returns emptyList<String>()
+        coEvery { spiedService.resolvePlatformLinks(any(), priority = HttpClientPriority.LOW) } returns emptyList()
         coEvery { spiedService.fetchReleaseGroupImage(any()) } returns null
 
         val result = spiedService.fetchNewReleases()

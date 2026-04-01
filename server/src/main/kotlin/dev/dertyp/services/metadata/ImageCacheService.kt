@@ -1,6 +1,7 @@
 package dev.dertyp.services.metadata
 
 import dev.dertyp.ApiClient
+import dev.dertyp.core.HttpClientPriority
 import dev.dertyp.core.bytes
 import dev.dertyp.data.User
 import dev.dertyp.services.ImageService
@@ -34,7 +35,7 @@ class ImageCacheService(
         }
     }
 
-    override suspend fun getImageUrlByImageId(imageId: UUID): String? {
+    override suspend fun getImageUrlByImageId(imageId: UUID, priority: HttpClientPriority): String? {
         val imageService by inject<ImageService>()
 
         val image = imageService.byId(imageId)
@@ -70,38 +71,39 @@ class ImageCacheService(
         return url
     }
 
-    override suspend fun getTrackById(trackId: String): IMetadataService.Track? {
+    override suspend fun getTrackById(trackId: String, priority: HttpClientPriority): IMetadataService.Track? {
         throw NotImplementedError("Not implemented for ImageCache")
     }
 
-    override suspend fun getTracksByIds(trackIds: List<String>): List<IMetadataService.Track> {
+    override suspend fun getTracksByIds(trackIds: List<String>, priority: HttpClientPriority): List<IMetadataService.Track> {
         throw NotImplementedError("Not implemented for ImageCache")
     }
 
-    override suspend fun albumExistsById(albumId: String): Boolean {
+    override suspend fun albumExistsById(albumId: String, priority: HttpClientPriority): Boolean {
         throw NotImplementedError("Not implemented for ImageCache")
     }
 
-    override suspend fun getAlbumsByIds(albumIds: List<String>): List<IMetadataService.Album> {
+    override suspend fun getAlbumsByIds(albumIds: List<String>, priority: HttpClientPriority): List<IMetadataService.Album> {
         throw NotImplementedError("Not implemented for ImageCache")
     }
 
-    override suspend fun getArtistsByIds(artistIds: List<String>): List<IMetadataService.Artist> {
+    override suspend fun getArtistsByIds(artistIds: List<String>, priority: HttpClientPriority): List<IMetadataService.Artist> {
         throw NotImplementedError("Not implemented for ImageCache")
     }
 
-    override suspend fun getAlbumTracks(albumId: String): Flow<IMetadataService.Track> {
+    override suspend fun getAlbumTracks(albumId: String, priority: HttpClientPriority): Flow<IMetadataService.Track> {
         throw NotImplementedError("Not implemented for ImageCache")
     }
 
-    override suspend fun getArtistTracks(artistId: String): Flow<IMetadataService.Track> {
+    override suspend fun getArtistTracks(artistId: String, priority: HttpClientPriority): Flow<IMetadataService.Track> {
         throw NotImplementedError("Not implemented for ImageCache")
     }
 
     override fun getPlaylistsByIds(
         playlistIds: List<String>,
         includeTracks: Boolean,
-        user: User?
+        user: User?,
+        priority: HttpClientPriority
     ): Flow<IMetadataService.FlowPlaylist> {
         throw NotImplementedError("Not implemented for ImageCache")
     }
@@ -110,27 +112,35 @@ class ImageCacheService(
         return !environment.config.propertyOrNull("imageCache.url")?.getString().isNullOrBlank()
     }
 
-    override suspend fun searchArtists(query: String, limit: Int): List<IMetadataService.Artist> {
+    override suspend fun searchArtists(query: String, limit: Int, priority: HttpClientPriority): List<IMetadataService.Artist> {
         throw NotImplementedError("Not implemented for ImageCache")
     }
 
-    override suspend fun search(query: String, limit: Int): List<IMetadataService.Track> {
+    override suspend fun search(query: String, limit: Int, priority: HttpClientPriority): List<IMetadataService.Track> {
         throw NotImplementedError("Not implemented for ImageCache")
     }
 
-    override suspend fun searchAlbums(query: String, limit: Int, includeTracks: Boolean): List<IMetadataService.Album> {
+    override suspend fun searchAlbums(
+        query: String,
+        limit: Int,
+        includeTracks: Boolean,
+        priority: HttpClientPriority
+    ): List<IMetadataService.Album> {
         throw NotImplementedError("Not implemented for ImageCache")
     }
 
-    override suspend fun getAlbumIdByTrackId(trackId: String): String? {
+    override suspend fun getAlbumIdByTrackId(trackId: String, priority: HttpClientPriority): String? {
         throw NotImplementedError("Not implemented for ImageCache")
     }
 
-    override suspend fun getImageUrlByAlbumId(albumId: String): List<IMetadataService.Image> {
+    override suspend fun getImageUrlByAlbumId(albumId: String, priority: HttpClientPriority): List<IMetadataService.Image> {
         throw NotImplementedError("Not implemented for ImageCache")
     }
 
-    override suspend fun getImageUrlsByAlbumIds(albumIds: List<String>): Map<String, List<IMetadataService.Image>> {
+    override suspend fun getImageUrlsByAlbumIds(
+        albumIds: List<String>,
+        priority: HttpClientPriority
+    ): Map<String, List<IMetadataService.Image>> {
         throw NotImplementedError("Not implemented for ImageCache")
     }
 }

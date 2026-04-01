@@ -27,7 +27,7 @@ fun Type.getWrapper(metadataService: MetadataService?, user: User, ids: List<Str
             if (metadataService == null) IdsWrapper.from(this, emptyMap())
             else {
                 val groups = ids.asFlow().map { id ->
-                    val tracks = metadataService.getArtistTracks(id)
+                    val tracks = metadataService.getArtistTracks(id, priority = HttpClientPriority.HIGH)
                     IdsGroup(
                         id,
                         emptyFlow(),
@@ -51,7 +51,7 @@ fun Type.getWrapper(metadataService: MetadataService?, user: User, ids: List<Str
                         IMetadataService.Album(
                             id = id,
                             title = "",
-                            tracks = metadataService.getAlbumTracks(id),
+                            tracks = metadataService.getAlbumTracks(id, priority = HttpClientPriority.HIGH),
                         )
                     )
                 }
@@ -62,7 +62,7 @@ fun Type.getWrapper(metadataService: MetadataService?, user: User, ids: List<Str
         Type.PLAYLIST -> {
             if (metadataService == null) IdsWrapper.from(this, emptyMap())
             else {
-                val groups = metadataService.getPlaylistsByIds(ids, true, user).map { playlist ->
+                val groups = metadataService.getPlaylistsByIds(ids, true, user, priority = HttpClientPriority.HIGH).map { playlist ->
                     IdsGroup(
                         playlist.id,
                         playlist.sharedTracks.map {

@@ -1,6 +1,7 @@
 package dev.dertyp.services.metadata
 
 import dev.dertyp.ApiClient
+import dev.dertyp.core.HttpClientPriority
 import dev.dertyp.core.cleanTitle
 import dev.dertyp.data.*
 import dev.dertyp.server.BuildConfig
@@ -103,12 +104,13 @@ class MusicBrainzService : Service() {
 
     private suspend inline fun <reified T> retryableGet(
         urlString: String,
+        priority: HttpClientPriority = HttpClientPriority.NORMAL,
         noinline block: suspend HttpRequestBuilder.() -> Unit = {}
     ): T? {
         var retries = 0
         while (retries < 10) {
             try {
-                val response: HttpResponse = ApiClient.queueInstance.enqueue(urlString, block)
+                val response: HttpResponse = ApiClient.queueInstance.enqueue(urlString, priority, block)
                 if (response.status == HttpStatusCode.ServiceUnavailable || response.status == HttpStatusCode.TooManyRequests) {
                     logger.warn("Rate limited by MusicBrainz, retrying in 1s... ($retries/10)")
                     delay(1000)
@@ -125,7 +127,7 @@ class MusicBrainzService : Service() {
         return null
     }
 
-    suspend fun searchMb(song: BaseSong): MusicBrainzRecording? {
+    suspend fun searchMb(song: BaseSong, priority: HttpClientPriority = HttpClientPriority.NORMAL): MusicBrainzRecording? {
         val queryParts = mutableListOf<String>()
         queryParts.add("recording:\"${song.title.cleanTitle()}\"")
         song.artists.forEach {
@@ -155,7 +157,7 @@ class MusicBrainzService : Service() {
         val query = queryParts.joinToString(" AND ")
 
         return try {
-            val searchResponse = retryableGet<MusicBrainzSearchResponse>("$mbBaseUrl/recording") {
+            val searchResponse = retryableGet<MusicBrainzSearchResponse>("$mbBaseUrl/recording", priority) {
                 parameter("query", query)
                 parameter("limit", 1)
                 parameter("fmt", "json")
@@ -169,7 +171,7 @@ class MusicBrainzService : Service() {
         }
     }
 
-    suspend fun searchAlbumMb(album: Album): MusicBrainzRelease? {
+    suspend fun searchAlbumMb(album: Album, priority: HttpClientPriority = HttpClientPriority.NORMAL): MusicBrainzRelease? {
         val queryParts = mutableListOf<String>()
         queryParts.add("release:\"${album.name.cleanTitle()}\"")
         album.artists.forEach {
@@ -183,7 +185,7 @@ class MusicBrainzService : Service() {
         val query = queryParts.joinToString(" AND ")
 
         return try {
-            val response = retryableGet<MusicBrainzReleaseSearchResponse>("$mbBaseUrl/release") {
+            val response = retryableGet<MusicBrainzReleaseSearchResponse>("$mbBaseUrl/release", priority) {
                 parameter("query", query)
                 parameter("limit", 1)
                 parameter("fmt", "json")
@@ -197,7 +199,7 @@ class MusicBrainzService : Service() {
         }
     }
 
-    suspend fun searchArtistMb(artist: Artist): MusicBrainzArtist? {
+    suspend fun searchArtistMb(artist: Artist, priority: HttpClientPriority = HttpClientPriority.NORMAL): MusicBrainzArtist? {
         val queryParts = mutableListOf<String>()
         queryParts.add("artist:\"${artist.name}\"")
         queryParts.add("artistaccent:\"${artist.name}\"")
@@ -209,7 +211,7 @@ class MusicBrainzService : Service() {
         val query = queryParts.joinToString(" AND ")
 
         return try {
-            val response = retryableGet<MusicBrainzArtistSearchResponse>("$mbBaseUrl/artist") {
+            val response = retryableGet<MusicBrainzArtistSearchResponse>("$mbBaseUrl/artist", priority) {
                 parameter("query", query)
                 parameter("limit", 1)
                 parameter("fmt", "json")
@@ -223,11 +225,11 @@ class MusicBrainzService : Service() {
         }
     }
 
-    suspend fun searchArtistsMbPaged(query: String, page: Int, pageSize: Int): PaginatedResponse<MusicBrainzArtist> {
+    suspend fun searchArtistsMbPaged(query: String, page: Int, pageSize: Int, priority: HttpClientPriority = HttpClientPriority.NORMAL): PaginatedResponse<MusicBrainzArtist> {
         val offset = page * pageSize
 
         val response = try {
-            retryableGet<MusicBrainzArtistSearchResponse>("$mbBaseUrl/artist") {
+            retryableGet<MusicBrainzArtistSearchResponse>("$mbBaseUrl/artist", priority) {
                 parameter("query", query)
                 parameter("limit", pageSize)
                 parameter("offset", offset)
@@ -251,9 +253,9 @@ class MusicBrainzService : Service() {
         )
     }
 
-    suspend fun fetchReleaseGroups(artistMbId: String): List<MusicBrainzReleaseGroup> {
+    suspend fun fetchReleaseGroups(artistMbId: String, priority: HttpClientPriority = HttpClientPriority.NORMAL): List<MusicBrainzReleaseGroup> {
         return try {
-            val response = retryableGet<MusicBrainzReleaseGroupResponse>("$mbBaseUrl/release-group") {
+            val response = retryableGet<MusicBrainzReleaseGroupResponse>("$mbBaseUrl/release-group", priority) {
                 parameter("artist", artistMbId)
                 parameter("inc", "url-rels+release-group-rels")
                 parameter("limit", 100)
@@ -267,9 +269,9 @@ class MusicBrainzService : Service() {
         }
     }
 
-    suspend fun fetchArtistById(mbId: String): MusicBrainzArtist? {
+    suspend fun fetchArtistById(mbId: String, priority: HttpClientPriority = HttpClientPriority.NORMAL): MusicBrainzArtist? {
         return try {
-            retryableGet<MusicBrainzArtist>("$mbBaseUrl/artist/$mbId") {
+            retryableGet<MusicBrainzArtist>("$mbBaseUrl/artist/$mbId", priority) {
                 parameter("fmt", "json")
                 header("User-Agent", "Synara/${BuildConfig.VERSION} ( https://github.com/dertyp7214/synara )")
             }
@@ -279,9 +281,9 @@ class MusicBrainzService : Service() {
         }
     }
 
-    suspend fun fetchReleasesByArtist(artistMbId: String): List<MusicBrainzRelease> {
+    suspend fun fetchReleasesByArtist(artistMbId: String, priority: HttpClientPriority = HttpClientPriority.NORMAL): List<MusicBrainzRelease> {
         return try {
-            val response = retryableGet<MusicBrainzReleaseResponse>("$mbBaseUrl/release") {
+            val response = retryableGet<MusicBrainzReleaseResponse>("$mbBaseUrl/release", priority) {
                 parameter("artist", artistMbId)
                 parameter("inc", "release-groups")
                 parameter("limit", 100)
@@ -295,9 +297,9 @@ class MusicBrainzService : Service() {
         }
     }
 
-    suspend fun fetchReleasesByReleaseGroup(releaseGroupId: String): List<MusicBrainzRelease> {
+    suspend fun fetchReleasesByReleaseGroup(releaseGroupId: String, priority: HttpClientPriority = HttpClientPriority.NORMAL): List<MusicBrainzRelease> {
         return try {
-            val response = retryableGet<MusicBrainzReleaseResponse>("$mbBaseUrl/release") {
+            val response = retryableGet<MusicBrainzReleaseResponse>("$mbBaseUrl/release", priority) {
                 parameter("release-group", releaseGroupId)
                 parameter("inc", "url-rels")
                 parameter("limit", 100)
@@ -311,9 +313,9 @@ class MusicBrainzService : Service() {
         }
     }
 
-    suspend fun fetchRecordingsByReleaseGroup(releaseGroupId: String): List<MusicBrainzRecording> {
+    suspend fun fetchRecordingsByReleaseGroup(releaseGroupId: String, priority: HttpClientPriority = HttpClientPriority.NORMAL): List<MusicBrainzRecording> {
         return try {
-            val response = retryableGet<MusicBrainzSearchResponse>("$mbBaseUrl/recording") {
+            val response = retryableGet<MusicBrainzSearchResponse>("$mbBaseUrl/recording", priority) {
                 parameter("release-group", releaseGroupId)
                 parameter("inc", "releases+release-groups")
                 parameter("fmt", "json")

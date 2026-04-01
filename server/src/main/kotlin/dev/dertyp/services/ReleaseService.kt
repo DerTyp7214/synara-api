@@ -1,10 +1,7 @@
 package dev.dertyp.services
 
 import dev.dertyp.ApiClient
-import dev.dertyp.core.ApplicationScope
-import dev.dertyp.core.cleanTitle
-import dev.dertyp.core.safeGet
-import dev.dertyp.core.sha256
+import dev.dertyp.core.*
 import dev.dertyp.data.ArtistType
 import dev.dertyp.data.InsertableImage
 import dev.dertyp.data.PaginatedResponse
@@ -171,7 +168,7 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
 
                     logger.info("Fetching releases for artist: $artistName")
 
-                    val mbReleases = musicBrainzService.fetchReleasesByArtist(mbId)
+                    val mbReleases = musicBrainzService.fetchReleasesByArtist(mbId, priority = HttpClientPriority.LOW)
 
                     val albumMappings = dbQuery {
                         AlbumMusicBrainzTable.join(AlbumArtistTable, JoinType.INNER, AlbumMusicBrainzTable.albumId, AlbumArtistTable.albumId)
@@ -189,7 +186,7 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
                             .toMap()
                     }
 
-                    val groups = musicBrainzService.fetchReleaseGroups(mbId)
+                    val groups = musicBrainzService.fetchReleaseGroups(mbId, priority = HttpClientPriority.LOW)
                     if (groups.isEmpty()) {
                         progressMutex.withLock { 
                             currentProgress += artistWeight
@@ -226,7 +223,7 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
                                     null
                                 }
 
-                                val mbReleasesForGroup = musicBrainzService.fetchReleasesByReleaseGroup(group.id)
+                                val mbReleasesForGroup = musicBrainzService.fetchReleasesByReleaseGroup(group.id, priority = HttpClientPriority.LOW)
                                 val allRelations = (group.relations ?: emptyList()) + mbReleasesForGroup.flatMap { it.relations ?: emptyList() }
                                 val relations = allRelations.mapNotNull { it.url?.resource }.distinct()
                                 val odesliLinks = mutableListOf<String>()
@@ -234,7 +231,7 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
                                     if (link.contains("spotify.com") || link.contains("itunes.apple.com") || link.contains("apple.com") ||
                                         link.contains("youtube.com") || link.contains("amazon.com") || link.contains("deezer.com") ||
                                         link.contains("tidal.com") || link.contains("bandcamp.com")) {
-                                        val resolved = resolvePlatformLinks(link)
+                                        val resolved = resolvePlatformLinks(link, priority = HttpClientPriority.LOW)
                                         if (resolved.isNotEmpty()) {
                                             odesliLinks.addAll(resolved)
                                             break
@@ -248,7 +245,7 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
                                         group.relations?.any { it.type == "single from" } == true
 
                                 val groupRecordings = if (isSingle) {
-                                    musicBrainzService.fetchRecordingsByReleaseGroup(group.id)
+                                    musicBrainzService.fetchRecordingsByReleaseGroup(group.id, priority = HttpClientPriority.LOW)
                                 } else emptyList()
                                 val groupRecordingIds = groupRecordings.map { it.id }.toSet()
 
@@ -286,7 +283,8 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
                                         val searchedApple = appleMusicService.searchAlbums(
                                             query,
                                             25,
-                                            includeTracks = isSingle
+                                            includeTracks = isSingle,
+                                            priority = HttpClientPriority.LOW
                                         )
                                         matchedAlbum = searchedApple.firstOrNull { album ->
                                             val cleanGroupTitle = group.title.cleanTitle()
@@ -305,7 +303,7 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
                                     if (matchedAlbum != null) {
                                         val appleUrl = "https://music.apple.com/album/${matchedAlbum.id}"
                                         finalLinks.add(appleUrl)
-                                        finalLinks.addAll(resolvePlatformLinks(appleUrl))
+                                        finalLinks.addAll(resolvePlatformLinks(appleUrl, priority = HttpClientPriority.LOW))
                                     } else {
                                         logger.info("AppleMusic search returned no results for \"$artistName ${group.title}\" or related albums.")
                                     }
@@ -322,7 +320,8 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
                                         val searchedTidal = tidalService.searchAlbums(
                                             query,
                                             15,
-                                            includeTracks = isSingle
+                                            includeTracks = isSingle,
+                                            priority = HttpClientPriority.LOW
                                         )
                                         matchedAlbum = searchedTidal.firstOrNull { album ->
                                             val cleanGroupTitle = group.title.cleanTitle()
@@ -339,7 +338,7 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
                                     if (matchedAlbum != null) {
                                         val tidalUrl = "https://tidal.com/album/${matchedAlbum.id}"
                                         finalLinks.add(tidalUrl)
-                                        finalLinks.addAll(resolvePlatformLinks(tidalUrl))
+                                        finalLinks.addAll(resolvePlatformLinks(tidalUrl, priority = HttpClientPriority.LOW))
                                     } else {
                                         logger.info("Tidal search returned no results for \"$artistName ${group.title}\" or related albums.")
                                     }
@@ -416,9 +415,12 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
         ).firstOrNull()
     }
 
-    internal suspend fun resolvePlatformLinks(platformUrl: String): List<String> {
+    internal suspend fun resolvePlatformLinks(
+        platformUrl: String,
+        priority: HttpClientPriority = HttpClientPriority.NORMAL
+    ): List<String> {
         return try {
-            val response = ApiClient.queueInstance.enqueue("https://api.song.link/v1-alpha.1/links") {
+            val response = ApiClient.queueInstance.enqueue("https://api.song.link/v1-alpha.1/links", priority = priority) {
                 parameter("url", platformUrl)
                 parameter("userCountry", "US")
             }

@@ -12,6 +12,7 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.PriorityBlockingQueue
 import kotlin.concurrent.atomics.AtomicBoolean
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.time.Clock
@@ -19,6 +20,10 @@ import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
+
+enum class HttpClientPriority {
+    HIGH, NORMAL, LOW
+}
 
 suspend inline fun <reified T> HttpClient.safeGet(url: String) = try {
     get(url).body<T>()
@@ -28,15 +33,30 @@ suspend inline fun <reified T> HttpClient.safeGet(url: String) = try {
 
 suspend inline fun <reified T> HttpClient.queuedGet(
     urlString: String,
+    priority: HttpClientPriority = HttpClientPriority.NORMAL,
     noinline block: suspend HttpRequestBuilder.() -> Unit = {}
-) = ApiClient.queueInstance.enqueue(urlString, block).body<T>()
+) = ApiClient.queueInstance.enqueue(urlString, priority, block).body<T>()
 
 @OptIn(ExperimentalAtomicApi::class, ExperimentalTime::class)
 class HttpClientQueueService : Service() {
     private val hostLocks = ConcurrentHashMap<String, Mutex>()
+    private val hostQueues = ConcurrentHashMap<String, PriorityBlockingQueue<QueuedRequest>>()
     private val hostLastRequest = ConcurrentHashMap<String, Instant>()
 
     private val stopped = AtomicBoolean(true)
+
+    private data class QueuedRequest(
+        val priority: HttpClientPriority,
+        val queuedAt: Instant,
+        val urlString: String,
+        val block: suspend HttpRequestBuilder.() -> Unit,
+        val deferred: CompletableDeferred<HttpResponse>
+    ) : Comparable<QueuedRequest> {
+        override fun compareTo(other: QueuedRequest): Int {
+            if (priority != other.priority) return priority.ordinal.compareTo(other.priority.ordinal)
+            return queuedAt.compareTo(other.queuedAt)
+        }
+    }
 
     init {
         CoroutineScope(Dispatchers.IO).launch {
@@ -56,49 +76,70 @@ class HttpClientQueueService : Service() {
 
     suspend fun enqueue(
         urlString: String,
+        priority: HttpClientPriority = HttpClientPriority.NORMAL,
         block: suspend HttpRequestBuilder.() -> Unit = {}
     ): HttpResponse {
-        val queuedAt = Clock.System.now()
         val host = try {
             Url(urlString).host
         } catch (_: Exception) {
             urlString
         }
 
+        val deferred = CompletableDeferred<HttpResponse>()
+        val request = QueuedRequest(priority, Clock.System.now(), urlString, block, deferred)
+
+        val queue = hostQueues.computeIfAbsent(host) { PriorityBlockingQueue() }
+        queue.put(request)
+
         val lock = hostLocks.computeIfAbsent(host) { Mutex() }
 
-        return lock.withLock {
-            if (stopped.load()) throw CancellationException("Service is stopped")
+        try {
+            lock.withLock {
+                if (stopped.load()) {
+                    val next = queue.poll()
+                    next?.deferred?.completeWith(Result.failure(CancellationException("Service is stopped")))
+                    throw CancellationException("Service is stopped")
+                }
 
-            val waitTime = Clock.System.now() - queuedAt
+                val next = queue.poll() ?: return@withLock
 
-            if (waitTime > 2.seconds)
-                logger.info("Request ($urlString) was ${waitTime.inWholeMilliseconds}ms in queue")
+                val waitTime = Clock.System.now() - next.queuedAt
 
-            val last = hostLastRequest[host]
-            val now = Clock.System.now()
+                if (waitTime > 2.seconds)
+                    logger.info("Request (${next.urlString}) was ${waitTime.inWholeMilliseconds}ms in queue")
 
-            val delayTime = when {
-                host.contains("musicbrainz.org") -> 1.seconds
-                host.contains("api.song.link") -> 6.seconds
-                else -> 250.milliseconds
-            }
+                val last = hostLastRequest[host]
+                val now = Clock.System.now()
 
-            if (last != null) {
-                val diff = now - last
-                if (diff < delayTime) {
-                    delay(delayTime - diff)
+                val delayTime = when {
+                    host.contains("musicbrainz.org") -> 1.seconds
+                    host.contains("api.song.link") -> 6.seconds
+                    else -> 250.milliseconds
+                }
+
+                if (last != null) {
+                    val diff = now - last
+                    if (diff < delayTime) {
+                        delay(delayTime - diff)
+                    }
+                }
+
+                try {
+                    val response = ApiClient.instance.get(next.urlString) {
+                        next.block(this)
+                    }
+                    hostLastRequest[host] = Clock.System.now()
+                    next.deferred.complete(response)
+                } catch (e: Exception) {
+                    logger.error("Error executing queued request for $host", e)
+                    next.deferred.completeWith(Result.failure(e))
                 }
             }
-
-            try {
-                val response = ApiClient.instance.get(urlString) { block() }
-                hostLastRequest[host] = Clock.System.now()
-                response
-            } catch (e: Exception) {
-                logger.error("Error executing queued request for $host", e)
-                throw e
-            }
+        } catch (e: CancellationException) {
+            queue.remove(request)
+            throw e
         }
+
+        return request.deferred.await()
     }
 }

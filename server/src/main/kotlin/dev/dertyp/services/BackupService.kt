@@ -17,6 +17,7 @@ import java.io.File
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
+import java.time.format.DateTimeFormatter
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
@@ -135,7 +136,7 @@ class BackupService(
         onProgress(75.0, "Image index compressed")
 
         val timestamp = java.time.LocalDateTime.now()
-            .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss"))
+            .format(DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss"))
         val backupFile = backupDir.resolve("backup-$timestamp.zip")
 
         logger.info("Writing backup to $backupFile")

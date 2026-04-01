@@ -15,7 +15,6 @@ import io.ktor.client.statement.bodyAsText
 import io.ktor.http.*
 import io.ktor.server.application.ApplicationEnvironment
 import io.ktor.server.util.url
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -110,8 +109,12 @@ class TidalService(
         }
     }
 
-    private suspend fun makeRequest(url: String, user: User? = null): HttpResponse {
-        return ApiClient.instance.queuedGet(url) {
+    private suspend fun makeRequest(
+        url: String,
+        user: User? = null,
+        priority: HttpClientPriority = HttpClientPriority.NORMAL
+    ): HttpResponse {
+        return ApiClient.instance.queuedGet(url, priority) {
             val token = if (user != null) {
                 SyncService.getInstance(user, environment, ISyncService.SyncServiceType.tidal)
                     .getAccessToken()?.let {
@@ -127,7 +130,11 @@ class TidalService(
         }
     }
 
-    override suspend fun searchArtists(query: String, limit: Int): List<IMetadataService.Artist> {
+    override suspend fun searchArtists(
+        query: String,
+        limit: Int,
+        priority: HttpClientPriority
+    ): List<IMetadataService.Artist> {
         val url = getUrl("searchResults") {
             encodedPath += "/" + query.encodeURLParameter()
 
@@ -137,11 +144,11 @@ class TidalService(
             }
         }
 
-        val response = makeRequest(url)
+        val response = makeRequest(url, priority = priority)
 
         if (response.status == HttpStatusCode.TooManyRequests) {
             delay(30.seconds)
-            return searchArtists(query, limit)
+            return searchArtists(query, limit, priority)
         }
 
         if (response.status != HttpStatusCode.OK) {
@@ -168,7 +175,11 @@ class TidalService(
         return getArtistsByIds(searchResponse.included.map { it.id })
     }
 
-    override suspend fun search(query: String, limit: Int): List<IMetadataService.Track> {
+    override suspend fun search(
+        query: String,
+        limit: Int,
+        priority: HttpClientPriority
+    ): List<IMetadataService.Track> {
         val url = getUrl("searchResults") {
             encodedPath += "/" + query.encodeURLParameter()
 
@@ -178,11 +189,11 @@ class TidalService(
             }
         }
 
-        val response = makeRequest(url)
+        val response = makeRequest(url, priority = priority)
 
         if (response.status == HttpStatusCode.TooManyRequests) {
             delay(30.seconds)
-            return search(query, limit)
+            return search(query, limit, priority)
         }
 
         if (response.status != HttpStatusCode.OK) {
@@ -212,7 +223,8 @@ class TidalService(
     override suspend fun searchAlbums(
         query: String,
         limit: Int,
-        includeTracks: Boolean
+        includeTracks: Boolean,
+        priority: HttpClientPriority
     ): List<IMetadataService.Album> {
         val url = getUrl("searchResults") {
             encodedPath += "/" + query.encodeURLParameter()
@@ -223,11 +235,11 @@ class TidalService(
             }
         }
 
-        val response = makeRequest(url)
+        val response = makeRequest(url, priority = priority)
 
         if (response.status == HttpStatusCode.TooManyRequests) {
             delay(30.seconds)
-            return searchAlbums(query, limit, includeTracks)
+            return searchAlbums(query, limit, includeTracks, priority)
         }
 
         if (response.status != HttpStatusCode.OK) {
@@ -273,7 +285,10 @@ class TidalService(
         return getAlbumsByIds(albumIds.toList())
     }
 
-    private suspend fun getImages(urlPath: String?): List<ArtworkFile> {
+    private suspend fun getImages(
+        urlPath: String?,
+        priority: HttpClientPriority = HttpClientPriority.NORMAL
+    ): List<ArtworkFile> {
         if (urlPath == null) return emptyList()
 
         val url = getUrl {
@@ -285,11 +300,11 @@ class TidalService(
             }
         }
 
-        val response = makeRequest(url)
+        val response = makeRequest(url, priority = priority)
 
         if (response.status == HttpStatusCode.TooManyRequests) {
             delay(5.seconds)
-            return getImages(urlPath)
+            return getImages(urlPath, priority)
         }
 
         if (response.status != HttpStatusCode.OK) {
@@ -303,7 +318,10 @@ class TidalService(
         return imagesResponse.included.firstOrNull()?.attributes?.files ?: emptyList()
     }
 
-    override suspend fun getAlbumIdByTrackId(trackId: String): String? {
+    override suspend fun getAlbumIdByTrackId(
+        trackId: String,
+        priority: HttpClientPriority
+    ): String? {
         val url = getUrl("/tracks/${trackId}/relationships/albums") {
             parameters {
                 append("countryCode", "US")
@@ -311,13 +329,13 @@ class TidalService(
             }
         }
 
-        val response = makeRequest(url)
+        val response = makeRequest(url, priority = priority)
         when (response.status) {
             HttpStatusCode.OK -> {}
             HttpStatusCode.TooManyRequests -> {
                 logger.warn("[getAlbumIdByTrackId]: Too many requests, waiting 10 seconds")
                 delay(10.seconds)
-                return getAlbumIdByTrackId(trackId)
+                return getAlbumIdByTrackId(trackId, priority)
             }
 
             else -> {
@@ -339,7 +357,10 @@ class TidalService(
         }
     }
 
-    override suspend fun getImageUrlByAlbumId(albumId: String): List<IMetadataService.Image> {
+    override suspend fun getImageUrlByAlbumId(
+        albumId: String,
+        priority: HttpClientPriority
+    ): List<IMetadataService.Image> {
         val url = getUrl("/albums/${albumId}/relationships/coverArt") {
             parameters {
                 append("countryCode", "US")
@@ -348,13 +369,13 @@ class TidalService(
             }
         }
 
-        val response = makeRequest(url)
+        val response = makeRequest(url, priority = priority)
         when (response.status) {
             HttpStatusCode.OK -> {}
             HttpStatusCode.TooManyRequests -> {
                 logger.warn("[getImageUrlByAlbumId]: Too many requests, waiting 10 seconds")
                 delay(10.seconds)
-                return getImageUrlByAlbumId(albumId)
+                return getImageUrlByAlbumId(albumId, priority)
             }
 
             else -> {
@@ -384,7 +405,10 @@ class TidalService(
         }
     }
 
-    override suspend fun getImageUrlsByAlbumIds(albumIds: List<String>): Map<String, List<IMetadataService.Image>> {
+    override suspend fun getImageUrlsByAlbumIds(
+        albumIds: List<String>,
+        priority: HttpClientPriority
+    ): Map<String, List<IMetadataService.Image>> {
         if (albumIds.isEmpty()) return emptyMap()
 
         val url = getUrl("/albums") {
@@ -396,13 +420,13 @@ class TidalService(
             }
         }
 
-        val response = makeRequest(url)
+        val response = makeRequest(url, priority = priority)
         when (response.status) {
             HttpStatusCode.OK -> {}
             HttpStatusCode.TooManyRequests -> {
                 logger.warn("[getImageUrlsByAlbumIds]: Too many requests, waiting 10 seconds")
                 delay(10.seconds)
-                return getImageUrlsByAlbumIds(albumIds)
+                return getImageUrlsByAlbumIds(albumIds, priority)
             }
 
             else -> {
@@ -431,11 +455,17 @@ class TidalService(
         }
     }
 
-    override suspend fun getImageUrlByImageId(imageId: UUID): String? {
+    override suspend fun getImageUrlByImageId(
+        imageId: UUID,
+        priority: HttpClientPriority
+    ): String? {
         throw NotImplementedError("Not implemented for tidal!")
     }
 
-    override suspend fun getTrackById(trackId: String): IMetadataService.Track? {
+    override suspend fun getTrackById(
+        trackId: String,
+        priority: HttpClientPriority
+    ): IMetadataService.Track? {
         val existing = getTrackFromJedis(trackId)
         if (existing != null) return existing
 
@@ -447,13 +477,13 @@ class TidalService(
             }
         }
 
-        val response = makeRequest(url)
+        val response = makeRequest(url, priority = priority)
         when (response.status) {
             HttpStatusCode.OK -> {}
             HttpStatusCode.TooManyRequests -> {
                 logger.warn("[getTrackById]: Too many requests, waiting 10 seconds")
                 delay(10.seconds)
-                return getTrackById(trackId)
+                return getTrackById(trackId, priority)
             }
 
             else -> {
@@ -466,7 +496,7 @@ class TidalService(
             val body =
                 response.body<TracksSingleResourceDataDocument<JsonAttribute, EmptyRelationships>>()
 
-            val imageUrls = body.data.singleImage(::getImageUrlByAlbumId)
+            val imageUrls = body.data.singleImage { getImageUrlByAlbumId(it, priority) }
 
             val artists = body.included?.mapAttributes<ArtistsAttributes>() ?: emptyMap()
 
@@ -488,7 +518,10 @@ class TidalService(
         }
     }
 
-    override suspend fun getTracksByIds(trackIds: List<String>): List<IMetadataService.Track> {
+    override suspend fun getTracksByIds(
+        trackIds: List<String>,
+        priority: HttpClientPriority
+    ): List<IMetadataService.Track> {
         val filteredTrackIds = trackIds.distinct().toMutableList()
         val existing = checkExistingTracksFromCache(filteredTrackIds)
 
@@ -497,7 +530,7 @@ class TidalService(
         if (filteredTrackIds.isEmpty()) return getTracksFromCache(existing)
 
         if (filteredTrackIds.size > 20) {
-            return filteredTrackIds.chunked(20).flatMap { getTracksByIds(it) }
+            return filteredTrackIds.chunked(20).flatMap { getTracksByIds(it, priority) }
         }
 
         val url = getUrl("/tracks") {
@@ -509,13 +542,13 @@ class TidalService(
             }
         }
 
-        val response = makeRequest(url)
+        val response = makeRequest(url, priority = priority)
         when (response.status) {
             HttpStatusCode.OK -> {}
             HttpStatusCode.TooManyRequests -> {
                 logger.warn("[getTracksByIds]: Too many requests, waiting 10 seconds")
                 delay(10.seconds)
-                return getTracksByIds(filteredTrackIds) + getTracksFromCache(existing)
+                return getTracksByIds(filteredTrackIds, priority) + getTracksFromCache(existing)
             }
 
             else -> {
@@ -554,7 +587,10 @@ class TidalService(
         }
     }
 
-    override suspend fun albumExistsById(albumId: String): Boolean {
+    override suspend fun albumExistsById(
+        albumId: String,
+        priority: HttpClientPriority
+    ): Boolean {
         val url = getUrl("/albums/${albumId}") {
             parameters {
                 append("countryCode", "US")
@@ -562,20 +598,23 @@ class TidalService(
             }
         }
 
-        val response = makeRequest(url)
+        val response = makeRequest(url, priority = priority)
         when (response.status) {
             HttpStatusCode.OK -> return true
             HttpStatusCode.TooManyRequests -> {
                 logger.warn("[albumExistsById]: Too many requests, waiting 10 seconds")
                 delay(10.seconds)
-                return albumExistsById(albumId)
+                return albumExistsById(albumId, priority)
             }
 
             else -> return false
         }
     }
 
-    override suspend fun getAlbumsByIds(albumIds: List<String>): List<IMetadataService.Album> {
+    override suspend fun getAlbumsByIds(
+        albumIds: List<String>,
+        priority: HttpClientPriority
+    ): List<IMetadataService.Album> {
         val filteredAlbumIds = albumIds.distinct().toMutableList()
         val existing = checkExistingAlbumsFromCache(filteredAlbumIds)
 
@@ -584,7 +623,7 @@ class TidalService(
         if (filteredAlbumIds.isEmpty()) return getAlbumsFromCache(existing)
 
         if (filteredAlbumIds.size > 20) {
-            return filteredAlbumIds.chunked(20).flatMap { getAlbumsByIds(it) }
+            return filteredAlbumIds.chunked(20).flatMap { getAlbumsByIds(it, priority) }
         }
 
         val url = getUrl("/albums") {
@@ -596,13 +635,13 @@ class TidalService(
             }
         }
 
-        val response = makeRequest(url)
+        val response = makeRequest(url, priority = priority)
         when (response.status) {
             HttpStatusCode.OK -> {}
             HttpStatusCode.TooManyRequests -> {
                 logger.warn("[getAlbumsByIds]: Too many requests, waiting 10 seconds")
                 delay(10.seconds)
-                return getAlbumsByIds(filteredAlbumIds) + getAlbumsFromCache(existing)
+                return getAlbumsByIds(filteredAlbumIds, priority) + getAlbumsFromCache(existing)
             }
 
             else -> {
@@ -640,7 +679,10 @@ class TidalService(
         }
     }
 
-    override suspend fun getArtistsByIds(artistIds: List<String>): List<IMetadataService.Artist> {
+    override suspend fun getArtistsByIds(
+        artistIds: List<String>,
+        priority: HttpClientPriority
+    ): List<IMetadataService.Artist> {
         val filteredArtistIds = artistIds.distinct().toMutableList()
         val existing = checkExistingAlbumsFromCache(filteredArtistIds)
 
@@ -649,7 +691,7 @@ class TidalService(
         if (filteredArtistIds.isEmpty()) return getArtistsFromCache(existing)
 
         if (filteredArtistIds.size > 20) {
-            return filteredArtistIds.chunked(20).flatMap { getArtistsByIds(it) }
+            return filteredArtistIds.chunked(20).flatMap { getArtistsByIds(it, priority) }
         }
 
         val url = getUrl("/artists") {
@@ -661,13 +703,13 @@ class TidalService(
             }
         }
 
-        val response = makeRequest(url)
+        val response = makeRequest(url, priority = priority)
         when (response.status) {
             HttpStatusCode.OK -> {}
             HttpStatusCode.TooManyRequests -> {
                 logger.warn("[getArtistsByIds]: Too many requests, waiting 10 seconds")
                 delay(10.seconds)
-                return getArtistsByIds(filteredArtistIds) + getArtistsFromCache(existing)
+                return getArtistsByIds(filteredArtistIds, priority) + getArtistsFromCache(existing)
             }
 
             else -> {
@@ -700,7 +742,10 @@ class TidalService(
         }
     }
 
-    override suspend fun getArtistTracks(artistId: String): Flow<IMetadataService.Track> = flow {
+    override suspend fun getArtistTracks(
+        artistId: String,
+        priority: HttpClientPriority
+    ): Flow<IMetadataService.Track> = flow {
         var cursor: String? = null
         var depth = 1
 
@@ -714,7 +759,7 @@ class TidalService(
                 }
             }
 
-            val response = makeRequest(url)
+            val response = makeRequest(url, priority = priority)
             when (response.status) {
                 HttpStatusCode.OK -> {}
                 HttpStatusCode.TooManyRequests -> {
@@ -764,7 +809,10 @@ class TidalService(
         } while (cursor != null)
     }
 
-    override suspend fun getAlbumTracks(albumId: String): Flow<IMetadataService.Track> = flow {
+    override suspend fun getAlbumTracks(
+        albumId: String,
+        priority: HttpClientPriority
+    ): Flow<IMetadataService.Track> = flow {
         var cursor: String? = null
         var depth = 1
 
@@ -778,7 +826,7 @@ class TidalService(
                 }
             }
 
-            val response = makeRequest(url)
+            val response = makeRequest(url, priority = priority)
             when (response.status) {
                 HttpStatusCode.OK -> {}
                 HttpStatusCode.TooManyRequests -> {
@@ -834,7 +882,8 @@ class TidalService(
         playlistId: String,
         user: User?,
         cursor: String? = null,
-        depth: Int = 1
+        depth: Int = 1,
+        priority: HttpClientPriority = HttpClientPriority.NORMAL
     ): Flow<IMetadataService.Track> = flow {
         val url = getUrl("/playlists/$playlistId/relationships/items") {
             parameters {
@@ -845,13 +894,13 @@ class TidalService(
             }
         }
 
-        val response = makeRequest(url, user)
+        val response = makeRequest(url, user, priority)
         when (response.status) {
             HttpStatusCode.OK -> {}
             HttpStatusCode.TooManyRequests -> {
                 logger.warn("[getTracksFromPlaylist]: Too many requests, waiting ${10 * depth} seconds")
                 delay(10.seconds * depth)
-                return@flow emitAll(getTracksFromPlaylist(playlistId, user, cursor, depth + 1))
+                return@flow emitAll(getTracksFromPlaylist(playlistId, user, cursor, depth + 1, priority))
             }
 
             else -> return@flow println("error: ${response.status}")
@@ -877,7 +926,7 @@ class TidalService(
             }.asFlow())
             if (nextCursor != null) {
                 logger.info("Fetching tracks for $playlistId with cursor: $nextCursor")
-                emitAll(getTracksFromPlaylist(playlistId, user, nextCursor))
+                emitAll(getTracksFromPlaylist(playlistId, user, nextCursor, priority = priority))
             }
 
             return@flow
@@ -889,11 +938,11 @@ class TidalService(
         }
     }
 
-    @OptIn(ExperimentalCoroutinesApi::class)
     override fun getPlaylistsByIds(
         playlistIds: List<String>,
         includeTracks: Boolean,
-        user: User?
+        user: User?,
+        priority: HttpClientPriority
     ): Flow<IMetadataService.FlowPlaylist> = flow {
         val filteredPlaylistIds = playlistIds.distinct().toMutableList()
         val existing =
@@ -903,7 +952,7 @@ class TidalService(
 
         if (filteredPlaylistIds.size > 20) {
             for (chunk in filteredPlaylistIds.chunked(20)) {
-                emitAll(getPlaylistsByIds(chunk, includeTracks, user))
+                emitAll(getPlaylistsByIds(chunk, includeTracks, user, priority))
             }
             return@flow
         }
@@ -920,7 +969,7 @@ class TidalService(
             }
         }
 
-        val response = makeRequest(url, user)
+        val response = makeRequest(url, user, priority)
         when (response.status) {
             HttpStatusCode.OK -> {}
             HttpStatusCode.TooManyRequests -> {
@@ -930,7 +979,8 @@ class TidalService(
                     getPlaylistsByIds(
                         filteredPlaylistIds,
                         includeTracks,
-                        user
+                        user,
+                        priority
                     )
                 )
             }
@@ -945,7 +995,7 @@ class TidalService(
             val images = body.included?.mapAttributes<ArtworksAttributes>() ?: emptyMap()
             val tracks =
                 if (includeTracks) body.data.map { it.id }
-                    .associateWith { getTracksFromPlaylist(it, user) } else emptyMap()
+                    .associateWith { getTracksFromPlaylist(it, user, priority = priority) } else emptyMap()
 
             return@flow emitAll(body.data.mapNotNull { playlistObj ->
                 playlistObj.attributes?.let { playlist ->
