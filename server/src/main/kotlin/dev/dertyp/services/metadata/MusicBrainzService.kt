@@ -49,7 +49,9 @@ data class MusicBrainzReleaseGroup(
     val primaryType: String? = null,
     @SerialName("first-release-date")
     val firstReleaseDate: String? = null,
-    val relations: List<MusicBrainzRelation>? = null
+    val relations: List<MusicBrainzRelation>? = null,
+    val tags: List<MusicBrainzTag>? = null,
+    val genres: List<MusicBrainzGenre>? = null
 )
 
 @Serializable
@@ -73,7 +75,9 @@ data class MusicBrainzRecording(
     @SerialName("artist-credit")
     val artistCredit: List<MusicBrainzArtistCredit>? = null,
     val releases: List<MusicBrainzRelease>? = null,
-    val length: Long? = null
+    val length: Long? = null,
+    val tags: List<MusicBrainzTag>? = null,
+    val genres: List<MusicBrainzGenre>? = null
 )
 
 @Serializable
@@ -89,7 +93,9 @@ data class MusicBrainzRelease(
     val title: String? = null,
     @SerialName("release-group")
     val releaseGroup: MusicBrainzReleaseGroup? = null,
-    val relations: List<MusicBrainzRelation>? = null
+    val relations: List<MusicBrainzRelation>? = null,
+    val tags: List<MusicBrainzTag>? = null,
+    val genres: List<MusicBrainzGenre>? = null
 )
 
 @Serializable
@@ -161,6 +167,7 @@ class MusicBrainzService : Service() {
                 parameter("query", query)
                 parameter("limit", 1)
                 parameter("fmt", "json")
+                parameter("inc", "tags+genres+releases+release-groups")
                 header("User-Agent", "Synara/${BuildConfig.VERSION} ( https://github.com/dertyp7214/synara )")
             }
 
@@ -189,6 +196,7 @@ class MusicBrainzService : Service() {
                 parameter("query", query)
                 parameter("limit", 1)
                 parameter("fmt", "json")
+                parameter("inc", "tags+genres+release-groups")
                 header("User-Agent", "Synara/${BuildConfig.VERSION} ( https://github.com/dertyp7214/synara )")
             }
 
@@ -215,6 +223,7 @@ class MusicBrainzService : Service() {
                 parameter("query", query)
                 parameter("limit", 1)
                 parameter("fmt", "json")
+                parameter("inc", "tags+genres")
                 header("User-Agent", "Synara/${BuildConfig.VERSION} ( https://github.com/dertyp7214/synara )")
             }
 
@@ -234,6 +243,7 @@ class MusicBrainzService : Service() {
                 parameter("limit", pageSize)
                 parameter("offset", offset)
                 parameter("fmt", "json")
+                parameter("inc", "tags+genres")
                 header("User-Agent", "Synara/${BuildConfig.VERSION} ( https://github.com/dertyp7214/synara )")
             }
         } catch (e: Exception) {
@@ -257,7 +267,7 @@ class MusicBrainzService : Service() {
         return try {
             val response = retryableGet<MusicBrainzReleaseGroupResponse>("$mbBaseUrl/release-group", priority) {
                 parameter("artist", artistMbId)
-                parameter("inc", "url-rels+release-group-rels")
+                parameter("inc", "url-rels+release-group-rels+tags+genres")
                 parameter("limit", 100)
                 parameter("fmt", "json")
                 header("User-Agent", "Synara/${BuildConfig.VERSION} ( https://github.com/dertyp7214/synara )")
@@ -272,6 +282,7 @@ class MusicBrainzService : Service() {
     suspend fun fetchArtistById(mbId: String, priority: HttpClientPriority = HttpClientPriority.NORMAL): MusicBrainzArtist? {
         return try {
             retryableGet<MusicBrainzArtist>("$mbBaseUrl/artist/$mbId", priority) {
+                parameter("inc", "tags+genres")
                 parameter("fmt", "json")
                 header("User-Agent", "Synara/${BuildConfig.VERSION} ( https://github.com/dertyp7214/synara )")
             }
@@ -285,7 +296,7 @@ class MusicBrainzService : Service() {
         return try {
             val response = retryableGet<MusicBrainzReleaseResponse>("$mbBaseUrl/release", priority) {
                 parameter("artist", artistMbId)
-                parameter("inc", "release-groups")
+                parameter("inc", "release-groups+tags+genres")
                 parameter("limit", 100)
                 parameter("fmt", "json")
                 header("User-Agent", "Synara/${BuildConfig.VERSION} ( https://github.com/dertyp7214/synara )")
@@ -301,7 +312,7 @@ class MusicBrainzService : Service() {
         return try {
             val response = retryableGet<MusicBrainzReleaseResponse>("$mbBaseUrl/release", priority) {
                 parameter("release-group", releaseGroupId)
-                parameter("inc", "url-rels")
+                parameter("inc", "url-rels+tags+genres")
                 parameter("limit", 100)
                 parameter("fmt", "json")
                 header("User-Agent", "Synara/${BuildConfig.VERSION} ( https://github.com/dertyp7214/synara )")
@@ -317,7 +328,7 @@ class MusicBrainzService : Service() {
         return try {
             val response = retryableGet<MusicBrainzSearchResponse>("$mbBaseUrl/recording", priority) {
                 parameter("release-group", releaseGroupId)
-                parameter("inc", "releases+release-groups")
+                parameter("inc", "releases+release-groups+tags+genres")
                 parameter("fmt", "json")
                 header("User-Agent", "Synara/${BuildConfig.VERSION} ( https://github.com/dertyp7214/synara )")
             }

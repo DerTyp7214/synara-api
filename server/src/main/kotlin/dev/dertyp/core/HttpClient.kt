@@ -114,6 +114,7 @@ class HttpClientQueueService : Service() {
                 val delayTime = when {
                     host.contains("musicbrainz.org") -> 1.seconds
                     host.contains("api.song.link") -> 6.seconds
+                    host.contains("theaudiodb.com") -> 2.seconds
                     else -> 250.milliseconds
                 }
 

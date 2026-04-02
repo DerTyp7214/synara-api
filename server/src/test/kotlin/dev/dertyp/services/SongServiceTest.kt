@@ -75,7 +75,11 @@ class SongServiceTest : KoinTest {
                 PlaylistSongTable,
                 UserPlaylistSongTable,
                 ImageTable,
-                ArtistSplitAliasTable
+                ArtistSplitAliasTable,
+                GenreTable,
+                ArtistGenreTable,
+                SongGenreTable,
+                AlbumGenreTable
             )
             
             UserTable.insert {
@@ -845,5 +849,44 @@ class SongServiceTest : KoinTest {
         assertEquals(1, songService.allSongIds(true, tags = listOf(SongTag.Q_192)).toList().size)
         assertEquals(1, songService.allSongIds(true, tags = listOf(SongTag.B_16)).toList().size)
         assertEquals(1, songService.allSongIds(true, tags = listOf(SongTag.HAS_MUSICBRAINZ_ID)).toList().size)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `byId should return song with genres`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val artistId = UUID.randomUUID()
+        val albumId = UUID.randomUUID()
+        val songId = UUID.randomUUID()
+        val genreId = UUID.randomUUID()
+
+        transaction(database) {
+            ArtistTable.insert {
+                it[id] = artistId
+                it[name] = "Test Artist"
+            }
+            AlbumTable.insert {
+                it[id] = albumId
+                it[name] = "Test Album"
+            }
+            SongTable.insert {
+                it[id] = songId
+                it[title] = "Test Song"
+                it[SongTable.albumId] = albumId
+            }
+            GenreTable.insert {
+                it[id] = genreId
+                it[name] = "rock"
+            }
+            SongGenreTable.insert {
+                it[SongGenreTable.songId] = songId
+                it[SongGenreTable.genreId] = genreId
+            }
+        }
+
+        val song = rpcService.byId(songId)
+        assertNotNull(song)
+        assertEquals(1, song?.genres?.size)
+        assertEquals("rock", song?.genres?.firstOrNull()?.name)
     }
 }

@@ -64,6 +64,37 @@ abstract class MetadataService(
         priority: HttpClientPriority = HttpClientPriority.NORMAL
     ): List<IMetadataService.Image>
 
+    open suspend fun getArtistByMbId(
+        mbId: String,
+        priority: HttpClientPriority = HttpClientPriority.NORMAL
+    ): IMetadataService.Artist? = null
+
+    open suspend fun getAlbumByMbId(
+        mbId: String,
+        priority: HttpClientPriority = HttpClientPriority.NORMAL
+    ): IMetadataService.Album? = null
+
+    open suspend fun getTrackByMbId(
+        mbId: String,
+        priority: HttpClientPriority = HttpClientPriority.NORMAL
+    ): IMetadataService.Track? = null
+
+    open suspend fun getImageUrlByArtistMbId(
+        mbId: String,
+        priority: HttpClientPriority = HttpClientPriority.NORMAL
+    ): List<IMetadataService.Image> = emptyList()
+
+    open suspend fun getImageUrlByAlbumMbId(
+        mbId: String,
+        priority: HttpClientPriority = HttpClientPriority.NORMAL
+    ): List<IMetadataService.Image> = emptyList()
+
+    open suspend fun getImageUrlByTrackMbId(
+        mbId: String,
+        priority: HttpClientPriority = HttpClientPriority.NORMAL
+    ): List<IMetadataService.Image> = emptyList()
+
+
     abstract suspend fun getImageUrlsByAlbumIds(
         albumIds: List<String>,
         priority: HttpClientPriority = HttpClientPriority.NORMAL
@@ -134,6 +165,7 @@ abstract class MetadataService(
             spotify,
             appleMusic,
             imageCache,
+            theAudioDB,
         }
 
         fun getMetadataService(type: MetadataType, environment: ApplicationEnvironment): MetadataService {
@@ -144,6 +176,7 @@ abstract class MetadataService(
                 MetadataType.spotify -> SpotifyService(environment)
                 MetadataType.appleMusic -> AppleMusicService(environment)
                 MetadataType.imageCache -> ImageCacheService(environment)
+                MetadataType.theAudioDB -> TheAudioDBService(environment)
             }
         }
     }

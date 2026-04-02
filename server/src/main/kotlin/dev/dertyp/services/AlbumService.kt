@@ -58,7 +58,7 @@ class AlbumService : Service() {
     val followedArtistAlias = FollowedArtistTable.alias("followedArtist")
 
     companion object {
-        fun mapAlbum(resultRow: ResultRow): Album {
+        fun mapAlbum(resultRow: ResultRow, genres: List<Genre> = listOf()): Album {
             val id = resultRow[AlbumTable.id].value
 
             return Album(
@@ -69,6 +69,7 @@ class AlbumService : Service() {
                 songCount = resultRow[AlbumTable.songCount],
                 totalDuration = -1,
                 coverId = resultRow[AlbumTable.cover]?.value,
+                genres = genres,
                 originalId = resultRow[AlbumTable.originalId],
                 musicbrainzId = resultRow.getOrNull(AlbumMusicBrainzTable.musicBrainzId),
             )
@@ -112,6 +113,19 @@ class AlbumService : Service() {
                     it[albumId] = id
                     it[musicBrainzId] = recording.id
                     it[lastCheck] = Clock.System.now().toEpochMilliseconds()
+                }
+            }
+
+            val genres = (recording.genres?.map { it.name } ?: emptyList()) + (recording.releaseGroup?.genres?.map { it.name } ?: emptyList())
+            if (genres.isNotEmpty()) {
+                val genreService: GenreService by inject()
+                val genreIds = genreService.getOrCreateGenres(genres)
+                dbQuery {
+                    AlbumGenreTable.deleteWhere { AlbumGenreTable.albumId eq id }
+                    AlbumGenreTable.batchInsert(genreIds) { genreId ->
+                        this[AlbumGenreTable.albumId] = id
+                        this[AlbumGenreTable.genreId] = genreId
+                    }
                 }
             }
         } else {
@@ -298,6 +312,8 @@ class AlbumService : Service() {
             )
             .leftJoin(ArtistAliasTable)
             .leftJoin(AlbumMusicBrainzTable)
+            .leftJoin(AlbumGenreTable)
+            .leftJoin(GenreTable)
             .columnSet()
             .selectAll()
             .query()
@@ -335,12 +351,19 @@ class AlbumService : Service() {
     ): List<Album> {
         val albumMap = mutableMapOf<UUID, Album>()
         val albumArtistsMap = mutableMapOf<UUID, MutableList<Artist>>()
+        val albumGenresMap = mutableMapOf<UUID, MutableList<Genre>>()
 
         for (row in rows) {
             val albumId = row[AlbumTable.id].value
 
             albumMap.getOrPut(albumId) {
-                mapAlbum(row)
+                val genres = rows.filter { it[AlbumTable.id].value == albumId }
+                    .mapNotNull { r ->
+                        val gid = r.getOrNull(GenreTable.id)?.value ?: return@mapNotNull null
+                        val gname = r.getOrNull(GenreTable.name) ?: return@mapNotNull null
+                        Genre(gid, gname)
+                    }.distinctBy { it.id }
+                mapAlbum(row, genres)
             }
 
             if (row.getOrNull(ArtistTable.id) != null) {
@@ -349,13 +372,22 @@ class AlbumService : Service() {
                     albumArtistsMap.getOrPut(albumId) { mutableListOf() }.add(artist)
                 }
             }
+
+            if (row.getOrNull(GenreTable.id) != null) {
+                val genre = Genre(row[GenreTable.id].value, row[GenreTable.name])
+                if (genre !in albumGenresMap.getOrDefault(albumId, emptyList())) {
+                    albumGenresMap.getOrPut(albumId) { mutableListOf() }.add(genre)
+                }
+            }
         }
 
         return albumMap.values.map { album ->
             val albumArtists = albumArtistsMap[album.id]?.distinctBy { it.id } ?: listOf()
+            val albumGenres = albumGenresMap[album.id]?.distinctBy { it.id } ?: listOf()
 
             album.copy(
                 artists = albumArtists,
+                genres = albumGenres,
                 totalDuration = albumStats[album.id]?.first ?: -1L,
                 totalSize = albumStats[album.id]?.second ?: -1L
             )

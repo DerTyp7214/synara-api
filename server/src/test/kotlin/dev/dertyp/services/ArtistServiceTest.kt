@@ -2,6 +2,7 @@ package dev.dertyp.services
 
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
+import dev.dertyp.data.MergeArtists
 import dev.dertyp.db.*
 import dev.dertyp.services.metadata.MusicBrainzService
 import io.mockk.mockk
@@ -48,7 +49,11 @@ class ArtistServiceTest : KoinTest {
                 SongTable,
                 SongArtistTable,
                 AlbumTable,
-                AlbumArtistTable
+                AlbumArtistTable,
+                GenreTable,
+                ArtistGenreTable,
+                SongGenreTable,
+                AlbumGenreTable
             )
         }
         
@@ -349,7 +354,7 @@ class ArtistServiceTest : KoinTest {
             }
         }
 
-        val mergeArtists = dev.dertyp.data.MergeArtists(
+        val mergeArtists = MergeArtists(
             name = "Merged Artist",
             artistIds = listOf(artistId1, artistId2),
             image = null
@@ -556,5 +561,82 @@ class ArtistServiceTest : KoinTest {
         val artists = service.allArtists(0, 10).data
         assertEquals(1, artists.size)
         assertEquals("Referenced", artists[0].name)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `byId should return artist with genres`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val id = UUID.randomUUID()
+        val genreId = UUID.randomUUID()
+        transaction(database) {
+            ArtistTable.insert {
+                it[ArtistTable.id] = id
+                it[name] = "Artist with Genre"
+            }
+            GenreTable.insert {
+                it[GenreTable.id] = genreId
+                it[name] = "jazz"
+            }
+            ArtistGenreTable.insert {
+                it[ArtistGenreTable.artistId] = id
+                it[ArtistGenreTable.genreId] = genreId
+            }
+        }
+
+        val artist = service.byId(id)
+        assertNotNull(artist)
+        assertEquals(1, artist?.genres?.size)
+        assertEquals("jazz", artist?.genres?.firstOrNull()?.name)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `mergeArtists should combine genres`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val artistId1 = UUID.randomUUID()
+        val artistId2 = UUID.randomUUID()
+        val genreId1 = UUID.randomUUID()
+        val genreId2 = UUID.randomUUID()
+
+        transaction(database) {
+            ArtistTable.insert {
+                it[id] = artistId1
+                it[name] = "Artist 1"
+            }
+            ArtistTable.insert {
+                it[id] = artistId2
+                it[name] = "Artist 2"
+            }
+            GenreTable.insert {
+                it[id] = genreId1
+                it[name] = "rock"
+            }
+            GenreTable.insert {
+                it[id] = genreId2
+                it[name] = "pop"
+            }
+            ArtistGenreTable.insert {
+                it[artistId] = artistId1
+                it[genreId] = genreId1
+            }
+            ArtistGenreTable.insert {
+                it[artistId] = artistId2
+                it[genreId] = genreId2
+            }
+        }
+
+        val mergeArtists = MergeArtists(
+            name = "Merged Artist",
+            artistIds = listOf(artistId1, artistId2),
+            image = null
+        )
+
+        val merged = service.mergeArtists(mergeArtists)
+        assertNotNull(merged)
+        assertEquals(2, merged?.genres?.size)
+        val genreNames = merged?.genres?.map { it.name }
+        assertTrue(genreNames?.contains("rock") == true)
+        assertTrue(genreNames?.contains("pop") == true)
     }
 }

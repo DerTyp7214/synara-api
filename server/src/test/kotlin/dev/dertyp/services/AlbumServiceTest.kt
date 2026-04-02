@@ -52,7 +52,11 @@ class AlbumServiceTest : KoinTest {
                 SongTable,
                 SongArtistTable,
                 SongMusicBrainzTable,
-                ArtistSplitAliasTable
+                ArtistSplitAliasTable,
+                GenreTable,
+                ArtistGenreTable,
+                SongGenreTable,
+                AlbumGenreTable
             )
         }
         
@@ -510,5 +514,33 @@ class AlbumServiceTest : KoinTest {
         val albums = service.allAlbums(0, 10).data
         assertEquals(1, albums.size)
         assertEquals("Non-Empty", albums[0].name)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `byId should return album with genres`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val id = UUID.randomUUID()
+        val genreId = UUID.randomUUID()
+        transaction(database) {
+            AlbumTable.insert {
+                it[AlbumTable.id] = id
+                it[name] = "Album with Genre"
+                it[songCount] = 1
+            }
+            GenreTable.insert {
+                it[GenreTable.id] = genreId
+                it[name] = "pop"
+            }
+            AlbumGenreTable.insert {
+                it[AlbumGenreTable.albumId] = id
+                it[AlbumGenreTable.genreId] = genreId
+            }
+        }
+
+        val album = service.byId(id)
+        assertNotNull(album)
+        assertEquals(1, album?.genres?.size)
+        assertEquals("pop", album?.genres?.firstOrNull()?.name)
     }
 }

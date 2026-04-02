@@ -17,6 +17,7 @@ import dev.dertyp.server.BuildConfig
 import dev.dertyp.services.*
 import dev.dertyp.services.metadata.MetadataService
 import dev.dertyp.services.metadata.MusicBrainzService
+import dev.dertyp.services.metadata.TheAudioDBService
 import dev.dertyp.services.schedule.*
 import dev.dertyp.services.tdn.DownloadService
 import dev.dertyp.services.tdn.TdnService
@@ -92,6 +93,7 @@ fun Application.module() {
             singleOf(::ImageService)
             singleOf(::AlbumService)
             singleOf(::LyricsSearch)
+            singleOf(::GenreService)
             singleOf(::ArtistService)
             singleOf(::StorageService)
             singleOf(::FavSyncService)
@@ -116,6 +118,7 @@ fun Application.module() {
             singleOf(::MirrorService)
             singleOf(::RemoteMirrorService)
             singleOf(::MusicBrainzService)
+            singleOf(::TheAudioDBService)
             singleOf(::MusicBrainzWorker)
             singleOf(::RecentReleaseWorker)
             singleOf(::ReleaseService)
@@ -233,32 +236,6 @@ fun Application.module() {
 
     scheduleService.triggerTask(mergeDuplicates.id)
 
-    scheduleService.schedule(
-        ScheduledTask(
-            name = "Fetch Artist Images (Tidal)",
-            trigger = CronPresets.dailyAt(4, 0),
-            task = {
-                logTask("Fetch Artist Images (Tidal)") {
-                    metadataFetchingService.fetchArtistImages(MetadataService.Companion.MetadataType.tidal) { p, l ->
-                        updateProgress(p, l)
-                    }
-                }
-            }
-        )
-    )
-
-    scheduleService.schedule(
-        ScheduledTask(
-            name = "Auto Transcoding",
-            trigger = CronPresets.dailyAt(3, 0),
-            task = {
-                logTask("Auto Transcoding") {
-                    autoTranscodeWorker.run { p, l -> updateProgress(p, l) }
-                }
-            }
-        )
-    )
-
     val musicBrainzTask = scheduleService.schedule(
         ScheduledTask(
             name = "MusicBrainz Worker",
@@ -272,6 +249,47 @@ fun Application.module() {
     )
 
     scheduleService.triggerTask(musicBrainzTask.id)
+
+    val fetchArtistImagesTidal = scheduleService.schedule(
+        ScheduledTask(
+            name = "Fetch Artist Images (Tidal)",
+            trigger = TaskCompletionTrigger(musicBrainzTask.id),
+            task = {
+                logTask("Fetch Artist Images (Tidal)") {
+                    metadataFetchingService.fetchArtistImages(MetadataService.Companion.MetadataType.tidal) { p, l ->
+                        updateProgress(p, l)
+                    }
+                }
+            }
+        )
+    )
+
+    scheduleService.schedule(
+        ScheduledTask(
+            name = "Fetch Metadata (TheAudioDB)",
+            trigger = TaskCompletionTrigger(fetchArtistImagesTidal.id),
+            task = {
+                logTask("Fetch Metadata (TheAudioDB)") {
+                    metadataFetchingService.fetchMetadata(MetadataService.Companion.MetadataType.theAudioDB) { p, l ->
+                        updateProgress(p, l)
+                    }
+                }
+            }
+        )
+    )
+
+
+    scheduleService.schedule(
+        ScheduledTask(
+            name = "Auto Transcoding",
+            trigger = CronPresets.dailyAt(3, 0),
+            task = {
+                logTask("Auto Transcoding") {
+                    autoTranscodeWorker.run { p, l -> updateProgress(p, l) }
+                }
+            }
+        )
+    )
 
     val recentReleaseTask = scheduleService.schedule(
         ScheduledTask(

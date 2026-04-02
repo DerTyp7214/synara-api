@@ -170,7 +170,7 @@ class SongService : Service() {
     val albumFollowedArtistAlias = FollowedArtistTable.alias("albumFollowedArtist")
 
     companion object {
-        fun mapSong(resultRow: ResultRow): Song {
+        fun mapSong(resultRow: ResultRow, genres: List<Genre> = listOf()): Song {
             val id = resultRow[SongTable.id].value
 
             return Song(
@@ -193,10 +193,11 @@ class SongService : Service() {
                 fileSize = resultRow[SongTable.fileSize],
                 coverId = resultRow[SongTable.cover]?.value,
                 musicBrainzId = resultRow.getOrNull(SongMusicBrainzTable.musicBrainzId),
+                genres = genres,
             )
         }
 
-        fun mapUserSong(resultRow: ResultRow): UserSong {
+        fun mapUserSong(resultRow: ResultRow, genres: List<Genre> = listOf()): UserSong {
             val id = resultRow[SongTable.id].value
 
             return UserSong(
@@ -219,6 +220,7 @@ class SongService : Service() {
                 fileSize = resultRow[SongTable.fileSize],
                 coverId = resultRow[SongTable.cover]?.value,
                 musicBrainzId = resultRow.getOrNull(SongMusicBrainzTable.musicBrainzId),
+                genres = genres,
                 isFavourite = resultRow.getOrNull(UserSongTable.isFavourite) ?: false,
                 userSongCreatedAt = resultRow.getOrNull(UserSongTable.createdAt).date,
                 userSongUpdatedAt = resultRow.getOrNull(UserSongTable.updatedAt).date,
@@ -226,8 +228,8 @@ class SongService : Service() {
         }
     }
 
-    inline fun <reified T : BaseSong> map(resultRow: ResultRow): BaseSong =
-        if (T::class == UserSong::class) mapUserSong(resultRow) else mapSong(resultRow)
+    inline fun <reified T : BaseSong> map(resultRow: ResultRow, genres: List<Genre> = listOf()): BaseSong =
+        if (T::class == UserSong::class) mapUserSong(resultRow, genres) else mapSong(resultRow, genres)
 
     private fun ColumnSet.userSong(userId: UUID?) = if (userId != null) {
         leftJoin(
@@ -371,6 +373,21 @@ class SongService : Service() {
         if (song.musicBrainzId != null) return song
 
         val recording = musicBrainzService.searchMb(song)
+
+        if (recording != null) {
+            val genres = (recording.genres?.map { it.name } ?: emptyList()) + (recording.releases?.flatMap { it.genres?.map { g -> g.name } ?: emptyList() } ?: emptyList()) + (recording.releases?.flatMap { it.releaseGroup?.genres?.map { g -> g.name } ?: emptyList() } ?: emptyList())
+            if (genres.isNotEmpty()) {
+                val genreService: GenreService by inject()
+                val genreIds = genreService.getOrCreateGenres(genres)
+                dbQuery {
+                    SongGenreTable.deleteWhere { SongGenreTable.songId eq id }
+                    SongGenreTable.batchInsert(genreIds) { genreId ->
+                        this[SongGenreTable.songId] = id
+                        this[SongGenreTable.genreId] = genreId
+                    }
+                }
+            }
+        }
 
         return setMusicBrainzId(id, recording?.id, userId)
     }
@@ -924,6 +941,8 @@ class SongService : Service() {
                 onColumn = { albumArtistAlias[ArtistTable.id] },
                 otherColumn = { albumArtistMemberAlias[ArtistTable.groupId] }
             )
+            .leftJoin(SongGenreTable)
+            .leftJoin(GenreTable)
             .leftJoin(SongMusicBrainzTable)
             .userSong(userId)
             .followedArtist(userId)
@@ -1003,6 +1022,7 @@ class SongService : Service() {
         val songMap = mutableMapOf<UUID, BaseSong>()
         val songArtistsMap = mutableMapOf<UUID, MutableList<Artist>>()
         val albumArtistsMap = mutableMapOf<UUID, MutableList<Artist>>()
+        val songGenresMap = mutableMapOf<UUID, MutableList<Genre>>()
 
         for (row in rows) {
             val songId = row[SongTable.id].value
@@ -1010,7 +1030,13 @@ class SongService : Service() {
 
             songMap.getOrPut(songId) {
                 val album = mapAlbum(row)
-                val song = map<T>(row)
+                val genres = rows.filter { it[SongTable.id].value == songId }
+                    .mapNotNull { r ->
+                        val gid = r.getOrNull(GenreTable.id)?.value ?: return@mapNotNull null
+                        val gname = r.getOrNull(GenreTable.name) ?: return@mapNotNull null
+                        Genre(gid, gname)
+                    }.distinctBy { it.id }
+                val song = map<T>(row, genres)
 
                 @Suppress("UNCHECKED_CAST")
                 when (song) {
@@ -1038,11 +1064,19 @@ class SongService : Service() {
                     albumArtistsMap.getOrPut(albumId) { mutableListOf() }.add(artist)
                 }
             }
+
+            if (row.getOrNull(GenreTable.id) != null) {
+                val genre = Genre(row[GenreTable.id].value, row[GenreTable.name])
+                if (genre !in songGenresMap.getOrDefault(songId, emptyList())) {
+                    songGenresMap.getOrPut(songId) { mutableListOf() }.add(genre)
+                }
+            }
         }
 
         return songMap.values.map { song ->
             val albumArtists = albumArtistsMap[song.album?.id] ?: listOf()
             val songArtists = songArtistsMap[song.id]?.distinctBy { it.id } ?: listOf()
+            val songGenres = songGenresMap[song.id]?.distinctBy { it.id } ?: listOf()
 
             val albumWithArtists = song.album?.copy(
                 artists = albumArtists,
@@ -1050,9 +1084,10 @@ class SongService : Service() {
                 totalSize = albumStats[song.album!!.id]?.second ?: -1L
             )
 
+            @Suppress("UNCHECKED_CAST")
             when (song) {
-                is Song -> song.copy(album = albumWithArtists, artists = songArtists)
-                is UserSong -> song.copy(album = albumWithArtists, artists = songArtists)
+                is Song -> song.copy(album = albumWithArtists, artists = songArtists, genres = songGenres) as T
+                is UserSong -> song.copy(album = albumWithArtists, artists = songArtists, genres = songGenres) as T
                 else -> throw Exception("Unknown song type: $song")
             }
         }.groupBy {
@@ -1065,9 +1100,8 @@ class SongService : Service() {
                 it.album?.name
             )
         }.mapNotNull { (_, songList) ->
-            @Suppress("UNCHECKED_CAST")
-            if (explicit) songList.find { it.explicit } as? T ?: songList.first() as T
-            else songList.find { !it.explicit } as T
+            if (explicit) songList.find { it.explicit } ?: songList.first()
+            else songList.find { !it.explicit }
         }
     }
 

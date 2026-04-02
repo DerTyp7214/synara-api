@@ -62,6 +62,7 @@ class ArtistService : Service() {
             resultRow: ResultRow,
             table: ColumnSet = ArtistTable,
             musicbrainzId: String? = null,
+            genres: List<Genre> = listOf(),
             followedTable: ColumnSet = FollowedArtistTable
         ): Artist {
             val id: UUID
@@ -96,6 +97,7 @@ class ArtistService : Service() {
                 isGroup = isGroup,
                 artists = listOf(),
                 about = about,
+                genres = genres,
                 imageId = imageId,
                 musicbrainzId = musicbrainzId ?: if (table == ArtistTable) resultRow.getOrNull(
                     ArtistMusicBrainzTable.musicBrainzId
@@ -129,6 +131,19 @@ class ArtistService : Service() {
                     it[artistId] = id
                     it[musicBrainzId] = recording.id
                     it[lastCheck] = Clock.System.now().toEpochMilliseconds()
+                }
+            }
+
+            val genres = recording.genres?.map { it.name } ?: emptyList()
+            if (genres.isNotEmpty()) {
+                val genreService: GenreService by inject()
+                val genreIds = genreService.getOrCreateGenres(genres)
+                dbQuery {
+                    ArtistGenreTable.deleteWhere { ArtistGenreTable.artistId eq id }
+                    ArtistGenreTable.batchInsert(genreIds) { genreId ->
+                        this[ArtistGenreTable.artistId] = id
+                        this[ArtistGenreTable.genreId] = genreId
+                    }
                 }
             }
         } else {
@@ -304,12 +319,26 @@ class ArtistService : Service() {
             }
         }
 
+        val existingGenreIds = ArtistGenreTable
+            .select(ArtistGenreTable.genreId)
+            .where { ArtistGenreTable.artistId inList currentArtistIds }
+            .map { it[ArtistGenreTable.genreId].value }
+            .distinct()
+
+        if (existingGenreIds.isNotEmpty()) {
+            ArtistGenreTable.batchInsert(existingGenreIds) { genreId ->
+                this[ArtistGenreTable.artistId] = newArtist
+                this[ArtistGenreTable.genreId] = genreId
+            }
+        }
+
         SongArtistTable.deleteWhere { SongArtistTable.artistId inList currentArtistIds }
         AlbumArtistTable.deleteWhere { AlbumArtistTable.artistId inList currentArtistIds }
 
         ArtistTable.deleteWhere { ArtistTable.id inList currentArtistIds }
         ArtistAliasTable.deleteWhere { ArtistAliasTable.artistId inList currentArtistIds }
         ArtistMusicBrainzTable.deleteWhere { ArtistMusicBrainzTable.artistId inList currentArtistIds }
+        ArtistGenreTable.deleteWhere { ArtistGenreTable.artistId inList currentArtistIds }
 
         logger.info("Merged artists $mergeArtists into $newArtist")
 
@@ -489,6 +518,8 @@ class ArtistService : Service() {
             .followedArtist(userId)
             .leftJoin(ArtistAliasTable)
             .leftJoin(ArtistMusicBrainzTable)
+            .leftJoin(ArtistGenreTable)
+            .leftJoin(GenreTable)
             .columnSet()
             .selectAll()
             .query()
@@ -500,8 +531,7 @@ class ArtistService : Service() {
             .distinct()
 
         if (groupIds.isEmpty()) {
-            return@dbQuery mainArtistRows
-                .map { mapArtist(it, followedTable = followedArtistAlias) }
+            return@dbQuery mapEagerly(mainArtistRows, emptyList(), userId)
                 .distinctBy { it.id }
                 .let {
                     PaginatedResponse(
@@ -517,6 +547,8 @@ class ArtistService : Service() {
         val memberDataRows = ArtistTable
             .followedArtist(userId)
             .leftJoin(ArtistMusicBrainzTable)
+            .leftJoin(ArtistGenreTable)
+            .leftJoin(GenreTable)
             .selectAll()
             .where { ArtistTable.groupId inList groupIds }
             .toList()
@@ -534,16 +566,29 @@ class ArtistService : Service() {
 
     private fun mapEagerly(mainRows: List<ResultRow>, memberRows: List<ResultRow>, userId: UUID? = null): List<Artist> {
         val followedTable = if (userId != null) followedArtistAlias else FollowedArtistTable
+        val genresByArtistId = (mainRows + memberRows)
+            .mapNotNull { row ->
+                val artistId = row.getOrNull(ArtistTable.id)?.value ?: return@mapNotNull null
+                val genreId = row.getOrNull(GenreTable.id)?.value ?: return@mapNotNull null
+                val genreName = row.getOrNull(GenreTable.name) ?: return@mapNotNull null
+                artistId to Genre(genreId, genreName)
+            }
+            .distinct()
+            .groupBy({ it.first }, { it.second })
+
         val membersByGroupId = memberRows
             .mapNotNull { row ->
                 val groupId = row[ArtistTable.groupId]?.value ?: return@mapNotNull null
-                val artist = mapArtist(row, followedTable = followedTable)
+                val artistId = row[ArtistTable.id].value
+                val artist = mapArtist(row, genres = genresByArtistId[artistId] ?: listOf(), followedTable = followedTable)
                 groupId to artist
             }
             .groupBy({ it.first }, { it.second })
 
         return mainRows.map { mainRow ->
-            val artist = mapArtist(mainRow, followedTable = followedTable)
+            val artistId = mainRow[ArtistTable.id].value
+            val genres = genresByArtistId[artistId] ?: listOf()
+            val artist = mapArtist(mainRow, genres = genres, followedTable = followedTable)
 
             return@map if (artist.isGroup) {
                 val memberArtists = membersByGroupId[artist.id] ?: listOf()
