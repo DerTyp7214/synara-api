@@ -7,16 +7,14 @@ import dev.dertyp.data.InsertableImage
 import dev.dertyp.db.*
 import dev.dertyp.dbQuery
 import dev.dertyp.services.metadata.MetadataService
+import dev.dertyp.services.metadata.MusicBrainzService
 import io.ktor.server.application.ApplicationEnvironment
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
-import org.jetbrains.exposed.v1.core.and
+import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.core.dao.id.EntityID
-import org.jetbrains.exposed.v1.core.eq
-import org.jetbrains.exposed.v1.core.less
-import org.jetbrains.exposed.v1.core.or
 import org.jetbrains.exposed.v1.jdbc.batchInsert
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.select
@@ -31,10 +29,270 @@ import kotlin.time.Duration.Companion.days
 class MetadataFetchingService(private val environment: ApplicationEnvironment) : Service() {
     private val imageService by inject<ImageService>()
     private val genreService by inject<GenreService>()
+    private val musicBrainzService by inject<MusicBrainzService>()
 
     data class ArtistToFetch(val id: UUID, val name: String, val mbid: String?)
     data class AlbumToFetch(val id: UUID, val name: String, val mbid: String?)
     data class TrackToFetch(val id: UUID, val name: String, val mbid: String?)
+
+    suspend fun fetchAllGenresWithMbId(
+        onProgress: suspend (Double, String) -> Unit = { _, _ -> }
+    ): Map<String, Int> {
+        val results = mutableMapOf<String, Int>()
+        try {
+            results.putAll(fetchArtistGenresWithMbId { p, m ->
+                onProgress(p / 3.0, m)
+            })
+            results.putAll(fetchAlbumGenresWithMbId { p, m ->
+                onProgress(33.33 + (p / 3.0), m)
+            })
+            results.putAll(fetchSongGenresWithMbId { p, m ->
+                onProgress(66.66 + (p / 3.0), m)
+            })
+            onProgress(100.0, "All genres fetched.")
+        } finally {
+            MetadataService.isFetching.store(false)
+        }
+        return results
+    }
+
+    private suspend fun fetchArtistGenresWithMbId(
+        onProgress: suspend (Double, String) -> Unit = { _, _ -> }
+    ): Map<String, Int> {
+        val tdbService = MetadataService.getMetadataService(MetadataService.Companion.MetadataType.theAudioDB, environment)
+        var foundCount = 0
+        var totalChecked = 0
+        val thirtyDaysAgo = Clock.System.now() - 30.days
+        val artists = dbQuery {
+            ArtistTable
+                .leftJoin(ArtistMusicBrainzTable)
+                .select(ArtistTable.id, ArtistTable.name, ArtistMusicBrainzTable.musicBrainzId)
+                .where { (ArtistMusicBrainzTable.musicBrainzId.isNotNull()) and (ArtistTable.lastMetadataCheck eq 0L or (ArtistTable.lastMetadataCheck less thirtyDaysAgo.toEpochMilliseconds())) }
+                .map { ArtistToFetch(it[ArtistTable.id].value, it[ArtistTable.name], it.getOrNull(ArtistMusicBrainzTable.musicBrainzId)) }
+        }
+
+        logger.info("Starting artist genre fetch for ${artists.size} artists")
+        onProgress(0.0, "Starting fetch for ${artists.size} artists")
+
+        val artistChannel = Channel<ArtistToFetch>(Channel.UNLIMITED)
+        val totalToFetch = artists.size
+
+        coroutineScope {
+            repeat(1) {
+                launch {
+                    for (artistData in artistChannel) {
+                        val id = artistData.id
+                        val name = artistData.name
+                        val mbid = artistData.mbid ?: continue
+
+                        totalChecked++
+                        val progress = (totalChecked.toDouble() / totalToFetch) * 100.0
+                        onProgress(progress, "Fetching genres for artist: $name")
+
+                        val genres = mutableSetOf<String>()
+
+                        try {
+                            tdbService.getArtistByMbId(mbid)?.let {
+                                genres.addAll(it.genres)
+                                genres.addAll(it.styles)
+                            }
+                        } catch (e: Exception) {
+                            logger.error("Error fetching artist from TheAudioDB: $mbid", e)
+                        }
+
+                        try {
+                            musicBrainzService.fetchArtistById(mbid)?.let {
+                                it.genres?.map { g -> g.name }?.let { g -> genres.addAll(g) }
+                            }
+                        } catch (e: Exception) {
+                            logger.error("Error fetching artist from MusicBrainz: $mbid", e)
+                        }
+
+                        if (genres.isNotEmpty()) {
+                            val genreIds = genreService.getOrCreateGenres(genres.toList())
+                            dbQuery {
+                                ArtistGenreTable.deleteWhere { ArtistGenreTable.artistId eq id }
+                                ArtistGenreTable.batchInsert(genreIds) { genreId ->
+                                    this[ArtistGenreTable.artistId] = id
+                                    this[ArtistGenreTable.genreId] = genreId
+                                }
+                            }
+                            foundCount++
+                        }
+
+                        updateLastMetadataCheckArtist(id)
+                    }
+                }
+            }
+
+            for (artist in artists) {
+                artistChannel.send(artist)
+                ensureActive()
+            }
+            artistChannel.close()
+        }
+
+        return mapOf("artistsChecked" to totalChecked, "artistsFound" to foundCount)
+    }
+
+    private suspend fun fetchAlbumGenresWithMbId(
+        onProgress: suspend (Double, String) -> Unit = { _, _ -> }
+    ): Map<String, Int> {
+        val tdbService = MetadataService.getMetadataService(MetadataService.Companion.MetadataType.theAudioDB, environment)
+        var foundCount = 0
+        var totalChecked = 0
+        val thirtyDaysAgo = Clock.System.now() - 30.days
+        val albums = dbQuery {
+            AlbumTable
+                .leftJoin(AlbumMusicBrainzTable)
+                .select(AlbumTable.id, AlbumTable.name, AlbumMusicBrainzTable.musicBrainzId)
+                .where { (AlbumMusicBrainzTable.musicBrainzId.isNotNull()) and (AlbumTable.lastMetadataCheck eq 0L or (AlbumTable.lastMetadataCheck less thirtyDaysAgo.toEpochMilliseconds())) }
+                .map { AlbumToFetch(it[AlbumTable.id].value, it[AlbumTable.name], it.getOrNull(AlbumMusicBrainzTable.musicBrainzId)) }
+        }
+
+        logger.info("Starting album genre fetch for ${albums.size} albums")
+        onProgress(0.0, "Starting fetch for ${albums.size} albums")
+
+        val albumChannel = Channel<AlbumToFetch>(Channel.UNLIMITED)
+        val totalToFetch = albums.size
+
+        coroutineScope {
+            repeat(1) {
+                launch {
+                    for (albumData in albumChannel) {
+                        val id = albumData.id
+                        val name = albumData.name
+                        val mbid = albumData.mbid ?: continue
+
+                        totalChecked++
+                        val progress = (totalChecked.toDouble() / totalToFetch) * 100.0
+                        onProgress(progress, "Fetching genres for album: $name")
+
+                        val genres = mutableSetOf<String>()
+
+                        try {
+                            tdbService.getAlbumByMbId(mbid)?.let {
+                                genres.addAll(it.genres)
+                            }
+                        } catch (e: Exception) {
+                            logger.error("Error fetching album from TheAudioDB: $mbid", e)
+                        }
+
+
+                        if (genres.isNotEmpty()) {
+                            val genreIds = genreService.getOrCreateGenres(genres.toList())
+                            dbQuery {
+                                AlbumGenreTable.deleteWhere { AlbumGenreTable.albumId eq id }
+                                AlbumGenreTable.batchInsert(genreIds) { genreId ->
+                                    this[AlbumGenreTable.albumId] = id
+                                    this[AlbumGenreTable.genreId] = genreId
+                                }
+                            }
+                            foundCount++
+                        }
+
+                        updateLastMetadataCheckAlbum(id)
+                    }
+                }
+            }
+
+            for (album in albums) {
+                albumChannel.send(album)
+                ensureActive()
+            }
+            albumChannel.close()
+        }
+
+        return mapOf("albumsChecked" to totalChecked, "albumsFound" to foundCount)
+    }
+
+    private suspend fun fetchSongGenresWithMbId(
+        onProgress: suspend (Double, String) -> Unit = { _, _ -> }
+    ): Map<String, Int> {
+        val tdbService = MetadataService.getMetadataService(MetadataService.Companion.MetadataType.theAudioDB, environment)
+        var foundCount = 0
+        var totalChecked = 0
+        val thirtyDaysAgo = Clock.System.now() - 30.days
+        val songs = dbQuery {
+            SongTable
+                .leftJoin(SongMusicBrainzTable)
+                .select(SongTable.id, SongTable.title, SongMusicBrainzTable.musicBrainzId)
+                .where { (SongMusicBrainzTable.musicBrainzId.isNotNull()) and (SongTable.lastMetadataCheck eq 0L or (SongTable.lastMetadataCheck less thirtyDaysAgo.toEpochMilliseconds())) }
+                .map { TrackToFetch(it[SongTable.id].value, it[SongTable.title], it.getOrNull(SongMusicBrainzTable.musicBrainzId)) }
+        }
+
+        logger.info("Starting song genre fetch for ${songs.size} songs")
+        onProgress(0.0, "Starting fetch for ${songs.size} songs")
+
+        val songChannel = Channel<TrackToFetch>(Channel.UNLIMITED)
+        val totalToFetch = songs.size
+
+        coroutineScope {
+            repeat(1) {
+                launch {
+                    for (songData in songChannel) {
+                        val id = songData.id
+                        val name = songData.name
+                        val mbid = songData.mbid ?: continue
+
+                        totalChecked++
+                        val progress = (totalChecked.toDouble() / totalToFetch) * 100.0
+                        onProgress(progress, "Fetching genres for song: $name")
+
+                        val genres = mutableSetOf<String>()
+
+                        try {
+                            tdbService.getTrackByMbId(mbid)?.let {
+                                genres.addAll(it.genres)
+                            }
+                        } catch (e: Exception) {
+                            logger.error("Error fetching song from TheAudioDB: $mbid", e)
+                        }
+
+                        if (genres.isNotEmpty()) {
+                            val genreIds = genreService.getOrCreateGenres(genres.toList())
+                            dbQuery {
+                                SongGenreTable.deleteWhere { SongGenreTable.songId eq id }
+                                SongGenreTable.batchInsert(genreIds) { genreId ->
+                                    this[SongGenreTable.songId] = id
+                                    this[SongGenreTable.genreId] = genreId
+                                }
+                            }
+                            foundCount++
+                        }
+
+                        updateLastMetadataCheckSong(id)
+                    }
+                }
+            }
+
+            for (song in songs) {
+                songChannel.send(song)
+                ensureActive()
+            }
+            songChannel.close()
+        }
+
+        return mapOf("songsChecked" to totalChecked, "songsFound" to foundCount)
+    }
+
+    private suspend fun updateLastMetadataCheckArtist(id: UUID) = dbQuery {
+        ArtistTable.update({ ArtistTable.id eq id }) {
+            it[ArtistTable.lastMetadataCheck] = System.currentTimeMillis()
+        }
+    }
+
+    private suspend fun updateLastMetadataCheckAlbum(id: UUID) = dbQuery {
+        AlbumTable.update({ AlbumTable.id eq id }) {
+            it[AlbumTable.lastMetadataCheck] = System.currentTimeMillis()
+        }
+    }
+
+    private suspend fun updateLastMetadataCheckSong(id: UUID) = dbQuery {
+        SongTable.update({ SongTable.id eq id }) {
+            it[SongTable.lastMetadataCheck] = System.currentTimeMillis()
+        }
+    }
 
     suspend fun fetchMetadata(
         metadataProvider: MetadataService.Companion.MetadataType,
@@ -205,7 +463,7 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
             ArtistTable
                 .leftJoin(ArtistMusicBrainzTable)
                 .select(ArtistTable.id, ArtistTable.name, ArtistMusicBrainzTable.musicBrainzId)
-                .where { (ArtistTable.image eq null or ArtistTable.about.eq("")) and (ArtistTable.lastImageCheck eq 0L or (ArtistTable.lastImageCheck less thirtyDaysAgo.toEpochMilliseconds())) }
+                .where { (ArtistTable.image eq null or ArtistTable.about.eq("")) and (ArtistTable.lastMetadataCheck eq 0L or (ArtistTable.lastMetadataCheck less thirtyDaysAgo.toEpochMilliseconds())) }
                 .map { ArtistToFetch(it[ArtistTable.id].value, it[ArtistTable.name], it.getOrNull(ArtistMusicBrainzTable.musicBrainzId)) }
         }
 
@@ -250,11 +508,10 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
 
                         if (artist == null) {
                             onProgress(progress, "No metadata for \"$name\" found.")
-                            updateLastCheck(id)
+                            updateLastMetadataCheckArtist(id)
                             continue
                         }
 
-                        // Save Genres/Styles
                         val genresToStore = (artist.genres + artist.styles).distinct()
                         if (genresToStore.isNotEmpty()) {
                             val genreIds = genreService.getOrCreateGenres(genresToStore)
@@ -267,7 +524,6 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
                             }
                         }
 
-                        // Save Biography
                         if (!artist.biography.isNullOrBlank()) {
                             dbQuery {
                                 ArtistTable.update({ ArtistTable.id eq id }) {
@@ -276,7 +532,6 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
                             }
                         }
 
-                        // Save Image
                         val images = artist.images
                         val image = images.maxByOrNull { it.width }
                         if (image != null) {
@@ -302,7 +557,7 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
                             }
                         }
 
-                        updateLastCheck(id)
+                        updateLastMetadataCheckArtist(id)
                         onProgress(progress, "Updated \"$name\" with metadata.")
                         foundCount++
                     }
@@ -451,11 +706,12 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
 
         var foundCount = 0
         var totalChecked = 0
+        val thirtyDaysAgo = Clock.System.now() - 30.days
         val albums = dbQuery {
             AlbumTable
                 .leftJoin(AlbumMusicBrainzTable)
                 .select(AlbumTable.id, AlbumTable.name, AlbumMusicBrainzTable.musicBrainzId)
-                .where { AlbumTable.cover eq null }
+                .where { (AlbumTable.cover eq null) and (AlbumTable.lastMetadataCheck eq 0L or (AlbumTable.lastMetadataCheck less thirtyDaysAgo.toEpochMilliseconds())) }
                 .map { AlbumToFetch(it[AlbumTable.id].value, it[AlbumTable.name], it.getOrNull(AlbumMusicBrainzTable.musicBrainzId)) }
         }
 
@@ -496,6 +752,7 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
 
                         if (albumMetadata == null) {
                             onProgress(progress, "No metadata for \"$name\" found.")
+                            updateLastMetadataCheckAlbum(id)
                             continue
                         }
 
@@ -537,6 +794,7 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
                             }
                         }
 
+                        updateLastMetadataCheckAlbum(id)
                         onProgress(progress, "Updated \"$name\" with metadata.")
                         foundCount++
                     }
@@ -566,12 +824,13 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
 
         var foundCount = 0
         var totalChecked = 0
+        val thirtyDaysAgo = Clock.System.now() - 30.days
         val tracks = dbQuery {
             SongTable
                 .leftJoin(SongMusicBrainzTable)
                 .leftJoin(SongGenreTable)
                 .select(SongTable.id, SongTable.title, SongMusicBrainzTable.musicBrainzId)
-                .where { SongGenreTable.songId eq null }
+                .where { (SongGenreTable.songId.isNull()) and (SongTable.lastMetadataCheck eq 0L or (SongTable.lastMetadataCheck less thirtyDaysAgo.toEpochMilliseconds())) }
                 .map { TrackToFetch(it[SongTable.id].value, it[SongTable.title], it.getOrNull(SongMusicBrainzTable.musicBrainzId)) }
         }
 
@@ -607,6 +866,7 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
 
                         if (trackMetadata == null || trackMetadata.genres.isEmpty()) {
                             onProgress(progress, "No metadata for \"$name\" found.")
+                            updateLastMetadataCheckSong(id)
                             continue
                         }
 
@@ -619,6 +879,7 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
                             }
                         }
 
+                        updateLastMetadataCheckAlbum(id)
                         onProgress(progress, "Updated \"$name\" with metadata.")
                         foundCount++
                     }

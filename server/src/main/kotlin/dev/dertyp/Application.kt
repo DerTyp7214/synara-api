@@ -120,6 +120,7 @@ fun Application.module() {
             singleOf(::MusicBrainzService)
             singleOf(::TheAudioDBService)
             singleOf(::MusicBrainzWorker)
+            singleOf(::GenreMetadataWorker)
             singleOf(::RecentReleaseWorker)
             singleOf(::ReleaseService)
             singleOf(::AutoTranscodeWorker)
@@ -180,6 +181,7 @@ fun Application.module() {
     val reverseProxyService = get<ReverseProxyService>()
     val metadataFetchingService = get<MetadataFetchingService>()
     val musicBrainzWorker = get<MusicBrainzWorker>()
+    val genreMetadataWorker = get<GenreMetadataWorker>()
     val recentReleaseWorker = get<RecentReleaseWorker>()
     val autoTranscodeWorker = get<AutoTranscodeWorker>()
 
@@ -250,10 +252,22 @@ fun Application.module() {
 
     scheduleService.triggerTask(musicBrainzTask.id)
 
+    val genreMetadataTask = scheduleService.schedule(
+        ScheduledTask(
+            name = "Genre Metadata Worker",
+            trigger = TaskCompletionTrigger(musicBrainzTask.id),
+            task = {
+                logTask("Genre Metadata Worker") {
+                    genreMetadataWorker.run { p, l -> updateProgress(p, l) }
+                }
+            }
+        )
+    )
+
     val fetchArtistImagesTidal = scheduleService.schedule(
         ScheduledTask(
             name = "Fetch Artist Images (Tidal)",
-            trigger = TaskCompletionTrigger(musicBrainzTask.id),
+            trigger = TaskCompletionTrigger(genreMetadataTask.id),
             task = {
                 logTask("Fetch Artist Images (Tidal)") {
                     metadataFetchingService.fetchArtistImages(MetadataService.Companion.MetadataType.tidal) { p, l ->

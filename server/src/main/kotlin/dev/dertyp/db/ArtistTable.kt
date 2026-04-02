@@ -9,4 +9,5 @@ object ArtistTable : UUIDTable("artist") {
     val about = text("about").default("")
     val image = reference("image", ImageTable.id).nullable()
     val lastImageCheck = long("lastImageCheck").default(0L)
+    val lastMetadataCheck = long("lastMetadataCheck").default(0L)
 }
