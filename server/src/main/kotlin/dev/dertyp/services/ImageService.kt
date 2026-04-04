@@ -73,17 +73,23 @@ class ImageService(
         if (!path.exists()) return null
 
         val bytes = if (size > 0) {
-            val outputStream = ByteArrayOutputStream()
-            Thumbnails.of(path.toFile())
-                .size(size, size)
-                .outputFormat(when (path.extension) {
-                    "jpg" -> "jpeg"
-                    "jpeg" -> "jpeg"
-                    "png" -> "png"
-                    else -> "jpeg"
-                })
-                .toOutputStream(outputStream)
-            outputStream.toByteArray()
+            try {
+                val outputStream = ByteArrayOutputStream()
+                Thumbnails.of(path.toFile())
+                    .size(size, size)
+                    .outputFormat(
+                        when (path.extension) {
+                            "jpg" -> "jpeg"
+                            "jpeg" -> "jpeg"
+                            "png" -> "png"
+                            else -> "jpeg"
+                        }
+                    )
+                    .toOutputStream(outputStream)
+                outputStream.toByteArray()
+            } catch (_: Exception) {
+                path.readBytes()
+            }
         } else {
             path.readBytes()
         }
