@@ -11,6 +11,7 @@ on:
       - docker/**
       - server/**
       - proxy/**
+      - gradle/**
       - common-rpc
       - common-proxy/**
       - Dockerfile.nobuild
