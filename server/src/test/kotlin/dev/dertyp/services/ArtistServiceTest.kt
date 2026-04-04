@@ -338,6 +338,74 @@ class ArtistServiceTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
+    fun `byGroup should not return duplicate members when an artist is followed by multiple users or has multiple genres`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val testGroupId = UUID.randomUUID()
+        val testMemberId = UUID.randomUUID()
+        val user1Id = UUID.randomUUID()
+        val user2Id = UUID.randomUUID()
+        val genre1Id = UUID.randomUUID()
+        val genre2Id = UUID.randomUUID()
+
+        transaction(database) {
+            UserTable.insert {
+                it[id] = user1Id
+                it[username] = "user1"
+                it[passwordHash] = "hash"
+            }
+            UserTable.insert {
+                it[id] = user2Id
+                it[username] = "user2"
+                it[passwordHash] = "hash"
+            }
+            ArtistTable.insert {
+                it[id] = testGroupId
+                it[name] = "The Group"
+                it[isGroup] = true
+            }
+            ArtistTable.insert {
+                it[id] = testMemberId
+                it[name] = "The Member"
+                it[groupId] = testGroupId
+            }
+            FollowedArtistTable.insert {
+                it[userId] = user1Id
+                it[artistId] = testMemberId
+            }
+            FollowedArtistTable.insert {
+                it[userId] = user2Id
+                it[artistId] = testMemberId
+            }
+            GenreTable.insert {
+                it[id] = genre1Id
+                it[name] = "Genre 1"
+            }
+            GenreTable.insert {
+                it[id] = genre2Id
+                it[name] = "Genre 2"
+            }
+            ArtistGenreTable.insert {
+                it[artistId] = testMemberId
+                it[genreId] = genre1Id
+            }
+            ArtistGenreTable.insert {
+                it[artistId] = testMemberId
+                it[genreId] = genre2Id
+            }
+        }
+
+        val group = service.byId(testGroupId)
+        assertNotNull(group)
+        assertEquals(1, group?.artists?.size, "Group should have exactly one member")
+        assertEquals(testMemberId, group?.artists?.firstOrNull()?.id)
+
+        val result = service.byGroup(0, 10, testGroupId)
+        assertEquals(1, result.data.size, "byGroup should return exactly one member")
+        assertEquals(testMemberId, result.data[0].id)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
     fun `mergeArtists should combine multiple artists into one`(dialect: DbDialect) = runBlocking {
         setup(dialect)
         val artistId1 = UUID.randomUUID()

@@ -591,7 +591,7 @@ class ArtistService : Service() {
             val artist = mapArtist(mainRow, genres = genres, followedTable = followedTable)
 
             return@map if (artist.isGroup) {
-                val memberArtists = membersByGroupId[artist.id] ?: listOf()
+                val memberArtists = membersByGroupId[artist.id]?.distinctBy { it.id } ?: listOf()
                 artist.copy(artists = memberArtists)
             } else {
                 artist
