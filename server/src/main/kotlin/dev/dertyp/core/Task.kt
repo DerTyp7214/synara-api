@@ -6,11 +6,13 @@ import dev.dertyp.services.schedule.CronPresets
 import dev.dertyp.services.schedule.CronTrigger
 import dev.dertyp.services.schedule.ScheduleTrigger
 import dev.dertyp.services.schedule.ScheduledTask
+import kotlin.jvm.Volatile
 import org.jetbrains.annotations.Range
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 import java.time.Duration
 import java.time.Instant
+import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.time.Duration as KDuration
 
 typealias Task = suspend KoinComponent.() -> Unit
@@ -26,8 +28,9 @@ suspend fun KoinComponent.logTask(name: String, block: suspend TaskContext.() ->
     val runningId = logService.startLog(name, startTime).value
     
     class TaskContextImpl : TaskContext {
+        @Volatile
         var currentProgress = 0.0
-        val currentLogs = mutableListOf<String>()
+        val currentLogs = CopyOnWriteArrayList<String>()
 
         override fun updateProgress(progress: Double, vararg logs: String) {
             currentProgress = progress
@@ -40,7 +43,9 @@ suspend fun KoinComponent.logTask(name: String, block: suspend TaskContext.() ->
 
         override fun log(line: String) {
             currentLogs.add(line)
-            if (currentLogs.size > 5) currentLogs.removeAt(0)
+            while (currentLogs.size > 5) {
+                currentLogs.removeAt(0)
+            }
             logService.updateProgress(runningId, currentProgress, currentLogs)
         }
     }
