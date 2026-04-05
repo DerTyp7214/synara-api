@@ -64,6 +64,10 @@ class AutoTranscodeWorker : KoinComponent {
                         launch {
                             for (song in songChannel) {
                                 val file = Paths.get(song.path).toFile()
+                                if (!file.exists()) {
+                                    logger.warn("Skipping auto transcode for \"${song.title}\": file not found at ${song.path}")
+                                    continue
+                                }
                                 try {
                                     val (newFile) = transcodeFlacToOpus(environment, file, quality)
                                     transcodedSongsMutex.withLock {

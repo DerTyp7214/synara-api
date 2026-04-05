@@ -16,12 +16,15 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.api.io.TempDir
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.CsvSource
 import org.junit.jupiter.params.provider.EnumSource
 import org.koin.core.context.stopKoin
 import java.io.File
+import java.io.FileNotFoundException
+import java.io.IOException
 import java.nio.file.Path
 import java.util.UUID
 
@@ -52,7 +55,7 @@ class AudioUtilsTest {
         "22050, 24000",
         "8000, 8000",
         "11025, 12000",
-        "16000, 16000"
+        "16000, 16000",
     )
     fun `closestSampleRate should return nearest supported rate`(input: Int, expected: Int) {
         val result = AudioUtils.closestSampleRate(input)
@@ -129,7 +132,8 @@ class AudioUtilsTest {
         every { anyConstructed<FFmpegFrameGrabber>().audioChannels } returns 2
         every { anyConstructed<FFmpegFrameGrabber>().metadata } returns HashMap<String, String>()
         every { anyConstructed<FFmpegFrameGrabber>().sampleRate } returns 44100
-        
+        every { anyConstructed<FFmpegFrameGrabber>().lengthInTime } returns 1000000
+
         val mockFrame = mockk<Frame>(relaxed = true)
         every { anyConstructed<FFmpegFrameGrabber>().grabFrame(any(), any(), any(), any()) } returnsMany listOf(mockFrame, null)
 
@@ -138,7 +142,7 @@ class AudioUtilsTest {
         every { anyConstructed<FFmpegFrameRecorder>().stop() } just Runs
         every { anyConstructed<FFmpegFrameRecorder>().release() } just Runs
         every { anyConstructed<FFmpegFrameRecorder>().record(any<Frame>()) } just Runs
-        
+
         every { anyConstructed<FFmpegFrameRecorder>().setImageWidth(any()) } just Runs
         every { anyConstructed<FFmpegFrameRecorder>().setImageHeight(any()) } just Runs
         every { anyConstructed<FFmpegFrameRecorder>().setVideoCodec(any()) } just Runs
@@ -157,5 +161,41 @@ class AudioUtilsTest {
         assertEquals("test.ogg", streamInfo.file.name)
 
         verify { anyConstructed<FFmpegFrameRecorder>().record(any<Frame>()) }
+    }
+
+    @Test
+    fun `transcodeFlacToOpus should throw FileNotFoundException when file does not exist`() {
+        runBlocking {
+            val environment = mockk<ApplicationEnvironment>(relaxed = true)
+            val nonExistentFile = File("non_existent_file.flac")
+
+            assertThrows<FileNotFoundException> {
+                AudioUtils.transcodeFlacToOpus(environment, nonExistentFile, 128)
+            }
+        }
+    }
+
+    @Test
+    fun `transcodeFlacToOpus should throw IOException when file is empty`(@TempDir tempDir: Path) {
+        runBlocking {
+            val emptyFile = tempDir.resolve("empty.flac").toFile().apply { createNewFile() }
+            val environment = mockk<ApplicationEnvironment>(relaxed = true)
+
+            assertThrows<IOException> {
+                AudioUtils.transcodeFlacToOpus(environment, emptyFile, 128)
+            }
+        }
+    }
+
+    @Test
+    fun `transcodeFlacToOpus should throw IOException when file is a directory`(@TempDir tempDir: Path) {
+        runBlocking {
+            val directory = tempDir.resolve("dir").toFile().apply { mkdir() }
+            val environment = mockk<ApplicationEnvironment>(relaxed = true)
+
+            assertThrows<IOException> {
+                AudioUtils.transcodeFlacToOpus(environment, directory, 128)
+            }
+        }
     }
 }

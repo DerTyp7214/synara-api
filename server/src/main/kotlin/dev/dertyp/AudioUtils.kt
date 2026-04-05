@@ -32,12 +32,15 @@ import org.bytedeco.ffmpeg.global.avutil
 import org.bytedeco.ffmpeg.global.avutil.AV_SAMPLE_FMT_S16
 import org.bytedeco.javacv.FFmpegFrameGrabber
 import org.bytedeco.javacv.FFmpegFrameRecorder
+import org.bytedeco.javacv.FFmpegLogCallback
 import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.core.notInList
 import org.jetbrains.exposed.v1.jdbc.insertIgnore
 import org.jetbrains.exposed.v1.jdbc.select
 import org.koin.ktor.ext.inject
 import java.io.File
+import java.io.FileNotFoundException
+import java.io.IOException
 import java.nio.file.Files
 import java.nio.file.Paths
 import java.util.UUID
@@ -61,6 +64,10 @@ data class StreamInfo(
 @OptIn(ExperimentalAtomicApi::class)
 object AudioUtils {
     val logger = KtorSimpleLogger("AudioUtils")
+
+    init {
+        FFmpegLogCallback.set()
+    }
 
     val isTranscoderActive = AtomicBoolean(false)
 
@@ -106,13 +113,29 @@ object AudioUtils {
             transcodeMutexes.computeIfAbsent(flacFile.absolutePath to targetKbps) { Mutex() }
 
         mutex.withLock {
+            if (!flacFile.exists()) {
+                throw FileNotFoundException("Input file not found: ${flacFile.absolutePath}")
+            }
+
+            if (flacFile.isDirectory) {
+                throw IOException("Input file is a directory: ${flacFile.absolutePath}")
+            }
+
+            if (flacFile.length() == 0L) {
+                throw IOException("Input file is empty: ${flacFile.absolutePath}")
+            }
+
+            if (!flacFile.canRead()) {
+                throw IOException("Input file is not readable: ${flacFile.absolutePath}")
+            }
+
             val tracksPath = environment.config.propertyOrNull("audio.tracks")?.getString()
             val transcoderPath =
                 environment.config.propertyOrNull("audio.transcode")?.getString() ?: ""
 
             val parent = if (tracksPath != null)
-                flacFile.parentFile.absolutePath.removePrefix(tracksPath)
-            else flacFile.parentFile.name
+                flacFile.absoluteFile.parentFile.absolutePath.removePrefix(tracksPath)
+            else flacFile.absoluteFile.parentFile.name
 
             val fileName =
                 Paths.get(
@@ -124,7 +147,7 @@ object AudioUtils {
 
             val transcodingFile = Files.createTempDirectory("transcoder_").toFile().apply {
                 deleteOnExitRecursive()
-            }.resolve("transcoding_$fileName")
+            }.resolve("transcoding_${flacFile.nameWithoutExtension}.ogg")
 
             val tempFolder =
                 if (fileName.isRooted) Paths.get("/").toFile()
@@ -218,7 +241,11 @@ object AudioUtils {
                 )
             } catch (e: Throwable) {
                 tempFile.delete()
-                e.printStackTrace()
+                if (e is FileNotFoundException || e is IOException) {
+                    logger.error(e.message)
+                } else {
+                    logger.error("Transcoding failed for ${flacFile.absolutePath}: ${e.message}", e)
+                }
                 throw e
             } finally {
                 transcodingFile.delete()
