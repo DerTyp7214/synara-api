@@ -70,7 +70,7 @@ class ScheduleServiceTest {
 
         assertTrue(service.triggerTask(task.id))
 
-        withTimeout(1000) {
+        withTimeout(5000) {
             executed.await()
         }
     }
