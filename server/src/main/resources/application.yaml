@@ -34,6 +34,8 @@ audio:
   custom: ${AUDIO_CUSTOM_PATH}
   secondary-tracks:
     - ${AUDIO_TRACKS_SECONDARY_PATH:}
+transcriber:
+  url: ${TRANSCRIBER_URL:http://localhost:8000}
 data:
   images: ${DATA_IMAGES_PATH}
 spotify:

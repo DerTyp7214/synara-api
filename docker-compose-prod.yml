@@ -75,9 +75,26 @@ services:
         limits:
           memory: 13G
 
+  transcriber:
+    image: ghcr.io/dertyp7214/synara-transcriber:latest-dev
+    ports:
+      - "8000:8000"
+    volumes:
+      - /home/typ/Music:/data
+      - transcriber_cache:/root/.cache
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    restart: unless-stopped
+
 volumes:
   tiddl:
   config:
   postgres:
   redis_data:
   backups:
+  transcriber_cache:

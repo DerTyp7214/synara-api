@@ -76,6 +76,7 @@ private fun registerAuthenticated(koin: Koin, call: ApplicationCall, user: User,
     val albumService = koin.get<AlbumService>()
     val imageService = koin.get<ImageService>()
     val lyricsSearch = koin.get<LyricsSearch>()
+    val lyricsService = koin.get<LyricsService>()
     val artistService = koin.get<ArtistService>()
     val favSyncService = koin.get<FavSyncService>()
     val playlistService = koin.get<PlaylistService>()
@@ -99,6 +100,7 @@ private fun registerAuthenticated(koin: Koin, call: ApplicationCall, user: User,
     registrar.register(IAlbumService::class) { AlbumRpcService(user, albumService).withLogging<IAlbumService>(call) }
     registrar.register(IImageService::class) { imageService.withLogging<IImageService>(call) }
     registrar.register(ILyricsSearch::class) { lyricsSearch.withLogging<ILyricsSearch>(call) }
+    registrar.register(ILyricsService::class) { lyricsService.withLogging<ILyricsService>(call) }
     registrar.register(IArtistService::class) { ArtistRpcService(user, artistService).withLogging<IArtistService>(call) }
     registrar.register(IFavSyncService::class) { FavSyncRpcService(user, favSyncService).withLogging<IFavSyncService>(call) }
     registrar.register(IDownloadService::class) { DownloadRpcService(user, call, downloadService, tidalDownloaderProxy).withLogging<IDownloadService>(call) }

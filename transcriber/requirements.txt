@@ -1,0 +1,6 @@
+fastapi
+uvicorn
+whisperx
+torch
+torchvision
+torchaudio

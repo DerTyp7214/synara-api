@@ -93,6 +93,7 @@ fun Application.module() {
             singleOf(::ImageService)
             singleOf(::AlbumService)
             singleOf(::LyricsSearch)
+            singleOf(::LyricsService)
             singleOf(::GenreService)
             singleOf(::ArtistService)
             singleOf(::StorageService)

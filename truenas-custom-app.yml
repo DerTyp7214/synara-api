@@ -22,6 +22,7 @@ services:
       REDIS_HOST: 127.0.0.1
       REDIS_PORT: '7000'
       BACKUP_DIR: /backups
+      TRANSCRIBER_URL: http://127.0.0.1:8000
     image: ghcr.io/dertyp7214/synara:latest-dev
     network_mode: host
     platform: linux/amd64
@@ -102,12 +103,40 @@ services:
         target: /data
         type: volume
 
+  transcriber:
+    image: ghcr.io/dertyp7214/synara-transcriber:latest-dev
+    platform: linux/amd64
+    pull_policy: always
+    restart: unless-stopped
+    ports:
+      - '8000:8000'
+    volumes:
+      - bind:
+          create_host_path: False
+          propagation: rprivate
+        read_only: False
+        source: /mnt/External/Synara
+        target: /data
+        type: bind
+      - read_only: False
+        source: transcriber_cache
+        target: /root/.cache
+        type: volume
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
 volumes:
   tiddl: {}
   config: {}
   postgres: {}
   redis_cluster_data: {}
   backups: {}
+  transcriber_cache: {}
 
 x-portals:
   - host: 0.0.0.0

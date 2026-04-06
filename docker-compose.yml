@@ -80,8 +80,20 @@ services:
         limits:
           memory: 13G
 
+  transcriber:
+    build:
+      context: ./transcriber
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - /home/typ/Music:/data
+      - transcriber_cache:/root/.cache
+    restart: unless-stopped
+
 volumes:
   config:
   postgres:
   redis_data:
   backups:
+  transcriber_cache:

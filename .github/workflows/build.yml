@@ -142,10 +142,17 @@ jobs:
             repo: "dertyp7214/synara"
             dockerfile: "./Dockerfile.nobuild"
             artifact: "server-fat-jar"
+            context: "."
           - name: proxy
             repo: "dertyp7214/synara-proxy"
             dockerfile: "./Dockerfile.proxy"
             artifact: "proxy-fat-jar"
+            context: "."
+          - name: transcriber
+            repo: "dertyp7214/synara-transcriber"
+            dockerfile: "./transcriber/Dockerfile"
+            artifact: ""
+            context: "./transcriber"
     timeout-minutes: 240
     permissions:
       contents: read
@@ -158,6 +165,7 @@ jobs:
           submodules: recursive
 
       - name: Download fat JAR artifact
+        if: matrix.artifact != ''
         uses: actions/download-artifact@v8
         with:
           name: ${{ matrix.artifact }}
@@ -195,7 +203,7 @@ jobs:
       - name: Build and push Docker image
         uses: docker/build-push-action@v7
         with:
-          context: .
+          context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
           push: true
           platforms: linux/amd64,linux/arm64
