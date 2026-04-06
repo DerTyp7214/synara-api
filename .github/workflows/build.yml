@@ -12,6 +12,7 @@ on:
       - server/**
       - proxy/**
       - gradle/**
+      - transcriber/**
       - common-rpc
       - common-proxy/**
       - Dockerfile.nobuild
