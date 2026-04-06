@@ -33,9 +33,9 @@ async def lifespan(app: FastAPI):
         models["whisper"] = WhisperModel(
             "large-v3", 
             device=models["device"], 
-            compute_type="float16" if models["device"] == "cuda" else "int8"
+            compute_type="auto"
         )
-        logger.info("Model loaded successfully.")
+        logger.info(f"Model loaded successfully using compute_type: auto")
     except Exception as e:
         logger.error(f"Failed to load model: {e}")
     yield
