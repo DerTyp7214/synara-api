@@ -4,3 +4,4 @@ whisperx
 torch
 torchvision
 torchaudio
+langdetect

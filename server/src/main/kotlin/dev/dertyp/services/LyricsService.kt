@@ -6,6 +6,7 @@ import dev.dertyp.db.SyncedLyricsTable
 import dev.dertyp.dbQuery
 import dev.dertyp.serializers.AppCbor
 import dev.dertyp.services.models.SyncedLyrics
+import dev.dertyp.services.schedule.LyricsSyncWorker
 import io.ktor.client.call.body
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
@@ -13,6 +14,9 @@ import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.server.application.ApplicationEnvironment
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.decodeFromByteArray
 import kotlinx.serialization.encodeToByteArray
@@ -26,6 +30,9 @@ import java.io.File
 class LyricsService : ILyricsService, Service() {
     private val environment by inject<ApplicationEnvironment>()
     private val songService by inject<SongService>()
+    private val lyricsSyncWorker by inject<LyricsSyncWorker>()
+
+    private val serviceScope = CoroutineScope(Dispatchers.IO)
 
     private val transcriberUrl: String
         get() = environment.config.propertyOrNull("transcriber.url")?.getString() ?: "http://localhost:8000"
@@ -34,7 +41,7 @@ class LyricsService : ILyricsService, Service() {
         SyncedLyricsTable.select(SyncedLyricsTable.content)
             .where { SyncedLyricsTable.songId eq songId }
             .singleOrNull()?.let {
-                AppCbor.decodeFromByteArray<SyncedLyrics>(it[SyncedLyricsTable.content])
+                it[SyncedLyricsTable.content]?.let { bytes -> AppCbor.decodeFromByteArray<SyncedLyrics>(bytes) }
             }
     }
 
@@ -46,12 +53,25 @@ class LyricsService : ILyricsService, Service() {
             return null
         }
 
-        val lyricsToAlign = lyrics ?: song.lyrics.ifBlank {
+        var rawLyrics: String? = lyrics
+        if (rawLyrics == null) {
+            rawLyrics = dbQuery {
+                SyncedLyricsTable.select(SyncedLyricsTable.rawLyrics)
+                    .where { SyncedLyricsTable.songId eq songId }
+                    .singleOrNull()?.get(SyncedLyricsTable.rawLyrics)
+            }
+        }
+
+        if (rawLyrics.isNullOrBlank()) {
+            rawLyrics = song.lyrics
+        }
+
+        if (rawLyrics.isBlank()) {
             val lyricsSearch by inject<LyricsSearch>()
             val artistName = song.artists.firstOrNull()?.name ?: ""
-            try {
+            rawLyrics = try {
                 lyricsSearch.searchLyrics(artistName, song.title, syncedOnly = false).joinToString("\n")
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 ""
             }
         }
@@ -63,7 +83,7 @@ class LyricsService : ILyricsService, Service() {
                     "path" to file.absolutePath,
                     "artist" to (song.artists.firstOrNull()?.name ?: ""),
                     "title" to song.title,
-                    "lyrics" to lyricsToAlign.ifBlank { null }
+                    "lyrics" to rawLyrics.ifBlank { null }
                 ))
             }
         } catch (e: Exception) {
@@ -76,16 +96,24 @@ class LyricsService : ILyricsService, Service() {
             return null
         }
 
-        val lyrics = response.body<SyncedLyrics>()
+        val syncedLyrics = response.body<SyncedLyrics>()
 
         dbQuery {
             SyncedLyricsTable.upsert(SyncedLyricsTable.songId) {
                 it[SyncedLyricsTable.songId] = songId
-                it[content] = AppCbor.encodeToByteArray(lyrics)
-                it[provider] = "whisperx_v1"
+                it[SyncedLyricsTable.content] = AppCbor.encodeToByteArray(syncedLyrics)
+                it[SyncedLyricsTable.rawLyrics] = rawLyrics
+                it[SyncedLyricsTable.provider] = "whisperx_v1"
             }
         }
 
-        return lyrics
+        return syncedLyrics
+    }
+
+    override suspend fun startSyncWorker(): Boolean {
+        serviceScope.launch {
+            lyricsSyncWorker.run()
+        }
+        return true
     }
 }

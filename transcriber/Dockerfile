@@ -8,7 +8,7 @@ RUN DEBIAN_FRONTEND=noninteractive apt-get update && DEBIAN_FRONTEND=noninteract
     && rm -rf /var/lib/apt/lists/*
 
 # Fix for some whisperx dependency issues
-RUN pip install --no-cache-dir fastapi uvicorn pydantic
+RUN pip install --no-cache-dir fastapi uvicorn pydantic langdetect
 
 # Install WhisperX from git for latest features and alignment models
 RUN pip install git+https://github.com/m-bain/whisperX.git

@@ -123,6 +123,7 @@ fun Application.module() {
             singleOf(::MusicBrainzWorker)
             singleOf(::GenreMetadataWorker)
             singleOf(::RecentReleaseWorker)
+            singleOf(::LyricsSyncWorker)
             singleOf(::ReleaseService)
             singleOf(::AutoTranscodeWorker)
             singleOf(::CustomMigrationService)
@@ -185,6 +186,7 @@ fun Application.module() {
     val genreMetadataWorker = get<GenreMetadataWorker>()
     val recentReleaseWorker = get<RecentReleaseWorker>()
     val autoTranscodeWorker = get<AutoTranscodeWorker>()
+    val lyricsSyncWorker = get<LyricsSyncWorker>()
 
     scheduleService.schedule(
         ScheduledTask(
@@ -305,6 +307,20 @@ fun Application.module() {
             }
         )
     )
+
+    val lyricsSyncTask = scheduleService.schedule(
+        ScheduledTask(
+            name = "Lyrics Sync Worker",
+            trigger = CronPresets.dailyAt(4, 0),
+            task = {
+                logTask("Lyrics Sync Worker") {
+                    lyricsSyncWorker.run { p, l -> updateProgress(p, l) }
+                }
+            }
+        )
+    )
+
+    scheduleService.triggerTask(lyricsSyncTask.id)
 
     val recentReleaseTask = scheduleService.schedule(
         ScheduledTask(

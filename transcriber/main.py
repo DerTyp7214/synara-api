@@ -9,6 +9,9 @@ import logging
 import traceback
 import re
 import difflib
+from langdetect import detect, DetectorFactory
+
+DetectorFactory.seed = 0
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -50,19 +53,12 @@ class SyncedLyrics(BaseModel):
 
 def clean_lyric_text(text):
     # 1. Remove multiline metadata blocks like [Hook: ... ]
-    # Using [\s\S]*? to match across newlines
     text = re.sub(r"\[[\s\S]*?\]", "", text)
-    
-    # 2. Remove standard Genius headers
+    # 2. Remove standard Genius/LRC headers
     text = re.sub(r"^\d+\s+Contributors.*$", "", text, flags=re.MULTILINE)
     text = re.sub(r"^.*?Lyrics$", "", text, flags=re.MULTILINE)
-    
-    # 3. Split into lines and clean up each line
-    lines = []
-    for line in text.split("\n"):
-        cleaned = line.strip()
-        if cleaned:
-            lines.append(cleaned)
+    # 3. Split into lines and clean up
+    lines = [line.strip() for line in text.split("\n") if line.strip()]
     return lines
 
 @app.post("/transcribe", response_model=SyncedLyrics)
@@ -74,27 +70,37 @@ async def transcribe(request: TranscribeRequest):
     try:
         logger.info(f"Processing: {request.title} by {request.artist}")
         
-        # Clean lyrics if provided
+        is_alignment_only = request.lyrics is not None and len(request.lyrics.strip()) > 0
         official_lines = []
-        if request.lyrics:
+        language = None
+        
+        if is_alignment_only:
             official_lines = clean_lyric_text(request.lyrics)
-
-        # 1. Transcription pass to get segment timings
-        # We use the official lyrics as a prompt to help the AI stay close to the real text
+            try:
+                # Detect language from text (instant compared to audio detection)
+                language = detect(" ".join(official_lines))
+                logger.info(f"Language detected from lyrics text: {language}")
+            except:
+                pass
+        
+        # Initial prompt to help with context
         prompt = f"Lyrics for the song {request.title} by {request.artist}."
         if official_lines:
             prompt += " " + " ".join(official_lines)[:200]
 
-        logger.info("Step 1: Capturing audio timings...")
+        logger.info(f"Step 1: Timing capture (Speed optimization: {is_alignment_only})...")
         segments_generator, info = whisper_model.transcribe(
             request.path, 
-            vad_filter=False,
-            beam_size=15,    
+            vad_filter=True,
+            language=language, # Use detected language if available
+            beam_size=1 if is_alignment_only else 15, # 1 is ~10x faster than 15
             initial_prompt=prompt,
             condition_on_previous_text=False 
         )
         
-        language = info.language
+        if language is None:
+            language = info.language
+            
         ai_segments = []
         for s in segments_generator:
             ai_segments.append({
@@ -106,29 +112,22 @@ async def transcribe(request: TranscribeRequest):
         if not ai_segments:
             return SyncedLyrics(lines=[])
 
-        # 2. Strict Text Replacement
-        # If official lyrics are provided, we replace the AI's "misheard" text with the official text
-        # while keeping the AI's detected start/end times for each line.
+        # 2. Forced Alignment Segments
         final_segments = ai_segments
         if official_lines:
-            logger.info("Step 2: Enforcing official lyrics text...")
-            # Use fuzzy matching to align official lines to AI segments
-            # This handles cases where line counts differ slightly
+            logger.info("Step 2: Mapping official text to detected timestamps...")
             new_segments = []
             ai_texts = [s["text"] for s in ai_segments]
             
-            # Match official lines to the most similar AI segments
             for i, off_line in enumerate(official_lines):
-                # Simple mapping: find the AI segment that most likely corresponds to this official line
-                # We search in a sliding window to maintain temporal order
-                start_idx = max(0, i - 2)
-                end_idx = min(len(ai_texts), i + 3)
+                # Windowed fuzzy match to find the best AI timestamp for this official line
+                start_idx = max(0, i - 3)
+                end_idx = min(len(ai_texts), i + 4)
                 window = ai_texts[start_idx:end_idx]
                 
                 matches = difflib.get_close_matches(off_line, window, n=1, cutoff=0.1)
                 if matches:
                     actual_idx = start_idx + window.index(matches[0])
-                    # Use the AI's timing but YOUR official text
                     new_segments.append({
                         "start": ai_segments[actual_idx]["start"],
                         "end": ai_segments[actual_idx]["end"],
@@ -137,10 +136,9 @@ async def transcribe(request: TranscribeRequest):
             
             if new_segments:
                 final_segments = new_segments
-                logger.info(f"Successfully mapped {len(new_segments)} official lines.")
 
-        # 3. Final Alignment (Phonetic matching of official text to audio)
-        logger.info(f"Step 3: Precise character alignment...")
+        # 3. Final alignment for word and character level timestamps
+        logger.info(f"Step 3: Phoneme alignment for {len(final_segments)} lines...")
         audio = whisperx.load_audio(request.path)
         model_a, metadata = whisperx.load_align_model(language_code=language, device=device)
         result = whisperx.align(final_segments, model_a, metadata, audio, device, return_char_alignments=True)
@@ -187,11 +185,11 @@ async def transcribe(request: TranscribeRequest):
                     words=words
                 ))
 
-        logger.info(f"Transcription finished. 100% correct text achieved.")
+        logger.info(f"Sync complete. Efficiency optimized.")
         return SyncedLyrics(lines=lines)
 
     except Exception as e:
-        logger.error(f"Transcription failed: {str(e)}")
+        logger.error(f"Sync failed: {str(e)}")
         logger.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
 
