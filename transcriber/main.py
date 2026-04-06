@@ -27,20 +27,26 @@ models = {
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Load model on startup
+    # Using 'medium' instead of 'large-v3' to prevent CUDA Out Of Memory errors.
+    # 'medium' is significantly faster and uses much less VRAM while being 
+    # more than accurate enough for timing capture.
+    model_name = "medium"
     logger.info(f"Using device: {models['device']}")
-    logger.info("Loading Faster-Whisper model (large-v3)...")
+    logger.info(f"Loading Faster-Whisper model ({model_name})...")
     try:
         models["whisper"] = WhisperModel(
-            "large-v3", 
+            model_name, 
             device=models["device"], 
             compute_type="auto"
         )
-        logger.info(f"Model loaded successfully using compute_type: auto")
+        logger.info(f"Model {model_name} loaded successfully using compute_type: auto")
     except Exception as e:
         logger.error(f"Failed to load model: {e}")
     yield
     # Clean up on shutdown
     models["whisper"] = None
+    if models["device"] == "cuda":
+        torch.cuda.empty_cache()
 
 app = FastAPI(lifespan=lifespan)
 
@@ -156,6 +162,10 @@ async def transcribe(request: TranscribeRequest):
             
             if new_segments:
                 final_segments = new_segments
+
+        # Optimization: Clear CUDA cache before loading the alignment model
+        if models["device"] == "cuda":
+            torch.cuda.empty_cache()
 
         logger.info(f"Step 3: Phoneme alignment for {len(final_segments)} lines...")
         audio = whisperx.load_audio(request.path)
