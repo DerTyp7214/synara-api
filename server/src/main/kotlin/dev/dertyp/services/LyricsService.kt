@@ -8,6 +8,7 @@ import dev.dertyp.serializers.AppCbor
 import dev.dertyp.services.models.SyncedLyrics
 import dev.dertyp.services.schedule.LyricsSyncWorker
 import io.ktor.client.call.body
+import io.ktor.client.plugins.timeout
 import io.ktor.client.request.get
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
@@ -26,6 +27,8 @@ import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.jdbc.upsert
 import org.koin.core.component.inject
 import java.io.File
+import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
 
 @OptIn(ExperimentalSerializationApi::class)
 class LyricsService : ILyricsService, Service() {
@@ -80,6 +83,11 @@ class LyricsService : ILyricsService, Service() {
         val response = try {
             ApiClient.instance.post("$transcriberUrl/transcribe") {
                 contentType(ContentType.Application.Json)
+                timeout {
+                    requestTimeoutMillis = 15.minutes.inWholeMilliseconds
+                    connectTimeoutMillis = 10.seconds.inWholeMilliseconds
+                    socketTimeoutMillis = 15.minutes.inWholeMilliseconds
+                }
                 setBody(mapOf(
                     "path" to file.absolutePath,
                     "artist" to (song.artists.firstOrNull()?.name ?: ""),
@@ -123,7 +131,11 @@ class LyricsService : ILyricsService, Service() {
     }
 
     suspend fun isReachable(): Boolean = try {
-        ApiClient.instance.get("$transcriberUrl/health").status == HttpStatusCode.OK
+        ApiClient.instance.get("$transcriberUrl/health") {
+            timeout {
+                requestTimeoutMillis = 5.seconds.inWholeMilliseconds
+            }
+        }.status == HttpStatusCode.OK
     } catch (_: Exception) {
         false
     }
