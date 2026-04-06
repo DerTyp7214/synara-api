@@ -21,15 +21,12 @@ logger = logging.getLogger("transcriber")
 # Global model references
 models = {
     "whisper": None,
-    "device": "cuda" if torch.cuda.is_available() else "cpu"
+    "device": "cpu" if os.getenv("FORCE_CPU", "false").lower() == "true" else ("cuda" if torch.cuda.is_available() else "cpu")
 }
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Load model on startup
-    # Using 'medium' instead of 'large-v3' to prevent CUDA Out Of Memory errors.
-    # 'medium' is significantly faster and uses much less VRAM while being 
-    # more than accurate enough for timing capture.
     model_name = "medium"
     logger.info(f"Using device: {models['device']}")
     logger.info(f"Loading Faster-Whisper model ({model_name})...")
@@ -42,6 +39,10 @@ async def lifespan(app: FastAPI):
         logger.info(f"Model {model_name} loaded successfully using compute_type: auto")
     except Exception as e:
         logger.error(f"Failed to load model: {e}")
+        if models["device"] == "cuda":
+            logger.warning("Retrying model load on CPU...")
+            models["device"] = "cpu"
+            models["whisper"] = WhisperModel(model_name, device="cpu", compute_type="int8")
     yield
     # Clean up on shutdown
     models["whisper"] = None
@@ -169,8 +170,17 @@ async def transcribe(request: TranscribeRequest):
 
         logger.info(f"Step 3: Phoneme alignment for {len(final_segments)} lines...")
         audio = whisperx.load_audio(request.path)
-        model_a, metadata = whisperx.load_align_model(language_code=language, device=models["device"])
-        result = whisperx.align(final_segments, model_a, metadata, audio, models["device"], return_char_alignments=True)
+        
+        try:
+            model_a, metadata = whisperx.load_align_model(language_code=language, device=models["device"])
+            result = whisperx.align(final_segments, model_a, metadata, audio, models["device"], return_char_alignments=True)
+        except Exception as e:
+            if models["device"] == "cuda":
+                logger.warning(f"Alignment failed on CUDA ({e}), falling back to CPU for this step...")
+                model_a, metadata = whisperx.load_align_model(language_code=language, device="cpu")
+                result = whisperx.align(final_segments, model_a, metadata, audio, "cpu", return_char_alignments=True)
+            else:
+                raise e
 
         lines = []
         for segment in result["segments"]:

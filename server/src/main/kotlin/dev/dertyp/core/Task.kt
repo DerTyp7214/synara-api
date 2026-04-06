@@ -6,7 +6,6 @@ import dev.dertyp.services.schedule.CronPresets
 import dev.dertyp.services.schedule.CronTrigger
 import dev.dertyp.services.schedule.ScheduleTrigger
 import dev.dertyp.services.schedule.ScheduledTask
-import kotlin.jvm.Volatile
 import org.jetbrains.annotations.Range
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
@@ -38,7 +37,7 @@ suspend fun KoinComponent.logTask(name: String, block: suspend TaskContext.() ->
                 currentLogs.clear()
                 currentLogs.addAll(logs.takeLast(5))
             }
-            logService.updateProgress(runningId, currentProgress, currentLogs)
+            logService.updateProgress(runningId, currentProgress, currentLogs.toList())
         }
 
         override fun log(line: String) {
@@ -46,7 +45,7 @@ suspend fun KoinComponent.logTask(name: String, block: suspend TaskContext.() ->
             while (currentLogs.size > 5) {
                 currentLogs.removeAt(0)
             }
-            logService.updateProgress(runningId, currentProgress, currentLogs)
+            logService.updateProgress(runningId, currentProgress, currentLogs.toList())
         }
     }
 
@@ -61,7 +60,7 @@ suspend fun KoinComponent.logTask(name: String, block: suspend TaskContext.() ->
             TaskStatus.SUCCESS,
             details = details.mapValues { it.value.toString() },
             progress = context.currentProgress,
-            logs = context.currentLogs,
+            logs = context.currentLogs.toList(),
             runningId = runningId
         )
     } catch (e: Throwable) {
@@ -72,7 +71,7 @@ suspend fun KoinComponent.logTask(name: String, block: suspend TaskContext.() ->
             TaskStatus.FAILURE,
             message = e.message,
             progress = context.currentProgress,
-            logs = context.currentLogs,
+            logs = context.currentLogs.toList(),
             runningId = runningId
         )
         throw e
