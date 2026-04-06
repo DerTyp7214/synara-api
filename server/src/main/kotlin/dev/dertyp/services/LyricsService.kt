@@ -8,6 +8,7 @@ import dev.dertyp.serializers.AppCbor
 import dev.dertyp.services.models.SyncedLyrics
 import dev.dertyp.services.schedule.LyricsSyncWorker
 import io.ktor.client.call.body
+import io.ktor.client.request.get
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
@@ -119,5 +120,11 @@ class LyricsService : ILyricsService, Service() {
 
     fun isConfigured(): Boolean {
         return environment.config.propertyOrNull("transcriber.url")?.getString() != null
+    }
+
+    suspend fun isReachable(): Boolean = try {
+        ApiClient.instance.get("$transcriberUrl/health").status == HttpStatusCode.OK
+    } catch (_: Exception) {
+        false
     }
 }

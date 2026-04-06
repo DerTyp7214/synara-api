@@ -10,6 +10,7 @@ import traceback
 import re
 import difflib
 from langdetect import detect, DetectorFactory
+from contextlib import asynccontextmanager
 
 DetectorFactory.seed = 0
 
@@ -17,14 +18,37 @@ DetectorFactory.seed = 0
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("transcriber")
 
-app = FastAPI()
+# Global model references
+models = {
+    "whisper": None,
+    "device": "cuda" if torch.cuda.is_available() else "cpu"
+}
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
-logger.info(f"Using device: {device}")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Load model on startup
+    logger.info(f"Using device: {models['device']}")
+    logger.info("Loading Faster-Whisper model (large-v3)...")
+    try:
+        models["whisper"] = WhisperModel(
+            "large-v3", 
+            device=models["device"], 
+            compute_type="float16" if models["device"] == "cuda" else "int8"
+        )
+        logger.info("Model loaded successfully.")
+    except Exception as e:
+        logger.error(f"Failed to load model: {e}")
+    yield
+    # Clean up on shutdown
+    models["whisper"] = None
 
-# Preload transcription model
-logger.info("Loading Faster-Whisper model...")
-whisper_model = WhisperModel("large-v3", device=device, compute_type="float16" if device == "cuda" else "int8")
+app = FastAPI(lifespan=lifespan)
+
+@app.get("/health")
+async def health():
+    if models["whisper"] is None:
+        raise HTTPException(status_code=503, detail="Model is still loading")
+    return {"status": "ok", "device": models["device"]}
 
 class TranscribeRequest(BaseModel):
     path: str
@@ -52,17 +76,17 @@ class SyncedLyrics(BaseModel):
     lines: List[LyricLine]
 
 def clean_lyric_text(text):
-    # 1. Remove multiline metadata blocks like [Hook: ... ]
     text = re.sub(r"\[[\s\S]*?\]", "", text)
-    # 2. Remove standard Genius/LRC headers
     text = re.sub(r"^\d+\s+Contributors.*$", "", text, flags=re.MULTILINE)
     text = re.sub(r"^.*?Lyrics$", "", text, flags=re.MULTILINE)
-    # 3. Split into lines and clean up
     lines = [line.strip() for line in text.split("\n") if line.strip()]
     return lines
 
 @app.post("/transcribe", response_model=SyncedLyrics)
 async def transcribe(request: TranscribeRequest):
+    if models["whisper"] is None:
+        raise HTTPException(status_code=503, detail="Model not loaded yet")
+        
     if not os.path.exists(request.path):
         logger.error(f"File not found: {request.path}")
         raise HTTPException(status_code=404, detail="File not found")
@@ -77,23 +101,21 @@ async def transcribe(request: TranscribeRequest):
         if is_alignment_only:
             official_lines = clean_lyric_text(request.lyrics)
             try:
-                # Detect language from text (instant compared to audio detection)
                 language = detect(" ".join(official_lines))
                 logger.info(f"Language detected from lyrics text: {language}")
             except:
                 pass
         
-        # Initial prompt to help with context
         prompt = f"Lyrics for the song {request.title} by {request.artist}."
         if official_lines:
             prompt += " " + " ".join(official_lines)[:200]
 
         logger.info(f"Step 1: Timing capture (Speed optimization: {is_alignment_only})...")
-        segments_generator, info = whisper_model.transcribe(
+        segments_generator, info = models["whisper"].transcribe(
             request.path, 
             vad_filter=True,
-            language=language, # Use detected language if available
-            beam_size=1 if is_alignment_only else 15, # 1 is ~10x faster than 15
+            language=language,
+            beam_size=1 if is_alignment_only else 15,
             initial_prompt=prompt,
             condition_on_previous_text=False 
         )
@@ -112,7 +134,6 @@ async def transcribe(request: TranscribeRequest):
         if not ai_segments:
             return SyncedLyrics(lines=[])
 
-        # 2. Forced Alignment Segments
         final_segments = ai_segments
         if official_lines:
             logger.info("Step 2: Mapping official text to detected timestamps...")
@@ -120,7 +141,6 @@ async def transcribe(request: TranscribeRequest):
             ai_texts = [s["text"] for s in ai_segments]
             
             for i, off_line in enumerate(official_lines):
-                # Windowed fuzzy match to find the best AI timestamp for this official line
                 start_idx = max(0, i - 3)
                 end_idx = min(len(ai_texts), i + 4)
                 window = ai_texts[start_idx:end_idx]
@@ -137,11 +157,10 @@ async def transcribe(request: TranscribeRequest):
             if new_segments:
                 final_segments = new_segments
 
-        # 3. Final alignment for word and character level timestamps
         logger.info(f"Step 3: Phoneme alignment for {len(final_segments)} lines...")
         audio = whisperx.load_audio(request.path)
-        model_a, metadata = whisperx.load_align_model(language_code=language, device=device)
-        result = whisperx.align(final_segments, model_a, metadata, audio, device, return_char_alignments=True)
+        model_a, metadata = whisperx.load_align_model(language_code=language, device=models["device"])
+        result = whisperx.align(final_segments, model_a, metadata, audio, models["device"], return_char_alignments=True)
 
         lines = []
         for segment in result["segments"]:

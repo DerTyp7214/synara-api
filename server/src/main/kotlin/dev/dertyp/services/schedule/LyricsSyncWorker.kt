@@ -5,6 +5,7 @@ import dev.dertyp.db.SyncedLyricsTable
 import dev.dertyp.dbQuery
 import dev.dertyp.services.LyricsService
 import io.ktor.util.logging.KtorSimpleLogger
+import kotlinx.coroutines.delay
 import org.jetbrains.exposed.v1.core.JoinType
 import org.jetbrains.exposed.v1.core.isNull
 import org.jetbrains.exposed.v1.jdbc.selectAll
@@ -25,6 +26,18 @@ class LyricsSyncWorker : KoinComponent {
     suspend fun run(onProgress: suspend (Double, String) -> Unit = { _, _ -> }): Map<String, Int> {
         if (!lyricsService.isConfigured()) {
             logger.info("Lyrics sync service is not configured. Skipping worker run.")
+            return emptyMap()
+        }
+
+        var retryCount = 0
+        while (!lyricsService.isReachable() && retryCount < 10) {
+            logger.info("Lyrics transcriber not reachable, waiting 30s... (Attempt ${retryCount + 1}/10)")
+            delay(30000)
+            retryCount++
+        }
+
+        if (!lyricsService.isReachable()) {
+            logger.info("Lyrics sync service is not reachable after retries. Skipping worker run.")
             return emptyMap()
         }
 

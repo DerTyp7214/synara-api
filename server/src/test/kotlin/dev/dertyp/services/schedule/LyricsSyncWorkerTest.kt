@@ -51,6 +51,7 @@ class LyricsSyncWorkerTest : KoinTest {
     fun `worker should process songs and handle not found`(): Unit = runBlocking {
         val lyricsService = mockk<LyricsService>()
         every { lyricsService.isConfigured() } returns true
+        coEvery { lyricsService.isReachable() } returns true
         
         val albumId = transaction {
             AlbumTable.insert {
@@ -112,6 +113,7 @@ class LyricsSyncWorkerTest : KoinTest {
     fun `worker should respect atomic running state`(): Unit = runBlocking {
         val lyricsService = mockk<LyricsService>()
         every { lyricsService.isConfigured() } returns true
+        coEvery { lyricsService.isReachable() } returns true
         
         // Mock a slow transcription to keep the worker running
         coEvery { lyricsService.transcribeLyrics(any(), any()) } coAnswers {
