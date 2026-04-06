@@ -6,9 +6,10 @@ import dev.dertyp.db.AlbumTable
 import dev.dertyp.db.ImageTable
 import dev.dertyp.db.SongTable
 import dev.dertyp.db.SyncedLyricsTable
-import dev.dertyp.services.ILyricsService
+import dev.dertyp.services.LyricsService
 import dev.dertyp.services.models.SyncedLyrics
 import io.mockk.coEvery
+import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -48,7 +49,8 @@ class LyricsSyncWorkerTest : KoinTest {
 
     @Test
     fun `worker should process songs and handle not found`(): Unit = runBlocking {
-        val lyricsService = mockk<ILyricsService>()
+        val lyricsService = mockk<LyricsService>()
+        every { lyricsService.isConfigured() } returns true
         
         val albumId = transaction {
             AlbumTable.insert {
@@ -101,7 +103,6 @@ class LyricsSyncWorkerTest : KoinTest {
         assertEquals(1, results["notFound"])
 
         transaction {
-            // Note: syncedCount is 0 because lyricsService is a mock and doesn't write to DB
             val notFoundCount = SyncedLyricsTable.selectAll().where { SyncedLyricsTable.provider eq "not_found" }.count()
             assertEquals(1, notFoundCount)
         }
@@ -109,7 +110,8 @@ class LyricsSyncWorkerTest : KoinTest {
 
     @Test
     fun `worker should respect atomic running state`(): Unit = runBlocking {
-        val lyricsService = mockk<ILyricsService>()
+        val lyricsService = mockk<LyricsService>()
+        every { lyricsService.isConfigured() } returns true
         
         // Mock a slow transcription to keep the worker running
         coEvery { lyricsService.transcribeLyrics(any(), any()) } coAnswers {

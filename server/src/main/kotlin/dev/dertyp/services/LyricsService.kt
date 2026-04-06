@@ -117,7 +117,7 @@ class LyricsService : ILyricsService, Service() {
         return true
     }
 
-    override suspend fun isConfigured(): Boolean {
+    fun isConfigured(): Boolean {
         return environment.config.propertyOrNull("transcriber.url")?.getString() != null
     }
 }
