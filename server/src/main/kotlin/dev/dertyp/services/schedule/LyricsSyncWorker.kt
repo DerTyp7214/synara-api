@@ -3,7 +3,7 @@ package dev.dertyp.services.schedule
 import dev.dertyp.db.SongTable
 import dev.dertyp.db.SyncedLyricsTable
 import dev.dertyp.dbQuery
-import dev.dertyp.services.ILyricsService
+import dev.dertyp.services.LyricsService
 import io.ktor.util.logging.KtorSimpleLogger
 import org.jetbrains.exposed.v1.core.JoinType
 import org.jetbrains.exposed.v1.core.isNull
@@ -18,11 +18,16 @@ import kotlin.concurrent.atomics.ExperimentalAtomicApi
 @OptIn(ExperimentalAtomicApi::class)
 class LyricsSyncWorker : KoinComponent {
     private val logger = KtorSimpleLogger("LyricsSyncWorker")
-    private val lyricsService by inject<ILyricsService>()
+    private val lyricsService by inject<LyricsService>()
 
     private val isRunning = AtomicBoolean(false)
 
     suspend fun run(onProgress: suspend (Double, String) -> Unit = { _, _ -> }): Map<String, Int> {
+        if (!lyricsService.isConfigured()) {
+            logger.info("Lyrics sync service is not configured. Skipping worker run.")
+            return emptyMap()
+        }
+
         if (!isRunning.compareAndSet(expectedValue = false, newValue = true)) {
             logger.info("LyricsSyncWorker is already running. Skipping this run.")
             return emptyMap()
