@@ -83,9 +83,12 @@ class SyncedLyrics(BaseModel):
     lines: List[LyricLine]
 
 def clean_lyric_text(text):
+    # 1. Remove multiline metadata blocks like [Hook: ... ]
     text = re.sub(r"\[[\s\S]*?\]", "", text)
+    # 2. Remove standard Genius/LRC headers and contributors
     text = re.sub(r"^\d+\s+Contributors.*$", "", text, flags=re.MULTILINE)
     text = re.sub(r"^.*?Lyrics$", "", text, flags=re.MULTILINE)
+    # 3. Split into lines and clean up whitespace
     lines = [line.strip() for line in text.split("\n") if line.strip()]
     return lines
 
@@ -113,14 +116,17 @@ async def transcribe(request: TranscribeRequest):
             except:
                 pass
         
+        # Initial prompt to help with context
         prompt = f"Lyrics for the song {request.title} by {request.artist}."
         if official_lines:
             prompt += " " + " ".join(official_lines)[:200]
 
-        logger.info(f"Step 1: Timing capture (Speed optimization: {is_alignment_only})...")
+        logger.info(f"Step 1: Timing capture (Alignment mode: {is_alignment_only})...")
+        # Optimization: We turn OFF vad_filter when we have lyrics.
+        # This prevents tracks like Rammstein from being skipped entirely.
         segments_generator, info = models["whisper"].transcribe(
             request.path, 
-            vad_filter=True,
+            vad_filter=False if is_alignment_only else True,
             language=language,
             beam_size=1 if is_alignment_only else 15,
             initial_prompt=prompt,
@@ -139,30 +145,46 @@ async def transcribe(request: TranscribeRequest):
             })
 
         if not ai_segments:
+            logger.warning("No audio segments detected. Transcription failed.")
             return SyncedLyrics(lines=[])
 
+        # 2. Forced Alignment Segments (Global Matching)
         final_segments = ai_segments
         if official_lines:
-            logger.info("Step 2: Mapping official text to detected timestamps...")
+            logger.info(f"Step 2: Globally aligning {len(official_lines)} official lines to {len(ai_segments)} AI segments...")
             new_segments = []
-            ai_texts = [s["text"] for s in ai_segments]
+            ai_texts = [s["text"].lower().strip() for s in ai_segments]
+            off_texts = [l.lower().strip() for l in official_lines]
             
-            for i, off_line in enumerate(official_lines):
-                start_idx = max(0, i - 3)
-                end_idx = min(len(ai_texts), i + 4)
-                window = ai_texts[start_idx:end_idx]
-                
-                matches = difflib.get_close_matches(off_line, window, n=1, cutoff=0.1)
-                if matches:
-                    actual_idx = start_idx + window.index(matches[0])
-                    new_segments.append({
-                        "start": ai_segments[actual_idx]["start"],
-                        "end": ai_segments[actual_idx]["end"],
-                        "text": off_line
-                    })
+            # Use SequenceMatcher to find the best global fit
+            matcher = difflib.SequenceMatcher(None, off_texts, ai_texts)
+            for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+                if tag == 'equal' or tag == 'replace':
+                    off_subset = official_lines[i1:i2]
+                    ai_subset = ai_segments[j1:j2]
+                    
+                    if not ai_subset:
+                        continue
+                        
+                    start_t = ai_subset[0]["start"]
+                    end_t = ai_subset[-1]["end"]
+                    
+                    if len(off_subset) == 1:
+                        new_segments.append({"start": start_t, "end": end_t, "text": off_subset[0]})
+                    elif len(off_subset) > 1:
+                        # Distribute time among multiple lines
+                        total_dur = end_t - start_t
+                        line_dur = total_dur / len(off_subset)
+                        for idx, line in enumerate(off_subset):
+                            new_segments.append({
+                                "start": start_t + (idx * line_dur),
+                                "end": start_t + ((idx + 1) * line_dur),
+                                "text": line
+                            })
             
             if new_segments:
                 final_segments = new_segments
+                logger.info(f"Successfully mapped into {len(new_segments)} aligned segments.")
 
         # Optimization: Clear CUDA cache before loading the alignment model
         if models["device"] == "cuda":
@@ -224,7 +246,7 @@ async def transcribe(request: TranscribeRequest):
                     words=words
                 ))
 
-        logger.info(f"Sync complete. Efficiency optimized.")
+        logger.info(f"Sync complete. Final lines: {len(lines)}")
         return SyncedLyrics(lines=lines)
 
     except Exception as e:
