@@ -21,6 +21,7 @@ services:
       - REDIS_HOST=127.0.0.1
       - REDIS_PORT=7000
       - BACKUP_DIR=/backups
+      - TRANSCRIBER_URL=http://127.0.0.1:8000
     volumes:
       - /home/typ/Music:/data
       - config:/home/appuser/.config

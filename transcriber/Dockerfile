@@ -8,10 +8,14 @@ RUN DEBIAN_FRONTEND=noninteractive apt-get update && DEBIAN_FRONTEND=noninteract
     && rm -rf /var/lib/apt/lists/*
 
 # Fix for some whisperx dependency issues
-RUN pip install --no-cache-dir fastapi uvicorn pydantic langdetect
+RUN pip install --no-cache-dir fastapi uvicorn pydantic langdetect demucs
 
 # Install WhisperX from git for latest features and alignment models
 RUN pip install git+https://github.com/m-bain/whisperX.git
+
+# Set cache directories to the persistent volume
+ENV HF_HOME=/root/.cache/huggingface
+ENV TORCH_HOME=/root/.cache/torch
 
 COPY main.py .
 

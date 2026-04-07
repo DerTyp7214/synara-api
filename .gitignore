@@ -44,3 +44,5 @@ tmp
 local.properties
 /data.db-shm
 /data.db-wal
+/transcriber/venv/
+/transcriber/.cache/
