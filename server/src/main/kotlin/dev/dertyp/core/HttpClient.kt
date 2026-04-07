@@ -8,6 +8,7 @@ import io.ktor.client.request.HttpRequestBuilder
 import io.ktor.client.request.get
 import io.ktor.client.statement.HttpResponse
 import io.ktor.http.Url
+import io.ktor.http.isSuccess
 import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -36,6 +37,17 @@ suspend inline fun <reified T> HttpClient.queuedGet(
     priority: HttpClientPriority = HttpClientPriority.NORMAL,
     noinline block: suspend HttpRequestBuilder.() -> Unit = {}
 ) = ApiClient.queueInstance.enqueue(urlString, priority, block).body<T>()
+
+suspend inline fun <reified T> HttpClient.safeQueuedGet(
+    urlString: String,
+    priority: HttpClientPriority = HttpClientPriority.NORMAL,
+    noinline block: suspend HttpRequestBuilder.() -> Unit = {}
+) = try {
+    val response = ApiClient.queueInstance.enqueue(urlString, priority, block)
+    if (response.status.isSuccess()) response.body<T>() else null
+} catch (_: Throwable) {
+    null
+}
 
 @OptIn(ExperimentalAtomicApi::class, ExperimentalTime::class)
 class HttpClientQueueService : Service() {
