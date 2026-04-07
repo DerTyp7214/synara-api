@@ -23,8 +23,8 @@ import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
-import org.junit.jupiter.api.BeforeEach
-import org.junit.jupiter.api.Test
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.EnumSource
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
 import org.koin.dsl.module
@@ -33,9 +33,8 @@ import java.util.UUID
 
 class LyricsSyncWorkerTest : KoinTest {
 
-    @BeforeEach
-    fun setup() {
-        TestDatabase.connect(DbDialect.POSTGRES, "lyrics_sync_test")
+    private fun setup(dialect: DbDialect) {
+        TestDatabase.connect(dialect, "lyrics_sync_test")
         transaction {
             SchemaUtils.create(SongTable, AlbumTable, ImageTable, SyncedLyricsTable)
         }
@@ -47,8 +46,10 @@ class LyricsSyncWorkerTest : KoinTest {
         TestDatabase.cleanUp()
     }
 
-    @Test
-    fun `worker should process songs and handle not found`(): Unit = runBlocking {
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `worker should process songs and handle not found`(dialect: DbDialect): Unit = runBlocking {
+        setup(dialect)
         val lyricsService = mockk<LyricsService>()
         every { lyricsService.isConfigured() } returns true
         coEvery { lyricsService.isReachable() } returns true
@@ -109,8 +110,10 @@ class LyricsSyncWorkerTest : KoinTest {
         }
     }
 
-    @Test
-    fun `worker should respect atomic running state`(): Unit = runBlocking {
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `worker should respect atomic running state`(dialect: DbDialect): Unit = runBlocking {
+        setup(dialect)
         val lyricsService = mockk<LyricsService>()
         every { lyricsService.isConfigured() } returns true
         coEvery { lyricsService.isReachable() } returns true

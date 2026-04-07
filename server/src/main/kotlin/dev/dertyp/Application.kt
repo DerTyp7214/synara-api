@@ -94,6 +94,7 @@ fun Application.module() {
             singleOf(::AlbumService)
             singleOf(::LyricsSearch)
             singleOf(::LyricsService)
+            singleOf(::LrcLibService)
             singleOf(::GenreService)
             singleOf(::ArtistService)
             singleOf(::StorageService)
@@ -124,6 +125,7 @@ fun Application.module() {
             singleOf(::GenreMetadataWorker)
             singleOf(::RecentReleaseWorker)
             singleOf(::LyricsSyncWorker)
+            singleOf(::LrcLibWorker)
             singleOf(::ReleaseService)
             singleOf(::AutoTranscodeWorker)
             singleOf(::CustomMigrationService)
@@ -187,6 +189,7 @@ fun Application.module() {
     val recentReleaseWorker = get<RecentReleaseWorker>()
     val autoTranscodeWorker = get<AutoTranscodeWorker>()
     val lyricsSyncWorker = get<LyricsSyncWorker>()
+    val lrcLibWorker = get<LrcLibWorker>()
 
     scheduleService.schedule(
         ScheduledTask(
@@ -321,6 +324,20 @@ fun Application.module() {
     )
 
     scheduleService.triggerTask(lyricsSyncTask.id)
+
+    val lrcLibTask = scheduleService.schedule(
+        ScheduledTask(
+            name = "LrcLib Worker",
+            trigger = CronPresets.dailyAt(4, 30),
+            task = {
+                logTask("LrcLib Worker") {
+                    lrcLibWorker.run { p, l -> updateProgress(p, l) }
+                }
+            }
+        )
+    )
+
+    scheduleService.triggerTask(lrcLibTask.id)
 
     val recentReleaseTask = scheduleService.schedule(
         ScheduledTask(

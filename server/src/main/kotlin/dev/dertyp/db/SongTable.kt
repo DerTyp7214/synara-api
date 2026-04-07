@@ -23,4 +23,5 @@ object SongTable : UUIDTable("song") {
     val fileSize = long("fileSize").default(0)
     val inserted = long("inserted").clientDefault { Instant.now().toEpochMilli() }
     val lastMetadataCheck = long("lastMetadataCheck").default(0L)
+    val lastLyricsFetchAttempt = long("lastLyricsFetchAttempt").default(0L)
 }
