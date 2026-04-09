@@ -81,7 +81,8 @@ class MusicBrainzCacheService : Service() {
                     ended = row[MBArtistTable.lifeSpanEnded]
                 ),
                 aliases = aliases,
-                tags = tags
+                tags = tags,
+                fetchedAt = row[MBArtistTable.lastUpdate]
             )
         }
     }
@@ -131,7 +132,8 @@ class MusicBrainzCacheService : Service() {
                 title = row[MBRecordingTable.title],
                 length = row[MBRecordingTable.length],
                 artistCredit = artistCredits,
-                releases = releases
+                releases = releases,
+                fetchedAt = row[MBRecordingTable.lastUpdate]
             )
         }
     }
@@ -166,7 +168,8 @@ class MusicBrainzCacheService : Service() {
                 date = row[MBReleaseTable.date],
                 disambiguation = row[MBReleaseTable.disambiguation],
                 releaseGroup = releaseGroup,
-                artistCredit = artistCredits
+                artistCredit = artistCredits,
+                fetchedAt = row[MBReleaseTable.lastUpdate]
             )
         }
     }
@@ -177,7 +180,8 @@ class MusicBrainzCacheService : Service() {
                 id = id,
                 title = row[MBReleaseGroupTable.title] ?: "",
                 primaryType = row[MBReleaseGroupTable.primaryType],
-                firstReleaseDate = row[MBReleaseGroupTable.firstReleaseDate]
+                firstReleaseDate = row[MBReleaseGroupTable.firstReleaseDate],
+                fetchedAt = row[MBReleaseGroupTable.lastUpdate]
             )
         }
     }

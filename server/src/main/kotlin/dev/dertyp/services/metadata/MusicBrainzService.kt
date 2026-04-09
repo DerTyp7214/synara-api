@@ -331,30 +331,34 @@ class RpcMusicBrainzService(
     private val musicBrainzCacheService: MusicBrainzCacheService
 ) : IMusicBrainzService {
     override suspend fun getArtist(id: PlatformUUID): MusicBrainzArtist? {
-        musicBrainzCacheService.getArtist(id)?.let { return it }
+        val cached = musicBrainzCacheService.getArtist(id)
+        if (cached != null && cached.fetchedAt != 0L) return cached
         return musicBrainzService.fetchArtistById(id, HttpClientPriority.HIGH)?.also {
             musicBrainzCacheService.updateArtistCache(it)
-        }
+        } ?: cached
     }
 
     override suspend fun getRecording(id: PlatformUUID): MusicBrainzRecording? {
-        musicBrainzCacheService.getRecording(id)?.let { return it }
+        val cached = musicBrainzCacheService.getRecording(id)
+        if (cached != null && cached.fetchedAt != 0L) return cached
         return musicBrainzService.fetchRecordingById(id, HttpClientPriority.HIGH)?.also {
             musicBrainzCacheService.updateRecordingCache(it)
-        }
+        } ?: cached
     }
 
     override suspend fun getRelease(id: PlatformUUID): MusicBrainzRelease? {
-        musicBrainzCacheService.getRelease(id)?.let { return it }
+        val cached = musicBrainzCacheService.getRelease(id)
+        if (cached != null && cached.fetchedAt != 0L) return cached
         return musicBrainzService.fetchReleaseById(id, HttpClientPriority.HIGH)?.also {
             musicBrainzCacheService.updateReleaseCache(it)
-        }
+        } ?: cached
     }
 
     override suspend fun getReleaseGroup(id: PlatformUUID): MusicBrainzReleaseGroup? {
-        musicBrainzCacheService.getReleaseGroup(id)?.let { return it }
+        val cached = musicBrainzCacheService.getReleaseGroup(id)
+        if (cached != null && cached.fetchedAt != 0L) return cached
         return musicBrainzService.fetchReleaseGroupById(id, HttpClientPriority.HIGH)?.also {
             musicBrainzCacheService.updateReleaseGroupCache(it)
-        }
+        } ?: cached
     }
 }
