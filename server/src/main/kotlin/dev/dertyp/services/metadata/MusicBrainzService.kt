@@ -326,7 +326,7 @@ class MusicBrainzService : Service() {
     }
 }
 
-class RpcMusicBrainzService(
+class CachedMusicBrainzService(
     private val musicBrainzService: MusicBrainzService,
     private val musicBrainzCacheService: MusicBrainzCacheService
 ) : IMusicBrainzService {

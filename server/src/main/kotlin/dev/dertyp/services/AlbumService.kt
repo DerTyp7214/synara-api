@@ -7,6 +7,7 @@ import dev.dertyp.dbQuery
 import dev.dertyp.getDateFromISO
 import dev.dertyp.getISOFromDate
 import dev.dertyp.services.ArtistService.Companion.mapArtist
+import dev.dertyp.services.metadata.CachedMusicBrainzService
 import dev.dertyp.services.metadata.MusicBrainzCacheService
 import dev.dertyp.services.metadata.MusicBrainzService
 import dev.dertyp.utils.LogParam
@@ -140,10 +141,8 @@ class AlbumService : Service() {
             }
 
             if (!releaseExists) {
-                val musicBrainzService: MusicBrainzService by inject()
-                musicBrainzService.fetchReleaseById(musicBrainzId, HttpClientPriority.HIGH)?.let {
-                    musicBrainzCacheService.updateReleaseCache(it)
-                }
+                val cachedMusicBrainzService: CachedMusicBrainzService by inject()
+                cachedMusicBrainzService.getRelease(musicBrainzId)
             }
         }
 

@@ -22,8 +22,11 @@ import org.jetbrains.exposed.v1.jdbc.update
 import org.koin.core.component.inject
 import java.util.UUID
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
+import kotlin.random.Random
 import kotlin.time.Clock
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.days
+import kotlin.time.Duration.Companion.nanoseconds
 
 @OptIn(ExperimentalAtomicApi::class)
 class MetadataFetchingService(private val environment: ApplicationEnvironment) : Service() {
@@ -276,21 +279,29 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
         return mapOf("songsChecked" to totalChecked, "songsFound" to foundCount)
     }
 
+    private fun ClosedRange<Duration>.random(random: Random = Random): Duration {
+        val startNs = start.inWholeNanoseconds
+        val endNs = endInclusive.inWholeNanoseconds
+
+        return (startNs..endNs).random(random).nanoseconds
+    }
+
+
     private suspend fun updateLastMetadataCheckArtist(id: UUID) = dbQuery {
         ArtistTable.update({ ArtistTable.id eq id }) {
-            it[ArtistTable.lastMetadataCheck] = System.currentTimeMillis()
+            it[ArtistTable.lastMetadataCheck] = System.currentTimeMillis() + (1.days .. 5.days).random().inWholeMilliseconds
         }
     }
 
     private suspend fun updateLastMetadataCheckAlbum(id: UUID) = dbQuery {
         AlbumTable.update({ AlbumTable.id eq id }) {
-            it[AlbumTable.lastMetadataCheck] = System.currentTimeMillis()
+            it[AlbumTable.lastMetadataCheck] = System.currentTimeMillis() + (1.days .. 5.days).random().inWholeMilliseconds
         }
     }
 
     private suspend fun updateLastMetadataCheckSong(id: UUID) = dbQuery {
         SongTable.update({ SongTable.id eq id }) {
-            it[SongTable.lastMetadataCheck] = System.currentTimeMillis()
+            it[SongTable.lastMetadataCheck] = System.currentTimeMillis() + (1.days .. 5.days).random().inWholeMilliseconds
         }
     }
 

@@ -12,17 +12,17 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import java.util.UUID
 
-class RpcMusicBrainzServiceTest {
+class CachedMusicBrainzServiceTest {
 
     private lateinit var musicBrainzService: MusicBrainzService
     private lateinit var musicBrainzCacheService: MusicBrainzCacheService
-    private lateinit var rpcService: RpcMusicBrainzService
+    private lateinit var rpcService: CachedMusicBrainzService
 
     @BeforeEach
     fun setup() {
         musicBrainzService = mockk()
         musicBrainzCacheService = mockk()
-        rpcService = RpcMusicBrainzService(musicBrainzService, musicBrainzCacheService)
+        rpcService = CachedMusicBrainzService(musicBrainzService, musicBrainzCacheService)
     }
 
     @AfterEach

@@ -5,6 +5,7 @@ import dev.dertyp.core.*
 import dev.dertyp.data.*
 import dev.dertyp.db.*
 import dev.dertyp.dbQuery
+import dev.dertyp.services.metadata.CachedMusicBrainzService
 import dev.dertyp.services.metadata.MusicBrainzCacheService
 import dev.dertyp.services.metadata.MusicBrainzService
 import dev.dertyp.utils.LogParam
@@ -124,8 +125,59 @@ class ArtistService : Service() {
         val artist = byId(id, userId) ?: return null
         if (artist.musicbrainzId != null) return artist
         
+        val cachedMusicBrainzService: CachedMusicBrainzService by inject()
         val musicBrainzService: MusicBrainzService by inject()
-        val mbArtist = musicBrainzService.searchArtistMb(artist, priority)
+        val songService: SongService by inject()
+        val albumService: AlbumService by inject()
+        
+        var mbArtistId: UUID? = null
+
+        val songIds = songService.songIdsByArtist(id).take(5).toList()
+        for (songId in songIds) {
+            val song = songService.byId(songId) ?: continue
+            val mbRecording = if (song.musicBrainzId != null) {
+                cachedMusicBrainzService.getRecording(song.musicBrainzId!!)
+            } else {
+                musicBrainzService.searchMb(song, priority)
+            }
+            
+            if (mbRecording != null) {
+                val matchedArtist = mbRecording.artistCredit?.find {
+                    it.name.equals(artist.name, ignoreCase = true) || it.artist?.name.equals(artist.name, ignoreCase = true)
+                }?.artist
+                
+                if (matchedArtist != null) {
+                    mbArtistId = matchedArtist.id
+                    break
+                }
+            }
+        }
+        
+        if (mbArtistId == null) {
+            val albums = albumService.byArtist(page = 0, pageSize = 5, artistId = id, singles = false, userId = userId).data
+            for (album in albums) {
+                val mbRelease = if (album.musicbrainzId != null) {
+                    cachedMusicBrainzService.getRelease(album.musicbrainzId!!)
+                } else {
+                    musicBrainzService.searchAlbumMb(album, priority)
+                }
+                
+                if (mbRelease != null) {
+                    val matchedArtist = mbRelease.artistCredit?.find {
+                        it.name.equals(artist.name, ignoreCase = true) || it.artist?.name.equals(artist.name, ignoreCase = true)
+                    }?.artist
+                    
+                    if (matchedArtist != null) {
+                        mbArtistId = matchedArtist.id
+                        break
+                    }
+                }
+            }
+        }
+        
+        val mbArtist = if (mbArtistId != null) {
+            cachedMusicBrainzService.getArtist(mbArtistId)
+        } else return byId(id, userId)
         
         if (mbArtist != null) {
             musicBrainzCacheService.updateArtistCache(mbArtist)
@@ -156,10 +208,8 @@ class ArtistService : Service() {
             }
 
             if (!artistExists) {
-                val musicBrainzService: MusicBrainzService by inject()
-                musicBrainzService.fetchArtistById(musicBrainzId, HttpClientPriority.HIGH)?.let {
-                    musicBrainzCacheService.updateArtistCache(it)
-                }
+                val cachedMusicBrainzService: CachedMusicBrainzService by inject()
+                cachedMusicBrainzService.getArtist(musicBrainzId)
             }
         }
 
