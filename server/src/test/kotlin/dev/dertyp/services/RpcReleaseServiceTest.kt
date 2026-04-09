@@ -1,5 +1,6 @@
 package dev.dertyp.services
 
+import dev.dertyp.core.HttpClientPriority
 import dev.dertyp.data.User
 import io.mockk.coEvery
 import io.mockk.mockk
@@ -16,7 +17,7 @@ class RpcReleaseServiceTest {
     @Test
     fun `followArtist should delegate to releaseService`() = runBlocking {
         val mbId = UUID.randomUUID()
-        coEvery { releaseService.followArtist(user.id, mbId) } returns true
+        coEvery { releaseService.followArtist(user.id, mbId, HttpClientPriority.HIGH) } returns true
         
         val result = rpcService.followArtist(mbId)
         assertTrue(result)
