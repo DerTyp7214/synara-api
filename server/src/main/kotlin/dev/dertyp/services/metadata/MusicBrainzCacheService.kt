@@ -1,6 +1,6 @@
 package dev.dertyp.services.metadata
 
-import dev.dertyp.core.fetchBatchedResults
+import dev.dertyp.core.fetchBatchedResultsByIdKeyset
 import dev.dertyp.data.*
 import dev.dertyp.db.*
 import dev.dertyp.dbQuery
@@ -17,30 +17,38 @@ import kotlin.time.Duration.Companion.days
 class MusicBrainzCacheService : Service() {
 
     fun staleArtistIdsFlow(staleSince: Long = Clock.System.now().toEpochMilliseconds() - 30.days.inWholeMilliseconds): Flow<UUID> = flow {
-        MBArtistTable.selectAll().where { MBArtistTable.lastUpdate less staleSince }
-            .fetchBatchedResults(100) { batch ->
-                batch.forEach { emit(it[MBArtistTable.id].value) }
+        MBArtistTable.select(MBArtistTable.id).where { MBArtistTable.lastUpdate less staleSince }
+            .fetchBatchedResultsByIdKeyset(MBArtistTable.id, 100) { batch ->
+                for (row in batch) {
+                    emit(row[MBArtistTable.id].value)
+                }
             }
     }
 
     fun staleReleaseGroupIdsFlow(staleSince: Long = Clock.System.now().toEpochMilliseconds() - 30.days.inWholeMilliseconds): Flow<UUID> = flow {
-        MBReleaseGroupTable.selectAll().where { MBReleaseGroupTable.lastUpdate less staleSince }
-            .fetchBatchedResults(100) { batch ->
-                batch.forEach { emit(it[MBReleaseGroupTable.id].value) }
+        MBReleaseGroupTable.select(MBReleaseGroupTable.id).where { MBReleaseGroupTable.lastUpdate less staleSince }
+            .fetchBatchedResultsByIdKeyset(MBReleaseGroupTable.id, 100) { batch ->
+                for (row in batch) {
+                    emit(row[MBReleaseGroupTable.id].value)
+                }
             }
     }
 
     fun staleReleaseIdsFlow(staleSince: Long = Clock.System.now().toEpochMilliseconds() - 30.days.inWholeMilliseconds): Flow<UUID> = flow {
-        MBReleaseTable.selectAll().where { MBReleaseTable.lastUpdate less staleSince }
-            .fetchBatchedResults(100) { batch ->
-                batch.forEach { emit(it[MBReleaseTable.id].value) }
+        MBReleaseTable.select(MBReleaseTable.id).where { MBReleaseTable.lastUpdate less staleSince }
+            .fetchBatchedResultsByIdKeyset(MBReleaseTable.id, 100) { batch ->
+                for (row in batch) {
+                    emit(row[MBReleaseTable.id].value)
+                }
             }
     }
 
     fun staleRecordingIdsFlow(staleSince: Long = Clock.System.now().toEpochMilliseconds() - 30.days.inWholeMilliseconds): Flow<UUID> = flow {
-        MBRecordingTable.selectAll().where { MBRecordingTable.lastUpdate less staleSince }
-            .fetchBatchedResults(100) { batch ->
-                batch.forEach { emit(it[MBRecordingTable.id].value) }
+        MBRecordingTable.select(MBRecordingTable.id).where { MBRecordingTable.lastUpdate less staleSince }
+            .fetchBatchedResultsByIdKeyset(MBRecordingTable.id, 100) { batch ->
+                for (row in batch) {
+                    emit(row[MBRecordingTable.id].value)
+                }
             }
     }
 
@@ -178,7 +186,7 @@ class MusicBrainzCacheService : Service() {
         MBReleaseGroupTable.selectAll().where { MBReleaseGroupTable.id eq id }.singleOrNull()?.let { row ->
             MusicBrainzReleaseGroup(
                 id = id,
-                title = row[MBReleaseGroupTable.title] ?: "",
+                title = row[MBReleaseGroupTable.title],
                 primaryType = row[MBReleaseGroupTable.primaryType],
                 firstReleaseDate = row[MBReleaseGroupTable.firstReleaseDate],
                 fetchedAt = row[MBReleaseGroupTable.lastUpdate]

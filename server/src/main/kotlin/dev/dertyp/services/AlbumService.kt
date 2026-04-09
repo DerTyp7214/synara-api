@@ -51,6 +51,8 @@ class AlbumRpcService(private val user: User, private val albumService: AlbumSer
     ): PaginatedResponse<Album> = albumService.byArtist(page, pageSize, artistId, singles, user.id)
 
     override suspend fun fetchMusicBrainzId(id: UUID): Album? = albumService.fetchMusicBrainzId(id, user.id, HttpClientPriority.HIGH)
+    override suspend fun setMusicBrainzId(id: UUID, musicBrainzId: UUID?): Album? =
+        albumService.setMusicBrainzId(id, musicBrainzId, user.id)
 }
 
 class AlbumService : Service() {
@@ -111,13 +113,6 @@ class AlbumService : Service() {
         
         if (mbRelease != null) {
             musicBrainzCacheService.updateReleaseCache(mbRelease)
-            dbQuery {
-                AlbumMusicBrainzTable.upsert(AlbumMusicBrainzTable.albumId) {
-                    it[albumId] = id
-                    it[musicBrainzId] = mbRelease.id
-                    it[lastCheck] = Clock.System.now().toEpochMilliseconds()
-                }
-            }
 
             val genres = (mbRelease.genres?.map { it.name } ?: emptyList()) + (mbRelease.releaseGroup?.genres?.map { it.name } ?: emptyList())
             if (genres.isNotEmpty()) {
@@ -131,12 +126,32 @@ class AlbumService : Service() {
                     }
                 }
             }
-        } else {
-            dbQuery {
-                AlbumMusicBrainzTable.upsert(AlbumMusicBrainzTable.albumId) {
-                    it[albumId] = id
-                    it[lastCheck] = Clock.System.now().toEpochMilliseconds()
+        }
+        
+        return setMusicBrainzId(id, mbRelease?.id, userId)
+    }
+
+    suspend fun setMusicBrainzId(id: UUID, musicBrainzId: UUID?, userId: UUID? = null): Album? {
+        if (musicBrainzId != null) {
+            val releaseExists = dbQuery {
+                MBReleaseTable.select(MBReleaseTable.id)
+                    .where { MBReleaseTable.id eq musicBrainzId }
+                    .any()
+            }
+
+            if (!releaseExists) {
+                val musicBrainzService: MusicBrainzService by inject()
+                musicBrainzService.fetchReleaseById(musicBrainzId, HttpClientPriority.HIGH)?.let {
+                    musicBrainzCacheService.updateReleaseCache(it)
                 }
+            }
+        }
+
+        dbQuery {
+            AlbumMusicBrainzTable.upsert(AlbumMusicBrainzTable.albumId) {
+                it[albumId] = id
+                it[AlbumMusicBrainzTable.musicBrainzId] = musicBrainzId
+                it[lastCheck] = Clock.System.now().toEpochMilliseconds()
             }
         }
         
@@ -214,8 +229,10 @@ class AlbumService : Service() {
     fun allAlbumIds(): Flow<UUID> = flow {
         AlbumTable
             .select(AlbumTable.id)
-            .fetchBatchedResults(1000) { batch ->
-                batch.forEach { emit(it[AlbumTable.id].value) }
+            .fetchBatchedResultsByIdKeyset(AlbumTable.id, 1000) { batch ->
+                for (row in batch) {
+                    emit(row[AlbumTable.id].value)
+                }
             }
     }
 
@@ -234,9 +251,9 @@ class AlbumService : Service() {
                 AlbumMusicBrainzTable.albumId.isNull() or
                         (AlbumMusicBrainzTable.musicBrainzId.isNull() and (AlbumMusicBrainzTable.lastCheck less oneWeekAgo.toEpochMilliseconds()))
             }
-            .fetchBatchedResults(1000) { batch ->
-                batch.forEach {
-                    emit(it[AlbumTable.id].value)
+            .fetchBatchedResultsByIdKeyset(AlbumTable.id, 1000) { batch ->
+                for (row in batch) {
+                    emit(row[AlbumTable.id].value)
                 }
             }
     }

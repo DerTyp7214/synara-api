@@ -150,3 +150,36 @@ suspend inline fun Query.fetchBatchedResults(
         }
     }
 }
+
+suspend inline fun <T : Any> Query.fetchBatchedResultsByIdKeyset(
+    idColumn: Column<T>,
+    batchSize: Int,
+    crossinline body: suspend (List<ResultRow>) -> Unit
+) {
+    var lastId: T? = null
+    var hasMore = true
+
+    while (hasMore) {
+        val results = dbQuery {
+            val query = this.copy()
+            if (lastId != null) {
+                query.adjustWhere {
+                    val newOp = GreaterOp(idColumn, QueryParameter(lastId!!, idColumn.columnType))
+                    if (this != null) this and newOp
+                    else newOp
+                }
+            }
+            query.orderBy(idColumn to SortOrder.ASC)
+            query.limit(batchSize)
+            query.toList()
+        }
+
+        if (results.isNotEmpty()) {
+            body(results)
+            lastId = results.last()[idColumn]
+            if (results.size < batchSize) hasMore = false
+        } else {
+            hasMore = false
+        }
+    }
+}

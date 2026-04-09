@@ -3,9 +3,11 @@ package dev.dertyp.services
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
 import dev.dertyp.data.InsertableAlbum
+import dev.dertyp.data.MusicBrainzRelease
 import dev.dertyp.db.*
 import dev.dertyp.services.metadata.MusicBrainzCacheService
 import dev.dertyp.services.metadata.MusicBrainzService
+import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
@@ -611,5 +613,34 @@ class AlbumServiceTest : KoinTest {
         assertNotNull(album)
         assertEquals(1, album?.genres?.size)
         assertEquals("pop", album?.genres?.firstOrNull()?.name)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `setMusicBrainzId should fetch metadata if not in cache`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val albumId = UUID.randomUUID()
+        val mbId = UUID.randomUUID()
+
+        transaction(database) {
+            AlbumTable.insert {
+                it[id] = albumId
+                it[name] = "Album"
+                it[songCount] = 1
+            }
+        }
+
+        coEvery { musicBrainzService.fetchReleaseById(mbId, any()) } returns MusicBrainzRelease(
+            id = mbId,
+            title = "Fetched Album"
+        )
+
+        service.setMusicBrainzId(albumId, mbId)
+
+        val mbRelease = transaction(database) {
+            MBReleaseTable.selectAll().where { MBReleaseTable.id eq mbId }.singleOrNull()
+        }
+        assertNotNull(mbRelease)
+        assertEquals("Fetched Album", mbRelease!![MBReleaseTable.title])
     }
 }

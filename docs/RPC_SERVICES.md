@@ -913,6 +913,7 @@ Manages albums and their metadata.
 | `updateAlbum` | `album` ([Album](#album)): The album object with updated fields. | [Album](#album)? | No |  | Update album metadata. |
 | `deleteAlbums` | `ids` (`List`<`PlatformUUID`>): Collection of album IDs to delete. | `Boolean` | No |  | Delete multiple albums from the library. |
 | `fetchMusicBrainzId` | `id` (`PlatformUUID`): The album unique identifier. | [Album](#album)? | No |  | Fetch and link MusicBrainz ID for an album. |
+| `setMusicBrainzId` | `id` (`PlatformUUID`): The album unique identifier.<br>`musicBrainzId` (`PlatformUUID`?): The MusicBrainz Release UUID. | [Album](#album)? | No |  | Manually set MusicBrainz ID for an album. |
 | `byArtist` | `page` (`Int`): Page index.<br>`pageSize` (`Int`): Number of items per page.<br>`artistId` (`PlatformUUID`): The artist unique identifier.<br>`singles` (`Boolean`): Whether to include singles. | [PaginatedResponse](#paginatedresponse)<[Album](#album)> | No |  | List albums by artist. |
 
 ### IArtistService

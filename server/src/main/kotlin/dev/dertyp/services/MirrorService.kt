@@ -1,6 +1,7 @@
 package dev.dertyp.services
 
 import dev.dertyp.core.fetchBatchedResults
+import dev.dertyp.core.fetchBatchedResultsByIdKeyset
 import dev.dertyp.data.*
 import dev.dertyp.db.ArtistAliasTable
 import dev.dertyp.db.ArtistSplitAliasTable
@@ -124,8 +125,8 @@ class MirrorService : Service() {
     fun getArtists(): Flow<Artist> = artistService.allArtistsFlow()
 
     fun getArtistAliases(): Flow<ArtistAlias> = flow {
-        ArtistAliasTable.selectAll().fetchBatchedResults(1000) { batch ->
-            batch.forEach { row ->
+        ArtistAliasTable.selectAll().fetchBatchedResultsByIdKeyset(ArtistAliasTable.id, 1000) { batch ->
+            for (row in batch) {
                 emit(ArtistAlias(
                     artistId = row[ArtistAliasTable.artistId].value,
                     name = row[ArtistAliasTable.name]
@@ -136,7 +137,7 @@ class MirrorService : Service() {
 
     fun getArtistSplitAliases(): Flow<ArtistSplitAlias> = flow {
         ArtistSplitAliasTable.selectAll().fetchBatchedResults(1000) { batch ->
-            batch.forEach { row ->
+            for (row in batch) {
                 emit(ArtistSplitAlias(
                     artistId = row[ArtistSplitAliasTable.artistId].value,
                     name = row[ArtistSplitAliasTable.name]
@@ -152,8 +153,8 @@ class MirrorService : Service() {
     fun getUserPlaylists(): Flow<UserPlaylist> = userPlaylistService.allPlaylistsFlow()
 
     fun getImageMetadata(): Flow<Image> = flow {
-        ImageTable.selectAll().fetchBatchedResults(1000) { batch ->
-            batch.forEach { row ->
+        ImageTable.selectAll().fetchBatchedResultsByIdKeyset(ImageTable.id, 1000) { batch ->
+            for (row in batch) {
                 emit(imageService.map(row))
             }
         }

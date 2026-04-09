@@ -3,9 +3,11 @@ package dev.dertyp.services
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
 import dev.dertyp.data.MergeArtists
+import dev.dertyp.data.MusicBrainzArtist
 import dev.dertyp.db.*
 import dev.dertyp.services.metadata.MusicBrainzCacheService
 import dev.dertyp.services.metadata.MusicBrainzService
+import io.mockk.coEvery
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.core.eq
@@ -765,5 +767,34 @@ class ArtistServiceTest : KoinTest {
         val genreNames = merged?.genres?.map { it.name }
         assertTrue(genreNames?.contains("rock") == true)
         assertTrue(genreNames?.contains("pop") == true)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `setMusicBrainzId should fetch metadata if not in cache`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val artistId = UUID.randomUUID()
+        val mbId = UUID.randomUUID()
+
+        transaction(database) {
+            ArtistTable.insert {
+                it[id] = artistId
+                it[name] = "Artist"
+            }
+        }
+
+        coEvery { musicBrainzService.fetchArtistById(mbId, any()) } returns MusicBrainzArtist(
+            id = mbId,
+            name = "Fetched Artist",
+            sortName = "Fetched Artist"
+        )
+
+        service.setMusicBrainzId(artistId, mbId)
+
+        val mbArtist = transaction(database) {
+            MBArtistTable.selectAll().where { MBArtistTable.id eq mbId }.singleOrNull()
+        }
+        assertNotNull(mbArtist)
+        assertEquals("Fetched Artist", mbArtist!![MBArtistTable.name])
     }
 }

@@ -2,14 +2,12 @@ package dev.dertyp.services
 
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
-import dev.dertyp.data.InsertableAlbum
-import dev.dertyp.data.InsertableSong
-import dev.dertyp.data.SongTag
-import dev.dertyp.data.User
+import dev.dertyp.data.*
 import dev.dertyp.db.*
 import dev.dertyp.services.metadata.MusicBrainzCacheService
 import dev.dertyp.services.metadata.MusicBrainzService
 import io.ktor.server.application.ApplicationEnvironment
+import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.flow.toList
@@ -982,5 +980,41 @@ class SongServiceTest : KoinTest {
         assertNotNull(song)
         assertEquals(1, song?.genres?.size)
         assertEquals("rock", song?.genres?.firstOrNull()?.name)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `setMusicBrainzId should fetch metadata if not in cache`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val songId = UUID.randomUUID()
+        val mbId = UUID.randomUUID()
+
+        transaction(database) {
+            val albumId = UUID.randomUUID()
+            AlbumTable.insert {
+                it[id] = albumId
+                it[name] = "Album"
+            }
+            SongTable.insert {
+                it[id] = songId
+                it[title] = "Song"
+                it[SongTable.albumId] = albumId
+                it[filePath] = "/path/song.mp3"
+            }
+        }
+
+        coEvery { musicBrainzService.fetchRecordingById(mbId, any()) } returns MusicBrainzRecording(
+            id = mbId,
+            title = "Fetched Title"
+        )
+
+        val updated = rpcService.setMusicBrainzId(songId, mbId)
+        assertNotNull(updated)
+
+        val mbRecording = transaction(database) {
+            MBRecordingTable.selectAll().where { MBRecordingTable.id eq mbId }.singleOrNull()
+        }
+        assertNotNull(mbRecording)
+        assertEquals("Fetched Title", mbRecording!![MBRecordingTable.title])
     }
 }

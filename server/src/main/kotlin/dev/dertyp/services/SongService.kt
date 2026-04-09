@@ -329,40 +329,54 @@ class SongService : Service() {
         }
     }
 
-    suspend fun setMusicBrainzId(id: UUID, musicBrainzId: UUID?, userId: UUID): UserSong? = dbQuery {
-        val exists = SongMusicBrainzTable.select(SongMusicBrainzTable.songId)
-            .where { SongMusicBrainzTable.songId eq id }
-            .any()
-
-        if (exists) {
-            SongMusicBrainzTable.update({ SongMusicBrainzTable.songId eq id }) {
-                it[SongMusicBrainzTable.musicBrainzId] = musicBrainzId
-                it[SongMusicBrainzTable.lastCheck] = System.currentTimeMillis()
+    suspend fun setMusicBrainzId(id: UUID, musicBrainzId: UUID?, userId: UUID): UserSong? {
+        if (musicBrainzId != null) {
+            val recordingExists = dbQuery {
+                MBRecordingTable.select(MBRecordingTable.id)
+                    .where { MBRecordingTable.id eq musicBrainzId }
+                    .any()
             }
-        } else {
-            SongMusicBrainzTable.insert {
-                it[SongMusicBrainzTable.songId] = id
-                it[SongMusicBrainzTable.musicBrainzId] = musicBrainzId
-                it[SongMusicBrainzTable.lastCheck] = System.currentTimeMillis()
+
+            if (!recordingExists) {
+                musicBrainzService.fetchRecordingById(musicBrainzId, HttpClientPriority.HIGH)?.let {
+                    musicBrainzCacheService.updateRecordingCache(it)
+                }
             }
         }
 
-        return@dbQuery byId(id, userId).also {
-            it?.let { song ->
-                if (!song.path.endsWith(".flac", true)) return@let
-                try {
-                    val file = AudioFileIO.read(File(song.path))
+        dbQuery {
+            val exists = SongMusicBrainzTable.select(SongMusicBrainzTable.songId)
+                .where { SongMusicBrainzTable.songId eq id }
+                .any()
 
-                    if (musicBrainzId != null) {
-                        file.tag.setField(FieldKey.MUSICBRAINZ_TRACK_ID, musicBrainzId.toString())
-                    } else {
-                        file.tag.deleteField(FieldKey.MUSICBRAINZ_TRACK_ID)
-                    }
-
-                    file.commit()
-                } catch (e: Exception) {
-                    logger.error("Failed to set musicBrainzId for $id: ${e.message}", e)
+            if (exists) {
+                SongMusicBrainzTable.update({ SongMusicBrainzTable.songId eq id }) {
+                    it[SongMusicBrainzTable.musicBrainzId] = musicBrainzId
+                    it[SongMusicBrainzTable.lastCheck] = System.currentTimeMillis()
                 }
+            } else {
+                SongMusicBrainzTable.insert {
+                    it[SongMusicBrainzTable.songId] = id
+                    it[SongMusicBrainzTable.musicBrainzId] = musicBrainzId
+                    it[SongMusicBrainzTable.lastCheck] = System.currentTimeMillis()
+                }
+            }
+        }
+
+        return byId(id, userId).also { song ->
+            if (song == null || !song.path.endsWith(".flac", true)) return@also
+            try {
+                val file = AudioFileIO.read(File(song.path))
+
+                if (musicBrainzId != null) {
+                    file.tag.setField(FieldKey.MUSICBRAINZ_TRACK_ID, musicBrainzId.toString())
+                } else {
+                    file.tag.deleteField(FieldKey.MUSICBRAINZ_TRACK_ID)
+                }
+
+                file.commit()
+            } catch (e: Exception) {
+                logger.error("Failed to set musicBrainzId for $id: ${e.message}", e)
             }
         }
     }

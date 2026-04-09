@@ -129,13 +129,6 @@ class ArtistService : Service() {
         
         if (mbArtist != null) {
             musicBrainzCacheService.updateArtistCache(mbArtist)
-            dbQuery {
-                ArtistMusicBrainzTable.upsert(ArtistMusicBrainzTable.artistId) {
-                    it[artistId] = id
-                    it[musicBrainzId] = mbArtist.id
-                    it[lastCheck] = Clock.System.now().toEpochMilliseconds()
-                }
-            }
 
             val genres = mbArtist.genres?.map { it.name } ?: emptyList()
             if (genres.isNotEmpty()) {
@@ -149,19 +142,27 @@ class ArtistService : Service() {
                     }
                 }
             }
-        } else {
-            dbQuery {
-                ArtistMusicBrainzTable.upsert(ArtistMusicBrainzTable.artistId) {
-                    it[artistId] = id
-                    it[lastCheck] = Clock.System.now().toEpochMilliseconds()
-                }
-            }
         }
         
-        return byId(id, userId)
+        return setMusicBrainzId(id, mbArtist?.id, userId)
     }
 
     suspend fun setMusicBrainzId(id: UUID, musicBrainzId: UUID?, userId: UUID? = null): Artist? {
+        if (musicBrainzId != null) {
+            val artistExists = dbQuery {
+                MBArtistTable.select(MBArtistTable.id)
+                    .where { MBArtistTable.id eq musicBrainzId }
+                    .any()
+            }
+
+            if (!artistExists) {
+                val musicBrainzService: MusicBrainzService by inject()
+                musicBrainzService.fetchArtistById(musicBrainzId, HttpClientPriority.HIGH)?.let {
+                    musicBrainzCacheService.updateArtistCache(it)
+                }
+            }
+        }
+
         dbQuery {
             ArtistMusicBrainzTable.upsert(ArtistMusicBrainzTable.artistId) {
                 it[artistId] = id
@@ -476,8 +477,10 @@ class ArtistService : Service() {
     fun allArtistIds(): Flow<UUID> = flow {
         ArtistTable
             .select(ArtistTable.id)
-            .fetchBatchedResults(1000) { batch ->
-                batch.forEach { emit(it[ArtistTable.id].value) }
+            .fetchBatchedResultsByIdKeyset(ArtistTable.id, 1000) { batch ->
+                for (row in batch) {
+                    emit(row[ArtistTable.id].value)
+                }
             }
     }
 
@@ -493,9 +496,9 @@ class ArtistService : Service() {
             .where {
                 ArtistMusicBrainzTable.artistId.isNull() or (ArtistMusicBrainzTable.musicBrainzId.isNull())
             }
-            .fetchBatchedResults(1000) { batch ->
-                batch.forEach {
-                    emit(it[ArtistTable.id].value)
+            .fetchBatchedResultsByIdKeyset(ArtistTable.id, 1000) { batch ->
+                for (row in batch) {
+                    emit(row[ArtistTable.id].value)
                 }
             }
     }
