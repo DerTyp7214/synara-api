@@ -1,4 +1,4 @@
-@file:OptIn(ExperimentalSerializationApi::class)
+@file:OptIn(ExperimentalSerializationApi::class, FlowPreview::class)
 
 package dev.dertyp.services
 
@@ -9,6 +9,10 @@ import dev.dertyp.data.User
 import dev.dertyp.db.ScheduledTaskLogTable
 import dev.dertyp.dbQuery
 import dev.dertyp.serializers.AppCbor
+import kotlin.time.Duration.Companion.seconds
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.*
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.decodeFromByteArray
 import kotlinx.serialization.encodeToByteArray
@@ -34,16 +38,36 @@ class RpcScheduledTaskLogService(
         }
         return logService.getGroupedLogs()
     }
+
+    override fun getGroupedLogsFlow(): Flow<Map<String, List<ScheduledTaskLog>>> {
+        if (!user.isAdmin) {
+            throw SecurityException("Only admins can access scheduled task logs")
+        }
+        return logService.groupedLogsFlow
+    }
 }
 
 class ScheduledTaskLogService : Service() {
+    private val updateTrigger = MutableSharedFlow<Unit>(replay = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+
+    val groupedLogsFlow: Flow<Map<String, List<ScheduledTaskLog>>> = updateTrigger
+        .onStart { emit(Unit) }
+        .sample(1.seconds)
+        .map { getGroupedLogs() }
+
+    private fun triggerUpdate() {
+        updateTrigger.tryEmit(Unit)
+    }
+
     fun startLog(taskName: String, startTime: Long) = transaction {
-        ScheduledTaskLogTable.insert {
+        val id = ScheduledTaskLogTable.insert {
             it[ScheduledTaskLogTable.taskName] = taskName
             it[ScheduledTaskLogTable.startTime] = startTime
             it[ScheduledTaskLogTable.endTime] = 0
             it[ScheduledTaskLogTable.status] = TaskStatus.RUNNING
         } get ScheduledTaskLogTable.id
+        triggerUpdate()
+        id
     }
 
     fun updateProgress(runningId: UUID, progress: Double, logs: List<String>) = transaction {
@@ -51,6 +75,7 @@ class ScheduledTaskLogService : Service() {
             it[ScheduledTaskLogTable.progress] = progress
             it[ScheduledTaskLogTable.logs] = ApplicationScope.json.encodeToString(logs)
         }
+        triggerUpdate()
     }
 
     fun logTask(
@@ -102,6 +127,7 @@ class ScheduledTaskLogService : Service() {
                 }
             }
         }
+        triggerUpdate()
     }
 
     suspend fun getGroupedLogs(): Map<String, List<ScheduledTaskLog>> = dbQuery {
@@ -131,5 +157,6 @@ class ScheduledTaskLogService : Service() {
     suspend fun cleanupRunningLogs() = dbQuery {
         logger.info("Cleaning up stuck running task logs")
         ScheduledTaskLogTable.deleteWhere { status eq TaskStatus.RUNNING }
+        triggerUpdate()
     }
 }
