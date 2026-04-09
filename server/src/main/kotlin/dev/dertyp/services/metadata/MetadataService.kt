@@ -26,7 +26,7 @@ abstract class MetadataService(
     private val providerName: String,
     metadataType: MetadataType,
     environment: ApplicationEnvironment
-) : Service() {
+) : IMetadataService, Service() {
     protected abstract val clientIdConfigPath: String
     protected abstract val clientSecretConfigPath: String
     protected abstract val tokenUrl: String
