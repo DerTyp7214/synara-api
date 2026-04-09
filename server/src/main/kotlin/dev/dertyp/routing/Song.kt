@@ -10,13 +10,14 @@ import dev.dertyp.services.SongService
 import io.github.smiley4.ktoropenapi.get
 import io.github.smiley4.ktoropenapi.post
 import io.github.smiley4.ktoropenapi.route
-import io.ktor.http.*
-import io.ktor.server.request.*
-import io.ktor.server.response.*
-import io.ktor.server.routing.*
+import io.ktor.http.HttpStatusCode
+import io.ktor.server.request.receive
+import io.ktor.server.response.respond
+import io.ktor.server.routing.Route
+import io.ktor.server.routing.delete
 import kotlinx.serialization.Serializable
 import org.koin.ktor.ext.inject
-import java.util.*
+import java.util.UUID
 
 @Serializable
 data class SetLikedBody(val liked: Boolean)
@@ -129,7 +130,7 @@ fun Route.song() {
 
             val user = call.getUser() ?: return@post call.respond(HttpStatusCode.Unauthorized)
 
-            val songs = service.byIds(ids.ids.distinct(), user.id).data
+            val songs = service.byIds(ids.ids.distinct(), user.id)
 
             call.respond(songs)
         }

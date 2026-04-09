@@ -59,7 +59,7 @@ class SongRpcService(private val user: User, private val songService: SongServic
     override suspend fun byMusicBrainzId(musicBrainzId: UUID): List<UserSong> =
         songService.byMusicBrainzId(musicBrainzId, user.id)
 
-    override suspend fun byIds(@LogParam("size") ids: Collection<UUID>): PaginatedResponse<UserSong> =
+    override suspend fun byIds(@LogParam("size") ids: Collection<UUID>): List<UserSong> =
         songService.byIds(ids, user.id)
 
     override suspend fun byTitle(
@@ -414,14 +414,12 @@ class SongService : Service() {
         where { SongTable.id eq id }
     }
 
-    suspend fun byIds(ids: Collection<UUID>, userId: UUID): PaginatedResponse<UserSong> =
+    suspend fun byIds(ids: Collection<UUID>, userId: UUID): List<UserSong> =
         querySongs<UserSong>(0, Int.MAX_VALUE, true, userId) {
             where { SongTable.id inList ids }
         }.let { response ->
             val songMap = response.data.associateBy { it.id }
-            response.copy(
-                data = ids.mapNotNull { songMap[it] }
-            )
+            ids.mapNotNull { songMap[it] }
         }
 
     suspend fun byIds(ids: Collection<UUID>): List<Song> =

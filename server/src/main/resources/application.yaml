@@ -3,10 +3,10 @@ ktor:
         modules:
             - dev.dertyp.ApplicationKt.module
     deployment:
-        port: $PORT:8080
+        port: ${PORT:8080}
 client:
-  id: ${CLIENT_ID}
-  secret: ${CLIENT_SECRET}
+  id: ${CLIENT_ID:}
+  secret: ${CLIENT_SECRET:}
 backup:
   dir: ${BACKUP_DIR:}
 redis:
@@ -16,34 +16,34 @@ imageCache:
   url: ${IMAGE_CACHE_URL:}
   token: ${IMAGE_CACHE_TOKEN:}
 jwt:
-  issuer: ${JWT_ISSUER}
-  audience: ${JWT_AUDIENCE}
-  realm: ${JWT_REALM}
-  secret: ${JWT_SECRET}
+  issuer: ${JWT_ISSUER:synara}
+  audience: ${JWT_AUDIENCE:synara-api}
+  realm: ${JWT_REALM:Access to 'Synara-API'}
+  secret: ${JWT_SECRET:changeme}
 storage:
-  driverClassName: ${DB_DRIVER}
-  jdbcURL: ${DB_URL}
+  driverClassName: ${DB_DRIVER:org.sqlite.JDBC}
+  jdbcURL: ${DB_URL:jdbc:sqlite:data.db}
   user: ${DB_USER:}
   password: ${DB_PASSWORD:}
 audio:
-  tracks: ${AUDIO_TRACKS_PATH}
-  albums: ${AUDIO_ALBUMS_PATH}
-  playlists: ${AUDIO_PLAYLISTS_PATH}
-  transcode: ${AUDIO_TRANSCODE_PATH}
+  tracks: ${AUDIO_TRACKS_PATH:music/tracks}
+  albums: ${AUDIO_ALBUMS_PATH:music/albums}
+  playlists: ${AUDIO_PLAYLISTS_PATH:music/playlists}
+  transcode: ${AUDIO_TRANSCODE_PATH:music/transcode}
   autoTranscode: ${AUDIO_AUTO_TRANSCODE_QUALITIES:}
-  custom: ${AUDIO_CUSTOM_PATH}
+  custom: ${AUDIO_CUSTOM_PATH:music/custom}
   secondary-tracks:
     - ${AUDIO_TRACKS_SECONDARY_PATH:}
 transcriber:
   url: ${TRANSCRIBER_URL:http://localhost:8000}
 data:
-  images: ${DATA_IMAGES_PATH}
+  images: ${DATA_IMAGES_PATH:data/images}
 spotify:
-  clientId: ${SPOTIFY_CLIENT_ID}
-  clientSecret: ${SPOTIFY_CLIENT_SECRET}
+  clientId: ${SPOTIFY_CLIENT_ID:}
+  clientSecret: ${SPOTIFY_CLIENT_SECRET:}
 tidal:
-  clientId: ${TIDAL_CLIENT_ID}
-  clientSecret: ${TIDAL_CLIENT_SECRET}
+  clientId: ${TIDAL_CLIENT_ID:}
+  clientSecret: ${TIDAL_CLIENT_SECRET:}
 proxy:
   hostname: ${PROXY_HOSTNAME:}
   controlPort: ${PROXY_CONTROL_PORT:8081}
