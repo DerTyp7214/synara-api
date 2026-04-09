@@ -49,6 +49,7 @@ class ReleaseServiceTest : KoinTest {
                 single<RedisCacheProvider.Config> { mockk(relaxed = true) }
                 
                 single { mockk<MusicBrainzService>(relaxed = true) }
+                single { MusicBrainzCacheService() }
                 single { mockk<ArtistService>(relaxed = true) }
                 single { mockk<ImageService>(relaxed = true) }
                 single { mockk<SpotifyService>(relaxed = true) }
@@ -80,7 +81,8 @@ class ReleaseServiceTest : KoinTest {
                 SongArtistTable,
                 SongMusicBrainzTable,
                 FollowedArtistTable,
-                RecentReleaseTable
+                RecentReleaseTable,
+                *allMusicBrainzTables
             )
         }
 
@@ -100,11 +102,12 @@ class ReleaseServiceTest : KoinTest {
         setup(dialect)
         val userId = UUID.randomUUID()
         val artistId = UUID.randomUUID()
-        val mbId = "mb-id-123"
+        val mbId = UUID.randomUUID()
 
         transaction(database) {
             UserTable.insert { it[id] = userId; it[username] = "user"; it[passwordHash] = "hash" }
             ArtistTable.insert { it[id] = artistId; it[name] = "Artist" }
+            MBArtistTable.insert { it[id] = mbId; it[name] = "Artist"; it[sortName] = "Artist" }
             ArtistMusicBrainzTable.insert { it[this.artistId] = artistId; it[musicBrainzId] = mbId }
         }
 
@@ -121,7 +124,7 @@ class ReleaseServiceTest : KoinTest {
     fun `followArtist should create artist if not exists`(dialect: DbDialect) = runBlocking {
         setup(dialect)
         val userId = UUID.randomUUID()
-        val mbId = "mb-id-new"
+        val mbId = UUID.randomUUID()
         val newArtistId = UUID.randomUUID()
 
         transaction(database) {
@@ -160,14 +163,15 @@ class ReleaseServiceTest : KoinTest {
         every { MetadataService.getMetadataService(MetadataService.Companion.MetadataType.tidal, any()) } returns tidalService
         every { MetadataService.getMetadataService(MetadataService.Companion.MetadataType.appleMusic, any()) } returns appleMusicService
 
-        val mbId = "mb-artist-1"
-        val releaseId = "mb-release-1"
+        val mbId = UUID.randomUUID()
+        val releaseId = UUID.randomUUID()
         val userId = UUID.randomUUID()
         val artistId = UUID.randomUUID()
 
         transaction(database) {
             UserTable.insert { it[id] = userId; it[username] = "user"; it[passwordHash] = "hash" }
             ArtistTable.insert { it[id] = artistId; it[name] = "Test Artist" }
+            MBArtistTable.insert { it[id] = mbId; it[name] = "Test Artist"; it[sortName] = "Test Artist" }
             ArtistMusicBrainzTable.insert { it[this.artistId] = artistId; it[musicBrainzId] = mbId }
             FollowedArtistTable.insert { it[this.userId] = userId; it[this.artistId] = artistId }
         }
@@ -180,7 +184,7 @@ class ReleaseServiceTest : KoinTest {
                 relations = listOf(
                     MusicBrainzRelation(
                         type = "spotify",
-                        url = MusicBrainzRelationUrl(id = "1", resource = "https://spotify.com/album/123")
+                        url = MusicBrainzRelationUrl(id = UUID.randomUUID(), resource = "https://spotify.com/album/123")
                     )
                 )
             )
@@ -217,10 +221,11 @@ class ReleaseServiceTest : KoinTest {
         every { MetadataService.getMetadataService(MetadataService.Companion.MetadataType.tidal, any()) } returns tidalService
         every { MetadataService.getMetadataService(MetadataService.Companion.MetadataType.appleMusic, any()) } returns appleMusicService
 
-        val mbId = "mb-artist-1"
-        val releaseIdInAlbumDb = "mb-release-in-album-db"
-        val releaseIdInSongDb = "mb-release-in-song-db"
-        val releaseIdNew = "mb-release-new"
+        val mbId = UUID.randomUUID()
+        val releaseIdInAlbumDb = UUID.randomUUID()
+        val releaseIdInSongDb = UUID.randomUUID()
+        val someOtherGroupId = UUID.randomUUID()
+        val releaseIdNew = UUID.randomUUID()
         val userId = UUID.randomUUID()
         val artistId = UUID.randomUUID()
 
@@ -230,12 +235,14 @@ class ReleaseServiceTest : KoinTest {
         transaction(database) {
             UserTable.insert { it[id] = userId; it[username] = "user"; it[passwordHash] = "hash" }
             ArtistTable.insert { it[id] = artistId; it[name] = "Test Artist" }
+            MBArtistTable.insert { it[id] = mbId; it[name] = "Test Artist"; it[sortName] = "Test Artist" }
             ArtistMusicBrainzTable.insert { it[this.artistId] = artistId; it[musicBrainzId] = mbId }
             FollowedArtistTable.insert { it[this.userId] = userId; it[this.artistId] = artistId }
 
             val albumId = AlbumTable.insert { it[name] = "Existing Album" }[AlbumTable.id]
             existingAlbumId = albumId.value
             AlbumArtistTable.insert { it[this.albumId] = albumId; it[this.artistId] = artistId }
+            MBReleaseTable.insert { it[id] = releaseIdInAlbumDb; it[title] = "Existing Album" }
             AlbumMusicBrainzTable.insert { it[this.albumId] = albumId; it[musicBrainzId] = releaseIdInAlbumDb }
 
             val songId = SongTable.insert {
@@ -244,6 +251,7 @@ class ReleaseServiceTest : KoinTest {
             }[SongTable.id]
             existingSongId = songId.value
             SongArtistTable.insert { it[this.songId] = songId; it[this.artistId] = artistId }
+            MBRecordingTable.insert { it[id] = releaseIdInSongDb; it[title] = "Existing Song" }
             SongMusicBrainzTable.insert { it[this.songId] = songId; it[musicBrainzId] = releaseIdInSongDb }
         }
 
@@ -254,7 +262,7 @@ class ReleaseServiceTest : KoinTest {
             ),
             MusicBrainzRelease(
                 id = releaseIdInSongDb,
-                releaseGroup = MusicBrainzReleaseGroup(id = "some-other-group-id", title = "Album with existing song")
+                releaseGroup = MusicBrainzReleaseGroup(id = someOtherGroupId, title = "Album with existing song")
             )
         )
 
@@ -265,7 +273,7 @@ class ReleaseServiceTest : KoinTest {
                 firstReleaseDate = "2023-01-01"
             ),
             MusicBrainzReleaseGroup(
-                id = "some-other-group-id",
+                id = someOtherGroupId,
                 title = "Album with existing song",
                 firstReleaseDate = "2023-01-01"
             ),
@@ -323,30 +331,38 @@ class ReleaseServiceTest : KoinTest {
                 it[SongTable.albumId] = dummyAlbumId
             }[SongTable.id]
 
+            val validRelId = UUID.randomUUID()
+            MBReleaseGroupTable.insert { it[id] = validRelId; it[title] = "New Release" }
             RecentReleaseTable.insert {
-                it[RecentReleaseTable.releaseId] = "release-valid"
+                it[RecentReleaseTable.releaseId] = validRelId
                 it[RecentReleaseTable.artistId] = artistId
                 it[RecentReleaseTable.title] = "New Release"
                 it[RecentReleaseTable.releaseDate] = 1000L
             }
 
+            val noDateRelId = UUID.randomUUID()
+            MBReleaseGroupTable.insert { it[id] = noDateRelId; it[title] = "No Date Release" }
             RecentReleaseTable.insert {
-                it[RecentReleaseTable.releaseId] = "release-no-date"
+                it[RecentReleaseTable.releaseId] = noDateRelId
                 it[RecentReleaseTable.artistId] = artistId
                 it[RecentReleaseTable.title] = "No Date Release"
                 it[RecentReleaseTable.releaseDate] = null
             }
 
+            val albumRelId = UUID.randomUUID()
+            MBReleaseGroupTable.insert { it[id] = albumRelId; it[title] = "Existing Album" }
             RecentReleaseTable.insert {
-                it[RecentReleaseTable.releaseId] = "release-album"
+                it[RecentReleaseTable.releaseId] = albumRelId
                 it[RecentReleaseTable.artistId] = artistId
                 it[RecentReleaseTable.title] = "Existing Album"
                 it[RecentReleaseTable.albumId] = dummyAlbumId
                 it[RecentReleaseTable.releaseDate] = 1000L
             }
 
+            val songRelId = UUID.randomUUID()
+            MBReleaseGroupTable.insert { it[id] = songRelId; it[title] = "Existing Song" }
             RecentReleaseTable.insert {
-                it[RecentReleaseTable.releaseId] = "release-song"
+                it[RecentReleaseTable.releaseId] = songRelId
                 it[RecentReleaseTable.artistId] = artistId
                 it[RecentReleaseTable.title] = "Existing Song"
                 it[RecentReleaseTable.songId] = dummySongId
@@ -372,8 +388,10 @@ class ReleaseServiceTest : KoinTest {
             FollowedArtistTable.insert { it[this.userId] = userId; it[this.artistId] = artistId }
 
             for (i in 1..5) {
+                val relId = UUID.randomUUID()
+                MBReleaseGroupTable.insert { it[id] = relId; it[title] = "Release $i" }
                 RecentReleaseTable.insert {
-                    it[releaseId] = "release-$i"
+                    it[releaseId] = relId
                     it[this.artistId] = artistId
                     it[artistName] = "Artist"
                     it[title] = "Release $i"
@@ -425,7 +443,7 @@ class ReleaseServiceTest : KoinTest {
     @EnumSource(DbDialect::class)
     fun `fetchNewReleases should handle MusicBrainz API failure`(dialect: DbDialect) = runBlocking {
         setup(dialect)
-        val mbId = "mb-artist-fail"
+        val mbId = UUID.randomUUID()
         val artistId = UUID.randomUUID()
         val userId = UUID.randomUUID()
 
@@ -436,6 +454,7 @@ class ReleaseServiceTest : KoinTest {
         transaction(database) {
             UserTable.insert { it[id] = userId; it[username] = "user"; it[passwordHash] = "hash" }
             ArtistTable.insert { it[id] = artistId; it[name] = "Artist" }
+            MBArtistTable.insert { it[id] = mbId; it[name] = "Artist"; it[sortName] = "Artist" }
             ArtistMusicBrainzTable.insert { it[this.artistId] = artistId; it[musicBrainzId] = mbId }
             FollowedArtistTable.insert { it[this.userId] = userId; it[this.artistId] = artistId }
         }
@@ -454,18 +473,20 @@ class ReleaseServiceTest : KoinTest {
         every { MetadataService.getMetadataService(MetadataService.Companion.MetadataType.tidal, any()) } returns tidalService
         every { MetadataService.getMetadataService(MetadataService.Companion.MetadataType.appleMusic, any()) } returns appleMusicService
 
-        val mbId = "mb-artist-1"
+        val mbId = UUID.randomUUID()
         val artistId = UUID.randomUUID()
         val userId = UUID.randomUUID()
+        val relGroupId = UUID.randomUUID()
         transaction(database) {
             UserTable.insert { it[id] = userId; it[username] = "user"; it[passwordHash] = "hash" }
             ArtistTable.insert { it[id] = artistId; it[name] = "Test Artist" }
+            MBArtistTable.insert { it[id] = mbId; it[name] = "Test Artist"; it[sortName] = "Test Artist" }
             ArtistMusicBrainzTable.insert { it[this.artistId] = artistId; it[musicBrainzId] = mbId }
             FollowedArtistTable.insert { it[this.userId] = userId; it[this.artistId] = artistId }
         }
 
         coEvery { musicBrainzService.fetchReleaseGroups(mbId, priority = HttpClientPriority.LOW) } returns listOf(
-            MusicBrainzReleaseGroup(id = "1", title = "The Title", firstReleaseDate = "2023-01-01", primaryType = "Single")
+            MusicBrainzReleaseGroup(id = relGroupId, title = "The Title", firstReleaseDate = "2023-01-01", primaryType = "Single")
         )
         
         coEvery { appleMusicService.searchAlbums(any(), any(), any(), priority = HttpClientPriority.LOW) } returns listOf(

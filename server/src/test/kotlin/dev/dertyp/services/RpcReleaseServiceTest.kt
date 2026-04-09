@@ -15,7 +15,7 @@ class RpcReleaseServiceTest {
 
     @Test
     fun `followArtist should delegate to releaseService`() = runBlocking {
-        val mbId = "mb-id"
+        val mbId = UUID.randomUUID()
         coEvery { releaseService.followArtist(user.id, mbId) } returns true
         
         val result = rpcService.followArtist(mbId)

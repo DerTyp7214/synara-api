@@ -11,12 +11,13 @@ import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.update
 import org.koin.core.component.inject
+import java.util.UUID
 
 @Migration("1.2")
 class LinkRecentReleasesToLibrary : CustomMigration() {
     private val musicBrainzService by inject<MusicBrainzService>()
 
-    private data class ReleaseInfo(val releaseGroupId: String, val type: ReleaseType)
+    private data class ReleaseInfo(val releaseGroupId: UUID, val type: ReleaseType)
 
     override suspend fun migrate() {
         val releases = dbQuery {
@@ -29,7 +30,7 @@ class LinkRecentReleasesToLibrary : CustomMigration() {
                 Triple(
                     it[ArtistMusicBrainzTable.artistId].value,
                     it[ArtistMusicBrainzTable.musicBrainzId],
-                    ReleaseInfo(it[RecentReleaseTable.releaseId], it[RecentReleaseTable.type])
+                    ReleaseInfo(it[RecentReleaseTable.releaseId].value, it[RecentReleaseTable.type])
                 )
             }
         }
@@ -40,12 +41,12 @@ class LinkRecentReleasesToLibrary : CustomMigration() {
             val (artistId, mbArtistId) = artist
             if (mbArtistId == null) return@forEach
 
-            logger.info("Processing artist $artistId ($mbArtistId) for linking releases")
+            logger.info("Processing artist $artistId (${mbArtistId.value}) for linking releases")
 
             val mbReleases = try {
-                musicBrainzService.fetchReleasesByArtist(mbArtistId)
+                musicBrainzService.fetchReleasesByArtist(mbArtistId.value)
             } catch (e: Exception) {
-                logger.error("Failed to fetch releases for artist $mbArtistId", e)
+                logger.error("Failed to fetch releases for artist ${mbArtistId.value}", e)
                 emptyList()
             }
 
@@ -57,7 +58,7 @@ class LinkRecentReleasesToLibrary : CustomMigration() {
                     AlbumArtistTable.albumId
                 ).selectAll()
                     .where { AlbumArtistTable.artistId eq artistId }
-                    .mapNotNull { it[AlbumMusicBrainzTable.musicBrainzId]?.let { mbId -> mbId to it[AlbumMusicBrainzTable.albumId].value } }
+                    .mapNotNull { it[AlbumMusicBrainzTable.musicBrainzId]?.let { mbId -> mbId.value to it[AlbumMusicBrainzTable.albumId].value } }
                     .toMap()
             }
 
@@ -69,7 +70,7 @@ class LinkRecentReleasesToLibrary : CustomMigration() {
                     SongArtistTable.songId
                 ).selectAll()
                     .where { SongArtistTable.artistId eq artistId }
-                    .mapNotNull { it[SongMusicBrainzTable.musicBrainzId]?.let { mbId -> mbId to it[SongMusicBrainzTable.songId].value } }
+                    .mapNotNull { it[SongMusicBrainzTable.musicBrainzId]?.let { mbId -> mbId.value to it[SongMusicBrainzTable.songId].value } }
                     .toMap()
             }
 
@@ -95,7 +96,7 @@ class LinkRecentReleasesToLibrary : CustomMigration() {
                     groupReleaseIds.contains(mbId) || groupRecordingIds.contains(mbId)
                 }?.value
 
-                if (libraryAlbumId != null || librarySongId != null) {
+                if ((libraryAlbumId != null) || (librarySongId != null)) {
                     dbQuery {
                         RecentReleaseTable.update({ RecentReleaseTable.releaseId eq releaseGroupId }) {
                             it[RecentReleaseTable.albumId] = libraryAlbumId

@@ -65,32 +65,32 @@ abstract class MetadataService(
     ): List<IMetadataService.Image>
 
     open suspend fun getArtistByMbId(
-        mbId: String,
+        mbId: UUID,
         priority: HttpClientPriority = HttpClientPriority.NORMAL
     ): IMetadataService.Artist? = null
 
     open suspend fun getAlbumByMbId(
-        mbId: String,
+        mbId: UUID,
         priority: HttpClientPriority = HttpClientPriority.NORMAL
     ): IMetadataService.Album? = null
 
     open suspend fun getTrackByMbId(
-        mbId: String,
+        mbId: UUID,
         priority: HttpClientPriority = HttpClientPriority.NORMAL
     ): IMetadataService.Track? = null
 
     open suspend fun getImageUrlByArtistMbId(
-        mbId: String,
+        mbId: UUID,
         priority: HttpClientPriority = HttpClientPriority.NORMAL
     ): List<IMetadataService.Image> = emptyList()
 
     open suspend fun getImageUrlByAlbumMbId(
-        mbId: String,
+        mbId: UUID,
         priority: HttpClientPriority = HttpClientPriority.NORMAL
     ): List<IMetadataService.Image> = emptyList()
 
     open suspend fun getImageUrlByTrackMbId(
-        mbId: String,
+        mbId: UUID,
         priority: HttpClientPriority = HttpClientPriority.NORMAL
     ): List<IMetadataService.Image> = emptyList()
 

@@ -5,7 +5,7 @@ import org.jetbrains.exposed.v1.core.ReferenceOption
 import org.jetbrains.exposed.v1.core.Table
 
 object RecentReleaseTable : Table("recent_release") {
-    val releaseId = varchar("releaseId", 36)
+    val releaseId = reference("releaseId", MBReleaseGroupTable.id, onDelete = ReferenceOption.CASCADE)
     val artistId = reference("artistId", ArtistTable.id, onDelete = ReferenceOption.CASCADE)
     val artistName = text("artistName").default("Unknown Artist")
     val title = text("title")

@@ -16,6 +16,7 @@ import dev.dertyp.serializers.OffsetDateTimeAdapter
 import dev.dertyp.server.BuildConfig
 import dev.dertyp.services.*
 import dev.dertyp.services.metadata.MetadataService
+import dev.dertyp.services.metadata.MusicBrainzCacheService
 import dev.dertyp.services.metadata.MusicBrainzService
 import dev.dertyp.services.metadata.TheAudioDBService
 import dev.dertyp.services.schedule.*
@@ -120,8 +121,10 @@ fun Application.module() {
             singleOf(::MirrorService)
             singleOf(::RemoteMirrorService)
             singleOf(::MusicBrainzService)
+            singleOf(::MusicBrainzCacheService)
             singleOf(::TheAudioDBService)
             singleOf(::MusicBrainzWorker)
+            singleOf(::MusicBrainzCacheWorker)
             singleOf(::GenreMetadataWorker)
             singleOf(::RecentReleaseWorker)
             singleOf(::LyricsSyncWorker)
@@ -185,6 +188,7 @@ fun Application.module() {
     val reverseProxyService = get<ReverseProxyService>()
     val metadataFetchingService = get<MetadataFetchingService>()
     val musicBrainzWorker = get<MusicBrainzWorker>()
+    val musicBrainzCacheWorker = get<MusicBrainzCacheWorker>()
     val genreMetadataWorker = get<GenreMetadataWorker>()
     val recentReleaseWorker = get<RecentReleaseWorker>()
     val autoTranscodeWorker = get<AutoTranscodeWorker>()
@@ -257,6 +261,20 @@ fun Application.module() {
     )
 
     scheduleService.triggerTask(musicBrainzTask.id)
+
+    val musicBrainzCacheTask = scheduleService.schedule(
+        ScheduledTask(
+            name = "MusicBrainz Cache Worker",
+            trigger = TaskCompletionTrigger(musicBrainzTask.id),
+            task = {
+                logTask("MusicBrainz Cache Worker") {
+                    musicBrainzCacheWorker.run { p, l -> updateProgress(p, l) }
+                }
+            }
+        )
+    )
+
+    scheduleService.triggerTask(musicBrainzCacheTask.id)
 
     val genreMetadataTask = scheduleService.schedule(
         ScheduledTask(

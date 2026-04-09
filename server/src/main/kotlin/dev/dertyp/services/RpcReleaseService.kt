@@ -10,7 +10,7 @@ class RpcReleaseService(
     private val user: User,
     private val releaseService: ReleaseService
 ) : IReleaseService {
-    override suspend fun followArtist(musicBrainzId: String): Boolean {
+    override suspend fun followArtist(musicBrainzId: UUID): Boolean {
         return releaseService.followArtist(user.id, musicBrainzId)
     }
 

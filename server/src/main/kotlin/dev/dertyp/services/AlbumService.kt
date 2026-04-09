@@ -7,6 +7,7 @@ import dev.dertyp.dbQuery
 import dev.dertyp.getDateFromISO
 import dev.dertyp.getISOFromDate
 import dev.dertyp.services.ArtistService.Companion.mapArtist
+import dev.dertyp.services.metadata.MusicBrainzCacheService
 import dev.dertyp.services.metadata.MusicBrainzService
 import dev.dertyp.utils.LogParam
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -53,6 +54,7 @@ class AlbumRpcService(private val user: User, private val albumService: AlbumSer
 }
 
 class AlbumService : Service() {
+    private val musicBrainzCacheService by inject<MusicBrainzCacheService>()
     val artistGroupAlias = ArtistTable.alias("artistGroup")
     val artistMemberAlias = ArtistTable.alias("artistMember")
     val followedArtistAlias = FollowedArtistTable.alias("followedArtist")
@@ -71,7 +73,7 @@ class AlbumService : Service() {
                 coverId = resultRow[AlbumTable.cover]?.value,
                 genres = genres,
                 originalId = resultRow[AlbumTable.originalId],
-                musicbrainzId = resultRow.getOrNull(AlbumMusicBrainzTable.musicBrainzId),
+                musicbrainzId = resultRow.getOrNull(AlbumMusicBrainzTable.musicBrainzId)?.value,
             )
         }
 
@@ -105,18 +107,19 @@ class AlbumService : Service() {
         if (album.musicbrainzId != null) return album
         
         val musicBrainzService: MusicBrainzService by inject()
-        val recording = musicBrainzService.searchAlbumMb(album)
+        val mbRelease = musicBrainzService.searchAlbumMb(album)
         
-        if (recording != null) {
+        if (mbRelease != null) {
+            musicBrainzCacheService.updateReleaseCache(mbRelease)
             dbQuery {
                 AlbumMusicBrainzTable.upsert(AlbumMusicBrainzTable.albumId) {
                     it[albumId] = id
-                    it[musicBrainzId] = recording.id
+                    it[musicBrainzId] = mbRelease.id
                     it[lastCheck] = Clock.System.now().toEpochMilliseconds()
                 }
             }
 
-            val genres = (recording.genres?.map { it.name } ?: emptyList()) + (recording.releaseGroup?.genres?.map { it.name } ?: emptyList())
+            val genres = (mbRelease.genres?.map { it.name } ?: emptyList()) + (mbRelease.releaseGroup?.genres?.map { it.name } ?: emptyList())
             if (genres.isNotEmpty()) {
                 val genreService: GenreService by inject()
                 val genreIds = genreService.getOrCreateGenres(genres)

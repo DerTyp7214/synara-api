@@ -20,7 +20,7 @@ class TagMusicBrainzIds : CustomMigration() {
             if (song.musicBrainzId != null && song.path.endsWith(".flac", true)) {
                 try {
                     val file = AudioFileIO.read(File(song.path))
-                    file.tag.setField(FieldKey.MUSICBRAINZ_TRACK_ID, song.musicBrainzId)
+                    file.tag.setField(FieldKey.MUSICBRAINZ_TRACK_ID, song.musicBrainzId?.toString())
                     file.commit()
                 } catch (e: Exception) {
                     logger.error("Failed to tag ${song.path}: ${e.message}")

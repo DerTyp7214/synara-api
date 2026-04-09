@@ -49,7 +49,7 @@ class ImageServiceTest {
 
         database = TestDatabase.connect(dialect, "image_test")
         transaction(database) {
-            SchemaUtils.create(ImageTable, AlbumTable, ArtistTable, SongTable, PlaylistTable, UserPlaylistTable, UserTable, RecentReleaseTable)
+            SchemaUtils.create(ImageTable, AlbumTable, ArtistTable, SongTable, PlaylistTable, UserPlaylistTable, UserTable, MBReleaseGroupTable, RecentReleaseTable)
         }
 
         service = ImageService(storageService, redisConfig)
@@ -105,8 +105,13 @@ class ImageServiceTest {
             val aId = ArtistTable.insertAndGetId {
                 it[ArtistTable.name] = "Artist"
             }
+            val relGroupId = java.util.UUID.randomUUID()
+            MBReleaseGroupTable.insert {
+                it[id] = relGroupId
+                it[title] = "Title"
+            }
             RecentReleaseTable.insert {
-                it[RecentReleaseTable.releaseId] = "release-1"
+                it[RecentReleaseTable.releaseId] = relGroupId
                 it[RecentReleaseTable.artistId] = aId
                 it[RecentReleaseTable.title] = "Title"
                 it[RecentReleaseTable.imageId] = EntityID(imageId, ImageTable)

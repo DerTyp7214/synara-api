@@ -14,6 +14,7 @@ import dev.dertyp.services.AlbumService.Companion.calculateAlbumStats
 import dev.dertyp.services.AlbumService.Companion.mapAlbum
 import dev.dertyp.services.ArtistService.Companion.mapArtist
 import dev.dertyp.services.metadata.IMetadataService
+import dev.dertyp.services.metadata.MusicBrainzCacheService
 import dev.dertyp.services.metadata.MusicBrainzService
 import dev.dertyp.utils.LogParam
 import io.ktor.server.application.ApplicationEnvironment
@@ -50,7 +51,7 @@ class SongRpcService(private val user: User, private val songService: SongServic
     override suspend fun setArtists(id: UUID, artistIds: List<UUID>): UserSong? =
         songService.setArtists(id, artistIds, user.id)
 
-    override suspend fun setMusicBrainzId(id: UUID, musicBrainzId: String?): UserSong? =
+    override suspend fun setMusicBrainzId(id: UUID, musicBrainzId: UUID?): UserSong? =
         songService.setMusicBrainzId(id, musicBrainzId, user.id)
 
     override suspend fun fetchMusicBrainzId(id: UUID): UserSong? =
@@ -58,7 +59,7 @@ class SongRpcService(private val user: User, private val songService: SongServic
 
     override suspend fun byId(id: UUID): UserSong? = songService.byId(id, user.id)
 
-    override suspend fun byMusicBrainzId(musicBrainzId: String): List<UserSong> =
+    override suspend fun byMusicBrainzId(musicBrainzId: UUID): List<UserSong> =
         songService.byMusicBrainzId(musicBrainzId, user.id)
 
     override suspend fun byIds(@LogParam("size") ids: Collection<UUID>): PaginatedResponse<UserSong> =
@@ -156,6 +157,7 @@ class SongRpcService(private val user: User, private val songService: SongServic
 class SongService : Service() {
     private val environment by inject<ApplicationEnvironment>()
     private val musicBrainzService by inject<MusicBrainzService>()
+    private val musicBrainzCacheService by inject<MusicBrainzCacheService>()
 
     val albumArtistAlias = ArtistTable.alias("albumArtistAlias")
     val albumArtistMusicBrainzAlias = ArtistMusicBrainzTable.alias("albumArtistMusicBrainzAlias")
@@ -192,7 +194,7 @@ class SongService : Service() {
                 bitRate = resultRow[SongTable.bitRate],
                 fileSize = resultRow[SongTable.fileSize],
                 coverId = resultRow[SongTable.cover]?.value,
-                musicBrainzId = resultRow.getOrNull(SongMusicBrainzTable.musicBrainzId),
+                musicBrainzId = resultRow.getOrNull(SongMusicBrainzTable.musicBrainzId)?.value,
                 genres = genres,
             )
         }
@@ -219,7 +221,7 @@ class SongService : Service() {
                 bitRate = resultRow[SongTable.bitRate],
                 fileSize = resultRow[SongTable.fileSize],
                 coverId = resultRow[SongTable.cover]?.value,
-                musicBrainzId = resultRow.getOrNull(SongMusicBrainzTable.musicBrainzId),
+                musicBrainzId = resultRow.getOrNull(SongMusicBrainzTable.musicBrainzId)?.value,
                 genres = genres,
                 isFavourite = resultRow.getOrNull(UserSongTable.isFavourite) ?: false,
                 userSongCreatedAt = resultRow.getOrNull(UserSongTable.createdAt).date,
@@ -330,7 +332,7 @@ class SongService : Service() {
         }
     }
 
-    suspend fun setMusicBrainzId(id: UUID, musicBrainzId: String?, userId: UUID): UserSong? = dbQuery {
+    suspend fun setMusicBrainzId(id: UUID, musicBrainzId: UUID?, userId: UUID): UserSong? = dbQuery {
         val exists = SongMusicBrainzTable.select(SongMusicBrainzTable.songId)
             .where { SongMusicBrainzTable.songId eq id }
             .any()
@@ -355,7 +357,7 @@ class SongService : Service() {
                     val file = AudioFileIO.read(File(song.path))
 
                     if (musicBrainzId != null) {
-                        file.tag.setField(FieldKey.MUSICBRAINZ_TRACK_ID, musicBrainzId)
+                        file.tag.setField(FieldKey.MUSICBRAINZ_TRACK_ID, musicBrainzId.toString())
                     } else {
                         file.tag.deleteField(FieldKey.MUSICBRAINZ_TRACK_ID)
                     }
@@ -372,10 +374,11 @@ class SongService : Service() {
         val song = byId(id, userId) ?: return null
         if (song.musicBrainzId != null) return song
 
-        val recording = musicBrainzService.searchMb(song)
+        val mbRecording = musicBrainzService.searchMb(song)
 
-        if (recording != null) {
-            val genres = (recording.genres?.map { it.name } ?: emptyList()) + (recording.releases?.flatMap { it.genres?.map { g -> g.name } ?: emptyList() } ?: emptyList()) + (recording.releases?.flatMap { it.releaseGroup?.genres?.map { g -> g.name } ?: emptyList() } ?: emptyList())
+        if (mbRecording != null) {
+            musicBrainzCacheService.updateRecordingCache(mbRecording)
+            val genres = (mbRecording.genres?.map { it.name } ?: emptyList()) + (mbRecording.releases?.flatMap { it.genres?.map { g -> g.name } ?: emptyList() } ?: emptyList()) + (mbRecording.releases?.flatMap { it.releaseGroup?.genres?.map { g -> g.name } ?: emptyList() } ?: emptyList())
             if (genres.isNotEmpty()) {
                 val genreService: GenreService by inject()
                 val genreIds = genreService.getOrCreateGenres(genres)
@@ -389,7 +392,7 @@ class SongService : Service() {
             }
         }
 
-        return setMusicBrainzId(id, recording?.id, userId)
+        return setMusicBrainzId(id, mbRecording?.id, userId)
     }
 
     suspend fun findSongIdByMetadata(
@@ -442,7 +445,7 @@ class SongService : Service() {
         where { SongTable.id eq id }
     }
 
-    suspend fun byMusicBrainzId(musicBrainzId: String, userId: UUID): List<UserSong> =
+    suspend fun byMusicBrainzId(musicBrainzId: UUID, userId: UUID): List<UserSong> =
         querySongs<UserSong>(0, Int.MAX_VALUE, true, userId) {
             where { SongMusicBrainzTable.musicBrainzId eq musicBrainzId }
         }.data
@@ -552,7 +555,7 @@ class SongService : Service() {
                 query,
                 listOf(20, 10, 5, 5, 5, 5, 3, 3, 3, 3),
                 listOf(
-                    SongMusicBrainzTable.musicBrainzId,
+                    SongMusicBrainzTable.musicBrainzId.castTo<String?>(VarCharColumnType(36)),
                     SongTable.title,
                     ArtistTable.name,
                     AlbumTable.name,
@@ -1057,7 +1060,7 @@ class SongService : Service() {
                 val artist = mapArtist(
                     row,
                     albumArtistAlias,
-                    row.getOrNull(albumArtistMusicBrainzAlias[ArtistMusicBrainzTable.musicBrainzId]),
+                    row.getOrNull(albumArtistMusicBrainzAlias[ArtistMusicBrainzTable.musicBrainzId])?.value,
                     followedTable = albumFollowedArtistAlias
                 )
                 if (artist !in albumArtistsMap.getOrDefault(albumId, emptyList())) {

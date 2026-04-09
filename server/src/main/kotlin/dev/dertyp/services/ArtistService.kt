@@ -5,6 +5,7 @@ import dev.dertyp.core.*
 import dev.dertyp.data.*
 import dev.dertyp.db.*
 import dev.dertyp.dbQuery
+import dev.dertyp.services.metadata.MusicBrainzCacheService
 import dev.dertyp.services.metadata.MusicBrainzService
 import dev.dertyp.utils.LogParam
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -35,7 +36,7 @@ class ArtistRpcService(private val user: User, private val artistService: Artist
         name: String,
         isGroup: Boolean,
         about: String,
-        musicBrainzId: String?
+        musicBrainzId: UUID?
     ): Artist = artistService.createArtist(name, isGroup, about, musicBrainzId, user.id)
 
     override suspend fun searchArtistOnMusicBrainz(
@@ -45,7 +46,7 @@ class ArtistRpcService(private val user: User, private val artistService: Artist
     ): PaginatedResponse<MusicBrainzArtist> = artistService.searchArtistOnMusicBrainz(query, page, pageSize)
 
     override suspend fun fetchMusicBrainzId(id: UUID): Artist? = artistService.fetchMusicBrainzId(id, user.id)
-    override suspend fun setMusicBrainzId(id: UUID, musicBrainzId: String?): Artist? =
+    override suspend fun setMusicBrainzId(id: UUID, musicBrainzId: UUID?): Artist? =
         artistService.setMusicBrainzId(id, musicBrainzId, user.id)
 
     override fun artistsWithoutMusicBrainzIdFlow(): Flow<Artist> = artistService.artistsWithoutMusicBrainzIdFlow(user.id)
@@ -53,6 +54,7 @@ class ArtistRpcService(private val user: User, private val artistService: Artist
 }
 
 class ArtistService : Service() {
+    private val musicBrainzCacheService by inject<MusicBrainzCacheService>()
     val artistGroupAlias = ArtistTable.alias("artistGroup")
     val artistMemberAlias = ArtistTable.alias("artistMember")
     val followedArtistAlias = FollowedArtistTable.alias("followedArtist")
@@ -61,7 +63,7 @@ class ArtistService : Service() {
         fun mapArtist(
             resultRow: ResultRow,
             table: ColumnSet = ArtistTable,
-            musicbrainzId: String? = null,
+            musicbrainzId: UUID? = null,
             genres: List<Genre> = listOf(),
             followedTable: ColumnSet = FollowedArtistTable
         ): Artist {
@@ -101,7 +103,7 @@ class ArtistService : Service() {
                 imageId = imageId,
                 musicbrainzId = musicbrainzId ?: if (table == ArtistTable) resultRow.getOrNull(
                     ArtistMusicBrainzTable.musicBrainzId
-                ) else null,
+                )?.value else null,
                 isFollowed = isFollowed
             )
         }
@@ -123,18 +125,19 @@ class ArtistService : Service() {
         if (artist.musicbrainzId != null) return artist
         
         val musicBrainzService: MusicBrainzService by inject()
-        val recording = musicBrainzService.searchArtistMb(artist)
+        val mbArtist = musicBrainzService.searchArtistMb(artist)
         
-        if (recording != null) {
+        if (mbArtist != null) {
+            musicBrainzCacheService.updateArtistCache(mbArtist)
             dbQuery {
                 ArtistMusicBrainzTable.upsert(ArtistMusicBrainzTable.artistId) {
                     it[artistId] = id
-                    it[musicBrainzId] = recording.id
+                    it[musicBrainzId] = mbArtist.id
                     it[lastCheck] = Clock.System.now().toEpochMilliseconds()
                 }
             }
 
-            val genres = recording.genres?.map { it.name } ?: emptyList()
+            val genres = mbArtist.genres?.map { it.name } ?: emptyList()
             if (genres.isNotEmpty()) {
                 val genreService: GenreService by inject()
                 val genreIds = genreService.getOrCreateGenres(genres)
@@ -158,7 +161,7 @@ class ArtistService : Service() {
         return byId(id, userId)
     }
 
-    suspend fun setMusicBrainzId(id: UUID, musicBrainzId: String?, userId: UUID? = null): Artist? {
+    suspend fun setMusicBrainzId(id: UUID, musicBrainzId: UUID?, userId: UUID? = null): Artist? {
         dbQuery {
             ArtistMusicBrainzTable.upsert(ArtistMusicBrainzTable.artistId) {
                 it[artistId] = id
@@ -309,7 +312,7 @@ class ArtistService : Service() {
         val existingMbIds = ArtistMusicBrainzTable
             .select(ArtistMusicBrainzTable.musicBrainzId)
             .where { ArtistMusicBrainzTable.artistId inList currentArtistIds }
-            .mapNotNull { it[ArtistMusicBrainzTable.musicBrainzId] }
+            .mapNotNull { it[ArtistMusicBrainzTable.musicBrainzId]?.value }
             .distinct()
             
         if (existingMbIds.isNotEmpty()) {
@@ -449,7 +452,7 @@ class ArtistService : Service() {
         name: String,
         isGroup: Boolean = false,
         about: String = "",
-        musicBrainzId: String? = null,
+        musicBrainzId: UUID? = null,
         userId: UUID? = null
     ): Artist = dbQuery {
         val newId = ArtistTable.insertAndGetId {

@@ -19,7 +19,9 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
@@ -34,10 +36,11 @@ import kotlin.time.Clock
 
 class ReleaseService(private val environment: ApplicationEnvironment) : Service() {
     private val musicBrainzService by inject<MusicBrainzService>()
+    private val musicBrainzCacheService by inject<MusicBrainzCacheService>()
     private val artistService by inject<ArtistService>()
     private val imageService by inject<ImageService>()
 
-    suspend fun followArtist(userId: UUID, musicBrainzId: String): Boolean {
+    suspend fun followArtist(userId: UUID, musicBrainzId: UUID): Boolean {
         val artistId = getOrCreateArtistByMbId(musicBrainzId) ?: return false
         return dbQuery {
             FollowedArtistTable.upsert(FollowedArtistTable.userId, FollowedArtistTable.artistId) {
@@ -47,7 +50,7 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
         }
     }
 
-    private suspend fun getOrCreateArtistByMbId(musicBrainzId: String): UUID? {
+    private suspend fun getOrCreateArtistByMbId(musicBrainzId: UUID): UUID? {
         val existingArtistId = dbQuery {
             ArtistMusicBrainzTable.selectAll()
                 .where { ArtistMusicBrainzTable.musicBrainzId eq musicBrainzId }
@@ -56,6 +59,7 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
         if (existingArtistId != null) return existingArtistId
 
         val mbArtist = musicBrainzService.fetchArtistById(musicBrainzId) ?: return null
+        musicBrainzCacheService.updateArtistCache(mbArtist)
         val artist = artistService.createArtist(
             name = mbArtist.name ?: "Unknown Artist",
             isGroup = mbArtist.type == ArtistType.GROUP,
@@ -104,7 +108,7 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
             .offset((page * pageSize).toLong())
             .map {
                 RecentRelease(
-                    releaseId = it[RecentReleaseTable.releaseId],
+                    releaseId = it[RecentReleaseTable.releaseId].value,
                     artistId = it[RecentReleaseTable.artistId].value,
                     artistName = it[RecentReleaseTable.artistName],
                     title = it[RecentReleaseTable.title],
@@ -154,6 +158,7 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
         val totalArtists = artists.size
         var currentProgress = 0.0
         val progressMutex = Mutex()
+        val dbSemaphore = Semaphore(1)
 
         val results = artists.map { (artistId, mbId) ->
             async {
@@ -162,47 +167,58 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
                 var artistName: String? = null
                 try {
                     if (mbId == null) return@async null
-                    artistName = dbQuery {
-                        ArtistTable.selectAll().where { ArtistTable.id eq artistId }.singleOrNull()?.get(ArtistTable.name)
+                    artistName = dbSemaphore.withPermit {
+                        dbQuery {
+                            ArtistTable.selectAll().where { ArtistTable.id eq artistId }.singleOrNull()?.get(ArtistTable.name)
+                        }
                     } ?: return@async null
 
                     logger.info("Fetching releases for artist: $artistName")
 
-                    val mbReleases = musicBrainzService.fetchReleasesByArtist(mbId, priority = HttpClientPriority.LOW)
+                    val mbReleases = musicBrainzService.fetchReleasesByArtist(mbId.value, priority = HttpClientPriority.LOW)
 
-                    val albumMappings = dbQuery {
-                        AlbumMusicBrainzTable.join(AlbumArtistTable, JoinType.INNER, AlbumMusicBrainzTable.albumId, AlbumArtistTable.albumId)
-                            .selectAll()
-                            .where { AlbumArtistTable.artistId eq artistId }
-                            .mapNotNull { it[AlbumMusicBrainzTable.musicBrainzId]?.let { mbId -> mbId to it[AlbumMusicBrainzTable.albumId].value } }
-                            .toMap()
+                    val albumMappings = dbSemaphore.withPermit {
+                        dbQuery {
+                            AlbumMusicBrainzTable.join(AlbumArtistTable, JoinType.INNER, AlbumMusicBrainzTable.albumId, AlbumArtistTable.albumId)
+                                .selectAll()
+                                .where { AlbumArtistTable.artistId eq artistId }
+                                .mapNotNull { it[AlbumMusicBrainzTable.musicBrainzId]?.let { mbId -> mbId.value to it[AlbumMusicBrainzTable.albumId].value } }
+                                .toMap()
+                        }
                     }
 
-                    val songMappings = dbQuery {
-                        SongMusicBrainzTable.join(SongArtistTable, JoinType.INNER, SongMusicBrainzTable.songId, SongArtistTable.songId)
-                            .selectAll()
-                            .where { SongArtistTable.artistId eq artistId }
-                            .mapNotNull { it[SongMusicBrainzTable.musicBrainzId]?.let { mbId -> mbId to it[SongMusicBrainzTable.songId].value } }
-                            .toMap()
+                    val songMappings = dbSemaphore.withPermit {
+                        dbQuery {
+                            SongMusicBrainzTable.join(SongArtistTable, JoinType.INNER, SongMusicBrainzTable.songId, SongArtistTable.songId)
+                                .selectAll()
+                                .where { SongArtistTable.artistId eq artistId }
+                                .mapNotNull { it[SongMusicBrainzTable.musicBrainzId]?.let { mbId -> mbId.value to it[SongMusicBrainzTable.songId].value } }
+                                .toMap()
+                        }
                     }
 
-                    val groups = musicBrainzService.fetchReleaseGroups(mbId, priority = HttpClientPriority.LOW)
+                    val groups = musicBrainzService.fetchReleaseGroups(mbId.value, priority = HttpClientPriority.LOW)
                     if (groups.isEmpty()) {
-                        progressMutex.withLock { 
+                        progressMutex.withLock {
                             currentProgress += artistWeight
                             progressAddedForArtist += artistWeight
                         }
-                        onProgress(currentProgress * 100.0, "Checked $artistName (no releases)")
+                        dbSemaphore.withPermit {
+                            onProgress(currentProgress * 100.0, "Checked $artistName (no releases)")
+                        }
                     }
                     val groupWeight = if (groups.isNotEmpty()) artistWeight / groups.size else 0.0
 
                     val newReleasesCount = groups.map { group ->
                         async {
                             try {
-                                val alreadyExists = dbQuery {
-                                    RecentReleaseTable.selectAll()
-                                        .where { RecentReleaseTable.releaseId eq group.id }
-                                        .any()
+                                val groupId = group.id
+                                val alreadyExists = dbSemaphore.withPermit {
+                                    dbQuery {
+                                        RecentReleaseTable.selectAll()
+                                            .where { RecentReleaseTable.releaseId eq groupId }
+                                            .any()
+                                    }
                                 }
                                 if (alreadyExists) return@async false
 
@@ -223,7 +239,7 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
                                     null
                                 }
 
-                                val mbReleasesForGroup = musicBrainzService.fetchReleasesByReleaseGroup(group.id, priority = HttpClientPriority.LOW)
+                                val mbReleasesForGroup = musicBrainzService.fetchReleasesByReleaseGroup(groupId, priority = HttpClientPriority.LOW)
                                 val allRelations = (group.relations ?: emptyList()) + mbReleasesForGroup.flatMap { it.relations ?: emptyList() }
                                 val relations = allRelations.mapNotNull { it.url?.resource }.distinct()
                                 val odesliLinks = mutableListOf<String>()
@@ -241,11 +257,11 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
 
                                 val finalLinks = (relations + odesliLinks).distinct().toMutableList()
 
-                                val isSingle = group.primaryType?.lowercase() == "single" || group.primaryType == null || 
+                                val isSingle = group.primaryType?.lowercase() == "single" || group.primaryType == null ||
                                         group.relations?.any { it.type == "single from" } == true
 
                                 val groupRecordings = if (isSingle) {
-                                    musicBrainzService.fetchRecordingsByReleaseGroup(group.id, priority = HttpClientPriority.LOW)
+                                    musicBrainzService.fetchRecordingsByReleaseGroup(groupId, priority = HttpClientPriority.LOW)
                                 } else emptyList()
                                 val groupRecordingIds = groupRecordings.map { it.id }.toSet()
 
@@ -265,7 +281,7 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
                                         .filter { it.primaryType?.lowercase() == "album" }
                                         .map { it.title }
                                         .toList()
-                                    
+
                                     val relationAlbums = group.relations?.filter { it.type == "single from" }
                                         ?.mapNotNull { it.releaseGroup?.title } ?: emptyList()
 
@@ -348,36 +364,47 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
 
                                 val imageId = fetchReleaseGroupImage(group.id)
 
-                                dbQuery {
-                                    RecentReleaseTable.upsert(RecentReleaseTable.releaseId) {
-                                        it[releaseId] = group.id
-                                        it[RecentReleaseTable.artistId] = artistId
-                                        it[RecentReleaseTable.artistName] = artistName
-                                        it[title] = group.title
-                                        it[RecentReleaseTable.releaseDate] = releaseDate
-                                        
-                                        val determinedType = if (isSingle) ReleaseType.Single else ReleaseType.fromString(group.primaryType)
-                                        it[type] = determinedType
-                                        it[RecentReleaseTable.imageId] = imageId
-                                        it[RecentReleaseTable.links] = ApplicationScope.json.encodeToString(distinctLinks)
-                                        it[RecentReleaseTable.albumId] = libraryAlbumId
-                                        it[RecentReleaseTable.songId] = librarySongId
+                                dbSemaphore.withPermit {
+                                    musicBrainzCacheService.updateReleaseGroupCache(group)
+
+                                    dbQuery {
+                                        RecentReleaseTable.upsert(RecentReleaseTable.releaseId) {
+                                            it[releaseId] = groupId
+                                            it[RecentReleaseTable.artistId] = artistId
+                                            it[RecentReleaseTable.artistName] = artistName
+                                            it[title] = group.title
+                                            it[RecentReleaseTable.releaseDate] = releaseDate
+
+                                            val determinedType = if (isSingle) ReleaseType.Single else ReleaseType.fromString(group.primaryType)
+                                            it[type] = determinedType
+                                            it[RecentReleaseTable.imageId] = imageId
+                                            it[RecentReleaseTable.links] = ApplicationScope.json.encodeToString(distinctLinks)
+                                            it[RecentReleaseTable.albumId] = libraryAlbumId
+                                            it[RecentReleaseTable.songId] = librarySongId
+                                        }
                                     }
                                 }
                                 true
+                            } catch (e: Exception) {
+                                logger.error("Failed to process group ${group.id}", e)
+                                false
                             } finally {
-                                progressMutex.withLock { 
+                                progressMutex.withLock {
                                     currentProgress += groupWeight
                                     progressAddedForArtist += groupWeight
                                 }
-                                onProgress(currentProgress * 100.0, "Processed $artistName: ${group.title}")
+                                dbSemaphore.withPermit {
+                                    onProgress(currentProgress * 100.0, "Processed $artistName: ${group.title}")
+                                }
                             }
                         }
                     }.awaitAll().count { it }
 
-                    dbQuery {
-                        FollowedArtistTable.update({ FollowedArtistTable.artistId eq artistId }) {
-                            it[lastCheck] = Clock.System.now().toEpochMilliseconds()
+                    dbSemaphore.withPermit {
+                        dbQuery {
+                            FollowedArtistTable.update({ FollowedArtistTable.artistId eq artistId }) {
+                                it[lastCheck] = Clock.System.now().toEpochMilliseconds()
+                            }
                         }
                     }
 
@@ -389,18 +416,22 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
                     val remaining = artistWeight - progressAddedForArtist
                     if (remaining > 0.000001) {
                         progressMutex.withLock { currentProgress += remaining }
-                        onProgress(currentProgress * 100.0, "Finished $artistName processing")
+                        dbSemaphore.withPermit {
+                            onProgress(currentProgress * 100.0, "Finished $artistName processing")
+                        }
                     }
                 }
             }
         }.awaitAll().filterNotNull().toMap()
+
+        onProgress(100.0, "Finished fetching new releases")
 
         logger.info("Finished fetching new releases. Found new releases for ${results.size} artists.")
         results
     }
 
 
-    internal suspend fun fetchReleaseGroupImage(releaseGroupId: String): UUID? {
+    internal suspend fun fetchReleaseGroupImage(releaseGroupId: UUID): UUID? {
         val imageUrl = "https://coverartarchive.org/release-group/$releaseGroupId/front"
         val imageBytes = ApiClient.instance.safeGet<ByteArray>(imageUrl) ?: return null
         

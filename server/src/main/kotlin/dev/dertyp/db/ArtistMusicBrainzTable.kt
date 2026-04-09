@@ -5,7 +5,7 @@ import org.jetbrains.exposed.v1.core.Table
 
 object ArtistMusicBrainzTable : Table("artist_musicbrainz") {
     val artistId = reference("artistId", ArtistTable.id, onDelete = ReferenceOption.CASCADE)
-    val musicBrainzId = varchar("musicBrainzId", 36).nullable()
+    val musicBrainzId = reference("musicBrainzId", MBArtistTable.id, onDelete = ReferenceOption.SET_NULL).nullable()
     val lastCheck = long("lastCheck").default(0L)
 
     override val primaryKey = PrimaryKey(artistId)

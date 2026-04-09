@@ -7,6 +7,7 @@ import dev.dertyp.data.InsertableSong
 import dev.dertyp.data.SongTag
 import dev.dertyp.data.User
 import dev.dertyp.db.*
+import dev.dertyp.services.metadata.MusicBrainzCacheService
 import dev.dertyp.services.metadata.MusicBrainzService
 import io.ktor.server.application.ApplicationEnvironment
 import io.mockk.every
@@ -50,6 +51,7 @@ class SongServiceTest : KoinTest {
             modules(module {
                 single { environment }
                 single { musicBrainzService }
+                single { MusicBrainzCacheService() }
                 single { mockk<ImageService>(relaxed = true) }
                 single { storageService }
                 single { AlbumService() }
@@ -79,7 +81,8 @@ class SongServiceTest : KoinTest {
                 GenreTable,
                 ArtistGenreTable,
                 SongGenreTable,
-                AlbumGenreTable
+                AlbumGenreTable,
+                *allMusicBrainzTables
             )
             
             UserTable.insert {
@@ -377,9 +380,13 @@ class SongServiceTest : KoinTest {
         setup(dialect)
         val songId = UUID.randomUUID()
         val albumId = UUID.randomUUID()
-        val mbId = "550e8400-e29b-41d4-a716-446655440000"
+        val mbId = UUID.fromString("550e8400-e29b-41d4-a716-446655440000")
 
         transaction(database) {
+            MBRecordingTable.insert {
+                it[id] = mbId
+                it[title] = "MBID Song"
+            }
             AlbumTable.insert {
                 it[id] = albumId
                 it[name] = "Album"
@@ -395,7 +402,7 @@ class SongServiceTest : KoinTest {
             }
         }
 
-        val result = rpcService.rankedSearch(0, 10, mbId, explicit = false, liked = false)
+        val result = rpcService.rankedSearch(0, 10, mbId.toString(), explicit = false, liked = false)
         assertEquals(1, result.data.size)
         assertEquals("MBID Song", result.data[0].title)
     }
@@ -834,6 +841,13 @@ class SongServiceTest : KoinTest {
                 it[bitsPerSample] = 24
             }
             val mbSongId = UUID.randomUUID()
+            val mbId = UUID.randomUUID()
+            transaction(database) {
+                MBRecordingTable.insert {
+                    it[id] = mbId
+                    it[title] = "MBID"
+                }
+            }
             SongTable.insert {
                 it[id] = mbSongId
                 it[title] = "MBID"
@@ -841,7 +855,7 @@ class SongServiceTest : KoinTest {
             }
             SongMusicBrainzTable.insert {
                 it[SongMusicBrainzTable.songId] = mbSongId
-                it[musicBrainzId] = "mb-id"
+                it[musicBrainzId] = mbId
             }
         }
 

@@ -180,7 +180,7 @@ class UserPlaylistService : IUserPlaylistService, Service() {
             )
         }
 
-    private suspend fun getSongInfoForPlaylist(songIds: List<UUID>): Map<UUID, Pair<Long, String?>> = dbQuery {
+    private suspend fun getSongInfoForPlaylist(songIds: List<UUID>): Map<UUID, Pair<Long, UUID?>> = dbQuery {
         SongTable
             .leftJoin(SongMusicBrainzTable)
             .select(SongTable.id, SongTable.duration, SongMusicBrainzTable.musicBrainzId)
@@ -188,7 +188,7 @@ class UserPlaylistService : IUserPlaylistService, Service() {
             .associate { row ->
                 row[SongTable.id].value to Pair(
                     row[SongTable.duration],
-                    row.getOrNull(SongMusicBrainzTable.musicBrainzId)
+                    row.getOrNull(SongMusicBrainzTable.musicBrainzId)?.value
                 )
             }
     }
@@ -196,7 +196,7 @@ class UserPlaylistService : IUserPlaylistService, Service() {
     private fun mapEagerly(
         mainRows: List<ResultRow>,
         songLinkRows: List<ResultRow>,
-        songInfoById: Map<UUID, Pair<Long, String?>>
+        songInfoById: Map<UUID, Pair<Long, UUID?>>
     ): List<UserPlaylist> {
         val songsByPlaylistId = songLinkRows
             .map { row ->
@@ -254,7 +254,7 @@ class UserPlaylistService : IUserPlaylistService, Service() {
                     SongMusicBrainzTable
                         .select(SongMusicBrainzTable.songId, SongMusicBrainzTable.musicBrainzId)
                         .where { SongMusicBrainzTable.musicBrainzId inList mbIds }
-                        .associate { it[SongMusicBrainzTable.musicBrainzId]!! to it[SongMusicBrainzTable.songId].value }
+                        .associate { it[SongMusicBrainzTable.musicBrainzId]!!.value to it[SongMusicBrainzTable.songId].value }
                 } ?: emptyMap()
 
             val entriesWithResolvedSongs = playlist.songEntries!!.mapNotNull { entry ->

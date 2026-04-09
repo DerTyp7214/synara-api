@@ -12,7 +12,7 @@ fun Query.paging(page: Int, pageSize: Int, offset: Int = 0) = apply {
 fun Query.rankedSearchQuery(
     queryString: String,
     weights: List<Int>,
-    columns: Collection<Column<out String?>>,
+    columns: Collection<Expression<out String?>>,
     sortFallback: Column<*>? = null
 ): Query {
     val tokens = queryString

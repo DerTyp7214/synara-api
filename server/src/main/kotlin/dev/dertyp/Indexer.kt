@@ -30,6 +30,7 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Collections
+import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.logging.Level
 import kotlin.concurrent.atomics.AtomicBoolean
@@ -400,7 +401,9 @@ class Indexer(
         val cover = audioFile.coverImage
         val lyrics = tag.getFirst(FieldKey.LYRICS) ?: ""
         val year = tag.getFirst(FieldKey.YEAR)
-        val musicBrainzId = tag.getFirst(FieldKey.MUSICBRAINZ_TRACK_ID).ifBlank { null }
+        val musicBrainzId = tag.getFirst(FieldKey.MUSICBRAINZ_TRACK_ID).ifBlank { null }?.let {
+            try { UUID.fromString(it) } catch (_: Exception) { null }
+        }
 
         val duration = header.preciseTrackLength.seconds.inWholeMilliseconds
         val sampleRate = header.sampleRateAsNumber

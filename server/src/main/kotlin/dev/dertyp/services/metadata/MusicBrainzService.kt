@@ -1,6 +1,9 @@
+@file:UseContextualSerialization(PlatformUUID::class)
+
 package dev.dertyp.services.metadata
 
 import dev.dertyp.ApiClient
+import dev.dertyp.PlatformUUID
 import dev.dertyp.core.HttpClientPriority
 import dev.dertyp.core.cleanTitle
 import dev.dertyp.data.*
@@ -15,6 +18,7 @@ import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.delay
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.UseContextualSerialization
 
 @Serializable
 data class MusicBrainzSearchResponse(
@@ -39,63 +43,6 @@ data class MusicBrainzReleaseGroupResponse(
     val count: Int? = null,
     @SerialName("release-groups")
     val releaseGroups: List<MusicBrainzReleaseGroup>? = null
-)
-
-@Serializable
-data class MusicBrainzReleaseGroup(
-    val id: String,
-    val title: String,
-    @SerialName("primary-type")
-    val primaryType: String? = null,
-    @SerialName("first-release-date")
-    val firstReleaseDate: String? = null,
-    val relations: List<MusicBrainzRelation>? = null,
-    val tags: List<MusicBrainzTag>? = null,
-    val genres: List<MusicBrainzGenre>? = null
-)
-
-@Serializable
-data class MusicBrainzRelation(
-    val type: String? = null,
-    val url: MusicBrainzRelationUrl? = null,
-    @SerialName("release_group")
-    val releaseGroup: MusicBrainzReleaseGroup? = null
-)
-
-@Serializable
-data class MusicBrainzRelationUrl(
-    val id: String,
-    val resource: String
-)
-
-@Serializable
-data class MusicBrainzRecording(
-    val id: String,
-    val title: String? = null,
-    @SerialName("artist-credit")
-    val artistCredit: List<MusicBrainzArtistCredit>? = null,
-    val releases: List<MusicBrainzRelease>? = null,
-    val length: Long? = null,
-    val tags: List<MusicBrainzTag>? = null,
-    val genres: List<MusicBrainzGenre>? = null
-)
-
-@Serializable
-data class MusicBrainzArtistCredit(
-    val name: String? = null,
-    val joinphrase: String? = null,
-    val artist: MusicBrainzArtist? = null
-)
-
-@Serializable
-data class MusicBrainzRelease(
-    val id: String,
-    val title: String? = null,
-    @SerialName("release-group")
-    val releaseGroup: MusicBrainzReleaseGroup? = null,
-    val relations: List<MusicBrainzRelation>? = null,
-    val tags: List<MusicBrainzTag>? = null,
-    val genres: List<MusicBrainzGenre>? = null
 )
 
 @Serializable
@@ -263,10 +210,10 @@ class MusicBrainzService : Service() {
         )
     }
 
-    suspend fun fetchReleaseGroups(artistMbId: String, priority: HttpClientPriority = HttpClientPriority.NORMAL): List<MusicBrainzReleaseGroup> {
+    suspend fun fetchReleaseGroups(artistMbId: PlatformUUID, priority: HttpClientPriority = HttpClientPriority.NORMAL): List<MusicBrainzReleaseGroup> {
         return try {
             val response = retryableGet<MusicBrainzReleaseGroupResponse>("$mbBaseUrl/release-group", priority) {
-                parameter("artist", artistMbId)
+                parameter("artist", artistMbId.toString())
                 parameter("inc", "url-rels+release-group-rels+tags+genres")
                 parameter("limit", 100)
                 parameter("fmt", "json")
@@ -279,10 +226,10 @@ class MusicBrainzService : Service() {
         }
     }
 
-    suspend fun fetchArtistById(mbId: String, priority: HttpClientPriority = HttpClientPriority.NORMAL): MusicBrainzArtist? {
+    suspend fun fetchArtistById(mbId: PlatformUUID, priority: HttpClientPriority = HttpClientPriority.NORMAL): MusicBrainzArtist? {
         return try {
             retryableGet<MusicBrainzArtist>("$mbBaseUrl/artist/$mbId", priority) {
-                parameter("inc", "tags+genres")
+                parameter("inc", "tags+genres+aliases")
                 parameter("fmt", "json")
                 header("User-Agent", "Synara/${BuildConfig.VERSION} ( https://github.com/dertyp7214/synara )")
             }
@@ -292,10 +239,23 @@ class MusicBrainzService : Service() {
         }
     }
 
-    suspend fun fetchReleasesByArtist(artistMbId: String, priority: HttpClientPriority = HttpClientPriority.NORMAL): List<MusicBrainzRelease> {
+    suspend fun fetchReleaseGroupById(mbId: PlatformUUID, priority: HttpClientPriority = HttpClientPriority.NORMAL): MusicBrainzReleaseGroup? {
+        return try {
+            retryableGet<MusicBrainzReleaseGroup>("$mbBaseUrl/release-group/$mbId", priority) {
+                parameter("inc", "tags+genres+url-rels")
+                parameter("fmt", "json")
+                header("User-Agent", "Synara/${BuildConfig.VERSION} ( https://github.com/dertyp7214/synara )")
+            }
+        } catch (e: Exception) {
+            logger.error("Error fetching release group by ID $mbId", e)
+            null
+        }
+    }
+
+    suspend fun fetchReleasesByArtist(artistMbId: PlatformUUID, priority: HttpClientPriority = HttpClientPriority.NORMAL): List<MusicBrainzRelease> {
         return try {
             val response = retryableGet<MusicBrainzReleaseResponse>("$mbBaseUrl/release", priority) {
-                parameter("artist", artistMbId)
+                parameter("artist", artistMbId.toString())
                 parameter("inc", "release-groups+tags+genres")
                 parameter("limit", 100)
                 parameter("fmt", "json")
@@ -308,10 +268,10 @@ class MusicBrainzService : Service() {
         }
     }
 
-    suspend fun fetchReleasesByReleaseGroup(releaseGroupId: String, priority: HttpClientPriority = HttpClientPriority.NORMAL): List<MusicBrainzRelease> {
+    suspend fun fetchReleasesByReleaseGroup(releaseGroupId: PlatformUUID, priority: HttpClientPriority = HttpClientPriority.NORMAL): List<MusicBrainzRelease> {
         return try {
             val response = retryableGet<MusicBrainzReleaseResponse>("$mbBaseUrl/release", priority) {
-                parameter("release-group", releaseGroupId)
+                parameter("release-group", releaseGroupId.toString())
                 parameter("inc", "url-rels+tags+genres")
                 parameter("limit", 100)
                 parameter("fmt", "json")
@@ -324,10 +284,36 @@ class MusicBrainzService : Service() {
         }
     }
 
-    suspend fun fetchRecordingsByReleaseGroup(releaseGroupId: String, priority: HttpClientPriority = HttpClientPriority.NORMAL): List<MusicBrainzRecording> {
+    suspend fun fetchRecordingById(mbId: PlatformUUID, priority: HttpClientPriority = HttpClientPriority.NORMAL): MusicBrainzRecording? {
+        return try {
+            retryableGet<MusicBrainzRecording>("$mbBaseUrl/recording/$mbId", priority) {
+                parameter("inc", "artist-credits+releases+tags+genres")
+                parameter("fmt", "json")
+                header("User-Agent", "Synara/${BuildConfig.VERSION} ( https://github.com/dertyp7214/synara )")
+            }
+        } catch (e: Exception) {
+            logger.error("Error fetching recording by ID $mbId", e)
+            null
+        }
+    }
+
+    suspend fun fetchReleaseById(mbId: PlatformUUID, priority: HttpClientPriority = HttpClientPriority.NORMAL): MusicBrainzRelease? {
+        return try {
+            retryableGet<MusicBrainzRelease>("$mbBaseUrl/release/$mbId", priority) {
+                parameter("inc", "artist-credits+release-groups+tags+genres")
+                parameter("fmt", "json")
+                header("User-Agent", "Synara/${BuildConfig.VERSION} ( https://github.com/dertyp7214/synara )")
+            }
+        } catch (e: Exception) {
+            logger.error("Error fetching release by ID $mbId", e)
+            null
+        }
+    }
+
+    suspend fun fetchRecordingsByReleaseGroup(releaseGroupId: PlatformUUID, priority: HttpClientPriority = HttpClientPriority.NORMAL): List<MusicBrainzRecording> {
         return try {
             val response = retryableGet<MusicBrainzSearchResponse>("$mbBaseUrl/recording", priority) {
-                parameter("release-group", releaseGroupId)
+                parameter("release-group", releaseGroupId.toString())
                 parameter("inc", "releases+release-groups+tags+genres")
                 parameter("fmt", "json")
                 header("User-Agent", "Synara/${BuildConfig.VERSION} ( https://github.com/dertyp7214/synara )")
@@ -336,6 +322,39 @@ class MusicBrainzService : Service() {
         } catch (e: Exception) {
             logger.error("Error fetching recordings for release group $releaseGroupId", e)
             emptyList()
+        }
+    }
+}
+
+class RpcMusicBrainzService(
+    private val musicBrainzService: MusicBrainzService,
+    private val musicBrainzCacheService: MusicBrainzCacheService
+) : IMusicBrainzService {
+    override suspend fun getArtist(id: PlatformUUID): MusicBrainzArtist? {
+        musicBrainzCacheService.getArtist(id)?.let { return it }
+        return musicBrainzService.fetchArtistById(id)?.also {
+            musicBrainzCacheService.updateArtistCache(it)
+        }
+    }
+
+    override suspend fun getRecording(id: PlatformUUID): MusicBrainzRecording? {
+        musicBrainzCacheService.getRecording(id)?.let { return it }
+        return musicBrainzService.fetchRecordingById(id)?.also {
+            musicBrainzCacheService.updateRecordingCache(it)
+        }
+    }
+
+    override suspend fun getRelease(id: PlatformUUID): MusicBrainzRelease? {
+        musicBrainzCacheService.getRelease(id)?.let { return it }
+        return musicBrainzService.fetchReleaseById(id)?.also {
+            musicBrainzCacheService.updateReleaseCache(it)
+        }
+    }
+
+    override suspend fun getReleaseGroup(id: PlatformUUID): MusicBrainzReleaseGroup? {
+        musicBrainzCacheService.getReleaseGroup(id)?.let { return it }
+        return musicBrainzService.fetchReleaseGroupById(id)?.also {
+            musicBrainzCacheService.updateReleaseGroupCache(it)
         }
     }
 }

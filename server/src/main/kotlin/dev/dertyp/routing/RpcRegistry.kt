@@ -6,6 +6,10 @@ import dev.dertyp.RpcIndexer
 import dev.dertyp.core.getUser
 import dev.dertyp.data.User
 import dev.dertyp.services.*
+import dev.dertyp.services.metadata.IMusicBrainzService
+import dev.dertyp.services.metadata.MusicBrainzCacheService
+import dev.dertyp.services.metadata.MusicBrainzService
+import dev.dertyp.services.metadata.RpcMusicBrainzService
 import dev.dertyp.services.tdn.DownloadRpcService
 import dev.dertyp.services.tdn.DownloadService
 import dev.dertyp.services.tdn.IDownloadService
@@ -93,6 +97,8 @@ private fun registerAuthenticated(koin: Koin, call: ApplicationCall, user: User,
     val remoteMirrorService = koin.get<RemoteMirrorService>()
     val scheduledTaskLogService = koin.get<ScheduledTaskLogService>()
     val releaseService = koin.get<ReleaseService>()
+    val musicBrainzService = koin.get<MusicBrainzService>()
+    val musicBrainzCacheService = koin.get<MusicBrainzCacheService>()
 
     registrar.register(IIndexer::class) { RpcIndexer(indexer).withLogging<IIndexer>(call) }
     registrar.register(IUserService::class) { RpcUserService(user, userService, imageService).withLogging<IUserService>(call) }
@@ -116,4 +122,5 @@ private fun registerAuthenticated(koin: Koin, call: ApplicationCall, user: User,
     registrar.register(IRemoteMirrorService::class) { RemoteMirrorRpcService(user, remoteMirrorService).withLogging<IRemoteMirrorService>(call) }
     registrar.register(IScheduledTaskLogService::class) { RpcScheduledTaskLogService(user, scheduledTaskLogService).withLogging<IScheduledTaskLogService>(call) }
     registrar.register(IReleaseService::class) { RpcReleaseService(user, releaseService).withLogging<IReleaseService>(call) }
+    registrar.register(IMusicBrainzService::class) { RpcMusicBrainzService(musicBrainzService, musicBrainzCacheService).withLogging<IMusicBrainzService>(call) }
 }

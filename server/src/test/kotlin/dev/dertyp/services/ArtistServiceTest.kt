@@ -4,6 +4,7 @@ import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
 import dev.dertyp.data.MergeArtists
 import dev.dertyp.db.*
+import dev.dertyp.services.metadata.MusicBrainzCacheService
 import dev.dertyp.services.metadata.MusicBrainzService
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
@@ -32,6 +33,7 @@ class ArtistServiceTest : KoinTest {
         startKoin {
             modules(module {
                 single { musicBrainzService }
+                single { MusicBrainzCacheService() }
                 single { mockk<ImageService>(relaxed = true) }
             })
         }
@@ -257,7 +259,14 @@ class ArtistServiceTest : KoinTest {
         setup(dialect)
         val name = "New Group"
         val about = "About the group"
-        val mbId = UUID.randomUUID().toString()
+        val mbId = UUID.randomUUID()
+        transaction(database) {
+            MBArtistTable.insert {
+                it[id] = mbId
+                it[this.name] = name
+                it[sortName] = name
+            }
+        }
         val created = service.createArtist(name, isGroup = true, about = about, musicBrainzId = mbId)
         
         assertNotNull(created)
@@ -454,7 +463,14 @@ class ArtistServiceTest : KoinTest {
             }
         }
 
-        val mbId = "mb-id-123"
+        val mbId = UUID.randomUUID()
+        transaction(database) {
+            MBArtistTable.insert {
+                it[this.id] = mbId
+                it[name] = "Artist"
+                it[sortName] = "Artist"
+            }
+        }
         service.setMusicBrainzId(id, mbId)
         
         val updated = service.byId(id)

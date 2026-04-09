@@ -25,18 +25,20 @@ class CustomMigrationService : KoinComponent {
 
         logger.info("Found ${sortedMigrations.size} custom migrations.")
 
-        dbQuery {
-            val executed = CustomMigrationTable.selectAll()
+        val executed = dbQuery {
+            CustomMigrationTable.selectAll()
                 .map { it[CustomMigrationTable.id] }
                 .toSet()
+        }
 
-            sortedMigrations.forEach { migration ->
-                if (migration.id !in executed) {
-                    logger.info("Starting custom migration ${migration.version}: ${migration.id}")
-                    val time = measureTimeMillis {
-                        migration.migrate()
-                    }
-                    logger.info("Finished custom migration ${migration.id} in ${formatDuration(time)}")
+        sortedMigrations.forEach { migration ->
+            if (migration.id !in executed) {
+                logger.info("Starting custom migration ${migration.version}: ${migration.id}")
+                val time = measureTimeMillis {
+                    migration.migrate()
+                }
+                logger.info("Finished custom migration ${migration.id} in ${formatDuration(time)}")
+                dbQuery {
                     CustomMigrationTable.insert {
                         it[id] = migration.id
                         it[executedAt] = System.currentTimeMillis()

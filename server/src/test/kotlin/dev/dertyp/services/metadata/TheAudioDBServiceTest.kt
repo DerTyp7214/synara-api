@@ -27,6 +27,7 @@ import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.koin.test.KoinTest
+import java.util.UUID
 
 class TheAudioDBServiceTest : KoinTest {
 
@@ -148,7 +149,7 @@ class TheAudioDBServiceTest : KoinTest {
 
     @Test
     fun `getArtistByMbId should return artist`() = runBlocking {
-        val artist = service.getArtistByMbId("mbid-123")
+        val artist = service.getArtistByMbId(UUID.randomUUID())
 
         assertNotNull(artist)
         assertEquals("Coldplay", artist?.name)
@@ -157,7 +158,7 @@ class TheAudioDBServiceTest : KoinTest {
 
     @Test
     fun `getAlbumByMbId should return album`() = runBlocking {
-        val album = service.getAlbumByMbId("mbid-456")
+        val album = service.getAlbumByMbId(UUID.randomUUID())
 
         assertNotNull(album)
         assertEquals("Parachutes", album?.title)

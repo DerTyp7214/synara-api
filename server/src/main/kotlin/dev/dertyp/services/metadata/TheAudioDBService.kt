@@ -143,13 +143,13 @@ class TheAudioDBService(
         } ?: emptyList()
     }
 
-    override suspend fun getImageUrlByArtistMbId(mbId: String, priority: HttpClientPriority): List<IMetadataService.Image> {
+    override suspend fun getImageUrlByArtistMbId(mbId: UUID, priority: HttpClientPriority): List<IMetadataService.Image> {
         return getArtistByMbId(mbId, priority)?.images ?: emptyList()
     }
 
-    override suspend fun getArtistByMbId(mbId: String, priority: HttpClientPriority): IMetadataService.Artist? {
+    override suspend fun getArtistByMbId(mbId: UUID, priority: HttpClientPriority): IMetadataService.Artist? {
         val response = retryableGet<ArtistResponse>("artist-mb.php", priority) {
-            parameter("i", mbId)
+            parameter("i", mbId.toString())
         }
         val artist = response?.artists?.firstOrNull() ?: return null
         return IMetadataService.Artist(
@@ -168,13 +168,13 @@ class TheAudioDBService(
         )
     }
 
-    override suspend fun getImageUrlByAlbumMbId(mbId: String, priority: HttpClientPriority): List<IMetadataService.Image> {
+    override suspend fun getImageUrlByAlbumMbId(mbId: UUID, priority: HttpClientPriority): List<IMetadataService.Image> {
         return getAlbumByMbId(mbId, priority)?.images ?: emptyList()
     }
 
-    override suspend fun getAlbumByMbId(mbId: String, priority: HttpClientPriority): IMetadataService.Album? {
+    override suspend fun getAlbumByMbId(mbId: UUID, priority: HttpClientPriority): IMetadataService.Album? {
         val response = retryableGet<AlbumResponse>("album-mb.php", priority) {
-            parameter("i", mbId)
+            parameter("i", mbId.toString())
         }
         val album = response?.album?.firstOrNull() ?: return null
         return IMetadataService.Album(
@@ -206,8 +206,13 @@ class TheAudioDBService(
         throw NotImplementedError("Not implemented for TheAudioDB")
     }
 
-    override suspend fun getImageUrlByAlbumId(albumId: String, priority: HttpClientPriority): List<IMetadataService.Image> = getImageUrlByAlbumMbId(albumId, priority)
-    override suspend fun getImageUrlsByAlbumIds(albumIds: List<String>, priority: HttpClientPriority): Map<String, List<IMetadataService.Image>> = albumIds.associateWith { getImageUrlByAlbumMbId(it, priority) }
+    override suspend fun getImageUrlByAlbumId(albumId: String, priority: HttpClientPriority): List<IMetadataService.Image> {
+        throw NotImplementedError("Not implemented for TheAudioDB")
+    }
+
+    override suspend fun getImageUrlsByAlbumIds(albumIds: List<String>, priority: HttpClientPriority): Map<String, List<IMetadataService.Image>> {
+        throw NotImplementedError("Not implemented for TheAudioDB")
+    }
 
     override suspend fun getImageUrlByImageId(imageId: UUID, priority: HttpClientPriority): String? {
         throw NotImplementedError("Not implemented for TheAudioDB")
@@ -217,13 +222,13 @@ class TheAudioDBService(
         throw NotImplementedError("Not implemented for TheAudioDB")
     }
 
-    override suspend fun getImageUrlByTrackMbId(mbId: String, priority: HttpClientPriority): List<IMetadataService.Image> {
+    override suspend fun getImageUrlByTrackMbId(mbId: UUID, priority: HttpClientPriority): List<IMetadataService.Image> {
         return getTrackByMbId(mbId, priority)?.images ?: emptyList()
     }
 
-    override suspend fun getTrackByMbId(mbId: String, priority: HttpClientPriority): IMetadataService.Track? {
+    override suspend fun getTrackByMbId(mbId: UUID, priority: HttpClientPriority): IMetadataService.Track? {
         val response = retryableGet<TrackResponse>("track-mb.php", priority) {
-            parameter("i", mbId)
+            parameter("i", mbId.toString())
         }
         val track = response?.track?.firstOrNull() ?: return null
         return IMetadataService.Track(
