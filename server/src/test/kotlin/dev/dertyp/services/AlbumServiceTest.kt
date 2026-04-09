@@ -58,7 +58,8 @@ class AlbumServiceTest : KoinTest {
                 GenreTable,
                 ArtistGenreTable,
                 SongGenreTable,
-                AlbumGenreTable
+                AlbumGenreTable,
+                *allMusicBrainzTables
             )
         }
         
@@ -370,6 +371,72 @@ class AlbumServiceTest : KoinTest {
         val result = service.byName(0, 10, "Unique Name")
         assertEquals(1, result.data.size)
         assertEquals("Unique Name", result.data[0].name)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `rankedSearch should find albums by MusicBrainz metadata`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val albumId = UUID.randomUUID()
+        val artistId = UUID.randomUUID()
+        val mbReleaseId = UUID.randomUUID()
+        val mbArtistId = UUID.randomUUID()
+        
+        transaction(database) {
+            ArtistTable.insert {
+                it[id] = artistId
+                it[name] = "Library Artist"
+            }
+            MBArtistTable.insert {
+                it[id] = mbArtistId
+                it[name] = "MB Artist Name"
+                it[sortName] = "MB Artist Name"
+            }
+            ArtistMusicBrainzTable.insert {
+                it[this.artistId] = artistId
+                it[musicBrainzId] = mbArtistId
+            }
+            MBArtistAliasTable.insert {
+                it[MBArtistAliasTable.artistId] = mbArtistId
+                it[name] = "MB Artist Alias"
+                it[sortName] = "MB Artist Alias"
+            }
+
+            AlbumTable.insert {
+                it[id] = albumId
+                it[name] = "Library Title"
+                it[songCount] = 10
+            }
+            AlbumArtistTable.insert {
+                it[AlbumArtistTable.albumId] = albumId
+                it[AlbumArtistTable.artistId] = artistId
+            }
+            MBReleaseTable.insert {
+                it[id] = mbReleaseId
+                it[title] = "MusicBrainz Title"
+                it[disambiguation] = "Special Version"
+            }
+            AlbumMusicBrainzTable.insert {
+                it[this.albumId] = albumId
+                it[musicBrainzId] = mbReleaseId
+            }
+        }
+
+        val mbTitleResult = service.rankedSearch(0, 10, "MusicBrainz")
+        assertEquals(1, mbTitleResult.data.size)
+        assertEquals(albumId, mbTitleResult.data[0].id)
+
+        val mbDisambiguationResult = service.rankedSearch(0, 10, "Special")
+        assertEquals(1, mbDisambiguationResult.data.size)
+        assertEquals(albumId, mbDisambiguationResult.data[0].id)
+
+        val mbArtistNameResult = service.rankedSearch(0, 10, "MB Artist Name")
+        assertEquals(1, mbArtistNameResult.data.size)
+        assertEquals(albumId, mbArtistNameResult.data[0].id)
+
+        val mbArtistAliasResult = service.rankedSearch(0, 10, "Artist Alias")
+        assertEquals(1, mbArtistAliasResult.data.size)
+        assertEquals(albumId, mbArtistAliasResult.data[0].id)
     }
 
     @ParameterizedTest

@@ -186,17 +186,19 @@ class AlbumService : Service() {
         queryAlbums(page, pageSize, userId = userId, columnSet = {
             leftJoin(artistGroupAlias, { ArtistTable.groupId }, { artistGroupAlias[ArtistTable.id] })
                 .leftJoin(artistMemberAlias, { ArtistTable.id }, { artistMemberAlias[ArtistTable.groupId] })
+                .withMBReleaseSearch()
+                .withMBArtistSearch()
         }) {
             rankedSearchQuery(
                 query,
-                listOf(10, 5, 5, 3, 3),
+                listOf(10, 5, 5, 3, 3, 5, 3, 5, 5, 3),
                 listOf(
                     AlbumTable.name,
                     ArtistTable.name,
                     ArtistAliasTable.name,
                     artistGroupAlias[ArtistTable.name],
                     artistMemberAlias[ArtistTable.name]
-                ),
+                ) + mbReleaseSearchColumns + mbArtistSearchColumns,
                 AlbumTable.id
             )
             andWhere { AlbumTable.songCount greater 1 }

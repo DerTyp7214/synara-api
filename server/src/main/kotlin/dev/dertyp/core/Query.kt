@@ -1,8 +1,41 @@
 package dev.dertyp.core
 
+import dev.dertyp.db.*
 import dev.dertyp.dbQuery
 import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.jdbc.Query
+
+val mbArtistSearchTable = MBArtistTable.alias("mbArtistSearch")
+val mbArtistAliasSearchTable = MBArtistAliasTable.alias("mbArtistAliasSearch")
+
+fun ColumnSet.withMBArtistSearch(): ColumnSet = this
+    .leftJoin(mbArtistSearchTable, { ArtistMusicBrainzTable.musicBrainzId }, { mbArtistSearchTable[MBArtistTable.id] })
+    .leftJoin(mbArtistAliasSearchTable, { mbArtistSearchTable[MBArtistTable.id] }, { mbArtistAliasSearchTable[MBArtistAliasTable.artistId] })
+
+val mbArtistSearchColumns: List<Expression<out String?>> = listOf(
+    mbArtistSearchTable[MBArtistTable.name],
+    mbArtistAliasSearchTable[MBArtistAliasTable.name],
+    mbArtistSearchTable[MBArtistTable.disambiguation]
+)
+
+val mbReleaseSearchTable = MBReleaseTable.alias("mbReleaseSearch")
+
+fun ColumnSet.withMBReleaseSearch(): ColumnSet = this
+    .leftJoin(mbReleaseSearchTable, { AlbumMusicBrainzTable.musicBrainzId }, { mbReleaseSearchTable[MBReleaseTable.id] })
+
+val mbReleaseSearchColumns: List<Expression<out String?>> = listOf(
+    mbReleaseSearchTable[MBReleaseTable.title],
+    mbReleaseSearchTable[MBReleaseTable.disambiguation]
+)
+
+val mbRecordingSearchTable = MBRecordingTable.alias("mbRecordingSearch")
+
+fun ColumnSet.withMBRecordingSearch(): ColumnSet = this
+    .leftJoin(mbRecordingSearchTable, { SongMusicBrainzTable.musicBrainzId }, { mbRecordingSearchTable[MBRecordingTable.id] })
+
+val mbRecordingSearchColumns: List<Expression<out String?>> = listOf(
+    mbRecordingSearchTable[MBRecordingTable.title]
+)
 
 fun Query.paging(page: Int, pageSize: Int, offset: Int = 0) = apply {
     offset((pageSize * page).toLong())

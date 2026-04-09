@@ -409,6 +409,86 @@ class SongServiceTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
+    fun `rankedSearch should find songs by MusicBrainz metadata`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val songId = UUID.randomUUID()
+        val albumId = UUID.randomUUID()
+        val artistId = UUID.randomUUID()
+        val mbRecordingId = UUID.randomUUID()
+        val mbReleaseId = UUID.randomUUID()
+        val mbArtistId = UUID.randomUUID()
+
+        transaction(database) {
+            ArtistTable.insert {
+                it[id] = artistId
+                it[name] = "Library Artist"
+            }
+            MBArtistTable.insert {
+                it[id] = mbArtistId
+                it[name] = "MB Artist Name"
+                it[sortName] = "MB Artist Name"
+            }
+            ArtistMusicBrainzTable.insert {
+                it[this.artistId] = artistId
+                it[musicBrainzId] = mbArtistId
+            }
+            MBArtistAliasTable.insert {
+                it[MBArtistAliasTable.artistId] = mbArtistId
+                it[name] = "MB Artist Alias"
+                it[sortName] = "MB Artist Alias"
+            }
+
+            AlbumTable.insert {
+                it[id] = albumId
+                it[name] = "Library Album"
+            }
+            MBReleaseTable.insert {
+                it[id] = mbReleaseId
+                it[title] = "MB Release Title"
+            }
+            AlbumMusicBrainzTable.insert {
+                it[this.albumId] = albumId
+                it[musicBrainzId] = mbReleaseId
+            }
+
+            SongTable.insert {
+                it[id] = songId
+                it[title] = "Library Song"
+                it[SongTable.albumId] = albumId
+            }
+            SongArtistTable.insert {
+                it[SongArtistTable.songId] = songId
+                it[SongArtistTable.artistId] = artistId
+            }
+            MBRecordingTable.insert {
+                it[id] = mbRecordingId
+                it[title] = "MB Recording Title"
+            }
+            SongMusicBrainzTable.insert {
+                it[this.songId] = songId
+                it[musicBrainzId] = mbRecordingId
+            }
+        }
+
+        val mbRecordingResult = rpcService.rankedSearch(0, 10, "Recording", explicit = false, liked = false)
+        assertEquals(1, mbRecordingResult.data.size)
+        assertEquals(songId, mbRecordingResult.data[0].id)
+
+        val mbReleaseResult = rpcService.rankedSearch(0, 10, "Release", explicit = false, liked = false)
+        assertEquals(1, mbReleaseResult.data.size)
+        assertEquals(songId, mbReleaseResult.data[0].id)
+
+        val mbArtistNameResult = rpcService.rankedSearch(0, 10, "MB Artist Name", explicit = false, liked = false)
+        assertEquals(1, mbArtistNameResult.data.size)
+        assertEquals(songId, mbArtistNameResult.data[0].id)
+
+        val mbArtistAliasResult = rpcService.rankedSearch(0, 10, "Artist Alias", explicit = false, liked = false)
+        assertEquals(1, mbArtistAliasResult.data.size)
+        assertEquals(songId, mbArtistAliasResult.data[0].id)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
     fun `rankedSearch should support negative keywords`(dialect: DbDialect) = runBlocking {
         setup(dialect)
         val albumId = UUID.randomUUID()

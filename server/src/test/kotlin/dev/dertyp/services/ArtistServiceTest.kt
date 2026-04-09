@@ -55,7 +55,8 @@ class ArtistServiceTest : KoinTest {
                 GenreTable,
                 ArtistGenreTable,
                 SongGenreTable,
-                AlbumGenreTable
+                AlbumGenreTable,
+                *allMusicBrainzTables
             )
         }
         
@@ -411,6 +412,48 @@ class ArtistServiceTest : KoinTest {
         val result = service.byGroup(0, 10, testGroupId)
         assertEquals(1, result.data.size, "byGroup should return exactly one member")
         assertEquals(testMemberId, result.data[0].id)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `rankedSearch should find artists by MusicBrainz metadata`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val artistId = UUID.randomUUID()
+        val mbId = UUID.randomUUID()
+        
+        transaction(database) {
+            ArtistTable.insert {
+                it[id] = artistId
+                it[name] = "Library Name"
+            }
+            MBArtistTable.insert {
+                it[id] = mbId
+                it[name] = "MusicBrainz Name"
+                it[sortName] = "MusicBrainz Name"
+                it[disambiguation] = "Special Disambiguation"
+            }
+            ArtistMusicBrainzTable.insert {
+                it[this.artistId] = artistId
+                it[musicBrainzId] = mbId
+            }
+            MBArtistAliasTable.insert {
+                it[MBArtistAliasTable.artistId] = mbId
+                it[name] = "MB Alias"
+                it[sortName] = "MB Alias"
+            }
+        }
+
+        val mbNameResult = service.rankedSearch(0, 10, "MusicBrainz")
+        assertEquals(1, mbNameResult.data.size)
+        assertEquals(artistId, mbNameResult.data[0].id)
+
+        val mbDisambiguationResult = service.rankedSearch(0, 10, "Special")
+        assertEquals(1, mbDisambiguationResult.data.size)
+        assertEquals(artistId, mbDisambiguationResult.data[0].id)
+
+        val mbAliasResult = service.rankedSearch(0, 10, "Alias")
+        assertEquals(1, mbAliasResult.data.size)
+        assertEquals(artistId, mbAliasResult.data[0].id)
     }
 
     @ParameterizedTest

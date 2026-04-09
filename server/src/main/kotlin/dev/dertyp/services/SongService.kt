@@ -1,10 +1,7 @@
 package dev.dertyp.services
 
 import dev.dertyp.AudioUtils
-import dev.dertyp.core.date
-import dev.dertyp.core.fetchBatchedResults
-import dev.dertyp.core.rankedSearchQuery
-import dev.dertyp.core.toMap
+import dev.dertyp.core.*
 import dev.dertyp.data.*
 import dev.dertyp.db.*
 import dev.dertyp.dbQuery
@@ -550,10 +547,14 @@ class SongService : Service() {
         userId: UUID,
         liked: Boolean = false
     ): PaginatedResponse<UserSong> =
-        querySongs(page, pageSize, explicit, userId) {
+        querySongs(page, pageSize, explicit, userId, columnSet = {
+            withMBRecordingSearch()
+                .withMBReleaseSearch()
+                .withMBArtistSearch()
+        }) {
             rankedSearchQuery(
                 query,
-                listOf(20, 10, 5, 5, 5, 5, 3, 3, 3, 3),
+                listOf(20, 10, 5, 5, 5, 5, 3, 3, 3, 3, 5, 5, 3, 5, 5, 3),
                 listOf(
                     SongMusicBrainzTable.musicBrainzId.castTo<String?>(VarCharColumnType(36)),
                     SongTable.title,
@@ -564,7 +565,13 @@ class SongService : Service() {
                     artistGroupAlias[ArtistTable.name],
                     artistMemberAlias[ArtistTable.name],
                     albumArtistGroupAlias[ArtistTable.name],
-                    albumArtistMemberAlias[ArtistTable.name]
+                    albumArtistMemberAlias[ArtistTable.name],
+                    mbRecordingSearchTable[MBRecordingTable.title],
+                    mbReleaseSearchTable[MBReleaseTable.title],
+                    mbReleaseSearchTable[MBReleaseTable.disambiguation],
+                    mbArtistSearchTable[MBArtistTable.name],
+                    mbArtistAliasSearchTable[MBArtistAliasTable.name],
+                    mbArtistSearchTable[MBArtistTable.disambiguation]
                 ),
                 SongTable.id
             ).let { it ->

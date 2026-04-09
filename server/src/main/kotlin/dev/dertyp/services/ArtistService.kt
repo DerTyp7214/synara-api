@@ -190,16 +190,17 @@ class ArtistService : Service() {
         queryArtists(page, pageSize, userId = userId, columnSet = {
             leftJoin(artistGroupAlias, { ArtistTable.groupId }, { artistGroupAlias[ArtistTable.id] })
                 .leftJoin(artistMemberAlias, { ArtistTable.id }, { artistMemberAlias[ArtistTable.groupId] })
+                .withMBArtistSearch()
         }) {
             rankedSearchQuery(
                 query,
-                listOf(10, 8, 6, 6),
+                listOf(10, 8, 6, 6, 5, 5, 3),
                 listOf(
                     ArtistTable.name,
                     ArtistAliasTable.name,
                     artistGroupAlias[ArtistTable.name],
                     artistMemberAlias[ArtistTable.name]
-                ),
+                ) + mbArtistSearchColumns,
                 ArtistTable.id
             )
         }

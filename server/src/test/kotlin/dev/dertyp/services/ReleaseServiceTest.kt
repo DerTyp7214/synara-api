@@ -4,7 +4,7 @@ import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
 import dev.dertyp.core.ApplicationScope
 import dev.dertyp.core.HttpClientPriority
-import dev.dertyp.data.MusicBrainzArtist
+import dev.dertyp.data.*
 import dev.dertyp.db.*
 import dev.dertyp.plugins.RedisCacheProvider
 import dev.dertyp.services.metadata.*
@@ -184,7 +184,10 @@ class ReleaseServiceTest : KoinTest {
                 relations = listOf(
                     MusicBrainzRelation(
                         type = "spotify",
-                        url = MusicBrainzRelationUrl(id = UUID.randomUUID(), resource = "https://spotify.com/album/123")
+                        url = MusicBrainzRelationUrl(
+                            id = UUID.randomUUID(),
+                            resource = "https://spotify.com/album/123"
+                        )
                     )
                 )
             )
@@ -258,7 +261,10 @@ class ReleaseServiceTest : KoinTest {
         coEvery { musicBrainzService.fetchReleasesByArtist(mbId, priority = HttpClientPriority.LOW) } returns listOf(
             MusicBrainzRelease(
                 id = releaseIdInAlbumDb,
-                releaseGroup = MusicBrainzReleaseGroup(id = releaseIdInAlbumDb, title = "Existing Album")
+                releaseGroup = MusicBrainzReleaseGroup(
+                    id = releaseIdInAlbumDb,
+                    title = "Existing Album"
+                )
             ),
             MusicBrainzRelease(
                 id = releaseIdInSongDb,
