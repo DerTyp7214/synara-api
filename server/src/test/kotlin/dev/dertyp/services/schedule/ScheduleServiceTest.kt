@@ -2,11 +2,8 @@ package dev.dertyp.services.schedule
 
 import io.mockk.every
 import io.mockk.spyk
-import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.test.runTest
-import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.*
+
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -18,7 +15,7 @@ import java.util.concurrent.atomic.AtomicInteger
 class ScheduleServiceTest {
 
     @Test
-    fun `should execute scheduled task`() = runTest {
+    fun `should execute scheduled task`() = runBlocking {
         val service = ScheduleService()
         val executed = CompletableDeferred<Unit>()
         
@@ -37,7 +34,7 @@ class ScheduleServiceTest {
     }
 
     @Test
-    fun `should execute repeating task`() = runTest {
+    fun `should execute repeating task`() = runBlocking {
         val service = ScheduleService()
         val count = AtomicInteger(0)
         val finished = CompletableDeferred<Unit>()
@@ -60,7 +57,7 @@ class ScheduleServiceTest {
     }
 
     @Test
-    fun `should manually trigger task`() = runTest {
+    fun `should manually trigger task`() = runBlocking {
         val service = ScheduleService()
         val executed = CompletableDeferred<Unit>()
 
@@ -76,7 +73,7 @@ class ScheduleServiceTest {
     }
 
     @Test
-    fun `should unschedule task`() = runTest {
+    fun `should unschedule task`() = runBlocking {
         val service = ScheduleService()
         val executed = AtomicInteger(0)
 
@@ -95,7 +92,7 @@ class ScheduleServiceTest {
     }
 
     @Test
-    fun `should handle task dependency`() = runTest {
+    fun `should handle task dependency`() = runBlocking {
         val service = ScheduleService()
         val firstExecuted = CompletableDeferred<Unit>()
         val secondExecuted = CompletableDeferred<Unit>()
@@ -123,7 +120,7 @@ class ScheduleServiceTest {
     }
 
     @Test
-    fun `should handle custom triggers and signaling`() = runTest {
+    fun `should handle custom triggers and signaling`() = runBlocking {
         val service = ScheduleService()
         val executed = CompletableDeferred<Unit>()
 
@@ -145,7 +142,7 @@ class ScheduleServiceTest {
     }
 
     @Test
-    fun `should reschedule failed task if not repeating`() = runTest {
+    fun `should reschedule failed task if not repeating`() = runBlocking {
         val service = ScheduleService()
         val attempt = AtomicInteger(0)
         val secondAttemptScheduled = CompletableDeferred<UUID>()
