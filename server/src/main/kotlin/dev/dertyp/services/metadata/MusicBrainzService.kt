@@ -332,28 +332,28 @@ class RpcMusicBrainzService(
 ) : IMusicBrainzService {
     override suspend fun getArtist(id: PlatformUUID): MusicBrainzArtist? {
         musicBrainzCacheService.getArtist(id)?.let { return it }
-        return musicBrainzService.fetchArtistById(id)?.also {
+        return musicBrainzService.fetchArtistById(id, HttpClientPriority.HIGH)?.also {
             musicBrainzCacheService.updateArtistCache(it)
         }
     }
 
     override suspend fun getRecording(id: PlatformUUID): MusicBrainzRecording? {
         musicBrainzCacheService.getRecording(id)?.let { return it }
-        return musicBrainzService.fetchRecordingById(id)?.also {
+        return musicBrainzService.fetchRecordingById(id, HttpClientPriority.HIGH)?.also {
             musicBrainzCacheService.updateRecordingCache(it)
         }
     }
 
     override suspend fun getRelease(id: PlatformUUID): MusicBrainzRelease? {
         musicBrainzCacheService.getRelease(id)?.let { return it }
-        return musicBrainzService.fetchReleaseById(id)?.also {
+        return musicBrainzService.fetchReleaseById(id, HttpClientPriority.HIGH)?.also {
             musicBrainzCacheService.updateReleaseCache(it)
         }
     }
 
     override suspend fun getReleaseGroup(id: PlatformUUID): MusicBrainzReleaseGroup? {
         musicBrainzCacheService.getReleaseGroup(id)?.let { return it }
-        return musicBrainzService.fetchReleaseGroupById(id)?.also {
+        return musicBrainzService.fetchReleaseGroupById(id, HttpClientPriority.HIGH)?.also {
             musicBrainzCacheService.updateReleaseGroupCache(it)
         }
     }

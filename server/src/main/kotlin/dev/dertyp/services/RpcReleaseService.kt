@@ -1,5 +1,6 @@
 package dev.dertyp.services
 
+import dev.dertyp.core.HttpClientPriority
 import dev.dertyp.data.PaginatedResponse
 import dev.dertyp.data.User
 import dev.dertyp.services.models.FollowedArtist
@@ -11,7 +12,7 @@ class RpcReleaseService(
     private val releaseService: ReleaseService
 ) : IReleaseService {
     override suspend fun followArtist(musicBrainzId: UUID): Boolean {
-        return releaseService.followArtist(user.id, musicBrainzId)
+        return releaseService.followArtist(user.id, musicBrainzId, HttpClientPriority.HIGH)
     }
 
     override suspend fun unfollowArtist(artistId: UUID): Boolean {

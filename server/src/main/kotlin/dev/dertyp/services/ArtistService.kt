@@ -43,9 +43,9 @@ class ArtistRpcService(private val user: User, private val artistService: Artist
         query: String,
         page: Int,
         pageSize: Int
-    ): PaginatedResponse<MusicBrainzArtist> = artistService.searchArtistOnMusicBrainz(query, page, pageSize)
+    ): PaginatedResponse<MusicBrainzArtist> = artistService.searchArtistOnMusicBrainz(query, page, pageSize, HttpClientPriority.HIGH)
 
-    override suspend fun fetchMusicBrainzId(id: UUID): Artist? = artistService.fetchMusicBrainzId(id, user.id)
+    override suspend fun fetchMusicBrainzId(id: UUID): Artist? = artistService.fetchMusicBrainzId(id, user.id, HttpClientPriority.HIGH)
     override suspend fun setMusicBrainzId(id: UUID, musicBrainzId: UUID?): Artist? =
         artistService.setMusicBrainzId(id, musicBrainzId, user.id)
 
@@ -120,12 +120,12 @@ class ArtistService : Service() {
         )
     } else this
 
-    suspend fun fetchMusicBrainzId(id: UUID, userId: UUID? = null): Artist? {
+    suspend fun fetchMusicBrainzId(id: UUID, userId: UUID? = null, priority: HttpClientPriority = HttpClientPriority.NORMAL): Artist? {
         val artist = byId(id, userId) ?: return null
         if (artist.musicbrainzId != null) return artist
         
         val musicBrainzService: MusicBrainzService by inject()
-        val mbArtist = musicBrainzService.searchArtistMb(artist)
+        val mbArtist = musicBrainzService.searchArtistMb(artist, priority)
         
         if (mbArtist != null) {
             musicBrainzCacheService.updateArtistCache(mbArtist)
@@ -173,9 +173,9 @@ class ArtistService : Service() {
         return byId(id, userId)
     }
 
-    suspend fun searchArtistOnMusicBrainz(query: String, page: Int, pageSize: Int): PaginatedResponse<MusicBrainzArtist> {
+    suspend fun searchArtistOnMusicBrainz(query: String, page: Int, pageSize: Int, priority: HttpClientPriority = HttpClientPriority.NORMAL): PaginatedResponse<MusicBrainzArtist> {
         val musicBrainzService: MusicBrainzService by inject()
-        return musicBrainzService.searchArtistsMbPaged(query, page, pageSize)
+        return musicBrainzService.searchArtistsMbPaged(query, page, pageSize, priority)
     }
 
     suspend fun byId(id: UUID, userId: UUID? = null): Artist? = querySingle(userId = userId) {

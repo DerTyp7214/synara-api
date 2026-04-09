@@ -52,7 +52,7 @@ class SongRpcService(private val user: User, private val songService: SongServic
         songService.setMusicBrainzId(id, musicBrainzId, user.id)
 
     override suspend fun fetchMusicBrainzId(id: UUID): UserSong? =
-        songService.fetchMusicBrainzId(id, user.id)
+        songService.fetchMusicBrainzId(id, user.id, HttpClientPriority.HIGH)
 
     override suspend fun byId(id: UUID): UserSong? = songService.byId(id, user.id)
 
@@ -367,11 +367,11 @@ class SongService : Service() {
         }
     }
 
-    suspend fun fetchMusicBrainzId(id: UUID, userId: UUID): UserSong? {
+    suspend fun fetchMusicBrainzId(id: UUID, userId: UUID, priority: HttpClientPriority = HttpClientPriority.NORMAL): UserSong? {
         val song = byId(id, userId) ?: return null
         if (song.musicBrainzId != null) return song
 
-        val mbRecording = musicBrainzService.searchMb(song)
+        val mbRecording = musicBrainzService.searchMb(song, priority)
 
         if (mbRecording != null) {
             musicBrainzCacheService.updateRecordingCache(mbRecording)

@@ -50,7 +50,7 @@ class AlbumRpcService(private val user: User, private val albumService: AlbumSer
         singles: Boolean
     ): PaginatedResponse<Album> = albumService.byArtist(page, pageSize, artistId, singles, user.id)
 
-    override suspend fun fetchMusicBrainzId(id: UUID): Album? = albumService.fetchMusicBrainzId(id, user.id)
+    override suspend fun fetchMusicBrainzId(id: UUID): Album? = albumService.fetchMusicBrainzId(id, user.id, HttpClientPriority.HIGH)
 }
 
 class AlbumService : Service() {
@@ -102,12 +102,12 @@ class AlbumService : Service() {
         )
     } else this
 
-    suspend fun fetchMusicBrainzId(id: UUID, userId: UUID? = null): Album? {
+    suspend fun fetchMusicBrainzId(id: UUID, userId: UUID? = null, priority: HttpClientPriority = HttpClientPriority.NORMAL): Album? {
         val album = byId(id, userId) ?: return null
         if (album.musicbrainzId != null) return album
         
         val musicBrainzService: MusicBrainzService by inject()
-        val mbRelease = musicBrainzService.searchAlbumMb(album)
+        val mbRelease = musicBrainzService.searchAlbumMb(album, priority)
         
         if (mbRelease != null) {
             musicBrainzCacheService.updateReleaseCache(mbRelease)

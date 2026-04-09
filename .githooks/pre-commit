@@ -1,0 +1,65 @@
+#!/bin/bash
+
+# Define paths to check
+PATHS_TO_CHECK=("common-rpc/src/commonMain/kotlin" "common-rpc/doc-compiler/src/main/kotlin")
+
+# Check if any relevant files are staged
+STAGED_FILES=$(git diff --cached --name-only)
+NEEDS_REBUILD=false
+
+for path in "${PATHS_TO_CHECK[@]}"; do
+    if echo "$STAGED_FILES" | grep -q "^$path"; then
+        NEEDS_REBUILD=true
+        break
+    fi
+done
+
+# Also check if the submodule common-rpc itself is staged as changed
+if echo "$STAGED_FILES" | grep -q "^common-rpc$"; then
+    NEEDS_REBUILD=true
+fi
+
+if [ "$NEEDS_REBUILD" = true ]; then
+    echo "Changes detected in RPC code or doc-compiler. Rebuilding documentation..."
+
+    # Run the KSP task to generate the docs
+    ./gradlew :common-rpc:kspCommonMainKotlinMetadata
+
+    if [ $? -eq 0 ]; then
+        # Add the generated/updated doc file to the commit
+        git add docs/RPC_SERVICES.md
+        echo "Documentation rebuilt and staged."
+    else
+        echo "Documentation build failed. Please check for errors."
+        exit 1
+    fi
+fi
+
+# --- Environment Variables Documentation ---
+ENV_FILES_TO_CHECK=(
+    "server/src/main/resources/application.yaml"
+    "proxy/src/main/resources/application.yaml"
+    "Dockerfile.nobuild"
+)
+
+NEEDS_ENV_DOCS_REBUILD=false
+for file in "${ENV_FILES_TO_CHECK[@]}"; do
+    if echo "$STAGED_FILES" | grep -q "^$file$"; then
+        NEEDS_ENV_DOCS_REBUILD=true
+        break
+    fi
+done
+
+if [ "$NEEDS_ENV_DOCS_REBUILD" = true ]; then
+    echo "Changes detected in environment configuration. Updating environment documentation..."
+    ./gradlew generateEnvDocs
+    if [ $? -eq 0 ]; then
+        git add example.env docs/ENVIRONMENT_VARIABLES.md
+        echo "Environment documentation updated and staged."
+    else
+        echo "Environment documentation update failed."
+        exit 1
+    fi
+fi
+
+exit 0

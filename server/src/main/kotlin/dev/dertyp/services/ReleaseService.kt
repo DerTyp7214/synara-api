@@ -40,8 +40,8 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
     private val artistService by inject<ArtistService>()
     private val imageService by inject<ImageService>()
 
-    suspend fun followArtist(userId: UUID, musicBrainzId: UUID): Boolean {
-        val artistId = getOrCreateArtistByMbId(musicBrainzId) ?: return false
+    suspend fun followArtist(userId: UUID, musicBrainzId: UUID, priority: HttpClientPriority = HttpClientPriority.NORMAL): Boolean {
+        val artistId = getOrCreateArtistByMbId(musicBrainzId, priority) ?: return false
         return dbQuery {
             FollowedArtistTable.upsert(FollowedArtistTable.userId, FollowedArtistTable.artistId) {
                 it[FollowedArtistTable.userId] = userId
@@ -50,7 +50,7 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
         }
     }
 
-    private suspend fun getOrCreateArtistByMbId(musicBrainzId: UUID): UUID? {
+    private suspend fun getOrCreateArtistByMbId(musicBrainzId: UUID, priority: HttpClientPriority = HttpClientPriority.NORMAL): UUID? {
         val existingArtistId = dbQuery {
             ArtistMusicBrainzTable.selectAll()
                 .where { ArtistMusicBrainzTable.musicBrainzId eq musicBrainzId }
@@ -58,7 +58,7 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
         }
         if (existingArtistId != null) return existingArtistId
 
-        val mbArtist = musicBrainzService.fetchArtistById(musicBrainzId) ?: return null
+        val mbArtist = musicBrainzService.fetchArtistById(musicBrainzId, priority) ?: return null
         musicBrainzCacheService.updateArtistCache(mbArtist)
         val artist = artistService.createArtist(
             name = mbArtist.name ?: "Unknown Artist",
