@@ -16,7 +16,7 @@ class V1_26__LinkMusicBrainzCache : BaseJavaMigration() {
         val allStatements = mutableListOf<String>()
 
         tempConnection {
-            val isPostgres = this.db.dialect.name == "postgresql"
+            val isPostgres = this.db.dialect.name.contains("postgres", ignoreCase = true)
             val insertPrefix = if (isPostgres) "INSERT" else "INSERT OR IGNORE"
             val onConflict = if (isPostgres) " ON CONFLICT (\"id\") DO NOTHING" else ""
 
@@ -89,17 +89,14 @@ class V1_26__LinkMusicBrainzCache : BaseJavaMigration() {
         }
 
         context.connection.createStatement().use { statement ->
-            var hasError = false
             for (sql in allStatements) {
                 try {
                     statement.execute(sql)
                 } catch (e: Exception) {
-                    println("Error executing: $sql")
-                    e.printStackTrace()
-                    hasError = true
+                    System.err.println("Error executing: $sql")
+                    throw e
                 }
             }
-            if (hasError) throw RuntimeException("Migration failed")
         }
     }
 }
