@@ -22,8 +22,9 @@ Synara is a powerful, modern music server and API designed for high-fidelity aud
 ## Documentation
 
 - **API Reference**: Swagger documentation is available at `/swagger` when the server is running.
-- **RPC Services**: Detailed breakdown of available RPC interfaces can be found in [rpc_services.md](rpc_services.md).
-- **Configuration**: See [ENVIRONMENT_VARIABLES.md](ENVIRONMENT_VARIABLES.md) for a full list of configuration options and defaults.
+- **RPC Services**: Detailed breakdown of available RPC interfaces can be found in [docs/RPC_SERVICES.md](docs/RPC_SERVICES.md).
+- **Configuration**: See [docs/ENVIRONMENT_VARIABLES.md](docs/ENVIRONMENT_VARIABLES.md) for a full list of configuration options and defaults.
+- **Development Instructions**: Detailed developer guide in [docs/INSTRUCTIONS.md](docs/INSTRUCTIONS.md).
 
 ## Getting Started
 

@@ -11,6 +11,7 @@ plugins {
     alias(libs.plugins.kotlinx.rpc)
     alias(libs.plugins.buildconfig)
     alias(libs.plugins.kover)
+    alias(libs.plugins.ksp)
 }
 
 application {
@@ -36,6 +37,8 @@ tasks.shadowJar {
 }
 
 dependencies {
+    add("ksp", project(":common-rpc:doc-compiler"))
+
     implementation(libs.ktor.client.core)
     implementation(libs.ktor.client.cio)
     implementation(libs.ktor.server.cors)
