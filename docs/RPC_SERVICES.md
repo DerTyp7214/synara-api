@@ -904,34 +904,34 @@ Manages albums and their metadata.
 
 | Function | Parameters | Returns | Admin | Errors | Description |
 | :--- | :--- | :--- | :---: | :--- | :--- |
-| `byId` | `id`: The album unique identifier. | [Album](#album)? | No |  | Get album by ID. |
-| `byIds` | `ids`: Collection of album IDs. | `List`<[Album](#album)> | No |  | Get multiple albums by their IDs. |
-| `versions` | `id`: The album unique identifier. | `List`<[Album](#album)> | No |  | List different versions of an album. |
-| `byName` | `page`: Page index (starting from 0).<br>`pageSize`: Number of items per page.<br>`name`: The album name to search for. | [PaginatedResponse](#paginatedresponse)<[Album](#album)> | No |  | Search albums by name. |
-| `rankedSearch` | `page`: Page index.<br>`pageSize`: Number of items per page.<br>`query`: The search query. | [PaginatedResponse](#paginatedresponse)<[Album](#album)> | No |  | Ranked album search. |
-| `allAlbums` | `page`: Page index.<br>`pageSize`: Number of items per page. | [PaginatedResponse](#paginatedresponse)<[Album](#album)> | No |  | Get all albums in the library. |
-| `updateAlbum` | `album`: The album object with updated fields. | [Album](#album)? | No |  | Update album metadata. |
-| `deleteAlbums` | `ids`: Collection of album IDs to delete. | `Boolean` | No |  | Delete multiple albums from the library. |
-| `fetchMusicBrainzId` | `id`: The album unique identifier. | [Album](#album)? | No |  | Fetch and link MusicBrainz ID for an album. |
-| `byArtist` | `page`: Page index.<br>`pageSize`: Number of items per page.<br>`artistId`: The artist unique identifier.<br>`singles`: Whether to include singles. | [PaginatedResponse](#paginatedresponse)<[Album](#album)> | No |  | List albums by artist. |
+| `byId` | `id` (`PlatformUUID`): The album unique identifier. | [Album](#album)? | No |  | Get album by ID. |
+| `byIds` | `ids` (`List`<`PlatformUUID`>): Collection of album IDs. | `List`<[Album](#album)> | No |  | Get multiple albums by their IDs. |
+| `versions` | `id` (`PlatformUUID`): The album unique identifier. | `List`<[Album](#album)> | No |  | List different versions of an album. |
+| `byName` | `page` (`Int`): Page index (starting from 0).<br>`pageSize` (`Int`): Number of items per page.<br>`name` (`String`): The album name to search for. | [PaginatedResponse](#paginatedresponse)<[Album](#album)> | No |  | Search albums by name. |
+| `rankedSearch` | `page` (`Int`): Page index.<br>`pageSize` (`Int`): Number of items per page.<br>`query` (`String`): The search query. | [PaginatedResponse](#paginatedresponse)<[Album](#album)> | No |  | Ranked album search. |
+| `allAlbums` | `page` (`Int`): Page index.<br>`pageSize` (`Int`): Number of items per page. | [PaginatedResponse](#paginatedresponse)<[Album](#album)> | No |  | Get all albums in the library. |
+| `updateAlbum` | `album` ([Album](#album)): The album object with updated fields. | [Album](#album)? | No |  | Update album metadata. |
+| `deleteAlbums` | `ids` (`List`<`PlatformUUID`>): Collection of album IDs to delete. | `Boolean` | No |  | Delete multiple albums from the library. |
+| `fetchMusicBrainzId` | `id` (`PlatformUUID`): The album unique identifier. | [Album](#album)? | No |  | Fetch and link MusicBrainz ID for an album. |
+| `byArtist` | `page` (`Int`): Page index.<br>`pageSize` (`Int`): Number of items per page.<br>`artistId` (`PlatformUUID`): The artist unique identifier.<br>`singles` (`Boolean`): Whether to include singles. | [PaginatedResponse](#paginatedresponse)<[Album](#album)> | No |  | List albums by artist. |
 
 ### IArtistService
 Manages artist data and complex library maintenance.
 
 | Function | Parameters | Returns | Admin | Errors | Description |
 | :--- | :--- | :--- | :---: | :--- | :--- |
-| `byId` | `id`: The artist unique identifier. | [Artist](#artist)? | No |  | Get artist by ID. |
-| `byIds` | `ids`: Collection of artist IDs. | `List`<[Artist](#artist)> | No |  | Get multiple artists by their IDs. |
-| `rankedSearch` | `page`: Page index.<br>`pageSize`: Number of items per page.<br>`query`: The search query. | [PaginatedResponse](#paginatedresponse)<[Artist](#artist)> | No |  | Ranked artist search. |
-| `setGroup` | `id`: The group artist unique identifier.<br>`artistIds`: Optional collection of sub-artist IDs. | [Artist](#artist)? | No |  | Set sub-artists for a group. |
-| `byGroup` | `page`: Page index.<br>`pageSize`: Number of items per page.<br>`groupId`: The group artist unique identifier. | [PaginatedResponse](#paginatedresponse)<[Artist](#artist)> | No |  | List artists in a group. |
-| `mergeArtists` | `mergeArtists`: Configuration for merging artists. | [Artist](#artist)? | No |  | Merge multiple artist records into one. |
-| `splitArtist` | `splitArtist`: Configuration for splitting an artist. | `List`<[Artist](#artist)> | No |  | Split an artist record into multiple artists. |
-| `allArtists` | `page`: Page index.<br>`pageSize`: Number of items per page. | [PaginatedResponse](#paginatedresponse)<[Artist](#artist)> | No |  | Get all artists in the library. |
-| `createArtist` | `name`: Name of the artist.<br>`isGroup`: Whether the artist is a group.<br>`about`: Optional biography or description.<br>`musicBrainzId`: Optional MusicBrainz ID. | [Artist](#artist) | No |  | Manually create an artist record. |
-| `searchArtistOnMusicBrainz` | `query`: The search query.<br>`page`: Page index.<br>`pageSize`: Number of items per page. | [PaginatedResponse](#paginatedresponse)<`MusicBrainzArtist`> | No |  | Search for an artist directly on MusicBrainz. |
-| `fetchMusicBrainzId` | `id`: The artist unique identifier. | [Artist](#artist)? | No |  | Fetch and link MusicBrainz ID for an artist. |
-| `setMusicBrainzId` | `id`: The artist unique identifier.<br>`musicBrainzId`: The MusicBrainz ID to link. | [Artist](#artist)? | No |  | Link an artist record to a MusicBrainz ID. |
+| `byId` | `id` (`PlatformUUID`): The artist unique identifier. | [Artist](#artist)? | No |  | Get artist by ID. |
+| `byIds` | `ids` (`List`<`PlatformUUID`>): Collection of artist IDs. | `List`<[Artist](#artist)> | No |  | Get multiple artists by their IDs. |
+| `rankedSearch` | `page` (`Int`): Page index.<br>`pageSize` (`Int`): Number of items per page.<br>`query` (`String`): The search query. | [PaginatedResponse](#paginatedresponse)<[Artist](#artist)> | No |  | Ranked artist search. |
+| `setGroup` | `id` (`PlatformUUID`): The group artist unique identifier.<br>`artistIds` (`List`<`PlatformUUID`>?): Optional collection of sub-artist IDs. | [Artist](#artist)? | No |  | Set sub-artists for a group. |
+| `byGroup` | `page` (`Int`): Page index.<br>`pageSize` (`Int`): Number of items per page.<br>`groupId` (`PlatformUUID`): The group artist unique identifier. | [PaginatedResponse](#paginatedresponse)<[Artist](#artist)> | No |  | List artists in a group. |
+| `mergeArtists` | `mergeArtists` ([MergeArtists](#mergeartists)): Configuration for merging artists. | [Artist](#artist)? | No |  | Merge multiple artist records into one. |
+| `splitArtist` | `splitArtist` ([SplitArtist](#splitartist)): Configuration for splitting an artist. | `List`<[Artist](#artist)> | No |  | Split an artist record into multiple artists. |
+| `allArtists` | `page` (`Int`): Page index.<br>`pageSize` (`Int`): Number of items per page. | [PaginatedResponse](#paginatedresponse)<[Artist](#artist)> | No |  | Get all artists in the library. |
+| `createArtist` | `name` (`String`): Name of the artist.<br>`isGroup` (`Boolean`): Whether the artist is a group.<br>`about` (`String`): Optional biography or description.<br>`musicBrainzId` (`PlatformUUID`?): Optional MusicBrainz ID. | [Artist](#artist) | No |  | Manually create an artist record. |
+| `searchArtistOnMusicBrainz` | `query` (`String`): The search query.<br>`page` (`Int`): Page index.<br>`pageSize` (`Int`): Number of items per page. | [PaginatedResponse](#paginatedresponse)<`MusicBrainzArtist`> | No |  | Search for an artist directly on MusicBrainz. |
+| `fetchMusicBrainzId` | `id` (`PlatformUUID`): The artist unique identifier. | [Artist](#artist)? | No |  | Fetch and link MusicBrainz ID for an artist. |
+| `setMusicBrainzId` | `id` (`PlatformUUID`): The artist unique identifier.<br>`musicBrainzId` (`PlatformUUID`?): The MusicBrainz ID to link. | [Artist](#artist)? | No |  | Link an artist record to a MusicBrainz ID. |
 | `artistsWithoutMusicBrainzIdFlow` | - | `Flow`<[Artist](#artist)> | No |  | Stream all artists that are missing a MusicBrainz ID. |
 | `artistIdsWithoutMusicBrainzId` | - | `Flow`<`PlatformUUID`> | No |  | Stream IDs of all artists that are missing a MusicBrainz ID. |
 
@@ -940,8 +940,8 @@ Handles user login and session security.
 
 | Function | Parameters | Returns | Admin | Errors | Description |
 | :--- | :--- | :--- | :---: | :--- | :--- |
-| `authenticate` | `username`: The username of the user.<br>`password`: The password of the user. | [AuthenticationResponse](#authenticationresponse) | No | IllegalArgumentException, IllegalStateException | Logs in a user and returns JWT token. |
-| `refreshToken` | `refreshToken`: The refresh token. | [AuthenticationResponse](#authenticationresponse) | No | IllegalArgumentException, IllegalStateException | Refreshes an expired access token. |
+| `authenticate` | `username` (`String`): The username of the user.<br>`password` (`String`): The password of the user. | [AuthenticationResponse](#authenticationresponse) | No | IllegalArgumentException, IllegalStateException | Logs in a user and returns JWT token. |
+| `refreshToken` | `refreshToken` (`String`): The refresh token. | [AuthenticationResponse](#authenticationresponse) | No | IllegalArgumentException, IllegalStateException | Refreshes an expired access token. |
 
 ### IBackupService
 System-wide data persistence and disaster recovery.
@@ -949,8 +949,8 @@ System-wide data persistence and disaster recovery.
 | Function | Parameters | Returns | Admin | Errors | Description |
 | :--- | :--- | :--- | :---: | :--- | :--- |
 | `listBackups` | - | `List`<[BackupInfo](#backupinfo)> | **Yes** | SecurityException | List all available system backup files. |
-| `loadBackup` | `fileName`: The name of the backup file. | `Unit` | **Yes** | SecurityException, IllegalArgumentException | Restore the entire server state from a backup file. |
-| `deleteBackup` | `fileName`: The name of the backup file. | `Unit` | **Yes** | SecurityException | Delete a system backup file from the server. |
+| `loadBackup` | `fileName` (`String`): The name of the backup file. | `Unit` | **Yes** | SecurityException, IllegalArgumentException | Restore the entire server state from a backup file. |
+| `deleteBackup` | `fileName` (`String`): The name of the backup file. | `Unit` | **Yes** | SecurityException | Delete a system backup file from the server. |
 | `createBackup` | - | [BackupResult](#backupresult) | **Yes** | SecurityException | Trigger the creation of a full system backup. |
 
 ### ICustomAudioService
@@ -958,7 +958,7 @@ Handles manual audio uploads.
 
 | Function | Parameters | Returns | Admin | Errors | Description |
 | :--- | :--- | :--- | :---: | :--- | :--- |
-| `uploadCustomAudio` | `fileData`: The raw bytes of the audio file.<br>`fileName`: The original name of the file.<br>`metadata`: Optional metadata associated with the audio. | `PlatformUUID`? | No |  | Upload a custom audio file and its metadata. |
+| `uploadCustomAudio` | `fileData` (`ByteArray`): The raw bytes of the audio file.<br>`fileName` (`String`): The original name of the file.<br>`metadata` ([CustomMetadata](#custommetadata)?): Optional metadata associated with the audio. | `PlatformUUID`? | No |  | Upload a custom audio file and its metadata. |
 
 ### IDbManagementService
 Direct database management and data migration.
@@ -966,7 +966,7 @@ Direct database management and data migration.
 | Function | Parameters | Returns | Admin | Errors | Description |
 | :--- | :--- | :--- | :---: | :--- | :--- |
 | `exportData` | - | `ByteArray` | No |  | Export the entire system database as a binary blob. |
-| `importData` | `data`: The raw database blob. | `Unit` | No |  | Import a previously exported database blob to overwrite the current state. |
+| `importData` | `data` (`ByteArray`): The raw database blob. | `Unit` | No |  | Import a previously exported database blob to overwrite the current state. |
 
 ### IDownloadService
 Management of the integrated media downloader (Tidal).
@@ -979,35 +979,35 @@ Management of the integrated media downloader (Tidal).
 | `finishedDownloads` | - | `List`<[FinishedDownloadQueueEntry](#finisheddownloadqueueentry)> | No |  | Get a list of recently completed or failed download tasks. |
 | `syncFavouritesAvailable` | - | `Boolean` | No |  | Check if favorite synchronization is available for the current Tidal account. |
 | `syncFavourites` | - | `Unit` | No | IllegalStateException | Synchronize Tidal favorites with the local library. |
-| `downloadTidalIds` | `ids`: Collection of Tidal IDs.<br>`type`: The type of content (SONG, ALBUM, etc.). | `Unit` | No |  | Queue Tidal content for download by its IDs. |
-| `existsByTidalId` | `id`: The Tidal ID to check.<br>`type`: The type of content. | `Boolean` | No |  | Check if content with a specific Tidal ID is already present in the library. |
-| `setTidalDownloadService` | `service`: The downloader service to use. | `Unit` | No |  | Set the preferred Tidal downloader backend. |
+| `downloadTidalIds` | `ids` (`List`<`String`>): Collection of Tidal IDs.<br>`type` ([Type](#type)): The type of content (SONG, ALBUM, etc.). | `Unit` | No |  | Queue Tidal content for download by its IDs. |
+| `existsByTidalId` | `id` (`String`): The Tidal ID to check.<br>`type` ([Type](#type)): The type of content. | `Boolean` | No |  | Check if content with a specific Tidal ID is already present in the library. |
+| `setTidalDownloadService` | `service` ([TidalDownloadService](#tidaldownloadservice)): The downloader service to use. | `Unit` | No |  | Set the preferred Tidal downloader backend. |
 | `getTidalDownloadService` | - | [TidalDownloadService](#tidaldownloadservice) | No |  | Get the currently active Tidal downloader backend. |
 | `tidalDownloadAuthorized` | - | `Boolean` | No |  | Check if the Tidal downloader is authorized. |
 | `tidalDownloadLogin` | - | `Flow`<`String`> | No |  | Trigger the Tidal OAuth login flow and stream the login URL. |
 | `tidalSyncAuthorized` | - | `Boolean` | No |  | Check if Tidal favorite synchronization is authorized. |
 | `getAuthUrl` | - | `String` | No | IllegalArgumentException | Get the Tidal OAuth authorization URL. |
 | `killAllChildProcesses` | - | `Unit` | No |  | Immediately stop all active downloader processes. |
-| `searchTidal` | `query`: General search query.<br>`title`: Filter by track title.<br>`artist`: Filter by artist name.<br>`count`: Maximum number of results. | `List`<[TidalSong](#tidalsong)> | No | IllegalStateException | Search for tracks directly on Tidal. |
+| `searchTidal` | `query` (`String`?): General search query.<br>`title` (`String`?): Filter by track title.<br>`artist` (`String`?): Filter by artist name.<br>`count` (`Int`): Maximum number of results. | `List`<[TidalSong](#tidalsong)> | No | IllegalStateException | Search for tracks directly on Tidal. |
 
 ### IFavSyncService
 Tracks the history of favorite synchronization tasks.
 
 | Function | Parameters | Returns | Admin | Errors | Description |
 | :--- | :--- | :--- | :---: | :--- | :--- |
-| `getLatestFavSync` | `service`: The service type (e.g., TIDAL). | [FavSync](#favsync)? | No |  | Get the timestamp of the last successful synchronization for a specific service. |
-| `insertFavSync` | `service`: The service type.<br>`syncedAt`: The timestamp of synchronization. | `Int` | No |  | Record a new successful synchronization timestamp. |
+| `getLatestFavSync` | `service` (`SyncServiceType`): The service type (e.g., TIDAL). | [FavSync](#favsync)? | No |  | Get the timestamp of the last successful synchronization for a specific service. |
+| `insertFavSync` | `service` (`SyncServiceType`): The service type.<br>`syncedAt` (`PlatformDate`): The timestamp of synchronization. | `Int` | No |  | Record a new successful synchronization timestamp. |
 
 ### IImageService
 Management of image files for covers and profiles.
 
 | Function | Parameters | Returns | Admin | Errors | Description |
 | :--- | :--- | :--- | :---: | :--- | :--- |
-| `byId` | `id`: The image unique identifier. | [Image](#image)? | No |  | Get image metadata by its unique ID. |
-| `byHash` | `hash`: The unique hash of the image. | [Image](#image)? | No |  | Find image metadata by its content hash. |
-| `getCoverHashes` | `hashes`: Collection of image hashes. | `Map`<`String`, `PlatformUUID`> | No |  | Map a list of image hashes to their existing internal UUIDs. |
-| `getImageData` | `id`: The image unique identifier.<br>`size`: Requested image size (width/height). 0 for original size. | `ByteArray`? | No |  | Retrieve the raw binary data of an image. |
-| `createImage` | `bytes`: The raw binary data of the image.<br>`origin`: The source or category of the image. | `PlatformUUID` | No |  | Store a new image on the server. |
+| `byId` | `id` (`PlatformUUID`): The image unique identifier. | [Image](#image)? | No |  | Get image metadata by its unique ID. |
+| `byHash` | `hash` (`String`): The unique hash of the image. | [Image](#image)? | No |  | Find image metadata by its content hash. |
+| `getCoverHashes` | `hashes` (`List`<`String`>): Collection of image hashes. | `Map`<`String`, `PlatformUUID`> | No |  | Map a list of image hashes to their existing internal UUIDs. |
+| `getImageData` | `id` (`PlatformUUID`): The image unique identifier.<br>`size` (`Int`): Requested image size (width/height). 0 for original size. | `ByteArray`? | No |  | Retrieve the raw binary data of an image. |
+| `createImage` | `bytes` (`ByteArray`): The raw binary data of the image.<br>`origin` (`String`): The source or category of the image. | `PlatformUUID` | No |  | Store a new image on the server. |
 
 ### IIndexer
 Local file system media scanning.
@@ -1021,15 +1021,15 @@ Search for track lyrics using external providers.
 
 | Function | Parameters | Returns | Admin | Errors | Description |
 | :--- | :--- | :--- | :---: | :--- | :--- |
-| `searchLyrics` | `artist`: The name of the artist.<br>`title`: The title of the song.<br>`syncedOnly`: Whether to only return time-synced lyrics. | `List`<`String`> | No | RuntimeException | Search for lyrics text on external services. |
+| `searchLyrics` | `artist` (`String`): The name of the artist.<br>`title` (`String`): The title of the song.<br>`syncedOnly` (`Boolean`): Whether to only return time-synced lyrics. | `List`<`String`> | No | RuntimeException | Search for lyrics text on external services. |
 
 ### ILyricsService
 Syncing and management of track lyrics.
 
 | Function | Parameters | Returns | Admin | Errors | Description |
 | :--- | :--- | :--- | :---: | :--- | :--- |
-| `getSyncedLyrics` | `songId`: The song unique identifier. | [SyncedLyrics](#syncedlyrics)? | No |  | Get time-synced lyrics for a song if they exist. |
-| `transcribeLyrics` | `songId`: The song unique identifier.<br>`lyrics`: Optional raw lyrics text to transcribe. | [SyncedLyrics](#syncedlyrics)? | No | RuntimeException | Trigger AI-based transcription or manual alignment of lyrics. |
+| `getSyncedLyrics` | `songId` (`PlatformUUID`): The song unique identifier. | [SyncedLyrics](#syncedlyrics)? | No |  | Get time-synced lyrics for a song if they exist. |
+| `transcribeLyrics` | `songId` (`PlatformUUID`): The song unique identifier.<br>`lyrics` (`String`?): Optional raw lyrics text to transcribe. | [SyncedLyrics](#syncedlyrics)? | No | RuntimeException | Trigger AI-based transcription or manual alignment of lyrics. |
 | `startSyncWorker` | - | `Boolean` | No |  | Start the background lyrics synchronization worker. |
 
 ### IMirrorService
@@ -1046,69 +1046,69 @@ Exposes local data for server-to-server mirroring.
 | `getPlaylists` | - | `Flow`<[Playlist](#playlist)> | No | IllegalStateException | Stream all local system playlists for mirroring. |
 | `getUserPlaylists` | - | `Flow`<[UserPlaylist](#userplaylist)> | No | IllegalStateException | Stream all local user playlists for mirroring. |
 | `getImageMetadata` | - | `Flow`<[Image](#image)> | No | IllegalStateException | Stream all image metadata for mirroring. |
-| `getSongData` | `songId`: The song unique identifier.<br>`quality`: Target audio quality level.<br>`chunkSize`: Number of bytes per chunk in the stream. | `Flow`<`ByteArray`> | No | IllegalStateException | Stream raw audio data for a song. |
+| `getSongData` | `songId` (`PlatformUUID`): The song unique identifier.<br>`quality` (`Int`): Target audio quality level.<br>`chunkSize` (`Int`): Number of bytes per chunk in the stream. | `Flow`<`ByteArray`> | No | IllegalStateException | Stream raw audio data for a song. |
 | `getUsers` | - | `Flow`<[User](#user)> | No | IllegalStateException | Stream all local user accounts (profiles) for mirroring. |
-| `getSongsByPlaylist` | `playlistId`: The playlist unique identifier. | `Flow`<[Song](#song)> | No | IllegalStateException | Stream all songs belonging to a specific system playlist for mirroring. |
-| `getSongsByUserPlaylist` | `playlistId`: The playlist unique identifier. | `Flow`<[Song](#song)> | No | IllegalStateException | Stream all songs belonging to a specific user playlist for mirroring. |
-| `getLikedSongs` | `userId`: The user unique identifier. | `Flow`<[Song](#song)> | No | IllegalStateException | Stream all songs liked by a specific user for mirroring. |
+| `getSongsByPlaylist` | `playlistId` (`PlatformUUID`): The playlist unique identifier. | `Flow`<[Song](#song)> | No | IllegalStateException | Stream all songs belonging to a specific system playlist for mirroring. |
+| `getSongsByUserPlaylist` | `playlistId` (`PlatformUUID`): The playlist unique identifier. | `Flow`<[Song](#song)> | No | IllegalStateException | Stream all songs belonging to a specific user playlist for mirroring. |
+| `getLikedSongs` | `userId` (`PlatformUUID`): The user unique identifier. | `Flow`<[Song](#song)> | No | IllegalStateException | Stream all songs liked by a specific user for mirroring. |
 
 ### IMusicBrainzService
 Fetch raw metadata records directly from the MusicBrainz database.
 
 | Function | Parameters | Returns | Admin | Errors | Description |
 | :--- | :--- | :--- | :---: | :--- | :--- |
-| `getArtist` | `id`: The MusicBrainz Artist UUID. | `MusicBrainzArtist`? | No |  | Retrieve a MusicBrainz Artist record. |
-| `getRecording` | `id`: The MusicBrainz Recording UUID. | `MusicBrainzRecording`? | No |  | Retrieve a MusicBrainz Recording record. |
-| `getRelease` | `id`: The MusicBrainz Release UUID. | `MusicBrainzRelease`? | No |  | Retrieve a MusicBrainz Release record. |
-| `getReleaseGroup` | `id`: The MusicBrainz Release Group UUID. | `MusicBrainzReleaseGroup`? | No |  | Retrieve a MusicBrainz Release Group record. |
+| `getArtist` | `id` (`PlatformUUID`): The MusicBrainz Artist UUID. | `MusicBrainzArtist`? | No |  | Retrieve a MusicBrainz Artist record. |
+| `getRecording` | `id` (`PlatformUUID`): The MusicBrainz Recording UUID. | `MusicBrainzRecording`? | No |  | Retrieve a MusicBrainz Recording record. |
+| `getRelease` | `id` (`PlatformUUID`): The MusicBrainz Release UUID. | `MusicBrainzRelease`? | No |  | Retrieve a MusicBrainz Release record. |
+| `getReleaseGroup` | `id` (`PlatformUUID`): The MusicBrainz Release Group UUID. | `MusicBrainzReleaseGroup`? | No |  | Retrieve a MusicBrainz Release Group record. |
 
 ### IPlaybackService
 Synchronize music playback status across multiple devices.
 
 | Function | Parameters | Returns | Admin | Errors | Description |
 | :--- | :--- | :--- | :---: | :--- | :--- |
-| `getPlaybackState` | `sessionId`: The session unique identifier. | [PlaybackState](#playbackstate)? | No |  | Retrieve the current playback state for a specific session. |
-| `setPlaybackState` | `sessionId`: The session unique identifier.<br>`state`: The new playback state data. | `Boolean` | No |  | Update the playback state for a specific session. |
-| `observePlaybackState` | `sessionId`: The session unique identifier. | `Flow`<[PlaybackState](#playbackstate)> | No |  | Watch real-time playback state changes for a session. |
+| `getPlaybackState` | `sessionId` (`PlatformUUID`): The session unique identifier. | [PlaybackState](#playbackstate)? | No |  | Retrieve the current playback state for a specific session. |
+| `setPlaybackState` | `sessionId` (`PlatformUUID`): The session unique identifier.<br>`state` ([PlaybackState](#playbackstate)): The new playback state data. | `Boolean` | No |  | Update the playback state for a specific session. |
+| `observePlaybackState` | `sessionId` (`PlatformUUID`): The session unique identifier. | `Flow`<[PlaybackState](#playbackstate)> | No |  | Watch real-time playback state changes for a session. |
 
 ### IPlaylistService
 Management of system playlists.
 
 | Function | Parameters | Returns | Admin | Errors | Description |
 | :--- | :--- | :--- | :---: | :--- | :--- |
-| `byId` | `id`: The playlist unique identifier. | [Playlist](#playlist)? | No |  | Get system playlist by ID. |
-| `byIds` | `ids`: Collection of playlist IDs. | `List`<[Playlist](#playlist)> | No |  | Get multiple system playlists by their IDs. |
-| `byIdFull` | `id`: The playlist unique identifier. | `Pair`<`String`, `List`<[PlaylistEntry](#playlistentry)>>? | No |  | Get system playlist with all track entries. |
-| `byName` | `name`: The name of the playlist. | [Playlist](#playlist)? | No |  | Get system playlist by name. |
-| `rankedSearch` | `page`: Page index.<br>`pageSize`: Number of items per page.<br>`query`: The search query. | [PaginatedResponse](#paginatedresponse)<[Playlist](#playlist)> | No |  | Search system playlists. |
-| `allPlaylists` | `page`: Page index.<br>`pageSize`: Number of items per page. | [PaginatedResponse](#paginatedresponse)<[Playlist](#playlist)> | No |  | Get all system playlists. |
-| `delete` | `id`: The playlist unique identifier. | `Boolean` | No |  | Delete a system playlist. |
+| `byId` | `id` (`PlatformUUID`): The playlist unique identifier. | [Playlist](#playlist)? | No |  | Get system playlist by ID. |
+| `byIds` | `ids` (`List`<`PlatformUUID`>): Collection of playlist IDs. | `List`<[Playlist](#playlist)> | No |  | Get multiple system playlists by their IDs. |
+| `byIdFull` | `id` (`PlatformUUID`): The playlist unique identifier. | `Pair`<`String`, `List`<[PlaylistEntry](#playlistentry)>>? | No |  | Get system playlist with all track entries. |
+| `byName` | `name` (`String`): The name of the playlist. | [Playlist](#playlist)? | No |  | Get system playlist by name. |
+| `rankedSearch` | `page` (`Int`): Page index.<br>`pageSize` (`Int`): Number of items per page.<br>`query` (`String`): The search query. | [PaginatedResponse](#paginatedresponse)<[Playlist](#playlist)> | No |  | Search system playlists. |
+| `allPlaylists` | `page` (`Int`): Page index.<br>`pageSize` (`Int`): Number of items per page. | [PaginatedResponse](#paginatedresponse)<[Playlist](#playlist)> | No |  | Get all system playlists. |
+| `delete` | `id` (`PlatformUUID`): The playlist unique identifier. | `Boolean` | No |  | Delete a system playlist. |
 
 ### IReleaseService
 Track and receive notifications for new music releases.
 
 | Function | Parameters | Returns | Admin | Errors | Description |
 | :--- | :--- | :--- | :---: | :--- | :--- |
-| `followArtist` | `musicBrainzId`: The MusicBrainz Artist UUID. | `Boolean` | No |  | Follow an artist by their MusicBrainz ID to track their releases. |
-| `unfollowArtist` | `artistId`: The artist unique identifier. | `Boolean` | No |  | Unfollow an artist and stop tracking their releases. |
+| `followArtist` | `musicBrainzId` (`PlatformUUID`): The MusicBrainz Artist UUID. | `Boolean` | No |  | Follow an artist by their MusicBrainz ID to track their releases. |
+| `unfollowArtist` | `artistId` (`PlatformUUID`): The artist unique identifier. | `Boolean` | No |  | Unfollow an artist and stop tracking their releases. |
 | `getFollowedArtists` | - | `List`<[FollowedArtist](#followedartist)> | No |  | Get a list of all artists the current user is following. |
-| `getRecentReleases` | `page`: Page index.<br>`pageSize`: Number of items per page. | [PaginatedResponse](#paginatedresponse)<[RecentRelease](#recentrelease)> | No |  | Retrieve a feed of recent music releases from followed artists. |
+| `getRecentReleases` | `page` (`Int`): Page index.<br>`pageSize` (`Int`): Number of items per page. | [PaginatedResponse](#paginatedresponse)<[RecentRelease](#recentrelease)> | No |  | Retrieve a feed of recent music releases from followed artists. |
 
 ### IRemoteMirrorService
 Instance-to-instance data synchronization.
 
 | Function | Parameters | Returns | Admin | Errors | Description |
 | :--- | :--- | :--- | :---: | :--- | :--- |
-| `getRemoteStats` | `config`: Connection configuration for the remote server. | [ServerStats](#serverstats) | **Yes** | IllegalStateException | Get statistics from a remote Synara instance. |
-| `startMirror` | `config`: Mirroring configuration and credentials. | `Unit` | **Yes** | IllegalStateException | Start mirroring content from another Synara instance. |
+| `getRemoteStats` | `config` ([RemoteServerConfig](#remoteserverconfig)): Connection configuration for the remote server. | [ServerStats](#serverstats) | **Yes** | IllegalStateException | Get statistics from a remote Synara instance. |
+| `startMirror` | `config` ([RemoteServerConfig](#remoteserverconfig)): Mirroring configuration and credentials. | `Unit` | **Yes** | IllegalStateException | Start mirroring content from another Synara instance. |
 | `stopMirror` | - | `Unit` | **Yes** | IllegalStateException | Stop the active mirroring process. |
 | `resetMirror` | - | `Unit` | **Yes** | IllegalStateException | Reset the internal mirroring state. |
 | `getActiveMirrorProgress` | - | `Flow`<[MirrorProgress](#mirrorprogress)> | **Yes** |  | Stream real-time progress updates for the active mirroring task. |
-| `getRemoteUsers` | `config`: Remote connection configuration. | `List`<[User](#user)> | **Yes** | IllegalStateException | List all user accounts on a remote Synara instance. |
-| `getRemotePlaylists` | `config`: Remote connection configuration. | `List`<[Playlist](#playlist)> | **Yes** | IllegalStateException | List all system playlists on a remote Synara instance. |
-| `getRemoteUserPlaylists` | `config`: Remote connection configuration. | `List`<[UserPlaylist](#userplaylist)> | **Yes** | IllegalStateException | List all user playlists on a remote Synara instance. |
-| `getProxyInstances` | `config`: Remote connection configuration. | `List`<[ProxyInstanceInfo](#proxyinstanceinfo)> | **Yes** | IllegalStateException | List available proxy instances on a remote Synara instance. |
-| `getRemoteImageData` | `config`: Remote connection configuration.<br>`imageId`: The unique identifier of the image.<br>`size`: Requested image size (width/height). | `ByteArray`? | **Yes** | IllegalStateException | Fetch raw image binary data from a remote Synara instance. |
+| `getRemoteUsers` | `config` ([RemoteServerConfig](#remoteserverconfig)): Remote connection configuration. | `List`<[User](#user)> | **Yes** | IllegalStateException | List all user accounts on a remote Synara instance. |
+| `getRemotePlaylists` | `config` ([RemoteServerConfig](#remoteserverconfig)): Remote connection configuration. | `List`<[Playlist](#playlist)> | **Yes** | IllegalStateException | List all system playlists on a remote Synara instance. |
+| `getRemoteUserPlaylists` | `config` ([RemoteServerConfig](#remoteserverconfig)): Remote connection configuration. | `List`<[UserPlaylist](#userplaylist)> | **Yes** | IllegalStateException | List all user playlists on a remote Synara instance. |
+| `getProxyInstances` | `config` ([RemoteServerConfig](#remoteserverconfig)): Remote connection configuration. | `List`<[ProxyInstanceInfo](#proxyinstanceinfo)> | **Yes** | IllegalStateException | List available proxy instances on a remote Synara instance. |
+| `getRemoteImageData` | `config` ([RemoteServerConfig](#remoteserverconfig)): Remote connection configuration.<br>`imageId` (`PlatformUUID`): The unique identifier of the image.<br>`size` (`Int`): Requested image size (width/height). | `ByteArray`? | **Yes** | IllegalStateException | Fetch raw image binary data from a remote Synara instance. |
 
 ### IScheduledTaskLogService
 Monitoring and tracking of background scheduled tasks.
@@ -1132,7 +1132,7 @@ Manages active user sessions and connected devices.
 
 | Function | Parameters | Returns | Admin | Errors | Description |
 | :--- | :--- | :--- | :---: | :--- | :--- |
-| `deactivateSession` | `sessionId`: The session unique identifier. | `Unit` | No |  | Terminate a specific user session. |
+| `deactivateSession` | `sessionId` (`PlatformUUID`): The session unique identifier. | `Unit` | No |  | Terminate a specific user session. |
 | `getSessions` | - | `List`<[Session](#session)> | No |  | List all sessions for the current user. |
 
 ### ISongService
@@ -1140,36 +1140,36 @@ The primary interface for song discovery, streaming, and metadata.
 
 | Function | Parameters | Returns | Admin | Errors | Description |
 | :--- | :--- | :--- | :---: | :--- | :--- |
-| `setLiked` | `id`: The unique UUID of the song.<br>`liked`: Whether to mark as liked.<br>`addedAt`: Optional timestamp of when it was added. | [UserSong](#usersong)? | No |  | Toggle favorite status. |
-| `setLyrics` | `id`: The song unique identifier.<br>`lyrics`: List of lyric lines. | [UserSong](#usersong)? | No |  | Manually set song lyrics. |
-| `setArtists` | `id`: The song unique identifier.<br>`artistIds`: Collection of artist IDs. | [UserSong](#usersong)? | No |  | Update song artists. |
-| `setMusicBrainzId` | `id`: The song unique identifier.<br>`musicBrainzId`: The MusicBrainz Recording UUID. | [UserSong](#usersong)? | No |  | Link a song to its MusicBrainz Recording record. |
-| `fetchMusicBrainzId` | `id`: The song unique identifier. | [UserSong](#usersong)? | No |  | Trigger automatic MusicBrainz ID matching for a song. |
-| `byId` | `id`: The song unique identifier. | [UserSong](#usersong)? | No |  | Get song by its unique identifier. |
-| `byMusicBrainzId` | `musicBrainzId`: The MusicBrainz Recording UUID. | `List`<[UserSong](#usersong)> | No |  | Find songs by their MusicBrainz Recording ID. |
-| `byIds` | `ids`: Collection of song IDs. | `List`<[UserSong](#usersong)> | No |  | Get multiple songs by their unique identifiers. |
-| `byTitle` | `page`: Page index.<br>`pageSize`: Number of items per page.<br>`title`: The song title to search for. | [PaginatedResponse](#paginatedresponse)<[UserSong](#usersong)> | No |  | Search for songs by title. |
-| `byArtist` | `page`: Page index.<br>`pageSize`: Number of items per page.<br>`artistId`: The artist unique identifier. | [PaginatedResponse](#paginatedresponse)<[UserSong](#usersong)> | No |  | List songs by a specific artist. |
-| `likedByArtist` | `page`: Page index.<br>`pageSize`: Number of items per page.<br>`artistId`: The artist unique identifier.<br>`explicit`: Whether to include explicit content. | [PaginatedResponse](#paginatedresponse)<[UserSong](#usersong)> | No |  | List songs liked by the user for a specific artist. |
-| `byAlbum` | `page`: Page index.<br>`pageSize`: Number of items per page.<br>`albumId`: The album unique identifier. | [PaginatedResponse](#paginatedresponse)<[UserSong](#usersong)> | No |  | List songs in an album. |
-| `byPlaylist` | `page`: Page index.<br>`pageSize`: Number of items per page.<br>`playlistId`: The playlist unique identifier. | [PaginatedResponse](#paginatedresponse)<[UserSong](#usersong)> | No |  | List songs in a system playlist. |
-| `byUserPlaylist` | `page`: Page index.<br>`pageSize`: Number of items per page.<br>`playlistId`: The user playlist unique identifier. | [PaginatedResponse](#paginatedresponse)<[UserSong](#usersong)> | No |  | List songs in a user playlist. |
-| `byTidalTrackIds` | `ids`: Collection of Tidal track IDs. | `List`<[UserSong](#usersong)> | No |  | Find songs by their original Tidal track IDs. |
-| `byTidalTracks` | `tracks`: Collection of track metadata. | `List`<[UserSong](#usersong)> | No |  | Find songs matching external metadata records. |
-| `likedSongs` | `page`: Page index.<br>`pageSize`: Number of items per page.<br>`explicit`: Whether to include explicit content. | [PaginatedResponse](#paginatedresponse)<[UserSong](#usersong)> | No |  | Get all songs liked by the current user. |
-| `allSongs` | `page`: Page index.<br>`pageSize`: Number of items per page.<br>`explicit`: Whether to include explicit content.<br>`tags`: Filter by specific tags.<br>`invertTags`: Invert the tag filter. | [PaginatedResponse](#paginatedresponse)<[UserSong](#usersong)> | No |  | Get all songs with optional filtering. |
-| `deleteSongs` | `ids`: Collection of song IDs to delete. | `Boolean` | No |  | Delete multiple songs from the library. |
-| `rankedSearch` | `page`: Page index.<br>`pageSize`: Number of items per page.<br>`query`: The search query.<br>`explicit`: Whether to include explicit content.<br>`liked`: Only search within liked songs. | [PaginatedResponse](#paginatedresponse)<[UserSong](#usersong)> | No |  | Perform a ranked search for songs. |
-| `streamSong` | `id`: The song unique identifier.<br>`offset`: Byte offset to start streaming from.<br>`chunkSize`: Size of each data chunk. | `Flow`<`ByteArray`>? | No |  | Stream song audio data for playback. |
-| `downloadSong` | `id`: The song unique identifier.<br>`quality`: Target audio quality.<br>`offset`: Byte offset to start from.<br>`chunkSize`: Size of each data chunk. | `Flow`<`ByteArray`>? | No | IOException, IllegalStateException | Download song audio in specific quality. |
-| `getStreamSize` | `id`: The song unique identifier. | `Long` | No |  | Get the total size of the song's audio stream. |
-| `getDownloadSize` | `id`: The song unique identifier.<br>`quality`: The requested quality. | `Long` | No |  | Get the size of the song audio for a specific quality. |
-| `allSongIds` | `explicit`: Whether to include explicit content.<br>`tags`: Filter by specific tags.<br>`invertTags`: Invert the tag filter. | `Flow`<`PlatformUUID`> | No |  | Stream all song IDs with optional filtering. |
-| `likedSongIds` | `explicit`: Whether to include explicit content. | `Flow`<`PlatformUUID`> | No |  | Stream all IDs of songs liked by the current user. |
-| `songIdsByArtist` | `artistId`: The artist unique identifier. | `Flow`<`PlatformUUID`> | No |  | Stream song IDs belonging to an artist. |
-| `songIdsByAlbum` | `albumId`: The album unique identifier. | `Flow`<`PlatformUUID`> | No |  | Stream song IDs belonging to an album. |
-| `songIdsByPlaylist` | `playlistId`: The playlist unique identifier. | `Flow`<`PlatformUUID`> | No |  | Stream song IDs belonging to a system playlist. |
-| `songIdsByUserPlaylist` | `playlistId`: The user playlist unique identifier. | `Flow`<`PlatformUUID`> | No |  | Stream song IDs belonging to a user playlist. |
+| `setLiked` | `id` (`PlatformUUID`): The unique UUID of the song.<br>`liked` (`Boolean`): Whether to mark as liked.<br>`addedAt` (`PlatformInstant`?): Optional timestamp of when it was added. | [UserSong](#usersong)? | No |  | Toggle favorite status. |
+| `setLyrics` | `id` (`PlatformUUID`): The song unique identifier.<br>`lyrics` (`List`<`String`>): List of lyric lines. | [UserSong](#usersong)? | No |  | Manually set song lyrics. |
+| `setArtists` | `id` (`PlatformUUID`): The song unique identifier.<br>`artistIds` (`List`<`PlatformUUID`>): Collection of artist IDs. | [UserSong](#usersong)? | No |  | Update song artists. |
+| `setMusicBrainzId` | `id` (`PlatformUUID`): The song unique identifier.<br>`musicBrainzId` (`PlatformUUID`?): The MusicBrainz Recording UUID. | [UserSong](#usersong)? | No |  | Link a song to its MusicBrainz Recording record. |
+| `fetchMusicBrainzId` | `id` (`PlatformUUID`): The song unique identifier. | [UserSong](#usersong)? | No |  | Trigger automatic MusicBrainz ID matching for a song. |
+| `byId` | `id` (`PlatformUUID`): The song unique identifier. | [UserSong](#usersong)? | No |  | Get song by its unique identifier. |
+| `byMusicBrainzId` | `musicBrainzId` (`PlatformUUID`): The MusicBrainz Recording UUID. | `List`<[UserSong](#usersong)> | No |  | Find songs by their MusicBrainz Recording ID. |
+| `byIds` | `ids` (`Collection`<`PlatformUUID`>): Collection of song IDs. | `List`<[UserSong](#usersong)> | No |  | Get multiple songs by their unique identifiers. |
+| `byTitle` | `page` (`Int`): Page index.<br>`pageSize` (`Int`): Number of items per page.<br>`title` (`String`): The song title to search for. | [PaginatedResponse](#paginatedresponse)<[UserSong](#usersong)> | No |  | Search for songs by title. |
+| `byArtist` | `page` (`Int`): Page index.<br>`pageSize` (`Int`): Number of items per page.<br>`artistId` (`PlatformUUID`): The artist unique identifier. | [PaginatedResponse](#paginatedresponse)<[UserSong](#usersong)> | No |  | List songs by a specific artist. |
+| `likedByArtist` | `page` (`Int`): Page index.<br>`pageSize` (`Int`): Number of items per page.<br>`artistId` (`PlatformUUID`): The artist unique identifier.<br>`explicit` (`Boolean`): Whether to include explicit content. | [PaginatedResponse](#paginatedresponse)<[UserSong](#usersong)> | No |  | List songs liked by the user for a specific artist. |
+| `byAlbum` | `page` (`Int`): Page index.<br>`pageSize` (`Int`): Number of items per page.<br>`albumId` (`PlatformUUID`): The album unique identifier. | [PaginatedResponse](#paginatedresponse)<[UserSong](#usersong)> | No |  | List songs in an album. |
+| `byPlaylist` | `page` (`Int`): Page index.<br>`pageSize` (`Int`): Number of items per page.<br>`playlistId` (`PlatformUUID`): The playlist unique identifier. | [PaginatedResponse](#paginatedresponse)<[UserSong](#usersong)> | No |  | List songs in a system playlist. |
+| `byUserPlaylist` | `page` (`Int`): Page index.<br>`pageSize` (`Int`): Number of items per page.<br>`playlistId` (`PlatformUUID`): The user playlist unique identifier. | [PaginatedResponse](#paginatedresponse)<[UserSong](#usersong)> | No |  | List songs in a user playlist. |
+| `byTidalTrackIds` | `ids` (`Collection`<`String`>): Collection of Tidal track IDs. | `List`<[UserSong](#usersong)> | No |  | Find songs by their original Tidal track IDs. |
+| `byTidalTracks` | `tracks` (`Collection`<[Track](#track)>): Collection of track metadata. | `List`<[UserSong](#usersong)> | No |  | Find songs matching external metadata records. |
+| `likedSongs` | `page` (`Int`): Page index.<br>`pageSize` (`Int`): Number of items per page.<br>`explicit` (`Boolean`): Whether to include explicit content. | [PaginatedResponse](#paginatedresponse)<[UserSong](#usersong)> | No |  | Get all songs liked by the current user. |
+| `allSongs` | `page` (`Int`): Page index.<br>`pageSize` (`Int`): Number of items per page.<br>`explicit` (`Boolean`): Whether to include explicit content.<br>`tags` (`List`<[SongTag](#songtag)>): Filter by specific tags.<br>`invertTags` (`Boolean`): Invert the tag filter. | [PaginatedResponse](#paginatedresponse)<[UserSong](#usersong)> | No |  | Get all songs with optional filtering. |
+| `deleteSongs` | `ids` (`Collection`<`PlatformUUID`>): Collection of song IDs to delete. | `Boolean` | No |  | Delete multiple songs from the library. |
+| `rankedSearch` | `page` (`Int`): Page index.<br>`pageSize` (`Int`): Number of items per page.<br>`query` (`String`): The search query.<br>`explicit` (`Boolean`): Whether to include explicit content.<br>`liked` (`Boolean`): Only search within liked songs. | [PaginatedResponse](#paginatedresponse)<[UserSong](#usersong)> | No |  | Perform a ranked search for songs. |
+| `streamSong` | `id` (`PlatformUUID`): The song unique identifier.<br>`offset` (`Long`): Byte offset to start streaming from.<br>`chunkSize` (`Int`): Size of each data chunk. | `Flow`<`ByteArray`>? | No |  | Stream song audio data for playback. |
+| `downloadSong` | `id` (`PlatformUUID`): The song unique identifier.<br>`quality` (`Int`): Target audio quality.<br>`offset` (`Long`): Byte offset to start from.<br>`chunkSize` (`Int`): Size of each data chunk. | `Flow`<`ByteArray`>? | No | IOException, IllegalStateException | Download song audio in specific quality. |
+| `getStreamSize` | `id` (`PlatformUUID`): The song unique identifier. | `Long` | No |  | Get the total size of the song's audio stream. |
+| `getDownloadSize` | `id` (`PlatformUUID`): The song unique identifier.<br>`quality` (`Int`): The requested quality. | `Long` | No |  | Get the size of the song audio for a specific quality. |
+| `allSongIds` | `explicit` (`Boolean`): Whether to include explicit content.<br>`tags` (`List`<[SongTag](#songtag)>): Filter by specific tags.<br>`invertTags` (`Boolean`): Invert the tag filter. | `Flow`<`PlatformUUID`> | No |  | Stream all song IDs with optional filtering. |
+| `likedSongIds` | `explicit` (`Boolean`): Whether to include explicit content. | `Flow`<`PlatformUUID`> | No |  | Stream all IDs of songs liked by the current user. |
+| `songIdsByArtist` | `artistId` (`PlatformUUID`): The artist unique identifier. | `Flow`<`PlatformUUID`> | No |  | Stream song IDs belonging to an artist. |
+| `songIdsByAlbum` | `albumId` (`PlatformUUID`): The album unique identifier. | `Flow`<`PlatformUUID`> | No |  | Stream song IDs belonging to an album. |
+| `songIdsByPlaylist` | `playlistId` (`PlatformUUID`): The playlist unique identifier. | `Flow`<`PlatformUUID`> | No |  | Stream song IDs belonging to a system playlist. |
+| `songIdsByUserPlaylist` | `playlistId` (`PlatformUUID`): The user playlist unique identifier. | `Flow`<`PlatformUUID`> | No |  | Stream song IDs belonging to a user playlist. |
 
 ### IStorageService
 Monitoring of physical disk usage for the media library.
@@ -1185,34 +1185,34 @@ Personal playlist backup and restoration for individual users.
 | :--- | :--- | :--- | :---: | :--- | :--- |
 | `createBackup` | - | `Unit` | No |  | Create a backup of all playlists owned by the current user. |
 | `listBackups` | - | `List`<[BackupInfo](#backupinfo)> | No |  | List all available playlist backup files for the current user. |
-| `restoreBackup` | `fileName`: Optional name of the backup file. If null, the latest backup is used. | `Unit` | No |  | Restore user playlists from a backup file. |
-| `getBackupContent` | `fileName`: The name of the backup file. | [UserPlaylistBackup](#userplaylistbackup)? | No |  | Peek into the contents of a specific user playlist backup. |
-| `deleteBackup` | `fileName`: The name of the backup file. | `Unit` | No |  | Delete a personal playlist backup file. |
+| `restoreBackup` | `fileName` (`String`?): Optional name of the backup file. If null, the latest backup is used. | `Unit` | No |  | Restore user playlists from a backup file. |
+| `getBackupContent` | `fileName` (`String`): The name of the backup file. | [UserPlaylistBackup](#userplaylistbackup)? | No |  | Peek into the contents of a specific user playlist backup. |
+| `deleteBackup` | `fileName` (`String`): The name of the backup file. | `Unit` | No |  | Delete a personal playlist backup file. |
 
 ### IUserPlaylistService
 Management of personal (user-created) playlists.
 
 | Function | Parameters | Returns | Admin | Errors | Description |
 | :--- | :--- | :--- | :---: | :--- | :--- |
-| `byId` | `id`: The playlist unique identifier. | [UserPlaylist](#userplaylist)? | No |  | Get user playlist by ID. |
-| `byIds` | `ids`: Collection of playlist IDs. | `List`<[UserPlaylist](#userplaylist)> | No |  | Get multiple user playlists by their IDs. |
-| `rankedSearch` | `creator`: Optional creator ID to filter by.<br>`page`: Page index.<br>`pageSize`: Number of items per page.<br>`query`: The search query. | [PaginatedResponse](#paginatedresponse)<[UserPlaylist](#userplaylist)> | No |  | Search user playlists. |
-| `allPlaylists` | `creator`: Optional creator ID to filter by.<br>`page`: Page index.<br>`pageSize`: Number of items per page. | [PaginatedResponse](#paginatedresponse)<[UserPlaylist](#userplaylist)> | No |  | Get all user playlists. |
-| `delete` | `id`: The playlist unique identifier. | `Boolean` | No |  | Delete a user playlist. |
-| `getOrAddPlaylist` | `user`: The user who owns the playlist.<br>`customIdentifier`: Optional unique string identifier from an external source.<br>`playlist`: The initial playlist data. | `PlatformUUID` | No |  | Create a new user playlist or retrieve an existing one by a custom identifier. |
-| `addToPlaylist` | `id`: The playlist unique identifier.<br>`songIds`: Collection of song IDs and their added timestamps. | `List`<`PlatformUUID`> | No |  | Add songs to a user playlist. |
-| `removeFromPlaylist` | `id`: The playlist unique identifier.<br>`songIds`: Collection of song IDs to remove. | `Int` | No |  | Remove songs from a user playlist. |
-| `setPlaylistImage` | `id`: The playlist unique identifier.<br>`imageId`: The image unique identifier. | `Boolean` | No |  | Set the cover image for a user playlist. |
+| `byId` | `id` (`PlatformUUID`): The playlist unique identifier. | [UserPlaylist](#userplaylist)? | No |  | Get user playlist by ID. |
+| `byIds` | `ids` (`List`<`PlatformUUID`>): Collection of playlist IDs. | `List`<[UserPlaylist](#userplaylist)> | No |  | Get multiple user playlists by their IDs. |
+| `rankedSearch` | `creator` (`PlatformUUID`?): Optional creator ID to filter by.<br>`page` (`Int`): Page index.<br>`pageSize` (`Int`): Number of items per page.<br>`query` (`String`): The search query. | [PaginatedResponse](#paginatedresponse)<[UserPlaylist](#userplaylist)> | No |  | Search user playlists. |
+| `allPlaylists` | `creator` (`PlatformUUID`?): Optional creator ID to filter by.<br>`page` (`Int`): Page index.<br>`pageSize` (`Int`): Number of items per page. | [PaginatedResponse](#paginatedresponse)<[UserPlaylist](#userplaylist)> | No |  | Get all user playlists. |
+| `delete` | `id` (`PlatformUUID`): The playlist unique identifier. | `Boolean` | No |  | Delete a user playlist. |
+| `getOrAddPlaylist` | `user` ([User](#user)): The user who owns the playlist.<br>`customIdentifier` (`String`?): Optional unique string identifier from an external source.<br>`playlist` ([InsertablePlaylist](#insertableplaylist)): The initial playlist data. | `PlatformUUID` | No |  | Create a new user playlist or retrieve an existing one by a custom identifier. |
+| `addToPlaylist` | `id` (`PlatformUUID`): The playlist unique identifier.<br>`songIds` (`List`<`Pair`<`Long`, `PlatformUUID`>>): Collection of song IDs and their added timestamps. | `List`<`PlatformUUID`> | No |  | Add songs to a user playlist. |
+| `removeFromPlaylist` | `id` (`PlatformUUID`): The playlist unique identifier.<br>`songIds` (`List`<`PlatformUUID`>): Collection of song IDs to remove. | `Int` | No |  | Remove songs from a user playlist. |
+| `setPlaylistImage` | `id` (`PlatformUUID`): The playlist unique identifier.<br>`imageId` (`PlatformUUID`?): The image unique identifier. | `Boolean` | No |  | Set the cover image for a user playlist. |
 
 ### IUserService
 Manages user profiles and identities.
 
 | Function | Parameters | Returns | Admin | Errors | Description |
 | :--- | :--- | :--- | :---: | :--- | :--- |
-| `findUserById` | `id`: The unique UUID of the user. | [User](#user)? | No |  | Look up a user by their unique ID. |
-| `findUserByUsername` | `username`: The username of the user. | [User](#user)? | No |  | Look up a user by their username. |
+| `findUserById` | `id` (`PlatformUUID`): The unique UUID of the user. | [User](#user)? | No |  | Look up a user by their unique ID. |
+| `findUserByUsername` | `username` (`String`): The username of the user. | [User](#user)? | No |  | Look up a user by their username. |
 | `me` | - | [User](#user) | No |  | Get the profile of the current authenticated user. |
 | `getAllUsers` | - | `List`<[User](#user)> | **Yes** | IllegalStateException | List all users on the server. |
-| `setProfileImage` | `bytes`: The raw bytes of the image. | `Unit` | No |  | Update the current user's avatar. |
-| `setDisplayName` | `name`: The new display name. | `Unit` | No |  | Update the current user's display name. |
+| `setProfileImage` | `bytes` (`ByteArray`): The raw bytes of the image. | `Unit` | No |  | Update the current user's avatar. |
+| `setDisplayName` | `name` (`String`?): The new display name. | `Unit` | No |  | Update the current user's display name. |
 
