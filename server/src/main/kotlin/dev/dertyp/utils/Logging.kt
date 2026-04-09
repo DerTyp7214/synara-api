@@ -1,6 +1,7 @@
 package dev.dertyp.utils
 
 import dev.dertyp.core.isProxied
+import dev.dertyp.core.principalUsername
 import io.ktor.server.application.ApplicationCall
 import io.ktor.util.logging.KtorSimpleLogger
 import java.lang.reflect.InvocationTargetException
@@ -20,7 +21,10 @@ inline fun <reified T : Any> T.withLogging(call: ApplicationCall? = null): T {
     val interfaceClass = T::class.java
     val logger = KtorSimpleLogger(interfaceClass.simpleName)
     val target = this
-    val prefix = if (call?.isProxied == true) "[Proxy] " else ""
+    val prefix = buildString {
+        if (call?.isProxied == true) append("[Proxy] ")
+        call?.principalUsername?.let { append("[$it] ") }
+    }
 
     return Proxy.newProxyInstance(interfaceClass.classLoader, arrayOf(interfaceClass)) { proxy, method, args ->
         if (method.declaringClass == Object::class.java) {
