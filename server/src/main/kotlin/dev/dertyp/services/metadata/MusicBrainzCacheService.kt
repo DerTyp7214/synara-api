@@ -222,26 +222,30 @@ class MusicBrainzCacheService : Service() {
             }
         }
 
-        MBArtistAliasTable.deleteWhere { MBArtistAliasTable.artistId eq artist.id }
-        artist.aliases?.forEach { alias ->
-            MBArtistAliasTable.insert {
-                it[artistId] = artist.id
-                it[name] = alias.name
-                it[sortName] = alias.sortName
-                it[locale] = alias.locale
-                it[type] = alias.type
-                it[primary] = alias.primary ?: false
-                it[beginDate] = alias.beginDate
-                it[endDate] = alias.endDate
+        artist.aliases?.let { aliases ->
+            MBArtistAliasTable.deleteWhere { MBArtistAliasTable.artistId eq artist.id }
+            aliases.forEach { alias ->
+                MBArtistAliasTable.insert {
+                    it[artistId] = artist.id
+                    it[name] = alias.name
+                    it[sortName] = alias.sortName
+                    it[locale] = alias.locale
+                    it[type] = alias.type
+                    it[primary] = alias.primary ?: false
+                    it[beginDate] = alias.beginDate
+                    it[endDate] = alias.endDate
+                }
             }
         }
 
-        MBArtistTagTable.deleteWhere { MBArtistTagTable.artistId eq artist.id }
-        artist.tags?.forEach { tag ->
-            MBArtistTagTable.insert {
-                it[artistId] = artist.id
-                it[name] = tag.name
-                it[count] = tag.count
+        artist.tags?.let { tags ->
+            MBArtistTagTable.deleteWhere { MBArtistTagTable.artistId eq artist.id }
+            tags.forEach { tag ->
+                MBArtistTagTable.insert {
+                    it[artistId] = artist.id
+                    it[name] = tag.name
+                    it[count] = tag.count
+                }
             }
         }
     }
@@ -265,11 +269,7 @@ class MusicBrainzCacheService : Service() {
         MBRecordingArtistCreditTable.deleteWhere { MBRecordingArtistCreditTable.recordingId eq recording.id }
         recording.artistCredit?.forEachIndexed { index, credit ->
             credit.artist?.let { mbArtist ->
-                MBArtistTable.upsert(MBArtistTable.id) {
-                    it[id] = mbArtist.id
-                    it[name] = mbArtist.name ?: ""
-                    it[sortName] = mbArtist.sortName ?: ""
-                }
+                updateArtistCache(mbArtist)
 
                 MBRecordingArtistCreditTable.insert {
                     it[recordingId] = recording.id
@@ -313,11 +313,7 @@ class MusicBrainzCacheService : Service() {
         MBReleaseArtistCreditTable.deleteWhere { MBReleaseArtistCreditTable.releaseId eq release.id }
         release.artistCredit?.forEachIndexed { index, credit ->
             credit.artist?.let { mbArtist ->
-                MBArtistTable.upsert(MBArtistTable.id) {
-                    it[id] = mbArtist.id
-                    it[name] = mbArtist.name ?: ""
-                    it[sortName] = mbArtist.sortName ?: ""
-                }
+                updateArtistCache(mbArtist)
 
                 MBReleaseArtistCreditTable.insert {
                     it[releaseId] = release.id

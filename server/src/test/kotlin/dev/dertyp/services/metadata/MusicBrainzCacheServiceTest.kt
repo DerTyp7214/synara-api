@@ -2,14 +2,14 @@ package dev.dertyp.services.metadata
 
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
+import dev.dertyp.data.MusicBrainzAlias
+import dev.dertyp.data.MusicBrainzArtist
+import dev.dertyp.data.MusicBrainzTag
 import dev.dertyp.db.*
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.core.eq
-import org.jetbrains.exposed.v1.jdbc.Database
-import org.jetbrains.exposed.v1.jdbc.SchemaUtils
-import org.jetbrains.exposed.v1.jdbc.deleteWhere
-import org.jetbrains.exposed.v1.jdbc.insert
+import org.jetbrains.exposed.v1.jdbc.*
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -166,5 +166,53 @@ class MusicBrainzCacheServiceTest {
         val staleIds = service.staleRecordingIdsFlow(staleSince).toList()
         assertEquals(1, staleIds.size)
         assertEquals(id1, staleIds.first())
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `updateArtistCache should not clear aliases and tags when null`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val artistId = UUID.randomUUID()
+        val artistWithTagsAndAliases = MusicBrainzArtist(
+            id = artistId,
+            name = "Test Artist",
+            tags = listOf(MusicBrainzTag(count = 1, name = "rock")),
+            aliases = listOf(MusicBrainzAlias(name = "Alias 1", sortName = "Alias 1"))
+        )
+
+        service.updateArtistCache(artistWithTagsAndAliases)
+
+        transaction(database) {
+            assertEquals(1, MBArtistTagTable.selectAll().count())
+            assertEquals(1, MBArtistAliasTable.selectAll().count())
+        }
+
+        val artistWithNullTagsAndAliases = MusicBrainzArtist(
+            id = artistId,
+            name = "Test Artist Updated",
+            tags = null,
+            aliases = null
+        )
+
+        service.updateArtistCache(artistWithNullTagsAndAliases)
+
+        transaction(database) {
+            assertEquals(1, MBArtistTagTable.selectAll().count())
+            assertEquals(1, MBArtistAliasTable.selectAll().count())
+        }
+
+        val artistWithEmptyTagsAndAliases = MusicBrainzArtist(
+            id = artistId,
+            name = "Test Artist Updated Again",
+            tags = emptyList(),
+            aliases = emptyList()
+        )
+
+        service.updateArtistCache(artistWithEmptyTagsAndAliases)
+
+        transaction(database) {
+            assertEquals(0, MBArtistTagTable.selectAll().count())
+            assertEquals(0, MBArtistAliasTable.selectAll().count())
+        }
     }
 }
