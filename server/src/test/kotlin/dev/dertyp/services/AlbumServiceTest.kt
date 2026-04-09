@@ -5,6 +5,7 @@ import dev.dertyp.TestDatabase
 import dev.dertyp.data.InsertableAlbum
 import dev.dertyp.data.MusicBrainzRelease
 import dev.dertyp.db.*
+import dev.dertyp.services.metadata.CachedMusicBrainzService
 import dev.dertyp.services.metadata.MusicBrainzCacheService
 import dev.dertyp.services.metadata.MusicBrainzService
 import io.mockk.coEvery
@@ -38,6 +39,7 @@ class AlbumServiceTest : KoinTest {
                 single { storageService }
                 single { mockk<ImageService>(relaxed = true) }
                 single { ArtistService() }
+                single { CachedMusicBrainzService(get(), get()) }
             })
         }
 
