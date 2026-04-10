@@ -39,7 +39,46 @@ class MusicBrainzCacheWorker : KoinComponent {
             logger.info("Starting MusicBrainzCacheWorker")
             onProgress(0.0, "Starting MusicBrainzCacheWorker")
 
-            val totalArtists = dbQuery { MBArtistTable.selectAll().where { MBArtistTable.lastUpdate less oneMonthAgo }.count() }
+            val totalArtists = dbQuery {
+                MBArtistTable.selectAll().where { MBArtistTable.lastUpdate less oneMonthAgo }
+                    .count()
+            }
+            val totalReleaseGroups = dbQuery {
+                MBReleaseGroupTable.selectAll()
+                    .where { MBReleaseGroupTable.lastUpdate less oneMonthAgo }.count()
+            }
+            val totalReleases = dbQuery {
+                MBReleaseTable.selectAll().where { MBReleaseTable.lastUpdate less oneMonthAgo }
+                    .count()
+            }
+            val totalRecordings = dbQuery {
+                MBRecordingTable.selectAll().where { MBRecordingTable.lastUpdate less oneMonthAgo }
+                    .count()
+            }
+
+            val total = totalArtists + totalReleaseGroups + totalReleases + totalRecordings
+
+            val artistBasePercentage = .0
+            val artistMaxPercentage = total.toDouble() / totalArtists.coerceAtLeast(1)
+
+            val releaseGroupBasePercentage = artistBasePercentage + artistMaxPercentage
+            val releaseGroupMaxPercentage = total.toDouble() / totalReleaseGroups.coerceAtLeast(1)
+
+            val releaseBasePercentage = releaseGroupBasePercentage + releaseGroupMaxPercentage
+            val releaseMaxPercentage = total.toDouble() / totalReleases.coerceAtLeast(1)
+
+            val recordingBasePercentage = releaseBasePercentage + releaseMaxPercentage
+            val recordingMaxPercentage = total.toDouble() / totalRecordings.coerceAtLeast(1)
+
+            suspend fun progress(
+                progress: Double,
+                basePercentage: Double,
+                maxPercentage: Double,
+                message: String
+            ) {
+                onProgress(basePercentage + progress * (maxPercentage - basePercentage), message)
+            }
+
             logger.info("Updating $totalArtists stale artists in MusicBrainz cache")
             musicBrainzCacheService.staleArtistIdsFlow(oneMonthAgo).collect { id ->
                 try {
@@ -47,13 +86,17 @@ class MusicBrainzCacheWorker : KoinComponent {
                         musicBrainzCacheService.updateArtistCache(it)
                         artistsUpdated++
                     }
-                    onProgress((artistsUpdated.toDouble() / totalArtists.coerceAtLeast(1)) * 25.0, "Updating artists: $artistsUpdated/$totalArtists")
+                    progress(
+                        progress = artistsUpdated.toDouble() / totalArtists.coerceAtLeast(1),
+                        basePercentage = artistBasePercentage,
+                        maxPercentage = artistMaxPercentage,
+                        message = "Updating artists: $artistsUpdated/$totalArtists ($total)"
+                    )
                 } catch (e: Exception) {
                     logger.error("Failed to update artist $id in cache: ${e.message}")
                 }
             }
 
-            val totalReleaseGroups = dbQuery { MBReleaseGroupTable.selectAll().where { MBReleaseGroupTable.lastUpdate less oneMonthAgo }.count() }
             logger.info("Updating $totalReleaseGroups stale release groups in MusicBrainz cache")
             musicBrainzCacheService.staleReleaseGroupIdsFlow(oneMonthAgo).collect { id ->
                 try {
@@ -61,13 +104,17 @@ class MusicBrainzCacheWorker : KoinComponent {
                         musicBrainzCacheService.updateReleaseGroupCache(it)
                         releaseGroupsUpdated++
                     }
-                    onProgress(25.0 + (releaseGroupsUpdated.toDouble() / totalReleaseGroups.coerceAtLeast(1)) * 25.0, "Updating release groups: $releaseGroupsUpdated/$totalReleaseGroups")
+                    progress(
+                        progress = releaseGroupsUpdated.toDouble() / totalReleaseGroups.coerceAtLeast(1),
+                        basePercentage = releaseGroupBasePercentage,
+                        maxPercentage = releaseGroupMaxPercentage,
+                        message = "Updating release groups: $releaseGroupsUpdated/$totalReleaseGroups ($total)"
+                    )
                 } catch (e: Exception) {
                     logger.error("Failed to update release group $id in cache: ${e.message}")
                 }
             }
 
-            val totalReleases = dbQuery { MBReleaseTable.selectAll().where { MBReleaseTable.lastUpdate less oneMonthAgo }.count() }
             logger.info("Updating $totalReleases stale releases in MusicBrainz cache")
             musicBrainzCacheService.staleReleaseIdsFlow(oneMonthAgo).collect { id ->
                 try {
@@ -75,13 +122,17 @@ class MusicBrainzCacheWorker : KoinComponent {
                         musicBrainzCacheService.updateReleaseCache(it)
                         releasesUpdated++
                     }
-                    onProgress(50.0 + (releasesUpdated.toDouble() / totalReleases.coerceAtLeast(1)) * 25.0, "Updating releases: $releasesUpdated/$totalReleases")
+                    progress(
+                        progress = releasesUpdated.toDouble() / totalReleases.coerceAtLeast(1),
+                        basePercentage = releaseBasePercentage,
+                        maxPercentage = releaseMaxPercentage,
+                        message = "Updating releases: $releasesUpdated/$totalReleases ($total)"
+                    )
                 } catch (e: Exception) {
                     logger.error("Failed to update release $id in cache: ${e.message}")
                 }
             }
 
-            val totalRecordings = dbQuery { MBRecordingTable.selectAll().where { MBRecordingTable.lastUpdate less oneMonthAgo }.count() }
             logger.info("Updating $totalRecordings stale recordings in MusicBrainz cache")
             musicBrainzCacheService.staleRecordingIdsFlow(oneMonthAgo).collect { id ->
                 try {
@@ -89,7 +140,12 @@ class MusicBrainzCacheWorker : KoinComponent {
                         musicBrainzCacheService.updateRecordingCache(it)
                         recordingsUpdated++
                     }
-                    onProgress(75.0 + (recordingsUpdated.toDouble() / totalRecordings.coerceAtLeast(1)) * 25.0, "Updating recordings: $recordingsUpdated/$totalRecordings")
+                    progress(
+                        progress = recordingsUpdated.toDouble() / totalRecordings.coerceAtLeast(1),
+                        basePercentage = recordingBasePercentage,
+                        maxPercentage = recordingMaxPercentage,
+                        message = "Updating recordings: $recordingsUpdated/$totalRecordings ($total)"
+                    )
                 } catch (e: Exception) {
                     logger.error("Failed to update recording $id in cache: ${e.message}")
                 }
