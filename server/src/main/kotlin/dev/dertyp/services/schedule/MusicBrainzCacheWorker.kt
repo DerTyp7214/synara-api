@@ -59,16 +59,16 @@ class MusicBrainzCacheWorker : KoinComponent {
             val total = totalArtists + totalReleaseGroups + totalReleases + totalRecordings
 
             val artistBasePercentage = .0
-            val artistMaxPercentage = total.toDouble() / totalArtists.coerceAtLeast(1)
+            val artistMaxPercentage = totalArtists.coerceAtLeast(1) / total.toDouble() * 100
 
             val releaseGroupBasePercentage = artistBasePercentage + artistMaxPercentage
-            val releaseGroupMaxPercentage = total.toDouble() / totalReleaseGroups.coerceAtLeast(1)
+            val releaseGroupMaxPercentage = totalReleaseGroups.coerceAtLeast(1) / total.toDouble() * 100
 
             val releaseBasePercentage = releaseGroupBasePercentage + releaseGroupMaxPercentage
-            val releaseMaxPercentage = total.toDouble() / totalReleases.coerceAtLeast(1)
+            val releaseMaxPercentage = totalReleases.coerceAtLeast(1) / total.toDouble() * 100
 
             val recordingBasePercentage = releaseBasePercentage + releaseMaxPercentage
-            val recordingMaxPercentage = total.toDouble() / totalRecordings.coerceAtLeast(1)
+            val recordingMaxPercentage = totalRecordings.coerceAtLeast(1) / total.toDouble() * 100
 
             suspend fun progress(
                 progress: Double,
@@ -76,7 +76,7 @@ class MusicBrainzCacheWorker : KoinComponent {
                 maxPercentage: Double,
                 message: String
             ) {
-                onProgress(basePercentage + progress * (maxPercentage - basePercentage), message)
+                onProgress(basePercentage + progress * maxPercentage, message)
             }
 
             logger.info("Updating $totalArtists stale artists in MusicBrainz cache")
