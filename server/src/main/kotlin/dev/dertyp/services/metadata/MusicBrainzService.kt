@@ -72,8 +72,12 @@ class MusicBrainzService : Service() {
                 }
                 return response.body<T>()
             } catch (e: Exception) {
-                logger.error("Error during MusicBrainz request: ${e.message}", e)
-                delay(1000)
+                if (retries < 9) {
+                    logger.warn("Error during MusicBrainz request: ${e.message}, retrying... ($retries/10)")
+                } else {
+                    logger.error("Error during MusicBrainz request after 10 retries: ${e.message}", e)
+                }
+                delay(10000)
                 retries++
             }
         }
