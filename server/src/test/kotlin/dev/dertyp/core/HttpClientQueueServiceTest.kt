@@ -18,6 +18,8 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import java.util.concurrent.CopyOnWriteArrayList
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 
 class HttpClientQueueServiceTest {
 
@@ -28,7 +30,7 @@ class HttpClientQueueServiceTest {
     @BeforeEach
     fun setup() = runBlocking {
         mockEngine = MockEngine { _ ->
-            delay(100)
+            delay(100.milliseconds)
             respond(
                 content = "OK",
                 status = HttpStatusCode.OK,
@@ -67,7 +69,7 @@ class HttpClientQueueServiceTest {
             results.add("first")
         })
 
-        delay(50)
+        delay(50.milliseconds)
 
         jobs.add(launch {
             queueService.enqueue("$host/low", HttpClientPriority.LOW)
@@ -82,7 +84,7 @@ class HttpClientQueueServiceTest {
             results.add("normal")
         })
 
-        withTimeout(10000) {
+        withTimeout(10.seconds) {
             jobs.joinAll()
         }
 
@@ -101,7 +103,7 @@ class HttpClientQueueServiceTest {
             results.add("first")
         })
 
-        delay(50)
+        delay(50.milliseconds)
 
         jobs.add(launch {
             queueService.enqueue("$host/second", HttpClientPriority.NORMAL)
@@ -112,7 +114,7 @@ class HttpClientQueueServiceTest {
             results.add("third")
         })
 
-        withTimeout(10000) {
+        withTimeout(10.seconds) {
             jobs.joinAll()
         }
 

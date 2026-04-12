@@ -34,6 +34,8 @@ import org.koin.core.component.get
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.coroutines.CoroutineContext
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 
 class ReverseProxyService(
     config: ApplicationConfig
@@ -64,7 +66,7 @@ class ReverseProxyService(
                     connectToProxy()
                 } catch (e: Exception) {
                     logger.error("Error in reverse proxy connection, retrying in 5s: ${e.message}")
-                    delay(5000)
+                    delay(5.seconds)
                 } finally {
                     proxyId = null
                 }

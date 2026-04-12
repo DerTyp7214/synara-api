@@ -25,6 +25,8 @@ import org.koin.core.context.stopKoin
 import org.koin.dsl.module
 import org.koin.test.KoinTest
 import java.util.UUID
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 
 class ReverseProxyServiceTest : KoinTest {
 
@@ -77,7 +79,7 @@ class ReverseProxyServiceTest : KoinTest {
                 webSocket("/proxy/server") {
                     send(ProxyMessage.AssignedId(assignedId).toFrame())
                     connectionReceived.complete(Unit)
-                    delay(2000)
+                    delay(2.seconds)
                 }
             }
         }.start(wait = false)
@@ -102,9 +104,9 @@ class ReverseProxyServiceTest : KoinTest {
                 service.startService()
             }
 
-            withTimeout(10000) {
+            withTimeout(10.seconds) {
                 connectionReceived.await()
-                while (service.proxyId == null) delay(10)
+                while (service.proxyId == null) delay(10.milliseconds)
             }
 
             assertEquals(assignedId, service.proxyId)
@@ -126,11 +128,11 @@ class ReverseProxyServiceTest : KoinTest {
                     val count = connectionCount.receive()
                     if (count == 1) {
                         send(ProxyMessage.AssignedId("id-1").toFrame())
-                        delay(100)
+                        delay(100.milliseconds)
                         close(CloseReason(CloseReason.Codes.SERVICE_RESTART, "Reconnecting"))
                     } else {
                         send(ProxyMessage.AssignedId("id-2").toFrame())
-                        delay(2000)
+                        delay(2.seconds)
                     }
                 }
             }
@@ -155,14 +157,14 @@ class ReverseProxyServiceTest : KoinTest {
 
             connectionCount.send(1)
             
-            withTimeout(10000) {
-                while (service.proxyId != "id-1") delay(10)
+            withTimeout(10.seconds) {
+                while (service.proxyId != "id-1") delay(10.milliseconds)
             }
             
             connectionCount.send(2)
             
-            withTimeout(10000) {
-                while (service.proxyId != "id-2") delay(10)
+            withTimeout(10.seconds) {
+                while (service.proxyId != "id-2") delay(10.milliseconds)
             }
 
             assertEquals("id-2", service.proxyId)
@@ -190,7 +192,7 @@ class ReverseProxyServiceTest : KoinTest {
                     } else {
                         send(ProxyMessage.AssignedId("ok").toFrame())
                         secondAttempt.complete(Unit)
-                        delay(2000)
+                        delay(2.seconds)
                     }
                 }
             }
@@ -212,12 +214,12 @@ class ReverseProxyServiceTest : KoinTest {
                 service.startService()
             }
 
-            withTimeout(10000) {
+            withTimeout(10.seconds) {
                 firstAttempt.await()
             }
 
-            withTimeout(15000) {
-                while (service.proxyId == null) delay(10)
+            withTimeout(15.seconds) {
+                while (service.proxyId == null) delay(10.milliseconds)
             }
 
             assertEquals("ok", service.proxyId)
@@ -241,7 +243,7 @@ class ReverseProxyServiceTest : KoinTest {
                     send(ProxyMessage.NewClient(clientId, "/rpc", mapOf("Authorization" to "Bearer valid-token")).toFrame())
                     send(ProxyMessage.ClientFrame(clientId, "test-data".toByteArray(), false).toFrame())
                     connectionReceived.complete(Unit)
-                    delay(2000)
+                    delay(2.seconds)
                 }
             }
         }.start(wait = false)
@@ -262,13 +264,13 @@ class ReverseProxyServiceTest : KoinTest {
                 service.startService()
             }
 
-            withTimeout(10000) {
+            withTimeout(10.seconds) {
                 connectionReceived.await()
-                while (service.proxyId == null) delay(10)
+                while (service.proxyId == null) delay(10.milliseconds)
             }
 
             assertEquals("server-1", service.proxyId)
-            delay(1000)
+            delay(1.seconds)
             job.cancelAndJoin()
         } finally {
             server.stop(500, 500)

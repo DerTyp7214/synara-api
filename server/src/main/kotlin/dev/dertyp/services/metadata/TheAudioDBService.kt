@@ -15,6 +15,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import java.util.UUID
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 
 class TheAudioDBService(
     private val environment: ApplicationEnvironment
@@ -97,7 +99,7 @@ class TheAudioDBService(
                 val response: HttpResponse = ApiClient.queueInstance.enqueue(url, priority, block)
                 if (response.status == HttpStatusCode.TooManyRequests) {
                     logger.warn("Rate limited by TheAudioDB, retrying in 1s... ($retries/5)")
-                    delay(1000)
+                    delay(1.seconds)
                     retries++
                     continue
                 }
@@ -105,7 +107,7 @@ class TheAudioDBService(
                 return response.body<T>()
             } catch (e: Exception) {
                 logger.error("Error during TheAudioDB request to $url: ${e.message}", e)
-                delay(1000)
+                delay(1.seconds)
                 retries++
             }
         }

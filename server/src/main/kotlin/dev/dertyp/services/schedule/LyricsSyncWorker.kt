@@ -15,6 +15,8 @@ import org.koin.core.component.inject
 import java.util.UUID
 import kotlin.concurrent.atomics.AtomicBoolean
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 
 @OptIn(ExperimentalAtomicApi::class)
 class LyricsSyncWorker : KoinComponent {
@@ -32,7 +34,7 @@ class LyricsSyncWorker : KoinComponent {
         var retryCount = 0
         while (!lyricsService.isReachable() && retryCount < 10) {
             logger.info("Lyrics transcriber not reachable, waiting 30s... (Attempt ${retryCount + 1}/10)")
-            delay(30000)
+            delay(30.seconds)
             retryCount++
         }
 

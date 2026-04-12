@@ -16,6 +16,7 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
+import kotlin.time.Duration.Companion.milliseconds
 
 fun getDateFromISO(iso: String?): LocalDate? {
     return if (iso == null) null else LocalDate.parse(iso, DateTimeFormatter.ISO_LOCAL_DATE)
@@ -64,7 +65,7 @@ suspend fun executeCommand(
         val checkJob = launch(Dispatchers.Default) {
             try {
                 while (aliveCheck()) {
-                    delay(200)
+                    delay(200.milliseconds)
                     yield()
                 }
             } catch (_: Exception) {

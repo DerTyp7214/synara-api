@@ -30,6 +30,8 @@ import org.koin.core.context.stopKoin
 import org.koin.dsl.module
 import org.koin.test.KoinTest
 import java.util.UUID
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 
 class LyricsSyncWorkerTest : KoinTest {
 
@@ -120,7 +122,7 @@ class LyricsSyncWorkerTest : KoinTest {
         
         // Mock a slow transcription to keep the worker running
         coEvery { lyricsService.transcribeLyrics(any(), any()) } coAnswers {
-            delay(1000)
+            delay(1.seconds)
             null
         }
 
@@ -145,7 +147,7 @@ class LyricsSyncWorkerTest : KoinTest {
         
         coroutineScope {
             val firstRun = async { worker.run() }
-            delay(100)
+            delay(100.milliseconds)
             val secondRun = worker.run()
 
             assertTrue(secondRun.isEmpty()) // Second run should return early because first is still running

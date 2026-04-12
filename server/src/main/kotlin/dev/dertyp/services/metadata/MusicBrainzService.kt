@@ -19,6 +19,7 @@ import kotlinx.coroutines.delay
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.UseContextualSerialization
+import kotlin.time.Duration.Companion.seconds
 
 @Serializable
 data class MusicBrainzSearchResponse(
@@ -66,7 +67,7 @@ class MusicBrainzService : Service() {
                 val response: HttpResponse = ApiClient.queueInstance.enqueue(urlString, priority, block)
                 if (response.status == HttpStatusCode.ServiceUnavailable || response.status == HttpStatusCode.TooManyRequests) {
                     logger.warn("Rate limited by MusicBrainz, retrying in 1s... ($retries/10)")
-                    delay(1000)
+                    delay(1.seconds)
                     retries++
                     continue
                 }
@@ -77,7 +78,7 @@ class MusicBrainzService : Service() {
                 } else {
                     logger.error("Error during MusicBrainz request after 10 retries: ${e.message}", e)
                 }
-                delay(10000)
+                delay(10.seconds)
                 retries++
             }
         }

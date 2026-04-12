@@ -11,6 +11,8 @@ import java.time.Duration
 import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 
 class ScheduleServiceTest {
 
@@ -25,7 +27,7 @@ class ScheduleServiceTest {
 
         val job = launch { service.startService() }
         
-        withTimeout(1000) {
+        withTimeout(1.seconds) {
             executed.await()
         }
         
@@ -47,7 +49,7 @@ class ScheduleServiceTest {
 
         val job = launch { service.startService() }
 
-        withTimeout(1000) {
+        withTimeout(1.seconds) {
             finished.await()
         }
 
@@ -67,7 +69,7 @@ class ScheduleServiceTest {
 
         assertTrue(service.triggerTask(task.id))
 
-        withTimeout(5000) {
+        withTimeout(5.seconds) {
             executed.await()
         }
     }
@@ -84,7 +86,7 @@ class ScheduleServiceTest {
         service.unscheduleTask(task.id)
 
         val job = launch { service.startService() }
-        delay(100)
+        delay(100.milliseconds)
         service.stopService()
         job.join()
 
@@ -110,7 +112,7 @@ class ScheduleServiceTest {
 
         val job = launch { service.startService() }
 
-        withTimeout(1000) {
+        withTimeout(1.seconds) {
             firstExecuted.await()
             secondExecuted.await()
         }
@@ -130,10 +132,10 @@ class ScheduleServiceTest {
 
         val job = launch { service.startService() }
         
-        delay(50)
+        delay(50.milliseconds)
         service.signal("my-key")
 
-        withTimeout(1000) {
+        withTimeout(1.seconds) {
             executed.await()
         }
 
@@ -165,7 +167,7 @@ class ScheduleServiceTest {
 
         val job = launch { spiedService.startService() }
 
-        withTimeout(1000) {
+        withTimeout(1.seconds) {
             secondAttemptScheduled.await()
         }
 

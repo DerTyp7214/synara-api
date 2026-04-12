@@ -6,6 +6,7 @@ import kotlin.concurrent.atomics.AtomicBoolean
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.math.ln
 import kotlin.math.pow
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.TimedValue
 import kotlin.time.measureTimedValue
 
@@ -73,6 +74,6 @@ suspend fun AtomicBoolean.waitForChange(expected: Boolean = true) {
     val pollIntervalMs = 100L
 
     while (load() != expected) {
-        delay(pollIntervalMs)
+        delay(pollIntervalMs.milliseconds)
     }
 }

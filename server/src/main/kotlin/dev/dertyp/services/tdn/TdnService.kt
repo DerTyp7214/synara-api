@@ -14,6 +14,7 @@ import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.io.path.Path
 import kotlin.io.path.absolute
 import kotlin.io.path.deleteIfExists
+import kotlin.time.Duration.Companion.milliseconds
 
 @OptIn(ExperimentalAtomicApi::class)
 class TdnService(indexer: Indexer, storageService: StorageService) : BaseDownloader(indexer, storageService) {
@@ -68,7 +69,7 @@ class TdnService(indexer: Indexer, storageService: StorageService) : BaseDownloa
                     (0 until 10).forEach { i ->
                         logProxy("Waiting for 500ms (${i + 1}/10)")
                         if (!aliveCheck()) throw ClientCloseException()
-                        delay(500)
+                        delay(500.milliseconds)
                     }
                 } else if (!brokenFilePath.isInside(rootPath)) {
                     logProxy("File ($brokenFilePath) not inside $rootPath")
