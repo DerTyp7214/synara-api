@@ -1,27 +1,15 @@
 package dev.dertyp
 
-import dev.dertyp.AudioUtils.transcodeFlacToOpus
 import dev.dertyp.core.deleteOnExitRecursive
-import dev.dertyp.core.toUUIDOrNull
 import dev.dertyp.data.SimpleSong
 import dev.dertyp.db.SongTable
 import dev.dertyp.db.TranscodedSongTable
-import dev.dertyp.services.SongService
-import io.github.smiley4.ktoropenapi.get
-import io.ktor.http.ContentDisposition
 import io.ktor.http.ContentType
-import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.content.OutgoingContent
 import io.ktor.server.application.Application
 import io.ktor.server.application.ApplicationEnvironment
-import io.ktor.server.plugins.partialcontent.PartialContent
-import io.ktor.server.response.header
-import io.ktor.server.response.respond
-import io.ktor.server.response.respondFile
 import io.ktor.server.routing.Route
-import io.ktor.server.routing.head
-import io.ktor.server.routing.route
 import io.ktor.util.logging.KtorSimpleLogger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
@@ -37,7 +25,6 @@ import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.core.notInList
 import org.jetbrains.exposed.v1.jdbc.insertIgnore
 import org.jetbrains.exposed.v1.jdbc.select
-import org.koin.ktor.ext.inject
 import java.io.File
 import java.io.FileNotFoundException
 import java.io.IOException
@@ -47,7 +34,6 @@ import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.concurrent.atomics.AtomicBoolean
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
-import kotlin.io.path.Path
 import kotlin.math.abs
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.microseconds
@@ -306,130 +292,6 @@ object AudioUtils {
             it[TranscodedSongTable.songId] = songId
             it[TranscodedSongTable.bitrate] = bitrate
             it[TranscodedSongTable.path] = file.absolutePath
-        }
-    }
-}
-
-private class NoOutputWithContentLength(
-    override val contentType: ContentType,
-    override val status: HttpStatusCode? = null,
-    override val contentLength: Long? = null
-) : OutgoingContent.NoContent()
-
-@Suppress("LoggingSimilarMessage")
-fun Route.stream() {
-    route("/stream") {
-        install(PartialContent) {
-            // Maximum number of ranges that will be accepted from an HTTP request.
-            // If the HTTP request specifies more ranges, they will all be merged into a single range.
-            maxRangeCount = 10
-        }
-
-        head("/{id}") {
-            val service by inject<SongService>()
-
-            val id = call.parameters["id"]?.toUUIDOrNull() ?: return@head call.respond(
-                HttpStatusCode.BadRequest
-            )
-
-            val song = service.byId(id) ?: return@head call.respond(
-                HttpStatusCode.NotFound,
-                "Song not found."
-            )
-
-            val bitrate = call.request.queryParameters["bitrate"]?.toIntOrNull()
-            val targetKbps = bitrate ?: 0
-
-            val flacFile = Path(song.path).toFile()
-            if (!flacFile.exists()) return@head call.respond(
-                HttpStatusCode.NotFound,
-                "File not found."
-            )
-
-            val (_, contentType, fullSize) = if (targetKbps > 0) {
-                transcodeFlacToOpus(flacFile, targetKbps).also {
-                    AudioUtils.insertTranscodedSong(song.id, it.file, targetKbps)
-                }
-            } else {
-                StreamInfo(
-                    flacFile,
-                    ContentType.parse("application/octet-stream"),
-                    flacFile.length(),
-                    flacFile.name
-                )
-            }
-
-            call.response.header(HttpHeaders.AcceptRanges, "bytes")
-            call.respond(
-                NoOutputWithContentLength(
-                    contentType = contentType,
-                    status = HttpStatusCode.OK,
-                    contentLength = fullSize
-                )
-            )
-        }
-        get("/{id}", {
-            request {
-                pathParameter<String>("id") {
-                    description = "The id of the song."
-                }
-                queryParameter<Int>("bitrate") {
-                    description =
-                        "Target bitrate in kbps (e.g., 320, 192, 128). Defaults to full quality if omitted."
-                    required = false
-                }
-            }
-            response {
-                HttpStatusCode.OK to {
-                    description = "Full audio of the song."
-                }
-                HttpStatusCode.PartialContent to {
-                    description = "The audio stream of the song."
-                }
-            }
-        }) {
-            val service by inject<SongService>()
-
-            val id = call.parameters["id"]?.toUUIDOrNull()
-                ?: return@get call.respond(HttpStatusCode.BadRequest)
-
-            val song = service.byId(id) ?: return@get call.respond(
-                HttpStatusCode.NotFound,
-                "Song not found."
-            )
-
-            val bitrate = call.request.queryParameters["bitrate"]?.toIntOrNull()
-            val targetKbps = bitrate ?: 0
-
-            val flacFile = Path(song.path).toFile()
-            if (!flacFile.exists()) return@get call.respond(
-                HttpStatusCode.NotFound,
-                "File not found."
-            )
-
-            val (serveFile, _, _, fileName) = if (targetKbps > 0) {
-                transcodeFlacToOpus(flacFile, targetKbps).also {
-                    AudioUtils.insertTranscodedSong(song.id, it.file, targetKbps)
-                }
-            } else {
-                StreamInfo(
-                    flacFile,
-                    ContentType.parse(Files.probeContentType(flacFile.toPath())),
-                    flacFile.length(),
-                    flacFile.name
-                )
-            }
-
-            call.response.header(
-                HttpHeaders.ContentDisposition,
-                ContentDisposition.Inline.withParameter(
-                    ContentDisposition.Parameters.FileName,
-                    fileName
-                )
-                    .toString()
-            )
-
-            return@get call.respondFile(serveFile)
         }
     }
 }

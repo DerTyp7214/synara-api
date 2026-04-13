@@ -1,14 +1,16 @@
 [versions]
 kotlin = "2.3.20"
 kotlinx-rpc = "0.10.2"
-kotlinx-serialization = "1.10.0"
+kotlinx-serialization = "1.11.0"
 kotlinx-coroutines = "1.10.2"
 ktor = "3.4.2"
 flyway = "12.3.0"
 hikari = "7.0.2"
 ktor-simple-cache = "0.63.3"
 jedis = "7.4.1"
+swagger-models="2.2.47"
 ktor-openapi = "5.6.0"
+schema-kenerator = "2.7.1"
 khealth = "3.0.2"
 kotlinx-html = "0.12.0"
 exposed = "1.2.0"
@@ -27,7 +29,7 @@ jmdns = "3.6.3"
 ksp = "2.3.6"
 cron-utils = "9.2.1"
 scrimage = "4.3.10"
-koin = "4.2.0"
+koin = "4.2.1"
 buildconfig = "6.0.9"
 symbolProcessingApi = "2.3.6"
 kover = "0.9.8"
@@ -81,8 +83,13 @@ ktor-simple-cache = { module = "com.ucasoft.ktor:ktor-simple-cache", version.ref
 ktor-simple-memory-cache = { module = "com.ucasoft.ktor:ktor-simple-memory-cache", version.ref = "ktor-simple-cache" }
 ktor-simple-redis-cache = { module = "com.ucasoft.ktor:ktor-simple-redis-cache", version.ref = "ktor-simple-cache" }
 jedis = { module = "redis.clients:jedis", version.ref = "jedis" }
+swagger-models = { module = "io.swagger.core.v3:swagger-models", version.ref = "swagger-models" }
 ktor-openapi = { module = "io.github.smiley4:ktor-openapi", version.ref = "ktor-openapi" }
 ktor-swagger-ui = { module = "io.github.smiley4:ktor-swagger-ui", version.ref = "ktor-openapi" }
+schema-kenerator = { module = "io.github.smiley4:schema-kenerator-core", version.ref = "schema-kenerator" }
+schema-kenerator-swagger = { module = "io.github.smiley4:schema-kenerator-swagger", version.ref = "schema-kenerator" }
+schema-kenerator-reflection = { module = "io.github.smiley4:schema-kenerator-reflection", version.ref = "schema-kenerator" }
+schema-kenerator-serialization = { module = "io.github.smiley4:schema-kenerator-serialization", version.ref = "schema-kenerator" }
 khealth = { module = "dev.hayden:khealth", version.ref = "khealth" }
 kotlinx-html = { module = "org.jetbrains.kotlinx:kotlinx-html", version.ref = "kotlinx-html" }
 exposed-dao = { module = "org.jetbrains.exposed:exposed-dao", version.ref = "exposed" }

@@ -3,7 +3,10 @@ package dev.dertyp.services
 import at.favre.lib.crypto.bcrypt.BCrypt
 import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
-import dev.dertyp.core.*
+import dev.dertyp.core.date
+import dev.dertyp.core.getUser
+import dev.dertyp.core.plus
+import dev.dertyp.core.toUUIDOrNull
 import dev.dertyp.data.*
 import io.github.smiley4.ktoropenapi.config.descriptors.ValueExampleDescriptor
 import io.github.smiley4.ktoropenapi.delete
@@ -45,9 +48,7 @@ class JwtService(
 
     fun authenticated(route: Route, routeBuilder: Route.() -> Unit) = route.authenticate("synara-auth") {
         route({
-            request {
-                authHeader()
-            }
+            securitySchemeNames("UserAuth")
         }) { routeBuilder() }
     }
 

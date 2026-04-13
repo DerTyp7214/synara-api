@@ -1,12 +1,14 @@
 package dev.dertyp.services
 
 import dev.dertyp.AudioUtils
+import dev.dertyp.StreamInfo
 import dev.dertyp.core.*
 import dev.dertyp.data.*
 import dev.dertyp.db.*
 import dev.dertyp.dbQuery
 import dev.dertyp.getDateFromISO
 import dev.dertyp.getISOFromDate
+import dev.dertyp.routing.RestFileProvider
 import dev.dertyp.services.AlbumService.Companion.calculateAlbumStats
 import dev.dertyp.services.AlbumService.Companion.mapAlbum
 import dev.dertyp.services.ArtistService.Companion.mapArtist
@@ -14,6 +16,7 @@ import dev.dertyp.services.metadata.IMetadataService
 import dev.dertyp.services.metadata.MusicBrainzCacheService
 import dev.dertyp.services.metadata.MusicBrainzService
 import dev.dertyp.utils.LogParam
+import io.ktor.http.ContentType
 import io.ktor.server.application.ApplicationEnvironment
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
@@ -26,6 +29,7 @@ import org.jetbrains.exposed.v1.jdbc.*
 import org.koin.core.component.get
 import org.koin.core.component.inject
 import java.io.File
+import java.nio.file.Files
 import java.nio.file.Paths
 import java.time.Instant
 import java.util.UUID
@@ -35,7 +39,46 @@ import kotlin.io.path.readSymbolicLink
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
 
-class SongRpcService(private val user: User, private val songService: SongService) : ISongService {
+class SongRpcService(private val user: User, private val songService: SongService) : ISongService, RestFileProvider {
+    override suspend fun getFile(methodName: String, args: List<Any?>): StreamInfo? {
+        if (methodName == "streamSong") {
+            val id = args[0] as? UUID ?: return null
+            val song = songService.byId(id) ?: return null
+            val file = File(song.path)
+            if (!file.exists()) return null
+            return StreamInfo(
+                file = file,
+                contentType = withContext(Dispatchers.IO) {
+                    ContentType.parse(Files.probeContentType(file.toPath()) ?: "application/octet-stream")
+                },
+                contentLength = file.length(),
+                fileName = file.name
+            )
+        }
+        if (methodName == "downloadSong") {
+            val id = args[0] as? UUID ?: return null
+            val quality = args[1] as? Int ?: return null
+            val song = songService.byId(id) ?: return null
+            val file = File(song.path)
+            if (!file.exists()) return null
+            if (quality > 0) {
+                val environment = songService.get<ApplicationEnvironment>()
+                val transcodeInfo = AudioUtils.transcodeFlacToOpus(environment, file, quality)
+                AudioUtils.insertTranscodedSong(id, transcodeInfo.file, quality)
+                return transcodeInfo
+            }
+            return StreamInfo(
+                file = file,
+                contentType = withContext(Dispatchers.IO) {
+                    ContentType.parse(Files.probeContentType(file.toPath()) ?: "application/octet-stream")
+                },
+                contentLength = file.length(),
+                fileName = file.name
+            )
+        }
+        return null
+    }
+
     override suspend fun setLiked(
         id: UUID,
         liked: Boolean,

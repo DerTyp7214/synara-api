@@ -1,0 +1,401 @@
+package dev.dertyp.routing
+
+import dev.dertyp.IIndexer
+import dev.dertyp.RpcIndexer
+import dev.dertyp.StreamInfo
+import dev.dertyp.core.ApplicationScope
+import dev.dertyp.core.getUser
+import dev.dertyp.core.toUUIDOrNull
+import dev.dertyp.rpc.annotations.*
+import dev.dertyp.services.*
+import dev.dertyp.services.metadata.CachedMusicBrainzService
+import dev.dertyp.services.metadata.IMusicBrainzService
+import dev.dertyp.services.tdn.DownloadRpcService
+import dev.dertyp.services.tdn.IDownloadService
+import io.github.smiley4.ktoropenapi.*
+import io.github.smiley4.ktoropenapi.config.RouteConfig
+import io.ktor.http.*
+import io.ktor.http.content.OutgoingContent
+import io.ktor.server.plugins.partialcontent.PartialContent
+import io.ktor.server.request.receive
+import io.ktor.server.response.*
+import io.ktor.server.routing.Route
+import io.ktor.server.routing.RoutingContext
+import io.ktor.server.routing.route
+import io.ktor.server.sse.SSEServerContent
+import io.ktor.sse.ServerSentEvent
+import io.ktor.utils.io.writeFully
+import kotlinx.coroutines.flow.Flow
+import kotlinx.serialization.serializer
+import org.koin.core.Koin
+import java.time.Instant
+import java.util.UUID
+import kotlin.reflect.*
+import kotlin.reflect.full.*
+
+interface RestFileProvider {
+    suspend fun getFile(methodName: String, args: List<Any?>): StreamInfo?
+}
+
+private class NoOutputWithContentLength(
+    override val contentType: ContentType,
+    override val status: HttpStatusCode? = null,
+    override val contentLength: Long? = null
+) : OutgoingContent.NoContent()
+
+fun Route.registerRestService(
+    serviceInterface: KClass<*>,
+    authenticated: Boolean = false,
+    serviceFactory: suspend RoutingContext.() -> Any
+) {
+    val serviceName = serviceInterface.simpleName?.removePrefix("I")?.removeSuffix("Service")?.replaceFirstChar { it.lowercase() } ?: ""
+    
+    route("/$serviceName") {
+        if (serviceInterface.declaredMemberFunctions.any { it.findAnnotation<RestFileResponse>() != null }) {
+            install(PartialContent) {
+                maxRangeCount = 10
+            }
+        }
+
+        serviceInterface.declaredMemberFunctions
+            .filter { it.isSuspend || it.returnType.isFlow() }
+            .forEach { func ->
+                val (method, name) = func.getRestMethodAndName()
+                val methodName = name.replaceFirstChar { it.lowercase() }
+                val hasIdParam = func.parameters.any { it.kind == KParameter.Kind.VALUE && it.name == "id" }
+                val finalPath = if (hasIdParam) "$methodName/{id}" else methodName
+                val rpcDoc = func.findAnnotation<RpcDoc>()
+                val isFileResponse = func.findAnnotation<RestFileResponse>() != null
+
+                val handler: suspend RoutingContext.() -> Unit = handler@{
+                    val service = serviceFactory()
+                    val args = mutableListOf<Any?>()
+                    args.add(service)
+                    
+                    func.parameters.filter { it.kind == KParameter.Kind.VALUE }.forEach { param ->
+                        if (param.name == "id" && call.parameters["id"] != null) {
+                            args.add(convertValue(call.parameters["id"], param.type))
+                        } else if (method == "GET" || isPrimitive(param.type)) {
+                            val value = call.request.queryParameters[param.name!!]
+                            args.add(convertValue(value, param.type))
+                        } else {
+                            @Suppress("UNCHECKED_CAST")
+                            args.add(call.receive(param.type.classifier as KClass<Any>))
+                        }
+                    }
+
+                    if (isFileResponse && service is RestFileProvider) {
+                        val streamInfo = service.getFile(func.name, args.drop(1))
+                        if (streamInfo != null) {
+                            call.response.header(HttpHeaders.AcceptRanges, "bytes")
+                            if (call.request.local.method == HttpMethod.Head) {
+                                call.respond(
+                                    NoOutputWithContentLength(
+                                        contentType = streamInfo.contentType,
+                                        status = HttpStatusCode.OK,
+                                        contentLength = streamInfo.contentLength
+                                    )
+                                )
+                            } else {
+                                call.response.header(
+                                    HttpHeaders.ContentDisposition,
+                                    ContentDisposition.Inline.withParameter(
+                                        ContentDisposition.Parameters.FileName,
+                                        streamInfo.fileName
+                                    ).toString()
+                                )
+                                call.respondFile(streamInfo.file)
+                            }
+                            return@handler
+                        }
+                    }
+                    
+                    val result = if (func.isSuspend) func.callSuspend(*args.toTypedArray()) else func.call(*args.toTypedArray())
+                    
+                    when (result) {
+                        null -> call.respond(HttpStatusCode.NotFound)
+                        is ByteArray -> {
+                            val contentType = if (func.name.contains("Image", ignoreCase = true)) {
+                                ContentType.Image.JPEG
+                            } else {
+                                ContentType.Application.OctetStream
+                            }
+                            call.respondBytes(result, contentType)
+                        }
+                        is Flow<*> -> {
+                            val typeArg = func.returnType.arguments.firstOrNull()?.type
+                            if (typeArg?.classifier == ByteArray::class) {
+                                call.respondBytesWriter {
+                                    @Suppress("UNCHECKED_CAST")
+                                    (result as Flow<ByteArray>).collect {
+                                        writeFully(it)
+                                    }
+                                }
+                            } else {
+                                call.response.cacheControl(CacheControl.NoCache(null))
+                                call.respond(SSEServerContent(call, handle = {
+                                    result.collect { item ->
+                                        if (item != null) {
+                                            send(ServerSentEvent(data = ApplicationScope.json.encodeToString(serializer(typeArg!!), item)))
+                                        }
+                                    }
+                                }))
+                            }
+                        }
+                        else -> call.respond(result)
+                    }
+                }
+
+                val openApiDoc: RouteConfig.() -> Unit = {
+                    tags(serviceName)
+                    summary = rpcDoc?.description
+                    if (authenticated) securitySchemeNames("UserAuth")
+                    
+                    request {
+                        func.parameters.filter { it.kind == KParameter.Kind.VALUE }.forEach { param ->
+                            val pDoc = param.findAnnotation<RpcParamDoc>()
+                            val safeType = getSafeOpenApiType(param.type)
+                            if (param.name == "id" && hasIdParam) {
+                                pathParameter<String>(param.name!!) { description = pDoc?.description }
+                            } else if (method == "GET" || isPrimitive(param.type)) {
+                                queryParameter(param.name!!, safeType) {
+                                    description = pDoc?.description
+                                }
+                            } else {
+                                body(safeType) { description = pDoc?.description }
+                            }
+                        }
+                    }
+                    
+                    response {
+                        HttpStatusCode.OK to {
+                            description = "Successful"
+                            val returnType = func.returnType
+                            if (isFileResponse) {
+                                body<ByteArray> {
+                                    mediaTypes(ContentType.Application.OctetStream)
+                                }
+                            } else if (returnType.classifier != Unit::class) {
+                                try {
+                                    if (returnType.isFlow()) {
+                                        val itemType = returnType.arguments.firstOrNull()?.type ?: Any::class.starProjectedType
+                                        val safeItemType = getSafeOpenApiType(itemType)
+                                        
+                                        if (itemType.classifier == ByteArray::class) {
+                                            body(safeItemType) {
+                                                mediaTypes(ContentType.Application.OctetStream)
+                                            }
+                                        } else {
+                                            body(safeItemType) {
+                                                mediaTypes(ContentType.Text.EventStream)
+                                            }
+                                        }
+                                    } else {
+                                        body(getSafeOpenApiType(returnType))
+                                    }
+                                } catch (_: Throwable) {
+                                    body<String>()
+                                }
+                            }
+                        }
+                        
+                        rpcDoc?.errors?.forEach { errorMsg ->
+                            HttpStatusCode.InternalServerError to {
+                                description = errorMsg
+                            }
+                        }
+                    }
+                }
+
+                when (method) {
+                    "GET" -> {
+                        if (isFileResponse) {
+                            head(finalPath, openApiDoc, handler)
+                        }
+                        get(finalPath, openApiDoc, handler)
+                    }
+                    "POST" -> post(finalPath, openApiDoc, handler)
+                    "PUT" -> put(finalPath, openApiDoc, handler)
+                    "DELETE" -> delete(finalPath, openApiDoc, handler)
+                }
+            }
+    }
+}
+
+private fun getSafeOpenApiType(type: KType): KType {
+    val classifier = type.classifier as? KClass<*> ?: return type
+    if (classifier == ByteArray::class) return type
+    if (classifier == UUID::class) return String::class.starProjectedType
+
+    if (type.isFlow()) {
+        val itemType = type.arguments.firstOrNull()?.type ?: Any::class.starProjectedType
+        val itemClassifier = itemType.classifier as? KClass<*>
+        return itemClassifier?.starProjectedType ?: itemType
+    }
+
+    val isPaginated = classifier.simpleName == "PaginatedResponse"
+    if (classifier.isSubclassOf(Iterable::class) || classifier.isSubclassOf(Map::class) || isPaginated) {
+        val hasGenericParameter = type.arguments.any { arg ->
+            arg.type?.classifier is KTypeParameter
+        }
+        if (!hasGenericParameter) {
+            return type
+        }
+    }
+
+    return if (type.arguments.isNotEmpty()) {
+        classifier.starProjectedType
+    } else {
+        type
+    }
+}
+
+private fun KType.isFlow(): Boolean {
+    val classifier = this.classifier as? KClass<*> ?: return false
+    return classifier.simpleName == "Flow" || classifier.qualifiedName?.contains("Flow") == true
+}
+
+private fun KFunction<*>.getRestMethodAndName(): Pair<String, String> {
+    val getAttr = findAnnotation<RestGet>()
+    val postAttr = findAnnotation<RestPost>()
+    val putAttr = findAnnotation<RestPut>()
+    val deleteAttr = findAnnotation<RestDelete>()
+    
+    return when {
+        getAttr != null -> "GET" to this.name
+        postAttr != null -> "POST" to this.name
+        putAttr != null -> "PUT" to this.name
+        deleteAttr != null -> "DELETE" to this.name
+        name.startsWith("by") -> "GET" to name
+        name.startsWith("all") -> "GET" to name
+        name.startsWith("liked") -> "GET" to name
+        name.startsWith("stream") -> "GET" to name
+        name.startsWith("download") -> "GET" to name
+        name.startsWith("get") -> "GET" to name.removePrefix("get")
+        name.startsWith("list") -> "GET" to name.removePrefix("list")
+        name.startsWith("find") -> "GET" to name.removePrefix("find")
+        name.startsWith("fetch") -> "GET" to name.removePrefix("fetch")
+        name.startsWith("search") -> "GET" to name.removePrefix("search")
+        name.startsWith("ranked") -> "GET" to name.removePrefix("ranked")
+        name.startsWith("add") -> "POST" to name
+        name.startsWith("post") -> "POST" to name.removePrefix("post")
+        name.startsWith("create") -> "POST" to name.removePrefix("create")
+        name.startsWith("put") -> "PUT" to name.removePrefix("put")
+        name.startsWith("set") -> "PUT" to name.removePrefix("set")
+        name.startsWith("update") -> "PUT" to name.removePrefix("update")
+        name.startsWith("delete") -> "DELETE" to name.removePrefix("delete")
+        name.startsWith("remove") -> "DELETE" to name.removePrefix("remove")
+        else -> "POST" to name
+    }
+}
+
+fun Route.registerPublicRestServices(koin: Koin) {
+    registerRestService(IServerStatsService::class) { koin.get<ServerStatsService>() }
+    registerRestService(IAuthService::class) { RpcAuthService(call, koin.get(), koin.get(), koin.get()) }
+}
+
+fun Route.registerAuthenticatedRestServices(koin: Koin) {
+    registerRestService(IIndexer::class, authenticated = true) { RpcIndexer(koin.get()) }
+    registerRestService(IUserService::class, authenticated = true) {
+        val user = call.getUser() ?: throw IllegalArgumentException("No user found")
+        RpcUserService(user, koin.get(), koin.get())
+    }
+    registerRestService(ISongService::class, authenticated = true) {
+        val user = call.getUser() ?: throw IllegalArgumentException("No user found")
+        SongRpcService(songService = koin.get(), user = user)
+    }
+    registerRestService(IAlbumService::class, authenticated = true) {
+        val user = call.getUser() ?: throw IllegalArgumentException("No user found")
+        AlbumRpcService(user, koin.get())
+    }
+    registerRestService(IImageService::class, authenticated = true) { koin.get<ImageService>() }
+    registerRestService(ILyricsSearch::class, authenticated = true) { koin.get<LyricsSearch>() }
+    registerRestService(ILyricsService::class, authenticated = true) { koin.get<LyricsService>() }
+    registerRestService(IArtistService::class, authenticated = true) {
+        val user = call.getUser() ?: throw IllegalArgumentException("No user found")
+        ArtistRpcService(user, koin.get())
+    }
+    registerRestService(IFavSyncService::class, authenticated = true) {
+        val user = call.getUser() ?: throw IllegalArgumentException("No user found")
+        FavSyncRpcService(user, koin.get())
+    }
+    registerRestService(IDownloadService::class, authenticated = true) {
+        val user = call.getUser() ?: throw IllegalArgumentException("No user found")
+        DownloadRpcService(user, call, koin.get(), koin.get())
+    }
+    registerRestService(IPlaylistService::class, authenticated = true) { koin.get<PlaylistService>() }
+    registerRestService(IUserPlaylistService::class, authenticated = true) { koin.get<UserPlaylistService>() }
+    registerRestService(ISessionService::class, authenticated = true) {
+        val user = call.getUser() ?: throw IllegalArgumentException("No user found")
+        RpcSessionService(user, koin.get())
+    }
+    registerRestService(IPlaybackService::class, authenticated = true) { RpcPlaybackService(koin.get()) }
+    registerRestService(ICustomAudioService::class, authenticated = true) { CustomAudioRpcService(koin.get()) }
+    registerRestService(IDbManagementService::class, authenticated = true) { koin.get<DbManagementService>() }
+    registerRestService(IBackupService::class, authenticated = true) {
+        val user = call.getUser() ?: throw IllegalArgumentException("No user found")
+        RpcBackupService(user, koin.get())
+    }
+    registerRestService(IUserPlaylistBackupService::class, authenticated = true) {
+        val user = call.getUser() ?: throw IllegalArgumentException("No user found")
+        RpcUserPlaylistBackupService(user, koin.get())
+    }
+    registerRestService(IMirrorService::class, authenticated = true) {
+        val user = call.getUser() ?: throw IllegalArgumentException("No user found")
+        MirrorRpcService(user, koin.get())
+    }
+    registerRestService(IRemoteMirrorService::class, authenticated = true) {
+        val user = call.getUser() ?: throw IllegalArgumentException("No user found")
+        RemoteMirrorRpcService(user, koin.get())
+    }
+    registerRestService(IScheduledTaskLogService::class, authenticated = true) {
+        val user = call.getUser() ?: throw IllegalArgumentException("No user found")
+        RpcScheduledTaskLogService(user, koin.get())
+    }
+    registerRestService(IReleaseService::class, authenticated = true) {
+        val user = call.getUser() ?: throw IllegalArgumentException("No user found")
+        RpcReleaseService(user, koin.get())
+    }
+    registerRestService(IMusicBrainzService::class, authenticated = true) { koin.get<CachedMusicBrainzService>() }
+}
+
+private fun isPrimitive(type: KType): Boolean {
+    val classifier = type.classifier ?: return false
+    if (classifier !is KClass<*>) return false
+    return classifier == String::class ||
+            classifier == Int::class ||
+            classifier == Long::class ||
+            classifier == Boolean::class ||
+            classifier == Double::class ||
+            classifier == Float::class ||
+            classifier == UUID::class ||
+            classifier.simpleName == "UUID" ||
+            classifier.simpleName == "PlatformUUID" ||
+            classifier.simpleName == "Instant" ||
+            classifier.simpleName == "PlatformInstant" ||
+            classifier.isSubclassOf(Enum::class)
+}
+
+private fun convertValue(value: String?, type: KType): Any? {
+    if (value == null) return null
+    val classifier = type.classifier as? KClass<*> ?: return value
+    
+    return when {
+        classifier == String::class -> value
+        classifier == Int::class -> value.toIntOrNull()
+        classifier == Long::class -> value.toLongOrNull()
+        classifier == Boolean::class -> value.toBoolean()
+        classifier == Double::class -> value.toDoubleOrNull()
+        classifier == Float::class -> value.toFloatOrNull()
+        classifier == UUID::class || classifier.simpleName == "UUID" || classifier.simpleName == "PlatformUUID" -> value.toUUIDOrNull()
+        classifier.simpleName == "Instant" || classifier.simpleName == "PlatformInstant" -> {
+            try { Instant.parse(value) } catch (_: Exception) { null }
+        }
+        classifier.isSubclassOf(Enum::class) -> {
+            @Suppress("UNCHECKED_CAST")
+            val enumClass = classifier.java as Class<out Enum<*>>
+            enumClass.enumConstants?.find { it.name.equals(value, ignoreCase = true) }
+        }
+        else -> value
+    }
+}

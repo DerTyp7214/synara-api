@@ -1,25 +1,28 @@
 package dev.dertyp
 
 import dev.dertyp.core.ApplicationScope
-import dev.dertyp.routing.mirrorRouting
-import dev.dertyp.routing.registerAuthenticatedServices
-import dev.dertyp.routing.registerPublicServices
+import dev.dertyp.routing.*
+import dev.dertyp.serializers.AppJson
 import dev.dertyp.services.JwtService
+import dev.hayden.KHealth
 import io.github.smiley4.ktoropenapi.OpenApi
+import io.github.smiley4.ktoropenapi.config.AuthScheme
+import io.github.smiley4.ktoropenapi.config.AuthType
+import io.github.smiley4.ktoropenapi.config.SchemaGenerator
 import io.github.smiley4.ktoropenapi.openApi
-import io.github.smiley4.ktoropenapi.route
 import io.github.smiley4.ktorswaggerui.swaggerUI
 import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.serialization.kotlinx.protobuf.protobuf
 import io.ktor.server.application.Application
 import io.ktor.server.application.install
+import io.ktor.server.http.content.staticResources
 import io.ktor.server.plugins.compression.Compression
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.server.plugins.statuspages.StatusPages
-import io.ktor.server.http.content.*
 import io.ktor.server.response.respondText
-import io.ktor.server.routing.*
+import io.ktor.server.routing.route
+import io.ktor.server.routing.routing
 import io.ktor.server.sse.SSE
 import io.ktor.server.websocket.WebSockets
 import io.ktor.server.websocket.pingPeriod
@@ -30,10 +33,11 @@ import kotlinx.rpc.krpc.serialization.cbor.cbor
 import kotlinx.serialization.ExperimentalSerializationApi
 import org.koin.ktor.ext.inject
 import org.koin.ktor.plugin.koin
+import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
 
-@OptIn(ExperimentalSerializationApi::class, ExperimentalTime::class)
+@OptIn(ExperimentalSerializationApi::class, ExperimentalTime::class, ExperimentalAtomicApi::class)
 fun Application.configureRouting() {
     install(ContentNegotiation) {
         json(ApplicationScope.json)
@@ -51,7 +55,40 @@ fun Application.configureRouting() {
             cbor(ApplicationScope.cbor)
         }
     }
-    install(OpenApi)
+    install(KHealth) {
+        successfulCheckStatusCode = HttpStatusCode.Accepted
+        unsuccessfulCheckStatusCode = HttpStatusCode.Accepted
+        healthChecks {
+            check("available") {
+                true
+            }
+        }
+
+        readyChecks {
+            check("indexer_ready") {
+                val indexer by inject<Indexer>()
+                !indexer.isActive.load()
+            }
+            check("transcoder_ready") {
+                !AudioUtils.isTranscoderActive.load()
+            }
+        }
+    }
+    install(OpenApi) {
+        schemas {
+            generator = SchemaGenerator.kotlinx(AppJson) {
+                overwrite(SchemaGenerator.TypeOverwrites.JavaUuid())
+                overwrite(SchemaGenerator.TypeOverwrites.KotlinUuid())
+            }
+        }
+        security {
+            securityScheme("UserAuth") {
+                type = AuthType.HTTP
+                scheme = AuthScheme.BEARER
+                bearerFormat = "JWT"
+            }
+        }
+    }
     install(Compression)
     install(StatusPages) {
         exception<Throwable> { call, cause ->
@@ -81,10 +118,14 @@ fun Application.configureRouting() {
             registerPublicServices(koin)
         }
 
+        registerPublicRestServices(koin)
+
         jwtService.authenticated(this) {
             rpc("/rpc/services") {
                 registerAuthenticatedServices(koin)
             }
+
+            registerAuthenticatedRestServices(koin)
         }
 
         jwtService.authenticate(this)
