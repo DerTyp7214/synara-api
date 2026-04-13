@@ -3,7 +3,7 @@ model: environment
 id: ev_xVRqZQ78ZV
 workspaceId: wk_9dbKacQT4H
 createdAt: 2025-10-14T19:25:16.452169629
-updatedAt: 2026-02-04T20:21:52.282056736
+updatedAt: 2026-04-13T14:01:58.827313004
 name: Global Variables
 public: true
 base: true
@@ -16,7 +16,7 @@ variables:
   id: Ay6f3rsrdM
 - enabled: true
   name: token
-  value: ${[ response.body.path(request='rq_E43hSHaxXc', path=b64'JC50b2tlbg', behavior='ttl', ttl=b64'MjQqNjAqNjA') ]}
+  value: ${[ response.body.path(request='rq_E43hSHaxXc', behavior='ttl', ttl=b64'MjQqNjAqNjA', result='first', join=b64'LCA', path=b64'JC50b2tlbg') ]}
   id: PfSc5FGw6S
 - enabled: true
   name: baseHost

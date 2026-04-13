@@ -68,24 +68,51 @@ fun Route.registerRestService(
                 val isFileResponse = func.findAnnotation<RestFileResponse>() != null
 
                 val handler: suspend RoutingContext.() -> Unit = handler@{
+                    if (authenticated && func.findAnnotation<RestPublic>() == null) {
+                        val user = call.getUser()
+                        if (user == null) {
+                            call.respond(HttpStatusCode.Unauthorized)
+                            return@handler
+                        }
+                    }
+
                     val service = serviceFactory()
-                    val args = mutableListOf<Any?>()
-                    args.add(service)
-                    
+                    val argMap = mutableMapOf<KParameter, Any?>()
+                    val instanceParam = func.parameters.first { it.kind == KParameter.Kind.INSTANCE }
+                    argMap[instanceParam] = service
+
                     func.parameters.filter { it.kind == KParameter.Kind.VALUE }.forEach { param ->
-                        if (param.name == "id" && call.parameters["id"] != null) {
-                            args.add(convertValue(call.parameters["id"], param.type))
-                        } else if (method == "GET" || isPrimitive(param.type)) {
-                            val value = call.request.queryParameters[param.name!!]
-                            args.add(convertValue(value, param.type))
-                        } else {
-                            @Suppress("UNCHECKED_CAST")
-                            args.add(call.receive(param.type.classifier as KClass<Any>))
+                        val value = try {
+                            if (param.name == "id" && call.parameters["id"] != null) {
+                                convertValue(call.parameters["id"], param.type)
+                            } else if (method == "GET" || isPrimitive(param.type)) {
+                                val classifier = param.type.classifier
+                                if (classifier == List::class || classifier == Collection::class || classifier == Iterable::class || classifier == Set::class) {
+                                    val values = call.request.queryParameters.getAll(param.name!!)
+                                    val itemType = param.type.arguments.firstOrNull()?.type ?: String::class.starProjectedType
+                                    values?.map { convertValue(it, itemType) } ?: if (param.isOptional) null else emptyList<Any>()
+                                } else {
+                                    val rawValue = call.request.queryParameters[param.name!!]
+                                    convertValue(rawValue, param.type)
+                                }
+                            } else {
+                                @Suppress("UNCHECKED_CAST")
+                                call.receive(param.type.classifier as KClass<Any>)
+                            }
+                        } catch (e: Exception) {
+                            if (param.isOptional && call.request.queryParameters[param.name!!] == null) null
+                            else throw IllegalArgumentException("Invalid value for parameter ${param.name}: ${e.message}")
+                        }
+
+                        if (value != null || param.type.isMarkedNullable) {
+                            argMap[param] = value
                         }
                     }
 
                     if (isFileResponse && service is RestFileProvider) {
-                        val streamInfo = service.getFile(func.name, args.drop(1))
+                        val methodParams = func.parameters.filter { it.kind == KParameter.Kind.VALUE }
+                        val fileArgs = methodParams.map { argMap[it] ?: if (it.type.isMarkedNullable) null else throw IllegalArgumentException("Missing required file provider parameter: ${it.name}") }
+                        val streamInfo = service.getFile(func.name, fileArgs)
                         if (streamInfo != null) {
                             call.response.header(HttpHeaders.AcceptRanges, "bytes")
                             if (call.request.local.method == HttpMethod.Head) {
@@ -110,7 +137,19 @@ fun Route.registerRestService(
                         }
                     }
                     
-                    val result = if (func.isSuspend) func.callSuspend(*args.toTypedArray()) else func.call(*args.toTypedArray())
+                    val result = try {
+                        if (func.isSuspend) {
+                            func.callSuspendBy(argMap)
+                        } else {
+                            func.callBy(argMap)
+                        }
+                    } catch (e: IllegalArgumentException) {
+                        call.respond(HttpStatusCode.BadRequest, e.message ?: "Invalid arguments")
+                        return@handler
+                    } catch (e: Exception) {
+                        call.respond(HttpStatusCode.InternalServerError, e.message ?: "Internal Server Error")
+                        return@handler
+                    }
                     
                     when (result) {
                         null -> call.respond(HttpStatusCode.NotFound)
@@ -142,14 +181,25 @@ fun Route.registerRestService(
                                 }))
                             }
                         }
-                        else -> call.respond(result)
+                        else -> {
+                            if (func.returnType.classifier == Unit::class) {
+                                call.respond(HttpStatusCode.OK)
+                            } else {
+                                try {
+                                    val json = ApplicationScope.json.encodeToString(serializer(func.returnType), result)
+                                    call.respondText(json, ContentType.Application.Json)
+                                } catch (_: Throwable) {
+                                    call.respond(result)
+                                }
+                            }
+                        }
                     }
                 }
 
                 val openApiDoc: RouteConfig.() -> Unit = {
                     tags(serviceName)
                     summary = rpcDoc?.description
-                    if (authenticated) securitySchemeNames("UserAuth")
+                    if (authenticated && func.findAnnotation<RestPublic>() == null) securitySchemeNames("UserAuth")
                     
                     request {
                         func.parameters.filter { it.kind == KParameter.Kind.VALUE }.forEach { param ->
@@ -292,6 +342,7 @@ private fun KFunction<*>.getRestMethodAndName(): Pair<String, String> {
 fun Route.registerPublicRestServices(koin: Koin) {
     registerRestService(IServerStatsService::class) { koin.get<ServerStatsService>() }
     registerRestService(IAuthService::class) { RpcAuthService(call, koin.get(), koin.get(), koin.get()) }
+    registerRestService(IImageService::class, authenticated = true) { koin.get<ImageService>() }
 }
 
 fun Route.registerAuthenticatedRestServices(koin: Koin) {
@@ -308,7 +359,6 @@ fun Route.registerAuthenticatedRestServices(koin: Koin) {
         val user = call.getUser() ?: throw IllegalArgumentException("No user found")
         AlbumRpcService(user, koin.get())
     }
-    registerRestService(IImageService::class, authenticated = true) { koin.get<ImageService>() }
     registerRestService(ILyricsSearch::class, authenticated = true) { koin.get<LyricsSearch>() }
     registerRestService(ILyricsService::class, authenticated = true) { koin.get<LyricsService>() }
     registerRestService(IArtistService::class, authenticated = true) {
@@ -377,24 +427,24 @@ private fun isPrimitive(type: KType): Boolean {
 }
 
 private fun convertValue(value: String?, type: KType): Any? {
-    if (value == null) return null
+    if (value.isNullOrBlank()) return null
     val classifier = type.classifier as? KClass<*> ?: return value
     
     return when {
         classifier == String::class -> value
-        classifier == Int::class -> value.toIntOrNull()
-        classifier == Long::class -> value.toLongOrNull()
-        classifier == Boolean::class -> value.toBoolean()
-        classifier == Double::class -> value.toDoubleOrNull()
-        classifier == Float::class -> value.toFloatOrNull()
-        classifier == UUID::class || classifier.simpleName == "UUID" || classifier.simpleName == "PlatformUUID" -> value.toUUIDOrNull()
+        classifier == Int::class -> value.toIntOrNull() ?: throw IllegalArgumentException("Invalid Int value: $value")
+        classifier == Long::class -> value.toLongOrNull() ?: throw IllegalArgumentException("Invalid Long value: $value")
+        classifier == Boolean::class -> value.toBooleanStrictOrNull() ?: throw IllegalArgumentException("Invalid Boolean value: $value")
+        classifier == Double::class -> value.toDoubleOrNull() ?: throw IllegalArgumentException("Invalid Double value: $value")
+        classifier == Float::class -> value.toFloatOrNull() ?: throw IllegalArgumentException("Invalid Float value: $value")
+        classifier == UUID::class || classifier.simpleName == "UUID" || classifier.simpleName == "PlatformUUID" -> value.toUUIDOrNull() ?: throw IllegalArgumentException("Invalid UUID value: $value")
         classifier.simpleName == "Instant" || classifier.simpleName == "PlatformInstant" -> {
-            try { Instant.parse(value) } catch (_: Exception) { null }
+            try { Instant.parse(value) } catch (_: Exception) { throw IllegalArgumentException("Invalid Instant value: $value") }
         }
         classifier.isSubclassOf(Enum::class) -> {
             @Suppress("UNCHECKED_CAST")
             val enumClass = classifier.java as Class<out Enum<*>>
-            enumClass.enumConstants?.find { it.name.equals(value, ignoreCase = true) }
+            enumClass.enumConstants?.find { it.name.equals(value, ignoreCase = true) } ?: throw IllegalArgumentException("Invalid Enum value: $value")
         }
         else -> value
     }
