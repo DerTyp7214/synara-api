@@ -20,7 +20,7 @@ import kotlin.time.Duration.Companion.seconds
 
 class SpotifyService(
     environment: ApplicationEnvironment
-) : MetadataService("Spotify", Companion.MetadataType.spotify, environment) {
+) : MetadataService("Spotify", IMetadataService.MetadataType.spotify, environment) {
     override val tokenUrl = "https://accounts.spotify.com/api/token"
     override val clientIdConfigPath = "spotify.clientId"
     override val clientSecretConfigPath = "spotify.clientSecret"
@@ -161,11 +161,11 @@ class SpotifyService(
         throw NotImplementedError("Not implemented for spotify!")
     }
 
-    override suspend fun getAlbumTracks(albumId: String, priority: HttpClientPriority): Flow<IMetadataService.Track> {
+    override fun getAlbumTracks(albumId: String, priority: HttpClientPriority): Flow<IMetadataService.Track> {
         throw NotImplementedError("Not implemented for spotify!")
     }
 
-    override suspend fun getArtistTracks(artistId: String, priority: HttpClientPriority): Flow<IMetadataService.Track> {
+    override fun getArtistTracks(artistId: String, priority: HttpClientPriority): Flow<IMetadataService.Track> {
         throw NotImplementedError("Not implemented for spotify!")
     }
 

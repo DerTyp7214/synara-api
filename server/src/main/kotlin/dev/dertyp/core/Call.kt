@@ -3,6 +3,7 @@ package dev.dertyp.core
 import dev.dertyp.data.User
 import dev.dertyp.services.SessionService
 import dev.dertyp.services.UserService
+import dev.dertyp.services.metadata.IMetadataService
 import dev.dertyp.services.metadata.MetadataService
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.ApplicationEnvironment
@@ -39,12 +40,12 @@ suspend fun ApplicationCall.getUser(): User? = try {
     null
 }
 
-fun ApplicationCall.getMetadataProvider(providerType: MetadataService.Companion.MetadataType? = null): MetadataService? {
+fun ApplicationCall.getMetadataProvider(providerType: IMetadataService.MetadataType? = null): MetadataService? {
     val environment by inject<ApplicationEnvironment>()
 
     val metadataProvider = if (providerType != null) providerType else {
         val metadataProviderString = this.parameters["metadataProvider"] ?: return null
-        MetadataService.Companion.MetadataType.valueOf(metadataProviderString)
+        IMetadataService.MetadataType.valueOf(metadataProviderString)
     }
 
     return MetadataService.getMetadataService(metadataProvider, environment)

@@ -15,12 +15,11 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import java.util.UUID
-import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 class TheAudioDBService(
     private val environment: ApplicationEnvironment
-) : MetadataService("TheAudioDB", Companion.MetadataType.theAudioDB, environment) {
+) : MetadataService("TheAudioDB", IMetadataService.MetadataType.theAudioDB, environment) {
     override val tokenUrl = ""
     override val clientIdConfigPath: String = "theaudiodb.apiKey"
     override val clientSecretConfigPath: String = ""
@@ -258,11 +257,11 @@ class TheAudioDBService(
         throw NotImplementedError("Not implemented for TheAudioDB")
     }
 
-    override suspend fun getAlbumTracks(albumId: String, priority: HttpClientPriority): Flow<IMetadataService.Track> {
+    override fun getAlbumTracks(albumId: String, priority: HttpClientPriority): Flow<IMetadataService.Track> {
         throw NotImplementedError("Not implemented for TheAudioDB")
     }
 
-    override suspend fun getArtistTracks(artistId: String, priority: HttpClientPriority): Flow<IMetadataService.Track> {
+    override fun getArtistTracks(artistId: String, priority: HttpClientPriority): Flow<IMetadataService.Track> {
         throw NotImplementedError("Not implemented for TheAudioDB")
     }
 

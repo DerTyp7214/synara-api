@@ -1,12 +1,32 @@
 package dev.dertyp.services
 
-import dev.dertyp.db.*
+import dev.dertyp.db.AlbumArtistTable
+import dev.dertyp.db.AlbumMusicBrainzTable
+import dev.dertyp.db.AlbumTable
+import dev.dertyp.db.ArtistTable
+import dev.dertyp.db.ImageTable
+import dev.dertyp.db.PlaylistSongTable
+import dev.dertyp.db.PlaylistTable
+import dev.dertyp.db.SongArtistTable
+import dev.dertyp.db.SongMusicBrainzTable
+import dev.dertyp.db.SongTable
+import dev.dertyp.db.TranscodedSongTable
+import dev.dertyp.db.UserPlaylistSongTable
+import dev.dertyp.db.UserPlaylistTable
+import dev.dertyp.db.UserSongTable
+import dev.dertyp.db.UserTable
 import dev.dertyp.dbQuery
 import dev.dertyp.getISOFromDate
+import dev.dertyp.services.metadata.IMetadataService
 import dev.dertyp.services.metadata.MetadataService
 import dev.dertyp.services.metadata.TidalService
 import io.ktor.server.application.ApplicationEnvironment
-import org.jetbrains.exposed.v1.core.*
+import org.jetbrains.exposed.v1.core.ResultRow
+import org.jetbrains.exposed.v1.core.SortOrder
+import org.jetbrains.exposed.v1.core.and
+import org.jetbrains.exposed.v1.core.count
+import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.greater
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.jdbc.selectAll
@@ -184,7 +204,7 @@ class LibraryMergeService(
             .groupBy { it[AlbumTable.originalId]!! }
             .filter { it.value.size > 1 }
 
-        val tidalService = MetadataService.getMetadataService(MetadataService.Companion.MetadataType.tidal, environment) as TidalService
+        val tidalService = MetadataService.getMetadataService(IMetadataService.MetadataType.tidal, environment) as TidalService
 
         for ((originalId, group) in originalIdGroups) {
             val sortedGroup = group.sortedByDescending {

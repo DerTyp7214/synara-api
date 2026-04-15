@@ -6,19 +6,86 @@ import dev.dertyp.StreamInfo
 import dev.dertyp.core.ApplicationScope
 import dev.dertyp.core.getUser
 import dev.dertyp.core.toUUIDOrNull
-import dev.dertyp.rpc.annotations.*
-import dev.dertyp.services.*
+import dev.dertyp.rpc.annotations.RestDelete
+import dev.dertyp.rpc.annotations.RestFileResponse
+import dev.dertyp.rpc.annotations.RestGet
+import dev.dertyp.rpc.annotations.RestPost
+import dev.dertyp.rpc.annotations.RestPublic
+import dev.dertyp.rpc.annotations.RestPut
+import dev.dertyp.rpc.annotations.RpcDoc
+import dev.dertyp.rpc.annotations.RpcParamDoc
+import dev.dertyp.services.AlbumRpcService
+import dev.dertyp.services.ArtistRpcService
+import dev.dertyp.services.CustomAudioRpcService
+import dev.dertyp.services.DbManagementService
+import dev.dertyp.services.FavSyncRpcService
+import dev.dertyp.services.IAlbumService
+import dev.dertyp.services.IArtistService
+import dev.dertyp.services.IAuthService
+import dev.dertyp.services.IBackupService
+import dev.dertyp.services.ICustomAudioService
+import dev.dertyp.services.IDbManagementService
+import dev.dertyp.services.IFavSyncService
+import dev.dertyp.services.IImageService
+import dev.dertyp.services.ILyricsSearch
+import dev.dertyp.services.ILyricsService
+import dev.dertyp.services.IMirrorService
+import dev.dertyp.services.IPlaybackService
+import dev.dertyp.services.IPlaylistService
+import dev.dertyp.services.IReleaseService
+import dev.dertyp.services.IRemoteMirrorService
+import dev.dertyp.services.IScheduledTaskLogService
+import dev.dertyp.services.IServerStatsService
+import dev.dertyp.services.ISessionService
+import dev.dertyp.services.ISongService
+import dev.dertyp.services.IUserPlaylistBackupService
+import dev.dertyp.services.IUserPlaylistService
+import dev.dertyp.services.IUserService
+import dev.dertyp.services.ImageService
+import dev.dertyp.services.LyricsSearch
+import dev.dertyp.services.LyricsService
+import dev.dertyp.services.MirrorRpcService
+import dev.dertyp.services.PlaylistService
+import dev.dertyp.services.RemoteMirrorRpcService
+import dev.dertyp.services.RpcAuthService
+import dev.dertyp.services.RpcBackupService
+import dev.dertyp.services.RpcPlaybackService
+import dev.dertyp.services.RpcReleaseService
+import dev.dertyp.services.RpcScheduledTaskLogService
+import dev.dertyp.services.RpcSessionService
+import dev.dertyp.services.RpcUserPlaylistBackupService
+import dev.dertyp.services.RpcUserService
+import dev.dertyp.services.ServerStatsService
+import dev.dertyp.services.SongRpcService
+import dev.dertyp.services.UserPlaylistService
 import dev.dertyp.services.metadata.CachedMusicBrainzService
+import dev.dertyp.services.metadata.IMetadataService
 import dev.dertyp.services.metadata.IMusicBrainzService
+import dev.dertyp.services.metadata.MetadataDispatcherService
 import dev.dertyp.services.tdn.DownloadRpcService
 import dev.dertyp.services.tdn.IDownloadService
-import io.github.smiley4.ktoropenapi.*
 import io.github.smiley4.ktoropenapi.config.RouteConfig
-import io.ktor.http.*
+import io.github.smiley4.ktoropenapi.delete
+import io.github.smiley4.ktoropenapi.get
+import io.github.smiley4.ktoropenapi.head
+import io.github.smiley4.ktoropenapi.post
+import io.github.smiley4.ktoropenapi.put
+import io.ktor.http.CacheControl
+import io.ktor.http.ContentDisposition
+import io.ktor.http.ContentType
+import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpMethod
+import io.ktor.http.HttpStatusCode
 import io.ktor.http.content.OutgoingContent
 import io.ktor.server.plugins.partialcontent.PartialContent
 import io.ktor.server.request.receive
-import io.ktor.server.response.*
+import io.ktor.server.response.cacheControl
+import io.ktor.server.response.header
+import io.ktor.server.response.respond
+import io.ktor.server.response.respondBytes
+import io.ktor.server.response.respondBytesWriter
+import io.ktor.server.response.respondFile
+import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.RoutingContext
 import io.ktor.server.routing.route
@@ -30,8 +97,16 @@ import kotlinx.serialization.serializer
 import org.koin.core.Koin
 import java.time.Instant
 import java.util.UUID
-import kotlin.reflect.*
-import kotlin.reflect.full.*
+import kotlin.reflect.KClass
+import kotlin.reflect.KFunction
+import kotlin.reflect.KParameter
+import kotlin.reflect.KType
+import kotlin.reflect.KTypeParameter
+import kotlin.reflect.full.callSuspendBy
+import kotlin.reflect.full.declaredMemberFunctions
+import kotlin.reflect.full.findAnnotation
+import kotlin.reflect.full.isSubclassOf
+import kotlin.reflect.full.starProjectedType
 
 interface RestFileProvider {
     suspend fun getFile(methodName: String, args: List<Any?>): StreamInfo?
@@ -62,8 +137,13 @@ fun Route.registerRestService(
             .forEach { func ->
                 val (method, name) = func.getRestMethodAndName()
                 val methodName = name.replaceFirstChar { it.lowercase() }
-                val hasIdParam = func.parameters.any { it.kind == KParameter.Kind.VALUE && it.name == "id" }
-                val finalPath = if (hasIdParam) "$methodName/{id}" else methodName
+                val typeParam = func.parameters.find { it.kind == KParameter.Kind.VALUE && it.name == "type" && isPrimitive(it.type) }
+                val idParam = func.parameters.find { it.kind == KParameter.Kind.VALUE && it.name != "type" && (it.name == "id" || it.name?.endsWith("Id") == true) && isPrimitive(it.type) }
+
+                var finalPath = methodName
+                if (typeParam != null) finalPath = "{type}/$finalPath"
+                if (idParam != null) finalPath = "$finalPath/{${idParam.name}}"
+
                 val rpcDoc = func.findAnnotation<RpcDoc>()
                 val isFileResponse = func.findAnnotation<RestFileResponse>() != null
 
@@ -83,8 +163,10 @@ fun Route.registerRestService(
 
                     func.parameters.filter { it.kind == KParameter.Kind.VALUE }.forEach { param ->
                         val value = try {
-                            if (param.name == "id" && call.parameters["id"] != null) {
-                                convertValue(call.parameters["id"], param.type)
+                            if (param.name == "type" && call.parameters["type"] != null) {
+                                convertValue(call.parameters["type"], param.type)
+                            } else if (idParam != null && param.name == idParam.name && call.parameters[idParam.name!!] != null) {
+                                convertValue(call.parameters[idParam.name!!], param.type)
                             } else if (method == "GET" || isPrimitive(param.type)) {
                                 val classifier = param.type.classifier
                                 if (classifier == List::class || classifier == Collection::class || classifier == Iterable::class || classifier == Set::class) {
@@ -205,8 +287,10 @@ fun Route.registerRestService(
                         func.parameters.filter { it.kind == KParameter.Kind.VALUE }.forEach { param ->
                             val pDoc = param.findAnnotation<RpcParamDoc>()
                             val safeType = getSafeOpenApiType(param.type)
-                            if (param.name == "id" && hasIdParam) {
-                                pathParameter<String>(param.name!!) { description = pDoc?.description }
+                            if (param.name == "type" && typeParam != null) {
+                                pathParameter(param.name!!, safeType) { description = pDoc?.description }
+                            } else if (idParam != null && param.name == idParam.name) {
+                                pathParameter(param.name!!, safeType) { description = pDoc?.description }
                             } else if (method == "GET" || isPrimitive(param.type)) {
                                 queryParameter(param.name!!, safeType) {
                                     description = pDoc?.description
@@ -327,6 +411,8 @@ private fun KFunction<*>.getRestMethodAndName(): Pair<String, String> {
         name.startsWith("fetch") -> "GET" to name.removePrefix("fetch")
         name.startsWith("search") -> "GET" to name.removePrefix("search")
         name.startsWith("ranked") -> "GET" to name.removePrefix("ranked")
+        name.startsWith("exists") -> "GET" to name
+        name.contains("Exists") -> "GET" to name
         name.startsWith("add") -> "POST" to name
         name.startsWith("post") -> "POST" to name.removePrefix("post")
         name.startsWith("create") -> "POST" to name.removePrefix("create")
@@ -407,6 +493,7 @@ fun Route.registerAuthenticatedRestServices(koin: Koin) {
         RpcReleaseService(user, koin.get())
     }
     registerRestService(IMusicBrainzService::class, authenticated = true) { koin.get<CachedMusicBrainzService>() }
+    registerRestService(IMetadataService::class, authenticated = true) { koin.get<MetadataDispatcherService>() }
 }
 
 private fun isPrimitive(type: KType): Boolean {

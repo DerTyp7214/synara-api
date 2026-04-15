@@ -1,21 +1,58 @@
 package dev.dertyp.services.tdn
 
-import dev.dertyp.core.*
+import dev.dertyp.core.ApplicationScope
+import dev.dertyp.core.download
+import dev.dertyp.core.getMetadataProvider
+import dev.dertyp.core.getUser
+import dev.dertyp.core.getWrapper
+import dev.dertyp.core.removeFirst
+import dev.dertyp.core.tidalId
+import dev.dertyp.core.waitForChange
 import dev.dertyp.data.User
 import dev.dertyp.data.UserSong
 import dev.dertyp.killAll
-import dev.dertyp.services.*
-import dev.dertyp.services.metadata.MetadataService
+import dev.dertyp.services.FavSyncService
+import dev.dertyp.services.ISyncService
+import dev.dertyp.services.ImageService
+import dev.dertyp.services.Service
+import dev.dertyp.services.SongService
+import dev.dertyp.services.UserPlaylistService
+import dev.dertyp.services.metadata.IMetadataService
 import dev.dertyp.services.sync.SyncService
 import dev.dertyp.utils.LogParam
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.ApplicationEnvironment
 import io.ktor.server.engine.launchOnCancellation
 import io.ktor.utils.io.InternalAPI
-import kotlinx.coroutines.*
-import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.CompletableJob
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asFlow
+import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.buffer
+import kotlinx.coroutines.flow.channelFlow
+import kotlinx.coroutines.flow.chunked
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.onStart
+import kotlinx.coroutines.flow.takeWhile
+import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.yield
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 import java.time.Instant
@@ -24,6 +61,7 @@ import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.concurrent.atomics.AtomicBoolean
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
+import kotlin.time.Duration.Companion.milliseconds
 
 class DownloadRpcService(
     private val user: User,
@@ -59,7 +97,7 @@ class DownloadRpcService(
     }
 
     override suspend fun existsByTidalId(id: String, type: Type): Boolean {
-        val metadataService = call.getMetadataProvider(MetadataService.Companion.MetadataType.tidal) ?: return false
+        val metadataService = call.getMetadataProvider(IMetadataService.MetadataType.tidal) ?: return false
         return when (type) {
             Type.SONG -> metadataService.getTrackById(id) != null
             Type.ALBUM -> metadataService.albumExistsById(id)
@@ -140,7 +178,7 @@ class DownloadService(
             launch {
                 queueUpdateFlow
                     .onStart { emit(Unit) }
-                    .debounce(100)
+                    .debounce(100.milliseconds)
                     .takeWhile { !stopped.load() }
                     .collect {
                         logger.info("Trying to download")
@@ -357,7 +395,7 @@ class DownloadService(
         callback: suspend (List<String>) -> Unit = {}
     ): Pair<Boolean, List<UserSong>> {
         val user = call.getUser() ?: throw IllegalStateException("No user")
-        val metadataService = call.getMetadataProvider(MetadataService.Companion.MetadataType.tidal)
+        val metadataService = call.getMetadataProvider(IMetadataService.MetadataType.tidal)
 
         val result = mutableListOf<UserSong>()
         var contentToDownload = false
@@ -488,7 +526,7 @@ class DownloadService(
         artist: String?,
         count: Int
     ): List<TidalSong> {
-        val metadataService = call.getMetadataProvider(MetadataService.Companion.MetadataType.tidal)
+        val metadataService = call.getMetadataProvider(IMetadataService.MetadataType.tidal)
             ?: throw IllegalStateException("Tidal metadata service not available")
 
         val searchResults = if (query != null) {

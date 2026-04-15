@@ -1033,6 +1033,30 @@ Syncing and management of track lyrics.
 | `transcribeLyrics` | `songId` (`PlatformUUID`): The song unique identifier.<br>`lyrics` (`String`?): Optional raw lyrics text to transcribe. | [SyncedLyrics](#syncedlyrics)? | No | RuntimeException | Trigger AI-based transcription or manual alignment of lyrics. |
 | `startSyncWorker` | - | `Boolean` | No |  | Start the background lyrics synchronization worker. |
 
+### IMetadataService
+Service for fetching metadata from external sources.
+
+| Function | Parameters | Returns | Admin | Errors | Description |
+| :--- | :--- | :--- | :---: | :--- | :--- |
+| `searchArtists` | `type` (`MetadataType`): The metadata provider to use.<br>`query` (`String`): The search query.<br>`limit` (`Int`): Maximum number of results to return. | `List`<[Artist](#artist)> | No |  | Search for artists on the specified metadata provider. |
+| `search` | `type` (`MetadataType`): The metadata provider to use.<br>`query` (`String`): The search query.<br>`limit` (`Int`): Maximum number of results to return. | `List`<[Track](#track)> | No |  | Search for tracks on the specified metadata provider. |
+| `searchAlbums` | `type` (`MetadataType`): The metadata provider to use.<br>`query` (`String`): The search query.<br>`limit` (`Int`): Maximum number of results to return.<br>`includeTracks` (`Boolean`): Whether to include tracks in the album results. | `List`<[Album](#album)> | No |  | Search for albums on the specified metadata provider. |
+| `getAlbumIdByTrackId` | `type` (`MetadataType`): The metadata provider to use.<br>`trackId` (`String`): The external track ID. | `String`? | No |  | Get the album ID for a given track ID. |
+| `getImageUrlByAlbumId` | `type` (`MetadataType`): The metadata provider to use.<br>`albumId` (`String`): The external album ID. | `List`<[Image](#image)> | No |  | Get image URLs for a given album ID. |
+| `getArtistByMbId` | `type` (`MetadataType`): The metadata provider to use.<br>`mbId` (`PlatformUUID`): The MusicBrainz Artist UUID. | [Artist](#artist)? | No |  | Get an artist by their MusicBrainz ID. |
+| `getAlbumByMbId` | `type` (`MetadataType`): The metadata provider to use.<br>`mbId` (`PlatformUUID`): The MusicBrainz Album (Release) UUID. | [Album](#album)? | No |  | Get an album by its MusicBrainz ID. |
+| `getTrackByMbId` | `type` (`MetadataType`): The metadata provider to use.<br>`mbId` (`PlatformUUID`): The MusicBrainz Track (Recording) UUID. | [Track](#track)? | No |  | Get a track by its MusicBrainz ID. |
+| `getImageUrlByArtistMbId` | `type` (`MetadataType`): The metadata provider to use.<br>`mbId` (`PlatformUUID`): The MusicBrainz Artist UUID. | `List`<[Image](#image)> | No |  | Get image URLs for an artist by their MusicBrainz ID. |
+| `getImageUrlByAlbumMbId` | `type` (`MetadataType`): The metadata provider to use.<br>`mbId` (`PlatformUUID`): The MusicBrainz Album (Release) UUID. | `List`<[Image](#image)> | No |  | Get image URLs for an album by its MusicBrainz ID. |
+| `getImageUrlByTrackMbId` | `type` (`MetadataType`): The metadata provider to use.<br>`mbId` (`PlatformUUID`): The MusicBrainz Track (Recording) UUID. | `List`<[Image](#image)> | No |  | Get image URLs for a track by its MusicBrainz ID. |
+| `getImageUrlsByAlbumIds` | `type` (`MetadataType`): The metadata provider to use.<br>`albumIds` (`List`<`String`>): List of external album IDs. | `Map`<`String`, `List`<[Image](#image)>> | No |  | Get image URLs for multiple album IDs. |
+| `getImageUrlByImageId` | `type` (`MetadataType`): The metadata provider to use.<br>`imageId` (`PlatformUUID`): The image UUID. | `String`? | No |  | Get the URL for a cached image by its ID. |
+| `getTrackById` | `type` (`MetadataType`): The metadata provider to use.<br>`trackId` (`String`): The external track ID. | [Track](#track)? | No |  | Get a track by its external ID. |
+| `getTracksByIds` | `type` (`MetadataType`): The metadata provider to use.<br>`trackIds` (`List`<`String`>): List of external track IDs. | `List`<[Track](#track)> | No |  | Get multiple tracks by their external IDs. |
+| `getAlbumsByIds` | `type` (`MetadataType`): The metadata provider to use.<br>`albumIds` (`List`<`String`>): List of external album IDs. | `List`<[Album](#album)> | No |  | Get multiple albums by their external IDs. |
+| `albumExistsById` | `type` (`MetadataType`): The metadata provider to use.<br>`albumId` (`String`): The external album ID. | `Boolean` | No |  | Check if an album exists by its external ID. |
+| `getArtistsByIds` | `type` (`MetadataType`): The metadata provider to use.<br>`artistIds` (`List`<`String`>): List of external artist IDs. | `List`<[Artist](#artist)> | No |  | Get multiple artists by their external IDs. |
+
 ### IMirrorService
 Exposes local data for server-to-server mirroring.
 

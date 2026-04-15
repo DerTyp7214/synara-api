@@ -5,9 +5,18 @@ import dev.dertyp.core.HttpClientPriority
 import dev.dertyp.core.bytes
 import dev.dertyp.data.User
 import dev.dertyp.services.ImageService
-import io.ktor.client.request.*
+import io.ktor.client.request.HttpRequestBuilder
+import io.ktor.client.request.head
+import io.ktor.client.request.headers
+import io.ktor.client.request.put
+import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
-import io.ktor.http.*
+import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpStatusCode
+import io.ktor.http.URLBuilder
+import io.ktor.http.appendPathSegments
+import io.ktor.http.isSuccess
+import io.ktor.http.takeFrom
 import io.ktor.server.application.ApplicationEnvironment
 import io.ktor.server.util.url
 import kotlinx.coroutines.flow.Flow
@@ -18,7 +27,7 @@ import kotlin.concurrent.atomics.ExperimentalAtomicApi
 @OptIn(ExperimentalAtomicApi::class)
 class ImageCacheService(
     private val environment: ApplicationEnvironment
-) : MetadataService("ImageCache", Companion.MetadataType.imageCache, environment) {
+) : MetadataService("ImageCache", IMetadataService.MetadataType.imageCache, environment) {
     override val tokenUrl = ""
     override val clientIdConfigPath: String = ""
     override val clientSecretConfigPath: String = ""
@@ -91,11 +100,11 @@ class ImageCacheService(
         throw NotImplementedError("Not implemented for ImageCache")
     }
 
-    override suspend fun getAlbumTracks(albumId: String, priority: HttpClientPriority): Flow<IMetadataService.Track> {
+    override fun getAlbumTracks(albumId: String, priority: HttpClientPriority): Flow<IMetadataService.Track> {
         throw NotImplementedError("Not implemented for ImageCache")
     }
 
-    override suspend fun getArtistTracks(artistId: String, priority: HttpClientPriority): Flow<IMetadataService.Track> {
+    override fun getArtistTracks(artistId: String, priority: HttpClientPriority): Flow<IMetadataService.Track> {
         throw NotImplementedError("Not implemented for ImageCache")
     }
 

@@ -4,12 +4,43 @@ import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
 import dev.dertyp.core.ApplicationScope
 import dev.dertyp.core.HttpClientPriority
-import dev.dertyp.data.*
-import dev.dertyp.db.*
+import dev.dertyp.data.MusicBrainzArtist
+import dev.dertyp.data.MusicBrainzRelation
+import dev.dertyp.data.MusicBrainzRelationUrl
+import dev.dertyp.data.MusicBrainzRelease
+import dev.dertyp.data.MusicBrainzReleaseGroup
+import dev.dertyp.db.AlbumArtistTable
+import dev.dertyp.db.AlbumMusicBrainzTable
+import dev.dertyp.db.AlbumTable
+import dev.dertyp.db.ArtistMusicBrainzTable
+import dev.dertyp.db.ArtistTable
+import dev.dertyp.db.FollowedArtistTable
+import dev.dertyp.db.ImageTable
+import dev.dertyp.db.MBArtistTable
+import dev.dertyp.db.MBRecordingTable
+import dev.dertyp.db.MBReleaseGroupTable
+import dev.dertyp.db.MBReleaseTable
+import dev.dertyp.db.RecentReleaseTable
+import dev.dertyp.db.SongArtistTable
+import dev.dertyp.db.SongMusicBrainzTable
+import dev.dertyp.db.SongTable
+import dev.dertyp.db.UserTable
+import dev.dertyp.db.allMusicBrainzTables
 import dev.dertyp.plugins.RedisCacheProvider
-import dev.dertyp.services.metadata.*
+import dev.dertyp.services.metadata.AppleMusicService
+import dev.dertyp.services.metadata.IMetadataService
+import dev.dertyp.services.metadata.MetadataService
+import dev.dertyp.services.metadata.MusicBrainzCacheService
+import dev.dertyp.services.metadata.MusicBrainzService
+import dev.dertyp.services.metadata.SpotifyService
+import dev.dertyp.services.metadata.TidalService
 import io.ktor.server.application.ApplicationEnvironment
-import io.mockk.*
+import io.mockk.coEvery
+import io.mockk.every
+import io.mockk.mockk
+import io.mockk.mockkObject
+import io.mockk.spyk
+import io.mockk.unmockkAll
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.SchemaUtils
@@ -160,8 +191,8 @@ class ReleaseServiceTest : KoinTest {
         setup(dialect)
 
         mockkObject(MetadataService.Companion)
-        every { MetadataService.getMetadataService(MetadataService.Companion.MetadataType.tidal, any()) } returns tidalService
-        every { MetadataService.getMetadataService(MetadataService.Companion.MetadataType.appleMusic, any()) } returns appleMusicService
+        every { MetadataService.getMetadataService(IMetadataService.MetadataType.tidal, any()) } returns tidalService
+        every { MetadataService.getMetadataService(IMetadataService.MetadataType.appleMusic, any()) } returns appleMusicService
 
         val mbId = UUID.randomUUID()
         val releaseId = UUID.randomUUID()
@@ -221,8 +252,8 @@ class ReleaseServiceTest : KoinTest {
         setup(dialect)
 
         mockkObject(MetadataService.Companion)
-        every { MetadataService.getMetadataService(MetadataService.Companion.MetadataType.tidal, any()) } returns tidalService
-        every { MetadataService.getMetadataService(MetadataService.Companion.MetadataType.appleMusic, any()) } returns appleMusicService
+        every { MetadataService.getMetadataService(IMetadataService.MetadataType.tidal, any()) } returns tidalService
+        every { MetadataService.getMetadataService(IMetadataService.MetadataType.appleMusic, any()) } returns appleMusicService
 
         val mbId = UUID.randomUUID()
         val releaseIdInAlbumDb = UUID.randomUUID()
@@ -454,8 +485,8 @@ class ReleaseServiceTest : KoinTest {
         val userId = UUID.randomUUID()
 
         mockkObject(MetadataService.Companion)
-        every { MetadataService.getMetadataService(MetadataService.Companion.MetadataType.tidal, any()) } returns tidalService
-        every { MetadataService.getMetadataService(MetadataService.Companion.MetadataType.appleMusic, any()) } returns appleMusicService
+        every { MetadataService.getMetadataService(IMetadataService.MetadataType.tidal, any()) } returns tidalService
+        every { MetadataService.getMetadataService(IMetadataService.MetadataType.appleMusic, any()) } returns appleMusicService
 
         transaction(database) {
             UserTable.insert { it[id] = userId; it[username] = "user"; it[passwordHash] = "hash" }
@@ -476,8 +507,8 @@ class ReleaseServiceTest : KoinTest {
     fun `fetchNewReleases should handle title matching ambiguity`(dialect: DbDialect) = runBlocking {
         setup(dialect)
         mockkObject(MetadataService.Companion)
-        every { MetadataService.getMetadataService(MetadataService.Companion.MetadataType.tidal, any()) } returns tidalService
-        every { MetadataService.getMetadataService(MetadataService.Companion.MetadataType.appleMusic, any()) } returns appleMusicService
+        every { MetadataService.getMetadataService(IMetadataService.MetadataType.tidal, any()) } returns tidalService
+        every { MetadataService.getMetadataService(IMetadataService.MetadataType.appleMusic, any()) } returns appleMusicService
 
         val mbId = UUID.randomUUID()
         val artistId = UUID.randomUUID()

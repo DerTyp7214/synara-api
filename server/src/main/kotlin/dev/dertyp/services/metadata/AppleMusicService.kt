@@ -16,7 +16,7 @@ import java.util.UUID
 
 class AppleMusicService(
     environment: ApplicationEnvironment
-) : MetadataService("Apple Music", Companion.MetadataType.appleMusic, environment) {
+) : MetadataService("Apple Music", IMetadataService.MetadataType.appleMusic, environment) {
     override val tokenUrl = ""
     override val clientIdConfigPath = ""
     override val clientSecretConfigPath = ""
@@ -109,8 +109,8 @@ class AppleMusicService(
     override suspend fun albumExistsById(albumId: String, priority: HttpClientPriority): Boolean = throw NotImplementedError("Not implemented for Apple Music!")
     override suspend fun getAlbumsByIds(albumIds: List<String>, priority: HttpClientPriority): List<IMetadataService.Album> = throw NotImplementedError("Not implemented for Apple Music!")
     override suspend fun getArtistsByIds(artistIds: List<String>, priority: HttpClientPriority): List<IMetadataService.Artist> = throw NotImplementedError("Not implemented for Apple Music!")
-    override suspend fun getAlbumTracks(albumId: String, priority: HttpClientPriority): Flow<IMetadataService.Track> = throw NotImplementedError("Not implemented for Apple Music!")
-    override suspend fun getArtistTracks(artistId: String, priority: HttpClientPriority): Flow<IMetadataService.Track> = throw NotImplementedError("Not implemented for Apple Music!")
+    override fun getAlbumTracks(albumId: String, priority: HttpClientPriority): Flow<IMetadataService.Track> = throw NotImplementedError("Not implemented for Apple Music!")
+    override fun getArtistTracks(artistId: String, priority: HttpClientPriority): Flow<IMetadataService.Track> = throw NotImplementedError("Not implemented for Apple Music!")
 
     override fun getPlaylistsByIds(
         playlistIds: List<String>,

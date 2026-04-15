@@ -9,6 +9,7 @@ import dev.dertyp.services.ImageService
 import dev.dertyp.services.PlaylistService
 import dev.dertyp.services.SongService
 import dev.dertyp.services.StorageService
+import dev.dertyp.services.metadata.IMetadataService
 import dev.dertyp.services.metadata.MetadataService
 import dev.dertyp.services.schedule.MusicBrainzWorker
 import dev.dertyp.services.schedule.ScheduleService
@@ -269,7 +270,7 @@ class Indexer(
             val images = ConcurrentHashMap<String, InsertableImage>()
 
             val tidalService = MetadataService.getMetadataService(
-                MetadataService.Companion.MetadataType.tidal,
+                IMetadataService.MetadataType.tidal,
                 environment
             )
 

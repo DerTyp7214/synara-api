@@ -4,8 +4,18 @@ import dev.dertyp.ApiClient
 import dev.dertyp.core.safeGet
 import dev.dertyp.core.sha256
 import dev.dertyp.data.InsertableImage
-import dev.dertyp.db.*
+import dev.dertyp.db.AlbumGenreTable
+import dev.dertyp.db.AlbumMusicBrainzTable
+import dev.dertyp.db.AlbumTable
+import dev.dertyp.db.ArtistGenreTable
+import dev.dertyp.db.ArtistMusicBrainzTable
+import dev.dertyp.db.ArtistTable
+import dev.dertyp.db.ImageTable
+import dev.dertyp.db.SongGenreTable
+import dev.dertyp.db.SongMusicBrainzTable
+import dev.dertyp.db.SongTable
 import dev.dertyp.dbQuery
+import dev.dertyp.services.metadata.IMetadataService
 import dev.dertyp.services.metadata.MetadataService
 import dev.dertyp.services.metadata.MusicBrainzService
 import io.ktor.server.application.ApplicationEnvironment
@@ -13,8 +23,13 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
-import org.jetbrains.exposed.v1.core.*
+import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.dao.id.EntityID
+import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.isNotNull
+import org.jetbrains.exposed.v1.core.isNull
+import org.jetbrains.exposed.v1.core.less
+import org.jetbrains.exposed.v1.core.or
 import org.jetbrains.exposed.v1.jdbc.batchInsert
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.select
@@ -62,7 +77,7 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
     private suspend fun fetchArtistGenresWithMbId(
         onProgress: suspend (Double, String) -> Unit = { _, _ -> }
     ): Map<String, Int> {
-        val tdbService = MetadataService.getMetadataService(MetadataService.Companion.MetadataType.theAudioDB, environment)
+        val tdbService = MetadataService.getMetadataService(IMetadataService.MetadataType.theAudioDB, environment)
         var foundCount = 0
         var totalChecked = 0
         val thirtyDaysAgo = Clock.System.now() - 30.days
@@ -141,7 +156,7 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
     private suspend fun fetchAlbumGenresWithMbId(
         onProgress: suspend (Double, String) -> Unit = { _, _ -> }
     ): Map<String, Int> {
-        val tdbService = MetadataService.getMetadataService(MetadataService.Companion.MetadataType.theAudioDB, environment)
+        val tdbService = MetadataService.getMetadataService(IMetadataService.MetadataType.theAudioDB, environment)
         var foundCount = 0
         var totalChecked = 0
         val thirtyDaysAgo = Clock.System.now() - 30.days
@@ -212,7 +227,7 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
     private suspend fun fetchSongGenresWithMbId(
         onProgress: suspend (Double, String) -> Unit = { _, _ -> }
     ): Map<String, Int> {
-        val tdbService = MetadataService.getMetadataService(MetadataService.Companion.MetadataType.theAudioDB, environment)
+        val tdbService = MetadataService.getMetadataService(IMetadataService.MetadataType.theAudioDB, environment)
         var foundCount = 0
         var totalChecked = 0
         val thirtyDaysAgo = Clock.System.now() - 30.days
@@ -306,7 +321,7 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
     }
 
     suspend fun fetchMetadata(
-        metadataProvider: MetadataService.Companion.MetadataType,
+        metadataProvider: IMetadataService.MetadataType,
         onProgress: suspend (Double, String) -> Unit = { _, _ -> }
     ): Map<String, Int> {
         if (!MetadataService.isFetching.compareAndSet(expectedValue = false, newValue = true)) {
@@ -333,7 +348,7 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
     }
 
     suspend fun fetchArtistImages(
-        metadataProvider: MetadataService.Companion.MetadataType,
+        metadataProvider: IMetadataService.MetadataType,
         onProgress: suspend (Double, String) -> Unit = { _, _ -> }
     ): Map<String, Int> {
         if (!MetadataService.isFetching.compareAndSet(expectedValue = false, newValue = true)) {
@@ -372,7 +387,7 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
                             val progress = (totalChecked.toDouble() / totalToFetch) * 100.0
                             onProgress(progress, "Fetching image for: $name")
 
-                            val artist = if (metadataProvider == MetadataService.Companion.MetadataType.theAudioDB && mbid != null) {
+                            val artist = if (metadataProvider == IMetadataService.MetadataType.theAudioDB && mbid != null) {
                                 try {
                                     service.getArtistByMbId(mbid)
                                 } catch (e: Exception) {
@@ -462,7 +477,7 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
     }
 
     private suspend fun fetchArtistMetadataInternal(
-        metadataProvider: MetadataService.Companion.MetadataType,
+        metadataProvider: IMetadataService.MetadataType,
         onProgress: suspend (Double, String) -> Unit = { _, _ -> }
     ): Map<String, Int> {
         val service = MetadataService.getMetadataService(metadataProvider, environment)
@@ -496,7 +511,7 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
                         val progress = (totalChecked.toDouble() / totalToFetch) * 100.0
                         onProgress(progress, "Fetching metadata for: $name")
 
-                        val artist = if (metadataProvider == MetadataService.Companion.MetadataType.theAudioDB && mbid != null) {
+                        val artist = if (metadataProvider == IMetadataService.MetadataType.theAudioDB && mbid != null) {
                             try {
                                 service.getArtistByMbId(mbid)
                             } catch (e: Exception) {
@@ -591,7 +606,7 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
     }
 
     suspend fun fetchAlbumImages(
-        metadataProvider: MetadataService.Companion.MetadataType,
+        metadataProvider: IMetadataService.MetadataType,
         onProgress: suspend (Double, String) -> Unit = { _, _ -> }
     ): Map<String, Int> {
         if (!MetadataService.isFetching.compareAndSet(expectedValue = false, newValue = true)) {
@@ -629,7 +644,7 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
                             val progress = (totalChecked.toDouble() / totalToFetch) * 100.0
                             onProgress(progress, "Fetching image for: $name")
 
-                            val images = if (metadataProvider == MetadataService.Companion.MetadataType.theAudioDB && mbid != null) {
+                            val images = if (metadataProvider == IMetadataService.MetadataType.theAudioDB && mbid != null) {
                                 try {
                                     service.getImageUrlByAlbumMbId(mbid)
                                 } catch (e: Exception) {
@@ -710,7 +725,7 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
     }
 
     private suspend fun fetchAlbumMetadataInternal(
-        metadataProvider: MetadataService.Companion.MetadataType,
+        metadataProvider: IMetadataService.MetadataType,
         onProgress: suspend (Double, String) -> Unit = { _, _ -> }
     ): Map<String, Int> {
         val service = MetadataService.getMetadataService(metadataProvider, environment)
@@ -744,7 +759,7 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
                         val progress = (totalChecked.toDouble() / totalToFetch) * 100.0
                         onProgress(progress, "Fetching metadata for: $name")
 
-                        val albumMetadata = if (metadataProvider == MetadataService.Companion.MetadataType.theAudioDB && mbid != null) {
+                        val albumMetadata = if (metadataProvider == IMetadataService.MetadataType.theAudioDB && mbid != null) {
                             try {
                                 service.getAlbumByMbId(mbid)
                             } catch (e: Exception) {
@@ -828,7 +843,7 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
     }
 
     private suspend fun fetchSongMetadataInternal(
-        metadataProvider: MetadataService.Companion.MetadataType,
+        metadataProvider: IMetadataService.MetadataType,
         onProgress: suspend (Double, String) -> Unit = { _, _ -> }
     ): Map<String, Int> {
         val service = MetadataService.getMetadataService(metadataProvider, environment)

@@ -14,9 +14,54 @@ import dev.dertyp.serializers.DurationAdapter
 import dev.dertyp.serializers.LocalDateAdapter
 import dev.dertyp.serializers.OffsetDateTimeAdapter
 import dev.dertyp.server.BuildConfig
-import dev.dertyp.services.*
-import dev.dertyp.services.metadata.*
-import dev.dertyp.services.schedule.*
+import dev.dertyp.services.AlbumService
+import dev.dertyp.services.ArtistService
+import dev.dertyp.services.AuthService
+import dev.dertyp.services.BackupService
+import dev.dertyp.services.CustomAudioService
+import dev.dertyp.services.CustomMigrationService
+import dev.dertyp.services.DatabaseManager
+import dev.dertyp.services.DbManagementService
+import dev.dertyp.services.FavSyncService
+import dev.dertyp.services.GenreService
+import dev.dertyp.services.ImageService
+import dev.dertyp.services.JwtService
+import dev.dertyp.services.LibraryMergeService
+import dev.dertyp.services.LrcLibService
+import dev.dertyp.services.LyricsSearch
+import dev.dertyp.services.LyricsService
+import dev.dertyp.services.MetadataFetchingService
+import dev.dertyp.services.MirrorService
+import dev.dertyp.services.PlaybackService
+import dev.dertyp.services.PlaylistService
+import dev.dertyp.services.RefreshTokenService
+import dev.dertyp.services.ReleaseService
+import dev.dertyp.services.RemoteMirrorService
+import dev.dertyp.services.ReverseProxyService
+import dev.dertyp.services.ScheduledTaskLogService
+import dev.dertyp.services.ServerStatsService
+import dev.dertyp.services.SessionService
+import dev.dertyp.services.SongService
+import dev.dertyp.services.StorageService
+import dev.dertyp.services.UserPlaylistBackupService
+import dev.dertyp.services.UserPlaylistService
+import dev.dertyp.services.UserService
+import dev.dertyp.services.metadata.CachedMusicBrainzService
+import dev.dertyp.services.metadata.IMetadataService
+import dev.dertyp.services.metadata.MetadataDispatcherService
+import dev.dertyp.services.metadata.MusicBrainzCacheService
+import dev.dertyp.services.metadata.MusicBrainzService
+import dev.dertyp.services.schedule.AutoTranscodeWorker
+import dev.dertyp.services.schedule.CronPresets
+import dev.dertyp.services.schedule.GenreMetadataWorker
+import dev.dertyp.services.schedule.LrcLibWorker
+import dev.dertyp.services.schedule.LyricsSyncWorker
+import dev.dertyp.services.schedule.MusicBrainzCacheWorker
+import dev.dertyp.services.schedule.MusicBrainzWorker
+import dev.dertyp.services.schedule.RecentReleaseWorker
+import dev.dertyp.services.schedule.ScheduleService
+import dev.dertyp.services.schedule.ScheduledTask
+import dev.dertyp.services.schedule.TaskCompletionTrigger
 import dev.dertyp.services.tdn.DownloadService
 import dev.dertyp.services.tdn.TdnService
 import dev.dertyp.services.tdn.TidalDownloaderProxy
@@ -115,12 +160,12 @@ fun Application.module() {
             singleOf(::BackupService)
             singleOf(::UserPlaylistBackupService)
             singleOf(::MetadataFetchingService)
+            singleOf(::MetadataDispatcherService)
             singleOf(::MirrorService)
             singleOf(::RemoteMirrorService)
             singleOf(::MusicBrainzService)
             singleOf(::MusicBrainzCacheService)
             singleOf(::CachedMusicBrainzService)
-            singleOf(::TheAudioDBService)
             singleOf(::MusicBrainzWorker)
             singleOf(::MusicBrainzCacheWorker)
             singleOf(::GenreMetadataWorker)
@@ -292,7 +337,7 @@ fun Application.module() {
             trigger = TaskCompletionTrigger(genreMetadataTask.id),
             task = {
                 logTask("Fetch Artist Images (Tidal)") {
-                    metadataFetchingService.fetchArtistImages(MetadataService.Companion.MetadataType.tidal) { p, l ->
+                    metadataFetchingService.fetchArtistImages(IMetadataService.MetadataType.tidal) { p, l ->
                         updateProgress(p, l)
                     }
                 }
@@ -306,7 +351,7 @@ fun Application.module() {
             trigger = TaskCompletionTrigger(fetchArtistImagesTidal.id),
             task = {
                 logTask("Fetch Metadata (TheAudioDB)") {
-                    metadataFetchingService.fetchMetadata(MetadataService.Companion.MetadataType.theAudioDB) { p, l ->
+                    metadataFetchingService.fetchMetadata(IMetadataService.MetadataType.theAudioDB) { p, l ->
                         updateProgress(p, l)
                     }
                 }
