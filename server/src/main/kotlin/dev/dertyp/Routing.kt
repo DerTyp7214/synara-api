@@ -1,8 +1,14 @@
 package dev.dertyp
 
-import dev.dertyp.core.ApplicationScope
-import dev.dertyp.routing.*
+import dev.dertyp.core.withSynaraPack
+import dev.dertyp.routing.mirrorRouting
+import dev.dertyp.routing.registerAuthenticatedRestServices
+import dev.dertyp.routing.registerAuthenticatedServices
+import dev.dertyp.routing.registerPublicRestServices
+import dev.dertyp.routing.registerPublicServices
+import dev.dertyp.serializers.AppCbor
 import dev.dertyp.serializers.AppJson
+import dev.dertyp.serializers.synaraCbor
 import dev.dertyp.services.JwtService
 import dev.hayden.KHealth
 import io.github.smiley4.ktoropenapi.OpenApi
@@ -40,7 +46,7 @@ import kotlin.time.ExperimentalTime
 @OptIn(ExperimentalSerializationApi::class, ExperimentalTime::class, ExperimentalAtomicApi::class)
 fun Application.configureRouting() {
     install(ContentNegotiation) {
-        json(ApplicationScope.json)
+        json(AppJson)
         protobuf()
     }
     install(SSE)
@@ -52,7 +58,8 @@ fun Application.configureRouting() {
     }
     install(Krpc) {
         serialization {
-            cbor(ApplicationScope.cbor)
+            cbor(AppCbor)
+            synaraCbor(AppCbor)
         }
     }
     install(KHealth) {
@@ -111,10 +118,12 @@ fun Application.configureRouting() {
         val jwtService by inject<JwtService>()
 
         rpc("/rpc") {
+            withSynaraPack()
             registerPublicServices(koin)
         }
 
         rpc("/rpc/auth") {
+            withSynaraPack()
             registerPublicServices(koin)
         }
 
@@ -122,6 +131,7 @@ fun Application.configureRouting() {
 
         jwtService.authenticated(this) {
             rpc("/rpc/services") {
+                withSynaraPack()
                 registerAuthenticatedServices(koin)
             }
 

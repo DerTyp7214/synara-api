@@ -26,8 +26,8 @@ class LyricsSearchTest {
         coEvery { 
             executeCommand(any(), any(), any(), any()) 
         } answers {
-            val command = it.invocation.args[0] as List<String>
-            val outputPath = command[command.indexOf("-o") + 1]
+            val command = it.invocation.args[0] as List<*>
+            val outputPath = command[command.indexOf("-o") + 1] as String
             File(outputPath).writeText("Line 1\nLine 2")
             ProcessExecutionResult(0, "output", "")
         }
