@@ -5,12 +5,12 @@ import org.jaudiotagger.tag.FieldKey
 
 enum class ArtistDelimiter(val delimiter: String) {
     Tdn(";"),
-    Tiddle(",")
+    Tiddl(";")
 }
 
 fun artistSplitter(input: String): List<String> = when {
     input.contains(ArtistDelimiter.Tdn.delimiter) -> input.split(ArtistDelimiter.Tdn.delimiter)
-    else -> input.split(ArtistDelimiter.Tiddle.delimiter)
+    else -> input.split(ArtistDelimiter.Tiddl.delimiter)
 }.map { it.replace("\\p{Cf}".toRegex(), "").trim() }.filter { it.length > 1 }
 
 val AudioFile.title: String?

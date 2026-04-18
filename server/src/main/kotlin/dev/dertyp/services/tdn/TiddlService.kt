@@ -8,9 +8,9 @@ import kotlin.concurrent.atomics.ExperimentalAtomicApi
 
 @OptIn(ExperimentalAtomicApi::class)
 class TiddlService(indexer: Indexer, storageService: StorageService) : BaseDownloader(indexer, storageService) {
-    override val loginCommand: MutableList<String> = mutableListOf("tiddl", "auth", "login")
+    override val loginCommand: MutableList<String> = mutableListOf("tiddl", "auth", "login", "--no-browser")
     override val downloadCommand: MutableList<String> = mutableListOf("tiddl", "download", "url")
-    override val favDownloadCommand: MutableList<String> = mutableListOf("tdn", "download", "fav", "-t")
+    override val favDownloadCommand: MutableList<String> = mutableListOf("tdn", "download", "fav", "--types")
 
     override fun authorizedCheck(result: ProcessExecutionResult) = result.fullOutput.contains("Already logged in.")
 
