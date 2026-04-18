@@ -2,7 +2,6 @@ package dev.dertyp.core
 
 import dev.dertyp.serializers.AppCbor
 import dev.dertyp.serializers.AppJson
-import dev.dertyp.serializers.synaraCbor
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -20,7 +19,6 @@ object ApplicationScope {
     val rpcConfig = rpcServerConfig {
         serialization {
             cbor(AppCbor)
-            synaraCbor(AppCbor)
         }
     }
 }

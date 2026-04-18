@@ -70,6 +70,7 @@ import io.ktor.server.application.Application
 import io.ktor.server.application.ApplicationEnvironment
 import io.ktor.server.application.install
 import io.ktor.server.application.log
+import io.ktor.server.netty.EngineMain
 import io.ktor.server.plugins.calllogging.CallLogging
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -88,7 +89,7 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.days
 
 fun main(args: Array<String>) {
-    io.ktor.server.netty.EngineMain.main(args)
+    EngineMain.main(args)
 }
 
 fun Application.module() {

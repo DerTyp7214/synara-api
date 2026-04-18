@@ -2,9 +2,7 @@ package dev.dertyp.utils
 
 import dev.dertyp.core.isProxied
 import dev.dertyp.core.principalUsername
-import dev.dertyp.serializers.SynaraPackHeader
 import io.ktor.server.application.ApplicationCall
-import io.ktor.server.request.header
 import io.ktor.util.logging.KtorSimpleLogger
 import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Proxy
@@ -26,7 +24,7 @@ inline fun <reified T : Any> T.withLogging(call: ApplicationCall? = null): T {
     val prefix = buildString {
         if (call?.isProxied == true) append("[Proxy] ")
         call?.principalUsername?.let { append("[$it] ") }
-        if (call?.request?.header(SynaraPackHeader) != "true") append("[No-Pack] ")
+        //if (call?.request?.header(SynaraPackHeader) != "true") append("[No-Pack] ")
     }
 
     return Proxy.newProxyInstance(interfaceClass.classLoader, arrayOf(interfaceClass)) { proxy, method, args ->
