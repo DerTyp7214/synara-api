@@ -81,7 +81,7 @@ Most variables have sensible defaults and are **optional**. Only variables witho
 | `AUDIO_CUSTOM_PATH` | Path for custom uploaded audio. | No | `music/custom` | `/data/Synara/custom` |
 | `AUDIO_PLAYLISTS_PATH` | Base path for playlists. | No | `music/playlists` | `/data/Synara/Playlists` |
 | `AUDIO_TRACKS_PATH` | Base path for audio tracks. | No | `music/tracks` | `/data/Synara/Tracks` |
-| `AUDIO_TRACKS_SECONDARY_PATH` | Optional secondary audio path. | No | - | `/data/Synara` |
+| `AUDIO_TRACKS_SECONDARY_PATH` | Optional secondary audio path. | No | - | `/data/Synara/other` |
 | `AUDIO_TRANSCODE_PATH` | Path for transcoded files. | No | `music/transcode` | `/data/Synara/Transcode` |
 | `DATA_IMAGES_PATH` | Path for cached images/covers. | No | `data/images` | `/data/Synara/Images` |
 

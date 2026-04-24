@@ -17,6 +17,7 @@ RUN apt-get update && apt-get install -y software-properties-common ca-certifica
     libva-drm2 \
     libva2 \
     libdrm2 \
+    nano \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 RUN ln -sf /usr/bin/python3.13 /usr/bin/python3 && \
@@ -62,7 +63,7 @@ ENV AUDIO_CUSTOM_PATH="/data/Synara/custom"
 ENV DATA_IMAGES_PATH="/data/Synara/Images"
 ENV BACKUP_DIR="/backups"
 
-ENV AUDIO_TRACKS_SECONDARY_PATH="/data/Synara"
+ENV AUDIO_TRACKS_SECONDARY_PATH="/data/Synara/other"
 
 ENV HOME=/home/appuser
 ENTRYPOINT ["java","--enable-native-access=ALL-UNNAMED","-jar","/app/synara-api.jar"]
