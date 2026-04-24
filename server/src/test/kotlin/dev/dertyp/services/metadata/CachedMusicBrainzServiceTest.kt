@@ -1,10 +1,17 @@
 package dev.dertyp.services.metadata
 
 import dev.dertyp.data.MusicBrainzArtist
+import dev.dertyp.data.MusicBrainzMedia
 import dev.dertyp.data.MusicBrainzRecording
 import dev.dertyp.data.MusicBrainzRelease
 import dev.dertyp.data.MusicBrainzReleaseGroup
-import io.mockk.*
+import dev.dertyp.data.MusicBrainzTrack
+import io.mockk.MockKMatcherScope
+import io.mockk.clearMocks
+import io.mockk.coEvery
+import io.mockk.coVerify
+import io.mockk.mockk
+import io.mockk.unmockkAll
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -98,14 +105,15 @@ class CachedMusicBrainzServiceTest {
     @Test
     fun `getRelease fetch logic`() = runBlocking {
         val id = UUID.randomUUID()
+        val mediaWithTracks = listOf(MusicBrainzMedia(tracks = listOf(MusicBrainzTrack(id = UUID.randomUUID()))))
         testMetadataFetchLogic(
             rpcCall = { rpcService.getRelease(it) },
             cacheGet = { musicBrainzCacheService.getRelease(any()) },
             networkFetch = { musicBrainzService.fetchReleaseById(any(), any()) },
             cacheUpdate = { musicBrainzCacheService.updateReleaseCache(any()) },
-            cachedValue = MusicBrainzRelease(id = id, fetchedAt = 123L),
-            fetchedValue = MusicBrainzRelease(id = id, fetchedAt = 456L),
-            fetchedAtZeroValue = MusicBrainzRelease(id = id, fetchedAt = 0L)
+            cachedValue = MusicBrainzRelease(id = id, fetchedAt = 123L, media = mediaWithTracks),
+            fetchedValue = MusicBrainzRelease(id = id, fetchedAt = 456L, media = mediaWithTracks),
+            fetchedAtZeroValue = MusicBrainzRelease(id = id, fetchedAt = 0L, media = mediaWithTracks)
         )
     }
 
