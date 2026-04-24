@@ -432,8 +432,7 @@ fun Route.registerPublicRestServices(koin: Koin) {
     registerRestService(IServerStatsService::class) { koin.get<ServerStatsService>() }
     registerRestService(IAuthService::class) { RpcAuthService(call, koin.get(), koin.get(), koin.get()) }
     registerRestService(IImageService::class, authenticated = true) {
-        val user = call.getUser() ?: throw IllegalArgumentException("No user found")
-        ImageRpcService(user, koin.get<ImageService>())
+        ImageRpcService(call.getUser(), koin.get<ImageService>())
     }
 }
 

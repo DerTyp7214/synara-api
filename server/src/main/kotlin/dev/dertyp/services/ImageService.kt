@@ -45,7 +45,7 @@ import kotlin.io.path.pathString
 import kotlin.io.path.readBytes
 import kotlin.io.path.writeBytes
 
-class ImageRpcService(private val user: User, private val imageService: ImageService) : IImageService {
+class ImageRpcService(private val user: User?, private val imageService: ImageService) : IImageService {
     override suspend fun byId(id: UUID): Image? = imageService.byId(id)
     override suspend fun byHash(hash: String): Image? = imageService.byHash(hash)
     override suspend fun getCoverHashes(hashes: List<String>): Map<String, UUID> = imageService.getCoverHashes(hashes)
@@ -53,6 +53,7 @@ class ImageRpcService(private val user: User, private val imageService: ImageSer
     override suspend fun createImage(bytes: ByteArray, origin: String): UUID = imageService.createImage(bytes, origin)
     override suspend fun createBatch(images: List<InsertableImage>): Map<String, UUID> = imageService.createBatch(images)
     override suspend fun moveImages(oldPath: String, newPath: String): Int {
+        if (user == null) throw IllegalStateException("No user found")
         if (!user.isAdmin) throw IllegalStateException("Only admins can move images")
         return imageService.moveImages(oldPath, newPath)
     }
