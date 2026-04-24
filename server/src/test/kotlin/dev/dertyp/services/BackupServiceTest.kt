@@ -1,23 +1,43 @@
 package dev.dertyp.services
 
+import com.github.luben.zstd.ZstdInputStream
+import dev.dertyp.plugins.IDownloader
+import dev.dertyp.plugins.PluginManager
+import dev.dertyp.services.download.DownloadBackend
 import io.ktor.server.application.ApplicationEnvironment
 import io.ktor.server.config.MapApplicationConfig
-import io.mockk.*
+import io.mockk.Runs
+import io.mockk.coEvery
+import io.mockk.coVerify
+import io.mockk.every
+import io.mockk.just
+import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
-import org.junit.jupiter.api.Assertions.*
+import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.cbor.Cbor
+import kotlinx.serialization.decodeFromByteArray
+import org.junit.jupiter.api.Assertions.assertArrayEquals
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import java.io.ByteArrayInputStream
 import java.io.File
 import java.nio.file.Files
 import java.util.zip.ZipFile
 
 class BackupServiceTest {
     private val dbManagementService = mockk<DbManagementService>()
+    private val storageService = mockk<StorageService>(relaxed = true)
+    private val pluginManager = mockk<PluginManager>(relaxed = true)
     private val environment = mockk<ApplicationEnvironment>()
     private lateinit var tempDir: File
     private lateinit var backupDir: File
     private lateinit var imagesDir: File
     private lateinit var tracksDir: File
+    private lateinit var downloaderTracksDir: File
     private lateinit var blobsDir: File
 
     @BeforeEach
@@ -26,11 +46,13 @@ class BackupServiceTest {
         backupDir = tempDir.resolve("backups")
         imagesDir = tempDir.resolve("images")
         tracksDir = tempDir.resolve("tracks")
+        downloaderTracksDir = tempDir.resolve("tiddl").resolve("tracks")
         blobsDir = backupDir.resolve("blobs")
         
         backupDir.mkdirs()
         imagesDir.mkdirs()
         tracksDir.mkdirs()
+        downloaderTracksDir.mkdirs()
         blobsDir.mkdirs()
 
         val config = MapApplicationConfig(
@@ -39,11 +61,23 @@ class BackupServiceTest {
             "audio.tracks" to tracksDir.absolutePath
         )
         every { environment.config } returns config
+
+        every { storageService.tracksPath } returns tracksDir.absolutePath
+        every { storageService.imagesPath } returns imagesDir.absolutePath
+
+        val mockDownloader = mockk<IDownloader>()
+        every { mockDownloader.id } returns "tiddl"
+        every { pluginManager.getAllDownloaders() } returns listOf(mockDownloader)
+
+        val downloaderStorage = mockk<StorageService>(relaxed = true)
+        every { downloaderStorage.tracksPath } returns downloaderTracksDir.absolutePath
+        every { storageService.forDownloader(DownloadBackend("tiddl")) } returns downloaderStorage
     }
 
+    @OptIn(ExperimentalSerializationApi::class)
     @Test
     fun `createBackup should create a zip file with expected entries and blobs`() = runBlocking {
-        val service = BackupService(dbManagementService, environment)
+        val service = BackupService(dbManagementService, storageService, pluginManager, environment)
         val dummyDbData = byteArrayOf(1, 2, 3)
         coEvery { dbManagementService.exportData() } returns dummyDbData
 
@@ -54,6 +88,9 @@ class BackupServiceTest {
         val imgFile = imgFileDir.resolve("34567890.jpg")
         imgFile.writeBytes(byteArrayOf(10, 11, 12))
 
+        val downloaderFile = downloaderTracksDir.resolve("song.mp3")
+        downloaderFile.writeText("test content")
+
         val result = service.createBackup()
         
         val backupFile = backupDir.resolve(result.fileName)
@@ -62,8 +99,20 @@ class BackupServiceTest {
 
         ZipFile(backupFile).use { zip ->
             assertNotNull(zip.getEntry("database.cbor.zst"))
-            assertNotNull(zip.getEntry("files.tree.cbor.zst"))
+            val treeEntry = zip.getEntry("files.tree.cbor.zst")
+            assertNotNull(treeEntry)
             assertNotNull(zip.getEntry("images.index.cbor.zst"))
+
+            zip.getInputStream(treeEntry).use { input ->
+                val compressedBytes = input.readBytes()
+                val decompressedBytes = ZstdInputStream(ByteArrayInputStream(compressedBytes)).use { it.readBytes() }
+                val tree = Cbor.decodeFromByteArray<Map<String, FileNode?>>(decompressedBytes)
+
+                assertTrue(tree.containsKey("tiddl/tracks"), "Tree should contain downloader tracks")
+                val downloaderNode = tree["tiddl/tracks"]
+                assertNotNull(downloaderNode)
+                assertTrue(downloaderNode!!.children?.any { it.name == "song.mp3" } == true)
+            }
         }
 
         val blobPath = blobsDir.resolve("ab").resolve("cd").resolve("ef").resolve("12").resolve(imgHash)
@@ -72,7 +121,7 @@ class BackupServiceTest {
 
     @Test
     fun `loadBackup should restore database and images`() = runBlocking {
-        val service = BackupService(dbManagementService, environment)
+        val service = BackupService(dbManagementService, storageService, pluginManager, environment)
         val dummyDbData = byteArrayOf(1, 2, 3)
         coEvery { dbManagementService.exportData() } returns dummyDbData
         coEvery { dbManagementService.importData(any()) } just Runs
@@ -99,7 +148,7 @@ class BackupServiceTest {
 
     @Test
     fun `rotateBackups should delete old backups and unreferenced blobs`() = runBlocking {
-        val service = BackupService(dbManagementService, environment)
+        val service = BackupService(dbManagementService, storageService, pluginManager, environment)
         coEvery { dbManagementService.exportData() } returns byteArrayOf(0)
 
         repeat(11) { i ->

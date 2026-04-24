@@ -3,6 +3,8 @@ package dev.dertyp.services
 import com.github.luben.zstd.ZstdInputStream
 import com.github.luben.zstd.ZstdOutputStream
 import dev.dertyp.data.User
+import dev.dertyp.plugins.PluginManager
+import dev.dertyp.services.download.DownloadBackend
 import io.ktor.server.application.ApplicationEnvironment
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -81,7 +83,9 @@ class RpcBackupService(
 @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
 class BackupService(
     private val dbManagementService: DbManagementService,
-    environment: ApplicationEnvironment
+    private val storageService: StorageService,
+    private val pluginManager: PluginManager,
+    private val environment: ApplicationEnvironment
 ) : Service(), IBackupService {
     private val backupDir =
         (environment.config.propertyOrNull("backup.dir")?.getString()?.ifBlank { null }?.let { Paths.get(it) }
@@ -92,13 +96,35 @@ class BackupService(
 
     private val imagePath =
         environment.config.propertyOrNull("data.images")?.getString()?.let { Paths.get(it) }?.toFile()
-    private val audioPaths = listOfNotNull(
-        environment.config.propertyOrNull("audio.tracks")?.getString(),
-        environment.config.propertyOrNull("audio.albums")?.getString(),
-        environment.config.propertyOrNull("audio.playlists")?.getString(),
-        environment.config.propertyOrNull("audio.transcode")?.getString(),
-        environment.config.propertyOrNull("audio.custom")?.getString()
-    ).map { Paths.get(it) }
+
+    private fun getAllAudioPaths(): Map<String, Path> {
+        val paths = mutableMapOf<String, Path>()
+
+        fun addPath(name: String, path: String?) {
+            if (path != null) {
+                paths[name] = Paths.get(path)
+            }
+        }
+
+        addPath("tracks", storageService.tracksPath)
+        addPath("albums", storageService.albumsPath)
+        addPath("playlists", storageService.playlistsPath)
+        addPath("custom", storageService.customAudioPath)
+        addPath("transcode", environment.config.propertyOrNull("audio.transcode")?.getString())
+
+        storageService.secondaryTracksPaths.forEachIndexed { index, path ->
+            addPath("secondary-tracks-$index", path)
+        }
+
+        pluginManager.getAllDownloaders().forEach { downloader ->
+            val downloaderStorage = storageService.forDownloader(DownloadBackend(downloader.id))
+            addPath("${downloader.id}/tracks", downloaderStorage.tracksPath)
+            addPath("${downloader.id}/albums", downloaderStorage.albumsPath)
+            addPath("${downloader.id}/playlists", downloaderStorage.playlistsPath)
+        }
+
+        return paths
+    }
 
     init {
         backupDir.mkdirs()
@@ -115,10 +141,14 @@ class BackupService(
         logger.info("Database exported")
         onProgress(20.0, "Database exported")
 
-        val fileTrees = audioPaths.associate { path ->
-            logger.debug("Generating file tree for {}", path)
-            onProgress(20.0 + (audioPaths.indexOf(path) + 1).toDouble() / audioPaths.size * 20.0, "Generating file tree for ${path.name}")
-            path.name to generateFileTree(path)
+        val allAudioPaths = getAllAudioPaths()
+        val totalPaths = allAudioPaths.size
+        var currentPathIndex = 0
+        val fileTrees = allAudioPaths.mapValues { (name, path) ->
+            currentPathIndex++
+            logger.debug("Generating file tree for {} ({})", name, path)
+            onProgress(20.0 + (currentPathIndex.toDouble() / totalPaths) * 20.0, "Generating file tree for $name")
+            generateFileTree(path)
         }
         val fileTreeBytes = compressZstd(Cbor.encodeToByteArray(fileTrees))
         logger.debug("File tree compressed")
