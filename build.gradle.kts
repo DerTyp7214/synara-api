@@ -65,7 +65,8 @@ tasks.register("generateEnvDocs") {
             "PROXY_SSL" to mapOf("desc" to "Whether to use SSL (true/false).", "cat" to "Proxy Configuration"),
             "PROXY_NAME" to mapOf("desc" to "Display name for this proxy instance.", "cat" to "Proxy Configuration"),
             "PROXY_ID" to mapOf("desc" to "Unique identifier for this proxy.", "cat" to "Proxy Configuration"),
-            "PROXY_KEY" to mapOf("desc" to "Authentication key for the proxy.", "cat" to "Proxy Configuration")
+            "PROXY_KEY" to mapOf("desc" to "Authentication key for the proxy.", "cat" to "Proxy Configuration"),
+            "YOUTUBE_API_KEY" to mapOf("desc" to "Youtube API key for YouTube Data API v3 (Downloader).", "cat" to "Other")
         )
 
         val varsFound = mutableMapOf<String, String?>()

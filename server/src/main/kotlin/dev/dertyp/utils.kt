@@ -3,12 +3,22 @@ package dev.dertyp
 import dev.dertyp.core.ClientCloseException
 import dev.dertyp.core.kill
 import dev.dertyp.core.lineFlow
-import dev.dertyp.services.tdn.ProcessExecutionResult
-import io.ktor.util.logging.*
+import dev.dertyp.services.download.ProcessExecutionResult
+import io.ktor.util.logging.KtorSimpleLogger
+import io.ktor.util.logging.Logger
 import io.ktor.utils.io.CancellationException
-import kotlinx.coroutines.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.DisposableHandle
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel.Factory.UNLIMITED
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.buffer
+import kotlinx.coroutines.job
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.yield
 import org.jetbrains.exposed.v1.jdbc.transactions.suspendTransaction
 import java.io.File
 import java.io.InputStreamReader
@@ -19,7 +29,16 @@ import java.time.format.DateTimeFormatter
 import kotlin.time.Duration.Companion.milliseconds
 
 fun getDateFromISO(iso: String?): LocalDate? {
-    return if (iso == null) null else LocalDate.parse(iso, DateTimeFormatter.ISO_LOCAL_DATE)
+    if (iso.isNullOrBlank()) return null
+    return try {
+        if (iso.length == 4 && iso.all { it.isDigit() }) {
+            LocalDate.parse("$iso-01-01", DateTimeFormatter.ISO_LOCAL_DATE)
+        } else {
+            LocalDate.parse(iso, DateTimeFormatter.ISO_LOCAL_DATE)
+        }
+    } catch (_: Exception) {
+        null
+    }
 }
 
 fun getDateTimeFromISO(iso: String?): LocalDateTime? {
@@ -49,6 +68,7 @@ suspend fun executeCommand(
     command: List<String>,
     aliveCheck: suspend () -> Boolean,
     logger: Logger = KtorSimpleLogger("executeCommand"),
+    directory: File? = null,
     onLineReceived: suspend (String) -> Unit = {}
 ): ProcessExecutionResult {
     val timeString = LocalTime.now().format(DateTimeFormatter.ISO_LOCAL_TIME).split(".").first()
@@ -78,6 +98,7 @@ suspend fun executeCommand(
 
         try {
             process = ProcessBuilder(command)
+                .directory(directory)
                 .redirectErrorStream(true)
                 .apply { environment()["COLUMNS"] = "500" }
                 .start()
@@ -95,7 +116,7 @@ suspend fun executeCommand(
 
                 try {
                     reader.lineFlow().buffer(UNLIMITED).collect { line ->
-                        logger.info(line)
+                        logger.debug(line)
                         fullOutput.appendLine(line)
                         if (line.isNotBlank()) onLineReceived(line)
                     }

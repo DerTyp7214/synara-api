@@ -1,15 +1,43 @@
 package dev.dertyp.services.metadata
 
 import dev.dertyp.core.fetchBatchedResultsByIdKeyset
-import dev.dertyp.data.*
-import dev.dertyp.db.*
+import dev.dertyp.data.ArtistType
+import dev.dertyp.data.MusicBrainzAlias
+import dev.dertyp.data.MusicBrainzArea
+import dev.dertyp.data.MusicBrainzArtist
+import dev.dertyp.data.MusicBrainzArtistCredit
+import dev.dertyp.data.MusicBrainzLifeSpan
+import dev.dertyp.data.MusicBrainzMedia
+import dev.dertyp.data.MusicBrainzRecording
+import dev.dertyp.data.MusicBrainzRelease
+import dev.dertyp.data.MusicBrainzReleaseGroup
+import dev.dertyp.data.MusicBrainzTag
+import dev.dertyp.data.MusicBrainzTrack
+import dev.dertyp.db.MBAreaTable
+import dev.dertyp.db.MBArtistAliasTable
+import dev.dertyp.db.MBArtistTable
+import dev.dertyp.db.MBArtistTagTable
+import dev.dertyp.db.MBMediaTable
+import dev.dertyp.db.MBRecordingArtistCreditTable
+import dev.dertyp.db.MBRecordingReleaseTable
+import dev.dertyp.db.MBRecordingTable
+import dev.dertyp.db.MBReleaseArtistCreditTable
+import dev.dertyp.db.MBReleaseGroupTable
+import dev.dertyp.db.MBReleaseTable
+import dev.dertyp.db.MBTrackTable
 import dev.dertyp.dbQuery
 import dev.dertyp.services.Service
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.less
-import org.jetbrains.exposed.v1.jdbc.*
+import org.jetbrains.exposed.v1.jdbc.deleteWhere
+import org.jetbrains.exposed.v1.jdbc.insert
+import org.jetbrains.exposed.v1.jdbc.insertAndGetId
+import org.jetbrains.exposed.v1.jdbc.select
+import org.jetbrains.exposed.v1.jdbc.selectAll
+import org.jetbrains.exposed.v1.jdbc.update
+import org.jetbrains.exposed.v1.jdbc.upsert
 import java.util.UUID
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
@@ -166,6 +194,38 @@ class MusicBrainzCacheService : Service() {
                     )
                 }
 
+            val media = MBMediaTable.selectAll().where { MBMediaTable.releaseId eq id }.orderBy(MBMediaTable.position).map { mediaRow ->
+                val mediaId = mediaRow[MBMediaTable.id].value
+                val tracks = MBTrackTable
+                    .leftJoin(MBRecordingTable)
+                    .selectAll()
+                    .where { MBTrackTable.mediaId eq mediaId }
+                    .orderBy(MBTrackTable.position)
+                    .map { trackRow ->
+                        val recordingId = trackRow[MBTrackTable.recordingId]?.value
+                        val recording = if (recordingId != null) {
+                            MusicBrainzRecording(
+                                id = recordingId,
+                                title = trackRow[MBRecordingTable.title]
+                            )
+                        } else null
+
+                        MusicBrainzTrack(
+                            id = trackRow[MBTrackTable.id].value,
+                            position = trackRow[MBTrackTable.position],
+                            number = trackRow[MBTrackTable.number],
+                            title = trackRow[MBTrackTable.title],
+                            recording = recording
+                        )
+                    }
+
+                MusicBrainzMedia(
+                    format = mediaRow[MBMediaTable.format],
+                    trackCount = mediaRow[MBMediaTable.trackCount],
+                    tracks = tracks
+                )
+            }
+
             MusicBrainzRelease(
                 id = id,
                 title = row[MBReleaseTable.title],
@@ -177,6 +237,7 @@ class MusicBrainzCacheService : Service() {
                 disambiguation = row[MBReleaseTable.disambiguation],
                 releaseGroup = releaseGroup,
                 artistCredit = artistCredits,
+                media = media,
                 fetchedAt = row[MBReleaseTable.lastUpdate]
             )
         }
@@ -290,7 +351,7 @@ class MusicBrainzCacheService : Service() {
         }
     }
 
-    suspend fun updateReleaseCache(release: MusicBrainzRelease) = dbQuery {
+    suspend fun updateReleaseCache(release: MusicBrainzRelease): Unit = dbQuery {
         MBReleaseTable.upsert(MBReleaseTable.id) {
             it[id] = release.id
             it[title] = release.title ?: ""
@@ -321,6 +382,31 @@ class MusicBrainzCacheService : Service() {
                     it[name] = credit.name ?: ""
                     it[joinPhrase] = credit.joinphrase
                     it[position] = index
+                }
+            }
+        }
+
+        MBMediaTable.deleteWhere { MBMediaTable.releaseId eq release.id }
+        release.media?.forEachIndexed { index, media ->
+            val mediaId = MBMediaTable.insertAndGetId {
+                it[releaseId] = release.id
+                it[position] = index
+                it[format] = media.format
+                it[trackCount] = media.trackCount ?: 0
+            }
+
+            media.tracks?.forEach { track ->
+                track.recording?.let { recording ->
+                    updateRecordingCache(recording)
+                }
+
+                MBTrackTable.upsert(MBTrackTable.id) {
+                    it[id] = track.id
+                    it[MBTrackTable.mediaId] = mediaId
+                    it[position] = track.position
+                    it[number] = track.number
+                    it[title] = track.title
+                    it[recordingId] = track.recording?.id
                 }
             }
         }

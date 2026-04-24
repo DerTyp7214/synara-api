@@ -38,6 +38,7 @@ import dev.dertyp.services.ISongService
 import dev.dertyp.services.IUserPlaylistBackupService
 import dev.dertyp.services.IUserPlaylistService
 import dev.dertyp.services.IUserService
+import dev.dertyp.services.ImageRpcService
 import dev.dertyp.services.ImageService
 import dev.dertyp.services.JwtService
 import dev.dertyp.services.LyricsSearch
@@ -65,14 +66,14 @@ import dev.dertyp.services.SongService
 import dev.dertyp.services.UserPlaylistBackupService
 import dev.dertyp.services.UserPlaylistService
 import dev.dertyp.services.UserService
+import dev.dertyp.services.download.DownloadRpcService
+import dev.dertyp.services.download.DownloadService
+import dev.dertyp.services.download.DownloaderProxy
+import dev.dertyp.services.download.IDownloadService
 import dev.dertyp.services.metadata.CachedMusicBrainzService
 import dev.dertyp.services.metadata.IMetadataService
 import dev.dertyp.services.metadata.IMusicBrainzService
 import dev.dertyp.services.metadata.MetadataDispatcherService
-import dev.dertyp.services.tdn.DownloadRpcService
-import dev.dertyp.services.tdn.DownloadService
-import dev.dertyp.services.tdn.IDownloadService
-import dev.dertyp.services.tdn.TidalDownloaderProxy
 import dev.dertyp.utils.withLogging
 import io.ktor.server.application.ApplicationCall
 import kotlinx.rpc.RpcServer
@@ -145,7 +146,7 @@ private fun registerAuthenticated(koin: Koin, call: ApplicationCall, user: User,
     val playlistService = koin.get<PlaylistService>()
     val downloadService = koin.get<DownloadService>()
     val userPlaylistService = koin.get<UserPlaylistService>()
-    val tidalDownloaderProxy = koin.get<TidalDownloaderProxy>()
+    val downloaderProxy = koin.get<DownloaderProxy>()
     val sessionService = koin.get<SessionService>()
     val playbackService = koin.get<PlaybackService>()
     val customAudioService = koin.get<CustomAudioService>()
@@ -159,16 +160,16 @@ private fun registerAuthenticated(koin: Koin, call: ApplicationCall, user: User,
     val cachedMusicBrainzService = koin.get<CachedMusicBrainzService>()
     val metadataDispatcherService = koin.get<MetadataDispatcherService>()
 
-    registrar.register(IIndexer::class) { RpcIndexer(indexer).withLogging<IIndexer>(call) }
+    registrar.register(IIndexer::class) { RpcIndexer(indexer, user).withLogging<IIndexer>(call) }
     registrar.register(IUserService::class) { RpcUserService(user, userService, imageService).withLogging<IUserService>(call) }
     registrar.register(ISongService::class) { SongRpcService(songService = songService, user = user).withLogging<ISongService>(call) }
     registrar.register(IAlbumService::class) { AlbumRpcService(user, albumService).withLogging<IAlbumService>(call) }
-    registrar.register(IImageService::class) { imageService.withLogging<IImageService>(call) }
+    registrar.register(IImageService::class) { ImageRpcService(user, imageService).withLogging<IImageService>(call) }
     registrar.register(ILyricsSearch::class) { lyricsSearch.withLogging<ILyricsSearch>(call) }
     registrar.register(ILyricsService::class) { lyricsService.withLogging<ILyricsService>(call) }
     registrar.register(IArtistService::class) { ArtistRpcService(user, artistService).withLogging<IArtistService>(call) }
     registrar.register(IFavSyncService::class) { FavSyncRpcService(user, favSyncService).withLogging<IFavSyncService>(call) }
-    registrar.register(IDownloadService::class) { DownloadRpcService(user, call, downloadService, tidalDownloaderProxy).withLogging<IDownloadService>(call) }
+    registrar.register(IDownloadService::class) { DownloadRpcService(user, call, downloadService, downloaderProxy).withLogging<IDownloadService>(call) }
     registrar.register(IPlaylistService::class) { playlistService.withLogging<IPlaylistService>(call) }
     registrar.register(IUserPlaylistService::class) { userPlaylistService.withLogging<IUserPlaylistService>(call) }
     registrar.register(ISessionService::class) { RpcSessionService(user, sessionService).withLogging<ISessionService>(call) }

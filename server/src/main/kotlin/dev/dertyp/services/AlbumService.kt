@@ -1,22 +1,81 @@
 package dev.dertyp.services
 
-import dev.dertyp.core.*
-import dev.dertyp.data.*
-import dev.dertyp.db.*
+import dev.dertyp.PlatformLocalDate
+import dev.dertyp.core.ApplicationScope
+import dev.dertyp.core.HttpClientPriority
+import dev.dertyp.core.Quadruple
+import dev.dertyp.core.fetchBatchedResultsByIdKeyset
+import dev.dertyp.core.filterValueNotNull
+import dev.dertyp.core.mbArtistSearchColumns
+import dev.dertyp.core.mbReleaseSearchColumns
+import dev.dertyp.core.rankedSearchQuery
+import dev.dertyp.core.withMBArtistSearch
+import dev.dertyp.core.withMBReleaseSearch
+import dev.dertyp.data.Album
+import dev.dertyp.data.Artist
+import dev.dertyp.data.Genre
+import dev.dertyp.data.InsertableAlbum
+import dev.dertyp.data.PaginatedResponse
+import dev.dertyp.data.User
+import dev.dertyp.db.AlbumArtistTable
+import dev.dertyp.db.AlbumGenreTable
+import dev.dertyp.db.AlbumMusicBrainzTable
+import dev.dertyp.db.AlbumTable
+import dev.dertyp.db.ArtistAliasTable
+import dev.dertyp.db.ArtistMusicBrainzTable
+import dev.dertyp.db.ArtistTable
+import dev.dertyp.db.FollowedArtistTable
+import dev.dertyp.db.GenreTable
+import dev.dertyp.db.ImageTable
+import dev.dertyp.db.MBRecordingArtistCreditTable
+import dev.dertyp.db.MBReleaseArtistCreditTable
+import dev.dertyp.db.MBReleaseTable
+import dev.dertyp.db.SongArtistTable
+import dev.dertyp.db.SongMusicBrainzTable
+import dev.dertyp.db.SongTable
 import dev.dertyp.dbQuery
 import dev.dertyp.getDateFromISO
 import dev.dertyp.getISOFromDate
+import dev.dertyp.plugins.AlbumLibrary
 import dev.dertyp.services.ArtistService.Companion.mapArtist
 import dev.dertyp.services.metadata.CachedMusicBrainzService
 import dev.dertyp.services.metadata.MusicBrainzCacheService
 import dev.dertyp.services.metadata.MusicBrainzService
 import dev.dertyp.utils.LogParam
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.asFlow
+import kotlinx.coroutines.flow.chunked
+import kotlinx.coroutines.flow.flatMapConcat
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
-import org.jetbrains.exposed.v1.core.*
+import org.jetbrains.exposed.v1.core.ColumnSet
+import org.jetbrains.exposed.v1.core.JoinType
+import org.jetbrains.exposed.v1.core.Op
+import org.jetbrains.exposed.v1.core.ResultRow
+import org.jetbrains.exposed.v1.core.SortOrder
+import org.jetbrains.exposed.v1.core.alias
+import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.dao.id.EntityID
-import org.jetbrains.exposed.v1.jdbc.*
+import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.greater
+import org.jetbrains.exposed.v1.core.inList
+import org.jetbrains.exposed.v1.core.isNull
+import org.jetbrains.exposed.v1.core.leftJoin
+import org.jetbrains.exposed.v1.core.less
+import org.jetbrains.exposed.v1.core.neq
+import org.jetbrains.exposed.v1.core.notExists
+import org.jetbrains.exposed.v1.core.or
+import org.jetbrains.exposed.v1.core.sum
+import org.jetbrains.exposed.v1.jdbc.Query
+import org.jetbrains.exposed.v1.jdbc.andWhere
+import org.jetbrains.exposed.v1.jdbc.batchInsert
+import org.jetbrains.exposed.v1.jdbc.deleteWhere
+import org.jetbrains.exposed.v1.jdbc.select
+import org.jetbrains.exposed.v1.jdbc.selectAll
+import org.jetbrains.exposed.v1.jdbc.update
+import org.jetbrains.exposed.v1.jdbc.upsert
 import org.koin.core.component.get
 import org.koin.core.component.inject
 import java.io.File
@@ -28,20 +87,27 @@ import kotlin.io.path.readSymbolicLink
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
 
-class AlbumRpcService(private val user: User, private val albumService: AlbumService) : IAlbumService {
+class AlbumRpcService(private val user: User, private val albumService: AlbumService) :
+    IAlbumService {
     override suspend fun byId(id: UUID): Album? = albumService.byId(id, user.id)
     override suspend fun byIds(ids: List<UUID>): List<Album> = albumService.byIds(ids, user.id)
     override suspend fun versions(id: UUID): List<Album> = albumService.versions(id, user.id)
     override suspend fun byName(page: Int, pageSize: Int, name: String): PaginatedResponse<Album> =
         albumService.byName(page, pageSize, name, user.id)
 
-    override suspend fun rankedSearch(page: Int, pageSize: Int, query: String): PaginatedResponse<Album> =
+    override suspend fun rankedSearch(
+        page: Int,
+        pageSize: Int,
+        query: String
+    ): PaginatedResponse<Album> =
         albumService.rankedSearch(page, pageSize, query, user.id)
 
     override suspend fun allAlbums(page: Int, pageSize: Int): PaginatedResponse<Album> =
         albumService.allAlbums(page, pageSize, user.id)
 
-    override suspend fun updateAlbum(album: Album): Album? = albumService.updateAlbum(album, user.id)
+    override suspend fun updateAlbum(album: Album): Album? =
+        albumService.updateAlbum(album, user.id)
+
     override suspend fun deleteAlbums(ids: List<UUID>): Boolean = albumService.deleteAlbums(ids)
 
     override suspend fun byArtist(
@@ -51,13 +117,16 @@ class AlbumRpcService(private val user: User, private val albumService: AlbumSer
         singles: Boolean
     ): PaginatedResponse<Album> = albumService.byArtist(page, pageSize, artistId, singles, user.id)
 
-    override suspend fun fetchMusicBrainzId(id: UUID): Album? = albumService.fetchMusicBrainzId(id, user.id, HttpClientPriority.HIGH)
+    override suspend fun fetchMusicBrainzId(id: UUID): Album? =
+        albumService.fetchMusicBrainzId(id, user.id, HttpClientPriority.HIGH)
+
     override suspend fun setMusicBrainzId(id: UUID, musicBrainzId: UUID?): Album? =
         albumService.setMusicBrainzId(id, musicBrainzId, user.id)
 }
 
-class AlbumService : Service() {
+class AlbumService : AlbumLibrary, Service() {
     private val musicBrainzCacheService by inject<MusicBrainzCacheService>()
+    private val libraryMergeService by inject<LibraryMergeService>()
     val artistGroupAlias = ArtistTable.alias("artistGroup")
     val artistMemberAlias = ArtistTable.alias("artistMember")
     val followedArtistAlias = FollowedArtistTable.alias("followedArtist")
@@ -80,18 +149,19 @@ class AlbumService : Service() {
             )
         }
 
-        suspend fun calculateAlbumStats(albumIds: List<UUID>): Map<UUID, Pair<Long, Long>> = dbQuery {
-            SongTable
-                .select(SongTable.albumId, SongTable.duration.sum(), SongTable.fileSize.sum())
-                .where { SongTable.albumId inList albumIds }
-                .groupBy(SongTable.albumId)
-                .associate { row ->
-                    row[SongTable.albumId].value to Pair(
-                        row[SongTable.duration.sum()] ?: -1L,
-                        row[SongTable.fileSize.sum()] ?: -1L
-                    )
-                }
-        }
+        suspend fun calculateAlbumStats(albumIds: List<UUID>): Map<UUID, Pair<Long, Long>> =
+            dbQuery {
+                SongTable
+                    .select(SongTable.albumId, SongTable.duration.sum(), SongTable.fileSize.sum())
+                    .where { SongTable.albumId inList albumIds }
+                    .groupBy(SongTable.albumId)
+                    .associate { row ->
+                        row[SongTable.albumId].value to Pair(
+                            row[SongTable.duration.sum()] ?: -1L,
+                            row[SongTable.fileSize.sum()] ?: -1L
+                        )
+                    }
+            }
     }
 
     fun map(resultRow: ResultRow): Album = mapAlbum(resultRow)
@@ -105,17 +175,188 @@ class AlbumService : Service() {
         )
     } else this
 
-    suspend fun fetchMusicBrainzId(id: UUID, userId: UUID? = null, priority: HttpClientPriority = HttpClientPriority.NORMAL): Album? {
+    suspend fun fetchMusicBrainzId(
+        id: UUID,
+        userId: UUID? = null,
+        priority: HttpClientPriority = HttpClientPriority.NORMAL,
+        triggerMerge: Boolean = true
+    ): Album? {
         val album = byId(id, userId) ?: return null
-        if (album.musicbrainzId != null) return album
-        
+
         val musicBrainzService: MusicBrainzService by inject()
-        val mbRelease = musicBrainzService.searchAlbumMb(album, priority)
-        
+        val mbId = album.musicbrainzId ?: musicBrainzService.searchAlbumMb(album, priority)?.id
+        ?: return album
+
+        val mbRelease = musicBrainzService.fetchReleaseById(mbId, priority)
+
         if (mbRelease != null) {
             musicBrainzCacheService.updateReleaseCache(mbRelease)
 
-            val genres = (mbRelease.genres?.map { it.name } ?: emptyList()) + (mbRelease.releaseGroup?.genres?.map { it.name } ?: emptyList())
+            val trackCount = mbRelease.media?.sumOf { it.trackCount ?: 0 } ?: 0
+
+            val artistService: ArtistService by inject()
+            val artistCredits = mbRelease.artistCredit ?: emptyList()
+
+            val mbArtistIds = artistCredits.mapNotNull { it.artist?.id }.distinct()
+            val existingArtistsByMbId = if (mbArtistIds.isNotEmpty()) {
+                artistService.byMusicBrainzIds(mbArtistIds, userId).associateBy { it.musicbrainzId }
+            } else emptyMap()
+
+            val resolvedArtists = mutableListOf<Artist>()
+            val namesToResolve = artistCredits
+                .filter { it.artist?.id == null || !existingArtistsByMbId.containsKey(it.artist?.id) }
+                .mapNotNull { it.name ?: it.artist?.name }
+                .distinct()
+
+            val artistsByName = if (namesToResolve.isNotEmpty()) {
+                artistService.getOrBulkCreateWithResult(namesToResolve)
+            } else null
+
+            val allCandidateIds =
+                artistsByName?.nameToIds?.values?.flatten()?.distinct() ?: emptyList()
+            val candidatesById = if (allCandidateIds.isNotEmpty()) {
+                artistService.byIds(allCandidateIds, userId).associateBy { it.id }
+            } else emptyMap()
+
+            val candidatesWithEvidence =
+                if (allCandidateIds.isNotEmpty() && mbArtistIds.isNotEmpty()) {
+                    dbQuery {
+                        val fromSongs = SongArtistTable
+                            .join(
+                                SongMusicBrainzTable,
+                                JoinType.INNER,
+                                SongArtistTable.songId,
+                                SongMusicBrainzTable.songId
+                            )
+                            .join(
+                                MBRecordingArtistCreditTable,
+                                JoinType.INNER,
+                                SongMusicBrainzTable.musicBrainzId,
+                                MBRecordingArtistCreditTable.recordingId
+                            )
+                            .join(SongTable, JoinType.INNER, SongArtistTable.songId, SongTable.id)
+                            .select(SongArtistTable.artistId, MBRecordingArtistCreditTable.artistId)
+                            .where { (SongArtistTable.artistId inList allCandidateIds) and (MBRecordingArtistCreditTable.artistId inList mbArtistIds) and (SongTable.albumId neq id) }
+                            .map { it[SongArtistTable.artistId].value to it[MBRecordingArtistCreditTable.artistId].value }
+
+                        val fromAlbums = AlbumArtistTable
+                            .join(
+                                AlbumMusicBrainzTable,
+                                JoinType.INNER,
+                                AlbumArtistTable.albumId,
+                                AlbumMusicBrainzTable.albumId
+                            )
+                            .join(
+                                MBReleaseArtistCreditTable,
+                                JoinType.INNER,
+                                AlbumMusicBrainzTable.musicBrainzId,
+                                MBReleaseArtistCreditTable.releaseId
+                            )
+                            .select(AlbumArtistTable.artistId, MBReleaseArtistCreditTable.artistId)
+                            .where { (AlbumArtistTable.artistId inList allCandidateIds) and (MBReleaseArtistCreditTable.artistId inList mbArtistIds) and (AlbumArtistTable.albumId neq id) }
+                            .map { it[AlbumArtistTable.artistId].value to it[MBReleaseArtistCreditTable.artistId].value }
+
+                        (fromSongs + fromAlbums).toSet()
+                    }
+                } else emptySet()
+
+            artistCredits.forEach { credit ->
+                val mbId = credit.artist?.id
+                val name = credit.name ?: credit.artist?.name ?: return@forEach
+
+                var artist = existingArtistsByMbId[mbId]
+                if (artist == null && artistsByName != null) {
+                    val ids = artistsByName.nameToIds[name] ?: emptyList()
+                    val candidates = ids.mapNotNull { candidatesById[it] }
+
+                    artist = candidates.find { candidate ->
+                        mbId != null && candidatesWithEvidence.contains(candidate.id to mbId)
+                    }
+
+                    if (artist != null) {
+                        if (mbId != null) {
+                            artistService.setMusicBrainzId(artist.id, mbId, userId)
+                            artist = artist.copy(musicbrainzId = mbId)
+                        }
+                    } else if (mbId != null) {
+                        artist = artistService.createArtist(
+                            name = name,
+                            musicBrainzId = mbId,
+                            userId = userId
+                        )
+                    } else {
+                        artist = candidates.firstOrNull()
+                    }
+                }
+
+                if (artist != null) {
+                    resolvedArtists.add(artist)
+                }
+            }
+
+            val finalArtists = resolvedArtists.distinctBy { it.id }
+
+            val mbTracks = mbRelease.media?.flatMapIndexed { mediaIndex, media ->
+                val discNumber = mediaIndex + 1
+                media.tracks?.map { track ->
+                    Triple(discNumber, track.position ?: 1, track)
+                } ?: emptyList()
+            } ?: emptyList()
+
+            dbQuery {
+                if (trackCount > 0) {
+                    AlbumTable.update({ AlbumTable.id eq id }) { row ->
+                        row[songCount] = trackCount
+                    }
+                }
+
+                if (finalArtists.isNotEmpty()) {
+                    AlbumArtistTable.deleteWhere { AlbumArtistTable.albumId eq id }
+                    AlbumArtistTable.batchInsert(finalArtists) { artist ->
+                        this[AlbumArtistTable.albumId] = id
+                        this[AlbumArtistTable.artistId] = artist.id
+                    }
+                }
+
+                if (mbTracks.isNotEmpty()) {
+                    val dbSongs = SongTable
+                        .leftJoin(SongMusicBrainzTable)
+                        .select(
+                            SongTable.id,
+                            SongTable.title,
+                            SongTable.trackNumber,
+                            SongTable.discNumber,
+                            SongMusicBrainzTable.musicBrainzId
+                        )
+                        .where { SongTable.albumId eq id }
+                        .map { row ->
+                            val songId = row[SongTable.id].value
+                            val smbId = row.getOrNull(SongMusicBrainzTable.musicBrainzId)?.value
+                            val title = row[SongTable.title]
+                            Quadruple(songId, smbId, title, row)
+                        }
+
+                    for ((discNo, trackNo, mbTrack) in mbTracks) {
+                        val mbRecordingId = mbTrack.recording?.id
+                        val mbTitle = mbTrack.title ?: mbTrack.recording?.title
+
+                        val matchedSong = dbSongs.find { it.second == mbRecordingId }
+                            ?: if (mbTitle != null) {
+                                dbSongs.find { it.third.equals(mbTitle, ignoreCase = true) }
+                            } else null
+
+                        if (matchedSong != null) {
+                            SongTable.update({ SongTable.id eq matchedSong.first }) {
+                                it[trackNumber] = trackNo
+                                it[discNumber] = discNo
+                            }
+                        }
+                    }
+                }
+            }
+
+            val genres = (mbRelease.genres?.map { it.name }
+                ?: emptyList()) + (mbRelease.releaseGroup?.genres?.map { it.name } ?: emptyList())
             if (genres.isNotEmpty()) {
                 val genreService: GenreService by inject()
                 val genreIds = genreService.getOrCreateGenres(genres)
@@ -128,11 +369,16 @@ class AlbumService : Service() {
                 }
             }
         }
-        
-        return setMusicBrainzId(id, mbRelease?.id, userId)
+
+        return setMusicBrainzId(id, mbId, userId, triggerMerge)
     }
 
-    suspend fun setMusicBrainzId(id: UUID, musicBrainzId: UUID?, userId: UUID? = null): Album? {
+    suspend fun setMusicBrainzId(
+        id: UUID,
+        musicBrainzId: UUID?,
+        userId: UUID? = null,
+        triggerMerge: Boolean = true
+    ): Album? {
         if (musicBrainzId != null) {
             val releaseExists = dbQuery {
                 MBReleaseTable.select(MBReleaseTable.id)
@@ -153,7 +399,15 @@ class AlbumService : Service() {
                 it[lastCheck] = Clock.System.now().toEpochMilliseconds()
             }
         }
-        
+
+        if (musicBrainzId != null && triggerMerge) {
+            ApplicationScope.scope.launch {
+                dbQuery {
+                    libraryMergeService.mergeDuplicateAlbums()
+                }
+            }
+        }
+
         return byId(id, userId)
     }
 
@@ -161,19 +415,33 @@ class AlbumService : Service() {
         where { AlbumTable.id eq id }
     }
 
-    suspend fun byIds(@LogParam("size") ids: List<UUID>, userId: UUID? = null): List<Album> = queryAlbums(0, Int.MAX_VALUE, userId = userId) {
-        where { AlbumTable.id inList ids }
-    }.data
+    override suspend fun byMusicBrainzId(mbId: UUID): Album? = byMusicBrainzId(mbId, null)
 
-    suspend fun versions(id: UUID, userId: UUID? = null): List<Album> = queryAlbums(0, Int.MAX_VALUE, userId = userId) {
-        val album = runBlocking { dbQuery { byId(id, userId) } }
-        if (album == null) return@queryAlbums where { Op.FALSE }
-        where { AlbumTable.cover eq album.coverId }
-        andWhere { AlbumTable.id neq id }
-        andWhere { AlbumTable.songCount greater 1 }
-    }.data
+    suspend fun byMusicBrainzId(mbId: UUID, userId: UUID? = null): Album? =
+        querySingle(userId = userId) {
+            where { AlbumMusicBrainzTable.musicBrainzId eq mbId }
+        }
 
-    suspend fun byName(page: Int, pageSize: Int, name: String, userId: UUID? = null): PaginatedResponse<Album> = queryAlbums(page, pageSize, userId = userId) {
+    suspend fun byIds(@LogParam("size") ids: List<UUID>, userId: UUID? = null): List<Album> =
+        queryAlbums(0, Int.MAX_VALUE, userId = userId) {
+            where { AlbumTable.id inList ids }
+        }.data
+
+    suspend fun versions(id: UUID, userId: UUID? = null): List<Album> =
+        queryAlbums(0, Int.MAX_VALUE, userId = userId) {
+            val album = runBlocking { dbQuery { byId(id, userId) } }
+            if (album == null) return@queryAlbums where { Op.FALSE }
+            where { AlbumTable.cover eq album.coverId }
+            andWhere { AlbumTable.id neq id }
+            andWhere { AlbumTable.songCount greater 1 }
+        }.data
+
+    suspend fun byName(
+        page: Int,
+        pageSize: Int,
+        name: String,
+        userId: UUID? = null
+    ): PaginatedResponse<Album> = queryAlbums(page, pageSize, userId = userId) {
         where { AlbumTable.name eq name }
     }
 
@@ -196,10 +464,21 @@ class AlbumService : Service() {
             orderBy(AlbumTable.releaseDate, SortOrder.DESC_NULLS_LAST)
         }
 
-    suspend fun rankedSearch(page: Int, pageSize: Int, query: String, userId: UUID? = null): PaginatedResponse<Album> =
+    suspend fun rankedSearch(
+        page: Int,
+        pageSize: Int,
+        query: String,
+        userId: UUID? = null
+    ): PaginatedResponse<Album> =
         queryAlbums(page, pageSize, userId = userId, columnSet = {
-            leftJoin(artistGroupAlias, { ArtistTable.groupId }, { artistGroupAlias[ArtistTable.id] })
-                .leftJoin(artistMemberAlias, { ArtistTable.id }, { artistMemberAlias[ArtistTable.groupId] })
+            leftJoin(
+                artistGroupAlias,
+                { ArtistTable.groupId },
+                { artistGroupAlias[ArtistTable.id] })
+                .leftJoin(
+                    artistMemberAlias,
+                    { ArtistTable.id },
+                    { artistMemberAlias[ArtistTable.groupId] })
                 .withMBReleaseSearch()
                 .withMBArtistSearch()
         }) {
@@ -218,7 +497,11 @@ class AlbumService : Service() {
             andWhere { AlbumTable.songCount greater 1 }
         }
 
-    suspend fun allAlbums(page: Int, pageSize: Int, userId: UUID? = null): PaginatedResponse<Album> = queryAlbums(page, pageSize, userId = userId)
+    suspend fun allAlbums(
+        page: Int,
+        pageSize: Int,
+        userId: UUID? = null
+    ): PaginatedResponse<Album> = queryAlbums(page, pageSize, userId = userId)
 
     suspend fun updateAlbum(album: Album, userId: UUID? = null): Album? {
         upsertAlbum(album)
@@ -239,7 +522,7 @@ class AlbumService : Service() {
     fun allAlbumsFlow(): Flow<Album> = allAlbumIds().chunked(100).flatMapConcat { ids ->
         byIds(ids).asFlow()
     }
-    
+
     fun albumIdsWithoutMusicBrainzId(): Flow<UUID> = flow {
         val oneWeekAgo = Clock.System.now() - 7.days
 
@@ -319,7 +602,10 @@ class AlbumService : Service() {
     ) = dbQuery {
         val offset = if (pageSize == Int.MAX_VALUE) 0 else 1
         val rows = AlbumTable
-            .leftJoin(AlbumArtistTable, onColumn = { AlbumTable.id }, otherColumn = { AlbumArtistTable.albumId })
+            .leftJoin(
+                AlbumArtistTable,
+                onColumn = { AlbumTable.id },
+                otherColumn = { AlbumArtistTable.albumId })
             .leftJoin(
                 ArtistTable,
                 onColumn = { AlbumArtistTable.artistId },
@@ -415,7 +701,15 @@ class AlbumService : Service() {
         }
     }
 
-    data class BulkCreateAlbumResult(val albumToIds: Map<InsertableAlbum, UUID>, val newlyCreated: Set<InsertableAlbum>)
+    data class BulkCreateAlbumResult(
+        val albumToIds: Map<InsertableAlbum, UUID>,
+        val newlyCreated: Set<InsertableAlbum>
+    )
+
+    override suspend fun createBatch(albums: List<InsertableAlbum>): Map<UUID, Album> {
+        val result = getOrBulkCreateWithResult(albums)
+        return byIds(result.albumToIds.values.toList()).associateBy { it.id }
+    }
 
     suspend fun getOrBulkCreateWithResult(albums: List<InsertableAlbum>): BulkCreateAlbumResult {
         if (albums.isEmpty()) return BulkCreateAlbumResult(emptyMap(), emptySet())
@@ -424,23 +718,25 @@ class AlbumService : Service() {
         val imageService = get<ImageService>()
 
         val uniqueCoverHashed = albums.distinctBy { it.coverHash }.mapNotNull { it.coverHash }
-        val uniqueAlbumMetadata =
-            albums.distinctBy {
-                Quintuple(
-                    it.name,
-                    it.releaseDate,
-                    it.songCount,
-                    it.artists.sorted().joinToString(", "),
-                    it.originalId
-                )
-            }
+        val albumsByIdentity = albums.groupBy {
+            if (it.originalId != null) it.originalId
+            else Triple(it.name, it.artists.sorted(), it.releaseDate)
+        }.mapValues { (_, group) ->
+            group.maxByOrNull {
+                (if (it.releaseDate != null) 1 else 0) +
+                        (if (it.songCount > 0) 1 else 0) +
+                        (if (it.coverHash != null) 1 else 0)
+            }!!
+        }
+        val uniqueAlbumMetadata = albumsByIdentity.values.toList()
         val uniqueAlbumNames = uniqueAlbumMetadata.map { it.name }
         val uniqueSongCounts = uniqueAlbumMetadata.map { it.songCount }
         val uniqueReleaseDates = uniqueAlbumMetadata.map { getISOFromDate(it.releaseDate) }
         val uniqueOriginalIds = uniqueAlbumMetadata.map { it.originalId }
         val allRequiredArtistNames = albums.flatMap { it.artists }.distinct()
 
-        val artistIdMap: Map<String, List<UUID>> = artistService.getOrBulkCreate(allRequiredArtistNames)
+        val artistIdMap: Map<String, List<UUID>> =
+            artistService.getOrBulkCreate(allRequiredArtistNames)
         val imageMap: Map<String, UUID> = imageService.getCoverHashes(uniqueCoverHashed)
 
         val potentialAlbumRows = queryAlbums(0, Int.MAX_VALUE) {
@@ -460,42 +756,47 @@ class AlbumService : Service() {
         }
 
         val artistsByPotentialAlbumId = albumArtistLinks
-            .groupBy({ it[AlbumArtistTable.albumId].value }, { it[AlbumArtistTable.artistId].value })
+            .groupBy(
+                { it[AlbumArtistTable.albumId].value },
+                { it[AlbumArtistTable.artistId].value })
             .mapValues { (_, artistIds) -> artistIds.toSet() }
 
-        val finalMatchMap = mutableMapOf<Quadruple<String, String?, Int, String?>, UUID>()
+        fun getIdentityKey(originalId: String?, name: String, artists: List<String>, releaseDate: PlatformLocalDate?): Any {
+            return originalId ?: Triple(name, artists.sorted(), getISOFromDate(releaseDate))
+        }
+
+        val finalMatchMap = mutableMapOf<Any, UUID>()
 
         for (row in potentialAlbumRows) {
             val albumId = row.id
             val albumArtists = artistsByPotentialAlbumId[albumId] ?: emptySet()
 
-            val inputAlbum = albums.firstOrNull {
-                it.name == row.name &&
-                        getISOFromDate(it.releaseDate) == getISOFromDate(row.releaseDate)
-                        && (it.originalId == null || it.originalId == row.originalId)
+            val inputAlbum = uniqueAlbumMetadata.firstOrNull {
+                if (it.originalId != null && row.originalId != null) {
+                    it.originalId == row.originalId
+                } else if (it.originalId == null && row.originalId == null) {
+                    it.name == row.name &&
+                            getISOFromDate(it.releaseDate) == getISOFromDate(row.releaseDate) &&
+                            it.songCount == row.songCount
+                } else {
+                    false
+                }
             }
 
-            val requiredArtistIdsForInput = inputAlbum?.artists?.flatMap { artistIdMap[it] ?: emptyList() }?.toSet() ?: emptySet()
+            if (inputAlbum != null) {
+                val requiredArtistIdsForInput =
+                    inputAlbum.artists.flatMap { artistIdMap[it] ?: emptyList() }.toSet()
 
-            if (albumArtists == requiredArtistIdsForInput) {
-                finalMatchMap[Quadruple(
-                    row.name,
-                    getISOFromDate(row.releaseDate),
-                    row.songCount,
-                    row.originalId
-                )] = albumId
+                if (inputAlbum.originalId != null || albumArtists == requiredArtistIdsForInput) {
+                    finalMatchMap[getIdentityKey(row.originalId, row.name, inputAlbum.artists, row.releaseDate)] = albumId
+                }
             }
         }
 
-        val newAlbumsToInsert = albums.filter { album ->
-            val key = Quadruple(
-                album.name,
-                getISOFromDate(album.releaseDate),
-                album.songCount,
-                album.originalId
-            )
+        val newAlbumsToInsert = uniqueAlbumMetadata.filter { album ->
+            val key = getIdentityKey(album.originalId, album.name, album.artists, album.releaseDate)
             !finalMatchMap.containsKey(key)
-        }.distinctBy { Quadruple(it.name, it.releaseDate, it.songCount, it.originalId) }
+        }
 
         val newRows = if (newAlbumsToInsert.isNotEmpty()) {
             dbQuery {
@@ -511,81 +812,89 @@ class AlbumService : Service() {
             emptyList()
         }
 
-        val newAlbumIdMap: Map<InsertableAlbum, UUID> = newRows.associate { row ->
+        val newAlbumIdLookupMap = newRows.associate { row ->
+            val rowOriginalId = row[AlbumTable.originalId]
+            val rowName = row[AlbumTable.name]
+            val rowReleaseDate = row[AlbumTable.releaseDate]
+
             val matchedAlbum = newAlbumsToInsert.first {
-                it.name == row[AlbumTable.name] && getISOFromDate(it.releaseDate) == row[AlbumTable.releaseDate] && (it.originalId == null || it.originalId == row[AlbumTable.originalId])
+                if (it.originalId != null && rowOriginalId != null) {
+                    it.originalId == rowOriginalId
+                } else if (it.originalId == null && rowOriginalId == null) {
+                    it.name == rowName && getISOFromDate(it.releaseDate) == rowReleaseDate
+                } else false
             }
-            matchedAlbum to row[AlbumTable.id].value
+
+            getIdentityKey(rowOriginalId, rowName, matchedAlbum.artists, matchedAlbum.releaseDate) to row[AlbumTable.id].value
         }
 
-        val newAlbumArtistLinks = newAlbumIdMap.flatMap { (albumData, albumId) ->
-            albumData.artists.flatMap { artistName ->
-                artistIdMap[artistName]?.map { artistId ->
-                    Pair(albumId, artistId)
-                } ?: emptyList()
-            }
-        }.distinct()
-
-        dbQuery {
-            AlbumArtistTable.batchInsert(newAlbumArtistLinks) { (albumId, artistId) ->
-                this[AlbumArtistTable.albumId] = albumId
-                this[AlbumArtistTable.artistId] = artistId
+        val newAlbumArtistLinks = newAlbumsToInsert.flatMap { album ->
+            val key = getIdentityKey(album.originalId, album.name, album.artists, album.releaseDate)
+            val albumId = newAlbumIdLookupMap[key]
+            if (albumId != null) {
+                album.artists.flatMap { artistName ->
+                    artistIdMap[artistName]?.map { artistId ->
+                        albumId to artistId
+                    } ?: emptyList()
+                }
+            } else {
+                emptyList()
             }
         }
 
-        val newAlbumIdLookupMap = newAlbumIdMap.entries.associate { (album, id) ->
-            Quadruple(
-                album.name,
-                getISOFromDate(album.releaseDate),
-                album.songCount,
-                album.originalId
-            ) to id
+        if (newAlbumArtistLinks.isNotEmpty()) {
+            dbQuery {
+                AlbumArtistTable.batchInsert(newAlbumArtistLinks) { (albumId, artistId) ->
+                    this[AlbumArtistTable.albumId] = albumId
+                    this[AlbumArtistTable.artistId] = artistId
+                }
+            }
         }
 
         val finalCombinedIdMap = finalMatchMap + newAlbumIdLookupMap
 
         val resultMap = albums.associateWith { album ->
-            val key = Quadruple(
-                album.name,
-                getISOFromDate(album.releaseDate),
-                album.songCount,
-                album.originalId
-            )
+            val key = getIdentityKey(album.originalId, album.name, album.artists, album.releaseDate)
             finalCombinedIdMap[key]
         }.filterValueNotNull()
 
         return BulkCreateAlbumResult(resultMap, newAlbumsToInsert.toSet())
     }
 
-    suspend fun getOrBulkCreate(albums: List<InsertableAlbum>): Map<InsertableAlbum, UUID> = getOrBulkCreateWithResult(albums).albumToIds
+    suspend fun getOrBulkCreate(albums: List<InsertableAlbum>): Map<InsertableAlbum, UUID> =
+        getOrBulkCreateWithResult(albums).albumToIds
 
-    suspend fun deleteEmptyAlbums(onProgress: suspend (Double, String) -> Unit = { _, _ -> }): Int = dbQuery {
-        val emptyAlbums = AlbumTable
-            .select(AlbumTable.id)
-            .where {
-                notExists(
-                    SongTable.select(SongTable.id).where {
-                        SongTable.albumId eq AlbumTable.id
-                    }
+    suspend fun deleteEmptyAlbums(onProgress: suspend (Double, String) -> Unit = { _, _ -> }): Int =
+        dbQuery {
+            val emptyAlbums = AlbumTable
+                .select(AlbumTable.id)
+                .where {
+                    notExists(
+                        SongTable.select(SongTable.id).where {
+                            SongTable.albumId eq AlbumTable.id
+                        }
+                    )
+                }
+                .map { it[AlbumTable.id].value }
+
+            onProgress(0.0, "Found ${emptyAlbums.size} empty albums")
+
+            val chunks = emptyAlbums.chunked(5000)
+            chunks.forEachIndexed { index, batch ->
+                val progress = (index.toDouble() / chunks.size) * 100.0
+                onProgress(
+                    progress,
+                    "Deleting batch ${index + 1}/${chunks.size} (${batch.size} albums)"
                 )
+
+                AlbumTable.deleteWhere { AlbumTable.id inList batch }
+                AlbumArtistTable.deleteWhere { AlbumArtistTable.albumId inList batch }
             }
-            .map { it[AlbumTable.id].value }
 
-        onProgress(0.0, "Found ${emptyAlbums.size} empty albums")
-
-        val chunks = emptyAlbums.chunked(5000)
-        chunks.forEachIndexed { index, batch ->
-            val progress = (index.toDouble() / chunks.size) * 100.0
-            onProgress(progress, "Deleting batch ${index + 1}/${chunks.size} (${batch.size} albums)")
-
-            AlbumTable.deleteWhere { AlbumTable.id inList batch }
-            AlbumArtistTable.deleteWhere { AlbumArtistTable.albumId inList batch }
+            onProgress(100.0, "Deleted ${emptyAlbums.size} albums")
+            logger.info("Deleted ${emptyAlbums.size} empty albums")
+            emptyAlbums.size
         }
-
-        onProgress(100.0, "Deleted ${emptyAlbums.size} albums")
-        logger.info("Deleted ${emptyAlbums.size} empty albums")
-        emptyAlbums.size
-    }
 
     suspend fun upsertAlbum(album: Album) = dbQuery {
         AlbumTable.upsert(AlbumTable.id) {
@@ -596,7 +905,7 @@ class AlbumService : Service() {
             it[cover] = album.coverId?.let { coverId -> EntityID(coverId, ImageTable) }
             it[originalId] = album.originalId
         }
-        
+
         if (album.musicbrainzId != null) {
             AlbumMusicBrainzTable.upsert(AlbumMusicBrainzTable.albumId) {
                 it[albumId] = album.id

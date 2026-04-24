@@ -1,10 +1,9 @@
 package dev.dertyp.core
 
 import dev.dertyp.data.TaskStatus
+import dev.dertyp.plugins.*
 import dev.dertyp.services.ScheduledTaskLogService
 import dev.dertyp.services.schedule.CronPresets
-import dev.dertyp.services.schedule.CronTrigger
-import dev.dertyp.services.schedule.ScheduleTrigger
 import dev.dertyp.services.schedule.ScheduledTask
 import org.jetbrains.annotations.Range
 import org.koin.core.component.KoinComponent
@@ -13,8 +12,6 @@ import java.time.Duration
 import java.time.Instant
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.time.Duration as KDuration
-
-typealias Task = suspend KoinComponent.() -> Unit
 
 interface TaskContext {
     fun updateProgress(progress: Double, vararg logs: String)

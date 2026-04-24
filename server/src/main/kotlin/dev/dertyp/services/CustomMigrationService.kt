@@ -9,6 +9,7 @@ import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.koin.core.component.KoinComponent
 import java.io.File
+import java.lang.reflect.Modifier
 import java.net.URLDecoder
 import java.util.jar.JarFile
 import kotlin.system.measureTimeMillis
@@ -97,7 +98,7 @@ class CustomMigrationService : KoinComponent {
             if (CustomMigration::class.java.isAssignableFrom(clazz) &&
                 clazz.isAnnotationPresent(Migration::class.java) &&
                 !clazz.isInterface &&
-                !java.lang.reflect.Modifier.isAbstract(clazz.modifiers)) {
+                !Modifier.isAbstract(clazz.modifiers)) {
                 clazz.getDeclaredConstructor().newInstance() as CustomMigration
             } else null
         } catch (_: Exception) {

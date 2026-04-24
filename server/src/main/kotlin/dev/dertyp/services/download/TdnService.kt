@@ -1,14 +1,17 @@
-package dev.dertyp.services.tdn
+package dev.dertyp.services.download
 
-import dev.dertyp.Indexer
+import dev.dertyp.PlatformUUID
 import dev.dertyp.core.ClientCloseException
 import dev.dertyp.core.isInside
 import dev.dertyp.core.oneLine
 import dev.dertyp.core.resolveRelativeAbsolute
 import dev.dertyp.executeCommand
 import dev.dertyp.findInPath
-import dev.dertyp.services.StorageService
+import dev.dertyp.plugins.IPluginIndexer
+import dev.dertyp.plugins.IServerStorageService
 import kotlinx.coroutines.delay
+import java.io.File
+import java.net.URI
 import java.nio.file.Path
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.io.path.Path
@@ -17,12 +20,32 @@ import kotlin.io.path.deleteIfExists
 import kotlin.time.Duration.Companion.milliseconds
 
 @OptIn(ExperimentalAtomicApi::class)
-class TdnService(indexer: Indexer, storageService: StorageService) : BaseDownloader(indexer, storageService) {
+class TdnService(
+    indexer: IPluginIndexer,
+    storageService: IServerStorageService
+) : TidalBaseDownloader(indexer, storageService) {
+    override val id: String = ID
+    override val enabled: Boolean get() = tdnPath != null
+
     override val loginCommand: MutableList<String> = mutableListOf("tdn", "login")
     override val downloadCommand: MutableList<String> = mutableListOf("tdn", "dl")
     override val favDownloadCommand: MutableList<String> = mutableListOf("tdn", "dl_fav")
 
+    companion object {
+        val ID = DownloadBackend.Tdn.id
+    }
+
     override fun authorizedCheck(result: ProcessExecutionResult) = result.fullOutput.contains("You are logged in.")
+
+    override fun canHandle(url: String): Boolean {
+        return try {
+            val uri = URI(url)
+            val host = uri.host?.lowercase() ?: ""
+            host == "tidal.com" || host.endsWith(".tidal.com") || url.startsWith("tdn:")
+        } catch (_: Exception) {
+            url.startsWith("tdn:")
+        }
+    }
 
     override suspend fun handleErrors(
         command: Collection<String>,
@@ -31,14 +54,15 @@ class TdnService(indexer: Indexer, storageService: StorageService) : BaseDownloa
         maxRetries: Int,
         paths: MutableList<Path>,
         aliveCheck: suspend () -> Boolean,
+        userId: PlatformUUID?,
         logProxy: suspend (String) -> Unit
     ): ProcessExecutionResult {
-        if (storageService.playlistsPath == null) return result
+        if (pluginStorage.playlistsPath == null) return result
 
         val pathAlternation =
-            "(${storageService.playlistsPath}|${storageService.albumsPath})"
+            "(${pluginStorage.playlistsPath}|${pluginStorage.albumsPath})"
 
-        val rootPath = Path(storageService.playlistsPath).parent.absolute()
+        val rootPath = Path(pluginStorage.playlistsPath!!).parent.absolute()
 
         val errorRegex = Regex(
             "FileNotFoundError:\\s+(\\[.+?])\\s+No\\s+such\\s+file\\s+or\\s+directory:\\s+'" +
@@ -83,6 +107,7 @@ class TdnService(indexer: Indexer, storageService: StorageService) : BaseDownloa
             maxRetries,
             currentTry + 1,
             aliveCheck,
+            userId,
             logProxy
         )
 
@@ -90,11 +115,18 @@ class TdnService(indexer: Indexer, storageService: StorageService) : BaseDownloa
         return newResult
     }
 
+    override fun tokenFileExists(): Boolean {
+        val homeDir = System.getProperty("user.home")
+        val tdnTokenJson = File(homeDir, ".config/tidal_dl_ng/token.json")
+        return tdnTokenJson.exists()
+    }
+
     private val tdnPath = findInPath("tdn")
 
     override suspend fun executeDownloader(
         command: Collection<String>,
         aliveCheck: suspend () -> Boolean,
+        directory: File?,
         onLineReceived: suspend (String) -> Unit
     ): ProcessExecutionResult {
         val cmd = command.toMutableList()
@@ -112,6 +144,6 @@ class TdnService(indexer: Indexer, storageService: StorageService) : BaseDownloa
             cmd.add(1, "-u")
         }
 
-        return executeCommand(cmd, aliveCheck, logger, onLineReceived)
+        return executeCommand(cmd, aliveCheck, logger, directory, onLineReceived)
     }
 }

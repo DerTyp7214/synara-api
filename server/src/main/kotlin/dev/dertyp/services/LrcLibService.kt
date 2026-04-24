@@ -5,22 +5,9 @@ import dev.dertyp.core.safeQueuedGet
 import dev.dertyp.server.BuildConfig
 import io.ktor.client.request.header
 import io.ktor.client.request.parameter
-import kotlinx.serialization.Serializable
 
-@Serializable
-data class LrcLibResponse(
-    val id: Int,
-    val trackName: String,
-    val artistName: String,
-    val albumName: String,
-    val duration: Double,
-    val instrumental: Boolean,
-    val plainLyrics: String? = null,
-    val syncedLyrics: String? = null
-)
-
-class LrcLibService : Service() {
-    suspend fun getLyrics(artist: String, title: String, album: String?, duration: Long?): LrcLibResponse? {
+class LrcLibService : ILrcLibService, Service() {
+    override suspend fun getLyrics(artist: String, title: String, album: String?, duration: Long?): LrcLibResponse? {
         return try {
             ApiClient.instance.safeQueuedGet<LrcLibResponse>("https://lrclib.net/api/get") {
                 header("User-Agent", "Synara/${BuildConfig.VERSION} (https://github.com/dertyp7214/synara_api)")

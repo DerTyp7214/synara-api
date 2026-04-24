@@ -4,6 +4,7 @@ import dev.dertyp.ApiClient
 import dev.dertyp.core.HttpClientPriority
 import dev.dertyp.data.User
 import dev.dertyp.services.Service
+import dev.dertyp.services.metadata.IMetadataService.MetadataType
 import io.ktor.client.call.body
 import io.ktor.client.request.HttpRequestBuilder
 import io.ktor.client.request.header
@@ -16,6 +17,7 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationEnvironment
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import org.koin.mp.KoinPlatformTools
 import java.util.UUID
 import kotlin.concurrent.atomics.AtomicBoolean
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
@@ -24,7 +26,7 @@ import kotlin.time.Duration.Companion.seconds
 @OptIn(ExperimentalAtomicApi::class)
 abstract class MetadataService(
     private val providerName: String,
-    metadataType: IMetadataService.MetadataType,
+    metadataType: MetadataType,
     environment: ApplicationEnvironment
 ) : IMetadataService, Service() {
     protected abstract val clientIdConfigPath: String
@@ -37,7 +39,7 @@ abstract class MetadataService(
     protected abstract fun HttpRequestBuilder.getAccessTokenHeader(clientId: String, clientSecret: String)
 
     override suspend fun searchArtists(
-        type: IMetadataService.MetadataType,
+        type: MetadataType,
         query: String,
         limit: Int
     ): List<IMetadataService.Artist> = searchArtists(query, limit)
@@ -49,7 +51,7 @@ abstract class MetadataService(
     ): List<IMetadataService.Artist>
 
     override suspend fun search(
-        type: IMetadataService.MetadataType,
+        type: MetadataType,
         query: String,
         limit: Int
     ): List<IMetadataService.Track> = search(query, limit)
@@ -61,7 +63,7 @@ abstract class MetadataService(
     ): List<IMetadataService.Track>
 
     override suspend fun searchAlbums(
-        type: IMetadataService.MetadataType,
+        type: MetadataType,
         query: String,
         limit: Int,
         includeTracks: Boolean
@@ -75,7 +77,7 @@ abstract class MetadataService(
     ): List<IMetadataService.Album>
 
     override suspend fun getAlbumIdByTrackId(
-        type: IMetadataService.MetadataType,
+        type: MetadataType,
         trackId: String
     ): String? = getAlbumIdByTrackId(trackId)
 
@@ -85,7 +87,7 @@ abstract class MetadataService(
     ): String?
 
     override suspend fun getImageUrlByAlbumId(
-        type: IMetadataService.MetadataType,
+        type: MetadataType,
         albumId: String
     ): List<IMetadataService.Image> = getImageUrlByAlbumId(albumId)
 
@@ -95,7 +97,7 @@ abstract class MetadataService(
     ): List<IMetadataService.Image>
 
     override suspend fun getArtistByMbId(
-        type: IMetadataService.MetadataType,
+        type: MetadataType,
         mbId: UUID
     ): IMetadataService.Artist? = getArtistByMbId(mbId)
 
@@ -105,7 +107,7 @@ abstract class MetadataService(
     ): IMetadataService.Artist? = null
 
     override suspend fun getAlbumByMbId(
-        type: IMetadataService.MetadataType,
+        type: MetadataType,
         mbId: UUID
     ): IMetadataService.Album? = getAlbumByMbId(mbId)
 
@@ -115,7 +117,7 @@ abstract class MetadataService(
     ): IMetadataService.Album? = null
 
     override suspend fun getTrackByMbId(
-        type: IMetadataService.MetadataType,
+        type: MetadataType,
         mbId: UUID
     ): IMetadataService.Track? = getTrackByMbId(mbId)
 
@@ -125,7 +127,7 @@ abstract class MetadataService(
     ): IMetadataService.Track? = null
 
     override suspend fun getImageUrlByArtistMbId(
-        type: IMetadataService.MetadataType,
+        type: MetadataType,
         mbId: UUID
     ): List<IMetadataService.Image> = getImageUrlByArtistMbId(mbId)
 
@@ -135,7 +137,7 @@ abstract class MetadataService(
     ): List<IMetadataService.Image> = emptyList()
 
     override suspend fun getImageUrlByAlbumMbId(
-        type: IMetadataService.MetadataType,
+        type: MetadataType,
         mbId: UUID
     ): List<IMetadataService.Image> = getImageUrlByAlbumMbId(mbId)
 
@@ -145,7 +147,7 @@ abstract class MetadataService(
     ): List<IMetadataService.Image> = emptyList()
 
     override suspend fun getImageUrlByTrackMbId(
-        type: IMetadataService.MetadataType,
+        type: MetadataType,
         mbId: UUID
     ): List<IMetadataService.Image> = getImageUrlByTrackMbId(mbId)
 
@@ -155,7 +157,7 @@ abstract class MetadataService(
     ): List<IMetadataService.Image> = emptyList()
 
     override suspend fun getImageUrlsByAlbumIds(
-        type: IMetadataService.MetadataType,
+        type: MetadataType,
         albumIds: List<String>
     ): Map<String, List<IMetadataService.Image>> = getImageUrlsByAlbumIds(albumIds)
 
@@ -165,7 +167,7 @@ abstract class MetadataService(
     ): Map<String, List<IMetadataService.Image>>
 
     override suspend fun getImageUrlByImageId(
-        type: IMetadataService.MetadataType,
+        type: MetadataType,
         imageId: UUID
     ): String? = getImageUrlByImageId(imageId)
 
@@ -175,7 +177,7 @@ abstract class MetadataService(
     ): String?
 
     override suspend fun getTrackById(
-        type: IMetadataService.MetadataType,
+        type: MetadataType,
         trackId: String
     ): IMetadataService.Track? = getTrackById(trackId)
 
@@ -185,7 +187,7 @@ abstract class MetadataService(
     ): IMetadataService.Track?
 
     override suspend fun getTracksByIds(
-        type: IMetadataService.MetadataType,
+        type: MetadataType,
         trackIds: List<String>
     ): List<IMetadataService.Track> = getTracksByIds(trackIds)
 
@@ -195,7 +197,7 @@ abstract class MetadataService(
     ): List<IMetadataService.Track>
 
     override suspend fun getAlbumsByIds(
-        type: IMetadataService.MetadataType,
+        type: MetadataType,
         albumIds: List<String>
     ): List<IMetadataService.Album> = getAlbumsByIds(albumIds)
 
@@ -205,7 +207,7 @@ abstract class MetadataService(
     ): List<IMetadataService.Album>
 
     override suspend fun albumExistsById(
-        type: IMetadataService.MetadataType,
+        type: MetadataType,
         albumId: String
     ): Boolean = albumExistsById(albumId)
 
@@ -215,7 +217,7 @@ abstract class MetadataService(
     ): Boolean
 
     override suspend fun getArtistsByIds(
-        type: IMetadataService.MetadataType,
+        type: MetadataType,
         artistIds: List<String>
     ): List<IMetadataService.Artist> = getArtistsByIds(artistIds)
 
@@ -251,17 +253,27 @@ abstract class MetadataService(
     companion object {
         val isFetching = AtomicBoolean(false)
 
-        private var instances: MutableMap<IMetadataService.MetadataType, MetadataService> = mutableMapOf()
+        private val instances: MutableMap<MetadataType, MetadataService> = mutableMapOf()
 
-        fun getMetadataService(type: IMetadataService.MetadataType, environment: ApplicationEnvironment): MetadataService {
-            if (instances.contains(type)) return instances[type]!!
+        fun register(type: MetadataType, service: MetadataService) {
+            instances[type] = service
+        }
+
+        fun getMetadataService(type: MetadataType, environment: ApplicationEnvironment): MetadataService {
+            instances[type]?.let { return it }
 
             return when (type) {
-                IMetadataService.MetadataType.tidal -> TidalService(environment)
-                IMetadataService.MetadataType.spotify -> SpotifyService(environment)
-                IMetadataService.MetadataType.appleMusic -> AppleMusicService(environment)
-                IMetadataService.MetadataType.imageCache -> ImageCacheService(environment)
-                IMetadataService.MetadataType.theAudioDB -> TheAudioDBService(environment)
+                MetadataType.tidal -> TidalService(environment)
+                MetadataType.spotify -> SpotifyService(environment)
+                MetadataType.appleMusic -> AppleMusicService(environment)
+                MetadataType.imageCache -> ImageCacheService(environment)
+                MetadataType.theAudioDB -> TheAudioDBService(environment)
+                MetadataType.musicBrainz -> MusicBrainzMetadataService(
+                    KoinPlatformTools.defaultContext().get().get<IMusicBrainzService>(),
+                    environment
+                )
+
+                else -> throw IllegalArgumentException("Unknown metadata provider: ${type.value}")
             }
         }
     }

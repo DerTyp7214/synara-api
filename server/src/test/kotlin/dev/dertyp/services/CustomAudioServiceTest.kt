@@ -1,7 +1,15 @@
 package dev.dertyp.services
 
 import dev.dertyp.Indexer
-import io.mockk.*
+import io.mockk.Runs
+import io.mockk.coEvery
+import io.mockk.coVerify
+import io.mockk.every
+import io.mockk.just
+import io.mockk.mockk
+import io.mockk.mockkConstructor
+import io.mockk.spyk
+import io.mockk.unmockkAll
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.runBlocking
 import org.bytedeco.javacv.FFmpegFrameGrabber
@@ -39,7 +47,7 @@ class CustomAudioServiceTest {
         val deferred = CompletableDeferred<Unit>()
         deferred.complete(Unit)
         
-        coEvery { indexer.queue(any(), any(), any()) } returns deferred
+        coEvery { indexer.queue(any(), any(), any(), any(), any()) } returns deferred
 
         val service = CustomAudioService(indexer, storageService)
         val fileData = "fake flac data".toByteArray()
@@ -50,7 +58,7 @@ class CustomAudioServiceTest {
         assertEquals(true, targetFile.exists())
         assertEquals("fake flac data", targetFile.readText())
 
-        coVerify { indexer.queue(listOf(targetFile.toPath()), emptyList(), any()) }
+        coVerify { indexer.queue(listOf(targetFile.toPath()), emptyList(), any(), any(), any()) }
     }
 
     @Test
@@ -70,7 +78,7 @@ class CustomAudioServiceTest {
 
         val deferred = CompletableDeferred<Unit>()
         deferred.complete(Unit)
-        coEvery { indexer.queue(any(), any(), any()) } returns deferred
+        coEvery { indexer.queue(any(), any(), any(), any(), any()) } returns deferred
 
         val fileData = "fake mp3 data".toByteArray()
         val uuid = service.uploadCustomAudio(fileData, "test.mp3", null)

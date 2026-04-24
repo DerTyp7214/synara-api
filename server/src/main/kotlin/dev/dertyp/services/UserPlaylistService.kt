@@ -1,9 +1,24 @@
 package dev.dertyp.services
 
-import dev.dertyp.core.*
-import dev.dertyp.data.*
-import dev.dertyp.db.*
+import dev.dertyp.PlatformUUID
+import dev.dertyp.core.date
+import dev.dertyp.core.minusOnce
+import dev.dertyp.core.paging
+import dev.dertyp.core.rankedSearchQuery
+import dev.dertyp.core.values
+import dev.dertyp.data.InsertablePlaylist
+import dev.dertyp.data.PaginatedResponse
+import dev.dertyp.data.User
+import dev.dertyp.data.UserPlaylist
+import dev.dertyp.data.UserPlaylistSong
+import dev.dertyp.db.ImageTable
+import dev.dertyp.db.SongMusicBrainzTable
+import dev.dertyp.db.SongTable
+import dev.dertyp.db.UserPlaylistSongTable
+import dev.dertyp.db.UserPlaylistTable
+import dev.dertyp.db.UserTable
 import dev.dertyp.dbQuery
+import dev.dertyp.plugins.PlaylistLibrary
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -13,13 +28,20 @@ import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.inList
-import org.jetbrains.exposed.v1.jdbc.*
+import org.jetbrains.exposed.v1.jdbc.Query
+import org.jetbrains.exposed.v1.jdbc.andWhere
+import org.jetbrains.exposed.v1.jdbc.batchInsert
+import org.jetbrains.exposed.v1.jdbc.deleteWhere
+import org.jetbrains.exposed.v1.jdbc.select
+import org.jetbrains.exposed.v1.jdbc.selectAll
+import org.jetbrains.exposed.v1.jdbc.update
+import org.jetbrains.exposed.v1.jdbc.upsert
 import org.koin.core.component.inject
 import java.time.Instant
 import java.util.Date
 import java.util.UUID
 
-class UserPlaylistService : IUserPlaylistService, Service() {
+class UserPlaylistService : PlaylistLibrary, IUserPlaylistService, Service() {
     companion object {
         fun mapPlaylist(resultRow: ResultRow): UserPlaylist {
             val id = resultRow[UserPlaylistTable.id].value
@@ -52,7 +74,7 @@ class UserPlaylistService : IUserPlaylistService, Service() {
     }.data
 
     suspend fun byName(name: String, creator: UUID): UserPlaylist? = querySingle {
-        where { UserPlaylistTable.name eq name and (UserPlaylistTable.creator eq creator) }
+        where { (UserPlaylistTable.name eq name) and (UserPlaylistTable.creator eq creator) }
     }
 
     override suspend fun rankedSearch(creator: UUID?, page: Int, pageSize: Int, query: String): PaginatedResponse<UserPlaylist> =
@@ -69,10 +91,11 @@ class UserPlaylistService : IUserPlaylistService, Service() {
 
     override suspend fun allPlaylists(creator: UUID?, page: Int, pageSize: Int): PaginatedResponse<UserPlaylist> =
         queryPlaylists(page, pageSize) {
-            if (creator != null) where { UserPlaylistTable.creator eq creator } else this
+            if (creator != null) where { UserPlaylistTable.creator eq creator }
+            this
         }
 
-    fun allPlaylistsFlow(creator: UUID? = null): Flow<UserPlaylist> = flow {
+    fun allPlaylistsFlow(creator: UUID?): Flow<UserPlaylist> = flow {
         val total = allPlaylists(creator, 0, 0).total
         var page = 0
         val pageSize = 100
@@ -101,8 +124,8 @@ class UserPlaylistService : IUserPlaylistService, Service() {
             this[UserPlaylistTable.name] = playlist.name
             this[UserPlaylistTable.customIdentifier] = customIdentifier
             this[UserPlaylistTable.description] = playlist.description
-            this[UserPlaylistTable.creator] = user.id
-            this[UserPlaylistTable.imageId] = coverImageId?.id
+            this[UserPlaylistTable.creator] = EntityID(user.id, UserTable)
+            this[UserPlaylistTable.imageId] = coverImageId?.id?.let { EntityID(it, ImageTable) }
             this[UserPlaylistTable.origin] = playlist.origin
         }.first()[UserPlaylistTable.id].value
     }
@@ -123,7 +146,7 @@ class UserPlaylistService : IUserPlaylistService, Service() {
 
     override suspend fun removeFromPlaylist(id: UUID, songIds: List<UUID>): Int = dbQuery {
         UserPlaylistSongTable.deleteWhere {
-            UserPlaylistSongTable.playlistId eq id and (UserPlaylistSongTable.songId inList songIds)
+            (UserPlaylistSongTable.playlistId eq id) and (UserPlaylistSongTable.songId inList songIds)
         }
     }
 
@@ -131,6 +154,49 @@ class UserPlaylistService : IUserPlaylistService, Service() {
         UserPlaylistTable.update({ UserPlaylistTable.id eq id }) {
             it[UserPlaylistTable.imageId] = imageId
         } == 1
+    }
+
+    override suspend fun createBatch(playlists: List<InsertablePlaylist>, userId: PlatformUUID?): List<PlatformUUID> {
+        if (playlists.isEmpty() || userId == null) return emptyList()
+
+        val imageService by inject<ImageService>()
+
+        val allUniqueImageHashes = playlists.mapNotNull { it.imageHash }.distinct()
+        val allUniqueSongPaths = playlists.flatMap { it.songPaths }.distinct()
+
+        val imageIdMap: Map<String, UUID> = imageService.getCoverHashes(allUniqueImageHashes)
+
+        val songIdByPath: Map<String, UUID> = dbQuery {
+            SongTable
+                .select(SongTable.id, SongTable.filePath)
+                .where { SongTable.filePath inList allUniqueSongPaths }
+                .associate { it[SongTable.filePath] to it[SongTable.id].value }
+        }
+
+        return playlists.map { playlist ->
+            val existingId = dbQuery {
+                UserPlaylistTable
+                    .select(UserPlaylistTable.id)
+                    .where { (UserPlaylistTable.name eq playlist.name) and (UserPlaylistTable.creator eq userId) }
+                    .firstOrNull()?.get(UserPlaylistTable.id)?.value ?: UUID.randomUUID()
+            }
+
+            val imageId = playlist.imageHash?.let { imageIdMap[it] }
+            val resolvedSongIds = playlist.songPaths.mapNotNull { songIdByPath[it] }
+
+            val userPlaylist = UserPlaylist(
+                id = existingId,
+                name = playlist.name,
+                songs = resolvedSongIds,
+                imageId = imageId,
+                creator = userId,
+                description = playlist.description,
+                origin = playlist.origin
+            )
+
+            upsertUserPlaylist(userPlaylist)
+            existingId
+        }
     }
 
     private suspend fun querySingle(query: Query.() -> Query) =
@@ -160,11 +226,10 @@ class UserPlaylistService : IUserPlaylistService, Service() {
                 .where { UserPlaylistSongTable.playlistId inList playlistIds }
                 .toList()
 
-            val songIds = songLinkRows.map { it[UserPlaylistSongTable.songId].value }
-            val distinctSongIds = songIds.distinct()
+            val songIds = songLinkRows.map { it[UserPlaylistSongTable.songId].value }.distinct()
 
-            val songInfoById = if (distinctSongIds.isNotEmpty()) {
-                getSongInfoForPlaylist(distinctSongIds)
+            val songInfoById = if (songIds.isNotEmpty()) {
+                getSongInfoForPlaylist(songIds)
             } else {
                 emptyMap()
             }

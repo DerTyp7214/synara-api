@@ -2,13 +2,27 @@ package dev.dertyp.services
 
 import dev.dertyp.core.fetchBatchedResults
 import dev.dertyp.core.fetchBatchedResultsByIdKeyset
-import dev.dertyp.data.*
+import dev.dertyp.data.Album
+import dev.dertyp.data.Artist
+import dev.dertyp.data.ArtistAlias
+import dev.dertyp.data.ArtistSplitAlias
+import dev.dertyp.data.Image
+import dev.dertyp.data.Playlist
+import dev.dertyp.data.RemoteServerPaths
+import dev.dertyp.data.Song
+import dev.dertyp.data.User
+import dev.dertyp.data.UserPlaylist
 import dev.dertyp.db.ArtistAliasTable
 import dev.dertyp.db.ArtistSplitAliasTable
 import dev.dertyp.db.ImageTable
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.asFlow
+import kotlinx.coroutines.flow.chunked
+import kotlinx.coroutines.flow.flatMapConcat
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.koin.core.component.inject
 import java.util.UUID
@@ -150,7 +164,7 @@ class MirrorService : Service() {
 
     fun getPlaylists(): Flow<Playlist> = playlistService.allPlaylistsFlow()
 
-    fun getUserPlaylists(): Flow<UserPlaylist> = userPlaylistService.allPlaylistsFlow()
+    fun getUserPlaylists(): Flow<UserPlaylist> = userPlaylistService.allPlaylistsFlow(null)
 
     fun getImageMetadata(): Flow<Image> = flow {
         ImageTable.selectAll().fetchBatchedResultsByIdKeyset(ImageTable.id, 1000) { batch ->

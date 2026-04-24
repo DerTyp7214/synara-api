@@ -4,7 +4,7 @@ import com.google.gson.Gson
 import com.ucasoft.ktor.simpleCache.SimpleCacheConfig
 import com.ucasoft.ktor.simpleCache.SimpleCacheProvider
 import org.koin.core.component.KoinComponent
-import org.koin.java.KoinJavaComponent.inject
+import org.koin.core.component.inject
 import redis.clients.jedis.HostAndPort
 import redis.clients.jedis.RedisClusterClient
 import redis.clients.jedis.params.SetParams
@@ -45,8 +45,8 @@ class RedisCacheProvider(config: Config) : SimpleCacheProvider(config) {
 class RedisCacheObject(val type: String, val content: String) : KoinComponent {
     override fun toString() = "${type.length}:$type$content"
 
-    companion object {
-        private val gson by inject<Gson>(Gson::class.java)
+    companion object : KoinComponent {
+        private val gson by inject<Gson>()
 
         fun fromObject(`object`: Any) = RedisCacheObject(`object`::class.java.name, gson.toJson(`object`))
 

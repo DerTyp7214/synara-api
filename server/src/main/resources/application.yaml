@@ -51,3 +51,5 @@ proxy:
   name: ${PROXY_NAME:}
   id: ${PROXY_ID:}
   key: ${PROXY_KEY:}
+youtube:
+  apiKey: ${YOUTUBE_API_KEY:}

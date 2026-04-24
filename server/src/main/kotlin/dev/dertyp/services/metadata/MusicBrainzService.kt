@@ -6,7 +6,14 @@ import dev.dertyp.ApiClient
 import dev.dertyp.PlatformUUID
 import dev.dertyp.core.HttpClientPriority
 import dev.dertyp.core.cleanTitle
-import dev.dertyp.data.*
+import dev.dertyp.data.Album
+import dev.dertyp.data.Artist
+import dev.dertyp.data.BaseSong
+import dev.dertyp.data.MusicBrainzArtist
+import dev.dertyp.data.MusicBrainzRecording
+import dev.dertyp.data.MusicBrainzRelease
+import dev.dertyp.data.MusicBrainzReleaseGroup
+import dev.dertyp.data.PaginatedResponse
 import dev.dertyp.server.BuildConfig
 import dev.dertyp.services.Service
 import io.ktor.client.call.body
@@ -62,27 +69,55 @@ class MusicBrainzService : Service() {
         noinline block: suspend HttpRequestBuilder.() -> Unit = {}
     ): T? {
         var retries = 0
-        while (retries < 10) {
+        val maxRetries = 3
+        while (retries < maxRetries) {
             try {
                 val response: HttpResponse = ApiClient.queueInstance.enqueue(urlString, priority, block)
                 if (response.status == HttpStatusCode.ServiceUnavailable || response.status == HttpStatusCode.TooManyRequests) {
-                    logger.warn("Rate limited by MusicBrainz, retrying in 1s... ($retries/10)")
+                    logger.warn("Rate limited by MusicBrainz, retrying in 1s... ($retries/$maxRetries)")
                     delay(1.seconds)
                     retries++
                     continue
                 }
                 return response.body<T>()
             } catch (e: Exception) {
-                if (retries < 9) {
-                    logger.warn("Error during MusicBrainz request: ${e.message}, retrying... ($retries/10)")
+                if (retries < maxRetries - 1) {
+                    logger.warn("Error during MusicBrainz request ($urlString): ${e.message}, retrying... ($retries/$maxRetries)")
                 } else {
-                    logger.error("Error during MusicBrainz request after 10 retries: ${e.message}", e)
+                    logger.error("Error during MusicBrainz request after $maxRetries retries ($urlString): ${e.message}", e)
                 }
                 delay(10.seconds)
                 retries++
             }
         }
         return null
+    }
+
+    suspend fun searchRecordingMb(
+        title: String,
+        artists: List<String>,
+        priority: HttpClientPriority = HttpClientPriority.NORMAL
+    ): MusicBrainzRecording? {
+        val query = "recording:\"${title.cleanTitle()}\" AND artist:${artists.joinToString { "\"$it\"" }}"
+
+        return try {
+            val searchResponse = retryableGet<MusicBrainzSearchResponse>("$mbBaseUrl/recording", priority) {
+                parameter("query", query)
+                parameter("limit", 5)
+                parameter("fmt", "json")
+                parameter("inc", "tags+genres+releases+release-groups+media")
+                header("User-Agent", "Synara/${BuildConfig.VERSION} ( https://github.com/dertyp7214/synara )")
+            }
+
+            searchResponse?.recordings?.firstOrNull { rec ->
+                val recArtists = rec.artistCredit?.mapNotNull { it.artist?.name?.lowercase() } ?: emptyList()
+                val targetArtists = artists.map { it.lowercase() }
+                targetArtists.any { it in recArtists }
+            }
+        } catch (e: Exception) {
+            logger.error("Failed to search MusicBrainz for $query", e)
+            null
+        }
     }
 
     suspend fun searchMb(song: BaseSong, priority: HttpClientPriority = HttpClientPriority.NORMAL): MusicBrainzRecording? {
@@ -119,7 +154,7 @@ class MusicBrainzService : Service() {
                 parameter("query", query)
                 parameter("limit", 1)
                 parameter("fmt", "json")
-                parameter("inc", "tags+genres+releases+release-groups")
+                parameter("inc", "tags+genres+releases+release-groups+media")
                 header("User-Agent", "Synara/${BuildConfig.VERSION} ( https://github.com/dertyp7214/synara )")
             }
 
@@ -146,13 +181,17 @@ class MusicBrainzService : Service() {
         return try {
             val response = retryableGet<MusicBrainzReleaseSearchResponse>("$mbBaseUrl/release", priority) {
                 parameter("query", query)
-                parameter("limit", 1)
+                parameter("limit", 5)
                 parameter("fmt", "json")
-                parameter("inc", "tags+genres+release-groups")
+                parameter("inc", "artist-credits+recordings+release-groups+tags+genres+media")
                 header("User-Agent", "Synara/${BuildConfig.VERSION} ( https://github.com/dertyp7214/synara )")
             }
 
-            response?.releases?.firstOrNull()
+            response?.releases?.firstOrNull { rel ->
+                val relArtists = rel.artistCredit?.mapNotNull { it.artist?.name?.lowercase() } ?: emptyList()
+                val targetArtists = album.artists.map { it.name.lowercase() }
+                targetArtists.any { it in relArtists }
+            }
         } catch (e: Exception) {
             logger.error("Error searching MusicBrainz for $query", e)
             null
@@ -289,6 +328,29 @@ class MusicBrainzService : Service() {
         }
     }
 
+    suspend fun searchReleaseMb(
+        title: String,
+        artists: List<String>,
+        priority: HttpClientPriority = HttpClientPriority.NORMAL
+    ): MusicBrainzRelease? {
+        val query = "release:\"${title.cleanTitle()}\" AND artist:${artists.joinToString { "\"$it\"" }}"
+
+        return try {
+            val response = retryableGet<MusicBrainzReleaseSearchResponse>("$mbBaseUrl/release", priority) {
+                parameter("query", query)
+                parameter("limit", 1)
+                parameter("fmt", "json")
+                parameter("inc", "artist-credits+recordings+release-groups+tags+genres+media")
+                header("User-Agent", "Synara/${BuildConfig.VERSION} ( https://github.com/dertyp7214/synara )")
+            }
+
+            response?.releases?.firstOrNull()
+        } catch (e: Exception) {
+            logger.error("Failed to search MusicBrainz for release $query", e)
+            null
+        }
+    }
+
     suspend fun fetchRecordingById(mbId: PlatformUUID, priority: HttpClientPriority = HttpClientPriority.NORMAL): MusicBrainzRecording? {
         return try {
             retryableGet<MusicBrainzRecording>("$mbBaseUrl/recording/$mbId", priority) {
@@ -305,7 +367,7 @@ class MusicBrainzService : Service() {
     suspend fun fetchReleaseById(mbId: PlatformUUID, priority: HttpClientPriority = HttpClientPriority.NORMAL): MusicBrainzRelease? {
         return try {
             retryableGet<MusicBrainzRelease>("$mbBaseUrl/release/$mbId", priority) {
-                parameter("inc", "artist-credits+release-groups+tags+genres")
+                parameter("inc", "artist-credits+recordings+release-groups+tags+genres+media")
                 parameter("fmt", "json")
                 header("User-Agent", "Synara/${BuildConfig.VERSION} ( https://github.com/dertyp7214/synara )")
             }
@@ -353,7 +415,10 @@ class CachedMusicBrainzService(
 
     override suspend fun getRelease(id: PlatformUUID): MusicBrainzRelease? {
         val cached = musicBrainzCacheService.getRelease(id)
-        if (cached != null && cached.fetchedAt != 0L) return cached
+        if (cached != null && cached.fetchedAt != 0L && cached.media?.isNotEmpty() == true) {
+            val hasTracks = cached.media!!.firstOrNull()?.tracks?.isNotEmpty() == true
+            if (hasTracks) return cached
+        }
         return musicBrainzService.fetchReleaseById(id, HttpClientPriority.HIGH)?.also {
             musicBrainzCacheService.updateReleaseCache(it)
         } ?: cached
@@ -365,5 +430,17 @@ class CachedMusicBrainzService(
         return musicBrainzService.fetchReleaseGroupById(id, HttpClientPriority.HIGH)?.also {
             musicBrainzCacheService.updateReleaseGroupCache(it)
         } ?: cached
+    }
+
+    override suspend fun searchRecording(title: String, artists: List<String>): MusicBrainzRecording? {
+        return musicBrainzService.searchRecordingMb(title, artists, HttpClientPriority.HIGH)?.also {
+            musicBrainzCacheService.updateRecordingCache(it)
+        }
+    }
+
+    override suspend fun searchRelease(title: String, artists: List<String>): MusicBrainzRelease? {
+        return musicBrainzService.searchReleaseMb(title, artists, HttpClientPriority.HIGH)?.also {
+            musicBrainzCacheService.updateReleaseCache(it)
+        }
     }
 }

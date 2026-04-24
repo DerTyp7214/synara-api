@@ -1,7 +1,7 @@
 package dev.dertyp.services
 
 import dev.dertyp.executeCommand
-import dev.dertyp.services.tdn.ProcessExecutionResult
+import dev.dertyp.services.download.ProcessExecutionResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -53,10 +53,10 @@ class LyricsSearch : ILyricsSearch, Service() {
     private suspend fun runCommand(command: List<String>, onLineReceived: suspend (String) -> Unit): ProcessExecutionResult {
         val startTime = Clock.System.now()
         return executeCommand(
-            command,
-            { Clock.System.now().minus(startTime) < 5.minutes },
-            logger,
-            onLineReceived
+            command = command,
+            aliveCheck = { Clock.System.now().minus(startTime) < 5.minutes },
+            logger = logger,
+            onLineReceived = onLineReceived
         )
     }
 }

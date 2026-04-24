@@ -437,7 +437,7 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
                                         origin = image.url
                                     )
                                 )
-                            ).firstOrNull()
+                            ).values.firstOrNull()
 
                             if (imageId == null) {
                                 onProgress(progress, "Error inserting image for \"$name\"")
@@ -571,7 +571,7 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
                                             origin = image.url
                                         )
                                     )
-                                ).firstOrNull()
+                                ).values.firstOrNull()
 
                                 if (imageId != null) {
                                     dbQuery {
@@ -687,7 +687,7 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
                                         origin = image.url
                                     )
                                 )
-                            ).firstOrNull()
+                            ).values.firstOrNull()
 
                             if (imageId == null) {
                                 onProgress(progress, "Error inserting image for \"$name\"")
@@ -808,7 +808,7 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
                                             origin = image.url
                                         )
                                     )
-                                ).firstOrNull()
+                                ).values.firstOrNull()
 
                                 if (imageId != null) {
                                     dbQuery {

@@ -4,6 +4,7 @@ import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
 import dev.dertyp.data.MergeArtists
 import dev.dertyp.data.MusicBrainzArtist
+import dev.dertyp.data.SplitArtist
 import dev.dertyp.db.*
 import dev.dertyp.services.metadata.CachedMusicBrainzService
 import dev.dertyp.services.metadata.MusicBrainzCacheService
@@ -614,7 +615,7 @@ class ArtistServiceTest : KoinTest {
             }
         }
 
-        val splitArtist = dev.dertyp.data.SplitArtist(
+        val splitArtist = SplitArtist(
             artistId = artistId,
             newArtists = mapOf(
                 "Artist A" to null,

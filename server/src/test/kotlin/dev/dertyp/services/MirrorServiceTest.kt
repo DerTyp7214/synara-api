@@ -1,5 +1,9 @@
 package dev.dertyp.services
 
+import dev.dertyp.data.Artist
+import dev.dertyp.data.Song
+import dev.dertyp.data.User
+
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
@@ -78,7 +82,7 @@ class MirrorServiceTest : KoinTest {
 
     @Test
     fun `getUsers should return users without password hashes`() = runBlocking {
-        val user = dev.dertyp.data.User(UUID.randomUUID(), "test", passwordHash = "secret")
+        val user = User(UUID.randomUUID(), "test", passwordHash = "secret")
         coEvery { userService.queryUser(any()) } returns listOf(user)
 
         val users = service.getUsers().toList()
@@ -89,7 +93,7 @@ class MirrorServiceTest : KoinTest {
 
     @Test
     fun `getSongs should delegate to songService`() = runBlocking {
-        val song = mockk<dev.dertyp.data.Song>()
+        val song = mockk<Song>()
         every { songService.allSongsFlow() } returns flowOf(song)
         
         val songs = service.getSongs().toList()
@@ -99,7 +103,7 @@ class MirrorServiceTest : KoinTest {
 
     @Test
     fun `getArtists should delegate to artistService`() = runBlocking {
-        val artist = mockk<dev.dertyp.data.Artist>()
+        val artist = mockk<Artist>()
         every { artistService.allArtistsFlow() } returns flowOf(artist)
         
         val artists = service.getArtists().toList()

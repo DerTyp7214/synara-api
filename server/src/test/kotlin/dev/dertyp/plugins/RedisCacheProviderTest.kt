@@ -1,7 +1,11 @@
 package dev.dertyp.plugins
 
 import com.google.gson.Gson
-import io.mockk.*
+import io.mockk.every
+import io.mockk.mockk
+import io.mockk.mockkStatic
+import io.mockk.unmockkAll
+import io.mockk.verify
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -69,7 +73,7 @@ class RedisCacheProviderTest {
         val provider = RedisCacheProvider(config)
         val key = "test-key"
 
-        val type = "java.lang.String"
+        val type = String::class.java.name
         val content = "\"cached-value\""
         val cacheString = "${type.length}:$type$content"
 

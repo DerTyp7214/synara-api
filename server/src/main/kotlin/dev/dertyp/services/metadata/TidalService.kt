@@ -551,7 +551,10 @@ class TidalService(
 
             val artists = body.included?.mapAttributes<ArtistsAttributes>() ?: emptyMap()
 
+            val albums = body.included?.mapAttributes<AlbumsAttributes>() ?: emptyMap()
+
             return body.data.attributes?.let { track ->
+                val albumId = body.data.relationships?.albums?.data?.firstOrNull()?.id
                 IMetadataService.Track(
                     id = body.data.id,
                     title = track.title,
@@ -559,6 +562,8 @@ class TidalService(
                     createdAt = track.createdAt,
                     artists = body.data.artists(artists),
                     images = imageUrls,
+                    albumId = albumId,
+                    albumTitle = albumId?.let { albums[it]?.title }
                 )
             }?.also { writeToJedis(it) }
         } catch (e: Exception) {
@@ -616,10 +621,12 @@ class TidalService(
                 body.data.mapNotNull { it.relationships?.albums?.data?.firstOrNull()?.id }
             val imageUrls = getImageUrlsByAlbumIds(albumIds)
 
+            val albums = body.included?.mapAttributes<AlbumsAttributes>() ?: emptyMap()
             val artists = body.included?.mapAttributes<ArtistsAttributes>() ?: emptyMap()
 
             return body.data.mapNotNull { trackObj ->
                 trackObj.attributes?.let { track ->
+                    val albumId = trackObj.relationships?.albums?.data?.firstOrNull()?.id
                     IMetadataService.Track(
                         id = trackObj.id,
                         title = track.title,
@@ -627,6 +634,8 @@ class TidalService(
                         createdAt = track.createdAt,
                         artists = trackObj.artists(artists),
                         images = trackObj.images(imageUrls),
+                        albumId = albumId,
+                        albumTitle = albumId?.let { albums[it]?.title }
                     )
                 }
             }.cacheTracks() + getTracksFromCache(existing)
@@ -840,6 +849,7 @@ class TidalService(
                         createdAt = track.createdAt,
                         artists = emptyList(),
                         images = emptyList(),
+                        albumId = it.relationships?.albums?.data?.firstOrNull()?.id
                     )
                 } ?: emptyList()
 
@@ -913,6 +923,7 @@ class TidalService(
                         discNumber = meta[id]?.volumeNumber,
                         artists = emptyList(),
                         images = emptyList(),
+                        albumId = albumId
                     )
                 }.asFlow())
 

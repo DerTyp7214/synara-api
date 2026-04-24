@@ -1,13 +1,25 @@
 package dev.dertyp.services.schedule
 
-import dev.dertyp.core.Task
 import dev.dertyp.core.plus
+import dev.dertyp.plugins.CronTrigger
+import dev.dertyp.plugins.CustomTrigger
+import dev.dertyp.plugins.EventTrigger
+import dev.dertyp.plugins.IScheduleService
+import dev.dertyp.plugins.ScheduleTrigger
+import dev.dertyp.plugins.Task
+import dev.dertyp.plugins.TaskCompletionTrigger
+import dev.dertyp.plugins.Trigger
 import dev.dertyp.services.Service
-import kotlinx.coroutines.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.time.withTimeoutOrNull
 import org.jetbrains.annotations.Range
+import org.koin.core.component.get
 import java.time.Duration
 import java.time.Instant
 import java.util.UUID
@@ -54,7 +66,7 @@ data class ScheduledTask(
 }
 
 @OptIn(ExperimentalAtomicApi::class, ExperimentalTime::class)
-class ScheduleService : Service() {
+class ScheduleService : IScheduleService, Service() {
     private val stopped: AtomicBoolean = AtomicBoolean(true)
     private val schedules: PriorityBlockingQueue<ScheduledTask> = PriorityBlockingQueue()
     private val eventRegistry = mutableMapOf<String, MutableSet<CustomTrigger>>()
@@ -85,7 +97,7 @@ class ScheduleService : Service() {
                         logger.info("Executing task: $taskName")
                         launch {
                             try {
-                                scheduledTask.task(this@ScheduleService)
+                                scheduledTask.task()
                                 notifyTaskCompletion(scheduledTask.id)
                             } catch (e: Exception) {
                                 logger.error("Error executing scheduled task", e)
@@ -133,7 +145,7 @@ class ScheduleService : Service() {
         return task
     }
 
-    fun scheduleTask(trigger: ScheduleTrigger, name: String? = null, task: Task): ScheduledTask {
+    override fun scheduleTask(trigger: ScheduleTrigger, name: String?, task: Task): ScheduledTask {
         val scheduledTask = ScheduledTask(
             trigger = trigger,
             name = name,
@@ -141,6 +153,15 @@ class ScheduleService : Service() {
         )
         schedule(scheduledTask)
         return scheduledTask
+    }
+
+    override fun schedulePostIndexTasks() {
+        val musicBrainzWorker = get<MusicBrainzWorker>()
+        scheduleTask(
+            trigger = ScheduleTrigger(Instant.now()),
+            name = "MusicBrainzWorker-AfterIndex",
+            task = { musicBrainzWorker.run { _, _ -> } }
+        )
     }
 
     fun fireEvent(id: UUID) {
@@ -154,13 +175,13 @@ class ScheduleService : Service() {
         }
     }
 
-    fun triggerTask(id: UUID): Boolean {
+    override fun triggerTask(id: UUID): Boolean {
         val scheduledTask = schedules.find { it.id == id } ?: return false
         val taskName = if (scheduledTask.name != null) "${scheduledTask.name} (${scheduledTask.id})" else "${scheduledTask.id}"
         logger.info("Manually triggering task: $taskName")
         CoroutineScope(Dispatchers.Default).launch {
             try {
-                scheduledTask.task(this@ScheduleService)
+                scheduledTask.task()
                 notifyTaskCompletion(scheduledTask.id)
             } catch (e: Exception) {
                 logger.error("Error executing manually triggered task: $taskName", e)

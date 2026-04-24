@@ -1,4 +1,4 @@
-package dev.dertyp.services.schedule
+package dev.dertyp.plugins
 
 import com.cronutils.model.CronType
 import com.cronutils.model.definition.CronDefinitionBuilder
@@ -7,14 +7,12 @@ import com.cronutils.parser.CronParser
 import java.time.Duration
 import java.time.Instant
 import java.time.ZoneId
-import java.util.*
-import kotlin.time.ExperimentalTime
+import java.util.UUID
 
 private val cronDefinition = CronDefinitionBuilder.instanceDefinitionFor(CronType.UNIX)
 private val parser = CronParser(cronDefinition)
-private val zoneId = ZoneId.systemDefault()
 
-sealed class Trigger() {
+sealed class Trigger {
     abstract val scheduledTime: Instant
     abstract fun nextExecution(from: Instant = Instant.now()): Instant
     abstract fun doesRepeat(): Boolean
@@ -24,6 +22,7 @@ sealed class Trigger() {
 data class CronTrigger(
     val expression: String,
     override val scheduledTime: Instant = Instant.now(),
+    val zoneId: ZoneId = ZoneId.systemDefault()
 ) : Trigger() {
     private val cron = parser.parse(expression)
     private val executionTime = ExecutionTime.forCron(cron)
@@ -32,7 +31,7 @@ data class CronTrigger(
         val zdt = from.atZone(zoneId)
         return executionTime.nextExecution(zdt)
             .map { it.toInstant() }
-            .orElse(Instant.MIN)
+            .orElse(Instant.MIN)!!
     }
 
     override fun doesRepeat(): Boolean {
@@ -43,7 +42,6 @@ data class CronTrigger(
     override fun updateForNextRun(time: Instant) = copy(scheduledTime = nextExecution(time))
 }
 
-@OptIn(ExperimentalTime::class)
 data class ScheduleTrigger(
     override val scheduledTime: Instant,
     val repeat: Duration = Duration.ZERO,
@@ -69,7 +67,6 @@ data class EventTrigger(
 
     fun fire(): EventTrigger = copy(scheduledTime = Instant.now())
 }
-
 
 data class CustomTrigger(
     private val autoRepeat: Boolean = true,
@@ -104,3 +101,5 @@ data class TaskCompletionTrigger(
         activatedTime = Instant.now()
     }
 }
+
+typealias Task = suspend () -> Unit

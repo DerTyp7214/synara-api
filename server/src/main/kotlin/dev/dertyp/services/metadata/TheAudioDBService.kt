@@ -237,7 +237,8 @@ class TheAudioDBService(
             title = track.strTrack,
             genres = track.genre.splitMetadata() + track.style.splitMetadata(),
             duration = kotlin.time.Duration.ZERO,
-            images = emptyList()
+            images = emptyList(),
+            albumId = track.idAlbum
         )
     }
 

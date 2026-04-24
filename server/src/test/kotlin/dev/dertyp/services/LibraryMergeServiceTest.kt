@@ -2,11 +2,30 @@ package dev.dertyp.services
 
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
-import dev.dertyp.db.*
+import dev.dertyp.db.AlbumArtistTable
+import dev.dertyp.db.AlbumMusicBrainzTable
+import dev.dertyp.db.AlbumTable
+import dev.dertyp.db.ArtistTable
+import dev.dertyp.db.ImageTable
+import dev.dertyp.db.PlaylistSongTable
+import dev.dertyp.db.PlaylistTable
+import dev.dertyp.db.SongArtistTable
+import dev.dertyp.db.SongMusicBrainzTable
+import dev.dertyp.db.SongTable
+import dev.dertyp.db.TranscodedSongTable
+import dev.dertyp.db.UserPlaylistSongTable
+import dev.dertyp.db.UserPlaylistTable
+import dev.dertyp.db.UserSongTable
+import dev.dertyp.db.UserTable
+import dev.dertyp.plugins.PluginManager
 import dev.dertyp.services.metadata.MetadataService
 import dev.dertyp.services.metadata.TidalService
 import io.ktor.server.application.ApplicationEnvironment
-import io.mockk.*
+import io.mockk.coEvery
+import io.mockk.coVerify
+import io.mockk.every
+import io.mockk.mockk
+import io.mockk.mockkObject
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.SchemaUtils
@@ -28,17 +47,23 @@ class LibraryMergeServiceTest : KoinTest {
     private lateinit var service: LibraryMergeService
     private lateinit var environment: ApplicationEnvironment
     private lateinit var songService: SongService
+    private lateinit var albumService: AlbumService
+    private lateinit var pluginManager: PluginManager
     private lateinit var tidalService: TidalService
 
     fun setup(dialect: DbDialect) {
         environment = mockk()
         songService = mockk()
+        albumService = mockk()
+        pluginManager = mockk()
         tidalService = mockk()
 
         startKoin {
             modules(module {
                 single { environment }
                 single { songService }
+                single { albumService }
+                single { pluginManager }
                 single { tidalService }
             })
         }
@@ -167,18 +192,20 @@ class LibraryMergeServiceTest : KoinTest {
         mockkObject(MetadataService.Companion)
         every { MetadataService.getMetadataService(any(), any()) } returns tidalService
         coEvery { tidalService.getAlbumsByIds(any()) } returns emptyList()
+        coEvery { albumService.fetchMusicBrainzId(any()) } returns null
+        every { pluginManager.getAllDownloaders() } returns emptyList()
 
         transaction(database) {
             AlbumTable.insert {
                 it[id] = UUID.randomUUID()
                 it[name] = "Album 1"
-                it[originalId] = "orig1"
+                it[originalId] = "tidal:orig1"
                 it[songCount] = 10
             }
             AlbumTable.insert {
                 it[id] = UUID.randomUUID()
                 it[name] = "Album 1 (Duplicate)"
-                it[originalId] = "orig1"
+                it[originalId] = "tidal:orig1"
                 it[songCount] = 12
             }
         }
@@ -198,6 +225,8 @@ class LibraryMergeServiceTest : KoinTest {
         mockkObject(MetadataService.Companion)
         every { MetadataService.getMetadataService(any(), any()) } returns tidalService
         coEvery { tidalService.getAlbumsByIds(any()) } returns emptyList()
+        coEvery { albumService.fetchMusicBrainzId(any()) } returns null
+        every { pluginManager.getAllDownloaders() } returns emptyList()
 
         transaction(database) {
             val imageId = ImageTable.insert {
@@ -277,7 +306,7 @@ class LibraryMergeServiceTest : KoinTest {
             UserSongTable.insert { it[songId] = song2; it[this.userId] = userId; it[isFavourite] = false }
             
             PlaylistSongTable.insert {
-                it[playlistId] = PlaylistTable.insert { it[name] = "P" }[PlaylistTable.id]
+                it[playlistId] = PlaylistTable.insert { table -> table[name] = "P" }[PlaylistTable.id]
                 it[songId] = song1
                 it[position] = 0
             }

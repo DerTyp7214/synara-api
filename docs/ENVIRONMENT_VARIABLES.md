@@ -48,6 +48,12 @@ Most variables have sensible defaults and are **optional**. Only variables witho
 | `JWT_SECRET` | Secret key for signing tokens. | No | `changeme` | - |
 | `PORT` | The port the server listens on. | No | `8080` | - |
 
+## Other
+
+| Variable | Description | Required | Default (Standalone) | Default (Docker) |
+|:---|:---|:---:|:---|:---|
+| `YOUTUBE_API_KEY` | Youtube API key for YouTube Data API v3 (Downloader). | No | - | - |
+
 ## Proxy Configuration
 
 | Variable | Description | Required | Default (Standalone) | Default (Docker) |
@@ -70,12 +76,12 @@ Most variables have sensible defaults and are **optional**. Only variables witho
 
 | Variable | Description | Required | Default (Standalone) | Default (Docker) |
 |:---|:---|:---:|:---|:---|
-| `AUDIO_ALBUMS_PATH` | Base path for albums. | No | `music/albums` | `/data/Tidal/Albums` |
+| `AUDIO_ALBUMS_PATH` | Base path for albums. | No | `music/albums` | `/data/Synara/Albums` |
 | `AUDIO_AUTO_TRANSCODE_QUALITIES` | Bitrates for auto-transcoding. | No | - | - |
 | `AUDIO_CUSTOM_PATH` | Path for custom uploaded audio. | No | `music/custom` | `/data/Synara/custom` |
-| `AUDIO_PLAYLISTS_PATH` | Base path for playlists. | No | `music/playlists` | `/data/Tidal/Playlists` |
-| `AUDIO_TRACKS_PATH` | Base path for audio tracks. | No | `music/tracks` | `/data/Tidal/Tracks` |
+| `AUDIO_PLAYLISTS_PATH` | Base path for playlists. | No | `music/playlists` | `/data/Synara/Playlists` |
+| `AUDIO_TRACKS_PATH` | Base path for audio tracks. | No | `music/tracks` | `/data/Synara/Tracks` |
 | `AUDIO_TRACKS_SECONDARY_PATH` | Optional secondary audio path. | No | - | `/data/Synara` |
-| `AUDIO_TRANSCODE_PATH` | Path for transcoded files. | No | `music/transcode` | `/data/Tidal/Transcode` |
-| `DATA_IMAGES_PATH` | Path for cached images/covers. | No | `data/images` | `/data/Tidal/Images` |
+| `AUDIO_TRANSCODE_PATH` | Path for transcoded files. | No | `music/transcode` | `/data/Synara/Transcode` |
+| `DATA_IMAGES_PATH` | Path for cached images/covers. | No | `data/images` | `/data/Synara/Images` |
 

@@ -1,5 +1,7 @@
 package dev.dertyp.services.schedule
 
+import dev.dertyp.plugins.ScheduleTrigger
+import dev.dertyp.plugins.TaskCompletionTrigger
 import io.mockk.every
 import io.mockk.spyk
 import kotlinx.coroutines.*

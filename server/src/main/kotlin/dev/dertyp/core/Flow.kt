@@ -6,7 +6,11 @@ import dev.dertyp.data.User
 import dev.dertyp.services.SongService
 import dev.dertyp.services.metadata.IMetadataService
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.asFlow
+import kotlinx.coroutines.flow.chunked
+import kotlinx.coroutines.flow.flattenConcat
+import kotlinx.coroutines.flow.map
 import java.util.UUID
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -18,7 +22,7 @@ fun Flow<IMetadataService.Track>.filterExisting(
 ): Flow<List<IMetadataService.Track>> {
     return chunked(20)
         .map { tracks ->
-            val existingSongs = songService.byTidalTrackIds(
+            val existingSongs = songService.byOriginalIds(
                 tracks.map { it.id },
                 user.id
             )

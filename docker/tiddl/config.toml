@@ -9,9 +9,9 @@ default = "Tracks/{album.id}/{item.id}"
 [download]
 track_quality = "max"
 video_quality = "fhd"
-skip_existing = true
+skip_existing = false
 threads_count = 3
-download_path = "/data/Tidal"
+download_path = "/data/Synara/tiddl"
 singles_filter = "none"
 videos_filter = "none"
 update_mtime = false

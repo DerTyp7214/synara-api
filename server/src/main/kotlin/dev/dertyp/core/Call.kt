@@ -45,7 +45,7 @@ fun ApplicationCall.getMetadataProvider(providerType: IMetadataService.MetadataT
 
     val metadataProvider = if (providerType != null) providerType else {
         val metadataProviderString = this.parameters["metadataProvider"] ?: return null
-        IMetadataService.MetadataType.valueOf(metadataProviderString)
+        IMetadataService.MetadataType(metadataProviderString)
     }
 
     return MetadataService.getMetadataService(metadataProvider, environment)

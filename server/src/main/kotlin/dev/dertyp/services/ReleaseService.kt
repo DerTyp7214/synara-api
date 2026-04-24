@@ -465,7 +465,7 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
                     origin = imageUrl
                 )
             )
-        ).firstOrNull()
+        ).values.firstOrNull()
     }
 
     internal suspend fun resolvePlatformLinks(

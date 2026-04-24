@@ -2,12 +2,54 @@ package dev.dertyp.services
 
 import dev.dertyp.AudioUtils
 import dev.dertyp.StreamInfo
-import dev.dertyp.core.*
-import dev.dertyp.data.*
-import dev.dertyp.db.*
+import dev.dertyp.core.HttpClientPriority
+import dev.dertyp.core.date
+import dev.dertyp.core.fetchBatchedResults
+import dev.dertyp.core.mbArtistAliasSearchTable
+import dev.dertyp.core.mbArtistSearchTable
+import dev.dertyp.core.mbRecordingSearchTable
+import dev.dertyp.core.mbReleaseSearchTable
+import dev.dertyp.core.rankedSearchQuery
+import dev.dertyp.core.toMap
+import dev.dertyp.core.withMBArtistSearch
+import dev.dertyp.core.withMBRecordingSearch
+import dev.dertyp.core.withMBReleaseSearch
+import dev.dertyp.data.Artist
+import dev.dertyp.data.BaseSong
+import dev.dertyp.data.Genre
+import dev.dertyp.data.InsertableAlbum
+import dev.dertyp.data.InsertableSong
+import dev.dertyp.data.PaginatedResponse
+import dev.dertyp.data.Song
+import dev.dertyp.data.SongTag
+import dev.dertyp.data.User
+import dev.dertyp.data.UserSong
+import dev.dertyp.db.AlbumArtistTable
+import dev.dertyp.db.AlbumMusicBrainzTable
+import dev.dertyp.db.AlbumTable
+import dev.dertyp.db.ArtistAliasTable
+import dev.dertyp.db.ArtistMusicBrainzTable
+import dev.dertyp.db.ArtistTable
+import dev.dertyp.db.FollowedArtistTable
+import dev.dertyp.db.GenreTable
+import dev.dertyp.db.ImageTable
+import dev.dertyp.db.MBArtistAliasTable
+import dev.dertyp.db.MBArtistTable
+import dev.dertyp.db.MBRecordingArtistCreditTable
+import dev.dertyp.db.MBRecordingTable
+import dev.dertyp.db.MBReleaseArtistCreditTable
+import dev.dertyp.db.MBReleaseTable
+import dev.dertyp.db.PlaylistSongTable
+import dev.dertyp.db.SongArtistTable
+import dev.dertyp.db.SongGenreTable
+import dev.dertyp.db.SongMusicBrainzTable
+import dev.dertyp.db.SongTable
+import dev.dertyp.db.UserPlaylistSongTable
+import dev.dertyp.db.UserSongTable
 import dev.dertyp.dbQuery
 import dev.dertyp.getDateFromISO
 import dev.dertyp.getISOFromDate
+import dev.dertyp.plugins.SongLibrary
 import dev.dertyp.routing.RestFileProvider
 import dev.dertyp.services.AlbumService.Companion.calculateAlbumStats
 import dev.dertyp.services.AlbumService.Companion.mapAlbum
@@ -18,14 +60,57 @@ import dev.dertyp.services.metadata.MusicBrainzService
 import dev.dertyp.utils.LogParam
 import io.ktor.http.ContentType
 import io.ktor.server.application.ApplicationEnvironment
-import kotlinx.coroutines.*
-import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.asFlow
+import kotlinx.coroutines.flow.chunked
+import kotlinx.coroutines.flow.flatMapConcat
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import kotlinx.io.IOException
 import org.jaudiotagger.audio.AudioFileIO
 import org.jaudiotagger.tag.FieldKey
-import org.jetbrains.exposed.v1.core.*
+import org.jetbrains.exposed.v1.core.Alias
+import org.jetbrains.exposed.v1.core.ColumnSet
+import org.jetbrains.exposed.v1.core.JoinType
+import org.jetbrains.exposed.v1.core.ResultRow
+import org.jetbrains.exposed.v1.core.Slice
+import org.jetbrains.exposed.v1.core.SortOrder
+import org.jetbrains.exposed.v1.core.VarCharColumnType
+import org.jetbrains.exposed.v1.core.alias
+import org.jetbrains.exposed.v1.core.and
+import org.jetbrains.exposed.v1.core.castTo
+import org.jetbrains.exposed.v1.core.countDistinct
 import org.jetbrains.exposed.v1.core.dao.id.EntityID
-import org.jetbrains.exposed.v1.jdbc.*
+import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.inList
+import org.jetbrains.exposed.v1.core.innerJoin
+import org.jetbrains.exposed.v1.core.isNotNull
+import org.jetbrains.exposed.v1.core.isNull
+import org.jetbrains.exposed.v1.core.leftJoin
+import org.jetbrains.exposed.v1.core.less
+import org.jetbrains.exposed.v1.core.like
+import org.jetbrains.exposed.v1.core.neq
+import org.jetbrains.exposed.v1.core.not
+import org.jetbrains.exposed.v1.core.notExists
+import org.jetbrains.exposed.v1.core.or
+import org.jetbrains.exposed.v1.jdbc.Query
+import org.jetbrains.exposed.v1.jdbc.andWhere
+import org.jetbrains.exposed.v1.jdbc.batchInsert
+import org.jetbrains.exposed.v1.jdbc.deleteWhere
+import org.jetbrains.exposed.v1.jdbc.insert
+import org.jetbrains.exposed.v1.jdbc.insertIgnore
+import org.jetbrains.exposed.v1.jdbc.orWhere
+import org.jetbrains.exposed.v1.jdbc.select
+import org.jetbrains.exposed.v1.jdbc.selectAll
+import org.jetbrains.exposed.v1.jdbc.update
+import org.jetbrains.exposed.v1.jdbc.upsert
 import org.koin.core.component.get
 import org.koin.core.component.inject
 import java.io.File
@@ -83,7 +168,7 @@ class SongRpcService(private val user: User, private val songService: SongServic
         id: UUID,
         liked: Boolean,
         addedAt: Instant?
-    ): UserSong? = songService.setLiked(id, user.id, liked, addedAt)
+    ): UserSong? = songService.setLikedReturning(id, user.id, liked, addedAt)
 
     override suspend fun setLyrics(id: UUID, @LogParam("size") lyrics: List<String>): UserSong? =
         songService.setLyrics(id, user.id, lyrics)
@@ -142,11 +227,11 @@ class SongRpcService(private val user: User, private val songService: SongServic
         playlistId: UUID
     ): PaginatedResponse<UserSong> = songService.byUserPlaylist(page, pageSize, playlistId, user.id)
 
-    override suspend fun byTidalTrackIds(@LogParam("size") ids: Collection<String>): List<UserSong> =
-        songService.byTidalTrackIds(ids, user.id)
+    override suspend fun byOriginalIds(@LogParam("size") ids: Collection<String>): List<UserSong> =
+        songService.byOriginalIds(ids, user.id)
 
-    override suspend fun byTidalTracks(@LogParam("size") tracks: Collection<IMetadataService.Track>): List<UserSong> =
-        songService.byTidalTracks(tracks, user.id)
+    override suspend fun byOriginalTracks(@LogParam("size") tracks: Collection<IMetadataService.Track>): List<UserSong> =
+        songService.byOriginalTracks(tracks, user.id)
 
     override suspend fun likedSongs(
         page: Int,
@@ -192,9 +277,14 @@ class SongRpcService(private val user: User, private val songService: SongServic
     override fun songIdsByPlaylist(playlistId: UUID): Flow<UUID> = songService.songIdsByPlaylist(playlistId)
 
     override fun songIdsByUserPlaylist(playlistId: UUID): Flow<UUID> = songService.songIdsByUserPlaylist(playlistId)
+
+    override suspend fun moveSongs(oldPath: String, newPath: String, originalIdPrefix: String?): Int {
+        if (!user.isAdmin) throw IllegalStateException("Only admins can move songs")
+        return songService.moveSongs(oldPath, newPath, originalIdPrefix)
+    }
 }
 
-class SongService : Service() {
+class SongService : SongLibrary, Service() {
     private val environment by inject<ApplicationEnvironment>()
     private val musicBrainzService by inject<MusicBrainzService>()
     private val musicBrainzCacheService by inject<MusicBrainzCacheService>()
@@ -300,10 +390,14 @@ class SongService : Service() {
         )
     } else this
 
-    suspend fun setLiked(id: UUID, userId: UUID, liked: Boolean, addedAt: Instant? = Instant.now()): UserSong? {
+    override suspend fun setLiked(songId: UUID, userId: UUID, liked: Boolean, addedAt: Instant?) {
+        setLikedReturning(songId, userId, liked, addedAt)
+    }
+
+    override suspend fun setLikedReturning(songId: UUID, userId: UUID, liked: Boolean, addedAt: Instant?): UserSong? {
         dbQuery {
             val inserted = UserSongTable.insertIgnore {
-                it[UserSongTable.songId] = id
+                it[UserSongTable.songId] = songId
                 it[UserSongTable.userId] = userId
                 it[UserSongTable.isFavourite] = liked
                 if (addedAt != null) it[UserSongTable.updatedAt] = addedAt.toEpochMilli()
@@ -311,7 +405,7 @@ class SongService : Service() {
 
             if (!inserted) {
                 UserSongTable.update({
-                    UserSongTable.userId eq userId and (UserSongTable.songId eq id)
+                    UserSongTable.userId eq userId and (UserSongTable.songId eq songId)
                 }) {
                     it[UserSongTable.isFavourite] = liked
                     it[UserSongTable.updatedAt] = (addedAt ?: Instant.now()).toEpochMilli()
@@ -319,7 +413,7 @@ class SongService : Service() {
             }
         }
 
-        return byId(id, userId)
+        return byId(songId, userId)
     }
 
     suspend fun setArtists(id: UUID, artistIds: List<UUID>, userId: UUID): UserSong? = dbQuery {
@@ -432,6 +526,93 @@ class SongService : Service() {
 
         if (mbRecording != null) {
             musicBrainzCacheService.updateRecordingCache(mbRecording)
+
+            val artistService: ArtistService by inject()
+            val artistCredits = mbRecording.artistCredit ?: emptyList()
+
+            val mbArtistIds = artistCredits.mapNotNull { it.artist?.id }.distinct()
+            val existingArtistsByMbId = if (mbArtistIds.isNotEmpty()) {
+                artistService.byMusicBrainzIds(mbArtistIds, userId).associateBy { it.musicbrainzId }
+            } else emptyMap()
+
+            val resolvedArtists = mutableListOf<Artist>()
+            val namesToResolve = artistCredits
+                .filter { it.artist?.id == null || !existingArtistsByMbId.containsKey(it.artist?.id) }
+                .mapNotNull { it.name ?: it.artist?.name }
+                .distinct()
+
+            val artistsByName = if (namesToResolve.isNotEmpty()) {
+                artistService.getOrBulkCreateWithResult(namesToResolve)
+            } else null
+
+            val allCandidateIds = artistsByName?.nameToIds?.values?.flatten()?.distinct() ?: emptyList()
+            val candidatesById = if (allCandidateIds.isNotEmpty()) {
+                artistService.byIds(allCandidateIds, userId).associateBy { it.id }
+            } else emptyMap()
+
+            val candidatesWithEvidence = if (allCandidateIds.isNotEmpty() && mbArtistIds.isNotEmpty()) {
+                dbQuery {
+                    val fromSongs = SongArtistTable
+                        .join(SongMusicBrainzTable, JoinType.INNER, SongArtistTable.songId, SongMusicBrainzTable.songId)
+                        .join(MBRecordingArtistCreditTable, JoinType.INNER, SongMusicBrainzTable.musicBrainzId, MBRecordingArtistCreditTable.recordingId)
+                        .join(SongTable, JoinType.INNER, SongArtistTable.songId, SongTable.id)
+                        .select(SongArtistTable.artistId, MBRecordingArtistCreditTable.artistId)
+                        .where { (SongArtistTable.artistId inList allCandidateIds) and (MBRecordingArtistCreditTable.artistId inList mbArtistIds) and (SongTable.id neq id) }
+                        .map { it[SongArtistTable.artistId].value to it[MBRecordingArtistCreditTable.artistId].value }
+
+                    val fromAlbums = AlbumArtistTable
+                        .join(AlbumMusicBrainzTable, JoinType.INNER, AlbumArtistTable.albumId, AlbumMusicBrainzTable.albumId)
+                        .join(MBReleaseArtistCreditTable, JoinType.INNER, AlbumMusicBrainzTable.musicBrainzId, MBReleaseArtistCreditTable.releaseId)
+                        .select(AlbumArtistTable.artistId, MBReleaseArtistCreditTable.artistId)
+                        .where { (AlbumArtistTable.artistId inList allCandidateIds) and (MBReleaseArtistCreditTable.artistId inList mbArtistIds) }
+                        .map { it[AlbumArtistTable.artistId].value to it[MBReleaseArtistCreditTable.artistId].value }
+
+                    (fromSongs + fromAlbums).toSet()
+                }
+            } else emptySet()
+
+            artistCredits.forEach { credit ->
+                val mbId = credit.artist?.id
+                val name = credit.name ?: credit.artist?.name ?: return@forEach
+
+                var artist = existingArtistsByMbId[mbId]
+                if (artist == null && artistsByName != null) {
+                    val ids = artistsByName.nameToIds[name] ?: emptyList()
+                    val candidates = ids.mapNotNull { candidatesById[it] }
+
+                    artist = candidates.find { candidate ->
+                        mbId != null && candidatesWithEvidence.contains(candidate.id to mbId)
+                    }
+
+                    if (artist != null) {
+                        if (mbId != null) {
+                            artistService.setMusicBrainzId(artist.id, mbId, userId)
+                            artist = artist.copy(musicbrainzId = mbId)
+                        }
+                    } else if (mbId != null) {
+                        artist = artistService.createArtist(name = name, musicBrainzId = mbId, userId = userId)
+                    } else {
+                        artist = candidates.firstOrNull()
+                    }
+                }
+
+                if (artist != null) {
+                    resolvedArtists.add(artist)
+                }
+            }
+
+            val finalArtists = resolvedArtists.distinctBy { it.id }
+
+            if (finalArtists.isNotEmpty()) {
+                dbQuery {
+                    SongArtistTable.deleteWhere { SongArtistTable.songId eq id }
+                    SongArtistTable.batchInsert(finalArtists) { artist ->
+                        this[SongArtistTable.songId] = id
+                        this[SongArtistTable.artistId] = artist.id
+                    }
+                }
+            }
+
             val genres = (mbRecording.genres?.map { it.name } ?: emptyList()) + (mbRecording.releases?.flatMap { it.genres?.map { g -> g.name } ?: emptyList() } ?: emptyList()) + (mbRecording.releases?.flatMap { it.releaseGroup?.genres?.map { g -> g.name } ?: emptyList() } ?: emptyList())
             if (genres.isNotEmpty()) {
                 val genreService: GenreService by inject()
@@ -569,21 +750,24 @@ class SongService : Service() {
             orderBy(SongTable.id, SortOrder.ASC)
         }
 
-    suspend fun byTidalTrackIds(ids: Collection<String>, userId: UUID): List<UserSong> =
+    override suspend fun byOriginalIds(ids: Collection<String>, userId: UUID): List<UserSong> =
         querySongs<UserSong>(0, Int.MAX_VALUE, true, userId) {
             where {
-                SongTable.originalUrl inList ids.map {
-                    "https://tidal.com/browse/track/$it"
-                }
+                SongTable.originalUrl inList ids
             }
             orWhere {
                 SongTable.originalUrl inList ids.map {
                     "https://tidal.com/track/$it"
                 }
             }
+            orWhere {
+                SongTable.originalUrl inList ids.map {
+                    "https://tidal.com/browse/track/$it"
+                }
+            }
         }.data
 
-    suspend fun byTidalTracks(tracks: Collection<IMetadataService.Track>, userId: UUID): List<UserSong> =
+    suspend fun byOriginalTracks(tracks: Collection<IMetadataService.Track>, userId: UUID): List<UserSong> =
         querySongs<UserSong>(0, Int.MAX_VALUE, true, userId) {
             where {
                 tracks.map { track ->
@@ -1228,7 +1412,7 @@ class SongService : Service() {
         return@dbQuery existingSongMap
     }
 
-    suspend fun createBatch(songs: List<InsertableSong>): Map<UUID, InsertableSong> = coroutineScope {
+    override suspend fun createBatch(songs: List<InsertableSong>): Map<UUID, Song> = coroutineScope {
         if (songs.isEmpty()) return@coroutineScope emptyMap()
 
         val artistService = get<ArtistService>()
@@ -1385,7 +1569,7 @@ class SongService : Service() {
             }
         }
 
-        insertedSongs.toMap()
+        byIds(insertedSongs.map { it.first }).associateBy { it.id }
     }
 
     suspend fun upsertSong(song: Song) = dbQuery {
@@ -1422,5 +1606,39 @@ class SongService : Service() {
                 it[lastCheck] = System.currentTimeMillis()
             }
         }
+    }
+
+    suspend fun moveSongs(oldPath: String, newPath: String, originalIdPrefix: String? = null): Int = dbQuery {
+        val affectedSongs = if (originalIdPrefix != null) {
+            SongTable.innerJoin(AlbumTable)
+                .select(SongTable.id)
+                .where {
+                    (SongTable.filePath like "$oldPath%") and
+                            (AlbumTable.originalId like "$originalIdPrefix%")
+                }
+                .map { it[SongTable.id].value }
+        } else {
+            SongTable.select(SongTable.id)
+                .where { SongTable.filePath like "$oldPath%" }
+                .map { it[SongTable.id].value }
+        }
+
+        if (affectedSongs.isEmpty()) return@dbQuery 0
+
+        val songs = SongTable.select(SongTable.id, SongTable.filePath)
+            .where { SongTable.id inList affectedSongs }
+            .toList()
+
+        songs.forEach { row ->
+            val id = row[SongTable.id].value
+            val currentPath = row[SongTable.filePath]
+            val newFilePath = currentPath.replaceFirst(oldPath, newPath)
+            
+            SongTable.update({ SongTable.id eq id }) {
+                it[filePath] = newFilePath
+            }
+        }
+        
+        songs.size
     }
 }

@@ -4,7 +4,7 @@
     "lyrics_file": false,
     "video_download": false,
     "download_delay": true,
-    "download_base_path": "/data/Tidal",
+    "download_base_path": "/data/Synara/tdn",
     "quality_audio": "HI_RES_LOSSLESS",
     "quality_video": "480",
     "format_album": "Albums/{album_id}/{track_id}",

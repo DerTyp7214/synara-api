@@ -41,6 +41,7 @@ dependencies {
 
     implementation(libs.ktor.client.core)
     implementation(libs.ktor.client.cio)
+    implementation(libs.ktor.client.okhttp)
     implementation(libs.ktor.client.encoding)
     implementation(libs.ktor.server.cors)
     implementation(libs.ktor.server.core)
@@ -111,6 +112,7 @@ dependencies {
 
     implementation(project(":common-rpc"))
     implementation(project(":common-proxy"))
+    implementation(project(":plugin-api"))
 
     testRuntimeOnly(libs.junit.jupiter.engine)
     testImplementation(libs.junit.jupiter.api)

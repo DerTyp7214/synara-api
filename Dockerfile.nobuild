@@ -46,7 +46,7 @@ RUN chown -R appuser:appgroup /home/appuser
 
 ARG DAY_MONTH_YEAR=unknown
 
-RUN python3 -m pip install --break-system-packages --no-cache-dir syncedlyrics tiddl #  tidal-dl-ng
+RUN python3 -m pip install --break-system-packages --no-cache-dir syncedlyrics yt-dlp tiddl #  tidal-dl-ng
 
 COPY --chown=appuser:appuser docker/tiddl/config.toml /home/appuser/.tiddl/config.toml
 COPY --chown=appuser:appuser docker/tdn-config/settings.json /home/appuser/.config/tidal_dl_ng/settings.json
@@ -54,12 +54,12 @@ COPY --chown=appuser:appgroup *.jar /app/synara-api.jar
 
 USER appuser
 
-ENV AUDIO_TRACKS_PATH="/data/Tidal/Tracks"
-ENV AUDIO_ALBUMS_PATH="/data/Tidal/Albums"
-ENV AUDIO_PLAYLISTS_PATH="/data/Tidal/Playlists"
-ENV AUDIO_TRANSCODE_PATH="/data/Tidal/Transcode"
+ENV AUDIO_TRACKS_PATH="/data/Synara/Tracks"
+ENV AUDIO_ALBUMS_PATH="/data/Synara/Albums"
+ENV AUDIO_PLAYLISTS_PATH="/data/Synara/Playlists"
+ENV AUDIO_TRANSCODE_PATH="/data/Synara/Transcode"
 ENV AUDIO_CUSTOM_PATH="/data/Synara/custom"
-ENV DATA_IMAGES_PATH="/data/Tidal/Images"
+ENV DATA_IMAGES_PATH="/data/Synara/Images"
 ENV BACKUP_DIR="/backups"
 
 ENV AUDIO_TRACKS_SECONDARY_PATH="/data/Synara"

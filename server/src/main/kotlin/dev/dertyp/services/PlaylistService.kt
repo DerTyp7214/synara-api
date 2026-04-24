@@ -1,30 +1,40 @@
 package dev.dertyp.services
 
+import dev.dertyp.PlatformUUID
 import dev.dertyp.core.paging
 import dev.dertyp.core.rankedSearchQuery
 import dev.dertyp.data.InsertablePlaylist
 import dev.dertyp.data.PaginatedResponse
 import dev.dertyp.data.Playlist
 import dev.dertyp.data.PlaylistEntry
+import dev.dertyp.data.User
 import dev.dertyp.db.ImageTable
 import dev.dertyp.db.PlaylistSongTable
 import dev.dertyp.db.PlaylistTable
 import dev.dertyp.db.SongTable
 import dev.dertyp.dbQuery
+import dev.dertyp.plugins.PlaylistLibrary
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.core.leftJoin
-import org.jetbrains.exposed.v1.jdbc.*
+import org.jetbrains.exposed.v1.jdbc.Query
+import org.jetbrains.exposed.v1.jdbc.batchInsert
+import org.jetbrains.exposed.v1.jdbc.deleteWhere
+import org.jetbrains.exposed.v1.jdbc.insertAndGetId
+import org.jetbrains.exposed.v1.jdbc.select
+import org.jetbrains.exposed.v1.jdbc.selectAll
+import org.jetbrains.exposed.v1.jdbc.upsert
 import org.koin.core.component.get
 import java.util.UUID
 
-class PlaylistService : IPlaylistService, Service() {
+class PlaylistService : PlaylistLibrary, IPlaylistService, Service() {
     companion object {
         fun mapPlaylist(resultRow: ResultRow): Playlist {
             val id = resultRow[PlaylistTable.id].value
@@ -218,8 +228,8 @@ class PlaylistService : IPlaylistService, Service() {
         return Pair(playlistName, sortedEntries)
     }
 
-    suspend fun createBatch(playlists: List<InsertablePlaylist>): List<UUID> {
-        if (playlists.isEmpty()) return emptyList()
+    override suspend fun createBatch(playlists: List<InsertablePlaylist>, userId: PlatformUUID?): List<PlatformUUID> = dbQuery {
+        if (playlists.isEmpty()) return@dbQuery emptyList()
 
         val imageService = get<ImageService>()
 
@@ -290,7 +300,38 @@ class PlaylistService : IPlaylistService, Service() {
             }
         }
 
-        return insertedPlaylistIds
+        insertedPlaylistIds
+    }
+
+    override suspend fun getOrAddPlaylist(user: User, customIdentifier: String?, playlist: InsertablePlaylist): UUID = dbQuery {
+        val existingId = PlaylistTable
+            .select(PlaylistTable.id)
+            .where { PlaylistTable.name eq playlist.name }
+            .singleOrNull()?.get(PlaylistTable.id)?.value
+
+        if (existingId != null) return@dbQuery existingId
+
+        PlaylistTable.insertAndGetId {
+            it[name] = playlist.name
+            it[imageId] = playlist.imageHash?.let { hash ->
+                val imageService = get<ImageService>()
+                runBlocking { imageService.byHash(hash)?.id }
+            }
+        }.value
+    }
+
+    override suspend fun addToPlaylist(id: UUID, songIds: List<Pair<Long, UUID>>): List<UUID> = dbQuery {
+        val lastPosition = PlaylistSongTable
+            .select(PlaylistSongTable.position)
+            .where { PlaylistSongTable.playlistId eq id }
+            .maxOfOrNull { it[PlaylistSongTable.position] } ?: 0
+
+        var currentPosition = lastPosition + 1
+        PlaylistSongTable.batchInsert(songIds) { (_, songId) ->
+            this[PlaylistSongTable.playlistId] = id
+            this[PlaylistSongTable.songId] = songId
+            this[PlaylistSongTable.position] = currentPosition++
+        }.map { it[PlaylistSongTable.songId].value }
     }
 
     suspend fun upsertPlaylist(playlist: Playlist) = dbQuery {

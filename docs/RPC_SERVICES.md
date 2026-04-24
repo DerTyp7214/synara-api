@@ -160,6 +160,23 @@ Manually provided metadata for custom audio uploads.
 | `genre` | `String`? | The musical genre. |
 | `coverData` | `ByteArray`? | The raw binary data of the cover image. |
 
+### DownloadBackend
+Available backend services for downloading content.
+
+| Field | Type | Description |
+| :--- | :--- | :--- |
+| `id` | `String` |  |
+
+### DownloadFavType
+The category of Download favorites.
+
+| Value | Description |
+| :--- | :--- |
+| `tracks` |  |
+| `artists` |  |
+| `albums` |  |
+| `videos` |  |
+
 ### DownloadQueueEntry
 Base class for entries in the download queue.
 
@@ -169,6 +186,16 @@ Base class for entries in the download queue.
 | `maxRetries` | `Int` | Maximum number of retry attempts on failure. |
 | `byUser` | `PlatformUUID`? | The ID of the user who initiated the download. |
 | `callback` | `SuspendFunction0`<`Unit`> |  |
+
+### DownloadSong
+Metadata for a track found.
+
+| Field | Type | Description |
+| :--- | :--- | :--- |
+| `id` | `String` | The track ID. |
+| `title` | `String` | The title of the track. |
+| `artists` | `List`<`String`> | Collection of artist names. |
+| `cover` | `Map`<`Int`, `String`> | Map of cover image sizes to URLs. |
 
 ### Explicit
 A queue entry containing full song metadata.
@@ -192,7 +219,7 @@ A download queue entry for a user's favorite collection.
 
 | Field | Type | Description |
 | :--- | :--- | :--- |
-| `tdnFavoriteType` | [TidalFavType](#tidalfavtype) | The type of favorites to download. |
+| `favoriteType` | [DownloadFavType](#downloadfavtype) | The type of favorites to download. |
 | `byUser` | `PlatformUUID`? | The ID of the user who initiated the download. |
 | `type` | [Type](#type)? | The type of content. |
 | `maxRetries` | `Int` |  |
@@ -341,6 +368,20 @@ A single log line from a download process.
 | :--- | :--- | :--- |
 | `queueEntry` | [DownloadQueueEntry](#downloadqueueentry) | The queue entry this log belongs to. |
 | `line` | `String`? | The actual log text. |
+
+### LrcLibResponse
+Lyrics metadata from LrcLib.
+
+| Field | Type | Description |
+| :--- | :--- | :--- |
+| `id` | `Int` | The LrcLib internal ID. |
+| `trackName` | `String` | The name of the track. |
+| `artistName` | `String` | The name of the artist. |
+| `albumName` | `String` | The name of the album. |
+| `duration` | `Double` | Duration of the track in seconds. |
+| `instrumental` | `Boolean` | Whether the track is instrumental. |
+| `plainLyrics` | `String`? | The plain text lyrics. |
+| `syncedLyrics` | `String`? | The synced lyrics in LRC format. |
 
 ### LyricChar
 A single character in a synced lyric word with precise timing.
@@ -732,34 +773,6 @@ The status of a background scheduled task.
 | `FAILURE` | The task encountered an error. |
 | `RUNNING` | The task is currently in progress. |
 
-### TidalDownloadService
-Available backend services for downloading content from Tidal.
-
-| Value | Description |
-| :--- | :--- |
-| `Tdn` |  |
-| `Tiddl` |  |
-
-### TidalFavType
-The category of Tidal favorites.
-
-| Value | Description |
-| :--- | :--- |
-| `tracks` |  |
-| `artists` |  |
-| `albums` |  |
-| `videos` |  |
-
-### TidalSong
-Metadata for a track found on Tidal.
-
-| Field | Type | Description |
-| :--- | :--- | :--- |
-| `id` | `String` | The Tidal track ID. |
-| `title` | `String` | The title of the track. |
-| `artists` | `List`<`String`> | Collection of artist names. |
-| `cover` | `Map`<`Int`, `String`> | Map of cover image sizes to URLs. |
-
 ### Track
 External metadata for a music track.
 
@@ -775,6 +788,8 @@ External metadata for a music track.
 | `discNumber` | `Int`? | Disc number in the album. |
 | `images` | `List`<[Image](#image)> | Collection of track images. |
 | `genres` | `List`<`String`> | Genres associated with the track. |
+| `albumId` | `String`? | The external album ID. |
+| `albumTitle` | `String`? | The title of the album. |
 
 ### Type
 The type of content available for download.
@@ -970,7 +985,7 @@ Direct database management and data migration.
 | `importData` | `data` (`ByteArray`): The raw database blob. | `Unit` | No |  | Import a previously exported database blob to overwrite the current state. |
 
 ### IDownloadService
-Management of the integrated media downloader (Tidal).
+Management of the integrated media downloader.
 
 | Function | Parameters | Returns | Admin | Errors | Description |
 | :--- | :--- | :--- | :---: | :--- | :--- |
@@ -978,18 +993,21 @@ Management of the integrated media downloader (Tidal).
 | `currentDownload` | - | [DownloadQueueEntry](#downloadqueueentry)? | No |  | Get the currently active download task. |
 | `downloadQueue` | - | `List`<[DownloadQueueEntry](#downloadqueueentry)> | No |  | Get the list of pending download tasks in the queue. |
 | `finishedDownloads` | - | `List`<[FinishedDownloadQueueEntry](#finisheddownloadqueueentry)> | No |  | Get a list of recently completed or failed download tasks. |
-| `syncFavouritesAvailable` | - | `Boolean` | No |  | Check if favorite synchronization is available for the current Tidal account. |
-| `syncFavourites` | - | `Unit` | No | IllegalStateException | Synchronize Tidal favorites with the local library. |
-| `downloadTidalIds` | `ids` (`List`<`String`>): Collection of Tidal IDs.<br>`type` ([Type](#type)): The type of content (SONG, ALBUM, etc.). | `Unit` | No |  | Queue Tidal content for download by its IDs. |
-| `existsByTidalId` | `id` (`String`): The Tidal ID to check.<br>`type` ([Type](#type)): The type of content. | `Boolean` | No |  | Check if content with a specific Tidal ID is already present in the library. |
-| `setTidalDownloadService` | `service` ([TidalDownloadService](#tidaldownloadservice)): The downloader service to use. | `Unit` | No |  | Set the preferred Tidal downloader backend. |
-| `getTidalDownloadService` | - | [TidalDownloadService](#tidaldownloadservice) | No |  | Get the currently active Tidal downloader backend. |
-| `tidalDownloadAuthorized` | - | `Boolean` | No |  | Check if the Tidal downloader is authorized. |
-| `tidalDownloadLogin` | - | `Flow`<`String`> | No |  | Trigger the Tidal OAuth login flow and stream the login URL. |
+| `syncFavouritesAvailable` | - | `Boolean` | No |  | Check if favorite synchronization is available. |
+| `syncFavourites` | - | `Unit` | No | IllegalStateException | Synchronize favorites with the local library. |
+| `downloadIds` | `ids` (`List`<`String`>): Collection of IDs.<br>`type` ([Type](#type)): The type of content (SONG, ALBUM, etc.).<br>`downloader` ([DownloadBackend](#downloadbackend)?): The downloader to use. | `Unit` | No |  | Queue content for download by its IDs. |
+| `downloadUrls` | `urls` (`List`<`String`>): Collection of URLs. | `Unit` | No |  | Queue content for download by its URLs. |
+| `getDownloaderForUrl` | `url` (`String`): The URL to check. | [DownloadBackend](#downloadbackend)? | No |  | Get the appropriate downloader backend for a given URL. |
+| `existsByOriginalId` | `id` (`String`): The original ID to check.<br>`type` ([Type](#type)): The type of content. | `Boolean` | No |  | Check if content with a specific original ID is already present in the library. |
+| `setDownloadService` | `service` ([DownloadBackend](#downloadbackend)): The downloader service to use. | `Unit` | No |  | Set the preferred downloader backend. |
+| `getDownloadService` | - | [DownloadBackend](#downloadbackend) | No |  | Get the currently active downloader backend. |
+| `getAllDownloadServices` | - | `List`<[DownloadBackend](#downloadbackend)> | No |  | Get all available downloader backends. |
+| `downloadAuthorized` | - | `Boolean` | No |  | Check if the downloader is authorized. |
+| `downloadLogin` | - | `Flow`<`String`> | No |  | Trigger the OAuth login flow and stream the login URL. |
 | `tidalSyncAuthorized` | - | `Boolean` | No |  | Check if Tidal favorite synchronization is authorized. |
 | `getAuthUrl` | - | `String` | No | IllegalArgumentException | Get the Tidal OAuth authorization URL. |
 | `killAllChildProcesses` | - | `Unit` | No |  | Immediately stop all active downloader processes. |
-| `searchTidal` | `query` (`String`?): General search query.<br>`title` (`String`?): Filter by track title.<br>`artist` (`String`?): Filter by artist name.<br>`count` (`Int`): Maximum number of results. | `List`<[TidalSong](#tidalsong)> | No | IllegalStateException | Search for tracks directly on Tidal. |
+| `search` | `query` (`String`?): General search query.<br>`title` (`String`?): Filter by track title.<br>`artist` (`String`?): Filter by artist name.<br>`count` (`Int`): Maximum number of results. | `List`<[DownloadSong](#downloadsong)> | No | IllegalStateException | Search for tracks directly. |
 
 ### IFavSyncService
 Tracks the history of favorite synchronization tasks.
@@ -1009,6 +1027,8 @@ Management of image files for covers and profiles.
 | `getCoverHashes` | `hashes` (`List`<`String`>): Collection of image hashes. | `Map`<`String`, `PlatformUUID`> | No |  | Map a list of image hashes to their existing internal UUIDs. |
 | `getImageData` | `id` (`PlatformUUID`): The image unique identifier.<br>`size` (`Int`): Requested image size (width/height). 0 for original size. | `ByteArray`? | No |  | Retrieve the raw binary data of an image. |
 | `createImage` | `bytes` (`ByteArray`): The raw binary data of the image.<br>`origin` (`String`): The source or category of the image. | `PlatformUUID` | No |  | Store a new image on the server. |
+| `createBatch` | `images` (`List`<[InsertableImage](#insertableimage)>): Collection of images to store. | `Map`<`String`, `PlatformUUID`> | No |  | Store multiple images on the server in a single operation. |
+| `moveImages` | `oldPath` (`String`): Path prefix to match.<br>`newPath` (`String`): New base path. | `Int` | **Yes** |  | Batch update image file paths. |
 
 ### IIndexer
 Local file system media scanning.
@@ -1086,6 +1106,8 @@ Fetch raw metadata records directly from the MusicBrainz database.
 | `getRecording` | `id` (`PlatformUUID`): The MusicBrainz Recording UUID. | `MusicBrainzRecording`? | No |  | Retrieve a MusicBrainz Recording record. |
 | `getRelease` | `id` (`PlatformUUID`): The MusicBrainz Release UUID. | `MusicBrainzRelease`? | No |  | Retrieve a MusicBrainz Release record. |
 | `getReleaseGroup` | `id` (`PlatformUUID`): The MusicBrainz Release Group UUID. | `MusicBrainzReleaseGroup`? | No |  | Retrieve a MusicBrainz Release Group record. |
+| `searchRecording` | `title` (`String`): The title of the recording.<br>`artists` (`List`<`String`>): The artists of the recording. | `MusicBrainzRecording`? | No |  | Search for a recording on MusicBrainz. |
+| `searchRelease` | `title` (`String`): The title of the release.<br>`artists` (`List`<`String`>): The artists of the release. | `MusicBrainzRelease`? | No |  | Search for a release (album) on MusicBrainz. |
 
 ### IPlaybackService
 Synchronize music playback status across multiple devices.
@@ -1179,8 +1201,8 @@ The primary interface for song discovery, streaming, and metadata.
 | `byAlbum` | `page` (`Int`): Page index.<br>`pageSize` (`Int`): Number of items per page.<br>`albumId` (`PlatformUUID`): The album unique identifier. | [PaginatedResponse](#paginatedresponse)<[UserSong](#usersong)> | No |  | List songs in an album. |
 | `byPlaylist` | `page` (`Int`): Page index.<br>`pageSize` (`Int`): Number of items per page.<br>`playlistId` (`PlatformUUID`): The playlist unique identifier. | [PaginatedResponse](#paginatedresponse)<[UserSong](#usersong)> | No |  | List songs in a system playlist. |
 | `byUserPlaylist` | `page` (`Int`): Page index.<br>`pageSize` (`Int`): Number of items per page.<br>`playlistId` (`PlatformUUID`): The user playlist unique identifier. | [PaginatedResponse](#paginatedresponse)<[UserSong](#usersong)> | No |  | List songs in a user playlist. |
-| `byTidalTrackIds` | `ids` (`Collection`<`String`>): Collection of Tidal track IDs. | `List`<[UserSong](#usersong)> | No |  | Find songs by their original Tidal track IDs. |
-| `byTidalTracks` | `tracks` (`Collection`<[Track](#track)>): Collection of track metadata. | `List`<[UserSong](#usersong)> | No |  | Find songs matching external metadata records. |
+| `byOriginalIds` | `ids` (`Collection`<`String`>): Collection of original platform-specific track identifiers. | `List`<[UserSong](#usersong)> | No |  | Find songs by their original platform-specific unique identifiers. |
+| `byOriginalTracks` | `tracks` (`Collection`<[Track](#track)>): Collection of track metadata. | `List`<[UserSong](#usersong)> | No |  | Find songs matching external metadata records. |
 | `likedSongs` | `page` (`Int`): Page index.<br>`pageSize` (`Int`): Number of items per page.<br>`explicit` (`Boolean`): Whether to include explicit content. | [PaginatedResponse](#paginatedresponse)<[UserSong](#usersong)> | No |  | Get all songs liked by the current user. |
 | `allSongs` | `page` (`Int`): Page index.<br>`pageSize` (`Int`): Number of items per page.<br>`explicit` (`Boolean`): Whether to include explicit content.<br>`tags` (`List`<[SongTag](#songtag)>): Filter by specific tags.<br>`invertTags` (`Boolean`): Invert the tag filter. | [PaginatedResponse](#paginatedresponse)<[UserSong](#usersong)> | No |  | Get all songs with optional filtering. |
 | `deleteSongs` | `ids` (`Collection`<`PlatformUUID`>): Collection of song IDs to delete. | `Boolean` | No |  | Delete multiple songs from the library. |
@@ -1195,6 +1217,7 @@ The primary interface for song discovery, streaming, and metadata.
 | `songIdsByAlbum` | `albumId` (`PlatformUUID`): The album unique identifier. | `Flow`<`PlatformUUID`> | No |  | Stream song IDs belonging to an album. |
 | `songIdsByPlaylist` | `playlistId` (`PlatformUUID`): The playlist unique identifier. | `Flow`<`PlatformUUID`> | No |  | Stream song IDs belonging to a system playlist. |
 | `songIdsByUserPlaylist` | `playlistId` (`PlatformUUID`): The user playlist unique identifier. | `Flow`<`PlatformUUID`> | No |  | Stream song IDs belonging to a user playlist. |
+| `moveSongs` | `oldPath` (`String`): Path prefix to match.<br>`newPath` (`String`): New base path.<br>`originalIdPrefix` (`String`?): Optional originalId prefix to filter by (e.g. 'youtube:'). | `Int` | **Yes** |  | Batch update song file paths. |
 
 ### IStorageService
 Monitoring of physical disk usage for the media library.

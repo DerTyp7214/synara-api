@@ -126,6 +126,21 @@ object MBRecordingReleaseTable : Table("mb_recording_release") {
     override val primaryKey = PrimaryKey(recordingId, releaseId)
 }
 
+object MBMediaTable : LongIdTable("mb_media") {
+    val releaseId = reference("releaseId", MBReleaseTable.id, onDelete = ReferenceOption.CASCADE)
+    val position = integer("position")
+    val format = varchar("format", 128).nullable()
+    val trackCount = integer("trackCount").default(0)
+}
+
+object MBTrackTable : MBIdTable("mb_track") {
+    val mediaId = reference("mediaId", MBMediaTable.id, onDelete = ReferenceOption.CASCADE)
+    val position = integer("position").nullable()
+    val number = varchar("number", 32).nullable()
+    val title = text("title").nullable()
+    val recordingId = reference("recordingId", MBRecordingTable.id, onDelete = ReferenceOption.CASCADE).nullable()
+}
+
 val allMusicBrainzTables = arrayOf(
     MBAreaTable,
     MBArtistTable,
@@ -137,5 +152,7 @@ val allMusicBrainzTables = arrayOf(
     MBReleaseGroupArtistCreditTable,
     MBRecordingArtistCreditTable,
     MBReleaseArtistCreditTable,
-    MBRecordingReleaseTable
+    MBRecordingReleaseTable,
+    MBMediaTable,
+    MBTrackTable
 )

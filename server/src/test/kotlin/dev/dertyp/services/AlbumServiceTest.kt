@@ -3,33 +3,67 @@ package dev.dertyp.services
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
 import dev.dertyp.data.InsertableAlbum
+import dev.dertyp.data.MusicBrainzArtist
+import dev.dertyp.data.MusicBrainzArtistCredit
 import dev.dertyp.data.MusicBrainzRelease
-import dev.dertyp.db.*
+import dev.dertyp.db.AlbumArtistTable
+import dev.dertyp.db.AlbumGenreTable
+import dev.dertyp.db.AlbumMusicBrainzTable
+import dev.dertyp.db.AlbumTable
+import dev.dertyp.db.ArtistAliasTable
+import dev.dertyp.db.ArtistGenreTable
+import dev.dertyp.db.ArtistMusicBrainzTable
+import dev.dertyp.db.ArtistSplitAliasTable
+import dev.dertyp.db.ArtistTable
+import dev.dertyp.db.FollowedArtistTable
+import dev.dertyp.db.GenreTable
+import dev.dertyp.db.ImageTable
+import dev.dertyp.db.MBArtistAliasTable
+import dev.dertyp.db.MBArtistTable
+import dev.dertyp.db.MBReleaseArtistCreditTable
+import dev.dertyp.db.MBReleaseTable
+import dev.dertyp.db.SongArtistTable
+import dev.dertyp.db.SongGenreTable
+import dev.dertyp.db.SongMusicBrainzTable
+import dev.dertyp.db.SongTable
+import dev.dertyp.db.UserTable
+import dev.dertyp.db.allMusicBrainzTables
 import dev.dertyp.services.metadata.CachedMusicBrainzService
 import dev.dertyp.services.metadata.MusicBrainzCacheService
 import dev.dertyp.services.metadata.MusicBrainzService
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.core.eq
-import org.jetbrains.exposed.v1.jdbc.*
+import org.jetbrains.exposed.v1.jdbc.Database
+import org.jetbrains.exposed.v1.jdbc.SchemaUtils
+import org.jetbrains.exposed.v1.jdbc.insert
+import org.jetbrains.exposed.v1.jdbc.insertAndGetId
+import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.jupiter.api.AfterEach
-import org.junit.jupiter.api.Assertions.*
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNotEquals
+import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.EnumSource
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
 import org.koin.dsl.module
 import org.koin.test.KoinTest
+import java.time.LocalDate
 import java.util.UUID
+import kotlin.time.Duration.Companion.milliseconds
 
 class AlbumServiceTest : KoinTest {
     private lateinit var database: Database
     private lateinit var service: AlbumService
     private val musicBrainzService = mockk<MusicBrainzService>(relaxed = true)
     private val storageService = mockk<StorageService>(relaxed = true)
+    private val libraryMergeService = mockk<LibraryMergeService>(relaxed = true)
 
     fun setup(dialect: DbDialect) {
         startKoin {
@@ -40,6 +74,7 @@ class AlbumServiceTest : KoinTest {
                 single { mockk<ImageService>(relaxed = true) }
                 single { ArtistService() }
                 single { CachedMusicBrainzService(get(), get()) }
+                single { libraryMergeService }
             })
         }
 
@@ -517,7 +552,7 @@ class AlbumServiceTest : KoinTest {
         setup(dialect)
         val artistName = "Test Artist"
         val albumName = "Matching Album"
-        val releaseDate = java.time.LocalDate.of(2024, 1, 1)
+        val releaseDate = LocalDate.of(2024, 1, 1)
         val isoDate = "2024-01-01"
         
         val artistId = transaction(database) {
@@ -644,5 +679,163 @@ class AlbumServiceTest : KoinTest {
         }
         assertNotNull(mbRelease)
         assertEquals("Fetched Album", mbRelease!![MBReleaseTable.title])
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `setMusicBrainzId should trigger duplicate album merge`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val albumId = UUID.randomUUID()
+        val mbId = UUID.randomUUID()
+
+        transaction(database) {
+            AlbumTable.insert {
+                it[id] = albumId
+                it[name] = "Album"
+            }
+        }
+
+        coEvery { musicBrainzService.fetchReleaseById(mbId, any()) } returns MusicBrainzRelease(
+            id = mbId,
+            title = "Album"
+        )
+        coEvery { libraryMergeService.mergeDuplicateAlbums() } returns 0
+
+        service.setMusicBrainzId(albumId, mbId)
+
+        kotlinx.coroutines.delay(500.milliseconds)
+
+        coVerify { libraryMergeService.mergeDuplicateAlbums() }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `fetchMusicBrainzId should resolve artist with evidence from other items`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val albumId = UUID.randomUUID()
+        val otherAlbumId = UUID.randomUUID()
+        val artistId = UUID.randomUUID()
+        val mbReleaseId = UUID.randomUUID()
+        val mbArtistId = UUID.randomUUID()
+
+        transaction(database) {
+            MBArtistTable.insert {
+                it[id] = mbArtistId
+                it[name] = "Artist Name"
+                it[sortName] = "Artist Name"
+            }
+            MBReleaseTable.insert {
+                it[id] = mbReleaseId
+                it[title] = "Other Album"
+            }
+            MBReleaseArtistCreditTable.insert {
+                it[releaseId] = mbReleaseId
+                it[MBReleaseArtistCreditTable.artistId] = mbArtistId
+                it[name] = "Artist Name"
+                it[position] = 0
+            }
+
+            ArtistTable.insert {
+                it[id] = artistId
+                it[name] = "Artist Name"
+            }
+
+            AlbumTable.insert {
+                it[id] = albumId
+                it[name] = "Current Album"
+                it[songCount] = 1
+            }
+            AlbumArtistTable.insert {
+                it[AlbumArtistTable.albumId] = albumId
+                it[AlbumArtistTable.artistId] = artistId
+            }
+
+            AlbumTable.insert {
+                it[id] = otherAlbumId
+                it[name] = "Other Album"
+                it[songCount] = 1
+            }
+            AlbumArtistTable.insert {
+                it[AlbumArtistTable.albumId] = otherAlbumId
+                it[AlbumArtistTable.artistId] = artistId
+            }
+            AlbumMusicBrainzTable.insert {
+                it[AlbumMusicBrainzTable.albumId] = otherAlbumId
+                it[AlbumMusicBrainzTable.musicBrainzId] = mbReleaseId
+                it[lastCheck] = 0
+            }
+        }
+
+        coEvery { musicBrainzService.searchAlbumMb(any(), any()) } returns MusicBrainzRelease(id = mbReleaseId, title = "Current Album")
+        coEvery { musicBrainzService.fetchReleaseById(mbReleaseId, any()) } returns MusicBrainzRelease(
+            id = mbReleaseId,
+            title = "Current Album",
+            artistCredit = listOf(
+                MusicBrainzArtistCredit(
+                    name = "Artist Name",
+                    artist = MusicBrainzArtist(id = mbArtistId, name = "Artist Name", sortName = "Artist Name")
+                )
+            )
+        )
+
+        service.fetchMusicBrainzId(albumId)
+
+        val updatedArtist = transaction(database) {
+            ArtistMusicBrainzTable.selectAll().where { ArtistMusicBrainzTable.artistId eq artistId }.singleOrNull()
+        }
+        assertNotNull(updatedArtist, "Artist should have been assigned an MBID because of evidence from other album")
+        assertEquals(mbArtistId, updatedArtist!![ArtistMusicBrainzTable.musicBrainzId]?.value)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `fetchMusicBrainzId should create new artist if no evidence exists`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val albumId = UUID.randomUUID()
+        val existingArtistId = UUID.randomUUID()
+        val mbReleaseId = UUID.randomUUID()
+        val mbArtistId = UUID.randomUUID()
+
+        transaction(database) {
+            ArtistTable.insert {
+                it[id] = existingArtistId
+                it[name] = "Same Name"
+            }
+
+            AlbumTable.insert {
+                it[id] = albumId
+                it[name] = "New Album"
+                it[songCount] = 1
+            }
+        }
+
+        coEvery { musicBrainzService.searchAlbumMb(any(), any()) } returns MusicBrainzRelease(id = mbReleaseId, title = "New Album")
+        coEvery { musicBrainzService.fetchReleaseById(mbReleaseId, any()) } returns MusicBrainzRelease(
+            id = mbReleaseId,
+            title = "New Album",
+            artistCredit = listOf(
+                MusicBrainzArtistCredit(
+                    name = "Same Name",
+                    artist = MusicBrainzArtist(id = mbArtistId, name = "Same Name", sortName = "Same Name")
+                )
+            )
+        )
+
+        service.fetchMusicBrainzId(albumId)
+
+        val artistsOnAlbum = transaction(database) {
+            AlbumArtistTable.selectAll().where { AlbumArtistTable.albumId eq albumId }
+                .map { it[AlbumArtistTable.artistId].value }
+        }
+        
+        assertEquals(1, artistsOnAlbum.size)
+        val resolvedArtistId = artistsOnAlbum.first()
+        assertNotEquals(existingArtistId, resolvedArtistId, "Should have created a new artist instead of reusing name-match without evidence")
+        
+        val mbInfo = transaction(database) {
+            ArtistMusicBrainzTable.selectAll().where { ArtistMusicBrainzTable.artistId eq resolvedArtistId }.singleOrNull()
+        }
+        assertNotNull(mbInfo)
+        assertEquals(mbArtistId, mbInfo!![ArtistMusicBrainzTable.musicBrainzId]?.value)
     }
 }

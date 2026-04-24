@@ -8,7 +8,10 @@ import com.google.gson.stream.JsonToken
 import com.google.gson.stream.JsonWriter
 import dev.dertyp.core.logTask
 import dev.dertyp.plugins.JmDNSPlugin
+import dev.dertyp.plugins.PluginManager
 import dev.dertyp.plugins.RedisCacheProvider
+import dev.dertyp.plugins.TaskCompletionTrigger
+import dev.dertyp.plugins.pluginModule
 import dev.dertyp.serializers.ByteArrayISO8859TypeAdapter
 import dev.dertyp.serializers.DurationAdapter
 import dev.dertyp.serializers.LocalDateAdapter
@@ -46,8 +49,11 @@ import dev.dertyp.services.StorageService
 import dev.dertyp.services.UserPlaylistBackupService
 import dev.dertyp.services.UserPlaylistService
 import dev.dertyp.services.UserService
+import dev.dertyp.services.download.DownloadService
+import dev.dertyp.services.download.DownloaderProxy
 import dev.dertyp.services.metadata.CachedMusicBrainzService
 import dev.dertyp.services.metadata.IMetadataService
+import dev.dertyp.services.metadata.IMusicBrainzService
 import dev.dertyp.services.metadata.MetadataDispatcherService
 import dev.dertyp.services.metadata.MusicBrainzCacheService
 import dev.dertyp.services.metadata.MusicBrainzService
@@ -61,11 +67,6 @@ import dev.dertyp.services.schedule.MusicBrainzWorker
 import dev.dertyp.services.schedule.RecentReleaseWorker
 import dev.dertyp.services.schedule.ScheduleService
 import dev.dertyp.services.schedule.ScheduledTask
-import dev.dertyp.services.schedule.TaskCompletionTrigger
-import dev.dertyp.services.tdn.DownloadService
-import dev.dertyp.services.tdn.TdnService
-import dev.dertyp.services.tdn.TidalDownloaderProxy
-import dev.dertyp.services.tdn.TiddlService
 import io.ktor.server.application.Application
 import io.ktor.server.application.ApplicationEnvironment
 import io.ktor.server.application.install
@@ -128,12 +129,11 @@ fun Application.module() {
             single { environment.config }
 
             singleOf(::Indexer)
+            singleOf(::PluginManager)
             singleOf(::JwtService)
-            singleOf(::TdnService)
             singleOf(::UserService)
             singleOf(::AuthService)
             singleOf(::SongService)
-            singleOf(::TiddlService)
             singleOf(::ImageService)
             singleOf(::AlbumService)
             singleOf(::LyricsSearch)
@@ -152,7 +152,7 @@ fun Application.module() {
             singleOf(::UserPlaylistService)
             singleOf(::RefreshTokenService)
             singleOf(::ScheduledTaskLogService)
-            singleOf(::TidalDownloaderProxy)
+            singleOf(::DownloaderProxy)
             singleOf(::SessionService)
             singleOf(::PlaybackService)
             singleOf(::CustomAudioService)
@@ -176,6 +176,8 @@ fun Application.module() {
             singleOf(::ReleaseService)
             singleOf(::AutoTranscodeWorker)
             singleOf(::CustomMigrationService)
+
+            single<IMusicBrainzService> { get<CachedMusicBrainzService>() }
 
             single<Gson> {
                 GsonBuilder()
@@ -209,7 +211,7 @@ fun Application.module() {
                     }
                 } else RedisCacheProvider.Config().apply { host = "none" }
             }
-        })
+        }, pluginModule)
     }
 
     get<DatabaseManager>().init()
@@ -244,7 +246,7 @@ fun Application.module() {
             name = "Database Backup",
             trigger = CronPresets.dailyAt(2, 0),
             task = {
-                logTask("Database Backup") {
+                scheduleService.logTask("Database Backup") {
                     val res = backupService.createBackup { p, l -> updateProgress(p, l) }
                     mapOf("fileName" to res.fileName, "size" to res.size, "imageCount" to res.imageCount)
                 }
@@ -257,7 +259,7 @@ fun Application.module() {
             name = "User Playlist Backup",
             trigger = CronPresets.dailyAt(2, 0),
             task = {
-                logTask("User Playlist Backup") {
+                scheduleService.logTask("User Playlist Backup") {
                     val count = userPlaylistBackupService.backupAllUsers { p, l -> updateProgress(p, l) }
                     mapOf("userCount" to count)
                 }
@@ -270,7 +272,7 @@ fun Application.module() {
             name = "Session Cleanup",
             trigger = CronPresets.dailyAt(0, 0),
             task = {
-                logTask("Session Cleanup") {
+                scheduleService.logTask("Session Cleanup") {
                     val count = sessionService.cleanupOldSessions { p, l -> updateProgress(p, l) }
                     mapOf("sessionsDeleted" to count)
                 }
@@ -283,7 +285,7 @@ fun Application.module() {
             name = "Merge Library Duplicates",
             trigger = CronPresets.dailyAt(1, 0),
             task = {
-                logTask("Merge Library Duplicates") {
+                scheduleService.logTask("Merge Library Duplicates") {
                     libraryMergeService.mergeDuplicates { p, l -> updateProgress(p, l) }
                 }
             }
@@ -297,7 +299,7 @@ fun Application.module() {
             name = "MusicBrainz Worker",
             trigger = CronPresets.dailyAt(0, 0),
             task = {
-                logTask("MusicBrainz Worker") {
+                scheduleService.logTask("MusicBrainz Worker") {
                     musicBrainzWorker.run { p, l -> updateProgress(p, l) }
                 }
             }
@@ -311,7 +313,7 @@ fun Application.module() {
             name = "MusicBrainz Cache Worker",
             trigger = TaskCompletionTrigger(musicBrainzTask.id),
             task = {
-                logTask("MusicBrainz Cache Worker") {
+                scheduleService.logTask("MusicBrainz Cache Worker") {
                     musicBrainzCacheWorker.run { p, l -> updateProgress(p, l) }
                 }
             }
@@ -325,7 +327,7 @@ fun Application.module() {
             name = "Genre Metadata Worker",
             trigger = TaskCompletionTrigger(musicBrainzTask.id),
             task = {
-                logTask("Genre Metadata Worker") {
+                scheduleService.logTask("Genre Metadata Worker") {
                     genreMetadataWorker.run { p, l -> updateProgress(p, l) }
                 }
             }
@@ -337,7 +339,7 @@ fun Application.module() {
             name = "Fetch Artist Images (Tidal)",
             trigger = TaskCompletionTrigger(genreMetadataTask.id),
             task = {
-                logTask("Fetch Artist Images (Tidal)") {
+                scheduleService.logTask("Fetch Artist Images (Tidal)") {
                     metadataFetchingService.fetchArtistImages(IMetadataService.MetadataType.tidal) { p, l ->
                         updateProgress(p, l)
                     }
@@ -351,7 +353,7 @@ fun Application.module() {
             name = "Fetch Metadata (TheAudioDB)",
             trigger = TaskCompletionTrigger(fetchArtistImagesTidal.id),
             task = {
-                logTask("Fetch Metadata (TheAudioDB)") {
+                scheduleService.logTask("Fetch Metadata (TheAudioDB)") {
                     metadataFetchingService.fetchMetadata(IMetadataService.MetadataType.theAudioDB) { p, l ->
                         updateProgress(p, l)
                     }
@@ -366,7 +368,7 @@ fun Application.module() {
             name = "Auto Transcoding",
             trigger = CronPresets.dailyAt(3, 0),
             task = {
-                logTask("Auto Transcoding") {
+                scheduleService.logTask("Auto Transcoding") {
                     autoTranscodeWorker.run { p, l -> updateProgress(p, l) }
                 }
             }
@@ -378,7 +380,7 @@ fun Application.module() {
             name = "Lyrics Sync Worker",
             trigger = CronPresets.dailyAt(4, 0),
             task = {
-                logTask("Lyrics Sync Worker") {
+                scheduleService.logTask("Lyrics Sync Worker") {
                     lyricsSyncWorker.run { p, l -> updateProgress(p, l) }
                 }
             }
@@ -392,7 +394,7 @@ fun Application.module() {
             name = "LrcLib Worker",
             trigger = CronPresets.dailyAt(4, 30),
             task = {
-                logTask("LrcLib Worker") {
+                scheduleService.logTask("LrcLib Worker") {
                     lrcLibWorker.run { p, l -> updateProgress(p, l) }
                 }
             }
@@ -406,7 +408,7 @@ fun Application.module() {
             name = "Recent Release Worker",
             trigger = CronPresets.dailyAt(1, 0),
             task = {
-                logTask("Recent Release Worker") {
+                scheduleService.logTask("Recent Release Worker") {
                     recentReleaseWorker.run { p, l -> updateProgress(p, l) }
                 }
             }
@@ -420,7 +422,7 @@ fun Application.module() {
             name = "Delete Empty Albums",
             trigger = CronPresets.dailyAt(0, 0),
             task = {
-                logTask("Delete Empty Albums") {
+                scheduleService.logTask("Delete Empty Albums") {
                     val count = albumService.deleteEmptyAlbums { p, l -> updateProgress(p, l) }
                     mapOf("albumsDeleted" to count)
                 }
@@ -433,7 +435,7 @@ fun Application.module() {
             name = "Delete Unreferenced Artists",
             trigger = TaskCompletionTrigger(cleanAlbumTask.id),
             task = {
-                logTask("Delete Unreferenced Artists") {
+                scheduleService.logTask("Delete Unreferenced Artists") {
                     val count = artistService.deleteUnreferencedArtists { p, l -> updateProgress(p, l) }
                     mapOf("artistsDeleted" to count)
                 }
@@ -446,7 +448,7 @@ fun Application.module() {
             name = "Delete Unreferenced Images",
             trigger = TaskCompletionTrigger(cleanArtistsTask.id),
             task = {
-                logTask("Delete Unreferenced Images") {
+                scheduleService.logTask("Delete Unreferenced Images") {
                     val count = imageService.deleteUnreferencedImages { p, l ->
                         updateProgress(p, l)
                     }
@@ -463,5 +465,5 @@ fun Application.module() {
 
     configureHTTP()
     configureRouting()
-    configureDatabases()
+    configureServices()
 }

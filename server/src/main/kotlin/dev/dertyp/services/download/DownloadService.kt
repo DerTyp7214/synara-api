@@ -1,22 +1,20 @@
-package dev.dertyp.services.tdn
+package dev.dertyp.services.download
 
 import dev.dertyp.core.ApplicationScope
-import dev.dertyp.core.download
 import dev.dertyp.core.getMetadataProvider
 import dev.dertyp.core.getUser
-import dev.dertyp.core.getWrapper
-import dev.dertyp.core.removeFirst
 import dev.dertyp.core.tidalId
 import dev.dertyp.core.waitForChange
 import dev.dertyp.data.User
 import dev.dertyp.data.UserSong
 import dev.dertyp.killAll
+import dev.dertyp.plugins.IPluginDownloadService
+import dev.dertyp.plugins.PluginManager
 import dev.dertyp.services.FavSyncService
 import dev.dertyp.services.ISyncService
 import dev.dertyp.services.ImageService
 import dev.dertyp.services.Service
 import dev.dertyp.services.SongService
-import dev.dertyp.services.UserPlaylistService
 import dev.dertyp.services.metadata.IMetadataService
 import dev.dertyp.services.sync.SyncService
 import dev.dertyp.utils.LogParam
@@ -35,9 +33,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asFlow
 import kotlinx.coroutines.flow.asSharedFlow
-import kotlinx.coroutines.flow.buffer
 import kotlinx.coroutines.flow.channelFlow
-import kotlinx.coroutines.flow.chunked
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.filter
@@ -67,7 +63,7 @@ class DownloadRpcService(
     private val user: User,
     private val call: ApplicationCall,
     private val downloadService: DownloadService,
-    private val tidalDownloadService: TidalDownloaderProxy,
+    private val downloaderProxy: DownloaderProxy,
 ) : IDownloadService, KoinComponent {
     private val applicationEnvironment by inject<ApplicationEnvironment>()
     private val syncService by lazy {
@@ -87,16 +83,52 @@ class DownloadRpcService(
         downloadService.syncFavourites(call, true).invokeOnCompletion {}
     }
 
-    override suspend fun downloadTidalIds(@LogParam("size") ids: List<String>, type: Type) {
-        downloadService.downloadTidalIds(
-            call = call,
+    override suspend fun downloadIds(@LogParam("size") ids: List<String>, type: Type, downloader: DownloadBackend?) {
+        downloadService.downloadIds(
             ids = ids.asFlow(),
             type = type,
+            user = user,
+            downloaderId = downloader?.id,
             callback = {}
         )
     }
 
-    override suspend fun existsByTidalId(id: String, type: Type): Boolean {
+    override suspend fun downloadUrls(urls: List<String>) {
+        downloadService.logger.info("Processing ${urls.size} download URLs for user ${user.username}")
+        val downloaderGroups = urls.groupBy { url ->
+            downloadService.pluginManager.getAllDownloaders().find { it.canHandle(url) }
+        }
+
+        downloaderGroups.forEach { (downloader, groupUrls) ->
+            if (downloader == null) {
+                downloadService.logger.warn("No specific downloader found for ${groupUrls.size} URLs, using default queue")
+                downloadService.addToQueue(
+                    UrlDownloadQueueEntry(
+                        urls = groupUrls.toMutableList(),
+                        byUser = user.id
+                    )
+                )
+            } else {
+                downloadService.logger.info("Routing ${groupUrls.size} URLs to downloader: ${downloader.id}")
+                val parsedUrls = groupUrls.map { url -> url to downloader.parseUrl(url) }
+                val typeGroups = parsedUrls.groupBy { it.second?.second ?: Type.SONG }
+
+                typeGroups.forEach { (type, pairs) ->
+                    val ids = pairs.mapNotNull { it.second?.first }
+                    downloadService.logger.info("Handing off ${ids.size} items of type $type to ${downloader.id}")
+                    downloadService.downloadIds(ids.asFlow(), type, user, downloader.id)
+                }
+            }
+        }
+    }
+
+    override suspend fun getDownloaderForUrl(url: String): DownloadBackend? {
+        return downloadService.pluginManager.getAllDownloaders()
+            .find { it.enabled && it.canHandle(url) }
+            ?.let { DownloadBackend(it.id) }
+    }
+
+    override suspend fun existsByOriginalId(id: String, type: Type): Boolean {
         val metadataService = call.getMetadataProvider(IMetadataService.MetadataType.tidal) ?: return false
         return when (type) {
             Type.SONG -> metadataService.getTrackById(id) != null
@@ -106,19 +138,22 @@ class DownloadRpcService(
         }
     }
 
-    override suspend fun getTidalDownloadService(): TidalDownloadService = tidalDownloadService.defaultService
-    override suspend fun setTidalDownloadService(service: TidalDownloadService) {
-        tidalDownloadService.defaultService = service
+    override suspend fun getDownloadService(): DownloadBackend = downloaderProxy.defaultService
+    override suspend fun getAllDownloadServices(): List<DownloadBackend> = downloadService.getAllDownloadServices()
+    override suspend fun setDownloadService(service: DownloadBackend) {
+        downloaderProxy.defaultService = service
     }
 
-    override suspend fun tidalDownloadAuthorized(): Boolean = tidalDownloadService.tokenFileExists()
+    override suspend fun downloadAuthorized(): Boolean = downloaderProxy.tokenFileExists()
 
-    override fun tidalDownloadLogin() = channelFlow {
-        tidalDownloadService.login(
+    override fun downloadLogin() = channelFlow {
+        val downloader = downloaderProxy.getDownloader(downloaderProxy.defaultService)
+        downloader.login(
             aliveCheck = { currentCoroutineContext().isActive },
-            onLiveOutput = {
-                trySend(it)
-                trySend("\n")
+            onLiveOutput = { log ->
+                downloader.extractLoginUrl(log)?.let { url ->
+                    trySend(url)
+                }
                 yield()
             }
         )
@@ -129,24 +164,25 @@ class DownloadRpcService(
 
     override suspend fun killAllChildProcesses() = killAll()
 
-    override suspend fun searchTidal(
+    override suspend fun search(
         query: String?,
         title: String?,
         artist: String?,
         count: Int
-    ): List<TidalSong> {
-        return downloadService.searchTidal(call, query, title, artist, count)
+    ): List<DownloadSong> {
+        return downloadService.search(call, query, title, artist, count)
     }
 }
 
+@Suppress("unused")
 @OptIn(ExperimentalAtomicApi::class)
 class DownloadService(
-    val tidalDownloadService: TidalDownloaderProxy,
+    val downloaderProxy: DownloaderProxy,
     val songService: SongService,
     val favSyncService: FavSyncService,
-    val userPlaylistService: UserPlaylistService,
-    val imageService: ImageService
-) : Service() {
+    val imageService: ImageService,
+    val pluginManager: PluginManager,
+) : IPluginDownloadService, Service() {
     private val maxLogLength: Int = 1000
 
     private val syncMutex = Mutex()
@@ -163,8 +199,8 @@ class DownloadService(
     private val active: AtomicBoolean = AtomicBoolean(false)
     private val stopped: AtomicBoolean = AtomicBoolean(true)
 
-    private val _log: MutableStateFlow<String?> = MutableStateFlow(null)
-    val log = _log.asSharedFlow()
+    private val internalLog: MutableStateFlow<String?> = MutableStateFlow(null)
+    val log = internalLog.asSharedFlow()
 
     var currentlyDownloading: FinishedDownloadQueueEntry? = null
         private set
@@ -195,7 +231,7 @@ class DownloadService(
         stopped.store(true)
     }
 
-    suspend fun addToQueue(vararg downloadEntries: DownloadQueueEntry) {
+    override suspend fun addToQueue(vararg downloadEntries: DownloadQueueEntry) {
         queueMutex.withLock {
             val existingUrls = downloadQueue
                 .filterIsInstance<UrlDownloadQueueEntry>()
@@ -203,13 +239,13 @@ class DownloadService(
                 .toMutableList()
             val existingTypes = downloadQueue
                 .filterIsInstance<FavouriteDownloadQueueEntry>()
-                .map { it.type }
+                .map { it.favoriteType }
                 .toMutableList()
 
             currentlyDownloading?.let {
-                when (it.downloadQueueEntry) {
-                    is UrlDownloadQueueEntry -> existingUrls.addAll((it.downloadQueueEntry as UrlDownloadQueueEntry).urls)
-                    is FavouriteDownloadQueueEntry -> existingTypes.add(it.downloadQueueEntry.type)
+                when (val entry = it.downloadQueueEntry) {
+                    is UrlDownloadQueueEntry -> existingUrls.addAll(entry.urls)
+                    is FavouriteDownloadQueueEntry -> existingTypes.add(entry.favoriteType)
                 }
             }
 
@@ -220,7 +256,7 @@ class DownloadService(
                         it.urls.isNotEmpty()
                     }
 
-                    is FavouriteDownloadQueueEntry -> !existingTypes.contains(it.type)
+                    is FavouriteDownloadQueueEntry -> !existingTypes.contains(it.favoriteType)
                 }
             }
 
@@ -303,8 +339,8 @@ class DownloadService(
 
     suspend fun retryErrors() {
         val errors = finishedMutex.withLock {
-            finishedDownloads.filter { it.result.failed() }
-        }.map { it.downloadQueueEntry }
+            finishedDownloads.filter { it.result.failed() }.map { it.downloadQueueEntry }
+        }
 
         addToQueue(*errors.toTypedArray())
 
@@ -326,7 +362,7 @@ class DownloadService(
             )
 
             val logUnit: suspend (String) -> Unit = { line ->
-                _log.emit(line)
+                internalLog.emit(line)
                 logs.add(line)
 
                 logger.debug(line)
@@ -335,22 +371,24 @@ class DownloadService(
             }
 
             val result = when (entry) {
-                is UrlDownloadQueueEntry -> tidalDownloadService.downloadContent(
+                is UrlDownloadQueueEntry -> downloaderProxy.downloadContent(
                     urls = entry.urls,
                     maxRetries = entry.maxRetries,
                     aliveCheck = aliveCheck,
+                    userId = entry.byUser,
                     onLiveOutput = logUnit
                 )
 
-                is FavouriteDownloadQueueEntry -> tidalDownloadService.downloadFavoriteCollection(
-                    type = entry.tdnFavoriteType,
+                is FavouriteDownloadQueueEntry -> downloaderProxy.downloadFavoriteCollection(
+                    type = entry.favoriteType,
                     maxRetries = entry.maxRetries,
                     aliveCheck = aliveCheck,
+                    userId = entry.byUser,
                     onLiveOutput = logUnit
                 )
             }
 
-            _log.emit(null)
+            internalLog.emit(null)
 
             currentlyDownloading?.let { currentlyDownloading ->
                 currentlyDownloading.result = result
@@ -358,7 +396,7 @@ class DownloadService(
 
                 finishedMutex.withLock {
                     finishedDownloads.add(currentlyDownloading)
-                    if (finishedDownloads.count { it.result.successful() } > 100) finishedDownloads.removeFirst {
+                    if (finishedDownloads.count { it.result.successful() } > 100) finishedDownloads.removeIf {
                         it.result.successful()
                     }
                 }
@@ -370,83 +408,38 @@ class DownloadService(
         active.store(false)
     }
 
+    fun getAllDownloadServices(): List<DownloadBackend> =
+        pluginManager.getAllDownloaders().filter { it.enabled }.map { DownloadBackend(it.id) }
+
     suspend fun syncFavouritesAvailable(call: ApplicationCall): Boolean {
         val user = call.getUser() ?: throw IllegalStateException("No user")
         return !(syncMap[user.id]?.load() ?: false)
     }
 
-    /**
-     * Downloads and processes Tidal track IDs for the currently authenticated user,
-     * ensuring the tracks are added to the download queue if they are not already
-     * marked as favorites or present in the user's library.
-     *
-     * @param call The routing call containing user authentication information and parameters.
-     * @param ids A list of track IDs to be processed and downloaded from Tidal.
-     * @return A Boolean indicating if something is going to be downloaded, and A list of UUIDs representing the already downloaded songs.
-     * @throws IllegalStateException If the user is not authenticated, or if the service type is not Tidal.
-     */
-    @OptIn(ExperimentalCoroutinesApi::class)
-    suspend fun downloadTidalIds(
-        call: ApplicationCall,
+    suspend fun downloadIds(
         ids: Flow<String>,
-        type: Type = Type.SONG,
-        filter: (UserSong) -> Boolean = { true },
-        chunkSize: Int = 250,
+        type: Type,
+        user: User,
+        downloaderId: String? = null,
         callback: suspend (List<String>) -> Unit = {}
     ): Pair<Boolean, List<UserSong>> {
-        val user = call.getUser() ?: throw IllegalStateException("No user")
-        val metadataService = call.getMetadataProvider(IMetadataService.MetadataType.tidal)
-
-        val result = mutableListOf<UserSong>()
         var contentToDownload = false
+        val allResultSongs = mutableListOf<UserSong>()
 
-        val downloadStage = mutableListOf<String>()
-        val downloadStageMutex = Mutex()
+        ids.toList().chunked(250).forEach { idChunk ->
+            val dl = if (downloaderId != null) {
+                pluginManager.getDownloader(downloaderId)
+            } else {
+                pluginManager.getDownloader(downloaderProxy.defaultService.id)
+            }
 
-        ids.chunked(chunkSize).buffer(chunkSize * 3).collect { idChunk ->
-            val filteredIdChunk = type.getWrapper(metadataService, user, idChunk)
-
-            if (filteredIdChunk.logSize())
-                logger.info("[${user.username}] Checking for ${filteredIdChunk.size()} ${type.value}s")
-
-            val existingSongs = if (filteredIdChunk.fetchExistingSongs()) songService.byTidalTrackIds(
-                filteredIdChunk.getIds().toList(),
-                user.id
-            ) else emptyList()
-
-            val existingUrls = existingSongs.map { it.originalUrl }
-
-            result.addAll(existingSongs.filter(filter))
-
-            contentToDownload = type.download(
-                downloadService = this,
-                wrapper = filteredIdChunk,
-                user = user,
-                existingUrls = existingUrls,
-                downloadStage = downloadStage,
-                downloadStageMutex = downloadStageMutex,
-                userPlaylistService = userPlaylistService,
-                imageService = imageService,
-                songService = songService,
-                callback = callback
-            ) || contentToDownload
+            if (dl != null) {
+                val result = dl.downloadIds(idChunk, type, user, callback)
+                if (result.first) contentToDownload = true
+                allResultSongs.addAll(result.second)
+            }
         }
-
-        if (downloadStage.isNotEmpty()) {
-            addToQueue(
-                UrlDownloadQueueEntry(
-                    urls = downloadStage.map { "https://tidal.com/${type.value}/${it}" }.toMutableList(),
-                    ids = downloadStage,
-                    byUser = user.id,
-                    type = type
-                ) {
-                    callback(downloadStage)
-                })
-        }
-
-        logger.info("[${user.username}] Found ${result.size} existing ${type.value}s")
-
-        return Pair(contentToDownload, result)
+        return Pair(contentToDownload, allResultSongs)
     }
 
     @OptIn(ExperimentalCoroutinesApi::class, InternalAPI::class)
@@ -482,17 +475,16 @@ class DownloadService(
                 .filter { song -> latestFavSync == null || song.addedAt > latestFavSync.syncedAt }
                 .onEach { idMap[it.id] = it }
 
-            val (_, songsToLike) = downloadTidalIds(
-                call = call,
-                ids = songs.map { it.id },
+            val idsToFetch = songs.map { it.id }
+            val (_, songsToLike) = downloadIds(
+                ids = idsToFetch,
                 type = Type.SONG,
-                filter = { !(it.isFavourite ?: false) },
-                chunkSize = 25
+                user = user
             ) {
-                for (song in songService.byTidalTrackIds(it, user.id)) {
+                for (song in songService.byOriginalIds(it, user.id)) {
                     if (!(song.isFavourite ?: false)) {
                         val addedAt = idMap[song.originalUrl.tidalId()]?.addedAt?.toInstant()
-                        songService.setLiked(song.id, user.id, true, addedAt)
+                        songService.setLikedReturning(song.id, user.id, true, addedAt)
                     }
                 }
             }
@@ -500,7 +492,7 @@ class DownloadService(
             logger.info("[${user.username}] Liking existing songs")
 
             for (song in songsToLike) {
-                songService.setLiked(song.id, user.id, true)
+                songService.setLikedReturning(song.id, user.id, true)
             }
 
             syncMutex.withLock {
@@ -519,13 +511,13 @@ class DownloadService(
         }
     }
 
-    suspend fun searchTidal(
+    suspend fun search(
         call: ApplicationCall,
         query: String?,
         title: String?,
         artist: String?,
         count: Int
-    ): List<TidalSong> {
+    ): List<DownloadSong> {
         val metadataService = call.getMetadataProvider(IMetadataService.MetadataType.tidal)
             ?: throw IllegalStateException("Tidal metadata service not available")
 
@@ -540,7 +532,7 @@ class DownloadService(
         }
 
         return searchResults.map {
-            TidalSong(
+            DownloadSong(
                 id = it.id,
                 title = it.title,
                 artists = it.artists,

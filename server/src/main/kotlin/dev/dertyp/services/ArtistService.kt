@@ -1,19 +1,74 @@
 package dev.dertyp.services
 
 import dev.dertyp.ApiClient
-import dev.dertyp.core.*
-import dev.dertyp.data.*
-import dev.dertyp.db.*
+import dev.dertyp.PlatformUUID
+import dev.dertyp.core.HttpClientPriority
+import dev.dertyp.core.fetchBatchedResultsByIdKeyset
+import dev.dertyp.core.isURL
+import dev.dertyp.core.mbArtistSearchColumns
+import dev.dertyp.core.rankedSearchQuery
+import dev.dertyp.core.safeGet
+import dev.dertyp.core.sha256
+import dev.dertyp.core.stripAccents
+import dev.dertyp.core.toUUIDOrNull
+import dev.dertyp.core.withMBArtistSearch
+import dev.dertyp.data.Artist
+import dev.dertyp.data.ArtistAlias
+import dev.dertyp.data.ArtistSplitAlias
+import dev.dertyp.data.Genre
+import dev.dertyp.data.InsertableImage
+import dev.dertyp.data.MergeArtists
+import dev.dertyp.data.MusicBrainzArtist
+import dev.dertyp.data.PaginatedResponse
+import dev.dertyp.data.SplitArtist
+import dev.dertyp.data.User
+import dev.dertyp.db.AlbumArtistTable
+import dev.dertyp.db.ArtistAliasTable
+import dev.dertyp.db.ArtistGenreTable
+import dev.dertyp.db.ArtistMusicBrainzTable
+import dev.dertyp.db.ArtistSplitAliasTable
+import dev.dertyp.db.ArtistTable
+import dev.dertyp.db.FollowedArtistTable
+import dev.dertyp.db.GenreTable
+import dev.dertyp.db.ImageTable
+import dev.dertyp.db.MBArtistTable
+import dev.dertyp.db.SongArtistTable
 import dev.dertyp.dbQuery
+import dev.dertyp.plugins.ArtistLibrary
 import dev.dertyp.services.metadata.CachedMusicBrainzService
 import dev.dertyp.services.metadata.MusicBrainzCacheService
 import dev.dertyp.services.metadata.MusicBrainzService
 import dev.dertyp.utils.LogParam
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.flow.*
-import org.jetbrains.exposed.v1.core.*
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.asFlow
+import kotlinx.coroutines.flow.chunked
+import kotlinx.coroutines.flow.flatMapConcat
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.take
+import kotlinx.coroutines.flow.toList
+import org.jetbrains.exposed.v1.core.Alias
+import org.jetbrains.exposed.v1.core.ColumnSet
+import org.jetbrains.exposed.v1.core.ResultRow
+import org.jetbrains.exposed.v1.core.alias
+import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.dao.id.EntityID
-import org.jetbrains.exposed.v1.jdbc.*
+import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.inList
+import org.jetbrains.exposed.v1.core.isNull
+import org.jetbrains.exposed.v1.core.leftJoin
+import org.jetbrains.exposed.v1.core.or
+import org.jetbrains.exposed.v1.jdbc.Query
+import org.jetbrains.exposed.v1.jdbc.batchInsert
+import org.jetbrains.exposed.v1.jdbc.deleteWhere
+import org.jetbrains.exposed.v1.jdbc.insert
+import org.jetbrains.exposed.v1.jdbc.insertAndGetId
+import org.jetbrains.exposed.v1.jdbc.insertIgnore
+import org.jetbrains.exposed.v1.jdbc.orWhere
+import org.jetbrains.exposed.v1.jdbc.select
+import org.jetbrains.exposed.v1.jdbc.selectAll
+import org.jetbrains.exposed.v1.jdbc.update
+import org.jetbrains.exposed.v1.jdbc.upsert
 import org.koin.core.component.inject
 import java.util.UUID
 import kotlin.time.Clock
@@ -54,7 +109,7 @@ class ArtistRpcService(private val user: User, private val artistService: Artist
     override fun artistIdsWithoutMusicBrainzId(): Flow<UUID> = artistService.artistIdsWithoutMusicBrainzId()
 }
 
-class ArtistService : Service() {
+class ArtistService : ArtistLibrary, Service() {
     private val musicBrainzCacheService by inject<MusicBrainzCacheService>()
     val artistGroupAlias = ArtistTable.alias("artistGroup")
     val artistMemberAlias = ArtistTable.alias("artistMember")
@@ -233,6 +288,17 @@ class ArtistService : Service() {
         where { ArtistTable.id eq id }
     }
 
+    suspend fun byMusicBrainzId(mbId: UUID, userId: UUID? = null): Artist? = querySingle(userId = userId) {
+        where { ArtistMusicBrainzTable.musicBrainzId eq mbId }
+    }
+
+    override suspend fun byMusicBrainzId(mbId: PlatformUUID): Artist? = byMusicBrainzId(mbId, null)
+
+    suspend fun byMusicBrainzIds(@LogParam("size") mbIds: Collection<PlatformUUID>, userId: UUID? = null): List<Artist> =
+        queryArtists(0, Int.MAX_VALUE, userId = userId) {
+            where { ArtistMusicBrainzTable.musicBrainzId inList mbIds }
+        }.data
+
     suspend fun byIds(@LogParam("size") ids: List<UUID>, userId: UUID? = null): List<Artist> = queryArtists(0, Int.MAX_VALUE, userId = userId) {
         where { ArtistTable.id inList ids }
     }.data
@@ -310,7 +376,7 @@ class ArtistService : Service() {
                                 origin = it
                             )
                         )
-                    ).firstOrNull()
+                    ).values.firstOrNull()
                 }
 
                 else -> null

@@ -16,10 +16,7 @@ import dev.dertyp.db.UserPlaylistTable
 import dev.dertyp.db.UserSongTable
 import dev.dertyp.db.UserTable
 import dev.dertyp.dbQuery
-import dev.dertyp.getISOFromDate
-import dev.dertyp.services.metadata.IMetadataService
-import dev.dertyp.services.metadata.MetadataService
-import dev.dertyp.services.metadata.TidalService
+import dev.dertyp.plugins.PluginManager
 import io.ktor.server.application.ApplicationEnvironment
 import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.SortOrder
@@ -32,11 +29,13 @@ import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.update
 import org.koin.core.component.get
+import org.koin.core.component.inject
 import java.util.UUID
 
 class LibraryMergeService(
     private val environment: ApplicationEnvironment
 ) : Service() {
+    private val pluginManager by inject<PluginManager>()
 
     suspend fun mergeDuplicates(onProgress: suspend (Double, String) -> Unit = { _, _ -> }): Map<String, Any?> = dbQuery {
         onProgress(0.0, "Merging duplicate songs...")
@@ -61,7 +60,7 @@ class LibraryMergeService(
         )
     }
 
-    private fun mergeDuplicateSongs(): Int {
+    fun mergeDuplicateSongs(): Int {
         logger.info("Starting duplicate song merge check")
 
         val duplicates = SongTable
@@ -126,7 +125,7 @@ class LibraryMergeService(
         return totalMerged
     }
 
-    private suspend fun mergeSameAlbumSongs(): Int {
+    suspend fun mergeSameAlbumSongs(): Int {
         logger.info("Starting same-album duplicate song merge check")
 
         val duplicates = SongTable
@@ -193,18 +192,52 @@ class LibraryMergeService(
         return totalMerged
     }
 
-    private suspend fun mergeDuplicateAlbums(): Int {
+    suspend fun mergeDuplicateAlbums(): Int {
         logger.info("Starting duplicate album merge check")
         var totalMerged = 0
 
         val allAlbums = AlbumTable.leftJoin(AlbumMusicBrainzTable).selectAll().toList()
 
-        val originalIdGroups = allAlbums
-            .filter { it[AlbumTable.originalId] != null }
-            .groupBy { it[AlbumTable.originalId]!! }
+        val mbIdGroups = allAlbums
+            .filter { it.getOrNull(AlbumMusicBrainzTable.musicBrainzId) != null }
+            .groupBy { it[AlbumMusicBrainzTable.musicBrainzId]!!.value }
             .filter { it.value.size > 1 }
 
-        val tidalService = MetadataService.getMetadataService(IMetadataService.MetadataType.tidal, environment) as TidalService
+        for ((mbId, group) in mbIdGroups) {
+            val sortedGroup = group.sortedByDescending {
+                var score = 0
+                if (it[AlbumTable.releaseDate] != null) score++
+                if (it[AlbumTable.cover] != null) score++
+                (score * 1000) + it[AlbumTable.songCount]
+            }
+
+            val keptAlbum = sortedGroup.first()
+            val keptAlbumId = keptAlbum[AlbumTable.id].value
+            val albumsToMerge = sortedGroup.drop(1)
+
+            logger.info("Merging ${albumsToMerge.size} albums with musicBrainzId $mbId into $keptAlbumId")
+
+            for (oldAlbum in albumsToMerge) {
+                mergeAlbumReferences(oldAlbum[AlbumTable.id].value, keptAlbumId)
+                AlbumTable.deleteWhere { AlbumTable.id eq oldAlbum[AlbumTable.id].value }
+                totalMerged++
+            }
+
+            if (totalMerged > 0) {
+                val albumService = get<AlbumService>()
+                albumService.fetchMusicBrainzId(keptAlbumId, triggerMerge = false)
+            }
+        }
+
+        val remainingAlbums = if (totalMerged > 0) AlbumTable.leftJoin(AlbumMusicBrainzTable).selectAll().toList() else allAlbums
+
+        val originalIdGroups = remainingAlbums
+            .filter { it[AlbumTable.originalId] != null }
+            .groupBy { 
+                val id = it[AlbumTable.originalId]!!
+                if (id.contains(":")) id else "tidal:$id"
+            }
+            .filter { it.value.size > 1 }
 
         for ((originalId, group) in originalIdGroups) {
             val sortedGroup = group.sortedByDescending {
@@ -227,17 +260,14 @@ class LibraryMergeService(
                 totalMerged++
             }
 
-            try {
-                val tidalAlbums = tidalService.getAlbumsByIds(listOf(originalId))
-                val tidalAlbum = tidalAlbums.firstOrNull()
-                if (tidalAlbum != null) {
-                    AlbumTable.update({ AlbumTable.id eq keptAlbumId }) {
-                        it[AlbumTable.songCount] = tidalAlbum.trackCount
-                        it[AlbumTable.releaseDate] = getISOFromDate(tidalAlbum.releaseDate)
-                    }
-                }
-            } catch (e: Exception) {
-                logger.error("Failed to query Tidal API for album $originalId: ${e.message}")
+            val musicBrainzId = keptAlbum.getOrNull(AlbumMusicBrainzTable.musicBrainzId)?.value
+            if (musicBrainzId != null) {
+                val albumService = get<AlbumService>()
+                albumService.fetchMusicBrainzId(keptAlbumId, triggerMerge = false)
+            } else {
+                val prefix = originalId.substringBefore(":")
+                val downloader = pluginManager.getAllDownloaders().find { it.id == prefix }
+                downloader?.updateAlbumMetadata(keptAlbumId, originalId)
             }
         }
 

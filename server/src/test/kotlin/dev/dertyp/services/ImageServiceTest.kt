@@ -2,7 +2,15 @@ package dev.dertyp.services
 
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
-import dev.dertyp.db.*
+import dev.dertyp.db.AlbumTable
+import dev.dertyp.db.ArtistTable
+import dev.dertyp.db.ImageTable
+import dev.dertyp.db.MBReleaseGroupTable
+import dev.dertyp.db.PlaylistTable
+import dev.dertyp.db.RecentReleaseTable
+import dev.dertyp.db.SongTable
+import dev.dertyp.db.UserPlaylistTable
+import dev.dertyp.db.UserTable
 import dev.dertyp.plugins.RedisCacheProvider
 import io.mockk.every
 import io.mockk.mockk
@@ -23,6 +31,7 @@ import org.koin.core.context.stopKoin
 import org.koin.dsl.module
 import java.io.File
 import java.nio.file.Files
+import java.util.UUID
 
 class ImageServiceTest {
     private lateinit var database: Database
@@ -105,7 +114,7 @@ class ImageServiceTest {
             val aId = ArtistTable.insertAndGetId {
                 it[ArtistTable.name] = "Artist"
             }
-            val relGroupId = java.util.UUID.randomUUID()
+            val relGroupId = UUID.randomUUID()
             MBReleaseGroupTable.insert {
                 it[id] = relGroupId
                 it[title] = "Title"

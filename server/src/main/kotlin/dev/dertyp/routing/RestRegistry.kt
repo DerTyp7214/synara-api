@@ -41,6 +41,7 @@ import dev.dertyp.services.ISongService
 import dev.dertyp.services.IUserPlaylistBackupService
 import dev.dertyp.services.IUserPlaylistService
 import dev.dertyp.services.IUserService
+import dev.dertyp.services.ImageRpcService
 import dev.dertyp.services.ImageService
 import dev.dertyp.services.LyricsSearch
 import dev.dertyp.services.LyricsService
@@ -58,12 +59,12 @@ import dev.dertyp.services.RpcUserService
 import dev.dertyp.services.ServerStatsService
 import dev.dertyp.services.SongRpcService
 import dev.dertyp.services.UserPlaylistService
+import dev.dertyp.services.download.DownloadRpcService
+import dev.dertyp.services.download.IDownloadService
 import dev.dertyp.services.metadata.CachedMusicBrainzService
 import dev.dertyp.services.metadata.IMetadataService
 import dev.dertyp.services.metadata.IMusicBrainzService
 import dev.dertyp.services.metadata.MetadataDispatcherService
-import dev.dertyp.services.tdn.DownloadRpcService
-import dev.dertyp.services.tdn.IDownloadService
 import io.github.smiley4.ktoropenapi.config.RouteConfig
 import io.github.smiley4.ktoropenapi.delete
 import io.github.smiley4.ktoropenapi.get
@@ -78,7 +79,7 @@ import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.content.OutgoingContent
 import io.ktor.server.plugins.partialcontent.PartialContent
-import io.ktor.server.request.receive
+import io.ktor.server.request.receiveText
 import io.ktor.server.response.cacheControl
 import io.ktor.server.response.header
 import io.ktor.server.response.respond
@@ -179,7 +180,9 @@ fun Route.registerRestService(
                                 }
                             } else {
                                 @Suppress("UNCHECKED_CAST")
-                                call.receive(param.type.classifier as KClass<Any>)
+                                val serializer = ApplicationScope.json.serializersModule.serializer(param.type)
+                                val body = call.receiveText()
+                                ApplicationScope.json.decodeFromString(serializer, body)
                             }
                         } catch (e: Exception) {
                             if (param.isOptional && call.request.queryParameters[param.name!!] == null) null
@@ -428,11 +431,17 @@ private fun KFunction<*>.getRestMethodAndName(): Pair<String, String> {
 fun Route.registerPublicRestServices(koin: Koin) {
     registerRestService(IServerStatsService::class) { koin.get<ServerStatsService>() }
     registerRestService(IAuthService::class) { RpcAuthService(call, koin.get(), koin.get(), koin.get()) }
-    registerRestService(IImageService::class, authenticated = true) { koin.get<ImageService>() }
+    registerRestService(IImageService::class, authenticated = true) {
+        val user = call.getUser() ?: throw IllegalArgumentException("No user found")
+        ImageRpcService(user, koin.get<ImageService>())
+    }
 }
 
 fun Route.registerAuthenticatedRestServices(koin: Koin) {
-    registerRestService(IIndexer::class, authenticated = true) { RpcIndexer(koin.get()) }
+    registerRestService(IIndexer::class, authenticated = true) {
+        val user = call.getUser() ?: throw IllegalArgumentException("No user found")
+        RpcIndexer(koin.get(), user)
+    }
     registerRestService(IUserService::class, authenticated = true) {
         val user = call.getUser() ?: throw IllegalArgumentException("No user found")
         RpcUserService(user, koin.get(), koin.get())

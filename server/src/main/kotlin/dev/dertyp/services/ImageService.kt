@@ -5,27 +5,63 @@ import dev.dertyp.core.sha256
 import dev.dertyp.data.Image
 import dev.dertyp.data.InsertableImage
 import dev.dertyp.data.PaginatedResponse
-import dev.dertyp.db.*
+import dev.dertyp.data.User
+import dev.dertyp.db.AlbumTable
+import dev.dertyp.db.ArtistTable
+import dev.dertyp.db.ImageTable
+import dev.dertyp.db.PlaylistTable
+import dev.dertyp.db.RecentReleaseTable
+import dev.dertyp.db.SongTable
+import dev.dertyp.db.UserPlaylistTable
+import dev.dertyp.db.UserTable
 import dev.dertyp.dbQuery
+import dev.dertyp.plugins.ImageLibrary
 import dev.dertyp.plugins.RedisCacheProvider
 import dev.dertyp.utils.LogParam
 import net.coobird.thumbnailator.Thumbnails
 import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.inList
-import org.jetbrains.exposed.v1.jdbc.*
+import org.jetbrains.exposed.v1.core.like
+import org.jetbrains.exposed.v1.jdbc.Query
+import org.jetbrains.exposed.v1.jdbc.batchInsert
+import org.jetbrains.exposed.v1.jdbc.deleteWhere
+import org.jetbrains.exposed.v1.jdbc.select
+import org.jetbrains.exposed.v1.jdbc.selectAll
+import org.jetbrains.exposed.v1.jdbc.update
+import org.jetbrains.exposed.v1.jdbc.upsert
 import redis.clients.jedis.HostAndPort
 import redis.clients.jedis.RedisClusterClient
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.util.UUID
 import javax.imageio.ImageIO
-import kotlin.io.path.*
+import kotlin.io.path.Path
+import kotlin.io.path.absolutePathString
+import kotlin.io.path.deleteIfExists
+import kotlin.io.path.exists
+import kotlin.io.path.extension
+import kotlin.io.path.pathString
+import kotlin.io.path.readBytes
+import kotlin.io.path.writeBytes
+
+class ImageRpcService(private val user: User, private val imageService: ImageService) : IImageService {
+    override suspend fun byId(id: UUID): Image? = imageService.byId(id)
+    override suspend fun byHash(hash: String): Image? = imageService.byHash(hash)
+    override suspend fun getCoverHashes(hashes: List<String>): Map<String, UUID> = imageService.getCoverHashes(hashes)
+    override suspend fun getImageData(id: UUID, size: Int): ByteArray? = imageService.getImageData(id, size)
+    override suspend fun createImage(bytes: ByteArray, origin: String): UUID = imageService.createImage(bytes, origin)
+    override suspend fun createBatch(images: List<InsertableImage>): Map<String, UUID> = imageService.createBatch(images)
+    override suspend fun moveImages(oldPath: String, newPath: String): Int {
+        if (!user.isAdmin) throw IllegalStateException("Only admins can move images")
+        return imageService.moveImages(oldPath, newPath)
+    }
+}
 
 class ImageService(
     private val storageService: StorageService,
     private val redisConfig: RedisCacheProvider.Config
-) : IImageService, Service() {
+) : ImageLibrary, Service() {
     init {
         Path(storageService.imagesPath).toFile().mkdirs()
     }
@@ -50,7 +86,7 @@ class ImageService(
         )
     }
 
-    override suspend fun byId(id: UUID): Image? = querySingle {
+    suspend fun byId(id: UUID): Image? = querySingle {
         where { ImageTable.id eq id }
     }
 
@@ -58,11 +94,11 @@ class ImageService(
         where { ImageTable.id inList ids }
     }.data
 
-    override suspend fun byHash(hash: String): Image? = querySingle {
+    suspend fun byHash(hash: String): Image? = querySingle {
         where { ImageTable.imageHash eq hash }
     }
 
-    override suspend fun getImageData(id: UUID, size: Int): ByteArray? {
+    suspend fun getImageData(id: UUID, size: Int): ByteArray? {
         val cacheKey = "image:$id:$size".toByteArray()
         val cached = jedis?.get(cacheKey)
         if (cached != null) return cached
@@ -98,10 +134,10 @@ class ImageService(
         return bytes
     }
 
-    override suspend fun createImage(@LogParam("size") bytes: ByteArray, origin: String): UUID {
+    suspend fun createImage(@LogParam("size") bytes: ByteArray, origin: String): UUID {
         val hash = bytes.sha256()
         val insertableImage = InsertableImage(bytes, hash, origin)
-        return createBatch(listOf(insertableImage)).first()
+        return createBatch(listOf(insertableImage)).values.first()
     }
 
     private suspend fun querySingle(query: Query.() -> Query) =
@@ -165,53 +201,55 @@ class ImageService(
         }
     }
 
-    suspend fun createBatch(insertableImages: List<InsertableImage>): List<UUID> {
-        if (insertableImages.isEmpty()) return emptyList()
+    override suspend fun createBatch(images: List<InsertableImage>): Map<String, UUID> {
+        if (images.isEmpty()) return emptyMap()
 
-        val images = dbQuery {
+        val existingImages = dbQuery {
             ImageTable
                 .select(ImageTable.id, ImageTable.imageHash)
-                .where { ImageTable.imageHash inList insertableImages.map { it.imageHash } }
+                .where { ImageTable.imageHash inList images.map { it.imageHash } }
                 .map { Pair(it[ImageTable.id].value, it[ImageTable.imageHash]) }
         }.toMap()
 
-        val imageHashes = images.values
-        val newImages = insertableImages.filter { it.imageHash !in imageHashes }
-        val existingImages = images.filter { (_, imageHash) -> imageHash !in newImages.map { it.imageHash } }.keys
+        val imageHashes = existingImages.values
+        val newImages = images.filter { it.imageHash !in imageHashes }
 
-        return dbQuery {
-            ImageTable.batchInsert(newImages.map {
-                val extension = try {
-                    val inputStream = ByteArrayInputStream(it.data)
-                    val imageInputStream = ImageIO.createImageInputStream(inputStream)
-                    val readers = ImageIO.getImageReaders(imageInputStream)
-                    if (readers.hasNext()) {
-                        val reader = readers.next()
-                        reader.formatName.lowercase()
-                    } else {
+        val newlyInserted = if (newImages.isNotEmpty()) {
+            dbQuery {
+                ImageTable.batchInsert(newImages.map {
+                    val extension = try {
+                        val inputStream = ByteArrayInputStream(it.data)
+                        val imageInputStream = ImageIO.createImageInputStream(inputStream)
+                        val readers = ImageIO.getImageReaders(imageInputStream)
+                        if (readers.hasNext()) {
+                            val reader = readers.next()
+                            reader.formatName.lowercase()
+                        } else {
+                            "jpeg"
+                        }
+                    } catch (_: Exception) {
                         "jpeg"
                     }
-                } catch (_: Exception) {
-                    "jpeg"
-                }
 
-                val imagePath = Path(
-                    storageService.imagesPath,
-                    *it.imageHash.windowed(2, 2).take(4).toTypedArray(),
-                    "${it.imageHash.drop(2 * 4)}.$extension"
-                )
-                if (imagePath.exists()) return@map Pair(it, imagePath)
+                    val imagePath = Path(
+                        storageService.imagesPath,
+                        *it.imageHash.windowed(2, 2).take(4).toTypedArray(),
+                        "${it.imageHash.drop(2 * 4)}.$extension"
+                    )
+                    if (!imagePath.exists()) {
+                        imagePath.parent.toFile().mkdirs()
+                        imagePath.writeBytes(it.data)
+                    }
+                    Pair(it, imagePath)
+                }) { (image, path) ->
+                    this[ImageTable.path] = Path(storageService.imagesPath).relativize(path).pathString
+                    this[ImageTable.imageHash] = image.imageHash
+                    this[ImageTable.origin] = image.origin
+                }.associate { it[ImageTable.imageHash] to it[ImageTable.id].value }
+            }
+        } else emptyMap()
 
-                imagePath.parent.toFile().mkdirs()
-
-                imagePath.writeBytes(it.data)
-                Pair(it, imagePath)
-            }) { (image, path) ->
-                this[ImageTable.path] = Path(storageService.imagesPath).relativize(path).pathString
-                this[ImageTable.imageHash] = image.imageHash
-                this[ImageTable.origin] = image.origin
-            }.map { it[ImageTable.id].value }
-        } + existingImages
+        return (existingImages.entries.associate { it.value to it.key }) + newlyInserted
     }
 
     suspend fun deleteUnreferencedImages(onProgress: suspend (Double, String) -> Unit = { _, _ -> }): Int = dbQuery {
@@ -250,5 +288,23 @@ class ImageService(
         onProgress(100.0, "Deleted ${unreferencedImages.size} images")
         logger.info("Deleted ${unreferencedImages.size} unreferenced images")
         unreferencedImages.size
+    }
+
+    suspend fun moveImages(oldPath: String, newPath: String): Int = dbQuery {
+        val affectedImages = ImageTable.select(ImageTable.id, ImageTable.path)
+            .where { ImageTable.path like "$oldPath%" }
+            .toList()
+
+        affectedImages.forEach { row ->
+            val id = row[ImageTable.id].value
+            val currentPath = row[ImageTable.path]
+            val newImagePath = currentPath.replaceFirst(oldPath, newPath)
+
+            ImageTable.update({ ImageTable.id eq id }) {
+                it[path] = newImagePath
+            }
+        }
+
+        affectedImages.size
     }
 }
