@@ -1625,9 +1625,11 @@ class SongService : SongLibrary, Service() {
 
         if (affectedSongs.isEmpty()) return@dbQuery 0
 
-        val songs = SongTable.select(SongTable.id, SongTable.filePath)
-            .where { SongTable.id inList affectedSongs }
-            .toList()
+        val songs = affectedSongs.chunked(20000).flatMap {
+            SongTable.select(SongTable.id, SongTable.filePath)
+                .where { SongTable.id inList it }
+                .toList()
+        }
 
         songs.forEach { row ->
             val id = row[SongTable.id].value

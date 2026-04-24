@@ -44,8 +44,10 @@ import io.mockk.mockk
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.like
 import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.SchemaUtils
+import org.jetbrains.exposed.v1.jdbc.batchInsert
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
@@ -1190,5 +1192,37 @@ class SongServiceTest : KoinTest {
         }
         assertNotNull(mbInfo)
         assertEquals(mbArtistId, mbInfo!![ArtistMusicBrainzTable.musicBrainzId]?.value)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `moveSongs should handle large number of songs`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val songCount = 80000
+        val oldPath = "/old/storage"
+        val newPath = "/new/storage"
+
+        transaction(database) {
+            val albumId = AlbumTable.insert {
+                it[id] = UUID.randomUUID()
+                it[name] = "Massive Album"
+            }[AlbumTable.id]
+
+            SongTable.batchInsert((1..songCount)) { i ->
+                this[SongTable.id] = UUID.randomUUID()
+                this[SongTable.title] = "Song $i"
+                this[SongTable.albumId] = albumId.value
+                this[SongTable.filePath] = "$oldPath/song_$i.mp3"
+                this[SongTable.duration] = 100
+            }
+        }
+
+        val moved = songService.moveSongs(oldPath, newPath)
+        assertEquals(songCount, moved)
+
+        transaction(database) {
+            val count = SongTable.selectAll().where { SongTable.filePath like "$newPath%" }.count()
+            assertEquals(songCount.toLong(), count)
+        }
     }
 }

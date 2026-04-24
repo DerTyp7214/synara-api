@@ -16,10 +16,13 @@ import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.core.dao.id.EntityID
+import org.jetbrains.exposed.v1.core.like
 import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.SchemaUtils
+import org.jetbrains.exposed.v1.jdbc.batchInsert
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.insertAndGetId
+import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -143,5 +146,31 @@ class ImageServiceTest {
         val deletedCount = service.deleteUnreferencedImages()
         assertEquals(1, deletedCount)
         assertEquals(null, service.byId(imageId))
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `moveImages should handle large number of images`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val imageCount = 80000
+        val oldPath = "old/images"
+        val newPath = "new/images"
+
+        transaction(database) {
+            ImageTable.batchInsert((1..imageCount)) { i ->
+                this[ImageTable.id] = UUID.randomUUID()
+                this[ImageTable.path] = "$oldPath/image_$i.jpg"
+                this[ImageTable.imageHash] = "hash_$i"
+                this[ImageTable.origin] = "test"
+            }
+        }
+
+        val moved = service.moveImages(oldPath, newPath)
+        assertEquals(imageCount, moved)
+
+        transaction(database) {
+            val count = ImageTable.selectAll().where { ImageTable.path like "$newPath%" }.count()
+            assertEquals(imageCount.toLong(), count)
+        }
     }
 }
