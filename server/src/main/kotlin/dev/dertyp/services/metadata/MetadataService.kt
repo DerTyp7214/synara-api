@@ -3,6 +3,7 @@ package dev.dertyp.services.metadata
 import dev.dertyp.ApiClient
 import dev.dertyp.core.HttpClientPriority
 import dev.dertyp.data.User
+import dev.dertyp.plugins.PluginManager
 import dev.dertyp.services.Service
 import dev.dertyp.services.metadata.IMetadataService.MetadataType
 import io.ktor.client.call.body
@@ -273,7 +274,15 @@ abstract class MetadataService(
                     environment
                 )
 
-                else -> throw IllegalArgumentException("Unknown metadata provider: ${type.value}")
+                else -> {
+                    val pluginManager = KoinPlatformTools.defaultContext().get().get<PluginManager>()
+                    val service = pluginManager.getMetadataService(type)
+                    if (service is MetadataService) {
+                        register(type, service)
+                        return service
+                    }
+                    throw IllegalArgumentException("Unknown metadata provider: ${type.value}")
+                }
             }
         }
     }

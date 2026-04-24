@@ -1,5 +1,6 @@
 package dev.dertyp.plugins
 
+import dev.dertyp.services.metadata.IMetadataService
 import org.koin.core.module.Module
 
 interface ISynaraPlugin {
@@ -15,4 +16,5 @@ interface ISynaraPlugin {
     fun getDownloaders(): List<IDownloader> = getDownloader()?.let { listOf(it) } ?: emptyList()
     fun getIndexer(): IPluginIndexer? = null
     fun getIndexers(): List<IPluginIndexer> = getIndexer()?.let { listOf(it) } ?: emptyList()
+    fun getMetadataService(type: IMetadataService.MetadataType): IMetadataService? = null
 }

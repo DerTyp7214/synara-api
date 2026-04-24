@@ -119,6 +119,8 @@ abstract class TidalBaseDownloader(
     indexer: IPluginIndexer,
     storageService: IServerStorageService
 ) : BaseDownloader(indexer, storageService) {
+    override val metadataType = IMetadataService.MetadataType.tidal
+
     private val songService by inject<SongService>()
     private val userPlaylistService by inject<UserPlaylistService>()
     private val imageService by inject<ImageService>()

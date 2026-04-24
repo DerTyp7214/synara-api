@@ -137,4 +137,8 @@ class PluginManager(
     fun getDownloader(id: String = defaultDownloaderId): IDownloader? = downloaders[id]
     fun getAllDownloaders(): Collection<IDownloader> = downloaders.values
     fun getAllIndexers(): Collection<IPluginIndexer> = indexers
+
+    fun getMetadataService(type: IMetadataService.MetadataType): IMetadataService? {
+        return loadedPlugins.firstNotNullOfOrNull { it.getMetadataService(type) }
+    }
 }

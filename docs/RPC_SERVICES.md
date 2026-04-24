@@ -995,10 +995,10 @@ Management of the integrated media downloader.
 | `finishedDownloads` | - | `List`<[FinishedDownloadQueueEntry](#finisheddownloadqueueentry)> | No |  | Get a list of recently completed or failed download tasks. |
 | `syncFavouritesAvailable` | - | `Boolean` | No |  | Check if favorite synchronization is available. |
 | `syncFavourites` | - | `Unit` | No | IllegalStateException | Synchronize favorites with the local library. |
-| `downloadIds` | `ids` (`List`<`String`>): Collection of IDs.<br>`type` ([Type](#type)): The type of content (SONG, ALBUM, etc.).<br>`downloader` ([DownloadBackend](#downloadbackend)?): The downloader to use. | `Unit` | No |  | Queue content for download by its IDs. |
+| `downloadIds` | `ids` (`List`<`PrefixedId`>): Collection of IDs.<br>`type` ([Type](#type)): The type of content (SONG, ALBUM, etc.).<br>`downloader` ([DownloadBackend](#downloadbackend)?): The downloader to use. | `Unit` | No |  | Queue content for download by its IDs. |
 | `downloadUrls` | `urls` (`List`<`String`>): Collection of URLs. | `Unit` | No |  | Queue content for download by its URLs. |
 | `getDownloaderForUrl` | `url` (`String`): The URL to check. | [DownloadBackend](#downloadbackend)? | No |  | Get the appropriate downloader backend for a given URL. |
-| `existsByOriginalId` | `id` (`String`): The original ID to check.<br>`type` ([Type](#type)): The type of content. | `Boolean` | No |  | Check if content with a specific original ID is already present in the library. |
+| `existsByOriginalId` | `id` (`PrefixedId`): The original ID to check.<br>`type` ([Type](#type)): The type of content. | `Boolean` | No |  | Check if content with a specific original ID is already present in the library. |
 | `setDownloadService` | `service` ([DownloadBackend](#downloadbackend)): The downloader service to use. | `Unit` | No |  | Set the preferred downloader backend. |
 | `getDownloadService` | - | [DownloadBackend](#downloadbackend) | No |  | Get the currently active downloader backend. |
 | `getAllDownloadServices` | - | `List`<[DownloadBackend](#downloadbackend)> | No |  | Get all available downloader backends. |

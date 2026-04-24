@@ -8,6 +8,7 @@ import dev.dertyp.core.waitForChange
 import dev.dertyp.data.User
 import dev.dertyp.data.UserSong
 import dev.dertyp.killAll
+import dev.dertyp.plugins.IDownloader
 import dev.dertyp.plugins.IPluginDownloadService
 import dev.dertyp.plugins.PluginManager
 import dev.dertyp.services.FavSyncService
@@ -83,14 +84,30 @@ class DownloadRpcService(
         downloadService.syncFavourites(call, true).invokeOnCompletion {}
     }
 
-    override suspend fun downloadIds(@LogParam("size") ids: List<String>, type: Type, downloader: DownloadBackend?) {
-        downloadService.downloadIds(
-            ids = ids.asFlow(),
-            type = type,
-            user = user,
-            downloaderId = downloader?.id,
-            callback = {}
-        )
+    override suspend fun downloadIds(@LogParam("size") ids: List<PrefixedId>, type: Type, downloader: DownloadBackend?) {
+        if (downloader != null) {
+            downloadService.downloadIds(
+                ids = ids.asFlow(),
+                type = type,
+                user = user,
+                downloaderId = downloader.id,
+                callback = {}
+            )
+        } else {
+            val groups = ids.groupBy { it.getPrefix() ?: downloaderProxy.defaultService.id }
+
+            groups.forEach { (downloaderId, groupIds) ->
+                val finalIds = groupIds.map { it.stripPrefix() }
+
+                downloadService.downloadIds(
+                    ids = finalIds.asFlow(),
+                    type = type,
+                    user = user,
+                    downloaderId = downloaderId,
+                    callback = {}
+                )
+            }
+        }
     }
 
     override suspend fun downloadUrls(urls: List<String>) {
@@ -128,13 +145,31 @@ class DownloadRpcService(
             ?.let { DownloadBackend(it.id) }
     }
 
-    override suspend fun existsByOriginalId(id: String, type: Type): Boolean {
-        val metadataService = call.getMetadataProvider(IMetadataService.MetadataType.tidal) ?: return false
+    override suspend fun existsByOriginalId(id: PrefixedId, type: Type): Boolean {
+        val (downloader, actualId) = getDownloaderAndId(id)
+
+        if (downloader == null) return false
+
+        val metadataService = try {
+            call.getMetadataProvider(downloader.metadataType)
+        } catch (_: Exception) {
+            null
+        } ?: return false
+
         return when (type) {
-            Type.SONG -> metadataService.getTrackById(id) != null
-            Type.ALBUM -> metadataService.albumExistsById(id)
-            Type.PLAYLIST -> metadataService.getPlaylistsByIds(listOf(id)).firstOrNull() != null
+            Type.SONG -> metadataService.getTrackById(actualId) != null
+            Type.ALBUM -> metadataService.albumExistsById(actualId)
+            Type.PLAYLIST -> metadataService.getPlaylistsByIds(listOf(actualId)).firstOrNull() != null
             else -> false
+        }
+    }
+
+    private fun getDownloaderAndId(id: PrefixedId): Pair<IDownloader?, String> {
+        val prefix = id.getPrefix()
+        return if (prefix != null) {
+            downloadService.pluginManager.getDownloader(prefix) to id.stripPrefix()
+        } else {
+            downloadService.pluginManager.getDownloader(downloaderProxy.defaultService.id) to id
         }
     }
 

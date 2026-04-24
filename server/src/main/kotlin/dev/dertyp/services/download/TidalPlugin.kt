@@ -1,8 +1,10 @@
 package dev.dertyp.services.download
 
+import dev.dertyp.PlatformUUID
 import dev.dertyp.core.sha256
 import dev.dertyp.data.InsertableAlbum
 import dev.dertyp.data.InsertableImage
+import dev.dertyp.data.User
 import dev.dertyp.getDateFromISO
 import dev.dertyp.plugins.BaseIndexer
 import dev.dertyp.plugins.IDownloader
@@ -182,12 +184,15 @@ class TidalPlugin : ISynaraPlugin, KoinComponent {
 
     private val tiddlService: TiddlService by inject()
     private val tdnService: TdnService by inject()
+    private val downloaderProxy: DownloaderProxy by inject()
     private lateinit var indexer: TidalIndexer
+    private lateinit var proxyDownloader: TidalProxyDownloader
 
     override fun init(context: PluginContext) {
         indexer = TidalIndexer(context)
         tiddlService.indexer = indexer
         tdnService.indexer = indexer
+        proxyDownloader = TidalProxyDownloader(tiddlService, tdnService, downloaderProxy)
     }
 
     override fun getKoinModule(): Module = module {
@@ -195,6 +200,47 @@ class TidalPlugin : ISynaraPlugin, KoinComponent {
         singleOf(::TdnService)
     }
 
-    override fun getDownloaders(): List<IDownloader> = listOf(tiddlService, tdnService)
+    override fun getDownloaders(): List<IDownloader> = listOf(tiddlService, tdnService, proxyDownloader)
     override fun getIndexer(): IPluginIndexer = indexer
+}
+
+class TidalProxyDownloader(
+    private val tiddl: TiddlService,
+    private val tdn: TdnService,
+    private val downloaderProxy: DownloaderProxy
+) : IDownloader {
+    override val id: String = "tidal"
+    override val name: String = "Tidal"
+    override val pluginId: String = "tidal"
+    override var indexer: IPluginIndexer
+        get() = current().indexer
+        set(value) {
+            tiddl.indexer = value
+            tdn.indexer = value
+        }
+
+    override val enabled: Boolean get() = tiddl.enabled || tdn.enabled
+    override val metadataType get() = current().metadataType
+
+    private fun current(): IDownloader {
+        val default = downloaderProxy.defaultService.id
+        if (default == TiddlService.ID && tiddl.enabled) return tiddl
+        if (default == TdnService.ID && tdn.enabled) return tdn
+
+        return if (tiddl.enabled) tiddl else tdn
+    }
+
+    override fun canHandle(url: String): Boolean = current().canHandle(url)
+    override suspend fun parseUrl(url: String) = current().parseUrl(url)
+    override suspend fun getWrapper(type: Type, ids: List<String>, user: User) = current().getWrapper(type, ids, user)
+    override suspend fun downloadIds(ids: List<String>, type: Type, user: User, callback: suspend (List<String>) -> Unit) = current().downloadIds(ids, type, user, callback)
+    override suspend fun downloadContent(urls: List<String>, maxRetries: Int, aliveCheck: suspend () -> Boolean, userId: PlatformUUID?, onLiveOutput: suspend (String) -> Unit) = current().downloadContent(urls, maxRetries, aliveCheck, userId, onLiveOutput)
+    override suspend fun downloadFavoriteCollection(type: DownloadFavType, maxRetries: Int, aliveCheck: suspend () -> Boolean, userId: PlatformUUID?, onLiveOutput: suspend (String) -> Unit) = current().downloadFavoriteCollection(type, maxRetries, aliveCheck, userId, onLiveOutput)
+    override suspend fun syncFavorites(user: User, onProgress: suspend (Double, String) -> Unit) = current().syncFavorites(user, onProgress)
+    override suspend fun search(query: String, count: Int) = current().search(query, count)
+    override suspend fun updateAlbumMetadata(albumId: PlatformUUID, originalId: String) = current().updateAlbumMetadata(albumId, originalId)
+    override suspend fun login(aliveCheck: suspend () -> Boolean, onLiveOutput: suspend (String) -> Unit) = current().login(aliveCheck, onLiveOutput)
+    override fun extractLoginUrl(log: String) = current().extractLoginUrl(log)
+    override suspend fun authorized(aliveCheck: suspend () -> Boolean) = current().authorized(aliveCheck)
+    override fun tokenFileExists() = current().tokenFileExists()
 }

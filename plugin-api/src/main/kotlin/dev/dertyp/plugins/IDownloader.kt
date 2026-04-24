@@ -7,6 +7,7 @@ import dev.dertyp.services.download.DownloadFavType
 import dev.dertyp.services.download.IdsWrapper
 import dev.dertyp.services.download.ProcessExecutionResult
 import dev.dertyp.services.download.Type
+import dev.dertyp.services.metadata.IMetadataService
 
 data class SearchResult(
     val id: String,
@@ -22,6 +23,7 @@ interface IDownloader {
     val pluginId: String
     var indexer: IPluginIndexer
     val enabled: Boolean get() = true
+    val metadataType: IMetadataService.MetadataType? get() = null
 
     fun canHandle(url: String): Boolean
     suspend fun parseUrl(url: String): Pair<String, Type>? = null
