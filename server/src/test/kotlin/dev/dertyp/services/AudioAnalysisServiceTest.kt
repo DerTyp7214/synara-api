@@ -19,8 +19,10 @@ import io.mockk.spyk
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.ExperimentalSerializationApi
 import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.innerJoin
 import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.insert
+import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
@@ -225,6 +227,104 @@ class AudioAnalysisServiceTest {
             assertNull(dbRow[SongAudioDataTable.bpm])
             assertNull(dbRow[SongAudioDataTable.energy])
             assertNull(dbRow[SongAudioDataTable.valence])
+        }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `saveCredits should overwrite old credits and handle duplicate persons`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val songId = UUID.randomUUID()
+        val albumId = UUID.randomUUID()
+
+        dbQuery {
+            AlbumTable.insert {
+                it[id] = albumId
+                it[name] = "Test Album"
+            }
+            SongTable.insert {
+                it[id] = songId
+                it[title] = "Test Song"
+                it[filePath] = "/tmp/test.flac"
+                it[duration] = 1000
+                it[explicit] = false
+                it[this.albumId] = albumId
+            }
+        }
+
+        val service = spyk<AudioAnalysisService>(recordPrivateCalls = true)
+        every { service getProperty "essentiaExtractorPath" } returns "/usr/bin/mock_essentia"
+
+        val firstJson = """
+            {
+                "metadata": {
+                    "tags": {
+                        "composer": ["Composer A", "Composer B"],
+                        "lyricist": ["Lyricist A"],
+                        "producer": ["Producer A"]
+                    }
+                }
+            }
+        """.trimIndent()
+
+        coEvery { service["runEssentia"](any<String>(), any<String>()) } coAnswers {
+            val outputPath = secondArg<String>()
+            File(outputPath).writeText(firstJson)
+            0
+        }
+
+        service.analyzeSong(songId)
+
+        dbQuery {
+            assertEquals(2, SongComposerTable.selectAll().where { SongComposerTable.songId eq songId }.count())
+            assertEquals(1, SongLyricistTable.selectAll().where { SongLyricistTable.songId eq songId }.count())
+            assertEquals(1, SongProducerTable.selectAll().where { SongProducerTable.songId eq songId }.count())
+            assertEquals(4, PersonTable.selectAll().count())
+        }
+
+        val secondJson = """
+            {
+                "metadata": {
+                    "tags": {
+                        "composer": ["Composer B", "Composer C"],
+                        "lyricist": ["Lyricist B"],
+                        "producer": []
+                    }
+                }
+            }
+        """.trimIndent()
+
+        coEvery { service["runEssentia"](any<String>(), any<String>()) } coAnswers {
+            val outputPath = secondArg<String>()
+            File(outputPath).writeText(secondJson)
+            0
+        }
+
+        service.analyzeSong(songId)
+
+        dbQuery {
+            val composers = SongComposerTable
+                .innerJoin(PersonTable, onColumn = { SongComposerTable.personId }, otherColumn = { PersonTable.id })
+                .select(PersonTable.name)
+                .where { SongComposerTable.songId eq songId }
+                .map { it[PersonTable.name] }
+            
+            assertEquals(2, composers.size)
+            assertTrue(composers.contains("Composer B"))
+            assertTrue(composers.contains("Composer C"))
+
+            val lyricists = SongLyricistTable
+                .innerJoin(PersonTable, onColumn = { SongLyricistTable.personId }, otherColumn = { PersonTable.id })
+                .select(PersonTable.name)
+                .where { SongLyricistTable.songId eq songId }
+                .map { it[PersonTable.name] }
+            assertEquals(1, lyricists.size)
+            assertEquals("Lyricist B", lyricists.first())
+
+            val producers = SongProducerTable.selectAll().where { SongProducerTable.songId eq songId }.count()
+            assertEquals(0, producers)
+
+            assertEquals(6, PersonTable.selectAll().count())
         }
     }
 }

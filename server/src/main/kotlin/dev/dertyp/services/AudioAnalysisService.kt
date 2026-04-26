@@ -30,6 +30,7 @@ import org.jetbrains.exposed.v1.core.innerJoin
 import org.jetbrains.exposed.v1.core.isNull
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.insert
+import org.jetbrains.exposed.v1.jdbc.insertIgnore
 import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.jdbc.upsert
 import java.io.File
@@ -172,9 +173,10 @@ open class AudioAnalysisService : IAudioAnalysisService, Service() {
         table.deleteWhere { songIdCol eq songId }
 
         names.filter { it.isNotBlank() }.distinct().forEach { name ->
-            val personId = PersonTable.upsert(PersonTable.name, onUpdate = { }) {
+            PersonTable.insertIgnore {
                 it[this.name] = name
-            }[PersonTable.id]
+            }
+            val personId = PersonTable.select(PersonTable.id).where { PersonTable.name eq name }.single()[PersonTable.id]
 
             table.insert {
                 it[songIdCol] = EntityID(songId, SongTable)
