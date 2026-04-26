@@ -85,6 +85,7 @@ class DiscoveryServiceTest : KoinTest {
                 it[this.songId] = seedSongId
                 it[bpm] = 120.0
                 it[energy] = 0.8
+                it[valence] = 0.7
                 it[danceability] = 0.7
             }
             SongTable.insert {
@@ -96,6 +97,7 @@ class DiscoveryServiceTest : KoinTest {
                 it[this.songId] = similarSongId
                 it[bpm] = 122.0
                 it[energy] = 0.78
+                it[valence] = 0.68
                 it[danceability] = 0.72
             }
             SongTable.insert {
@@ -107,6 +109,7 @@ class DiscoveryServiceTest : KoinTest {
                 it[this.songId] = differentSongId
                 it[bpm] = 90.0
                 it[energy] = 0.2
+                it[valence] = 0.1
                 it[danceability] = 0.1
             }
         }
@@ -117,6 +120,7 @@ class DiscoveryServiceTest : KoinTest {
                 SongAudioData(
                     bpm = 120.0,
                     energy = 0.8,
+                    valence = 0.7,
                     danceability = 0.7
                 )
             }
@@ -434,13 +438,13 @@ class DiscoveryServiceTest : KoinTest {
             SongTable.insert { it[id] = match2; it[title] = "Match2"; it[this.albumId] = albumId }
             SongTable.insert { it[id] = match3; it[title] = "Match3"; it[this.albumId] = albumId }
             
-            SongAudioDataTable.insert { it[this.songId] = seedSongId; it[valence] = 0.9 }
-            SongAudioDataTable.insert { it[this.songId] = match1; it[valence] = 0.89 }
-            SongAudioDataTable.insert { it[this.songId] = match2; it[valence] = 0.8 }
-            SongAudioDataTable.insert { it[this.songId] = match3; it[valence] = 0.7 }
+            SongAudioDataTable.insert { it[this.songId] = seedSongId; it[energy] = 0.9; it[valence] = 0.9 }
+            SongAudioDataTable.insert { it[this.songId] = match1; it[energy] = 0.89; it[valence] = 0.89 }
+            SongAudioDataTable.insert { it[this.songId] = match2; it[energy] = 0.8; it[valence] = 0.8 }
+            SongAudioDataTable.insert { it[this.songId] = match3; it[energy] = 0.7; it[valence] = 0.7 }
         }
 
-        coEvery { mockAudioAnalysisService.getAudioDataBatch(any()) } returns mapOf(seedSongId to SongAudioData(valence = 0.9))
+        coEvery { mockAudioAnalysisService.getAudioDataBatch(any()) } returns mapOf(seedSongId to SongAudioData(energy = 0.9, valence = 0.9))
         val userId = UUID.randomUUID()
         coEvery { songService.byIds(any(), userId) } coAnswers {
             val ids = firstArg<Collection<UUID>>()

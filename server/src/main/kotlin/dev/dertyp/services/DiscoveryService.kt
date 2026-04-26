@@ -1,6 +1,7 @@
 package dev.dertyp.services
 
 import dev.dertyp.PlatformUUID
+import dev.dertyp.data.AudioScale
 import dev.dertyp.data.SongAudioData
 import dev.dertyp.data.User
 import dev.dertyp.data.UserSong
@@ -99,7 +100,11 @@ class DiscoveryService : Service() {
 
     suspend fun getSimilarSongsByMood(seedSongIds: List<PlatformUUID>, limit: Int = 20, userId: PlatformUUID): List<UserSong> {
         return getSimilarSongsByFeature(seedSongIds, limit, userId) { target, candidate ->
-            1.0 - abs(target.valence - candidate.valence)
+            val distance = weightedDistance {
+                add(target.energy, candidate.energy, weight = 1.0)
+                add(target.valence, candidate.valence, weight = 1.0)
+            }
+            1.0 - (distance / sqrt(2.0))
         }
     }
 
@@ -218,23 +223,16 @@ class DiscoveryService : Service() {
     }
 
     private fun calculateSimilarity(target: FeatureVector, candidate: FeatureVector): Double {
-        val dBpm = normalize(target.bpm, 50.0, 200.0) - normalize(candidate.bpm, 50.0, 200.0)
-        val dEnergy = target.energy - candidate.energy
-        val dDance = target.danceability - candidate.danceability
-        val dLoudness = normalize(target.loudness, -60.0, 0.0) - normalize(candidate.loudness, -60.0, 0.0)
-        val dAcoustic = target.acousticness - candidate.acousticness
-        val dInstrumental = target.instrumentalness - candidate.instrumentalness
-        val dSpeech = target.speechiness - candidate.speechiness
-
-        val distance = sqrt(
-            (dBpm * 0.2).pow(2) +
-            (dEnergy * 0.3).pow(2) +
-            (dDance * 0.3).pow(2) +
-            (dLoudness * 0.1).pow(2) +
-            (dAcoustic * 0.1).pow(2) +
-            (dInstrumental * 0.1).pow(2) +
-            (dSpeech * 0.05).pow(2)
-        )
+        val distance = weightedDistance {
+            add(target.bpm, candidate.bpm, weight = 0.15, min = 50.0, max = 200.0)
+            add(target.energy, candidate.energy, weight = 0.25)
+            add(target.valence, candidate.valence, weight = 0.25)
+            add(target.danceability, candidate.danceability, weight = 0.2)
+            add(target.loudness, candidate.loudness, weight = 0.05, min = -60.0, max = 0.0)
+            add(target.acousticness, candidate.acousticness, weight = 0.05)
+            add(target.instrumentalness, candidate.instrumentalness, weight = 0.05)
+            add(target.speechiness, candidate.speechiness, weight = 0.05)
+        }
 
         val harmonicBonus = if (target.camelot != null && candidate.camelot != null) {
             val hDist = camelotDistance(target.camelot, candidate.camelot)
@@ -264,9 +262,9 @@ class DiscoveryService : Service() {
         return numDist + letterDist
     }
 
-    private fun mapToCamelot(key: String?, scale: String?): String? {
+    private fun mapToCamelot(key: String?, scale: AudioScale?): String? {
         if (key == null || scale == null) return null
-        val isMinor = scale.lowercase() == "minor"
+        val isMinor = scale == AudioScale.Minor
         return when (key.uppercase()) {
             "G#", "AB" -> if (isMinor) "1A" else "4B"
             "EB", "D#" -> if (isMinor) "2A" else "5B"
@@ -286,30 +284,48 @@ class DiscoveryService : Service() {
 
     private fun mapToFeatureVector(data: SongAudioData): FeatureVector {
         return FeatureVector(
-            bpm = data.bpm ?: 120.0,
-            energy = data.energy ?: 0.5,
-            valence = data.valence ?: 0.5,
-            danceability = data.danceability ?: 0.5,
-            loudness = data.loudness ?: -10.0,
-            acousticness = data.acousticness ?: 0.5,
-            instrumentalness = data.instrumentalness ?: 0.5,
-            speechiness = data.speechiness ?: 0.5,
+            bpm = data.bpm ?: SongAudioData.DEFAULT_BPM,
+            energy = data.energy ?: SongAudioData.DEFAULT_ENERGY,
+            valence = data.valence ?: SongAudioData.DEFAULT_VALENCE,
+            danceability = data.danceability ?: SongAudioData.DEFAULT_DANCEABILITY,
+            loudness = data.loudness ?: SongAudioData.DEFAULT_LOUDNESS,
+            acousticness = data.acousticness ?: SongAudioData.DEFAULT_ACOUSTICNESS,
+            instrumentalness = data.instrumentalness ?: SongAudioData.DEFAULT_INSTRUMENTALNESS,
+            speechiness = data.speechiness ?: SongAudioData.DEFAULT_SPEECHINESS,
             camelot = mapToCamelot(data.key, data.scale)
         )
     }
 
     private fun mapAudioDataToFeatureVector(row: ResultRow): FeatureVector {
         return FeatureVector(
-            bpm = row[SongAudioDataTable.bpm] ?: 120.0,
-            energy = row[SongAudioDataTable.energy] ?: 0.5,
-            valence = row[SongAudioDataTable.valence] ?: 0.5,
-            danceability = row[SongAudioDataTable.danceability] ?: 0.5,
-            loudness = row[SongAudioDataTable.loudness] ?: -10.0,
-            acousticness = row[SongAudioDataTable.acousticness] ?: 0.5,
-            instrumentalness = row[SongAudioDataTable.instrumentalness] ?: 0.5,
-            speechiness = row[SongAudioDataTable.speechiness] ?: 0.5,
-            camelot = mapToCamelot(row[SongAudioDataTable.key], row[SongAudioDataTable.scale])
+            bpm = row[SongAudioDataTable.bpm] ?: SongAudioData.DEFAULT_BPM,
+            energy = row[SongAudioDataTable.energy] ?: SongAudioData.DEFAULT_ENERGY,
+            valence = row[SongAudioDataTable.valence] ?: SongAudioData.DEFAULT_VALENCE,
+            danceability = row[SongAudioDataTable.danceability] ?: SongAudioData.DEFAULT_DANCEABILITY,
+            loudness = row[SongAudioDataTable.loudness] ?: SongAudioData.DEFAULT_LOUDNESS,
+            acousticness = row[SongAudioDataTable.acousticness] ?: SongAudioData.DEFAULT_ACOUSTICNESS,
+            instrumentalness = row[SongAudioDataTable.instrumentalness] ?: SongAudioData.DEFAULT_INSTRUMENTALNESS,
+            speechiness = row[SongAudioDataTable.speechiness] ?: SongAudioData.DEFAULT_SPEECHINESS,
+            camelot = mapToCamelot(row[SongAudioDataTable.key], AudioScale.fromString(row[SongAudioDataTable.scale]))
         )
+    }
+
+    private inline fun weightedDistance(block: SimilarityBuilder.() -> Unit): Double {
+        val builder = SimilarityBuilder()
+        builder.block()
+        return builder.build()
+    }
+
+    private inner class SimilarityBuilder {
+        private var sumOfSquares = 0.0
+
+        fun add(target: Double, candidate: Double, weight: Double, min: Double? = null, max: Double? = null) {
+            val t = if (min != null && max != null) normalize(target, min, max) else target
+            val c = if (min != null && max != null) normalize(candidate, min, max) else candidate
+            sumOfSquares += ((t - c) * weight).pow(2)
+        }
+
+        fun build(): Double = sqrt(sumOfSquares)
     }
 
     private data class FeatureVector(

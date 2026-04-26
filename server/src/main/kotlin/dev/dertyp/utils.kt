@@ -26,6 +26,7 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.time.Duration.Companion.milliseconds
 
 fun getDateFromISO(iso: String?): LocalDate? {
@@ -82,6 +83,7 @@ suspend fun executeCommand(
     var process: Process? = null
 
     return coroutineScope {
+        val manuallyCancelled = AtomicBoolean(false)
         val checkJob = launch(Dispatchers.Default) {
             try {
                 while (aliveCheck()) {
@@ -89,7 +91,9 @@ suspend fun executeCommand(
                     yield()
                 }
             } catch (_: Exception) {
-                logger.info("Parent no longer alive, stoping forcefully")
+                if (!manuallyCancelled.get()) {
+                    logger.info("Parent no longer alive, stoping forcefully")
+                }
             }
 
             if (process?.isAlive == true) process?.kill()
@@ -140,6 +144,7 @@ suspend fun executeCommand(
             )
         } finally {
             completionHandle?.dispose()
+            manuallyCancelled.set(true)
 
             if (process?.isAlive == true) process.kill()
             if (checkJob.isActive) checkJob.cancel()

@@ -3,6 +3,7 @@ package dev.dertyp.services
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
 import dev.dertyp.core.ApplicationScope
+import dev.dertyp.data.AudioScale
 import dev.dertyp.db.AlbumTable
 import dev.dertyp.db.PersonTable
 import dev.dertyp.db.SongAudioDataTable
@@ -11,6 +12,7 @@ import dev.dertyp.db.SongLyricistTable
 import dev.dertyp.db.SongProducerTable
 import dev.dertyp.db.SongTable
 import dev.dertyp.dbQuery
+import dev.dertyp.services.audio.ValencePostProcessor
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.spyk
@@ -27,7 +29,9 @@ import org.junit.jupiter.params.provider.EnumSource
 import java.io.File
 import java.util.UUID
 import kotlin.test.assertEquals
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalSerializationApi::class)
@@ -58,13 +62,62 @@ class AudioAnalysisServiceTest {
 
         assertNotNull(audioData.bpm)
         assertNotNull(audioData.key)
-        assertNotNull(audioData.scale)
+        assertEquals(AudioScale.Minor, audioData.scale)
         assertNotNull(audioData.loudness)
         assertNotNull(audioData.energy)
         assertNotNull(audioData.danceability)
         assertNotNull(audioData.composer)
         assertNotNull(audioData.lyricist)
         assertNotNull(audioData.producers)
+        assertNull(audioData.valence)
+    }
+
+    @Test
+    fun `ValencePostProcessor should calculate mood correctly`() {
+        val processor = ValencePostProcessor()
+        val essentia = EssentiaOutput(
+            lowLevel = EssentiaOutput.LowLevel(
+                dissonance = EssentiaOutput.Statistics(mean = 0.1)
+            ),
+            rhythm = EssentiaOutput.Rhythm(
+                bpm = 128.0,
+                danceability = 2.0
+            ),
+            tonal = EssentiaOutput.Tonal(
+                keyEdma = EssentiaOutput.KeyEdma(scale = AudioScale.Major)
+            )
+        )
+
+        val rawData = essentia.toSongAudioData()
+        val processedData = processor.process(essentia, rawData)
+
+        assertNotNull(processedData.energy)
+        assertNotNull(processedData.valence)
+        assertTrue(processedData.energy!! > 0.6, "Energy should be high for 128 BPM/2.0 Danceability")
+        assertTrue(processedData.valence!! > 0.7, "Valence should be high for Major/Low Dissonance")
+    }
+
+    @Test
+    fun `ValencePostProcessor should handle Gloomy tracks correctly`() {
+        val processor = ValencePostProcessor()
+        val essentia = EssentiaOutput(
+            lowLevel = EssentiaOutput.LowLevel(
+                dissonance = EssentiaOutput.Statistics(mean = 0.5)
+            ),
+            rhythm = EssentiaOutput.Rhythm(
+                bpm = 70.0,
+                danceability = 0.6
+            ),
+            tonal = EssentiaOutput.Tonal(
+                keyEdma = EssentiaOutput.KeyEdma(scale = AudioScale.Minor)
+            )
+        )
+
+        val rawData = essentia.toSongAudioData()
+        val processedData = processor.process(essentia, rawData)
+
+        assertTrue(processedData.energy!! < 0.4, "Energy should be low")
+        assertTrue(processedData.valence!! < 0.4, "Valence should be low")
     }
 
     @ParameterizedTest
@@ -109,11 +162,14 @@ class AudioAnalysisServiceTest {
         assertEquals(expectedData.composer, result.composer)
         assertEquals(expectedData.lyricist, result.lyricist)
         assertEquals(expectedData.producers, result.producers)
+        assertNotNull(result.valence, "Valence should be calculated via post-processor")
+        assertNotEquals(expectedData.energy, result.energy, "Energy should have been recalculated by post-processor")
 
         dbQuery {
             val dbRow = SongAudioDataTable.selectAll().where { SongAudioDataTable.songId eq songId }.single()
-            assertEquals(expectedData.bpm, dbRow[SongAudioDataTable.bpm])
-            assertEquals(expectedData.energy, dbRow[SongAudioDataTable.energy])
+            assertEquals(result.bpm, dbRow[SongAudioDataTable.bpm])
+            assertEquals(result.energy, dbRow[SongAudioDataTable.energy])
+            assertEquals(result.valence, dbRow[SongAudioDataTable.valence])
         }
 
         dbQuery {
@@ -121,6 +177,54 @@ class AudioAnalysisServiceTest {
             expectedData.composer?.forEach { assertTrue(persons.contains(it)) }
             expectedData.lyricist?.forEach { assertTrue(persons.contains(it)) }
             expectedData.producers?.forEach { assertTrue(persons.contains(it)) }
+        }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `should handle missing data by persisting nulls`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val songId = UUID.randomUUID()
+        val albumId = UUID.randomUUID()
+
+        dbQuery {
+            AlbumTable.insert {
+                it[id] = albumId
+                it[name] = "Test Album"
+            }
+            SongTable.insert {
+                it[id] = songId
+                it[title] = "Null Song"
+                it[filePath] = "/tmp/null.flac"
+                it[duration] = 1000
+                it[explicit] = false
+                it[this.albumId] = albumId
+            }
+        }
+
+        val jsonText = "{}"
+
+        val service = spyk<AudioAnalysisService>(recordPrivateCalls = true)
+        every { service getProperty "essentiaExtractorPath" } returns "/usr/bin/mock_essentia"
+
+        coEvery { service["runEssentia"](any<String>(), any<String>()) } coAnswers {
+            val outputPath = secondArg<String>()
+            File(outputPath).writeText(jsonText)
+            0
+        }
+
+        val result = service.getAudioData(songId)
+        assertNotNull(result)
+
+        assertNull(result.bpm)
+        assertNull(result.energy)
+        assertNull(result.valence)
+
+        dbQuery {
+            val dbRow = SongAudioDataTable.selectAll().where { SongAudioDataTable.songId eq songId }.single()
+            assertNull(dbRow[SongAudioDataTable.bpm])
+            assertNull(dbRow[SongAudioDataTable.energy])
+            assertNull(dbRow[SongAudioDataTable.valence])
         }
     }
 }

@@ -2,6 +2,7 @@ package dev.dertyp.services
 
 import dev.dertyp.PlatformUUID
 import dev.dertyp.core.ApplicationScope
+import dev.dertyp.data.AudioScale
 import dev.dertyp.data.SongAudioData
 import dev.dertyp.db.PersonTable
 import dev.dertyp.db.SongAudioDataTable
@@ -12,11 +13,11 @@ import dev.dertyp.db.SongTable
 import dev.dertyp.dbQuery
 import dev.dertyp.executeCommand
 import dev.dertyp.findInPath
+import dev.dertyp.services.audio.AudioAnalysisPostProcessor
+import dev.dertyp.services.audio.ValencePostProcessor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.ExperimentalSerializationApi
-import kotlinx.serialization.SerialName
-import kotlinx.serialization.Serializable
 import org.jaudiotagger.audio.AudioFileIO
 import org.jaudiotagger.tag.FieldKey
 import org.jetbrains.exposed.v1.core.Column
@@ -33,97 +34,13 @@ import org.jetbrains.exposed.v1.jdbc.upsert
 import java.io.File
 import java.util.UUID
 
-@Serializable
-internal data class EssentiaOutput(
-    @SerialName("lowlevel")
-    val lowLevel: LowLevel? = null,
-    @SerialName("rhythm")
-    val rhythm: Rhythm? = null,
-    @SerialName("tonal")
-    val tonal: Tonal? = null,
-    @SerialName("metadata")
-    val metadata: Metadata? = null
-) {
-    fun toSongAudioData() = SongAudioData(
-        bpm = rhythm?.bpm,
-        key = tonal?.keyEdma?.key,
-        scale = tonal?.keyEdma?.scale,
-        loudness = lowLevel?.loudnessEbu128?.integrated,
-        energy = lowLevel?.spectralEnergy?.mean,
-        danceability = rhythm?.danceability,
-        composer = metadata?.tags?.composer,
-        lyricist = metadata?.tags?.lyricist,
-        producers = metadata?.tags?.producer
-    )
-
-    @Serializable
-    data class Metadata(
-        @SerialName("tags")
-        val tags: Tags? = null
-    )
-
-    @Serializable
-    data class Tags(
-        @SerialName("composer")
-        val composer: List<String>? = null,
-        @SerialName("lyricist")
-        val lyricist: List<String>? = null,
-        @SerialName("producer")
-        val producer: List<String>? = null
-    )
-
-    @Serializable
-    data class LowLevel(
-        @SerialName("loudness_ebu128")
-        val loudnessEbu128: LoudnessEbu128? = null,
-        @SerialName("spectral_energy")
-        val spectralEnergy: Statistics? = null,
-        @SerialName("average_loudness")
-        val averageLoudness: Double? = null,
-        @SerialName("dissonance")
-        val dissonance: Statistics? = null
-    )
-
-    @Serializable
-    data class LoudnessEbu128(
-        @SerialName("integrated")
-        val integrated: Double? = null
-    )
-
-    @Serializable
-    data class Statistics(
-        @SerialName("mean")
-        val mean: Double? = null,
-        @SerialName("stdev")
-        val stdev: Double? = null
-    )
-
-    @Serializable
-    data class Rhythm(
-        @SerialName("bpm")
-        val bpm: Double? = null,
-        @SerialName("danceability")
-        val danceability: Double? = null
-    )
-
-    @Serializable
-    data class Tonal(
-        @SerialName("key_edma")
-        val keyEdma: KeyEdma? = null
-    )
-
-    @Serializable
-    data class KeyEdma(
-        @SerialName("key")
-        val key: String? = null,
-        @SerialName("scale")
-        val scale: String? = null
-    )
-}
-
 @OptIn(ExperimentalSerializationApi::class)
 open class AudioAnalysisService : IAudioAnalysisService, Service() {
     protected open val essentiaExtractorPath = findInPath("essentia_streaming_extractor_music")
+
+    protected open val postProcessors: List<AudioAnalysisPostProcessor> = listOf(
+        ValencePostProcessor()
+    )
 
     override suspend fun getAudioData(songId: PlatformUUID): SongAudioData? = dbQuery {
         val existing = SongAudioDataTable.select(SongAudioDataTable.columns)
@@ -199,7 +116,12 @@ open class AudioAnalysisService : IAudioAnalysisService, Service() {
                 val jsonText = tempFile.readText()
                 val essentia = ApplicationScope.json.decodeFromString<EssentiaOutput>(jsonText)
 
-                return essentia.toSongAudioData()
+                var audioData = essentia.toSongAudioData()
+                postProcessors.forEach {
+                    audioData = it.process(essentia, audioData)
+                }
+
+                return audioData
             }
         } catch (e: Exception) {
             logger.error("Essentia analysis failed: ${e.message}")
@@ -223,7 +145,7 @@ open class AudioAnalysisService : IAudioAnalysisService, Service() {
             it[SongAudioDataTable.songId] = songId
             it[bpm] = audioData.bpm
             it[key] = audioData.key
-            it[scale] = audioData.scale
+            it[scale] = audioData.scale?.name?.lowercase()
             it[loudness] = audioData.loudness
             it[energy] = audioData.energy
             it[valence] = audioData.valence
@@ -261,7 +183,7 @@ open class AudioAnalysisService : IAudioAnalysisService, Service() {
         return SongAudioData(
             bpm = row[SongAudioDataTable.bpm],
             key = row[SongAudioDataTable.key],
-            scale = row[SongAudioDataTable.scale],
+            scale = AudioScale.fromString(row[SongAudioDataTable.scale]),
             loudness = row[SongAudioDataTable.loudness],
             energy = row[SongAudioDataTable.energy],
             valence = row[SongAudioDataTable.valence],
