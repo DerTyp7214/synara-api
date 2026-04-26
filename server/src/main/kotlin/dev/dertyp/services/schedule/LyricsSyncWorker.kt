@@ -5,8 +5,8 @@ import dev.dertyp.db.SyncedLyricsTable
 import dev.dertyp.dbQuery
 import dev.dertyp.services.LyricsService
 import kotlinx.coroutines.delay
-import org.jetbrains.exposed.v1.core.JoinType
 import org.jetbrains.exposed.v1.core.isNull
+import org.jetbrains.exposed.v1.core.leftJoin
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.upsert
 import org.koin.core.component.inject
@@ -39,7 +39,7 @@ class LyricsSyncWorker : Worker("LyricsSyncWorker") {
         var failed = 0
 
         val songsToProcess = dbQuery {
-            SongTable.join(SyncedLyricsTable, JoinType.LEFT, SongTable.id, SyncedLyricsTable.songId)
+            SongTable.leftJoin(SyncedLyricsTable, onColumn = { SongTable.id }, otherColumn = { SyncedLyricsTable.songId })
                 .selectAll()
                 .where { SyncedLyricsTable.songId.isNull() }
                 .map { 

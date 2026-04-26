@@ -21,12 +21,12 @@ import kotlinx.serialization.ExperimentalSerializationApi
 import org.jaudiotagger.audio.AudioFileIO
 import org.jaudiotagger.tag.FieldKey
 import org.jetbrains.exposed.v1.core.Column
-import org.jetbrains.exposed.v1.core.JoinType
 import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.Table
 import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.inList
+import org.jetbrains.exposed.v1.core.innerJoin
 import org.jetbrains.exposed.v1.core.isNull
 import org.jetbrains.exposed.v1.jdbc.insertIgnore
 import org.jetbrains.exposed.v1.jdbc.select
@@ -203,7 +203,7 @@ open class AudioAnalysisService : IAudioAnalysisService, Service() {
         @Suppress("UNCHECKED_CAST")
         val personIdCol = table.columns[1] as Column<EntityID<UUID>>
 
-        return table.join(PersonTable, JoinType.INNER, personIdCol, PersonTable.id)
+        return table.innerJoin(PersonTable, onColumn = { personIdCol }, otherColumn = { PersonTable.id })
             .select(PersonTable.name)
             .where { songIdCol eq songId }
             .map { it[PersonTable.name] }

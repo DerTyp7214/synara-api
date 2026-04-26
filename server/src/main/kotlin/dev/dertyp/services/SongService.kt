@@ -28,6 +28,7 @@ import dev.dertyp.db.AlbumArtistTable
 import dev.dertyp.db.AlbumMusicBrainzTable
 import dev.dertyp.db.AlbumTable
 import dev.dertyp.db.ArtistAliasTable
+import dev.dertyp.db.ArtistMemberTable
 import dev.dertyp.db.ArtistMusicBrainzTable
 import dev.dertyp.db.ArtistTable
 import dev.dertyp.db.FollowedArtistTable
@@ -79,7 +80,6 @@ import org.jaudiotagger.audio.AudioFileIO
 import org.jaudiotagger.tag.FieldKey
 import org.jetbrains.exposed.v1.core.Alias
 import org.jetbrains.exposed.v1.core.ColumnSet
-import org.jetbrains.exposed.v1.core.JoinType
 import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.Slice
 import org.jetbrains.exposed.v1.core.SortOrder
@@ -298,6 +298,11 @@ class SongService : SongLibrary, Service() {
     val artistMemberAlias = ArtistTable.alias("artistMember")
     val albumArtistGroupAlias = ArtistTable.alias("albumArtistGroup")
     val albumArtistMemberAlias = ArtistTable.alias("albumArtistMember")
+
+    val artistGroupJoinAlias = ArtistMemberTable.alias("artistGroupJoin")
+    val artistMemberJoinAlias = ArtistMemberTable.alias("artistMemberJoin")
+    val albumArtistGroupJoinAlias = ArtistMemberTable.alias("albumArtistGroupJoin")
+    val albumArtistMemberJoinAlias = ArtistMemberTable.alias("albumArtistMemberJoin")
 
     val followedArtistAlias = FollowedArtistTable.alias("followedArtist")
     val albumFollowedArtistAlias = FollowedArtistTable.alias("albumFollowedArtist")
@@ -554,16 +559,16 @@ class SongService : SongLibrary, Service() {
             val candidatesWithEvidence = if (allCandidateIds.isNotEmpty() && mbArtistIds.isNotEmpty()) {
                 dbQuery {
                     val fromSongs = SongArtistTable
-                        .join(SongMusicBrainzTable, JoinType.INNER, SongArtistTable.songId, SongMusicBrainzTable.songId)
-                        .join(MBRecordingArtistCreditTable, JoinType.INNER, SongMusicBrainzTable.musicBrainzId, MBRecordingArtistCreditTable.recordingId)
-                        .join(SongTable, JoinType.INNER, SongArtistTable.songId, SongTable.id)
+                        .innerJoin(SongMusicBrainzTable, onColumn = { SongArtistTable.songId }, otherColumn = { SongMusicBrainzTable.songId })
+                        .innerJoin(MBRecordingArtistCreditTable, onColumn = { SongMusicBrainzTable.musicBrainzId }, otherColumn = { MBRecordingArtistCreditTable.recordingId })
+                        .innerJoin(SongTable, onColumn = { SongArtistTable.songId }, otherColumn = { SongTable.id })
                         .select(SongArtistTable.artistId, MBRecordingArtistCreditTable.artistId)
                         .where { (SongArtistTable.artistId inList allCandidateIds) and (MBRecordingArtistCreditTable.artistId inList mbArtistIds) and (SongTable.id neq id) }
                         .map { it[SongArtistTable.artistId].value to it[MBRecordingArtistCreditTable.artistId].value }
 
                     val fromAlbums = AlbumArtistTable
-                        .join(AlbumMusicBrainzTable, JoinType.INNER, AlbumArtistTable.albumId, AlbumMusicBrainzTable.albumId)
-                        .join(MBReleaseArtistCreditTable, JoinType.INNER, AlbumMusicBrainzTable.musicBrainzId, MBReleaseArtistCreditTable.releaseId)
+                        .innerJoin(AlbumMusicBrainzTable, onColumn = { AlbumArtistTable.albumId }, otherColumn = { AlbumMusicBrainzTable.albumId })
+                        .innerJoin(MBReleaseArtistCreditTable, onColumn = { AlbumMusicBrainzTable.musicBrainzId }, otherColumn = { MBReleaseArtistCreditTable.releaseId })
                         .select(AlbumArtistTable.artistId, MBReleaseArtistCreditTable.artistId)
                         .where { (AlbumArtistTable.artistId inList allCandidateIds) and (MBReleaseArtistCreditTable.artistId inList mbArtistIds) }
                         .map { it[AlbumArtistTable.artistId].value to it[MBReleaseArtistCreditTable.artistId].value }
@@ -1150,16 +1155,10 @@ class SongService : SongLibrary, Service() {
                 onColumn = { ArtistTable.id },
                 otherColumn = { ArtistMusicBrainzTable.artistId }
             )
-            .leftJoin(
-                artistGroupAlias,
-                onColumn = { ArtistTable.groupId },
-                otherColumn = { artistGroupAlias[ArtistTable.id] }
-            )
-            .leftJoin(
-                artistMemberAlias,
-                onColumn = { ArtistTable.id },
-                otherColumn = { artistMemberAlias[ArtistTable.groupId] }
-            )
+            .leftJoin(artistGroupJoinAlias, onColumn = { ArtistTable.id }, otherColumn = { artistGroupJoinAlias[ArtistMemberTable.artistId] })
+            .leftJoin(artistGroupAlias, onColumn = { artistGroupJoinAlias[ArtistMemberTable.groupId] }, otherColumn = { artistGroupAlias[ArtistTable.id] })
+            .leftJoin(artistMemberJoinAlias, onColumn = { ArtistTable.id }, otherColumn = { artistMemberJoinAlias[ArtistMemberTable.groupId] })
+            .leftJoin(artistMemberAlias, onColumn = { artistMemberJoinAlias[ArtistMemberTable.artistId] }, otherColumn = { artistMemberAlias[ArtistTable.id] })
             .leftJoin(ArtistAliasTable)
             .leftJoin(
                 AlbumArtistTable,
@@ -1181,16 +1180,10 @@ class SongService : SongLibrary, Service() {
                 onColumn = { AlbumArtistTable.artistId },
                 otherColumn = { albumArtistAliasAlias[ArtistAliasTable.artistId] }
             )
-            .leftJoin(
-                albumArtistGroupAlias,
-                onColumn = { albumArtistAlias[ArtistTable.groupId] },
-                otherColumn = { albumArtistGroupAlias[ArtistTable.id] }
-            )
-            .leftJoin(
-                albumArtistMemberAlias,
-                onColumn = { albumArtistAlias[ArtistTable.id] },
-                otherColumn = { albumArtistMemberAlias[ArtistTable.groupId] }
-            )
+            .leftJoin(albumArtistGroupJoinAlias, onColumn = { albumArtistAlias[ArtistTable.id] }, otherColumn = { albumArtistGroupJoinAlias[ArtistMemberTable.artistId] })
+            .leftJoin(albumArtistGroupAlias, onColumn = { albumArtistGroupJoinAlias[ArtistMemberTable.groupId] }, otherColumn = { albumArtistGroupAlias[ArtistTable.id] })
+            .leftJoin(albumArtistMemberJoinAlias, onColumn = { albumArtistAlias[ArtistTable.id] }, otherColumn = { albumArtistMemberJoinAlias[ArtistMemberTable.groupId] })
+            .leftJoin(albumArtistMemberAlias, onColumn = { albumArtistMemberJoinAlias[ArtistMemberTable.artistId] }, otherColumn = { albumArtistMemberAlias[ArtistTable.id] })
             .leftJoin(SongGenreTable)
             .leftJoin(GenreTable)
             .leftJoin(SongMusicBrainzTable)

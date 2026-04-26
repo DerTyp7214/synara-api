@@ -3,11 +3,16 @@ package dev.dertyp.migrations.custom
 import dev.dertyp.core.CustomMigration
 import dev.dertyp.core.Migration
 import dev.dertyp.data.ReleaseType
-import dev.dertyp.db.*
+import dev.dertyp.db.AlbumArtistTable
+import dev.dertyp.db.AlbumMusicBrainzTable
+import dev.dertyp.db.ArtistMusicBrainzTable
+import dev.dertyp.db.RecentReleaseTable
+import dev.dertyp.db.SongArtistTable
+import dev.dertyp.db.SongMusicBrainzTable
 import dev.dertyp.dbQuery
 import dev.dertyp.services.metadata.MusicBrainzService
-import org.jetbrains.exposed.v1.core.JoinType
 import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.innerJoin
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.update
 import org.koin.core.component.inject
@@ -21,11 +26,10 @@ class LinkRecentReleasesToLibrary : CustomMigration() {
 
     override suspend fun migrate() {
         val releases = dbQuery {
-            RecentReleaseTable.join(
+            RecentReleaseTable.innerJoin(
                 ArtistMusicBrainzTable,
-                JoinType.INNER,
-                RecentReleaseTable.artistId,
-                ArtistMusicBrainzTable.artistId
+                onColumn = { RecentReleaseTable.artistId },
+                otherColumn = { ArtistMusicBrainzTable.artistId }
             ).selectAll().map {
                 Triple(
                     it[ArtistMusicBrainzTable.artistId].value,
@@ -51,11 +55,10 @@ class LinkRecentReleasesToLibrary : CustomMigration() {
             }
 
             val albumMappings = dbQuery {
-                AlbumMusicBrainzTable.join(
+                AlbumMusicBrainzTable.innerJoin(
                     AlbumArtistTable,
-                    JoinType.INNER,
-                    AlbumMusicBrainzTable.albumId,
-                    AlbumArtistTable.albumId
+                    onColumn = { AlbumMusicBrainzTable.albumId },
+                    otherColumn = { AlbumArtistTable.albumId }
                 ).selectAll()
                     .where { AlbumArtistTable.artistId eq artistId }
                     .mapNotNull { it[AlbumMusicBrainzTable.musicBrainzId]?.let { mbId -> mbId.value to it[AlbumMusicBrainzTable.albumId].value } }
@@ -63,11 +66,10 @@ class LinkRecentReleasesToLibrary : CustomMigration() {
             }
 
             val songMappings = dbQuery {
-                SongMusicBrainzTable.join(
+                SongMusicBrainzTable.innerJoin(
                     SongArtistTable,
-                    JoinType.INNER,
-                    SongMusicBrainzTable.songId,
-                    SongArtistTable.songId
+                    onColumn = { SongMusicBrainzTable.songId },
+                    otherColumn = { SongArtistTable.songId }
                 ).selectAll()
                     .where { SongArtistTable.artistId eq artistId }
                     .mapNotNull { it[SongMusicBrainzTable.musicBrainzId]?.let { mbId -> mbId.value to it[SongMusicBrainzTable.songId].value } }

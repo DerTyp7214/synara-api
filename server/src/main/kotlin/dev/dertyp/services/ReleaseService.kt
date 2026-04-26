@@ -39,11 +39,11 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.serialization.Serializable
-import org.jetbrains.exposed.v1.core.JoinType
 import org.jetbrains.exposed.v1.core.SortOrder
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.inList
+import org.jetbrains.exposed.v1.core.innerJoin
 import org.jetbrains.exposed.v1.core.isNotNull
 import org.jetbrains.exposed.v1.core.isNull
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
@@ -168,7 +168,7 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
         ) as AppleMusicService
 
         val artists = dbQuery {
-            FollowedArtistTable.join(ArtistMusicBrainzTable, JoinType.INNER, FollowedArtistTable.artistId, ArtistMusicBrainzTable.artistId)
+            FollowedArtistTable.innerJoin(ArtistMusicBrainzTable, onColumn = { FollowedArtistTable.artistId }, otherColumn = { ArtistMusicBrainzTable.artistId })
                 .selectAll()
                 .map { Pair(it[ArtistMusicBrainzTable.artistId].value, it[ArtistMusicBrainzTable.musicBrainzId]) }
                 .distinctBy { it.second }
@@ -201,7 +201,7 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
 
                     val albumMappings = dbSemaphore.withPermit {
                         dbQuery {
-                            AlbumMusicBrainzTable.join(AlbumArtistTable, JoinType.INNER, AlbumMusicBrainzTable.albumId, AlbumArtistTable.albumId)
+                            AlbumMusicBrainzTable.innerJoin(AlbumArtistTable, onColumn = { AlbumMusicBrainzTable.albumId }, otherColumn = { AlbumArtistTable.albumId })
                                 .selectAll()
                                 .where { AlbumArtistTable.artistId eq artistId }
                                 .mapNotNull { it[AlbumMusicBrainzTable.musicBrainzId]?.let { mbId -> mbId.value to it[AlbumMusicBrainzTable.albumId].value } }
@@ -211,7 +211,7 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
 
                     val songMappings = dbSemaphore.withPermit {
                         dbQuery {
-                            SongMusicBrainzTable.join(SongArtistTable, JoinType.INNER, SongMusicBrainzTable.songId, SongArtistTable.songId)
+                            SongMusicBrainzTable.innerJoin(SongArtistTable, onColumn = { SongMusicBrainzTable.songId }, otherColumn = { SongArtistTable.songId })
                                 .selectAll()
                                 .where { SongArtistTable.artistId eq artistId }
                                 .mapNotNull { it[SongMusicBrainzTable.musicBrainzId]?.let { mbId -> mbId.value to it[SongMusicBrainzTable.songId].value } }

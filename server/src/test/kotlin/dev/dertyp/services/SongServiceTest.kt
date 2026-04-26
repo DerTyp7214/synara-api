@@ -15,6 +15,7 @@ import dev.dertyp.db.AlbumMusicBrainzTable
 import dev.dertyp.db.AlbumTable
 import dev.dertyp.db.ArtistAliasTable
 import dev.dertyp.db.ArtistGenreTable
+import dev.dertyp.db.ArtistMemberTable
 import dev.dertyp.db.ArtistMusicBrainzTable
 import dev.dertyp.db.ArtistSplitAliasTable
 import dev.dertyp.db.ArtistTable
@@ -102,6 +103,7 @@ class SongServiceTest : KoinTest {
                 SongTable,
                 AlbumTable,
                 ArtistTable,
+                ArtistMemberTable,
                 SongArtistTable,
                 AlbumArtistTable,
                 SongMusicBrainzTable,
@@ -263,9 +265,13 @@ class SongServiceTest : KoinTest {
                 it[name] = "The Beatles"
                 it[isGroup] = true
             }
+            val johnLennonId = UUID.randomUUID()
             ArtistTable.insert {
-                it[id] = UUID.randomUUID()
+                it[id] = johnLennonId
                 it[name] = "John Lennon"
+            }
+            ArtistMemberTable.insert {
+                it[artistId] = johnLennonId
                 it[groupId] = unrelatedGroupId
             }
             AlbumTable.insert {
@@ -348,6 +354,9 @@ class SongServiceTest : KoinTest {
             ArtistTable.insert {
                 it[id] = testMemberId
                 it[name] = "John Lennon"
+            }
+            ArtistMemberTable.insert {
+                it[artistId] = testMemberId
                 it[groupId] = testGroupId
             }
             AlbumTable.insert {
@@ -388,6 +397,9 @@ class SongServiceTest : KoinTest {
             ArtistTable.insert {
                 it[id] = testMemberId
                 it[name] = "John Lennon"
+            }
+            ArtistMemberTable.insert {
+                it[artistId] = testMemberId
                 it[groupId] = testGroupId
             }
             AlbumTable.insert {

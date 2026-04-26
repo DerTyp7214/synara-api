@@ -25,6 +25,7 @@ import dev.dertyp.data.User
 import dev.dertyp.db.AlbumArtistTable
 import dev.dertyp.db.ArtistAliasTable
 import dev.dertyp.db.ArtistGenreTable
+import dev.dertyp.db.ArtistMemberTable
 import dev.dertyp.db.ArtistMusicBrainzTable
 import dev.dertyp.db.ArtistSplitAliasTable
 import dev.dertyp.db.ArtistTable
@@ -55,6 +56,7 @@ import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.inList
+import org.jetbrains.exposed.v1.core.innerJoin
 import org.jetbrains.exposed.v1.core.isNull
 import org.jetbrains.exposed.v1.core.leftJoin
 import org.jetbrains.exposed.v1.core.or
@@ -113,6 +115,8 @@ class ArtistService : ArtistLibrary, Service() {
     private val musicBrainzCacheService by inject<MusicBrainzCacheService>()
     val artistGroupAlias = ArtistTable.alias("artistGroup")
     val artistMemberAlias = ArtistTable.alias("artistMember")
+    val artistGroupJoinAlias = ArtistMemberTable.alias("artistGroupJoin")
+    val artistMemberJoinAlias = ArtistMemberTable.alias("artistMemberJoin")
     val followedArtistAlias = FollowedArtistTable.alias("followedArtist")
 
     companion object {
@@ -305,8 +309,10 @@ class ArtistService : ArtistLibrary, Service() {
 
     suspend fun rankedSearch(page: Int, pageSize: Int, query: String, userId: UUID? = null): PaginatedResponse<Artist> =
         queryArtists(page, pageSize, userId = userId, columnSet = {
-            leftJoin(artistGroupAlias, { ArtistTable.groupId }, { artistGroupAlias[ArtistTable.id] })
-                .leftJoin(artistMemberAlias, { ArtistTable.id }, { artistMemberAlias[ArtistTable.groupId] })
+            leftJoin(artistGroupJoinAlias, onColumn = { ArtistTable.id }, otherColumn = { artistGroupJoinAlias[ArtistMemberTable.artistId] })
+                .leftJoin(artistGroupAlias, onColumn = { artistGroupJoinAlias[ArtistMemberTable.groupId] }, otherColumn = { artistGroupAlias[ArtistTable.id] })
+                .leftJoin(artistMemberJoinAlias, onColumn = { ArtistTable.id }, otherColumn = { artistMemberJoinAlias[ArtistMemberTable.groupId] })
+                .leftJoin(artistMemberAlias, onColumn = { artistMemberJoinAlias[ArtistMemberTable.artistId] }, otherColumn = { artistMemberAlias[ArtistTable.id] })
                 .withMBArtistSearch()
         }) {
             rankedSearchQuery(
@@ -323,8 +329,10 @@ class ArtistService : ArtistLibrary, Service() {
         }
 
     suspend fun byGroup(page: Int, pageSize: Int, groupId: UUID, userId: UUID? = null): PaginatedResponse<Artist> =
-        queryArtists(page, pageSize, userId = userId) {
-            where { ArtistTable.groupId eq groupId }
+        queryArtists(page, pageSize, userId = userId, columnSet = {
+            innerJoin(ArtistMemberTable, onColumn = { ArtistTable.id }, otherColumn = { ArtistMemberTable.artistId })
+        }) {
+            where { ArtistMemberTable.groupId eq groupId }
         }
 
     suspend fun setGroup(id: UUID, artistIds: List<UUID>?, userId: UUID? = null): Artist? {
@@ -333,13 +341,12 @@ class ArtistService : ArtistLibrary, Service() {
                 it[isGroup] = artistIds != null
             }
 
-            ArtistTable.update({ ArtistTable.groupId eq id }) {
-                it[groupId] = null
-            }
+            ArtistMemberTable.deleteWhere { ArtistMemberTable.groupId eq id }
 
             if (artistIds != null) {
-                ArtistTable.update({ ArtistTable.id inList artistIds }) {
-                    it[groupId] = id
+                ArtistMemberTable.batchInsert(artistIds) { memberId ->
+                    this[ArtistMemberTable.groupId] = id
+                    this[ArtistMemberTable.artistId] = memberId
                 }
             }
         }
@@ -672,8 +679,9 @@ class ArtistService : ArtistLibrary, Service() {
             .leftJoin(ArtistMusicBrainzTable)
             .leftJoin(ArtistGenreTable)
             .leftJoin(GenreTable)
+            .innerJoin(ArtistMemberTable, onColumn = { ArtistTable.id }, otherColumn = { ArtistMemberTable.artistId })
             .selectAll()
-            .where { ArtistTable.groupId inList groupIds }
+            .where { ArtistMemberTable.groupId inList groupIds }
             .toList()
 
         val data = mapEagerly(mainArtistRows, memberDataRows, userId).distinctBy { it.id }
@@ -701,7 +709,7 @@ class ArtistService : ArtistLibrary, Service() {
 
         val membersByGroupId = memberRows
             .mapNotNull { row ->
-                val groupId = row[ArtistTable.groupId]?.value ?: return@mapNotNull null
+                val groupId = row.getOrNull(ArtistMemberTable.groupId)?.value ?: return@mapNotNull null
                 val artistId = row[ArtistTable.id].value
                 val artist = mapArtist(row, genres = genresByArtistId[artistId] ?: listOf(), followedTable = followedTable)
                 groupId to artist
@@ -787,7 +795,7 @@ class ArtistService : ArtistLibrary, Service() {
         val referencedArtists = mutableSetOf<UUID>()
         referencedArtists.addAll(SongArtistTable.selectAll().map { it[SongArtistTable.artistId].value })
         referencedArtists.addAll(AlbumArtistTable.selectAll().map { it[AlbumArtistTable.artistId].value })
-        referencedArtists.addAll(ArtistTable.selectAll().mapNotNull { it[ArtistTable.groupId]?.value })
+        referencedArtists.addAll(ArtistMemberTable.selectAll().map { it[ArtistMemberTable.groupId].value })
 
         val allArtists = ArtistTable.selectAll().map { it[ArtistTable.id].value }
 
@@ -825,7 +833,8 @@ class ArtistService : ArtistLibrary, Service() {
         }
 
         artist.artists.forEach { member ->
-            ArtistTable.update({ ArtistTable.id eq member.id }) {
+            ArtistMemberTable.upsert(ArtistMemberTable.artistId, ArtistMemberTable.groupId) {
+                it[artistId] = member.id
                 it[groupId] = artist.id
             }
         }
