@@ -16,15 +16,19 @@ import dev.dertyp.rpc.annotations.RpcDoc
 import dev.dertyp.rpc.annotations.RpcParamDoc
 import dev.dertyp.services.AlbumRpcService
 import dev.dertyp.services.ArtistRpcService
+import dev.dertyp.services.AudioAnalysisService
 import dev.dertyp.services.CustomAudioRpcService
 import dev.dertyp.services.DbManagementService
+import dev.dertyp.services.DiscoveryRpcService
 import dev.dertyp.services.FavSyncRpcService
 import dev.dertyp.services.IAlbumService
 import dev.dertyp.services.IArtistService
+import dev.dertyp.services.IAudioAnalysisService
 import dev.dertyp.services.IAuthService
 import dev.dertyp.services.IBackupService
 import dev.dertyp.services.ICustomAudioService
 import dev.dertyp.services.IDbManagementService
+import dev.dertyp.services.IDiscoveryService
 import dev.dertyp.services.IFavSyncService
 import dev.dertyp.services.IImageService
 import dev.dertyp.services.ILyricsSearch
@@ -458,6 +462,11 @@ fun Route.registerAuthenticatedRestServices(koin: Koin) {
     registerRestService(IArtistService::class, authenticated = true) {
         val user = call.getUser() ?: throw IllegalArgumentException("No user found")
         ArtistRpcService(user, koin.get())
+    }
+    registerRestService(IAudioAnalysisService::class, authenticated = true) { koin.get<AudioAnalysisService>() }
+    registerRestService(IDiscoveryService::class, authenticated = true) {
+        val user = call.getUser() ?: throw IllegalArgumentException("No user found")
+        DiscoveryRpcService(user, koin.get())
     }
     registerRestService(IFavSyncService::class, authenticated = true) {
         val user = call.getUser() ?: throw IllegalArgumentException("No user found")

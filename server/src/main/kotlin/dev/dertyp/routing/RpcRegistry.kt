@@ -9,19 +9,24 @@ import dev.dertyp.services.AlbumRpcService
 import dev.dertyp.services.AlbumService
 import dev.dertyp.services.ArtistRpcService
 import dev.dertyp.services.ArtistService
+import dev.dertyp.services.AudioAnalysisService
 import dev.dertyp.services.AuthService
 import dev.dertyp.services.BackupService
 import dev.dertyp.services.CustomAudioRpcService
 import dev.dertyp.services.CustomAudioService
 import dev.dertyp.services.DbManagementService
+import dev.dertyp.services.DiscoveryRpcService
+import dev.dertyp.services.DiscoveryService
 import dev.dertyp.services.FavSyncRpcService
 import dev.dertyp.services.FavSyncService
 import dev.dertyp.services.IAlbumService
 import dev.dertyp.services.IArtistService
+import dev.dertyp.services.IAudioAnalysisService
 import dev.dertyp.services.IAuthService
 import dev.dertyp.services.IBackupService
 import dev.dertyp.services.ICustomAudioService
 import dev.dertyp.services.IDbManagementService
+import dev.dertyp.services.IDiscoveryService
 import dev.dertyp.services.IFavSyncService
 import dev.dertyp.services.IImageService
 import dev.dertyp.services.ILyricsSearch
@@ -157,6 +162,8 @@ private fun registerAuthenticated(koin: Koin, call: ApplicationCall, user: User,
     val remoteMirrorService = koin.get<RemoteMirrorService>()
     val scheduledTaskLogService = koin.get<ScheduledTaskLogService>()
     val releaseService = koin.get<ReleaseService>()
+    val audioAnalysisService = koin.get<AudioAnalysisService>()
+    val discoveryService = koin.get<DiscoveryService>()
     val cachedMusicBrainzService = koin.get<CachedMusicBrainzService>()
     val metadataDispatcherService = koin.get<MetadataDispatcherService>()
 
@@ -165,6 +172,8 @@ private fun registerAuthenticated(koin: Koin, call: ApplicationCall, user: User,
     registrar.register(ISongService::class) { SongRpcService(songService = songService, user = user).withLogging<ISongService>(call) }
     registrar.register(IAlbumService::class) { AlbumRpcService(user, albumService).withLogging<IAlbumService>(call) }
     registrar.register(IImageService::class) { ImageRpcService(user, imageService).withLogging<IImageService>(call) }
+    registrar.register(IAudioAnalysisService::class) { audioAnalysisService.withLogging<IAudioAnalysisService>(call) }
+    registrar.register(IDiscoveryService::class) { DiscoveryRpcService(user, discoveryService).withLogging<IDiscoveryService>(call) }
     registrar.register(ILyricsSearch::class) { lyricsSearch.withLogging<ILyricsSearch>(call) }
     registrar.register(ILyricsService::class) { lyricsService.withLogging<ILyricsService>(call) }
     registrar.register(IArtistService::class) { ArtistRpcService(user, artistService).withLogging<IArtistService>(call) }

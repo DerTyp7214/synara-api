@@ -1,0 +1,84 @@
+package dev.dertyp.services.schedule
+
+import dev.dertyp.DbDialect
+import dev.dertyp.TestDatabase
+import dev.dertyp.data.User
+import dev.dertyp.db.SongTable
+import dev.dertyp.dbQuery
+import dev.dertyp.services.AlbumService
+import dev.dertyp.services.ArtistService
+import dev.dertyp.services.SongService
+import dev.dertyp.services.UserService
+import io.mockk.coEvery
+import io.mockk.coVerify
+import io.mockk.mockk
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.runBlocking
+import org.jetbrains.exposed.v1.jdbc.SchemaUtils
+import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.EnumSource
+import org.koin.core.context.startKoin
+import org.koin.core.context.stopKoin
+import org.koin.dsl.module
+import org.koin.test.KoinTest
+import java.util.UUID
+
+class MusicBrainzWorkerTest : KoinTest {
+
+    private fun setup(dialect: DbDialect) = runBlocking {
+        TestDatabase.connect(dialect, "mb_worker_test")
+        dbQuery {
+            SchemaUtils.create(SongTable)
+        }
+    }
+
+    @AfterEach
+    fun tearDown() {
+        stopKoin()
+        TestDatabase.cleanUp()
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `worker should tag unmapped entities`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val songService = mockk<SongService>()
+        val albumService = mockk<AlbumService>()
+        val artistService = mockk<ArtistService>()
+        val userService = mockk<UserService>()
+        
+        val admin = mockk<User>()
+        val adminId = UUID.randomUUID()
+        coEvery { admin.id } returns adminId
+        coEvery { userService.findAdmin() } returns admin
+
+        val songId = UUID.randomUUID()
+        val albumId = UUID.randomUUID()
+        val artistId = UUID.randomUUID()
+
+        coEvery { songService.songIdsWithoutMusicBrainzId() } returns flowOf(songId)
+        coEvery { albumService.albumIdsWithoutMusicBrainzId() } returns flowOf(albumId)
+        coEvery { artistService.artistIdsWithoutMusicBrainzId() } returns flowOf(artistId)
+
+        coEvery { songService.fetchMusicBrainzId(songId, adminId) } returns mockk()
+        coEvery { albumService.fetchMusicBrainzId(albumId) } returns mockk()
+        coEvery { artistService.fetchMusicBrainzId(artistId) } returns mockk()
+
+        startKoin {
+            modules(module {
+                single { songService }
+                single { albumService }
+                single { artistService }
+                single { userService }
+            })
+        }
+
+        val worker = MusicBrainzWorker()
+        worker.run()
+
+        coVerify { songService.fetchMusicBrainzId(songId, adminId) }
+        coVerify { albumService.fetchMusicBrainzId(albumId) }
+        coVerify { artistService.fetchMusicBrainzId(artistId) }
+    }
+}

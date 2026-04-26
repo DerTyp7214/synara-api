@@ -7,6 +7,7 @@ import dev.dertyp.data.InsertableImage
 import dev.dertyp.data.InsertablePlaylist
 import dev.dertyp.data.InsertableSong
 import dev.dertyp.data.Song
+import dev.dertyp.data.SongAudioData
 import dev.dertyp.services.metadata.IMetadataService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
@@ -336,6 +337,7 @@ abstract class BaseIndexer(
         val sampleRate = header.sampleRateAsNumber
         val bitsPerSample = header.bitsPerSample
         val bitRate = header.bitRateAsNumber
+        val bpm = tag.getFirst(FieldKey.BPM).toDoubleOrNull()
 
         val releaseDate = try {
             LocalDate.parse(year, DateTimeFormatter.ISO_LOCAL_DATE)
@@ -361,7 +363,8 @@ abstract class BaseIndexer(
             bitRate = bitRate,
             fileSize = audioFile.file.length(),
             coverHash = cover?.sha256(),
-            musicBrainzId = musicBrainzId
+            musicBrainzId = musicBrainzId,
+            audioData = SongAudioData(bpm = bpm)
         )
     }
 }

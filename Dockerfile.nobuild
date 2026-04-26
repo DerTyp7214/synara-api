@@ -1,4 +1,11 @@
 FROM mwader/static-ffmpeg:8.0.1 AS ffmpeg-builder
+FROM mtgupf/essentia:latest AS essentia-source
+
+FROM mtgupf/essentia:latest AS essentia-libs
+RUN mkdir -p /libs && \
+    ldd /usr/local/bin/essentia_streaming_extractor_music | grep "=> /" | awk '{print $3}' | \
+    grep -vE 'libc\.so|libm\.so|libpthread\.so|libdl\.so|librt\.so|libgcc_s\.so|libstdc\+\+\.so|libselinux\.so|libresolv\.so|libz\.so|libbz2\.so|liblzma\.so|libexpat\.so|libuuid\.so' | \
+    xargs -I '{}' cp -L '{}' /libs/
 
 FROM eclipse-temurin:25-jre AS runtime
 
@@ -27,9 +34,14 @@ RUN ln -sf /usr/bin/python3.13 /usr/bin/python3 && \
 
 COPY --from=ffmpeg-builder /ffmpeg /usr/bin/
 COPY --from=ffmpeg-builder /ffprobe /usr/bin/
+
 COPY --from=denoland/deno:bin /deno /usr/local/bin/deno
 
-ENV LD_LIBRARY_PATH="/usr/lib:/usr/local/lib:$LD_LIBRARY_PATH"
+COPY --from=essentia-source /usr/local/bin/essentia_streaming_extractor_music /usr/bin/
+COPY --from=essentia-source /usr/local/lib/libessentia.so /usr/lib/
+COPY --from=essentia-libs /libs/* /usr/lib/essentia/
+
+ENV LD_LIBRARY_PATH="/usr/lib:/usr/local/lib:/usr/lib/essentia:$LD_LIBRARY_PATH"
 
 RUN touch /var/mail/ubuntu && chown ubuntu /var/mail/ubuntu && userdel -r ubuntu
 RUN groupadd -g $APP_GROUP_ID appgroup && useradd -u $APP_USER_ID -g appgroup -s /bin/bash -m -d /home/appuser appuser

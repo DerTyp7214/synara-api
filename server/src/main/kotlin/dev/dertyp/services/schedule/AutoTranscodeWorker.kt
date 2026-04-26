@@ -7,32 +7,26 @@ import dev.dertyp.AudioUtils.transcodeFlacToOpus
 import dev.dertyp.core.nullIfEmpty
 import dev.dertyp.data.SimpleSong
 import io.ktor.server.application.ApplicationEnvironment
-import io.ktor.util.logging.KtorSimpleLogger
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 import java.io.File
 import java.nio.file.Paths
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 
 @OptIn(ExperimentalAtomicApi::class)
-class AutoTranscodeWorker : KoinComponent {
-    private val logger = KtorSimpleLogger("AutoTranscodeWorker")
+class AutoTranscodeWorker : Worker("AutoTranscodeWorker") {
     private val environment by inject<ApplicationEnvironment>()
 
-    suspend fun run(onProgress: suspend (Double, String) -> Unit = { _, _ -> }): Map<String, Int> {
+    override suspend fun execute(onProgress: suspend (Double, String) -> Unit): Map<String, Int> {
         val qualities = environment.config.propertyOrNull("audio.autoTranscode")?.getString()
             ?.split(",")
             ?.mapNotNull { it.trim().toIntOrNull() }
             ?.filter { it > 0 }
             ?.nullIfEmpty() ?: return emptyMap()
-
-        logger.info("Starting AutoTranscodeWorker for qualities: $qualities")
-        onProgress(0.0, "Starting AutoTranscodeWorker for qualities: $qualities")
 
         val results = mutableMapOf<String, Int>()
         for (quality in qualities) {
@@ -95,8 +89,6 @@ class AutoTranscodeWorker : KoinComponent {
             }
         }
 
-        onProgress(100.0, "AutoTranscodeWorker finished")
-        logger.info("AutoTranscodeWorker finished")
         return results
     }
 }

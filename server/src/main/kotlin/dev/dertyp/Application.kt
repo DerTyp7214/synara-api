@@ -19,12 +19,14 @@ import dev.dertyp.serializers.OffsetDateTimeAdapter
 import dev.dertyp.server.BuildConfig
 import dev.dertyp.services.AlbumService
 import dev.dertyp.services.ArtistService
+import dev.dertyp.services.AudioAnalysisService
 import dev.dertyp.services.AuthService
 import dev.dertyp.services.BackupService
 import dev.dertyp.services.CustomAudioService
 import dev.dertyp.services.CustomMigrationService
 import dev.dertyp.services.DatabaseManager
 import dev.dertyp.services.DbManagementService
+import dev.dertyp.services.DiscoveryService
 import dev.dertyp.services.FavSyncService
 import dev.dertyp.services.GenreService
 import dev.dertyp.services.ImageService
@@ -57,6 +59,7 @@ import dev.dertyp.services.metadata.IMusicBrainzService
 import dev.dertyp.services.metadata.MetadataDispatcherService
 import dev.dertyp.services.metadata.MusicBrainzCacheService
 import dev.dertyp.services.metadata.MusicBrainzService
+import dev.dertyp.services.schedule.AudioAnalysisWorker
 import dev.dertyp.services.schedule.AutoTranscodeWorker
 import dev.dertyp.services.schedule.CronPresets
 import dev.dertyp.services.schedule.GenreMetadataWorker
@@ -134,6 +137,7 @@ fun Application.module() {
             singleOf(::UserService)
             singleOf(::AuthService)
             singleOf(::SongService)
+            singleOf(::AudioAnalysisService)
             singleOf(::ImageService)
             singleOf(::AlbumService)
             singleOf(::LyricsSearch)
@@ -152,6 +156,7 @@ fun Application.module() {
             singleOf(::UserPlaylistService)
             singleOf(::RefreshTokenService)
             singleOf(::ScheduledTaskLogService)
+            singleOf(::DiscoveryService)
             singleOf(::DownloaderProxy)
             singleOf(::SessionService)
             singleOf(::PlaybackService)
@@ -173,6 +178,7 @@ fun Application.module() {
             singleOf(::RecentReleaseWorker)
             singleOf(::LyricsSyncWorker)
             singleOf(::LrcLibWorker)
+            singleOf(::AudioAnalysisWorker)
             singleOf(::ReleaseService)
             singleOf(::AutoTranscodeWorker)
             singleOf(::CustomMigrationService)
@@ -239,6 +245,7 @@ fun Application.module() {
     val recentReleaseWorker = get<RecentReleaseWorker>()
     val autoTranscodeWorker = get<AutoTranscodeWorker>()
     val lyricsSyncWorker = get<LyricsSyncWorker>()
+    val audioAnalysisWorker = get<AudioAnalysisWorker>()
     val lrcLibWorker = get<LrcLibWorker>()
 
     scheduleService.schedule(
@@ -293,6 +300,20 @@ fun Application.module() {
     )
 
     scheduleService.triggerTask(mergeDuplicates.id)
+
+    val audioAnalysis = scheduleService.schedule(
+        ScheduledTask(
+            name = "Audio Analysis",
+            trigger = CronPresets.dailyAt(3, 0),
+            task = {
+                scheduleService.logTask("Audio Analysis") {
+                    audioAnalysisWorker.run { p, l -> updateProgress(p, l) }
+                }
+            }
+        )
+    )
+
+    scheduleService.triggerTask(audioAnalysis.id)
 
     val musicBrainzTask = scheduleService.schedule(
         ScheduledTask(

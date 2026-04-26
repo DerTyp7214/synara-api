@@ -360,6 +360,7 @@ Configuration for creating or updating a song record.
 | `fileSize` | `Long` | Size of the audio file in bytes. |
 | `coverHash` | `String`? | The hash of the cover image. |
 | `musicBrainzId` | `PlatformUUID`? | The MusicBrainz Recording unique identifier. |
+| `audioData` | [SongAudioData](#songaudiodata)? | Additional audio analysis data. |
 
 ### LogLine
 A single log line from a download process.
@@ -715,6 +716,25 @@ Contains core metadata about a track that is common for all users.
 | `musicBrainzId` | `PlatformUUID`? | The MusicBrainz Recording unique identifier. |
 | `genres` | `List`<[Genre](#genre)> | Collection of genres associated with this song. |
 
+### SongAudioData
+Additional audio analysis data for a song.
+
+| Field | Type | Description |
+| :--- | :--- | :--- |
+| `bpm` | `Double`? | The beats per minute (BPM) of the song. |
+| `key` | `String`? | The musical key of the song (e.g. C, G#, Bb). |
+| `scale` | `String`? | The scale of the song (major or minor). |
+| `loudness` | `Double`? | The perceived loudness of the track in LUFS. |
+| `energy` | `Double`? | The energy level of the song (0.0 to 1.0). |
+| `valence` | `Double`? | The musical positiveness of the song (0.0 to 1.0). |
+| `danceability` | `Double`? | The danceability level of the song (0.0 to 1.0). |
+| `acousticness` | `Double`? | The acousticness level of the song (0.0 to 1.0). |
+| `instrumentalness` | `Double`? | The instrumentalness level of the song (0.0 to 1.0). |
+| `speechiness` | `Double`? | The speechiness level of the song (0.0 to 1.0). |
+| `composer` | `List`<`String`>? | The composer of the song. |
+| `lyricist` | `List`<`String`>? | The lyricist of the song. |
+| `producers` | `List`<`String`>? | The producers of the song. |
+
 ### SongTag
 Flags and metadata attributes for a song.
 
@@ -951,6 +971,14 @@ Manages artist data and complex library maintenance.
 | `artistsWithoutMusicBrainzIdFlow` | - | `Flow`<[Artist](#artist)> | No |  | Stream all artists that are missing a MusicBrainz ID. |
 | `artistIdsWithoutMusicBrainzId` | - | `Flow`<`PlatformUUID`> | No |  | Stream IDs of all artists that are missing a MusicBrainz ID. |
 
+### IAudioAnalysisService
+Service for audio analysis and related data management.
+
+| Function | Parameters | Returns | Admin | Errors | Description |
+| :--- | :--- | :--- | :---: | :--- | :--- |
+| `getAudioData` | `songId` (`PlatformUUID`): The song unique identifier. | [SongAudioData](#songaudiodata)? | No |  | Get audio analysis data for a song. |
+| `analyzeSong` | `songId` (`PlatformUUID`): The song unique identifier. | `Unit` | No |  | Trigger analysis for a song. |
+
 ### IAuthService
 Handles user login and session security.
 
@@ -983,6 +1011,16 @@ Direct database management and data migration.
 | :--- | :--- | :--- | :---: | :--- | :--- |
 | `exportData` | - | `ByteArray` | No |  | Export the entire system database as a binary blob. |
 | `importData` | `data` (`ByteArray`): The raw database blob. | `Unit` | No |  | Import a previously exported database blob to overwrite the current state. |
+
+### IDiscoveryService
+Service for content discovery and song recommendations.
+
+| Function | Parameters | Returns | Admin | Errors | Description |
+| :--- | :--- | :--- | :---: | :--- | :--- |
+| `getSimilarSongs` | `seedSongIds` (`List`<`PlatformUUID`>): List of song unique identifiers to use as a seed.<br>`limit` (`Int`): The maximum number of results to return. | `List`<[UserSong](#usersong)> | No |  | Get songs similar to the provided seed tracks. |
+| `getSongsBySameComposers` | `seedSongIds` (`List`<`PlatformUUID`>): List of song unique identifiers to use as a seed.<br>`limit` (`Int`): The maximum number of results to return. | `List`<[UserSong](#usersong)> | No |  | Get songs by the same composers as the provided seed tracks. |
+| `getSongsBySameLyricists` | `seedSongIds` (`List`<`PlatformUUID`>): List of song unique identifiers to use as a seed.<br>`limit` (`Int`): The maximum number of results to return. | `List`<[UserSong](#usersong)> | No |  | Get songs by the same lyricists as the provided seed tracks. |
+| `getSongsBySameProducers` | `seedSongIds` (`List`<`PlatformUUID`>): List of song unique identifiers to use as a seed.<br>`limit` (`Int`): The maximum number of results to return. | `List`<[UserSong](#usersong)> | No |  | Get songs by the same producers as the provided seed tracks. |
 
 ### IDownloadService
 Management of the integrated media downloader.

@@ -41,6 +41,7 @@ import dev.dertyp.db.MBReleaseArtistCreditTable
 import dev.dertyp.db.MBReleaseTable
 import dev.dertyp.db.PlaylistSongTable
 import dev.dertyp.db.SongArtistTable
+import dev.dertyp.db.SongAudioDataTable
 import dev.dertyp.db.SongGenreTable
 import dev.dertyp.db.SongMusicBrainzTable
 import dev.dertyp.db.SongTable
@@ -1540,6 +1541,19 @@ class SongService : SongLibrary, Service() {
                 SongMusicBrainzTable.batchInsert(musicBrainzBatch) { (songId, mbId) ->
                     this[SongMusicBrainzTable.songId] = songId
                     this[SongMusicBrainzTable.musicBrainzId] = mbId
+                }
+            }
+        }
+
+        val audioDataBatch = insertedSongs.mapNotNull { (songId, songData) ->
+            songData.audioData?.bpm?.let { bpm -> songId to bpm }
+        }
+
+        if (audioDataBatch.isNotEmpty()) {
+            dbQuery {
+                SongAudioDataTable.batchInsert(audioDataBatch) { (songId, bpmValue) ->
+                    this[SongAudioDataTable.songId] = songId
+                    this[SongAudioDataTable.bpm] = bpmValue
                 }
             }
         }
