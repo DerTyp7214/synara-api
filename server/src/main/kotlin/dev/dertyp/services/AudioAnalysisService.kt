@@ -25,6 +25,7 @@ import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.Table
 import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.core.isNull
 import org.jetbrains.exposed.v1.jdbc.insertIgnore
 import org.jetbrains.exposed.v1.jdbc.select
@@ -129,9 +130,7 @@ open class AudioAnalysisService : IAudioAnalysisService, Service() {
             .where { SongAudioDataTable.songId eq songId }
             .singleOrNull()
 
-        if (existing != null) {
-            return@dbQuery mapAudioData(existing)
-        }
+        if (existing != null) return@dbQuery mapAudioData(existing)
 
         analyzeSong(songId)
 
@@ -139,6 +138,15 @@ open class AudioAnalysisService : IAudioAnalysisService, Service() {
             .where { SongAudioDataTable.songId eq songId }
             .singleOrNull()?.let { mapAudioData(it) }
     }
+
+    suspend fun getAudioDataBatch(songIds: Collection<PlatformUUID>): Map<PlatformUUID, SongAudioData> =
+        songIds.chunked(1000).flatMap { chunk ->
+            dbQuery {
+                SongAudioDataTable.select(SongAudioDataTable.columns)
+                    .where { SongAudioDataTable.songId inList chunk }
+                    .map { row -> row[SongAudioDataTable.songId].value to mapAudioData(row) }
+            }
+        }.toMap()
 
     override suspend fun analyzeSong(songId: PlatformUUID) {
         val filePath = dbQuery {

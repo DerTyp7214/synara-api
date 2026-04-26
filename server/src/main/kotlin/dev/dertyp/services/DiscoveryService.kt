@@ -1,6 +1,7 @@
 package dev.dertyp.services
 
 import dev.dertyp.PlatformUUID
+import dev.dertyp.data.SongAudioData
 import dev.dertyp.data.User
 import dev.dertyp.data.UserSong
 import dev.dertyp.db.SongAudioDataTable
@@ -8,15 +9,13 @@ import dev.dertyp.db.SongComposerTable
 import dev.dertyp.db.SongLyricistTable
 import dev.dertyp.db.SongProducerTable
 import dev.dertyp.dbQuery
+import kotlinx.coroutines.flow.toList
 import org.jetbrains.exposed.v1.core.Column
 import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.Table
-import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import org.jetbrains.exposed.v1.core.inList
-import org.jetbrains.exposed.v1.core.notInList
 import org.jetbrains.exposed.v1.jdbc.select
-import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.koin.core.component.inject
 import java.util.UUID
 import kotlin.math.abs
@@ -30,6 +29,22 @@ class DiscoveryRpcService(
 ) : IDiscoveryService {
     override suspend fun getSimilarSongs(seedSongIds: List<PlatformUUID>, limit: Int): List<UserSong> {
         return discoveryService.getSimilarSongs(seedSongIds, limit, user.id)
+    }
+
+    override suspend fun getSimilarSongsByPlaylist(playlistId: PlatformUUID, limit: Int): List<UserSong> {
+        return discoveryService.getSimilarSongsByPlaylist(playlistId, limit, user.id)
+    }
+
+    override suspend fun getSimilarSongsByBpm(seedSongIds: List<PlatformUUID>, limit: Int): List<UserSong> {
+        return discoveryService.getSimilarSongsByBpm(seedSongIds, limit, user.id)
+    }
+
+    override suspend fun getSimilarSongsByEnergy(seedSongIds: List<PlatformUUID>, limit: Int): List<UserSong> {
+        return discoveryService.getSimilarSongsByEnergy(seedSongIds, limit, user.id)
+    }
+
+    override suspend fun getSimilarSongsByMood(seedSongIds: List<PlatformUUID>, limit: Int): List<UserSong> {
+        return discoveryService.getSimilarSongsByMood(seedSongIds, limit, user.id)
     }
 
     override suspend fun getSongsBySameComposers(seedSongIds: List<PlatformUUID>, limit: Int): List<UserSong> {
@@ -61,39 +76,115 @@ class DiscoveryService : Service() {
         return getSongsBySameCredits(seedSongIds, SongProducerTable, limit, userId)
     }
 
+    suspend fun getSimilarSongsByPlaylist(
+        playlistId: PlatformUUID,
+        limit: Int,
+        userId: PlatformUUID
+    ): List<UserSong> {
+        val songIds = songService.songIdsByUserPlaylist(playlistId).toList()
+        return getSimilarSongs(songIds, limit, userId)
+    }
+
+    suspend fun getSimilarSongsByBpm(seedSongIds: List<PlatformUUID>, limit: Int = 20, userId: PlatformUUID): List<UserSong> {
+        return getSimilarSongsByFeature(seedSongIds, limit, userId) { target, candidate ->
+            1.0 - abs(normalize(target.bpm, 50.0, 200.0) - normalize(candidate.bpm, 50.0, 200.0))
+        }
+    }
+
+    suspend fun getSimilarSongsByEnergy(seedSongIds: List<PlatformUUID>, limit: Int = 20, userId: PlatformUUID): List<UserSong> {
+        return getSimilarSongsByFeature(seedSongIds, limit, userId) { target, candidate ->
+            1.0 - abs(target.energy - candidate.energy)
+        }
+    }
+
+    suspend fun getSimilarSongsByMood(seedSongIds: List<PlatformUUID>, limit: Int = 20, userId: PlatformUUID): List<UserSong> {
+        return getSimilarSongsByFeature(seedSongIds, limit, userId) { target, candidate ->
+            1.0 - abs(target.valence - candidate.valence)
+        }
+    }
+
+    private suspend fun getSimilarSongsByFeature(
+        seedSongIds: List<PlatformUUID>,
+        limit: Int,
+        userId: PlatformUUID,
+        scoring: (FeatureVector, FeatureVector) -> Double
+    ): List<UserSong> {
+        val seedSet = seedSongIds.toSet()
+        val seeds = audioAnalysisService.getAudioDataBatch(seedSongIds).values.map(::mapToFeatureVector)
+        if (seeds.isEmpty()) return emptyList()
+
+        val scoreBoard = mutableMapOf<PlatformUUID, Double>()
+        val allIds = dbQuery {
+            SongAudioDataTable.select(SongAudioDataTable.songId).map { it[SongAudioDataTable.songId].value }
+        }
+
+        allIds.chunked(1000).forEach { chunk ->
+            dbQuery {
+                SongAudioDataTable.select(SongAudioDataTable.columns)
+                    .where { SongAudioDataTable.songId inList chunk }
+                    .forEach { row ->
+                        val candidateId = row[SongAudioDataTable.songId].value
+                        if (candidateId in seedSet) return@forEach
+
+                        val candidateVector = mapAudioDataToFeatureVector(row)
+                        seeds.forEach { seed ->
+                            val score = scoring(seed, candidateVector)
+                            if (score > 0.6) {
+                                scoreBoard[candidateId] = (scoreBoard[candidateId] ?: 0.0) + score
+                            }
+                        }
+                    }
+            }
+        }
+
+        val topIds = scoreBoard.entries
+            .sortedByDescending { it.value }
+            .take(limit)
+            .map { it.key }
+
+        return topIds.chunked(10000).flatMap { songService.byIds(it, userId) }
+    }
+
     suspend fun getSimilarSongs(
         seedSongIds: List<PlatformUUID>,
         limit: Int,
         userId: PlatformUUID
     ): List<UserSong> {
-        val seedData = seedSongIds.mapNotNull { audioAnalysisService.getAudioData(it) }
-        if (seedData.isEmpty()) return emptyList()
+        val seedSet = seedSongIds.toSet()
+        val seeds = audioAnalysisService.getAudioDataBatch(seedSongIds).values.map(::mapToFeatureVector)
+        if (seeds.isEmpty()) return emptyList()
 
-        val targetProfile = FeatureVector(
-            bpm = seedData.mapNotNull { it.bpm }.average().takeIf { !it.isNaN() } ?: 120.0,
-            energy = seedData.mapNotNull { it.energy }.average().takeIf { !it.isNaN() } ?: 0.5,
-            danceability = seedData.mapNotNull { it.danceability }.average().takeIf { !it.isNaN() } ?: 0.5,
-            loudness = seedData.mapNotNull { it.loudness }.average().takeIf { !it.isNaN() } ?: -10.0,
-            acousticness = seedData.mapNotNull { it.acousticness }.average().takeIf { !it.isNaN() } ?: 0.5,
-            instrumentalness = seedData.mapNotNull { it.instrumentalness }.average().takeIf { !it.isNaN() } ?: 0.5,
-            speechiness = seedData.mapNotNull { it.speechiness }.average().takeIf { !it.isNaN() } ?: 0.5,
-            camelot = seedData.mapNotNull { mapToCamelot(it.key, it.scale) }.groupingBy { it }.eachCount().maxByOrNull { it.value }?.key
-        )
+        val scoreBoard = mutableMapOf<PlatformUUID, Double>()
 
-        val candidates = dbQuery {
-            SongAudioDataTable.selectAll()
-                .where { SongAudioDataTable.songId notInList seedSongIds }
-                .map { mapRowToFeatureVector(it) }
+        val allIds = dbQuery {
+            SongAudioDataTable.select(SongAudioDataTable.songId).map { it[SongAudioDataTable.songId].value }
         }
 
-        val similarIdsWithScore = candidates
-            .map { it.first to calculateSimilarity(targetProfile, it.second) }
-            .sortedByDescending { it.second }
+        allIds.chunked(1000).forEach { chunk ->
+            dbQuery {
+                SongAudioDataTable.select(SongAudioDataTable.columns)
+                    .where { SongAudioDataTable.songId inList chunk }
+                    .forEach { row ->
+                        val candidateId = row[SongAudioDataTable.songId].value
+                        if (candidateId in seedSet) return@forEach
+
+                        val candidateVector = mapAudioDataToFeatureVector(row)
+                        seeds.forEach { seed ->
+                            val score = calculateSimilarity(seed, candidateVector)
+                            if (score > 0.6) {
+                                scoreBoard[candidateId] = (scoreBoard[candidateId] ?: 0.0) + score
+                            }
+                        }
+                    }
+            }
+        }
+
+        val topIds = scoreBoard.entries
+            .sortedByDescending { it.value }
             .take(limit)
+            .map { it.key }
 
-        val similarSongs = songService.byIds(similarIdsWithScore.map { it.first }, userId)
-
-        return similarIdsWithScore.mapNotNull { (id, _) -> similarSongs.find { it.id == id } }
+        return topIds.chunked(10000).flatMap { songService.byIds(it, userId) }
     }
 
     suspend fun getSongsBySameCredits(
@@ -107,20 +198,23 @@ class DiscoveryService : Service() {
         @Suppress("UNCHECKED_CAST")
         val personIdCol = creditTable.columns[1] as Column<EntityID<UUID>>
 
-        val personIds = creditTable.select(personIdCol)
-            .where { songIdCol inList seedSongIds }
-            .map { it[personIdCol] }
-            .distinct()
+        val seedSet = seedSongIds.toSet()
+        
+        val personIds = seedSongIds.chunked(1000).flatMap { chunk ->
+            creditTable.select(personIdCol)
+                .where { songIdCol inList chunk }
+                .map { it[personIdCol] }
+        }.distinct()
 
         if (personIds.isEmpty()) return@dbQuery emptyList()
 
-        val songIds = creditTable.select(songIdCol)
-            .where { (personIdCol inList personIds) and (songIdCol notInList seedSongIds) }
-            .map { it[songIdCol].value }
-            .distinct()
-            .take(limit)
+        val matchedSongIds = personIds.chunked(1000).flatMap { chunk ->
+            creditTable.select(songIdCol)
+                .where { personIdCol inList chunk }
+                .map { it[songIdCol].value }
+        }.filter { it !in seedSet }.distinct()
 
-        songService.byIds(songIds, userId)
+        matchedSongIds.take(limit).chunked(10000).flatMap { songService.byIds(it, userId) }
     }
 
     private fun calculateSimilarity(target: FeatureVector, candidate: FeatureVector): Double {
@@ -190,10 +284,25 @@ class DiscoveryService : Service() {
         }
     }
 
-    private fun mapRowToFeatureVector(row: ResultRow): Pair<PlatformUUID, FeatureVector> {
-        return row[SongAudioDataTable.songId].value to FeatureVector(
+    private fun mapToFeatureVector(data: SongAudioData): FeatureVector {
+        return FeatureVector(
+            bpm = data.bpm ?: 120.0,
+            energy = data.energy ?: 0.5,
+            valence = data.valence ?: 0.5,
+            danceability = data.danceability ?: 0.5,
+            loudness = data.loudness ?: -10.0,
+            acousticness = data.acousticness ?: 0.5,
+            instrumentalness = data.instrumentalness ?: 0.5,
+            speechiness = data.speechiness ?: 0.5,
+            camelot = mapToCamelot(data.key, data.scale)
+        )
+    }
+
+    private fun mapAudioDataToFeatureVector(row: ResultRow): FeatureVector {
+        return FeatureVector(
             bpm = row[SongAudioDataTable.bpm] ?: 120.0,
             energy = row[SongAudioDataTable.energy] ?: 0.5,
+            valence = row[SongAudioDataTable.valence] ?: 0.5,
             danceability = row[SongAudioDataTable.danceability] ?: 0.5,
             loudness = row[SongAudioDataTable.loudness] ?: -10.0,
             acousticness = row[SongAudioDataTable.acousticness] ?: 0.5,
@@ -206,6 +315,7 @@ class DiscoveryService : Service() {
     private data class FeatureVector(
         val bpm: Double,
         val energy: Double,
+        val valence: Double,
         val danceability: Double,
         val loudness: Double,
         val acousticness: Double,
