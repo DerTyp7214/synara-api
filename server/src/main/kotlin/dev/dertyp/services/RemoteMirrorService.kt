@@ -517,7 +517,7 @@ class RemoteMirrorService : Service() {
                         logger.info("Downloading song: $displayName")
                         Path(localPathString).also { it.parent.toFile().mkdirs() }.outputStream().use { output ->
                             var downloaded = 0L
-                            session.mirrorService.getSongData(song.id, session.config.quality, 64 * 1024).collect { chunk ->
+                            session.mirrorService.getSongData(song.id, session.config.quality, 64 * 1024, force = false).collect { chunk ->
                                 withContext(Dispatchers.IO) { output.write(chunk) }
                                 downloaded += chunk.size
                                 session.progressMutex.withLock {

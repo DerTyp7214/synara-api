@@ -76,9 +76,9 @@ class MirrorRpcService(
         return mirrorService.getImageMetadata()
     }
 
-    override fun getSongData(songId: UUID, quality: Int, chunkSize: Int): Flow<ByteArray> {
+    override fun getSongData(songId: UUID, quality: Int, chunkSize: Int, force: Boolean): Flow<ByteArray> {
         if (!user.isAdmin) throw IllegalStateException("Only admins can mirror")
-        return mirrorService.getSongData(songId, quality, chunkSize)
+        return mirrorService.getSongData(songId, quality, chunkSize, force)
     }
 
     override fun getUsers(): Flow<User> {
@@ -174,8 +174,8 @@ class MirrorService : Service() {
         }
     }.flowOn(Dispatchers.IO)
 
-    fun getSongData(songId: UUID, quality: Int, chunkSize: Int = 4096): Flow<ByteArray> {
+    fun getSongData(songId: UUID, quality: Int, chunkSize: Int = 4096, force: Boolean = true): Flow<ByteArray> {
         if (quality == -1) return songService.streamSong(songId, 0, chunkSize) ?: flow { }
-        return songService.downloadSong(songId, quality, 0, chunkSize) ?: flow { }
+        return songService.downloadSong(songId, quality, 0, chunkSize, force) ?: flow { }
     }
 }

@@ -144,12 +144,13 @@ class SongRpcService(private val user: User, private val songService: SongServic
         if (methodName == "downloadSong") {
             val id = args[0] as? UUID ?: return null
             val quality = args[1] as? Int ?: return null
+            val force = args.getOrNull(4) as? Boolean ?: true
             val song = songService.byId(id) ?: return null
             val file = File(song.path)
             if (!file.exists()) return null
             if (quality > 0) {
                 val environment = songService.get<ApplicationEnvironment>()
-                val transcodeInfo = AudioUtils.transcodeFlacToOpus(environment, file, quality)
+                val transcodeInfo = AudioUtils.transcodeFlacToOpus(environment, file, quality, force)
                 AudioUtils.insertTranscodedSong(id, transcodeInfo.file, quality)
                 return transcodeInfo
             }
@@ -260,11 +261,11 @@ class SongRpcService(private val user: User, private val songService: SongServic
 
     override fun streamSong(id: UUID, offset: Long, chunkSize: Int): Flow<ByteArray>? = songService.streamSong(id, offset, chunkSize)
 
-    override fun downloadSong(id: UUID, quality: Int, offset: Long, chunkSize: Int): Flow<ByteArray>? = songService.downloadSong(id, quality, offset, chunkSize)
+    override fun downloadSong(id: UUID, quality: Int, offset: Long, chunkSize: Int, force: Boolean): Flow<ByteArray>? = songService.downloadSong(id, quality, offset, chunkSize, force)
 
     override suspend fun getStreamSize(id: UUID): Long = songService.getStreamSize(id)
 
-    override suspend fun getDownloadSize(id: UUID, quality: Int): Long = songService.getDownloadSize(id, quality)
+    override suspend fun getDownloadSize(id: UUID, quality: Int, force: Boolean): Long = songService.getDownloadSize(id, quality, force)
 
     override fun allSongIds(explicit: Boolean, tags: List<SongTag>, invertTags: Boolean): Flow<UUID> =
         songService.allSongIds(explicit, tags, invertTags)
@@ -916,13 +917,13 @@ class SongService : SongLibrary, Service() {
         }.flowOn(Dispatchers.IO)
     }
 
-    fun downloadSong(id: UUID, quality: Int, offset: Long = 0, chunkSize: Int = 4096): Flow<ByteArray>? {
+    fun downloadSong(id: UUID, quality: Int, offset: Long = 0, chunkSize: Int = 4096, force: Boolean = true): Flow<ByteArray>? {
         val song = runBlocking { byId(id) } ?: return null
         val file = File(song.path)
         if (!file.exists()) return null
 
         return flow {
-            val streamInfo = AudioUtils.transcodeFlacToOpus(environment, file, quality).also {
+            val streamInfo = AudioUtils.transcodeFlacToOpus(environment, file, quality, force).also {
                 AudioUtils.insertTranscodedSong(id, it.file, quality)
             }
 
@@ -952,11 +953,11 @@ class SongService : SongLibrary, Service() {
         return file.length()
     }
 
-    suspend fun getDownloadSize(id: UUID, quality: Int): Long {
+    suspend fun getDownloadSize(id: UUID, quality: Int, force: Boolean = true): Long {
         val song = byId(id) ?: return 0
         val file = File(song.path)
         if (!file.exists()) return 0
-        val streamInfo = AudioUtils.transcodeFlacToOpus(environment, file, quality).also {
+        val streamInfo = AudioUtils.transcodeFlacToOpus(environment, file, quality, force).also {
             AudioUtils.insertTranscodedSong(id, it.file, quality)
         }
         return streamInfo.file.length()

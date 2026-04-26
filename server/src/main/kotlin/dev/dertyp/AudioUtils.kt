@@ -5,8 +5,6 @@ import dev.dertyp.data.SimpleSong
 import dev.dertyp.db.SongTable
 import dev.dertyp.db.TranscodedSongTable
 import io.ktor.http.ContentType
-import io.ktor.http.HttpStatusCode
-import io.ktor.http.content.OutgoingContent
 import io.ktor.server.application.Application
 import io.ktor.server.application.ApplicationEnvironment
 import io.ktor.server.routing.Route
@@ -82,18 +80,21 @@ object AudioUtils {
 
     suspend fun Application.transcodeFlacToOpus(
         flacFile: File,
-        targetKbps: Int
-    ) = transcodeFlacToOpus(environment, flacFile, targetKbps)
+        targetKbps: Int,
+        force: Boolean = true
+    ) = transcodeFlacToOpus(environment, flacFile, targetKbps, force)
 
     suspend fun Route.transcodeFlacToOpus(
         flacFile: File,
-        targetKbps: Int
-    ) = transcodeFlacToOpus(environment, flacFile, targetKbps)
+        targetKbps: Int,
+        force: Boolean = true
+    ) = transcodeFlacToOpus(environment, flacFile, targetKbps, force)
 
     suspend fun transcodeFlacToOpus(
         environment: ApplicationEnvironment,
         flacFile: File,
         targetKbps: Int,
+        force: Boolean = true,
     ): StreamInfo = withContext(Dispatchers.IO) {
         val mutex =
             transcodeMutexes.computeIfAbsent(flacFile.absolutePath to targetKbps) { Mutex() }
@@ -143,6 +144,15 @@ object AudioUtils {
             val tempFile = tempFolder.resolve(fileName)
 
             if (tempFile.exists() && tempFile.length() > 0) {
+                if (!force) {
+                    return@withLock StreamInfo(
+                        tempFile,
+                        ContentType.Audio.OGG,
+                        tempFile.length(),
+                        tempFile.name,
+                    )
+                }
+
                 val flacDuration = getDuration(flacFile)
                 val tempDuration = getDuration(tempFile)
 
