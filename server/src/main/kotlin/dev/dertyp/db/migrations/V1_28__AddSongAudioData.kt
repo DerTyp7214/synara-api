@@ -12,7 +12,7 @@ import org.flywaydb.core.api.migration.Context
 import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 
 @Suppress("unused", "ClassName")
-class v1_28__AddSongAudioData : BaseJavaMigration() {
+class V1_28__AddSongAudioData : BaseJavaMigration() {
     override fun migrate(context: Context) {
         foreignKeyOn(context.connection)
 
