@@ -20,15 +20,15 @@ class ValencePostProcessor : AudioAnalysisPostProcessor {
 
         val calculatedValence = if (scale != null || rawDissonance != null) {
             val valenceBaseline = when (scale) {
-                AudioScale.Major -> 0.75
-                AudioScale.Minor -> 0.25
-                else -> 0.5
+                AudioScale.Major -> 0.70
+                AudioScale.Minor -> 0.40
+                else -> 0.55
             }
             val dissonance = rawDissonance ?: SongAudioData.DEFAULT_DISSONANCE
-            val dissonanceImpact = (dissonance * 0.8).coerceIn(0.0, 0.5)
-            val danceArousal = (((rawDanceability ?: SongAudioData.DEFAULT_DANCEABILITY) - 0.5) / 2.0).coerceIn(0.0, 1.0)
+            val dissonanceImpact = (dissonance * 0.4).coerceIn(0.0, 0.4)
+            val danceFactor = ((rawDanceability ?: SongAudioData.DEFAULT_DANCEABILITY) / 2.0).coerceIn(0.0, 1.0)
 
-            (valenceBaseline - dissonanceImpact + (danceArousal * 0.2)).coerceIn(0.0, 1.0)
+            (valenceBaseline - dissonanceImpact + (danceFactor * 0.2)).coerceIn(0.0, 1.0)
         } else null
 
         return currentData.copy(
