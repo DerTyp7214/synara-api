@@ -28,6 +28,8 @@ import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.core.innerJoin
 import org.jetbrains.exposed.v1.core.isNull
+import org.jetbrains.exposed.v1.jdbc.deleteWhere
+import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.jdbc.upsert
 import java.io.File
@@ -160,18 +162,21 @@ open class AudioAnalysisService : IAudioAnalysisService, Service() {
     }
 
     private fun saveCredits(songId: PlatformUUID, names: List<String>?, table: Table) {
-        if (names == null) return
         @Suppress("UNCHECKED_CAST")
         val songIdCol = table.columns.first { it.name == "songId" } as Column<EntityID<UUID>>
         @Suppress("UNCHECKED_CAST")
         val personIdCol = table.columns.first { it.name == "personId" } as Column<EntityID<UUID>>
 
+        if (names == null) return
+
+        table.deleteWhere { songIdCol eq songId }
+
         names.filter { it.isNotBlank() }.distinct().forEach { name ->
-            val personId = PersonTable.upsert(PersonTable.name) {
+            val personId = PersonTable.upsert(PersonTable.name, onUpdate = { }) {
                 it[this.name] = name
             }[PersonTable.id]
 
-            table.upsert(songIdCol, personIdCol) {
+            table.insert {
                 it[songIdCol] = EntityID(songId, SongTable)
                 it[personIdCol] = personId
             }
