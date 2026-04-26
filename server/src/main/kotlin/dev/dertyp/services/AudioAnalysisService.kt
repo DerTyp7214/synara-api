@@ -28,7 +28,6 @@ import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.core.innerJoin
 import org.jetbrains.exposed.v1.core.isNull
-import org.jetbrains.exposed.v1.jdbc.insertIgnore
 import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.jdbc.upsert
 import java.io.File
@@ -162,18 +161,19 @@ open class AudioAnalysisService : IAudioAnalysisService, Service() {
 
     private fun saveCredits(songId: PlatformUUID, names: List<String>?, table: Table) {
         if (names == null) return
-        names.forEach { name ->
-            val personId = PersonTable.insertIgnore {
-                it[this.name] = name
-            }.getOrNull(PersonTable.id) ?: PersonTable.select(PersonTable.id).where { PersonTable.name eq name }.single()[PersonTable.id]
+        @Suppress("UNCHECKED_CAST")
+        val songIdCol = table.columns.first { it.name == "songId" } as Column<EntityID<UUID>>
+        @Suppress("UNCHECKED_CAST")
+        val personIdCol = table.columns.first { it.name == "personId" } as Column<EntityID<UUID>>
 
-            table.insertIgnore {
-                @Suppress("UNCHECKED_CAST")
-                val sId = table.columns[0] as Column<EntityID<UUID>>
-                @Suppress("UNCHECKED_CAST")
-                val pId = table.columns[1] as Column<EntityID<UUID>>
-                it[sId] = EntityID(songId, SongTable)
-                it[pId] = personId
+        names.filter { it.isNotBlank() }.distinct().forEach { name ->
+            val personId = PersonTable.upsert(PersonTable.name) {
+                it[this.name] = name
+            }[PersonTable.id]
+
+            table.upsert(songIdCol, personIdCol) {
+                it[songIdCol] = EntityID(songId, SongTable)
+                it[personIdCol] = personId
             }
         }
     }
@@ -199,9 +199,9 @@ open class AudioAnalysisService : IAudioAnalysisService, Service() {
 
     private fun getCredits(songId: PlatformUUID, table: Table): List<String> {
         @Suppress("UNCHECKED_CAST")
-        val songIdCol = table.columns[0] as Column<EntityID<UUID>>
+        val songIdCol = table.columns.first { it.name == "songId" } as Column<EntityID<UUID>>
         @Suppress("UNCHECKED_CAST")
-        val personIdCol = table.columns[1] as Column<EntityID<UUID>>
+        val personIdCol = table.columns.first { it.name == "personId" } as Column<EntityID<UUID>>
 
         return table.innerJoin(PersonTable, onColumn = { personIdCol }, otherColumn = { PersonTable.id })
             .select(PersonTable.name)
