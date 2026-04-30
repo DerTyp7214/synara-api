@@ -1,56 +1,9 @@
 package dev.dertyp.services
 
-import dev.dertyp.AudioUtils
-import dev.dertyp.StreamInfo
-import dev.dertyp.core.HttpClientPriority
-import dev.dertyp.core.date
-import dev.dertyp.core.fetchBatchedResults
-import dev.dertyp.core.mbArtistAliasSearchTable
-import dev.dertyp.core.mbArtistSearchTable
-import dev.dertyp.core.mbRecordingSearchTable
-import dev.dertyp.core.mbReleaseSearchTable
-import dev.dertyp.core.rankedSearchQuery
-import dev.dertyp.core.toMap
-import dev.dertyp.core.withMBArtistSearch
-import dev.dertyp.core.withMBRecordingSearch
-import dev.dertyp.core.withMBReleaseSearch
-import dev.dertyp.data.Artist
-import dev.dertyp.data.BaseSong
-import dev.dertyp.data.Genre
-import dev.dertyp.data.InsertableAlbum
-import dev.dertyp.data.InsertableSong
-import dev.dertyp.data.PaginatedResponse
-import dev.dertyp.data.Song
-import dev.dertyp.data.SongTag
-import dev.dertyp.data.User
-import dev.dertyp.data.UserSong
-import dev.dertyp.db.AlbumArtistTable
-import dev.dertyp.db.AlbumMusicBrainzTable
-import dev.dertyp.db.AlbumTable
-import dev.dertyp.db.ArtistAliasTable
-import dev.dertyp.db.ArtistMemberTable
-import dev.dertyp.db.ArtistMusicBrainzTable
-import dev.dertyp.db.ArtistTable
-import dev.dertyp.db.FollowedArtistTable
-import dev.dertyp.db.GenreTable
-import dev.dertyp.db.ImageTable
-import dev.dertyp.db.MBArtistAliasTable
-import dev.dertyp.db.MBArtistTable
-import dev.dertyp.db.MBRecordingArtistCreditTable
-import dev.dertyp.db.MBRecordingTable
-import dev.dertyp.db.MBReleaseArtistCreditTable
-import dev.dertyp.db.MBReleaseTable
-import dev.dertyp.db.PlaylistSongTable
-import dev.dertyp.db.SongArtistTable
-import dev.dertyp.db.SongAudioDataTable
-import dev.dertyp.db.SongGenreTable
-import dev.dertyp.db.SongMusicBrainzTable
-import dev.dertyp.db.SongTable
-import dev.dertyp.db.UserPlaylistSongTable
-import dev.dertyp.db.UserSongTable
-import dev.dertyp.dbQuery
-import dev.dertyp.getDateFromISO
-import dev.dertyp.getISOFromDate
+import dev.dertyp.*
+import dev.dertyp.core.*
+import dev.dertyp.data.*
+import dev.dertyp.db.*
 import dev.dertyp.plugins.SongLibrary
 import dev.dertyp.routing.RestFileProvider
 import dev.dertyp.services.AlbumService.Companion.calculateAlbumStats
@@ -62,56 +15,14 @@ import dev.dertyp.services.metadata.MusicBrainzService
 import dev.dertyp.utils.LogParam
 import io.ktor.http.ContentType
 import io.ktor.server.application.ApplicationEnvironment
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.asFlow
-import kotlinx.coroutines.flow.chunked
-import kotlinx.coroutines.flow.flatMapConcat
-import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.flowOn
-import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.*
 import kotlinx.io.IOException
 import org.jaudiotagger.audio.AudioFileIO
 import org.jaudiotagger.tag.FieldKey
-import org.jetbrains.exposed.v1.core.Alias
-import org.jetbrains.exposed.v1.core.ColumnSet
-import org.jetbrains.exposed.v1.core.ResultRow
-import org.jetbrains.exposed.v1.core.Slice
-import org.jetbrains.exposed.v1.core.SortOrder
-import org.jetbrains.exposed.v1.core.VarCharColumnType
-import org.jetbrains.exposed.v1.core.alias
-import org.jetbrains.exposed.v1.core.and
-import org.jetbrains.exposed.v1.core.castTo
-import org.jetbrains.exposed.v1.core.countDistinct
+import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.core.dao.id.EntityID
-import org.jetbrains.exposed.v1.core.eq
-import org.jetbrains.exposed.v1.core.inList
-import org.jetbrains.exposed.v1.core.innerJoin
-import org.jetbrains.exposed.v1.core.isNotNull
-import org.jetbrains.exposed.v1.core.isNull
-import org.jetbrains.exposed.v1.core.leftJoin
-import org.jetbrains.exposed.v1.core.less
-import org.jetbrains.exposed.v1.core.like
-import org.jetbrains.exposed.v1.core.neq
-import org.jetbrains.exposed.v1.core.not
-import org.jetbrains.exposed.v1.core.notExists
-import org.jetbrains.exposed.v1.core.or
-import org.jetbrains.exposed.v1.jdbc.Query
-import org.jetbrains.exposed.v1.jdbc.andWhere
-import org.jetbrains.exposed.v1.jdbc.batchInsert
-import org.jetbrains.exposed.v1.jdbc.deleteWhere
-import org.jetbrains.exposed.v1.jdbc.insert
-import org.jetbrains.exposed.v1.jdbc.insertIgnore
-import org.jetbrains.exposed.v1.jdbc.orWhere
-import org.jetbrains.exposed.v1.jdbc.select
-import org.jetbrains.exposed.v1.jdbc.selectAll
-import org.jetbrains.exposed.v1.jdbc.update
-import org.jetbrains.exposed.v1.jdbc.upsert
+import org.jetbrains.exposed.v1.jdbc.*
 import org.koin.core.component.get
 import org.koin.core.component.inject
 import java.io.File
@@ -189,7 +100,7 @@ class SongRpcService(private val user: User, private val songService: SongServic
     override suspend fun byMusicBrainzId(musicBrainzId: UUID): List<UserSong> =
         songService.byMusicBrainzId(musicBrainzId, user.id)
 
-    override suspend fun byIds(@LogParam("size") ids: Collection<UUID>): List<UserSong> =
+    override suspend fun byIds(@LogParam("size") ids: List<UUID>): List<UserSong> =
         songService.byIds(ids, user.id)
 
     override suspend fun byTitle(
@@ -249,7 +160,7 @@ class SongRpcService(private val user: User, private val songService: SongServic
         invertTags: Boolean
     ): PaginatedResponse<UserSong> = songService.allSongs(page, pageSize, explicit, user.id, tags, invertTags)
 
-    override suspend fun deleteSongs(@LogParam("size") ids: Collection<UUID>): Boolean = songService.deleteSongs(ids)
+    override suspend fun deleteSongs(@LogParam("size") ids: List<UUID>): Boolean = songService.deleteSongs(ids)
 
     override suspend fun rankedSearch(
         page: Int,
@@ -659,7 +570,7 @@ class SongService : SongLibrary, Service() {
         where { SongTable.id eq id }
     }
 
-    suspend fun byIds(ids: Collection<UUID>, userId: UUID): List<UserSong> =
+    suspend fun byIds(ids: List<UUID>, userId: UUID): List<UserSong> =
         querySongs<UserSong>(0, Int.MAX_VALUE, true, userId) {
             where { SongTable.id inList ids }
         }.let { response ->
@@ -667,7 +578,7 @@ class SongService : SongLibrary, Service() {
             ids.mapNotNull { songMap[it] }
         }
 
-    suspend fun byIds(ids: Collection<UUID>): List<Song> =
+    suspend fun byIds(ids: List<UUID>): List<Song> =
         querySongs<Song>(0, Int.MAX_VALUE, true) {
             where { SongTable.id inList ids }
         }.let { response ->
@@ -852,7 +763,7 @@ class SongService : SongLibrary, Service() {
         )
 
     @Suppress("DuplicatedCode")
-    suspend fun deleteSongs(ids: Collection<UUID>): Boolean = dbQuery {
+    suspend fun deleteSongs(ids: List<UUID>): Boolean = dbQuery {
         val paths = SongTable
             .select(SongTable.id, SongTable.filePath)
             .where { SongTable.id inList ids }

@@ -127,7 +127,7 @@ class LyricsService : ILyricsService, Service() {
     }
 
     fun isConfigured(): Boolean {
-        return environment.config.propertyOrNull("transcriber.url")?.getString() != null
+        return !environment.config.propertyOrNull("transcriber.url")?.getString().isNullOrBlank()
     }
 
     suspend fun isReachable(): Boolean = try {
