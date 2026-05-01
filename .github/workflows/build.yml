@@ -55,7 +55,7 @@ jobs:
 
       - name: Add Coverage to Summary
         uses: madrapps/jacoco-report@v1.7.1
-        if: always()
+        if: always() && github.event_name != 'schedule'
         with:
           paths: |
             ${{ github.workspace }}/**/build/reports/kover/report.xml
@@ -235,7 +235,7 @@ jobs:
           path: release-asset/
 
       - name: Create GitHub Release and Upload Assets
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: v${{ needs.build-artifact.outputs.app_version }}${{ github.ref_name == 'master' && '-dev' || '' }}-server
           name: Release v${{ needs.build-artifact.outputs.app_version }}${{ github.ref_name == 'master' && ' (Development Build)' || '' }}
@@ -247,7 +247,7 @@ jobs:
           token: ${{ secrets.SYNARA_GITHUB_TOKEN }}
 
       - name: Update Latest Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: latest${{ github.ref_name == 'master' && '-dev' || '' }}-server
           name: Release v${{ needs.build-artifact.outputs.app_version }}${{ github.ref_name == 'master' && ' (Development Build)' || '' }}

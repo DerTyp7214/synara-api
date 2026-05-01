@@ -5,29 +5,12 @@ import dev.dertyp.TestDatabase
 import dev.dertyp.data.MergeArtists
 import dev.dertyp.data.MusicBrainzArtist
 import dev.dertyp.data.SplitArtist
-import dev.dertyp.db.AlbumArtistTable
-import dev.dertyp.db.AlbumGenreTable
-import dev.dertyp.db.AlbumTable
-import dev.dertyp.db.ArtistAliasTable
-import dev.dertyp.db.ArtistGenreTable
-import dev.dertyp.db.ArtistMemberTable
-import dev.dertyp.db.ArtistMusicBrainzTable
-import dev.dertyp.db.ArtistSplitAliasTable
-import dev.dertyp.db.ArtistTable
-import dev.dertyp.db.FollowedArtistTable
-import dev.dertyp.db.GenreTable
-import dev.dertyp.db.ImageTable
-import dev.dertyp.db.MBArtistAliasTable
-import dev.dertyp.db.MBArtistTable
-import dev.dertyp.db.SongArtistTable
-import dev.dertyp.db.SongGenreTable
-import dev.dertyp.db.SongTable
-import dev.dertyp.db.UserTable
-import dev.dertyp.db.allMusicBrainzTables
+import dev.dertyp.db.*
 import dev.dertyp.services.metadata.CachedMusicBrainzService
 import dev.dertyp.services.metadata.MusicBrainzCacheService
 import dev.dertyp.services.metadata.MusicBrainzService
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.core.eq
@@ -37,11 +20,7 @@ import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.jupiter.api.AfterEach
-import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertFalse
-import org.junit.jupiter.api.Assertions.assertNotNull
-import org.junit.jupiter.api.Assertions.assertNull
-import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.EnumSource
 import org.koin.core.context.startKoin
@@ -54,11 +33,13 @@ class ArtistServiceTest : KoinTest {
     private lateinit var database: Database
     private lateinit var service: ArtistService
     private val musicBrainzService = mockk<MusicBrainzService>()
+    private val metadataFetchingService = mockk<MetadataFetchingService>(relaxed = true)
 
     fun setup(dialect: DbDialect) {
         startKoin {
             modules(module {
                 single { musicBrainzService }
+                single { metadataFetchingService }
                 single { MusicBrainzCacheService() }
                 single { mockk<ImageService>(relaxed = true) }
                 single { CachedMusicBrainzService(get(), get()) }
@@ -844,5 +825,132 @@ class ArtistServiceTest : KoinTest {
         }
         assertNotNull(mbArtist)
         assertEquals("Fetched Artist", mbArtist!![MBArtistTable.name])
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `setMusicBrainzId should clear metadata and refresh when mbId changes`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val artistId = UUID.randomUUID()
+        val oldMbId = UUID.randomUUID()
+        val newMbId = UUID.randomUUID()
+        val imageId = UUID.randomUUID()
+
+        transaction(database) {
+            ImageTable.insert {
+                it[id] = imageId
+                it[path] = "some/path"
+                it[imageHash] = "hash"
+                it[origin] = "origin"
+            }
+            ArtistTable.insert {
+                it[id] = artistId
+                it[name] = "Artist"
+                it[about] = "Old Biography"
+                it[image] = imageId
+                it[lastImageCheck] = 12345L
+                it[lastMetadataCheck] = 67890L
+            }
+            MBArtistTable.insert {
+                it[id] = oldMbId
+                it[name] = "Old MB Artist"
+                it[sortName] = "Old MB Artist"
+            }
+            ArtistMusicBrainzTable.insert {
+                it[this.artistId] = artistId
+                it[musicBrainzId] = oldMbId
+            }
+            MBArtistTable.insert {
+                it[id] = newMbId
+                it[name] = "New Artist"
+                it[sortName] = "New Artist"
+            }
+        }
+
+        service.setMusicBrainzId(artistId, newMbId)
+
+        val updatedArtist = transaction(database) {
+            ArtistTable.selectAll().where { ArtistTable.id eq artistId }.single()
+        }
+
+        assertEquals("", updatedArtist[ArtistTable.about])
+        assertNull(updatedArtist[ArtistTable.image])
+        assertEquals(0L, updatedArtist[ArtistTable.lastImageCheck])
+        assertEquals(0L, updatedArtist[ArtistTable.lastMetadataCheck])
+
+        coVerify { metadataFetchingService.refreshArtistMetadata(artistId) }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `setMusicBrainzId should not clear metadata but refresh when mbId is set for the first time`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val artistId = UUID.randomUUID()
+        val mbId = UUID.randomUUID()
+        val imageId = UUID.randomUUID()
+
+        transaction(database) {
+            ImageTable.insert {
+                it[id] = imageId
+                it[path] = "some/path"
+                it[imageHash] = "hash"
+                it[origin] = "origin"
+            }
+            ArtistTable.insert {
+                it[id] = artistId
+                it[name] = "Artist"
+                it[about] = "Existing Biography"
+                it[image] = imageId
+                it[lastImageCheck] = 12345L
+                it[lastMetadataCheck] = 67890L
+            }
+            MBArtistTable.insert {
+                it[id] = mbId
+                it[name] = "Artist"
+                it[sortName] = "Artist"
+            }
+        }
+
+        service.setMusicBrainzId(artistId, mbId)
+
+        val updatedArtist = transaction(database) {
+            ArtistTable.selectAll().where { ArtistTable.id eq artistId }.single()
+        }
+
+        assertEquals("Existing Biography", updatedArtist[ArtistTable.about])
+        assertEquals(imageId, updatedArtist[ArtistTable.image]?.value)
+        assertEquals(12345L, updatedArtist[ArtistTable.lastImageCheck])
+        assertEquals(67890L, updatedArtist[ArtistTable.lastMetadataCheck])
+
+        coVerify { metadataFetchingService.refreshArtistMetadata(artistId) }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `setMusicBrainzId should do nothing when mbId is set to the same value`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val artistId = UUID.randomUUID()
+        val mbId = UUID.randomUUID()
+
+        transaction(database) {
+            ArtistTable.insert {
+                it[id] = artistId
+                it[name] = "Artist"
+                it[about] = "Biography"
+            }
+            MBArtistTable.insert {
+                it[id] = mbId
+                it[name] = "MB Artist"
+                it[sortName] = "MB Artist"
+            }
+            ArtistMusicBrainzTable.insert {
+                it[this.artistId] = artistId
+                it[musicBrainzId] = mbId
+            }
+        }
+
+        service.setMusicBrainzId(artistId, mbId)
+
+        coVerify(exactly = 0) { metadataFetchingService.refreshArtistMetadata(any()) }
     }
 }

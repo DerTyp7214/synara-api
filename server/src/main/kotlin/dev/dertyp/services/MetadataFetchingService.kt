@@ -1,19 +1,12 @@
 package dev.dertyp.services
 
 import dev.dertyp.ApiClient
+import dev.dertyp.core.HttpClientPriority
 import dev.dertyp.core.safeGet
+import dev.dertyp.core.safeQueuedGet
 import dev.dertyp.core.sha256
 import dev.dertyp.data.InsertableImage
-import dev.dertyp.db.AlbumGenreTable
-import dev.dertyp.db.AlbumMusicBrainzTable
-import dev.dertyp.db.AlbumTable
-import dev.dertyp.db.ArtistGenreTable
-import dev.dertyp.db.ArtistMusicBrainzTable
-import dev.dertyp.db.ArtistTable
-import dev.dertyp.db.ImageTable
-import dev.dertyp.db.SongGenreTable
-import dev.dertyp.db.SongMusicBrainzTable
-import dev.dertyp.db.SongTable
+import dev.dertyp.db.*
 import dev.dertyp.dbQuery
 import dev.dertyp.services.metadata.IMetadataService
 import dev.dertyp.services.metadata.MetadataService
@@ -23,13 +16,8 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
-import org.jetbrains.exposed.v1.core.and
+import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.core.dao.id.EntityID
-import org.jetbrains.exposed.v1.core.eq
-import org.jetbrains.exposed.v1.core.isNotNull
-import org.jetbrains.exposed.v1.core.isNull
-import org.jetbrains.exposed.v1.core.less
-import org.jetbrains.exposed.v1.core.or
 import org.jetbrains.exposed.v1.jdbc.batchInsert
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.select
@@ -925,6 +913,103 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
             "songsChecked" to totalChecked,
             "songsFound" to foundCount
         )
+    }
+
+    suspend fun refreshArtistMetadata(
+        id: UUID,
+        metadataProvider: IMetadataService.MetadataType = IMetadataService.MetadataType.theAudioDB
+    ) {
+        val service = MetadataService.getMetadataService(metadataProvider, environment)
+
+        val artistData = dbQuery {
+            ArtistTable
+                .leftJoin(ArtistMusicBrainzTable)
+                .select(ArtistTable.id, ArtistTable.name, ArtistMusicBrainzTable.musicBrainzId)
+                .where { ArtistTable.id eq id }
+                .map { ArtistToFetch(it[ArtistTable.id].value, it[ArtistTable.name], it.getOrNull(ArtistMusicBrainzTable.musicBrainzId)?.value) }
+                .singleOrNull()
+        } ?: return
+
+        val name = artistData.name
+        val mbid = artistData.mbid
+
+        val artist = if (metadataProvider == IMetadataService.MetadataType.theAudioDB && mbid != null) {
+            try {
+                service.getArtistByMbId(mbid)
+            } catch (e: Exception) {
+                logger.error("Error fetching artist by MBID for $name ($mbid)", e)
+                null
+            }
+        } else {
+            val response = try {
+                service.searchArtists(name, 20)
+            } catch (e: Exception) {
+                logger.error("Error searching artists for $name", e)
+                emptyList()
+            }
+
+            response.sortedByDescending { it.popularity }.firstOrNull { a ->
+                a.name.replace(".", "")
+                    .equals(name.replace(".", ""), ignoreCase = true)
+            }
+        }
+
+        if (artist == null) {
+            updateLastMetadataCheckArtist(id)
+            updateLastCheck(id)
+            return
+        }
+
+        val genresToStore = (artist.genres + artist.styles).distinct()
+        if (genresToStore.isNotEmpty()) {
+            val genreIds = genreService.getOrCreateGenres(genresToStore)
+            dbQuery {
+                ArtistGenreTable.deleteWhere { ArtistGenreTable.artistId eq id }
+                ArtistGenreTable.batchInsert(genreIds) { genreId ->
+                    this[ArtistGenreTable.artistId] = id
+                    this[ArtistGenreTable.genreId] = genreId
+                }
+            }
+        }
+
+        if (!artist.biography.isNullOrBlank()) {
+            dbQuery {
+                ArtistTable.update({ ArtistTable.id eq id }) {
+                    it[ArtistTable.about] = artist.biography!!
+                }
+            }
+        }
+
+        val images = artist.images
+        val image = images.maxByOrNull { it.width }
+        if (image != null) {
+            val imageBytes = ApiClient.instance.safeQueuedGet<ByteArray>(
+                urlString = image.url,
+                priority = HttpClientPriority.HIGH
+            )
+            if (imageBytes != null) {
+                val imageId = imageService.createBatch(
+                    listOf(
+                        InsertableImage(
+                            data = imageBytes,
+                            imageHash = imageBytes.sha256(),
+                            origin = image.url
+                        )
+                    )
+                ).values.firstOrNull()
+
+                if (imageId != null) {
+                    dbQuery {
+                        ArtistTable.update({ ArtistTable.id eq id }) {
+                            it[ArtistTable.image] = EntityID(imageId, ImageTable)
+                        }
+                    }
+                }
+            }
+        }
+
+        updateLastMetadataCheckArtist(id)
+        updateLastCheck(id)
     }
 
     private suspend fun updateLastCheck(id: UUID) = dbQuery {

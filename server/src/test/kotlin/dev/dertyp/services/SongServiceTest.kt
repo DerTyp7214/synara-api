@@ -2,40 +2,8 @@ package dev.dertyp.services
 
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
-import dev.dertyp.data.InsertableAlbum
-import dev.dertyp.data.InsertableSong
-import dev.dertyp.data.MusicBrainzArtist
-import dev.dertyp.data.MusicBrainzArtistCredit
-import dev.dertyp.data.MusicBrainzRecording
-import dev.dertyp.data.SongTag
-import dev.dertyp.data.User
-import dev.dertyp.db.AlbumArtistTable
-import dev.dertyp.db.AlbumGenreTable
-import dev.dertyp.db.AlbumMusicBrainzTable
-import dev.dertyp.db.AlbumTable
-import dev.dertyp.db.ArtistAliasTable
-import dev.dertyp.db.ArtistGenreTable
-import dev.dertyp.db.ArtistMemberTable
-import dev.dertyp.db.ArtistMusicBrainzTable
-import dev.dertyp.db.ArtistSplitAliasTable
-import dev.dertyp.db.ArtistTable
-import dev.dertyp.db.FollowedArtistTable
-import dev.dertyp.db.GenreTable
-import dev.dertyp.db.ImageTable
-import dev.dertyp.db.MBArtistAliasTable
-import dev.dertyp.db.MBArtistTable
-import dev.dertyp.db.MBRecordingArtistCreditTable
-import dev.dertyp.db.MBRecordingTable
-import dev.dertyp.db.MBReleaseTable
-import dev.dertyp.db.PlaylistSongTable
-import dev.dertyp.db.SongArtistTable
-import dev.dertyp.db.SongGenreTable
-import dev.dertyp.db.SongMusicBrainzTable
-import dev.dertyp.db.SongTable
-import dev.dertyp.db.UserPlaylistSongTable
-import dev.dertyp.db.UserSongTable
-import dev.dertyp.db.UserTable
-import dev.dertyp.db.allMusicBrainzTables
+import dev.dertyp.data.*
+import dev.dertyp.db.*
 import dev.dertyp.services.metadata.MusicBrainzCacheService
 import dev.dertyp.services.metadata.MusicBrainzService
 import io.ktor.server.application.ApplicationEnvironment
@@ -46,19 +14,10 @@ import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.like
-import org.jetbrains.exposed.v1.jdbc.Database
-import org.jetbrains.exposed.v1.jdbc.SchemaUtils
-import org.jetbrains.exposed.v1.jdbc.batchInsert
-import org.jetbrains.exposed.v1.jdbc.insert
-import org.jetbrains.exposed.v1.jdbc.selectAll
+import org.jetbrains.exposed.v1.jdbc.*
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.jupiter.api.AfterEach
-import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertFalse
-import org.junit.jupiter.api.Assertions.assertNotEquals
-import org.junit.jupiter.api.Assertions.assertNotNull
-import org.junit.jupiter.api.Assertions.assertNull
-import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.EnumSource
 import org.koin.core.context.startKoin
@@ -91,6 +50,7 @@ class SongServiceTest : KoinTest {
                 single { MusicBrainzCacheService() }
                 single { mockk<ImageService>(relaxed = true) }
                 single { storageService }
+                single { mockk<MetadataFetchingService>(relaxed = true) }
                 single { AlbumService() }
                 single { ArtistService() }
             })

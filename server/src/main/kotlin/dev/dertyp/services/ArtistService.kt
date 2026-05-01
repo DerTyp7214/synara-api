@@ -2,38 +2,9 @@ package dev.dertyp.services
 
 import dev.dertyp.ApiClient
 import dev.dertyp.PlatformUUID
-import dev.dertyp.core.HttpClientPriority
-import dev.dertyp.core.fetchBatchedResultsByIdKeyset
-import dev.dertyp.core.isURL
-import dev.dertyp.core.mbArtistSearchColumns
-import dev.dertyp.core.rankedSearchQuery
-import dev.dertyp.core.safeGet
-import dev.dertyp.core.sha256
-import dev.dertyp.core.stripAccents
-import dev.dertyp.core.toUUIDOrNull
-import dev.dertyp.core.withMBArtistSearch
-import dev.dertyp.data.Artist
-import dev.dertyp.data.ArtistAlias
-import dev.dertyp.data.ArtistSplitAlias
-import dev.dertyp.data.Genre
-import dev.dertyp.data.InsertableImage
-import dev.dertyp.data.MergeArtists
-import dev.dertyp.data.MusicBrainzArtist
-import dev.dertyp.data.PaginatedResponse
-import dev.dertyp.data.SplitArtist
-import dev.dertyp.data.User
-import dev.dertyp.db.AlbumArtistTable
-import dev.dertyp.db.ArtistAliasTable
-import dev.dertyp.db.ArtistGenreTable
-import dev.dertyp.db.ArtistMemberTable
-import dev.dertyp.db.ArtistMusicBrainzTable
-import dev.dertyp.db.ArtistSplitAliasTable
-import dev.dertyp.db.ArtistTable
-import dev.dertyp.db.FollowedArtistTable
-import dev.dertyp.db.GenreTable
-import dev.dertyp.db.ImageTable
-import dev.dertyp.db.MBArtistTable
-import dev.dertyp.db.SongArtistTable
+import dev.dertyp.core.*
+import dev.dertyp.data.*
+import dev.dertyp.db.*
 import dev.dertyp.dbQuery
 import dev.dertyp.plugins.ArtistLibrary
 import dev.dertyp.services.metadata.CachedMusicBrainzService
@@ -41,36 +12,10 @@ import dev.dertyp.services.metadata.MusicBrainzCacheService
 import dev.dertyp.services.metadata.MusicBrainzService
 import dev.dertyp.utils.LogParam
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.asFlow
-import kotlinx.coroutines.flow.chunked
-import kotlinx.coroutines.flow.flatMapConcat
-import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.take
-import kotlinx.coroutines.flow.toList
-import org.jetbrains.exposed.v1.core.Alias
-import org.jetbrains.exposed.v1.core.ColumnSet
-import org.jetbrains.exposed.v1.core.ResultRow
-import org.jetbrains.exposed.v1.core.alias
-import org.jetbrains.exposed.v1.core.and
+import kotlinx.coroutines.flow.*
+import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.core.dao.id.EntityID
-import org.jetbrains.exposed.v1.core.eq
-import org.jetbrains.exposed.v1.core.inList
-import org.jetbrains.exposed.v1.core.innerJoin
-import org.jetbrains.exposed.v1.core.isNull
-import org.jetbrains.exposed.v1.core.leftJoin
-import org.jetbrains.exposed.v1.core.or
-import org.jetbrains.exposed.v1.jdbc.Query
-import org.jetbrains.exposed.v1.jdbc.batchInsert
-import org.jetbrains.exposed.v1.jdbc.deleteWhere
-import org.jetbrains.exposed.v1.jdbc.insert
-import org.jetbrains.exposed.v1.jdbc.insertAndGetId
-import org.jetbrains.exposed.v1.jdbc.insertIgnore
-import org.jetbrains.exposed.v1.jdbc.orWhere
-import org.jetbrains.exposed.v1.jdbc.select
-import org.jetbrains.exposed.v1.jdbc.selectAll
-import org.jetbrains.exposed.v1.jdbc.update
-import org.jetbrains.exposed.v1.jdbc.upsert
+import org.jetbrains.exposed.v1.jdbc.*
 import org.koin.core.component.inject
 import java.util.UUID
 import kotlin.time.Clock
@@ -113,6 +58,7 @@ class ArtistRpcService(private val user: User, private val artistService: Artist
 
 class ArtistService : ArtistLibrary, Service() {
     private val musicBrainzCacheService by inject<MusicBrainzCacheService>()
+    private val metadataFetchingService by inject<MetadataFetchingService>()
     val artistGroupAlias = ArtistTable.alias("artistGroup")
     val artistMemberAlias = ArtistTable.alias("artistMember")
     val artistGroupJoinAlias = ArtistMemberTable.alias("artistGroupJoin")
@@ -259,6 +205,13 @@ class ArtistService : ArtistLibrary, Service() {
     }
 
     suspend fun setMusicBrainzId(id: UUID, musicBrainzId: UUID?, userId: UUID? = null): Artist? {
+        val oldMbId = dbQuery {
+            ArtistMusicBrainzTable
+                .select(ArtistMusicBrainzTable.musicBrainzId)
+                .where { ArtistMusicBrainzTable.artistId eq id }
+                .singleOrNull()?.get(ArtistMusicBrainzTable.musicBrainzId)?.value
+        }
+
         if (musicBrainzId != null) {
             val artistExists = dbQuery {
                 MBArtistTable.select(MBArtistTable.id)
@@ -279,7 +232,22 @@ class ArtistService : ArtistLibrary, Service() {
                 it[lastCheck] = Clock.System.now().toEpochMilliseconds()
             }
         }
-        
+
+        if ((musicBrainzId != null) && (musicBrainzId != oldMbId)) {
+            if (oldMbId != null) {
+                dbQuery {
+                    ArtistTable.update({ ArtistTable.id eq id }) {
+                        it[about] = ""
+                        it[image] = null
+                        it[lastImageCheck] = 0L
+                        it[lastMetadataCheck] = 0L
+                    }
+                }
+            }
+
+            metadataFetchingService.refreshArtistMetadata(id)
+        }
+
         return byId(id, userId)
     }
 
