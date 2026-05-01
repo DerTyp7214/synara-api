@@ -50,9 +50,9 @@ class ServerTunnel(
     }
 }
 
-val tunnels = ConcurrentHashMap<String, ServerTunnel>()
-
 fun Application.module() {
+    val tunnels = ConcurrentHashMap<String, ServerTunnel>()
+
     install(CallLogging) {
         level = Level.INFO
     }
