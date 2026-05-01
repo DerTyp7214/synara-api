@@ -20,6 +20,7 @@ import org.slf4j.LoggerFactory
 import org.slf4j.event.Level
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Duration.Companion.seconds
 
 fun main(args: Array<String>) {
@@ -124,7 +125,9 @@ fun Application.module() {
                     }
                 }
             } catch (e: Exception) {
-                logger.error("[{}] Error in server tunnel", assignedId, e)
+                if (e !is CancellationException) {
+                    logger.error("[{}] Error in server tunnel", assignedId, e)
+                }
             } finally {
                 tunnels.remove(assignedId)
                 tunnel.clients.values.forEach {

@@ -14,10 +14,12 @@ import io.ktor.websocket.Frame
 import io.ktor.websocket.readText
 import io.ktor.websocket.send
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.milliseconds
 
 class ProxyApplicationTest {
 
@@ -154,6 +156,7 @@ class ProxyApplicationTest {
         }
 
         client.webSocket("/proxy/server?id=s1&name=Server1") {
+            incoming.receive()
             val instances = client.get("/instances").body<List<InstanceInfo>>()
             assertEquals(1, instances.size)
             assertEquals("s1", instances[0].id)
@@ -173,6 +176,8 @@ class ProxyApplicationTest {
         val clientDisconnected = CompletableDeferred<Unit>()
 
         client.webSocket("/proxy/server?id=s1") {
+            incoming.receive()
+
             launch {
                 try {
                     client.webSocket("/s1/rpc/test") {
@@ -183,7 +188,7 @@ class ProxyApplicationTest {
                 }
             }
 
-            incoming.receive()
+            delay(100.milliseconds)
         }
 
         clientDisconnected.await()
