@@ -7,18 +7,9 @@ import dev.dertyp.services.download.ProcessExecutionResult
 import io.ktor.util.logging.KtorSimpleLogger
 import io.ktor.util.logging.Logger
 import io.ktor.utils.io.CancellationException
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.DisposableHandle
-import kotlinx.coroutines.cancel
+import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel.Factory.UNLIMITED
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.buffer
-import kotlinx.coroutines.job
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import kotlinx.coroutines.yield
 import org.jetbrains.exposed.v1.jdbc.transactions.suspendTransaction
 import java.io.File
 import java.io.InputStreamReader
@@ -70,10 +61,13 @@ suspend fun executeCommand(
     aliveCheck: suspend () -> Boolean,
     logger: Logger = KtorSimpleLogger("executeCommand"),
     directory: File? = null,
+    logCommand: Boolean = true,
     onLineReceived: suspend (String) -> Unit = {}
 ): ProcessExecutionResult {
     val timeString = LocalTime.now().format(DateTimeFormatter.ISO_LOCAL_TIME).split(".").first()
-    logger.info("[$timeString] Starting command: ${command.joinToString(" ")}")
+    if (logCommand) {
+        logger.info("[$timeString] Starting command: ${command.joinToString(" ")}")
+    }
 
     val fullOutput = StringBuilder()
 

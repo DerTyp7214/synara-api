@@ -88,6 +88,7 @@ class FlacAnalysisService : Service() {
             command = listOf(metaflacPath, "--add-seekpoint=$interval", "--add-padding=8192", filePath),
             aliveCheck = { true },
             logger = logger,
+            logCommand = false,
         )
 
         analyze(songId, force = true)
@@ -99,6 +100,7 @@ class FlacAnalysisService : Service() {
             command = listOf(path, "--list", filePath),
             aliveCheck = { true },
             logger = logger,
+            logCommand = false,
         )
 
         if (result.exitCode != 0) return null

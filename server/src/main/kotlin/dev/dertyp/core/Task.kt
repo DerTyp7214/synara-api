@@ -1,7 +1,9 @@
 package dev.dertyp.core
 
 import dev.dertyp.data.TaskStatus
-import dev.dertyp.plugins.*
+import dev.dertyp.plugins.CronTrigger
+import dev.dertyp.plugins.ScheduleTrigger
+import dev.dertyp.plugins.Task
 import dev.dertyp.services.ScheduledTaskLogService
 import dev.dertyp.services.schedule.CronPresets
 import dev.dertyp.services.schedule.ScheduledTask
@@ -10,7 +12,6 @@ import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 import java.time.Duration
 import java.time.Instant
-import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.time.Duration as KDuration
 
 interface TaskContext {
@@ -26,23 +27,29 @@ suspend fun KoinComponent.logTask(name: String, block: suspend TaskContext.() ->
     class TaskContextImpl : TaskContext {
         @Volatile
         var currentProgress = 0.0
-        val currentLogs = CopyOnWriteArrayList<String>()
+        val currentLogs = mutableListOf<String>()
 
         override fun updateProgress(progress: Double, vararg logs: String) {
             currentProgress = progress
-            if (logs.isNotEmpty()) {
-                currentLogs.clear()
-                currentLogs.addAll(logs.takeLast(5))
+            val logsSnapshot = synchronized(currentLogs) {
+                if (logs.isNotEmpty()) {
+                    currentLogs.clear()
+                    currentLogs.addAll(logs.takeLast(5))
+                }
+                ArrayList(currentLogs)
             }
-            logService.updateProgress(runningId, currentProgress, currentLogs.toList())
+            logService.updateProgress(runningId, currentProgress, logsSnapshot)
         }
 
         override fun log(line: String) {
-            currentLogs.add(line)
-            while (currentLogs.size > 5) {
-                currentLogs.removeAt(0)
+            val logsSnapshot = synchronized(currentLogs) {
+                currentLogs.add(line)
+                while (currentLogs.size > 5) {
+                    currentLogs.removeAt(0)
+                }
+                ArrayList(currentLogs)
             }
-            logService.updateProgress(runningId, currentProgress, currentLogs.toList())
+            logService.updateProgress(runningId, currentProgress, logsSnapshot)
         }
     }
 
@@ -57,8 +64,8 @@ suspend fun KoinComponent.logTask(name: String, block: suspend TaskContext.() ->
             TaskStatus.SUCCESS,
             details = details.mapValues { it.value.toString() },
             progress = context.currentProgress,
-            logs = context.currentLogs.toList(),
-            runningId = runningId
+            logs = synchronized(context.currentLogs) { ArrayList(context.currentLogs) },
+            runningId = runningId,
         )
     } catch (e: Throwable) {
         logService.logTask(
@@ -68,8 +75,8 @@ suspend fun KoinComponent.logTask(name: String, block: suspend TaskContext.() ->
             TaskStatus.FAILURE,
             message = e.message,
             progress = context.currentProgress,
-            logs = context.currentLogs.toList(),
-            runningId = runningId
+            logs = synchronized(context.currentLogs) { ArrayList(context.currentLogs) },
+            runningId = runningId,
         )
         throw e
     }

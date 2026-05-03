@@ -28,12 +28,15 @@ class FlacAnalysisWorker : Worker("FlacAnalysisWorker") {
             runParallel(
                 items = unanalyzedIds,
                 baseThreadCount = Runtime.getRuntime().availableProcessors(),
-                onItemProcessed = { currentCount ->
-                    val progress = (currentCount.toDouble() / totalToProcess) * 100.0
-                    onProgress(progress, "Analyzed $currentCount/$totalToProcess files")
+                onItemProcessed = { _ ->
+                    val currentCount = processedCount.incrementAndGet()
+                    if (currentCount % 50 == 0 || currentCount == unanalyzedIds.size || currentCount == totalToProcess) {
+                        val progress = (currentCount.toDouble() / totalToProcess) * 100.0
+                        onProgress(progress, "Analyzed $currentCount/$totalToProcess files")
 
-                    if (currentCount % 100 == 0) {
-                        logger.info("Analyzed $currentCount/${unanalyzedIds.size} files")
+                        if (currentCount % 100 == 0) {
+                            logger.info("Analyzed $currentCount/${unanalyzedIds.size} files")
+                        }
                     }
                 }
             ) { songId ->
@@ -47,10 +50,10 @@ class FlacAnalysisWorker : Worker("FlacAnalysisWorker") {
                 try {
                     flacAnalysisService.fixSeekpoints(songId)
                     val currentCount = processedCount.incrementAndGet()
-                    val progress = (currentCount.toDouble() / totalToProcess) * 100.0
-                    onProgress(progress, "Fixed $currentCount/$totalToProcess files")
-
-                    if (currentCount % 10 == 0) {
+                    
+                    if (currentCount % 10 == 0 || currentCount == totalToProcess) {
+                        val progress = (currentCount.toDouble() / totalToProcess) * 100.0
+                        onProgress(progress, "Fixed $currentCount/$totalToProcess files")
                         logger.info("Fixed $currentCount/${needingFixIds.size} files")
                     }
                 } catch (e: Exception) {
