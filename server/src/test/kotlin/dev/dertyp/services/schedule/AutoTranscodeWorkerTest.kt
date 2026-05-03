@@ -3,6 +3,7 @@ package dev.dertyp.services.schedule
 import dev.dertyp.AudioUtils
 import dev.dertyp.data.SimpleSong
 import io.ktor.server.application.ApplicationEnvironment
+import io.ktor.server.config.ApplicationConfig
 import io.ktor.server.config.MapApplicationConfig
 import io.mockk.*
 import kotlinx.coroutines.runBlocking
@@ -64,6 +65,7 @@ class AutoTranscodeWorkerTest : KoinTest {
             modules(
                 module {
                     single { environment }
+                    single<ApplicationConfig> { config }
                 }
             )
         }

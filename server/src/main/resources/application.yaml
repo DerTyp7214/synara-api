@@ -53,3 +53,5 @@ proxy:
   key: ${PROXY_KEY:}
 youtube:
   apiKey: ${YOUTUBE_API_KEY:}
+workers:
+  threadMultiplier: ${WORKER_THREAD_MULTIPLIER:1.0}

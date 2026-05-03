@@ -1,0 +1,179 @@
+package dev.dertyp.mock
+
+import dev.dertyp.rpc.annotations.RestDelete
+import dev.dertyp.rpc.annotations.RestGet
+import dev.dertyp.rpc.annotations.RestPost
+import dev.dertyp.rpc.annotations.RestPut
+import dev.dertyp.rpc.getAllServiceClasses
+import dev.dertyp.rpc.initializeServiceRegistry
+import io.ktor.http.ContentType
+import io.ktor.http.HttpStatusCode
+import io.ktor.serialization.kotlinx.json.json
+import io.ktor.server.application.Application
+import io.ktor.server.application.createRouteScopedPlugin
+import io.ktor.server.application.install
+import io.ktor.server.engine.embeddedServer
+import io.ktor.server.netty.Netty
+import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.server.response.respond
+import io.ktor.server.response.respondText
+import io.ktor.server.routing.*
+import kotlinx.rpc.krpc.ktor.server.Krpc
+import kotlinx.rpc.krpc.ktor.server.KrpcRoute
+import kotlinx.rpc.krpc.ktor.server.rpc
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.serializer
+import kotlin.reflect.KClass
+import kotlin.reflect.KFunction
+import kotlin.reflect.full.declaredMemberFunctions
+import kotlin.reflect.full.findAnnotation
+import kotlin.reflect.full.memberFunctions
+
+fun main() {
+    val port = System.getenv("PORT")?.toIntOrNull() ?: 8081
+    embeddedServer(Netty, port = port, host = "0.0.0.0", module = Application::module)
+        .start(wait = true)
+}
+
+val MockAuthPlugin = createRouteScopedPlugin("MockAuthPlugin") {
+    onCall { call ->
+        if (call.request.headers["Authorization"] == null) {
+            call.respond(HttpStatusCode.Unauthorized)
+        }
+    }
+}
+
+fun Application.module() {
+    val jsonConfig = Json {
+        prettyPrint = true
+        isLenient = true
+        ignoreUnknownKeys = true
+    }
+
+    install(ContentNegotiation) {
+        json(jsonConfig)
+    }
+
+    install(Krpc)
+    
+    initializeServiceRegistry()
+    val allServices = getAllServiceClasses()
+    val publicServices = listOf("IAuthService", "IServerStatsService")
+
+    routing {
+        rpc("/rpc") {
+            val krpcRoute = this
+            allServices.filter { it.simpleName in publicServices }.forEach { serviceClass ->
+                try {
+                    val method = KrpcRoute::class.memberFunctions.find { 
+                        it.name == "registerService" && it.parameters.size == 3 
+                    }
+                    method?.call(krpcRoute, serviceClass, { MockGenerator.createMock(serviceClass) })
+                } catch (_: Exception) {}
+            }
+        }
+
+        rpc("/rpc/auth") {
+            val krpcRoute = this
+            allServices.filter { it.simpleName == "IAuthService" }.forEach { serviceClass ->
+                try {
+                    val method = KrpcRoute::class.memberFunctions.find { 
+                        it.name == "registerService" && it.parameters.size == 3 
+                    }
+                    method?.call(krpcRoute, serviceClass, { MockGenerator.createMock(serviceClass) })
+                } catch (_: Exception) {}
+            }
+        }
+
+        route("/rpc/services") {
+            install(MockAuthPlugin)
+            rpc {
+                val krpcRoute = this
+                allServices.filter { it.simpleName !in publicServices }.forEach { serviceClass ->
+                    try {
+                        val method = KrpcRoute::class.memberFunctions.find { 
+                            it.name == "registerService" && it.parameters.size == 3 
+                        }
+                        method?.call(krpcRoute, serviceClass, { MockGenerator.createMock(serviceClass) })
+                    } catch (_: Exception) {}
+                }
+            }
+        }
+
+        allServices.forEach { serviceClass ->
+            registerMockRestService(serviceClass, jsonConfig, serviceClass.simpleName in publicServices)
+        }
+    }
+}
+
+fun Route.registerMockRestService(serviceInterface: KClass<*>, json: Json, isPublic: Boolean) {
+    val serviceName = serviceInterface.simpleName?.removePrefix("I")?.removeSuffix("Service")?.replaceFirstChar { it.lowercase() } ?: ""
+
+    route("/$serviceName") {
+        if (!isPublic) {
+            install(MockAuthPlugin)
+        }
+
+        serviceInterface.declaredMemberFunctions.forEach { func ->
+            val (method, name) = func.getRestMethodAndName()
+            val methodName = name.replaceFirstChar { it.lowercase() }
+
+            val handler: suspend RoutingContext.() -> Unit = {
+                val dummy = MockGenerator.createDummy(func.returnType)
+                if (dummy == null) {
+                    call.respond(HttpStatusCode.NotFound)
+                } else {
+                    try {
+                        val responseJson = json.encodeToString(serializer(func.returnType), dummy)
+                        call.respondText(responseJson, ContentType.Application.Json)
+                    } catch (_: Exception) {
+                        call.respond(dummy)
+                    }
+                }
+            }
+
+            when (method) {
+                "GET" -> get(methodName, handler)
+                "POST" -> post(methodName, handler)
+                "PUT" -> put(methodName, handler)
+                "DELETE" -> delete(methodName, handler)
+            }
+        }
+    }
+}
+
+private fun KFunction<*>.getRestMethodAndName(): Pair<String, String> {
+    val getAttr = findAnnotation<RestGet>()
+    val postAttr = findAnnotation<RestPost>()
+    val putAttr = findAnnotation<RestPut>()
+    val deleteAttr = findAnnotation<RestDelete>()
+
+    return when {
+        getAttr != null -> "GET" to this.name
+        postAttr != null -> "POST" to this.name
+        putAttr != null -> "PUT" to this.name
+        deleteAttr != null -> "DELETE" to this.name
+        name.startsWith("by") -> "GET" to name
+        name.startsWith("all") -> "GET" to name
+        name.startsWith("liked") -> "GET" to name
+        name.startsWith("stream") -> "GET" to name
+        name.startsWith("download") -> "GET" to name
+        name.startsWith("get") -> "GET" to name.removePrefix("get")
+        name.startsWith("list") -> "GET" to name.removePrefix("list")
+        name.startsWith("find") -> "GET" to name.removePrefix("find")
+        name.startsWith("fetch") -> "GET" to name.removePrefix("fetch")
+        name.startsWith("search") -> "GET" to name.removePrefix("search")
+        name.startsWith("ranked") -> "GET" to name.removePrefix("ranked")
+        name.startsWith("exists") -> "GET" to name
+        name.contains("Exists") -> "GET" to name
+        name.startsWith("add") -> "POST" to name
+        name.startsWith("post") -> "POST" to name.removePrefix("post")
+        name.startsWith("create") -> "POST" to name.removePrefix("create")
+        name.startsWith("put") -> "PUT" to name.removePrefix("put")
+        name.startsWith("set") -> "PUT" to name.removePrefix("set")
+        name.startsWith("update") -> "PUT" to name.removePrefix("update")
+        name.startsWith("delete") -> "DELETE" to name.removePrefix("delete")
+        name.startsWith("remove") -> "DELETE" to name.removePrefix("remove")
+        else -> "POST" to name
+    }
+}

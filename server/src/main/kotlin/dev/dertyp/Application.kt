@@ -7,69 +7,17 @@ import com.google.gson.stream.JsonReader
 import com.google.gson.stream.JsonToken
 import com.google.gson.stream.JsonWriter
 import dev.dertyp.core.logTask
-import dev.dertyp.plugins.JmDNSPlugin
-import dev.dertyp.plugins.PluginManager
-import dev.dertyp.plugins.RedisCacheProvider
-import dev.dertyp.plugins.TaskCompletionTrigger
-import dev.dertyp.plugins.pluginModule
+import dev.dertyp.plugins.*
 import dev.dertyp.serializers.ByteArrayISO8859TypeAdapter
 import dev.dertyp.serializers.DurationAdapter
 import dev.dertyp.serializers.LocalDateAdapter
 import dev.dertyp.serializers.OffsetDateTimeAdapter
 import dev.dertyp.server.BuildConfig
-import dev.dertyp.services.AlbumService
-import dev.dertyp.services.ArtistService
-import dev.dertyp.services.AudioAnalysisService
-import dev.dertyp.services.AuthService
-import dev.dertyp.services.BackupService
-import dev.dertyp.services.CustomAudioService
-import dev.dertyp.services.CustomMigrationService
-import dev.dertyp.services.DatabaseManager
-import dev.dertyp.services.DbManagementService
-import dev.dertyp.services.DiscoveryService
-import dev.dertyp.services.FavSyncService
-import dev.dertyp.services.GenreService
-import dev.dertyp.services.ImageService
-import dev.dertyp.services.JwtService
-import dev.dertyp.services.LibraryMergeService
-import dev.dertyp.services.LrcLibService
-import dev.dertyp.services.LyricsSearch
-import dev.dertyp.services.LyricsService
-import dev.dertyp.services.MetadataFetchingService
-import dev.dertyp.services.MirrorService
-import dev.dertyp.services.PlaybackService
-import dev.dertyp.services.PlaylistService
-import dev.dertyp.services.RefreshTokenService
-import dev.dertyp.services.ReleaseService
-import dev.dertyp.services.RemoteMirrorService
-import dev.dertyp.services.ReverseProxyService
-import dev.dertyp.services.ScheduledTaskLogService
-import dev.dertyp.services.ServerStatsService
-import dev.dertyp.services.SessionService
-import dev.dertyp.services.SongService
-import dev.dertyp.services.StorageService
-import dev.dertyp.services.UserPlaylistBackupService
-import dev.dertyp.services.UserPlaylistService
-import dev.dertyp.services.UserService
+import dev.dertyp.services.*
 import dev.dertyp.services.download.DownloadService
 import dev.dertyp.services.download.DownloaderProxy
-import dev.dertyp.services.metadata.CachedMusicBrainzService
-import dev.dertyp.services.metadata.IMetadataService
-import dev.dertyp.services.metadata.IMusicBrainzService
-import dev.dertyp.services.metadata.MetadataDispatcherService
-import dev.dertyp.services.metadata.MusicBrainzCacheService
-import dev.dertyp.services.metadata.MusicBrainzService
-import dev.dertyp.services.schedule.AudioAnalysisWorker
-import dev.dertyp.services.schedule.AutoTranscodeWorker
-import dev.dertyp.services.schedule.CronPresets
-import dev.dertyp.services.schedule.GenreMetadataWorker
-import dev.dertyp.services.schedule.LrcLibWorker
-import dev.dertyp.services.schedule.LyricsSyncWorker
-import dev.dertyp.services.schedule.MusicBrainzCacheWorker
-import dev.dertyp.services.schedule.MusicBrainzWorker
-import dev.dertyp.services.schedule.RecentReleaseWorker
-import dev.dertyp.services.schedule.ScheduleService
-import dev.dertyp.services.schedule.ScheduledTask
+import dev.dertyp.services.metadata.*
+import dev.dertyp.services.schedule.*
 import io.ktor.server.application.Application
 import io.ktor.server.application.ApplicationEnvironment
 import io.ktor.server.application.install
@@ -138,6 +86,7 @@ fun Application.module() {
             singleOf(::AuthService)
             singleOf(::SongService)
             singleOf(::AudioAnalysisService)
+            singleOf(::FlacAnalysisService)
             singleOf(::ImageService)
             singleOf(::AlbumService)
             singleOf(::LyricsSearch)
@@ -179,6 +128,7 @@ fun Application.module() {
             singleOf(::LyricsSyncWorker)
             singleOf(::LrcLibWorker)
             singleOf(::AudioAnalysisWorker)
+            singleOf(::FlacAnalysisWorker)
             singleOf(::ReleaseService)
             singleOf(::AutoTranscodeWorker)
             singleOf(::CustomMigrationService)
@@ -246,6 +196,7 @@ fun Application.module() {
     val autoTranscodeWorker = get<AutoTranscodeWorker>()
     val lyricsSyncWorker = get<LyricsSyncWorker>()
     val audioAnalysisWorker = get<AudioAnalysisWorker>()
+    val flacAnalysisWorker = get<FlacAnalysisWorker>()
     val lrcLibWorker = get<LrcLibWorker>()
 
     scheduleService.schedule(
@@ -314,6 +265,20 @@ fun Application.module() {
     )
 
     scheduleService.triggerTask(audioAnalysis.id)
+
+    val flacAnalysis = scheduleService.schedule(
+        ScheduledTask(
+            name = "FLAC Analysis",
+            trigger = CronPresets.dailyAt(5, 0),
+            task = {
+                scheduleService.logTask("FLAC Analysis") {
+                    flacAnalysisWorker.run { p, l -> updateProgress(p, l) }
+                }
+            }
+        )
+    )
+
+    scheduleService.triggerTask(flacAnalysis.id)
 
     val musicBrainzTask = scheduleService.schedule(
         ScheduledTask(

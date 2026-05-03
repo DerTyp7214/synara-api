@@ -6,6 +6,8 @@ import dev.dertyp.db.SongAudioDataTable
 import dev.dertyp.db.SongTable
 import dev.dertyp.dbQuery
 import dev.dertyp.services.AudioAnalysisService
+import io.ktor.server.config.ApplicationConfig
+import io.ktor.server.config.MapApplicationConfig
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
@@ -48,6 +50,7 @@ class AudioAnalysisWorkerTest : KoinTest {
         startKoin {
             modules(module {
                 single { audioAnalysisService }
+                single<ApplicationConfig> { MapApplicationConfig() }
             })
         }
 

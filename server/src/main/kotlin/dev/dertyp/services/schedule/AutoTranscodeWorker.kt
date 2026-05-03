@@ -7,9 +7,6 @@ import dev.dertyp.AudioUtils.transcodeFlacToOpus
 import dev.dertyp.core.nullIfEmpty
 import dev.dertyp.data.SimpleSong
 import io.ktor.server.application.ApplicationEnvironment
-import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.koin.core.component.inject
@@ -40,11 +37,8 @@ class AutoTranscodeWorker : Worker("AutoTranscodeWorker") {
             logger.info("Auto transcoding ${songs.size} songs for quality: $quality")
             onProgress(0.0, "Auto transcoding ${songs.size} songs for quality: $quality")
 
-            val songChannel = Channel<SimpleSong>(Channel.UNLIMITED)
             val transcodedSongs = mutableListOf<Triple<SimpleSong, File, Int>>()
             val transcodedSongsMutex = Mutex()
-            val maxConcurrentTranscoders = 6
-            var processedCount = 0
 
             if (!AudioUtils.isTranscoderActive.compareAndSet(expectedValue = false, newValue = true)) {
                 logger.warn("Transcoding is already in progress, skipping quality: $quality")
@@ -53,34 +47,27 @@ class AutoTranscodeWorker : Worker("AutoTranscodeWorker") {
             }
 
             try {
-                coroutineScope {
-                    repeat(maxConcurrentTranscoders) { _ ->
-                        launch {
-                            for (song in songChannel) {
-                                val file = Paths.get(song.path).toFile()
-                                if (!file.exists()) {
-                                    logger.warn("Skipping auto transcode for \"${song.title}\": file not found at ${song.path}")
-                                    continue
-                                }
-                                try {
-                                    val (newFile) = transcodeFlacToOpus(environment, file, quality)
-                                    transcodedSongsMutex.withLock {
-                                        transcodedSongs.add(Triple(song, newFile, quality))
-                                        processedCount++
-                                        val progress = (processedCount.toDouble() / songs.size) * 100.0
-                                        onProgress(progress, "Transcoding quality $quality: $processedCount/${songs.size} songs")
-                                    }
-                                } catch (e: Exception) {
-                                    logger.error("Failed to auto transcode \"${song.title}\": ${e.message}")
-                                }
+                runParallel(
+                    items = songs,
+                    baseThreadCount = 6,
+                    onItemProcessed = { processedCount ->
+                        val progress = (processedCount.toDouble() / songs.size) * 100.0
+                        onProgress(progress, "Transcoding quality $quality: $processedCount/${songs.size} songs")
+                    }
+                ) { song ->
+                    val file = Paths.get(song.path).toFile()
+                    if (!file.exists()) {
+                        logger.warn("Skipping auto transcode for \"${song.title}\": file not found at ${song.path}")
+                    } else {
+                        try {
+                            val (newFile) = transcodeFlacToOpus(environment, file, quality)
+                            transcodedSongsMutex.withLock {
+                                transcodedSongs.add(Triple(song, newFile, quality))
                             }
+                        } catch (e: Exception) {
+                            logger.error("Failed to auto transcode \"${song.title}\": ${e.message}")
                         }
                     }
-
-                    for (song in songs) {
-                        songChannel.send(song)
-                    }
-                    songChannel.close()
                 }
                 results["quality_$quality"] = transcodedSongs.size
             } finally {

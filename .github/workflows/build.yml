@@ -11,6 +11,7 @@ on:
       - docker/**
       - server/**
       - proxy/**
+      - mock-server/**
       - gradle/**
       - transcriber/**
       - common-rpc
@@ -105,7 +106,7 @@ jobs:
         run: chmod +x gradlew
 
       - name: Build Ktor fat JARs
-        run: ./gradlew :server:shadowJar :proxy:shadowJar
+        run: ./gradlew :server:shadowJar :proxy:shadowJar :mock-server:shadowJar
 
       - name: Extract Application Version
         id: version_info
@@ -133,6 +134,13 @@ jobs:
           path: proxy/build/libs/proxy-all.jar
           retention-days: 1
 
+      - name: Upload Mock Server fat JAR
+        uses: actions/upload-artifact@v7
+        with:
+          name: mock-server-fat-jar
+          path: mock-server/build/libs/mock-server-all.jar
+          retention-days: 1
+
   build-publish-docker:
     needs: [run-tests, build-artifact]
     runs-on: ubuntu-latest
@@ -148,6 +156,11 @@ jobs:
             repo: "dertyp7214/synara-proxy"
             dockerfile: "./Dockerfile.proxy"
             artifact: "proxy-fat-jar"
+            context: "."
+          - name: mock-server
+            repo: "dertyp7214/synara-mock"
+            dockerfile: "./Dockerfile.mock"
+            artifact: "mock-server-fat-jar"
             context: "."
           - name: transcriber
             repo: "dertyp7214/synara-transcriber"
@@ -232,6 +245,12 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           name: proxy-fat-jar
+          path: release-asset/
+
+      - name: Download Mock Server fat JAR
+        uses: actions/download-artifact@v8
+        with:
+          name: mock-server-fat-jar
           path: release-asset/
 
       - name: Create GitHub Release and Upload Assets

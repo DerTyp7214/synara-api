@@ -33,6 +33,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libuuid1 \
     libreadline8 \
     libncursesw6 \
+    flac \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 COPY --from=python-base /usr/local /usr/local
