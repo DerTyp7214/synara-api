@@ -24,7 +24,7 @@ class LyricsSearchTest {
         mockkStatic("dev.dertyp.UtilsKt")
         
         coEvery { 
-            executeCommand(any(), any(), any(), any(), any())
+            executeCommand(any(), any(), any(), any(), any(), any())
         } answers {
             val command = it.invocation.args[0] as List<*>
             val outputPath = command[command.indexOf("-o") + 1] as String

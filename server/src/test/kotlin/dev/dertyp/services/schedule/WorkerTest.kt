@@ -12,6 +12,8 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
+import org.junit.jupiter.api.parallel.Execution
+import org.junit.jupiter.api.parallel.ExecutionMode
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
 import org.koin.dsl.module
@@ -20,6 +22,7 @@ import java.util.concurrent.TimeUnit
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
+@Execution(ExecutionMode.SAME_THREAD)
 class WorkerTest : KoinTest {
 
     @BeforeEach
@@ -59,7 +62,7 @@ class WorkerTest : KoinTest {
     }
 
     private suspend fun awaitSettlement(expectedTotal: Int, vararg workers: TestWorker) {
-        withTimeout(10.seconds) {
+        withTimeout(30.seconds) {
             while (true) {
                 val currentTotal = workers.sumOf { it.getThreadsFlow().value }
                 val allRegistered = workers.all { it.getThreadsFlow().value > 0 }

@@ -17,6 +17,7 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
+import java.util.Collections
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.time.Duration.Companion.milliseconds
 
@@ -48,11 +49,13 @@ fun getISOFromDateTime(date: LocalDateTime): String {
 suspend fun <T> dbQuery(block: suspend () -> T): T =
     suspendTransaction { withContext(Dispatchers.IO) { block() } }
 
-private val processes: MutableList<Process> = mutableListOf()
+private val processes: MutableList<Process> = Collections.synchronizedList(mutableListOf<Process>())
 
 fun killAll() {
-    while (processes.isNotEmpty()) {
-        processes.removeFirst().kill()
+    synchronized(processes) {
+        while (processes.isNotEmpty()) {
+            processes.removeFirst().kill()
+        }
     }
 }
 
@@ -123,7 +126,7 @@ suspend fun executeCommand(
                 }
             }
 
-            val exitCode = process.waitFor()
+            val exitCode = withContext(Dispatchers.IO) { process.waitFor() }
             outputJob.join()
 
             return@coroutineScope ProcessExecutionResult(exitCode, fullOutput.toString(), "")

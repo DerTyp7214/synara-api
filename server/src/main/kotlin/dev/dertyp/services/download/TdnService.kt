@@ -144,6 +144,6 @@ class TdnService(
             cmd.add(1, "-u")
         }
 
-        return executeCommand(cmd, aliveCheck, logger, directory, onLineReceived)
+        return executeCommand(cmd, aliveCheck, logger, directory, onLineReceived = onLineReceived)
     }
 }

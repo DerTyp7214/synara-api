@@ -5,7 +5,6 @@ import io.ktor.util.logging.KtorSimpleLogger
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -53,24 +52,45 @@ abstract class Worker(val name: String) : KoinComponent {
             val outerScope = this
 
             val supervisor = launch {
-                grantedThreads.collectLatest { targetCount ->
+                while (isActive) {
+                    val targetCount = grantedThreads.value
                     for (i in 0 until targetCount) {
                         if (!activeWorkerJobs.containsKey(i)) {
                             activeWorkerJobs[i] = outerScope.launch {
                                 try {
-                                    for (item in itemChannel) {
-                                        if (i >= grantedThreads.value) {
-                                            if (!itemChannel.isClosedForSend) {
-                                                try {
-                                                    itemChannel.send(item)
-                                                } catch (_: Exception) {}
+                                    while (isActive) {
+                                        if (i >= grantedThreads.value) break
+                                        
+                                        val result = itemChannel.tryReceive()
+                                        if (result.isSuccess) {
+                                            val item = result.getOrThrow()
+                                            try {
+                                                block(item)
+                                            } finally {
+                                                onItemProcessed(processedCount.incrementAndGet())
                                             }
+                                        } else if (result.isClosed) {
                                             break
-                                        }
-                                        try {
-                                            block(item)
-                                        } finally {
-                                            onItemProcessed(processedCount.incrementAndGet())
+                                        } else {
+                                            val item = try {
+                                                itemChannel.receive()
+                                            } catch (_: Exception) {
+                                                break
+                                            }
+                                            
+                                            if (i >= grantedThreads.value) {
+                                                val returned = if (!itemChannel.isClosedForSend) {
+                                                    itemChannel.trySend(item).isSuccess
+                                                } else false
+                                                
+                                                if (returned) break
+                                            }
+                                            
+                                            try {
+                                                block(item)
+                                            } finally {
+                                                onItemProcessed(processedCount.incrementAndGet())
+                                            }
                                         }
                                     }
                                 } finally {
@@ -79,11 +99,12 @@ abstract class Worker(val name: String) : KoinComponent {
                             }
                         }
                     }
+                    delay(50.milliseconds)
                 }
             }
 
             while (activeWorkerJobs.isEmpty() && items.any()) {
-                yield()
+                delay(10.milliseconds)
             }
 
             items.forEach { itemChannel.send(it) }
@@ -155,9 +176,12 @@ abstract class Worker(val name: String) : KoinComponent {
                 var remaining = totalMaxSafe
                 val sortedWorkers = activeWorkers.toList().sortedBy { it.second.first }
                 
+                val workerCount = activeWorkers.size
+                val minThreadsPerWorker = if (totalMaxSafe >= workerCount) 1 else 0
+
                 sortedWorkers.forEach { (_, pair) ->
                     val desired = pair.first
-                    val share = floor(totalMaxSafe * (desired.toDouble() / totalDesired)).toInt().coerceAtLeast(1)
+                    val share = floor(totalMaxSafe * (desired.toDouble() / totalDesired)).toInt().coerceAtLeast(minThreadsPerWorker)
                     
                     val granted = share.coerceAtMost(remaining).coerceAtMost(desired)
                     pair.second.value = granted

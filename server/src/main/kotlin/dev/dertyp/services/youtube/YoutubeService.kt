@@ -18,22 +18,11 @@ import dev.dertyp.plugins.setOriginalUrl
 import dev.dertyp.services.LrcLibService
 import dev.dertyp.services.SongService
 import dev.dertyp.services.UserPlaylistService
-import dev.dertyp.services.download.BaseDownloader
-import dev.dertyp.services.download.DownloadBackend
-import dev.dertyp.services.download.DownloadService
-import dev.dertyp.services.download.IdsGroup
-import dev.dertyp.services.download.IdsWrapper
-import dev.dertyp.services.download.ProcessExecutionResult
-import dev.dertyp.services.download.Type
-import dev.dertyp.services.download.UrlDownloadQueueEntry
+import dev.dertyp.services.download.*
 import dev.dertyp.services.metadata.IMetadataService
 import dev.dertyp.services.metadata.MusicBrainzService
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.flow.asFlow
-import kotlinx.coroutines.flow.buffer
-import kotlinx.coroutines.flow.chunked
-import kotlinx.coroutines.flow.emptyFlow
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.*
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -298,7 +287,7 @@ class YoutubeService(
 
         cmd[0] = ytdlpPath
 
-        return executeCommand(cmd, aliveCheck, logger, directory, onLineReceived)
+        return executeCommand(cmd, aliveCheck, logger, directory, onLineReceived = onLineReceived)
     }
 
     override suspend fun downloadContent(
