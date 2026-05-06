@@ -23,17 +23,18 @@ bcrypt = "0.10.2"
 logback = "1.5.32"
 slf4j = "2.0.17"
 jaudiotagger = "3.0.1"
-sqlite = "3.53.0.0"
-caffeine = "3.2.3"
+sqlite = "3.53.1.0"
+caffeine = "3.2.4"
 jmdns = "3.6.3"
 ksp = "2.3.6"
 cron-utils = "9.2.1"
-scrimage = "4.4.4"
+scrimage = "4.5.1"
 koin = "4.2.1"
 buildconfig = "6.0.9"
 symbolProcessingApi = "2.3.7"
 kover = "0.9.8"
 zstd = "1.5.7-8"
+classgraph = "4.8.184"
 junit = "6.0.3"
 mockk = "1.14.9"
 testcontainers = "1.21.4"
@@ -121,6 +122,7 @@ koin-ktor = { module = "io.insert-koin:koin-ktor", version.ref = "koin" }
 koin-logger-slf4j = { module = "io.insert-koin:koin-logger-slf4j", version.ref = "koin" }
 symbol-processing-api = { module = "com.google.devtools.ksp:symbol-processing-api", version.ref = "symbolProcessingApi" }
 zstd-jni = { module = "com.github.luben:zstd-jni", version.ref = "zstd" }
+classgraph = { module = "io.github.classgraph:classgraph", version.ref = "classgraph" }
 
 junit-jupiter-api = { module = "org.junit.jupiter:junit-jupiter-api", version.ref = "junit" }
 junit-jupiter-engine = { module = "org.junit.jupiter:junit-jupiter-engine", version.ref = "junit" }

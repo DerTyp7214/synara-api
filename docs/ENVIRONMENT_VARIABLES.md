@@ -23,6 +23,10 @@ Most variables have sensible defaults and are **optional**. Only variables witho
 | `DB_PASSWORD` | Database password. | No | - | - |
 | `DB_URL` | JDBC connection URL. | No | `jdbc:sqlite:data.db` | - |
 | `DB_USER` | Database username. | No | - | - |
+| `SETUP_FROM_BACKUP` | Path to a backup file to initialize the server from (only if the database is empty). | No | - | - |
+| `SETUP_FROM_MIRROR_PASSWORD` | Password for the remote server mirroring setup. | No | - | - |
+| `SETUP_FROM_MIRROR_URL` | URL of another Synara server to initialize from (only if the database is empty). | No | - | - |
+| `SETUP_FROM_MIRROR_USERNAME` | Username for the remote server mirroring setup. | No | - | - |
 
 ## External Services
 

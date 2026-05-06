@@ -7,10 +7,7 @@ import dev.dertyp.db.UserTable
 import dev.dertyp.dbQuery
 import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.eq
-import org.jetbrains.exposed.v1.jdbc.Query
-import org.jetbrains.exposed.v1.jdbc.batchInsert
-import org.jetbrains.exposed.v1.jdbc.selectAll
-import org.jetbrains.exposed.v1.jdbc.update
+import org.jetbrains.exposed.v1.jdbc.*
 import java.util.UUID
 
 class RpcUserService(
@@ -90,6 +87,17 @@ class UserService : Service() {
             this[UserTable.isAdmin] = false
         }.map(::map)
     }.singleOrNull()
+
+    suspend fun upsertUser(user: User) = dbQuery {
+        UserTable.upsert {
+            it[id] = user.id
+            it[username] = user.username
+            it[passwordHash] = user.passwordHash
+            it[displayName] = user.displayName
+            it[isAdmin] = user.isAdmin
+            it[profileImage] = user.profileImageId
+        }
+    }
 
     suspend fun queryUser(query: Query.() -> Query = { this }): List<User> {
         return dbQuery {

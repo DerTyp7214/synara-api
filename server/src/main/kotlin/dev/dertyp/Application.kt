@@ -7,6 +7,9 @@ import com.google.gson.stream.JsonReader
 import com.google.gson.stream.JsonToken
 import com.google.gson.stream.JsonWriter
 import dev.dertyp.core.logTask
+import dev.dertyp.data.RemoteServerConfig
+import dev.dertyp.db.SongTable
+import dev.dertyp.db.UserTable
 import dev.dertyp.plugins.*
 import dev.dertyp.serializers.ByteArrayISO8859TypeAdapter
 import dev.dertyp.serializers.DurationAdapter
@@ -24,21 +27,24 @@ import io.ktor.server.application.install
 import io.ktor.server.application.log
 import io.ktor.server.netty.EngineMain
 import io.ktor.server.plugins.calllogging.CallLogging
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
-import kotlinx.coroutines.launch
+import org.jetbrains.exposed.v1.jdbc.selectAll
+import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.koin.core.module.dsl.singleOf
 import org.koin.dsl.module
 import org.koin.ktor.ext.get
 import org.koin.ktor.plugin.Koin
 import org.koin.logger.slf4jLogger
 import org.slf4j.bridge.SLF4JBridgeHandler
+import java.io.File
 import java.time.LocalDate
 import java.time.OffsetDateTime
+import kotlin.system.exitProcess
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.days
+import kotlin.time.Duration.Companion.seconds
 
 fun main(args: Array<String>) {
     EngineMain.main(args)
@@ -172,6 +178,64 @@ fun Application.module() {
 
     get<DatabaseManager>().init()
 
+    val backupService = get<BackupService>()
+    val remoteMirrorService = get<RemoteMirrorService>()
+    val setupFromBackup = environment.config.propertyOrNull("setup.fromBackup")?.getString()
+    val setupFromMirrorUrl = environment.config.propertyOrNull("setup.fromMirror.url")?.getString()
+    
+    if (!setupFromBackup.isNullOrBlank() || !setupFromMirrorUrl.isNullOrBlank()) {
+        transaction {
+            val songCount = SongTable.selectAll().count()
+            val userCount = UserTable.selectAll().count()
+            if ((songCount == 0L) && (userCount <= 1L)) {
+                if (!setupFromBackup.isNullOrBlank()) {
+                    log.info("Database is empty. Setting up from backup: $setupFromBackup")
+                    val backupFile = File(setupFromBackup)
+                    if (backupFile.exists()) {
+                        runBlocking {
+                            backupService.loadBackup(backupFile)
+                        }
+                        log.info("Backup restored successfully. Restarting server...")
+                        exitProcess(0)
+                    } else {
+                        log.error("Backup file not found: $setupFromBackup")
+                    }
+                } else if (!setupFromMirrorUrl.isNullOrBlank()) {
+                    val setupFromMirrorUser = environment.config.propertyOrNull("setup.fromMirror.username")?.getString()
+                    val setupFromMirrorPass = environment.config.propertyOrNull("setup.fromMirror.password")?.getString()
+                    
+                    if (setupFromMirrorUser != null && setupFromMirrorPass != null) {
+                        log.info("Database is empty. Setting up from mirror: $setupFromMirrorUrl")
+                        val url = setupFromMirrorUrl.substringAfter("://")
+                        val host = url.substringBefore(":")
+                        val port = url.substringAfter(":", "8080").substringBefore("/").toIntOrNull() ?: 8080
+                        val secure = setupFromMirrorUrl.startsWith("https")
+                        
+                        runBlocking {
+                            remoteMirrorService.startMirror(RemoteServerConfig(
+                                host = host,
+                                port = port,
+                                username = setupFromMirrorUser,
+                                password = setupFromMirrorPass,
+                                secure = secure,
+                                isImport = true,
+                                importUsers = true
+                            ))
+
+                            while (remoteMirrorService.isMirroring) {
+                                delay(1.seconds)
+                            }
+                        }
+                        log.info("Mirror setup completed. Restarting server...")
+                        exitProcess(0)
+                    } else {
+                        log.error("Mirror setup requested but username or password missing")
+                    }
+                }
+            }
+        }
+    }
+
     val logService = get<ScheduledTaskLogService>()
     val customMigrationService = get<CustomMigrationService>()
     CoroutineScope(Dispatchers.IO).launch {
@@ -185,7 +249,6 @@ fun Application.module() {
     val libraryMergeService = get<LibraryMergeService>()
     val artistService = get<ArtistService>()
     val albumService = get<AlbumService>()
-    val backupService = get<BackupService>()
     val userPlaylistBackupService = get<UserPlaylistBackupService>()
     val reverseProxyService = get<ReverseProxyService>()
     val metadataFetchingService = get<MetadataFetchingService>()

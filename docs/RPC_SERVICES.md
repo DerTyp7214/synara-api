@@ -726,6 +726,7 @@ Configuration for connecting and mirroring data from another Synara server.
 | `proxyInstanceId` | `String`? | The identifier of the proxy instance to use. |
 | `targetUserId` | `PlatformUUID`? | The target user ID on the local server for imported user data. |
 | `isImport` | `Boolean` | Whether this mirroring task is considered a one-time import. |
+| `importUsers` | `Boolean` | Whether to import all user accounts from the remote server. |
 
 ### RemoteServerPaths
 Collection of local file system paths for media storage on the server.

@@ -2,19 +2,7 @@ package dev.dertyp.services
 
 import dev.dertyp.PlatformUUID
 import dev.dertyp.core.ApplicationScope
-import dev.dertyp.data.Artist
-import dev.dertyp.data.AuthenticationResponse
-import dev.dertyp.data.InsertableAlbum
-import dev.dertyp.data.MirrorProgress
-import dev.dertyp.data.Playlist
-import dev.dertyp.data.ProxyInstanceInfo
-import dev.dertyp.data.RemoteServerConfig
-import dev.dertyp.data.RemoteServerPaths
-import dev.dertyp.data.ServerStats
-import dev.dertyp.data.Song
-import dev.dertyp.data.SyncBreakdown
-import dev.dertyp.data.User
-import dev.dertyp.data.UserPlaylist
+import dev.dertyp.data.*
 import dev.dertyp.randomPlatformUUID
 import dev.dertyp.rpc.BaseRpcServiceManager
 import io.ktor.client.HttpClient
@@ -27,30 +15,10 @@ import io.ktor.client.plugins.websocket.WebSockets
 import io.ktor.client.plugins.websocket.pingInterval
 import io.ktor.client.request.get
 import io.ktor.serialization.kotlinx.json.json
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asFlow
-import kotlinx.coroutines.flow.buffer
-import kotlinx.coroutines.flow.chunked
-import kotlinx.coroutines.flow.collect
-import kotlinx.coroutines.flow.emptyFlow
-import kotlinx.coroutines.flow.filter
-import kotlinx.coroutines.flow.filterNotNull
-import kotlinx.coroutines.flow.flatMapConcat
-import kotlinx.coroutines.flow.flatMapMerge
-import kotlinx.coroutines.flow.flattenMerge
-import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.toList
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.withContext
-import kotlinx.coroutines.yield
 import kotlinx.rpc.krpc.ktor.client.Krpc
 import kotlinx.rpc.krpc.serialization.cbor.cbor
 import kotlinx.serialization.ExperimentalSerializationApi
@@ -131,6 +99,7 @@ class RemoteMirrorService : Service() {
     private val storageService by inject<StorageService>()
     private val playlistService by inject<PlaylistService>()
     private val userPlaylistService by inject<UserPlaylistService>()
+    private val userService by inject<UserService>()
 
     @OptIn(ExperimentalSerializationApi::class)
     private val httpClient = HttpClient(CIO) {
@@ -170,7 +139,7 @@ class RemoteMirrorService : Service() {
     }
 
     private val _activeProgress = MutableStateFlow<MirrorProgress?>(null)
-    private var isMirroring = false
+    var isMirroring = false
     private var mirrorJob: Job? = null
 
     suspend fun getRemoteStats(config: RemoteServerConfig): ServerStats {
@@ -266,6 +235,7 @@ class RemoteMirrorService : Service() {
         if (session.isFiltered) analyzeSelection(session)
         else session.updateProgress("Initializing", 0, 0, newStatus = "Starting full library synchronization...")
 
+        if (config.importUsers) syncUsers(session)
         syncImages(session, remoteStats)
         syncArtists(session, remoteStats)
         syncArtistAliases(session)
@@ -583,6 +553,22 @@ class RemoteMirrorService : Service() {
             session.updateProgress("Mirroring Playlists", count, total, playlist.name)
         }
         logger.info("Completed mirroring playlists. New: ${session.syncedPlaylists}, Existing: ${session.existingPlaylists}")
+    }
+
+    private suspend fun syncUsers(session: MirrorSession) {
+        logger.info("Stage: Syncing users...")
+        session.updateProgress("Syncing Users", 0, 0, newStatus = "Mirroring user accounts...")
+        var count = 0
+        session.mirrorService.getUsers().collect { user ->
+            try {
+                userService.upsertUser(user)
+                count++
+            } catch (e: Exception) {
+                session.recordError("User ${user.username}", e)
+            }
+        }
+        logger.info("Completed mirroring $count user accounts")
+        session.updateProgress("Syncing Users", count, count, item = "Completed mirroring $count user accounts")
     }
 
     private suspend fun syncUserPlaylists(session: MirrorSession) {

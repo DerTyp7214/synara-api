@@ -1,31 +1,31 @@
 package dev.dertyp.services
 
 import com.github.luben.zstd.ZstdInputStream
+import dev.dertyp.DbDialect
+import dev.dertyp.TestDatabase
+import dev.dertyp.db.*
 import dev.dertyp.plugins.IDownloader
 import dev.dertyp.plugins.PluginManager
 import dev.dertyp.services.download.DownloadBackend
 import io.ktor.server.application.ApplicationEnvironment
 import io.ktor.server.config.MapApplicationConfig
-import io.mockk.Runs
-import io.mockk.coEvery
-import io.mockk.coVerify
-import io.mockk.every
-import io.mockk.just
-import io.mockk.mockk
+import io.mockk.*
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.cbor.Cbor
 import kotlinx.serialization.decodeFromByteArray
-import org.junit.jupiter.api.Assertions.assertArrayEquals
-import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertFalse
-import org.junit.jupiter.api.Assertions.assertNotNull
-import org.junit.jupiter.api.Assertions.assertTrue
-import org.junit.jupiter.api.BeforeEach
-import org.junit.jupiter.api.Test
+import org.jetbrains.exposed.v1.jdbc.Database
+import org.jetbrains.exposed.v1.jdbc.SchemaUtils
+import org.jetbrains.exposed.v1.jdbc.insert
+import org.jetbrains.exposed.v1.jdbc.transactions.transaction
+import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.Assertions.*
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.EnumSource
 import java.io.ByteArrayInputStream
 import java.io.File
 import java.nio.file.Files
+import java.util.UUID
 import java.util.zip.ZipFile
 
 class BackupServiceTest {
@@ -39,9 +39,14 @@ class BackupServiceTest {
     private lateinit var tracksDir: File
     private lateinit var downloaderTracksDir: File
     private lateinit var blobsDir: File
+    private lateinit var database: Database
 
-    @BeforeEach
-    fun setup() {
+    fun setup(dialect: DbDialect) {
+        database = TestDatabase.connect(dialect, "backup_test")
+        transaction(database) {
+            SchemaUtils.create(SongTable, FlacInfoTable, SongMusicBrainzTable, MBRecordingTable, AlbumTable, ImageTable)
+        }
+
         tempDir = Files.createTempDirectory("backup_test_root").toFile()
         backupDir = tempDir.resolve("backups")
         imagesDir = tempDir.resolve("images")
@@ -74,9 +79,16 @@ class BackupServiceTest {
         every { storageService.forDownloader(DownloadBackend("tiddl")) } returns downloaderStorage
     }
 
+    @AfterEach
+    fun tearDown() {
+        TestDatabase.cleanUp()
+    }
+
     @OptIn(ExperimentalSerializationApi::class)
-    @Test
-    fun `createBackup should create a zip file with expected entries and blobs`() = runBlocking {
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `createBackup should create a zip file with expected entries and blobs`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
         val service = BackupService(dbManagementService, storageService, pluginManager, environment)
         val dummyDbData = byteArrayOf(1, 2, 3)
         coEvery { dbManagementService.exportData() } returns dummyDbData
@@ -90,6 +102,43 @@ class BackupServiceTest {
 
         val downloaderFile = downloaderTracksDir.resolve("song.mp3")
         downloaderFile.writeText("test content")
+
+        val songId = UUID.randomUUID()
+        val mbId = UUID.randomUUID()
+        transaction(database) {
+            val albumId = UUID.randomUUID()
+            AlbumTable.insert {
+                it[id] = albumId
+                it[name] = "Album"
+            }
+            SongTable.insert {
+                it[id] = songId
+                it[title] = "Song"
+                it[filePath] = downloaderFile.absolutePath
+                it[this.albumId] = albumId
+            }
+            FlacInfoTable.insert {
+                it[this.songId] = songId
+                it[audioMd5] = "test-hash"
+                it[sampleRate] = 44100
+                it[bitDepth] = 16
+                it[channels] = 2
+                it[duration] = 180.0
+                it[fileSize] = 1024
+                it[bitrateAvg] = 1411
+                it[seekpointCount] = 0
+                it[seekIntervalMax] = 0.0
+                it[paddingBytes] = 0
+            }
+            MBRecordingTable.insert {
+                it[id] = mbId
+                it[title] = "Song"
+            }
+            SongMusicBrainzTable.insert {
+                it[this.songId] = songId
+                it[musicBrainzId] = mbId
+            }
+        }
 
         val result = service.createBackup()
         
@@ -111,7 +160,10 @@ class BackupServiceTest {
                 assertTrue(tree.containsKey("tiddl/tracks"), "Tree should contain downloader tracks")
                 val downloaderNode = tree["tiddl/tracks"]
                 assertNotNull(downloaderNode)
-                assertTrue(downloaderNode!!.children?.any { it.name == "song.mp3" } == true)
+                val songNode = downloaderNode!!.children?.find { it.name == "song.mp3" }
+                assertNotNull(songNode)
+                assertEquals("test-hash", songNode?.hash)
+                assertEquals(mbId.toString(), songNode?.mbid)
             }
         }
 
@@ -119,8 +171,10 @@ class BackupServiceTest {
         assertTrue(blobPath.exists(), "Blob file should exist at $blobPath")
     }
 
-    @Test
-    fun `loadBackup should restore database and images`() = runBlocking {
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `loadBackup should restore database and images`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
         val service = BackupService(dbManagementService, storageService, pluginManager, environment)
         val dummyDbData = byteArrayOf(1, 2, 3)
         coEvery { dbManagementService.exportData() } returns dummyDbData
@@ -146,8 +200,40 @@ class BackupServiceTest {
         assertArrayEquals(imgData, imgFile.readBytes())
     }
 
-    @Test
-    fun `rotateBackups should delete old backups and unreferenced blobs`() = runBlocking {
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `loadBackup should restore database and images from File`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val service = BackupService(dbManagementService, storageService, pluginManager, environment)
+        val dummyDbData = byteArrayOf(1, 2, 3)
+        coEvery { dbManagementService.exportData() } returns dummyDbData
+        coEvery { dbManagementService.importData(any()) } just Runs
+
+        val imgSubPath = "ab/cd/ef/12"
+        val imgFileDir = imagesDir.resolve(imgSubPath)
+        imgFileDir.mkdirs()
+        val imgFile = imgFileDir.resolve("34567890.jpg")
+        val imgData = byteArrayOf(10, 11, 12)
+        imgFile.writeBytes(imgData)
+
+        val backupResult = service.createBackup()
+        val backupFile = backupDir.resolve(backupResult.fileName)
+
+        imagesDir.deleteRecursively()
+        imagesDir.mkdirs()
+        assertFalse(imgFile.exists())
+
+        service.loadBackup(backupFile)
+
+        coVerify { dbManagementService.importData(any()) }
+        assertTrue(imgFile.exists(), "Image file should have been restored")
+        assertArrayEquals(imgData, imgFile.readBytes())
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `rotateBackups should delete old backups and unreferenced blobs`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
         val service = BackupService(dbManagementService, storageService, pluginManager, environment)
         coEvery { dbManagementService.exportData() } returns byteArrayOf(0)
 

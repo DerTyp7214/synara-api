@@ -764,6 +764,7 @@ class ArtistService : ArtistLibrary, Service() {
         referencedArtists.addAll(SongArtistTable.selectAll().map { it[SongArtistTable.artistId].value })
         referencedArtists.addAll(AlbumArtistTable.selectAll().map { it[AlbumArtistTable.artistId].value })
         referencedArtists.addAll(ArtistMemberTable.selectAll().map { it[ArtistMemberTable.groupId].value })
+        referencedArtists.addAll(ArtistMemberTable.selectAll().map { it[ArtistMemberTable.artistId].value })
 
         val allArtists = ArtistTable.selectAll().map { it[ArtistTable.id].value }
 

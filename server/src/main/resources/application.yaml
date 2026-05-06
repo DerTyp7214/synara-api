@@ -9,6 +9,12 @@ client:
   secret: ${CLIENT_SECRET:}
 backup:
   dir: ${BACKUP_DIR:}
+setup:
+  fromBackup: ${SETUP_FROM_BACKUP:}
+  fromMirror:
+    url: ${SETUP_FROM_MIRROR_URL:}
+    username: ${SETUP_FROM_MIRROR_USERNAME:}
+    password: ${SETUP_FROM_MIRROR_PASSWORD:}
 redis:
   host: ${REDIS_HOST:}
   port: ${REDIS_PORT:}

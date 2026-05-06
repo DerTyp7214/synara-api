@@ -2,10 +2,11 @@ package dev.dertyp.services
 
 import com.github.luben.zstd.ZstdInputStream
 import com.github.luben.zstd.ZstdOutputStream
-import dev.dertyp.db.*
+import io.github.classgraph.ClassGraph
 import kotlinx.serialization.*
 import kotlinx.serialization.cbor.Cbor
 import org.jetbrains.exposed.v1.core.Column
+import org.jetbrains.exposed.v1.core.Table
 import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import org.jetbrains.exposed.v1.jdbc.deleteAll
 import org.jetbrains.exposed.v1.jdbc.insert
@@ -50,33 +51,27 @@ data class TableData(
 )
 
 class DbManagementService : IDbManagementService {
-    private val tables = listOf(
-        UserTable,
-        SongTable,
-        AlbumTable,
-        ImageTable,
-        ArtistTable,
-        FavSyncTable,
-        SessionTable,
-        PlaylistTable,
-        UserSongTable,
-        SongArtistTable,
-        AlbumArtistTable,
-        ArtistAliasTable,
-        SyncServiceTable,
-        PlaylistSongTable,
-        RefreshTokenTable,
-        UserPlaylistTable,
-        TranscodedSongTable,
-        UserPlaylistSongTable,
-        ArtistMusicBrainzTable,
-        AlbumMusicBrainzTable,
-        SongMusicBrainzTable,
-        ArtistSplitAliasTable,
-        ScheduledTaskLogTable,
-        FollowedArtistTable,
-        RecentReleaseTable
-    )
+    private val tables: List<Table> by lazy {
+        ClassGraph()
+            .enableClassInfo()
+            .acceptPackages("dev.dertyp.db")
+            .scan()
+            .use { scanResult ->
+                scanResult.getSubclasses(Table::class.java.name)
+                    .loadClasses(Table::class.java)
+                    .asSequence()
+                    .mapNotNull {
+                        try {
+                            it.kotlin.objectInstance
+                        } catch (_: Exception) {
+                            null
+                        }
+                    }
+                    .distinct()
+                    .sortedBy { it.tableName }
+                    .toList()
+            }
+    }
 
     @OptIn(ExperimentalSerializationApi::class)
     override suspend fun exportData(): ByteArray {

@@ -723,6 +723,51 @@ class ArtistServiceTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
+    fun `deleteUnreferencedArtists should not remove artists that are group members`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val testGroupId = UUID.randomUUID()
+        val testMemberId = UUID.randomUUID()
+        
+        transaction(database) {
+            ArtistTable.insert {
+                it[id] = testGroupId
+                it[name] = "The Group"
+                it[isGroup] = true
+            }
+            ArtistTable.insert {
+                it[id] = testMemberId
+                it[name] = "The Member"
+            }
+            ArtistMemberTable.insert {
+                it[artistId] = testMemberId
+                it[groupId] = testGroupId
+            }
+
+            val songId = UUID.randomUUID()
+            SongTable.insert {
+                it[id] = songId
+                it[title] = "Song"
+                it[albumId] = UUID.randomUUID().also { albumId ->
+                    AlbumTable.insert { album -> album[id] = albumId; album[name] = "Album" }
+                }
+            }
+            SongArtistTable.insert {
+                it[SongArtistTable.songId] = songId
+                it[SongArtistTable.artistId] = testGroupId
+            }
+        }
+
+        val deletedCount = service.deleteUnreferencedArtists()
+        assertEquals(0, deletedCount)
+        
+        val artists = service.allArtists(0, 10).data
+        assertEquals(2, artists.size)
+        assertTrue(artists.any { it.name == "The Group" })
+        assertTrue(artists.any { it.name == "The Member" })
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
     fun `byId should return artist with genres`(dialect: DbDialect) = runBlocking {
         setup(dialect)
         val id = UUID.randomUUID()

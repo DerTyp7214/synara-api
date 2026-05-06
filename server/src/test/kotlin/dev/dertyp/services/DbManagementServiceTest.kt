@@ -2,9 +2,11 @@ package dev.dertyp.services
 
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
-import dev.dertyp.db.*
+import dev.dertyp.db.ArtistTable
+import dev.dertyp.db.UserTable
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
+import org.jetbrains.exposed.v1.core.Table
 import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.insert
@@ -12,6 +14,7 @@ import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.EnumSource
 import org.koin.core.context.startKoin
@@ -24,33 +27,12 @@ class DbManagementServiceTest : KoinTest {
     private lateinit var database: Database
     private lateinit var service: DbManagementService
 
-    private val allTables = arrayOf(
-        UserTable,
-        SongTable,
-        AlbumTable,
-        ImageTable,
-        ArtistTable,
-        FavSyncTable,
-        SessionTable,
-        PlaylistTable,
-        UserSongTable,
-        SongArtistTable,
-        AlbumArtistTable,
-        ArtistAliasTable,
-        SyncServiceTable,
-        PlaylistSongTable,
-        RefreshTokenTable,
-        UserPlaylistTable,
-        TranscodedSongTable,
-        UserPlaylistSongTable,
-        ArtistMusicBrainzTable,
-        AlbumMusicBrainzTable,
-        SongMusicBrainzTable,
-        ArtistSplitAliasTable,
-        ScheduledTaskLogTable,
-        FollowedArtistTable,
-        RecentReleaseTable
-    )
+    private fun getDiscoveredTables(service: DbManagementService): List<Table> {
+        val method = service.javaClass.getDeclaredMethod("getTables")
+        method.isAccessible = true
+        @Suppress("UNCHECKED_CAST")
+        return method.invoke(service) as List<Table>
+    }
 
     fun setup(dialect: DbDialect) {
         startKoin {
@@ -60,10 +42,12 @@ class DbManagementServiceTest : KoinTest {
         }
 
         database = TestDatabase.connect(dialect, "db_mgmt_test")
-        transaction(database) {
-            SchemaUtils.create(*allTables)
-        }
         service = DbManagementService()
+        val tables = getDiscoveredTables(service).toTypedArray()
+        
+        transaction(database) {
+            SchemaUtils.create(*tables)
+        }
     }
 
     @AfterEach
@@ -93,10 +77,11 @@ class DbManagementServiceTest : KoinTest {
         }
 
         val exportedData = service.exportData()
+        val tables = getDiscoveredTables(service).toTypedArray()
 
         transaction(database) {
-            SchemaUtils.drop(*allTables)
-            SchemaUtils.create(*allTables)
+            SchemaUtils.drop(*tables)
+            SchemaUtils.create(*tables)
         }
         
         transaction(database) {
@@ -117,5 +102,17 @@ class DbManagementServiceTest : KoinTest {
             assertEquals("Test Artist", artists[0][ArtistTable.name])
             assertEquals(artistId, artists[0][ArtistTable.id].value)
         }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `should automatically discover tables`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val discoveredTables = getDiscoveredTables(service)
+        
+        assertTrue(discoveredTables.size > 30)
+        assertTrue(discoveredTables.any { it.tableName == "user" })
+        assertTrue(discoveredTables.any { it.tableName == "song" })
+        assertTrue(discoveredTables.any { it.tableName == "mb_artist" })
     }
 }

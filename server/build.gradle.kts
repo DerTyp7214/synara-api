@@ -108,6 +108,7 @@ dependencies {
     implementation(libs.koin.ktor)
     implementation(libs.koin.logger.slf4j)
     implementation(libs.zstd.jni)
+    implementation(libs.classgraph)
     implementation(libs.kotlinx.serialization.cbor)
 
     implementation(project(":common-rpc"))

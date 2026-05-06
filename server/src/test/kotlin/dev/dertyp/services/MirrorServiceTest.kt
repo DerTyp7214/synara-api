@@ -81,14 +81,14 @@ class MirrorServiceTest : KoinTest {
     }
 
     @Test
-    fun `getUsers should return users without password hashes`() = runBlocking {
+    fun `getUsers should return users with password hashes`() = runBlocking {
         val user = User(UUID.randomUUID(), "test", passwordHash = "secret")
         coEvery { userService.queryUser(any()) } returns listOf(user)
 
         val users = service.getUsers().toList()
         assertEquals(1, users.size)
         assertEquals("test", users[0].username)
-        assertEquals("", users[0].passwordHash)
+        assertEquals("secret", users[0].passwordHash)
     }
 
     @Test

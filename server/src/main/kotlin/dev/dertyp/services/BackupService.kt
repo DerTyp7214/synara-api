@@ -3,6 +3,9 @@ package dev.dertyp.services
 import com.github.luben.zstd.ZstdInputStream
 import com.github.luben.zstd.ZstdOutputStream
 import dev.dertyp.data.User
+import dev.dertyp.db.FlacInfoTable
+import dev.dertyp.db.SongMusicBrainzTable
+import dev.dertyp.db.SongTable
 import dev.dertyp.plugins.PluginManager
 import dev.dertyp.services.download.DownloadBackend
 import io.ktor.server.application.ApplicationEnvironment
@@ -13,6 +16,9 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.cbor.Cbor
 import kotlinx.serialization.decodeFromByteArray
 import kotlinx.serialization.encodeToByteArray
+import org.jetbrains.exposed.v1.core.leftJoin
+import org.jetbrains.exposed.v1.jdbc.selectAll
+import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -24,6 +30,7 @@ import java.time.format.DateTimeFormatter
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
+import kotlin.io.path.absolutePathString
 import kotlin.io.path.name
 
 @Serializable
@@ -40,6 +47,8 @@ data class FileNode(
     val name: String,
     val type: FileType,
     val size: Long,
+    val hash: String? = null,
+    val mbid: String? = null,
     val children: List<FileNode>? = null
 )
 
@@ -139,7 +148,10 @@ class BackupService(
         
         val dbData = dbManagementService.exportData()
         logger.info("Database exported")
-        onProgress(20.0, "Database exported")
+        onProgress(10.0, "Database exported")
+
+        onProgress(15.0, "Fetching song metadata...")
+        val metadataMap = fetchSongMetadata()
 
         val allAudioPaths = getAllAudioPaths()
         val totalPaths = allAudioPaths.size
@@ -148,7 +160,7 @@ class BackupService(
             currentPathIndex++
             logger.debug("Generating file tree for {} ({})", name, path)
             onProgress(20.0 + (currentPathIndex.toDouble() / totalPaths) * 20.0, "Generating file tree for $name")
-            generateFileTree(path)
+            generateFileTree(path, metadataMap)
         }
         val fileTreeBytes = compressZstd(Cbor.encodeToByteArray(fileTrees))
         logger.debug("File tree compressed")
@@ -198,23 +210,45 @@ class BackupService(
         )
     }
 
-    private fun generateFileTree(path: Path): FileNode? {
+    private fun generateFileTree(path: Path, metadataMap: Map<String, Pair<String?, String?>>): FileNode? {
         if (!Files.exists(path)) return null
 
         val children = if (Files.isDirectory(path)) {
             val entries = Files.list(path).use { it.toList() }
-            entries.mapNotNull { generateFileTree(it) }
+            entries.mapNotNull { generateFileTree(it, metadataMap) }
                 .sortedBy { it.name }
         } else {
             null
         }
 
+        val metadata = if (!Files.isDirectory(path)) metadataMap[path.absolutePathString()] else null
+
         return FileNode(
             name = path.name,
             type = if (Files.isDirectory(path)) FileType.DIRECTORY else FileType.FILE,
             size = if (Files.isDirectory(path)) 0 else Files.size(path),
+            hash = metadata?.first,
+            mbid = metadata?.second,
             children = children
         )
+    }
+
+    private fun fetchSongMetadata(): Map<String, Pair<String?, String?>> = transaction {
+        val result = mutableMapOf<String, Pair<String?, String?>>()
+        
+        val songMetadata = SongTable
+            .leftJoin(FlacInfoTable, onColumn = { SongTable.id }, otherColumn = { FlacInfoTable.songId })
+            .leftJoin(SongMusicBrainzTable, onColumn = { SongTable.id }, otherColumn = { SongMusicBrainzTable.songId })
+            .selectAll()
+            .map { row ->
+                val filePath = row[SongTable.filePath]
+                val hash = row.getOrNull(FlacInfoTable.audioMd5)
+                val mbid = row.getOrNull(SongMusicBrainzTable.musicBrainzId)?.value?.toString()
+                filePath to (hash to mbid)
+            }
+        
+        result.putAll(songMetadata)
+        result
     }
 
     private fun getBlobPath(hash: String): File {
@@ -279,12 +313,16 @@ class BackupService(
     }
 
     override suspend fun loadBackup(fileName: String) {
-        logger.info("Loading backup: $fileName")
+        val backupFile = backupDir.resolve(fileName)
+        loadBackup(backupFile)
+    }
+
+    suspend fun loadBackup(backupFile: File) {
+        logger.info("Loading backup: ${backupFile.absolutePath}")
         withContext(Dispatchers.IO) {
-            val backupFile = backupDir.resolve(fileName)
             if (!backupFile.exists()) {
-                logger.error("Backup file not found: $fileName")
-                throw IllegalArgumentException("Backup file not found: $fileName")
+                logger.error("Backup file not found: ${backupFile.absolutePath}")
+                throw IllegalArgumentException("Backup file not found: ${backupFile.absolutePath}")
             }
 
             ZipInputStream(backupFile.inputStream()).use { zip ->
@@ -292,14 +330,14 @@ class BackupService(
                 while (entry != null) {
                     when (entry.name) {
                         "database.cbor.zst" -> {
-                            logger.info("Restoring database from $fileName")
+                            logger.info("Restoring database from ${backupFile.name}")
                             val dbData = zip.readBytes()
                             dbManagementService.importData(dbData)
                         }
 
                         "images.index.cbor.zst" -> {
                             if (imagePath != null) {
-                                logger.info("Restoring images from $fileName")
+                                logger.info("Restoring images from ${backupFile.name}")
                                 val indexCborBytes = decompressZstd(zip.readBytes())
                                 val index = Cbor.decodeFromByteArray<List<ImageEntry>>(indexCborBytes)
                                 restoreImages(index)
@@ -309,7 +347,7 @@ class BackupService(
                     entry = zip.nextEntry
                 }
             }
-            logger.info("Backup loaded successfully: $fileName")
+            logger.info("Backup loaded successfully: ${backupFile.absolutePath}")
         }
     }
 
