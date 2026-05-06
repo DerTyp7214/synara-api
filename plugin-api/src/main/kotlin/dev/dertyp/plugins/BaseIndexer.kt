@@ -2,20 +2,9 @@ package dev.dertyp.plugins
 
 import dev.dertyp.PlatformUUID
 import dev.dertyp.core.sha256
-import dev.dertyp.data.InsertableAlbum
-import dev.dertyp.data.InsertableImage
-import dev.dertyp.data.InsertablePlaylist
-import dev.dertyp.data.InsertableSong
-import dev.dertyp.data.Song
-import dev.dertyp.data.SongAudioData
+import dev.dertyp.data.*
 import dev.dertyp.services.metadata.IMetadataService
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Deferred
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
@@ -32,14 +21,7 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.logging.Level
 import kotlin.concurrent.atomics.AtomicBoolean
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
-import kotlin.io.path.absolutePathString
-import kotlin.io.path.extension
-import kotlin.io.path.isDirectory
-import kotlin.io.path.isSymbolicLink
-import kotlin.io.path.listDirectoryEntries
-import kotlin.io.path.name
-import kotlin.io.path.nameWithoutExtension
-import kotlin.io.path.readText
+import kotlin.io.path.*
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.DurationUnit
@@ -319,7 +301,10 @@ abstract class BaseIndexer(
         val tag = audioFile.tag
         val header = audioFile.audioHeader
 
-        val title = audioFile.title ?: ""
+        val rawTitle = audioFile.title ?: ""
+        val titleCleaned = rawTitle.replace("\uD83C\uDD74", "").trim()
+        val isExplicitByEmoji = rawTitle.contains("\uD83C\uDD74")
+
         val artists = audioFile.getArtists(artistDelimiter)
         val copyright = tag.getAll(FieldKey.COPYRIGHT)
         val trackNumber = tag.getFirst(FieldKey.TRACK).toIntOrNull() ?: 1
@@ -345,12 +330,32 @@ abstract class BaseIndexer(
             null
         }
 
+        val isExplicit = audioFile.file.nameWithoutExtension.endsWith("(Explicit)") || isExplicitByEmoji || audioFile.isExplicit
+
+        var needsCommit = false
+        if (isExplicit && !audioFile.isExplicit) {
+            audioFile.setExplicit(true)
+            needsCommit = true
+        }
+        if (isExplicitByEmoji && rawTitle != titleCleaned) {
+            tag.setField(FieldKey.TITLE, titleCleaned)
+            needsCommit = true
+        }
+
+        if (needsCommit) {
+            try {
+                audioFile.commit()
+            } catch (e: Exception) {
+                context.logger.error("Failed to update tags for ${audioFile.file.absolutePath}: ${e.message}")
+            }
+        }
+
         return InsertableSong(
-            title = title,
+            title = titleCleaned,
             artists = artists,
             album = album,
             duration = duration,
-            explicit = audioFile.file.nameWithoutExtension.endsWith("(Explicit)") || title.endsWith("\uD83C\uDD74"),
+            explicit = isExplicit,
             releaseDate = releaseDate ?: album.releaseDate,
             lyrics = lyrics,
             path = audioFile.file.absolutePath,

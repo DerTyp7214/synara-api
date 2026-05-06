@@ -2,31 +2,14 @@ package dev.dertyp.services
 
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
-import dev.dertyp.db.AlbumArtistTable
-import dev.dertyp.db.AlbumMusicBrainzTable
-import dev.dertyp.db.AlbumTable
-import dev.dertyp.db.ArtistTable
-import dev.dertyp.db.ImageTable
-import dev.dertyp.db.PlaylistSongTable
-import dev.dertyp.db.PlaylistTable
-import dev.dertyp.db.SongArtistTable
-import dev.dertyp.db.SongMusicBrainzTable
-import dev.dertyp.db.SongTable
-import dev.dertyp.db.TranscodedSongTable
-import dev.dertyp.db.UserPlaylistSongTable
-import dev.dertyp.db.UserPlaylistTable
-import dev.dertyp.db.UserSongTable
-import dev.dertyp.db.UserTable
+import dev.dertyp.db.*
 import dev.dertyp.plugins.PluginManager
 import dev.dertyp.services.metadata.MetadataService
 import dev.dertyp.services.metadata.TidalService
 import io.ktor.server.application.ApplicationEnvironment
-import io.mockk.coEvery
-import io.mockk.coVerify
-import io.mockk.every
-import io.mockk.mockk
-import io.mockk.mockkObject
+import io.mockk.*
 import kotlinx.coroutines.runBlocking
+import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.insert
@@ -77,7 +60,7 @@ class LibraryMergeServiceTest : KoinTest {
                 TranscodedSongTable, UserSongTable
             )
         }
-        service = LibraryMergeService(environment)
+        service = LibraryMergeService()
     }
 
     @AfterEach
@@ -141,6 +124,7 @@ class LibraryMergeServiceTest : KoinTest {
                 it[trackNumber] = 1
                 it[fileSize] = 100L
                 it[inserted] = 1000L
+                it[filePath] = "/path/1"
             }
             SongTable.insert {
                 it[title] = "Same Album"
@@ -148,6 +132,7 @@ class LibraryMergeServiceTest : KoinTest {
                 it[trackNumber] = 1
                 it[fileSize] = 200L
                 it[inserted] = 2000L
+                it[filePath] = "/path/2"
             }
         }
 
@@ -272,6 +257,53 @@ class LibraryMergeServiceTest : KoinTest {
         transaction(database) {
             assertEquals(1, AlbumTable.selectAll().count())
             assertEquals(1, AlbumArtistTable.selectAll().count())
+        }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `mergeDuplicates should handle emoji title variations and path-based duplicates`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val albumId = UUID.randomUUID()
+        val artistId = UUID.randomUUID()
+        val path = "/music/song.flac"
+
+        transaction(database) {
+            ArtistTable.insert {
+                it[id] = artistId
+                it[name] = "Artist"
+            }
+            AlbumTable.insert {
+                it[id] = albumId
+                it[name] = "Album"
+            }
+
+            SongTable.insert {
+                it[id] = UUID.randomUUID()
+                it[title] = "Song Title \uD83C\uDD74"
+                it[SongTable.albumId] = albumId
+                it[filePath] = path
+                it[explicit] = false
+                it[inserted] = 1000
+            }
+            
+            SongTable.insert {
+                it[id] = UUID.randomUUID()
+                it[title] = "Song Title"
+                it[SongTable.albumId] = albumId
+                it[filePath] = path
+                it[explicit] = true
+                it[inserted] = 2000
+            }
+        }
+
+        service.mergeDuplicates()
+
+        transaction(database) {
+            val songs = SongTable.selectAll().where { SongTable.filePath eq path }.toList()
+            assertEquals(1, songs.size, "Should have merged duplicates with same path")
+            assertEquals("Song Title", songs[0][SongTable.title])
+            assertEquals(true, songs[0][SongTable.explicit], "Should have propagated explicit flag")
         }
     }
 

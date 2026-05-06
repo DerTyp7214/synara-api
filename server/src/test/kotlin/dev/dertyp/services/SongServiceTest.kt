@@ -685,6 +685,57 @@ class SongServiceTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
+    fun `createBatch should update dirty songs by path`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val albumId = UUID.randomUUID()
+        val artistId = UUID.randomUUID()
+        val songId = UUID.randomUUID()
+        val path = "/path/to/song.flac"
+
+        transaction(database) {
+            ArtistTable.insert {
+                it[id] = artistId
+                it[name] = "Artist"
+            }
+            AlbumTable.insert {
+                it[id] = albumId
+                it[name] = "Album"
+            }
+            SongTable.insert {
+                it[id] = songId
+                it[title] = "Dirty Title \uD83C\uDD74"
+                it[SongTable.albumId] = albumId
+                it[filePath] = path
+                it[explicit] = false
+            }
+            SongArtistTable.insert {
+                it[SongArtistTable.songId] = songId
+                it[SongArtistTable.artistId] = artistId
+            }
+        }
+
+        val album = InsertableAlbum("Album", listOf("Artist"))
+        val songs = listOf(
+            InsertableSong(
+                title = "Clean Title",
+                artists = listOf("Artist"),
+                album = album,
+                duration = 100,
+                explicit = true,
+                path = path
+            )
+        )
+
+        val result = songService.createBatch(songs)
+        assertTrue(result.isEmpty(), "Should not create new song")
+
+        val fromDb = songService.byId(songId)
+        assertEquals("Clean Title", fromDb?.title)
+        assertEquals(true, fromDb?.explicit)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
     fun `allSongIds should filter by tags`(dialect: DbDialect) = runBlocking {
         setup(dialect)
         val albumId = UUID.randomUUID()

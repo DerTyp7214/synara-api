@@ -1,29 +1,9 @@
 package dev.dertyp.services
 
-import dev.dertyp.db.AlbumArtistTable
-import dev.dertyp.db.AlbumMusicBrainzTable
-import dev.dertyp.db.AlbumTable
-import dev.dertyp.db.ArtistTable
-import dev.dertyp.db.ImageTable
-import dev.dertyp.db.PlaylistSongTable
-import dev.dertyp.db.PlaylistTable
-import dev.dertyp.db.SongArtistTable
-import dev.dertyp.db.SongMusicBrainzTable
-import dev.dertyp.db.SongTable
-import dev.dertyp.db.TranscodedSongTable
-import dev.dertyp.db.UserPlaylistSongTable
-import dev.dertyp.db.UserPlaylistTable
-import dev.dertyp.db.UserSongTable
-import dev.dertyp.db.UserTable
+import dev.dertyp.db.*
 import dev.dertyp.dbQuery
 import dev.dertyp.plugins.PluginManager
-import io.ktor.server.application.ApplicationEnvironment
-import org.jetbrains.exposed.v1.core.ResultRow
-import org.jetbrains.exposed.v1.core.SortOrder
-import org.jetbrains.exposed.v1.core.and
-import org.jetbrains.exposed.v1.core.count
-import org.jetbrains.exposed.v1.core.eq
-import org.jetbrains.exposed.v1.core.greater
+import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.jdbc.selectAll
@@ -32,9 +12,7 @@ import org.koin.core.component.get
 import org.koin.core.component.inject
 import java.util.UUID
 
-class LibraryMergeService(
-    private val environment: ApplicationEnvironment
-) : Service() {
+class LibraryMergeService : Service() {
     private val pluginManager by inject<PluginManager>()
 
     suspend fun mergeDuplicates(onProgress: suspend (Double, String) -> Unit = { _, _ -> }): Map<String, Any?> = dbQuery {
@@ -63,7 +41,7 @@ class LibraryMergeService(
     fun mergeDuplicateSongs(): Int {
         logger.info("Starting duplicate song merge check")
 
-        val duplicates = SongTable
+        val perfectDuplicates = SongTable
             .select(
                 SongTable.title,
                 SongTable.albumId,
@@ -85,17 +63,10 @@ class LibraryMergeService(
             .having { SongTable.id.count() greater 1L }
             .toList()
 
-        if (duplicates.isEmpty()) {
-            logger.info("No duplicate songs found")
-            return 0
-        }
-
-        logger.info("Found ${duplicates.size} groups of duplicate songs")
-
         var totalMerged = 0
-        for (duplicateGroup in duplicates) {
+        for (duplicateGroup in perfectDuplicates) {
             val songsInGroup = SongTable
-                .select(SongTable.id, SongTable.inserted)
+                .select(SongTable.id, SongTable.inserted, SongTable.title, SongTable.explicit)
                 .where {
                     (SongTable.title eq duplicateGroup[SongTable.title]) and
                             (SongTable.albumId eq duplicateGroup[SongTable.albumId]) and
@@ -106,75 +77,125 @@ class LibraryMergeService(
                             (SongTable.fileSize eq duplicateGroup[SongTable.fileSize])
                 }
                 .orderBy(SongTable.inserted, SortOrder.ASC)
-                .map { it[SongTable.id].value }
+                .toList()
 
             if (songsInGroup.size <= 1) continue
+            totalMerged += performSongMerge(songsInGroup)
+        }
 
-            val keptSongId = songsInGroup.first()
-            val songsToMerge = songsInGroup.drop(1)
+        val pathDuplicates = SongTable
+            .select(SongTable.filePath)
+            .groupBy(SongTable.filePath)
+            .having { SongTable.id.count() greater 1L }
+            .toList()
 
-            logger.info("Merging ${songsToMerge.size} songs into $keptSongId")
+        for (duplicateGroup in pathDuplicates) {
+            val songsInGroup = SongTable
+                .select(SongTable.id, SongTable.inserted, SongTable.title, SongTable.explicit)
+                .where { SongTable.filePath eq duplicateGroup[SongTable.filePath] }
+                .orderBy(SongTable.inserted, SortOrder.ASC)
+                .toList()
 
-            for (oldSongId in songsToMerge) {
-                mergeSongReferences(oldSongId, keptSongId)
-                SongTable.deleteWhere { SongTable.id eq oldSongId }
-                totalMerged++
+            if (songsInGroup.size <= 1) continue
+            totalMerged += performSongMerge(songsInGroup)
+        }
+
+        logger.info("Duplicate song merge completed. Total merged: $totalMerged")
+        return totalMerged
+    }
+
+    private fun performSongMerge(songsInGroup: List<ResultRow>): Int {
+        val keptSongRow = songsInGroup.first()
+        val keptSongId = keptSongRow[SongTable.id].value
+        val songsToMerge = songsInGroup.drop(1)
+
+        val anyExplicit = songsInGroup.any { 
+            it[SongTable.explicit] || it[SongTable.title].contains("\uD83C\uDD74")
+        }
+
+        val bestTitle = songsInGroup
+            .map { it[SongTable.title].replace("\uD83C\uDD74", "").trim() }
+            .firstOrNull { it.isNotBlank() } ?: keptSongRow[SongTable.title]
+
+        if (bestTitle != keptSongRow[SongTable.title] || anyExplicit != keptSongRow[SongTable.explicit]) {
+            SongTable.update({ SongTable.id eq keptSongId }) {
+                it[title] = bestTitle
+                it[explicit] = anyExplicit
             }
         }
-        logger.info("Duplicate song merge completed")
-        return totalMerged
+
+        logger.info("Merging ${songsToMerge.size} songs into $keptSongId")
+
+        var mergedInGroup = 0
+        for (oldSongRow in songsToMerge) {
+            val oldSongId = oldSongRow[SongTable.id].value
+            mergeSongReferences(oldSongId, keptSongId)
+            SongTable.deleteWhere { SongTable.id eq oldSongId }
+            mergedInGroup++
+        }
+        return mergedInGroup
     }
 
     suspend fun mergeSameAlbumSongs(): Int {
         logger.info("Starting same-album duplicate song merge check")
 
-        val duplicates = SongTable
+        val allSongsInAlbums = SongTable
             .select(
+                SongTable.id,
                 SongTable.albumId,
                 SongTable.title,
                 SongTable.trackNumber,
-                SongTable.discNumber
+                SongTable.discNumber,
+                SongTable.fileSize,
+                SongTable.inserted,
+                SongTable.explicit
             )
-            .groupBy(
-                SongTable.albumId,
-                SongTable.title,
-                SongTable.trackNumber,
-                SongTable.discNumber
-            )
-            .having { SongTable.id.count() greater 1L }
             .toList()
 
-        if (duplicates.isEmpty()) {
+        val groups = allSongsInAlbums.groupBy { row ->
+            Triple(
+                row[SongTable.albumId].value,
+                row[SongTable.title].replace("\uD83C\uDD74", "").trim().lowercase(),
+                row[SongTable.trackNumber] to row[SongTable.discNumber]
+            )
+        }.filter { it.value.size > 1 }
+
+        if (groups.isEmpty()) {
             logger.info("No same-album duplicate songs found")
             return 0
         }
 
-        logger.info("Found ${duplicates.size} groups of same-album duplicate songs")
+        logger.info("Found ${groups.size} groups of same-album duplicate songs")
 
         val allSongsToDelete = mutableListOf<UUID>()
         var totalMerged = 0
 
-        for (duplicateGroup in duplicates) {
-            val songsInGroup = SongTable
-                .select(SongTable.id, SongTable.fileSize, SongTable.inserted)
-                .where {
-                    (SongTable.albumId eq duplicateGroup[SongTable.albumId]) and
-                            (SongTable.title eq duplicateGroup[SongTable.title]) and
-                            (SongTable.trackNumber eq duplicateGroup[SongTable.trackNumber]) and
-                            (SongTable.discNumber eq duplicateGroup[SongTable.discNumber])
+        for ((_, songsInGroupRows) in groups) {
+            val sortedGroup = songsInGroupRows.sortedWith(
+                compareByDescending<ResultRow> { it[SongTable.fileSize] }
+                    .thenBy { it[SongTable.inserted] }
+            )
+
+            val keptSongRow = sortedGroup.first()
+            val keptSongId = keptSongRow[SongTable.id].value
+            val songsToMerge = sortedGroup.drop(1)
+
+            val anyExplicit = songsInGroupRows.any { 
+                it[SongTable.explicit] || it[SongTable.title].contains("\uD83C\uDD74")
+            }
+            val cleanTitle = keptSongRow[SongTable.title].replace("\uD83C\uDD74", "").trim()
+
+            if (cleanTitle != keptSongRow[SongTable.title] || anyExplicit != keptSongRow[SongTable.explicit]) {
+                SongTable.update({ SongTable.id eq keptSongId }) {
+                    it[title] = cleanTitle
+                    it[explicit] = anyExplicit
                 }
-                .orderBy(SongTable.fileSize, SortOrder.DESC)
-                .orderBy(SongTable.inserted, SortOrder.ASC)
-                .map { it[SongTable.id].value }
-
-            if (songsInGroup.size <= 1) continue
-
-            val keptSongId = songsInGroup.first()
-            val songsToMerge = songsInGroup.drop(1)
+            }
 
             logger.info("Merging ${songsToMerge.size} songs into $keptSongId")
 
-            for (oldSongId in songsToMerge) {
+            for (oldSongRow in songsToMerge) {
+                val oldSongId = oldSongRow[SongTable.id].value
                 mergeSongReferences(oldSongId, keptSongId)
                 allSongsToDelete.add(oldSongId)
                 totalMerged++

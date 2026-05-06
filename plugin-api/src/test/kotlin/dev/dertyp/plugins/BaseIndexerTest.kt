@@ -1,10 +1,17 @@
 package dev.dertyp.plugins
 
 import dev.dertyp.PlatformUUID
+import dev.dertyp.data.InsertableAlbum
 import io.mockk.coEvery
+import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import kotlinx.coroutines.runBlocking
+import org.jaudiotagger.audio.AudioFile
+import org.jaudiotagger.audio.AudioHeader
+import org.jaudiotagger.tag.Tag
 import org.junit.jupiter.api.Test
+import java.io.File
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.UUID
@@ -75,5 +82,32 @@ class BaseIndexerTest {
         } finally {
             tempDir.toFile().deleteRecursively()
         }
+    }
+
+    @Test
+    fun testInsertableSongFromFileSanitization() = runBlocking {
+        val audioFile = mockk<AudioFile>(relaxed = true)
+        val tag = mockk<Tag>(relaxed = true)
+        val header = mockk<AudioHeader>(relaxed = true)
+        val album = InsertableAlbum("Album", listOf("Artist"))
+
+        every { audioFile.tag } returns tag
+        every { audioFile.audioHeader } returns header
+        every { audioFile.file } returns File("test.flac")
+        every { header.preciseTrackLength } returns 180.0
+
+        every { tag.getFirst(org.jaudiotagger.tag.FieldKey.TITLE) } returns "Song Title \uD83C\uDD74"
+        
+        val testIndexer = object : BaseIndexer(context) {
+            override val id = "test"
+            override val name = "test"
+            suspend fun testInsertable(af: AudioFile, a: InsertableAlbum) = insertableSongFromFile(af, a)
+        }
+
+        val song = testIndexer.testInsertable(audioFile, album)
+        
+        assertEquals("Song Title", song.title)
+        assertTrue(song.explicit)
+        verify { tag.setField(org.jaudiotagger.tag.FieldKey.TITLE, "Song Title") }
     }
 }

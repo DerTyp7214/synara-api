@@ -1260,7 +1260,7 @@ class SongService : SongLibrary, Service() {
         }
     }
 
-    private suspend fun bulkFindExistingSongs(songs: List<InsertableSong>): Map<InsertableSong, UUID> = dbQuery {
+    private suspend fun bulkFindExistingSongs(songs: List<InsertableSong>): Map<InsertableSong, Pair<UUID, Pair<String, Boolean>>> = dbQuery {
         val rows = SongTable
             .innerJoin(
                 AlbumTable,
@@ -1280,10 +1280,12 @@ class SongService : SongLibrary, Service() {
                 SongTable.discNumber,
                 SongTable.explicit,
                 SongTable.originalUrl,
+                SongTable.filePath,
                 AlbumTable.name
             )
             .withDistinct()
-            .where { SongTable.originalUrl inList songs.map { it.originalUrl }.filter { it.isNotBlank() } }
+            .where { SongTable.filePath inList songs.map { it.path } }
+            .orWhere { SongTable.originalUrl inList songs.map { it.originalUrl }.filter { it.isNotBlank() } }
             .orWhere {
                 (SongTable.title inList songs.map { it.title }) and
                         (SongTable.trackNumber inList songs.map { it.trackNumber }) and
@@ -1291,13 +1293,15 @@ class SongService : SongLibrary, Service() {
             }
             .toList()
 
-        val existingSongMap = mutableMapOf<InsertableSong, UUID>()
+        val existingSongMap = mutableMapOf<InsertableSong, Pair<UUID, Pair<String, Boolean>>>()
 
         for (song in songs) {
             rows.firstOrNull { row ->
                 val albumName = row[AlbumTable.name]
                 val songId = row[SongTable.id].value
+                val dbFilePath = row[SongTable.filePath]
 
+                val pathMatch = dbFilePath == song.path
                 val metadataMatch =
                     (song.originalUrl.isNotBlank() && row[SongTable.originalUrl] == song.originalUrl) || (
                             row[SongTable.originalUrl].isBlank() &&
@@ -1308,8 +1312,8 @@ class SongService : SongLibrary, Service() {
                                     albumName == song.album.name
                             )
 
-                if (metadataMatch) {
-                    existingSongMap[song] = songId
+                if (pathMatch || metadataMatch) {
+                    existingSongMap[song] = songId to (row[SongTable.title] to row[SongTable.explicit])
                     return@firstOrNull true
                 }
                 return@firstOrNull false
@@ -1383,6 +1387,24 @@ class SongService : SongLibrary, Service() {
             .awaitAll()
             .flatten()
             .toMap()
+
+        val dirtySongs = existingSongMap.filter { (song, data) ->
+            val (_, meta) = data
+            val (dbTitle, dbExplicit) = meta
+            dbTitle != song.title || dbExplicit != song.explicit
+        }
+
+        if (dirtySongs.isNotEmpty()) {
+            dbQuery {
+                dirtySongs.forEach { (song, data) ->
+                    val (songId, _) = data
+                    SongTable.update({ SongTable.id eq songId }) {
+                        it[title] = song.title
+                        it[explicit] = song.explicit
+                    }
+                }
+            }
+        }
 
         val newSongs = songs.filter { it !in existingSongMap.keys }
 
