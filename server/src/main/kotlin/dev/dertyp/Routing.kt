@@ -1,12 +1,10 @@
 package dev.dertyp
 
-import dev.dertyp.routing.mirrorRouting
-import dev.dertyp.routing.registerAuthenticatedRestServices
-import dev.dertyp.routing.registerAuthenticatedServices
-import dev.dertyp.routing.registerPublicRestServices
-import dev.dertyp.routing.registerPublicServices
+import dev.dertyp.data.HandshakeResponse
+import dev.dertyp.routing.*
 import dev.dertyp.serializers.AppCbor
 import dev.dertyp.serializers.AppJson
+import dev.dertyp.services.HandshakeService
 import dev.dertyp.services.JwtService
 import dev.hayden.KHealth
 import io.github.smiley4.ktoropenapi.OpenApi
@@ -31,10 +29,14 @@ import io.ktor.server.sse.SSE
 import io.ktor.server.websocket.WebSockets
 import io.ktor.server.websocket.pingPeriod
 import io.ktor.server.websocket.timeout
+import io.ktor.server.websocket.webSocket
+import io.ktor.websocket.Frame
+import io.ktor.websocket.close
 import kotlinx.rpc.krpc.ktor.server.Krpc
 import kotlinx.rpc.krpc.ktor.server.rpc
 import kotlinx.rpc.krpc.serialization.cbor.cbor
 import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.encodeToByteArray
 import org.koin.ktor.ext.inject
 import org.koin.ktor.plugin.koin
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
@@ -126,6 +128,12 @@ fun Application.configureRouting() {
         }
 
         registerPublicRestServices(koin)
+
+        webSocket("/handshake") {
+            val response = HandshakeService.determineHandshakeResponse(call)
+            send(Frame.Binary(true, AppCbor.encodeToByteArray(response)))
+            close()
+        }
 
         jwtService.authenticated(this) {
             rpc("/rpc/services") {
