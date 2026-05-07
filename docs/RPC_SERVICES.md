@@ -407,7 +407,7 @@ Response for the server handshake/reachability test.
 | Field | Type | Description |
 | :--- | :--- | :--- |
 | `secure` | `Boolean` | Whether the current connection is secure (HTTPS/WSS). |
-| `wssSupported` | `Boolean` | Whether the server supports WebSocket Secure connections. |
+| `sslSupported` | `Boolean` | Whether the server supports secure connections (HTTPS/WSS). |
 
 ### Image
 Metadata for an image from an external source.

@@ -14,6 +14,7 @@ import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.plugins.websocket.WebSockets
 import io.ktor.client.plugins.websocket.pingInterval
 import io.ktor.client.request.get
+import io.ktor.http.Url
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
@@ -672,7 +673,7 @@ class RemoteMirrorService : Service() {
     }
 
     private inner class RemoteMirrorRpcManager(
-        private val config: RemoteServerConfig
+        private var config: RemoteServerConfig
     ) : BaseRpcServiceManager(httpClient) {
         private var token: String? = null
 
@@ -683,6 +684,15 @@ class RemoteMirrorService : Service() {
             val base = "$protocol://$cleanHost:${config.port}"
             val proxyPath = if (config.useProxy && !config.proxyInstanceId.isNullOrEmpty()) "/${config.proxyInstanceId!!.removePrefix("/")}" else ""
             return "$base$proxyPath"
+        }
+
+        override suspend fun setRpcUrl(url: String) {
+            val uri = Url(url)
+            config = config.copy(
+                host = uri.host,
+                port = uri.port,
+                secure = uri.protocol.name.endsWith("s")
+            )
         }
 
         override fun getAuthToken(): String? = token

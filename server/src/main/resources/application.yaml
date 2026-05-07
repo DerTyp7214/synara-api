@@ -4,6 +4,8 @@ ktor:
             - dev.dertyp.ApplicationKt.module
     deployment:
         port: ${PORT:8080}
+server:
+  sslSupported: ${SERVER_SSL_SUPPORTED:false}
 client:
   id: ${CLIENT_ID:}
   secret: ${CLIENT_SECRET:}

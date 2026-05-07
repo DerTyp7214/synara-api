@@ -5,72 +5,7 @@ import dev.dertyp.Indexer
 import dev.dertyp.RpcIndexer
 import dev.dertyp.core.getUser
 import dev.dertyp.data.User
-import dev.dertyp.services.AlbumRpcService
-import dev.dertyp.services.AlbumService
-import dev.dertyp.services.ArtistRpcService
-import dev.dertyp.services.ArtistService
-import dev.dertyp.services.AudioAnalysisService
-import dev.dertyp.services.AuthService
-import dev.dertyp.services.BackupService
-import dev.dertyp.services.CustomAudioRpcService
-import dev.dertyp.services.CustomAudioService
-import dev.dertyp.services.DbManagementService
-import dev.dertyp.services.DiscoveryRpcService
-import dev.dertyp.services.DiscoveryService
-import dev.dertyp.services.FavSyncRpcService
-import dev.dertyp.services.FavSyncService
-import dev.dertyp.services.IAlbumService
-import dev.dertyp.services.IArtistService
-import dev.dertyp.services.IAudioAnalysisService
-import dev.dertyp.services.IAuthService
-import dev.dertyp.services.IBackupService
-import dev.dertyp.services.ICustomAudioService
-import dev.dertyp.services.IDbManagementService
-import dev.dertyp.services.IDiscoveryService
-import dev.dertyp.services.IFavSyncService
-import dev.dertyp.services.IImageService
-import dev.dertyp.services.ILyricsSearch
-import dev.dertyp.services.ILyricsService
-import dev.dertyp.services.IMirrorService
-import dev.dertyp.services.IPlaybackService
-import dev.dertyp.services.IPlaylistService
-import dev.dertyp.services.IReleaseService
-import dev.dertyp.services.IRemoteMirrorService
-import dev.dertyp.services.IScheduledTaskLogService
-import dev.dertyp.services.IServerStatsService
-import dev.dertyp.services.ISessionService
-import dev.dertyp.services.ISongService
-import dev.dertyp.services.IUserPlaylistBackupService
-import dev.dertyp.services.IUserPlaylistService
-import dev.dertyp.services.IUserService
-import dev.dertyp.services.ImageRpcService
-import dev.dertyp.services.ImageService
-import dev.dertyp.services.JwtService
-import dev.dertyp.services.LyricsSearch
-import dev.dertyp.services.LyricsService
-import dev.dertyp.services.MirrorRpcService
-import dev.dertyp.services.MirrorService
-import dev.dertyp.services.PlaybackService
-import dev.dertyp.services.PlaylistService
-import dev.dertyp.services.ReleaseService
-import dev.dertyp.services.RemoteMirrorRpcService
-import dev.dertyp.services.RemoteMirrorService
-import dev.dertyp.services.RpcAuthService
-import dev.dertyp.services.RpcBackupService
-import dev.dertyp.services.RpcPlaybackService
-import dev.dertyp.services.RpcReleaseService
-import dev.dertyp.services.RpcScheduledTaskLogService
-import dev.dertyp.services.RpcSessionService
-import dev.dertyp.services.RpcUserPlaylistBackupService
-import dev.dertyp.services.RpcUserService
-import dev.dertyp.services.ScheduledTaskLogService
-import dev.dertyp.services.ServerStatsService
-import dev.dertyp.services.SessionService
-import dev.dertyp.services.SongRpcService
-import dev.dertyp.services.SongService
-import dev.dertyp.services.UserPlaylistBackupService
-import dev.dertyp.services.UserPlaylistService
-import dev.dertyp.services.UserService
+import dev.dertyp.services.*
 import dev.dertyp.services.download.DownloadRpcService
 import dev.dertyp.services.download.DownloadService
 import dev.dertyp.services.download.DownloaderProxy
@@ -117,6 +52,7 @@ private fun registerPublic(koin: Koin, call: ApplicationCall, registrar: Service
 
     registrar.register(IServerStatsService::class) { serverStatsService.withLogging<IServerStatsService>(call) }
     registrar.register(IAuthService::class) { RpcAuthService(call, authService, sessionService, jwtService).withLogging<IAuthService>(call) }
+    registrar.register(IHandshakeService::class) { HandshakeService(call).withLogging<IHandshakeService>(call) }
 }
 
 suspend fun KrpcRoute.registerAuthenticatedServices(koin: Koin) {

@@ -15,7 +15,12 @@ class HandshakeService(private val call: ApplicationCall) : IHandshakeService {
                         call.request.headers["X-Forwarded-Proto"] == "https" ||
                         call.request.headers["X-Forwarded-Proto"] == "wss"
             
-            return HandshakeResponse(secure = secure, wssSupported = true)
+            val config = call.application.environment.config
+            val serverSslSupported = config.propertyOrNull("server.sslSupported")?.getString()?.toBoolean() ?: false
+            
+            val sslSupported = secure || serverSslSupported
+            
+            return HandshakeResponse(secure = secure, sslSupported = sslSupported)
         }
     }
 }
