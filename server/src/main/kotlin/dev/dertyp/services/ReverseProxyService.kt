@@ -22,27 +22,37 @@ import io.ktor.util.AttributeKey
 import io.ktor.util.Attributes
 import io.ktor.util.reflect.TypeInfo
 import io.ktor.utils.io.ByteReadChannel
+import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
 import kotlinx.rpc.krpc.KrpcTransport
 import kotlinx.rpc.krpc.KrpcTransportMessage
 import kotlinx.rpc.krpc.server.KrpcServer
 import org.koin.core.component.get
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import kotlin.concurrent.atomics.AtomicBoolean
+import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.coroutines.CoroutineContext
-import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
+@OptIn(ExperimentalAtomicApi::class)
 class ReverseProxyService(
     config: ApplicationConfig
 ) : Service() {
     private val client = HttpClient {
         install(WebSockets)
     }
+
+    private val _isConnected = AtomicBoolean(false)
+    val isConnected: Boolean get() = _isConnected.load()
+
+    private val _isRunning = AtomicBoolean(false)
+    val isRunning: Boolean get() = _isRunning.load()
+
+    val isConfigured: Boolean get() = !proxyHost.isNullOrBlank() && controlPort != null
+
+    @Volatile
+    private var connectionJob: Job? = null
 
     val proxyHost = config.propertyOrNull("proxy.hostname")?.getString()
     val controlPort = config.propertyOrNull("proxy.controlPort")?.getString()?.toInt()
@@ -55,23 +65,40 @@ class ReverseProxyService(
         private set
 
     override suspend fun startService() {
-        if (proxyHost.isNullOrBlank() || controlPort == null) {
+        if (!isConfigured) {
             logger.info("Reverse proxy not fully configured (host=$proxyHost, controlPort=$controlPort, id=$requestedId, name=$serverName)")
             return
         }
 
-        coroutineScope {
-            while (isActive) {
-                try {
-                    connectToProxy()
-                } catch (e: Exception) {
-                    logger.error("Error in reverse proxy connection, retrying in 5s: ${e.message}")
-                    delay(5.seconds)
-                } finally {
-                    proxyId = null
+        _isRunning.store(true)
+        try {
+            coroutineScope {
+                while (isActive) {
+                    val job = launch {
+                        try {
+                            connectToProxy()
+                        } catch (e: Exception) {
+                            if (e is CancellationException) throw e
+                            logger.error("Error in reverse proxy connection, retrying in 5s: ${e.message}")
+                            delay(5.seconds)
+                        } finally {
+                            proxyId = null
+                            _isConnected.store(false)
+                        }
+                    }
+                    connectionJob = job
+                    job.join()
                 }
             }
+        } finally {
+            _isRunning.store(false)
+            logger.info("Reverse proxy service stopped")
         }
+    }
+
+    fun restartService() {
+        logger.info("Restarting reverse proxy service (cancelling current connection job)")
+        connectionJob?.cancel()
     }
 
     private suspend fun connectToProxy() {
@@ -93,6 +120,7 @@ class ReverseProxyService(
         ) {
             val activeServers = ConcurrentHashMap<UUID, ProxyKrpcServer>()
             logger.info("Connected to reverse proxy control at $proxyHost:$controlPort")
+            _isConnected.store(true)
 
             try {
                 for (frame in incoming) {
@@ -130,6 +158,7 @@ class ReverseProxyService(
                     }
                 }
             } finally {
+                _isConnected.store(false)
                 activeServers.values.forEach { it.close() }
                 logger.info("Disconnected from reverse proxy control")
             }

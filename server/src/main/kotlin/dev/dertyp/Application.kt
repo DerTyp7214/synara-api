@@ -137,6 +137,7 @@ fun Application.module() {
             singleOf(::FlacAnalysisWorker)
             singleOf(::ReleaseService)
             singleOf(::AutoTranscodeWorker)
+            singleOf(::ReverseProxyWorker)
             singleOf(::CustomMigrationService)
 
             single<IMusicBrainzService> { get<CachedMusicBrainzService>() }
@@ -250,7 +251,7 @@ fun Application.module() {
     val artistService = get<ArtistService>()
     val albumService = get<AlbumService>()
     val userPlaylistBackupService = get<UserPlaylistBackupService>()
-    val reverseProxyService = get<ReverseProxyService>()
+    val reverseProxyWorker = get<ReverseProxyWorker>()
     val metadataFetchingService = get<MetadataFetchingService>()
     val musicBrainzWorker = get<MusicBrainzWorker>()
     val musicBrainzCacheWorker = get<MusicBrainzCacheWorker>()
@@ -261,6 +262,16 @@ fun Application.module() {
     val audioAnalysisWorker = get<AudioAnalysisWorker>()
     val flacAnalysisWorker = get<FlacAnalysisWorker>()
     val lrcLibWorker = get<LrcLibWorker>()
+
+    val reverseProxy = scheduleService.schedule(
+        ScheduledTask(
+            name = "Reverse Proxy Health Check",
+            trigger = CronPresets.hourlyAt(0),
+            task = { reverseProxyWorker.run() }
+        )
+    )
+
+    scheduleService.triggerTask(reverseProxy.id)
 
     scheduleService.schedule(
         ScheduledTask(
@@ -509,7 +520,6 @@ fun Application.module() {
 
     CoroutineScope(Dispatchers.IO).launch {
         launch { scheduleService.startService() }
-        launch { reverseProxyService.startService() }
     }
 
     configureHTTP()
