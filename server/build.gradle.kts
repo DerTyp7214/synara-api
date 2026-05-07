@@ -132,6 +132,7 @@ dependencies {
 tasks.test {
     useJUnitPlatform()
     systemProperty("net.bytebuddy.experimental", "true")
+    maxHeapSize = "2g"
 }
 
 val ktorBaseImageTag = "synara-api-base:latest"

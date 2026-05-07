@@ -22,7 +22,11 @@ class SslFallbackTest {
 
     class TestRpcManager(client: HttpClient, var url: String) : BaseRpcServiceManager(client) {
         override suspend fun getRpcUrl(): String = url
-        override suspend fun setRpcUrl(url: String) { this.url = url }
+        override suspend fun setRpcUrl(host: String, port: Int, ssl: Boolean, path: String) {
+            val protocol = if (url.startsWith("ws")) (if (ssl) "wss" else "ws") else (if (ssl) "https" else "http")
+            val p = if (ssl && port == 443) "" else if (!ssl && port == 80) "" else if (!ssl && port == 443) "" else ":$port"
+            url = "$protocol://$host$p$path".removeSuffix("/")
+        }
         override fun getAuthToken(): String? = null
         override fun getRefreshToken(): String? = null
         override fun isTokenExpired(): Boolean = false

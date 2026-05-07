@@ -25,7 +25,13 @@ class ServerValidationTest {
 
     class TestRpcManager(client: HttpClient) : BaseRpcServiceManager(client) {
         override suspend fun getRpcUrl(): String? = null
-        override suspend fun setRpcUrl(url: String) {}
+        override suspend fun setRpcUrl(
+            host: String,
+            port: Int,
+            ssl: Boolean,
+            path: String
+        ) {}
+
         override fun getAuthToken(): String? = null
         override fun getRefreshToken(): String? = null
         override fun isTokenExpired(): Boolean = false

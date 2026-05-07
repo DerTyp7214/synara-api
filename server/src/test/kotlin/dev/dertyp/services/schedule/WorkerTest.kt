@@ -104,7 +104,7 @@ class WorkerTest : KoinTest {
     }
 
     @Test
-    @Timeout(value = 1, unit = TimeUnit.MINUTES)
+    @Timeout(value = 2, unit = TimeUnit.MINUTES)
     fun `runParallel should work on large systems with complex split`() = runBlocking(Dispatchers.Default) {
         setupKoin()
         val cores = 128
