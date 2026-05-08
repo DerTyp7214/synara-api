@@ -131,19 +131,19 @@ class UserPlaylistService : PlaylistLibrary, IUserPlaylistService, Service() {
     }
 
     override suspend fun addAlbumToPlaylist(id: UUID, albumId: UUID) {
-        val songService by inject<ISongService>()
+        val songService by inject<SongService>()
         val songIds = songService.songIdsByAlbum(albumId).toList()
         addSongsToPlaylist(id, songIds)
     }
 
     override suspend fun addPlaylistToPlaylist(id: UUID, sourcePlaylistId: UUID) {
-        val songService by inject<ISongService>()
+        val songService by inject<SongService>()
         val songIds = songService.songIdsByPlaylist(sourcePlaylistId).toList()
         addSongsToPlaylist(id, songIds)
     }
 
     override suspend fun addUserPlaylistToPlaylist(id: UUID, sourcePlaylistId: UUID) {
-        val songService by inject<ISongService>()
+        val songService by inject<SongService>()
         val songIds = songService.songIdsByUserPlaylist(sourcePlaylistId).toList()
         addSongsToPlaylist(id, songIds)
     }
