@@ -1,41 +1,22 @@
 package dev.dertyp.services
 
 import dev.dertyp.PlatformUUID
-import dev.dertyp.core.date
-import dev.dertyp.core.minusOnce
-import dev.dertyp.core.paging
-import dev.dertyp.core.rankedSearchQuery
-import dev.dertyp.core.values
-import dev.dertyp.data.InsertablePlaylist
-import dev.dertyp.data.PaginatedResponse
-import dev.dertyp.data.User
-import dev.dertyp.data.UserPlaylist
-import dev.dertyp.data.UserPlaylistSong
-import dev.dertyp.db.ImageTable
-import dev.dertyp.db.SongMusicBrainzTable
-import dev.dertyp.db.SongTable
-import dev.dertyp.db.UserPlaylistSongTable
-import dev.dertyp.db.UserPlaylistTable
-import dev.dertyp.db.UserTable
+import dev.dertyp.core.*
+import dev.dertyp.data.*
+import dev.dertyp.db.*
 import dev.dertyp.dbQuery
 import dev.dertyp.plugins.PlaylistLibrary
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.toList
 import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.inList
-import org.jetbrains.exposed.v1.jdbc.Query
-import org.jetbrains.exposed.v1.jdbc.andWhere
-import org.jetbrains.exposed.v1.jdbc.batchInsert
-import org.jetbrains.exposed.v1.jdbc.deleteWhere
-import org.jetbrains.exposed.v1.jdbc.select
-import org.jetbrains.exposed.v1.jdbc.selectAll
-import org.jetbrains.exposed.v1.jdbc.update
-import org.jetbrains.exposed.v1.jdbc.upsert
+import org.jetbrains.exposed.v1.jdbc.*
 import org.koin.core.component.inject
 import java.time.Instant
 import java.util.Date
@@ -142,6 +123,29 @@ class UserPlaylistService : PlaylistLibrary, IUserPlaylistService, Service() {
             this[UserPlaylistSongTable.songId] = songId
             this[UserPlaylistSongTable.addedAt] = addedAt
         }.map { it[UserPlaylistSongTable.songId].value }
+    }
+
+    override suspend fun addSongsToPlaylist(id: UUID, songIds: List<UUID>): List<UUID> {
+        val now = System.currentTimeMillis()
+        return addToPlaylist(id, songIds.mapIndexed { index, it -> (now + index) to it })
+    }
+
+    override suspend fun addAlbumToPlaylist(id: UUID, albumId: UUID): List<UUID> {
+        val songService by inject<ISongService>()
+        val songIds = songService.songIdsByAlbum(albumId).toList()
+        return addSongsToPlaylist(id, songIds)
+    }
+
+    override suspend fun addPlaylistToPlaylist(id: UUID, sourcePlaylistId: UUID): List<UUID> {
+        val songService by inject<ISongService>()
+        val songIds = songService.songIdsByPlaylist(sourcePlaylistId).toList()
+        return addSongsToPlaylist(id, songIds)
+    }
+
+    override suspend fun addUserPlaylistToPlaylist(id: UUID, sourcePlaylistId: UUID): List<UUID> {
+        val songService by inject<ISongService>()
+        val songIds = songService.songIdsByUserPlaylist(sourcePlaylistId).toList()
+        return addSongsToPlaylist(id, songIds)
     }
 
     override suspend fun removeFromPlaylist(id: UUID, songIds: List<UUID>): Int = dbQuery {
@@ -334,10 +338,11 @@ class UserPlaylistService : PlaylistLibrary, IUserPlaylistService, Service() {
             }
         } else {
             val existingSongsToInsert = playlist.songs.filter { it in existingSongIds }
-            UserPlaylistSongTable.batchInsert(existingSongsToInsert) { songId ->
+            val now = System.currentTimeMillis()
+            UserPlaylistSongTable.batchInsert(existingSongsToInsert.mapIndexed { index, songId -> index to songId }) { (index, songId) ->
                 this[UserPlaylistSongTable.playlistId] = playlist.id
                 this[UserPlaylistSongTable.songId] = songId
-                this[UserPlaylistSongTable.addedAt] = System.currentTimeMillis()
+                this[UserPlaylistSongTable.addedAt] = now + index
             }
         }
     }
