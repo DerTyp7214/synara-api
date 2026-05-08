@@ -1,21 +1,13 @@
 package dev.dertyp.services.download
 
-import dev.dertyp.core.ApplicationScope
-import dev.dertyp.core.getMetadataProvider
-import dev.dertyp.core.getUser
-import dev.dertyp.core.tidalId
-import dev.dertyp.core.waitForChange
+import dev.dertyp.core.*
 import dev.dertyp.data.User
 import dev.dertyp.data.UserSong
 import dev.dertyp.killAll
 import dev.dertyp.plugins.IDownloader
 import dev.dertyp.plugins.IPluginDownloadService
 import dev.dertyp.plugins.PluginManager
-import dev.dertyp.services.FavSyncService
-import dev.dertyp.services.ISyncService
-import dev.dertyp.services.ImageService
-import dev.dertyp.services.Service
-import dev.dertyp.services.SongService
+import dev.dertyp.services.*
 import dev.dertyp.services.metadata.IMetadataService
 import dev.dertyp.services.sync.SyncService
 import dev.dertyp.utils.LogParam
@@ -23,33 +15,10 @@ import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.ApplicationEnvironment
 import io.ktor.server.engine.launchOnCancellation
 import io.ktor.utils.io.InternalAPI
-import kotlinx.coroutines.CompletableJob
-import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.FlowPreview
-import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asFlow
-import kotlinx.coroutines.flow.asSharedFlow
-import kotlinx.coroutines.flow.channelFlow
-import kotlinx.coroutines.flow.debounce
-import kotlinx.coroutines.flow.emitAll
-import kotlinx.coroutines.flow.filter
-import kotlinx.coroutines.flow.firstOrNull
-import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.onEach
-import kotlinx.coroutines.flow.onStart
-import kotlinx.coroutines.flow.takeWhile
-import kotlinx.coroutines.flow.toList
-import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.yield
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 import java.time.Instant
@@ -346,6 +315,7 @@ class DownloadService(
     }
 
     fun currentDownload(user: User? = null): DownloadQueueEntry? {
+        if (user?.isAdmin == true) return currentlyDownloading?.downloadQueueEntry
         return when (user?.id) {
             null, currentlyDownloading?.downloadQueueEntry?.byUser -> currentlyDownloading?.downloadQueueEntry
             else -> null
@@ -354,13 +324,13 @@ class DownloadService(
 
     suspend fun downloadQueue(user: User? = null): List<DownloadQueueEntry> {
         return queueMutex.withLock {
-            downloadQueue.filter { user == null || it.byUser == user.id }
+            downloadQueue.filter { user == null || user.isAdmin || it.byUser == user.id }
         }
     }
 
     suspend fun finishedDownloads(user: User? = null): List<FinishedDownloadQueueEntry> {
         return finishedMutex.withLock {
-            finishedDownloads.toList().filter { user == null || it.downloadQueueEntry.byUser == user.id }
+            finishedDownloads.toList().filter { user == null || user.isAdmin || it.downloadQueueEntry.byUser == user.id }
         }
     }
 
