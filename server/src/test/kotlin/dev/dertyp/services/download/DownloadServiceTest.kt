@@ -7,11 +7,7 @@ import dev.dertyp.services.SongService
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
-import kotlinx.coroutines.cancelAndJoin
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withTimeout
-import kotlinx.coroutines.yield
+import kotlinx.coroutines.*
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
 import kotlin.time.Duration.Companion.seconds
@@ -32,7 +28,7 @@ class DownloadServiceTest {
         val urls = listOf("https://tidal.com/track/1")
         val entry = UrlDownloadQueueEntry(urls = urls.toMutableList())
 
-        coEvery { downloaderProxy.downloadContent(any(), any(), any(), any(), any()) } returns ProcessExecutionResult(0, "ok", "")
+        coEvery { downloaderProxy.downloadContent(any(), any(), any(), any(), any(), any()) } returns ProcessExecutionResult(0, "ok", "")
 
         val job = launch {
             service.startService()
@@ -46,7 +42,7 @@ class DownloadServiceTest {
             }
         }
 
-        coVerify { downloaderProxy.downloadContent(eq(urls), any(), any(), any(), any()) }
+        coVerify { downloaderProxy.downloadContent(eq(urls), any(), any(), any(), any(), any()) }
         assertEquals(1, service.finishedDownloads().size)
 
         service.stopService()
