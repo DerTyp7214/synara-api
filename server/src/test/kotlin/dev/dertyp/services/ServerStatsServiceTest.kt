@@ -25,7 +25,7 @@ class ServerStatsServiceTest {
     fun setup(dialect: DbDialect) {
         database = TestDatabase.connect(dialect, "stats_test")
         transaction(database) {
-            SchemaUtils.create(ArtistTable, AlbumTable, ImageTable, SongTable, PlaylistTable)
+            SchemaUtils.create(ArtistTable, AlbumTable, ImageTable, SongTable, PlaylistTable, UserTable, UserPlaylistTable)
         }
         storageService = mockk()
         reverseProxyService = mockk()
@@ -45,7 +45,7 @@ class ServerStatsServiceTest {
         coEvery { storageService.getTotalStorage() } returns 1000L
 
         transaction(database) {
-            val artistId = ArtistTable.insert { it[name] = "Artist" }[ArtistTable.id]
+            ArtistTable.insert { it[name] = "Artist" }[ArtistTable.id]
             val albumId = AlbumTable.insert { it[name] = "Album" }[AlbumTable.id]
             
             SongTable.insert {
