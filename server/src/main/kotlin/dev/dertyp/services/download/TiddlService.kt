@@ -18,7 +18,7 @@ class TiddlService(
 
     override val loginCommand: MutableList<String> = mutableListOf("tiddl", "auth", "login", "--no-browser")
     override val downloadCommand: MutableList<String> = mutableListOf("tiddl", "download", "url")
-    override val favDownloadCommand: MutableList<String> = mutableListOf("tdn", "download", "fav", "--types")
+    override val favDownloadCommand: MutableList<String> = mutableListOf("tiddl", "download", "fav", "--types")
 
     companion object {
         val ID = DownloadBackend.Tiddl.id
@@ -45,8 +45,8 @@ class TiddlService(
 
     override fun tokenFileExists(): Boolean {
         val homeDir = System.getProperty("user.home")
-        val tdnTokenJson = File(homeDir, ".tiddl/auth.json")
-        return tdnTokenJson.exists()
+        val tiddlTokenJson = File(homeDir, ".tiddl/auth.json")
+        return tiddlTokenJson.exists()
     }
 
     private val tiddlPath = findInPath("tiddl")

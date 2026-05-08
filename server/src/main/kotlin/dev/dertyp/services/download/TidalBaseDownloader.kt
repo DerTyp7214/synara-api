@@ -2,30 +2,12 @@ package dev.dertyp.services.download
 
 import dev.dertyp.ApiClient
 import dev.dertyp.PlatformUUID
-import dev.dertyp.core.HttpClientPriority
-import dev.dertyp.core.cleanTitle
-import dev.dertyp.core.filterExisting
-import dev.dertyp.core.filterNotNull
-import dev.dertyp.core.largest
-import dev.dertyp.core.safeGet
-import dev.dertyp.core.safeQueuedGet
-import dev.dertyp.core.sha256
-import dev.dertyp.core.waitForChange
-import dev.dertyp.data.InsertableImage
-import dev.dertyp.data.InsertablePlaylist
-import dev.dertyp.data.MusicBrainzRelease
-import dev.dertyp.data.User
-import dev.dertyp.data.UserSong
+import dev.dertyp.core.*
+import dev.dertyp.data.*
 import dev.dertyp.db.AlbumTable
 import dev.dertyp.dbQuery
 import dev.dertyp.getISOFromDate
-import dev.dertyp.plugins.IPluginIndexer
-import dev.dertyp.plugins.IServerStorageService
-import dev.dertyp.plugins.coverImage
-import dev.dertyp.plugins.getArtists
-import dev.dertyp.plugins.setCoverImage
-import dev.dertyp.plugins.setOriginalUrl
-import dev.dertyp.plugins.title
+import dev.dertyp.plugins.*
 import dev.dertyp.services.ILrcLibService
 import dev.dertyp.services.ImageService
 import dev.dertyp.services.SongService
@@ -33,16 +15,8 @@ import dev.dertyp.services.UserPlaylistService
 import dev.dertyp.services.metadata.IMetadataService
 import dev.dertyp.services.metadata.IMusicBrainzService
 import dev.dertyp.services.metadata.MetadataService
-import kotlinx.coroutines.Deferred
-import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.flow.asFlow
-import kotlinx.coroutines.flow.buffer
-import kotlinx.coroutines.flow.emptyFlow
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.jaudiotagger.audio.AudioFileIO
@@ -514,7 +488,8 @@ abstract class TidalBaseDownloader(
                                             ids = trackChunk.map { it.id },
                                             byUser = user.id,
                                             maxRetries = trackChunk.size,
-                                            type = Type.SONG
+                                            type = Type.SONG,
+                                            downloader = DownloadBackend(id)
                                         ) {
                                             val songs = songService.byOriginalIds(
                                                 trackChunk.map { it.id },
@@ -561,7 +536,8 @@ abstract class TidalBaseDownloader(
                                         ids = trackChunk.map { it.id },
                                         byUser = user.id,
                                         maxRetries = trackChunk.size,
-                                        type = Type.SONG
+                                        type = Type.SONG,
+                                        downloader = DownloadBackend(id)
                                     )
                                 )
                             }
@@ -589,7 +565,8 @@ abstract class TidalBaseDownloader(
                                         ids = trackChunk.map { it.id },
                                         byUser = user.id,
                                         maxRetries = trackChunk.size,
-                                        type = Type.SONG
+                                        type = Type.SONG,
+                                        downloader = DownloadBackend(id)
                                     )
                                 )
                             }
@@ -620,7 +597,8 @@ abstract class TidalBaseDownloader(
                                 .toMutableList(),
                             ids = urls,
                             byUser = user.id,
-                            type = wrapper.type
+                            type = wrapper.type,
+                            downloader = DownloadBackend(id)
                         ) {
                             callback(urls)
                         })

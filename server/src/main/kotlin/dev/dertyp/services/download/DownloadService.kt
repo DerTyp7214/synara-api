@@ -81,11 +81,11 @@ class DownloadRpcService(
 
     override suspend fun downloadUrls(urls: List<String>) {
         downloadService.logger.info("Processing ${urls.size} download URLs for user ${user.username}")
-        val downloaderGroups = urls.groupBy { url ->
+        val groups = urls.groupBy { url ->
             downloadService.pluginManager.getAllDownloaders().find { it.canHandle(url) }
         }
 
-        downloaderGroups.forEach { (downloader, groupUrls) ->
+        groups.forEach { (downloader, groupUrls) ->
             if (downloader == null) {
                 downloadService.logger.warn("No specific downloader found for ${groupUrls.size} URLs, using default queue")
                 downloadService.addToQueue(
@@ -96,11 +96,21 @@ class DownloadRpcService(
                 )
             } else {
                 downloadService.logger.info("Routing ${groupUrls.size} URLs to downloader: ${downloader.id}")
-                val parsedUrls = groupUrls.map { url -> url to downloader.parseUrl(url) }
-                val typeGroups = parsedUrls.groupBy { it.second?.second ?: Type.SONG }
+                val parsed = groupUrls.map { it to downloader.parseUrl(it) }
+                val unparsed = parsed.filter { it.second == null }.map { it.first }
+                if (unparsed.isNotEmpty()) {
+                    downloadService.logger.info("Queueing ${unparsed.size} unparsed URLs for ${downloader.id}")
+                    downloadService.addToQueue(
+                        UrlDownloadQueueEntry(
+                            urls = unparsed.toMutableList(),
+                            byUser = user.id,
+                            downloader = DownloadBackend(downloader.id)
+                        )
+                    )
+                }
 
-                typeGroups.forEach { (type, pairs) ->
-                    val ids = pairs.mapNotNull { it.second?.first }
+                parsed.mapNotNull { it.second }.groupBy { it.second }.forEach { (type, resultPairs) ->
+                    val ids = resultPairs.map { it.first }
                     downloadService.logger.info("Handing off ${ids.size} items of type $type to ${downloader.id}")
                     downloadService.downloadIds(ids.asFlow(), type, user, downloader.id)
                 }
@@ -381,6 +391,7 @@ class DownloadService(
                     maxRetries = entry.maxRetries,
                     aliveCheck = aliveCheck,
                     userId = entry.byUser,
+                    service = entry.downloader,
                     onLiveOutput = logUnit
                 )
 
@@ -389,6 +400,7 @@ class DownloadService(
                     maxRetries = entry.maxRetries,
                     aliveCheck = aliveCheck,
                     userId = entry.byUser,
+                    service = entry.downloader ?: downloaderProxy.defaultService,
                     onLiveOutput = logUnit
                 )
             }
@@ -481,10 +493,13 @@ class DownloadService(
                 .onEach { idMap[it.id] = it }
 
             val idsToFetch = songs.map { it.id }
+            val tidalDownloader = pluginManager.getAllDownloaders().find { it.id == "tidal" } ?:
+                                 pluginManager.getAllDownloaders().find { it.canHandle("https://tidal.com") }
             val (_, songsToLike) = downloadIds(
                 ids = idsToFetch,
                 type = Type.SONG,
-                user = user
+                user = user,
+                downloaderId = tidalDownloader?.id
             ) {
                 for (song in songService.byOriginalIds(it, user.id)) {
                     if (!(song.isFavourite ?: false)) {

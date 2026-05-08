@@ -20,9 +20,10 @@ class DownloaderProxy(
         maxRetries: Int,
         aliveCheck: suspend () -> Boolean,
         userId: PlatformUUID? = null,
+        service: DownloadBackend? = null,
         onLiveOutput: suspend (String) -> Unit
     ): ProcessExecutionResult {
-        val defaultDownloader = getDownloader(defaultService)
+        val defaultDownloader = getDownloader(service ?: defaultService)
         val groups = urls.groupBy { url ->
             if (defaultDownloader.canHandle(url)) defaultDownloader
             else pluginManager.getAllDownloaders().find { it.canHandle(url) } ?: defaultDownloader

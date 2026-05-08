@@ -309,6 +309,7 @@ Base class for entries in the download queue.
 | `type` | [Type](#type)? | The type of content being downloaded. |
 | `maxRetries` | `Int` | Maximum number of retry attempts on failure. |
 | `byUser` | `PlatformUUID`? | The ID of the user who initiated the download. |
+| `downloader` | [DownloadBackend](#downloadbackend)? | The downloader backend to use for this entry. |
 | `callback` | `SuspendFunction0`<`Unit`> |  |
 
 ### DownloadSong
@@ -346,6 +347,7 @@ A download queue entry for a user's favorite collection.
 | `favoriteType` | [DownloadFavType](#downloadfavtype) | The type of favorites to download. |
 | `byUser` | `PlatformUUID`? | The ID of the user who initiated the download. |
 | `type` | [Type](#type)? | The type of content. |
+| `downloader` | [DownloadBackend](#downloadbackend)? | The downloader backend to use for this entry. |
 | `maxRetries` | `Int` |  |
 | `callback` | `SuspendFunction0`<`Unit`> |  |
 
@@ -964,6 +966,7 @@ A download queue entry for content specified by its URL.
 | `ids` | `Collection`<`String`> | Collection of associated IDs. |
 | `byUser` | `PlatformUUID`? | The ID of the user who initiated the download. |
 | `type` | [Type](#type)? | The type of content. |
+| `downloader` | [DownloadBackend](#downloadbackend)? | The downloader backend to use for this entry. |
 | `maxRetries` | `Int` |  |
 | `callback` | `SuspendFunction0`<`Unit`> |  |
 

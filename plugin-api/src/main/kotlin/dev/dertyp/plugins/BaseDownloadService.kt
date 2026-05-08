@@ -1,21 +1,10 @@
 package dev.dertyp.plugins
 
 import dev.dertyp.data.User
-import dev.dertyp.services.download.DownloadQueueEntry
-import dev.dertyp.services.download.FavouriteDownloadQueueEntry
-import dev.dertyp.services.download.FinishedDownloadQueueEntry
-import dev.dertyp.services.download.ProcessExecutionResult
-import dev.dertyp.services.download.Type
-import dev.dertyp.services.download.UrlDownloadQueueEntry
+import dev.dertyp.services.download.*
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asSharedFlow
-import kotlinx.coroutines.flow.debounce
-import kotlinx.coroutines.flow.onStart
-import kotlinx.coroutines.flow.takeWhile
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -126,8 +115,10 @@ abstract class BaseDownloadService(val context: PluginContext) : IPluginDownload
 
             val result = when (entry) {
                 is UrlDownloadQueueEntry -> {
+                    val defaultDownloader = entry.downloader?.let { db -> getAllDownloaders().find { it.id == db.id } }
                     val groups = entry.urls.groupBy { url ->
-                        getAllDownloaders().find { it.canHandle(url) }
+                        if (defaultDownloader?.canHandle(url) == true) defaultDownloader
+                        else getAllDownloaders().find { it.canHandle(url) } ?: defaultDownloader
                     }
                     var lastRes = ProcessExecutionResult.EMPTY
                     for ((downloader, groupUrls) in groups) {
@@ -138,7 +129,8 @@ abstract class BaseDownloadService(val context: PluginContext) : IPluginDownload
                     lastRes
                 }
                 is FavouriteDownloadQueueEntry -> {
-                    getDownloaderForEntry(entry)?.downloadFavoriteCollection(entry.favoriteType, entry.maxRetries, aliveCheck, entry.byUser, logUnit)
+                    val downloader = entry.downloader?.let { db -> getAllDownloaders().find { it.id == db.id } } ?: getDownloaderForEntry(entry)
+                    downloader?.downloadFavoriteCollection(entry.favoriteType, entry.maxRetries, aliveCheck, entry.byUser, logUnit)
                         ?: ProcessExecutionResult(-1, "No downloader for favorites", "")
                 }
             }

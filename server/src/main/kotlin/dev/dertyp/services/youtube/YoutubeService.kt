@@ -164,7 +164,8 @@ class YoutubeService(
                                 urls = trackChunk.map { "https://www.youtube.com/watch?v=${it.second}" }.toMutableList(),
                                 ids = trackChunk.map { it.second },
                                 byUser = user.id,
-                                type = Type.SONG
+                                type = Type.SONG,
+                                downloader = DownloadBackend(id)
                             ) {
                                 val songs = songService.byOriginalIds(
                                     trackChunk.map { "https://www.youtube.com/watch?v=${it.second}" },
@@ -196,7 +197,8 @@ class YoutubeService(
                             urls = toDownload.toMutableList(),
                             ids = ids,
                             byUser = user.id,
-                            type = type
+                            type = type,
+                            downloader = DownloadBackend(id)
                         ) {
                             callback(ids)
                         }
