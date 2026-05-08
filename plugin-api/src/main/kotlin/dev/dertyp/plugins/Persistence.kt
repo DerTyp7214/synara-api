@@ -1,15 +1,7 @@
 package dev.dertyp.plugins
 
 import dev.dertyp.PlatformUUID
-import dev.dertyp.data.Album
-import dev.dertyp.data.Artist
-import dev.dertyp.data.InsertableAlbum
-import dev.dertyp.data.InsertableImage
-import dev.dertyp.data.InsertablePlaylist
-import dev.dertyp.data.InsertableSong
-import dev.dertyp.data.Song
-import dev.dertyp.data.User
-import dev.dertyp.data.UserSong
+import dev.dertyp.data.*
 import java.time.Instant
 
 interface SongLibrary {

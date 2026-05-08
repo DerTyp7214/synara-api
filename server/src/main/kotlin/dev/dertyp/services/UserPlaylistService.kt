@@ -125,27 +125,27 @@ class UserPlaylistService : PlaylistLibrary, IUserPlaylistService, Service() {
         }.map { it[UserPlaylistSongTable.songId].value }
     }
 
-    override suspend fun addSongsToPlaylist(id: UUID, songIds: List<UUID>): List<UUID> {
+    override suspend fun addSongsToPlaylist(id: UUID, songIds: List<UUID>) {
         val now = System.currentTimeMillis()
-        return addToPlaylist(id, songIds.mapIndexed { index, it -> (now + index) to it })
+        addToPlaylist(id, songIds.mapIndexed { index, it -> (now + index) to it })
     }
 
-    override suspend fun addAlbumToPlaylist(id: UUID, albumId: UUID): List<UUID> {
+    override suspend fun addAlbumToPlaylist(id: UUID, albumId: UUID) {
         val songService by inject<ISongService>()
         val songIds = songService.songIdsByAlbum(albumId).toList()
-        return addSongsToPlaylist(id, songIds)
+        addSongsToPlaylist(id, songIds)
     }
 
-    override suspend fun addPlaylistToPlaylist(id: UUID, sourcePlaylistId: UUID): List<UUID> {
+    override suspend fun addPlaylistToPlaylist(id: UUID, sourcePlaylistId: UUID) {
         val songService by inject<ISongService>()
         val songIds = songService.songIdsByPlaylist(sourcePlaylistId).toList()
-        return addSongsToPlaylist(id, songIds)
+        addSongsToPlaylist(id, songIds)
     }
 
-    override suspend fun addUserPlaylistToPlaylist(id: UUID, sourcePlaylistId: UUID): List<UUID> {
+    override suspend fun addUserPlaylistToPlaylist(id: UUID, sourcePlaylistId: UUID) {
         val songService by inject<ISongService>()
         val songIds = songService.songIdsByUserPlaylist(sourcePlaylistId).toList()
-        return addSongsToPlaylist(id, songIds)
+        addSongsToPlaylist(id, songIds)
     }
 
     override suspend fun removeFromPlaylist(id: UUID, songIds: List<UUID>): Int = dbQuery {
