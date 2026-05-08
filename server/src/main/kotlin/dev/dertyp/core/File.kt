@@ -15,7 +15,9 @@ fun File.deleteOnExitRecursive() {
 }
 
 fun File.getTotalSize(): Long {
-    if (isFile) return length()
+    val path = this.toPath()
+    if (Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) return length()
+    if (!Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS)) return 0
 
-    return walkTopDown().filter { Files.isRegularFile(it.toPath(), LinkOption.NOFOLLOW_LINKS) }.sumOf { it.length() }
+    return listFiles()?.sumOf { it.getTotalSize() } ?: 0
 }
