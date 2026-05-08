@@ -70,7 +70,9 @@ RUN chown -R appuser:appgroup /home/appuser
 
 ARG DAY_MONTH_YEAR=unknown
 
-RUN python3 -m pip install --break-system-packages --no-cache-dir syncedlyrics yt-dlp tiddl #  tidal-dl-ng
+RUN python3 -m pip install --break-system-packages --no-cache-dir syncedlyrics yt-dlp tiddl && \
+    sed -i 's/facebookUid: int/facebookUid: Optional[int] = None/' /usr/local/lib/python3.*/site-packages/tiddl/core/auth/models.py && \
+    find /usr/local/lib/python3.*/site-packages/tiddl -name "__pycache__" -type d -exec rm -rf {} +
 
 COPY --chown=appuser:appuser docker/tiddl/config.toml /home/appuser/.tiddl/config.toml
 COPY --chown=appuser:appuser docker/tdn-config/settings.json /home/appuser/.config/tidal_dl_ng/settings.json
