@@ -60,6 +60,8 @@ class MusicBrainzWorker : Worker("MusicBrainzWorker") {
                                 totalAlbumsChecked++
                                 if (album?.musicbrainzId != null) {
                                     taggedAlbums++
+                                } else {
+                                    albumService.updateMusicBrainzLastCheck(albumId)
                                 }
                                 onProgress(0.0, "Checked $totalSongsChecked songs ($taggedSongs tagged), $totalAlbumsChecked albums ($taggedAlbums tagged), $totalArtistsChecked artists ($taggedArtists tagged)")
                             } catch (e: Exception) {
@@ -77,6 +79,8 @@ class MusicBrainzWorker : Worker("MusicBrainzWorker") {
                                 totalArtistsChecked++
                                 if (artist?.musicbrainzId != null) {
                                     taggedArtists++
+                                } else {
+                                    artistService.updateMusicBrainzLastCheck(artistId)
                                 }
                                 onProgress(0.0, "Checked $totalSongsChecked songs ($taggedSongs tagged), $totalAlbumsChecked albums ($taggedAlbums tagged), $totalArtistsChecked artists ($taggedArtists tagged)")
                             } catch (e: Exception) {

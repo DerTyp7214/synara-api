@@ -316,6 +316,13 @@ class AlbumService : AlbumLibrary, Service() {
         return setMusicBrainzId(id, mbId, userId, triggerMerge)
     }
 
+    suspend fun updateMusicBrainzLastCheck(id: UUID) = dbQuery {
+        AlbumMusicBrainzTable.upsert(AlbumMusicBrainzTable.albumId) {
+            it[albumId] = id
+            it[lastCheck] = Clock.System.now().toEpochMilliseconds()
+        }
+    }
+
     suspend fun setMusicBrainzId(
         id: UUID,
         musicBrainzId: UUID?,

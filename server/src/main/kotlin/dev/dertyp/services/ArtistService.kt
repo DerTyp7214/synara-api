@@ -19,6 +19,7 @@ import org.jetbrains.exposed.v1.jdbc.*
 import org.koin.core.component.inject
 import java.util.UUID
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.days
 
 class ArtistRpcService(private val user: User, private val artistService: ArtistService) : IArtistService {
     override suspend fun byId(id: UUID): Artist? = artistService.byId(id, user.id)
@@ -203,6 +204,13 @@ class ArtistService : ArtistLibrary, Service() {
         }
         
         return setMusicBrainzId(id, mbArtist?.id, userId)
+    }
+
+    suspend fun updateMusicBrainzLastCheck(id: UUID) = dbQuery {
+        ArtistMusicBrainzTable.upsert(ArtistMusicBrainzTable.artistId) {
+            it[artistId] = id
+            it[lastCheck] = Clock.System.now().toEpochMilliseconds()
+        }
     }
 
     suspend fun setMusicBrainzId(id: UUID, musicBrainzId: UUID?, userId: UUID? = null): Artist? {
@@ -583,11 +591,14 @@ class ArtistService : ArtistLibrary, Service() {
     }
 
     fun artistIdsWithoutMusicBrainzId(): Flow<UUID> = flow {
+        val oneWeekAgo = Clock.System.now() - 7.days
+
         ArtistTable
             .leftJoin(ArtistMusicBrainzTable)
             .select(ArtistTable.id)
             .where {
-                ArtistMusicBrainzTable.artistId.isNull() or (ArtistMusicBrainzTable.musicBrainzId.isNull())
+                ArtistMusicBrainzTable.artistId.isNull() or
+                        (ArtistMusicBrainzTable.musicBrainzId.isNull() and (ArtistMusicBrainzTable.lastCheck less oneWeekAgo.toEpochMilliseconds()))
             }
             .fetchBatchedResultsByIdKeyset(ArtistTable.id, 1000) { batch ->
                 for (row in batch) {
