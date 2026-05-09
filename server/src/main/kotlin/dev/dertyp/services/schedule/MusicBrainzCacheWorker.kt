@@ -24,6 +24,7 @@ class MusicBrainzCacheWorker : Worker("MusicBrainzCacheWorker") {
         var releaseGroupsUpdated = 0
 
         val oneMonthAgo = Clock.System.now().toEpochMilliseconds() - 30.days.inWholeMilliseconds
+        fun getRetryTimestamp(): Long = oneMonthAgo + (2..5).random().days.inWholeMilliseconds
 
         val totalArtists = dbQuery {
             MBArtistTable.selectAll().where { MBArtistTable.lastUpdate less oneMonthAgo }
@@ -73,6 +74,8 @@ class MusicBrainzCacheWorker : Worker("MusicBrainzCacheWorker") {
                 musicBrainzService.fetchArtistById(id)?.let {
                     musicBrainzCacheService.updateArtistCache(it)
                     artistsUpdated++
+                } ?: run {
+                    musicBrainzCacheService.updateArtistLastUpdate(id, getRetryTimestamp())
                 }
                 progress(
                     current = artistsUpdated,
@@ -92,6 +95,8 @@ class MusicBrainzCacheWorker : Worker("MusicBrainzCacheWorker") {
                 musicBrainzService.fetchReleaseGroupById(id)?.let {
                     musicBrainzCacheService.updateReleaseGroupCache(it)
                     releaseGroupsUpdated++
+                } ?: run {
+                    musicBrainzCacheService.updateReleaseGroupLastUpdate(id, getRetryTimestamp())
                 }
                 progress(
                     current = releaseGroupsUpdated,
@@ -111,6 +116,8 @@ class MusicBrainzCacheWorker : Worker("MusicBrainzCacheWorker") {
                 musicBrainzService.fetchReleaseById(id)?.let {
                     musicBrainzCacheService.updateReleaseCache(it)
                     releasesUpdated++
+                } ?: run {
+                    musicBrainzCacheService.updateReleaseLastUpdate(id, getRetryTimestamp())
                 }
                 progress(
                     current = releasesUpdated,
@@ -130,6 +137,8 @@ class MusicBrainzCacheWorker : Worker("MusicBrainzCacheWorker") {
                 musicBrainzService.fetchRecordingById(id)?.let {
                     musicBrainzCacheService.updateRecordingCache(it)
                     recordingsUpdated++
+                } ?: run {
+                    musicBrainzCacheService.updateRecordingLastUpdate(id, getRetryTimestamp())
                 }
                 progress(
                     current = recordingsUpdated,

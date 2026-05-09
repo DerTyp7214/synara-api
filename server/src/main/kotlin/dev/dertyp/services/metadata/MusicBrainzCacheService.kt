@@ -1,43 +1,15 @@
 package dev.dertyp.services.metadata
 
 import dev.dertyp.core.fetchBatchedResultsByIdKeyset
-import dev.dertyp.data.ArtistType
-import dev.dertyp.data.MusicBrainzAlias
-import dev.dertyp.data.MusicBrainzArea
-import dev.dertyp.data.MusicBrainzArtist
-import dev.dertyp.data.MusicBrainzArtistCredit
-import dev.dertyp.data.MusicBrainzLifeSpan
-import dev.dertyp.data.MusicBrainzMedia
-import dev.dertyp.data.MusicBrainzRecording
-import dev.dertyp.data.MusicBrainzRelease
-import dev.dertyp.data.MusicBrainzReleaseGroup
-import dev.dertyp.data.MusicBrainzTag
-import dev.dertyp.data.MusicBrainzTrack
-import dev.dertyp.db.MBAreaTable
-import dev.dertyp.db.MBArtistAliasTable
-import dev.dertyp.db.MBArtistTable
-import dev.dertyp.db.MBArtistTagTable
-import dev.dertyp.db.MBMediaTable
-import dev.dertyp.db.MBRecordingArtistCreditTable
-import dev.dertyp.db.MBRecordingReleaseTable
-import dev.dertyp.db.MBRecordingTable
-import dev.dertyp.db.MBReleaseArtistCreditTable
-import dev.dertyp.db.MBReleaseGroupTable
-import dev.dertyp.db.MBReleaseTable
-import dev.dertyp.db.MBTrackTable
+import dev.dertyp.data.*
+import dev.dertyp.db.*
 import dev.dertyp.dbQuery
 import dev.dertyp.services.Service
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.less
-import org.jetbrains.exposed.v1.jdbc.deleteWhere
-import org.jetbrains.exposed.v1.jdbc.insert
-import org.jetbrains.exposed.v1.jdbc.insertAndGetId
-import org.jetbrains.exposed.v1.jdbc.select
-import org.jetbrains.exposed.v1.jdbc.selectAll
-import org.jetbrains.exposed.v1.jdbc.update
-import org.jetbrains.exposed.v1.jdbc.upsert
+import org.jetbrains.exposed.v1.jdbc.*
 import java.util.UUID
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
@@ -419,6 +391,30 @@ class MusicBrainzCacheService : Service() {
             it[primaryType] = group.primaryType
             it[firstReleaseDate] = group.firstReleaseDate
             it[lastUpdate] = Clock.System.now().toEpochMilliseconds()
+        }
+    }
+
+    suspend fun updateArtistLastUpdate(id: UUID, lastUpdate: Long) = dbQuery {
+        MBArtistTable.update({ MBArtistTable.id eq id }) {
+            it[MBArtistTable.lastUpdate] = lastUpdate
+        }
+    }
+
+    suspend fun updateReleaseGroupLastUpdate(id: UUID, lastUpdate: Long) = dbQuery {
+        MBReleaseGroupTable.update({ MBReleaseGroupTable.id eq id }) {
+            it[MBReleaseGroupTable.lastUpdate] = lastUpdate
+        }
+    }
+
+    suspend fun updateReleaseLastUpdate(id: UUID, lastUpdate: Long) = dbQuery {
+        MBReleaseTable.update({ MBReleaseTable.id eq id }) {
+            it[MBReleaseTable.lastUpdate] = lastUpdate
+        }
+    }
+
+    suspend fun updateRecordingLastUpdate(id: UUID, lastUpdate: Long) = dbQuery {
+        MBRecordingTable.update({ MBRecordingTable.id eq id }) {
+            it[MBRecordingTable.lastUpdate] = lastUpdate
         }
     }
 }
