@@ -6,6 +6,8 @@ import dev.dertyp.rpc.annotations.RestPost
 import dev.dertyp.rpc.annotations.RestPut
 import dev.dertyp.rpc.getAllServiceClasses
 import dev.dertyp.rpc.initializeServiceRegistry
+import dev.dertyp.serializers.AppCbor
+import dev.dertyp.serializers.AppJson
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.kotlinx.json.json
@@ -21,6 +23,8 @@ import io.ktor.server.routing.*
 import kotlinx.rpc.krpc.ktor.server.Krpc
 import kotlinx.rpc.krpc.ktor.server.KrpcRoute
 import kotlinx.rpc.krpc.ktor.server.rpc
+import kotlinx.rpc.krpc.serialization.cbor.cbor
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.serializer
 import kotlin.reflect.KClass
@@ -43,18 +47,17 @@ val MockAuthPlugin = createRouteScopedPlugin("MockAuthPlugin") {
     }
 }
 
+@OptIn(ExperimentalSerializationApi::class)
 fun Application.module() {
-    val jsonConfig = Json {
-        prettyPrint = true
-        isLenient = true
-        ignoreUnknownKeys = true
-    }
-
     install(ContentNegotiation) {
-        json(jsonConfig)
+        json(AppJson)
     }
 
-    install(Krpc)
+    install(Krpc) {
+        serialization {
+            cbor(AppCbor)
+        }
+    }
     
     initializeServiceRegistry()
     val allServices = getAllServiceClasses()
@@ -101,7 +104,7 @@ fun Application.module() {
         }
 
         allServices.forEach { serviceClass ->
-            registerMockRestService(serviceClass, jsonConfig, serviceClass.simpleName in publicServices)
+            registerMockRestService(serviceClass, AppJson, serviceClass.simpleName in publicServices)
         }
     }
 }
