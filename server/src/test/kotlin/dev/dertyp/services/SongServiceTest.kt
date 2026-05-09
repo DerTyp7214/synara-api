@@ -56,6 +56,7 @@ class SongServiceTest : KoinTest {
                 single { AlbumService() }
                 single { ArtistService() }
                 single { GenreService() }
+                single { LibraryMergeService() }
             })
         }
 

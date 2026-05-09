@@ -147,12 +147,16 @@ class ArtistService : ArtistLibrary, Service() {
             for (songId in songIds) {
                 val song = songService.byId(songId) ?: continue
                 val mbRecording = if (song.musicBrainzId != null) {
-                    cachedMusicBrainzService.getRecording(song.musicBrainzId!!)
+                    cachedMusicBrainzService.getRecording(song.musicBrainzId!!, priority)
                 } else {
                     musicBrainzService.searchMb(song, priority)
                 }
 
                 if (mbRecording != null) {
+                    if (song.musicBrainzId == null) {
+                        musicBrainzCacheService.updateRecordingCache(mbRecording)
+                    }
+
                     val matchedArtist = mbRecording.artistCredit?.find {
                         it.name.equals(artist.name, ignoreCase = true) || it.artist?.name.equals(artist.name, ignoreCase = true)
                     }?.artist
@@ -169,9 +173,11 @@ class ArtistService : ArtistLibrary, Service() {
             val albums = albumService.byArtist(page = 0, pageSize = 5, artistId = id, singles = false, userId = userId).data
             for (album in albums) {
                 val mbRelease = if (album.musicbrainzId != null) {
-                    cachedMusicBrainzService.getRelease(album.musicbrainzId!!)
+                    cachedMusicBrainzService.getRelease(album.musicbrainzId!!, priority)
                 } else {
-                    musicBrainzService.searchAlbumMb(album, priority)
+                    musicBrainzService.searchAlbumMb(album, priority)?.also {
+                        musicBrainzCacheService.updateReleaseCache(it)
+                    }
                 }
                 
                 if (mbRelease != null) {
@@ -188,12 +194,10 @@ class ArtistService : ArtistLibrary, Service() {
         }
         
         val mbArtist = if (mbArtistId != null) {
-            cachedMusicBrainzService.getArtist(mbArtistId)
+            cachedMusicBrainzService.getArtist(mbArtistId, priority)
         } else return byId(id, userId)
         
         if (mbArtist != null) {
-            musicBrainzCacheService.updateArtistCache(mbArtist)
-
             val genres = mbArtist.genres?.map { it.name } ?: emptyList()
             if (genres.isNotEmpty()) {
                 val genreIds = genreService.getOrCreateGenres(genres)
@@ -233,7 +237,6 @@ class ArtistService : ArtistLibrary, Service() {
             }
 
             if (!artistExists) {
-                val cachedMusicBrainzService: CachedMusicBrainzService by inject()
                 cachedMusicBrainzService.getArtist(musicBrainzId)
             }
         }

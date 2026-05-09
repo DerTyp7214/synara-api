@@ -6,14 +6,7 @@ import dev.dertyp.ApiClient
 import dev.dertyp.PlatformUUID
 import dev.dertyp.core.HttpClientPriority
 import dev.dertyp.core.cleanTitle
-import dev.dertyp.data.Album
-import dev.dertyp.data.Artist
-import dev.dertyp.data.BaseSong
-import dev.dertyp.data.MusicBrainzArtist
-import dev.dertyp.data.MusicBrainzRecording
-import dev.dertyp.data.MusicBrainzRelease
-import dev.dertyp.data.MusicBrainzReleaseGroup
-import dev.dertyp.data.PaginatedResponse
+import dev.dertyp.data.*
 import dev.dertyp.server.BuildConfig
 import dev.dertyp.services.Service
 import io.ktor.client.call.body
@@ -397,49 +390,61 @@ class CachedMusicBrainzService(
     private val musicBrainzService: MusicBrainzService,
     private val musicBrainzCacheService: MusicBrainzCacheService
 ) : IMusicBrainzService {
-    override suspend fun getArtist(id: PlatformUUID): MusicBrainzArtist? {
+    override suspend fun getArtist(id: PlatformUUID) = getArtist(id, HttpClientPriority.HIGH)
+
+    suspend fun getArtist(id: PlatformUUID, priority: HttpClientPriority = HttpClientPriority.NORMAL): MusicBrainzArtist? {
         val cached = musicBrainzCacheService.getArtist(id)
         if (cached != null && cached.fetchedAt != 0L) return cached
-        return musicBrainzService.fetchArtistById(id, HttpClientPriority.HIGH)?.also {
+        return musicBrainzService.fetchArtistById(id, priority)?.also {
             musicBrainzCacheService.updateArtistCache(it)
         } ?: cached
     }
 
-    override suspend fun getRecording(id: PlatformUUID): MusicBrainzRecording? {
+    override suspend fun getRecording(id: PlatformUUID) = getRecording(id, HttpClientPriority.HIGH)
+
+    suspend fun getRecording(id: PlatformUUID, priority: HttpClientPriority = HttpClientPriority.NORMAL): MusicBrainzRecording? {
         val cached = musicBrainzCacheService.getRecording(id)
         if (cached != null && cached.fetchedAt != 0L) return cached
-        return musicBrainzService.fetchRecordingById(id, HttpClientPriority.HIGH)?.also {
+        return musicBrainzService.fetchRecordingById(id, priority)?.also {
             musicBrainzCacheService.updateRecordingCache(it)
         } ?: cached
     }
 
-    override suspend fun getRelease(id: PlatformUUID): MusicBrainzRelease? {
+    override suspend fun getRelease(id: PlatformUUID) = getRelease(id, HttpClientPriority.HIGH)
+
+    suspend fun getRelease(id: PlatformUUID, priority: HttpClientPriority = HttpClientPriority.NORMAL): MusicBrainzRelease? {
         val cached = musicBrainzCacheService.getRelease(id)
         if (cached != null && cached.fetchedAt != 0L && cached.media?.isNotEmpty() == true) {
             val hasTracks = cached.media!!.firstOrNull()?.tracks?.isNotEmpty() == true
             if (hasTracks) return cached
         }
-        return musicBrainzService.fetchReleaseById(id, HttpClientPriority.HIGH)?.also {
+        return musicBrainzService.fetchReleaseById(id, priority)?.also {
             musicBrainzCacheService.updateReleaseCache(it)
         } ?: cached
     }
 
-    override suspend fun getReleaseGroup(id: PlatformUUID): MusicBrainzReleaseGroup? {
+    override suspend fun getReleaseGroup(id: PlatformUUID) = getReleaseGroup(id, HttpClientPriority.HIGH)
+
+    suspend fun getReleaseGroup(id: PlatformUUID, priority: HttpClientPriority = HttpClientPriority.NORMAL): MusicBrainzReleaseGroup? {
         val cached = musicBrainzCacheService.getReleaseGroup(id)
         if (cached != null && cached.fetchedAt != 0L) return cached
-        return musicBrainzService.fetchReleaseGroupById(id, HttpClientPriority.HIGH)?.also {
+        return musicBrainzService.fetchReleaseGroupById(id, priority)?.also {
             musicBrainzCacheService.updateReleaseGroupCache(it)
         } ?: cached
     }
 
-    override suspend fun searchRecording(title: String, artists: List<String>): MusicBrainzRecording? {
-        return musicBrainzService.searchRecordingMb(title, artists, HttpClientPriority.HIGH)?.also {
+    override suspend fun searchRecording(title: String, artists: List<String>) = searchRecording(title, artists, HttpClientPriority.HIGH)
+
+    suspend fun searchRecording(title: String, artists: List<String>, priority: HttpClientPriority = HttpClientPriority.NORMAL): MusicBrainzRecording? {
+        return musicBrainzService.searchRecordingMb(title, artists, priority)?.also {
             musicBrainzCacheService.updateRecordingCache(it)
         }
     }
 
-    override suspend fun searchRelease(title: String, artists: List<String>): MusicBrainzRelease? {
-        return musicBrainzService.searchReleaseMb(title, artists, HttpClientPriority.HIGH)?.also {
+    override suspend fun searchRelease(title: String, artists: List<String>) = searchRelease(title, artists, HttpClientPriority.HIGH)
+
+    suspend fun searchRelease(title: String, artists: List<String>, priority: HttpClientPriority = HttpClientPriority.NORMAL): MusicBrainzRelease? {
+        return musicBrainzService.searchReleaseMb(title, artists, priority)?.also {
             musicBrainzCacheService.updateReleaseCache(it)
         }
     }

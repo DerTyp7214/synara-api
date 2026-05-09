@@ -10,6 +10,7 @@ import dev.dertyp.getISOFromDate
 import dev.dertyp.plugins.AlbumLibrary
 import dev.dertyp.services.ArtistService.Companion.mapArtist
 import dev.dertyp.services.metadata.CachedMusicBrainzService
+import dev.dertyp.services.metadata.MusicBrainzCacheService
 import dev.dertyp.services.metadata.MusicBrainzService
 import dev.dertyp.utils.LogParam
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -71,6 +72,7 @@ class AlbumRpcService(private val user: User, private val albumService: AlbumSer
 class AlbumService : AlbumLibrary, Service() {
     private val musicBrainzService by inject<MusicBrainzService>()
     private val cachedMusicBrainzService by inject<CachedMusicBrainzService>()
+    private val musicBrainzCacheService by inject<MusicBrainzCacheService>()
     private val artistService by inject<ArtistService>()
     private val genreService by inject<GenreService>()
     private val libraryMergeService by inject<LibraryMergeService>()
@@ -133,10 +135,11 @@ class AlbumService : AlbumLibrary, Service() {
     ): Album? {
         val album = byId(id, userId) ?: return null
 
-        val mbId = album.musicbrainzId ?: musicBrainzService.searchAlbumMb(album, priority)?.id
-        ?: return album
+        val mbId = album.musicbrainzId ?: musicBrainzService.searchAlbumMb(album, priority)?.also {
+            musicBrainzCacheService.updateReleaseCache(it)
+        }?.id ?: return album
 
-        val mbRelease = cachedMusicBrainzService.getRelease(mbId)
+        val mbRelease = cachedMusicBrainzService.getRelease(mbId, priority)
 
         if (mbRelease != null) {
             val trackCount = mbRelease.media?.sumOf { it.trackCount ?: 0 } ?: 0
@@ -335,7 +338,6 @@ class AlbumService : AlbumLibrary, Service() {
             }
 
             if (!releaseExists) {
-                val cachedMusicBrainzService: CachedMusicBrainzService by inject()
                 cachedMusicBrainzService.getRelease(musicBrainzId)
             }
         }

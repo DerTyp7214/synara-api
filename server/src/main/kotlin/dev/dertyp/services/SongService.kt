@@ -446,7 +446,7 @@ class SongService : SongLibrary, Service() {
         val song = byId(id, userId) ?: return null
 
         val mbRecording = if (song.musicBrainzId != null) {
-            cachedMusicBrainzService.getRecording(song.musicBrainzId!!)
+            cachedMusicBrainzService.getRecording(song.musicBrainzId!!, priority)
         } else {
             musicBrainzService.searchMb(song, priority)
         }
