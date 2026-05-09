@@ -43,6 +43,9 @@ class ArtistServiceTest : KoinTest {
                 single { MusicBrainzCacheService() }
                 single { mockk<ImageService>(relaxed = true) }
                 single { CachedMusicBrainzService(get(), get()) }
+                single { SongService() }
+                single { AlbumService() }
+                single { GenreService() }
             })
         }
 

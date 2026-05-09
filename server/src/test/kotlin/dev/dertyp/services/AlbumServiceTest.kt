@@ -46,6 +46,7 @@ class AlbumServiceTest : KoinTest {
                 single { mockk<ImageService>(relaxed = true) }
                 single { mockk<MetadataFetchingService>(relaxed = true) }
                 single { ArtistService() }
+                single { GenreService() }
                 single { CachedMusicBrainzService(get(), get()) }
                 single { libraryMergeService }
             })

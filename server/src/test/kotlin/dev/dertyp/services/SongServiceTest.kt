@@ -4,6 +4,7 @@ import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
 import dev.dertyp.data.*
 import dev.dertyp.db.*
+import dev.dertyp.services.metadata.CachedMusicBrainzService
 import dev.dertyp.services.metadata.MusicBrainzCacheService
 import dev.dertyp.services.metadata.MusicBrainzService
 import io.ktor.server.application.ApplicationEnvironment
@@ -48,11 +49,13 @@ class SongServiceTest : KoinTest {
                 single { environment }
                 single { musicBrainzService }
                 single { MusicBrainzCacheService() }
+                single { CachedMusicBrainzService(get(), get()) }
                 single { mockk<ImageService>(relaxed = true) }
                 single { storageService }
                 single { mockk<MetadataFetchingService>(relaxed = true) }
                 single { AlbumService() }
                 single { ArtistService() }
+                single { GenreService() }
             })
         }
 
