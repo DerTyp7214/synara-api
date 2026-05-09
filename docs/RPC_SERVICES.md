@@ -127,7 +127,7 @@ Contains metadata about a collection of songs released together.
 | :--- | :--- | :--- |
 | `id` | `PlatformUUID` | The album unique identifier. |
 | `name` | `String` | The name of the album. |
-| `artists` | `List`<[dev.dertyp.data.Artist](#devdertypdataartist)> | Collection of artists credited for this album. |
+| `artists` | `List`<[Artist](#devdertypdataartist)> | Collection of artists credited for this album. |
 | `songCount` | `Int` | Total number of songs in the album. |
 | `releaseDate` | `PlatformLocalDate`? | The date the album was released. |
 | `totalDuration` | `Long` | Sum of all track durations in milliseconds. |
@@ -147,7 +147,7 @@ Contains metadata about a music artist or group.
 | `id` | `PlatformUUID` | The artist unique identifier. |
 | `name` | `String` | The name of the artist. |
 | `isGroup` | `Boolean` | Whether the artist record represents a group of individuals. |
-| `artists` | `List`<[dev.dertyp.data.Artist](#devdertypdataartist)> | Collection of sub-artists if this is a group. |
+| `artists` | `List`<[Artist](#devdertypdataartist)> | Collection of sub-artists if this is a group. |
 | `about` | `String` | A short biography or description of the artist. |
 | `genres` | `List`<[Genre](#devdertypdatagenre)> | Collection of genres associated with this artist. |
 | `imageId` | `PlatformUUID`? | The artist image unique identifier. |
@@ -215,7 +215,7 @@ Contains raw binary data for a cover image in a backup.
 
 | Field | Type | Description |
 | :--- | :--- | :--- |
-| `image` | [dev.dertyp.data.Image](#devdertypdataimage) | Metadata for the image. |
+| `image` | [Image](#devdertypdataimage) | Metadata for the image. |
 | `data` | `ByteArray` | The raw binary data of the image. |
 
 ### CustomMetadata <a name="devdertypdatacustommetadata"></a>
@@ -590,8 +590,8 @@ Contains core metadata about a track that is common for all users.
 | :--- | :--- | :--- |
 | `id` | `PlatformUUID` | The song unique identifier. |
 | `title` | `String` | The title of the song. |
-| `artists` | `List`<[dev.dertyp.data.Artist](#devdertypdataartist)> | Collection of performing artists. |
-| `album` | [dev.dertyp.data.Album](#devdertypdataalbum)? | The album this song belongs to. |
+| `artists` | `List`<[Artist](#devdertypdataartist)> | Collection of performing artists. |
+| `album` | [Album](#devdertypdataalbum)? | The album this song belongs to. |
 | `duration` | `Long` | Duration of the song in milliseconds. |
 | `explicit` | `Boolean` | Whether the song contains explicit content. |
 | `releaseDate` | `PlatformLocalDate`? | Original release date of the track. |
@@ -743,8 +743,8 @@ Extends track metadata with user-specific information like favorite status.
 | :--- | :--- | :--- |
 | `id` | `PlatformUUID` | The song unique identifier. |
 | `title` | `String` | The title of the song. |
-| `artists` | `List`<[dev.dertyp.data.Artist](#devdertypdataartist)> | Collection of performing artists. |
-| `album` | [dev.dertyp.data.Album](#devdertypdataalbum)? | The album this song belongs to. |
+| `artists` | `List`<[Artist](#devdertypdataartist)> | Collection of performing artists. |
+| `album` | [Album](#devdertypdataalbum)? | The album this song belongs to. |
 | `duration` | `Long` | Duration of the song in milliseconds. |
 | `explicit` | `Boolean` | Whether the song contains explicit content. |
 | `releaseDate` | `PlatformLocalDate`? | Original release date of the track. |
@@ -929,7 +929,7 @@ External metadata for a music album.
 | `trackCount` | `Int` | Number of tracks in the album. |
 | `discCount` | `Int` | Number of discs in the album. |
 | `releaseDate` | `PlatformLocalDate`? | The date the album was released. |
-| `images` | `List`<[dev.dertyp.services.metadata.IMetadataService.Image](#devdertypservicesmetadataimetadataserviceimage)> | Collection of album images. |
+| `images` | `List`<[Image](#devdertypservicesmetadataimetadataserviceimage)> | Collection of album images. |
 | `genres` | `List`<`String`> | Genres associated with the album. |
 | `additionalTitles` | `List`<`String`> | Alternative titles for the album. |
 
@@ -944,7 +944,7 @@ External metadata for a music artist.
 | `name` | `String` | The name of the artist. |
 | `popularity` | `Float` | Popularity score of the artist. |
 | `url` | `String`? | The URL to the artist's profile. |
-| `images` | `List`<[dev.dertyp.services.metadata.IMetadataService.Image](#devdertypservicesmetadataimetadataserviceimage)> | Collection of artist images. |
+| `images` | `List`<[Image](#devdertypservicesmetadataimetadataserviceimage)> | Collection of artist images. |
 | `biography` | `String`? | Biography or description text. |
 | `styles` | `List`<`String`> | Musical styles associated with the artist. |
 | `genres` | `List`<`String`> | Genres associated with the artist. |
@@ -961,7 +961,7 @@ Reactive flow-based external playlist metadata.
 | `trackCount` | `Int` | Number of tracks in the playlist. |
 | `createdAt` | `PlatformOffsetDateTime`? | Timestamp of when the playlist was created. |
 | `modifiedAt` | `PlatformOffsetDateTime`? | Timestamp of the last modification. |
-| `images` | `List`<[dev.dertyp.services.metadata.IMetadataService.Image](#devdertypservicesmetadataimetadataserviceimage)> | Collection of playlist images. |
+| `images` | `List`<[Image](#devdertypservicesmetadataimetadataserviceimage)> | Collection of playlist images. |
 | `cache` | `MutableList`<[Track](#devdertypservicesmetadataimetadataservicetrack)> |  |
 | `collectionJob` | `Deferred`<`List`<[Track](#devdertypservicesmetadataimetadataservicetrack)>>? |  |
 | `mutex` | `Mutex` |  |
@@ -987,7 +987,7 @@ External metadata for a curated music mix.
 | `id` | `String` | The external mix ID. |
 | `name` | `String` | The name of the mix. |
 | `tracks` | `Flow`<[Track](#devdertypservicesmetadataimetadataservicetrack)> | Stream of tracks included in the mix. |
-| `images` | `List`<[dev.dertyp.services.metadata.IMetadataService.Image](#devdertypservicesmetadataimetadataserviceimage)> | Collection of mix images. |
+| `images` | `List`<[Image](#devdertypservicesmetadataimetadataserviceimage)> | Collection of mix images. |
 
 ### Playlist <a name="devdertypservicesmetadataimetadataserviceplaylist"></a>
 *Full name: `dev.dertyp.services.metadata.IMetadataService.Playlist`*
@@ -1003,7 +1003,7 @@ External metadata for a music playlist.
 | `trackCount` | `Int` | Number of tracks in the playlist. |
 | `createdAt` | `PlatformOffsetDateTime`? | Timestamp of when the playlist was created. |
 | `modifiedAt` | `PlatformOffsetDateTime`? | Timestamp of the last modification. |
-| `images` | `List`<[dev.dertyp.services.metadata.IMetadataService.Image](#devdertypservicesmetadataimetadataserviceimage)> | Collection of playlist images. |
+| `images` | `List`<[Image](#devdertypservicesmetadataimetadataserviceimage)> | Collection of playlist images. |
 
 ### Track <a name="devdertypservicesmetadataimetadataservicetrack"></a>
 External metadata for a music track.
@@ -1018,7 +1018,7 @@ External metadata for a music track.
 | `addedAt` | `PlatformOffsetDateTime`? | Timestamp of when the track was added to the source collection. |
 | `trackNumber` | `Int`? | Track position in the album. |
 | `discNumber` | `Int`? | Disc number in the album. |
-| `images` | `List`<[dev.dertyp.services.metadata.IMetadataService.Image](#devdertypservicesmetadataimetadataserviceimage)> | Collection of track images. |
+| `images` | `List`<[Image](#devdertypservicesmetadataimetadataserviceimage)> | Collection of track images. |
 | `genres` | `List`<`String`> | Genres associated with the track. |
 | `albumId` | `String`? | The external album ID. |
 | `albumTitle` | `String`? | The title of the album. |
@@ -1098,38 +1098,38 @@ Manages albums and their metadata.
 
 | Function | Parameters | Returns | Admin | Errors | Description |
 | :--- | :--- | :--- | :---: | :--- | :--- |
-| `byId` | `id` (`PlatformUUID`): The album unique identifier. | [dev.dertyp.data.Album](#devdertypdataalbum)? | No |  | Get album by ID. |
-| `byMusicBrainzId` | `mbId` (`PlatformUUID`): The MusicBrainz release UUID. | `List`<[dev.dertyp.data.Album](#devdertypdataalbum)> | No |  | Get album by MusicBrainz ID. |
-| `byIds` | `ids` (`List`<`PlatformUUID`>): Collection of album IDs. | `List`<[dev.dertyp.data.Album](#devdertypdataalbum)> | No |  | Get multiple albums by their IDs. |
-| `versions` | `id` (`PlatformUUID`): The album unique identifier. | `List`<[dev.dertyp.data.Album](#devdertypdataalbum)> | No |  | List different versions of an album. |
-| `byName` | `page` (`Int`): Page index (starting from 0).<br>`pageSize` (`Int`): Number of items per page.<br>`name` (`String`): The album name to search for. | [PaginatedResponse](#devdertypdatapaginatedresponse)<[dev.dertyp.data.Album](#devdertypdataalbum)> | No |  | Search albums by name. |
-| `rankedSearch` | `page` (`Int`): Page index.<br>`pageSize` (`Int`): Number of items per page.<br>`query` (`String`): The search query. | [PaginatedResponse](#devdertypdatapaginatedresponse)<[dev.dertyp.data.Album](#devdertypdataalbum)> | No |  | Ranked album search. |
-| `allAlbums` | `page` (`Int`): Page index.<br>`pageSize` (`Int`): Number of items per page. | [PaginatedResponse](#devdertypdatapaginatedresponse)<[dev.dertyp.data.Album](#devdertypdataalbum)> | No |  | Get all albums in the library. |
-| `updateAlbum` | `album` ([dev.dertyp.data.Album](#devdertypdataalbum)): The album object with updated fields. | [dev.dertyp.data.Album](#devdertypdataalbum)? | No |  | Update album metadata. |
+| `byId` | `id` (`PlatformUUID`): The album unique identifier. | [Album](#devdertypdataalbum)? | No |  | Get album by ID. |
+| `byMusicBrainzId` | `mbId` (`PlatformUUID`): The MusicBrainz release UUID. | `List`<[Album](#devdertypdataalbum)> | No |  | Get album by MusicBrainz ID. |
+| `byIds` | `ids` (`List`<`PlatformUUID`>): Collection of album IDs. | `List`<[Album](#devdertypdataalbum)> | No |  | Get multiple albums by their IDs. |
+| `versions` | `id` (`PlatformUUID`): The album unique identifier. | `List`<[Album](#devdertypdataalbum)> | No |  | List different versions of an album. |
+| `byName` | `page` (`Int`): Page index (starting from 0).<br>`pageSize` (`Int`): Number of items per page.<br>`name` (`String`): The album name to search for. | [PaginatedResponse](#devdertypdatapaginatedresponse)<[Album](#devdertypdataalbum)> | No |  | Search albums by name. |
+| `rankedSearch` | `page` (`Int`): Page index.<br>`pageSize` (`Int`): Number of items per page.<br>`query` (`String`): The search query. | [PaginatedResponse](#devdertypdatapaginatedresponse)<[Album](#devdertypdataalbum)> | No |  | Ranked album search. |
+| `allAlbums` | `page` (`Int`): Page index.<br>`pageSize` (`Int`): Number of items per page. | [PaginatedResponse](#devdertypdatapaginatedresponse)<[Album](#devdertypdataalbum)> | No |  | Get all albums in the library. |
+| `updateAlbum` | `album` ([Album](#devdertypdataalbum)): The album object with updated fields. | [Album](#devdertypdataalbum)? | No |  | Update album metadata. |
 | `deleteAlbums` | `ids` (`List`<`PlatformUUID`>): Collection of album IDs to delete. | `Boolean` | No |  | Delete multiple albums from the library. |
-| `fetchMusicBrainzId` | `id` (`PlatformUUID`): The album unique identifier. | [dev.dertyp.data.Album](#devdertypdataalbum)? | No |  | Fetch and link MusicBrainz ID for an album. |
-| `setMusicBrainzId` | `id` (`PlatformUUID`): The album unique identifier.<br>`musicBrainzId` (`PlatformUUID`?): The MusicBrainz Release UUID. | [dev.dertyp.data.Album](#devdertypdataalbum)? | No |  | Manually set MusicBrainz ID for an album. |
-| `byArtist` | `page` (`Int`): Page index.<br>`pageSize` (`Int`): Number of items per page.<br>`artistId` (`PlatformUUID`): The artist unique identifier.<br>`singles` (`Boolean`): Whether to include singles. | [PaginatedResponse](#devdertypdatapaginatedresponse)<[dev.dertyp.data.Album](#devdertypdataalbum)> | No |  | List albums by artist. |
+| `fetchMusicBrainzId` | `id` (`PlatformUUID`): The album unique identifier. | [Album](#devdertypdataalbum)? | No |  | Fetch and link MusicBrainz ID for an album. |
+| `setMusicBrainzId` | `id` (`PlatformUUID`): The album unique identifier.<br>`musicBrainzId` (`PlatformUUID`?): The MusicBrainz Release UUID. | [Album](#devdertypdataalbum)? | No |  | Manually set MusicBrainz ID for an album. |
+| `byArtist` | `page` (`Int`): Page index.<br>`pageSize` (`Int`): Number of items per page.<br>`artistId` (`PlatformUUID`): The artist unique identifier.<br>`singles` (`Boolean`): Whether to include singles. | [PaginatedResponse](#devdertypdatapaginatedresponse)<[Album](#devdertypdataalbum)> | No |  | List albums by artist. |
 
 ### IArtistService <a name="devdertypservicesiartistservice"></a>
 Manages artist data and complex library maintenance.
 
 | Function | Parameters | Returns | Admin | Errors | Description |
 | :--- | :--- | :--- | :---: | :--- | :--- |
-| `byId` | `id` (`PlatformUUID`): The artist unique identifier. | [dev.dertyp.data.Artist](#devdertypdataartist)? | No |  | Get artist by ID. |
-| `byMusicBrainzId` | `mbId` (`PlatformUUID`): The MusicBrainz artist UUID. | `List`<[dev.dertyp.data.Artist](#devdertypdataartist)> | No |  | Get artist by MusicBrainz ID. |
-| `byIds` | `ids` (`List`<`PlatformUUID`>): Collection of artist IDs. | `List`<[dev.dertyp.data.Artist](#devdertypdataartist)> | No |  | Get multiple artists by their IDs. |
-| `rankedSearch` | `page` (`Int`): Page index.<br>`pageSize` (`Int`): Number of items per page.<br>`query` (`String`): The search query. | [PaginatedResponse](#devdertypdatapaginatedresponse)<[dev.dertyp.data.Artist](#devdertypdataartist)> | No |  | Ranked artist search. |
-| `setGroup` | `id` (`PlatformUUID`): The group artist unique identifier.<br>`artistIds` (`List`<`PlatformUUID`>?): Optional collection of sub-artist IDs. | [dev.dertyp.data.Artist](#devdertypdataartist)? | No |  | Set sub-artists for a group. |
-| `byGroup` | `page` (`Int`): Page index.<br>`pageSize` (`Int`): Number of items per page.<br>`groupId` (`PlatformUUID`): The group artist unique identifier. | [PaginatedResponse](#devdertypdatapaginatedresponse)<[dev.dertyp.data.Artist](#devdertypdataartist)> | No |  | List artists in a group. |
-| `mergeArtists` | `mergeArtists` ([MergeArtists](#devdertypdatamergeartists)): Configuration for merging artists. | [dev.dertyp.data.Artist](#devdertypdataartist)? | No |  | Merge multiple artist records into one. |
-| `splitArtist` | `splitArtist` ([SplitArtist](#devdertypdatasplitartist)): Configuration for splitting an artist. | `List`<[dev.dertyp.data.Artist](#devdertypdataartist)> | No |  | Split an artist record into multiple artists. |
-| `allArtists` | `page` (`Int`): Page index.<br>`pageSize` (`Int`): Number of items per page. | [PaginatedResponse](#devdertypdatapaginatedresponse)<[dev.dertyp.data.Artist](#devdertypdataartist)> | No |  | Get all artists in the library. |
-| `createArtist` | `name` (`String`): Name of the artist.<br>`isGroup` (`Boolean`): Whether the artist is a group.<br>`about` (`String`): Optional biography or description.<br>`musicBrainzId` (`PlatformUUID`?): Optional MusicBrainz ID. | [dev.dertyp.data.Artist](#devdertypdataartist) | No |  | Manually create an artist record. |
+| `byId` | `id` (`PlatformUUID`): The artist unique identifier. | [Artist](#devdertypdataartist)? | No |  | Get artist by ID. |
+| `byMusicBrainzId` | `mbId` (`PlatformUUID`): The MusicBrainz artist UUID. | `List`<[Artist](#devdertypdataartist)> | No |  | Get artist by MusicBrainz ID. |
+| `byIds` | `ids` (`List`<`PlatformUUID`>): Collection of artist IDs. | `List`<[Artist](#devdertypdataartist)> | No |  | Get multiple artists by their IDs. |
+| `rankedSearch` | `page` (`Int`): Page index.<br>`pageSize` (`Int`): Number of items per page.<br>`query` (`String`): The search query. | [PaginatedResponse](#devdertypdatapaginatedresponse)<[Artist](#devdertypdataartist)> | No |  | Ranked artist search. |
+| `setGroup` | `id` (`PlatformUUID`): The group artist unique identifier.<br>`artistIds` (`List`<`PlatformUUID`>?): Optional collection of sub-artist IDs. | [Artist](#devdertypdataartist)? | No |  | Set sub-artists for a group. |
+| `byGroup` | `page` (`Int`): Page index.<br>`pageSize` (`Int`): Number of items per page.<br>`groupId` (`PlatformUUID`): The group artist unique identifier. | [PaginatedResponse](#devdertypdatapaginatedresponse)<[Artist](#devdertypdataartist)> | No |  | List artists in a group. |
+| `mergeArtists` | `mergeArtists` ([MergeArtists](#devdertypdatamergeartists)): Configuration for merging artists. | [Artist](#devdertypdataartist)? | No |  | Merge multiple artist records into one. |
+| `splitArtist` | `splitArtist` ([SplitArtist](#devdertypdatasplitartist)): Configuration for splitting an artist. | `List`<[Artist](#devdertypdataartist)> | No |  | Split an artist record into multiple artists. |
+| `allArtists` | `page` (`Int`): Page index.<br>`pageSize` (`Int`): Number of items per page. | [PaginatedResponse](#devdertypdatapaginatedresponse)<[Artist](#devdertypdataartist)> | No |  | Get all artists in the library. |
+| `createArtist` | `name` (`String`): Name of the artist.<br>`isGroup` (`Boolean`): Whether the artist is a group.<br>`about` (`String`): Optional biography or description.<br>`musicBrainzId` (`PlatformUUID`?): Optional MusicBrainz ID. | [Artist](#devdertypdataartist) | No |  | Manually create an artist record. |
 | `searchArtistOnMusicBrainz` | `query` (`String`): The search query.<br>`page` (`Int`): Page index.<br>`pageSize` (`Int`): Number of items per page. | [PaginatedResponse](#devdertypdatapaginatedresponse)<`MusicBrainzArtist`> | No |  | Search for an artist directly on MusicBrainz. |
-| `fetchMusicBrainzId` | `id` (`PlatformUUID`): The artist unique identifier. | [dev.dertyp.data.Artist](#devdertypdataartist)? | No |  | Fetch and link MusicBrainz ID for an artist. |
-| `setMusicBrainzId` | `id` (`PlatformUUID`): The artist unique identifier.<br>`musicBrainzId` (`PlatformUUID`?): The MusicBrainz ID to link. | [dev.dertyp.data.Artist](#devdertypdataartist)? | No |  | Link an artist record to a MusicBrainz ID. |
-| `artistsWithoutMusicBrainzIdFlow` | - | `Flow`<[dev.dertyp.data.Artist](#devdertypdataartist)> | No |  | Stream all artists that are missing a MusicBrainz ID. |
+| `fetchMusicBrainzId` | `id` (`PlatformUUID`): The artist unique identifier. | [Artist](#devdertypdataartist)? | No |  | Fetch and link MusicBrainz ID for an artist. |
+| `setMusicBrainzId` | `id` (`PlatformUUID`): The artist unique identifier.<br>`musicBrainzId` (`PlatformUUID`?): The MusicBrainz ID to link. | [Artist](#devdertypdataartist)? | No |  | Link an artist record to a MusicBrainz ID. |
+| `artistsWithoutMusicBrainzIdFlow` | - | `Flow`<[Artist](#devdertypdataartist)> | No |  | Stream all artists that are missing a MusicBrainz ID. |
 | `artistIdsWithoutMusicBrainzId` | - | `Flow`<`PlatformUUID`> | No |  | Stream IDs of all artists that are missing a MusicBrainz ID. |
 
 ### IAudioAnalysisService <a name="devdertypservicesiaudioanalysisservice"></a>
@@ -1207,8 +1207,8 @@ Management of image files for covers and profiles.
 
 | Function | Parameters | Returns | Admin | Errors | Description |
 | :--- | :--- | :--- | :---: | :--- | :--- |
-| `byId` | `id` (`PlatformUUID`): The image unique identifier. | [dev.dertyp.data.Image](#devdertypdataimage)? | No |  | Get image metadata by its unique ID. |
-| `byHash` | `hash` (`String`): The unique hash of the image. | [dev.dertyp.data.Image](#devdertypdataimage)? | No |  | Find image metadata by its content hash. |
+| `byId` | `id` (`PlatformUUID`): The image unique identifier. | [Image](#devdertypdataimage)? | No |  | Get image metadata by its unique ID. |
+| `byHash` | `hash` (`String`): The unique hash of the image. | [Image](#devdertypdataimage)? | No |  | Find image metadata by its content hash. |
 | `getCoverHashes` | `hashes` (`List`<`String`>): Collection of image hashes. | `Map`<`String`, `PlatformUUID`> | No |  | Map a list of image hashes to their existing internal UUIDs. |
 | `getImageData` | `id` (`PlatformUUID`): The image unique identifier.<br>`size` (`Int`): Requested image size (width/height). 0 for original size. | `ByteArray`? | No |  | Retrieve the raw binary data of an image. |
 | `createImage` | `bytes` (`ByteArray`): The raw binary data of the image.<br>`origin` (`String`): The source or category of the image. | `PlatformUUID` | No |  | Store a new image on the server. |
@@ -1238,13 +1238,13 @@ Exposes local data for server-to-server mirroring.
 | :--- | :--- | :--- | :---: | :--- | :--- |
 | `getServerPaths` | - | [RemoteServerPaths](#devdertypdataremoteserverpaths) | No | IllegalStateException | Expose the local file system paths where media files are stored. |
 | `getSongs` | - | `Flow`<[Song](#devdertypdatasong)> | No | IllegalStateException | Stream all local songs with metadata for mirroring. |
-| `getArtists` | - | `Flow`<[dev.dertyp.data.Artist](#devdertypdataartist)> | No | IllegalStateException | Stream all local artists for mirroring. |
+| `getArtists` | - | `Flow`<[Artist](#devdertypdataartist)> | No | IllegalStateException | Stream all local artists for mirroring. |
 | `getArtistAliases` | - | `Flow`<[ArtistAlias](#devdertypdataartistalias)> | No | IllegalStateException | Stream all artist name aliases for mirroring. |
 | `getArtistSplitAliases` | - | `Flow`<[ArtistSplitAlias](#devdertypdataartistsplitalias)> | No | IllegalStateException | Stream all artist split-name mappings for mirroring. |
-| `getAlbums` | - | `Flow`<[dev.dertyp.data.Album](#devdertypdataalbum)> | No | IllegalStateException | Stream all local albums for mirroring. |
-| `getPlaylists` | - | `Flow`<[dev.dertyp.data.Playlist](#devdertypdataplaylist)> | No | IllegalStateException | Stream all local system playlists for mirroring. |
+| `getAlbums` | - | `Flow`<[Album](#devdertypdataalbum)> | No | IllegalStateException | Stream all local albums for mirroring. |
+| `getPlaylists` | - | `Flow`<[Playlist](#devdertypdataplaylist)> | No | IllegalStateException | Stream all local system playlists for mirroring. |
 | `getUserPlaylists` | - | `Flow`<[UserPlaylist](#devdertypdatauserplaylist)> | No | IllegalStateException | Stream all local user playlists for mirroring. |
-| `getImageMetadata` | - | `Flow`<[dev.dertyp.data.Image](#devdertypdataimage)> | No | IllegalStateException | Stream all image metadata for mirroring. |
+| `getImageMetadata` | - | `Flow`<[Image](#devdertypdataimage)> | No | IllegalStateException | Stream all image metadata for mirroring. |
 | `getSongData` | `songId` (`PlatformUUID`): The song unique identifier.<br>`quality` (`Int`): Target audio quality level.<br>`chunkSize` (`Int`): Number of bytes per chunk in the stream.<br>`force` (`Boolean`): Whether to force re-transcoding and duration check. | `Flow`<`ByteArray`> | No | IllegalStateException | Stream raw audio data for a song. |
 | `getUsers` | - | `Flow`<[User](#devdertypdatauser)> | No | IllegalStateException | Stream all local user accounts (profiles) for mirroring. |
 | `getSongsByPlaylist` | `playlistId` (`PlatformUUID`): The playlist unique identifier. | `Flow`<[Song](#devdertypdatasong)> | No | IllegalStateException | Stream all songs belonging to a specific system playlist for mirroring. |
@@ -1265,12 +1265,12 @@ Management of system playlists.
 
 | Function | Parameters | Returns | Admin | Errors | Description |
 | :--- | :--- | :--- | :---: | :--- | :--- |
-| `byId` | `id` (`PlatformUUID`): The playlist unique identifier. | [dev.dertyp.data.Playlist](#devdertypdataplaylist)? | No |  | Get system playlist by ID. |
-| `byIds` | `ids` (`List`<`PlatformUUID`>): Collection of playlist IDs. | `List`<[dev.dertyp.data.Playlist](#devdertypdataplaylist)> | No |  | Get multiple system playlists by their IDs. |
+| `byId` | `id` (`PlatformUUID`): The playlist unique identifier. | [Playlist](#devdertypdataplaylist)? | No |  | Get system playlist by ID. |
+| `byIds` | `ids` (`List`<`PlatformUUID`>): Collection of playlist IDs. | `List`<[Playlist](#devdertypdataplaylist)> | No |  | Get multiple system playlists by their IDs. |
 | `byIdFull` | `id` (`PlatformUUID`): The playlist unique identifier. | `Pair`<`String`, `List`<[PlaylistEntry](#devdertypdataplaylistentry)>>? | No |  | Get system playlist with all track entries. |
-| `byName` | `name` (`String`): The name of the playlist. | [dev.dertyp.data.Playlist](#devdertypdataplaylist)? | No |  | Get system playlist by name. |
-| `rankedSearch` | `page` (`Int`): Page index.<br>`pageSize` (`Int`): Number of items per page.<br>`query` (`String`): The search query. | [PaginatedResponse](#devdertypdatapaginatedresponse)<[dev.dertyp.data.Playlist](#devdertypdataplaylist)> | No |  | Search system playlists. |
-| `allPlaylists` | `page` (`Int`): Page index.<br>`pageSize` (`Int`): Number of items per page. | [PaginatedResponse](#devdertypdatapaginatedresponse)<[dev.dertyp.data.Playlist](#devdertypdataplaylist)> | No |  | Get all system playlists. |
+| `byName` | `name` (`String`): The name of the playlist. | [Playlist](#devdertypdataplaylist)? | No |  | Get system playlist by name. |
+| `rankedSearch` | `page` (`Int`): Page index.<br>`pageSize` (`Int`): Number of items per page.<br>`query` (`String`): The search query. | [PaginatedResponse](#devdertypdatapaginatedresponse)<[Playlist](#devdertypdataplaylist)> | No |  | Search system playlists. |
+| `allPlaylists` | `page` (`Int`): Page index.<br>`pageSize` (`Int`): Number of items per page. | [PaginatedResponse](#devdertypdatapaginatedresponse)<[Playlist](#devdertypdataplaylist)> | No |  | Get all system playlists. |
 | `delete` | `id` (`PlatformUUID`): The playlist unique identifier. | `Boolean` | No |  | Delete a system playlist. |
 
 ### IReleaseService <a name="devdertypservicesireleaseservice"></a>
@@ -1294,7 +1294,7 @@ Instance-to-instance data synchronization.
 | `resetMirror` | - | `Unit` | **Yes** | IllegalStateException | Reset the internal mirroring state. |
 | `getActiveMirrorProgress` | - | `Flow`<[MirrorProgress](#devdertypdatamirrorprogress)> | **Yes** |  | Stream real-time progress updates for the active mirroring task. |
 | `getRemoteUsers` | `config` ([RemoteServerConfig](#devdertypdataremoteserverconfig)): Remote connection configuration. | `List`<[User](#devdertypdatauser)> | **Yes** | IllegalStateException | List all user accounts on a remote Synara instance. |
-| `getRemotePlaylists` | `config` ([RemoteServerConfig](#devdertypdataremoteserverconfig)): Remote connection configuration. | `List`<[dev.dertyp.data.Playlist](#devdertypdataplaylist)> | **Yes** | IllegalStateException | List all system playlists on a remote Synara instance. |
+| `getRemotePlaylists` | `config` ([RemoteServerConfig](#devdertypdataremoteserverconfig)): Remote connection configuration. | `List`<[Playlist](#devdertypdataplaylist)> | **Yes** | IllegalStateException | List all system playlists on a remote Synara instance. |
 | `getRemoteUserPlaylists` | `config` ([RemoteServerConfig](#devdertypdataremoteserverconfig)): Remote connection configuration. | `List`<[UserPlaylist](#devdertypdatauserplaylist)> | **Yes** | IllegalStateException | List all user playlists on a remote Synara instance. |
 | `getProxyInstances` | `config` ([RemoteServerConfig](#devdertypdataremoteserverconfig)): Remote connection configuration. | `List`<[ProxyInstanceInfo](#devdertypdataproxyinstanceinfo)> | **Yes** | IllegalStateException | List available proxy instances on a remote Synara instance. |
 | `getRemoteImageData` | `config` ([RemoteServerConfig](#devdertypdataremoteserverconfig)): Remote connection configuration.<br>`imageId` (`PlatformUUID`): The unique identifier of the image.<br>`size` (`Int`): Requested image size (width/height). | `ByteArray`? | **Yes** | IllegalStateException | Fetch raw image binary data from a remote Synara instance. |
@@ -1440,24 +1440,24 @@ Service for fetching metadata from external sources.
 
 | Function | Parameters | Returns | Admin | Errors | Description |
 | :--- | :--- | :--- | :---: | :--- | :--- |
-| `searchArtists` | `type` (`MetadataType`): The metadata provider to use.<br>`query` (`String`): The search query.<br>`limit` (`Int`): Maximum number of results to return. | `List`<[dev.dertyp.services.metadata.IMetadataService.Artist](#devdertypservicesmetadataimetadataserviceartist)> | No |  | Search for artists on the specified metadata provider. |
+| `searchArtists` | `type` (`MetadataType`): The metadata provider to use.<br>`query` (`String`): The search query.<br>`limit` (`Int`): Maximum number of results to return. | `List`<[Artist](#devdertypservicesmetadataimetadataserviceartist)> | No |  | Search for artists on the specified metadata provider. |
 | `search` | `type` (`MetadataType`): The metadata provider to use.<br>`query` (`String`): The search query.<br>`limit` (`Int`): Maximum number of results to return. | `List`<[Track](#devdertypservicesmetadataimetadataservicetrack)> | No |  | Search for tracks on the specified metadata provider. |
-| `searchAlbums` | `type` (`MetadataType`): The metadata provider to use.<br>`query` (`String`): The search query.<br>`limit` (`Int`): Maximum number of results to return.<br>`includeTracks` (`Boolean`): Whether to include tracks in the album results. | `List`<[dev.dertyp.services.metadata.IMetadataService.Album](#devdertypservicesmetadataimetadataservicealbum)> | No |  | Search for albums on the specified metadata provider. |
+| `searchAlbums` | `type` (`MetadataType`): The metadata provider to use.<br>`query` (`String`): The search query.<br>`limit` (`Int`): Maximum number of results to return.<br>`includeTracks` (`Boolean`): Whether to include tracks in the album results. | `List`<[Album](#devdertypservicesmetadataimetadataservicealbum)> | No |  | Search for albums on the specified metadata provider. |
 | `getAlbumIdByTrackId` | `type` (`MetadataType`): The metadata provider to use.<br>`trackId` (`String`): The external track ID. | `String`? | No |  | Get the album ID for a given track ID. |
-| `getImageUrlByAlbumId` | `type` (`MetadataType`): The metadata provider to use.<br>`albumId` (`String`): The external album ID. | `List`<[dev.dertyp.services.metadata.IMetadataService.Image](#devdertypservicesmetadataimetadataserviceimage)> | No |  | Get image URLs for a given album ID. |
-| `getArtistByMbId` | `type` (`MetadataType`): The metadata provider to use.<br>`mbId` (`PlatformUUID`): The MusicBrainz Artist UUID. | [dev.dertyp.services.metadata.IMetadataService.Artist](#devdertypservicesmetadataimetadataserviceartist)? | No |  | Get an artist by their MusicBrainz ID. |
-| `getAlbumByMbId` | `type` (`MetadataType`): The metadata provider to use.<br>`mbId` (`PlatformUUID`): The MusicBrainz Album (Release) UUID. | [dev.dertyp.services.metadata.IMetadataService.Album](#devdertypservicesmetadataimetadataservicealbum)? | No |  | Get an album by its MusicBrainz ID. |
+| `getImageUrlByAlbumId` | `type` (`MetadataType`): The metadata provider to use.<br>`albumId` (`String`): The external album ID. | `List`<[Image](#devdertypservicesmetadataimetadataserviceimage)> | No |  | Get image URLs for a given album ID. |
+| `getArtistByMbId` | `type` (`MetadataType`): The metadata provider to use.<br>`mbId` (`PlatformUUID`): The MusicBrainz Artist UUID. | [Artist](#devdertypservicesmetadataimetadataserviceartist)? | No |  | Get an artist by their MusicBrainz ID. |
+| `getAlbumByMbId` | `type` (`MetadataType`): The metadata provider to use.<br>`mbId` (`PlatformUUID`): The MusicBrainz Album (Release) UUID. | [Album](#devdertypservicesmetadataimetadataservicealbum)? | No |  | Get an album by its MusicBrainz ID. |
 | `getTrackByMbId` | `type` (`MetadataType`): The metadata provider to use.<br>`mbId` (`PlatformUUID`): The MusicBrainz Track (Recording) UUID. | [Track](#devdertypservicesmetadataimetadataservicetrack)? | No |  | Get a track by its MusicBrainz ID. |
-| `getImageUrlByArtistMbId` | `type` (`MetadataType`): The metadata provider to use.<br>`mbId` (`PlatformUUID`): The MusicBrainz Artist UUID. | `List`<[dev.dertyp.services.metadata.IMetadataService.Image](#devdertypservicesmetadataimetadataserviceimage)> | No |  | Get image URLs for an artist by their MusicBrainz ID. |
-| `getImageUrlByAlbumMbId` | `type` (`MetadataType`): The metadata provider to use.<br>`mbId` (`PlatformUUID`): The MusicBrainz Album (Release) UUID. | `List`<[dev.dertyp.services.metadata.IMetadataService.Image](#devdertypservicesmetadataimetadataserviceimage)> | No |  | Get image URLs for an album by its MusicBrainz ID. |
-| `getImageUrlByTrackMbId` | `type` (`MetadataType`): The metadata provider to use.<br>`mbId` (`PlatformUUID`): The MusicBrainz Track (Recording) UUID. | `List`<[dev.dertyp.services.metadata.IMetadataService.Image](#devdertypservicesmetadataimetadataserviceimage)> | No |  | Get image URLs for a track by its MusicBrainz ID. |
-| `getImageUrlsByAlbumIds` | `type` (`MetadataType`): The metadata provider to use.<br>`albumIds` (`List`<`String`>): List of external album IDs. | `Map`<`String`, `List`<[dev.dertyp.services.metadata.IMetadataService.Image](#devdertypservicesmetadataimetadataserviceimage)>> | No |  | Get image URLs for multiple album IDs. |
+| `getImageUrlByArtistMbId` | `type` (`MetadataType`): The metadata provider to use.<br>`mbId` (`PlatformUUID`): The MusicBrainz Artist UUID. | `List`<[Image](#devdertypservicesmetadataimetadataserviceimage)> | No |  | Get image URLs for an artist by their MusicBrainz ID. |
+| `getImageUrlByAlbumMbId` | `type` (`MetadataType`): The metadata provider to use.<br>`mbId` (`PlatformUUID`): The MusicBrainz Album (Release) UUID. | `List`<[Image](#devdertypservicesmetadataimetadataserviceimage)> | No |  | Get image URLs for an album by its MusicBrainz ID. |
+| `getImageUrlByTrackMbId` | `type` (`MetadataType`): The metadata provider to use.<br>`mbId` (`PlatformUUID`): The MusicBrainz Track (Recording) UUID. | `List`<[Image](#devdertypservicesmetadataimetadataserviceimage)> | No |  | Get image URLs for a track by its MusicBrainz ID. |
+| `getImageUrlsByAlbumIds` | `type` (`MetadataType`): The metadata provider to use.<br>`albumIds` (`List`<`String`>): List of external album IDs. | `Map`<`String`, `List`<[Image](#devdertypservicesmetadataimetadataserviceimage)>> | No |  | Get image URLs for multiple album IDs. |
 | `getImageUrlByImageId` | `type` (`MetadataType`): The metadata provider to use.<br>`imageId` (`PlatformUUID`): The image UUID. | `String`? | No |  | Get the URL for a cached image by its ID. |
 | `getTrackById` | `type` (`MetadataType`): The metadata provider to use.<br>`trackId` (`String`): The external track ID. | [Track](#devdertypservicesmetadataimetadataservicetrack)? | No |  | Get a track by its external ID. |
 | `getTracksByIds` | `type` (`MetadataType`): The metadata provider to use.<br>`trackIds` (`List`<`String`>): List of external track IDs. | `List`<[Track](#devdertypservicesmetadataimetadataservicetrack)> | No |  | Get multiple tracks by their external IDs. |
-| `getAlbumsByIds` | `type` (`MetadataType`): The metadata provider to use.<br>`albumIds` (`List`<`String`>): List of external album IDs. | `List`<[dev.dertyp.services.metadata.IMetadataService.Album](#devdertypservicesmetadataimetadataservicealbum)> | No |  | Get multiple albums by their external IDs. |
+| `getAlbumsByIds` | `type` (`MetadataType`): The metadata provider to use.<br>`albumIds` (`List`<`String`>): List of external album IDs. | `List`<[Album](#devdertypservicesmetadataimetadataservicealbum)> | No |  | Get multiple albums by their external IDs. |
 | `albumExistsById` | `type` (`MetadataType`): The metadata provider to use.<br>`albumId` (`String`): The external album ID. | `Boolean` | No |  | Check if an album exists by its external ID. |
-| `getArtistsByIds` | `type` (`MetadataType`): The metadata provider to use.<br>`artistIds` (`List`<`String`>): List of external artist IDs. | `List`<[dev.dertyp.services.metadata.IMetadataService.Artist](#devdertypservicesmetadataimetadataserviceartist)> | No |  | Get multiple artists by their external IDs. |
+| `getArtistsByIds` | `type` (`MetadataType`): The metadata provider to use.<br>`artistIds` (`List`<`String`>): List of external artist IDs. | `List`<[Artist](#devdertypservicesmetadataimetadataserviceartist)> | No |  | Get multiple artists by their external IDs. |
 
 ### IMusicBrainzService <a name="devdertypservicesmetadataimusicbrainzservice"></a>
 Fetch raw metadata records directly from the MusicBrainz database.
