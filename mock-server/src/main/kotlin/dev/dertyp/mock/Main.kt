@@ -17,6 +17,7 @@ import io.ktor.server.application.install
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.netty.Netty
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.server.plugins.statuspages.StatusPages
 import io.ktor.server.response.respond
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.*
@@ -52,6 +53,12 @@ val MockAuthPlugin = createRouteScopedPlugin("MockAuthPlugin") {
 fun Application.module() {
     install(ContentNegotiation) {
         json(AppJson)
+    }
+
+    install(StatusPages) {
+        unhandled { call ->
+            call.respond(HttpStatusCode.NotFound)
+        }
     }
 
     install(Krpc) {
@@ -106,6 +113,12 @@ fun Application.module() {
 
         allServices.forEach { serviceClass ->
             registerMockRestService(serviceClass, AppJson, serviceClass.simpleName in publicServices)
+        }
+
+        route("{...}") {
+            handle {
+                call.respond(HttpStatusCode.NotFound)
+            }
         }
     }
 }
