@@ -13,6 +13,7 @@ import kotlin.reflect.KType
 import kotlin.reflect.full.createInstance
 import kotlin.reflect.full.isSubclassOf
 import kotlin.reflect.full.primaryConstructor
+import kotlin.reflect.full.starProjectedType
 
 object MockGenerator {
     @Suppress("UNCHECKED_CAST")
@@ -93,11 +94,31 @@ object MockGenerator {
             }
             classifier == UUID::class || classifier.simpleName == "UUID" || classifier.simpleName == "PlatformUUID" -> UUID.randomUUID()
             classifier.isSubclassOf(Enum::class) -> classifier.java.enumConstants?.random()
-            classifier == List::class || classifier == Collection::class || classifier == Iterable::class || classifier == Set::class -> {
+            classifier.isSealed -> {
+                if (depth > 10) return null
+                val subclass = classifier.sealedSubclasses.randomOrNull() ?: return null
+                createDummy(subclass.starProjectedType, name, depth + 1)
+            }
+            classifier.isSubclassOf(Map::class) -> {
+                val keyType = type.arguments.getOrNull(0)?.type ?: return emptyMap<Any, Any>()
+                val valueType = type.arguments.getOrNull(1)?.type ?: return emptyMap<Any, Any>()
+                if (depth > 5) return emptyMap<Any, Any>()
+                val map = (1..3).associate {
+                    createDummy(keyType, "${name}Key", depth + 1) to createDummy(valueType, "${name}Value", depth + 1)
+                }.filterKeys { it != null }
+                @Suppress("UNCHECKED_CAST")
+                val result = map as Map<Any, Any>
+                if (classifier.isSubclassOf(MutableMap::class)) result.toMutableMap() else result
+            }
+            classifier.isSubclassOf(Iterable::class) || classifier.isSubclassOf(Collection::class) -> {
                 val itemType = type.arguments.firstOrNull()?.type ?: return emptyList<Any>()
-                if (depth > 5) return if (classifier == Set::class) emptySet() else emptyList<Any>()
-                List(3) { createDummy(itemType, name, depth + 1) }.let {
-                    if (classifier == Set::class) it.toSet() else it
+                if (depth > 5) return if (classifier.isSubclassOf(Set::class)) emptySet() else emptyList<Any>()
+                val items = List(3) { createDummy(itemType, name, depth + 1) }
+                when {
+                    classifier.isSubclassOf(MutableSet::class) -> items.toMutableSet()
+                    classifier.isSubclassOf(Set::class) -> items.toSet()
+                    classifier.isSubclassOf(MutableList::class) -> items.toMutableList()
+                    else -> items
                 }
             }
             classifier.simpleName == "Flow" -> {
@@ -121,11 +142,20 @@ object MockGenerator {
                 )
             }
             classifier.isData -> {
-                if (depth > 10) return null
-                val constructor = classifier.primaryConstructor ?: return null
-                val args = constructor.parameters.associateWith { param ->
-                    createDummy(param.type, param.name, depth + 1)
+                if (depth > 10) return try {
+                    classifier.createInstance()
+                } catch (_: Exception) {
+                    null
                 }
+                val constructor = classifier.primaryConstructor ?: return null
+                val args = constructor.parameters.mapNotNull { param ->
+                    val value = createDummy(param.type, param.name, depth + 1)
+                    if (value == null && !param.type.isMarkedNullable && param.isOptional) {
+                        null
+                    } else {
+                        param to value
+                    }
+                }.toMap()
                 constructor.callBy(args)
             }
             else -> {
