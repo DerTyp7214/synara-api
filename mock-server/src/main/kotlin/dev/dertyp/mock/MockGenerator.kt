@@ -3,6 +3,9 @@ package dev.dertyp.mock
 import dev.dertyp.data.PaginatedResponse
 import kotlinx.coroutines.flow.flow
 import java.lang.reflect.Proxy
+import java.time.Instant
+import java.time.LocalDate
+import java.util.Date
 import java.util.UUID
 import kotlin.reflect.KClass
 import kotlin.reflect.KType
@@ -46,9 +49,9 @@ object MockGenerator {
             classifier == Boolean::class -> (0..1).random() == 1
             classifier == Double::class -> (0..10000).random().toDouble() / 100.0
             classifier == Float::class -> (0..10000).random().toFloat() / 100.0f
-            classifier == java.util.Date::class || classifier.simpleName == "Date" || classifier.simpleName == "PlatformDate" -> java.util.Date()
-            classifier == java.time.Instant::class || classifier.simpleName == "Instant" || classifier.simpleName == "PlatformInstant" -> java.time.Instant.now()
-            classifier == java.time.LocalDate::class || classifier.simpleName == "LocalDate" || classifier.simpleName == "PlatformLocalDate" -> java.time.LocalDate.now()
+            classifier == Date::class || classifier.simpleName == "Date" || classifier.simpleName == "PlatformDate" -> Date()
+            classifier == Instant::class || classifier.simpleName == "Instant" || classifier.simpleName == "PlatformInstant" -> Instant.now()
+            classifier == LocalDate::class || classifier.simpleName == "LocalDate" || classifier.simpleName == "PlatformLocalDate" -> LocalDate.now()
             classifier == UUID::class || classifier.simpleName == "UUID" || classifier.simpleName == "PlatformUUID" -> UUID.randomUUID()
             classifier.isSubclassOf(Enum::class) -> classifier.java.enumConstants?.random()
             classifier == List::class || classifier == Collection::class || classifier == Iterable::class || classifier == Set::class -> {
