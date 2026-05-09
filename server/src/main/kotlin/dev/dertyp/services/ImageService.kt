@@ -1,5 +1,7 @@
 package dev.dertyp.services
 
+import com.sksamuel.scrimage.ImmutableImage
+import com.sksamuel.scrimage.pixels.Pixel
 import dev.dertyp.core.paging
 import dev.dertyp.core.sha256
 import dev.dertyp.data.Image
@@ -11,11 +13,11 @@ import dev.dertyp.dbQuery
 import dev.dertyp.plugins.ImageLibrary
 import dev.dertyp.plugins.RedisCacheProvider
 import dev.dertyp.utils.LogParam
+import io.trbl.blurhash.BlurHash
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import net.coobird.thumbnailator.Thumbnails
-import org.jetbrains.exposed.v1.core.ResultRow
-import org.jetbrains.exposed.v1.core.eq
-import org.jetbrains.exposed.v1.core.inList
-import org.jetbrains.exposed.v1.core.like
+import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.jdbc.*
 import redis.clients.jedis.HostAndPort
 import redis.clients.jedis.RedisClusterClient
@@ -24,6 +26,7 @@ import java.io.ByteArrayOutputStream
 import java.util.UUID
 import javax.imageio.ImageIO
 import kotlin.io.path.*
+import kotlin.math.roundToInt
 
 class ImageRpcService(private val user: User?, private val imageService: ImageService) : IImageService {
     override suspend fun byId(id: UUID): Image? = imageService.byId(id)
@@ -310,5 +313,143 @@ class ImageService(
         }
 
         affectedImages.size
+    }
+
+    suspend fun getUnanalyzedImageIds(): List<UUID> = dbQuery {
+        val analyzedIds = ImageMetadataTable.selectAll().map { it[ImageMetadataTable.imageId].value }
+        ImageTable.selectAll()
+            .where { ImageTable.id notInList analyzedIds }
+            .map { it[ImageTable.id].value }
+    }
+
+    suspend fun analyzeImage(imageId: UUID) {
+        val image = byId(imageId) ?: return
+        val path = Path(image.path)
+        if (!path.exists()) return
+
+        val bytes = withContext(Dispatchers.IO) { path.readBytes() }
+        val bufferedImage = withContext(Dispatchers.IO) { ImageIO.read(ByteArrayInputStream(bytes)) } ?: return
+        val scrImage = ImmutableImage.fromAwt(bufferedImage)
+
+        val width = bufferedImage.width
+        val height = bufferedImage.height
+        val byteSize = bytes.size.toLong()
+
+        val blurHash = try {
+            BlurHash.encode(bufferedImage, 4, 3)
+        } catch (_: Exception) {
+            null
+        }
+
+        val smallImage = scrImage.max(64, 64)
+        val pixels = smallImage.pixels()
+        
+        var rSum = 0L
+        var gSum = 0L
+        var bSum = 0L
+        pixels.forEach {
+            rSum += it.red()
+            gSum += it.green()
+            bSum += it.blue()
+        }
+        val avgR = (rSum / pixels.size).toInt()
+        val avgG = (gSum / pixels.size).toInt()
+        val avgB = (bSum / pixels.size).toInt()
+        val primaryColor = (255 shl 24) or (avgR shl 16) or (avgG shl 8) or avgB
+
+        val luminance = (0.2126 * avgR + 0.7152 * avgG + 0.0722 * avgB) / 255.0
+
+        val palette = try {
+            extractPalette(pixels, 5)
+        } catch (_: Exception) {
+            listOf(primaryColor)
+        }
+
+        dbQuery {
+            ImageTable.update({ ImageTable.id eq imageId }) {
+                it[ImageTable.blurHash] = blurHash
+            }
+
+            ImageMetadataTable.upsert(ImageMetadataTable.imageId) {
+                it[ImageMetadataTable.imageId] = imageId
+                it[ImageMetadataTable.width] = width
+                it[ImageMetadataTable.height] = height
+                it[ImageMetadataTable.byteSize] = byteSize
+                it[ImageMetadataTable.primaryColor] = primaryColor
+                it[ImageMetadataTable.red] = avgR
+                it[ImageMetadataTable.green] = avgG
+                it[ImageMetadataTable.blue] = avgB
+                it[ImageMetadataTable.luminance] = luminance
+                it[color1] = palette.getOrNull(0)
+                it[color2] = palette.getOrNull(1)
+                it[color3] = palette.getOrNull(2)
+                it[color4] = palette.getOrNull(3)
+                it[color5] = palette.getOrNull(4)
+            }
+        }
+    }
+
+    private fun extractPalette(pixels: Array<Pixel>, k: Int): List<Int> {
+        if (pixels.isEmpty()) return emptyList()
+        
+        val samples = if (pixels.size > 1000) {
+            val step = pixels.size / 1000
+            (0 until 1000).map { pixels[it * step] }
+        } else {
+            pixels.toList()
+        }
+
+        var centroids = samples.shuffled().take(k).map { 
+            doubleArrayOf(it.red().toDouble(), it.green().toDouble(), it.blue().toDouble())
+        }
+
+        repeat(10) {
+            val clusters = Array(centroids.size) { mutableListOf<DoubleArray>() }
+            
+            for (pixel in samples) {
+                val p = doubleArrayOf(pixel.red().toDouble(), pixel.green().toDouble(), pixel.blue().toDouble())
+                var minDist = Double.MAX_VALUE
+                var closestIndex = 0
+                
+                for (i in centroids.indices) {
+                    val dist = sqDist(p, centroids[i])
+                    if (dist < minDist) {
+                        minDist = dist
+                        closestIndex = i
+                    }
+                }
+                clusters[closestIndex].add(p)
+            }
+            
+            centroids = clusters.mapIndexed { i, cluster ->
+                if (cluster.isEmpty()) centroids[i]
+                else {
+                    val avg = DoubleArray(3)
+                    for (p in cluster) {
+                        avg[0] += p[0]
+                        avg[1] += p[1]
+                        avg[2] += p[2]
+                    }
+                    avg[0] /= cluster.size
+                    avg[1] /= cluster.size
+                    avg[2] /= cluster.size
+                    avg
+                }
+            }
+        }
+
+        return centroids.map { 
+            val r = it[0].roundToInt().coerceIn(0, 255)
+            val g = it[1].roundToInt().coerceIn(0, 255)
+            val b = it[2].roundToInt().coerceIn(0, 255)
+            ((0xFF shl 24) or (r shl 16) or (g shl 8) or b)
+        }
+    }
+
+    private fun sqDist(p1: DoubleArray, p2: DoubleArray): Double {
+        val r = p1[0] - p2[0]
+        val g = p1[1] - p2[1]
+        val b = p1[2] - p2[2]
+        return r * r + g * g + b * b
     }
 }

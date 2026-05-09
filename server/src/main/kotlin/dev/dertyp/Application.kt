@@ -138,6 +138,7 @@ fun Application.module() {
             singleOf(::ReleaseService)
             singleOf(::AutoTranscodeWorker)
             singleOf(::ReverseProxyWorker)
+            singleOf(::ImageAnalysisWorker)
             singleOf(::CustomMigrationService)
 
             single<IMusicBrainzService> { get<CachedMusicBrainzService>() }
@@ -261,6 +262,7 @@ fun Application.module() {
     val lyricsSyncWorker = get<LyricsSyncWorker>()
     val audioAnalysisWorker = get<AudioAnalysisWorker>()
     val flacAnalysisWorker = get<FlacAnalysisWorker>()
+    val imageAnalysisWorker = get<ImageAnalysisWorker>()
     val lrcLibWorker = get<LrcLibWorker>()
 
     val reverseProxy = scheduleService.schedule(
@@ -503,7 +505,7 @@ fun Application.module() {
         )
     )
 
-    scheduleService.schedule(
+    val deleteUnreferencedImages = scheduleService.schedule(
         ScheduledTask(
             name = "Delete Unreferenced Images",
             trigger = TaskCompletionTrigger(cleanArtistsTask.id),
@@ -517,6 +519,20 @@ fun Application.module() {
             }
         )
     )
+
+    val imageAnalysis = scheduleService.schedule(
+        ScheduledTask(
+            name = "Image Analysis",
+            trigger = TaskCompletionTrigger(deleteUnreferencedImages.id),
+            task = {
+                scheduleService.logTask("Image Analysis") {
+                    imageAnalysisWorker.run { p, l -> updateProgress(p, l) }
+                }
+            }
+        )
+    )
+
+    scheduleService.triggerTask(imageAnalysis.id)
 
     CoroutineScope(Dispatchers.IO).launch {
         launch { scheduleService.startService() }

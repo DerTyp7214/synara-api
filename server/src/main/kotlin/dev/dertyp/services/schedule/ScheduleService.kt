@@ -1,22 +1,11 @@
 package dev.dertyp.services.schedule
 
 import dev.dertyp.core.plus
-import dev.dertyp.plugins.CronTrigger
-import dev.dertyp.plugins.CustomTrigger
-import dev.dertyp.plugins.EventTrigger
-import dev.dertyp.plugins.IScheduleService
-import dev.dertyp.plugins.ScheduleTrigger
-import dev.dertyp.plugins.Task
-import dev.dertyp.plugins.TaskCompletionTrigger
-import dev.dertyp.plugins.Trigger
+import dev.dertyp.plugins.*
 import dev.dertyp.services.Service
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.FlowPreview
-import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.time.withTimeoutOrNull
 import org.jetbrains.annotations.Range
 import org.koin.core.component.get
@@ -157,10 +146,16 @@ class ScheduleService : IScheduleService, Service() {
 
     override fun schedulePostIndexTasks() {
         val musicBrainzWorker = get<MusicBrainzWorker>()
+        val imageAnalysisWorker = get<ImageAnalysisWorker>()
         scheduleTask(
             trigger = ScheduleTrigger(Instant.now()),
             name = "MusicBrainzWorker-AfterIndex",
             task = { musicBrainzWorker.run { _, _ -> } }
+        )
+        scheduleTask(
+            trigger = ScheduleTrigger(Instant.now()),
+            name = "ImageAnalysisWorker-AfterIndex",
+            task = { imageAnalysisWorker.run { _, _ -> } }
         )
     }
 

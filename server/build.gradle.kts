@@ -105,6 +105,7 @@ dependencies {
     implementation(libs.cron.utils)
     implementation(libs.scrimage.core)
     implementation(libs.scrimage.webp)
+    implementation(libs.blurhash)
     implementation(libs.koin.ktor)
     implementation(libs.koin.logger.slf4j)
     implementation(libs.zstd.jni)

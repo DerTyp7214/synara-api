@@ -12,16 +12,19 @@ import org.jetbrains.exposed.v1.core.like
 import org.jetbrains.exposed.v1.jdbc.*
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.jupiter.api.AfterEach
-import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.EnumSource
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
 import org.koin.dsl.module
+import java.awt.Color
+import java.awt.image.BufferedImage
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.nio.file.Files
 import java.util.UUID
+import javax.imageio.ImageIO
 
 class ImageServiceTest {
     private lateinit var database: Database
@@ -90,6 +93,66 @@ class ImageServiceTest {
         assertEquals(0xFF0000, image?.primaryColor)
         assertEquals(0.5, image?.luminance)
         assertEquals(listOf(0xFF0000), image?.palette)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `analyzeImage should calculate BlurHash and metadata`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        
+        val bufferedImage = BufferedImage(100, 100, BufferedImage.TYPE_INT_RGB)
+        val g = bufferedImage.createGraphics()
+        g.color = Color.RED
+        g.fillRect(0, 0, 100, 100)
+        g.dispose()
+        
+        val baos = ByteArrayOutputStream()
+        ImageIO.write(bufferedImage, "png", baos)
+        val data = baos.toByteArray()
+        
+        val id = service.createImage(data, "test_analysis")
+        
+        service.analyzeImage(id)
+        
+        val image = service.byId(id)
+        assertNotNull(image)
+        assertNotNull(image?.blurHash)
+        assertEquals(100, image?.width)
+        assertEquals(100, image?.height)
+        assertEquals(data.size.toLong(), image?.byteSize)
+        
+        assertEquals(0xFFFF0000.toInt(), image?.primaryColor)
+        
+        assertEquals(0.2126, image?.luminance!!, 0.01)
+        
+        assertNotNull(image.palette)
+        assertTrue(image.palette?.contains(0xFFFF0000.toInt()) == true)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `getUnanalyzedImageIds should return images without metadata`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val id1 = service.createImage(byteArrayOf(1, 2, 3, 4), "test1")
+        val id2 = service.createImage(byteArrayOf(5, 6, 7, 8), "test2")
+        
+        transaction(database) {
+            ImageMetadataTable.insert {
+                it[imageId] = EntityID(id1, ImageTable)
+                it[width] = 10
+                it[height] = 10
+                it[byteSize] = 4
+                it[primaryColor] = 0
+                it[red] = 0
+                it[green] = 0
+                it[blue] = 0
+                it[luminance] = 0.0
+            }
+        }
+        
+        val unanalyzed = service.getUnanalyzedImageIds()
+        assertEquals(1, unanalyzed.size)
+        assertEquals(id2, unanalyzed[0])
     }
 
     @AfterEach
