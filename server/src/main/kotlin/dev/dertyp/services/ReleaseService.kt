@@ -1,31 +1,15 @@
 package dev.dertyp.services
 
 import dev.dertyp.ApiClient
-import dev.dertyp.core.ApplicationScope
-import dev.dertyp.core.HttpClientPriority
-import dev.dertyp.core.cleanTitle
-import dev.dertyp.core.safeGet
-import dev.dertyp.core.sha256
+import dev.dertyp.core.*
 import dev.dertyp.data.ArtistType
 import dev.dertyp.data.InsertableImage
 import dev.dertyp.data.PaginatedResponse
 import dev.dertyp.data.ReleaseType
-import dev.dertyp.db.AlbumArtistTable
-import dev.dertyp.db.AlbumMusicBrainzTable
-import dev.dertyp.db.ArtistMusicBrainzTable
-import dev.dertyp.db.ArtistTable
-import dev.dertyp.db.FollowedArtistTable
-import dev.dertyp.db.RecentReleaseTable
-import dev.dertyp.db.SongArtistTable
-import dev.dertyp.db.SongMusicBrainzTable
+import dev.dertyp.db.*
 import dev.dertyp.dbQuery
 import dev.dertyp.platformDateFromEpochMilliseconds
-import dev.dertyp.services.metadata.AppleMusicService
-import dev.dertyp.services.metadata.IMetadataService
-import dev.dertyp.services.metadata.MetadataService
-import dev.dertyp.services.metadata.MusicBrainzCacheService
-import dev.dertyp.services.metadata.MusicBrainzService
-import dev.dertyp.services.metadata.TidalService
+import dev.dertyp.services.metadata.*
 import dev.dertyp.services.models.FollowedArtist
 import dev.dertyp.services.models.RecentRelease
 import io.ktor.client.call.body
@@ -39,13 +23,7 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.serialization.Serializable
-import org.jetbrains.exposed.v1.core.SortOrder
-import org.jetbrains.exposed.v1.core.and
-import org.jetbrains.exposed.v1.core.eq
-import org.jetbrains.exposed.v1.core.inList
-import org.jetbrains.exposed.v1.core.innerJoin
-import org.jetbrains.exposed.v1.core.isNotNull
-import org.jetbrains.exposed.v1.core.isNull
+import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.update
@@ -119,11 +97,15 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
             .where { FollowedArtistTable.userId eq userId }
             .map { it[FollowedArtistTable.artistId].value }
 
-        val total = RecentReleaseTable.selectAll()
+        val total = RecentReleaseTable
+            .leftJoin(ImageTable, onColumn = { RecentReleaseTable.imageId }, otherColumn = { ImageTable.id })
+            .selectAll()
             .where { (RecentReleaseTable.artistId inList followedArtistIds) and (RecentReleaseTable.albumId.isNull()) and (RecentReleaseTable.songId.isNull()) and (RecentReleaseTable.releaseDate.isNotNull()) }
             .count()
 
-        val data = RecentReleaseTable.selectAll()
+        val data = RecentReleaseTable
+            .leftJoin(ImageTable, onColumn = { RecentReleaseTable.imageId }, otherColumn = { ImageTable.id })
+            .selectAll()
             .where { (RecentReleaseTable.artistId inList followedArtistIds) and (RecentReleaseTable.albumId.isNull()) and (RecentReleaseTable.songId.isNull()) and (RecentReleaseTable.releaseDate.isNotNull()) }
             .orderBy(RecentReleaseTable.releaseDate to SortOrder.DESC)
             .limit(pageSize)
@@ -137,6 +119,7 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
                     releaseDate = it[RecentReleaseTable.releaseDate]?.let { ms -> platformDateFromEpochMilliseconds(ms) },
                     type = it[RecentReleaseTable.type],
                     imageId = it[RecentReleaseTable.imageId]?.value,
+                    blurHash = it.getOrNull(ImageTable.blurHash),
                     links = try {
                         ApplicationScope.json.decodeFromString<List<String>>(it[RecentReleaseTable.links])
                     } catch (_: Exception) {

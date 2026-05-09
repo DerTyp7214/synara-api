@@ -11,11 +11,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.toList
-import org.jetbrains.exposed.v1.core.ResultRow
-import org.jetbrains.exposed.v1.core.and
+import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.core.dao.id.EntityID
-import org.jetbrains.exposed.v1.core.eq
-import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.jdbc.*
 import org.koin.core.component.inject
 import java.time.Instant
@@ -28,6 +25,7 @@ class UserPlaylistService : PlaylistLibrary, IUserPlaylistService, Service() {
             val id = resultRow[UserPlaylistTable.id].value
             val name = resultRow[UserPlaylistTable.name]
             val imageId = resultRow[UserPlaylistTable.imageId]?.value
+            val blurHash = resultRow.getOrNull(ImageTable.blurHash)
             val creator = resultRow[UserPlaylistTable.creator].value
             val description = resultRow[UserPlaylistTable.description]
             val origin = resultRow[UserPlaylistTable.origin]
@@ -37,6 +35,7 @@ class UserPlaylistService : PlaylistLibrary, IUserPlaylistService, Service() {
                 name = name,
                 songs = emptyList(),
                 imageId = imageId,
+                blurHash = blurHash,
                 creator = creator,
                 description = description,
                 origin = origin,
@@ -210,6 +209,7 @@ class UserPlaylistService : PlaylistLibrary, IUserPlaylistService, Service() {
         dbQuery {
             val offset = if (pageSize == Int.MAX_VALUE) 0 else 1
             val mainPlaylistRows = UserPlaylistTable
+                .leftJoin(ImageTable, onColumn = { UserPlaylistTable.imageId }, otherColumn = { ImageTable.id })
                 .selectAll()
                 .query()
                 .orderBy(UserPlaylistTable.name)

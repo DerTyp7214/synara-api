@@ -6,14 +6,7 @@ import dev.dertyp.data.Image
 import dev.dertyp.data.InsertableImage
 import dev.dertyp.data.PaginatedResponse
 import dev.dertyp.data.User
-import dev.dertyp.db.AlbumTable
-import dev.dertyp.db.ArtistTable
-import dev.dertyp.db.ImageTable
-import dev.dertyp.db.PlaylistTable
-import dev.dertyp.db.RecentReleaseTable
-import dev.dertyp.db.SongTable
-import dev.dertyp.db.UserPlaylistTable
-import dev.dertyp.db.UserTable
+import dev.dertyp.db.*
 import dev.dertyp.dbQuery
 import dev.dertyp.plugins.ImageLibrary
 import dev.dertyp.plugins.RedisCacheProvider
@@ -23,27 +16,14 @@ import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.core.like
-import org.jetbrains.exposed.v1.jdbc.Query
-import org.jetbrains.exposed.v1.jdbc.batchInsert
-import org.jetbrains.exposed.v1.jdbc.deleteWhere
-import org.jetbrains.exposed.v1.jdbc.select
-import org.jetbrains.exposed.v1.jdbc.selectAll
-import org.jetbrains.exposed.v1.jdbc.update
-import org.jetbrains.exposed.v1.jdbc.upsert
+import org.jetbrains.exposed.v1.jdbc.*
 import redis.clients.jedis.HostAndPort
 import redis.clients.jedis.RedisClusterClient
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.util.UUID
 import javax.imageio.ImageIO
-import kotlin.io.path.Path
-import kotlin.io.path.absolutePathString
-import kotlin.io.path.deleteIfExists
-import kotlin.io.path.exists
-import kotlin.io.path.extension
-import kotlin.io.path.pathString
-import kotlin.io.path.readBytes
-import kotlin.io.path.writeBytes
+import kotlin.io.path.*
 
 class ImageRpcService(private val user: User?, private val imageService: ImageService) : IImageService {
     override suspend fun byId(id: UUID): Image? = imageService.byId(id)
@@ -78,12 +58,34 @@ class ImageService(
         val path = Path(storageService.imagesPath, resultRow[ImageTable.path]).absolutePathString()
         val imageHash = resultRow[ImageTable.imageHash]
         val origin = resultRow[ImageTable.origin]
+        val blurHash = resultRow[ImageTable.blurHash]
+
+        val width = resultRow.getOrNull(ImageMetadataTable.width)
+        val height = resultRow.getOrNull(ImageMetadataTable.height)
+        val byteSize = resultRow.getOrNull(ImageMetadataTable.byteSize)
+        val primaryColor = resultRow.getOrNull(ImageMetadataTable.primaryColor)
+        val luminance = resultRow.getOrNull(ImageMetadataTable.luminance)
+
+        val palette = listOfNotNull(
+            resultRow.getOrNull(ImageMetadataTable.color1),
+            resultRow.getOrNull(ImageMetadataTable.color2),
+            resultRow.getOrNull(ImageMetadataTable.color3),
+            resultRow.getOrNull(ImageMetadataTable.color4),
+            resultRow.getOrNull(ImageMetadataTable.color5)
+        ).ifEmpty { null }
 
         return Image(
             id = id,
             path = path,
             imageHash = imageHash,
             origin = origin,
+            blurHash = blurHash,
+            width = width,
+            height = height,
+            byteSize = byteSize,
+            primaryColor = primaryColor,
+            luminance = luminance,
+            palette = palette
         )
     }
 
@@ -147,6 +149,7 @@ class ImageService(
     private suspend fun queryImages(page: Int, pageSize: Int, query: Query.() -> Query = { this }) = dbQuery {
         val offset = if (pageSize == Int.MAX_VALUE) 0 else 1
         val data = ImageTable
+            .leftJoin(ImageMetadataTable)
             .selectAll()
             .query()
             .paging(page, pageSize)

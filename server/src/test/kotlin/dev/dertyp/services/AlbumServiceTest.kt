@@ -64,6 +64,7 @@ class AlbumServiceTest : KoinTest {
                 FollowedArtistTable,
                 AlbumMusicBrainzTable,
                 ImageTable,
+                ImageMetadataTable,
                 SongTable,
                 SongArtistTable,
                 SongMusicBrainzTable,
@@ -500,6 +501,35 @@ class AlbumServiceTest : KoinTest {
         val deleted = service.deleteAlbums(listOf(albumId))
         assertTrue(deleted)
         assertEquals(null, service.byId(albumId))
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `byId should return album with cover blurHash`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val albumId = UUID.randomUUID()
+        val imageId = UUID.randomUUID()
+        transaction(database) {
+            ImageTable.insert {
+                it[id] = imageId
+                it[path] = "test.jpg"
+                it[imageHash] = "hash"
+                it[origin] = "test"
+                it[blurHash] = "album_blurhash"
+            }
+            AlbumTable.insert {
+                it[id] = albumId
+                it[name] = "Album with Cover"
+                it[cover] = imageId
+                it[songCount] = 10
+                it[releaseDate] = "2023-01-01"
+            }
+        }
+
+        val album = service.byId(albumId)
+        assertNotNull(album)
+        assertEquals(imageId, album?.coverId)
+        assertEquals("album_blurhash", album?.blurHash)
     }
 
     @ParameterizedTest

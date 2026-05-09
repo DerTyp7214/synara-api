@@ -242,6 +242,7 @@ class SongService : SongLibrary, Service() {
                 bitRate = resultRow[SongTable.bitRate],
                 fileSize = resultRow[SongTable.fileSize],
                 coverId = resultRow[SongTable.cover]?.value,
+                blurHash = resultRow.getOrNull(ImageTable.blurHash),
                 musicBrainzId = resultRow.getOrNull(SongMusicBrainzTable.musicBrainzId)?.value,
                 genres = genres,
             )
@@ -269,6 +270,7 @@ class SongService : SongLibrary, Service() {
                 bitRate = resultRow[SongTable.bitRate],
                 fileSize = resultRow[SongTable.fileSize],
                 coverId = resultRow[SongTable.cover]?.value,
+                blurHash = resultRow.getOrNull(ImageTable.blurHash),
                 musicBrainzId = resultRow.getOrNull(SongMusicBrainzTable.musicBrainzId)?.value,
                 genres = genres,
                 isFavourite = resultRow.getOrNull(UserSongTable.isFavourite) ?: false,
@@ -1098,6 +1100,7 @@ class SongService : SongLibrary, Service() {
             .leftJoin(albumArtistMemberAlias, onColumn = { albumArtistMemberJoinAlias[ArtistMemberTable.artistId] }, otherColumn = { albumArtistMemberAlias[ArtistTable.id] })
             .leftJoin(SongGenreTable)
             .leftJoin(GenreTable)
+            .leftJoin(ImageTable, onColumn = { SongTable.cover }, otherColumn = { ImageTable.id })
             .leftJoin(SongMusicBrainzTable)
             .userSong(userId)
             .followedArtist(userId)

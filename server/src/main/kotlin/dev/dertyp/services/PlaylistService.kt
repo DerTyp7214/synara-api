@@ -3,11 +3,7 @@ package dev.dertyp.services
 import dev.dertyp.PlatformUUID
 import dev.dertyp.core.paging
 import dev.dertyp.core.rankedSearchQuery
-import dev.dertyp.data.InsertablePlaylist
-import dev.dertyp.data.PaginatedResponse
-import dev.dertyp.data.Playlist
-import dev.dertyp.data.PlaylistEntry
-import dev.dertyp.data.User
+import dev.dertyp.data.*
 import dev.dertyp.db.ImageTable
 import dev.dertyp.db.PlaylistSongTable
 import dev.dertyp.db.PlaylistTable
@@ -24,13 +20,7 @@ import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.core.leftJoin
-import org.jetbrains.exposed.v1.jdbc.Query
-import org.jetbrains.exposed.v1.jdbc.batchInsert
-import org.jetbrains.exposed.v1.jdbc.deleteWhere
-import org.jetbrains.exposed.v1.jdbc.insertAndGetId
-import org.jetbrains.exposed.v1.jdbc.select
-import org.jetbrains.exposed.v1.jdbc.selectAll
-import org.jetbrains.exposed.v1.jdbc.upsert
+import org.jetbrains.exposed.v1.jdbc.*
 import org.koin.core.component.get
 import java.util.UUID
 
@@ -40,12 +30,14 @@ class PlaylistService : PlaylistLibrary, IPlaylistService, Service() {
             val id = resultRow[PlaylistTable.id].value
             val name = resultRow[PlaylistTable.name]
             val imageId = resultRow[PlaylistTable.imageId]?.value
+            val blurHash = resultRow.getOrNull(ImageTable.blurHash)
 
             return Playlist(
                 id = id,
                 name = name,
                 songs = emptyList(),
                 imageId = imageId,
+                blurHash = blurHash,
             )
         }
     }
@@ -124,6 +116,7 @@ class PlaylistService : PlaylistLibrary, IPlaylistService, Service() {
         dbQuery {
             val offset = if (pageSize == Int.MAX_VALUE) 0 else 1
             val mainPlaylistRows = PlaylistTable
+                .leftJoin(ImageTable, onColumn = { PlaylistTable.imageId }, otherColumn = { ImageTable.id })
                 .selectAll()
                 .query()
                 .paging(page, pageSize, offset)

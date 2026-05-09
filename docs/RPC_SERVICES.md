@@ -133,6 +133,7 @@ Contains metadata about a collection of songs released together.
 | `totalDuration` | `Long` | Sum of all track durations in milliseconds. |
 | `totalSize` | `Long` | Total file size of all tracks in bytes. |
 | `coverId` | `PlatformUUID`? | The album cover image unique identifier. |
+| `blurHash` | `String`? | The blur hash of the album cover image. |
 | `genres` | `List`<[Genre](#devdertypdatagenre)> | Collection of genres associated with this album. |
 | `originalId` | `String`? | The original ID of the album on external sources. |
 | `musicbrainzId` | `PlatformUUID`? | The MusicBrainz Release unique identifier. |
@@ -151,6 +152,7 @@ Contains metadata about a music artist or group.
 | `about` | `String` | A short biography or description of the artist. |
 | `genres` | `List`<[Genre](#devdertypdatagenre)> | Collection of genres associated with this artist. |
 | `imageId` | `PlatformUUID`? | The artist image unique identifier. |
+| `blurHash` | `String`? | The blur hash of the artist image. |
 | `musicbrainzId` | `PlatformUUID`? | The MusicBrainz Artist unique identifier. |
 | `isFollowed` | `Boolean` | Whether the current user is following this artist. |
 
@@ -266,6 +268,13 @@ Metadata for a stored image file (e.g., cover art, profile picture).
 | `path` | `String` | Internal server path to the image file. |
 | `imageHash` | `String` | Unique hash of the image content. |
 | `origin` | `String` | The source or platform where the image originated. |
+| `blurHash` | `String`? | BlurHash string for placeholders. |
+| `width` | `Int`? | Width of the image in pixels. |
+| `height` | `Int`? | Height of the image in pixels. |
+| `byteSize` | `Long`? | Size of the image file in bytes. |
+| `primaryColor` | `Int`? | Primary color of the image in ARGB format. |
+| `luminance` | `Double`? | Perceived brightness of the image (0.0 to 1.0). |
+| `palette` | `List`<`Int`>? | Top 5 dominant colors in the image. |
 
 ### InsertableAlbum <a name="devdertypdatainsertablealbum"></a>
 Configuration for creating or updating an album record.
@@ -409,6 +418,7 @@ Represents a system-managed collection of tracks.
 | `songs` | `List`<`PlatformUUID`> | Collection of song IDs in the playlist. |
 | `totalDuration` | `Long` | Total duration of all tracks in milliseconds. |
 | `imageId` | `PlatformUUID`? | The playlist cover image unique identifier. |
+| `blurHash` | `String`? | The blur hash of the playlist cover image. |
 
 ### PlaylistEntry <a name="devdertypdataplaylistentry"></a>
 A simplified representation of a track within a system playlist.
@@ -580,6 +590,7 @@ A simplified representation of a song.
 | `bitRate` | `Long` | Audio bit rate in bits per second. |
 | `fileSize` | `Long` | Size of the audio file in bytes. |
 | `coverId` | `PlatformUUID`? | The song cover image unique identifier. |
+| `blurHash` | `String`? | The blur hash of the song cover image. |
 | `musicBrainzId` | `PlatformUUID`? | The MusicBrainz Recording unique identifier. |
 | `transcodedTo` | `List`<`Int`> | List of bitrates for which a transcoded version exists. |
 
@@ -606,6 +617,7 @@ Contains core metadata about a track that is common for all users.
 | `bitRate` | `Long` | Audio bit rate in bits per second. |
 | `fileSize` | `Long` | Size of the audio file in bytes. |
 | `coverId` | `PlatformUUID`? | The song cover image unique identifier. |
+| `blurHash` | `String`? | The blur hash of the song cover image. |
 | `musicBrainzId` | `PlatformUUID`? | The MusicBrainz Recording unique identifier. |
 | `genres` | `List`<[Genre](#devdertypdatagenre)> | Collection of genres associated with this song. |
 
@@ -690,6 +702,7 @@ Contains core identity and profile data for a Synara user.
 | `passwordHash` | `String` | Hashed password for authentication. |
 | `isAdmin` | `Boolean` | Whether the user has administrative privileges. |
 | `profileImageId` | `PlatformUUID`? | The user's profile avatar image unique identifier. |
+| `blurHash` | `String`? | The blur hash of the profile avatar image. |
 
 ### UserInfo <a name="devdertypdatauserinfo"></a>
 Publicly safe profile information about a user.
@@ -701,6 +714,7 @@ Publicly safe profile information about a user.
 | `displayName` | `String`? | Optional display name shown to other users. |
 | `isAdmin` | `Boolean` | Whether the user has administrative privileges. |
 | `profileImageId` | `PlatformUUID`? | The user's profile avatar image unique identifier. |
+| `blurHash` | `String`? | The blur hash of the profile avatar image. |
 
 ### UserPlaylist <a name="devdertypdatauserplaylist"></a>
 Represents a user-created and managed collection of tracks.
@@ -713,6 +727,7 @@ Represents a user-created and managed collection of tracks.
 | `songEntries` | `List`<[UserPlaylistSong](#devdertypdatauserplaylistsong)>? | Detailed entry data including added timestamps. |
 | `totalDuration` | `Long` | Total duration of all tracks in milliseconds. |
 | `imageId` | `PlatformUUID`? | The playlist cover image unique identifier. |
+| `blurHash` | `String`? | The blur hash of the playlist cover image. |
 | `creator` | `PlatformUUID` | The unique identifier of the user who created the playlist. |
 | `description` | `String` | A user-provided description of the playlist. |
 | `origin` | `String`? | The source or platform where the playlist originated. |
@@ -759,6 +774,7 @@ Extends track metadata with user-specific information like favorite status.
 | `bitRate` | `Long` | Audio bit rate in bits per second. |
 | `fileSize` | `Long` | Size of the audio file in bytes. |
 | `coverId` | `PlatformUUID`? | The song cover image unique identifier. |
+| `blurHash` | `String`? | The blur hash of the song cover image. |
 | `musicBrainzId` | `PlatformUUID`? | The MusicBrainz Recording unique identifier. |
 | `genres` | `List`<[Genre](#devdertypdatagenre)> | Collection of genres associated with this song. |
 | `isFavourite` | `Boolean`? | Whether the current user has marked this song as a favorite. |
@@ -1072,6 +1088,7 @@ Metadata for a recently released album or single from a followed artist.
 | `releaseDate` | `PlatformDate`? | The date the content was released. |
 | `type` | [ReleaseType](#devdertypdatareleasetype) | The type of release (Album, Single, etc.). |
 | `imageId` | `PlatformUUID`? | The release cover image unique identifier. |
+| `blurHash` | `String`? | The blur hash of the release cover image. |
 | `links` | `List`<`String`> | Collection of external URLs related to the release. |
 | `albumId` | `PlatformUUID`? | The internal album ID if it has been indexed. |
 | `songId` | `PlatformUUID`? | The internal song ID if a single track has been indexed. |

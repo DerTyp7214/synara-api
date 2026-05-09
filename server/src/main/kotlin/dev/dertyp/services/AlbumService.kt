@@ -90,6 +90,7 @@ class AlbumService : AlbumLibrary, Service() {
                 songCount = resultRow[AlbumTable.songCount],
                 totalDuration = -1,
                 coverId = resultRow[AlbumTable.cover]?.value,
+                blurHash = resultRow.getOrNull(ImageTable.blurHash),
                 genres = genres,
                 originalId = resultRow[AlbumTable.originalId],
                 musicbrainzId = resultRow.getOrNull(AlbumMusicBrainzTable.musicBrainzId)?.value,
@@ -567,6 +568,7 @@ class AlbumService : AlbumLibrary, Service() {
             .leftJoin(AlbumMusicBrainzTable)
             .leftJoin(AlbumGenreTable)
             .leftJoin(GenreTable)
+            .leftJoin(ImageTable, onColumn = { AlbumTable.cover }, otherColumn = { ImageTable.id })
             .columnSet()
             .selectAll()
             .query()

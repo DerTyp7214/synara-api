@@ -4,44 +4,14 @@ import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
 import dev.dertyp.core.ApplicationScope
 import dev.dertyp.core.HttpClientPriority
-import dev.dertyp.data.MusicBrainzArtist
-import dev.dertyp.data.MusicBrainzRelation
-import dev.dertyp.data.MusicBrainzRelationUrl
-import dev.dertyp.data.MusicBrainzRelease
-import dev.dertyp.data.MusicBrainzReleaseGroup
-import dev.dertyp.db.AlbumArtistTable
-import dev.dertyp.db.AlbumMusicBrainzTable
-import dev.dertyp.db.AlbumTable
-import dev.dertyp.db.ArtistMusicBrainzTable
-import dev.dertyp.db.ArtistTable
-import dev.dertyp.db.FollowedArtistTable
-import dev.dertyp.db.ImageTable
-import dev.dertyp.db.MBArtistTable
-import dev.dertyp.db.MBRecordingTable
-import dev.dertyp.db.MBReleaseGroupTable
-import dev.dertyp.db.MBReleaseTable
-import dev.dertyp.db.RecentReleaseTable
-import dev.dertyp.db.SongArtistTable
-import dev.dertyp.db.SongMusicBrainzTable
-import dev.dertyp.db.SongTable
-import dev.dertyp.db.UserTable
-import dev.dertyp.db.allMusicBrainzTables
+import dev.dertyp.data.*
+import dev.dertyp.db.*
 import dev.dertyp.plugins.RedisCacheProvider
-import dev.dertyp.services.metadata.AppleMusicService
-import dev.dertyp.services.metadata.IMetadataService
-import dev.dertyp.services.metadata.MetadataService
-import dev.dertyp.services.metadata.MusicBrainzCacheService
-import dev.dertyp.services.metadata.MusicBrainzService
-import dev.dertyp.services.metadata.SpotifyService
-import dev.dertyp.services.metadata.TidalService
+import dev.dertyp.services.metadata.*
 import io.ktor.server.application.ApplicationEnvironment
-import io.mockk.coEvery
-import io.mockk.every
-import io.mockk.mockk
-import io.mockk.mockkObject
-import io.mockk.spyk
-import io.mockk.unmockkAll
+import io.mockk.*
 import kotlinx.coroutines.runBlocking
+import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.insert
@@ -103,6 +73,7 @@ class ReleaseServiceTest : KoinTest {
             SchemaUtils.create(
                 UserTable,
                 ImageTable,
+                ImageMetadataTable,
                 ArtistTable,
                 ArtistMusicBrainzTable,
                 AlbumTable,
@@ -183,6 +154,57 @@ class ReleaseServiceTest : KoinTest {
         val followed = service.getFollowedArtists(userId)
         assertEquals(1, followed.size)
         assertEquals(newArtistId, followed[0].artistId)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `getRecentReleases should return release with cover blurHash`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val userId = UUID.randomUUID()
+        val artistId = UUID.randomUUID()
+        val releaseId = UUID.randomUUID()
+        val imageId = UUID.randomUUID()
+        
+        transaction(database) {
+            UserTable.insert {
+                it[id] = userId
+                it[username] = "user"
+                it[passwordHash] = "hash"
+            }
+            ArtistTable.insert {
+                it[id] = artistId
+                it[name] = "Artist"
+            }
+            FollowedArtistTable.insert {
+                it[FollowedArtistTable.userId] = userId
+                it[FollowedArtistTable.artistId] = artistId
+            }
+            ImageTable.insert {
+                it[id] = imageId
+                it[path] = "test.jpg"
+                it[imageHash] = "hash"
+                it[origin] = "test"
+                it[blurHash] = "recent_blurhash"
+            }
+            MBReleaseGroupTable.insert {
+                it[id] = releaseId
+                it[title] = "Recent Release"
+            }
+            RecentReleaseTable.insert {
+                it[RecentReleaseTable.releaseId] = releaseId
+                it[RecentReleaseTable.artistId] = artistId
+                it[RecentReleaseTable.artistName] = "Artist"
+                it[RecentReleaseTable.title] = "Recent Release"
+                it[RecentReleaseTable.releaseDate] = 1672531200000L // 2023-01-01
+                it[RecentReleaseTable.type] = ReleaseType.Album
+                it[RecentReleaseTable.imageId] = EntityID(imageId, ImageTable)
+                it[RecentReleaseTable.links] = "[]"
+            }
+        }
+
+        val result = service.getRecentReleases(userId)
+        assertEquals(1, result.data.size)
+        assertEquals("recent_blurhash", result.data[0].blurHash)
     }
 
     @ParameterizedTest

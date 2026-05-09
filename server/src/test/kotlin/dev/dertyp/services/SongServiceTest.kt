@@ -75,6 +75,7 @@ class SongServiceTest : KoinTest {
                 PlaylistSongTable,
                 UserPlaylistSongTable,
                 ImageTable,
+                ImageMetadataTable,
                 ArtistSplitAliasTable,
                 GenreTable,
                 ArtistGenreTable,
@@ -1046,6 +1047,48 @@ class SongServiceTest : KoinTest {
         assertEquals(1, songService.allSongIds(true, tags = listOf(SongTag.Q_192)).toList().size)
         assertEquals(1, songService.allSongIds(true, tags = listOf(SongTag.B_16)).toList().size)
         assertEquals(1, songService.allSongIds(true, tags = listOf(SongTag.HAS_MUSICBRAINZ_ID)).toList().size)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `byId should return song with cover blurHash`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val songId = UUID.randomUUID()
+        val imageId = UUID.randomUUID()
+        transaction(database) {
+            ImageTable.insert {
+                it[id] = imageId
+                it[path] = "test.jpg"
+                it[imageHash] = "hash"
+                it[origin] = "test"
+                it[blurHash] = "song_blurhash"
+            }
+            SongTable.insert {
+                it[id] = songId
+                it[title] = "Song with Cover"
+                it[cover] = imageId
+                it[filePath] = "test.flac"
+                it[duration] = 1000
+                it[explicit] = false
+                it[trackNumber] = 1
+                it[discNumber] = 1
+                it[sampleRate] = 44100
+                it[bitsPerSample] = 16
+                it[bitRate] = 128000
+                it[fileSize] = 1024
+                it[albumId] = UUID.randomUUID().also { albumId ->
+                    AlbumTable.insert { album ->
+                        album[id] = albumId
+                        album[name] = "Album"
+                    }
+                }
+            }
+        }
+
+        val song = songService.byId(songId)
+        assertNotNull(song)
+        assertEquals(imageId, song?.coverId)
+        assertEquals("song_blurhash", song?.blurHash)
     }
 
     @ParameterizedTest

@@ -3,6 +3,7 @@ package dev.dertyp.services
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
 import dev.dertyp.data.AuthenticationRequest
+import dev.dertyp.db.ImageMetadataTable
 import dev.dertyp.db.ImageTable
 import dev.dertyp.db.UserTable
 import io.mockk.mockk
@@ -34,7 +35,7 @@ class UserServiceTest : KoinTest {
 
         database = TestDatabase.connect(dialect, "user_test")
         transaction(database) {
-            SchemaUtils.create(UserTable)
+            SchemaUtils.create(UserTable, ImageTable, ImageMetadataTable)
         }
         service = UserService()
     }
@@ -43,6 +44,34 @@ class UserServiceTest : KoinTest {
     fun tearDown() {
         stopKoin()
         TestDatabase.cleanUp()
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `findUserById should return user with profile blurHash`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val userId = UUID.randomUUID()
+        val imageId = UUID.randomUUID()
+        transaction(database) {
+            ImageTable.insert {
+                it[id] = imageId
+                it[path] = "test.jpg"
+                it[imageHash] = "hash"
+                it[origin] = "test"
+                it[blurHash] = "profile_blurhash"
+            }
+            UserTable.insert {
+                it[id] = userId
+                it[username] = "user_with_image"
+                it[passwordHash] = "hash"
+                it[profileImage] = imageId
+            }
+        }
+
+        val user = service.findUserById(userId)
+        assertNotNull(user)
+        assertEquals(imageId, user?.profileImageId)
+        assertEquals("profile_blurhash", user?.blurHash)
     }
 
     @ParameterizedTest
@@ -108,7 +137,6 @@ class UserServiceTest : KoinTest {
         val userId = UUID.randomUUID()
         val imageId = UUID.randomUUID()
         transaction(database) {
-            SchemaUtils.create(ImageTable)
             ImageTable.insert {
                 it[id] = imageId
                 it[path] = "path"

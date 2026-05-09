@@ -2,27 +2,14 @@ package dev.dertyp.services
 
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
-import dev.dertyp.db.AlbumTable
-import dev.dertyp.db.ArtistTable
-import dev.dertyp.db.ImageTable
-import dev.dertyp.db.MBReleaseGroupTable
-import dev.dertyp.db.PlaylistTable
-import dev.dertyp.db.RecentReleaseTable
-import dev.dertyp.db.SongTable
-import dev.dertyp.db.UserPlaylistTable
-import dev.dertyp.db.UserTable
+import dev.dertyp.db.*
 import dev.dertyp.plugins.RedisCacheProvider
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import org.jetbrains.exposed.v1.core.like
-import org.jetbrains.exposed.v1.jdbc.Database
-import org.jetbrains.exposed.v1.jdbc.SchemaUtils
-import org.jetbrains.exposed.v1.jdbc.batchInsert
-import org.jetbrains.exposed.v1.jdbc.insert
-import org.jetbrains.exposed.v1.jdbc.insertAndGetId
-import org.jetbrains.exposed.v1.jdbc.selectAll
+import org.jetbrains.exposed.v1.jdbc.*
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -61,10 +48,48 @@ class ImageServiceTest {
 
         database = TestDatabase.connect(dialect, "image_test")
         transaction(database) {
-            SchemaUtils.create(ImageTable, AlbumTable, ArtistTable, SongTable, PlaylistTable, UserPlaylistTable, UserTable, MBReleaseGroupTable, RecentReleaseTable)
+            SchemaUtils.create(ImageTable, ImageMetadataTable, AlbumTable, ArtistTable, SongTable, PlaylistTable, UserPlaylistTable, UserTable, MBReleaseGroupTable, RecentReleaseTable)
         }
 
         service = ImageService(storageService, redisConfig)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `byId should return image with blurHash and metadata`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val imageId = UUID.randomUUID()
+        transaction(database) {
+            ImageTable.insert {
+                it[id] = imageId
+                it[path] = "test.jpg"
+                it[imageHash] = "hash"
+                it[origin] = "test"
+                it[blurHash] = "LKO2?V%2S1?bM69GZ~v._38_9Gv."
+            }
+            ImageMetadataTable.insert {
+                it[ImageMetadataTable.imageId] = EntityID(imageId, ImageTable)
+                it[width] = 100
+                it[height] = 200
+                it[byteSize] = 1024L
+                it[primaryColor] = 0xFF0000
+                it[red] = 255
+                it[green] = 0
+                it[blue] = 0
+                it[luminance] = 0.5
+                it[color1] = 0xFF0000
+            }
+        }
+
+        val image = service.byId(imageId)
+        assertNotNull(image)
+        assertEquals("LKO2?V%2S1?bM69GZ~v._38_9Gv.", image?.blurHash)
+        assertEquals(100, image?.width)
+        assertEquals(200, image?.height)
+        assertEquals(1024L, image?.byteSize)
+        assertEquals(0xFF0000, image?.primaryColor)
+        assertEquals(0.5, image?.luminance)
+        assertEquals(listOf(0xFF0000), image?.palette)
     }
 
     @AfterEach

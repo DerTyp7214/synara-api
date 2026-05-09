@@ -56,6 +56,7 @@ class ArtistServiceTest : KoinTest {
                 FollowedArtistTable,
                 ArtistSplitAliasTable,
                 ImageTable,
+                ImageMetadataTable,
                 SongTable,
                 SongArtistTable,
                 AlbumTable,
@@ -96,6 +97,33 @@ class ArtistServiceTest : KoinTest {
         assertNotNull(artist)
         assertEquals(id, artist?.id)
         assertEquals("Test Artist", artist?.name)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `byId should return artist with image blurHash`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val artistId = UUID.randomUUID()
+        val imageId = UUID.randomUUID()
+        transaction(database) {
+            ImageTable.insert {
+                it[id] = imageId
+                it[path] = "test.jpg"
+                it[imageHash] = "hash"
+                it[origin] = "test"
+                it[blurHash] = "test_blurhash"
+            }
+            ArtistTable.insert {
+                it[id] = artistId
+                it[name] = "Artist with Image"
+                it[image] = imageId
+            }
+        }
+
+        val artist = service.byId(artistId)
+        assertNotNull(artist)
+        assertEquals(imageId, artist?.imageId)
+        assertEquals("test_blurhash", artist?.blurHash)
     }
 
     @ParameterizedTest

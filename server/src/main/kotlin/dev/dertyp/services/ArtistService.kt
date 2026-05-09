@@ -80,6 +80,7 @@ class ArtistService : ArtistLibrary, Service() {
             val isGroup: Boolean
             val about: String
             val imageId: UUID?
+            val blurHash: String?
 
             if (table is Alias<*>) {
                 id = resultRow[table[ArtistTable.id]].value
@@ -87,12 +88,14 @@ class ArtistService : ArtistLibrary, Service() {
                 isGroup = resultRow[table[ArtistTable.isGroup]]
                 about = resultRow[table[ArtistTable.about]]
                 imageId = resultRow[table[ArtistTable.image]]?.value
+                blurHash = resultRow.getOrNull(ImageTable.blurHash)
             } else {
                 id = resultRow[ArtistTable.id].value
                 name = resultRow[ArtistTable.name]
                 isGroup = resultRow[ArtistTable.isGroup]
                 about = resultRow[ArtistTable.about]
                 imageId = resultRow[ArtistTable.image]?.value
+                blurHash = resultRow.getOrNull(ImageTable.blurHash)
             }
 
             val isFollowed = if (followedTable is Alias<*>) {
@@ -109,6 +112,7 @@ class ArtistService : ArtistLibrary, Service() {
                 about = about,
                 genres = genres,
                 imageId = imageId,
+                blurHash = blurHash,
                 musicbrainzId = musicbrainzId ?: if (table == ArtistTable) resultRow.getOrNull(
                     ArtistMusicBrainzTable.musicBrainzId
                 )?.value else null,
@@ -631,6 +635,7 @@ class ArtistService : ArtistLibrary, Service() {
             .leftJoin(ArtistMusicBrainzTable)
             .leftJoin(ArtistGenreTable)
             .leftJoin(GenreTable)
+            .leftJoin(ImageTable, onColumn = { ArtistTable.image }, otherColumn = { ImageTable.id })
             .columnSet()
             .selectAll()
             .query()
@@ -660,6 +665,7 @@ class ArtistService : ArtistLibrary, Service() {
             .leftJoin(ArtistMusicBrainzTable)
             .leftJoin(ArtistGenreTable)
             .leftJoin(GenreTable)
+            .leftJoin(ImageTable, onColumn = { ArtistTable.image }, otherColumn = { ImageTable.id })
             .innerJoin(ArtistMemberTable, onColumn = { ArtistTable.id }, otherColumn = { ArtistMemberTable.artistId })
             .selectAll()
             .where { ArtistMemberTable.groupId inList groupIds }

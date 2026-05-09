@@ -42,7 +42,8 @@ class UserPlaylistServiceTest : KoinTest {
                 ArtistTable,
                 SongArtistTable,
                 AlbumArtistTable,
-                ImageTable
+                ImageTable,
+                ImageMetadataTable
             )
         }
         service = UserPlaylistService()
@@ -52,6 +53,41 @@ class UserPlaylistServiceTest : KoinTest {
     fun tearDown() {
         stopKoin()
         TestDatabase.cleanUp()
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `byId should return user playlist with cover blurHash`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val playlistId = UUID.randomUUID()
+        val userId = UUID.randomUUID()
+        val imageId = UUID.randomUUID()
+        transaction(database) {
+            UserTable.insert {
+                it[id] = userId
+                it[username] = "user"
+                it[passwordHash] = "hash"
+            }
+            ImageTable.insert {
+                it[id] = imageId
+                it[path] = "test.jpg"
+                it[imageHash] = "hash"
+                it[origin] = "test"
+                it[blurHash] = "user_playlist_blurhash"
+            }
+            UserPlaylistTable.insert {
+                it[id] = playlistId
+                it[name] = "User Playlist with Cover"
+                it[UserPlaylistTable.imageId] = imageId
+                it[creator] = userId
+                it[description] = ""
+            }
+        }
+
+        val playlist = service.byId(playlistId)
+        assertNotNull(playlist)
+        assertEquals(imageId, playlist?.imageId)
+        assertEquals("user_playlist_blurhash", playlist?.blurHash)
     }
 
     @ParameterizedTest

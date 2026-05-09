@@ -3,10 +3,12 @@ package dev.dertyp.services
 import at.favre.lib.crypto.bcrypt.BCrypt
 import dev.dertyp.data.AuthenticationRequest
 import dev.dertyp.data.User
+import dev.dertyp.db.ImageTable
 import dev.dertyp.db.UserTable
 import dev.dertyp.dbQuery
 import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.leftJoin
 import org.jetbrains.exposed.v1.jdbc.*
 import java.util.UUID
 
@@ -44,7 +46,8 @@ class UserService : Service() {
                 displayName = row[UserTable.displayName],
                 passwordHash = row[UserTable.passwordHash],
                 isAdmin = row[UserTable.isAdmin],
-                profileImageId = row[UserTable.profileImage]?.value
+                profileImageId = row[UserTable.profileImage]?.value,
+                blurHash = row.getOrNull(ImageTable.blurHash)
             )
         }
     }
@@ -102,6 +105,7 @@ class UserService : Service() {
     suspend fun queryUser(query: Query.() -> Query = { this }): List<User> {
         return dbQuery {
             UserTable
+                .leftJoin(ImageTable, onColumn = { UserTable.profileImage }, otherColumn = { ImageTable.id })
                 .selectAll()
                 .query()
                 .map(::map)
