@@ -10,6 +10,8 @@ import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.serialization.kotlinx.protobuf.protobuf
 import kotlinx.serialization.ExperimentalSerializationApi
+import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
 
 object ApiClient {
     @OptIn(ExperimentalSerializationApi::class)
@@ -18,7 +20,11 @@ object ApiClient {
             json(ApplicationScope.json)
             protobuf()
         }
-        install(HttpTimeout)
+        install(HttpTimeout) {
+            requestTimeoutMillis = 1.minutes.inWholeMilliseconds
+            connectTimeoutMillis = 30.seconds.inWholeMilliseconds
+            socketTimeoutMillis = 30.seconds.inWholeMilliseconds
+        }
         install(ContentEncoding) {
             gzip()
         }

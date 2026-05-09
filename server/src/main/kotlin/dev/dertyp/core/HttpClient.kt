@@ -141,11 +141,12 @@ class HttpClientQueueService : Service() {
                     val response = ApiClient.instance.get(next.urlString) {
                         next.block(this)
                     }
-                    hostLastRequest[host] = Clock.System.now()
                     next.deferred.complete(response)
                 } catch (e: Exception) {
                     logger.error("Error executing queued request for $host", e)
                     next.deferred.completeWith(Result.failure(e))
+                } finally {
+                    hostLastRequest[host] = Clock.System.now()
                 }
             }
         } catch (e: CancellationException) {
