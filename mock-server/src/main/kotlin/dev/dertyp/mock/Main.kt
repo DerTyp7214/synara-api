@@ -41,7 +41,8 @@ fun main() {
 
 val MockAuthPlugin = createRouteScopedPlugin("MockAuthPlugin") {
     onCall { call ->
-        if (call.request.headers["Authorization"] == null) {
+        val authHeader = call.request.headers["Authorization"]
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             call.respond(HttpStatusCode.Unauthorized)
         }
     }
@@ -122,7 +123,7 @@ fun Route.registerMockRestService(serviceInterface: KClass<*>, json: Json, isPub
             val methodName = name.replaceFirstChar { it.lowercase() }
 
             val handler: suspend RoutingContext.() -> Unit = {
-                val dummy = MockGenerator.createDummy(func.returnType)
+                val dummy = MockGenerator.createDummy(func.returnType, func.name)
                 if (dummy == null) {
                     call.respond(HttpStatusCode.NotFound)
                 } else {
