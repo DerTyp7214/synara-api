@@ -40,13 +40,7 @@ object MockGenerator {
 
     fun createDummy(type: KType, name: String? = null, depth: Int = 0): Any? {
         if (type.isMarkedNullable && (depth > 3 || (0..100).random() < 10)) {
-            val lowercaseName = name?.lowercase() ?: ""
-            if (!lowercaseName.contains("active") &&
-                !lowercaseName.contains("valid") &&
-                !lowercaseName.contains("token") &&
-                !lowercaseName.contains("id") &&
-                !lowercaseName.contains("data") &&
-                !lowercaseName.contains("success")) {
+            if (!isEssentialField(name)) {
                 return null
             }
         }
@@ -56,7 +50,7 @@ object MockGenerator {
         return when {
             classifier == String::class -> "Mock String ${UUID.randomUUID().toString().take(5)}"
             classifier == Int::class -> {
-                if (name?.lowercase()?.contains("total") == true || name?.lowercase()?.contains("count") == true) {
+                if (nameContains(name, "total", "count")) {
                     (1..100).random()
                 } else {
                     (0..100).random()
@@ -64,19 +58,7 @@ object MockGenerator {
             }
             classifier == Long::class -> (0..Int.MAX_VALUE.toLong()).random()
             classifier == Boolean::class -> {
-                val lowercaseName = name?.lowercase() ?: ""
-                if (lowercaseName.contains("active") ||
-                    lowercaseName.contains("valid") ||
-                    lowercaseName.contains("success") ||
-                    lowercaseName.contains("secure") ||
-                    lowercaseName.contains("supported") ||
-                    lowercaseName.contains("enabled") ||
-                    lowercaseName.contains("completed") ||
-                    lowercaseName.contains("finished") ||
-                    lowercaseName.contains("healthy") ||
-                    lowercaseName.contains("connected") ||
-                    lowercaseName.contains("authorized") ||
-                    lowercaseName.contains("authenticated")) {
+                if (isEssentialField(name)) {
                     true
                 } else {
                     (0..1).random() == 1
@@ -85,25 +67,25 @@ object MockGenerator {
             classifier == Double::class -> (0..10000).random().toDouble() / 100.0
             classifier == Float::class -> (0..10000).random().toFloat() / 100.0f
             classifier == ByteArray::class -> {
-                val size = if (name?.lowercase()?.contains("data") == true || name?.lowercase()?.contains("bytes") == true) 64 else 32
+                val size = if (nameContains(name, "data", "bytes")) 64 else 32
                 Random.nextBytes(size)
             }
             classifier == Date::class || classifier.simpleName == "Date" || classifier.simpleName == "PlatformDate" -> {
-                if (name?.lowercase()?.contains("expire") == true) {
+                if (nameContains(name, "expire")) {
                     Date(System.currentTimeMillis() + 1000L * 60 * 60 * 24 * 30)
                 } else {
                     Date()
                 }
             }
             classifier == Instant::class || classifier.simpleName == "Instant" || classifier.simpleName == "PlatformInstant" -> {
-                if (name?.lowercase()?.contains("expire") == true) {
+                if (nameContains(name, "expire")) {
                     Instant.now().plusSeconds(60 * 60 * 24 * 30)
                 } else {
                     Instant.now()
                 }
             }
             classifier == LocalDate::class || classifier.simpleName == "LocalDate" || classifier.simpleName == "PlatformLocalDate" -> {
-                if (name?.lowercase()?.contains("expire") == true) {
+                if (nameContains(name, "expire")) {
                     LocalDate.now().plusMonths(1)
                 } else {
                     LocalDate.now()
@@ -154,5 +136,19 @@ object MockGenerator {
                 }
             }
         }
+    }
+
+    private fun nameContains(name: String?, vararg keywords: String): Boolean {
+        val lowercaseName = name?.lowercase() ?: return false
+        return keywords.any { lowercaseName.contains(it) }
+    }
+
+    private fun isEssentialField(name: String?): Boolean {
+        return nameContains(
+            name,
+            "active", "valid", "token", "id", "data", "success",
+            "secure", "supported", "enabled", "completed", "finished",
+            "healthy", "connected", "authorized", "authenticated", "admin"
+        )
     }
 }
