@@ -9,6 +9,7 @@ import dev.dertyp.routing.RestFileProvider
 import dev.dertyp.services.AlbumService.Companion.calculateAlbumStats
 import dev.dertyp.services.AlbumService.Companion.mapAlbum
 import dev.dertyp.services.ArtistService.Companion.mapArtist
+import dev.dertyp.services.metadata.CachedMusicBrainzService
 import dev.dertyp.services.metadata.IMetadataService
 import dev.dertyp.services.metadata.MusicBrainzCacheService
 import dev.dertyp.services.metadata.MusicBrainzService
@@ -200,7 +201,10 @@ class SongRpcService(private val user: User, private val songService: SongServic
 class SongService : SongLibrary, Service() {
     private val environment by inject<ApplicationEnvironment>()
     private val musicBrainzService by inject<MusicBrainzService>()
+    private val cachedMusicBrainzService by inject<CachedMusicBrainzService>()
     private val musicBrainzCacheService by inject<MusicBrainzCacheService>()
+    private val artistService by inject<ArtistService>()
+    private val genreService by inject<GenreService>()
 
     val albumArtistAlias = ArtistTable.alias("albumArtistAlias")
     val albumArtistMusicBrainzAlias = ArtistMusicBrainzTable.alias("albumArtistMusicBrainzAlias")
@@ -440,14 +444,18 @@ class SongService : SongLibrary, Service() {
 
     suspend fun fetchMusicBrainzId(id: UUID, userId: UUID, priority: HttpClientPriority = HttpClientPriority.NORMAL): UserSong? {
         val song = byId(id, userId) ?: return null
-        if (song.musicBrainzId != null) return song
 
-        val mbRecording = musicBrainzService.searchMb(song, priority)
+        val mbRecording = if (song.musicBrainzId != null) {
+            cachedMusicBrainzService.getRecording(song.musicBrainzId!!)
+        } else {
+            musicBrainzService.searchMb(song, priority)
+        }
 
         if (mbRecording != null) {
-            musicBrainzCacheService.updateRecordingCache(mbRecording)
+            if (song.musicBrainzId == null) {
+                musicBrainzCacheService.updateRecordingCache(mbRecording)
+            }
 
-            val artistService: ArtistService by inject()
             val artistCredits = mbRecording.artistCredit ?: emptyList()
 
             val mbArtistIds = artistCredits.mapNotNull { it.artist?.id }.distinct()
@@ -535,7 +543,6 @@ class SongService : SongLibrary, Service() {
 
             val genres = (mbRecording.genres?.map { it.name } ?: emptyList()) + (mbRecording.releases?.flatMap { it.genres?.map { g -> g.name } ?: emptyList() } ?: emptyList()) + (mbRecording.releases?.flatMap { it.releaseGroup?.genres?.map { g -> g.name } ?: emptyList() } ?: emptyList())
             if (genres.isNotEmpty()) {
-                val genreService: GenreService by inject()
                 val genreIds = genreService.getOrCreateGenres(genres)
                 dbQuery {
                     SongGenreTable.deleteWhere { SongGenreTable.songId eq id }
@@ -1022,6 +1029,7 @@ class SongService : SongLibrary, Service() {
             .select(SongTable.id)
             .where {
                 SongMusicBrainzTable.songId.isNull() or
+                        (SongMusicBrainzTable.lastCheck eq 0L) or
                         (SongMusicBrainzTable.musicBrainzId.isNull() and (SongMusicBrainzTable.lastCheck less oneWeekAgo.toEpochMilliseconds()))
             }
             .orderBy(SongTable.inserted, SortOrder.DESC)

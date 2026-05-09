@@ -59,8 +59,13 @@ class ArtistRpcService(private val user: User, private val artistService: Artist
 }
 
 class ArtistService : ArtistLibrary, Service() {
+    private val musicBrainzService by inject<MusicBrainzService>()
+    private val cachedMusicBrainzService by inject<CachedMusicBrainzService>()
     private val musicBrainzCacheService by inject<MusicBrainzCacheService>()
     private val metadataFetchingService by inject<MetadataFetchingService>()
+    private val songService by inject<SongService>()
+    private val albumService by inject<AlbumService>()
+    private val genreService by inject<GenreService>()
     val artistGroupAlias = ArtistTable.alias("artistGroup")
     val artistMemberAlias = ArtistTable.alias("artistMember")
     val artistGroupJoinAlias = ArtistMemberTable.alias("artistGroupJoin")
@@ -134,36 +139,32 @@ class ArtistService : ArtistLibrary, Service() {
 
     suspend fun fetchMusicBrainzId(id: UUID, userId: UUID? = null, priority: HttpClientPriority = HttpClientPriority.NORMAL): Artist? {
         val artist = byId(id, userId) ?: return null
-        if (artist.musicbrainzId != null) return artist
         
-        val cachedMusicBrainzService: CachedMusicBrainzService by inject()
-        val musicBrainzService: MusicBrainzService by inject()
-        val songService: SongService by inject()
-        val albumService: AlbumService by inject()
-        
-        var mbArtistId: UUID? = null
+        var mbArtistId: UUID? = artist.musicbrainzId
 
-        val songIds = songService.songIdsByArtist(id).take(5).toList()
-        for (songId in songIds) {
-            val song = songService.byId(songId) ?: continue
-            val mbRecording = if (song.musicBrainzId != null) {
-                cachedMusicBrainzService.getRecording(song.musicBrainzId!!)
-            } else {
-                musicBrainzService.searchMb(song, priority)
-            }
-            
-            if (mbRecording != null) {
-                val matchedArtist = mbRecording.artistCredit?.find {
-                    it.name.equals(artist.name, ignoreCase = true) || it.artist?.name.equals(artist.name, ignoreCase = true)
-                }?.artist
-                
-                if (matchedArtist != null) {
-                    mbArtistId = matchedArtist.id
-                    break
+        if (mbArtistId == null) {
+            val songIds = songService.songIdsByArtist(id).take(5).toList()
+            for (songId in songIds) {
+                val song = songService.byId(songId) ?: continue
+                val mbRecording = if (song.musicBrainzId != null) {
+                    cachedMusicBrainzService.getRecording(song.musicBrainzId!!)
+                } else {
+                    musicBrainzService.searchMb(song, priority)
+                }
+
+                if (mbRecording != null) {
+                    val matchedArtist = mbRecording.artistCredit?.find {
+                        it.name.equals(artist.name, ignoreCase = true) || it.artist?.name.equals(artist.name, ignoreCase = true)
+                    }?.artist
+
+                    if (matchedArtist != null) {
+                        mbArtistId = matchedArtist.id
+                        break
+                    }
                 }
             }
         }
-        
+
         if (mbArtistId == null) {
             val albums = albumService.byArtist(page = 0, pageSize = 5, artistId = id, singles = false, userId = userId).data
             for (album in albums) {
@@ -195,7 +196,6 @@ class ArtistService : ArtistLibrary, Service() {
 
             val genres = mbArtist.genres?.map { it.name } ?: emptyList()
             if (genres.isNotEmpty()) {
-                val genreService: GenreService by inject()
                 val genreIds = genreService.getOrCreateGenres(genres)
                 dbQuery {
                     ArtistGenreTable.deleteWhere { ArtistGenreTable.artistId eq id }
@@ -265,7 +265,6 @@ class ArtistService : ArtistLibrary, Service() {
     }
 
     suspend fun searchArtistOnMusicBrainz(query: String, page: Int, pageSize: Int, priority: HttpClientPriority = HttpClientPriority.NORMAL): PaginatedResponse<MusicBrainzArtist> {
-        val musicBrainzService: MusicBrainzService by inject()
         return musicBrainzService.searchArtistsMbPaged(query, page, pageSize, priority)
     }
 
@@ -602,6 +601,7 @@ class ArtistService : ArtistLibrary, Service() {
             .select(ArtistTable.id)
             .where {
                 ArtistMusicBrainzTable.artistId.isNull() or
+                        (ArtistMusicBrainzTable.lastCheck eq 0L) or
                         (ArtistMusicBrainzTable.musicBrainzId.isNull() and (ArtistMusicBrainzTable.lastCheck less oneWeekAgo.toEpochMilliseconds()))
             }
             .fetchBatchedResultsByIdKeyset(ArtistTable.id, 1000) { batch ->
