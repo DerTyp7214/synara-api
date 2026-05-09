@@ -53,6 +53,8 @@ abstract class Worker(val name: String) : KoinComponent {
 
             val supervisor = launch {
                 while (isActive) {
+                    if (itemChannel.isClosedForReceive) break
+
                     val targetCount = grantedThreads.value
                     for (i in 0 until targetCount) {
                         if (!activeWorkerJobs.containsKey(i)) {
@@ -79,11 +81,10 @@ abstract class Worker(val name: String) : KoinComponent {
                                             }
                                             
                                             if (i >= grantedThreads.value) {
-                                                val returned = if (!itemChannel.isClosedForSend) {
-                                                    itemChannel.trySend(item).isSuccess
-                                                } else false
-                                                
-                                                if (returned) break
+                                                if (!itemChannel.isClosedForSend) {
+                                                    itemChannel.trySend(item)
+                                                }
+                                                break
                                             }
                                             
                                             try {
@@ -103,14 +104,11 @@ abstract class Worker(val name: String) : KoinComponent {
                 }
             }
 
-            while (activeWorkerJobs.isEmpty() && items.any()) {
-                delay(10.milliseconds)
-            }
-
             items.forEach { itemChannel.send(it) }
             itemChannel.close()
 
-            while (activeWorkerJobs.isNotEmpty()) {
+            while (isActive) {
+                if (activeWorkerJobs.isEmpty() && itemChannel.isClosedForReceive) break
                 delay(10.milliseconds)
             }
             
@@ -146,6 +144,7 @@ abstract class Worker(val name: String) : KoinComponent {
     companion object {
         private val activeWorkers = ConcurrentHashMap<String, Pair<Int, MutableStateFlow<Int>>>()
         private val mutex = Mutex()
+        @Volatile
         internal var overridenProcessorCount: Int? = null
 
         internal fun resetActiveWorkers() {
@@ -165,8 +164,14 @@ abstract class Worker(val name: String) : KoinComponent {
 
         private suspend fun recalculateAllocations() = mutex.withLock {
             val cores = overridenProcessorCount ?: Runtime.getRuntime().availableProcessors()
-            val leaveFree = if (cores > 4) 2 else 1
-            val totalMaxSafe = (cores * 0.9).toInt().coerceAtMost(cores - leaveFree).coerceAtLeast(1)
+            val leaveFree = when {
+                cores <= 1 -> 0
+                cores <= 4 -> 1
+                else -> 2
+            }
+            val totalMaxSafe = (cores * 0.9).toInt()
+                .coerceAtMost(cores - leaveFree)
+                .coerceAtLeast(1)
             
             val totalDesired = activeWorkers.values.sumOf { it.first }
             
@@ -176,12 +181,12 @@ abstract class Worker(val name: String) : KoinComponent {
                 var remaining = totalMaxSafe
                 val sortedWorkers = activeWorkers.toList().sortedBy { it.second.first }
                 
-                val workerCount = activeWorkers.size
-                val minThreadsPerWorker = if (totalMaxSafe >= workerCount) 1 else 0
+                val minThreadsPerWorker = if (totalMaxSafe >= activeWorkers.size) 1 else 0
 
                 sortedWorkers.forEach { (_, pair) ->
                     val desired = pair.first
-                    val share = floor(totalMaxSafe * (desired.toDouble() / totalDesired)).toInt().coerceAtLeast(minThreadsPerWorker)
+                    val share = floor(totalMaxSafe * (desired.toDouble() / totalDesired)).toInt()
+                        .coerceAtLeast(minThreadsPerWorker)
                     
                     val granted = share.coerceAtMost(remaining).coerceAtMost(desired)
                     pair.second.value = granted
@@ -189,7 +194,7 @@ abstract class Worker(val name: String) : KoinComponent {
                 }
                 
                 if (remaining > 0) {
-                    sortedWorkers.reversed().forEach { (_, pair) ->
+                    sortedWorkers.forEach { (_, pair) ->
                         if (remaining > 0 && pair.second.value < pair.first) {
                             pair.second.value += 1
                             remaining -= 1

@@ -63,11 +63,14 @@ class WorkerTest : KoinTest {
 
     private suspend fun awaitSettlement(expectedTotal: Int, vararg workers: TestWorker) {
         withTimeout(30.seconds) {
-            while (true) {
-                val currentTotal = workers.sumOf { it.getThreadsFlow().value }
-                val allRegistered = workers.all { it.getThreadsFlow().value > 0 }
+            while (isActive) {
+                val threadValues = workers.map { it.name to it.getThreadsFlow().value }
+                val currentTotal = threadValues.sumOf { it.second }
+                val allRegistered = threadValues.all { it.second > 0 }
+                
                 if (allRegistered && currentTotal == expectedTotal) break
-                delay(50.milliseconds)
+                
+                delay(100.milliseconds)
             }
         }
     }
@@ -127,9 +130,9 @@ class WorkerTest : KoinTest {
         val w2 = worker2.getThreadsFlow().value
         val w3 = worker3.getThreadsFlow().value
 
-        assertEquals(58, w1)
-        assertTrue(w2 in 28..29)
-        assertTrue(w3 in 28..29)
+        assertEquals(57, w1)
+        assertEquals(29, w2)
+        assertEquals(29, w3)
         assertEquals(maxSafe, w1 + w2 + w3)
 
         latch.complete(Unit)

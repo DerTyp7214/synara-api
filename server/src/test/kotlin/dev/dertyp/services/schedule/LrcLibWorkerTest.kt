@@ -44,7 +44,6 @@ class LrcLibWorkerTest : KoinTest {
     fun tearDown() {
         stopKoin()
         TestDatabase.cleanUp()
-        Worker.resetActiveWorkers()
     }
 
     @ParameterizedTest
