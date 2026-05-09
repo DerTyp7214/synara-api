@@ -1,39 +1,9 @@
 package dev.dertyp.services
 
 import dev.dertyp.PlatformLocalDate
-import dev.dertyp.core.ApplicationScope
-import dev.dertyp.core.HttpClientPriority
-import dev.dertyp.core.Quadruple
-import dev.dertyp.core.fetchBatchedResultsByIdKeyset
-import dev.dertyp.core.filterValueNotNull
-import dev.dertyp.core.mbArtistSearchColumns
-import dev.dertyp.core.mbReleaseSearchColumns
-import dev.dertyp.core.rankedSearchQuery
-import dev.dertyp.core.withMBArtistSearch
-import dev.dertyp.core.withMBReleaseSearch
-import dev.dertyp.data.Album
-import dev.dertyp.data.Artist
-import dev.dertyp.data.Genre
-import dev.dertyp.data.InsertableAlbum
-import dev.dertyp.data.PaginatedResponse
-import dev.dertyp.data.User
-import dev.dertyp.db.AlbumArtistTable
-import dev.dertyp.db.AlbumGenreTable
-import dev.dertyp.db.AlbumMusicBrainzTable
-import dev.dertyp.db.AlbumTable
-import dev.dertyp.db.ArtistAliasTable
-import dev.dertyp.db.ArtistMemberTable
-import dev.dertyp.db.ArtistMusicBrainzTable
-import dev.dertyp.db.ArtistTable
-import dev.dertyp.db.FollowedArtistTable
-import dev.dertyp.db.GenreTable
-import dev.dertyp.db.ImageTable
-import dev.dertyp.db.MBRecordingArtistCreditTable
-import dev.dertyp.db.MBReleaseArtistCreditTable
-import dev.dertyp.db.MBReleaseTable
-import dev.dertyp.db.SongArtistTable
-import dev.dertyp.db.SongMusicBrainzTable
-import dev.dertyp.db.SongTable
+import dev.dertyp.core.*
+import dev.dertyp.data.*
+import dev.dertyp.db.*
 import dev.dertyp.dbQuery
 import dev.dertyp.getDateFromISO
 import dev.dertyp.getISOFromDate
@@ -44,39 +14,12 @@ import dev.dertyp.services.metadata.MusicBrainzCacheService
 import dev.dertyp.services.metadata.MusicBrainzService
 import dev.dertyp.utils.LogParam
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.asFlow
-import kotlinx.coroutines.flow.chunked
-import kotlinx.coroutines.flow.flatMapConcat
-import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
-import org.jetbrains.exposed.v1.core.ColumnSet
-import org.jetbrains.exposed.v1.core.Op
-import org.jetbrains.exposed.v1.core.ResultRow
-import org.jetbrains.exposed.v1.core.SortOrder
-import org.jetbrains.exposed.v1.core.alias
-import org.jetbrains.exposed.v1.core.and
+import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.core.dao.id.EntityID
-import org.jetbrains.exposed.v1.core.eq
-import org.jetbrains.exposed.v1.core.greater
-import org.jetbrains.exposed.v1.core.inList
-import org.jetbrains.exposed.v1.core.innerJoin
-import org.jetbrains.exposed.v1.core.isNull
-import org.jetbrains.exposed.v1.core.leftJoin
-import org.jetbrains.exposed.v1.core.less
-import org.jetbrains.exposed.v1.core.neq
-import org.jetbrains.exposed.v1.core.notExists
-import org.jetbrains.exposed.v1.core.or
-import org.jetbrains.exposed.v1.core.sum
-import org.jetbrains.exposed.v1.jdbc.Query
-import org.jetbrains.exposed.v1.jdbc.andWhere
-import org.jetbrains.exposed.v1.jdbc.batchInsert
-import org.jetbrains.exposed.v1.jdbc.deleteWhere
-import org.jetbrains.exposed.v1.jdbc.select
-import org.jetbrains.exposed.v1.jdbc.selectAll
-import org.jetbrains.exposed.v1.jdbc.update
-import org.jetbrains.exposed.v1.jdbc.upsert
+import org.jetbrains.exposed.v1.jdbc.*
 import org.koin.core.component.get
 import org.koin.core.component.inject
 import java.io.File
@@ -91,6 +34,7 @@ import kotlin.time.Duration.Companion.days
 class AlbumRpcService(private val user: User, private val albumService: AlbumService) :
     IAlbumService {
     override suspend fun byId(id: UUID): Album? = albumService.byId(id, user.id)
+    override suspend fun byMusicBrainzId(mbId: UUID): List<Album> = albumService.byMusicBrainzId(mbId, user.id)
     override suspend fun byIds(ids: List<UUID>): List<Album> = albumService.byIds(ids, user.id)
     override suspend fun versions(id: UUID): List<Album> = albumService.versions(id, user.id)
     override suspend fun byName(page: Int, pageSize: Int, name: String): PaginatedResponse<Album> =
@@ -414,12 +358,12 @@ class AlbumService : AlbumLibrary, Service() {
         where { AlbumTable.id eq id }
     }
 
-    override suspend fun byMusicBrainzId(mbId: UUID): Album? = byMusicBrainzId(mbId, null)
+    override suspend fun byMusicBrainzId(mbId: UUID): List<Album> = byMusicBrainzId(mbId, null)
 
-    suspend fun byMusicBrainzId(mbId: UUID, userId: UUID? = null): Album? =
-        querySingle(userId = userId) {
+    suspend fun byMusicBrainzId(mbId: UUID, userId: UUID? = null): List<Album> =
+        queryAlbums(0, Int.MAX_VALUE, userId = userId) {
             where { AlbumMusicBrainzTable.musicBrainzId eq mbId }
-        }
+        }.data
 
     suspend fun byIds(@LogParam("size") ids: List<UUID>, userId: UUID? = null): List<Album> =
         queryAlbums(0, Int.MAX_VALUE, userId = userId) {

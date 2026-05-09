@@ -1076,6 +1076,7 @@ Manages albums and their metadata.
 | Function | Parameters | Returns | Admin | Errors | Description |
 | :--- | :--- | :--- | :---: | :--- | :--- |
 | `byId` | `id` (`PlatformUUID`): The album unique identifier. | [Album](#album)? | No |  | Get album by ID. |
+| `byMusicBrainzId` | `mbId` (`PlatformUUID`): The MusicBrainz release UUID. | `List`<[Album](#album)> | No |  | Get album by MusicBrainz ID. |
 | `byIds` | `ids` (`List`<`PlatformUUID`>): Collection of album IDs. | `List`<[Album](#album)> | No |  | Get multiple albums by their IDs. |
 | `versions` | `id` (`PlatformUUID`): The album unique identifier. | `List`<[Album](#album)> | No |  | List different versions of an album. |
 | `byName` | `page` (`Int`): Page index (starting from 0).<br>`pageSize` (`Int`): Number of items per page.<br>`name` (`String`): The album name to search for. | [PaginatedResponse](#paginatedresponse)<[Album](#album)> | No |  | Search albums by name. |
@@ -1093,6 +1094,7 @@ Manages artist data and complex library maintenance.
 | Function | Parameters | Returns | Admin | Errors | Description |
 | :--- | :--- | :--- | :---: | :--- | :--- |
 | `byId` | `id` (`PlatformUUID`): The artist unique identifier. | [Artist](#artist)? | No |  | Get artist by ID. |
+| `byMusicBrainzId` | `mbId` (`PlatformUUID`): The MusicBrainz artist UUID. | `List`<[Artist](#artist)> | No |  | Get artist by MusicBrainz ID. |
 | `byIds` | `ids` (`List`<`PlatformUUID`>): Collection of artist IDs. | `List`<[Artist](#artist)> | No |  | Get multiple artists by their IDs. |
 | `rankedSearch` | `page` (`Int`): Page index.<br>`pageSize` (`Int`): Number of items per page.<br>`query` (`String`): The search query. | [PaginatedResponse](#paginatedresponse)<[Artist](#artist)> | No |  | Ranked artist search. |
 | `setGroup` | `id` (`PlatformUUID`): The group artist unique identifier.<br>`artistIds` (`List`<`PlatformUUID`>?): Optional collection of sub-artist IDs. | [Artist](#artist)? | No |  | Set sub-artists for a group. |

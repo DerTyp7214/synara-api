@@ -384,6 +384,50 @@ class SongServiceTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
+    fun `byMusicBrainzId should return matching songs`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val mbId = UUID.randomUUID()
+        val songId1 = UUID.randomUUID()
+        val songId2 = UUID.randomUUID()
+        val albumId = UUID.randomUUID()
+
+        transaction(database) {
+            MBRecordingTable.insert {
+                it[id] = mbId
+                it[title] = "MB Title"
+            }
+            AlbumTable.insert {
+                it[id] = albumId
+                it[name] = "Album"
+            }
+            SongTable.insert {
+                it[id] = songId1
+                it[title] = "Song 1"
+                it[SongTable.albumId] = albumId
+            }
+            SongTable.insert {
+                it[id] = songId2
+                it[title] = "Song 2"
+                it[SongTable.albumId] = albumId
+            }
+            SongMusicBrainzTable.insert {
+                it[songId] = songId1
+                it[musicBrainzId] = mbId
+            }
+            SongMusicBrainzTable.insert {
+                it[songId] = songId2
+                it[musicBrainzId] = mbId
+            }
+        }
+
+        val results = songService.byMusicBrainzId(mbId, user.id)
+        assertEquals(2, results.size)
+        assertTrue(results.any { it.id == songId1 })
+        assertTrue(results.any { it.id == songId2 })
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
     fun `rankedSearch should find songs by MusicBrainz ID`(dialect: DbDialect) = runBlocking {
         setup(dialect)
         val songId = UUID.randomUUID()

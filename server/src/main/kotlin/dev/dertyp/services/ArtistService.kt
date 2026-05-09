@@ -22,6 +22,7 @@ import kotlin.time.Clock
 
 class ArtistRpcService(private val user: User, private val artistService: ArtistService) : IArtistService {
     override suspend fun byId(id: UUID): Artist? = artistService.byId(id, user.id)
+    override suspend fun byMusicBrainzId(mbId: UUID): List<Artist> = artistService.byMusicBrainzId(mbId, user.id)
     override suspend fun byIds(ids: List<UUID>): List<Artist> = artistService.byIds(ids, user.id)
     override suspend fun rankedSearch(page: Int, pageSize: Int, query: String): PaginatedResponse<Artist> =
         artistService.rankedSearch(page, pageSize, query, user.id)
@@ -260,11 +261,12 @@ class ArtistService : ArtistLibrary, Service() {
         where { ArtistTable.id eq id }
     }
 
-    suspend fun byMusicBrainzId(mbId: UUID, userId: UUID? = null): Artist? = querySingle(userId = userId) {
-        where { ArtistMusicBrainzTable.musicBrainzId eq mbId }
-    }
+    override suspend fun byMusicBrainzId(mbId: PlatformUUID): List<Artist> = byMusicBrainzId(mbId, null)
 
-    override suspend fun byMusicBrainzId(mbId: PlatformUUID): Artist? = byMusicBrainzId(mbId, null)
+    suspend fun byMusicBrainzId(mbId: UUID, userId: UUID? = null): List<Artist> =
+        queryArtists(0, Int.MAX_VALUE, userId = userId) {
+            where { ArtistMusicBrainzTable.musicBrainzId eq mbId }
+        }.data
 
     suspend fun byMusicBrainzIds(@LogParam("size") mbIds: Collection<PlatformUUID>, userId: UUID? = null): List<Artist> =
         queryArtists(0, Int.MAX_VALUE, userId = userId) {

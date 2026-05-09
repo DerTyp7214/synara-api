@@ -972,6 +972,44 @@ class ArtistServiceTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
+    fun `byMusicBrainzId should return matching artists`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val mbId = UUID.randomUUID()
+        val artistId1 = UUID.randomUUID()
+        val artistId2 = UUID.randomUUID()
+
+        transaction(database) {
+            MBArtistTable.insert {
+                it[id] = mbId
+                it[name] = "MB Artist"
+                it[sortName] = "MB Artist"
+            }
+            ArtistTable.insert {
+                it[id] = artistId1
+                it[name] = "Artist 1"
+            }
+            ArtistTable.insert {
+                it[id] = artistId2
+                it[name] = "Artist 2"
+            }
+            ArtistMusicBrainzTable.insert {
+                it[artistId] = artistId1
+                it[musicBrainzId] = mbId
+            }
+            ArtistMusicBrainzTable.insert {
+                it[artistId] = artistId2
+                it[musicBrainzId] = mbId
+            }
+        }
+
+        val results = service.byMusicBrainzId(mbId)
+        assertEquals(2, results.size)
+        assertTrue(results.any { it.id == artistId1 })
+        assertTrue(results.any { it.id == artistId2 })
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
     fun `setMusicBrainzId should do nothing when mbId is set to the same value`(dialect: DbDialect) = runBlocking {
         setup(dialect)
         val artistId = UUID.randomUUID()

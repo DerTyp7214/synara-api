@@ -5,17 +5,7 @@ import dev.dertyp.data.InsertableAlbum
 import dev.dertyp.data.InsertableImage
 import dev.dertyp.data.InsertableSong
 import dev.dertyp.getDateFromISO
-import dev.dertyp.plugins.BaseIndexer
-import dev.dertyp.plugins.PluginContext
-import dev.dertyp.plugins.album
-import dev.dertyp.plugins.coverImage
-import dev.dertyp.plugins.getAlbumArtists
-import dev.dertyp.plugins.getArtists
-import dev.dertyp.plugins.musicBrainzArtistId
-import dev.dertyp.plugins.musicBrainzReleaseId
-import dev.dertyp.plugins.songCount
-import dev.dertyp.plugins.title
-import dev.dertyp.plugins.year
+import dev.dertyp.plugins.*
 import dev.dertyp.services.metadata.IMetadataService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -97,7 +87,7 @@ class YoutubeIndexer(context: PluginContext) : BaseIndexer(context, IMetadataSer
                             var finalOriginalId = "$id:${youtubeId ?: if (!isMbId) fallbackId else audioFile.file.nameWithoutExtension}"
 
                             if (mbReleaseId != null) {
-                                val existingAlbum = try { context.albumLibrary.byMusicBrainzId(UUID.fromString(mbReleaseId)) } catch (_: Exception) { null }
+                                val existingAlbum = try { context.albumLibrary.byMusicBrainzId(UUID.fromString(mbReleaseId)).firstOrNull() } catch (_: Exception) { null }
                                 if (existingAlbum != null) {
                                     finalAlbumName = existingAlbum.name
                                     finalAlbumArtists = existingAlbum.artists.map { it.name }.sorted()
@@ -137,7 +127,7 @@ class YoutubeIndexer(context: PluginContext) : BaseIndexer(context, IMetadataSer
             if (recording != null) {
                 val artists = if (audioFile.musicBrainzArtistId != null) {
                     val ids = audioFile.musicBrainzArtistId!!.split("/").mapNotNull { try { UUID.fromString(it) } catch (_: Exception) { null } }
-                    val matchedArtists = ids.mapNotNull { context.artistLibrary.byMusicBrainzId(it) }
+                    val matchedArtists = ids.mapNotNull { context.artistLibrary.byMusicBrainzId(it).firstOrNull() }
                     if (matchedArtists.size == ids.size) {
                         matchedArtists.map { it.name }
                     } else recording.artists

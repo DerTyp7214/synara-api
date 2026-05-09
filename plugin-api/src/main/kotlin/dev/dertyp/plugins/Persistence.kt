@@ -13,11 +13,11 @@ interface SongLibrary {
 
 interface AlbumLibrary {
     suspend fun createBatch(albums: List<InsertableAlbum>): Map<PlatformUUID, Album>
-    suspend fun byMusicBrainzId(mbId: PlatformUUID): Album?
+    suspend fun byMusicBrainzId(mbId: PlatformUUID): List<Album>
 }
 
 interface ArtistLibrary {
-    suspend fun byMusicBrainzId(mbId: PlatformUUID): Artist?
+    suspend fun byMusicBrainzId(mbId: PlatformUUID): List<Artist>
 }
 
 interface ImageLibrary {

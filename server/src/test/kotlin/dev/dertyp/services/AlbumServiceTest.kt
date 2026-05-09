@@ -610,6 +610,43 @@ class AlbumServiceTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
+    fun `byMusicBrainzId should return matching albums`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val mbId = UUID.randomUUID()
+        val albumId1 = UUID.randomUUID()
+        val albumId2 = UUID.randomUUID()
+
+        transaction(database) {
+            MBReleaseTable.insert {
+                it[id] = mbId
+                it[title] = "MB Title"
+            }
+            AlbumTable.insert {
+                it[id] = albumId1
+                it[name] = "Album 1"
+            }
+            AlbumTable.insert {
+                it[id] = albumId2
+                it[name] = "Album 2"
+            }
+            AlbumMusicBrainzTable.insert {
+                it[albumId] = albumId1
+                it[musicBrainzId] = mbId
+            }
+            AlbumMusicBrainzTable.insert {
+                it[albumId] = albumId2
+                it[musicBrainzId] = mbId
+            }
+        }
+
+        val results = service.byMusicBrainzId(mbId)
+        assertEquals(2, results.size)
+        assertTrue(results.any { it.id == albumId1 })
+        assertTrue(results.any { it.id == albumId2 })
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
     fun `byId should return album with genres`(dialect: DbDialect) = runBlocking {
         setup(dialect)
         val id = UUID.randomUUID()
