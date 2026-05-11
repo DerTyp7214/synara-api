@@ -6,6 +6,7 @@ import dev.dertyp.StreamInfo
 import dev.dertyp.core.ApplicationScope
 import dev.dertyp.core.getUser
 import dev.dertyp.core.toUUIDOrNull
+import dev.dertyp.data.PaginatedResponse
 import dev.dertyp.rpc.annotations.*
 import dev.dertyp.services.*
 import dev.dertyp.services.download.DownloadRpcService
@@ -99,7 +100,9 @@ fun Route.registerRestService(
                                 if (classifier == List::class || classifier == Collection::class || classifier == Iterable::class || classifier == Set::class) {
                                     val values = call.request.queryParameters.getAll(param.name!!)
                                     val itemType = param.type.arguments.firstOrNull()?.type ?: String::class.starProjectedType
-                                    values?.map { convertValue(it, itemType) } ?: if (param.isOptional) null else emptyList<Any>()
+                                    val resultValues = values?.flatMap { it.split(",") }?.map { convertValue(it.trim(), itemType) }
+                                    if (classifier == Set::class) resultValues?.toSet() ?: if (param.isOptional) null else emptySet<Any>()
+                                    else resultValues ?: if (param.isOptional) null else emptyList<Any>()
                                 } else {
                                     val rawValue = call.request.queryParameters[param.name!!]
                                     convertValue(rawValue, param.type)
@@ -186,7 +189,9 @@ fun Route.registerRestService(
                                 call.respond(SSEServerContent(call, handle = {
                                     result.collect { item ->
                                         if (item != null) {
-                                            send(ServerSentEvent(data = ApplicationScope.json.encodeToString(serializer(typeArg!!), item)))
+                                            val safeType = getSafeOpenApiType(typeArg!!)
+                                            val safeItem = transformToRestResponse(item)
+                                            send(ServerSentEvent(data = ApplicationScope.json.encodeToString(serializer(safeType), safeItem)))
                                         }
                                     }
                                 }))
@@ -197,7 +202,9 @@ fun Route.registerRestService(
                                 call.respond(HttpStatusCode.OK)
                             } else {
                                 try {
-                                    val json = ApplicationScope.json.encodeToString(serializer(func.returnType), result)
+                                    val safeReturnType = getSafeOpenApiType(func.returnType)
+                                    val safeResult = transformToRestResponse(result)
+                                    val json = ApplicationScope.json.encodeToString(serializer(safeReturnType), safeResult)
                                     call.respondText(json, ContentType.Application.Json)
                                 } catch (_: Throwable) {
                                     call.respond(result)
@@ -285,6 +292,23 @@ fun Route.registerRestService(
     }
 }
 
+private fun transformToRestResponse(value: Any?): Any? {
+    if (value == null) return null
+    if (value is IMetadataService.MetadataType) return value.value
+    if (value is Iterable<*>) return value.map { transformToRestResponse(it) }
+    if (value is Map<*, *>) return value.entries.associate { transformToRestResponse(it.key) to transformToRestResponse(it.value) }
+    if (value is PaginatedResponse<*>) {
+        return PaginatedResponse(
+            data = value.data.map { transformToRestResponse(it) },
+            page = value.page,
+            total = value.total,
+            pageSize = value.pageSize,
+            hasNextPage = value.hasNextPage
+        )
+    }
+    return value
+}
+
 private fun getSafeOpenApiType(type: KType): KType {
     val classifier = type.classifier as? KClass<*> ?: return type
     if (classifier == ByteArray::class) return type
@@ -292,12 +316,32 @@ private fun getSafeOpenApiType(type: KType): KType {
 
     if (type.isFlow()) {
         val itemType = type.arguments.firstOrNull()?.type ?: Any::class.starProjectedType
-        val itemClassifier = itemType.classifier as? KClass<*>
-        return itemClassifier?.starProjectedType ?: itemType
+        return getSafeOpenApiType(itemType)
     }
 
     val isPaginated = classifier.simpleName == "PaginatedResponse"
-    if (classifier.isSubclassOf(Iterable::class) || classifier.isSubclassOf(Map::class) || isPaginated) {
+    if (classifier.isSubclassOf(Iterable::class) || isPaginated) {
+        val itemType = type.arguments.firstOrNull()?.type
+        if (itemType != null) {
+            val safeItemType = getSafeOpenApiType(itemType)
+            if (safeItemType != itemType) {
+                return if (isPaginated) {
+                    classifier.createType(listOf(KTypeProjection.invariant(safeItemType)))
+                } else {
+                    List::class.createType(listOf(KTypeProjection.invariant(safeItemType)))
+                }
+            }
+        }
+
+        val hasGenericParameter = type.arguments.any { arg ->
+            arg.type?.classifier is KTypeParameter
+        }
+        if (!hasGenericParameter) {
+            return type
+        }
+    }
+
+    if (classifier.isSubclassOf(Map::class)) {
         val hasGenericParameter = type.arguments.any { arg ->
             arg.type?.classifier is KTypeParameter
         }
@@ -439,6 +483,12 @@ fun Route.registerAuthenticatedRestServices(koin: Koin) {
 private fun isPrimitive(type: KType): Boolean {
     val classifier = type.classifier ?: return false
     if (classifier !is KClass<*>) return false
+
+    if (classifier.isSubclassOf(Iterable::class)) {
+        val itemType = type.arguments.firstOrNull()?.type ?: return false
+        return isPrimitive(itemType)
+    }
+
     return classifier == String::class ||
             classifier == Int::class ||
             classifier == Long::class ||

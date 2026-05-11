@@ -45,23 +45,22 @@ abstract class MetadataService(
         val features = mutableSetOf<IMetadataService.Feature>()
         val baseClass = MetadataService::class.java
         val interfaceClass = IMetadataService::class.java
-        
-        baseClass.declaredMethods.forEach { baseMethod ->
-            val annotation = try {
-                interfaceClass.getMethod(baseMethod.name, *baseMethod.parameterTypes)
-                    .getAnnotation(IMetadataService.ProvidesFeature::class.java)
-            } catch (_: NoSuchMethodException) {
-                null
-            }
 
-            if (annotation != null) {
-                try {
-                    val subMethod = this.javaClass.getMethod(baseMethod.name, *baseMethod.parameterTypes)
-                    if (subMethod.declaringClass != baseClass) {
-                        features.add(annotation.feature)
-                    }
-                } catch (_: NoSuchMethodException) {
+        val annotatedMethods = interfaceClass.declaredMethods.filter {
+            it.isAnnotationPresent(IMetadataService.ProvidesFeature::class.java)
+        }
+
+        baseClass.declaredMethods.forEach { baseMethod ->
+            val feature = annotatedMethods.find { it.name == baseMethod.name }
+                ?.getAnnotation(IMetadataService.ProvidesFeature::class.java)?.feature
+                ?: return@forEach
+
+            try {
+                val subMethod = this.javaClass.getMethod(baseMethod.name, *baseMethod.parameterTypes)
+                if (subMethod.declaringClass != baseClass) {
+                    features.add(feature)
                 }
+            } catch (_: NoSuchMethodException) {
             }
         }
         features
