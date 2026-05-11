@@ -3,16 +3,13 @@ package dev.dertyp.services.metadata
 import dev.dertyp.ApiClient
 import dev.dertyp.core.ApplicationScope
 import dev.dertyp.core.HttpClientPriority
-import dev.dertyp.data.User
 import io.ktor.client.request.HttpRequestBuilder
 import io.ktor.client.request.get
 import io.ktor.client.request.parameter
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationEnvironment
-import kotlinx.coroutines.flow.Flow
 import kotlinx.serialization.Serializable
-import java.util.UUID
 
 class AppleMusicService(
     environment: ApplicationEnvironment
@@ -20,6 +17,11 @@ class AppleMusicService(
     override val tokenUrl = ""
     override val clientIdConfigPath = ""
     override val clientSecretConfigPath = ""
+
+    override val supportedFeatures: Set<IMetadataService.Feature> = setOf(
+        IMetadataService.Feature.SEARCH_ARTISTS,
+        IMetadataService.Feature.SEARCH_ALBUMS
+    )
 
     override fun HttpRequestBuilder.getAccessTokenHeader(clientId: String, clientSecret: String) {}
 
@@ -51,14 +53,6 @@ class AppleMusicService(
                 images = emptyList()
             )
         }
-    }
-
-    override suspend fun search(
-        query: String,
-        limit: Int,
-        priority: HttpClientPriority
-    ): List<IMetadataService.Track> {
-        throw NotImplementedError("Not implemented for Apple Music!")
     }
 
     override suspend fun searchAlbums(
@@ -99,25 +93,6 @@ class AppleMusicService(
                 )
             }
     }
-
-    override suspend fun getAlbumIdByTrackId(trackId: String, priority: HttpClientPriority): String? = throw NotImplementedError("Not implemented for Apple Music!")
-    override suspend fun getImageUrlByAlbumId(albumId: String, priority: HttpClientPriority): List<IMetadataService.Image> = throw NotImplementedError("Not implemented for Apple Music!")
-    override suspend fun getImageUrlsByAlbumIds(albumIds: List<String>, priority: HttpClientPriority): Map<String, List<IMetadataService.Image>> = throw NotImplementedError("Not implemented for Apple Music!")
-    override suspend fun getImageUrlByImageId(imageId: UUID, priority: HttpClientPriority): String? = throw NotImplementedError("Not implemented for Apple Music!")
-    override suspend fun getTrackById(trackId: String, priority: HttpClientPriority): IMetadataService.Track? = throw NotImplementedError("Not implemented for Apple Music!")
-    override suspend fun getTracksByIds(trackIds: List<String>, priority: HttpClientPriority): List<IMetadataService.Track> = throw NotImplementedError("Not implemented for Apple Music!")
-    override suspend fun albumExistsById(albumId: String, priority: HttpClientPriority): Boolean = throw NotImplementedError("Not implemented for Apple Music!")
-    override suspend fun getAlbumsByIds(albumIds: List<String>, priority: HttpClientPriority): List<IMetadataService.Album> = throw NotImplementedError("Not implemented for Apple Music!")
-    override suspend fun getArtistsByIds(artistIds: List<String>, priority: HttpClientPriority): List<IMetadataService.Artist> = throw NotImplementedError("Not implemented for Apple Music!")
-    override fun getAlbumTracks(albumId: String, priority: HttpClientPriority): Flow<IMetadataService.Track> = throw NotImplementedError("Not implemented for Apple Music!")
-    override fun getArtistTracks(artistId: String, priority: HttpClientPriority): Flow<IMetadataService.Track> = throw NotImplementedError("Not implemented for Apple Music!")
-
-    override fun getPlaylistsByIds(
-        playlistIds: List<String>,
-        includeTracks: Boolean,
-        user: User?,
-        priority: HttpClientPriority
-    ): Flow<IMetadataService.FlowPlaylist> = throw NotImplementedError("Not implemented for Apple Music!")
 
     @Serializable
     data class ITunesSearchResponse<T>(

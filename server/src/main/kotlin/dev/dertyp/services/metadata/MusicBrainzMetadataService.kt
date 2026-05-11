@@ -2,12 +2,9 @@ package dev.dertyp.services.metadata
 
 import dev.dertyp.PlatformUUID
 import dev.dertyp.core.HttpClientPriority
-import dev.dertyp.data.User
 import dev.dertyp.getDateFromISO
 import io.ktor.client.request.HttpRequestBuilder
 import io.ktor.server.application.ApplicationEnvironment
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.emptyFlow
 import java.util.UUID
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
@@ -21,21 +18,27 @@ class MusicBrainzMetadataService(
     override val clientSecretConfigPath: String = ""
     override val tokenUrl: String = ""
 
+    override val supportedFeatures: Set<IMetadataService.Feature> = setOf(
+        IMetadataService.Feature.GET_ARTIST_BY_MBID,
+        IMetadataService.Feature.GET_ALBUM_BY_MBID,
+        IMetadataService.Feature.GET_TRACK_BY_MBID,
+        IMetadataService.Feature.GET_IMAGE_URL_BY_ALBUM_MBID,
+        IMetadataService.Feature.GET_IMAGE_URL_BY_TRACK_MBID,
+        IMetadataService.Feature.GET_ALBUM_ID_BY_TRACK_ID,
+        IMetadataService.Feature.GET_TRACKS_BY_IDS,
+        IMetadataService.Feature.GET_ALBUMS_BY_IDS,
+        IMetadataService.Feature.GET_ARTISTS_BY_IDS
+    )
+
     override fun HttpRequestBuilder.getAccessTokenHeader(clientId: String, clientSecret: String) {}
     override suspend fun getAccessToken(): IMetadataService.AccessTokenResponse = IMetadataService.AccessTokenResponse("", "", 0)
 
-    override suspend fun searchArtists(query: String, limit: Int, priority: HttpClientPriority): List<IMetadataService.Artist> = emptyList()
-    override suspend fun search(query: String, limit: Int, priority: HttpClientPriority): List<IMetadataService.Track> = emptyList()
-    override suspend fun searchAlbums(query: String, limit: Int, includeTracks: Boolean, priority: HttpClientPriority): List<IMetadataService.Album> = emptyList()
     override suspend fun getAlbumIdByTrackId(trackId: String, priority: HttpClientPriority): String? {
         val mbId = try { UUID.fromString(trackId) } catch (_: Exception) { return null }
         val recording = musicBrainzService.getRecording(mbId) ?: return null
         return recording.releases?.firstOrNull()?.id?.toString()
     }
-    override suspend fun getImageUrlByAlbumId(albumId: String, priority: HttpClientPriority): List<IMetadataService.Image> = emptyList()
-    override suspend fun getImageUrlsByAlbumIds(albumIds: List<String>, priority: HttpClientPriority): Map<String, List<IMetadataService.Image>> = emptyMap()
-    override suspend fun getImageUrlByImageId(imageId: PlatformUUID, priority: HttpClientPriority): String? = null
-    override suspend fun getTrackById(trackId: String, priority: HttpClientPriority): IMetadataService.Track? = null
+
     override suspend fun getTracksByIds(trackIds: List<String>, priority: HttpClientPriority): List<IMetadataService.Track> {
         return trackIds.mapNotNull { id ->
             try {
@@ -56,7 +59,6 @@ class MusicBrainzMetadataService(
         }
     }
 
-    override suspend fun albumExistsById(albumId: String, priority: HttpClientPriority): Boolean = false
     override suspend fun getArtistsByIds(artistIds: List<String>, priority: HttpClientPriority): List<IMetadataService.Artist> {
         return artistIds.mapNotNull { id ->
             try {
@@ -66,9 +68,6 @@ class MusicBrainzMetadataService(
             }
         }
     }
-    override fun getAlbumTracks(albumId: String, priority: HttpClientPriority): Flow<IMetadataService.Track> = emptyFlow()
-    override fun getArtistTracks(artistId: String, priority: HttpClientPriority): Flow<IMetadataService.Track> = emptyFlow()
-    override fun getPlaylistsByIds(playlistIds: List<String>, includeTracks: Boolean, user: User?, priority: HttpClientPriority): Flow<IMetadataService.FlowPlaylist> = emptyFlow()
 
     override suspend fun getArtistByMbId(mbId: PlatformUUID, priority: HttpClientPriority): IMetadataService.Artist? {
         val artist = musicBrainzService.getArtist(mbId) ?: return null
@@ -105,10 +104,6 @@ class MusicBrainzMetadataService(
             albumId = firstRelease?.id?.toString(),
             albumTitle = firstRelease?.title
         )
-    }
-
-    override suspend fun getImageUrlByArtistMbId(mbId: PlatformUUID, priority: HttpClientPriority): List<IMetadataService.Image> {
-        return emptyList()
     }
 
     override suspend fun getImageUrlByAlbumMbId(mbId: PlatformUUID, priority: HttpClientPriority): List<IMetadataService.Image> {

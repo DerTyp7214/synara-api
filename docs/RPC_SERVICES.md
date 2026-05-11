@@ -1459,6 +1459,7 @@ Service for fetching metadata from external sources.
 
 | Function | Parameters | Returns | Admin | Errors | Description |
 | :--- | :--- | :--- | :---: | :--- | :--- |
+| `getSupportedFeatures` | `type` (`MetadataType`): The metadata provider to check. | `Set`<`Feature`> | No |  | Get the list of features supported by the specified metadata provider. |
 | `searchArtists` | `type` (`MetadataType`): The metadata provider to use.<br>`query` (`String`): The search query.<br>`limit` (`Int`): Maximum number of results to return. | `List`<[Artist](#devdertypservicesmetadataimetadataserviceartist)> | No |  | Search for artists on the specified metadata provider. |
 | `search` | `type` (`MetadataType`): The metadata provider to use.<br>`query` (`String`): The search query.<br>`limit` (`Int`): Maximum number of results to return. | `List`<[Track](#devdertypservicesmetadataimetadataservicetrack)> | No |  | Search for tracks on the specified metadata provider. |
 | `searchAlbums` | `type` (`MetadataType`): The metadata provider to use.<br>`query` (`String`): The search query.<br>`limit` (`Int`): Maximum number of results to return.<br>`includeTracks` (`Boolean`): Whether to include tracks in the album results. | `List`<[Album](#devdertypservicesmetadataimetadataservicealbum)> | No |  | Search for albums on the specified metadata provider. |

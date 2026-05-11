@@ -18,6 +18,7 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationEnvironment
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
 import org.koin.mp.KoinPlatformTools
 import java.util.UUID
 import kotlin.concurrent.atomics.AtomicBoolean
@@ -39,17 +40,21 @@ abstract class MetadataService(
 
     protected abstract fun HttpRequestBuilder.getAccessTokenHeader(clientId: String, clientSecret: String)
 
+    abstract val supportedFeatures: Set<IMetadataService.Feature>
+
+    override suspend fun getSupportedFeatures(type: MetadataType): Set<IMetadataService.Feature> = supportedFeatures
+
     override suspend fun searchArtists(
         type: MetadataType,
         query: String,
         limit: Int
     ): List<IMetadataService.Artist> = searchArtists(query, limit)
 
-    abstract suspend fun searchArtists(
+    open suspend fun searchArtists(
         query: String,
         limit: Int = 50,
         priority: HttpClientPriority = HttpClientPriority.NORMAL
-    ): List<IMetadataService.Artist>
+    ): List<IMetadataService.Artist> = emptyList()
 
     override suspend fun search(
         type: MetadataType,
@@ -57,11 +62,11 @@ abstract class MetadataService(
         limit: Int
     ): List<IMetadataService.Track> = search(query, limit)
 
-    abstract suspend fun search(
+    open suspend fun search(
         query: String,
         limit: Int = 50,
         priority: HttpClientPriority = HttpClientPriority.NORMAL
-    ): List<IMetadataService.Track>
+    ): List<IMetadataService.Track> = emptyList()
 
     override suspend fun searchAlbums(
         type: MetadataType,
@@ -70,32 +75,32 @@ abstract class MetadataService(
         includeTracks: Boolean
     ): List<IMetadataService.Album> = searchAlbums(query, limit, includeTracks)
 
-    abstract suspend fun searchAlbums(
+    open suspend fun searchAlbums(
         query: String,
         limit: Int = 50,
         includeTracks: Boolean = false,
         priority: HttpClientPriority = HttpClientPriority.NORMAL
-    ): List<IMetadataService.Album>
+    ): List<IMetadataService.Album> = emptyList()
 
     override suspend fun getAlbumIdByTrackId(
         type: MetadataType,
         trackId: String
     ): String? = getAlbumIdByTrackId(trackId)
 
-    abstract suspend fun getAlbumIdByTrackId(
+    open suspend fun getAlbumIdByTrackId(
         trackId: String,
         priority: HttpClientPriority = HttpClientPriority.NORMAL
-    ): String?
+    ): String? = null
 
     override suspend fun getImageUrlByAlbumId(
         type: MetadataType,
         albumId: String
     ): List<IMetadataService.Image> = getImageUrlByAlbumId(albumId)
 
-    abstract suspend fun getImageUrlByAlbumId(
+    open suspend fun getImageUrlByAlbumId(
         albumId: String,
         priority: HttpClientPriority = HttpClientPriority.NORMAL
-    ): List<IMetadataService.Image>
+    ): List<IMetadataService.Image> = emptyList()
 
     override suspend fun getArtistByMbId(
         type: MetadataType,
@@ -162,87 +167,87 @@ abstract class MetadataService(
         albumIds: List<String>
     ): Map<String, List<IMetadataService.Image>> = getImageUrlsByAlbumIds(albumIds)
 
-    abstract suspend fun getImageUrlsByAlbumIds(
+    open suspend fun getImageUrlsByAlbumIds(
         albumIds: List<String>,
         priority: HttpClientPriority = HttpClientPriority.NORMAL
-    ): Map<String, List<IMetadataService.Image>>
+    ): Map<String, List<IMetadataService.Image>> = emptyMap()
 
     override suspend fun getImageUrlByImageId(
         type: MetadataType,
         imageId: UUID
     ): String? = getImageUrlByImageId(imageId)
 
-    abstract suspend fun getImageUrlByImageId(
+    open suspend fun getImageUrlByImageId(
         imageId: UUID,
         priority: HttpClientPriority = HttpClientPriority.NORMAL
-    ): String?
+    ): String? = null
 
     override suspend fun getTrackById(
         type: MetadataType,
         trackId: String
     ): IMetadataService.Track? = getTrackById(trackId)
 
-    abstract suspend fun getTrackById(
+    open suspend fun getTrackById(
         trackId: String,
         priority: HttpClientPriority = HttpClientPriority.NORMAL
-    ): IMetadataService.Track?
+    ): IMetadataService.Track? = null
 
     override suspend fun getTracksByIds(
         type: MetadataType,
         trackIds: List<String>
     ): List<IMetadataService.Track> = getTracksByIds(trackIds)
 
-    abstract suspend fun getTracksByIds(
+    open suspend fun getTracksByIds(
         trackIds: List<String>,
         priority: HttpClientPriority = HttpClientPriority.NORMAL
-    ): List<IMetadataService.Track>
+    ): List<IMetadataService.Track> = emptyList()
 
     override suspend fun getAlbumsByIds(
         type: MetadataType,
         albumIds: List<String>
     ): List<IMetadataService.Album> = getAlbumsByIds(albumIds)
 
-    abstract suspend fun getAlbumsByIds(
+    open suspend fun getAlbumsByIds(
         albumIds: List<String>,
         priority: HttpClientPriority = HttpClientPriority.NORMAL
-    ): List<IMetadataService.Album>
+    ): List<IMetadataService.Album> = emptyList()
 
     override suspend fun albumExistsById(
         type: MetadataType,
         albumId: String
     ): Boolean = albumExistsById(albumId)
 
-    abstract suspend fun albumExistsById(
+    open suspend fun albumExistsById(
         albumId: String,
         priority: HttpClientPriority = HttpClientPriority.NORMAL
-    ): Boolean
+    ): Boolean = false
 
     override suspend fun getArtistsByIds(
         type: MetadataType,
         artistIds: List<String>
     ): List<IMetadataService.Artist> = getArtistsByIds(artistIds)
 
-    abstract suspend fun getArtistsByIds(
+    open suspend fun getArtistsByIds(
         artistIds: List<String>,
         priority: HttpClientPriority = HttpClientPriority.NORMAL
-    ): List<IMetadataService.Artist>
+    ): List<IMetadataService.Artist> = emptyList()
 
-    abstract fun getAlbumTracks(
+    open fun getAlbumTracks(
         albumId: String,
         priority: HttpClientPriority = HttpClientPriority.NORMAL
-    ): Flow<IMetadataService.Track>
+    ): Flow<IMetadataService.Track> = emptyFlow()
 
-    abstract fun getArtistTracks(
+    open fun getArtistTracks(
         artistId: String,
         priority: HttpClientPriority = HttpClientPriority.NORMAL
-    ): Flow<IMetadataService.Track>
+    ): Flow<IMetadataService.Track> = emptyFlow()
 
-    abstract fun getPlaylistsByIds(
+    open fun getPlaylistsByIds(
         playlistIds: List<String>,
         includeTracks: Boolean = false,
         user: User? = null,
         priority: HttpClientPriority = HttpClientPriority.NORMAL
-    ): Flow<IMetadataService.FlowPlaylist>
+    ): Flow<IMetadataService.FlowPlaylist> = emptyFlow()
 
     private var accessToken: Pair<IMetadataService.AccessTokenResponse, Long>? = null
 

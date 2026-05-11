@@ -2,7 +2,6 @@ package dev.dertyp.services.metadata
 
 import dev.dertyp.ApiClient
 import dev.dertyp.core.HttpClientPriority
-import dev.dertyp.data.User
 import io.ktor.client.call.body
 import io.ktor.client.request.HttpRequestBuilder
 import io.ktor.client.request.parameter
@@ -11,18 +10,27 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.isSuccess
 import io.ktor.server.application.ApplicationEnvironment
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.Flow
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import java.util.UUID
 import kotlin.time.Duration.Companion.seconds
 
 class TheAudioDBService(
-    private val environment: ApplicationEnvironment
+    environment: ApplicationEnvironment
 ) : MetadataService("TheAudioDB", IMetadataService.MetadataType.theAudioDB, environment) {
     override val tokenUrl = ""
     override val clientIdConfigPath: String = "theaudiodb.apiKey"
     override val clientSecretConfigPath: String = ""
+
+    override val supportedFeatures: Set<IMetadataService.Feature> = setOf(
+        IMetadataService.Feature.SEARCH_ARTISTS,
+        IMetadataService.Feature.GET_ARTIST_BY_MBID,
+        IMetadataService.Feature.GET_ALBUM_BY_MBID,
+        IMetadataService.Feature.GET_TRACK_BY_MBID,
+        IMetadataService.Feature.GET_IMAGE_URL_BY_ARTIST_MBID,
+        IMetadataService.Feature.GET_IMAGE_URL_BY_ALBUM_MBID,
+        IMetadataService.Feature.GET_IMAGE_URL_BY_TRACK_MBID
+    )
 
     private val apiKey by lazy { environment.config.propertyOrNull(clientIdConfigPath)?.getString() ?: "123" }
 
@@ -57,7 +65,7 @@ class TheAudioDBService(
     data class Album(
         val idAlbum: String,
         val idArtist: String,
-        val idArtistMBID: String? = null,
+        @SerialName("idArtistMBID") val idArtistMbId: String? = null,
         val strAlbum: String,
         @SerialName("strGenre") val genre: String? = null,
         @SerialName("strStyle") val style: String? = null,
@@ -190,39 +198,6 @@ class TheAudioDBService(
         )
     }
 
-    override suspend fun search(query: String, limit: Int, priority: HttpClientPriority): List<IMetadataService.Track> {
-        throw NotImplementedError("Not implemented for TheAudioDB")
-    }
-
-    override suspend fun searchAlbums(
-        query: String,
-        limit: Int,
-        includeTracks: Boolean,
-        priority: HttpClientPriority
-    ): List<IMetadataService.Album> {
-        throw NotImplementedError("Not implemented for TheAudioDB")
-    }
-
-    override suspend fun getAlbumIdByTrackId(trackId: String, priority: HttpClientPriority): String? {
-        throw NotImplementedError("Not implemented for TheAudioDB")
-    }
-
-    override suspend fun getImageUrlByAlbumId(albumId: String, priority: HttpClientPriority): List<IMetadataService.Image> {
-        throw NotImplementedError("Not implemented for TheAudioDB")
-    }
-
-    override suspend fun getImageUrlsByAlbumIds(albumIds: List<String>, priority: HttpClientPriority): Map<String, List<IMetadataService.Image>> {
-        throw NotImplementedError("Not implemented for TheAudioDB")
-    }
-
-    override suspend fun getImageUrlByImageId(imageId: UUID, priority: HttpClientPriority): String? {
-        throw NotImplementedError("Not implemented for TheAudioDB")
-    }
-
-    override suspend fun getTrackById(trackId: String, priority: HttpClientPriority): IMetadataService.Track? {
-        throw NotImplementedError("Not implemented for TheAudioDB")
-    }
-
     override suspend fun getImageUrlByTrackMbId(mbId: UUID, priority: HttpClientPriority): List<IMetadataService.Image> {
         return getTrackByMbId(mbId, priority)?.images ?: emptyList()
     }
@@ -240,38 +215,5 @@ class TheAudioDBService(
             images = emptyList(),
             albumId = track.idAlbum
         )
-    }
-
-    override suspend fun getTracksByIds(trackIds: List<String>, priority: HttpClientPriority): List<IMetadataService.Track> {
-        throw NotImplementedError("Not implemented for TheAudioDB")
-    }
-
-    override suspend fun getAlbumsByIds(albumIds: List<String>, priority: HttpClientPriority): List<IMetadataService.Album> {
-        throw NotImplementedError("Not implemented for TheAudioDB")
-    }
-
-    override suspend fun albumExistsById(albumId: String, priority: HttpClientPriority): Boolean {
-        throw NotImplementedError("Not implemented for TheAudioDB")
-    }
-
-    override suspend fun getArtistsByIds(artistIds: List<String>, priority: HttpClientPriority): List<IMetadataService.Artist> {
-        throw NotImplementedError("Not implemented for TheAudioDB")
-    }
-
-    override fun getAlbumTracks(albumId: String, priority: HttpClientPriority): Flow<IMetadataService.Track> {
-        throw NotImplementedError("Not implemented for TheAudioDB")
-    }
-
-    override fun getArtistTracks(artistId: String, priority: HttpClientPriority): Flow<IMetadataService.Track> {
-        throw NotImplementedError("Not implemented for TheAudioDB")
-    }
-
-    override fun getPlaylistsByIds(
-        playlistIds: List<String>,
-        includeTracks: Boolean,
-        user: User?,
-        priority: HttpClientPriority
-    ): Flow<IMetadataService.FlowPlaylist> {
-        throw NotImplementedError("Not implemented for TheAudioDB")
     }
 }

@@ -12,6 +12,9 @@ class MetadataDispatcherService(
         return MetadataService.getMetadataService(type, environment)
     }
 
+    override suspend fun getSupportedFeatures(type: IMetadataService.MetadataType): Set<IMetadataService.Feature> =
+        getService(type).getSupportedFeatures(type)
+
     override suspend fun searchArtists(
         type: IMetadataService.MetadataType,
         query: String,

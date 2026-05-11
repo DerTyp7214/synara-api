@@ -1,78 +1,26 @@
 package dev.dertyp.services.metadata
 
 import dev.dertyp.ApiClient
-import dev.dertyp.core.ApplicationScope
-import dev.dertyp.core.HttpClientPriority
-import dev.dertyp.core.artists
-import dev.dertyp.core.checkExistingAlbumsFromCache
-import dev.dertyp.core.checkExistingPlaylistsFromCache
-import dev.dertyp.core.checkExistingTracksFromCache
-import dev.dertyp.core.filterValueNotNull
-import dev.dertyp.core.getAlbumsFromCache
-import dev.dertyp.core.getArtistsFromCache
-import dev.dertyp.core.getPlaylistsFromCache
-import dev.dertyp.core.getTrackFromJedis
-import dev.dertyp.core.getTracksFromCache
-import dev.dertyp.core.images
-import dev.dertyp.core.mapAttributes
-import dev.dertyp.core.parameters
-import dev.dertyp.core.queuedGet
-import dev.dertyp.core.singleImage
-import dev.dertyp.core.toFlow
-import dev.dertyp.core.writeToJedis
+import dev.dertyp.core.*
 import dev.dertyp.data.User
 import dev.dertyp.plugins.RedisCacheProvider
 import dev.dertyp.services.ISyncService
-import dev.dertyp.services.models.tidal.AlbumsAttributes
-import dev.dertyp.services.models.tidal.AlbumsItemsMultiRelationshipDataDocument
-import dev.dertyp.services.models.tidal.AlbumsMultiRelationshipDataDocument
-import dev.dertyp.services.models.tidal.ArtistsAttributes
-import dev.dertyp.services.models.tidal.ArtistsMultiRelationshipDataDocument
-import dev.dertyp.services.models.tidal.ArtistsRelationships
-import dev.dertyp.services.models.tidal.ArtworkFile
-import dev.dertyp.services.models.tidal.ArtworksAttributes
-import dev.dertyp.services.models.tidal.ArtworksMultiResourceDataDocument
-import dev.dertyp.services.models.tidal.ArtworksRelationships
-import dev.dertyp.services.models.tidal.EmptyRelationships
-import dev.dertyp.services.models.tidal.JsonAttribute
-import dev.dertyp.services.models.tidal.PlaylistsItemsMultiRelationshipDataDocument
-import dev.dertyp.services.models.tidal.PlaylistsMultiRelationshipDataDocument
-import dev.dertyp.services.models.tidal.ResourceIdentifier
-import dev.dertyp.services.models.tidal.SearchResultsSingleResourceDataDocument
-import dev.dertyp.services.models.tidal.TracksAttributes
-import dev.dertyp.services.models.tidal.TracksMultiRelationshipDataDocument
-import dev.dertyp.services.models.tidal.TracksMultiResourceDataDocument
-import dev.dertyp.services.models.tidal.TracksRelationships
-import dev.dertyp.services.models.tidal.TracksSingleResourceDataDocument
+import dev.dertyp.services.models.tidal.*
 import dev.dertyp.services.sync.SyncService
 import io.ktor.client.call.body
 import io.ktor.client.request.HttpRequestBuilder
 import io.ktor.client.request.header
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
-import io.ktor.http.HttpHeaders
-import io.ktor.http.HttpStatusCode
-import io.ktor.http.URLBuilder
-import io.ktor.http.URLProtocol
-import io.ktor.http.Url
-import io.ktor.http.appendPathSegments
-import io.ktor.http.encodeURLParameter
-import io.ktor.http.encodedPath
-import io.ktor.http.takeFrom
+import io.ktor.http.*
 import io.ktor.server.application.ApplicationEnvironment
 import io.ktor.server.util.url
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.asFlow
-import kotlinx.coroutines.flow.emitAll
-import kotlinx.coroutines.flow.emptyFlow
-import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import org.koin.core.component.inject
 import redis.clients.jedis.HostAndPort
 import redis.clients.jedis.RedisClusterClient
-import java.util.UUID
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.io.encoding.Base64
 import kotlin.time.Duration.Companion.minutes
@@ -80,11 +28,28 @@ import kotlin.time.Duration.Companion.seconds
 
 @OptIn(ExperimentalAtomicApi::class)
 class TidalService(
-    private val environment: ApplicationEnvironment
+    environment: ApplicationEnvironment
 ) : MetadataService("Tidal", IMetadataService.MetadataType.tidal, environment) {
     override val tokenUrl = "https://auth.tidal.com/v1/oauth2/token"
     override val clientIdConfigPath: String = "tidal.clientId"
     override val clientSecretConfigPath: String = "tidal.clientSecret"
+
+    override val supportedFeatures: Set<IMetadataService.Feature> = setOf(
+        IMetadataService.Feature.SEARCH_ARTISTS,
+        IMetadataService.Feature.SEARCH_TRACKS,
+        IMetadataService.Feature.SEARCH_ALBUMS,
+        IMetadataService.Feature.GET_ALBUM_ID_BY_TRACK_ID,
+        IMetadataService.Feature.GET_IMAGE_URL_BY_ALBUM_ID,
+        IMetadataService.Feature.GET_IMAGE_URLS_BY_ALBUM_IDS,
+        IMetadataService.Feature.GET_TRACK_BY_ID,
+        IMetadataService.Feature.GET_TRACKS_BY_IDS,
+        IMetadataService.Feature.ALBUM_EXISTS_BY_ID,
+        IMetadataService.Feature.GET_ALBUMS_BY_IDS,
+        IMetadataService.Feature.GET_ARTISTS_BY_IDS,
+        IMetadataService.Feature.GET_ARTIST_TRACKS,
+        IMetadataService.Feature.GET_ALBUM_TRACKS,
+        IMetadataService.Feature.GET_PLAYLISTS_BY_IDS
+    )
 
     private val jedisConfig by inject<RedisCacheProvider.Config>()
     val jedis by lazy {
@@ -504,13 +469,6 @@ class TidalService(
             println(url)
             return albumIds.associateWith { emptyList() }
         }
-    }
-
-    override suspend fun getImageUrlByImageId(
-        imageId: UUID,
-        priority: HttpClientPriority
-    ): String? {
-        throw NotImplementedError("Not implemented for tidal!")
     }
 
     override suspend fun getTrackById(
