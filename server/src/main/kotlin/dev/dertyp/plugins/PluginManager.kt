@@ -1,21 +1,14 @@
 package dev.dertyp.plugins
 
 import dev.dertyp.Indexer
-import dev.dertyp.services.AlbumService
-import dev.dertyp.services.ArtistService
-import dev.dertyp.services.ILrcLibService
-import dev.dertyp.services.ImageService
-import dev.dertyp.services.LrcLibService
-import dev.dertyp.services.Service
-import dev.dertyp.services.SongService
-import dev.dertyp.services.StorageService
-import dev.dertyp.services.UserPlaylistService
+import dev.dertyp.services.*
 import dev.dertyp.services.download.DownloadBackend
 import dev.dertyp.services.download.DownloadService
 import dev.dertyp.services.download.TidalPlugin
 import dev.dertyp.services.metadata.IMetadataService
 import dev.dertyp.services.metadata.MetadataDispatcherService
 import dev.dertyp.services.schedule.ScheduleService
+import dev.dertyp.services.soundcloud.SoundcloudPlugin
 import dev.dertyp.services.youtube.YoutubePlugin
 import io.ktor.util.logging.KtorSimpleLogger
 import org.koin.core.component.KoinComponent
@@ -59,6 +52,7 @@ class PluginManager(
     override suspend fun startService() {
         loadPlugin(TidalPlugin())
         loadPlugin(YoutubePlugin())
+        loadPlugin(SoundcloudPlugin())
         loadPlugins()
     }
 

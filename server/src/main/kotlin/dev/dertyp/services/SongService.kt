@@ -223,8 +223,17 @@ class SongService : SongLibrary, Service() {
     val followedArtistAlias = FollowedArtistTable.alias("followedArtist")
     val albumFollowedArtistAlias = FollowedArtistTable.alias("albumFollowedArtist")
 
+    val songImageAlias = ImageTable.alias("songImage")
+    val albumImageAlias = ImageTable.alias("albumImage")
+    val artistImageAlias = ImageTable.alias("artistImage")
+    val albumArtistImageAlias = ImageTable.alias("albumArtistImage")
+
     companion object {
-        fun mapSong(resultRow: ResultRow, genres: List<Genre> = listOf()): Song {
+        fun mapSong(
+            resultRow: ResultRow,
+            genres: List<Genre> = listOf(),
+            blurHashColumn: Expression<String?>? = null
+        ): Song {
             val id = resultRow[SongTable.id].value
 
             return Song(
@@ -246,13 +255,17 @@ class SongService : SongLibrary, Service() {
                 bitRate = resultRow[SongTable.bitRate],
                 fileSize = resultRow[SongTable.fileSize],
                 coverId = resultRow[SongTable.cover]?.value,
-                blurHash = resultRow.getOrNull(ImageTable.blurHash),
+                blurHash = resultRow.getOrNull(blurHashColumn ?: ImageTable.blurHash),
                 musicBrainzId = resultRow.getOrNull(SongMusicBrainzTable.musicBrainzId)?.value,
                 genres = genres,
             )
         }
 
-        fun mapUserSong(resultRow: ResultRow, genres: List<Genre> = listOf()): UserSong {
+        fun mapUserSong(
+            resultRow: ResultRow,
+            genres: List<Genre> = listOf(),
+            blurHashColumn: Expression<String?>? = null
+        ): UserSong {
             val id = resultRow[SongTable.id].value
 
             return UserSong(
@@ -274,7 +287,7 @@ class SongService : SongLibrary, Service() {
                 bitRate = resultRow[SongTable.bitRate],
                 fileSize = resultRow[SongTable.fileSize],
                 coverId = resultRow[SongTable.cover]?.value,
-                blurHash = resultRow.getOrNull(ImageTable.blurHash),
+                blurHash = resultRow.getOrNull(blurHashColumn ?: ImageTable.blurHash),
                 musicBrainzId = resultRow.getOrNull(SongMusicBrainzTable.musicBrainzId)?.value,
                 genres = genres,
                 isFavourite = resultRow.getOrNull(UserSongTable.isFavourite) ?: false,
@@ -284,8 +297,13 @@ class SongService : SongLibrary, Service() {
         }
     }
 
-    inline fun <reified T : BaseSong> map(resultRow: ResultRow, genres: List<Genre> = listOf()): BaseSong =
-        if (T::class == UserSong::class) mapUserSong(resultRow, genres) else mapSong(resultRow, genres)
+    inline fun <reified T : BaseSong> map(
+        resultRow: ResultRow,
+        genres: List<Genre> = listOf(),
+        blurHashColumn: Expression<String?>? = null
+    ): BaseSong =
+        if (T::class == UserSong::class) mapUserSong(resultRow, genres, blurHashColumn)
+        else mapSong(resultRow, genres, blurHashColumn)
 
     private fun ColumnSet.userSong(userId: UUID?) = if (userId != null) {
         leftJoin(
@@ -1108,7 +1126,10 @@ class SongService : SongLibrary, Service() {
             .leftJoin(albumArtistMemberAlias, onColumn = { albumArtistMemberJoinAlias[ArtistMemberTable.artistId] }, otherColumn = { albumArtistMemberAlias[ArtistTable.id] })
             .leftJoin(SongGenreTable)
             .leftJoin(GenreTable)
-            .leftJoin(ImageTable, onColumn = { SongTable.cover }, otherColumn = { ImageTable.id })
+            .leftJoin(songImageAlias, onColumn = { SongTable.cover }, otherColumn = { songImageAlias[ImageTable.id] })
+            .leftJoin(albumImageAlias, onColumn = { AlbumTable.cover }, otherColumn = { albumImageAlias[ImageTable.id] })
+            .leftJoin(artistImageAlias, onColumn = { ArtistTable.image }, otherColumn = { artistImageAlias[ImageTable.id] })
+            .leftJoin(albumArtistImageAlias, onColumn = { albumArtistAlias[ArtistTable.image] }, otherColumn = { albumArtistImageAlias[ImageTable.id] })
             .leftJoin(SongMusicBrainzTable)
             .userSong(userId)
             .followedArtist(userId)
@@ -1166,7 +1187,16 @@ class SongService : SongLibrary, Service() {
             emptyMap()
         }
 
-        val unsortedData = mapEagerly<T>(rows, albumArtistAlias, statsByAlbumId, explicit)
+        val unsortedData = mapEagerly<T>(
+            rows = rows,
+            albumArtistAlias = albumArtistAlias,
+            albumStats = statsByAlbumId,
+            explicit = explicit,
+            songBlurHashColumn = songImageAlias[ImageTable.blurHash],
+            albumBlurHashColumn = albumImageAlias[ImageTable.blurHash],
+            artistBlurHashColumn = artistImageAlias[ImageTable.blurHash],
+            albumArtistBlurHashColumn = albumArtistImageAlias[ImageTable.blurHash]
+        )
 
         val data = ids.mapNotNull { id -> unsortedData.find { it.id == id } }
 
@@ -1183,7 +1213,11 @@ class SongService : SongLibrary, Service() {
         rows: List<ResultRow>,
         albumArtistAlias: Alias<ArtistTable>,
         albumStats: Map<UUID, Pair<Long, Long>>,
-        explicit: Boolean = false
+        explicit: Boolean = false,
+        songBlurHashColumn: Expression<String?>? = null,
+        albumBlurHashColumn: Expression<String?>? = null,
+        artistBlurHashColumn: Expression<String?>? = null,
+        albumArtistBlurHashColumn: Expression<String?>? = null
     ): List<T> {
         val songMap = mutableMapOf<UUID, BaseSong>()
         val songArtistsMap = mutableMapOf<UUID, MutableList<Artist>>()
@@ -1195,14 +1229,14 @@ class SongService : SongLibrary, Service() {
             val albumId = row[SongTable.albumId].value
 
             songMap.getOrPut(songId) {
-                val album = mapAlbum(row)
+                val album = mapAlbum(row, blurHashColumn = albumBlurHashColumn)
                 val genres = rows.filter { it[SongTable.id].value == songId }
                     .mapNotNull { r ->
                         val gid = r.getOrNull(GenreTable.id)?.value ?: return@mapNotNull null
                         val gname = r.getOrNull(GenreTable.name) ?: return@mapNotNull null
                         Genre(gid, gname)
                     }.distinctBy { it.id }
-                val song = map<T>(row, genres)
+                val song = map<T>(row, genres, songBlurHashColumn)
 
                 @Suppress("UNCHECKED_CAST")
                 when (song) {
@@ -1213,7 +1247,12 @@ class SongService : SongLibrary, Service() {
             }
 
             if (row.getOrNull(ArtistTable.id) != null) {
-                val artist = mapArtist(row, ArtistTable, followedTable = followedArtistAlias)
+                val artist = mapArtist(
+                    row,
+                    ArtistTable,
+                    followedTable = followedArtistAlias,
+                    blurHashColumn = artistBlurHashColumn
+                )
                 if (artist !in songArtistsMap.getOrDefault(songId, emptyList())) {
                     songArtistsMap.getOrPut(songId) { mutableListOf() }.add(artist)
                 }
@@ -1224,7 +1263,8 @@ class SongService : SongLibrary, Service() {
                     row,
                     albumArtistAlias,
                     row.getOrNull(albumArtistMusicBrainzAlias[ArtistMusicBrainzTable.musicBrainzId])?.value,
-                    followedTable = albumFollowedArtistAlias
+                    followedTable = albumFollowedArtistAlias,
+                    blurHashColumn = albumArtistBlurHashColumn
                 )
                 if (artist !in albumArtistsMap.getOrDefault(albumId, emptyList())) {
                     albumArtistsMap.getOrPut(albumId) { mutableListOf() }.add(artist)

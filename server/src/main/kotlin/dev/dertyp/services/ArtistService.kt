@@ -78,7 +78,8 @@ class ArtistService : ArtistLibrary, Service() {
             table: ColumnSet = ArtistTable,
             musicbrainzId: UUID? = null,
             genres: List<Genre> = listOf(),
-            followedTable: ColumnSet = FollowedArtistTable
+            followedTable: ColumnSet = FollowedArtistTable,
+            blurHashColumn: Expression<String?>? = null
         ): Artist {
             val id: UUID
             val name: String
@@ -93,14 +94,14 @@ class ArtistService : ArtistLibrary, Service() {
                 isGroup = resultRow[table[ArtistTable.isGroup]]
                 about = resultRow[table[ArtistTable.about]]
                 imageId = resultRow[table[ArtistTable.image]]?.value
-                blurHash = resultRow.getOrNull(ImageTable.blurHash)
+                blurHash = resultRow.getOrNull(blurHashColumn ?: ImageTable.blurHash)
             } else {
                 id = resultRow[ArtistTable.id].value
                 name = resultRow[ArtistTable.name]
                 isGroup = resultRow[ArtistTable.isGroup]
                 about = resultRow[ArtistTable.about]
                 imageId = resultRow[ArtistTable.image]?.value
-                blurHash = resultRow.getOrNull(ImageTable.blurHash)
+                blurHash = resultRow.getOrNull(blurHashColumn ?: ImageTable.blurHash)
             }
 
             val isFollowed = if (followedTable is Alias<*>) {

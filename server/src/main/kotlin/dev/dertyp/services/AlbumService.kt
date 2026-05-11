@@ -83,7 +83,11 @@ class AlbumService : AlbumLibrary, Service() {
     val followedArtistAlias = FollowedArtistTable.alias("followedArtist")
 
     companion object {
-        fun mapAlbum(resultRow: ResultRow, genres: List<Genre> = listOf()): Album {
+        fun mapAlbum(
+            resultRow: ResultRow,
+            genres: List<Genre> = listOf(),
+            blurHashColumn: Expression<String?>? = null
+        ): Album {
             val id = resultRow[AlbumTable.id].value
 
             return Album(
@@ -94,7 +98,7 @@ class AlbumService : AlbumLibrary, Service() {
                 songCount = resultRow[AlbumTable.songCount],
                 totalDuration = -1,
                 coverId = resultRow[AlbumTable.cover]?.value,
-                blurHash = resultRow.getOrNull(ImageTable.blurHash),
+                blurHash = resultRow.getOrNull(blurHashColumn ?: ImageTable.blurHash),
                 genres = genres,
                 originalId = resultRow[AlbumTable.originalId],
                 musicbrainzId = resultRow.getOrNull(AlbumMusicBrainzTable.musicBrainzId)?.value,

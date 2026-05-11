@@ -1136,6 +1136,73 @@ class SongServiceTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
+    fun `byId should return correct blurHashes for song, album and artist`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val songId = UUID.randomUUID()
+        val albumId = UUID.randomUUID()
+        val artistId = UUID.randomUUID()
+        val songImageId = UUID.randomUUID()
+        val albumImageId = UUID.randomUUID()
+        val artistImageId = UUID.randomUUID()
+
+        transaction(database) {
+            ImageTable.insert {
+                it[id] = songImageId
+                it[path] = "song.jpg"
+                it[imageHash] = "song_hash"
+                it[origin] = "test"
+                it[blurHash] = "song_blurhash"
+            }
+            ImageTable.insert {
+                it[id] = albumImageId
+                it[path] = "album.jpg"
+                it[imageHash] = "album_hash"
+                it[origin] = "test"
+                it[blurHash] = "album_blurhash"
+            }
+            ImageTable.insert {
+                it[id] = artistImageId
+                it[path] = "artist.jpg"
+                it[imageHash] = "artist_hash"
+                it[origin] = "test"
+                it[blurHash] = "artist_blurhash"
+            }
+            ArtistTable.insert {
+                it[id] = artistId
+                it[name] = "Artist"
+                it[image] = artistImageId
+            }
+            AlbumTable.insert {
+                it[id] = albumId
+                it[name] = "Album"
+                it[cover] = albumImageId
+            }
+            AlbumArtistTable.insert {
+                it[AlbumArtistTable.albumId] = albumId
+                it[AlbumArtistTable.artistId] = artistId
+            }
+            SongTable.insert {
+                it[id] = songId
+                it[title] = "Song"
+                it[SongTable.albumId] = albumId
+                it[cover] = songImageId
+            }
+            SongArtistTable.insert {
+                it[SongArtistTable.songId] = songId
+                it[SongArtistTable.artistId] = artistId
+            }
+        }
+
+        val song = songService.byId(songId, user.id)
+        assertNotNull(song)
+        assertEquals("song_blurhash", song?.blurHash)
+        assertEquals("album_blurhash", song?.album?.blurHash)
+        assertEquals("artist_blurhash", song?.artists?.firstOrNull()?.blurHash)
+        assertEquals("artist_blurhash", song?.album?.artists?.firstOrNull()?.blurHash)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
     fun `setMusicBrainzId should fetch metadata if not in cache`(dialect: DbDialect) = runBlocking {
         setup(dialect)
         val songId = UUID.randomUUID()
