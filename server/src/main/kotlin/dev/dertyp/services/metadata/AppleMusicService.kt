@@ -18,11 +18,6 @@ class AppleMusicService(
     override val clientIdConfigPath = ""
     override val clientSecretConfigPath = ""
 
-    override val supportedFeatures: Set<IMetadataService.Feature> = setOf(
-        IMetadataService.Feature.SEARCH_ARTISTS,
-        IMetadataService.Feature.SEARCH_ALBUMS
-    )
-
     override fun HttpRequestBuilder.getAccessTokenHeader(clientId: String, clientSecret: String) {}
 
     override suspend fun getAccessToken(): IMetadataService.AccessTokenResponse {

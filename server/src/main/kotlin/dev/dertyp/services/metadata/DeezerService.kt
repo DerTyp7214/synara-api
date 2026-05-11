@@ -18,10 +18,6 @@ class DeezerService(
     override val clientIdConfigPath = ""
     override val clientSecretConfigPath = ""
 
-    override val supportedFeatures: Set<IMetadataService.Feature> = setOf(
-        IMetadataService.Feature.SEARCH_ARTISTS
-    )
-
     private val baseUrl = "https://api.deezer.com"
 
     override fun HttpRequestBuilder.getAccessTokenHeader(clientId: String, clientSecret: String) {

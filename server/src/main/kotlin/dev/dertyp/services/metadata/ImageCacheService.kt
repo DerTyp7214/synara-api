@@ -21,10 +21,6 @@ class ImageCacheService(
     override val clientIdConfigPath: String = ""
     override val clientSecretConfigPath: String = ""
 
-    override val supportedFeatures: Set<IMetadataService.Feature> = setOf(
-        IMetadataService.Feature.GET_IMAGE_URL_BY_IMAGE_ID
-    )
-
     override fun HttpRequestBuilder.getAccessTokenHeader(clientId: String, clientSecret: String) {
     }
 

@@ -40,9 +40,36 @@ abstract class MetadataService(
 
     protected abstract fun HttpRequestBuilder.getAccessTokenHeader(clientId: String, clientSecret: String)
 
-    abstract val supportedFeatures: Set<IMetadataService.Feature>
+    open val supportedFeatures: Set<IMetadataService.Feature> by lazy {
+        if (!supported()) return@lazy emptySet()
+        val features = mutableSetOf<IMetadataService.Feature>()
+        val baseClass = MetadataService::class.java
+        val interfaceClass = IMetadataService::class.java
+        
+        baseClass.declaredMethods.forEach { baseMethod ->
+            val annotation = try {
+                interfaceClass.getMethod(baseMethod.name, *baseMethod.parameterTypes)
+                    .getAnnotation(IMetadataService.ProvidesFeature::class.java)
+            } catch (_: NoSuchMethodException) {
+                null
+            }
+
+            if (annotation != null) {
+                try {
+                    val subMethod = this.javaClass.getMethod(baseMethod.name, *baseMethod.parameterTypes)
+                    if (subMethod.declaringClass != baseClass) {
+                        features.add(annotation.feature)
+                    }
+                } catch (_: NoSuchMethodException) {
+                }
+            }
+        }
+        features
+    }
 
     override suspend fun getSupportedFeatures(type: MetadataType): Set<IMetadataService.Feature> = supportedFeatures
+
+    override suspend fun getAllMetadataTypes(features: Set<IMetadataService.Feature>): List<MetadataType> = MetadataType.all()
 
     override suspend fun searchArtists(
         type: MetadataType,

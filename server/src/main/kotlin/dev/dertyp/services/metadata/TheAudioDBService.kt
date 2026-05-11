@@ -22,16 +22,6 @@ class TheAudioDBService(
     override val clientIdConfigPath: String = "theaudiodb.apiKey"
     override val clientSecretConfigPath: String = ""
 
-    override val supportedFeatures: Set<IMetadataService.Feature> = setOf(
-        IMetadataService.Feature.SEARCH_ARTISTS,
-        IMetadataService.Feature.GET_ARTIST_BY_MBID,
-        IMetadataService.Feature.GET_ALBUM_BY_MBID,
-        IMetadataService.Feature.GET_TRACK_BY_MBID,
-        IMetadataService.Feature.GET_IMAGE_URL_BY_ARTIST_MBID,
-        IMetadataService.Feature.GET_IMAGE_URL_BY_ALBUM_MBID,
-        IMetadataService.Feature.GET_IMAGE_URL_BY_TRACK_MBID
-    )
-
     private val apiKey by lazy { environment.config.propertyOrNull(clientIdConfigPath)?.getString() ?: "123" }
 
     private val baseUrl = "https://www.theaudiodb.com/api/v1/json"

@@ -15,6 +15,16 @@ class MetadataDispatcherService(
     override suspend fun getSupportedFeatures(type: IMetadataService.MetadataType): Set<IMetadataService.Feature> =
         getService(type).getSupportedFeatures(type)
 
+    override suspend fun getAllMetadataTypes(features: Set<IMetadataService.Feature>): List<IMetadataService.MetadataType> {
+        val allTypes = IMetadataService.MetadataType.all()
+        if (features.isEmpty()) return allTypes
+
+        return allTypes.filter { type ->
+            val supported = getService(type).getSupportedFeatures(type)
+            features.all { it in supported }
+        }
+    }
+
     override suspend fun searchArtists(
         type: IMetadataService.MetadataType,
         query: String,

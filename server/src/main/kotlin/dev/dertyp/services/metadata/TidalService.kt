@@ -34,23 +34,6 @@ class TidalService(
     override val clientIdConfigPath: String = "tidal.clientId"
     override val clientSecretConfigPath: String = "tidal.clientSecret"
 
-    override val supportedFeatures: Set<IMetadataService.Feature> = setOf(
-        IMetadataService.Feature.SEARCH_ARTISTS,
-        IMetadataService.Feature.SEARCH_TRACKS,
-        IMetadataService.Feature.SEARCH_ALBUMS,
-        IMetadataService.Feature.GET_ALBUM_ID_BY_TRACK_ID,
-        IMetadataService.Feature.GET_IMAGE_URL_BY_ALBUM_ID,
-        IMetadataService.Feature.GET_IMAGE_URLS_BY_ALBUM_IDS,
-        IMetadataService.Feature.GET_TRACK_BY_ID,
-        IMetadataService.Feature.GET_TRACKS_BY_IDS,
-        IMetadataService.Feature.ALBUM_EXISTS_BY_ID,
-        IMetadataService.Feature.GET_ALBUMS_BY_IDS,
-        IMetadataService.Feature.GET_ARTISTS_BY_IDS,
-        IMetadataService.Feature.GET_ARTIST_TRACKS,
-        IMetadataService.Feature.GET_ALBUM_TRACKS,
-        IMetadataService.Feature.GET_PLAYLISTS_BY_IDS
-    )
-
     private val jedisConfig by inject<RedisCacheProvider.Config>()
     val jedis by lazy {
         jedisConfig.let {

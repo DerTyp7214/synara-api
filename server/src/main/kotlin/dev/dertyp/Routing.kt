@@ -1,6 +1,5 @@
 package dev.dertyp
 
-import dev.dertyp.data.HandshakeResponse
 import dev.dertyp.routing.*
 import dev.dertyp.serializers.AppCbor
 import dev.dertyp.serializers.AppJson

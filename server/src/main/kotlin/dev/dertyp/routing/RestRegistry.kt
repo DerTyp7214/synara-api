@@ -288,7 +288,7 @@ fun Route.registerRestService(
 private fun getSafeOpenApiType(type: KType): KType {
     val classifier = type.classifier as? KClass<*> ?: return type
     if (classifier == ByteArray::class) return type
-    if (classifier == UUID::class) return String::class.starProjectedType
+    if (classifier == UUID::class || classifier.simpleName == "MetadataType") return String::class.starProjectedType
 
     if (type.isFlow()) {
         val itemType = type.arguments.firstOrNull()?.type ?: Any::class.starProjectedType
@@ -450,6 +450,7 @@ private fun isPrimitive(type: KType): Boolean {
             classifier.simpleName == "PlatformUUID" ||
             classifier.simpleName == "Instant" ||
             classifier.simpleName == "PlatformInstant" ||
+            classifier.simpleName == "MetadataType" ||
             classifier.isSubclassOf(Enum::class)
 }
 
@@ -468,6 +469,7 @@ private fun convertValue(value: String?, type: KType): Any? {
         classifier.simpleName == "Instant" || classifier.simpleName == "PlatformInstant" -> {
             try { Instant.parse(value) } catch (_: Exception) { throw IllegalArgumentException("Invalid Instant value: $value") }
         }
+        classifier.simpleName == "MetadataType" -> IMetadataService.MetadataType(value)
         classifier.isSubclassOf(Enum::class) -> {
             @Suppress("UNCHECKED_CAST")
             val enumClass = classifier.java as Class<out Enum<*>>

@@ -23,11 +23,6 @@ class SpotifyService(
     override val clientIdConfigPath = "spotify.clientId"
     override val clientSecretConfigPath = "spotify.clientSecret"
 
-    override val supportedFeatures: Set<IMetadataService.Feature> = setOf(
-        IMetadataService.Feature.SEARCH_ARTISTS,
-        IMetadataService.Feature.SEARCH_ALBUMS
-    )
-
     override fun HttpRequestBuilder.getAccessTokenHeader(clientId: String, clientSecret: String) {
         parameter("client_id", clientId)
         parameter("client_secret", clientSecret)

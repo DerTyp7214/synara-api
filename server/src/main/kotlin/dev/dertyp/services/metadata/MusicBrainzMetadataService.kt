@@ -18,18 +18,6 @@ class MusicBrainzMetadataService(
     override val clientSecretConfigPath: String = ""
     override val tokenUrl: String = ""
 
-    override val supportedFeatures: Set<IMetadataService.Feature> = setOf(
-        IMetadataService.Feature.GET_ARTIST_BY_MBID,
-        IMetadataService.Feature.GET_ALBUM_BY_MBID,
-        IMetadataService.Feature.GET_TRACK_BY_MBID,
-        IMetadataService.Feature.GET_IMAGE_URL_BY_ALBUM_MBID,
-        IMetadataService.Feature.GET_IMAGE_URL_BY_TRACK_MBID,
-        IMetadataService.Feature.GET_ALBUM_ID_BY_TRACK_ID,
-        IMetadataService.Feature.GET_TRACKS_BY_IDS,
-        IMetadataService.Feature.GET_ALBUMS_BY_IDS,
-        IMetadataService.Feature.GET_ARTISTS_BY_IDS
-    )
-
     override fun HttpRequestBuilder.getAccessTokenHeader(clientId: String, clientSecret: String) {}
     override suspend fun getAccessToken(): IMetadataService.AccessTokenResponse = IMetadataService.AccessTokenResponse("", "", 0)
 
