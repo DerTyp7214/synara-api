@@ -37,6 +37,14 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
     private val genreService by inject<GenreService>()
     private val musicBrainzService by inject<MusicBrainzService>()
 
+    private val artistImageProviders = listOf(
+        IMetadataService.MetadataType.theAudioDB,
+        IMetadataService.MetadataType.tidal,
+        IMetadataService.MetadataType.deezer,
+        IMetadataService.MetadataType.appleMusic,
+        IMetadataService.MetadataType.spotify
+    )
+
     data class ArtistToFetch(val id: UUID, val name: String, val mbid: UUID?)
     data class AlbumToFetch(val id: UUID, val name: String, val mbid: UUID?)
     data class TrackToFetch(val id: UUID, val name: String, val mbid: UUID?)
@@ -335,8 +343,45 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
         return results
     }
 
+    suspend fun fetchAllArtistImages(
+        onProgress: suspend (Double, String) -> Unit = { _, _ -> }
+    ): Map<String, Int> {
+        val results = mutableMapOf<String, Int>()
+        val activeProviders = artistImageProviders.filter {
+            MetadataService.getMetadataService(it, environment).supported()
+        }
+        val totalProviders = activeProviders.size
+
+        try {
+            activeProviders.forEachIndexed { index, provider ->
+                val startProgress = (index.toDouble() / totalProviders) * 100.0
+                val providerResults = fetchArtistImages(provider, updateOnFailure = false) { p, m ->
+                    val totalProgress = startProgress + (p / totalProviders)
+                    onProgress(totalProgress, m)
+                }
+                results[provider.value] = providerResults["found"] ?: 0
+            }
+
+            val thirtyDaysAgo = Clock.System.now() - 30.days
+            dbQuery {
+                ArtistTable.update({
+                    (ArtistTable.image eq null) and
+                            (ArtistTable.lastImageCheck eq 0L or (ArtistTable.lastImageCheck less thirtyDaysAgo.toEpochMilliseconds()))
+                }) {
+                    it[lastImageCheck] = System.currentTimeMillis()
+                }
+            }
+
+            onProgress(100.0, "All artist images fetched.")
+        } finally {
+            MetadataService.isFetching.store(false)
+        }
+        return results
+    }
+
     suspend fun fetchArtistImages(
         metadataProvider: IMetadataService.MetadataType,
+        updateOnFailure: Boolean = true,
         onProgress: suspend (Double, String) -> Unit = { _, _ -> }
     ): Map<String, Int> {
         if (!MetadataService.isFetching.compareAndSet(expectedValue = false, newValue = true)) {
@@ -398,7 +443,7 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
 
                             if (artist == null || artist.images.isEmpty()) {
                                 onProgress(progress, "No images for \"$name\" found.")
-                                updateLastCheck(id)
+                                if (updateOnFailure) updateLastCheck(id)
                                 continue
                             }
 
@@ -406,14 +451,14 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
                             val image = images.maxByOrNull { it.width }
                             if (image == null) {
                                 onProgress(progress, "No image for \"$name\"")
-                                updateLastCheck(id)
+                                if (updateOnFailure) updateLastCheck(id)
                                 continue
                             }
 
                             val imageBytes = ApiClient.instance.safeGet<ByteArray>(image.url)
                             if (imageBytes == null) {
                                 onProgress(progress, "Failed to download image for \"$name\"")
-                                updateLastCheck(id)
+                                if (updateOnFailure) updateLastCheck(id)
                                 continue
                             }
 
@@ -429,7 +474,7 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
 
                             if (imageId == null) {
                                 onProgress(progress, "Error inserting image for \"$name\"")
-                                updateLastCheck(id)
+                                if (updateOnFailure) updateLastCheck(id)
                                 continue
                             }
 

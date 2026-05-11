@@ -28,7 +28,7 @@ import kotlin.time.Duration.Companion.seconds
 abstract class MetadataService(
     private val providerName: String,
     metadataType: MetadataType,
-    environment: ApplicationEnvironment
+    protected val environment: ApplicationEnvironment
 ) : IMetadataService, Service() {
     protected abstract val clientIdConfigPath: String
     protected abstract val clientSecretConfigPath: String
@@ -267,6 +267,7 @@ abstract class MetadataService(
                 MetadataType.tidal -> TidalService(environment)
                 MetadataType.spotify -> SpotifyService(environment)
                 MetadataType.appleMusic -> AppleMusicService(environment)
+                MetadataType.deezer -> DeezerService(environment)
                 MetadataType.imageCache -> ImageCacheService(environment)
                 MetadataType.theAudioDB -> TheAudioDBService(environment)
                 MetadataType.musicBrainz -> MusicBrainzMetadataService(
@@ -288,6 +289,8 @@ abstract class MetadataService(
     }
 
     open fun supported(): Boolean {
+        if (clientIdConfigPath.isNotEmpty() && environment.config.propertyOrNull(clientIdConfigPath)?.getString().isNullOrBlank()) return false
+        if (clientSecretConfigPath.isNotEmpty() && environment.config.propertyOrNull(clientSecretConfigPath)?.getString().isNullOrBlank()) return false
         return true
     }
 

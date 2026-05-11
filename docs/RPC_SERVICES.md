@@ -1146,6 +1146,8 @@ Manages artist data and complex library maintenance.
 | `searchArtistOnMusicBrainz` | `query` (`String`): The search query.<br>`page` (`Int`): Page index.<br>`pageSize` (`Int`): Number of items per page. | [PaginatedResponse](#devdertypdatapaginatedresponse)<`MusicBrainzArtist`> | No |  | Search for an artist directly on MusicBrainz. |
 | `fetchMusicBrainzId` | `id` (`PlatformUUID`): The artist unique identifier. | [Artist](#devdertypdataartist)? | No |  | Fetch and link MusicBrainz ID for an artist. |
 | `setMusicBrainzId` | `id` (`PlatformUUID`): The artist unique identifier.<br>`musicBrainzId` (`PlatformUUID`?): The MusicBrainz ID to link. | [Artist](#devdertypdataartist)? | No |  | Link an artist record to a MusicBrainz ID. |
+| `searchArtistImages` | `type` (`MetadataType`): The metadata provider to use.<br>`query` (`String`): The artist name to search for.<br>`limit` (`Int`): Maximum number of images to return. | `List`<[Image](#devdertypservicesmetadataimetadataserviceimage)> | No |  | Search for artist images using a metadata provider. |
+| `setArtistImageByUrl` | `id` (`PlatformUUID`): The artist unique identifier.<br>`url` (`String`): The direct image URL. | [Artist](#devdertypdataartist)? | No |  | Set an artist's image from a direct URL. |
 | `artistsWithoutMusicBrainzIdFlow` | - | `Flow`<[Artist](#devdertypdataartist)> | No |  | Stream all artists that are missing a MusicBrainz ID. |
 | `artistIdsWithoutMusicBrainzId` | - | `Flow`<`PlatformUUID`> | No |  | Stream IDs of all artists that are missing a MusicBrainz ID. |
 

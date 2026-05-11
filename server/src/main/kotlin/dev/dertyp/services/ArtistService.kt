@@ -7,10 +7,9 @@ import dev.dertyp.data.*
 import dev.dertyp.db.*
 import dev.dertyp.dbQuery
 import dev.dertyp.plugins.ArtistLibrary
-import dev.dertyp.services.metadata.CachedMusicBrainzService
-import dev.dertyp.services.metadata.MusicBrainzCacheService
-import dev.dertyp.services.metadata.MusicBrainzService
+import dev.dertyp.services.metadata.*
 import dev.dertyp.utils.LogParam
+import io.ktor.server.application.ApplicationEnvironment
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import org.jetbrains.exposed.v1.core.*
@@ -54,11 +53,21 @@ class ArtistRpcService(private val user: User, private val artistService: Artist
     override suspend fun setMusicBrainzId(id: UUID, musicBrainzId: UUID?): Artist? =
         artistService.setMusicBrainzId(id, musicBrainzId, user.id)
 
+    override suspend fun searchArtistImages(
+        type: IMetadataService.MetadataType,
+        query: String,
+        limit: Int
+    ): List<IMetadataService.Image> = artistService.searchArtistImages(type, query, limit)
+
+    override suspend fun setArtistImageByUrl(id: UUID, url: String): Artist? =
+        artistService.setArtistImageByUrl(id, url, user.id)
+
     override fun artistsWithoutMusicBrainzIdFlow(): Flow<Artist> = artistService.artistsWithoutMusicBrainzIdFlow(user.id)
     override fun artistIdsWithoutMusicBrainzId(): Flow<UUID> = artistService.artistIdsWithoutMusicBrainzId()
 }
 
 class ArtistService : ArtistLibrary, Service() {
+    private val environment by inject<ApplicationEnvironment>()
     private val musicBrainzService by inject<MusicBrainzService>()
     private val cachedMusicBrainzService by inject<CachedMusicBrainzService>()
     private val musicBrainzCacheService by inject<MusicBrainzCacheService>()
@@ -613,6 +622,45 @@ class ArtistService : ArtistLibrary, Service() {
                     emit(row[ArtistTable.id].value)
                 }
             }
+    }
+
+    suspend fun searchArtistImages(
+        type: IMetadataService.MetadataType,
+        query: String,
+        limit: Int
+    ): List<IMetadataService.Image> {
+        val service = MetadataService.getMetadataService(type, environment)
+        return try {
+            val artists = service.searchArtists(query, 20)
+            artists.flatMap { it.images }.distinctBy { it.url }.take(limit)
+        } catch (e: Exception) {
+            logger.error("Error searching artist images for $query using ${type.value}", e)
+            emptyList()
+        }
+    }
+
+    suspend fun setArtistImageByUrl(id: UUID, url: String, userId: UUID? = null): Artist? {
+        val imageService by inject<ImageService>()
+
+        val imageBytes = ApiClient.instance.safeQueuedGet<ByteArray>(url, HttpClientPriority.HIGH) ?: return null
+        val imageId = imageService.createBatch(
+            listOf(
+                InsertableImage(
+                    data = imageBytes,
+                    imageHash = imageBytes.sha256(),
+                    origin = url
+                )
+            )
+        ).values.firstOrNull() ?: return null
+
+        dbQuery {
+            ArtistTable.update({ ArtistTable.id eq id }) {
+                it[image] = EntityID(imageId, ImageTable)
+                it[lastImageCheck] = System.currentTimeMillis()
+            }
+        }
+
+        return byId(id, userId)
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)

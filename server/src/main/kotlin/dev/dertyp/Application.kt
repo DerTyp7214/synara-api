@@ -130,6 +130,7 @@ fun Application.module() {
             singleOf(::MusicBrainzWorker)
             singleOf(::MusicBrainzCacheWorker)
             singleOf(::GenreMetadataWorker)
+            singleOf(::ArtistImageWorker)
             singleOf(::RecentReleaseWorker)
             singleOf(::LyricsSyncWorker)
             singleOf(::LrcLibWorker)
@@ -257,6 +258,7 @@ fun Application.module() {
     val musicBrainzWorker = get<MusicBrainzWorker>()
     val musicBrainzCacheWorker = get<MusicBrainzCacheWorker>()
     val genreMetadataWorker = get<GenreMetadataWorker>()
+    val artistImageWorker = get<ArtistImageWorker>()
     val recentReleaseWorker = get<RecentReleaseWorker>()
     val autoTranscodeWorker = get<AutoTranscodeWorker>()
     val lyricsSyncWorker = get<LyricsSyncWorker>()
@@ -396,15 +398,13 @@ fun Application.module() {
         )
     )
 
-    val fetchArtistImagesTidal = scheduleService.schedule(
+    val artistImageTask = scheduleService.schedule(
         ScheduledTask(
-            name = "Fetch Artist Images (Tidal)",
+            name = "Artist Image Worker",
             trigger = TaskCompletionTrigger(genreMetadataTask.id),
             task = {
-                scheduleService.logTask("Fetch Artist Images (Tidal)") {
-                    metadataFetchingService.fetchArtistImages(IMetadataService.MetadataType.tidal) { p, l ->
-                        updateProgress(p, l)
-                    }
+                scheduleService.logTask("Artist Image Worker") {
+                    artistImageWorker.run { p, l -> updateProgress(p, l) }
                 }
             }
         )
@@ -413,7 +413,7 @@ fun Application.module() {
     scheduleService.schedule(
         ScheduledTask(
             name = "Fetch Metadata (TheAudioDB)",
-            trigger = TaskCompletionTrigger(fetchArtistImagesTidal.id),
+            trigger = TaskCompletionTrigger(artistImageTask.id),
             task = {
                 scheduleService.logTask("Fetch Metadata (TheAudioDB)") {
                     metadataFetchingService.fetchMetadata(IMetadataService.MetadataType.theAudioDB) { p, l ->
