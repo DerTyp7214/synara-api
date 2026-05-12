@@ -95,7 +95,7 @@ abstract class BaseIndexer(
         return finalAlbum
     }
 
-    protected open suspend fun groupByAlbum(files: List<Path>): Pair<Map<String, InsertableImage>, Map<InsertableAlbum, List<AudioFile>>> =
+    open suspend fun groupByAlbum(files: List<Path>): Pair<Map<String, InsertableImage>, Map<InsertableAlbum, List<AudioFile>>> =
         coroutineScope {
             val semaphore = Semaphore(2)
             val map = ConcurrentHashMap<InsertableAlbum, MutableList<AudioFile>>()

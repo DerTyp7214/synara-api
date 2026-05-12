@@ -19,10 +19,7 @@ import io.mockk.mockkObject
 import io.mockk.unmockkAll
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.AfterEach
-import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertFalse
-import org.junit.jupiter.api.Assertions.assertNotNull
-import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 
@@ -62,7 +59,7 @@ class YoutubeApiServiceTest {
     fun `getVideoMetadata should return correct map`() = runBlocking {
         every { config.propertyOrNull("youtube.apiKey") } returns mockk { every { getString() } returns "test-key" }
         
-        val mockEngine = MockEngine { request ->
+        val mockEngine = MockEngine { _ ->
             respond(
                 content = """
                     {
@@ -71,6 +68,7 @@ class YoutubeApiServiceTest {
                           "snippet": {
                             "title": "Test Video",
                             "channelTitle": "Test Channel",
+                            "description": "Test Description",
                             "thumbnails": {
                               "maxres": { "url": "https://example.com/max.jpg", "width": 1280, "height": 720 }
                             }
@@ -103,5 +101,70 @@ class YoutubeApiServiceTest {
         assertEquals("https://example.com/max.jpg", metadata?.get("thumbnail"))
         assertEquals("1280", metadata?.get("width"))
         assertEquals("720", metadata?.get("height"))
+    }
+
+    @Test
+    fun `getPlaylistItems should return all items with pagination`() = runBlocking {
+        every { config.propertyOrNull("youtube.apiKey") } returns mockk { every { getString() } returns "test-key" }
+
+        var callCount = 0
+        val mockEngine = MockEngine { request ->
+            callCount++
+            val content = if (request.url.parameters["pageToken"] == null) {
+                """{ "items": [{ "snippet": { "title": "Item 1" } }], "nextPageToken": "token2" }"""
+            } else {
+                """{ "items": [{ "snippet": { "title": "Item 2" } }] }"""
+            }
+            respond(
+                content = content,
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+            )
+        }
+
+        val mockHttpClient = HttpClient(mockEngine) {
+            install(ContentNegotiation) {
+                json(ApplicationScope.json)
+            }
+        }
+
+        mockkObject(ApiClient)
+        every { ApiClient.instance } returns mockHttpClient
+
+        service = YoutubeApiService(environment)
+        val items = service.getPlaylistItems("playlist-id")
+
+        assertEquals(2, items.size)
+        assertEquals(2, callCount)
+        assertEquals("Item 1", items[0].snippet?.title)
+        assertEquals("Item 2", items[1].snippet?.title)
+    }
+
+    @Test
+    fun `getPlaylistMetadata should return metadata`() = runBlocking {
+        every { config.propertyOrNull("youtube.apiKey") } returns mockk { every { getString() } returns "test-key" }
+
+        val mockEngine = MockEngine { _ ->
+            respond(
+                content = """{ "items": [{ "snippet": { "title": "Playlist Title" } }] }""",
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+            )
+        }
+
+        val mockHttpClient = HttpClient(mockEngine) {
+            install(ContentNegotiation) {
+                json(ApplicationScope.json)
+            }
+        }
+
+        mockkObject(ApiClient)
+        every { ApiClient.instance } returns mockHttpClient
+
+        service = YoutubeApiService(environment)
+        val metadata = service.getPlaylistMetadata("playlist-id")
+
+        assertNotNull(metadata)
+        assertEquals("Playlist Title", metadata?.snippet?.title)
     }
 }

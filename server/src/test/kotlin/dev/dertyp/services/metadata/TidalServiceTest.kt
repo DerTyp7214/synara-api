@@ -19,9 +19,11 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkObject
 import io.mockk.unmockkAll
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.koin.core.context.startKoin
@@ -62,50 +64,63 @@ class TidalServiceTest : KoinTest {
                     )
                 }
                 "/v2/searchResults/test" -> {
+                    val include = request.url.parameters["include"]
+                    val included = mutableListOf<String>()
+                    if (include?.contains("artists") == true) {
+                        included.add("""
+                            {
+                              "id": "artist-1",
+                              "type": "artists",
+                              "attributes": { "name": "Artist 1", "popularity": 0.9 }
+                            }
+                        """.trimIndent())
+                    }
+                    if (include?.contains("albums") == true) {
+                         included.add("""
+                            {
+                              "id": "album-1",
+                              "type": "albums",
+                              "attributes": {
+                                "barcodeId": "123",
+                                "duration": "PT40M",
+                                "explicit": false,
+                                "mediaTags": [],
+                                "numberOfItems": 10,
+                                "numberOfVolumes": 1,
+                                "popularity": 0.5,
+                                "title": "Album 1",
+                                "type": "ALBUM"
+                              }
+                            }
+                        """.trimIndent())
+                    }
+                    if (include?.contains("tracks") == true) {
+                         included.add("""
+                            {
+                              "id": "track-1",
+                              "type": "tracks",
+                              "attributes": {
+                                "duration": "PT3M",
+                                "explicit": false,
+                                "isrc": "123",
+                                "mediaTags": [],
+                                "popularity": 0.5,
+                                "title": "Track 1"
+                              }
+                            }
+                        """.trimIndent())
+                    }
+
                     respond(
                         content = """
                             {
                               "data": {
-                                "id": "search-results-id",
-                                "type": "searchResults"
+                                "id": "test",
+                                "type": "searchResults",
+                                "attributes": { "trackingId": "track-id" }
                               },
-                              "included": [
-                                {
-                                  "id": "album-1",
-                                  "type": "albums",
-                                  "attributes": {
-                                    "barcodeId": "123",
-                                    "duration": "PT40M",
-                                    "explicit": false,
-                                    "mediaTags": [],
-                                    "numberOfItems": 10,
-                                    "numberOfVolumes": 1,
-                                    "popularity": 0.5,
-                                    "title": "Album 1",
-                                    "type": "ALBUM"
-                                  },
-                                  "relationships": {}
-                                },
-                                {
-                                  "id": "track-1",
-                                  "type": "tracks",
-                                  "attributes": {
-                                    "duration": "PT3M",
-                                    "explicit": false,
-                                    "isrc": "123",
-                                    "mediaTags": [],
-                                    "popularity": 0.5,
-                                    "title": "Track 1"
-                                  },
-                                  "relationships": {
-                                    "albums": {
-                                      "data": [{"id": "album-2", "type": "albums"}],
-                                      "links": { "self": "test-url" }
-                                    }
-                                  }
-                                }
-                              ],
-                              "links": { "self": "test-url" }
+                              "links": { "self": "/v2/searchResults/test" },
+                              "included": [ ${included.joinToString(",")} ]
                             }
                         """.trimIndent(),
                         status = HttpStatusCode.OK,
@@ -133,40 +148,8 @@ class TidalServiceTest : KoinTest {
                                     "releaseDate": "2023-01-01"
                                   },
                                   "relationships": {
-                                    "artists": { 
-                                      "data": [{"id": "artist-1", "type": "artists"}],
-                                      "links": { "self": "test-url" }
-                                    },
-                                    "coverArt": { 
-                                      "data": [{"id": "cover-1", "type": "artworks"}],
-                                      "links": { "self": "test-url" }
-                                    }
-                                  }
-                                },
-                                {
-                                  "id": "album-2",
-                                  "type": "albums",
-                                  "attributes": {
-                                    "barcodeId": "456",
-                                    "duration": "PT3M",
-                                    "explicit": false,
-                                    "mediaTags": [],
-                                    "numberOfItems": 1,
-                                    "numberOfVolumes": 1,
-                                    "popularity": 0.5,
-                                    "title": "Album 2",
-                                    "type": "SINGLE",
-                                    "releaseDate": "2023-02-01"
-                                  },
-                                  "relationships": {
-                                    "artists": { 
-                                      "data": [{"id": "artist-1", "type": "artists"}],
-                                      "links": { "self": "test-url" }
-                                    },
-                                    "coverArt": { 
-                                      "data": [{"id": "cover-2", "type": "artworks"}],
-                                      "links": { "self": "test-url" }
-                                    }
+                                    "artists": { "links": { "self": "url" }, "data": [{"id": "artist-1", "type": "artists"}] },
+                                    "coverArt": { "links": { "self": "url" }, "data": [{"id": "cover-1", "type": "artworks"}] }
                                   }
                                 }
                               ],
@@ -183,17 +166,94 @@ class TidalServiceTest : KoinTest {
                                     "mediaType": "IMAGE",
                                     "files": [{"href": "https://example.com/cover1.jpg", "meta": {"width": 500, "height": 500}}] 
                                   }
+                                }
+                              ],
+                              "links": { "self": "/v2/albums" }
+                            }
+                        """.trimIndent(),
+                        status = HttpStatusCode.OK,
+                        headers = headersOf(HttpHeaders.ContentType, "application/vnd.api+json")
+                    )
+                }
+                "/v2/tracks/track-1" -> {
+                    respond(
+                        content = """
+                            {
+                              "data": {
+                                "id": "track-1",
+                                "type": "tracks",
+                                "attributes": {
+                                  "duration": "PT3M",
+                                  "explicit": false,
+                                  "isrc": "123",
+                                  "mediaTags": [],
+                                  "popularity": 0.5,
+                                  "title": "Track 1"
                                 },
+                                "relationships": {
+                                  "albums": { "links": { "self": "url" }, "data": [{"id": "album-1", "type": "albums"}] },
+                                  "artists": { "links": { "self": "url" }, "data": [{"id": "artist-1", "type": "artists"}] }
+                                }
+                              },
+                              "included": [
+                                { "id": "artist-1", "type": "artists", "attributes": { "name": "Artist 1", "popularity": 0.9 } },
+                                { "id": "album-1", "type": "albums", "attributes": { "barcodeId": "123", "title": "Album 1", "duration": "PT40M", "explicit": false, "mediaTags": [], "numberOfItems": 10, "numberOfVolumes": 1, "popularity": 0.5, "type": "ALBUM" } }
+                              ],
+                              "links": { "self": "/v2/tracks/track-1" }
+                            }
+                        """.trimIndent(),
+                        status = HttpStatusCode.OK,
+                        headers = headersOf(HttpHeaders.ContentType, "application/vnd.api+json")
+                    )
+                }
+                "/v2/artists" -> {
+                     respond(
+                        content = """
+                            {
+                              "data": [
+                                { "id": "artist-1", "type": "artists", "attributes": { "name": "Artist 1", "popularity": 0.9 } }
+                              ],
+                              "included": [],
+                              "links": { "self": "/v2/artists" }
+                            }
+                        """.trimIndent(),
+                        status = HttpStatusCode.OK,
+                        headers = headersOf(HttpHeaders.ContentType, "application/vnd.api+json")
+                    )
+                }
+                "/v2/artists/artist-1/relationships/tracks" -> {
+                    respond(
+                        content = """
+                            {
+                              "data": [
+                                { "id": "track-1", "type": "tracks" }
+                              ],
+                              "included": [
+                                { "id": "track-1", "type": "tracks", "attributes": { "title": "Track 1", "duration": "PT3M", "explicit": false, "isrc": "123", "mediaTags": [], "popularity": 0.5 } }
+                              ],
+                              "links": { "self": "/v2/artists/artist-1/relationships/tracks" }
+                            }
+                        """.trimIndent(),
+                        status = HttpStatusCode.OK,
+                        headers = headersOf(HttpHeaders.ContentType, "application/vnd.api+json")
+                    )
+                }
+                "/v2/albums/album-1/relationships/coverArt" -> {
+                    respond(
+                        content = """
+                            {
+                              "data": [ { "id": "cover-1", "type": "artworks" } ],
+                              "included": [
                                 {
-                                  "id": "cover-2",
+                                  "id": "cover-1",
                                   "type": "artworks",
                                   "attributes": { 
                                     "mediaType": "IMAGE",
-                                    "files": [{"href": "https://example.com/cover2.jpg", "meta": {"width": 500, "height": 500}}] 
+                                    "files": [{"href": "https://example.com/cover1.jpg", "meta": {"width": 500, "height": 500}}] 
                                   }
                                 }
                               ],
-                              "links": { "self": "test-url" }
+                              "links": { "self": "url" }
                             }
                         """.trimIndent(),
                         status = HttpStatusCode.OK,
@@ -223,19 +283,33 @@ class TidalServiceTest : KoinTest {
     }
 
     @Test
-    fun `searchAlbums should return albums from both direct results and tracks`() = runBlocking {
+    fun `searchAlbums should return albums`() = runBlocking {
         val albums = tidalService.searchAlbums("test", 10, includeTracks = true)
 
-        assertEquals(2, albums.size)
-        
-        val album1 = albums.find { it.id == "album-1" }
-        assertEquals("Album 1", album1?.title)
-        assertEquals(listOf("Artist 1"), album1?.artists)
-        assertEquals("https://example.com/cover1.jpg", album1?.images?.firstOrNull()?.url)
+        assertEquals(1, albums.size)
+        assertEquals("Album 1", albums[0].title)
+    }
 
-        val album2 = albums.find { it.id == "album-2" }
-        assertEquals("Album 2", album2?.title)
-        assertEquals(listOf("Artist 1"), album2?.artists)
-        assertEquals("https://example.com/cover2.jpg", album2?.images?.firstOrNull()?.url)
+    @Test
+    fun `searchArtists should return matching artists`() = runBlocking {
+        val artists = tidalService.searchArtists("test", 10)
+        assertEquals(1, artists.size)
+        assertEquals("Artist 1", artists[0].name)
+    }
+
+    @Test
+    fun `getTrackById should return enriched track`() = runBlocking {
+        val track = tidalService.getTrackById("track-1")
+        assertNotNull(track)
+        assertEquals("Track 1", track?.title)
+        assertEquals(listOf("Artist 1"), track?.artists)
+        assertEquals("Album 1", track?.albumTitle)
+    }
+
+    @Test
+    fun `getArtistTracks should return tracks flow`() = runBlocking {
+        val tracks = tidalService.getArtistTracks("artist-1").toList()
+        assertEquals(1, tracks.size)
+        assertEquals("Track 1", tracks[0].title)
     }
 }

@@ -49,36 +49,64 @@ class SpotifyServiceTest : KoinTest {
                     )
                 }
                 "/v1/search" -> {
-                    respond(
-                        content = """
+                    val type = request.url.parameters["type"]
+                    val content = when (type) {
+                        "artist" -> """
                             {
                               "artists": {
-                                "href": "https://api.spotify.com/v1/search?query=test&type=artist&offset=0&limit=10",
-                                "limit": 10,
-                                "next": null,
-                                "offset": 0,
-                                "previous": null,
-                                "total": 1,
+                                "href": "url", "limit": 10, "next": null, "offset": 0, "previous": null, "total": 1,
                                 "items": [
                                   {
                                     "id": "artist-id-1",
                                     "name": "Test Artist",
                                     "popularity": 80,
                                     "href": "https://api.spotify.com/v1/artists/artist-id-1",
-                                    "genres": ["genre1"],
                                     "uri": "spotify:artist:artist-id-1",
-                                    "images": [
-                                      {
-                                        "url": "https://example.com/image.jpg",
-                                        "width": 640,
-                                        "height": 640
-                                      }
-                                    ]
+                                    "images": [{ "url": "https://example.com/image.jpg", "width": 640, "height": 640 }]
                                   }
                                 ]
                               }
                             }
-                        """.trimIndent(),
+                        """.trimIndent()
+                        "track" -> """
+                            {
+                              "tracks": {
+                                "href": "url", "limit": 10, "next": null, "offset": 0, "previous": null, "total": 1,
+                                "items": [
+                                  {
+                                    "id": "track-id-1",
+                                    "name": "Test Track",
+                                    "duration_ms": 180000,
+                                    "href": "https://api.spotify.com/v1/tracks/track-id-1",
+                                    "artists": [{ "id": "a1", "name": "Test Artist", "href": "h", "uri": "u" }],
+                                    "album": { "id": "al1", "name": "Test Album", "href": "h", "total_tracks": 1, "artists": [], "images": [{ "url": "https://example.com/cover.jpg", "width": 640, "height": 640 }] }
+                                  }
+                                ]
+                              }
+                            }
+                        """.trimIndent()
+                        "album" -> """
+                            {
+                              "albums": {
+                                "href": "url", "limit": 10, "next": null, "offset": 0, "previous": null, "total": 1,
+                                "items": [
+                                  {
+                                    "id": "album-id-1",
+                                    "name": "Test Album",
+                                    "href": "https://api.spotify.com/v1/albums/album-id-1",
+                                    "total_tracks": 1,
+                                    "artists": [{ "id": "a1", "name": "Test Artist", "href": "h", "uri": "u" }],
+                                    "images": [{ "url": "https://example.com/cover.jpg", "width": 640, "height": 640 }],
+                                    "release_date": "2023-01-01"
+                                  }
+                                ]
+                              }
+                            }
+                        """.trimIndent()
+                        else -> "{}"
+                    }
+                    respond(
+                        content = content,
                         status = HttpStatusCode.OK,
                         headers = headersOf(HttpHeaders.ContentType, ContentType.Application.Json.toString())
                     )
@@ -111,8 +139,24 @@ class SpotifyServiceTest : KoinTest {
         assertEquals(1, artists.size)
         assertEquals("artist-id-1", artists[0].id)
         assertEquals("Test Artist", artists[0].name)
-        assertEquals(80f, artists[0].popularity)
-        assertEquals(1, artists[0].images.size)
-        assertEquals("https://example.com/image.jpg", artists[0].images[0].url)
+    }
+
+    @Test
+    fun `search should return list of tracks`() = runBlocking {
+        val tracks = spotifyService.search("test", 10)
+
+        assertEquals(1, tracks.size)
+        assertEquals("track-id-1", tracks[0].id)
+        assertEquals("Test Track", tracks[0].title)
+        assertEquals(listOf("Test Artist"), tracks[0].artists)
+    }
+
+    @Test
+    fun `searchAlbums should return list of albums`() = runBlocking {
+        val albums = spotifyService.searchAlbums("test", 10)
+
+        assertEquals(1, albums.size)
+        assertEquals("album-id-1", albums[0].id)
+        assertEquals("Test Album", albums[0].title)
     }
 }

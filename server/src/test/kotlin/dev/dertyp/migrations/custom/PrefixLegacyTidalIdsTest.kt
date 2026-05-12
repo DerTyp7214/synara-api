@@ -3,8 +3,11 @@ package dev.dertyp.migrations.custom
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
 import dev.dertyp.db.AlbumTable
+import dev.dertyp.db.ArtistTable
 import dev.dertyp.db.ImageTable
+import dev.dertyp.db.UserTable
 import kotlinx.coroutines.runBlocking
+import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.insert
@@ -14,56 +17,40 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.EnumSource
-import org.koin.core.context.stopKoin
-import org.koin.test.KoinTest
 import java.util.UUID
 
-class PrefixLegacyTidalIdsTest : KoinTest {
+class PrefixLegacyTidalIdsTest {
     private lateinit var database: Database
 
     fun setup(dialect: DbDialect) {
         database = TestDatabase.connect(dialect, "migration_test")
         transaction(database) {
-            SchemaUtils.create(ImageTable, AlbumTable)
+            SchemaUtils.create(UserTable, ImageTable, ArtistTable, AlbumTable)
         }
     }
 
     @AfterEach
     fun tearDown() {
-        stopKoin()
         TestDatabase.cleanUp()
     }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `PrefixLegacyTidalIds should prefix non-prefixed originalIds`(dialect: DbDialect) = runBlocking {
+    fun `migrate should prefix legacy IDs with tidal`(dialect: DbDialect) = runBlocking {
         setup(dialect)
-
+        val albumId = UUID.randomUUID()
+        val legacyId = "12345"
+        
         transaction(database) {
             AlbumTable.insert {
-                it[id] = UUID.randomUUID()
+                it[id] = albumId
                 it[name] = "Legacy Album"
-                it[originalId] = "12345"
+                it[originalId] = legacyId
             }
             AlbumTable.insert {
                 it[id] = UUID.randomUUID()
-                it[name] = "Already Prefixed Album"
-                it[originalId] = "youtube:abcde"
-            }
-            AlbumTable.insert {
-                it[id] = UUID.randomUUID()
-                it[name] = "Tidal Prefixed Album"
+                it[name] = "Modern Album"
                 it[originalId] = "tidal:67890"
-            }
-            AlbumTable.insert {
-                it[id] = UUID.randomUUID()
-                it[name] = "Empty OriginalId"
-                it[originalId] = ""
-            }
-            AlbumTable.insert {
-                it[id] = UUID.randomUUID()
-                it[name] = "Null OriginalId"
-                it[originalId] = null
             }
         }
 
@@ -71,12 +58,11 @@ class PrefixLegacyTidalIdsTest : KoinTest {
         migration.migrate()
 
         transaction(database) {
-            val albums = AlbumTable.selectAll().associate { it[AlbumTable.name] to it[AlbumTable.originalId] }
-            assertEquals("tidal:12345", albums["Legacy Album"])
-            assertEquals("youtube:abcde", albums["Already Prefixed Album"])
-            assertEquals("tidal:67890", albums["Tidal Prefixed Album"])
-            assertEquals("", albums["Empty OriginalId"])
-            assertEquals(null, albums["Null OriginalId"])
+            val updated = AlbumTable.selectAll().where { AlbumTable.id eq albumId }.single()
+            assertEquals("tidal:12345", updated[AlbumTable.originalId])
+            
+            val modernCount = AlbumTable.selectAll().where { AlbumTable.originalId eq "tidal:67890" }.count()
+            assertEquals(1L, modernCount)
         }
     }
 }

@@ -15,9 +15,7 @@ import io.mockk.mockkStatic
 import io.mockk.unmockkAll
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.AfterEach
-import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertFalse
-import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.koin.core.context.startKoin
@@ -64,8 +62,14 @@ class YoutubeServiceTest : KoinTest {
     fun `parseUrl should handle various youtube links`() = runBlocking {
         assertEquals("abc" to Type.SONG, service.parseUrl("https://www.youtube.com/watch?v=abc"))
         assertEquals("abc" to Type.SONG, service.parseUrl("https://youtu.be/abc"))
+        assertEquals("abc" to Type.SONG, service.parseUrl("https://music.youtube.com/watch?v=abc"))
+        assertEquals("abc" to Type.SONG, service.parseUrl("https://m.youtube.com/watch?v=abc"))
+        assertEquals("abc" to Type.SONG, service.parseUrl("https://www.youtube.com/shorts/abc"))
+        assertEquals("abc" to Type.SONG, service.parseUrl("https://www.youtube.com/watch?v=abc&list=list123"))
         assertEquals("list123" to Type.PLAYLIST, service.parseUrl("https://www.youtube.com/playlist?list=list123"))
         assertEquals("@channel" to Type.ARTIST, service.parseUrl("https://www.youtube.com/@channel"))
+        assertEquals("channel/UC123" to Type.ARTIST, service.parseUrl("https://www.youtube.com/channel/UC123"))
+        assertEquals("user/username" to Type.ARTIST, service.parseUrl("https://www.youtube.com/user/username"))
     }
 
     @Test

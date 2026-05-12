@@ -87,7 +87,8 @@ class AppleMusicServiceTest : KoinTest {
                                   "collectionName": "Test Album",
                                   "trackName": "Test Song",
                                   "artworkUrl100": "https://example.com/100x100bb.jpg",
-                                  "trackCount": 1
+                                  "trackCount": 1,
+                                  "trackTimeMillis": 180000
                                 }
                               ]
                             }
@@ -129,6 +130,16 @@ class AppleMusicServiceTest : KoinTest {
         assertEquals("12345", artists[0].id)
         assertEquals("Test Artist", artists[0].name)
         assertEquals("https://music.apple.com/artist/test-artist/12345", artists[0].url)
+    }
+
+    @Test
+    fun `search should return list of tracks`() = runBlocking {
+        val tracks = appleMusicService.search("test", 10)
+
+        assertEquals(1, tracks.size)
+        assertEquals("67890", tracks[0].id)
+        assertEquals("Test Song", tracks[0].title)
+        assertEquals(listOf("Test Artist"), tracks[0].artists)
     }
 
     @Test

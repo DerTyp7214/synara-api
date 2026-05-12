@@ -46,4 +46,28 @@ class DownloaderProxyTest {
         coVerify { tiddlDownloader.downloadContent(listOf("tidal.com/track/1"), 1, any(), any(), any()) }
         coVerify { tdnDownloader.downloadContent(listOf("tdn:track/2"), 1, any(), any(), any()) }
     }
+
+    @Test
+    fun `default downloader should win if it can handle the url`() = runBlocking {
+        val d1 = mockk<IDownloader>(relaxed = true)
+        val d2 = mockk<IDownloader>(relaxed = true)
+
+        every { d1.id } returns "d1"
+        every { d2.id } returns "d2"
+        every { d1.canHandle(any()) } returns true
+        every { d2.canHandle(any()) } returns true
+
+        every { pluginManager.getDownloader("d1") } returns d1
+        every { pluginManager.getDownloader("d2") } returns d2
+        every { pluginManager.getAllDownloaders() } returns listOf(d1, d2)
+
+        proxy.defaultService = DownloadBackend("d1")
+        proxy.downloadContent(listOf("any"), 1, { true }, null, null) {}
+        coVerify { d1.downloadContent(any(), any(), any(), any(), any()) }
+        coVerify(exactly = 0) { d2.downloadContent(any(), any(), any(), any(), any()) }
+
+        proxy.defaultService = DownloadBackend("d2")
+        proxy.downloadContent(listOf("any"), 1, { true }, null, null) {}
+        coVerify { d2.downloadContent(any(), any(), any(), any(), any()) }
+    }
 }

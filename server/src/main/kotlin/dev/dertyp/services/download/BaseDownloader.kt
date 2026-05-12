@@ -1,12 +1,7 @@
 package dev.dertyp.services.download
 
 import dev.dertyp.PlatformUUID
-import dev.dertyp.core.ClientCloseException
-import dev.dertyp.core.getModifiedSince
-import dev.dertyp.core.isInside
-import dev.dertyp.core.oneLine
-import dev.dertyp.core.resolveRelativeAbsolute
-import dev.dertyp.core.waitForChange
+import dev.dertyp.core.*
 import dev.dertyp.data.User
 import dev.dertyp.data.UserSong
 import dev.dertyp.plugins.IDownloader
@@ -21,12 +16,7 @@ import java.time.Instant
 import java.util.UUID
 import kotlin.concurrent.atomics.AtomicBoolean
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
-import kotlin.io.path.Path
-import kotlin.io.path.absolutePathString
-import kotlin.io.path.exists
-import kotlin.io.path.extension
-import kotlin.io.path.listDirectoryEntries
-import kotlin.io.path.readLines
+import kotlin.io.path.*
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
@@ -63,7 +53,7 @@ abstract class BaseDownloader(override var indexer: IPluginIndexer, internal val
     ): ProcessExecutionResult = result
 
     @OptIn(ExperimentalAtomicApi::class)
-    internal suspend fun collectDownloadedFiles(
+    internal open suspend fun collectDownloadedFiles(
         command: Collection<String>,
         maxRetries: Int = 5,
         currentTry: Int = 0,

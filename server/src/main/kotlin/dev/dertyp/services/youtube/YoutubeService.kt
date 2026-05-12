@@ -36,7 +36,7 @@ import kotlin.io.path.absolutePathString
 import kotlin.io.path.extension
 
 @OptIn(ExperimentalAtomicApi::class)
-class YoutubeService(
+open class YoutubeService(
     indexer: IPluginIndexer,
     storageService: IServerStorageService,
     private val youtubeApiService: YoutubeApiService,
@@ -94,6 +94,10 @@ class YoutubeService(
 
             params["v"]?.let { return it to Type.SONG }
             params["list"]?.let { return it to Type.PLAYLIST }
+
+            if (uri.path.startsWith("/shorts/")) {
+                return uri.path.removePrefix("/shorts/").trim('/') to Type.SONG
+            }
 
             if (uri.path.startsWith("/channel/") || uri.path.startsWith("/user/") || uri.path.startsWith("/@")) {
                 return uri.path.trim('/') to Type.ARTIST

@@ -10,6 +10,7 @@ import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationEnvironment
 import kotlinx.serialization.Serializable
+import kotlin.time.Duration.Companion.milliseconds
 
 class AppleMusicService(
     environment: ApplicationEnvironment
@@ -22,6 +23,38 @@ class AppleMusicService(
 
     override suspend fun getAccessToken(): IMetadataService.AccessTokenResponse {
         return IMetadataService.AccessTokenResponse("", "", 0)
+    }
+
+    override suspend fun search(
+        query: String,
+        limit: Int,
+        priority: HttpClientPriority
+    ): List<IMetadataService.Track> {
+        val response = ApiClient.instance.get("https://itunes.apple.com/search") {
+            parameter("term", query)
+            parameter("entity", "song")
+            parameter("limit", limit)
+        }
+
+        if (response.status != HttpStatusCode.OK) return emptyList()
+
+        val body = response.bodyAsText().trim()
+        val searchResponse = ApplicationScope.json.decodeFromString<ITunesSearchResponse<ITunesAlbum>>(body)
+        return searchResponse.results.filter { it.wrapperType == "track" }.map { track ->
+            IMetadataService.Track(
+                id = track.collectionId.toString(),
+                title = track.trackName ?: "",
+                artists = listOf(track.artistName),
+                duration = (track.trackTimeMillis ?: 0L).milliseconds,
+                images = listOf(
+                    IMetadataService.Image(
+                        url = track.artworkUrl100.replace("100x100bb", "600x600bb"),
+                        width = 600,
+                        height = 600
+                    )
+                )
+            )
+        }
     }
 
     override suspend fun searchArtists(
@@ -111,6 +144,7 @@ class AppleMusicService(
         val collectionName: String,
         val artworkUrl100: String,
         val trackCount: Int,
-        val trackName: String? = null
+        val trackName: String? = null,
+        val trackTimeMillis: Long? = null
     )
 }

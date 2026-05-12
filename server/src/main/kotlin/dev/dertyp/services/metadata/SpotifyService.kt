@@ -14,6 +14,7 @@ import io.ktor.server.application.ApplicationEnvironment
 import kotlinx.coroutines.delay
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 class SpotifyService(
@@ -26,6 +27,49 @@ class SpotifyService(
     override fun HttpRequestBuilder.getAccessTokenHeader(clientId: String, clientSecret: String) {
         parameter("client_id", clientId)
         parameter("client_secret", clientSecret)
+    }
+
+    override suspend fun search(
+        query: String,
+        limit: Int,
+        priority: HttpClientPriority
+    ): List<IMetadataService.Track> {
+        val response = ApiClient.instance.get("https://api.spotify.com/v1/search") {
+            val token = getAccessToken()
+            header(HttpHeaders.Authorization, "${token.tokenType} ${token.accessToken}")
+            header(HttpHeaders.ContentType, ContentType.Application.Json)
+            parameter("q", query)
+            parameter("type", "track")
+            parameter("limit", limit)
+        }
+
+        if (response.status == HttpStatusCode.TooManyRequests) {
+            delay(30.seconds)
+            return search(query, limit, priority)
+        }
+
+        if (response.status != HttpStatusCode.OK) {
+            logger.error("Searching tracks for $query failed with status ${response.status}")
+            return emptyList()
+        }
+
+        val searchResponse = response.body<SearchResponse>()
+
+        return searchResponse.tracks?.items?.map { track ->
+            IMetadataService.Track(
+                id = track.id,
+                title = track.name,
+                artists = track.artists.map { it.name },
+                duration = track.durationMs.milliseconds,
+                images = track.album.images.map { image ->
+                    IMetadataService.Image(
+                        url = image.url,
+                        width = image.width,
+                        height = image.height,
+                    )
+                }
+            )
+        } ?: emptyList()
     }
 
     override suspend fun searchArtists(
@@ -118,7 +162,30 @@ class SpotifyService(
     @Serializable
     data class SearchResponse(
         val artists: Artists? = null,
-        val albums: Albums? = null
+        val albums: Albums? = null,
+        val tracks: Tracks? = null
+    )
+
+    @Serializable
+    data class Tracks(
+        val href: String,
+        val limit: Int,
+        val next: String?,
+        val offset: Int,
+        val previous: String?,
+        val total: Int,
+        val items: List<Track>
+    )
+
+    @Serializable
+    data class Track(
+        val id: String,
+        val name: String,
+        val artists: List<Artist>,
+        val album: Album,
+        @SerialName("duration_ms")
+        val durationMs: Int,
+        val href: String
     )
 
     @Serializable
