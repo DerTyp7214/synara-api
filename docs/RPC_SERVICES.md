@@ -907,6 +907,7 @@ The type of content available for download.
 | `ALBUM` |  |
 | `PLAYLIST` |  |
 | `ARTIST` |  |
+| `VIDEO` |  |
 
 ### UrlDownloadQueueEntry <a name="devdertypservicesdownloadurldownloadqueueentry"></a>
 A download queue entry for content specified by its URL.

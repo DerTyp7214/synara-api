@@ -301,7 +301,7 @@ abstract class TidalBaseDownloader(
         val metadataService = MetadataService.getMetadataService(IMetadataService.MetadataType.tidal, get())
         return when (type) {
             Type.MIX -> IdsWrapper.from(type, ids.associateBy { UUID.randomUUID().mostSignificantBits })
-            Type.SONG -> IdsWrapper.from(
+            Type.SONG, Type.VIDEO -> IdsWrapper.from(
                 type,
                 ids.associateBy { UUID.randomUUID().mostSignificantBits })
 
@@ -402,6 +402,7 @@ abstract class TidalBaseDownloader(
             "album" -> Type.ALBUM
             "playlist" -> Type.PLAYLIST
             "artist" -> Type.ARTIST
+            "video" -> Type.VIDEO
             else -> return null
         }
 
@@ -574,7 +575,7 @@ abstract class TidalBaseDownloader(
                 }
             }
 
-            Type.MIX, Type.SONG -> {
+            Type.MIX, Type.SONG, Type.VIDEO -> {
                 downloadStageMutex.withLock {
                     downloadStage.addAll(wrapper.getIds().toList().filter { id ->
                         existingUrls.none { url ->
