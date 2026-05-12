@@ -5,6 +5,7 @@ import dev.dertyp.TestDatabase
 import dev.dertyp.data.AuthenticationRequest
 import dev.dertyp.db.ImageMetadataTable
 import dev.dertyp.db.ImageTable
+import dev.dertyp.db.UserCapabilityTable
 import dev.dertyp.db.UserTable
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
@@ -35,7 +36,7 @@ class UserServiceTest : KoinTest {
 
         database = TestDatabase.connect(dialect, "user_test")
         transaction(database) {
-            SchemaUtils.create(UserTable, ImageTable, ImageMetadataTable)
+            SchemaUtils.create(UserTable, ImageTable, ImageMetadataTable, UserCapabilityTable)
         }
         service = UserService()
     }

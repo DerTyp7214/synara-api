@@ -74,6 +74,7 @@ class SongServiceTest : KoinTest {
                 AlbumMusicBrainzTable,
                 ArtistMusicBrainzTable,
                 UserSongTable,
+                UserCapabilityTable,
                 ArtistAliasTable,
                 FollowedArtistTable,
                 PlaylistSongTable,

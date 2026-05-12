@@ -4,10 +4,12 @@ import at.favre.lib.crypto.bcrypt.BCrypt
 import dev.dertyp.data.AuthenticationRequest
 import dev.dertyp.data.User
 import dev.dertyp.db.ImageTable
+import dev.dertyp.db.UserCapabilityTable
 import dev.dertyp.db.UserTable
 import dev.dertyp.dbQuery
 import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.core.leftJoin
 import org.jetbrains.exposed.v1.jdbc.*
 import java.util.UUID
@@ -23,7 +25,6 @@ class RpcUserService(
 
     override suspend fun me() = userService.findUserById(user.id)!!.copy(passwordHash = "")
     override suspend fun getAllUsers(): List<User> {
-        if (!user.isAdmin) throw IllegalStateException("Only admins can list all users")
         return userService.queryUser().map { it.copy(passwordHash = "") }
     }
 
@@ -100,15 +101,32 @@ class UserService : Service() {
             it[isAdmin] = user.isAdmin
             it[profileImage] = user.profileImageId
         }
+
+        UserCapabilityTable.deleteWhere { userId eq user.id }
+        UserCapabilityTable.batchInsert(user.capabilities) {
+            this[UserCapabilityTable.userId] = user.id
+            this[UserCapabilityTable.capability] = it
+        }
     }
 
     suspend fun queryUser(query: Query.() -> Query = { this }): List<User> {
         return dbQuery {
-            UserTable
+            val users = UserTable
                 .leftJoin(ImageTable, onColumn = { UserTable.profileImage }, otherColumn = { ImageTable.id })
                 .selectAll()
                 .query()
                 .map(::map)
+
+            val userIds = users.map { it.id }
+            val capabilitiesMap = UserCapabilityTable
+                .selectAll()
+                .where { UserCapabilityTable.userId inList userIds }
+                .groupBy { it[UserCapabilityTable.userId].value }
+                .mapValues { entry -> entry.value.map { it[UserCapabilityTable.capability] } }
+
+            users.map { user ->
+                user.copy(capabilities = capabilitiesMap[user.id] ?: emptyList())
+            }
         }
     }
 }

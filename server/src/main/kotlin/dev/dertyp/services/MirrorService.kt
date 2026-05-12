@@ -14,78 +14,35 @@ import org.koin.core.component.inject
 import java.util.UUID
 
 class MirrorRpcService(
-    private val user: User,
     private val mirrorService: MirrorService
 ) : IMirrorService {
-    override suspend fun getServerPaths(): RemoteServerPaths {
-        if (!user.isAdmin) throw IllegalStateException("Only admins can mirror")
-        return mirrorService.getServerPaths()
-    }
+    override suspend fun getServerPaths(): RemoteServerPaths = mirrorService.getServerPaths()
 
-    override fun getSongs(): Flow<Song> {
-        if (!user.isAdmin) throw IllegalStateException("Only admins can mirror")
-        return mirrorService.getSongs()
-    }
+    override fun getSongs(): Flow<Song> = mirrorService.getSongs()
 
-    override fun getArtists(): Flow<Artist> {
-        if (!user.isAdmin) throw IllegalStateException("Only admins can mirror")
-        return mirrorService.getArtists()
-    }
+    override fun getArtists(): Flow<Artist> = mirrorService.getArtists()
 
-    override fun getArtistAliases(): Flow<ArtistAlias> {
-        if (!user.isAdmin) throw IllegalStateException("Only admins can mirror")
-        return mirrorService.getArtistAliases()
-    }
+    override fun getArtistAliases(): Flow<ArtistAlias> = mirrorService.getArtistAliases()
 
-    override fun getArtistSplitAliases(): Flow<ArtistSplitAlias> {
-        if (!user.isAdmin) throw IllegalStateException("Only admins can mirror")
-        return mirrorService.getArtistSplitAliases()
-    }
+    override fun getArtistSplitAliases(): Flow<ArtistSplitAlias> = mirrorService.getArtistSplitAliases()
 
-    override fun getAlbums(): Flow<Album> {
-        if (!user.isAdmin) throw IllegalStateException("Only admins can mirror")
-        return mirrorService.getAlbums()
-    }
+    override fun getAlbums(): Flow<Album> = mirrorService.getAlbums()
 
-    override fun getPlaylists(): Flow<Playlist> {
-        if (!user.isAdmin) throw IllegalStateException("Only admins can mirror")
-        return mirrorService.getPlaylists()
-    }
+    override fun getPlaylists(): Flow<Playlist> = mirrorService.getPlaylists()
 
-    override fun getUserPlaylists(): Flow<UserPlaylist> {
-        if (!user.isAdmin) throw IllegalStateException("Only admins can mirror")
-        return mirrorService.getUserPlaylists()
-    }
+    override fun getUserPlaylists(): Flow<UserPlaylist> = mirrorService.getUserPlaylists()
 
-    override fun getImageMetadata(): Flow<Image> {
-        if (!user.isAdmin) throw IllegalStateException("Only admins can mirror")
-        return mirrorService.getImageMetadata()
-    }
+    override fun getImageMetadata(): Flow<Image> = mirrorService.getImageMetadata()
 
-    override fun getSongData(songId: UUID, quality: Int, chunkSize: Int, force: Boolean): Flow<ByteArray> {
-        if (!user.isAdmin) throw IllegalStateException("Only admins can mirror")
-        return mirrorService.getSongData(songId, quality, chunkSize, force)
-    }
+    override fun getSongData(songId: UUID, quality: Int, chunkSize: Int, force: Boolean): Flow<ByteArray> = mirrorService.getSongData(songId, quality, chunkSize, force)
 
-    override fun getUsers(): Flow<User> {
-        if (!user.isAdmin) throw IllegalStateException("Only admins can mirror")
-        return mirrorService.getUsers()
-    }
+    override fun getUsers(): Flow<User> = mirrorService.getUsers()
 
-    override fun getSongsByPlaylist(playlistId: UUID): Flow<Song> {
-        if (!user.isAdmin) throw IllegalStateException("Only admins can mirror")
-        return mirrorService.getSongsByPlaylist(playlistId)
-    }
+    override fun getSongsByPlaylist(playlistId: UUID): Flow<Song> = mirrorService.getSongsByPlaylist(playlistId)
 
-    override fun getSongsByUserPlaylist(playlistId: UUID): Flow<Song> {
-        if (!user.isAdmin) throw IllegalStateException("Only admins can mirror")
-        return mirrorService.getSongsByUserPlaylist(playlistId)
-    }
+    override fun getSongsByUserPlaylist(playlistId: UUID): Flow<Song> = mirrorService.getSongsByUserPlaylist(playlistId)
 
-    override fun getLikedSongs(userId: UUID): Flow<Song> {
-        if (!user.isAdmin) throw IllegalStateException("Only admins can mirror")
-        return mirrorService.getLikedSongs(userId)
-    }
+    override fun getLikedSongs(userId: UUID): Flow<Song> = mirrorService.getLikedSongs(userId)
 }
 
 @OptIn(ExperimentalCoroutinesApi::class)

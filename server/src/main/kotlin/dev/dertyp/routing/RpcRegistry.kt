@@ -14,6 +14,7 @@ import dev.dertyp.services.metadata.CachedMusicBrainzService
 import dev.dertyp.services.metadata.IMetadataService
 import dev.dertyp.services.metadata.IMusicBrainzService
 import dev.dertyp.services.metadata.MetadataDispatcherService
+import dev.dertyp.utils.withAuthorization
 import dev.dertyp.utils.withLogging
 import io.ktor.server.application.ApplicationCall
 import kotlinx.rpc.RpcServer
@@ -103,30 +104,30 @@ private fun registerAuthenticated(koin: Koin, call: ApplicationCall, user: User,
     val cachedMusicBrainzService = koin.get<CachedMusicBrainzService>()
     val metadataDispatcherService = koin.get<MetadataDispatcherService>()
 
-    registrar.register(IIndexer::class) { RpcIndexer(indexer, user).withLogging<IIndexer>(call) }
-    registrar.register(IUserService::class) { RpcUserService(user, userService, imageService).withLogging<IUserService>(call) }
-    registrar.register(ISongService::class) { SongRpcService(songService = songService, user = user).withLogging<ISongService>(call) }
-    registrar.register(IAlbumService::class) { AlbumRpcService(user, albumService).withLogging<IAlbumService>(call) }
-    registrar.register(IImageService::class) { ImageRpcService(user, imageService).withLogging<IImageService>(call) }
-    registrar.register(IAudioAnalysisService::class) { audioAnalysisService.withLogging<IAudioAnalysisService>(call) }
-    registrar.register(IDiscoveryService::class) { DiscoveryRpcService(user, discoveryService).withLogging<IDiscoveryService>(call) }
-    registrar.register(ILyricsSearch::class) { lyricsSearch.withLogging<ILyricsSearch>(call) }
-    registrar.register(ILyricsService::class) { lyricsService.withLogging<ILyricsService>(call) }
-    registrar.register(IArtistService::class) { ArtistRpcService(user, artistService).withLogging<IArtistService>(call) }
-    registrar.register(IFavSyncService::class) { FavSyncRpcService(user, favSyncService).withLogging<IFavSyncService>(call) }
-    registrar.register(IDownloadService::class) { DownloadRpcService(user, call, downloadService, downloaderProxy).withLogging<IDownloadService>(call) }
-    registrar.register(IPlaylistService::class) { playlistService.withLogging<IPlaylistService>(call) }
-    registrar.register(IUserPlaylistService::class) { userPlaylistService.withLogging<IUserPlaylistService>(call) }
-    registrar.register(ISessionService::class) { RpcSessionService(user, sessionService).withLogging<ISessionService>(call) }
-    registrar.register(IPlaybackService::class) { RpcPlaybackService(playbackService).withLogging<IPlaybackService>(call) }
-    registrar.register(ICustomAudioService::class) { CustomAudioRpcService(customAudioService).withLogging<ICustomAudioService>(call) }
-    registrar.register(IDbManagementService::class) { dbManagementService.withLogging<IDbManagementService>(call) }
-    registrar.register(IBackupService::class) { RpcBackupService(user, backupService).withLogging<IBackupService>(call) }
-    registrar.register(IUserPlaylistBackupService::class) { RpcUserPlaylistBackupService(user, userPlaylistBackupService).withLogging<IUserPlaylistBackupService>(call) }
-    registrar.register(IMirrorService::class) { MirrorRpcService(user, mirrorService).withLogging<IMirrorService>(call) }
-    registrar.register(IRemoteMirrorService::class) { RemoteMirrorRpcService(user, remoteMirrorService).withLogging<IRemoteMirrorService>(call) }
-    registrar.register(IScheduledTaskLogService::class) { RpcScheduledTaskLogService(user, scheduledTaskLogService).withLogging<IScheduledTaskLogService>(call) }
-    registrar.register(IReleaseService::class) { RpcReleaseService(user, releaseService).withLogging<IReleaseService>(call) }
-    registrar.register(IMusicBrainzService::class) { cachedMusicBrainzService.withLogging<IMusicBrainzService>(call) }
-    registrar.register(IMetadataService::class) { metadataDispatcherService.withLogging<IMetadataService>(call) }
+    registrar.register(IIndexer::class) { RpcIndexer(indexer, user).withAuthorization<IIndexer>(user).withLogging<IIndexer>(call) }
+    registrar.register(IUserService::class) { RpcUserService(user, userService, imageService).withAuthorization<IUserService>(user).withLogging<IUserService>(call) }
+    registrar.register(ISongService::class) { SongRpcService(songService = songService, user = user).withAuthorization<ISongService>(user).withLogging<ISongService>(call) }
+    registrar.register(IAlbumService::class) { AlbumRpcService(user, albumService).withAuthorization<IAlbumService>(user).withLogging<IAlbumService>(call) }
+    registrar.register(IImageService::class) { ImageRpcService(user, imageService).withAuthorization<IImageService>(user).withLogging<IImageService>(call) }
+    registrar.register(IAudioAnalysisService::class) { audioAnalysisService.withAuthorization<IAudioAnalysisService>(user).withLogging<IAudioAnalysisService>(call) }
+    registrar.register(IDiscoveryService::class) { DiscoveryRpcService(user, discoveryService).withAuthorization<IDiscoveryService>(user).withLogging<IDiscoveryService>(call) }
+    registrar.register(ILyricsSearch::class) { lyricsSearch.withAuthorization<ILyricsSearch>(user).withLogging<ILyricsSearch>(call) }
+    registrar.register(ILyricsService::class) { lyricsService.withAuthorization<ILyricsService>(user).withLogging<ILyricsService>(call) }
+    registrar.register(IArtistService::class) { ArtistRpcService(user, artistService).withAuthorization<IArtistService>(user).withLogging<IArtistService>(call) }
+    registrar.register(IFavSyncService::class) { FavSyncRpcService(user, favSyncService).withAuthorization<IFavSyncService>(user).withLogging<IFavSyncService>(call) }
+    registrar.register(IDownloadService::class) { DownloadRpcService(user, call, downloadService, downloaderProxy).withAuthorization<IDownloadService>(user).withLogging<IDownloadService>(call) }
+    registrar.register(IPlaylistService::class) { playlistService.withAuthorization<IPlaylistService>(user).withLogging<IPlaylistService>(call) }
+    registrar.register(IUserPlaylistService::class) { userPlaylistService.withAuthorization<IUserPlaylistService>(user).withLogging<IUserPlaylistService>(call) }
+    registrar.register(ISessionService::class) { RpcSessionService(user, sessionService).withAuthorization<ISessionService>(user).withLogging<ISessionService>(call) }
+    registrar.register(IPlaybackService::class) { RpcPlaybackService(playbackService).withAuthorization<IPlaybackService>(user).withLogging<IPlaybackService>(call) }
+    registrar.register(ICustomAudioService::class) { CustomAudioRpcService(customAudioService).withAuthorization<ICustomAudioService>(user).withLogging<ICustomAudioService>(call) }
+    registrar.register(IDbManagementService::class) { dbManagementService.withAuthorization<IDbManagementService>(user).withLogging<IDbManagementService>(call) }
+    registrar.register(IBackupService::class) { RpcBackupService(user, backupService).withAuthorization<IBackupService>(user).withLogging<IBackupService>(call) }
+    registrar.register(IUserPlaylistBackupService::class) { RpcUserPlaylistBackupService(user, userPlaylistBackupService).withAuthorization<IUserPlaylistBackupService>(user).withLogging<IUserPlaylistBackupService>(call) }
+    registrar.register(IMirrorService::class) { MirrorRpcService(mirrorService).withAuthorization<IMirrorService>(user).withLogging<IMirrorService>(call) }
+    registrar.register(IRemoteMirrorService::class) { RemoteMirrorRpcService(user, remoteMirrorService).withAuthorization<IRemoteMirrorService>(user).withLogging<IRemoteMirrorService>(call) }
+    registrar.register(IScheduledTaskLogService::class) { RpcScheduledTaskLogService(user, scheduledTaskLogService).withAuthorization<IScheduledTaskLogService>(user).withLogging<IScheduledTaskLogService>(call) }
+    registrar.register(IReleaseService::class) { RpcReleaseService(user, releaseService).withAuthorization<IReleaseService>(user).withLogging<IReleaseService>(call) }
+    registrar.register(IMusicBrainzService::class) { cachedMusicBrainzService.withAuthorization<IMusicBrainzService>(user).withLogging<IMusicBrainzService>(call) }
+    registrar.register(IMetadataService::class) { metadataDispatcherService.withAuthorization<IMetadataService>(user).withLogging<IMetadataService>(call) }
 }

@@ -4,6 +4,7 @@ import dev.dertyp.IIndexer
 import dev.dertyp.RpcIndexer
 import dev.dertyp.StreamInfo
 import dev.dertyp.core.ApplicationScope
+import dev.dertyp.core.UnauthorizedException
 import dev.dertyp.core.getUser
 import dev.dertyp.core.toUUIDOrNull
 import dev.dertyp.data.PaginatedResponse
@@ -15,6 +16,7 @@ import dev.dertyp.services.metadata.CachedMusicBrainzService
 import dev.dertyp.services.metadata.IMetadataService
 import dev.dertyp.services.metadata.IMusicBrainzService
 import dev.dertyp.services.metadata.MetadataDispatcherService
+import dev.dertyp.utils.withAuthorization
 import io.github.smiley4.ktoropenapi.*
 import io.github.smiley4.ktoropenapi.config.RouteConfig
 import io.ktor.http.*
@@ -159,6 +161,9 @@ fun Route.registerRestService(
                         }
                     } catch (e: IllegalArgumentException) {
                         call.respond(HttpStatusCode.BadRequest, e.message ?: "Invalid arguments")
+                        return@handler
+                    } catch (e: UnauthorizedException) {
+                        call.respond(HttpStatusCode.Forbidden, e.message ?: "Unauthorized")
                         return@handler
                     } catch (e: Exception) {
                         call.respond(HttpStatusCode.InternalServerError, e.message ?: "Internal Server Error")
@@ -410,74 +415,104 @@ fun Route.registerPublicRestServices(koin: Koin) {
 fun Route.registerAuthenticatedRestServices(koin: Koin) {
     registerRestService(IIndexer::class, authenticated = true) {
         val user = call.getUser() ?: throw IllegalArgumentException("No user found")
-        RpcIndexer(koin.get(), user)
+        RpcIndexer(koin.get(), user).withAuthorization<IIndexer>(user)
     }
     registerRestService(IUserService::class, authenticated = true) {
         val user = call.getUser() ?: throw IllegalArgumentException("No user found")
-        RpcUserService(user, koin.get(), koin.get())
+        RpcUserService(user, koin.get(), koin.get()).withAuthorization<IUserService>(user)
     }
     registerRestService(ISongService::class, authenticated = true) {
         val user = call.getUser() ?: throw IllegalArgumentException("No user found")
-        SongRpcService(songService = koin.get(), user = user)
+        SongRpcService(songService = koin.get(), user = user).withAuthorization<ISongService>(user)
     }
     registerRestService(IAlbumService::class, authenticated = true) {
         val user = call.getUser() ?: throw IllegalArgumentException("No user found")
-        AlbumRpcService(user, koin.get())
+        AlbumRpcService(user, koin.get()).withAuthorization<IAlbumService>(user)
     }
-    registerRestService(ILyricsSearch::class, authenticated = true) { koin.get<LyricsSearch>() }
-    registerRestService(ILyricsService::class, authenticated = true) { koin.get<LyricsService>() }
+    registerRestService(ILyricsSearch::class, authenticated = true) {
+        val user = call.getUser()
+        koin.get<LyricsSearch>().withAuthorization<ILyricsSearch>(user)
+    }
+    registerRestService(ILyricsService::class, authenticated = true) {
+        val user = call.getUser()
+        koin.get<LyricsService>().withAuthorization<ILyricsService>(user)
+    }
     registerRestService(IArtistService::class, authenticated = true) {
         val user = call.getUser() ?: throw IllegalArgumentException("No user found")
-        ArtistRpcService(user, koin.get())
+        ArtistRpcService(user, koin.get()).withAuthorization<IArtistService>(user)
     }
-    registerRestService(IAudioAnalysisService::class, authenticated = true) { koin.get<AudioAnalysisService>() }
+    registerRestService(IAudioAnalysisService::class, authenticated = true) {
+        val user = call.getUser()
+        koin.get<AudioAnalysisService>().withAuthorization<IAudioAnalysisService>(user)
+    }
     registerRestService(IDiscoveryService::class, authenticated = true) {
         val user = call.getUser() ?: throw IllegalArgumentException("No user found")
-        DiscoveryRpcService(user, koin.get())
+        DiscoveryRpcService(user, koin.get()).withAuthorization<IDiscoveryService>(user)
     }
     registerRestService(IFavSyncService::class, authenticated = true) {
         val user = call.getUser() ?: throw IllegalArgumentException("No user found")
-        FavSyncRpcService(user, koin.get())
+        FavSyncRpcService(user, koin.get()).withAuthorization<IFavSyncService>(user)
     }
     registerRestService(IDownloadService::class, authenticated = true) {
         val user = call.getUser() ?: throw IllegalArgumentException("No user found")
-        DownloadRpcService(user, call, koin.get(), koin.get())
+        DownloadRpcService(user, call, koin.get(), koin.get()).withAuthorization<IDownloadService>(user)
     }
-    registerRestService(IPlaylistService::class, authenticated = true) { koin.get<PlaylistService>() }
-    registerRestService(IUserPlaylistService::class, authenticated = true) { koin.get<UserPlaylistService>() }
+    registerRestService(IPlaylistService::class, authenticated = true) {
+        val user = call.getUser()
+        koin.get<PlaylistService>().withAuthorization<IPlaylistService>(user)
+    }
+    registerRestService(IUserPlaylistService::class, authenticated = true) {
+        val user = call.getUser()
+        koin.get<UserPlaylistService>().withAuthorization<IUserPlaylistService>(user)
+    }
     registerRestService(ISessionService::class, authenticated = true) {
         val user = call.getUser() ?: throw IllegalArgumentException("No user found")
-        RpcSessionService(user, koin.get())
+        RpcSessionService(user, koin.get()).withAuthorization<ISessionService>(user)
     }
-    registerRestService(IPlaybackService::class, authenticated = true) { RpcPlaybackService(koin.get()) }
-    registerRestService(ICustomAudioService::class, authenticated = true) { CustomAudioRpcService(koin.get()) }
-    registerRestService(IDbManagementService::class, authenticated = true) { koin.get<DbManagementService>() }
+    registerRestService(IPlaybackService::class, authenticated = true) {
+        val user = call.getUser()
+        RpcPlaybackService(koin.get()).withAuthorization<IPlaybackService>(user)
+    }
+    registerRestService(ICustomAudioService::class, authenticated = true) {
+        val user = call.getUser()
+        CustomAudioRpcService(koin.get()).withAuthorization<ICustomAudioService>(user)
+    }
+    registerRestService(IDbManagementService::class, authenticated = true) {
+        val user = call.getUser()
+        koin.get<DbManagementService>().withAuthorization<IDbManagementService>(user)
+    }
     registerRestService(IBackupService::class, authenticated = true) {
         val user = call.getUser() ?: throw IllegalArgumentException("No user found")
-        RpcBackupService(user, koin.get())
+        RpcBackupService(user, koin.get()).withAuthorization<IBackupService>(user)
     }
     registerRestService(IUserPlaylistBackupService::class, authenticated = true) {
         val user = call.getUser() ?: throw IllegalArgumentException("No user found")
-        RpcUserPlaylistBackupService(user, koin.get())
+        RpcUserPlaylistBackupService(user, koin.get()).withAuthorization<IUserPlaylistBackupService>(user)
     }
     registerRestService(IMirrorService::class, authenticated = true) {
         val user = call.getUser() ?: throw IllegalArgumentException("No user found")
-        MirrorRpcService(user, koin.get())
+        MirrorRpcService(koin.get()).withAuthorization<IMirrorService>(user)
     }
     registerRestService(IRemoteMirrorService::class, authenticated = true) {
         val user = call.getUser() ?: throw IllegalArgumentException("No user found")
-        RemoteMirrorRpcService(user, koin.get())
+        RemoteMirrorRpcService(user, koin.get()).withAuthorization<IRemoteMirrorService>(user)
     }
     registerRestService(IScheduledTaskLogService::class, authenticated = true) {
         val user = call.getUser() ?: throw IllegalArgumentException("No user found")
-        RpcScheduledTaskLogService(user, koin.get())
+        RpcScheduledTaskLogService(user, koin.get()).withAuthorization<IScheduledTaskLogService>(user)
     }
     registerRestService(IReleaseService::class, authenticated = true) {
         val user = call.getUser() ?: throw IllegalArgumentException("No user found")
-        RpcReleaseService(user, koin.get())
+        RpcReleaseService(user, koin.get()).withAuthorization<IReleaseService>(user)
     }
-    registerRestService(IMusicBrainzService::class, authenticated = true) { koin.get<CachedMusicBrainzService>() }
-    registerRestService(IMetadataService::class, authenticated = true) { koin.get<MetadataDispatcherService>() }
+    registerRestService(IMusicBrainzService::class, authenticated = true) {
+        val user = call.getUser()
+        koin.get<CachedMusicBrainzService>().withAuthorization<IMusicBrainzService>(user)
+    }
+    registerRestService(IMetadataService::class, authenticated = true) {
+        val user = call.getUser()
+        koin.get<MetadataDispatcherService>().withAuthorization<IMetadataService>(user)
+    }
 }
 
 private fun isPrimitive(type: KType): Boolean {
