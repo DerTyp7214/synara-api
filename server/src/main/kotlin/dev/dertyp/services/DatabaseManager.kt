@@ -27,6 +27,7 @@ class DatabaseManager(private val environment: ApplicationEnvironment) : Closeab
                     it[UserTable.username] = clientId
                     it[UserTable.passwordHash] = BCrypt.withDefaults()
                         .hashToString(12, clientSecret.toCharArray())
+                    it[UserTable.isAdmin] = true
                 }
             }
         }
