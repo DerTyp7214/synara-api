@@ -1,4 +1,4 @@
-package dev.dertyp.services.download
+package dev.dertyp.services.import.tidal
 
 import dev.dertyp.ApiClient
 import dev.dertyp.PlatformUUID
@@ -9,6 +9,9 @@ import dev.dertyp.services.ILrcLibService
 import dev.dertyp.services.ImageService
 import dev.dertyp.services.SongService
 import dev.dertyp.services.UserPlaylistService
+import dev.dertyp.services.import.ImportService
+import dev.dertyp.services.import.ProcessExecutionResult
+import dev.dertyp.services.import.TidalBaseImporter
 import dev.dertyp.services.metadata.IMetadataService
 import dev.dertyp.services.metadata.IMusicBrainzService
 import dev.dertyp.services.metadata.MetadataService
@@ -42,36 +45,36 @@ class TidalMetadataEnrichmentTest : KoinTest {
     private val songService = mockk<SongService>(relaxed = true)
     private val userPlaylistService = mockk<UserPlaylistService>(relaxed = true)
     private val imageService = mockk<ImageService>(relaxed = true)
-    private val downloadService = mockk<DownloadService>(relaxed = true)
+    private val importService = mockk<ImportService>(relaxed = true)
     private val lrcLibService = mockk<ILrcLibService>(relaxed = true)
     private val musicBrainzService = mockk<IMusicBrainzService>(relaxed = true)
 
     @TempDir
     lateinit var tempDir: Path
 
-    private lateinit var downloader: TestTidalDownloader
+    private lateinit var downloader: TestTidalImporter
 
-    private class TestTidalDownloader(
+    private class TestTidalImporter(
         indexer: IPluginIndexer,
         storageService: IServerStorageService,
         private val mockFiles: List<Path>
-    ) : TidalBaseDownloader(indexer, storageService) {
+    ) : TidalBaseImporter(indexer, storageService) {
         override val id: String = "test"
         override val enabled: Boolean = true
         override val loginCommand: MutableList<String> = mutableListOf()
-        override val downloadCommand: MutableList<String> = mutableListOf("test-dl")
-        override val favDownloadCommand: MutableList<String> = mutableListOf()
+        override val importCommand: MutableList<String> = mutableListOf("test-dl")
+        override val favImportCommand: MutableList<String> = mutableListOf()
         override fun authorizedCheck(result: ProcessExecutionResult): Boolean = true
         override fun tokenFileExists(): Boolean = true
         override fun canHandle(url: String): Boolean = true
-        override suspend fun executeDownloader(
+        override suspend fun executeImporter(
             command: Collection<String>,
             aliveCheck: suspend () -> Boolean,
             directory: File?,
             onLineReceived: suspend (String) -> Unit
         ): ProcessExecutionResult = ProcessExecutionResult(0, "Success", "")
 
-        override suspend fun collectDownloadedFiles(
+        override suspend fun collectImportedFiles(
             command: Collection<String>,
             maxRetries: Int,
             currentTry: Int,
@@ -85,7 +88,7 @@ class TidalMetadataEnrichmentTest : KoinTest {
             return Pair(ProcessExecutionResult(0, "Success", ""), mockFiles)
         }
 
-        suspend fun testDownloadContent(urls: List<String>) = downloadContent(urls, 1, { true }, null) {
+        suspend fun testDownloadContent(urls: List<String>) = importContent(urls, 1, { true }, null) {
             println("LIVE OUTPUT: $it")
         }
     }
@@ -97,7 +100,7 @@ class TidalMetadataEnrichmentTest : KoinTest {
                 single { songService }
                 single { userPlaylistService }
                 single { imageService }
-                single { downloadService }
+                single { importService }
                 single { lrcLibService }
                 single { musicBrainzService }
                 single { mockk<ApplicationEnvironment>(relaxed = true) }
@@ -114,7 +117,7 @@ class TidalMetadataEnrichmentTest : KoinTest {
 
         mockkStatic(AudioFileIO::class)
 
-        every { storageService.forDownloader(any()) } returns mockk(relaxed = true) {
+        every { storageService.forImporter(any()) } returns mockk(relaxed = true) {
             every { tracksPath } returns tempDir.toString()
         }
         
@@ -181,7 +184,7 @@ class TidalMetadataEnrichmentTest : KoinTest {
         Files.createFile(file)
         every { AudioFileIO.read(file.toFile()) } returns mockAudioFile
 
-        downloader = TestTidalDownloader(indexer, storageService, listOf(file))
+        downloader = TestTidalImporter(indexer, storageService, listOf(file))
 
         downloader.testDownloadContent(listOf(url))
 

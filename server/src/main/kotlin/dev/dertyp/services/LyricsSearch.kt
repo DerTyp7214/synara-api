@@ -1,7 +1,7 @@
 package dev.dertyp.services
 
 import dev.dertyp.executeCommand
-import dev.dertyp.services.download.ProcessExecutionResult
+import dev.dertyp.services.import.ProcessExecutionResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File

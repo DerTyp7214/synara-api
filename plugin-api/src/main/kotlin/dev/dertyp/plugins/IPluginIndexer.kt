@@ -1,7 +1,7 @@
 package dev.dertyp.plugins
 
 import dev.dertyp.PlatformUUID
-import dev.dertyp.services.download.DownloadBackend
+import dev.dertyp.services.import.ImportBackend
 import kotlinx.coroutines.Deferred
 import java.nio.file.Path
 
@@ -9,7 +9,7 @@ interface IPluginIndexer {
     val id: String
     val name: String
     val enabled: Boolean get() = true
-    val downloadBackends: List<DownloadBackend> get() = listOf(DownloadBackend(id))
+    val importBackends: List<ImportBackend> get() = listOf(ImportBackend(id))
 
     fun canHandle(path: Path): Boolean
 

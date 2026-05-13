@@ -1,9 +1,12 @@
-package dev.dertyp.services.download
+package dev.dertyp.services.import.tidal
 
 import dev.dertyp.executeCommand
 import dev.dertyp.findInPath
 import dev.dertyp.plugins.IPluginIndexer
 import dev.dertyp.plugins.IServerStorageService
+import dev.dertyp.services.import.ImportFavType
+import dev.dertyp.services.import.ProcessExecutionResult
+import dev.dertyp.services.import.TiddlService
 import io.mockk.*
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.AfterEach
@@ -37,7 +40,7 @@ class TiddlServiceTest {
             executeCommand(expectedCommand, any(), any(), any(), any(), any())
         } returns ProcessExecutionResult(0, "Success", "")
 
-        service.executeDownloader(command, { true }, null) {}
+        service.executeImporter(command, { true }, null) {}
 
         coVerify {
             executeCommand(expectedCommand, any(), any(), any(), any(), any())
@@ -52,7 +55,7 @@ class TiddlServiceTest {
             executeCommand(command, any(), any(), any(), any(), any())
         } returns ProcessExecutionResult(0, "Success", "")
 
-        service.executeDownloader(command, { true }, null) {}
+        service.executeImporter(command, { true }, null) {}
 
         coVerify {
             executeCommand(command, any(), any(), any(), any(), any())
@@ -72,11 +75,11 @@ class TiddlServiceTest {
         val tiddlService = spyk(service)
         val expectedCommand = listOf("tiddl", "download", "fav", "--types", "track")
         
-        coEvery { tiddlService.executeDownloader(any(), any(), any(), any()) } returns ProcessExecutionResult(0, "", "")
+        coEvery { tiddlService.executeImporter(any(), any(), any(), any()) } returns ProcessExecutionResult(0, "", "")
         
-        tiddlService.downloadFavoriteCollection(DownloadFavType.tracks, 3, { true }, null) {}
+        tiddlService.importFavoriteCollection(ImportFavType.tracks, 3, { true }, null) {}
         
-        coVerify { tiddlService.executeDownloader(expectedCommand, any(), any(), any()) }
+        coVerify { tiddlService.executeImporter(expectedCommand, any(), any(), any()) }
     }
 
     @Test
@@ -84,10 +87,10 @@ class TiddlServiceTest {
         val tiddlService = spyk(service)
         val expectedCommand = listOf("tiddl", "auth", "login", "--no-browser")
         
-        coEvery { tiddlService.executeDownloader(any(), any(), any(), any()) } returns ProcessExecutionResult(0, "", "")
+        coEvery { tiddlService.executeImporter(any(), any(), any(), any()) } returns ProcessExecutionResult(0, "", "")
         
         tiddlService.login({ true }) {}
         
-        coVerify { tiddlService.executeDownloader(expectedCommand, any(), any(), any()) }
+        coVerify { tiddlService.executeImporter(expectedCommand, any(), any(), any()) }
     }
 }

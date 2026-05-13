@@ -1,4 +1,4 @@
-package dev.dertyp.services.youtube
+package dev.dertyp.services.import.youtube
 
 import dev.dertyp.ApiClient
 import dev.dertyp.PlatformUUID
@@ -12,9 +12,11 @@ import dev.dertyp.plugins.IServerStorageService
 import dev.dertyp.services.LrcLibService
 import dev.dertyp.services.SongService
 import dev.dertyp.services.UserPlaylistService
-import dev.dertyp.services.download.DownloadService
-import dev.dertyp.services.download.ProcessExecutionResult
+import dev.dertyp.services.import.ImportService
+import dev.dertyp.services.import.ProcessExecutionResult
 import dev.dertyp.services.metadata.MusicBrainzService
+import dev.dertyp.services.youtube.YoutubeApiService
+import dev.dertyp.services.youtube.YoutubeService
 import io.mockk.*
 import kotlinx.coroutines.runBlocking
 import org.jaudiotagger.audio.AudioFile
@@ -42,7 +44,7 @@ class YoutubeMetadataEnrichmentTest : KoinTest {
 
     private val songService = mockk<SongService>(relaxed = true)
     private val userPlaylistService = mockk<UserPlaylistService>(relaxed = true)
-    private val downloadService = mockk<DownloadService>(relaxed = true)
+    private val importService = mockk<ImportService>(relaxed = true)
 
     @TempDir
     lateinit var tempDir: Path
@@ -58,7 +60,7 @@ class YoutubeMetadataEnrichmentTest : KoinTest {
         private val mockFiles: List<Path>
     ) : YoutubeService(indexer, storageService, youtubeApiService, lrcLibService, musicBrainzService) {
         
-        override suspend fun collectDownloadedFiles(
+        override suspend fun collectImportedFiles(
             command: Collection<String>,
             maxRetries: Int,
             currentTry: Int,
@@ -78,7 +80,7 @@ class YoutubeMetadataEnrichmentTest : KoinTest {
             modules(module {
                 single { songService }
                 single { userPlaylistService }
-                single { downloadService }
+                single { importService }
             })
         }
 
@@ -142,7 +144,7 @@ class YoutubeMetadataEnrichmentTest : KoinTest {
 
         service = TestYoutubeService(indexer, storageService, youtubeApiService, lrcLibService, musicBrainzService, listOf(file))
 
-        service.downloadContent(listOf(url), 1, { true }, null) {}
+        service.importContent(listOf(url), 1, { true }, null) {}
 
         verify { mockTag.setField(FieldKey.TITLE, "Enriched Title") }
         verify { mockTag.setField(FieldKey.ARTIST, "Enriched Artist") }

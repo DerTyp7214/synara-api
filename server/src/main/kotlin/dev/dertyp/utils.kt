@@ -3,7 +3,7 @@ package dev.dertyp
 import dev.dertyp.core.ClientCloseException
 import dev.dertyp.core.kill
 import dev.dertyp.core.lineFlow
-import dev.dertyp.services.download.ProcessExecutionResult
+import dev.dertyp.services.import.ProcessExecutionResult
 import io.ktor.util.logging.KtorSimpleLogger
 import io.ktor.util.logging.Logger
 import io.ktor.utils.io.CancellationException

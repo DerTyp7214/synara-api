@@ -1,10 +1,10 @@
-package dev.dertyp.services.download
+package dev.dertyp.services.import
 
 import dev.dertyp.PlatformUUID
 import dev.dertyp.core.*
 import dev.dertyp.data.User
 import dev.dertyp.data.UserSong
-import dev.dertyp.plugins.IDownloader
+import dev.dertyp.plugins.IImporter
 import dev.dertyp.plugins.IPluginIndexer
 import dev.dertyp.plugins.IServerStorageService
 import dev.dertyp.plugins.SearchResult
@@ -23,23 +23,23 @@ import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
 
 @OptIn(ExperimentalAtomicApi::class)
-abstract class BaseDownloader(override var indexer: IPluginIndexer, internal val storageService: IServerStorageService) : Service(), IDownloader {
+abstract class BaseImporter(override var indexer: IPluginIndexer, internal val storageService: IServerStorageService) : Service(), IImporter {
     override val id: String get() = this::class.simpleName!!.lowercase().removeSuffix("service")
     override val name: String get() = this::class.simpleName!!.removeSuffix("service")
     override val pluginId: String get() = id
 
-    protected val pluginStorage by lazy { storageService.forDownloader(DownloadBackend(id)) }
+    protected val pluginStorage by lazy { storageService.forImporter(ImportBackend(id)) }
 
     open val workingDirectory: File? get() = pluginStorage.tracksPath?.let { File(it).apply { mkdirs() } }
 
     internal val loggingIn = AtomicBoolean(false)
 
     internal abstract fun authorizedCheck(result: ProcessExecutionResult): Boolean
-    internal open fun parseFavType(favType: DownloadFavType): String = favType.name
+    internal open fun parseFavType(favType: ImportFavType): String = favType.name
     abstract override fun canHandle(url: String): Boolean
     abstract val loginCommand: MutableList<String>
-    abstract val downloadCommand: MutableList<String>
-    abstract val favDownloadCommand: MutableList<String>
+    abstract val importCommand: MutableList<String>
+    abstract val favImportCommand: MutableList<String>
 
     internal open suspend fun handleErrors(
         command: Collection<String>,
@@ -53,7 +53,7 @@ abstract class BaseDownloader(override var indexer: IPluginIndexer, internal val
     ): ProcessExecutionResult = result
 
     @OptIn(ExperimentalAtomicApi::class)
-    internal open suspend fun collectDownloadedFiles(
+    internal open suspend fun collectImportedFiles(
         command: Collection<String>,
         maxRetries: Int = 5,
         currentTry: Int = 0,
@@ -72,8 +72,8 @@ abstract class BaseDownloader(override var indexer: IPluginIndexer, internal val
         var result: ProcessExecutionResult
 
         try {
-            logProxy("Starting download process...")
-            result = executeDownloader(command, aliveCheck, workingDirectory) {
+            logProxy("Starting import process...")
+            result = executeImporter(command, aliveCheck, workingDirectory) {
                 if (!aliveCheck()) throw ClientCloseException()
                 logProxy(it)
             }
@@ -94,12 +94,12 @@ abstract class BaseDownloader(override var indexer: IPluginIndexer, internal val
                 }
             }
 
-            logProxy("Found ${pathLines.size} files since the download started.")
+            logProxy("Found ${pathLines.size} files since the import started.")
 
             paths.addAll(pathLines.map { Path(it) }.filter { it.exists() }.toMutableList())
 
             logProxy("Found ${paths.size} valid paths.")
-            logProxy("Download process finished with exit code ${result.exitCode}.")
+            logProxy("Import process finished with exit code ${result.exitCode}.")
 
             val pathAlternation =
                 "(${pluginStorage.playlistsPath}|${pluginStorage.albumsPath})"
@@ -177,7 +177,7 @@ abstract class BaseDownloader(override var indexer: IPluginIndexer, internal val
     }
 
     @OptIn(ExperimentalAtomicApi::class)
-    override suspend fun downloadIds(
+    override suspend fun importIds(
         ids: List<String>,
         type: Type,
         user: User,
@@ -200,7 +200,7 @@ abstract class BaseDownloader(override var indexer: IPluginIndexer, internal val
     }
 
     @OptIn(ExperimentalAtomicApi::class)
-    override suspend fun downloadContent(
+    override suspend fun importContent(
         urls: List<String>,
         maxRetries: Int,
         aliveCheck: suspend () -> Boolean,
@@ -209,14 +209,14 @@ abstract class BaseDownloader(override var indexer: IPluginIndexer, internal val
     ): ProcessExecutionResult {
         loggingIn.waitForChange(false)
 
-        val command = downloadCommand + urls
-        val (result) = collectDownloadedFiles(command, maxRetries, 0, aliveCheck, userId, onLiveOutput)
+        val command = importCommand + urls
+        val (result) = collectImportedFiles(command, maxRetries, 0, aliveCheck, userId, onLiveOutput)
         return result
     }
 
     @OptIn(ExperimentalAtomicApi::class)
-    override suspend fun downloadFavoriteCollection(
-        type: DownloadFavType,
+    override suspend fun importFavoriteCollection(
+        type: ImportFavType,
         maxRetries: Int,
         aliveCheck: suspend () -> Boolean,
         userId: PlatformUUID?,
@@ -224,8 +224,8 @@ abstract class BaseDownloader(override var indexer: IPluginIndexer, internal val
     ): ProcessExecutionResult {
         loggingIn.waitForChange(false)
 
-        val command = favDownloadCommand + parseFavType(favType = type)
-        val (result) = collectDownloadedFiles(command, maxRetries, 0, aliveCheck, userId, onLiveOutput)
+        val command = favImportCommand + parseFavType(favType = type)
+        val (result) = collectImportedFiles(command, maxRetries, 0, aliveCheck, userId, onLiveOutput)
         return result
     }
 
@@ -240,7 +240,7 @@ abstract class BaseDownloader(override var indexer: IPluginIndexer, internal val
         val command = loginCommand
         val startTime = Clock.System.now()
         val response = try {
-            executeDownloader(command, {
+            executeImporter(command, {
                 Clock.System.now().minus(startTime) < 3.minutes && aliveCheck()
             }, workingDirectory) {
                 onLiveOutput(it)
@@ -263,7 +263,7 @@ abstract class BaseDownloader(override var indexer: IPluginIndexer, internal val
         val command = loginCommand
         val startTime = Clock.System.now()
         val result = try {
-            executeDownloader(command, { Clock.System.now().minus(startTime) < 10.seconds && aliveCheck() }, workingDirectory) {
+            executeImporter(command, { Clock.System.now().minus(startTime) < 10.seconds && aliveCheck() }, workingDirectory) {
                 yield()
             }
         } finally {
@@ -278,7 +278,7 @@ abstract class BaseDownloader(override var indexer: IPluginIndexer, internal val
         return true
     }
 
-    internal abstract suspend fun executeDownloader(
+    internal abstract suspend fun executeImporter(
         command: Collection<String>,
         aliveCheck: suspend () -> Boolean,
         directory: File? = workingDirectory,

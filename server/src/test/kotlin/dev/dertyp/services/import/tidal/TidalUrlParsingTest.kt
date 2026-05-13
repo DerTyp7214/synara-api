@@ -1,4 +1,4 @@
-package dev.dertyp.services.download
+package dev.dertyp.services.import
 
 import dev.dertyp.plugins.IPluginIndexer
 import dev.dertyp.plugins.IServerStorageService
@@ -12,19 +12,19 @@ class TidalUrlParsingTest {
     private val indexer = mockk<IPluginIndexer>(relaxed = true)
     private val storageService = mockk<IServerStorageService>(relaxed = true)
 
-    private class TestTidalDownloader(
+    private class TestTidalImporter(
         indexer: IPluginIndexer,
         storageService: IServerStorageService
-    ) : TidalBaseDownloader(indexer, storageService) {
+    ) : TidalBaseImporter(indexer, storageService) {
         override val id: String = "test"
         override val enabled: Boolean = true
         override val loginCommand: MutableList<String> = mutableListOf()
-        override val downloadCommand: MutableList<String> = mutableListOf()
-        override val favDownloadCommand: MutableList<String> = mutableListOf()
+        override val importCommand: MutableList<String> = mutableListOf()
+        override val favImportCommand: MutableList<String> = mutableListOf()
         override fun authorizedCheck(result: ProcessExecutionResult): Boolean = true
         override fun tokenFileExists(): Boolean = true
         override fun canHandle(url: String): Boolean = true
-        override suspend fun executeDownloader(
+        override suspend fun executeImporter(
             command: Collection<String>,
             aliveCheck: suspend () -> Boolean,
             directory: File?,
@@ -32,7 +32,7 @@ class TidalUrlParsingTest {
         ): ProcessExecutionResult = ProcessExecutionResult(0, "", "")
     }
 
-    private val downloader = TestTidalDownloader(indexer, storageService)
+    private val downloader = TestTidalImporter(indexer, storageService)
 
     @Test
     fun `parseUrl should handle various Tidal links`() = runBlocking {

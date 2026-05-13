@@ -17,8 +17,8 @@ import dev.dertyp.serializers.LocalDateAdapter
 import dev.dertyp.serializers.OffsetDateTimeAdapter
 import dev.dertyp.server.BuildConfig
 import dev.dertyp.services.*
-import dev.dertyp.services.download.DownloadService
-import dev.dertyp.services.download.DownloaderProxy
+import dev.dertyp.services.import.ImportService
+import dev.dertyp.services.import.ImporterProxy
 import dev.dertyp.services.metadata.*
 import dev.dertyp.services.schedule.*
 import io.ktor.server.application.Application
@@ -105,14 +105,14 @@ fun Application.module() {
             singleOf(::DatabaseManager)
             singleOf(::PlaylistService)
             singleOf(::LibraryMergeService)
-            singleOf(::DownloadService)
+            singleOf(::ImportService)
             singleOf(::ScheduleService)
             singleOf(::ServerStatsService)
             singleOf(::UserPlaylistService)
             singleOf(::RefreshTokenService)
             singleOf(::ScheduledTaskLogService)
             singleOf(::DiscoveryService)
-            singleOf(::DownloaderProxy)
+            singleOf(::ImporterProxy)
             singleOf(::SessionService)
             singleOf(::PlaybackService)
             singleOf(::CustomAudioService)

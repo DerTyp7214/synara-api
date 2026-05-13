@@ -1,13 +1,14 @@
-package dev.dertyp.services.soundcloud
+package dev.dertyp.services.import.soundcloud
 
 import dev.dertyp.plugins.IPluginIndexer
 import dev.dertyp.plugins.IServerStorageService
 import dev.dertyp.services.LrcLibService
 import dev.dertyp.services.SongService
 import dev.dertyp.services.UserPlaylistService
-import dev.dertyp.services.download.DownloadService
-import dev.dertyp.services.download.Type
+import dev.dertyp.services.import.ImportService
+import dev.dertyp.services.import.Type
 import dev.dertyp.services.metadata.MusicBrainzService
+import dev.dertyp.services.soundcloud.SoundcloudService
 import io.mockk.mockk
 import io.mockk.mockkStatic
 import io.mockk.unmockkAll
@@ -30,7 +31,7 @@ class SoundcloudServiceTest : KoinTest {
     
     private val songService = mockk<SongService>(relaxed = true)
     private val userPlaylistService = mockk<UserPlaylistService>(relaxed = true)
-    private val downloadService = mockk<DownloadService>(relaxed = true)
+    private val importService = mockk<ImportService>(relaxed = true)
 
     @BeforeEach
     fun setup() {
@@ -38,7 +39,7 @@ class SoundcloudServiceTest : KoinTest {
             modules(module {
                 single { songService }
                 single { userPlaylistService }
-                single { downloadService }
+                single { importService }
             })
         }
 

@@ -1,6 +1,6 @@
 package dev.dertyp.plugins
 
-import dev.dertyp.services.download.DownloadBackend
+import dev.dertyp.services.import.ImportBackend
 
 interface IServerStorageService {
     val tracksPath: String?
@@ -10,5 +10,5 @@ interface IServerStorageService {
     val imagesPath: String
     val secondaryTracksPaths: List<String>
 
-    fun forDownloader(backend: DownloadBackend): IServerStorageService
+    fun forImporter(backend: ImportBackend): IServerStorageService
 }

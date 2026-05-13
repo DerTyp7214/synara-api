@@ -1,7 +1,7 @@
 package dev.dertyp
 
 import dev.dertyp.plugins.PluginManager
-import dev.dertyp.services.download.DownloadService
+import dev.dertyp.services.import.ImportService
 import io.ktor.server.application.Application
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -10,10 +10,10 @@ import org.koin.ktor.ext.inject
 
 fun Application.configureServices() {
     val pluginManager by inject<PluginManager>()
-    val downloadService by inject<DownloadService>()
+    val importService by inject<ImportService>()
 
     CoroutineScope(Dispatchers.IO).launch {
         launch { pluginManager.startService() }
-        launch { downloadService.startService() }
+        launch { importService.startService() }
     }
 }

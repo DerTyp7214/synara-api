@@ -3,6 +3,7 @@ package dev.dertyp.services
 import at.favre.lib.crypto.bcrypt.BCrypt
 import dev.dertyp.data.AuthenticationRequest
 import dev.dertyp.data.User
+import dev.dertyp.data.UserCapability
 import dev.dertyp.db.ImageTable
 import dev.dertyp.db.UserCapabilityTable
 import dev.dertyp.db.UserTable
@@ -35,6 +36,10 @@ class RpcUserService(
 
     override suspend fun setDisplayName(name: String?) {
         userService.updateDisplayName(user.id, name)
+    }
+
+    override suspend fun setCapabilities(id: UUID, capabilities: List<UserCapability>) {
+        userService.setCapabilities(id, capabilities)
     }
 }
 
@@ -80,6 +85,14 @@ class UserService : Service() {
     suspend fun updateDisplayName(id: UUID, name: String?) = dbQuery {
         UserTable.update({ UserTable.id eq id }) {
             it[displayName] = name
+        }
+    }
+
+    suspend fun setCapabilities(id: UUID, capabilities: List<UserCapability>) = dbQuery {
+        UserCapabilityTable.deleteWhere { userId eq id }
+        UserCapabilityTable.batchInsert(capabilities) {
+            this[UserCapabilityTable.userId] = id
+            this[UserCapabilityTable.capability] = it
         }
     }
 

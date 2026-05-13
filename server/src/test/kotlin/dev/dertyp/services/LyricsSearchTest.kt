@@ -1,7 +1,7 @@
 package dev.dertyp.services
 
 import dev.dertyp.executeCommand
-import dev.dertyp.services.download.ProcessExecutionResult
+import dev.dertyp.services.import.ProcessExecutionResult
 import io.mockk.coEvery
 import io.mockk.mockkStatic
 import io.mockk.unmockkStatic

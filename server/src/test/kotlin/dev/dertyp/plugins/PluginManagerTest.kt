@@ -35,7 +35,7 @@ class PluginManagerTest : KoinTest {
                 single { storageService }
                 single { indexer }
 
-                single { mockk<IPluginDownloadService>(relaxed = true) }
+                single { mockk<IPluginImportService>(relaxed = true) }
                 single { mockk<SongLibrary>(relaxed = true) }
                 single { mockk<AlbumLibrary>(relaxed = true) }
                 single { mockk<ArtistLibrary>(relaxed = true) }
@@ -74,7 +74,7 @@ class PluginManagerTest : KoinTest {
         
         verify(exactly = 1) { disabledPlugin.getKoinModule() }
 
-        assertEquals(0, pluginManager.getAllDownloaders().size)
+        assertEquals(0, pluginManager.getAllImporters().size)
         verify(exactly = 0) { disabledPlugin.init(any()) }
 
         assertThrows<NoDefinitionFoundException> {

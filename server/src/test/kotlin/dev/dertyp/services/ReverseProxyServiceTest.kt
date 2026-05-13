@@ -2,9 +2,9 @@ package dev.dertyp.services
 
 import dev.dertyp.Indexer
 import dev.dertyp.proxy.ProxyMessage
+import dev.dertyp.services.import.ImportService
+import dev.dertyp.services.import.ImporterProxy
 import dev.dertyp.services.metadata.MusicBrainzService
-import dev.dertyp.services.download.DownloadService
-import dev.dertyp.services.download.DownloaderProxy
 import io.ktor.server.application.Application
 import io.ktor.server.application.install
 import io.ktor.server.config.MapApplicationConfig
@@ -16,13 +16,8 @@ import io.ktor.server.websocket.webSocket
 import io.ktor.websocket.CloseReason
 import io.ktor.websocket.close
 import io.mockk.mockk
-import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withTimeout
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import org.koin.core.context.startKoin
@@ -56,9 +51,9 @@ class ReverseProxyServiceTest : KoinTest {
                 single { mockk<ArtistService>(relaxed = true) }
                 single { mockk<FavSyncService>(relaxed = true) }
                 single { mockk<PlaylistService>(relaxed = true) }
-                single { mockk<DownloadService>(relaxed = true) }
+                single { mockk<ImportService>(relaxed = true) }
                 single { mockk<UserPlaylistService>(relaxed = true) }
-                single { mockk<DownloaderProxy>(relaxed = true) }
+                single { mockk<ImporterProxy>(relaxed = true) }
                 single { mockk<PlaybackService>(relaxed = true) }
                 single { mockk<CustomAudioService>(relaxed = true) }
                 single { mockk<DbManagementService>(relaxed = true) }

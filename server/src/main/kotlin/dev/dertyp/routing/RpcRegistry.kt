@@ -6,10 +6,10 @@ import dev.dertyp.RpcIndexer
 import dev.dertyp.core.getUser
 import dev.dertyp.data.User
 import dev.dertyp.services.*
-import dev.dertyp.services.download.DownloadRpcService
-import dev.dertyp.services.download.DownloadService
-import dev.dertyp.services.download.DownloaderProxy
-import dev.dertyp.services.download.IDownloadService
+import dev.dertyp.services.import.IImportService
+import dev.dertyp.services.import.ImportRpcService
+import dev.dertyp.services.import.ImportService
+import dev.dertyp.services.import.ImporterProxy
 import dev.dertyp.services.metadata.CachedMusicBrainzService
 import dev.dertyp.services.metadata.IMetadataService
 import dev.dertyp.services.metadata.IMusicBrainzService
@@ -84,11 +84,11 @@ private fun registerAuthenticated(koin: Koin, call: ApplicationCall, user: User,
     val lyricsSearch = koin.get<LyricsSearch>()
     val lyricsService = koin.get<LyricsService>()
     val artistService = koin.get<ArtistService>()
+    val importService = koin.get<ImportService>()
     val favSyncService = koin.get<FavSyncService>()
     val playlistService = koin.get<PlaylistService>()
-    val downloadService = koin.get<DownloadService>()
     val userPlaylistService = koin.get<UserPlaylistService>()
-    val downloaderProxy = koin.get<DownloaderProxy>()
+    val importerProxy = koin.get<ImporterProxy>()
     val sessionService = koin.get<SessionService>()
     val playbackService = koin.get<PlaybackService>()
     val customAudioService = koin.get<CustomAudioService>()
@@ -115,7 +115,7 @@ private fun registerAuthenticated(koin: Koin, call: ApplicationCall, user: User,
     registrar.register(ILyricsService::class) { lyricsService.withAuthorization<ILyricsService>(user).withLogging<ILyricsService>(call) }
     registrar.register(IArtistService::class) { ArtistRpcService(user, artistService).withAuthorization<IArtistService>(user).withLogging<IArtistService>(call) }
     registrar.register(IFavSyncService::class) { FavSyncRpcService(user, favSyncService).withAuthorization<IFavSyncService>(user).withLogging<IFavSyncService>(call) }
-    registrar.register(IDownloadService::class) { DownloadRpcService(user, call, downloadService, downloaderProxy).withAuthorization<IDownloadService>(user).withLogging<IDownloadService>(call) }
+    registrar.register(IImportService::class) { ImportRpcService(user, call, importService, importerProxy).withAuthorization<IImportService>(user).withLogging<IImportService>(call) }
     registrar.register(IPlaylistService::class) { playlistService.withAuthorization<IPlaylistService>(user).withLogging<IPlaylistService>(call) }
     registrar.register(IUserPlaylistService::class) { userPlaylistService.withAuthorization<IUserPlaylistService>(user).withLogging<IUserPlaylistService>(call) }
     registrar.register(ISessionService::class) { RpcSessionService(user, sessionService).withAuthorization<ISessionService>(user).withLogging<ISessionService>(call) }

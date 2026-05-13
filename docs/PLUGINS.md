@@ -1,6 +1,6 @@
 # Synara Custom Plugins
 
-Synara supports an extensible plugin architecture that allows you to add custom downloaders, indexers, and other services.
+Synara supports an extensible plugin architecture that allows you to add custom importers, indexers, and other services.
 
 ## Plugin Structure
 
@@ -16,14 +16,14 @@ interface ISynaraPlugin {
 
     fun init(context: PluginContext)
 
-    fun getDownloaders(): List<IDownloader> = emptyList()
+    fun getImporters(): List<IImporter> = emptyList()
     fun getIndexers(): List<IPluginIndexer> = emptyList()
 }
 ```
 
 ### Components
 
-- **`IDownloader`**: Responsible for handling specific URLs or content types. It defines logic for downloading and metadata enrichment.
+- **`IImporter`**: Responsible for handling specific URLs or content types. It defines logic for importing and metadata enrichment.
 - **`IPluginIndexer`**: Responsible for scanning the filesystem and inserting media records into the Synara database.
 - **`PluginContext`**: Provides access to core Synara services like the logger, storage, and database libraries.
 
@@ -31,7 +31,7 @@ interface ISynaraPlugin {
 
 1.  **Depend on `plugin-api`**: Add the Synara `plugin-api` module as a dependency in your project.
 2.  **Implement `ISynaraPlugin`**: Create a class that implements `ISynaraPlugin`.
-3.  **Define Services**: Implement `IDownloader` or `IPluginIndexer` if your plugin provides these capabilities.
+3.  **Define Services**: Implement `IImporter` or `IPluginIndexer` if your plugin provides these capabilities.
 4.  **Register via `ServiceLoader`**:
     -   Create a file named `dev.dertyp.plugins.ISynaraPlugin` in `src/main/resources/META-INF/services/`.
     -   Add the fully qualified name of your implementation class to this file.

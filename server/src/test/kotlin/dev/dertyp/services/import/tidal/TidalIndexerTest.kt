@@ -1,4 +1,4 @@
-package dev.dertyp.services.download
+package dev.dertyp.services.import
 
 import dev.dertyp.plugins.PluginContext
 import io.mockk.*

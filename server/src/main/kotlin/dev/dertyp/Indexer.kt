@@ -1,36 +1,15 @@
 package dev.dertyp
 
 import dev.dertyp.data.User
-import dev.dertyp.plugins.AlbumLibrary
-import dev.dertyp.plugins.ArtistLibrary
-import dev.dertyp.plugins.BaseIndexer
-import dev.dertyp.plugins.IPluginDownloadService
-import dev.dertyp.plugins.IPluginIndexer
-import dev.dertyp.plugins.IScheduleService
-import dev.dertyp.plugins.ImageLibrary
-import dev.dertyp.plugins.PlaylistLibrary
-import dev.dertyp.plugins.PluginContext
-import dev.dertyp.plugins.SongLibrary
-import dev.dertyp.services.AlbumService
-import dev.dertyp.services.ArtistService
-import dev.dertyp.services.ILrcLibService
-import dev.dertyp.services.ImageService
-import dev.dertyp.services.LrcLibService
-import dev.dertyp.services.SongService
-import dev.dertyp.services.StorageService
-import dev.dertyp.services.UserPlaylistService
-import dev.dertyp.services.download.DownloadBackend
-import dev.dertyp.services.download.DownloadService
+import dev.dertyp.plugins.*
+import dev.dertyp.services.*
+import dev.dertyp.services.import.ImportBackend
+import dev.dertyp.services.import.ImportService
 import dev.dertyp.services.metadata.IMetadataService
 import dev.dertyp.services.metadata.MetadataDispatcherService
 import dev.dertyp.services.schedule.ScheduleService
 import io.ktor.util.logging.KtorSimpleLogger
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Deferred
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import org.koin.core.component.KoinComponent
@@ -76,9 +55,9 @@ class Indexer(
 
     private val coreIndexer = object : BaseIndexer(object : PluginContext, KoinComponent {
         override val logger = this@Indexer.logger
-        override val storageService = this@Indexer.storageService.forDownloader(DownloadBackend("core"))
+        override val storageService = this@Indexer.storageService.forImporter(ImportBackend("core"))
         override val indexer: IPluginIndexer get() = this@Indexer
-        override val downloadService: IPluginDownloadService get() = getKoin().get<DownloadService>()
+        override val importService: IPluginImportService get() = getKoin().get<ImportService>()
         override val songLibrary: SongLibrary get() = songService
         override val albumLibrary: AlbumLibrary get() = getKoin().get<AlbumService>()
         override val artistLibrary: ArtistLibrary get() = getKoin().get<ArtistService>()

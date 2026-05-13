@@ -457,7 +457,7 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
 
                             val imageBytes = ApiClient.instance.safeGet<ByteArray>(image.url)
                             if (imageBytes == null) {
-                                onProgress(progress, "Failed to download image for \"$name\"")
+                                onProgress(progress, "Failed to import image for \"$name\"")
                                 if (updateOnFailure) updateLastCheck(id)
                                 continue
                             }
@@ -708,7 +708,7 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
 
                             val imageBytes = ApiClient.instance.safeGet<ByteArray>(image.url)
                             if (imageBytes == null) {
-                                onProgress(progress, "Failed to download image for \"$name\"")
+                                onProgress(progress, "Failed to import image for \"$name\"")
                                 continue
                             }
 

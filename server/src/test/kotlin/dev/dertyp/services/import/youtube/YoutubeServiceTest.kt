@@ -1,4 +1,4 @@
-package dev.dertyp.services.youtube
+package dev.dertyp.services.import.youtube
 
 import dev.dertyp.Indexer
 import dev.dertyp.findInPath
@@ -6,9 +6,11 @@ import dev.dertyp.services.LrcLibService
 import dev.dertyp.services.SongService
 import dev.dertyp.services.StorageService
 import dev.dertyp.services.UserPlaylistService
-import dev.dertyp.services.download.DownloadService
-import dev.dertyp.services.download.Type
+import dev.dertyp.services.import.ImportService
+import dev.dertyp.services.import.Type
 import dev.dertyp.services.metadata.MusicBrainzService
+import dev.dertyp.services.youtube.YoutubeApiService
+import dev.dertyp.services.youtube.YoutubeService
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkStatic
@@ -34,7 +36,7 @@ class YoutubeServiceTest : KoinTest {
     
     private val songService = mockk<SongService>(relaxed = true)
     private val userPlaylistService = mockk<UserPlaylistService>(relaxed = true)
-    private val downloadService = mockk<DownloadService>(relaxed = true)
+    private val importService = mockk<ImportService>(relaxed = true)
 
     @BeforeEach
     fun setup() {
@@ -42,14 +44,20 @@ class YoutubeServiceTest : KoinTest {
             modules(module {
                 single { songService }
                 single { userPlaylistService }
-                single { downloadService }
+                single { importService }
             })
         }
 
         mockkStatic("dev.dertyp.UtilsKt")
         every { findInPath("yt-dlp") } returns "/usr/bin/yt-dlp"
 
-        service = YoutubeService(indexer, storageService, youtubeApiService, lrcLibService, musicBrainzService)
+        service = YoutubeService(
+            indexer,
+            storageService,
+            youtubeApiService,
+            lrcLibService,
+            musicBrainzService
+        )
     }
 
     @AfterEach
@@ -78,7 +86,13 @@ class YoutubeServiceTest : KoinTest {
         assertTrue(service.enabled)
 
         every { findInPath("yt-dlp") } returns null
-        val serviceNoYtdlp = YoutubeService(indexer, storageService, youtubeApiService, lrcLibService, musicBrainzService)
+        val serviceNoYtdlp = YoutubeService(
+            indexer,
+            storageService,
+            youtubeApiService,
+            lrcLibService,
+            musicBrainzService
+        )
         assertFalse(serviceNoYtdlp.enabled)
     }
 }

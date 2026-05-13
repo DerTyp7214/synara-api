@@ -35,7 +35,7 @@ abstract class BaseIndexer(
     override val audioExtension = "flac"
     override val playlistExtension = "m3u"
 
-    protected val pluginStorages by lazy { downloadBackends.map { context.storageService.forDownloader(it) } }
+    protected val pluginStorages by lazy { importBackends.map { context.storageService.forImporter(it) } }
 
     val isActive = AtomicBoolean(false)
 

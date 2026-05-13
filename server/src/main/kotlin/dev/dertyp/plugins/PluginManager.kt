@@ -2,9 +2,9 @@ package dev.dertyp.plugins
 
 import dev.dertyp.Indexer
 import dev.dertyp.services.*
-import dev.dertyp.services.download.DownloadBackend
-import dev.dertyp.services.download.DownloadService
-import dev.dertyp.services.download.TidalPlugin
+import dev.dertyp.services.import.ImportBackend
+import dev.dertyp.services.import.ImportService
+import dev.dertyp.services.import.TidalPlugin
 import dev.dertyp.services.metadata.IMetadataService
 import dev.dertyp.services.metadata.MetadataDispatcherService
 import dev.dertyp.services.schedule.ScheduleService
@@ -22,7 +22,7 @@ import java.util.ServiceLoader
 
 val pluginModule = module {
     single<IPluginIndexer> { get<Indexer>() }
-    single<IPluginDownloadService> { get<DownloadService>() }
+    single<IPluginImportService> { get<ImportService>() }
     single<SongLibrary> { get<SongService>() }
     single<AlbumLibrary> { get<AlbumService>() }
     single<ArtistLibrary> { get<ArtistService>() }
@@ -40,10 +40,10 @@ class PluginManager(
 ) : Service() {
     private val pluginsDir = File("plugins").apply { mkdirs() }
     private val loadedPlugins = mutableListOf<ISynaraPlugin>()
-    private val downloaders = mutableMapOf<String, IDownloader>()
+    private val importers = mutableMapOf<String, IImporter>()
     private val indexers = mutableSetOf<IPluginIndexer>()
 
-    var defaultDownloaderId: String = "tiddl"
+    var defaultImporterId: String = "tiddl"
 
     companion object {
         const val CURRENT_API_VERSION = 1
@@ -56,11 +56,11 @@ class PluginManager(
         loadPlugins()
     }
 
-    fun registerDownloader(downloader: IDownloader) {
-        downloaders[downloader.id] = downloader
-        indexers.add(downloader.indexer)
-        indexer.registerIndexer(downloader.indexer)
-        logger.info("Registered downloader: ${downloader.name} (${downloader.id})")
+    fun registerImporter(importer: IImporter) {
+        importers[importer.id] = importer
+        indexers.add(importer.indexer)
+        indexer.registerIndexer(importer.indexer)
+        logger.info("Registered importer: ${importer.name} (${importer.id})")
     }
 
     private fun loadPlugin(plugin: ISynaraPlugin) {
@@ -80,7 +80,7 @@ class PluginManager(
             }
 
             val pluginContext = object : PluginContext by baseContext {
-                override val storageService = baseContext.storageService.forDownloader(DownloadBackend(plugin.id))
+                override val storageService = baseContext.storageService.forImporter(ImportBackend(plugin.id))
             }
 
             plugin.init(pluginContext)
@@ -91,8 +91,8 @@ class PluginManager(
                 indexer.registerIndexer(it)
             }
 
-            plugin.getDownloaders().forEach {
-                registerDownloader(it)
+            plugin.getImporters().forEach {
+                registerImporter(it)
             }
             logger.info("Loaded plugin: ${plugin.name} (${plugin.id})")
         } catch (e: Exception) {
@@ -104,7 +104,7 @@ class PluginManager(
         override val logger = KtorSimpleLogger("Plugin")
         override val storageService = this@PluginManager.storageService
         override val indexer = this@PluginManager.indexer
-        override val downloadService: IPluginDownloadService by inject()
+        override val importService: IPluginImportService by inject()
         override val songLibrary: SongLibrary by inject()
         override val albumLibrary: AlbumLibrary by inject()
         override val artistLibrary: ArtistLibrary by inject()
@@ -128,8 +128,8 @@ class PluginManager(
         }
     }
 
-    fun getDownloader(id: String = defaultDownloaderId): IDownloader? = downloaders[id]
-    fun getAllDownloaders(): Collection<IDownloader> = downloaders.values
+    fun getImporter(id: String = defaultImporterId): IImporter? = importers[id]
+    fun getAllImporters(): Collection<IImporter> = importers.values
     fun getAllIndexers(): Collection<IPluginIndexer> = indexers
 
     fun getMetadataService(type: IMetadataService.MetadataType): IMetadataService? {

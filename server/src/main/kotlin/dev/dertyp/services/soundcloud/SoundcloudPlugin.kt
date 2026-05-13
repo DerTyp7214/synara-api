@@ -1,6 +1,6 @@
 package dev.dertyp.services.soundcloud
 
-import dev.dertyp.plugins.IDownloader
+import dev.dertyp.plugins.IImporter
 import dev.dertyp.plugins.IPluginIndexer
 import dev.dertyp.plugins.ISynaraPlugin
 import dev.dertyp.plugins.PluginContext
@@ -27,6 +27,6 @@ class SoundcloudPlugin : ISynaraPlugin, KoinComponent {
         singleOf(::SoundcloudService)
     }
 
-    override fun getDownloader(): IDownloader = soundcloudService
+    override fun getImporter(): IImporter = soundcloudService
     override fun getIndexer(): IPluginIndexer = indexer
 }

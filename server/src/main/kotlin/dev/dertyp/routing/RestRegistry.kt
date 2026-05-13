@@ -10,8 +10,8 @@ import dev.dertyp.core.toUUIDOrNull
 import dev.dertyp.data.PaginatedResponse
 import dev.dertyp.rpc.annotations.*
 import dev.dertyp.services.*
-import dev.dertyp.services.download.DownloadRpcService
-import dev.dertyp.services.download.IDownloadService
+import dev.dertyp.services.import.IImportService
+import dev.dertyp.services.import.ImportRpcService
 import dev.dertyp.services.metadata.CachedMusicBrainzService
 import dev.dertyp.services.metadata.IMetadataService
 import dev.dertyp.services.metadata.IMusicBrainzService
@@ -382,6 +382,7 @@ private fun KFunction<*>.getRestMethodAndName(): Pair<String, String> {
         name.startsWith("all") -> "GET" to name
         name.startsWith("liked") -> "GET" to name
         name.startsWith("stream") -> "GET" to name
+        name.startsWith("import") -> "GET" to name
         name.startsWith("download") -> "GET" to name
         name.startsWith("get") -> "GET" to name.removePrefix("get")
         name.startsWith("list") -> "GET" to name.removePrefix("list")
@@ -453,9 +454,9 @@ fun Route.registerAuthenticatedRestServices(koin: Koin) {
         val user = call.getUser() ?: throw IllegalArgumentException("No user found")
         FavSyncRpcService(user, koin.get()).withAuthorization<IFavSyncService>(user)
     }
-    registerRestService(IDownloadService::class, authenticated = true) {
+    registerRestService(IImportService::class, authenticated = true) {
         val user = call.getUser() ?: throw IllegalArgumentException("No user found")
-        DownloadRpcService(user, call, koin.get(), koin.get()).withAuthorization<IDownloadService>(user)
+        ImportRpcService(user, call, koin.get(), koin.get()).withAuthorization<IImportService>(user)
     }
     registerRestService(IPlaylistService::class, authenticated = true) {
         val user = call.getUser()

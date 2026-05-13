@@ -1,6 +1,6 @@
 package dev.dertyp.services.youtube
 
-import dev.dertyp.plugins.IDownloader
+import dev.dertyp.plugins.IImporter
 import dev.dertyp.plugins.IPluginIndexer
 import dev.dertyp.plugins.ISynaraPlugin
 import dev.dertyp.plugins.PluginContext
@@ -28,6 +28,6 @@ class YoutubePlugin : ISynaraPlugin, KoinComponent {
         singleOf(::YoutubeService)
     }
 
-    override fun getDownloader(): IDownloader = youtubeService
+    override fun getImporter(): IImporter = youtubeService
     override fun getIndexer(): IPluginIndexer = indexer
 }

@@ -8,7 +8,7 @@ interface PluginContext {
     val logger: Logger
     val storageService: IServerStorageService
     val indexer: IPluginIndexer
-    val downloadService: IPluginDownloadService
+    val importService: IPluginImportService
     val songLibrary: SongLibrary
     val albumLibrary: AlbumLibrary
     val artistLibrary: ArtistLibrary

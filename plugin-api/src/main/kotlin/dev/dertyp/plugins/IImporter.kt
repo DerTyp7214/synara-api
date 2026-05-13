@@ -3,10 +3,10 @@ package dev.dertyp.plugins
 import dev.dertyp.PlatformUUID
 import dev.dertyp.data.User
 import dev.dertyp.data.UserSong
-import dev.dertyp.services.download.DownloadFavType
-import dev.dertyp.services.download.IdsWrapper
-import dev.dertyp.services.download.ProcessExecutionResult
-import dev.dertyp.services.download.Type
+import dev.dertyp.services.import.IdsWrapper
+import dev.dertyp.services.import.ImportFavType
+import dev.dertyp.services.import.ProcessExecutionResult
+import dev.dertyp.services.import.Type
 import dev.dertyp.services.metadata.IMetadataService
 
 data class SearchResult(
@@ -17,7 +17,7 @@ data class SearchResult(
     val metadata: Map<String, String> = emptyMap()
 )
 
-interface IDownloader {
+interface IImporter {
     val id: String
     val name: String
     val pluginId: String
@@ -34,14 +34,14 @@ interface IDownloader {
         user: User
     ): IdsWrapper
 
-    suspend fun downloadIds(
+    suspend fun importIds(
         ids: List<String>,
         type: Type,
         user: User,
         callback: suspend (List<String>) -> Unit
     ): Pair<Boolean, List<UserSong>>
 
-    suspend fun downloadContent(
+    suspend fun importContent(
         urls: List<String>,
         maxRetries: Int,
         aliveCheck: suspend () -> Boolean,
@@ -49,8 +49,8 @@ interface IDownloader {
         onLiveOutput: suspend (String) -> Unit
     ): ProcessExecutionResult
 
-    suspend fun downloadFavoriteCollection(
-        type: DownloadFavType,
+    suspend fun importFavoriteCollection(
+        type: ImportFavType,
         maxRetries: Int,
         aliveCheck: suspend () -> Boolean,
         userId: PlatformUUID? = null,

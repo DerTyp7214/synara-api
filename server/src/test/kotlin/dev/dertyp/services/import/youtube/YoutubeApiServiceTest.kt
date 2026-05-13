@@ -1,7 +1,8 @@
-package dev.dertyp.services.youtube
+package dev.dertyp.services.import.youtube
 
 import dev.dertyp.ApiClient
 import dev.dertyp.core.ApplicationScope
+import dev.dertyp.services.youtube.YoutubeApiService
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond

@@ -12,8 +12,8 @@ interface ISynaraPlugin {
     fun init(context: PluginContext)
 
     fun getKoinModule(): Module? = null
-    fun getDownloader(): IDownloader? = null
-    fun getDownloaders(): List<IDownloader> = getDownloader()?.let { listOf(it) } ?: emptyList()
+    fun getImporter(): IImporter? = null
+    fun getImporters(): List<IImporter> = getImporter()?.let { listOf(it) } ?: emptyList()
     fun getIndexer(): IPluginIndexer? = null
     fun getIndexers(): List<IPluginIndexer> = getIndexer()?.let { listOf(it) } ?: emptyList()
     fun getMetadataService(type: IMetadataService.MetadataType): IMetadataService? = null

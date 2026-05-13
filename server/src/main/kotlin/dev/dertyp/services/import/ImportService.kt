@@ -1,11 +1,11 @@
-package dev.dertyp.services.download
+package dev.dertyp.services.import
 
 import dev.dertyp.core.*
 import dev.dertyp.data.User
 import dev.dertyp.data.UserSong
 import dev.dertyp.killAll
-import dev.dertyp.plugins.IDownloader
-import dev.dertyp.plugins.IPluginDownloadService
+import dev.dertyp.plugins.IImporter
+import dev.dertyp.plugins.IPluginImportService
 import dev.dertyp.plugins.PluginManager
 import dev.dertyp.services.*
 import dev.dertyp.services.metadata.IMetadataService
@@ -29,12 +29,12 @@ import kotlin.concurrent.atomics.AtomicBoolean
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.time.Duration.Companion.milliseconds
 
-class DownloadRpcService(
+class ImportRpcService(
     private val user: User,
     private val call: ApplicationCall,
-    private val downloadService: DownloadService,
-    private val downloaderProxy: DownloaderProxy,
-) : IDownloadService, KoinComponent {
+    private val importService: ImportService,
+    private val importerProxy: ImporterProxy,
+) : IImportService, KoinComponent {
     private val applicationEnvironment by inject<ApplicationEnvironment>()
     private val syncService by lazy {
         SyncService.getInstance(
@@ -44,93 +44,93 @@ class DownloadRpcService(
         )
     }
 
-    override fun logs(): Flow<LogLine> = downloadService.logs()
-    override suspend fun currentDownload(): DownloadQueueEntry? = downloadService.currentDownload(user)
-    override suspend fun downloadQueue(): List<DownloadQueueEntry> = downloadService.downloadQueue(user)
-    override suspend fun finishedDownloads(): List<FinishedDownloadQueueEntry> = downloadService.finishedDownloads(user)
-    override suspend fun syncFavouritesAvailable(): Boolean = downloadService.syncFavouritesAvailable(call)
+    override fun logs(): Flow<LogLine> = importService.logs()
+    override suspend fun currentImport(): ImportQueueEntry? = importService.currentImport(user)
+    override suspend fun importQueue(): List<ImportQueueEntry> = importService.importQueue(user)
+    override suspend fun finishedImports(): List<FinishedImportQueueEntry> = importService.finishedImports(user)
+    override suspend fun syncFavouritesAvailable(): Boolean = importService.syncFavouritesAvailable(call)
     override suspend fun syncFavourites() {
-        downloadService.syncFavourites(call, true).invokeOnCompletion {}
+        importService.syncFavourites(call, true).invokeOnCompletion {}
     }
 
-    override suspend fun downloadIds(@LogParam("size") ids: List<PrefixedId>, type: Type, downloader: DownloadBackend?) {
-        if (downloader != null) {
-            downloadService.downloadIds(
+    override suspend fun importIds(@LogParam("size") ids: List<PrefixedId>, type: Type, importer: ImportBackend?) {
+        if (importer != null) {
+            importService.importIds(
                 ids = ids.asFlow(),
                 type = type,
                 user = user,
-                downloaderId = downloader.id,
+                importerId = importer.id,
                 callback = {}
             )
         } else {
-            val groups = ids.groupBy { it.getPrefix() ?: downloaderProxy.defaultService.id }
+            val groups = ids.groupBy { it.getPrefix() ?: importerProxy.defaultService.id }
 
-            groups.forEach { (downloaderId, groupIds) ->
+            groups.forEach { (importerId, groupIds) ->
                 val finalIds = groupIds.map { it.stripPrefix() }
 
-                downloadService.downloadIds(
+                importService.importIds(
                     ids = finalIds.asFlow(),
                     type = type,
                     user = user,
-                    downloaderId = downloaderId,
+                    importerId = importerId,
                     callback = {}
                 )
             }
         }
     }
 
-    override suspend fun downloadUrls(urls: List<String>) {
-        downloadService.logger.info("Processing ${urls.size} download URLs for user ${user.username}")
+    override suspend fun importUrls(urls: List<String>) {
+        importService.logger.info("Processing ${urls.size} import URLs for user ${user.username}")
         val groups = urls.groupBy { url ->
-            downloadService.pluginManager.getAllDownloaders().find { it.canHandle(url) }
+            importService.pluginManager.getAllImporters().find { it.canHandle(url) }
         }
 
-        groups.forEach { (downloader, groupUrls) ->
-            if (downloader == null) {
-                downloadService.logger.warn("No specific downloader found for ${groupUrls.size} URLs, using default queue")
-                downloadService.addToQueue(
-                    UrlDownloadQueueEntry(
+        groups.forEach { (importer, groupUrls) ->
+            if (importer == null) {
+                importService.logger.warn("No specific importer found for ${groupUrls.size} URLs, using default queue")
+                importService.addToQueue(
+                    UrlImportQueueEntry(
                         urls = groupUrls.toMutableList(),
                         byUser = user.id
                     )
                 )
             } else {
-                downloadService.logger.info("Routing ${groupUrls.size} URLs to downloader: ${downloader.id}")
-                val parsed = groupUrls.map { it to downloader.parseUrl(it) }
+                importService.logger.info("Routing ${groupUrls.size} URLs to importer: ${importer.id}")
+                val parsed = groupUrls.map { it to importer.parseUrl(it) }
                 val unparsed = parsed.filter { it.second == null }.map { it.first }
                 if (unparsed.isNotEmpty()) {
-                    downloadService.logger.info("Queueing ${unparsed.size} unparsed URLs for ${downloader.id}")
-                    downloadService.addToQueue(
-                        UrlDownloadQueueEntry(
+                    importService.logger.info("Queueing ${unparsed.size} unparsed URLs for ${importer.id}")
+                    importService.addToQueue(
+                        UrlImportQueueEntry(
                             urls = unparsed.toMutableList(),
                             byUser = user.id,
-                            downloader = DownloadBackend(downloader.id)
+                            importer = ImportBackend(importer.id)
                         )
                     )
                 }
 
                 parsed.mapNotNull { it.second }.groupBy { it.second }.forEach { (type, resultPairs) ->
                     val ids = resultPairs.map { it.first }
-                    downloadService.logger.info("Handing off ${ids.size} items of type $type to ${downloader.id}")
-                    downloadService.downloadIds(ids.asFlow(), type, user, downloader.id)
+                    importService.logger.info("Routing ${ids.size} items of type $type to ${importer.id}")
+                    importService.importIds(ids.asFlow(), type, user, importer.id)
                 }
             }
         }
     }
 
-    override suspend fun getDownloaderForUrl(url: String): DownloadBackend? {
-        return downloadService.pluginManager.getAllDownloaders()
+    override suspend fun getImporterForUrl(url: String): ImportBackend? {
+        return importService.pluginManager.getAllImporters()
             .find { it.enabled && it.canHandle(url) }
-            ?.let { DownloadBackend(it.id) }
+            ?.let { ImportBackend(it.id) }
     }
 
     override suspend fun existsByOriginalId(id: PrefixedId, type: Type): Boolean {
-        val (downloader, actualId) = getDownloaderAndId(id)
+        val (importer, actualId) = getImporterAndId(id)
 
-        if (downloader == null) return false
+        if (importer == null) return false
 
         val metadataService = try {
-            call.getMetadataProvider(downloader.metadataType)
+            call.getMetadataProvider(importer.metadataType)
         } catch (_: Exception) {
             null
         } ?: return false
@@ -143,29 +143,29 @@ class DownloadRpcService(
         }
     }
 
-    private fun getDownloaderAndId(id: PrefixedId): Pair<IDownloader?, String> {
+    private fun getImporterAndId(id: PrefixedId): Pair<IImporter?, String> {
         val prefix = id.getPrefix()
         return if (prefix != null) {
-            downloadService.pluginManager.getDownloader(prefix) to id.stripPrefix()
+            importService.pluginManager.getImporter(prefix) to id.stripPrefix()
         } else {
-            downloadService.pluginManager.getDownloader(downloaderProxy.defaultService.id) to id
+            importService.pluginManager.getImporter(importerProxy.defaultService.id) to id
         }
     }
 
-    override suspend fun getDownloadService(): DownloadBackend = downloaderProxy.defaultService
-    override suspend fun getAllDownloadServices(): List<DownloadBackend> = downloadService.getAllDownloadServices()
-    override suspend fun setDownloadService(service: DownloadBackend) {
-        downloaderProxy.defaultService = service
+    override suspend fun getImportService(): ImportBackend = importerProxy.defaultService
+    override suspend fun getAllImportServices(): List<ImportBackend> = importService.getAllImportServices()
+    override suspend fun setImportService(service: ImportBackend) {
+        importerProxy.defaultService = service
     }
 
-    override suspend fun downloadAuthorized(): Boolean = downloaderProxy.tokenFileExists()
+    override suspend fun importAuthorized(): Boolean = importerProxy.tokenFileExists()
 
-    override fun downloadLogin() = channelFlow {
-        val downloader = downloaderProxy.getDownloader(downloaderProxy.defaultService)
-        downloader.login(
+    override fun importLogin() = channelFlow {
+        val importer = importerProxy.getImporter(importerProxy.defaultService)
+        importer.login(
             aliveCheck = { currentCoroutineContext().isActive },
             onLiveOutput = { log ->
-                downloader.extractLoginUrl(log)?.let { url ->
+                importer.extractLoginUrl(log)?.let { url ->
                     trySend(url)
                 }
                 yield()
@@ -183,20 +183,20 @@ class DownloadRpcService(
         title: String?,
         artist: String?,
         count: Int
-    ): List<DownloadSong> {
-        return downloadService.search(call, query, title, artist, count)
+    ): List<ImportSong> {
+        return importService.search(call, query, title, artist, count)
     }
 }
 
 @Suppress("unused")
 @OptIn(ExperimentalAtomicApi::class)
-class DownloadService(
-    val downloaderProxy: DownloaderProxy,
+class ImportService(
+    val importerProxy: ImporterProxy,
     val songService: SongService,
     val favSyncService: FavSyncService,
     val imageService: ImageService,
     val pluginManager: PluginManager,
-) : IPluginDownloadService, Service() {
+) : IPluginImportService, Service() {
     private val maxLogLength: Int = 1000
 
     private val syncMutex = Mutex()
@@ -205,8 +205,8 @@ class DownloadService(
 
     private val syncMap = ConcurrentHashMap<UUID, AtomicBoolean>()
 
-    private val downloadQueue: MutableList<DownloadQueueEntry> = arrayListOf()
-    private val finishedDownloads: MutableList<FinishedDownloadQueueEntry> = arrayListOf()
+    private val importQueue: MutableList<ImportQueueEntry> = arrayListOf()
+    private val finishedImports: MutableList<FinishedImportQueueEntry> = arrayListOf()
 
     private val queueUpdateFlow: MutableSharedFlow<Unit> = MutableSharedFlow(extraBufferCapacity = 1)
 
@@ -216,7 +216,7 @@ class DownloadService(
     private val internalLog: MutableStateFlow<String?> = MutableStateFlow(null)
     val log = internalLog.asSharedFlow()
 
-    var currentlyDownloading: FinishedDownloadQueueEntry? = null
+    var currentImport: FinishedImportQueueEntry? = null
         private set
 
     @OptIn(FlowPreview::class)
@@ -231,8 +231,8 @@ class DownloadService(
                     .debounce(100.milliseconds)
                     .takeWhile { !stopped.load() }
                     .collect {
-                        logger.info("Trying to download")
-                        download { !stopped.load() }
+                        logger.info("Trying to import")
+                        import { !stopped.load() }
                     }
             }
         }
@@ -245,45 +245,45 @@ class DownloadService(
         stopped.store(true)
     }
 
-    override suspend fun addToQueue(vararg downloadEntries: DownloadQueueEntry) {
+    override suspend fun addToQueue(vararg importEntries: ImportQueueEntry) {
         queueMutex.withLock {
-            val existingUrls = downloadQueue
-                .filterIsInstance<UrlDownloadQueueEntry>()
+            val existingUrls = importQueue
+                .filterIsInstance<UrlImportQueueEntry>()
                 .flatMap { it.urls }
                 .toMutableList()
-            val existingTypes = downloadQueue
-                .filterIsInstance<FavouriteDownloadQueueEntry>()
+            val existingTypes = importQueue
+                .filterIsInstance<FavouriteImportQueueEntry>()
                 .map { it.favoriteType }
                 .toMutableList()
 
-            currentlyDownloading?.let {
-                when (val entry = it.downloadQueueEntry) {
-                    is UrlDownloadQueueEntry -> existingUrls.addAll(entry.urls)
-                    is FavouriteDownloadQueueEntry -> existingTypes.add(entry.favoriteType)
+            currentImport?.let {
+                when (val entry = it.importQueueEntry) {
+                    is UrlImportQueueEntry -> existingUrls.addAll(entry.urls)
+                    is FavouriteImportQueueEntry -> existingTypes.add(entry.favoriteType)
                 }
             }
 
-            val entries = downloadEntries.filter {
+            val entries = importEntries.filter {
                 when (it) {
-                    is UrlDownloadQueueEntry -> {
+                    is UrlImportQueueEntry -> {
                         it.urls.removeAll(existingUrls)
                         it.urls.isNotEmpty()
                     }
 
-                    is FavouriteDownloadQueueEntry -> !existingTypes.contains(it.favoriteType)
+                    is FavouriteImportQueueEntry -> !existingTypes.contains(it.favoriteType)
                 }
             }
 
             logger.info(
                 "Adding ${entries.size} to queue (${
                     entries.sumOf {
-                        if (it is UrlDownloadQueueEntry) it.urls.size
+                        if (it is UrlImportQueueEntry) it.urls.size
                         else 1
                     }
                 } urls)"
             )
 
-            downloadQueue.addAll(entries)
+            importQueue.addAll(entries)
         }
 
         queueUpdateFlow.tryEmit(Unit)
@@ -306,72 +306,70 @@ class DownloadService(
     }
 
     fun queueSize(): Int {
-        return downloadQueue.size
+        return importQueue.size
     }
 
-    fun logs() = flow {
-        val oldLogs = currentlyDownloading?.logs ?: emptyList()
+    fun logs(): Flow<LogLine> = flow {
+        val oldLogs = currentImport?.logs ?: emptyList()
 
-        val currentDownloadQueueEntry = currentlyDownloading?.downloadQueueEntry
+        val currentImportQueueEntry = currentImport?.importQueueEntry
 
         emitAll(oldLogs.mapNotNull { line ->
-            currentDownloadQueueEntry?.let { LogLine(it, line) }
+            currentImportQueueEntry?.let { LogLine(it, line) }
         }.asFlow())
         log.collect { line ->
-            currentlyDownloading?.let {
-                emit(LogLine(it.downloadQueueEntry, line))
+            currentImport?.let {
+                emit(LogLine(it.importQueueEntry, line))
             }
         }
     }
 
-    fun currentDownload(user: User? = null): DownloadQueueEntry? {
-        if (user?.isAdmin == true) return currentlyDownloading?.downloadQueueEntry
+    fun currentImport(user: User? = null): ImportQueueEntry? {
+        if (user?.isAdmin == true) return currentImport?.importQueueEntry
         return when (user?.id) {
-            null, currentlyDownloading?.downloadQueueEntry?.byUser -> currentlyDownloading?.downloadQueueEntry
+            null, currentImport?.importQueueEntry?.byUser -> currentImport?.importQueueEntry
             else -> null
         }
     }
 
-    suspend fun downloadQueue(user: User? = null): List<DownloadQueueEntry> {
+    suspend fun importQueue(user: User? = null): List<ImportQueueEntry> {
         return queueMutex.withLock {
-            downloadQueue.filter { user == null || user.isAdmin || it.byUser == user.id }
+            importQueue.filter { user == null || user.isAdmin || it.byUser == user.id }
         }
     }
 
-    suspend fun finishedDownloads(user: User? = null): List<FinishedDownloadQueueEntry> {
+    suspend fun finishedImports(user: User? = null): List<FinishedImportQueueEntry> {
         return finishedMutex.withLock {
-            finishedDownloads.toList().filter { user == null || user.isAdmin || it.downloadQueueEntry.byUser == user.id }
+            finishedImports.toList().filter { user == null || user.isAdmin || it.importQueueEntry.byUser == user.id }
         }
     }
 
     suspend fun clearErrors() {
         finishedMutex.withLock {
-            finishedDownloads.removeIf {
+            finishedImports.removeIf {
                 !it.result.successful()
             }
         }
     }
 
     suspend fun retryErrors() {
-        val errors = finishedMutex.withLock {
-            finishedDownloads.filter { it.result.failed() }.map { it.downloadQueueEntry }
-        }
+        val errors = finishedImports.filter { it.result.failed() }.map { it.importQueueEntry }
 
         addToQueue(*errors.toTypedArray())
 
         clearErrors()
     }
 
-    private suspend fun download(aliveCheck: suspend () -> Boolean) {
+    private suspend fun import(aliveCheck: suspend () -> Boolean) {
         if (!active.compareAndSet(expectedValue = false, newValue = true)) return
 
-        while (queueMutex.withLock { downloadQueue.isNotEmpty() }) {
-            val entry = queueMutex.withLock { downloadQueue.removeFirst() }
+        while (queueMutex.withLock { importQueue.isNotEmpty() }) {
+            val entry = queueMutex.withLock { importQueue.removeFirst() }
 
             val logs = mutableListOf<String>()
 
-            currentlyDownloading = FinishedDownloadQueueEntry(
-                downloadQueueEntry = entry,
+            currentImport = FinishedImportQueueEntry(
+                importQueueEntry = entry,
                 result = ProcessExecutionResult.EMPTY,
                 logs = logs
             )
@@ -386,34 +384,34 @@ class DownloadService(
             }
 
             val result = when (entry) {
-                is UrlDownloadQueueEntry -> downloaderProxy.downloadContent(
+                is UrlImportQueueEntry -> importerProxy.importContent(
                     urls = entry.urls,
                     maxRetries = entry.maxRetries,
                     aliveCheck = aliveCheck,
                     userId = entry.byUser,
-                    service = entry.downloader,
+                    service = entry.importer,
                     onLiveOutput = logUnit
                 )
 
-                is FavouriteDownloadQueueEntry -> downloaderProxy.downloadFavoriteCollection(
+                is FavouriteImportQueueEntry -> importerProxy.importFavoriteCollection(
                     type = entry.favoriteType,
                     maxRetries = entry.maxRetries,
                     aliveCheck = aliveCheck,
                     userId = entry.byUser,
-                    service = entry.downloader ?: downloaderProxy.defaultService,
+                    service = entry.importer ?: importerProxy.defaultService,
                     onLiveOutput = logUnit
                 )
             }
 
             internalLog.emit(null)
 
-            currentlyDownloading?.let { currentlyDownloading ->
-                currentlyDownloading.result = result
-                if (result.successful()) currentlyDownloading.downloadQueueEntry.callback()
+            currentImport?.let { currentImport ->
+                currentImport.result = result
+                if (result.successful()) currentImport.importQueueEntry.callback()
 
                 finishedMutex.withLock {
-                    finishedDownloads.add(currentlyDownloading)
-                    if (finishedDownloads.count { it.result.successful() } > 100) finishedDownloads.removeIf {
+                    finishedImports.add(currentImport)
+                    if (finishedImports.count { it.result.successful() } > 100) finishedImports.removeIf {
                         it.result.successful()
                     }
                 }
@@ -421,42 +419,42 @@ class DownloadService(
 
         }
 
-        currentlyDownloading = null
+        currentImport = null
         active.store(false)
     }
 
-    fun getAllDownloadServices(): List<DownloadBackend> =
-        pluginManager.getAllDownloaders().filter { it.enabled }.map { DownloadBackend(it.id) }
+    fun getAllImportServices(): List<ImportBackend> =
+        pluginManager.getAllImporters().filter { it.enabled }.map { ImportBackend(it.id) }
 
     suspend fun syncFavouritesAvailable(call: ApplicationCall): Boolean {
         val user = call.getUser() ?: throw IllegalStateException("No user")
         return !(syncMap[user.id]?.load() ?: false)
     }
 
-    suspend fun downloadIds(
+    suspend fun importIds(
         ids: Flow<String>,
         type: Type,
         user: User,
-        downloaderId: String? = null,
+        importerId: String? = null,
         callback: suspend (List<String>) -> Unit = {}
     ): Pair<Boolean, List<UserSong>> {
-        var contentToDownload = false
+        var contentToImport = false
         val allResultSongs = mutableListOf<UserSong>()
 
         ids.toList().chunked(250).forEach { idChunk ->
-            val dl = if (downloaderId != null) {
-                pluginManager.getDownloader(downloaderId)
+            val im = if (importerId != null) {
+                pluginManager.getImporter(importerId)
             } else {
-                pluginManager.getDownloader(downloaderProxy.defaultService.id)
+                pluginManager.getImporter(importerProxy.defaultService.id)
             }
 
-            if (dl != null) {
-                val result = dl.downloadIds(idChunk, type, user, callback)
-                if (result.first) contentToDownload = true
+            if (im != null) {
+                val result = im.importIds(idChunk, type, user, callback)
+                if (result.first) contentToImport = true
                 allResultSongs.addAll(result.second)
             }
         }
-        return Pair(contentToDownload, allResultSongs)
+        return Pair(contentToImport, allResultSongs)
     }
 
     @OptIn(ExperimentalCoroutinesApi::class, InternalAPI::class)
@@ -493,13 +491,13 @@ class DownloadService(
                 .onEach { idMap[it.id] = it }
 
             val idsToFetch = songs.map { it.id }
-            val tidalDownloader = pluginManager.getAllDownloaders().find { it.id == "tidal" } ?:
-                                 pluginManager.getAllDownloaders().find { it.canHandle("https://tidal.com") }
-            val (_, songsToLike) = downloadIds(
+            val tidalImporter = pluginManager.getAllImporters().find { it.id == "tidal" } ?:
+                                 pluginManager.getAllImporters().find { it.canHandle("https://tidal.com") }
+            val (_, songsToLike) = importIds(
                 ids = idsToFetch,
                 type = Type.SONG,
                 user = user,
-                downloaderId = tidalDownloader?.id
+                importerId = tidalImporter?.id
             ) {
                 for (song in songService.byOriginalIds(it, user.id)) {
                     if (!(song.isFavourite ?: false)) {
@@ -537,7 +535,7 @@ class DownloadService(
         title: String?,
         artist: String?,
         count: Int
-    ): List<DownloadSong> {
+    ): List<ImportSong> {
         val metadataService = call.getMetadataProvider(IMetadataService.MetadataType.tidal)
             ?: throw IllegalStateException("Tidal metadata service not available")
 
@@ -552,7 +550,7 @@ class DownloadService(
         }
 
         return searchResults.map {
-            DownloadSong(
+            ImportSong(
                 id = it.id,
                 title = it.title,
                 artists = it.artists,

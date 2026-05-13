@@ -2,7 +2,7 @@ package dev.dertyp.services
 
 import dev.dertyp.core.getTotalSize
 import dev.dertyp.plugins.IServerStorageService
-import dev.dertyp.services.download.DownloadBackend
+import dev.dertyp.services.import.ImportBackend
 import io.ktor.server.application.ApplicationEnvironment
 import java.io.File
 
@@ -25,8 +25,8 @@ class StorageService(environment: ApplicationEnvironment) : IStorageService, ISe
         emptyList()
     }
 
-    override fun forDownloader(backend: DownloadBackend): IServerStorageService =
-        DownloaderStorageService(this, backend)
+    override fun forImporter(backend: ImportBackend): IServerStorageService =
+        ImporterStorageService(this, backend)
 
     override suspend fun getTotalStorage(): Long {
         val pathsToMeasure = (
@@ -51,9 +51,9 @@ class StorageService(environment: ApplicationEnvironment) : IStorageService, ISe
     }
 }
 
-class DownloaderStorageService(
+class ImporterStorageService(
     private val delegate: IServerStorageService,
-    private val backend: DownloadBackend
+    private val backend: ImportBackend
 ) : IServerStorageService {
     private fun pluginPath(path: String?): String? {
         if (path == null) return null
@@ -69,6 +69,6 @@ class DownloaderStorageService(
     override val imagesPath: String get() = delegate.imagesPath
     override val secondaryTracksPaths: List<String> get() = delegate.secondaryTracksPaths
 
-    override fun forDownloader(backend: DownloadBackend): IServerStorageService =
-        delegate.forDownloader(backend)
+    override fun forImporter(backend: ImportBackend): IServerStorageService =
+        delegate.forImporter(backend)
 }

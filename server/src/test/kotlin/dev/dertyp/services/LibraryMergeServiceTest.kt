@@ -178,7 +178,7 @@ class LibraryMergeServiceTest : KoinTest {
         every { MetadataService.getMetadataService(any(), any()) } returns tidalService
         coEvery { tidalService.getAlbumsByIds(any()) } returns emptyList()
         coEvery { albumService.fetchMusicBrainzId(any()) } returns null
-        every { pluginManager.getAllDownloaders() } returns emptyList()
+        every { pluginManager.getAllImporters() } returns emptyList()
 
         transaction(database) {
             AlbumTable.insert {
@@ -211,7 +211,7 @@ class LibraryMergeServiceTest : KoinTest {
         every { MetadataService.getMetadataService(any(), any()) } returns tidalService
         coEvery { tidalService.getAlbumsByIds(any()) } returns emptyList()
         coEvery { albumService.fetchMusicBrainzId(any()) } returns null
-        every { pluginManager.getAllDownloaders() } returns emptyList()
+        every { pluginManager.getAllImporters() } returns emptyList()
 
         transaction(database) {
             val imageId = ImageTable.insert {

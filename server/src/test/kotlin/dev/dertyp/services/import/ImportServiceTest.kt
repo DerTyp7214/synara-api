@@ -1,4 +1,4 @@
-package dev.dertyp.services.download
+package dev.dertyp.services.import
 
 import dev.dertyp.plugins.PluginManager
 import dev.dertyp.services.FavSyncService
@@ -12,23 +12,23 @@ import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
 import kotlin.time.Duration.Companion.seconds
 
-class DownloadServiceTest {
-    private val downloaderProxy = mockk<DownloaderProxy>(relaxed = true)
+class ImportServiceTest {
+    private val importerProxy = mockk<ImporterProxy>(relaxed = true)
     private val songService = mockk<SongService>()
     private val favSyncService = mockk<FavSyncService>()
     private val imageService = mockk<ImageService>()
     private val pluginManager = mockk<PluginManager>()
 
-    private val service = DownloadService(
-        downloaderProxy, songService, favSyncService, imageService, pluginManager
+    private val service = ImportService(
+        importerProxy, songService, favSyncService, imageService, pluginManager
     )
 
     @Test
-    fun testDownloadUrls() = runBlocking {
+    fun testImportUrls() = runBlocking {
         val urls = listOf("https://tidal.com/track/1")
-        val entry = UrlDownloadQueueEntry(urls = urls.toMutableList())
+        val entry = UrlImportQueueEntry(urls = urls.toMutableList())
 
-        coEvery { downloaderProxy.downloadContent(any(), any(), any(), any(), any(), any()) } returns ProcessExecutionResult(0, "ok", "")
+        coEvery { importerProxy.importContent(any(), any(), any(), any(), any(), any()) } returns ProcessExecutionResult(0, "ok", "")
 
         val job = launch {
             service.startService()
@@ -37,13 +37,13 @@ class DownloadServiceTest {
         service.addToQueue(entry)
 
         withTimeout(2.seconds) {
-            while (service.finishedDownloads().isEmpty()) {
+            while (service.finishedImports().isEmpty()) {
                 yield()
             }
         }
 
-        coVerify { downloaderProxy.downloadContent(eq(urls), any(), any(), any(), any(), any()) }
-        assertEquals(1, service.finishedDownloads().size)
+        coVerify { importerProxy.importContent(eq(urls), any(), any(), any(), any(), any()) }
+        assertEquals(1, service.finishedImports().size)
 
         service.stopService()
         job.cancelAndJoin()

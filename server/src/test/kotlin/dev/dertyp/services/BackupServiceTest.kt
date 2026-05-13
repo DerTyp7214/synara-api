@@ -4,9 +4,9 @@ import com.github.luben.zstd.ZstdInputStream
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
 import dev.dertyp.db.*
-import dev.dertyp.plugins.IDownloader
+import dev.dertyp.plugins.IImporter
 import dev.dertyp.plugins.PluginManager
-import dev.dertyp.services.download.DownloadBackend
+import dev.dertyp.services.import.ImportBackend
 import io.ktor.server.application.ApplicationEnvironment
 import io.ktor.server.config.MapApplicationConfig
 import io.mockk.*
@@ -70,13 +70,13 @@ class BackupServiceTest {
         every { storageService.tracksPath } returns tracksDir.absolutePath
         every { storageService.imagesPath } returns imagesDir.absolutePath
 
-        val mockDownloader = mockk<IDownloader>()
+        val mockDownloader = mockk<IImporter>()
         every { mockDownloader.id } returns "tiddl"
-        every { pluginManager.getAllDownloaders() } returns listOf(mockDownloader)
+        every { pluginManager.getAllImporters() } returns listOf(mockDownloader)
 
         val downloaderStorage = mockk<StorageService>(relaxed = true)
         every { downloaderStorage.tracksPath } returns downloaderTracksDir.absolutePath
-        every { storageService.forDownloader(DownloadBackend("tiddl")) } returns downloaderStorage
+        every { storageService.forImporter(ImportBackend("tiddl")) } returns downloaderStorage
     }
 
     @AfterEach

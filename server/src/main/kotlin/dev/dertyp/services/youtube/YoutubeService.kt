@@ -18,7 +18,7 @@ import dev.dertyp.plugins.setOriginalUrl
 import dev.dertyp.services.LrcLibService
 import dev.dertyp.services.SongService
 import dev.dertyp.services.UserPlaylistService
-import dev.dertyp.services.download.*
+import dev.dertyp.services.import.*
 import dev.dertyp.services.metadata.IMetadataService
 import dev.dertyp.services.metadata.MusicBrainzService
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -42,23 +42,23 @@ open class YoutubeService(
     private val youtubeApiService: YoutubeApiService,
     private val lrcLibService: LrcLibService,
     private val musicBrainzService: MusicBrainzService
-) : BaseDownloader(indexer, storageService) {
+) : BaseImporter(indexer, storageService) {
     override val id: String = ID
     override val enabled: Boolean get() = ytdlpPath != null
 
     private val songService by inject<SongService>()
     private val userPlaylistService by inject<UserPlaylistService>()
-    private val downloadService by inject<DownloadService>()
+    private val importService by inject<ImportService>()
 
     override val loginCommand: MutableList<String> = mutableListOf()
-    override val downloadCommand: MutableList<String> = mutableListOf(
+    override val importCommand: MutableList<String> = mutableListOf(
         "yt-dlp", "-x", "--audio-format", "flac", "--no-progress", "--convert-thumbnails", "jpg",
         "--write-auto-subs", "--write-subs", "--sub-langs", "en.*,.*", "--convert-subs", "lrc"
     )
-    override val favDownloadCommand: MutableList<String> = mutableListOf()
+    override val favImportCommand: MutableList<String> = mutableListOf()
 
     companion object {
-        val ID = DownloadBackend.Youtube.id
+        val ID = ImportBackend.Youtube.id
     }
 
     override fun authorizedCheck(result: ProcessExecutionResult): Boolean = true
@@ -135,14 +135,14 @@ open class YoutubeService(
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    override suspend fun downloadIds(
+    override suspend fun importIds(
         ids: List<String>,
         type: Type,
         user: User,
         callback: suspend (List<String>) -> Unit
     ): Pair<Boolean, List<UserSong>> {
         val wrapper = getWrapper(type, ids, user)
-        var contentToDownload = false
+        var contentToImport = false
 
         when (type) {
             Type.PLAYLIST -> {
@@ -162,14 +162,14 @@ open class YoutubeService(
                     }
 
                     idGroup.ids.buffer(100).chunked(50).collect { trackChunk ->
-                        contentToDownload = true
-                        downloadService.addToQueue(
-                            UrlDownloadQueueEntry(
+                        contentToImport = true
+                        importService.addToQueue(
+                            UrlImportQueueEntry(
                                 urls = trackChunk.map { "https://www.youtube.com/watch?v=${it.second}" }.toMutableList(),
                                 ids = trackChunk.map { it.second },
                                 byUser = user.id,
                                 type = Type.SONG,
-                                downloader = DownloadBackend(id)
+                                importer = ImportBackend(id)
                             ) {
                                 val songs = songService.byOriginalIds(
                                     trackChunk.map { "https://www.youtube.com/watch?v=${it.second}" },
@@ -192,28 +192,28 @@ open class YoutubeService(
                 val urls = ids.map { "https://www.youtube.com/watch?v=$it" }
                 val existingSongs = songService.byOriginalIds(urls, user.id)
                 val existingUrls = existingSongs.map { it.originalUrl }
-                val toDownload = urls.filter { it !in existingUrls }
+                val toImport = urls.filter { it !in existingUrls }
 
-                if (toDownload.isNotEmpty()) {
-                    contentToDownload = true
-                    downloadService.addToQueue(
-                        UrlDownloadQueueEntry(
-                            urls = toDownload.toMutableList(),
+                if (toImport.isNotEmpty()) {
+                    contentToImport = true
+                    importService.addToQueue(
+                        UrlImportQueueEntry(
+                            urls = toImport.toMutableList(),
                             ids = ids,
                             byUser = user.id,
                             type = type,
-                            downloader = DownloadBackend(id)
+                            importer = ImportBackend(id)
                         ) {
                             callback(ids)
                         }
                     )
                 }
-                return contentToDownload to existingSongs
+                return contentToImport to existingSongs
             }
             else -> {}
         }
 
-        return contentToDownload to emptyList()
+        return contentToImport to emptyList()
     }
 
     private suspend fun fetchPlaylistInfo(url: String): Map<String, Any>? {
@@ -276,7 +276,7 @@ open class YoutubeService(
 
     private val ytdlpPath = findInPath("yt-dlp")
 
-    override suspend fun executeDownloader(
+    override suspend fun executeImporter(
         command: Collection<String>,
         aliveCheck: suspend () -> Boolean,
         directory: File?,
@@ -296,7 +296,7 @@ open class YoutubeService(
         return executeCommand(cmd, aliveCheck, logger, directory, onLineReceived = onLineReceived)
     }
 
-    override suspend fun downloadContent(
+    override suspend fun importContent(
         urls: List<String>,
         maxRetries: Int,
         aliveCheck: suspend () -> Boolean,
@@ -317,12 +317,12 @@ open class YoutubeService(
         for ((index, url) in urls.withIndex()) {
             val normalized = normalizedUrls[index]
             if (normalized in existingUrls) {
-                onLiveOutput("Skipping already downloaded song: $url")
+                onLiveOutput("Skipping already imported song: $url")
                 continue
             }
 
             onLiveOutput("Fetching metadata for: $url")
-            val cmd = downloadCommand.toMutableList()
+            val cmd = importCommand.toMutableList()
 
             val info = fetchInfo(url, aliveCheck)
             var coverData: ByteArray? = null
@@ -395,8 +395,8 @@ open class YoutubeService(
                 cmd.add("--embed-thumbnail")
             }
 
-            onLiveOutput("Starting download for: $url")
-            val (result, _) = collectDownloadedFiles(cmd + url, maxRetries, 0, aliveCheck, userId, onLiveOutput) { paths ->
+            onLiveOutput("Starting import for: $url")
+            val (result, _) = collectImportedFiles(cmd + url, maxRetries, 0, aliveCheck, userId, onLiveOutput) { paths ->
                 paths.filter { it.extension == "flac" }.forEach { path ->
                     onLiveOutput("Post-processing: ${path.absolutePathString()}")
                     try {

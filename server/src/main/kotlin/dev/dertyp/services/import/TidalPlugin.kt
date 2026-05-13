@@ -1,4 +1,4 @@
-package dev.dertyp.services.download
+package dev.dertyp.services.import
 
 import dev.dertyp.PlatformUUID
 import dev.dertyp.core.sha256
@@ -6,19 +6,7 @@ import dev.dertyp.data.InsertableAlbum
 import dev.dertyp.data.InsertableImage
 import dev.dertyp.data.User
 import dev.dertyp.getDateFromISO
-import dev.dertyp.plugins.BaseIndexer
-import dev.dertyp.plugins.IDownloader
-import dev.dertyp.plugins.IPluginIndexer
-import dev.dertyp.plugins.ISynaraPlugin
-import dev.dertyp.plugins.PluginContext
-import dev.dertyp.plugins.album
-import dev.dertyp.plugins.coverImage
-import dev.dertyp.plugins.getAlbumArtists
-import dev.dertyp.plugins.getArtists
-import dev.dertyp.plugins.musicBrainzTrackId
-import dev.dertyp.plugins.songCount
-import dev.dertyp.plugins.title
-import dev.dertyp.plugins.year
+import dev.dertyp.plugins.*
 import dev.dertyp.services.metadata.IMetadataService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -44,12 +32,12 @@ import kotlin.io.path.name
 class TidalIndexer(context: PluginContext) : BaseIndexer(context, IMetadataService.MetadataType.tidal) {
     override val id: String = "tidal"
     override val name: String = "Tidal Indexer"
-    override val downloadBackends: List<DownloadBackend> = listOf(DownloadBackend.Tdn, DownloadBackend.Tiddl)
+    override val importBackends: List<ImportBackend> = listOf(ImportBackend.Tdn, ImportBackend.Tiddl)
 
     override fun canHandle(path: Path): Boolean {
         if (!super.canHandle(path)) return false
-        return downloadBackends.any {
-            val tracksPath = context.storageService.forDownloader(it).tracksPath ?: return@any false
+        return importBackends.any {
+            val tracksPath = context.storageService.forImporter(it).tracksPath ?: return@any false
             path.toAbsolutePath().toString().startsWith(File(tracksPath).absolutePath)
         }
     }
@@ -184,15 +172,15 @@ class TidalPlugin : ISynaraPlugin, KoinComponent {
 
     private val tiddlService: TiddlService by inject()
     private val tdnService: TdnService by inject()
-    private val downloaderProxy: DownloaderProxy by inject()
+    private val importerProxy: ImporterProxy by inject()
     private lateinit var indexer: TidalIndexer
-    private lateinit var proxyDownloader: TidalProxyDownloader
+    private lateinit var proxyImporter: TidalProxyImporter
 
     override fun init(context: PluginContext) {
         indexer = TidalIndexer(context)
         tiddlService.indexer = indexer
         tdnService.indexer = indexer
-        proxyDownloader = TidalProxyDownloader(tiddlService, tdnService, downloaderProxy)
+        proxyImporter = TidalProxyImporter(tiddlService, tdnService, importerProxy)
     }
 
     override fun getKoinModule(): Module = module {
@@ -200,15 +188,15 @@ class TidalPlugin : ISynaraPlugin, KoinComponent {
         singleOf(::TdnService)
     }
 
-    override fun getDownloaders(): List<IDownloader> = listOf(tiddlService, tdnService, proxyDownloader)
+    override fun getImporters(): List<IImporter> = listOf(tiddlService, tdnService, proxyImporter)
     override fun getIndexer(): IPluginIndexer = indexer
 }
 
-class TidalProxyDownloader(
+class TidalProxyImporter(
     private val tiddl: TiddlService,
     private val tdn: TdnService,
-    private val downloaderProxy: DownloaderProxy
-) : IDownloader {
+    private val importerProxy: ImporterProxy
+) : IImporter {
     override val id: String = "tidal"
     override val name: String = "Tidal"
     override val pluginId: String = "tidal"
@@ -222,8 +210,8 @@ class TidalProxyDownloader(
     override val enabled: Boolean get() = tiddl.enabled || tdn.enabled
     override val metadataType get() = current().metadataType
 
-    private fun current(): IDownloader {
-        val default = downloaderProxy.defaultService.id
+    private fun current(): IImporter {
+        val default = importerProxy.defaultService.id
         if (default == TiddlService.ID && tiddl.enabled) return tiddl
         if (default == TdnService.ID && tdn.enabled) return tdn
 
@@ -233,9 +221,9 @@ class TidalProxyDownloader(
     override fun canHandle(url: String): Boolean = current().canHandle(url)
     override suspend fun parseUrl(url: String) = current().parseUrl(url)
     override suspend fun getWrapper(type: Type, ids: List<String>, user: User) = current().getWrapper(type, ids, user)
-    override suspend fun downloadIds(ids: List<String>, type: Type, user: User, callback: suspend (List<String>) -> Unit) = current().downloadIds(ids, type, user, callback)
-    override suspend fun downloadContent(urls: List<String>, maxRetries: Int, aliveCheck: suspend () -> Boolean, userId: PlatformUUID?, onLiveOutput: suspend (String) -> Unit) = current().downloadContent(urls, maxRetries, aliveCheck, userId, onLiveOutput)
-    override suspend fun downloadFavoriteCollection(type: DownloadFavType, maxRetries: Int, aliveCheck: suspend () -> Boolean, userId: PlatformUUID?, onLiveOutput: suspend (String) -> Unit) = current().downloadFavoriteCollection(type, maxRetries, aliveCheck, userId, onLiveOutput)
+    override suspend fun importIds(ids: List<String>, type: Type, user: User, callback: suspend (List<String>) -> Unit) = current().importIds(ids, type, user, callback)
+    override suspend fun importContent(urls: List<String>, maxRetries: Int, aliveCheck: suspend () -> Boolean, userId: PlatformUUID?, onLiveOutput: suspend (String) -> Unit) = current().importContent(urls, maxRetries, aliveCheck, userId, onLiveOutput)
+    override suspend fun importFavoriteCollection(type: ImportFavType, maxRetries: Int, aliveCheck: suspend () -> Boolean, userId: PlatformUUID?, onLiveOutput: suspend (String) -> Unit) = current().importFavoriteCollection(type, maxRetries, aliveCheck, userId, onLiveOutput)
     override suspend fun syncFavorites(user: User, onProgress: suspend (Double, String) -> Unit) = current().syncFavorites(user, onProgress)
     override suspend fun search(query: String, count: Int) = current().search(query, count)
     override suspend fun updateAlbumMetadata(albumId: PlatformUUID, originalId: String) = current().updateAlbumMetadata(albumId, originalId)

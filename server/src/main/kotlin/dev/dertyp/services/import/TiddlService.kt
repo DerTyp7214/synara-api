@@ -1,4 +1,4 @@
-package dev.dertyp.services.download
+package dev.dertyp.services.import
 
 import dev.dertyp.executeCommand
 import dev.dertyp.findInPath
@@ -12,16 +12,16 @@ import kotlin.concurrent.atomics.ExperimentalAtomicApi
 class TiddlService(
     indexer: IPluginIndexer,
     storageService: IServerStorageService
-) : TidalBaseDownloader(indexer, storageService) {
+) : TidalBaseImporter(indexer, storageService) {
     override val id: String = ID
     override val enabled: Boolean get() = tiddlPath != null
 
     override val loginCommand: MutableList<String> = mutableListOf("tiddl", "auth", "login", "--no-browser")
-    override val downloadCommand: MutableList<String> = mutableListOf("tiddl", "download", "url")
-    override val favDownloadCommand: MutableList<String> = mutableListOf("tiddl", "download", "fav", "--types")
+    override val importCommand: MutableList<String> = mutableListOf("tiddl", "download", "url")
+    override val favImportCommand: MutableList<String> = mutableListOf("tiddl", "download", "fav", "--types")
 
     companion object {
-        val ID = DownloadBackend.Tiddl.id
+        val ID = ImportBackend.Tiddl.id
     }
 
     override fun authorizedCheck(result: ProcessExecutionResult) = result.fullOutput.contains("Already logged in.")
@@ -36,11 +36,11 @@ class TiddlService(
         }
     }
 
-    override fun parseFavType(favType: DownloadFavType): String = when (favType) {
-        DownloadFavType.tracks -> "track"
-        DownloadFavType.artists -> "artist"
-        DownloadFavType.albums -> "album"
-        DownloadFavType.videos -> "video"
+    override fun parseFavType(favType: ImportFavType): String = when (favType) {
+        ImportFavType.tracks -> "track"
+        ImportFavType.artists -> "artist"
+        ImportFavType.albums -> "album"
+        ImportFavType.videos -> "video"
     }
 
     override fun tokenFileExists(): Boolean {
@@ -51,7 +51,7 @@ class TiddlService(
 
     private val tiddlPath = findInPath("tiddl")
 
-    override suspend fun executeDownloader(
+    override suspend fun executeImporter(
         command: Collection<String>,
         aliveCheck: suspend () -> Boolean,
         directory: File?,

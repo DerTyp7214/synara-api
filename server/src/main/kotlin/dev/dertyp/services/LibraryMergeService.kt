@@ -287,8 +287,8 @@ class LibraryMergeService : Service() {
                 albumService.fetchMusicBrainzId(keptAlbumId, triggerMerge = false)
             } else {
                 val prefix = originalId.substringBefore(":")
-                val downloader = pluginManager.getAllDownloaders().find { it.id == prefix }
-                downloader?.updateAlbumMetadata(keptAlbumId, originalId)
+                val importer = pluginManager.getAllImporters().find { it.id == prefix }
+                importer?.updateAlbumMetadata(keptAlbumId, originalId)
             }
         }
 

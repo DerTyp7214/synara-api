@@ -1,4 +1,4 @@
-package dev.dertyp.services.youtube
+package dev.dertyp.services.import.youtube
 
 import dev.dertyp.data.MusicBrainzRecording
 import dev.dertyp.data.MusicBrainzRelease
@@ -9,9 +9,11 @@ import dev.dertyp.plugins.IServerStorageService
 import dev.dertyp.services.LrcLibService
 import dev.dertyp.services.SongService
 import dev.dertyp.services.UserPlaylistService
-import dev.dertyp.services.download.DownloadService
-import dev.dertyp.services.download.ProcessExecutionResult
+import dev.dertyp.services.import.ImportService
+import dev.dertyp.services.import.ProcessExecutionResult
 import dev.dertyp.services.metadata.MusicBrainzService
+import dev.dertyp.services.youtube.YoutubeApiService
+import dev.dertyp.services.youtube.YoutubeService
 import io.mockk.*
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.AfterEach
@@ -32,7 +34,7 @@ class YoutubeCommandGenerationTest : KoinTest {
 
     private val songService = mockk<SongService>(relaxed = true)
     private val userPlaylistService = mockk<UserPlaylistService>(relaxed = true)
-    private val downloadService = mockk<DownloadService>(relaxed = true)
+    private val importService = mockk<ImportService>(relaxed = true)
 
     private lateinit var service: YoutubeService
 
@@ -42,14 +44,20 @@ class YoutubeCommandGenerationTest : KoinTest {
             modules(module {
                 single { songService }
                 single { userPlaylistService }
-                single { downloadService }
+                single { importService }
             })
         }
 
         mockkStatic("dev.dertyp.UtilsKt")
         every { findInPath("yt-dlp") } returns "/usr/bin/yt-dlp"
 
-        service = YoutubeService(indexer, storageService, youtubeApiService, lrcLibService, musicBrainzService)
+        service = YoutubeService(
+            indexer,
+            storageService,
+            youtubeApiService,
+            lrcLibService,
+            musicBrainzService
+        )
     }
 
     @AfterEach
@@ -75,7 +83,7 @@ class YoutubeCommandGenerationTest : KoinTest {
         coEvery { musicBrainzService.searchRecordingMb(any(), any()) } returns null
         every { youtubeApiService.enabled } returns false
 
-        service.downloadContent(listOf(url), 1, { true }, null) {}
+        service.importContent(listOf(url), 1, { true }, null) {}
 
         coVerify {
             executeCommand(match { cmd ->
@@ -106,7 +114,7 @@ class YoutubeCommandGenerationTest : KoinTest {
         coEvery { musicBrainzService.searchRecordingMb(any(), any()) } returns null
         every { youtubeApiService.enabled } returns false
 
-        service.downloadContent(listOf(url), 1, { true }, null) {}
+        service.importContent(listOf(url), 1, { true }, null) {}
 
         coVerify {
             executeCommand(match { cmd ->
@@ -145,7 +153,7 @@ class YoutubeCommandGenerationTest : KoinTest {
         coEvery { musicBrainzService.searchRecordingMb(any(), any()) } returns mbRecording
         every { youtubeApiService.enabled } returns false
 
-        service.downloadContent(listOf(url), 1, { true }, null) {}
+        service.importContent(listOf(url), 1, { true }, null) {}
 
         coVerify {
             executeCommand(match { cmd ->

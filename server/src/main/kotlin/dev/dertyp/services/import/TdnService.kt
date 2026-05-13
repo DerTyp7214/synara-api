@@ -1,4 +1,4 @@
-package dev.dertyp.services.download
+package dev.dertyp.services.import
 
 import dev.dertyp.PlatformUUID
 import dev.dertyp.core.ClientCloseException
@@ -23,16 +23,16 @@ import kotlin.time.Duration.Companion.milliseconds
 class TdnService(
     indexer: IPluginIndexer,
     storageService: IServerStorageService
-) : TidalBaseDownloader(indexer, storageService) {
+) : TidalBaseImporter(indexer, storageService) {
     override val id: String = ID
     override val enabled: Boolean get() = tdnPath != null
 
     override val loginCommand: MutableList<String> = mutableListOf("tdn", "login")
-    override val downloadCommand: MutableList<String> = mutableListOf("tdn", "dl")
-    override val favDownloadCommand: MutableList<String> = mutableListOf("tdn", "dl_fav")
+    override val importCommand: MutableList<String> = mutableListOf("tdn", "dl")
+    override val favImportCommand: MutableList<String> = mutableListOf("tdn", "dl_fav")
 
     companion object {
-        val ID = DownloadBackend.Tdn.id
+        val ID = ImportBackend.Tdn.id
     }
 
     override fun authorizedCheck(result: ProcessExecutionResult) = result.fullOutput.contains("You are logged in.")
@@ -102,7 +102,7 @@ class TdnService(
             }
         } else logger.info(errorRegex.toString())
 
-        val (newResult, newPaths) = collectDownloadedFiles(
+        val (newResult, newPaths) = collectImportedFiles(
             command,
             maxRetries,
             currentTry + 1,
@@ -123,7 +123,7 @@ class TdnService(
 
     private val tdnPath = findInPath("tdn")
 
-    override suspend fun executeDownloader(
+    override suspend fun executeImporter(
         command: Collection<String>,
         aliveCheck: suspend () -> Boolean,
         directory: File?,

@@ -7,7 +7,7 @@ import dev.dertyp.db.FlacInfoTable
 import dev.dertyp.db.SongMusicBrainzTable
 import dev.dertyp.db.SongTable
 import dev.dertyp.plugins.PluginManager
-import dev.dertyp.services.download.DownloadBackend
+import dev.dertyp.services.import.ImportBackend
 import io.ktor.server.application.ApplicationEnvironment
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -125,11 +125,11 @@ class BackupService(
             addPath("secondary-tracks-$index", path)
         }
 
-        pluginManager.getAllDownloaders().forEach { downloader ->
-            val downloaderStorage = storageService.forDownloader(DownloadBackend(downloader.id))
-            addPath("${downloader.id}/tracks", downloaderStorage.tracksPath)
-            addPath("${downloader.id}/albums", downloaderStorage.albumsPath)
-            addPath("${downloader.id}/playlists", downloaderStorage.playlistsPath)
+        pluginManager.getAllImporters().forEach { importer ->
+            val importerStorage = storageService.forImporter(ImportBackend(importer.id))
+            addPath("${importer.id}/tracks", importerStorage.tracksPath)
+            addPath("${importer.id}/albums", importerStorage.albumsPath)
+            addPath("${importer.id}/playlists", importerStorage.playlistsPath)
         }
 
         return paths

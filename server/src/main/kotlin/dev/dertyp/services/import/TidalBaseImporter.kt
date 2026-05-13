@@ -1,4 +1,4 @@
-package dev.dertyp.services.download
+package dev.dertyp.services.import
 
 import dev.dertyp.ApiClient
 import dev.dertyp.PlatformUUID
@@ -89,20 +89,20 @@ private data class TrackMetadata(
 }
 
 @OptIn(ExperimentalAtomicApi::class)
-abstract class TidalBaseDownloader(
+abstract class TidalBaseImporter(
     indexer: IPluginIndexer,
     storageService: IServerStorageService
-) : BaseDownloader(indexer, storageService) {
+) : BaseImporter(indexer, storageService) {
     override val metadataType = IMetadataService.MetadataType.tidal
 
     private val songService by inject<SongService>()
     private val userPlaylistService by inject<UserPlaylistService>()
     private val imageService by inject<ImageService>()
-    private val downloadService by inject<DownloadService>()
+    private val importService by inject<ImportService>()
     private val lrcLibService by inject<ILrcLibService>()
     private val musicBrainzService by inject<IMusicBrainzService>()
 
-    override suspend fun downloadContent(
+    override suspend fun importContent(
         urls: List<String>,
         maxRetries: Int,
         aliveCheck: suspend () -> Boolean,
@@ -230,11 +230,11 @@ abstract class TidalBaseDownloader(
             }
         }
 
-        onLiveOutput("Metadata pre-fetch complete. Starting download process...")
+        onLiveOutput("Metadata pre-fetch complete. Starting import process...")
 
-        val command = downloadCommand + urls
-        val (result, _) = collectDownloadedFiles(command, maxRetries, 0, aliveCheck, userId, onLiveOutput) { paths ->
-            onLiveOutput("Waiting for cover art downloads to finish...")
+        val command = importCommand + urls
+        val (result, _) = collectImportedFiles(command, maxRetries, 0, aliveCheck, userId, onLiveOutput) { paths ->
+            onLiveOutput("Waiting for cover art imports to finish...")
             val coverDataMap = coverDownloads.mapValues { it.value.await() }
 
             paths.filter { it.extension == indexer.audioExtension }.forEach { path ->
@@ -412,7 +412,7 @@ abstract class TidalBaseDownloader(
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    override suspend fun downloadIds(
+    override suspend fun importIds(
         ids: List<String>,
         type: Type,
         user: User,
@@ -476,13 +476,13 @@ abstract class TidalBaseDownloader(
                                         playlistId,
                                         songIds
                                     ).let { result ->
-                                        downloadService.logger.info("Added ${result.size} songs to playlist $playlistId")
+                                        importService.logger.info("Added ${result.size} songs to playlist $playlistId")
                                     }
                                 }
                                 .collect { trackChunk ->
                                     contentToDownload = true
-                                    downloadService.addToQueue(
-                                        UrlDownloadQueueEntry(
+                                    importService.addToQueue(
+                                        UrlImportQueueEntry(
                                             urls = trackChunk
                                                 .map { track -> "https://tidal.com/track/${track.id}" }
                                                 .toMutableList(),
@@ -490,7 +490,7 @@ abstract class TidalBaseDownloader(
                                             byUser = user.id,
                                             maxRetries = trackChunk.size,
                                             type = Type.SONG,
-                                            downloader = DownloadBackend(id)
+                                            importer = ImportBackend(id)
                                         ) {
                                             val songs = songService.byOriginalIds(
                                                 trackChunk.map { it.id },
@@ -529,8 +529,8 @@ abstract class TidalBaseDownloader(
                                 user = user,
                                 chunkSize = 100
                             ).collect { trackChunk ->
-                                downloadService.addToQueue(
-                                    UrlDownloadQueueEntry(
+                                importService.addToQueue(
+                                    UrlImportQueueEntry(
                                         urls = trackChunk
                                             .map { track -> "https://tidal.com/track/${track.id}" }
                                             .toMutableList(),
@@ -538,7 +538,7 @@ abstract class TidalBaseDownloader(
                                         byUser = user.id,
                                         maxRetries = trackChunk.size,
                                         type = Type.SONG,
-                                        downloader = DownloadBackend(id)
+                                        importer = ImportBackend(id)
                                     )
                                 )
                             }
@@ -558,8 +558,8 @@ abstract class TidalBaseDownloader(
                                 songService = songService,
                                 user = user,
                             ).collect { trackChunk ->
-                                downloadService.addToQueue(
-                                    UrlDownloadQueueEntry(
+                                importService.addToQueue(
+                                    UrlImportQueueEntry(
                                         urls = trackChunk
                                             .map { track -> "https://tidal.com/track/${track.id}" }
                                             .toMutableList(),
@@ -567,7 +567,7 @@ abstract class TidalBaseDownloader(
                                         byUser = user.id,
                                         maxRetries = trackChunk.size,
                                         type = Type.SONG,
-                                        downloader = DownloadBackend(id)
+                                        importer = ImportBackend(id)
                                     )
                                 )
                             }
@@ -592,14 +592,14 @@ abstract class TidalBaseDownloader(
                         downloadStage.removeAll(chunk)
                         chunk
                     }
-                    downloadService.addToQueue(
-                        UrlDownloadQueueEntry(
+                    importService.addToQueue(
+                        UrlImportQueueEntry(
                             urls = urls.map { "https://tidal.com/${wrapper.type.value}/${it}" }
                                 .toMutableList(),
                             ids = urls,
                             byUser = user.id,
                             type = wrapper.type,
-                            downloader = DownloadBackend(id)
+                            importer = ImportBackend(id)
                         ) {
                             callback(urls)
                         })
