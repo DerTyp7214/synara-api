@@ -1,9 +1,14 @@
 package dev.dertyp.services.import
 
 import dev.dertyp.PlatformUUID
+import dev.dertyp.data.User
+import dev.dertyp.data.UserSong
 import dev.dertyp.plugins.IImporter
+import dev.dertyp.plugins.IPluginIndexer
 import dev.dertyp.plugins.PluginManager
+import dev.dertyp.plugins.SearchResult
 import dev.dertyp.services.Service
+import kotlinx.coroutines.flow.emptyFlow
 import kotlin.time.ExperimentalTime
 
 class ImporterProxy(
@@ -12,7 +17,36 @@ class ImporterProxy(
     var defaultService: ImportBackend = ImportBackend.Tiddl
 
     internal fun getImporter(service: ImportBackend): IImporter {
-        return pluginManager.getImporter(service.id) ?: throw IllegalStateException("Importer ${service.id} not found")
+        val requested = pluginManager.getImporter(service.id)
+        if (requested != null && requested.enabled) return requested
+
+        return pluginManager.getAllImporters().find { it.enabled }
+            ?: DisabledImporter(service.id)
+    }
+
+    private class DisabledImporter(override val id: String) : IImporter {
+        override val name: String = "Disabled ($id)"
+        override val pluginId: String = id
+        override var indexer: IPluginIndexer
+            get() = throw IllegalStateException("Importer $id is disabled")
+            set(_) { throw IllegalStateException("Importer $id is disabled") }
+        override val enabled: Boolean = false
+        override fun canHandle(url: String): Boolean = false
+        override suspend fun getWrapper(type: Type, ids: List<String>, user: User) = IdsWrapper(type, emptyFlow())
+        override suspend fun importIds(ids: List<String>, type: Type, user: User, callback: suspend (List<String>) -> Unit) = Pair(false, emptyList<UserSong>())
+        override suspend fun importContent(urls: List<String>, maxRetries: Int, aliveCheck: suspend () -> Boolean, userId: PlatformUUID?, onLiveOutput: suspend (String) -> Unit): ProcessExecutionResult {
+            onLiveOutput("Error: Importer $id is disabled and no fallback is available.")
+            return ProcessExecutionResult(-1, "Importer $id is disabled", "")
+        }
+        override suspend fun importFavoriteCollection(type: ImportFavType, maxRetries: Int, aliveCheck: suspend () -> Boolean, userId: PlatformUUID?, onLiveOutput: suspend (String) -> Unit): ProcessExecutionResult {
+            onLiveOutput("Error: Importer $id is disabled and no fallback is available.")
+            return ProcessExecutionResult(-1, "Importer $id is disabled", "")
+        }
+        override suspend fun syncFavorites(user: User, onProgress: suspend (Double, String) -> Unit) {}
+        override suspend fun search(query: String, count: Int): List<SearchResult> = emptyList()
+        override suspend fun login(aliveCheck: suspend () -> Boolean, onLiveOutput: suspend (String) -> Unit): ProcessExecutionResult = ProcessExecutionResult(-1, "Importer $id is disabled", "")
+        override suspend fun authorized(aliveCheck: suspend () -> Boolean): Boolean = false
+        override fun tokenFileExists(): Boolean = false
     }
 
     suspend fun importContent(
@@ -25,8 +59,8 @@ class ImporterProxy(
     ): ProcessExecutionResult {
         val defaultImporter = getImporter(service ?: defaultService)
         val groups = urls.groupBy { url ->
-            if (defaultImporter.canHandle(url)) defaultImporter
-            else pluginManager.getAllImporters().find { it.canHandle(url) } ?: defaultImporter
+            if (defaultImporter.enabled && defaultImporter.canHandle(url)) defaultImporter
+            else pluginManager.getAllImporters().find { it.enabled && it.canHandle(url) } ?: defaultImporter
         }
 
         var lastResult = ProcessExecutionResult.EMPTY

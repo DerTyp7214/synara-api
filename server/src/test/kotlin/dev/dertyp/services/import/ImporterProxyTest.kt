@@ -19,7 +19,9 @@ class ImporterProxyTest {
         val tiddlDownloader = mockk<IImporter>(relaxed = true)
 
         every { tdnDownloader.id } returns ImportBackend.Tdn.id
+        every { tdnDownloader.enabled } returns true
         every { tiddlDownloader.id } returns ImportBackend.Tiddl.id
+        every { tiddlDownloader.enabled } returns true
 
         every { pluginManager.getImporter(ImportBackend.Tdn.id) } returns tdnDownloader
         every { pluginManager.getImporter(ImportBackend.Tiddl.id) } returns tiddlDownloader
@@ -53,7 +55,9 @@ class ImporterProxyTest {
         val d2 = mockk<IImporter>(relaxed = true)
 
         every { d1.id } returns "d1"
+        every { d1.enabled } returns true
         every { d2.id } returns "d2"
+        every { d2.enabled } returns true
         every { d1.canHandle(any()) } returns true
         every { d2.canHandle(any()) } returns true
 
@@ -69,5 +73,59 @@ class ImporterProxyTest {
         proxy.defaultService = ImportBackend("d2")
         proxy.importContent(listOf("any"), 1, { true }, null, null) {}
         coVerify { d2.importContent(any(), any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun `fallback should occur if default importer is disabled`() = runBlocking {
+        val d1 = mockk<IImporter>(relaxed = true)
+        val d2 = mockk<IImporter>(relaxed = true)
+
+        every { d1.id } returns "d1"
+        every { d1.enabled } returns false
+        every { d1.canHandle(any()) } returns true
+
+        every { d2.id } returns "d2"
+        every { d2.enabled } returns true
+        every { d2.canHandle(any()) } returns true
+
+        every { pluginManager.getImporter("d1") } returns d1
+        every { pluginManager.getImporter("d2") } returns d2
+        every { pluginManager.getAllImporters() } returns listOf(d1, d2)
+
+        proxy.defaultService = ImportBackend("d1")
+
+        proxy.importContent(
+            urls = listOf("any"),
+            maxRetries = 1,
+            aliveCheck = { true },
+            userId = null,
+            onLiveOutput = {}
+        )
+
+        coVerify { d2.importContent(any(), any(), any(), any(), any()) }
+        coVerify(exactly = 0) { d1.importContent(any(), any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun `should use DisabledImporter when no importers are enabled`() = runBlocking {
+        val d1 = mockk<IImporter>(relaxed = true)
+        every { d1.id } returns "d1"
+        every { d1.enabled } returns false
+
+        every { pluginManager.getImporter("d1") } returns d1
+        every { pluginManager.getAllImporters() } returns listOf(d1)
+
+        proxy.defaultService = ImportBackend("d1")
+
+        val result = proxy.importContent(
+            urls = listOf("any"),
+            maxRetries = 1,
+            aliveCheck = { true },
+            userId = null,
+            onLiveOutput = {}
+        )
+
+        assert(result.exitCode == -1)
+        assert(result.fullOutput.contains("is disabled"))
     }
 }

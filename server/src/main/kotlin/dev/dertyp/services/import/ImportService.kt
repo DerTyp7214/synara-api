@@ -82,7 +82,7 @@ class ImportRpcService(
     override suspend fun importUrls(urls: List<String>) {
         importService.logger.info("Processing ${urls.size} import URLs for user ${user.username}")
         val groups = urls.groupBy { url ->
-            importService.pluginManager.getAllImporters().find { it.canHandle(url) }
+            importService.pluginManager.getAllImporters().find { it.enabled && it.canHandle(url) }
         }
 
         groups.forEach { (importer, groupUrls) ->
@@ -442,13 +442,13 @@ class ImportService(
         val allResultSongs = mutableListOf<UserSong>()
 
         ids.toList().chunked(250).forEach { idChunk ->
-            val im = if (importerId != null) {
-                pluginManager.getImporter(importerId)
-            } else {
-                pluginManager.getImporter(importerProxy.defaultService.id)
+            val im = try {
+                importerProxy.getImporter(ImportBackend(importerId ?: importerProxy.defaultService.id))
+            } catch (_: Exception) {
+                null
             }
 
-            if (im != null) {
+            if (im != null && im.enabled) {
                 val result = im.importIds(idChunk, type, user, callback)
                 if (result.first) contentToImport = true
                 allResultSongs.addAll(result.second)
