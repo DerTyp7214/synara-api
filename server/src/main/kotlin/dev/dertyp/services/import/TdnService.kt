@@ -25,7 +25,7 @@ class TdnService(
     storageService: IServerStorageService
 ) : TidalBaseImporter(indexer, storageService) {
     override val id: String = ID
-    override val enabled: Boolean get() = tdnPath != null
+    override val enabled: Boolean get() = tdnPath != null && tokenFileExists()
 
     override val loginCommand: MutableList<String> = mutableListOf("tdn", "login")
     override val importCommand: MutableList<String> = mutableListOf("tdn", "dl")
@@ -143,6 +143,8 @@ class TdnService(
             cmd.add(0, "python3")
             cmd.add(1, "-u")
         }
+
+        directory?.mkdirs()
 
         return executeCommand(cmd, aliveCheck, logger, directory, onLineReceived = onLineReceived)
     }
