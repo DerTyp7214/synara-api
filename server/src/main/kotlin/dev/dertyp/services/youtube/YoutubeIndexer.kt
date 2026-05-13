@@ -56,7 +56,8 @@ class YoutubeIndexer(context: PluginContext) : BaseIndexer(context, IMetadataSer
 
                             val mbReleaseId = audioFile.musicBrainzReleaseId
                             val name = audioFile.album ?: audioFile.title ?: ""
-                            val artists = audioFile.getAlbumArtists(artistDelimiter).ifEmpty { audioFile.getArtists(artistDelimiter) }.sorted()
+                            val delimiter = getArtistDelimiter(audioFile)
+                            val artists = audioFile.getAlbumArtists(delimiter).ifEmpty { audioFile.getArtists(delimiter) }.sorted()
                             val songCount = audioFile.songCount ?: 0
                             val year = audioFile.year
 

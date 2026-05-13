@@ -97,7 +97,8 @@ class TidalIndexer(context: PluginContext) : BaseIndexer(context, IMetadataServi
                 val mbTrack = audioFile.musicBrainzTrackId?.let { resolvedMbTracks[it] }
 
                 val name = mbTrack?.albumTitle ?: audioFile.album ?: audioFile.title
-                val artists = audioFile.getAlbumArtists(artistDelimiter).ifEmpty { audioFile.getArtists(artistDelimiter) }.sorted()
+                val delimiter = getArtistDelimiter(audioFile)
+                val artists = audioFile.getAlbumArtists(delimiter).ifEmpty { audioFile.getArtists(delimiter) }.sorted()
                 val songCount = audioFile.songCount ?: 0
                 val year = audioFile.year
 

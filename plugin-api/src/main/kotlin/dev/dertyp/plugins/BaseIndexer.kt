@@ -95,6 +95,8 @@ abstract class BaseIndexer(
         return finalAlbum
     }
 
+    protected open fun getArtistDelimiter(audioFile: AudioFile): String = artistDelimiter
+
     open suspend fun groupByAlbum(files: List<Path>): Pair<Map<String, InsertableImage>, Map<InsertableAlbum, List<AudioFile>>> =
         coroutineScope {
             val semaphore = Semaphore(2)
@@ -117,7 +119,8 @@ abstract class BaseIndexer(
                             }
 
                             val name = audioFile.album ?: audioFile.title
-                            val artists = audioFile.getAlbumArtists(artistDelimiter).ifEmpty { audioFile.getArtists(artistDelimiter) }.sorted()
+                            val delimiter = getArtistDelimiter(audioFile)
+                            val artists = audioFile.getAlbumArtists(delimiter).ifEmpty { audioFile.getArtists(delimiter) }.sorted()
                             val songCount = audioFile.songCount ?: 0
                             val year = audioFile.year
 
@@ -305,7 +308,8 @@ abstract class BaseIndexer(
         val titleCleaned = rawTitle.replace("\uD83C\uDD74", "").trim()
         val isExplicitByEmoji = rawTitle.contains("\uD83C\uDD74")
 
-        val artists = audioFile.getArtists(artistDelimiter)
+        val delimiter = getArtistDelimiter(audioFile)
+        val artists = audioFile.getArtists(delimiter)
         val copyright = tag.getAll(FieldKey.COPYRIGHT)
         val trackNumber = tag.getFirst(FieldKey.TRACK).toIntOrNull() ?: 1
         val discNumber = tag.getFirst(FieldKey.DISC_NO).toIntOrNull() ?: 1

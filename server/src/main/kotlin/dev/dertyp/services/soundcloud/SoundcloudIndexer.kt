@@ -2,6 +2,8 @@ package dev.dertyp.services.soundcloud
 
 import dev.dertyp.plugins.BaseIndexer
 import dev.dertyp.plugins.PluginContext
+import dev.dertyp.plugins.musicBrainzTrackId
+import org.jaudiotagger.audio.AudioFile
 import java.io.File
 import java.nio.file.Path
 
@@ -13,5 +15,9 @@ class SoundcloudIndexer(context: PluginContext) : BaseIndexer(context) {
         if (!super.canHandle(path)) return false
         val tracksPath = context.storageService.tracksPath ?: return true
         return path.toAbsolutePath().toString().startsWith(File(tracksPath).absolutePath)
+    }
+
+    override fun getArtistDelimiter(audioFile: AudioFile): String {
+        return if (audioFile.musicBrainzTrackId != null) super.getArtistDelimiter(audioFile) else ","
     }
 }
