@@ -21,6 +21,7 @@ class ImporterPriorityTest {
         
         val tidalImporter = mockk<IImporter> {
             every { id } returns "tidal"
+            every { enabled } returns true
             every { canHandle(url1) } returns true
             every { canHandle(url2) } returns false
             coEvery { importContent(any(), any(), any(), any(), any()) } returns ProcessExecutionResult.EMPTY
@@ -28,6 +29,7 @@ class ImporterPriorityTest {
         
         val youtubeImporter = mockk<IImporter> {
             every { id } returns "youtube"
+            every { enabled } returns true
             every { canHandle(url1) } returns false
             every { canHandle(url2) } returns true
             coEvery { importContent(any(), any(), any(), any(), any()) } returns ProcessExecutionResult.EMPTY
