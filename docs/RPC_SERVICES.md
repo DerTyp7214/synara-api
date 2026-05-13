@@ -1442,6 +1442,7 @@ Manages user profiles and identities.
 | `setProfileImage` | `bytes` (`ByteArray`): The raw bytes of the image. | `Unit` | - |  | Update the current user's avatar. |
 | `setDisplayName` | `name` (`String`?): The new display name. | `Unit` | - |  | Update the current user's display name. |
 | `setCapabilities` | `id` (`PlatformUUID`): The UUID of the user.<br>`capabilities` (`List`<[UserCapability](#devdertypdatausercapability)>): The new list of capabilities. | `Unit` | **Admin** |  | Update the capabilities for a specific user. |
+| `createUser` | `user` ([AuthenticationRequest](#devdertypdataauthenticationrequest)): The user data.<br>`isAdmin` (`Boolean`): Whether the user is an admin.<br>`capabilities` (`List`<[UserCapability](#devdertypdatausercapability)>): The initial capabilities of the user. | [User](#devdertypdatauser)? | **Admin** |  | Create a new user. |
 
 ### IImportService <a name="devdertypservicesimportiimportservice"></a>
 Management of the integrated media importer.

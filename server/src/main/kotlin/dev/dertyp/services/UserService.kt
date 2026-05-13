@@ -41,6 +41,14 @@ class RpcUserService(
     override suspend fun setCapabilities(id: UUID, capabilities: List<UserCapability>) {
         userService.setCapabilities(id, capabilities)
     }
+
+    override suspend fun createUser(
+        user: AuthenticationRequest,
+        isAdmin: Boolean,
+        capabilities: List<UserCapability>
+    ): User? {
+        return userService.createUser(user, isAdmin, capabilities)
+    }
 }
 
 class UserService : Service() {
@@ -96,14 +104,27 @@ class UserService : Service() {
         }
     }
 
-    suspend fun createUser(user: AuthenticationRequest): User? = dbQuery {
-        UserTable.batchInsert(listOf(user)) {
-            this[UserTable.username] = it.username
-            this[UserTable.passwordHash] = BCrypt.withDefaults()
-                .hashToString(12, it.password.toCharArray())
-            this[UserTable.isAdmin] = false
-        }.map(::map)
-    }.singleOrNull()
+    suspend fun createUser(
+        user: AuthenticationRequest,
+        isAdmin: Boolean = false,
+        capabilities: List<UserCapability> = emptyList()
+    ): User? {
+        val createdUser = dbQuery {
+            UserTable.batchInsert(listOf(user)) {
+                this[UserTable.username] = it.username
+                this[UserTable.passwordHash] = BCrypt.withDefaults()
+                    .hashToString(12, it.password.toCharArray())
+                this[UserTable.isAdmin] = isAdmin
+            }.map(::map)
+        }.singleOrNull()
+
+        if (createdUser != null && capabilities.isNotEmpty()) {
+            setCapabilities(createdUser.id, capabilities)
+            return findUserById(createdUser.id)
+        }
+
+        return createdUser
+    }
 
     suspend fun upsertUser(user: User) = dbQuery {
         UserTable.upsert {
