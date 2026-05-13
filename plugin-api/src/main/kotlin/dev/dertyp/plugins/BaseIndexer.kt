@@ -224,6 +224,12 @@ abstract class BaseIndexer(
         if (queueMutex.withLock { indexQueue.isNotEmpty() }) startIndexer()
     }
 
+    override suspend fun start(userId: PlatformUUID?, stdout: suspend (String) -> Unit) {
+        val songPaths = pluginStorages.mapNotNull { it.tracksPath }.map { Path(it) }
+        val playlistPaths = pluginStorages.mapNotNull { it.playlistsPath }.map { Path(it) }
+        queue(songPaths, playlistPaths, null, userId, stdout).await()
+    }
+
     open suspend fun start(
         songPaths: List<Path>,
         playlistPaths: List<Path> = emptyList(),

@@ -21,6 +21,11 @@ interface IPluginIndexer {
         stdout: suspend (String) -> Unit
     ): Deferred<Unit>
 
+    suspend fun start(
+        userId: PlatformUUID? = null,
+        stdout: suspend (String) -> Unit
+    )
+
     val audioExtension: String
     val playlistExtension: String
     val artistDelimiter: String get() = ";"

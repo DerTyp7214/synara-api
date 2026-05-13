@@ -11,7 +11,7 @@ import dev.dertyp.services.schedule.ScheduleService
 import io.ktor.util.logging.KtorSimpleLogger
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.channelFlow
 import org.koin.core.component.KoinComponent
 import java.nio.file.Path
 import kotlin.concurrent.atomics.AtomicBoolean
@@ -20,22 +20,40 @@ import kotlin.io.path.Path
 
 class RpcIndexer(private val indexer: Indexer, private val user: User) : IIndexer {
     @OptIn(ExperimentalAtomicApi::class)
-    override fun start(): Flow<String> = flow {
+    override fun start(): Flow<String> = channelFlow {
         if (!indexer.isActive.compareAndSet(expectedValue = false, newValue = true)) {
             indexer.logger.warn("Indexer is already running.")
-            emit("Indexer is already running.")
-            return@flow
+            send("Indexer is already running.")
+            return@channelFlow
         }
 
-        indexer.logger.info("Starting indexing...")
-        emit("Starting indexing...")
-        indexer.start(user.id) { stdout ->
-            emit(stdout)
-        }
+        try {
+            indexer.logger.info("Starting indexing...")
+            send("Starting indexing...")
 
-        indexer.logger.info("Finished indexing...")
-        emit("Finished indexing...")
-        indexer.isActive.store(false)
+            coroutineScope {
+                if (indexer.enabled) {
+                    launch {
+                        indexer.start(user.id) { stdout ->
+                            send(stdout)
+                        }
+                    }
+                }
+
+                indexer.otherIndexers.filter { it.enabled }.forEach { otherIndexer ->
+                    launch {
+                        otherIndexer.start(user.id) { stdout ->
+                            send(stdout)
+                        }
+                    }
+                }
+            }
+
+            indexer.logger.info("Finished indexing...")
+            send("Finished indexing...")
+        } finally {
+            indexer.isActive.store(false)
+        }
     }
 }
 
@@ -91,7 +109,7 @@ class Indexer(
         )
     }
 
-    suspend fun start(userId: PlatformUUID? = null, stdout: suspend (String) -> Unit) = coroutineScope {
+    override suspend fun start(userId: PlatformUUID?, stdout: suspend (String) -> Unit) = coroutineScope {
         val log = { line: String -> async { stdout(line) } }
         if (storageService.tracksPath == null || storageService.playlistsPath == null)
             return@coroutineScope log("audio paths are not configured").await()
@@ -105,7 +123,7 @@ class Indexer(
         )
     }
 
-    private val otherIndexers = mutableSetOf<IPluginIndexer>()
+    val otherIndexers = mutableSetOf<IPluginIndexer>()
 
     fun registerIndexer(indexer: IPluginIndexer) {
         if (indexer != this) {
