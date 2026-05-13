@@ -11,6 +11,7 @@ import dev.dertyp.services.import.Type
 import dev.dertyp.services.metadata.MusicBrainzService
 import dev.dertyp.services.youtube.YoutubeApiService
 import dev.dertyp.services.youtube.YoutubeService
+import io.ktor.server.application.ApplicationEnvironment
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkStatic
@@ -40,8 +41,10 @@ class YoutubeServiceTest : KoinTest {
 
     @BeforeEach
     fun setup() {
+        val environment = mockk<ApplicationEnvironment>(relaxed = true)
         startKoin {
             modules(module {
+                single { environment }
                 single { songService }
                 single { userPlaylistService }
                 single { importService }

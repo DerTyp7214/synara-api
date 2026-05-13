@@ -9,6 +9,7 @@ import dev.dertyp.services.import.ImportService
 import dev.dertyp.services.import.Type
 import dev.dertyp.services.metadata.MusicBrainzService
 import dev.dertyp.services.soundcloud.SoundcloudService
+import io.ktor.server.application.ApplicationEnvironment
 import io.mockk.mockk
 import io.mockk.mockkStatic
 import io.mockk.unmockkAll
@@ -35,8 +36,10 @@ class SoundcloudServiceTest : KoinTest {
 
     @BeforeEach
     fun setup() {
+        val environment = mockk<ApplicationEnvironment>(relaxed = true)
         startKoin {
             modules(module {
+                single { environment }
                 single { songService }
                 single { userPlaylistService }
                 single { importService }

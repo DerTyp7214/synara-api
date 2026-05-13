@@ -64,6 +64,7 @@ tasks.register("generateEnvDocs") {
             "AUDIO_CUSTOM_PATH" to mapOf("desc" to "Path for custom uploaded audio.", "cat" to "Storage & Paths"),
             "DATA_IMAGES_PATH" to mapOf("desc" to "Path for cached images/covers.", "cat" to "Storage & Paths"),
             "AUDIO_TRACKS_SECONDARY_PATH" to mapOf("desc" to "Optional secondary audio path.", "cat" to "Storage & Paths"),
+            "YTDLP_COOKIES_PATH" to mapOf("desc" to "Path to cookies.txt for yt-dlp.", "cat" to "Storage & Paths"),
             "PROXY_HOSTNAME" to mapOf("desc" to "Public hostname of the proxy.", "cat" to "Proxy Configuration"),
             "PROXY_CONTROL_PORT" to mapOf("desc" to "Port for the proxy control interface.", "cat" to "Proxy Configuration"),
             "PROXY_SSL" to mapOf("desc" to "Whether to use SSL (true/false).", "cat" to "Proxy Configuration"),

@@ -17,6 +17,7 @@ import dev.dertyp.services.import.ProcessExecutionResult
 import dev.dertyp.services.metadata.MusicBrainzService
 import dev.dertyp.services.youtube.YoutubeApiService
 import dev.dertyp.services.youtube.YoutubeService
+import io.ktor.server.application.ApplicationEnvironment
 import io.mockk.*
 import kotlinx.coroutines.runBlocking
 import org.jaudiotagger.audio.AudioFile
@@ -76,8 +77,10 @@ class YoutubeMetadataEnrichmentTest : KoinTest {
 
     @BeforeEach
     fun setup() {
+        val environment = mockk<ApplicationEnvironment>(relaxed = true)
         startKoin {
             modules(module {
+                single { environment }
                 single { songService }
                 single { userPlaylistService }
                 single { importService }

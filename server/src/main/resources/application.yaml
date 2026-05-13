@@ -61,5 +61,7 @@ proxy:
   key: ${PROXY_KEY:}
 youtube:
   apiKey: ${YOUTUBE_API_KEY:}
+ytdlp:
+  cookies: ${YTDLP_COOKIES_PATH:}
 workers:
   threadMultiplier: ${WORKER_THREAD_MULTIPLIER:1.0}

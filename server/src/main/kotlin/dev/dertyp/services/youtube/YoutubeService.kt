@@ -42,7 +42,7 @@ open class YoutubeService(
     private val youtubeApiService: YoutubeApiService,
     private val lrcLibService: LrcLibService,
     private val musicBrainzService: MusicBrainzService
-) : BaseImporter(indexer, storageService) {
+) : BaseYtdlpImporter(indexer, storageService) {
     override val id: String = ID
     override val enabled: Boolean get() = ytdlpPath != null
 
@@ -51,8 +51,8 @@ open class YoutubeService(
     private val importService by inject<ImportService>()
 
     override val loginCommand: MutableList<String> = mutableListOf()
-    override val importCommand: MutableList<String> = mutableListOf(
-        "yt-dlp", "-x", "--audio-format", "flac", "--no-progress", "--convert-thumbnails", "jpg",
+    override val importCommand: MutableList<String> get() = ytdlp(
+        "-x", "--audio-format", "flac", "--no-progress", "--convert-thumbnails", "jpg",
         "--write-auto-subs", "--write-subs", "--sub-langs", "en.*,.*", "--convert-subs", "lrc"
     )
     override val favImportCommand: MutableList<String> = mutableListOf()
@@ -242,8 +242,8 @@ open class YoutubeService(
         }
 
         if (ytdlpPath == null) return null
-        val cmd = listOf(ytdlpPath, "-J", "--flat-playlist", url)
-        val result = executeCommand(cmd, { true }, logger) {}
+        val cmd = ytdlp("-J", "--flat-playlist", url)
+        val result = executeImporter(cmd, { true }) {}
         if (result.exitCode == 0) {
             try {
                 val jsonStartIndex = result.fullOutput.indexOf("{")
@@ -454,8 +454,8 @@ open class YoutubeService(
         }
 
         if (ytdlpPath == null) return null
-        val cmd = listOf(ytdlpPath, "-J", "--simulate", url)
-        val result = executeCommand(cmd, aliveCheck, logger) {}
+        val cmd = ytdlp("-J", "--simulate", url)
+        val result = executeImporter(cmd, aliveCheck) {}
         if (result.exitCode == 0) {
             try {
                 val jsonStartIndex = result.fullOutput.indexOf("{")

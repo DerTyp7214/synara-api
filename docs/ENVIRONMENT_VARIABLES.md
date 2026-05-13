@@ -90,4 +90,5 @@ Most variables have sensible defaults and are **optional**. Only variables witho
 | `AUDIO_TRACKS_SECONDARY_PATH` | Optional secondary audio path. | No | - | `/data/Synara/other` |
 | `AUDIO_TRANSCODE_PATH` | Path for transcoded files. | No | `music/transcode` | `/data/Synara/Transcode` |
 | `DATA_IMAGES_PATH` | Path for cached images/covers. | No | `data/images` | `/data/Synara/Images` |
+| `YTDLP_COOKIES_PATH` | Path to cookies.txt for yt-dlp. | No | - | `/data/Synara/cookies.txt` |
 

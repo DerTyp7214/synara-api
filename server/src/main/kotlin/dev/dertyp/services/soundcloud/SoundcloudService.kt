@@ -42,7 +42,7 @@ class SoundcloudService(
     storageService: IServerStorageService,
     private val lrcLibService: LrcLibService,
     private val musicBrainzService: MusicBrainzService
-) : BaseImporter(indexer, storageService) {
+) : BaseYtdlpImporter(indexer, storageService) {
     override val id: String = ID
     override val enabled: Boolean get() = ytdlpPath != null
 
@@ -51,8 +51,8 @@ class SoundcloudService(
     private val importService by inject<ImportService>()
 
     override val loginCommand: MutableList<String> = mutableListOf()
-    override val importCommand: MutableList<String> = mutableListOf(
-        "yt-dlp", "-x", "--audio-format", "flac", "--no-progress", "--convert-thumbnails", "jpg"
+    override val importCommand: MutableList<String> get() = ytdlp(
+        "-x", "--audio-format", "flac", "--no-progress", "--convert-thumbnails", "jpg"
     )
     override val favImportCommand: MutableList<String> = mutableListOf()
 
@@ -209,8 +209,8 @@ class SoundcloudService(
 
     private suspend fun fetchPlaylistInfo(url: String): Map<String, Any>? {
         if (ytdlpPath == null) return null
-        val cmd = listOf(ytdlpPath, "-J", "--flat-playlist", url)
-        val result = executeCommand(cmd, { true }, logger) {}
+        val cmd = ytdlp("-J", "--flat-playlist", url)
+        val result = executeImporter(cmd, { true }) {}
         if (result.exitCode == 0) {
             try {
                 val jsonStartIndex = result.fullOutput.indexOf("{")
@@ -403,8 +403,8 @@ class SoundcloudService(
 
     private suspend fun fetchInfo(url: String, aliveCheck: suspend () -> Boolean): Map<String, String>? {
         if (ytdlpPath == null) return null
-        val cmd = listOf(ytdlpPath, "-J", "--simulate", url)
-        val result = executeCommand(cmd, aliveCheck, logger) {}
+        val cmd = ytdlp("-J", "--simulate", url)
+        val result = executeImporter(cmd, aliveCheck) {}
         if (result.exitCode == 0) {
             try {
                 val jsonStartIndex = result.fullOutput.indexOf("{")
