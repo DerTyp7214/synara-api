@@ -581,6 +581,14 @@ class ArtistService : ArtistLibrary, Service() {
         }.value
 
         if (musicBrainzId != null) {
+            if (MBArtistTable.selectAll().where { MBArtistTable.id eq musicBrainzId }.empty()) {
+                MBArtistTable.insert {
+                    it[id] = EntityID(musicBrainzId, MBArtistTable)
+                    it[MBArtistTable.name] = name
+                    it[MBArtistTable.sortName] = name
+                }
+            }
+
             ArtistMusicBrainzTable.insert {
                 it[artistId] = newId
                 it[ArtistMusicBrainzTable.musicBrainzId] = musicBrainzId
@@ -866,9 +874,18 @@ class ArtistService : ArtistLibrary, Service() {
         }
         
         if (artist.musicbrainzId != null) {
+            val mbId = artist.musicbrainzId!!
+            if (MBArtistTable.selectAll().where { MBArtistTable.id eq mbId }.empty()) {
+                MBArtistTable.insert {
+                    it[id] = EntityID(mbId, MBArtistTable)
+                    it[name] = artist.name
+                    it[sortName] = artist.name
+                }
+            }
+
             ArtistMusicBrainzTable.upsert(ArtistMusicBrainzTable.artistId) {
                 it[artistId] = artist.id
-                it[musicBrainzId] = artist.musicbrainzId
+                it[musicBrainzId] = mbId
             }
         }
 

@@ -859,9 +859,17 @@ class AlbumService : AlbumLibrary, Service() {
         }
 
         if (album.musicbrainzId != null) {
+            val mbId = album.musicbrainzId!!
+            if (MBReleaseTable.selectAll().where { MBReleaseTable.id eq mbId }.empty()) {
+                MBReleaseTable.insert {
+                    it[id] = EntityID(mbId, MBReleaseTable)
+                    it[title] = album.name
+                }
+            }
+
             AlbumMusicBrainzTable.upsert(AlbumMusicBrainzTable.albumId) {
                 it[albumId] = album.id
-                it[musicBrainzId] = album.musicbrainzId
+                it[musicBrainzId] = mbId
             }
         }
 
