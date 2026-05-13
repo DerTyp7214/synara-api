@@ -72,8 +72,6 @@ class TiddlService(
             cmd.add(1, "-u")
         }
 
-        directory?.mkdirs()
-
         return executeCommand(cmd, aliveCheck, logger, directory, onLineReceived = onLineReceived)
     }
 }

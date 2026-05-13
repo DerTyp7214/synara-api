@@ -260,8 +260,6 @@ class SoundcloudService(
 
         cmd[0] = ytdlpPath
 
-        directory?.mkdirs()
-
         return executeCommand(cmd, aliveCheck, logger, directory, onLineReceived = onLineReceived)
     }
 

@@ -35,7 +35,7 @@ class ImporterPriorityTest {
             coEvery { importContent(any(), any(), any(), any(), any()) } returns ProcessExecutionResult.EMPTY
         }
 
-        every { pluginManager.getImporter("tiddl") } returns tidalImporter // Mocking default
+        every { pluginManager.getImporter("tiddl") } returns tidalImporter
         every { pluginManager.getAllImporters() } returns listOf(tidalImporter, youtubeImporter)
 
         proxy.importContent(listOf(url1, url2), 3, { true }) {}

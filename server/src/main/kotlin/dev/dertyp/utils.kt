@@ -98,6 +98,17 @@ suspend fun executeCommand(
         }
 
         try {
+            if (directory != null && !directory.exists()) {
+                val created = directory.mkdirs()
+                if (created) {
+                    logger.info("Created working directory: ${directory.absolutePath}")
+                } else if (!directory.exists()) {
+                    val error = "Working directory does not exist and could not be created: ${directory.absolutePath}"
+                    logger.error(error)
+                    return@coroutineScope ProcessExecutionResult(-3, "", error)
+                }
+            }
+
             process = ProcessBuilder(command)
                 .directory(directory)
                 .redirectErrorStream(true)
