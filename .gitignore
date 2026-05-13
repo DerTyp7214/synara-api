@@ -46,3 +46,5 @@ local.properties
 /data.db-wal
 /transcriber/venv/
 /transcriber/.cache/
+
+docker-compose.server.yml

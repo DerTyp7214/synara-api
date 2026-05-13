@@ -127,6 +127,7 @@ class HttpClientQueueService : Service() {
                     host.contains("musicbrainz.org") -> 1.seconds
                     host.contains("api.song.link") -> 6.seconds
                     host.contains("theaudiodb.com") -> 2.seconds
+                    host.contains("googleapis.com") || host.contains("youtube.com") -> 1.seconds
                     else -> 250.milliseconds
                 }
 

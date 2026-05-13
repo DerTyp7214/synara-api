@@ -13,14 +13,14 @@ abstract class BaseYtdlpImporter(
 ) : BaseImporter(indexer, storageService) {
     private val environment by inject<ApplicationEnvironment>()
 
-    private val ytdlpCookiesPath: String?
-        get() = environment.config.propertyOrNull("ytdlp.cookies")?.getString()
+    private val ytdlpConfigPath: String?
+        get() = environment.config.propertyOrNull("ytdlp.config")?.getString()
 
     protected fun ytdlp(vararg args: String): MutableList<String> {
         val cmd = mutableListOf("yt-dlp")
-        ytdlpCookiesPath?.let {
+        ytdlpConfigPath?.let {
             if (Path(it).exists()) {
-                cmd.add("--cookies")
+                cmd.add("--config-location")
                 cmd.add(it)
             }
         }

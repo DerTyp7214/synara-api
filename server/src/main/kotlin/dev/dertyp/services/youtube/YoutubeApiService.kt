@@ -2,13 +2,16 @@ package dev.dertyp.services.youtube
 
 import dev.dertyp.ApiClient
 import dev.dertyp.core.HttpClientPriority
-import dev.dertyp.core.safeQueuedGet
 import dev.dertyp.services.Service
-import io.ktor.client.request.get
+import io.ktor.client.call.body
+import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.isSuccess
 import io.ktor.server.application.ApplicationEnvironment
+import kotlinx.coroutines.delay
 import kotlinx.serialization.Serializable
+import kotlin.time.Duration.Companion.seconds
 
 @Serializable
 data class YoutubePlaylistResponse(
@@ -88,10 +91,39 @@ class YoutubeApiService(
 
     val enabled: Boolean get() = !apiKey.isNullOrBlank()
 
+    private suspend inline fun <reified T> retryableQueuedGet(
+        url: String,
+        priority: HttpClientPriority = HttpClientPriority.NORMAL
+    ): T? {
+        var retries = 0
+        val maxRetries = 3
+        while (retries < maxRetries) {
+            try {
+                val response: HttpResponse = ApiClient.queueInstance.enqueue(url, priority)
+                if (response.status == HttpStatusCode.TooManyRequests) {
+                    logger.warn("Rate limited by YouTube, retrying in 10s... ($retries/$maxRetries)")
+                    delay(10.seconds)
+                    retries++
+                    continue
+                }
+                return if (response.status.isSuccess()) response.body<T>() else null
+            } catch (e: Exception) {
+                if (retries < maxRetries - 1) {
+                    logger.warn("Error during YouTube request ($url): ${e.message}, retrying... ($retries/$maxRetries)")
+                    delay(5.seconds)
+                } else {
+                    logger.error("Error during YouTube request after $maxRetries retries ($url): ${e.message}", e)
+                }
+                retries++
+            }
+        }
+        return null
+    }
+
     suspend fun getYoutubeMusicCover(videoId: String): String? {
         return try {
             val url = "https://music.youtube.com/watch?v=$videoId"
-            val response = ApiClient.instance.get(url)
+            val response = ApiClient.queueInstance.enqueue(url, HttpClientPriority.LOW)
             if (response.status != HttpStatusCode.OK) return null
             val html = response.bodyAsText()
             val regex = Regex("""<meta property="og:image" content="([^"]+)">""")
@@ -105,7 +137,7 @@ class YoutubeApiService(
         if (!enabled) return null
         val url = "$baseUrl/videos?part=snippet,contentDetails&id=$videoId&key=$apiKey"
         return try {
-            val response = ApiClient.instance.safeQueuedGet<YoutubeVideoListResponse>(url, HttpClientPriority.HIGH)
+            val response = retryableQueuedGet<YoutubeVideoListResponse>(url, HttpClientPriority.HIGH)
             val item = response?.items?.firstOrNull() ?: return null
             val map = mutableMapOf<String, String>()
             map["id"] = videoId
@@ -150,12 +182,7 @@ class YoutubeApiService(
             val url = "$baseUrl/playlistItems?part=snippet,contentDetails&maxResults=50&playlistId=$playlistId&key=$apiKey" +
                     (nextToken?.let { "&pageToken=$it" } ?: "")
             
-            val response = try {
-                ApiClient.instance.safeQueuedGet<YoutubePlaylistResponse>(url, HttpClientPriority.HIGH)
-            } catch (e: Exception) {
-                logger.error("Failed to fetch youtube playlist items", e)
-                null
-            }
+            val response = retryableQueuedGet<YoutubePlaylistResponse>(url, HttpClientPriority.HIGH)
             
             response?.items?.let { items.addAll(it) }
             nextToken = response?.nextPageToken
@@ -167,11 +194,6 @@ class YoutubeApiService(
     suspend fun getPlaylistMetadata(playlistId: String): YoutubePlaylist? {
         if (!enabled) return null
         val url = "$baseUrl/playlists?part=snippet&id=$playlistId&key=$apiKey"
-        return try {
-            ApiClient.instance.safeQueuedGet<YoutubePlaylistListResponse>(url, HttpClientPriority.HIGH)?.items?.firstOrNull()
-        } catch (e: Exception) {
-            logger.error("Failed to fetch youtube playlist metadata", e)
-            null
-        }
+        return retryableQueuedGet<YoutubePlaylistListResponse>(url, HttpClientPriority.HIGH)?.items?.firstOrNull()
     }
 }
