@@ -22,17 +22,16 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.v1.core.*
-import org.jetbrains.exposed.v1.jdbc.deleteWhere
-import org.jetbrains.exposed.v1.jdbc.selectAll
-import org.jetbrains.exposed.v1.jdbc.update
-import org.jetbrains.exposed.v1.jdbc.upsert
+import org.jetbrains.exposed.v1.jdbc.*
 import org.koin.core.component.inject
 import java.time.LocalDate
 import java.time.ZoneOffset
 import java.util.UUID
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.hours
 
 class ReleaseService(private val environment: ApplicationEnvironment) : Service() {
     private val musicBrainzService by inject<MusicBrainzService>()
@@ -150,17 +149,66 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
             environment
         ) as AppleMusicService
 
-        val artists = dbQuery {
-            FollowedArtistTable.innerJoin(ArtistMusicBrainzTable, onColumn = { FollowedArtistTable.artistId }, otherColumn = { ArtistMusicBrainzTable.artistId })
-                .selectAll()
-                .map { Pair(it[ArtistMusicBrainzTable.artistId].value, it[ArtistMusicBrainzTable.musicBrainzId]) }
+        val followedArtists = dbQuery {
+            FollowedArtistTable.innerJoin(ArtistMusicBrainzTable, { FollowedArtistTable.artistId }, { ArtistMusicBrainzTable.artistId })
+                .select(FollowedArtistTable.artistId, ArtistMusicBrainzTable.musicBrainzId)
+                .where { ArtistMusicBrainzTable.musicBrainzId.isNotNull() }
+                .groupBy(FollowedArtistTable.artistId, ArtistMusicBrainzTable.musicBrainzId)
+                .map { it[FollowedArtistTable.artistId].value to it[ArtistMusicBrainzTable.musicBrainzId]!!.value }
                 .distinctBy { it.second }
         }
 
-        logger.info("Starting to fetch new releases for ${artists.size} artists")
-        onProgress(0.0, "Starting to fetch new releases for ${artists.size} artists")
+        val followedResults = processArtistsBatch(
+            artists = followedArtists,
+            tidalService = tidalService,
+            appleMusicService = appleMusicService,
+            onProgress = { p, s -> onProgress(p * 0.5, s) },
+            label = "followed"
+        )
 
+        val unfollowedResults = fetchUnfollowedArtistsReleases(tidalService, appleMusicService) { p, s ->
+            onProgress(p * 0.5 + 50.0, s)
+        }
+
+        onProgress(100.0, "Finished fetching new releases")
+
+        followedResults + unfollowedResults
+    }
+
+    private suspend fun fetchUnfollowedArtistsReleases(
+        tidalService: TidalService,
+        appleMusicService: AppleMusicService,
+        onProgress: suspend (Double, String) -> Unit
+    ): Map<String, Int> = withTimeoutOrNull(2.hours) {
+        val unfollowedArtists: List<Pair<UUID, UUID>> = dbQuery {
+            ArtistTable.innerJoin(ArtistMusicBrainzTable, { ArtistTable.id }, { ArtistMusicBrainzTable.artistId })
+                .leftJoin(SongArtistTable, { ArtistTable.id }, { SongArtistTable.artistId })
+                .leftJoin(FollowedArtistTable, { ArtistTable.id }, { FollowedArtistTable.artistId })
+                .select(ArtistTable.id, ArtistMusicBrainzTable.musicBrainzId, SongArtistTable.songId.count())
+                .where { FollowedArtistTable.artistId.isNull() }
+                .andWhere { ArtistMusicBrainzTable.musicBrainzId.isNotNull() }
+                .groupBy(ArtistTable.id, ArtistMusicBrainzTable.musicBrainzId)
+                .orderBy(SongArtistTable.songId.count(), SortOrder.DESC)
+                .map { it[ArtistTable.id].value to it[ArtistMusicBrainzTable.musicBrainzId]!!.value }
+        }
+
+        logger.info("Starting to fetch new releases for ${unfollowedArtists.size} unfollowed artists (2h timeout)")
+        processArtistsBatch(unfollowedArtists, tidalService, appleMusicService, onProgress, "unfollowed")
+    } ?: emptyMap()
+
+    private suspend fun processArtistsBatch(
+        artists: List<Pair<UUID, UUID>>,
+        tidalService: TidalService,
+        appleMusicService: AppleMusicService,
+        onProgress: suspend (Double, String) -> Unit,
+        label: String
+    ): Map<String, Int> = coroutineScope {
         val totalArtists = artists.size
+        if (totalArtists == 0) return@coroutineScope emptyMap()
+
+        logger.info("Starting to fetch new releases for $totalArtists $label artists")
+        onProgress(0.0, "Starting to fetch new releases for $totalArtists $label artists")
+
         var currentProgress = 0.0
         val progressMutex = Mutex()
         val dbSemaphore = Semaphore(1)
@@ -171,16 +219,15 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
                 var progressAddedForArtist = 0.0
                 var artistName: String? = null
                 try {
-                    if (mbId == null) return@async null
                     artistName = dbSemaphore.withPermit {
                         dbQuery {
                             ArtistTable.selectAll().where { ArtistTable.id eq artistId }.singleOrNull()?.get(ArtistTable.name)
                         }
                     } ?: return@async null
 
-                    logger.info("Fetching releases for artist: $artistName")
+                    logger.info("Fetching releases for $label artist: $artistName")
 
-                    val mbReleases = musicBrainzService.fetchReleasesByArtist(mbId.value, priority = HttpClientPriority.LOW)
+                    val mbReleases = musicBrainzService.fetchReleasesByArtist(mbId, priority = HttpClientPriority.LOW)
 
                     val albumMappings = dbSemaphore.withPermit {
                         dbQuery {
@@ -202,7 +249,7 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
                         }
                     }
 
-                    val groups = musicBrainzService.fetchReleaseGroups(mbId.value, priority = HttpClientPriority.LOW)
+                    val groups = musicBrainzService.fetchReleaseGroups(mbId, priority = HttpClientPriority.LOW)
                     if (groups.isEmpty()) {
                         progressMutex.withLock {
                             currentProgress += artistWeight
@@ -429,9 +476,6 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
             }
         }.awaitAll().filterNotNull().toMap()
 
-        onProgress(100.0, "Finished fetching new releases")
-
-        logger.info("Finished fetching new releases. Found new releases for ${results.size} artists.")
         results
     }
 
