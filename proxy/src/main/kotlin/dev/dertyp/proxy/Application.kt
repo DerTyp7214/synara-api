@@ -121,6 +121,9 @@ fun Application.module() {
                             logger.info("[{}] Client {} disconnected by server", assignedId, msg.clientId)
                             tunnel.clients.remove(msg.clientId)?.close()
                         }
+                        is ProxyMessage.Ping -> {
+                            tunnel.sendChannel.send(ProxyMessage.Pong)
+                        }
                         else -> {}
                     }
                 }

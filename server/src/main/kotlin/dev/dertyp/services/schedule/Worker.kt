@@ -193,13 +193,16 @@ abstract class Worker(val name: String) : KoinComponent {
                     remaining -= granted
                 }
                 
-                if (remaining > 0) {
-                    sortedWorkers.forEach { (_, pair) ->
+                while (remaining > 0) {
+                    var anyAdded = false
+                    for ((_, pair) in sortedWorkers) {
                         if (remaining > 0 && pair.second.value < pair.first) {
                             pair.second.value += 1
                             remaining -= 1
+                            anyAdded = true
                         }
                     }
+                    if (!anyAdded) break
                 }
             }
         }

@@ -216,4 +216,22 @@ class ProxyApplicationTest {
             assertEquals(msg1.clientId, msg2.clientId)
         }
     }
+
+    @Test
+    fun `proxy should respond to ping with pong`() = testApplication {
+        application {
+            module()
+        }
+        val client = createClient {
+            install(WebSockets)
+        }
+
+        client.webSocket("/proxy/server") {
+            incoming.receive()
+
+            send(ProxyMessage.Ping.toFrame())
+            val response = ProxyMessage.fromFrame(incoming.receive())
+            assertTrue(response is ProxyMessage.Pong)
+        }
+    }
 }

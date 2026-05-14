@@ -52,12 +52,22 @@ sealed class ProxyMessage {
         override val clientId: UUID = UUID(0, 0)
     }
 
+    object Ping : ProxyMessage() {
+        override val clientId: UUID = UUID(0, 0)
+    }
+
+    object Pong : ProxyMessage() {
+        override val clientId: UUID = UUID(0, 0)
+    }
+
     fun toFrame(): Frame {
         val type = when (this) {
             is NewClient -> 0
             is ClientFrame -> 1
             is ClientDisconnected -> 2
             is AssignedId -> 3
+            is Ping -> 4
+            is Pong -> 5
         }
         val metadataBytes = when (this) {
             is NewClient -> Json.encodeToString(ConnectionMetadata.serializer(), ConnectionMetadata(uri, headers)).toByteArray()
@@ -107,6 +117,8 @@ sealed class ProxyMessage {
                 }
                 2 -> ClientDisconnected(clientId)
                 3 -> AssignedId(String(ByteArray(buffer.remaining()).also { buffer.get(it) }))
+                4 -> Ping
+                5 -> Pong
                 else -> null
             }
         }

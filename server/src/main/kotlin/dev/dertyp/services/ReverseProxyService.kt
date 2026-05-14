@@ -22,6 +22,8 @@ import io.ktor.util.AttributeKey
 import io.ktor.util.Attributes
 import io.ktor.util.reflect.TypeInfo
 import io.ktor.utils.io.ByteReadChannel
+import io.ktor.websocket.CloseReason
+import io.ktor.websocket.close
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.rpc.krpc.KrpcTransport
@@ -34,6 +36,8 @@ import kotlin.concurrent.atomics.AtomicBoolean
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.coroutines.CoroutineContext
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.TimeMark
+import kotlin.time.TimeSource
 
 @OptIn(ExperimentalAtomicApi::class)
 class ReverseProxyService(
@@ -48,6 +52,9 @@ class ReverseProxyService(
 
     private val _isRunning = AtomicBoolean(false)
     val isRunning: Boolean get() = _isRunning.load()
+
+    var lastInteraction: TimeMark? = null
+        private set
 
     val isConfigured: Boolean get() = !proxyHost.isNullOrBlank() && controlPort != null
 
@@ -121,9 +128,24 @@ class ReverseProxyService(
             val activeServers = ConcurrentHashMap<UUID, ProxyKrpcServer>()
             logger.info("Connected to reverse proxy control at $proxyHost:$controlPort")
             _isConnected.store(true)
+            lastInteraction = TimeSource.Monotonic.markNow()
 
             try {
+                launch {
+                    while (isActive) {
+                        delay(10.seconds)
+                        val last = lastInteraction
+                        if (last != null && last.elapsedNow() > 30.seconds) {
+                            logger.warn("Reverse proxy health check failed (no interaction for 30s), reconnecting...")
+                            this@webSocket.close(CloseReason(CloseReason.Codes.VIOLATED_POLICY, "Health check failed"))
+                            break
+                        }
+                        send(ProxyMessage.Ping.toFrame())
+                    }
+                }
+
                 for (frame in incoming) {
+                    lastInteraction = TimeSource.Monotonic.markNow()
                     val msg = ProxyMessage.fromFrame(frame) ?: continue
                     val clientId = msg.clientId
 
@@ -154,6 +176,10 @@ class ReverseProxyService(
                         is ProxyMessage.AssignedId -> {
                             this@ReverseProxyService.proxyId = msg.id
                             logger.info("Proxy assigned ID: ${msg.id}")
+                        }
+                        is ProxyMessage.Pong -> {}
+                        is ProxyMessage.Ping -> {
+                            send(ProxyMessage.Pong.toFrame())
                         }
                     }
                 }

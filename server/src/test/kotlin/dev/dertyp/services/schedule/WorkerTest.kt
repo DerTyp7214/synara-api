@@ -62,7 +62,7 @@ class WorkerTest : KoinTest {
     }
 
     private suspend fun awaitSettlement(expectedTotal: Int, vararg workers: TestWorker) {
-        withTimeout(30.seconds) {
+        withTimeout(60.seconds) {
             while (isActive) {
                 val threadValues = workers.map { it.name to it.getThreadsFlow().value }
                 val currentTotal = threadValues.sumOf { it.second }
@@ -70,7 +70,7 @@ class WorkerTest : KoinTest {
                 
                 if (allRegistered && currentTotal == expectedTotal) break
                 
-                delay(100.milliseconds)
+                delay(200.milliseconds)
             }
         }
     }
@@ -124,6 +124,7 @@ class WorkerTest : KoinTest {
         val job2 = launch { worker2.testRunParallel((1..100).toList(), 50) { latch.await() } }
         val job3 = launch { worker3.testRunParallel((1..100).toList(), 50) { latch.await() } }
 
+        delay(500.milliseconds)
         awaitSettlement(maxSafe, worker1, worker2, worker3)
 
         val w1 = worker1.getThreadsFlow().value

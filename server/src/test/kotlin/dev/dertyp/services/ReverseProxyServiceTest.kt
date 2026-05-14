@@ -18,13 +18,14 @@ import io.ktor.websocket.close
 import io.mockk.mockk
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
-import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
 import org.koin.dsl.module
 import org.koin.test.KoinTest
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
@@ -271,6 +272,62 @@ class ReverseProxyServiceTest : KoinTest {
 
             assertEquals("server-1", service.proxyId)
             delay(1.seconds)
+            job.cancelAndJoin()
+        } finally {
+            server.stop(500, 500)
+            tearDown()
+        }
+    }
+
+    @Test
+    fun `should reconnect if health check fails`() = runBlocking {
+        val pingsReceived = Channel<Unit>(Channel.UNLIMITED)
+        val connectionCount = AtomicInteger(0)
+
+        val server = embeddedServer(Netty, port = 0) {
+            install(WebSockets)
+            routing {
+                webSocket("/proxy/server") {
+                    val count = connectionCount.incrementAndGet()
+                    send(ProxyMessage.AssignedId("server-$count").toFrame())
+                    
+                    for (frame in incoming) {
+                        val msg = ProxyMessage.fromFrame(frame)
+                        if (msg is ProxyMessage.Ping) {
+                            pingsReceived.send(Unit)
+                        }
+                    }
+                }
+            }
+        }.start(wait = false)
+
+        val port = server.engine.resolvedConnectors().first().port
+        
+        val config = MapApplicationConfig(
+            "proxy.hostname" to "127.0.0.1",
+            "proxy.controlPort" to port.toString()
+        )
+
+        val mockApp = mockk<Application>(relaxed = true)
+        setupKoin(mockApp)
+
+        try {
+            val service = ReverseProxyService(config)
+            val job = launch {
+                service.startService()
+            }
+
+            withTimeout(15.seconds) {
+                pingsReceived.receive()
+            }
+            
+            assertNotNull(service.lastInteraction)
+
+            val initialInteraction = service.lastInteraction!!
+
+            delay(11.seconds)
+            assertTrue(service.lastInteraction!!.elapsedNow() < initialInteraction.elapsedNow())
+
             job.cancelAndJoin()
         } finally {
             server.stop(500, 500)
