@@ -377,7 +377,7 @@ class AlbumService : AlbumLibrary, Service() {
         if (directMatches.isNotEmpty()) return directMatches
 
         val release = cachedMusicBrainzService.getRelease(mbId)
-        val releaseGroupId = release?.releaseGroup?.id ?: return emptyList()
+        val releaseGroupId = release?.releaseGroup?.id ?: mbId
 
         val otherAlbumIds = dbQuery {
             AlbumMusicBrainzTable

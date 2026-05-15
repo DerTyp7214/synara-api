@@ -1129,7 +1129,7 @@ Manages albums and their metadata.
 | Function | Parameters | Returns | Permissions | Errors | Description |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | `byId` | `id` (`PlatformUUID`): The album unique identifier. | [Album](#devdertypdataalbum)? | - |  | Get album by ID. |
-| `byMusicBrainzId` | `mbId` (`PlatformUUID`): The MusicBrainz release UUID. | `List`<[Album](#devdertypdataalbum)> | - |  | Get album by MusicBrainz ID. |
+| `byMusicBrainzId` | `mbId` (`PlatformUUID`): The MusicBrainz release (or release-group) UUID. | `List`<[Album](#devdertypdataalbum)> | - |  | Get album by MusicBrainz ID. |
 | `byIds` | `ids` (`List`<`PlatformUUID`>): Collection of album IDs. | `List`<[Album](#devdertypdataalbum)> | - |  | Get multiple albums by their IDs. |
 | `versions` | `id` (`PlatformUUID`): The album unique identifier. | `List`<[Album](#devdertypdataalbum)> | - |  | List different versions of an album. |
 | `byName` | `page` (`Int`): Page index (starting from 0).<br>`pageSize` (`Int`): Number of items per page.<br>`name` (`String`): The album name to search for. | [PaginatedResponse](#devdertypdatapaginatedresponse)<[Album](#devdertypdataalbum)> | - |  | Search albums by name. |
