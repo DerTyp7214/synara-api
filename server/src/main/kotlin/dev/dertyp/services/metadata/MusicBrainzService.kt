@@ -433,6 +433,16 @@ class CachedMusicBrainzService(
         } ?: cached
     }
 
+    override suspend fun getReleasesByReleaseGroup(id: PlatformUUID): List<MusicBrainzRelease> = getReleasesByReleaseGroup(id, HttpClientPriority.HIGH)
+
+    suspend fun getReleasesByReleaseGroup(id: PlatformUUID, priority: HttpClientPriority = HttpClientPriority.NORMAL): List<MusicBrainzRelease> {
+        val cached = musicBrainzCacheService.getReleasesByReleaseGroup(id)
+        if (cached.isNotEmpty()) return cached
+        return musicBrainzService.fetchReleasesByReleaseGroup(id, priority).onEach {
+            musicBrainzCacheService.updateReleaseCache(it)
+        }
+    }
+
     override suspend fun searchRecording(title: String, artists: List<String>) = searchRecording(title, artists, HttpClientPriority.HIGH)
 
     suspend fun searchRecording(title: String, artists: List<String>, priority: HttpClientPriority = HttpClientPriority.NORMAL): MusicBrainzRecording? {

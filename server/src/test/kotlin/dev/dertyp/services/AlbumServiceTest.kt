@@ -2,10 +2,7 @@ package dev.dertyp.services
 
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
-import dev.dertyp.data.InsertableAlbum
-import dev.dertyp.data.MusicBrainzArtist
-import dev.dertyp.data.MusicBrainzArtistCredit
-import dev.dertyp.data.MusicBrainzRelease
+import dev.dertyp.data.*
 import dev.dertyp.db.*
 import dev.dertyp.services.metadata.CachedMusicBrainzService
 import dev.dertyp.services.metadata.MusicBrainzCacheService
@@ -350,36 +347,58 @@ class AlbumServiceTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `versions should return other versions of the same album`(dialect: DbDialect) = runBlocking {
+    fun `versions should return other versions of the same album by Release Group`(dialect: DbDialect) = runBlocking {
         setup(dialect)
-        val coverId = UUID.randomUUID()
-        val album1 = UUID.randomUUID()
-        val album2 = UUID.randomUUID()
-        
+        val releaseGroupId = UUID.randomUUID()
+        val mbId1 = UUID.randomUUID()
+        val mbId2 = UUID.randomUUID()
+        val albumId1 = UUID.randomUUID()
+        val albumId2 = UUID.randomUUID()
+
         transaction(database) {
-            ImageTable.insert {
-                it[id] = coverId
-                it[path] = "test"
-                it[imageHash] = "hash"
-                it[origin] = "test"
+            MBReleaseGroupTable.insert {
+                it[id] = releaseGroupId
+                it[title] = "Release Group"
+            }
+            MBReleaseTable.insert {
+                it[id] = mbId1
+                it[title] = "Release 1"
+                it[MBReleaseTable.releaseGroupId] = releaseGroupId
+            }
+            MBReleaseTable.insert {
+                it[id] = mbId2
+                it[title] = "Release 2"
+                it[MBReleaseTable.releaseGroupId] = releaseGroupId
             }
             AlbumTable.insert {
-                it[id] = album1
-                it[name] = "Version 1"
-                it[cover] = coverId
+                it[id] = albumId1
+                it[name] = "Album 1"
                 it[songCount] = 10
             }
             AlbumTable.insert {
-                it[id] = album2
-                it[name] = "Version 2"
-                it[cover] = coverId
+                it[id] = albumId2
+                it[name] = "Album 2"
                 it[songCount] = 10
+            }
+            AlbumMusicBrainzTable.insert {
+                it[albumId] = albumId1
+                it[musicBrainzId] = mbId1
+            }
+            AlbumMusicBrainzTable.insert {
+                it[albumId] = albumId2
+                it[musicBrainzId] = mbId2
             }
         }
 
-        val versions = service.versions(album1)
+        coEvery { musicBrainzService.fetchReleaseById(mbId1, any()) } returns MusicBrainzRelease(
+            id = mbId1,
+            title = "Release 1",
+            releaseGroup = MusicBrainzReleaseGroup(id = releaseGroupId, title = "Release Group")
+        )
+
+        val versions = service.versions(albumId1)
         assertEquals(1, versions.size)
-        assertEquals(album2, versions[0].id)
+        assertEquals(albumId2, versions[0].id)
     }
 
     @ParameterizedTest
@@ -674,6 +693,47 @@ class AlbumServiceTest : KoinTest {
         assertEquals(2, results.size)
         assertTrue(results.any { it.id == albumId1 })
         assertTrue(results.any { it.id == albumId2 })
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `byMusicBrainzId should return alternative versions if direct match is missing`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val requestedMbId = UUID.randomUUID()
+        val siblingMbId = UUID.randomUUID()
+        val releaseGroupId = UUID.randomUUID()
+        val localAlbumId = UUID.randomUUID()
+
+        transaction(database) {
+            MBReleaseGroupTable.insert {
+                it[id] = releaseGroupId
+                it[title] = "Release Group Title"
+            }
+            MBReleaseTable.insert {
+                it[id] = siblingMbId
+                it[title] = "Sibling Release"
+                it[MBReleaseTable.releaseGroupId] = releaseGroupId
+            }
+            AlbumTable.insert {
+                it[id] = localAlbumId
+                it[name] = "Local Album"
+                it[songCount] = 10
+            }
+            AlbumMusicBrainzTable.insert {
+                it[albumId] = localAlbumId
+                it[musicBrainzId] = siblingMbId
+            }
+        }
+
+        coEvery { musicBrainzService.fetchReleaseById(requestedMbId, any()) } returns MusicBrainzRelease(
+            id = requestedMbId,
+            title = "Requested Release",
+            releaseGroup = MusicBrainzReleaseGroup(id = releaseGroupId, title = "Release Group Title")
+        )
+
+        val results = service.byMusicBrainzId(requestedMbId)
+        assertEquals(1, results.size)
+        assertEquals(localAlbumId, results[0].id)
     }
 
     @ParameterizedTest

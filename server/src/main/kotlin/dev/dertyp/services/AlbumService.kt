@@ -16,7 +16,6 @@ import dev.dertyp.utils.LogParam
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import org.jetbrains.exposed.v1.jdbc.*
@@ -371,24 +370,59 @@ class AlbumService : AlbumLibrary, Service() {
 
     override suspend fun byMusicBrainzId(mbId: UUID): List<Album> = byMusicBrainzId(mbId, null)
 
-    suspend fun byMusicBrainzId(mbId: UUID, userId: UUID? = null): List<Album> =
-        queryAlbums(0, Int.MAX_VALUE, userId = userId) {
+    suspend fun byMusicBrainzId(mbId: UUID, userId: UUID? = null): List<Album> {
+        val directMatches = queryAlbums(0, Int.MAX_VALUE, userId = userId) {
             where { AlbumMusicBrainzTable.musicBrainzId eq mbId }
         }.data
+        if (directMatches.isNotEmpty()) return directMatches
+
+        val release = cachedMusicBrainzService.getRelease(mbId)
+        val releaseGroupId = release?.releaseGroup?.id ?: return emptyList()
+
+        val otherAlbumIds = dbQuery {
+            AlbumMusicBrainzTable
+                .innerJoin(MBReleaseTable, onColumn = { AlbumMusicBrainzTable.musicBrainzId }, otherColumn = { MBReleaseTable.id })
+                .select(AlbumMusicBrainzTable.albumId)
+                .where { MBReleaseTable.releaseGroupId eq releaseGroupId }
+                .map { it[AlbumMusicBrainzTable.albumId].value }
+        }
+
+        if (otherAlbumIds.isEmpty()) return emptyList()
+
+        return byIds(otherAlbumIds, userId).sortedWith(
+            compareByDescending<Album> { it.songCount }
+                .thenByDescending { it.coverId != null }
+        )
+    }
 
     suspend fun byIds(@LogParam("size") ids: List<UUID>, userId: UUID? = null): List<Album> =
         queryAlbums(0, Int.MAX_VALUE, userId = userId) {
             where { AlbumTable.id inList ids }
         }.data
 
-    suspend fun versions(id: UUID, userId: UUID? = null): List<Album> =
-        queryAlbums(0, Int.MAX_VALUE, userId = userId) {
-            val album = runBlocking { dbQuery { byId(id, userId) } }
-            if (album == null) return@queryAlbums where { Op.FALSE }
-            where { AlbumTable.cover eq album.coverId }
-            andWhere { AlbumTable.id neq id }
-            andWhere { AlbumTable.songCount greater 1 }
-        }.data
+    suspend fun versions(id: UUID, userId: UUID? = null): List<Album> {
+        val album = byId(id, userId) ?: return emptyList()
+
+        if (album.musicbrainzId != null) {
+            val release = cachedMusicBrainzService.getRelease(album.musicbrainzId!!)
+            val releaseGroupId = release?.releaseGroup?.id
+            if (releaseGroupId != null) {
+                val otherAlbumIds = dbQuery {
+                    AlbumMusicBrainzTable
+                        .innerJoin(MBReleaseTable, onColumn = { AlbumMusicBrainzTable.musicBrainzId }, otherColumn = { MBReleaseTable.id })
+                        .select(AlbumMusicBrainzTable.albumId)
+                        .where { (MBReleaseTable.releaseGroupId eq releaseGroupId) and (AlbumMusicBrainzTable.albumId neq id) }
+                        .map { it[AlbumMusicBrainzTable.albumId].value }
+                }
+
+                if (otherAlbumIds.isNotEmpty()) {
+                    return byIds(otherAlbumIds, userId)
+                }
+            }
+        }
+
+        return emptyList()
+    }
 
     suspend fun byName(
         page: Int,

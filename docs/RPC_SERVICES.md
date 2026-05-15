@@ -1506,4 +1506,5 @@ Fetch raw metadata records directly from the MusicBrainz database.
 | `getReleaseGroup` | `id` (`PlatformUUID`): The MusicBrainz Release Group UUID. | `MusicBrainzReleaseGroup`? | - |  | Retrieve a MusicBrainz Release Group record. |
 | `searchRecording` | `title` (`String`): The title of the recording.<br>`artists` (`List`<`String`>): The artists of the recording. | `MusicBrainzRecording`? | - |  | Search for a recording on MusicBrainz. |
 | `searchRelease` | `title` (`String`): The title of the release.<br>`artists` (`List`<`String`>): The artists of the release. | `MusicBrainzRelease`? | - |  | Search for a release (album) on MusicBrainz. |
+| `getReleasesByReleaseGroup` | `id` (`PlatformUUID`): The MusicBrainz Release Group UUID. | `List`<`MusicBrainzRelease`> | - |  | Retrieve all releases in a MusicBrainz Release Group. |
 

@@ -227,6 +227,12 @@ class MusicBrainzCacheService : Service() {
         }
     }
 
+    suspend fun getReleasesByReleaseGroup(releaseGroupId: UUID): List<MusicBrainzRelease> = dbQuery {
+        MBReleaseTable.select(MBReleaseTable.id)
+            .where { MBReleaseTable.releaseGroupId eq releaseGroupId }
+            .mapNotNull { getRelease(it[MBReleaseTable.id].value) }
+    }
+
     suspend fun updateArtistCache(artist: MusicBrainzArtist) = dbQuery {
         MBArtistTable.upsert(MBArtistTable.id) {
             it[id] = artist.id
