@@ -774,6 +774,105 @@ class AlbumServiceTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
+    fun `byMusicBrainzIds should return matches for multiple IDs`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val mbId1 = UUID.randomUUID()
+        val mbId2 = UUID.randomUUID()
+        val albumId1 = UUID.randomUUID()
+        val albumId2 = UUID.randomUUID()
+
+        transaction(database) {
+            MBReleaseTable.insert {
+                it[id] = mbId1
+                it[title] = "Release 1"
+            }
+            MBReleaseTable.insert {
+                it[id] = mbId2
+                it[title] = "Release 2"
+            }
+            AlbumTable.insert {
+                it[id] = albumId1
+                it[name] = "Album 1"
+            }
+            AlbumTable.insert {
+                it[id] = albumId2
+                it[name] = "Album 2"
+            }
+            AlbumMusicBrainzTable.insert {
+                it[albumId] = albumId1
+                it[musicBrainzId] = mbId1
+            }
+            AlbumMusicBrainzTable.insert {
+                it[albumId] = albumId2
+                it[musicBrainzId] = mbId2
+            }
+        }
+
+        val results = service.byMusicBrainzIds(listOf(mbId1, mbId2))
+        assertEquals(2, results.size)
+        assertEquals(albumId1, results[mbId1]?.firstOrNull()?.id)
+        assertEquals(albumId2, results[mbId2]?.firstOrNull()?.id)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `byMusicBrainzIds should handle mix of direct and RG fallback`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val directMbId = UUID.randomUUID()
+        val fallbackMbId = UUID.randomUUID()
+        val siblingMbId = UUID.randomUUID()
+        val releaseGroupId = UUID.randomUUID()
+        val albumId1 = UUID.randomUUID()
+        val albumId2 = UUID.randomUUID()
+
+        transaction(database) {
+            MBReleaseTable.insert {
+                it[id] = directMbId
+                it[title] = "Direct Release"
+            }
+            AlbumTable.insert {
+                it[id] = albumId1
+                it[name] = "Direct Album"
+            }
+            AlbumMusicBrainzTable.insert {
+                it[albumId] = albumId1
+                it[musicBrainzId] = directMbId
+            }
+
+            MBReleaseGroupTable.insert {
+                it[id] = releaseGroupId
+                it[title] = "RG"
+            }
+            MBReleaseTable.insert {
+                it[id] = siblingMbId
+                it[title] = "Sibling"
+                it[MBReleaseTable.releaseGroupId] = releaseGroupId
+            }
+            AlbumTable.insert {
+                it[id] = albumId2
+                it[name] = "Fallback Album"
+                it[songCount] = 10
+            }
+            AlbumMusicBrainzTable.insert {
+                it[albumId] = albumId2
+                it[musicBrainzId] = siblingMbId
+            }
+        }
+
+        coEvery { musicBrainzService.fetchReleaseById(fallbackMbId, any()) } returns MusicBrainzRelease(
+            id = fallbackMbId,
+            title = "Requested",
+            releaseGroup = MusicBrainzReleaseGroup(id = releaseGroupId, title = "RG")
+        )
+
+        val results = service.byMusicBrainzIds(listOf(directMbId, fallbackMbId))
+        assertEquals(2, results.size)
+        assertEquals(albumId1, results[directMbId]?.firstOrNull()?.id)
+        assertEquals(albumId2, results[fallbackMbId]?.firstOrNull()?.id)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
     fun `byId should return album with genres`(dialect: DbDialect) = runBlocking {
         setup(dialect)
         val id = UUID.randomUUID()

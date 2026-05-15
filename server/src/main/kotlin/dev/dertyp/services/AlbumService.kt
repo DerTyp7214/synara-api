@@ -34,6 +34,7 @@ class AlbumRpcService(private val user: User, private val albumService: AlbumSer
     IAlbumService {
     override suspend fun byId(id: UUID): Album? = albumService.byId(id, user.id)
     override suspend fun byMusicBrainzId(mbId: UUID): List<Album> = albumService.byMusicBrainzId(mbId, user.id)
+    override suspend fun byMusicBrainzIds(mbIds: List<UUID>): Map<UUID, List<Album>> = albumService.byMusicBrainzIds(mbIds, user.id)
     override suspend fun byIds(ids: List<UUID>): List<Album> = albumService.byIds(ids, user.id)
     override suspend fun versions(id: UUID): List<Album> = albumService.versions(id, user.id)
     override suspend fun byName(page: Int, pageSize: Int, name: String): PaginatedResponse<Album> =
@@ -371,30 +372,73 @@ class AlbumService : AlbumLibrary, Service() {
     override suspend fun byMusicBrainzId(mbId: UUID): List<Album> = byMusicBrainzId(mbId, null)
 
     suspend fun byMusicBrainzId(mbId: UUID, userId: UUID? = null): List<Album> {
+        return byMusicBrainzIds(listOf(mbId), userId)[mbId] ?: emptyList()
+    }
+
+    suspend fun byMusicBrainzIds(mbIds: List<UUID>, userId: UUID? = null): Map<UUID, List<Album>> {
+        val results = mutableMapOf<UUID, List<Album>>()
+        val remainingIds = mbIds.distinct().toMutableList()
+
         val directMatches = queryAlbums(0, Int.MAX_VALUE, userId = userId) {
-            where { AlbumMusicBrainzTable.musicBrainzId eq mbId }
+            where { AlbumMusicBrainzTable.musicBrainzId inList remainingIds.map { EntityID(it, MBReleaseTable) } }
         }.data
-        if (directMatches.isNotEmpty()) return directMatches
 
-        val releaseGroupId = musicBrainzCacheService.getReleaseGroup(mbId)?.id
-            ?: cachedMusicBrainzService.getRelease(mbId)?.releaseGroup?.id
-            ?: cachedMusicBrainzService.getReleaseGroup(mbId)?.id
-            ?: return emptyList()
-
-        val otherAlbumIds = dbQuery {
-            AlbumMusicBrainzTable
-                .innerJoin(MBReleaseTable, onColumn = { AlbumMusicBrainzTable.musicBrainzId }, otherColumn = { MBReleaseTable.id })
-                .select(AlbumMusicBrainzTable.albumId)
-                .where { MBReleaseTable.releaseGroupId eq releaseGroupId }
-                .map { it[AlbumMusicBrainzTable.albumId].value }
+        directMatches.forEach { album ->
+            album.musicbrainzId?.let { mbId ->
+                if (mbId in remainingIds) {
+                    val albums = results.getOrPut(mbId) { mutableListOf() } as MutableList<Album>
+                    if (album !in albums) albums.add(album)
+                }
+            }
         }
 
-        if (otherAlbumIds.isEmpty()) return emptyList()
+        remainingIds.removeAll(results.keys)
+        if (remainingIds.isEmpty()) return results
 
-        return byIds(otherAlbumIds, userId).sortedWith(
-            compareByDescending<Album> { it.songCount }
-                .thenByDescending { it.coverId != null }
-        )
+        val idToReleaseGroupId = mutableMapOf<UUID, UUID>()
+        remainingIds.forEach { mbId ->
+            val releaseGroupId = musicBrainzCacheService.getReleaseGroup(mbId)?.id
+                ?: cachedMusicBrainzService.getRelease(mbId)?.releaseGroup?.id
+                ?: cachedMusicBrainzService.getReleaseGroup(mbId)?.id
+
+            if (releaseGroupId != null) {
+                idToReleaseGroupId[mbId] = releaseGroupId
+            }
+        }
+
+        if (idToReleaseGroupId.isEmpty()) return results
+
+        val uniqueReleaseGroupIds = idToReleaseGroupId.values.distinct()
+        val rgIdToAlbumIds = dbQuery {
+            AlbumMusicBrainzTable
+                .innerJoin(MBReleaseTable, onColumn = { AlbumMusicBrainzTable.musicBrainzId }, otherColumn = { MBReleaseTable.id })
+                .select(AlbumMusicBrainzTable.albumId, MBReleaseTable.releaseGroupId)
+                .where { MBReleaseTable.releaseGroupId inList uniqueReleaseGroupIds.map { EntityID(it, MBReleaseGroupTable) } }
+                .mapNotNull { row ->
+                    val rgId = row[MBReleaseTable.releaseGroupId]?.value ?: return@mapNotNull null
+                    val albumId = row[AlbumMusicBrainzTable.albumId].value
+                    rgId to albumId
+                }
+                .groupBy({ it.first }, { it.second })
+        }
+
+        val allAlbumIdsToFetch = rgIdToAlbumIds.values.flatten().distinct()
+        if (allAlbumIdsToFetch.isEmpty()) return results
+
+        val albumsById = byIds(allAlbumIdsToFetch, userId).associateBy { it.id }
+
+        idToReleaseGroupId.forEach { (mbId, rgId) ->
+            val albumIds = rgIdToAlbumIds[rgId] ?: emptyList()
+            val albums = albumIds.mapNotNull { albumsById[it] }.distinctBy { it.id }.sortedWith(
+                compareByDescending<Album> { it.songCount }
+                    .thenByDescending { it.coverId != null }
+            )
+            if (albums.isNotEmpty()) {
+                results[mbId] = albums
+            }
+        }
+
+        return results
     }
 
     suspend fun byIds(@LogParam("size") ids: List<UUID>, userId: UUID? = null): List<Album> =
