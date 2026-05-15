@@ -272,4 +272,61 @@ class ImageServiceTest {
             assertEquals(imageCount.toLong(), count)
         }
     }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `generateMosaicImage should return an 8k image`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+
+        val red = Color.RED
+        val (rl, ra, rb) = dev.dertyp.utils.ColorUtils.rgbToLab(red.red, red.green, red.blue)
+
+        transaction(database) {
+            val imgId = ImageTable.insert {
+                it[id] = UUID.randomUUID()
+                it[path] = "red.jpg"
+                it[imageHash] = "red"
+                it[origin] = "test"
+            }[ImageTable.id]
+
+            val fullPath = File(storageService.imagesPath, "red.jpg")
+            fullPath.parentFile.mkdirs()
+            val img = BufferedImage(10, 10, BufferedImage.TYPE_INT_RGB)
+            val g = img.createGraphics()
+            g.color = Color.RED
+            g.fillRect(0, 0, 10, 10)
+            g.dispose()
+            ImageIO.write(img, "jpg", fullPath)
+
+            ImageMetadataTable.insert {
+                it[imageId] = imgId
+                it[width] = 10
+                it[height] = 10
+                it[byteSize] = 100
+                it[primaryColor] = red.rgb
+                it[ImageMetadataTable.red] = red.red
+                it[ImageMetadataTable.green] = red.green
+                it[ImageMetadataTable.blue] = red.blue
+                it[luminance] = 0.5
+                it[labL] = rl
+                it[labA] = ra
+                it[labB] = rb
+            }
+        }
+
+        val inputImg = BufferedImage(2, 2, BufferedImage.TYPE_INT_RGB)
+        val ig = inputImg.createGraphics()
+        ig.color = Color.RED
+        ig.fillRect(0, 0, 2, 2)
+        ig.dispose()
+        val baos = ByteArrayOutputStream()
+        ImageIO.write(inputImg, "png", baos)
+
+        val result = service.generateMosaicImage(baos.toByteArray(), 2, 2)
+        assertNotNull(result)
+
+        val resultImg = ImageIO.read(java.io.ByteArrayInputStream(result))
+        assertEquals(8192, resultImg.width)
+        assertEquals(8192, resultImg.height)
+    }
 }

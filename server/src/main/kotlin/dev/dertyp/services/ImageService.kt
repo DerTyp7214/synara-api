@@ -1,7 +1,6 @@
 package dev.dertyp.services
 
 import com.sksamuel.scrimage.ImmutableImage
-import com.sksamuel.scrimage.pixels.Pixel
 import dev.dertyp.core.paging
 import dev.dertyp.core.sha256
 import dev.dertyp.data.Image
@@ -13,6 +12,7 @@ import dev.dertyp.dbQuery
 import dev.dertyp.plugins.ImageLibrary
 import dev.dertyp.plugins.RedisCacheProvider
 import dev.dertyp.utils.ColorUtils
+import dev.dertyp.utils.ImageUtils
 import dev.dertyp.utils.LogParam
 import io.trbl.blurhash.BlurHash
 import kotlinx.coroutines.Dispatchers
@@ -22,12 +22,15 @@ import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.jdbc.*
 import redis.clients.jedis.HostAndPort
 import redis.clients.jedis.RedisClusterClient
+import java.awt.Color
+import java.awt.image.BufferedImage
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.util.UUID
 import javax.imageio.ImageIO
 import kotlin.io.path.*
 import kotlin.math.roundToInt
+import com.sksamuel.scrimage.pixels.Pixel as ScrPixel
 
 class ImageRpcService(private val user: User?, private val imageService: ImageService) : IImageService {
     override suspend fun byId(id: UUID): Image? = imageService.byId(id)
@@ -41,6 +44,9 @@ class ImageRpcService(private val user: User?, private val imageService: ImageSe
         if (!user.isAdmin) throw IllegalStateException("Only admins can move images")
         return imageService.moveImages(oldPath, newPath)
     }
+
+    override suspend fun generateMosaicImage(image: ByteArray, width: Int, height: Int): ByteArray =
+        imageService.generateMosaicImage(image, width, height)
 }
 
 class ImageService(
@@ -399,7 +405,7 @@ class ImageService(
         }
     }
 
-    private fun extractPalette(pixels: Array<Pixel>, k: Int): List<Int> {
+    private fun extractPalette(pixels: Array<ScrPixel>, k: Int): List<Int> {
         if (pixels.isEmpty()) return emptyList()
         
         val samples = if (pixels.size > 1000) {
@@ -454,6 +460,101 @@ class ImageService(
             val b = it[2].roundToInt().coerceIn(0, 255)
             ((0xFF shl 24) or (r shl 16) or (g shl 8) or b)
         }
+    }
+
+    suspend fun generateMosaicImage(image: ByteArray, width: Int, height: Int): ByteArray {
+        val maxTiles = 256 * 256
+        if (width * height > maxTiles) throw IllegalArgumentException("Grid size too large (max 65,536 tiles)")
+
+        val allPixels = ImageUtils.extractColors(image, width, height)
+        val pixelRanks = mutableMapOf<ImageUtils.Pixel, Int>()
+        val pixelWithRank = allPixels.map { pixel ->
+            val rank = pixelRanks.getOrDefault(pixel, 0)
+            pixelRanks[pixel] = rank + 1
+            pixel to rank
+        }
+
+        val distinctPixels = allPixels.distinct()
+        val idsByPixel = mutableMapOf<ImageUtils.Pixel, List<UUID>>()
+
+        distinctPixels.forEach { pixel ->
+            val count = pixelRanks[pixel] ?: 0
+            val (l, a, b) = ColorUtils.rgbToLab(pixel.r, pixel.g, pixel.b)
+            val ids = dbQuery {
+                ImageMetadataTable
+                    .select(ImageMetadataTable.imageId)
+                    .filterByColor(l, a, b, 50)
+                    .orderByColorDistance(l, a, b)
+                    .limit(count)
+                    .map { it[ImageMetadataTable.imageId].value }
+            }
+            idsByPixel[pixel] = ids
+        }
+
+        val outputSize = 8192
+        val mosaic = BufferedImage(outputSize, outputSize, BufferedImage.TYPE_INT_RGB)
+        val g = mosaic.createGraphics()
+
+        val allImageIds = idsByPixel.values.flatten().distinct()
+        val imagePaths = dbQuery {
+            ImageTable.select(ImageTable.id, ImageTable.path)
+                .where { ImageTable.id inList allImageIds }
+                .associate { it[ImageTable.id].value to it[ImageTable.path] }
+        }
+
+        val imageCache = mutableMapOf<UUID, BufferedImage?>()
+
+        pixelWithRank.forEachIndexed { index, (pixel, rank) ->
+            val pool = idsByPixel[pixel] ?: emptyList()
+            val imageId = if (pool.isNotEmpty()) pool[rank % pool.size] else null
+
+            val ix = index % width
+            val iy = index / width
+            
+            val x = (ix * outputSize) / width
+            val nextX = ((ix + 1) * outputSize) / width
+            val currentTileWidth = nextX - x
+
+            val y = (iy * outputSize) / height
+            val nextY = ((iy + 1) * outputSize) / height
+            val currentTileHeight = nextY - y
+
+            if (imageId != null) {
+                val tile = imageCache.getOrPut(imageId) {
+                    val path = imagePaths[imageId]
+                    if (path != null) {
+                        val fullPath = Path(storageService.imagesPath, path)
+                        if (fullPath.exists()) {
+                            val img = try { withContext(Dispatchers.IO) { ImageIO.read(fullPath.toFile()) } } catch (_: Exception) { null }
+                            if (img != null) {
+                                val scaled = BufferedImage(currentTileWidth, currentTileHeight, BufferedImage.TYPE_INT_RGB)
+                                val sg = scaled.createGraphics()
+                                sg.drawImage(img, 0, 0, currentTileWidth, currentTileHeight, null)
+                                sg.dispose()
+                                scaled
+                            } else null
+                        } else null
+                    } else null
+                }
+
+                if (tile != null) {
+                    g.drawImage(tile, x, y, null)
+                } else {
+                    g.color = Color(pixel.r, pixel.g, pixel.b)
+                    g.fillRect(x, y, currentTileWidth, currentTileHeight)
+                }
+            } else {
+                g.color = Color(pixel.r, pixel.g, pixel.b)
+                g.fillRect(x, y, currentTileWidth, currentTileHeight)
+            }
+        }
+
+        g.dispose()
+        val baos = ByteArrayOutputStream()
+        withContext(Dispatchers.IO) {
+            ImageIO.write(mosaic, "jpeg", baos)
+        }
+        return baos.toByteArray()
     }
 
     private fun sqDist(p1: DoubleArray, p2: DoubleArray): Double {

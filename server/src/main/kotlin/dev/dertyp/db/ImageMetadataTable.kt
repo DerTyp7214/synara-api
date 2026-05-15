@@ -41,3 +41,11 @@ fun Query.filterByColor(l: Double, a: Double, b: Double, range: Int): Query {
         (lDiff.times(lDiff) plus aDiff.times(aDiff) plus bDiff.times(bDiff)) lessEq rangeSq.toDouble()
     }
 }
+
+fun Query.orderByColorDistance(l: Double, a: Double, b: Double): Query {
+    val lDiff = ImageMetadataTable.labL.minus(l)
+    val aDiff = ImageMetadataTable.labA.minus(a)
+    val bDiff = ImageMetadataTable.labB.minus(b)
+    val distanceSq = (lDiff.times(lDiff) plus aDiff.times(aDiff) plus bDiff.times(bDiff))
+    return orderBy(distanceSq, SortOrder.ASC)
+}

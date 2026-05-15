@@ -558,6 +558,7 @@ class AlbumService : AlbumLibrary, Service() {
             leftJoin(ImageMetadataTable, onColumn = { AlbumTable.cover }, otherColumn = { ImageMetadataTable.imageId })
         }) {
             filterByColor(l, a, b, range)
+            orderByColorDistance(l, a, b)
         }
     }
 

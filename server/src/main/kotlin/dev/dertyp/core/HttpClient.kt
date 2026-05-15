@@ -118,7 +118,7 @@ class HttpClientQueueService : Service() {
                 val waitTime = Clock.System.now() - next.queuedAt
 
                 if (waitTime > 2.seconds)
-                    logger.info("Request (${next.urlString}) was ${waitTime.inWholeMilliseconds}ms in queue")
+                    logger.info("Request (${next.urlString}) was $waitTime in queue")
 
                 val last = hostLastRequest[host]
                 val now = Clock.System.now()

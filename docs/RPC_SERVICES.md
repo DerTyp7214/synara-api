@@ -1213,6 +1213,8 @@ Service for content discovery and song recommendations.
 
 | Function | Parameters | Returns | Permissions | Errors | Description |
 | :--- | :--- | :--- | :--- | :--- | :--- |
+| `createSongMosaic` | `image` (`ByteArray`): The source image data.<br>`width` (`Int`): Target grid width.<br>`height` (`Int`): Target grid height.<br>`page` (`Int`): Page index.<br>`pageSize` (`Int`): Number of items per page.<br>`range` (`Int`): Search range for colors (0-255). | [PaginatedResponse](#devdertypdatapaginatedresponse)<[UserSong](#devdertypdatausersong)> | - |  | Create a mosaic of songs matching the colors of an image. |
+| `createAlbumMosaic` | `image` (`ByteArray`): The source image data.<br>`width` (`Int`): Target grid width.<br>`height` (`Int`): Target grid height.<br>`page` (`Int`): Page index.<br>`pageSize` (`Int`): Number of items per page.<br>`range` (`Int`): Search range for colors (0-255). | [PaginatedResponse](#devdertypdatapaginatedresponse)<[Album](#devdertypdataalbum)> | - |  | Create a mosaic of albums matching the colors of an image. |
 | `getSimilarSongs` | `seedSongIds` (`List`<`PlatformUUID`>): List of song unique identifiers to use as a seed.<br>`limit` (`Int`): The maximum number of results to return. | `List`<[UserSong](#devdertypdatausersong)> | - |  | Get songs similar to the provided seed tracks. |
 | `getSimilarSongsByPlaylist` | `playlistId` (`PlatformUUID`): The user playlist unique identifier to use as a seed.<br>`limit` (`Int`): The maximum number of results to return. | `List`<[UserSong](#devdertypdatausersong)> | - |  | Get songs similar to the songs in the provided user playlist. |
 | `getSimilarSongsByBpm` | `seedSongIds` (`List`<`PlatformUUID`>): List of song unique identifiers to use as a seed.<br>`limit` (`Int`): The maximum number of results to return. | `List`<[UserSong](#devdertypdatausersong)> | - |  | Get songs with similar BPM to the provided seed tracks. |
@@ -1249,6 +1251,7 @@ Management of image files for covers and profiles.
 | `createImage` | `bytes` (`ByteArray`): The raw binary data of the image.<br>`origin` (`String`): The source or category of the image. | `PlatformUUID` | - |  | Store a new image on the server. |
 | `createBatch` | `images` (`List`<[InsertableImage](#devdertypdatainsertableimage)>): Collection of images to store. | `Map`<`String`, `PlatformUUID`> | - |  | Store multiple images on the server in a single operation. |
 | `moveImages` | `oldPath` (`String`): Path prefix to match.<br>`newPath` (`String`): New base path. | `Int` | **Admin** |  | Batch update image file paths. |
+| `generateMosaicImage` | `image` (`ByteArray`): The source image data.<br>`width` (`Int`): Grid width (max width * height = 65,536).<br>`height` (`Int`): Grid height (max width * height = 65,536). | `ByteArray` | - | IllegalArgumentException | Generate an 8k mosaic image from a source image where each pixel is replaced by a matching cover. |
 
 ### ILyricsSearch <a name="devdertypservicesilyricssearch"></a>
 Search for track lyrics using external providers.

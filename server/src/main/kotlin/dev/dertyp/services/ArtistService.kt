@@ -587,6 +587,7 @@ class ArtistService : ArtistLibrary, Service() {
             leftJoin(ImageMetadataTable, onColumn = { ArtistTable.image }, otherColumn = { ImageMetadataTable.imageId })
         }) {
             filterByColor(l, a, b, range)
+            orderByColorDistance(l, a, b)
         }
     }
 

@@ -1,21 +1,14 @@
 package dev.dertyp.services
 
 import dev.dertyp.PlatformUUID
-import dev.dertyp.data.AudioScale
-import dev.dertyp.data.SongAudioData
-import dev.dertyp.data.User
-import dev.dertyp.data.UserSong
-import dev.dertyp.db.SongAudioDataTable
-import dev.dertyp.db.SongComposerTable
-import dev.dertyp.db.SongLyricistTable
-import dev.dertyp.db.SongProducerTable
+import dev.dertyp.data.*
+import dev.dertyp.db.*
 import dev.dertyp.dbQuery
+import dev.dertyp.utils.ColorUtils
+import dev.dertyp.utils.ImageUtils
 import kotlinx.coroutines.flow.toList
-import org.jetbrains.exposed.v1.core.Column
-import org.jetbrains.exposed.v1.core.ResultRow
-import org.jetbrains.exposed.v1.core.Table
+import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.core.dao.id.EntityID
-import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.jdbc.select
 import org.koin.core.component.inject
 import java.util.UUID
@@ -59,10 +52,33 @@ class DiscoveryRpcService(
     override suspend fun getSongsBySameProducers(seedSongIds: List<PlatformUUID>, limit: Int): List<UserSong> {
         return discoveryService.getSongsBySameProducers(seedSongIds, limit, user.id)
     }
+
+    override suspend fun createSongMosaic(
+        image: ByteArray,
+        width: Int,
+        height: Int,
+        page: Int,
+        pageSize: Int,
+        range: Int
+    ): PaginatedResponse<UserSong> {
+        return discoveryService.createSongMosaic(image, width, height, page, pageSize, range, user.id)
+    }
+
+    override suspend fun createAlbumMosaic(
+        image: ByteArray,
+        width: Int,
+        height: Int,
+        page: Int,
+        pageSize: Int,
+        range: Int
+    ): PaginatedResponse<Album> {
+        return discoveryService.createAlbumMosaic(image, width, height, page, pageSize, range, user.id)
+    }
 }
 
 class DiscoveryService : Service() {
     private val songService: SongService by inject()
+    private val albumService: AlbumService by inject()
     private val audioAnalysisService: AudioAnalysisService by inject()
 
     suspend fun getSongsBySameComposers(seedSongIds: List<PlatformUUID>, limit: Int = 20, userId: PlatformUUID): List<UserSong> {
@@ -75,6 +91,123 @@ class DiscoveryService : Service() {
 
     suspend fun getSongsBySameProducers(seedSongIds: List<PlatformUUID>, limit: Int = 20, userId: PlatformUUID): List<UserSong> {
         return getSongsBySameCredits(seedSongIds, SongProducerTable, limit, userId)
+    }
+
+    suspend fun createSongMosaic(
+        image: ByteArray,
+        width: Int,
+        height: Int,
+        page: Int,
+        pageSize: Int,
+        range: Int,
+        userId: PlatformUUID
+    ): PaginatedResponse<UserSong> {
+        val allPixels = ImageUtils.extractColors(image, width, height)
+        val total = width * height
+        val startIndex = page * pageSize
+        if (startIndex >= total) return PaginatedResponse(emptyList(), total, page, pageSize)
+        val endIndex = min(startIndex + pageSize, total)
+
+        val pagePixels = allPixels.subList(startIndex, endIndex)
+        val globalRanks = (startIndex until endIndex).map { i -> calculateGlobalRank(allPixels, i) }
+
+        val idsByPixelAndRank = mutableMapOf<ImageUtils.Pixel, Map<Int, UUID>>()
+
+        pagePixels.distinct().forEach { pixel ->
+            val pixelIndicesInPage = pagePixels.indices.filter { pagePixels[it] == pixel }
+            val ranksNeeded = pixelIndicesInPage.map { globalRanks[it] }
+            val offsetVal = ranksNeeded.minOrNull() ?: 0
+            val limitVal = (ranksNeeded.maxOrNull() ?: 0) - offsetVal + 1
+
+            val (l, a, b) = ColorUtils.rgbToLab(pixel.r, pixel.g, pixel.b)
+
+            val ids = dbQuery {
+                SongTable
+                    .innerJoin(ImageMetadataTable, onColumn = { cover }, otherColumn = { ImageMetadataTable.imageId })
+                    .select(SongTable.id)
+                    .filterByColor(l, a, b, range)
+                    .orderByColorDistance(l, a, b)
+                    .limit(limitVal)
+                    .offset(offsetVal.toLong())
+                    .map { it[SongTable.id].value }
+            }
+
+            @Suppress("UNCHECKED_CAST")
+            idsByPixelAndRank[pixel] = ranksNeeded.associateWith { rank ->
+                val idIndex = rank - offsetVal
+                ids.getOrNull(idIndex)
+            }.filterValues { it != null } as Map<Int, UUID>
+        }
+
+        val allFetchedIds = pagePixels.indices.mapNotNull { i ->
+            idsByPixelAndRank[pagePixels[i]]?.get(globalRanks[i])
+        }
+
+        val songs = songService.byIds(allFetchedIds, userId).associateBy { it.id }
+        val data = allFetchedIds.mapNotNull { songs[it] }
+
+        return PaginatedResponse(data, total, page, pageSize, hasNextPage = endIndex < total)
+    }
+
+    suspend fun createAlbumMosaic(
+        image: ByteArray,
+        width: Int,
+        height: Int,
+        page: Int,
+        pageSize: Int,
+        range: Int,
+        userId: PlatformUUID
+    ): PaginatedResponse<Album> {
+        val allPixels = ImageUtils.extractColors(image, width, height)
+        val total = width * height
+        val startIndex = page * pageSize
+        if (startIndex >= total) return PaginatedResponse(emptyList(), total, page, pageSize)
+        val endIndex = min(startIndex + pageSize, total)
+
+        val pagePixels = allPixels.subList(startIndex, endIndex)
+        val globalRanks = (startIndex until endIndex).map { i -> calculateGlobalRank(allPixels, i) }
+
+        val idsByColorAndRank = mutableMapOf<ImageUtils.Pixel, Map<Int, UUID>>()
+
+        pagePixels.distinct().forEach { pixel ->
+            val pixelIndicesInPage = pagePixels.indices.filter { pagePixels[it] == pixel }
+            val ranksNeeded = pixelIndicesInPage.map { globalRanks[it] }
+            val offsetVal = ranksNeeded.minOrNull() ?: 0
+            val limitVal = (ranksNeeded.maxOrNull() ?: 0) - offsetVal + 1
+
+            val (l, a, b) = ColorUtils.rgbToLab(pixel.r, pixel.g, pixel.b)
+
+            val ids = dbQuery {
+                AlbumTable
+                    .innerJoin(ImageMetadataTable, onColumn = { cover }, otherColumn = { ImageMetadataTable.imageId })
+                    .select(AlbumTable.id)
+                    .filterByColor(l, a, b, range)
+                    .orderByColorDistance(l, a, b)
+                    .limit(limitVal)
+                    .offset(offsetVal.toLong())
+                    .map { it[AlbumTable.id].value }
+            }
+
+            @Suppress("UNCHECKED_CAST")
+            idsByColorAndRank[pixel] = ranksNeeded.associateWith { rank ->
+                val idIndex = rank - offsetVal
+                ids.getOrNull(idIndex)
+            }.filterValues { it != null } as Map<Int, UUID>
+        }
+
+        val allFetchedIds = pagePixels.indices.mapNotNull { i ->
+            idsByColorAndRank[pagePixels[i]]?.get(globalRanks[i])
+        }
+
+        val albums = albumService.byIds(allFetchedIds, userId).associateBy { it.id }
+        val data = allFetchedIds.mapNotNull { albums[it] }
+
+        return PaginatedResponse(data, total, page, pageSize, hasNextPage = endIndex < total)
+    }
+
+    private fun calculateGlobalRank(allPixels: List<ImageUtils.Pixel>, targetIndex: Int): Int {
+        val pixel = allPixels[targetIndex]
+        return allPixels.take(targetIndex).count { it == pixel }
     }
 
     suspend fun getSimilarSongsByPlaylist(

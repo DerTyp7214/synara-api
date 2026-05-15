@@ -87,6 +87,7 @@ class UserPlaylistService : PlaylistLibrary, IUserPlaylistService, Service() {
             leftJoin(ImageMetadataTable, onColumn = { UserPlaylistTable.imageId }, otherColumn = { ImageMetadataTable.imageId })
         }) {
             filterByColor(l, a, b, range)
+            orderByColorDistance(l, a, b)
             if (creator != null) andWhere { UserPlaylistTable.creator eq creator }
             else this
         }

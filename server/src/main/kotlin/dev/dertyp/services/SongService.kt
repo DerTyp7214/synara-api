@@ -814,6 +814,7 @@ class SongService : SongLibrary, Service() {
             },
             query = {
                 filterByColor(l, a, b, range)
+                orderByColorDistance(l, a, b)
             }
         )
     }
