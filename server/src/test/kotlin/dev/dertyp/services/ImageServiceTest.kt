@@ -8,6 +8,7 @@ import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.core.dao.id.EntityID
+import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.like
 import org.jetbrains.exposed.v1.jdbc.*
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
@@ -127,6 +128,16 @@ class ImageServiceTest {
         
         assertNotNull(image.palette)
         assertTrue(image.palette?.contains(0xFFFF0000.toInt()) == true)
+
+        transaction(database) {
+            val metadata = ImageMetadataTable.selectAll().where { ImageMetadataTable.imageId eq id }.single()
+            assertNotNull(metadata[ImageMetadataTable.labL])
+            assertNotNull(metadata[ImageMetadataTable.labA])
+            assertNotNull(metadata[ImageMetadataTable.labB])
+            assertNotNull(metadata[ImageMetadataTable.hue])
+            assertNotNull(metadata[ImageMetadataTable.saturation])
+            assertNotNull(metadata[ImageMetadataTable.lightness])
+        }
     }
 
     @ParameterizedTest

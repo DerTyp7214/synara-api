@@ -12,6 +12,7 @@ import dev.dertyp.db.*
 import dev.dertyp.dbQuery
 import dev.dertyp.plugins.ImageLibrary
 import dev.dertyp.plugins.RedisCacheProvider
+import dev.dertyp.utils.ColorUtils
 import dev.dertyp.utils.LogParam
 import io.trbl.blurhash.BlurHash
 import kotlinx.coroutines.Dispatchers
@@ -359,6 +360,9 @@ class ImageService(
 
         val luminance = (0.2126 * avgR + 0.7152 * avgG + 0.0722 * avgB) / 255.0
 
+        val (hue, saturation, lightness) = ColorUtils.rgbToHsl(avgR, avgG, avgB)
+        val (labL, labA, labB) = ColorUtils.rgbToLab(avgR, avgG, avgB)
+
         val palette = try {
             extractPalette(pixels, 5)
         } catch (_: Exception) {
@@ -380,6 +384,12 @@ class ImageService(
                 it[ImageMetadataTable.green] = avgG
                 it[ImageMetadataTable.blue] = avgB
                 it[ImageMetadataTable.luminance] = luminance
+                it[ImageMetadataTable.hue] = hue
+                it[ImageMetadataTable.saturation] = saturation
+                it[ImageMetadataTable.lightness] = lightness
+                it[ImageMetadataTable.labL] = labL
+                it[ImageMetadataTable.labA] = labA
+                it[ImageMetadataTable.labB] = labB
                 it[color1] = palette.getOrNull(0)
                 it[color2] = palette.getOrNull(1)
                 it[color3] = palette.getOrNull(2)

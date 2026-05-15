@@ -8,6 +8,7 @@ import dev.dertyp.db.*
 import dev.dertyp.dbQuery
 import dev.dertyp.plugins.ArtistLibrary
 import dev.dertyp.services.metadata.*
+import dev.dertyp.utils.ColorUtils
 import dev.dertyp.utils.LogParam
 import io.ktor.server.application.ApplicationEnvironment
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -35,6 +36,13 @@ class ArtistRpcService(private val user: User, private val artistService: Artist
     override suspend fun splitArtist(splitArtist: SplitArtist): List<Artist> = artistService.splitArtist(splitArtist, user.id)
     override suspend fun allArtists(page: Int, pageSize: Int): PaginatedResponse<Artist> =
         artistService.allArtists(page, pageSize, user.id)
+
+    override suspend fun byColor(
+        page: Int,
+        pageSize: Int,
+        color: Int,
+        range: Int
+    ): PaginatedResponse<Artist> = artistService.byColor(page, pageSize, color, range, user.id)
 
     override suspend fun createArtist(
         name: String,
@@ -566,6 +574,21 @@ class ArtistService : ArtistLibrary, Service() {
 
     suspend fun allArtists(page: Int, pageSize: Int, userId: UUID? = null): PaginatedResponse<Artist> =
         queryArtists(page, pageSize, userId = userId)
+
+    suspend fun byColor(
+        page: Int,
+        pageSize: Int,
+        color: Int,
+        range: Int,
+        userId: UUID? = null
+    ): PaginatedResponse<Artist> {
+        val (l, a, b) = ColorUtils.rgbToLab((color shr 16) and 0xFF, (color shr 8) and 0xFF, color and 0xFF)
+        return queryArtists(page, pageSize, userId = userId, columnSet = {
+            leftJoin(ImageMetadataTable, onColumn = { ArtistTable.image }, otherColumn = { ImageMetadataTable.imageId })
+        }) {
+            filterByColor(l, a, b, range)
+        }
+    }
 
     suspend fun createArtist(
         name: String,

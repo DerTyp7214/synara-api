@@ -12,6 +12,7 @@ import dev.dertyp.services.ArtistService.Companion.mapArtist
 import dev.dertyp.services.metadata.CachedMusicBrainzService
 import dev.dertyp.services.metadata.MusicBrainzCacheService
 import dev.dertyp.services.metadata.MusicBrainzService
+import dev.dertyp.utils.ColorUtils
 import dev.dertyp.utils.LogParam
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
@@ -49,6 +50,13 @@ class AlbumRpcService(private val user: User, private val albumService: AlbumSer
 
     override suspend fun allAlbums(page: Int, pageSize: Int): PaginatedResponse<Album> =
         albumService.allAlbums(page, pageSize, user.id)
+
+    override suspend fun byColor(
+        page: Int,
+        pageSize: Int,
+        color: Int,
+        range: Int
+    ): PaginatedResponse<Album> = albumService.byColor(page, pageSize, color, range, user.id)
 
     override suspend fun updateAlbum(album: Album): Album? =
         albumService.updateAlbum(album, user.id)
@@ -537,6 +545,21 @@ class AlbumService : AlbumLibrary, Service() {
         pageSize: Int,
         userId: UUID? = null
     ): PaginatedResponse<Album> = queryAlbums(page, pageSize, userId = userId)
+
+    suspend fun byColor(
+        page: Int,
+        pageSize: Int,
+        color: Int,
+        range: Int,
+        userId: UUID? = null
+    ): PaginatedResponse<Album> {
+        val (l, a, b) = ColorUtils.rgbToLab((color shr 16) and 0xFF, (color shr 8) and 0xFF, color and 0xFF)
+        return queryAlbums(page, pageSize, userId = userId, columnSet = {
+            leftJoin(ImageMetadataTable, onColumn = { AlbumTable.cover }, otherColumn = { ImageMetadataTable.imageId })
+        }) {
+            filterByColor(l, a, b, range)
+        }
+    }
 
     suspend fun updateAlbum(album: Album, userId: UUID? = null): Album? {
         upsertAlbum(album)

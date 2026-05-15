@@ -13,6 +13,7 @@ import dev.dertyp.services.metadata.CachedMusicBrainzService
 import dev.dertyp.services.metadata.IMetadataService
 import dev.dertyp.services.metadata.MusicBrainzCacheService
 import dev.dertyp.services.metadata.MusicBrainzService
+import dev.dertyp.utils.ColorUtils
 import dev.dertyp.utils.LogParam
 import io.ktor.http.ContentType
 import io.ktor.server.application.ApplicationEnvironment
@@ -160,6 +161,14 @@ class SongRpcService(private val user: User, private val songService: SongServic
         tags: List<SongTag>,
         invertTags: Boolean
     ): PaginatedResponse<UserSong> = songService.allSongs(page, pageSize, explicit, user.id, tags, invertTags)
+
+    override suspend fun byColor(
+        page: Int,
+        pageSize: Int,
+        color: Int,
+        range: Int,
+        explicit: Boolean
+    ): PaginatedResponse<UserSong> = songService.byColor(page, pageSize, color, range, explicit, user.id)
 
     override suspend fun deleteSongs(@LogParam("size") ids: List<UUID>): Boolean = songService.deleteSongs(ids)
 
@@ -788,6 +797,26 @@ class SongService : SongLibrary, Service() {
                 orderBy(SongTable.id, SortOrder.ASC)
             }
         )
+
+    suspend fun byColor(
+        page: Int,
+        pageSize: Int,
+        color: Int,
+        range: Int,
+        explicit: Boolean,
+        userId: UUID
+    ): PaginatedResponse<UserSong> {
+        val (l, a, b) = ColorUtils.rgbToLab((color shr 16) and 0xFF, (color shr 8) and 0xFF, color and 0xFF)
+        return querySongs(
+            page, pageSize, explicit, userId,
+            columnSet = {
+                leftJoin(ImageMetadataTable, onColumn = { SongTable.cover }, otherColumn = { ImageMetadataTable.imageId })
+            },
+            query = {
+                filterByColor(l, a, b, range)
+            }
+        )
+    }
 
     @Suppress("DuplicatedCode")
     suspend fun deleteSongs(ids: List<UUID>): Boolean = dbQuery {

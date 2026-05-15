@@ -75,6 +75,23 @@ class UserPlaylistService : PlaylistLibrary, IUserPlaylistService, Service() {
             this
         }
 
+    override suspend fun byColor(
+        creator: UUID?,
+        page: Int,
+        pageSize: Int,
+        color: Int,
+        range: Int
+    ): PaginatedResponse<UserPlaylist> {
+        val (l, a, b) = dev.dertyp.utils.ColorUtils.rgbToLab((color shr 16) and 0xFF, (color shr 8) and 0xFF, color and 0xFF)
+        return queryPlaylists(page, pageSize, columnSet = {
+            leftJoin(ImageMetadataTable, onColumn = { UserPlaylistTable.imageId }, otherColumn = { ImageMetadataTable.imageId })
+        }) {
+            filterByColor(l, a, b, range)
+            if (creator != null) andWhere { UserPlaylistTable.creator eq creator }
+            else this
+        }
+    }
+
     fun allPlaylistsFlow(creator: UUID?): Flow<UserPlaylist> = flow {
         val total = allPlaylists(creator, 0, 0).total
         var page = 0
@@ -203,13 +220,19 @@ class UserPlaylistService : PlaylistLibrary, IUserPlaylistService, Service() {
     }
 
     private suspend fun querySingle(query: Query.() -> Query) =
-        queryPlaylists(0, Int.MAX_VALUE, query).data.singleOrNull()
+        queryPlaylists(0, Int.MAX_VALUE, query = query).data.singleOrNull()
 
-    private suspend fun queryPlaylists(page: Int, pageSize: Int, query: Query.() -> Query = { this }) =
+    private suspend fun queryPlaylists(
+        page: Int,
+        pageSize: Int,
+        columnSet: ColumnSet.() -> ColumnSet = { this },
+        query: Query.() -> Query = { this }
+    ) =
         dbQuery {
             val offset = if (pageSize == Int.MAX_VALUE) 0 else 1
             val mainPlaylistRows = UserPlaylistTable
                 .leftJoin(ImageTable, onColumn = { UserPlaylistTable.imageId }, otherColumn = { ImageTable.id })
+                .columnSet()
                 .selectAll()
                 .query()
                 .orderBy(UserPlaylistTable.name)
