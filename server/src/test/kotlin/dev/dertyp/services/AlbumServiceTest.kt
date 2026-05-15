@@ -810,8 +810,8 @@ class AlbumServiceTest : KoinTest {
 
         val results = service.byMusicBrainzIds(listOf(mbId1, mbId2))
         assertEquals(2, results.size)
-        assertEquals(albumId1, results[mbId1]?.firstOrNull()?.id)
-        assertEquals(albumId2, results[mbId2]?.firstOrNull()?.id)
+        assertEquals(albumId1, results[0]?.id)
+        assertEquals(albumId2, results[1]?.id)
     }
 
     @ParameterizedTest
@@ -867,8 +867,8 @@ class AlbumServiceTest : KoinTest {
 
         val results = service.byMusicBrainzIds(listOf(directMbId, fallbackMbId))
         assertEquals(2, results.size)
-        assertEquals(albumId1, results[directMbId]?.firstOrNull()?.id)
-        assertEquals(albumId2, results[fallbackMbId]?.firstOrNull()?.id)
+        assertEquals(albumId1, results[0]?.id)
+        assertEquals(albumId2, results[1]?.id)
     }
 
     @ParameterizedTest

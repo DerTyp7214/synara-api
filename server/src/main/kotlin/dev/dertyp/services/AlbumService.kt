@@ -34,7 +34,7 @@ class AlbumRpcService(private val user: User, private val albumService: AlbumSer
     IAlbumService {
     override suspend fun byId(id: UUID): Album? = albumService.byId(id, user.id)
     override suspend fun byMusicBrainzId(mbId: UUID): List<Album> = albumService.byMusicBrainzId(mbId, user.id)
-    override suspend fun byMusicBrainzIds(mbIds: List<UUID>): Map<UUID, List<Album>> = albumService.byMusicBrainzIds(mbIds, user.id)
+    override suspend fun byMusicBrainzIds(mbIds: List<UUID>): List<Album?> = albumService.byMusicBrainzIds(mbIds, user.id)
     override suspend fun byIds(ids: List<UUID>): List<Album> = albumService.byIds(ids, user.id)
     override suspend fun versions(id: UUID): List<Album> = albumService.versions(id, user.id)
     override suspend fun byName(page: Int, pageSize: Int, name: String): PaginatedResponse<Album> =
@@ -372,10 +372,15 @@ class AlbumService : AlbumLibrary, Service() {
     override suspend fun byMusicBrainzId(mbId: UUID): List<Album> = byMusicBrainzId(mbId, null)
 
     suspend fun byMusicBrainzId(mbId: UUID, userId: UUID? = null): List<Album> {
-        return byMusicBrainzIds(listOf(mbId), userId)[mbId] ?: emptyList()
+        return byMusicBrainzIdsMap(listOf(mbId), userId)[mbId] ?: emptyList()
     }
 
-    suspend fun byMusicBrainzIds(mbIds: List<UUID>, userId: UUID? = null): Map<UUID, List<Album>> {
+    suspend fun byMusicBrainzIds(mbIds: List<UUID>, userId: UUID? = null): List<Album?> {
+        val map = byMusicBrainzIdsMap(mbIds, userId)
+        return mbIds.map { map[it]?.firstOrNull() }
+    }
+
+    private suspend fun byMusicBrainzIdsMap(mbIds: List<UUID>, userId: UUID? = null): Map<UUID, List<Album>> {
         val results = mutableMapOf<UUID, List<Album>>()
         val remainingIds = mbIds.distinct().toMutableList()
 
@@ -386,8 +391,8 @@ class AlbumService : AlbumLibrary, Service() {
         directMatches.forEach { album ->
             album.musicbrainzId?.let { mbId ->
                 if (mbId in remainingIds) {
-                    val albums = results.getOrPut(mbId) { mutableListOf() } as MutableList<Album>
-                    if (album !in albums) albums.add(album)
+                    val list = results.getOrPut(mbId) { mutableListOf() } as MutableList<Album>
+                    if (album !in list) list.add(album)
                 }
             }
         }
