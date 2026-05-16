@@ -12,14 +12,14 @@ import io.ktor.server.application.ApplicationEnvironment
 import io.mockk.*
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.core.dao.id.EntityID
+import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.jupiter.api.AfterEach
-import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.EnumSource
 import org.koin.core.context.startKoin
@@ -29,6 +29,9 @@ import org.koin.test.KoinTest
 import org.koin.test.get
 import java.time.LocalDate
 import java.util.UUID
+import kotlin.time.Clock
+import kotlin.time.Duration.Companion.days
+import kotlin.time.Duration.Companion.hours
 import dev.dertyp.data.Artist as DataArtist
 
 class ReleaseServiceTest : KoinTest {
@@ -571,5 +574,116 @@ class ReleaseServiceTest : KoinTest {
             val links = ApplicationScope.json.decodeFromString<List<String>>(release[RecentReleaseTable.links])
             assertTrue(links.any { it.contains("apple-1") })
         }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `backfillMissingRecentReleaseImages should fetch and update missing images`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val artistId = UUID.randomUUID()
+        val releaseId = UUID.randomUUID()
+        val imageId = UUID.randomUUID()
+
+        transaction(database) {
+            ArtistTable.insert { it[id] = artistId; it[name] = "Artist" }
+            ImageTable.insert { it[id] = imageId; it[path] = "test"; it[imageHash] = "hash"; it[origin] = "test" }
+            MBReleaseGroupTable.insert { it[id] = releaseId; it[title] = "Release" }
+            RecentReleaseTable.insert {
+                it[RecentReleaseTable.releaseId] = releaseId
+                it[RecentReleaseTable.artistId] = artistId
+                it[RecentReleaseTable.title] = "Release"
+                it[RecentReleaseTable.imageId] = null
+                it[RecentReleaseTable.lastImageFetch] = null
+            }
+        }
+
+        val spiedService = spyk(service, recordPrivateCalls = true)
+        coEvery { spiedService.fetchReleaseGroupImage(releaseId) } returns imageId
+
+        spiedService.backfillMissingRecentReleaseImages()
+
+        transaction(database) {
+            val release = RecentReleaseTable.selectAll().where { RecentReleaseTable.releaseId eq releaseId }.single()
+            assertEquals(imageId, release[RecentReleaseTable.imageId]?.value)
+            assertNotNull(release[RecentReleaseTable.lastImageFetch])
+        }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `backfillMissingRecentReleaseImages should respect cooldown`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val artistId = UUID.randomUUID()
+        val releaseId = UUID.randomUUID()
+        val now = Clock.System.now().toEpochMilliseconds()
+
+        transaction(database) {
+            ArtistTable.insert { it[id] = artistId; it[name] = "Artist" }
+            MBReleaseGroupTable.insert { it[id] = releaseId; it[title] = "Release" }
+            RecentReleaseTable.insert {
+                it[RecentReleaseTable.releaseId] = releaseId
+                it[RecentReleaseTable.artistId] = artistId
+                it[RecentReleaseTable.title] = "Release"
+                it[RecentReleaseTable.imageId] = null
+                it[RecentReleaseTable.lastImageFetch] = now
+            }
+        }
+
+        val spiedService = spyk(service, recordPrivateCalls = true)
+        spiedService.backfillMissingRecentReleaseImages()
+
+        coVerify(exactly = 0) { spiedService.fetchReleaseGroupImage(any()) }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `backfillMissingRecentReleaseImages should respect progressive cooldown tiers`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val artistId = UUID.randomUUID()
+        val now = Clock.System.now().toEpochMilliseconds()
+
+        val rel1 = UUID.randomUUID()
+        val date1 = now - 2.days.inWholeMilliseconds
+        val last1 = now - 12.hours.inWholeMilliseconds
+
+        val rel2 = UUID.randomUUID()
+        val date2 = now - 7.days.inWholeMilliseconds
+        val last2 = now - 1.days.inWholeMilliseconds
+
+        val rel3 = UUID.randomUUID()
+        val date3 = now - 15.days.inWholeMilliseconds
+        val last3 = now - 6.days.inWholeMilliseconds
+
+        val rel4 = UUID.randomUUID()
+        val date4 = now - 2.days.inWholeMilliseconds
+        val last4 = now - 25.hours.inWholeMilliseconds
+
+        transaction(database) {
+            ArtistTable.insert { it[id] = artistId; it[name] = "Artist" }
+            listOf(
+                rel1 to Pair(date1, last1),
+                rel2 to Pair(date2, last2),
+                rel3 to Pair(date3, last3),
+                rel4 to Pair(date4, last4)
+            ).forEach { (id, data) ->
+                MBReleaseGroupTable.insert { it[MBReleaseGroupTable.id] = EntityID(id, MBReleaseGroupTable); it[title] = "Rel $id" }
+                RecentReleaseTable.insert {
+                    it[RecentReleaseTable.releaseId] = EntityID(id, MBReleaseGroupTable)
+                    it[RecentReleaseTable.artistId] = artistId
+                    it[RecentReleaseTable.artistName] = "Artist"
+                    it[RecentReleaseTable.title] = "Rel $id"
+                    it[RecentReleaseTable.releaseDate] = data.first
+                    it[RecentReleaseTable.lastImageFetch] = data.second
+                }
+            }
+        }
+
+        val spiedService = spyk(service, recordPrivateCalls = true)
+        coEvery { spiedService.fetchReleaseGroupImage(any()) } returns null
+
+        spiedService.backfillMissingRecentReleaseImages()
+
+        coVerify(exactly = 1) { spiedService.fetchReleaseGroupImage(any()) }
+        coVerify { spiedService.fetchReleaseGroupImage(rel4) }
     }
 }

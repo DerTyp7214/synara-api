@@ -15,6 +15,7 @@ object RecentReleaseTable : Table("recent_release") {
     val links = text("links").default("[]")
     val albumId = reference("albumId", AlbumTable.id, onDelete = ReferenceOption.SET_NULL).nullable()
     val songId = reference("songId", SongTable.id, onDelete = ReferenceOption.SET_NULL).nullable()
+    val lastImageFetch = long("last_image_fetch").nullable()
 
     override val primaryKey = PrimaryKey(releaseId)
 }

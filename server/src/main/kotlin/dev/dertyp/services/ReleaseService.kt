@@ -15,14 +15,11 @@ import dev.dertyp.services.models.RecentRelease
 import io.ktor.client.call.body
 import io.ktor.client.request.parameter
 import io.ktor.server.application.ApplicationEnvironment
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
-import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.jdbc.*
@@ -31,6 +28,7 @@ import java.time.LocalDate
 import java.time.ZoneOffset
 import java.util.UUID
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.hours
 
 class ReleaseService(private val environment: ApplicationEnvironment) : Service() {
@@ -172,7 +170,70 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
 
         onProgress(100.0, "Finished fetching new releases")
 
+        backfillMissingRecentReleaseImages()
+
         followedResults + unfollowedResults
+    }
+
+    suspend fun backfillMissingRecentReleaseImages() {
+        val now = Clock.System.now().toEpochMilliseconds()
+        val candidates = dbQuery {
+            RecentReleaseTable.select(RecentReleaseTable.releaseId, RecentReleaseTable.releaseDate, RecentReleaseTable.lastImageFetch)
+                .where { RecentReleaseTable.imageId.isNull() }
+                .map {
+                    Triple(
+                        it[RecentReleaseTable.releaseId].value,
+                        it[RecentReleaseTable.releaseDate],
+                        it[RecentReleaseTable.lastImageFetch]
+                    )
+                }
+        }
+
+        val missingImages = candidates.filter { (_, releaseDate, lastFetch) ->
+            if (lastFetch == null) return@filter true
+
+            val releaseAge = if (releaseDate != null) now - releaseDate else Long.MAX_VALUE
+            val lastFetchAge = now - lastFetch
+
+            val requiredCooldown = when {
+                releaseAge < 5.days.inWholeMilliseconds -> 1.days
+                releaseAge < 9.days.inWholeMilliseconds -> 2.days
+                releaseAge < 30.days.inWholeMilliseconds -> 7.days
+                else -> 30.days
+            }
+
+            lastFetchAge >= requiredCooldown.inWholeMilliseconds
+        }.map { it.first }
+
+        if (missingImages.isEmpty()) return
+
+        logger.info("Backfilling images for ${missingImages.size} recent releases (Progressive cooldown)")
+        val semaphore = Semaphore(5)
+
+        coroutineScope {
+            missingImages.forEach { releaseGroupId ->
+                launch {
+                    semaphore.withPermit {
+                        try {
+                            val imageId = fetchReleaseGroupImage(releaseGroupId)
+                            dbQuery {
+                                RecentReleaseTable.update({ RecentReleaseTable.releaseId eq releaseGroupId }) {
+                                    it[RecentReleaseTable.imageId] = imageId
+                                    it[RecentReleaseTable.lastImageFetch] = Clock.System.now().toEpochMilliseconds()
+                                }
+                            }
+                        } catch (e: Exception) {
+                            logger.error("Failed to backfill image for release group $releaseGroupId", e)
+                            dbQuery {
+                                RecentReleaseTable.update({ RecentReleaseTable.releaseId eq releaseGroupId }) {
+                                    it[RecentReleaseTable.lastImageFetch] = Clock.System.now().toEpochMilliseconds()
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
     private suspend fun fetchUnfollowedArtistsReleases(
