@@ -34,6 +34,7 @@ import javax.imageio.event.IIOWriteProgressListener
 import javax.imageio.stream.MemoryCacheImageOutputStream
 import kotlin.io.path.*
 import kotlin.math.roundToInt
+import kotlin.time.Duration.Companion.milliseconds
 import com.sksamuel.scrimage.pixels.Pixel as ScrPixel
 
 class ExposedBAOS : ByteArrayOutputStream() {
@@ -618,7 +619,7 @@ class ImageService(
 
         @Suppress("AssignedValueIsNeverRead")
         mosaic = null
-        
+
         val totalSize = baos.size()
         val rawBuffer = baos.buffer
         val chunkSize = 1024 * 1024
@@ -630,7 +631,7 @@ class ImageService(
             val chunk = rawBuffer.copyOfRange(start, start + length)
             val progress = 0.95 + ((i + 1).toDouble() / totalChunks * 0.05)
             sendProgress(progress, "Sending data (${i + 1}/$totalChunks)...", chunk, totalChunks)
-            yield()
+            delay(1.milliseconds)
         }
         
         sendProgress(1.0, "Finished")

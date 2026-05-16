@@ -39,6 +39,7 @@ import kotlinx.serialization.encodeToByteArray
 import org.koin.ktor.ext.inject
 import org.koin.ktor.plugin.koin
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
+import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
 
@@ -51,7 +52,7 @@ fun Application.configureRouting() {
     install(SSE)
     install(WebSockets) {
         pingPeriod = 15.seconds
-        timeout = 15.seconds
+        timeout = 5.minutes
         maxFrameSize = Long.MAX_VALUE
         masking = false
     }
