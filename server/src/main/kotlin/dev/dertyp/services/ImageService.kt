@@ -31,14 +31,59 @@ import javax.imageio.ImageIO
 import javax.imageio.ImageWriteParam
 import javax.imageio.ImageWriter
 import javax.imageio.event.IIOWriteProgressListener
-import javax.imageio.stream.MemoryCacheImageOutputStream
+import javax.imageio.stream.ImageOutputStreamImpl
 import kotlin.io.path.*
 import kotlin.math.roundToInt
 import kotlin.time.Duration.Companion.milliseconds
 import com.sksamuel.scrimage.pixels.Pixel as ScrPixel
 
-class ExposedBAOS : ByteArrayOutputStream() {
-    val buffer: ByteArray get() = buf
+private class ChunkedImageOutputStream(
+    private val onChunk: suspend (ByteArray, Double) -> Unit,
+    private val totalProgressStart: Double,
+    private val totalProgressRange: Double
+) : ImageOutputStreamImpl() {
+    private val buffer = ByteArrayOutputStream()
+    private val chunkSize = 1024 * 1024
+    private var currentProgress = 0.0
+
+    fun updateProgress(progress: Double) {
+        currentProgress = progress
+    }
+
+    override fun write(b: Int) {
+        buffer.write(b)
+        checkBuffer()
+    }
+
+    override fun write(b: ByteArray, off: Int, len: Int) {
+        buffer.write(b, off, len)
+        checkBuffer()
+    }
+
+    private fun checkBuffer() {
+        while (buffer.size() >= chunkSize) {
+            val fullData = buffer.toByteArray()
+            val chunk = fullData.copyOfRange(0, chunkSize)
+            val remaining = fullData.copyOfRange(chunkSize, fullData.size)
+            buffer.reset()
+            buffer.write(remaining)
+
+            val progress = totalProgressStart + (currentProgress * totalProgressRange)
+            runBlocking { onChunk(chunk, progress) }
+        }
+    }
+
+    override fun read() = -1
+    override fun read(b: ByteArray, off: Int, len: Int) = -1
+
+    override fun flush() {
+        if (buffer.size() > 0) {
+            val chunk = buffer.toByteArray()
+            buffer.reset()
+            val progress = totalProgressStart + (currentProgress * totalProgressRange)
+            runBlocking { onChunk(chunk, progress) }
+        }
+    }
 }
 
 class ImageRpcService(private val user: User?, private val imageService: ImageService) : IImageService {
@@ -482,10 +527,10 @@ class ImageService(
         if (width * height > maxTiles) throw IllegalArgumentException("Grid size too large (max 65,536 tiles)")
 
         var lastProgress = 0.0
-        suspend fun sendProgress(progress: Double, status: String, chunk: ByteArray? = null, total: Int? = null) {
+        suspend fun sendProgress(progress: Double, status: String, chunk: ByteArray? = null, isLast: Boolean = false) {
             val monotonicProgress = maxOf(lastProgress, progress).coerceAtMost(1.0)
             lastProgress = monotonicProgress
-            send(MosaicGenerationResponse(monotonicProgress, status, chunk, total))
+            send(MosaicGenerationResponse(monotonicProgress, status, chunk, isLast))
         }
 
         sendProgress(0.0, "Extracting colors...")
@@ -586,9 +631,7 @@ class ImageService(
         g.dispose()
         @Suppress("AssignedValueIsNeverRead")
         imageCache = null
-        sendProgress(0.85, "Encoding final image...")
         
-        val baos = ExposedBAOS()
         withContext(Dispatchers.IO) {
             val writer = ImageIO.getImageWritersByFormatName("jpeg").next()
             val writeParam = writer.defaultWriteParam
@@ -597,10 +640,20 @@ class ImageService(
                 writeParam.compressionQuality = 0.85f
             }
 
+            val chunkedStream = ChunkedImageOutputStream(
+                onChunk = { bytes, progress ->
+                    sendProgress(progress, "Encoding and sending...")
+                    send(MosaicGenerationResponse(progress, "Encoding and sending...", bytes))
+                    delay(1.milliseconds)
+                },
+                totalProgressStart = 0.85,
+                totalProgressRange = 0.15
+            )
+
             writer.addIIOWriteProgressListener(object : IIOWriteProgressListener {
                 override fun imageStarted(source: ImageWriter?, imageIndex: Int) {}
                 override fun imageProgress(source: ImageWriter?, percentageDone: Float) {
-                    runBlocking { sendProgress(0.85 + (percentageDone / 100.0 * 0.1), "Encoding final image (${percentageDone.toInt()}%)...") }
+                    chunkedStream.updateProgress(percentageDone.toDouble() / 100.0)
                 }
                 override fun imageComplete(source: ImageWriter?) {}
                 override fun thumbnailStarted(source: ImageWriter?, imageIndex: Int, thumbnailIndex: Int) {}
@@ -609,7 +662,7 @@ class ImageService(
                 override fun writeAborted(source: ImageWriter?) {}
             })
 
-            MemoryCacheImageOutputStream(baos).use { ios ->
+            chunkedStream.use { ios ->
                 writer.output = ios
                 writer.write(null, IIOImage(mosaic, null, null), writeParam)
                 ios.flush()
@@ -619,22 +672,8 @@ class ImageService(
 
         @Suppress("AssignedValueIsNeverRead")
         mosaic = null
-
-        val totalSize = baos.size()
-        val rawBuffer = baos.buffer
-        val chunkSize = 1024 * 1024
-        val totalChunks = (totalSize + chunkSize - 1) / chunkSize
         
-        for (i in 0 until totalChunks) {
-            val start = i * chunkSize
-            val length = minOf(chunkSize, totalSize - start)
-            val chunk = rawBuffer.copyOfRange(start, start + length)
-            val progress = 0.95 + ((i + 1).toDouble() / totalChunks * 0.05)
-            sendProgress(progress, "Sending data (${i + 1}/$totalChunks)...", chunk, totalChunks)
-            delay(1.milliseconds)
-        }
-        
-        sendProgress(1.0, "Finished")
+        sendProgress(1.0, "Finished", isLast = true)
     }.flowOn(Dispatchers.IO)
 
     private fun sqDist(p1: DoubleArray, p2: DoubleArray): Double {

@@ -407,14 +407,11 @@ class ImageServiceTest {
         }
 
         val chunks = results.filter { it.chunk != null }
-        assertTrue(chunks.size > 1, "Should have multiple chunks for 4k image (got ${chunks.size})")
+        assertTrue(chunks.size > 1, "Should have multiple chunks for 8k image (got ${chunks.size})")
         
-        val totalChunks = chunks.first().totalChunks
-        assertNotNull(totalChunks)
-        assertEquals(chunks.size, totalChunks, "Total chunks reported should match emitted chunks")
+        assertTrue(results.last().isLast, "Last response should have isLast = true")
         
         chunks.forEach { 
-            assertEquals(totalChunks, it.totalChunks, "All chunk messages should report same total count")
             assertTrue(it.chunk!!.size <= 1024 * 1024, "Chunk size should not exceed 1MB")
         }
 
