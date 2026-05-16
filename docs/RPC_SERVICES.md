@@ -1261,7 +1261,7 @@ Management of image files for covers and profiles.
 | `createImage` | `bytes` (`ByteArray`): The raw binary data of the image.<br>`origin` (`String`): The source or category of the image. | `PlatformUUID` | - |  | Store a new image on the server. |
 | `createBatch` | `images` (`List`<[InsertableImage](#devdertypdatainsertableimage)>): Collection of images to store. | `Map`<`String`, `PlatformUUID`> | - |  | Store multiple images on the server in a single operation. |
 | `moveImages` | `oldPath` (`String`): Path prefix to match.<br>`newPath` (`String`): New base path. | `Int` | **Admin** |  | Batch update image file paths. |
-| `generateMosaicImage` | `image` (`ByteArray`): The source image data.<br>`width` (`Int`): Grid width (max width * height = 65,536).<br>`height` (`Int`): Grid height (max width * height = 65,536). | `Flow`<[MosaicGenerationResponse](#devdertypdatamosaicgenerationresponse)> | - | IllegalArgumentException | Generate an 16k mosaic image from a source image where each pixel is replaced by a matching cover. |
+| `generateMosaicImage` | `image` (`ByteArray`): The source image data.<br>`width` (`Int`): Grid width (max width * height = 65,536).<br>`height` (`Int`): Grid height (max width * height = 65,536).<br>`resultSize` (`Int`): The resolution of the resulting square image. | `Flow`<[MosaicGenerationResponse](#devdertypdatamosaicgenerationresponse)> | - | IllegalArgumentException | Generate a mosaic image from a source image where each pixel is replaced by a matching cover. |
 
 ### ILyricsSearch <a name="devdertypservicesilyricssearch"></a>
 Search for track lyrics using external providers.

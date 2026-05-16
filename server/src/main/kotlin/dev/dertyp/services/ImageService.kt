@@ -45,8 +45,13 @@ class ImageRpcService(private val user: User?, private val imageService: ImageSe
         return imageService.moveImages(oldPath, newPath)
     }
 
-    override fun generateMosaicImage(image: ByteArray, width: Int, height: Int): Flow<MosaicGenerationResponse> =
-        imageService.generateMosaicImage(image, width, height)
+    override fun generateMosaicImage(
+        image: ByteArray,
+        width: Int,
+        height: Int,
+        resultSize: Int
+    ): Flow<MosaicGenerationResponse> =
+        imageService.generateMosaicImage(image, width, height, resultSize)
 }
 
 class ImageService(
@@ -462,7 +467,7 @@ class ImageService(
         }
     }
 
-    fun generateMosaicImage(image: ByteArray, width: Int, height: Int): Flow<MosaicGenerationResponse> = flow {
+    fun generateMosaicImage(image: ByteArray, width: Int, height: Int, outputSize: Int): Flow<MosaicGenerationResponse> = flow {
         val maxTiles = 256 * 256
         if (width * height > maxTiles) throw IllegalArgumentException("Grid size too large (max 65,536 tiles)")
 
@@ -495,7 +500,6 @@ class ImageService(
             idsByPixel[pixel] = ids
         }
 
-        val outputSize = 16384
         val mosaic = BufferedImage(outputSize, outputSize, BufferedImage.TYPE_INT_RGB)
         val g = mosaic.createGraphics()
 
@@ -509,7 +513,7 @@ class ImageService(
         val imageCache = mutableMapOf<UUID, BufferedImage?>()
 
         pixelWithRank.forEachIndexed { index, (pixel, rank) ->
-            if (index % 100 == 0) {
+            if (index % 10 == 0) {
                 emit(MosaicGenerationResponse(0.1 + 0.8 * (index.toDouble() / pixelWithRank.size), "Rendering mosaic (${index}/${pixelWithRank.size})..."))
             }
             val pool = idsByPixel[pixel] ?: emptyList()

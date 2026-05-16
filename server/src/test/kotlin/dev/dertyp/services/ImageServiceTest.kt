@@ -325,7 +325,7 @@ class ImageServiceTest {
         val baos = ByteArrayOutputStream()
         ImageIO.write(inputImg, "png", baos)
 
-        val results = service.generateMosaicImage(baos.toByteArray(), 2, 2).toList()
+        val results = service.generateMosaicImage(baos.toByteArray(), 2, 2, 1024).toList()
         assertTrue(results.isNotEmpty())
         
         val lastResult = results.last()
@@ -333,7 +333,7 @@ class ImageServiceTest {
         assertNotNull(lastResult.image)
 
         val resultImg = ImageIO.read(ByteArrayInputStream(lastResult.image!!))
-        assertEquals(16384, resultImg.width)
-        assertEquals(16384, resultImg.height)
+        assertEquals(1024, resultImg.width)
+        assertEquals(1024, resultImg.height)
     }
 }
