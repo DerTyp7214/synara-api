@@ -368,7 +368,8 @@ Progress information for an image mosaic generation task.
 | :--- | :--- | :--- |
 | `progress` | `Double` | Current progress fraction (0.0 to 1.0). |
 | `status` | `String` | Status or log message. |
-| `image` | `ByteArray`? | The generated mosaic image data. Only present on completion. |
+| `chunk` | `ByteArray`? | A chunk of the generated mosaic image data. |
+| `totalChunks` | `Int`? | The total number of chunks being sent. Only present when chunk is not null. |
 
 ### PaginatedResponse <a name="devdertypdatapaginatedresponse"></a>
 A generic wrapper for paginated data collections.

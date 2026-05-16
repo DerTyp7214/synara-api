@@ -517,7 +517,7 @@ class ImageService(
         send(MosaicGenerationResponse(0.1, "Loading covers..."))
         val imageCache = coroutineScope {
             allImageIds.chunked(25).flatMapIndexed { chunkIdx, batch ->
-                val progress = 0.1 + 0.4 * (chunkIdx.toDouble() * 25 / allImageIds.size)
+                val progress = 0.1 + 0.35 * (chunkIdx.toDouble() * 25 / allImageIds.size)
                 send(MosaicGenerationResponse(progress, "Loading covers (${chunkIdx * 25}/${allImageIds.size})..."))
                 batch.map { id ->
                     async {
@@ -545,7 +545,7 @@ class ImageService(
 
         pixelWithRank.forEachIndexed { index, (pixel, rank) ->
             if (index % 10 == 0) {
-                send(MosaicGenerationResponse(0.5 + 0.4 * (index.toDouble() / pixelWithRank.size), "Rendering mosaic (${index}/${pixelWithRank.size})..."))
+                send(MosaicGenerationResponse(0.45 + 0.4 * (index.toDouble() / pixelWithRank.size), "Rendering mosaic (${index}/${pixelWithRank.size})..."))
             }
             val pool = idsByPixel[pixel] ?: emptyList()
             val imageId = if (pool.isNotEmpty()) pool[rank % pool.size] else null
@@ -571,7 +571,7 @@ class ImageService(
         }
 
         g.dispose()
-        send(MosaicGenerationResponse(0.9, "Encoding final image..."))
+        send(MosaicGenerationResponse(0.85, "Encoding final image..."))
         
         val baos = ByteArrayOutputStream()
         withContext(Dispatchers.IO) {
@@ -585,7 +585,7 @@ class ImageService(
             writer.addIIOWriteProgressListener(object : IIOWriteProgressListener {
                 override fun imageStarted(source: ImageWriter?, imageIndex: Int) {}
                 override fun imageProgress(source: ImageWriter?, percentageDone: Float) {
-                    launch { send(MosaicGenerationResponse(0.9 + (percentageDone / 100.0 * 0.1), "Encoding final image (${percentageDone.toInt()}%)...")) }
+                    launch { send(MosaicGenerationResponse(0.85 + (percentageDone / 100.0 * 0.1), "Encoding final image (${percentageDone.toInt()}%)...")) }
                 }
                 override fun imageComplete(source: ImageWriter?) {}
                 override fun thumbnailStarted(source: ImageWriter?, imageIndex: Int, thumbnailIndex: Int) {}
@@ -602,7 +602,19 @@ class ImageService(
             writer.dispose()
         }
         
-        send(MosaicGenerationResponse(1.0, "Finished", baos.toByteArray()))
+        val fullImage = baos.toByteArray()
+        val chunkSize = 1024 * 1024
+        val totalChunks = (fullImage.size + chunkSize - 1) / chunkSize
+        
+        for (i in 0 until totalChunks) {
+            val start = i * chunkSize
+            val end = minOf(start + chunkSize, fullImage.size)
+            val chunk = fullImage.copyOfRange(start, end)
+            val progress = 0.95 + ((i + 1).toDouble() / totalChunks * 0.05)
+            send(MosaicGenerationResponse(progress, "Sending data (${i + 1}/$totalChunks)...", chunk, totalChunks))
+        }
+        
+        send(MosaicGenerationResponse(1.0, "Finished"))
     }.flowOn(Dispatchers.IO)
 
     private fun sqDist(p1: DoubleArray, p2: DoubleArray): Double {

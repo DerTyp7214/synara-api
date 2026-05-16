@@ -328,11 +328,10 @@ class ImageServiceTest {
         val results = service.generateMosaicImage(baos.toByteArray(), 2, 2, 1024).toList()
         assertTrue(results.isNotEmpty())
         
-        val lastResult = results.last()
-        assertEquals(1.0, lastResult.progress)
-        assertNotNull(lastResult.image)
+        val assembledImage = results.mapNotNull { it.chunk }.fold(ByteArray(0)) { acc, chunk -> acc + chunk }
+        assertTrue(assembledImage.isNotEmpty())
 
-        val resultImg = ImageIO.read(ByteArrayInputStream(lastResult.image!!))
+        val resultImg = ImageIO.read(ByteArrayInputStream(assembledImage))
         assertEquals(1024, resultImg.width)
         assertEquals(1024, resultImg.height)
     }
