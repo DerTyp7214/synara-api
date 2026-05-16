@@ -27,6 +27,7 @@ import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.nio.file.Files
+import java.util.Random
 import java.util.UUID
 import javax.imageio.ImageIO
 
@@ -334,5 +335,91 @@ class ImageServiceTest {
         val resultImg = ImageIO.read(ByteArrayInputStream(assembledImage))
         assertEquals(1024, resultImg.width)
         assertEquals(1024, resultImg.height)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `generateMosaicImage should handle chunking and progress correctly`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+
+        val red = Color.RED
+        val (rl, ra, rb) = ColorUtils.rgbToLab(red.red, red.green, red.blue)
+        transaction(database) {
+            repeat(30) { i ->
+                val imgId = ImageTable.insert {
+                    it[id] = UUID.randomUUID()
+                    it[path] = "red$i.jpg"
+                    it[imageHash] = "red$i"
+                    it[origin] = "test"
+                }[ImageTable.id]
+
+                val fullPath = File(storageService.imagesPath, "red$i.jpg")
+                fullPath.parentFile.mkdirs()
+                val img = BufferedImage(10, 10, BufferedImage.TYPE_INT_RGB)
+                val g = img.createGraphics()
+                g.color = Color.RED
+                g.fillRect(0, 0, 10, 10)
+                g.dispose()
+                ImageIO.write(img, "jpg", fullPath)
+
+                ImageMetadataTable.insert {
+                    it[imageId] = imgId
+                    it[width] = 10
+                    it[height] = 10
+                    it[byteSize] = 100
+                    it[primaryColor] = red.rgb
+                    it[ImageMetadataTable.red] = red.red
+                    it[ImageMetadataTable.green] = red.green
+                    it[ImageMetadataTable.blue] = red.blue
+                    it[luminance] = 0.5
+                    it[labL] = rl
+                    it[labA] = ra
+                    it[labB] = rb
+                }
+            }
+        }
+
+        val inputImg = BufferedImage(50, 50, BufferedImage.TYPE_INT_RGB)
+        val ig = inputImg.createGraphics()
+        val random = Random()
+        for (x in 0 until 50) {
+            for (y in 0 until 50) {
+                ig.color = Color(random.nextInt(256), random.nextInt(256), random.nextInt(256))
+                ig.drawRect(x, y, 1, 1)
+            }
+        }
+        ig.dispose()
+        val baos = ByteArrayOutputStream()
+        ImageIO.write(inputImg, "png", baos)
+
+        val results = service.generateMosaicImage(baos.toByteArray(), 50, 50, 8192).toList()
+        
+        assertTrue(results.any { it.progress == 0.0 }, "Should have starting progress")
+        assertTrue(results.any { it.progress in 0.1..0.45 }, "Should have loading progress")
+        assertTrue(results.any { it.progress in 0.45..0.85 }, "Should have rendering progress")
+        assertTrue(results.any { it.progress in 0.85..0.95 }, "Should have encoding progress")
+        assertEquals(1.0, results.last().progress, "Should finish at 1.0")
+
+        var lastProgress = -1.0
+        results.forEach {
+            assertTrue(it.progress >= lastProgress, "Progress should be monotonic: ${it.progress} vs $lastProgress")
+            lastProgress = it.progress
+        }
+
+        val chunks = results.filter { it.chunk != null }
+        assertTrue(chunks.size > 1, "Should have multiple chunks for 4k image (got ${chunks.size})")
+        
+        val totalChunks = chunks.first().totalChunks
+        assertNotNull(totalChunks)
+        assertEquals(chunks.size, totalChunks, "Total chunks reported should match emitted chunks")
+        
+        chunks.forEach { 
+            assertEquals(totalChunks, it.totalChunks, "All chunk messages should report same total count")
+            assertTrue(it.chunk!!.size <= 1024 * 1024, "Chunk size should not exceed 1MB")
+        }
+
+        val assembled = chunks.mapNotNull { it.chunk }.fold(ByteArray(0)) { acc, chunk -> acc + chunk }
+        val resultImg = ImageIO.read(ByteArrayInputStream(assembled))
+        assertEquals(8192, resultImg.width)
     }
 }

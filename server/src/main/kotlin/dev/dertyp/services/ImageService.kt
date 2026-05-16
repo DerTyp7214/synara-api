@@ -36,6 +36,10 @@ import kotlin.io.path.*
 import kotlin.math.roundToInt
 import com.sksamuel.scrimage.pixels.Pixel as ScrPixel
 
+class ExposedBAOS : ByteArrayOutputStream() {
+    val buffer: ByteArray get() = buf
+}
+
 class ImageRpcService(private val user: User?, private val imageService: ImageService) : IImageService {
     override suspend fun byId(id: UUID): Image? = imageService.byId(id)
     override suspend fun byHash(hash: String): Image? = imageService.byHash(hash)
@@ -414,6 +418,7 @@ class ImageService(
         }
     }
 
+    @Suppress("SameParameterValue")
     private fun extractPalette(pixels: Array<ScrPixel>, k: Int): List<Int> {
         if (pixels.isEmpty()) return emptyList()
         
@@ -475,7 +480,14 @@ class ImageService(
         val maxTiles = 256 * 256
         if (width * height > maxTiles) throw IllegalArgumentException("Grid size too large (max 65,536 tiles)")
 
-        send(MosaicGenerationResponse(0.0, "Extracting colors..."))
+        var lastProgress = 0.0
+        suspend fun sendProgress(progress: Double, status: String, chunk: ByteArray? = null, total: Int? = null) {
+            val monotonicProgress = maxOf(lastProgress, progress).coerceAtMost(1.0)
+            lastProgress = monotonicProgress
+            send(MosaicGenerationResponse(monotonicProgress, status, chunk, total))
+        }
+
+        sendProgress(0.0, "Extracting colors...")
         val allPixels = ImageUtils.extractColors(image, width, height)
         val pixelRanks = mutableMapOf<ImageUtils.Pixel, Int>()
         val pixelWithRank = allPixels.map { pixel ->
@@ -489,7 +501,7 @@ class ImageService(
 
         distinctPixels.forEachIndexed { idx, pixel ->
             if (idx % 10 == 0) {
-                send(MosaicGenerationResponse(0.1 * (idx.toDouble() / distinctPixels.size), "Finding matches (${idx}/${distinctPixels.size})..."))
+                sendProgress(0.1 * (idx.toDouble() / distinctPixels.size), "Finding matches (${idx}/${distinctPixels.size})...")
             }
             val count = pixelRanks[pixel] ?: 0
             val (l, a, b) = ColorUtils.rgbToLab(pixel.r, pixel.g, pixel.b)
@@ -514,11 +526,11 @@ class ImageService(
         val tw = (outputSize + width - 1) / width
         val th = (outputSize + height - 1) / height
 
-        send(MosaicGenerationResponse(0.1, "Loading covers..."))
-        val imageCache = coroutineScope {
+        sendProgress(0.1, "Loading covers...")
+        var imageCache: Map<UUID, BufferedImage>? = coroutineScope {
             allImageIds.chunked(25).flatMapIndexed { chunkIdx, batch ->
                 val progress = 0.1 + 0.35 * (chunkIdx.toDouble() * 25 / allImageIds.size)
-                send(MosaicGenerationResponse(progress, "Loading covers (${chunkIdx * 25}/${allImageIds.size})..."))
+                sendProgress(progress, "Loading covers (${chunkIdx * 25}/${allImageIds.size})...")
                 batch.map { id ->
                     async {
                         val path = imagePaths[id]
@@ -540,12 +552,12 @@ class ImageService(
             }.filterNotNull().toMap()
         }
 
-        val mosaic = BufferedImage(outputSize, outputSize, BufferedImage.TYPE_INT_RGB)
-        val g = mosaic.createGraphics()
+        var mosaic: BufferedImage? = BufferedImage(outputSize, outputSize, BufferedImage.TYPE_INT_RGB)
+        val g = mosaic!!.createGraphics()
 
         pixelWithRank.forEachIndexed { index, (pixel, rank) ->
             if (index % 10 == 0) {
-                send(MosaicGenerationResponse(0.45 + 0.4 * (index.toDouble() / pixelWithRank.size), "Rendering mosaic (${index}/${pixelWithRank.size})..."))
+                sendProgress(0.45 + 0.4 * (index.toDouble() / pixelWithRank.size), "Rendering mosaic (${index}/${pixelWithRank.size})...")
             }
             val pool = idsByPixel[pixel] ?: emptyList()
             val imageId = if (pool.isNotEmpty()) pool[rank % pool.size] else null
@@ -561,7 +573,7 @@ class ImageService(
             val nextY = ((iy + 1) * outputSize) / height
             val currentTileHeight = nextY - y
 
-            val tile = imageCache[imageId]
+            val tile = imageCache?.get(imageId)
             if (tile != null) {
                 g.drawImage(tile, x, y, currentTileWidth, currentTileHeight, null)
             } else {
@@ -571,9 +583,11 @@ class ImageService(
         }
 
         g.dispose()
-        send(MosaicGenerationResponse(0.85, "Encoding final image..."))
+        @Suppress("AssignedValueIsNeverRead")
+        imageCache = null
+        sendProgress(0.85, "Encoding final image...")
         
-        val baos = ByteArrayOutputStream()
+        val baos = ExposedBAOS()
         withContext(Dispatchers.IO) {
             val writer = ImageIO.getImageWritersByFormatName("jpeg").next()
             val writeParam = writer.defaultWriteParam
@@ -585,7 +599,7 @@ class ImageService(
             writer.addIIOWriteProgressListener(object : IIOWriteProgressListener {
                 override fun imageStarted(source: ImageWriter?, imageIndex: Int) {}
                 override fun imageProgress(source: ImageWriter?, percentageDone: Float) {
-                    launch { send(MosaicGenerationResponse(0.85 + (percentageDone / 100.0 * 0.1), "Encoding final image (${percentageDone.toInt()}%)...")) }
+                    runBlocking { sendProgress(0.85 + (percentageDone / 100.0 * 0.1), "Encoding final image (${percentageDone.toInt()}%)...") }
                 }
                 override fun imageComplete(source: ImageWriter?) {}
                 override fun thumbnailStarted(source: ImageWriter?, imageIndex: Int, thumbnailIndex: Int) {}
@@ -601,20 +615,25 @@ class ImageService(
             }
             writer.dispose()
         }
+
+        @Suppress("AssignedValueIsNeverRead")
+        mosaic = null
         
-        val fullImage = baos.toByteArray()
+        val totalSize = baos.size()
+        val rawBuffer = baos.buffer
         val chunkSize = 1024 * 1024
-        val totalChunks = (fullImage.size + chunkSize - 1) / chunkSize
+        val totalChunks = (totalSize + chunkSize - 1) / chunkSize
         
         for (i in 0 until totalChunks) {
             val start = i * chunkSize
-            val end = minOf(start + chunkSize, fullImage.size)
-            val chunk = fullImage.copyOfRange(start, end)
+            val length = minOf(chunkSize, totalSize - start)
+            val chunk = rawBuffer.copyOfRange(start, start + length)
             val progress = 0.95 + ((i + 1).toDouble() / totalChunks * 0.05)
-            send(MosaicGenerationResponse(progress, "Sending data (${i + 1}/$totalChunks)...", chunk, totalChunks))
+            sendProgress(progress, "Sending data (${i + 1}/$totalChunks)...", chunk, totalChunks)
+            yield()
         }
         
-        send(MosaicGenerationResponse(1.0, "Finished"))
+        sendProgress(1.0, "Finished")
     }.flowOn(Dispatchers.IO)
 
     private fun sqDist(p1: DoubleArray, p2: DoubleArray): Double {
