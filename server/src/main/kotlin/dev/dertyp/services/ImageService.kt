@@ -14,7 +14,7 @@ import dev.dertyp.utils.LogParam
 import io.trbl.blurhash.BlurHash
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.flowOn
 import net.coobird.thumbnailator.Thumbnails
 import org.jetbrains.exposed.v1.core.*
@@ -26,7 +26,12 @@ import java.awt.image.BufferedImage
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.util.UUID
+import javax.imageio.IIOImage
 import javax.imageio.ImageIO
+import javax.imageio.ImageWriteParam
+import javax.imageio.ImageWriter
+import javax.imageio.event.IIOWriteProgressListener
+import javax.imageio.stream.MemoryCacheImageOutputStream
 import kotlin.io.path.*
 import kotlin.math.roundToInt
 import com.sksamuel.scrimage.pixels.Pixel as ScrPixel
@@ -466,11 +471,11 @@ class ImageService(
         }
     }
 
-    fun generateMosaicImage(image: ByteArray, width: Int, height: Int, outputSize: Int): Flow<MosaicGenerationResponse> = flow {
+    fun generateMosaicImage(image: ByteArray, width: Int, height: Int, outputSize: Int): Flow<MosaicGenerationResponse> = channelFlow {
         val maxTiles = 256 * 256
         if (width * height > maxTiles) throw IllegalArgumentException("Grid size too large (max 65,536 tiles)")
 
-        emit(MosaicGenerationResponse(0.0, "Extracting colors..."))
+        send(MosaicGenerationResponse(0.0, "Extracting colors..."))
         val allPixels = ImageUtils.extractColors(image, width, height)
         val pixelRanks = mutableMapOf<ImageUtils.Pixel, Int>()
         val pixelWithRank = allPixels.map { pixel ->
@@ -484,7 +489,7 @@ class ImageService(
 
         distinctPixels.forEachIndexed { idx, pixel ->
             if (idx % 10 == 0) {
-                emit(MosaicGenerationResponse(0.1 * (idx.toDouble() / distinctPixels.size), "Finding matches (${idx}/${distinctPixels.size})..."))
+                send(MosaicGenerationResponse(0.1 * (idx.toDouble() / distinctPixels.size), "Finding matches (${idx}/${distinctPixels.size})..."))
             }
             val count = pixelRanks[pixel] ?: 0
             val (l, a, b) = ColorUtils.rgbToLab(pixel.r, pixel.g, pixel.b)
@@ -509,11 +514,11 @@ class ImageService(
         val tw = (outputSize + width - 1) / width
         val th = (outputSize + height - 1) / height
 
-        emit(MosaicGenerationResponse(0.1, "Loading covers..."))
+        send(MosaicGenerationResponse(0.1, "Loading covers..."))
         val imageCache = coroutineScope {
             allImageIds.chunked(25).flatMapIndexed { chunkIdx, batch ->
                 val progress = 0.1 + 0.4 * (chunkIdx.toDouble() * 25 / allImageIds.size)
-                emit(MosaicGenerationResponse(progress, "Loading covers (${chunkIdx * 25}/${allImageIds.size})..."))
+                send(MosaicGenerationResponse(progress, "Loading covers (${chunkIdx * 25}/${allImageIds.size})..."))
                 batch.map { id ->
                     async {
                         val path = imagePaths[id]
@@ -540,7 +545,7 @@ class ImageService(
 
         pixelWithRank.forEachIndexed { index, (pixel, rank) ->
             if (index % 10 == 0) {
-                emit(MosaicGenerationResponse(0.5 + 0.4 * (index.toDouble() / pixelWithRank.size), "Rendering mosaic (${index}/${pixelWithRank.size})..."))
+                send(MosaicGenerationResponse(0.5 + 0.4 * (index.toDouble() / pixelWithRank.size), "Rendering mosaic (${index}/${pixelWithRank.size})..."))
             }
             val pool = idsByPixel[pixel] ?: emptyList()
             val imageId = if (pool.isNotEmpty()) pool[rank % pool.size] else null
@@ -566,12 +571,38 @@ class ImageService(
         }
 
         g.dispose()
-        emit(MosaicGenerationResponse(0.95, "Encoding final image..."))
+        send(MosaicGenerationResponse(0.9, "Encoding final image..."))
+        
         val baos = ByteArrayOutputStream()
         withContext(Dispatchers.IO) {
-            ImageIO.write(mosaic, "jpeg", baos)
+            val writer = ImageIO.getImageWritersByFormatName("jpeg").next()
+            val writeParam = writer.defaultWriteParam
+            if (writeParam.canWriteCompressed()) {
+                writeParam.compressionMode = ImageWriteParam.MODE_EXPLICIT
+                writeParam.compressionQuality = 0.85f
+            }
+
+            writer.addIIOWriteProgressListener(object : IIOWriteProgressListener {
+                override fun imageStarted(source: ImageWriter?, imageIndex: Int) {}
+                override fun imageProgress(source: ImageWriter?, percentageDone: Float) {
+                    launch { send(MosaicGenerationResponse(0.9 + (percentageDone / 100.0 * 0.1), "Encoding final image (${percentageDone.toInt()}%)...")) }
+                }
+                override fun imageComplete(source: ImageWriter?) {}
+                override fun thumbnailStarted(source: ImageWriter?, imageIndex: Int, thumbnailIndex: Int) {}
+                override fun thumbnailProgress(source: ImageWriter?, percentageDone: Float) {}
+                override fun thumbnailComplete(source: ImageWriter?) {}
+                override fun writeAborted(source: ImageWriter?) {}
+            })
+
+            MemoryCacheImageOutputStream(baos).use { ios ->
+                writer.output = ios
+                writer.write(null, IIOImage(mosaic, null, null), writeParam)
+                ios.flush()
+            }
+            writer.dispose()
         }
-        emit(MosaicGenerationResponse(1.0, "Finished", baos.toByteArray()))
+        
+        send(MosaicGenerationResponse(1.0, "Finished", baos.toByteArray()))
     }.flowOn(Dispatchers.IO)
 
     private fun sqDist(p1: DoubleArray, p2: DoubleArray): Double {
