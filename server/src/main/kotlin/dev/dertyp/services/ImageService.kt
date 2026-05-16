@@ -3,10 +3,7 @@ package dev.dertyp.services
 import com.sksamuel.scrimage.ImmutableImage
 import dev.dertyp.core.paging
 import dev.dertyp.core.sha256
-import dev.dertyp.data.Image
-import dev.dertyp.data.InsertableImage
-import dev.dertyp.data.PaginatedResponse
-import dev.dertyp.data.User
+import dev.dertyp.data.*
 import dev.dertyp.db.*
 import dev.dertyp.dbQuery
 import dev.dertyp.plugins.ImageLibrary
@@ -16,6 +13,9 @@ import dev.dertyp.utils.ImageUtils
 import dev.dertyp.utils.LogParam
 import io.trbl.blurhash.BlurHash
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
 import net.coobird.thumbnailator.Thumbnails
 import org.jetbrains.exposed.v1.core.*
@@ -45,7 +45,7 @@ class ImageRpcService(private val user: User?, private val imageService: ImageSe
         return imageService.moveImages(oldPath, newPath)
     }
 
-    override suspend fun generateMosaicImage(image: ByteArray, width: Int, height: Int): ByteArray =
+    override fun generateMosaicImage(image: ByteArray, width: Int, height: Int): Flow<MosaicGenerationResponse> =
         imageService.generateMosaicImage(image, width, height)
 }
 
@@ -462,10 +462,11 @@ class ImageService(
         }
     }
 
-    suspend fun generateMosaicImage(image: ByteArray, width: Int, height: Int): ByteArray {
+    fun generateMosaicImage(image: ByteArray, width: Int, height: Int): Flow<MosaicGenerationResponse> = flow {
         val maxTiles = 256 * 256
         if (width * height > maxTiles) throw IllegalArgumentException("Grid size too large (max 65,536 tiles)")
 
+        emit(MosaicGenerationResponse(0.0, "Extracting colors..."))
         val allPixels = ImageUtils.extractColors(image, width, height)
         val pixelRanks = mutableMapOf<ImageUtils.Pixel, Int>()
         val pixelWithRank = allPixels.map { pixel ->
@@ -477,7 +478,10 @@ class ImageService(
         val distinctPixels = allPixels.distinct()
         val idsByPixel = mutableMapOf<ImageUtils.Pixel, List<UUID>>()
 
-        distinctPixels.forEach { pixel ->
+        distinctPixels.forEachIndexed { idx, pixel ->
+            if (idx % 10 == 0) {
+                emit(MosaicGenerationResponse(0.1 * (idx.toDouble() / distinctPixels.size), "Finding matches (${idx}/${distinctPixels.size})..."))
+            }
             val count = pixelRanks[pixel] ?: 0
             val (l, a, b) = ColorUtils.rgbToLab(pixel.r, pixel.g, pixel.b)
             val ids = dbQuery {
@@ -491,7 +495,7 @@ class ImageService(
             idsByPixel[pixel] = ids
         }
 
-        val outputSize = 8192
+        val outputSize = 16384
         val mosaic = BufferedImage(outputSize, outputSize, BufferedImage.TYPE_INT_RGB)
         val g = mosaic.createGraphics()
 
@@ -505,6 +509,9 @@ class ImageService(
         val imageCache = mutableMapOf<UUID, BufferedImage?>()
 
         pixelWithRank.forEachIndexed { index, (pixel, rank) ->
+            if (index % 100 == 0) {
+                emit(MosaicGenerationResponse(0.1 + 0.8 * (index.toDouble() / pixelWithRank.size), "Rendering mosaic (${index}/${pixelWithRank.size})..."))
+            }
             val pool = idsByPixel[pixel] ?: emptyList()
             val imageId = if (pool.isNotEmpty()) pool[rank % pool.size] else null
 
@@ -525,7 +532,7 @@ class ImageService(
                     if (path != null) {
                         val fullPath = Path(storageService.imagesPath, path)
                         if (fullPath.exists()) {
-                            val img = try { withContext(Dispatchers.IO) { ImageIO.read(fullPath.toFile()) } } catch (_: Exception) { null }
+                            val img = try { ImageIO.read(fullPath.toFile()) } catch (_: Exception) { null }
                             if (img != null) {
                                 val scaled = BufferedImage(currentTileWidth, currentTileHeight, BufferedImage.TYPE_INT_RGB)
                                 val sg = scaled.createGraphics()
@@ -550,12 +557,13 @@ class ImageService(
         }
 
         g.dispose()
+        emit(MosaicGenerationResponse(0.95, "Encoding final image..."))
         val baos = ByteArrayOutputStream()
         withContext(Dispatchers.IO) {
             ImageIO.write(mosaic, "jpeg", baos)
         }
-        return baos.toByteArray()
-    }
+        emit(MosaicGenerationResponse(1.0, "Finished", baos.toByteArray()))
+    }.flowOn(Dispatchers.IO)
 
     private fun sqDist(p1: DoubleArray, p2: DoubleArray): Double {
         val r = p1[0] - p2[0]

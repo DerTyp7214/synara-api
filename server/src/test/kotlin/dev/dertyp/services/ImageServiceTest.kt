@@ -4,8 +4,10 @@ import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
 import dev.dertyp.db.*
 import dev.dertyp.plugins.RedisCacheProvider
+import dev.dertyp.utils.ColorUtils
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import org.jetbrains.exposed.v1.core.eq
@@ -21,6 +23,7 @@ import org.koin.core.context.stopKoin
 import org.koin.dsl.module
 import java.awt.Color
 import java.awt.image.BufferedImage
+import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.nio.file.Files
@@ -275,11 +278,11 @@ class ImageServiceTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `generateMosaicImage should return an 8k image`(dialect: DbDialect) = runBlocking {
+    fun `generateMosaicImage should return a 16k image via flow`(dialect: DbDialect) = runBlocking {
         setup(dialect)
 
         val red = Color.RED
-        val (rl, ra, rb) = dev.dertyp.utils.ColorUtils.rgbToLab(red.red, red.green, red.blue)
+        val (rl, ra, rb) = ColorUtils.rgbToLab(red.red, red.green, red.blue)
 
         transaction(database) {
             val imgId = ImageTable.insert {
@@ -322,11 +325,15 @@ class ImageServiceTest {
         val baos = ByteArrayOutputStream()
         ImageIO.write(inputImg, "png", baos)
 
-        val result = service.generateMosaicImage(baos.toByteArray(), 2, 2)
-        assertNotNull(result)
+        val results = service.generateMosaicImage(baos.toByteArray(), 2, 2).toList()
+        assertTrue(results.isNotEmpty())
+        
+        val lastResult = results.last()
+        assertEquals(1.0, lastResult.progress)
+        assertNotNull(lastResult.image)
 
-        val resultImg = ImageIO.read(java.io.ByteArrayInputStream(result))
-        assertEquals(8192, resultImg.width)
-        assertEquals(8192, resultImg.height)
+        val resultImg = ImageIO.read(ByteArrayInputStream(lastResult.image!!))
+        assertEquals(16384, resultImg.width)
+        assertEquals(16384, resultImg.height)
     }
 }
