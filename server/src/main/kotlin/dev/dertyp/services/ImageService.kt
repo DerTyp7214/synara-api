@@ -12,11 +12,10 @@ import dev.dertyp.utils.ColorUtils
 import dev.dertyp.utils.ImageUtils
 import dev.dertyp.utils.LogParam
 import io.trbl.blurhash.BlurHash
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
-import kotlinx.coroutines.withContext
 import net.coobird.thumbnailator.Thumbnails
 import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.jdbc.*
@@ -500,9 +499,6 @@ class ImageService(
             idsByPixel[pixel] = ids
         }
 
-        val mosaic = BufferedImage(outputSize, outputSize, BufferedImage.TYPE_INT_RGB)
-        val g = mosaic.createGraphics()
-
         val allImageIds = idsByPixel.values.flatten().distinct()
         val imagePaths = dbQuery {
             ImageTable.select(ImageTable.id, ImageTable.path)
@@ -510,11 +506,41 @@ class ImageService(
                 .associate { it[ImageTable.id].value to it[ImageTable.path] }
         }
 
-        val imageCache = mutableMapOf<UUID, BufferedImage?>()
+        val tw = (outputSize + width - 1) / width
+        val th = (outputSize + height - 1) / height
+
+        emit(MosaicGenerationResponse(0.1, "Loading covers..."))
+        val imageCache = coroutineScope {
+            allImageIds.chunked(25).flatMapIndexed { chunkIdx, batch ->
+                val progress = 0.1 + 0.4 * (chunkIdx.toDouble() * 25 / allImageIds.size)
+                emit(MosaicGenerationResponse(progress, "Loading covers (${chunkIdx * 25}/${allImageIds.size})..."))
+                batch.map { id ->
+                    async {
+                        val path = imagePaths[id]
+                        if (path != null) {
+                            val fullPath = Path(storageService.imagesPath, path)
+                            if (fullPath.exists()) {
+                                val img = try { ImageIO.read(fullPath.toFile()) } catch (_: Exception) { null }
+                                if (img != null) {
+                                    val scaled = BufferedImage(tw, th, BufferedImage.TYPE_INT_RGB)
+                                    val sg = scaled.createGraphics()
+                                    sg.drawImage(img, 0, 0, tw, th, null)
+                                    sg.dispose()
+                                    id to scaled
+                                } else null
+                            } else null
+                        } else null
+                    }
+                }.awaitAll()
+            }.filterNotNull().toMap()
+        }
+
+        val mosaic = BufferedImage(outputSize, outputSize, BufferedImage.TYPE_INT_RGB)
+        val g = mosaic.createGraphics()
 
         pixelWithRank.forEachIndexed { index, (pixel, rank) ->
             if (index % 10 == 0) {
-                emit(MosaicGenerationResponse(0.1 + 0.8 * (index.toDouble() / pixelWithRank.size), "Rendering mosaic (${index}/${pixelWithRank.size})..."))
+                emit(MosaicGenerationResponse(0.5 + 0.4 * (index.toDouble() / pixelWithRank.size), "Rendering mosaic (${index}/${pixelWithRank.size})..."))
             }
             val pool = idsByPixel[pixel] ?: emptyList()
             val imageId = if (pool.isNotEmpty()) pool[rank % pool.size] else null
@@ -530,30 +556,9 @@ class ImageService(
             val nextY = ((iy + 1) * outputSize) / height
             val currentTileHeight = nextY - y
 
-            if (imageId != null) {
-                val tile = imageCache.getOrPut(imageId) {
-                    val path = imagePaths[imageId]
-                    if (path != null) {
-                        val fullPath = Path(storageService.imagesPath, path)
-                        if (fullPath.exists()) {
-                            val img = try { ImageIO.read(fullPath.toFile()) } catch (_: Exception) { null }
-                            if (img != null) {
-                                val scaled = BufferedImage(currentTileWidth, currentTileHeight, BufferedImage.TYPE_INT_RGB)
-                                val sg = scaled.createGraphics()
-                                sg.drawImage(img, 0, 0, currentTileWidth, currentTileHeight, null)
-                                sg.dispose()
-                                scaled
-                            } else null
-                        } else null
-                    } else null
-                }
-
-                if (tile != null) {
-                    g.drawImage(tile, x, y, null)
-                } else {
-                    g.color = Color(pixel.r, pixel.g, pixel.b)
-                    g.fillRect(x, y, currentTileWidth, currentTileHeight)
-                }
+            val tile = imageCache[imageId]
+            if (tile != null) {
+                g.drawImage(tile, x, y, currentTileWidth, currentTileHeight, null)
             } else {
                 g.color = Color(pixel.r, pixel.g, pixel.b)
                 g.fillRect(x, y, currentTileWidth, currentTileHeight)
