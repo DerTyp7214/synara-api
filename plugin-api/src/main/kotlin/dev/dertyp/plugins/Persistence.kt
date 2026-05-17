@@ -1,12 +1,14 @@
 package dev.dertyp.plugins
 
 import dev.dertyp.PlatformUUID
+import dev.dertyp.PrefixedId
 import dev.dertyp.data.*
 import java.time.Instant
 
 interface SongLibrary {
     suspend fun createBatch(songs: List<InsertableSong>): Map<PlatformUUID, Song>
-    suspend fun byOriginalIds(ids: Collection<String>, userId: PlatformUUID): List<UserSong>
+    suspend fun byOriginalIds(ids: Collection<PrefixedId>, userId: PlatformUUID): List<UserSong>
+    suspend fun byOriginalUrls(urls: Collection<String>, userId: PlatformUUID): Map<String, UserSong?>
     suspend fun setLiked(songId: PlatformUUID, userId: PlatformUUID, liked: Boolean, addedAt: Instant? = null)
     suspend fun setLikedReturning(songId: PlatformUUID, userId: PlatformUUID, liked: Boolean, addedAt: Instant? = null): UserSong?
 }

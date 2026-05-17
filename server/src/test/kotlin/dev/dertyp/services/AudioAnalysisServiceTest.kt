@@ -4,13 +4,7 @@ import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
 import dev.dertyp.core.ApplicationScope
 import dev.dertyp.data.AudioScale
-import dev.dertyp.db.AlbumTable
-import dev.dertyp.db.PersonTable
-import dev.dertyp.db.SongAudioDataTable
-import dev.dertyp.db.SongComposerTable
-import dev.dertyp.db.SongLyricistTable
-import dev.dertyp.db.SongProducerTable
-import dev.dertyp.db.SongTable
+import dev.dertyp.db.*
 import dev.dertyp.dbQuery
 import dev.dertyp.services.audio.ValencePostProcessor
 import io.mockk.coEvery
@@ -30,11 +24,7 @@ import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.EnumSource
 import java.io.File
 import java.util.UUID
-import kotlin.test.assertEquals
-import kotlin.test.assertNotEquals
-import kotlin.test.assertNotNull
-import kotlin.test.assertNull
-import kotlin.test.assertTrue
+import kotlin.test.*
 
 @OptIn(ExperimentalSerializationApi::class)
 class AudioAnalysisServiceTest {
@@ -308,7 +298,7 @@ class AudioAnalysisServiceTest {
                 .select(PersonTable.name)
                 .where { SongComposerTable.songId eq songId }
                 .map { it[PersonTable.name] }
-            
+
             assertEquals(2, composers.size)
             assertTrue(composers.contains("Composer B"))
             assertTrue(composers.contains("Composer C"))

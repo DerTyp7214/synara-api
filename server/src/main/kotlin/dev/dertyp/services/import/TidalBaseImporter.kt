@@ -15,6 +15,7 @@ import dev.dertyp.services.UserPlaylistService
 import dev.dertyp.services.metadata.IMetadataService
 import dev.dertyp.services.metadata.IMusicBrainzService
 import dev.dertyp.services.metadata.MetadataService
+import dev.dertyp.utils.parsers.ParserFactory
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.sync.Mutex
@@ -25,7 +26,6 @@ import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.update
 import org.koin.core.component.get
 import org.koin.core.component.inject
-import java.net.URI
 import java.util.UUID
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.io.path.absolutePathString
@@ -380,35 +380,7 @@ abstract class TidalBaseImporter(
     }
 
     override suspend fun parseUrl(url: String): Pair<String, Type>? {
-        val uri = try {
-            URI(url)
-        } catch (_: Exception) {
-            return null
-        }
-        val host = uri.host?.lowercase() ?: ""
-        var path = uri.path ?: ""
-
-        if (!host.contains("tidal.com")) return null
-
-        if (path.startsWith("/browse")) {
-            path = path.removePrefix("/browse")
-        }
-
-        val parts = path.trim('/').split("/")
-        if (parts.size < 2) return null
-
-        val type = when (parts[0]) {
-            "track" -> Type.SONG
-            "album" -> Type.ALBUM
-            "playlist" -> Type.PLAYLIST
-            "artist" -> Type.ARTIST
-            "video" -> Type.VIDEO
-            else -> return null
-        }
-
-        val id = parts[1].removeSuffix("/u")
-
-        return id to type
+        return ParserFactory.getParserForProvider("tidal")?.parse(url)
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)

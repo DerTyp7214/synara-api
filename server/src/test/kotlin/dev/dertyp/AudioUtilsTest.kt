@@ -56,6 +56,8 @@ class AudioUtilsTest {
         "8000, 8000",
         "11025, 12000",
         "16000, 16000",
+        "96000, 48000",
+        "192000, 48000"
     )
     fun `closestSampleRate should return nearest supported rate`(input: Int, expected: Int) {
         val result = AudioUtils.closestSampleRate(input)

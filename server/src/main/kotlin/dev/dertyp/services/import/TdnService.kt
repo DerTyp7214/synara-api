@@ -9,9 +9,9 @@ import dev.dertyp.executeCommand
 import dev.dertyp.findInPath
 import dev.dertyp.plugins.IPluginIndexer
 import dev.dertyp.plugins.IServerStorageService
+import dev.dertyp.utils.parsers.ParserFactory
 import kotlinx.coroutines.delay
 import java.io.File
-import java.net.URI
 import java.nio.file.Path
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.io.path.Path
@@ -38,13 +38,7 @@ class TdnService(
     override fun authorizedCheck(result: ProcessExecutionResult) = result.fullOutput.contains("You are logged in.")
 
     override fun canHandle(url: String): Boolean {
-        return try {
-            val uri = URI(url)
-            val host = uri.host?.lowercase() ?: ""
-            host == "tidal.com" || host.endsWith(".tidal.com") || url.startsWith("tdn:")
-        } catch (_: Exception) {
-            url.startsWith("tdn:")
-        }
+        return ParserFactory.getParserForProvider("tidal")?.canHandle(url) ?: false
     }
 
     override suspend fun handleErrors(

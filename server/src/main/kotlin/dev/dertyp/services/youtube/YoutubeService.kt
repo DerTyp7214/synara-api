@@ -21,6 +21,7 @@ import dev.dertyp.services.UserPlaylistService
 import dev.dertyp.services.import.*
 import dev.dertyp.services.metadata.IMetadataService
 import dev.dertyp.services.metadata.MusicBrainzService
+import dev.dertyp.utils.parsers.ParserFactory
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import kotlinx.serialization.json.jsonArray
@@ -30,7 +31,6 @@ import org.jaudiotagger.audio.AudioFileIO
 import org.jaudiotagger.tag.FieldKey
 import org.koin.core.component.inject
 import java.io.File
-import java.net.URI
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.io.path.absolutePathString
 import kotlin.io.path.extension
@@ -64,47 +64,11 @@ open class YoutubeService(
     override fun authorizedCheck(result: ProcessExecutionResult): Boolean = true
 
     override fun canHandle(url: String): Boolean {
-        return try {
-            val uri = URI(url)
-            val host = uri.host?.lowercase() ?: ""
-            host == "youtube.com" || host.endsWith(".youtube.com") || host == "youtu.be"
-        } catch (_: Exception) {
-            false
-        }
+        return ParserFactory.getParserForProvider("youtube")?.canHandle(url) ?: false
     }
 
     override suspend fun parseUrl(url: String): Pair<String, Type>? {
-        val uri = try {
-            URI(url)
-        } catch (_: Exception) {
-            return null
-        }
-        val host = uri.host?.lowercase() ?: ""
-        val query = uri.query ?: ""
-
-        if (host == "youtu.be") {
-            return uri.path.trim('/') to Type.SONG
-        }
-
-        if (host == "youtube.com" || host.endsWith(".youtube.com")) {
-            val params = query.split("&").associate {
-                val parts = it.split("=")
-                parts[0] to parts.getOrNull(1)
-            }
-
-            params["v"]?.let { return it to Type.SONG }
-            params["list"]?.let { return it to Type.PLAYLIST }
-
-            if (uri.path.startsWith("/shorts/")) {
-                return uri.path.removePrefix("/shorts/").trim('/') to Type.SONG
-            }
-
-            if (uri.path.startsWith("/channel/") || uri.path.startsWith("/user/") || uri.path.startsWith("/@")) {
-                return uri.path.trim('/') to Type.ARTIST
-            }
-        }
-
-        return null
+        return ParserFactory.getParserForProvider("youtube")?.parse(url)
     }
 
     override suspend fun getWrapper(type: Type, ids: List<String>, user: User): IdsWrapper {

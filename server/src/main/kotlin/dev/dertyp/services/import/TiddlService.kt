@@ -4,8 +4,8 @@ import dev.dertyp.executeCommand
 import dev.dertyp.findInPath
 import dev.dertyp.plugins.IPluginIndexer
 import dev.dertyp.plugins.IServerStorageService
+import dev.dertyp.utils.parsers.ParserFactory
 import java.io.File
-import java.net.URI
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 
 @OptIn(ExperimentalAtomicApi::class)
@@ -27,13 +27,7 @@ class TiddlService(
     override fun authorizedCheck(result: ProcessExecutionResult) = result.fullOutput.contains("Already logged in.")
 
     override fun canHandle(url: String): Boolean {
-        return try {
-            val uri = URI(url)
-            val host = uri.host?.lowercase() ?: ""
-            host == "tidal.com" || host.endsWith(".tidal.com") || url.startsWith("tiddl:")
-        } catch (_: Exception) {
-            url.startsWith("tiddl:")
-        }
+        return ParserFactory.getParserForProvider("tidal")?.canHandle(url) ?: false
     }
 
     override fun parseFavType(favType: ImportFavType): String = when (favType) {

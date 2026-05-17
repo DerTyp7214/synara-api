@@ -57,7 +57,7 @@ class LibraryMergeServiceTest : KoinTest {
                 ArtistTable, AlbumTable, SongTable, ImageTable, PlaylistTable,
                 UserTable, UserPlaylistTable, UserPlaylistSongTable, PlaylistSongTable,
                 SongArtistTable, AlbumArtistTable, AlbumMusicBrainzTable, SongMusicBrainzTable,
-                TranscodedSongTable, UserSongTable
+                TranscodedSongTable, UserSongTable, SongProviderTable
             )
         }
         service = LibraryMergeService()

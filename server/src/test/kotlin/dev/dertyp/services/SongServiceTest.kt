@@ -86,6 +86,7 @@ class SongServiceTest : KoinTest {
                 ArtistGenreTable,
                 SongGenreTable,
                 AlbumGenreTable,
+                SongProviderTable,
                 *allMusicBrainzTables
             )
             
@@ -1405,6 +1406,83 @@ class SongServiceTest : KoinTest {
         transaction(database) {
             val count = SongTable.selectAll().where { SongTable.filePath like "$newPath%" }.count()
             assertEquals(songCount.toLong(), count)
+        }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `byOriginalUrls should find songs via SongProviderTable`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val songId1 = UUID.randomUUID()
+        val songId2 = UUID.randomUUID()
+        val albumId = UUID.randomUUID()
+
+        val url1 = "https://tidal.com/track/1"
+        val url2 = "https://youtube.com/watch?v=2"
+        val url2alt = "https://youtu.be/2"
+        val url3 = "https://spotify.com/track/3"
+
+        transaction(database) {
+            AlbumTable.insert {
+                it[id] = albumId
+                it[name] = "Album"
+            }
+            SongTable.insert {
+                it[id] = songId1
+                it[title] = "Tidal Song"
+                it[SongTable.albumId] = albumId
+                it[originalUrl] = url1
+            }
+            SongTable.insert {
+                it[id] = songId2
+                it[title] = "Youtube Song"
+                it[SongTable.albumId] = albumId
+                it[originalUrl] = ""
+            }
+            SongProviderTable.insert {
+                it[SongProviderTable.songId] = songId2
+                it[provider] = "youtube"
+                it[externalId] = "2"
+                it[rawUrl] = url2
+            }
+        }
+
+        val result = rpcService.byOriginalUrls(listOf(url1, url2, url2alt, url3))
+        
+        assertEquals(4, result.size)
+        assertEquals(songId1, result[url1]?.id)
+        assertEquals(songId2, result[url2]?.id)
+        assertEquals(songId2, result[url2alt]?.id)
+        assertNull(result[url3])
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `createBatch should populate SongProviderTable`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val album = InsertableAlbum("Provider Album", listOf("Provider Artist"))
+        val song = InsertableSong(
+            title = "Provider Song",
+            artists = listOf("Provider Artist"),
+            album = album,
+            duration = 100,
+            explicit = false,
+            path = "/path/provider",
+            originalUrl = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+        )
+
+        val result = songService.createBatch(listOf(song))
+        val songId = result.values.first().id
+
+        val providerInfo = transaction(database) {
+            SongProviderTable.selectAll().where { SongProviderTable.songId eq songId }.singleOrNull()
+        }
+
+        assertNotNull(providerInfo)
+        providerInfo?.let {
+            assertEquals("youtube", it[SongProviderTable.provider])
+            assertEquals("dQw4w9WgXcQ", it[SongProviderTable.externalId])
+            assertEquals("https://www.youtube.com/watch?v=dQw4w9WgXcQ", it[SongProviderTable.rawUrl])
         }
     }
 }

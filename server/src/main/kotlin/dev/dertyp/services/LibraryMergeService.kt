@@ -528,6 +528,25 @@ class LibraryMergeService : Service() {
             }
         }
         SongMusicBrainzTable.deleteWhere { SongMusicBrainzTable.songId eq oldSongId }
+
+        val providersForOld = SongProviderTable.selectAll().where { SongProviderTable.songId eq oldSongId }.toList()
+        val providersForKept = SongProviderTable.selectAll().where { SongProviderTable.songId eq keptSongId }
+            .map { it[SongProviderTable.provider] to it[SongProviderTable.externalId] }.toSet()
+
+        for (row in providersForOld) {
+            val provider = row[SongProviderTable.provider]
+            val externalId = row[SongProviderTable.externalId]
+            if (provider to externalId !in providersForKept) {
+                SongProviderTable.update({
+                    (SongProviderTable.songId eq oldSongId) and
+                            (SongProviderTable.provider eq provider) and
+                            (SongProviderTable.externalId eq externalId)
+                }) {
+                    it[SongProviderTable.songId] = keptSongId
+                }
+            }
+        }
+        SongProviderTable.deleteWhere { SongProviderTable.songId eq oldSongId }
     }
 
     private fun mergeImageReferences(oldImageId: UUID, keptImageId: UUID) {

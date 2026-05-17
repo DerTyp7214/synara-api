@@ -1,7 +1,10 @@
-package dev.dertyp.services.import
+package dev.dertyp.services.import.tidal
 
 import dev.dertyp.plugins.IPluginIndexer
 import dev.dertyp.plugins.IServerStorageService
+import dev.dertyp.services.import.ProcessExecutionResult
+import dev.dertyp.services.import.TidalBaseImporter
+import dev.dertyp.services.import.Type
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assertions.assertEquals

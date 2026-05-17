@@ -21,6 +21,7 @@ import dev.dertyp.services.UserPlaylistService
 import dev.dertyp.services.import.*
 import dev.dertyp.services.metadata.IMetadataService
 import dev.dertyp.services.metadata.MusicBrainzService
+import dev.dertyp.utils.parsers.ParserFactory
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import kotlinx.serialization.json.jsonArray
@@ -30,7 +31,6 @@ import org.jaudiotagger.audio.AudioFileIO
 import org.jaudiotagger.tag.FieldKey
 import org.koin.core.component.inject
 import java.io.File
-import java.net.URI
 import java.util.UUID
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.io.path.absolutePathString
@@ -63,37 +63,11 @@ class SoundcloudService(
     override fun authorizedCheck(result: ProcessExecutionResult): Boolean = true
 
     override fun canHandle(url: String): Boolean {
-        return try {
-            val uri = URI(url)
-            val host = uri.host?.lowercase() ?: ""
-            host == "soundcloud.com" || host.endsWith(".soundcloud.com")
-        } catch (_: Exception) {
-            false
-        }
+        return ParserFactory.getParserForProvider("soundcloud")?.canHandle(url) ?: false
     }
 
     override suspend fun parseUrl(url: String): Pair<String, Type>? {
-        val uri = try {
-            URI(url)
-        } catch (_: Exception) {
-            return null
-        }
-        val host = uri.host?.lowercase() ?: ""
-        if (host != "soundcloud.com" && !host.endsWith(".soundcloud.com")) return null
-
-        val pathParts = uri.path.trim('/').split('/')
-        return when (pathParts.size) {
-            1 -> pathParts[0] to Type.ARTIST
-            2 -> {
-                if (pathParts[1] == "reposts") pathParts[0] to Type.ARTIST
-                else uri.path.trim('/') to Type.SONG
-            }
-            3 -> {
-                if (pathParts[1] == "sets") uri.path.trim('/') to Type.PLAYLIST
-                else uri.path.trim('/') to Type.SONG
-            }
-            else -> uri.path.trim('/') to Type.SONG
-        }
+        return ParserFactory.getParserForProvider("soundcloud")?.parse(url)
     }
 
     override suspend fun getWrapper(type: Type, ids: List<String>, user: User): IdsWrapper {

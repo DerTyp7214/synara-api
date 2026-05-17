@@ -1,6 +1,7 @@
-package dev.dertyp.services.import
+package dev.dertyp.services.import.tidal
 
 import dev.dertyp.plugins.PluginContext
+import dev.dertyp.services.import.TidalIndexer
 import io.mockk.*
 import kotlinx.coroutines.runBlocking
 import org.jaudiotagger.audio.AudioFile

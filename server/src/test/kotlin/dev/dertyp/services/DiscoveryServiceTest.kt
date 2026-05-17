@@ -3,13 +3,7 @@ package dev.dertyp.services
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
 import dev.dertyp.data.SongAudioData
-import dev.dertyp.db.AlbumTable
-import dev.dertyp.db.PersonTable
-import dev.dertyp.db.SongAudioDataTable
-import dev.dertyp.db.SongComposerTable
-import dev.dertyp.db.SongLyricistTable
-import dev.dertyp.db.SongProducerTable
-import dev.dertyp.db.SongTable
+import dev.dertyp.db.*
 import dev.dertyp.dbQuery
 import io.mockk.coEvery
 import io.mockk.every

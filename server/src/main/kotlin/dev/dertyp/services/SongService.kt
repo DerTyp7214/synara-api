@@ -15,6 +15,7 @@ import dev.dertyp.services.metadata.MusicBrainzCacheService
 import dev.dertyp.services.metadata.MusicBrainzService
 import dev.dertyp.utils.ColorUtils
 import dev.dertyp.utils.LogParam
+import dev.dertyp.utils.parsers.ParserFactory
 import io.ktor.http.ContentType
 import io.ktor.server.application.ApplicationEnvironment
 import kotlinx.coroutines.*
@@ -142,8 +143,11 @@ class SongRpcService(private val user: User, private val songService: SongServic
         playlistId: UUID
     ): PaginatedResponse<UserSong> = songService.byUserPlaylist(page, pageSize, playlistId, user.id)
 
-    override suspend fun byOriginalIds(@LogParam("size") ids: Collection<String>): List<UserSong> =
+    override suspend fun byOriginalIds(@LogParam("size") ids: Collection<PrefixedId>): List<UserSong> =
         songService.byOriginalIds(ids, user.id)
+
+    override suspend fun byOriginalUrls(@LogParam("size") urls: Collection<String>): Map<String, UserSong?> =
+        songService.byOriginalUrls(urls, user.id)
 
     override suspend fun byOriginalTracks(@LogParam("size") tracks: Collection<IMetadataService.Track>): List<UserSong> =
         songService.byOriginalTracks(tracks, user.id)
@@ -704,24 +708,126 @@ class SongService : SongLibrary, Service() {
             orderBy(SongTable.id, SortOrder.ASC)
         }
 
-    override suspend fun byOriginalIds(ids: Collection<String>, userId: UUID): List<UserSong> =
-        querySongs<UserSong>(0, Int.MAX_VALUE, true, userId) {
+    override suspend fun byOriginalIds(ids: Collection<PrefixedId>, userId: UUID): List<UserSong> =
+        ids.chunked(5000).flatMap { idChunk ->
+            val parsedLookups = idChunk.mapNotNull { id ->
+                val parser = ParserFactory.getParser(id)
+                val parsed = parser?.parse(id)
+                if (parser != null && parsed != null) {
+                    parser.name to parsed.first
+                } else null
+            }
+
+            querySongs<UserSong>(0, Int.MAX_VALUE, true, userId) {
+                val songIdsFromProviders = SongProviderTable
+                    .select(SongProviderTable.songId)
+                    .where {
+                        (SongProviderTable.rawUrl inList ids) or
+                                (SongProviderTable.externalId inList ids) or
+                                (if (parsedLookups.isNotEmpty()) {
+                                    parsedLookups.map { (p, eid) ->
+                                        (SongProviderTable.provider eq p) and (SongProviderTable.externalId eq eid)
+                                    }.reduce { acc, op -> acc or op }
+                                } else Op.FALSE)
+                    }
+                    .map { it[SongProviderTable.songId].value }
+
+                where {
+                    SongTable.originalUrl inList ids
+                }
+                orWhere {
+                    SongTable.id inList songIdsFromProviders
+                }
+            }.data
+        }
+
+    override suspend fun byOriginalUrls(urls: Collection<String>, userId: UUID): Map<String, UserSong?> {
+        val results = mutableMapOf<String, UserSong?>()
+        if (urls.isEmpty()) return results
+
+        val parsedLookups = mutableListOf<Triple<String, String, String>>()
+        for (url in urls) {
+            val parser = ParserFactory.getParser(url)
+            val parsed = parser?.parse(url)
+            if (parser != null && parsed != null) {
+                parsedLookups.add(Triple(url, parser.name, parsed.first))
+            }
+        }
+
+        val allSongs = querySongs<UserSong>(0, Int.MAX_VALUE, true, userId) {
+            val songIdsFromProviders = SongProviderTable
+                .select(SongProviderTable.songId)
+                .where {
+                    (SongProviderTable.rawUrl inList urls) or
+                            (if (parsedLookups.isNotEmpty()) {
+                                parsedLookups.map { (_, p, eid) ->
+                                    (SongProviderTable.provider eq p) and (SongProviderTable.externalId eq eid)
+                                }.reduce { acc, op -> acc or op }
+                            } else Op.FALSE)
+                }
+                .map { it[SongProviderTable.songId].value }
+
             where {
-                SongTable.originalUrl inList ids
-            }
-            orWhere {
-                SongTable.originalUrl inList ids.map {
-                    "https://tidal.com/track/$it"
-                }
-            }
-            orWhere {
-                SongTable.originalUrl inList ids.map {
-                    "https://tidal.com/browse/track/$it"
-                }
+                (SongTable.originalUrl inList urls) or
+                        (SongTable.id inList songIdsFromProviders)
             }
         }.data
 
-    suspend fun byOriginalTracks(tracks: Collection<IMetadataService.Track>, userId: UUID): List<UserSong> =
+        val mappings = dbQuery {
+            SongProviderTable
+                .select(SongProviderTable.songId, SongProviderTable.rawUrl, SongProviderTable.provider, SongProviderTable.externalId)
+                .where {
+                    (SongProviderTable.rawUrl inList urls) or
+                            (if (parsedLookups.isNotEmpty()) {
+                                parsedLookups.map { (_, p, eid) ->
+                                    (SongProviderTable.provider eq p) and (SongProviderTable.externalId eq eid)
+                                }.reduce { acc, op -> acc or op }
+                            } else Op.FALSE)
+                }
+                .map { row ->
+                    row[SongProviderTable.songId].value to Triple(
+                        row[SongProviderTable.rawUrl],
+                        row[SongProviderTable.provider],
+                        row[SongProviderTable.externalId]
+                    )
+                }
+        }
+
+        for (url in urls) {
+            val lookup = parsedLookups.find { it.first == url }
+
+            val song = allSongs.find { song ->
+                song.originalUrl == url ||
+                        mappings.any { (songId, triple) ->
+                            songId == song.id && (triple.first == url || (lookup != null && triple.second == lookup.second && triple.third == lookup.third))
+                        }
+            }
+            results[url] = song
+        }
+
+        return results
+    }
+
+    suspend fun addProviderUrl(songId: UUID, url: String) = dbQuery {
+        val parser = ParserFactory.getParser(url)
+        val parsed = parser?.parse(url)
+
+        val provider = parser?.name ?: "unknown"
+        val externalId = parsed?.first ?: url
+
+        SongProviderTable.upsert(SongProviderTable.songId, SongProviderTable.provider, SongProviderTable.externalId) {
+            it[SongProviderTable.songId] = songId
+            it[SongProviderTable.provider] = provider
+            it[SongProviderTable.externalId] = externalId
+            it[SongProviderTable.type] = parsed?.second?.value
+            it[SongProviderTable.rawUrl] = url
+        }
+    }
+
+    suspend fun byOriginalTracks(
+        tracks: Collection<IMetadataService.Track>,
+        userId: UUID
+    ): List<UserSong> =
         querySongs<UserSong>(0, Int.MAX_VALUE, true, userId) {
             where {
                 tracks.map { track ->
@@ -969,7 +1075,7 @@ class SongService : SongLibrary, Service() {
                     SongTag.HAS_MUSICBRAINZ_ID -> (SongMusicBrainzTable.musicBrainzId.isNotNull())
                 }
             }
-            
+
             val combinedCondition = conditions.reduce { acc, op -> acc or op }
             if (invert) andWhere { not(combinedCondition) }
             else andWhere { combinedCondition }
@@ -1156,6 +1262,7 @@ class SongService : SongLibrary, Service() {
             .leftJoin(albumArtistMemberAlias, onColumn = { albumArtistMemberJoinAlias[ArtistMemberTable.artistId] }, otherColumn = { albumArtistMemberAlias[ArtistTable.id] })
             .leftJoin(SongGenreTable)
             .leftJoin(GenreTable)
+            .leftJoin(SongProviderTable)
             .leftJoin(songImageAlias, onColumn = { SongTable.cover }, otherColumn = { songImageAlias[ImageTable.id] })
             .leftJoin(albumImageAlias, onColumn = { AlbumTable.cover }, otherColumn = { albumImageAlias[ImageTable.id] })
             .leftJoin(artistImageAlias, onColumn = { ArtistTable.image }, otherColumn = { artistImageAlias[ImageTable.id] })
@@ -1253,6 +1360,7 @@ class SongService : SongLibrary, Service() {
         val songArtistsMap = mutableMapOf<UUID, MutableList<Artist>>()
         val albumArtistsMap = mutableMapOf<UUID, MutableList<Artist>>()
         val songGenresMap = mutableMapOf<UUID, MutableList<Genre>>()
+        val songUrlsMap = mutableMapOf<UUID, MutableSet<String>>()
 
         for (row in rows) {
             val songId = row[SongTable.id].value
@@ -1274,6 +1382,10 @@ class SongService : SongLibrary, Service() {
                     is Song -> song.copy(album = album)
                     else -> throw Exception("Unknown song type: $row")
                 }
+            }
+
+            row.getOrNull(SongProviderTable.rawUrl)?.let { url ->
+                songUrlsMap.getOrPut(songId) { mutableSetOf() }.add(url)
             }
 
             if (row.getOrNull(ArtistTable.id) != null) {
@@ -1313,6 +1425,7 @@ class SongService : SongLibrary, Service() {
             val albumArtists = albumArtistsMap[song.album?.id] ?: listOf()
             val songArtists = songArtistsMap[song.id]?.distinctBy { it.id } ?: listOf()
             val songGenres = songGenresMap[song.id]?.distinctBy { it.id } ?: listOf()
+            val urls = songUrlsMap[song.id] ?: emptySet()
 
             val albumWithArtists = song.album?.copy(
                 artists = albumArtists,
@@ -1320,10 +1433,24 @@ class SongService : SongLibrary, Service() {
                 totalSize = albumStats[song.album!!.id]?.second ?: -1L
             )
 
+            val originalUrl = urls.firstOrNull() ?: song.originalUrl
+
             @Suppress("UNCHECKED_CAST")
             when (song) {
-                is Song -> song.copy(album = albumWithArtists, artists = songArtists, genres = songGenres) as T
-                is UserSong -> song.copy(album = albumWithArtists, artists = songArtists, genres = songGenres) as T
+                is Song -> song.copy(
+                    album = albumWithArtists,
+                    artists = songArtists,
+                    genres = songGenres,
+                    originalUrl = originalUrl
+                ) as T
+
+                is UserSong -> song.copy(
+                    album = albumWithArtists,
+                    artists = songArtists,
+                    genres = songGenres,
+                    originalUrl = originalUrl
+                ) as T
+
                 else -> throw Exception("Unknown song type: $song")
             }
         }.groupBy {
@@ -1341,51 +1468,87 @@ class SongService : SongLibrary, Service() {
         }
     }
 
-    private suspend fun bulkFindExistingSongs(songs: List<InsertableSong>): Map<InsertableSong, Pair<UUID, Pair<String, Boolean>>> = dbQuery {
-        val rows = SongTable
-            .innerJoin(
-                AlbumTable,
-                onColumn = { SongTable.albumId },
-                otherColumn = { AlbumTable.id }
-            )
-            .innerJoin(SongArtistTable)
-            .innerJoin(
-                ArtistTable,
-                onColumn = { SongArtistTable.artistId },
-                otherColumn = { ArtistTable.id }
-            )
-            .select(
-                SongTable.id,
-                SongTable.title,
-                SongTable.trackNumber,
-                SongTable.discNumber,
-                SongTable.explicit,
-                SongTable.originalUrl,
-                SongTable.filePath,
-                AlbumTable.name
-            )
-            .withDistinct()
-            .where { SongTable.filePath inList songs.map { it.path } }
-            .orWhere { SongTable.originalUrl inList songs.map { it.originalUrl }.filter { it.isNotBlank() } }
-            .orWhere {
-                (SongTable.title inList songs.map { it.title }) and
-                        (SongTable.trackNumber inList songs.map { it.trackNumber }) and
-                        (SongTable.discNumber inList songs.map { it.discNumber })
+    private suspend fun bulkFindExistingSongs(songs: List<InsertableSong>): Map<InsertableSong, Pair<UUID, Pair<String, Boolean>>> =
+        dbQuery {
+            val parsedLookups = songs.mapNotNull { song ->
+                if (song.originalUrl.isBlank()) return@mapNotNull null
+                val parser = ParserFactory.getParser(song.originalUrl)
+                val parsed = parser?.parse(song.originalUrl)
+                if (parser != null && parsed != null) {
+                    Triple(song.originalUrl, parser.name, parsed.first)
+                } else null
             }
-            .toList()
 
-        val existingSongMap = mutableMapOf<InsertableSong, Pair<UUID, Pair<String, Boolean>>>()
+            val rows = SongTable
+                .leftJoin(SongProviderTable)
+                .innerJoin(
+                    AlbumTable,
+                    onColumn = { SongTable.albumId },
+                    otherColumn = { AlbumTable.id }
+                )
+                .innerJoin(SongArtistTable)
+                .innerJoin(
+                    ArtistTable,
+                    onColumn = { SongArtistTable.artistId },
+                    otherColumn = { ArtistTable.id }
+                )
+                .select(
+                    SongTable.id,
+                    SongTable.title,
+                    SongTable.trackNumber,
+                    SongTable.discNumber,
+                    SongTable.explicit,
+                    SongTable.filePath,
+                    SongTable.originalUrl,
+                    AlbumTable.name,
+                    SongProviderTable.rawUrl,
+                    SongProviderTable.provider,
+                    SongProviderTable.externalId
+                )
+                .withDistinct()
+                .where { SongTable.filePath inList songs.map { it.path } }
+                .orWhere {
+                    val urls = songs.map { it.originalUrl }.filter { it.isNotBlank() }
+                    (SongTable.originalUrl inList urls) or
+                            (SongProviderTable.rawUrl inList urls) or
+                            (if (parsedLookups.isNotEmpty()) {
+                                parsedLookups.map { (_, p, eid) ->
+                                    (SongProviderTable.provider eq p) and (SongProviderTable.externalId eq eid)
+                                }.reduce { acc, op -> acc or op }
+                            } else Op.FALSE)
+                }
+                .orWhere {
+                    (SongTable.title inList songs.map { it.title }) and
+                            (SongTable.trackNumber inList songs.map { it.trackNumber }) and
+                            (SongTable.discNumber inList songs.map { it.discNumber })
+                }
+                .toList()
 
-        for (song in songs) {
-            rows.firstOrNull { row ->
-                val albumName = row[AlbumTable.name]
-                val songId = row[SongTable.id].value
-                val dbFilePath = row[SongTable.filePath]
+            val existingSongMap = mutableMapOf<InsertableSong, Pair<UUID, Pair<String, Boolean>>>()
 
-                val pathMatch = dbFilePath == song.path
-                val metadataMatch =
-                    (song.originalUrl.isNotBlank() && row[SongTable.originalUrl] == song.originalUrl) || (
-                            row[SongTable.originalUrl].isBlank() &&
+            for (song in songs) {
+                rows.firstOrNull { row ->
+                    val albumName = row[AlbumTable.name]
+                    val songId = row[SongTable.id].value
+                    val dbFilePath = row[SongTable.filePath]
+
+                    val pathMatch = dbFilePath == song.path
+
+                    val lookup = parsedLookups.find { it.first == song.originalUrl }
+                    val rowRawUrl = row.getOrNull(SongProviderTable.rawUrl)
+                    val rowProvider = row.getOrNull(SongProviderTable.provider)
+                    val rowExternalId = row.getOrNull(SongProviderTable.externalId)
+
+                    val providerMatch = song.originalUrl.isNotBlank() && (
+                            rowRawUrl == song.originalUrl || (
+                                    lookup != null && rowProvider == lookup.second && rowExternalId == lookup.third
+                                    )
+                            )
+
+                    val legacyMatch = song.originalUrl.isNotBlank() && row[SongTable.originalUrl] == song.originalUrl
+
+                    val metadataMatch = legacyMatch || providerMatch || (
+                            song.originalUrl.isBlank() &&
                                     row[SongTable.title] == song.title &&
                                     row[SongTable.trackNumber] == song.trackNumber &&
                                     row[SongTable.discNumber] == song.discNumber &&
@@ -1393,222 +1556,234 @@ class SongService : SongLibrary, Service() {
                                     albumName == song.album.name
                             )
 
-                if (pathMatch || metadataMatch) {
-                    existingSongMap[song] = songId to (row[SongTable.title] to row[SongTable.explicit])
-                    return@firstOrNull true
-                }
-                return@firstOrNull false
-            }
-        }
-        return@dbQuery existingSongMap
-    }
-
-    override suspend fun createBatch(songs: List<InsertableSong>): Map<UUID, Song> = coroutineScope {
-        if (songs.isEmpty()) return@coroutineScope emptyMap()
-
-        val artistService = get<ArtistService>()
-        val albumService = get<AlbumService>()
-        val imageService = get<ImageService>()
-
-        val uniqueArtistNames = songs.flatMap { it.artists }.distinct()
-        val uniqueAlbums = songs.map { it.album }.distinctBy {
-            listOf(
-                it.name,
-                it.releaseDate,
-                it.songCount,
-                it.artists.sorted().joinToString(", "),
-                it.originalId
-            )
-        }
-        val uniqueCoverHashes = songs.map { it.coverHash }.distinct()
-
-        val artistIdMap: Map<String, List<UUID>> = uniqueArtistNames
-            .chunked(maxBatchSize)
-            .map { batch ->
-                async {
-                    artistService.getOrBulkCreate(batch).entries
-                }
-            }
-            .awaitAll()
-            .flatten()
-            .groupBy({ it.key }, { it.value })
-            .mapValues { (_, values) -> values.flatten() }
-
-        val albumIdMap: Map<InsertableAlbum, UUID> = uniqueAlbums
-            .chunked(maxBatchSize)
-            .map { batch ->
-                async {
-                    albumService.getOrBulkCreate(batch).entries
-                }
-            }
-            .awaitAll()
-            .flatten()
-            .toMap()
-
-        val imageIdMap: Map<String, UUID> = uniqueCoverHashes
-            .filterNotNull()
-            .chunked(maxBatchSize)
-            .map { batch ->
-                async {
-                    imageService.getCoverHashes(batch).entries
-                }
-            }
-            .awaitAll()
-            .flatten()
-            .toMap()
-
-        val existingSongMap = songs
-            .chunked(maxBatchSize / 3)
-            .map { batch ->
-                async {
-                    logger.info("Checking ${batch.size} songs")
-                    bulkFindExistingSongs(batch).entries
-                }
-            }
-            .awaitAll()
-            .flatten()
-            .toMap()
-
-        val dirtySongs = existingSongMap.filter { (song, data) ->
-            val (_, meta) = data
-            val (dbTitle, dbExplicit) = meta
-            dbTitle != song.title || dbExplicit != song.explicit
-        }
-
-        if (dirtySongs.isNotEmpty()) {
-            dbQuery {
-                dirtySongs.forEach { (song, data) ->
-                    val (songId, _) = data
-                    SongTable.update({ SongTable.id eq songId }) {
-                        it[title] = song.title
-                        it[explicit] = song.explicit
+                    if (pathMatch || metadataMatch) {
+                        existingSongMap[song] =
+                            songId to (row[SongTable.title] to row[SongTable.explicit])
+                        return@firstOrNull true
                     }
+                    return@firstOrNull false
                 }
             }
+            return@dbQuery existingSongMap
         }
 
-        val newSongs = songs.filter { it !in existingSongMap.keys }
+    override suspend fun createBatch(songs: List<InsertableSong>): Map<UUID, Song> =
+        coroutineScope {
+            if (songs.isEmpty()) return@coroutineScope emptyMap()
 
-        if (newSongs.isEmpty()) return@coroutineScope emptyMap()
+            val artistService = get<ArtistService>()
+            val albumService = get<AlbumService>()
+            val imageService = get<ImageService>()
 
-        val uniqueSongs = newSongs
-            .groupBy { song ->
+            val uniqueArtistNames = songs.flatMap { it.artists }.distinct()
+            val uniqueAlbums = songs.map { it.album }.distinctBy {
                 listOf(
-                    song.title,
-                    song.album.name,
-                    song.album.originalId,
-                    song.trackNumber,
-                    song.discNumber,
-                    song.duration,
-                    song.explicit,
+                    it.name,
+                    it.releaseDate,
+                    it.songCount,
+                    it.artists.sorted().joinToString(", "),
+                    it.originalId
                 )
             }
-            .map { (_, songs) ->
-                songs.maxByOrNull { it.bitRate }
-            }
-            .filterNotNull()
+            val uniqueCoverHashes = songs.map { it.coverHash }.distinct()
 
-        val filteredSongs = uniqueSongs.filter {
-            if (albumIdMap[it.album] == null) logger.info("${it.title} (${it.album.name}) has no album.")
-            albumIdMap[it.album] != null
-        }
-
-        val songInsertResult: List<ResultRow> = dbQuery {
-            SongTable.batchInsert(filteredSongs) { song ->
-                val albumId = albumIdMap[song.album]
-                val imageId = song.coverHash?.let { imageIdMap[it] }
-
-                this[SongTable.title] = song.title
-                this[SongTable.albumId] = albumId!!
-                this[SongTable.duration] = song.duration
-                this[SongTable.explicit] = song.explicit
-                this[SongTable.releaseDate] = getISOFromDate(song.releaseDate)
-                this[SongTable.lyrics] = song.lyrics
-                this[SongTable.filePath] = song.path
-                this[SongTable.originalUrl] = song.originalUrl
-                this[SongTable.trackNumber] = song.trackNumber
-                this[SongTable.discNumber] = song.discNumber
-                this[SongTable.copyright] = song.copyright
-                this[SongTable.sampleRate] = song.sampleRate
-                this[SongTable.bitsPerSample] = song.bitsPerSample
-                this[SongTable.bitRate] = song.bitRate
-                this[SongTable.fileSize] = song.fileSize
-                this[SongTable.cover] = imageId
-            }
-        }
-
-        val insertedSongs: List<Pair<UUID, InsertableSong>> =
-            songInsertResult.map { it[SongTable.id].value to filteredSongs[songInsertResult.indexOf(it)] }
-
-        val musicBrainzBatch = insertedSongs.mapNotNull { (songId, songData) ->
-            songData.musicBrainzId?.let { mbId -> songId to mbId }
-        }
-
-        if (musicBrainzBatch.isNotEmpty()) {
-            dbQuery {
-                val uniqueMbIds = musicBrainzBatch.map { it.second }.distinct()
-                val existingMbIds = MBRecordingTable
-                    .select(MBRecordingTable.id)
-                    .where { MBRecordingTable.id inList uniqueMbIds }
-                    .map { it[MBRecordingTable.id].value }
-                    .toSet()
-
-                val missingMbIds = uniqueMbIds.filter { it !in existingMbIds }
-
-                if (missingMbIds.isNotEmpty()) {
-                    MBRecordingTable.batchInsert(missingMbIds) { mbId ->
-                        this[MBRecordingTable.id] = EntityID(mbId, MBRecordingTable)
-                        this[MBRecordingTable.title] = ""
+            val artistIdMap: Map<String, List<UUID>> = uniqueArtistNames
+                .chunked(maxBatchSize)
+                .map { batch ->
+                    async {
+                        artistService.getOrBulkCreate(batch).entries
                     }
                 }
+                .awaitAll()
+                .flatten()
+                .groupBy({ it.key }, { it.value })
+                .mapValues { (_, values) -> values.flatten() }
 
-                SongMusicBrainzTable.batchInsert(musicBrainzBatch) { (songId, mbId) ->
-                    this[SongMusicBrainzTable.songId] = songId
-                    this[SongMusicBrainzTable.musicBrainzId] = mbId
-                }
-            }
-        }
-
-        val audioDataBatch = insertedSongs.mapNotNull { (songId, songData) ->
-            songData.audioData?.bpm?.let { bpm -> songId to bpm }
-        }
-
-        if (audioDataBatch.isNotEmpty()) {
-            dbQuery {
-                SongAudioDataTable.batchInsert(audioDataBatch) { (songId, bpmValue) ->
-                    this[SongAudioDataTable.songId] = songId
-                    this[SongAudioDataTable.bpm] = bpmValue
-                }
-            }
-        }
-
-        val songArtistLinks = insertedSongs.flatMap { (songId, songData) ->
-            songData.artists.flatMap { artistName ->
-                artistIdMap[artistName]?.map { artistId ->
-                    Pair(songId, artistId)
-                } ?: emptyList()
-            }
-        }.distinct()
-
-        dbQuery {
-            SongArtistTable.batchInsert(songArtistLinks) { (songId, artistId) ->
-                this[SongArtistTable.songId] = songId
-                this[SongArtistTable.artistId] = artistId
-            }
-        }
-
-        dbQuery {
-            AlbumTable.deleteWhere {
-                notExists(
-                    SongTable.select(SongTable.id).where {
-                        SongTable.albumId eq AlbumTable.id
+            val albumIdMap: Map<InsertableAlbum, UUID> = uniqueAlbums
+                .chunked(maxBatchSize)
+                .map { batch ->
+                    async {
+                        albumService.getOrBulkCreate(batch).entries
                     }
-                )
-            }
-        }
+                }
+                .awaitAll()
+                .flatten()
+                .toMap()
 
-        byIds(insertedSongs.map { it.first }).associateBy { it.id }
-    }
+            val imageIdMap: Map<String, UUID> = uniqueCoverHashes
+                .filterNotNull()
+                .chunked(maxBatchSize)
+                .map { batch ->
+                    async {
+                        imageService.getCoverHashes(batch).entries
+                    }
+                }
+                .awaitAll()
+                .flatten()
+                .toMap()
+
+            val existingSongMap = songs
+                .chunked(maxBatchSize / 3)
+                .map { batch ->
+                    async {
+                        logger.info("Checking ${batch.size} songs")
+                        bulkFindExistingSongs(batch).entries
+                    }
+                }
+                .awaitAll()
+                .flatten()
+                .toMap()
+
+            val dirtySongs = existingSongMap.filter { (song, data) ->
+                val (_, meta) = data
+                val (dbTitle, dbExplicit) = meta
+                dbTitle != song.title || dbExplicit != song.explicit
+            }
+
+            if (dirtySongs.isNotEmpty()) {
+                dbQuery {
+                    dirtySongs.forEach { (song, data) ->
+                        val (songId, _) = data
+                        SongTable.update({ SongTable.id eq songId }) {
+                            it[title] = song.title
+                            it[explicit] = song.explicit
+                        }
+                    }
+                }
+            }
+
+            val newSongs = songs.filter { it !in existingSongMap.keys }
+
+            if (newSongs.isEmpty()) return@coroutineScope emptyMap()
+
+            val uniqueSongs = newSongs
+                .groupBy { song ->
+                    listOf(
+                        song.title,
+                        song.album.name,
+                        song.album.originalId,
+                        song.trackNumber,
+                        song.discNumber,
+                        song.duration,
+                        song.explicit,
+                    )
+                }
+                .map { (_, songs) ->
+                    songs.maxByOrNull { it.bitRate }
+                }
+                .filterNotNull()
+
+            val filteredSongs = uniqueSongs.filter {
+                if (albumIdMap[it.album] == null) logger.info("${it.title} (${it.album.name}) has no album.")
+                albumIdMap[it.album] != null
+            }
+
+            val songInsertResult: List<ResultRow> = dbQuery {
+                SongTable.batchInsert(filteredSongs) { song ->
+                    val albumId = albumIdMap[song.album]
+                    val imageId = song.coverHash?.let { imageIdMap[it] }
+
+                    this[SongTable.title] = song.title
+                    this[SongTable.albumId] = albumId!!
+                    this[SongTable.duration] = song.duration
+                    this[SongTable.explicit] = song.explicit
+                    this[SongTable.releaseDate] = getISOFromDate(song.releaseDate)
+                    this[SongTable.lyrics] = song.lyrics
+                    this[SongTable.filePath] = song.path
+                    this[SongTable.originalUrl] = song.originalUrl
+                    this[SongTable.trackNumber] = song.trackNumber
+                    this[SongTable.discNumber] = song.discNumber
+                    this[SongTable.copyright] = song.copyright
+                    this[SongTable.sampleRate] = song.sampleRate
+                    this[SongTable.bitsPerSample] = song.bitsPerSample
+                    this[SongTable.bitRate] = song.bitRate
+                    this[SongTable.fileSize] = song.fileSize
+                    this[SongTable.cover] = imageId
+                }
+            }
+
+            val insertedSongs: List<Pair<UUID, InsertableSong>> =
+                songInsertResult.map {
+                    it[SongTable.id].value to filteredSongs[songInsertResult.indexOf(
+                        it
+                    )]
+                }
+
+            val musicBrainzBatch = insertedSongs.mapNotNull { (songId, songData) ->
+                songData.musicBrainzId?.let { mbId -> songId to mbId }
+            }
+
+            if (musicBrainzBatch.isNotEmpty()) {
+                dbQuery {
+                    val uniqueMbIds = musicBrainzBatch.map { it.second }.distinct()
+                    val existingMbIds = MBRecordingTable
+                        .select(MBRecordingTable.id)
+                        .where { MBRecordingTable.id inList uniqueMbIds }
+                        .map { it[MBRecordingTable.id].value }
+                        .toSet()
+
+                    val missingMbIds = uniqueMbIds.filter { it !in existingMbIds }
+
+                    if (missingMbIds.isNotEmpty()) {
+                        MBRecordingTable.batchInsert(missingMbIds) { mbId ->
+                            this[MBRecordingTable.id] = EntityID(mbId, MBRecordingTable)
+                            this[MBRecordingTable.title] = ""
+                        }
+                    }
+
+                    SongMusicBrainzTable.batchInsert(musicBrainzBatch) { (songId, mbId) ->
+                        this[SongMusicBrainzTable.songId] = songId
+                        this[SongMusicBrainzTable.musicBrainzId] = mbId
+                    }
+                }
+            }
+
+            insertedSongs.forEach { (songId, songData) ->
+                if (songData.originalUrl.isNotBlank()) {
+                    addProviderUrl(songId, songData.originalUrl)
+                }
+            }
+
+            val audioDataBatch = insertedSongs.mapNotNull { (songId, songData) ->
+                songData.audioData?.bpm?.let { bpm -> songId to bpm }
+            }
+
+            if (audioDataBatch.isNotEmpty()) {
+                dbQuery {
+                    SongAudioDataTable.batchInsert(audioDataBatch) { (songId, bpmValue) ->
+                        this[SongAudioDataTable.songId] = songId
+                        this[SongAudioDataTable.bpm] = bpmValue
+                    }
+                }
+            }
+
+            val songArtistLinks = insertedSongs.flatMap { (songId, songData) ->
+                songData.artists.flatMap { artistName ->
+                    artistIdMap[artistName]?.map { artistId ->
+                        Pair(songId, artistId)
+                    } ?: emptyList()
+                }
+            }.distinct()
+
+            dbQuery {
+                SongArtistTable.batchInsert(songArtistLinks) { (songId, artistId) ->
+                    this[SongArtistTable.songId] = songId
+                    this[SongArtistTable.artistId] = artistId
+                }
+            }
+
+            dbQuery {
+                AlbumTable.deleteWhere {
+                    notExists(
+                        SongTable.select(SongTable.id).where {
+                            SongTable.albumId eq AlbumTable.id
+                        }
+                    )
+                }
+            }
+
+            byIds(insertedSongs.map { it.first }).associateBy { it.id }
+        }
 
     suspend fun upsertSong(song: Song) = dbQuery {
         SongTable.upsert(SongTable.id) {
@@ -1629,6 +1804,10 @@ class SongService : SongLibrary, Service() {
             it[bitRate] = song.bitRate
             it[fileSize] = song.fileSize
             it[cover] = song.coverId?.let { coverId -> EntityID(coverId, ImageTable) }
+        }
+
+        if (song.originalUrl.isNotBlank()) {
+            addProviderUrl(song.id, song.originalUrl)
         }
 
         SongArtistTable.deleteWhere { SongArtistTable.songId eq song.id }
@@ -1654,39 +1833,40 @@ class SongService : SongLibrary, Service() {
         }
     }
 
-    suspend fun moveSongs(oldPath: String, newPath: String, originalIdPrefix: String? = null): Int = dbQuery {
-        val affectedSongs = if (originalIdPrefix != null) {
-            SongTable.innerJoin(AlbumTable)
-                .select(SongTable.id)
-                .where {
-                    (SongTable.filePath like "$oldPath%") and
-                            (AlbumTable.originalId like "$originalIdPrefix%")
-                }
-                .map { it[SongTable.id].value }
-        } else {
-            SongTable.select(SongTable.id)
-                .where { SongTable.filePath like "$oldPath%" }
-                .map { it[SongTable.id].value }
-        }
-
-        if (affectedSongs.isEmpty()) return@dbQuery 0
-
-        val songs = affectedSongs.chunked(20000).flatMap {
-            SongTable.select(SongTable.id, SongTable.filePath)
-                .where { SongTable.id inList it }
-                .toList()
-        }
-
-        songs.forEach { row ->
-            val id = row[SongTable.id].value
-            val currentPath = row[SongTable.filePath]
-            val newFilePath = currentPath.replaceFirst(oldPath, newPath)
-            
-            SongTable.update({ SongTable.id eq id }) {
-                it[filePath] = newFilePath
+    suspend fun moveSongs(oldPath: String, newPath: String, originalIdPrefix: String? = null): Int =
+        dbQuery {
+            val affectedSongs = if (originalIdPrefix != null) {
+                SongTable.innerJoin(AlbumTable)
+                    .select(SongTable.id)
+                    .where {
+                        (SongTable.filePath like "$oldPath%") and
+                                (AlbumTable.originalId like "$originalIdPrefix%")
+                    }
+                    .map { it[SongTable.id].value }
+            } else {
+                SongTable.select(SongTable.id)
+                    .where { SongTable.filePath like "$oldPath%" }
+                    .map { it[SongTable.id].value }
             }
+
+            if (affectedSongs.isEmpty()) return@dbQuery 0
+
+            val songs = affectedSongs.chunked(20000).flatMap {
+                SongTable.select(SongTable.id, SongTable.filePath)
+                    .where { SongTable.id inList it }
+                    .toList()
+            }
+
+            songs.forEach { row ->
+                val id = row[SongTable.id].value
+                val currentPath = row[SongTable.filePath]
+                val newFilePath = currentPath.replaceFirst(oldPath, newPath)
+
+                SongTable.update({ SongTable.id eq id }) {
+                    it[filePath] = newFilePath
+                }
+            }
+
+            songs.size
         }
-        
-        songs.size
-    }
 }
