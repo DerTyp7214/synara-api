@@ -13,15 +13,12 @@ import dev.dertyp.services.metadata.*
 import dev.dertyp.services.models.FollowedArtist
 import dev.dertyp.services.models.RecentRelease
 import dev.dertyp.utils.parsers.ParserFactory
-import io.ktor.client.call.body
-import io.ktor.client.request.parameter
 import io.ktor.server.application.ApplicationEnvironment
 import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
-import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.jdbc.*
 import org.koin.core.component.inject
@@ -37,6 +34,7 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
     private val musicBrainzCacheService by inject<MusicBrainzCacheService>()
     private val artistService by inject<ArtistService>()
     private val imageService by inject<ImageService>()
+    private val odesliService by inject<OdesliService>()
 
     suspend fun followArtist(userId: UUID, musicBrainzId: UUID, priority: HttpClientPriority = HttpClientPriority.NORMAL): Boolean {
         val artistId = getOrCreateArtistByMbId(musicBrainzId, priority) ?: return false
@@ -249,6 +247,7 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
         appleMusicService: AppleMusicService,
         onProgress: suspend (Double, String) -> Unit
     ): Map<String, Int> = withTimeoutOrNull(2.hours) {
+        val oneMonthAgo = Clock.System.now() - 30.days
         val unfollowedArtists: List<Pair<UUID, UUID>> = dbQuery {
             ArtistTable.innerJoin(ArtistMusicBrainzTable, { ArtistTable.id }, { ArtistMusicBrainzTable.artistId })
                 .leftJoin(SongArtistTable, { ArtistTable.id }, { SongArtistTable.artistId })
@@ -256,6 +255,10 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
                 .select(ArtistTable.id, ArtistMusicBrainzTable.musicBrainzId, SongArtistTable.songId.count())
                 .where { FollowedArtistTable.artistId.isNull() }
                 .andWhere { ArtistMusicBrainzTable.musicBrainzId.isNotNull() }
+                .andWhere {
+                    (ArtistMusicBrainzTable.lastReleaseCheck eq 0L) or
+                            (ArtistMusicBrainzTable.lastReleaseCheck less oneMonthAgo.toEpochMilliseconds())
+                }
                 .groupBy(ArtistTable.id, ArtistMusicBrainzTable.musicBrainzId)
                 .orderBy(SongArtistTable.songId.count(), SortOrder.DESC)
                 .map { it[ArtistTable.id].value to it[ArtistMusicBrainzTable.musicBrainzId]!!.value }
@@ -382,21 +385,9 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
                                     val allRelations =
                                         (group.relations ?: emptyList()) + mbReleasesForGroup.flatMap { it.relations ?: emptyList() }
                                     val relations = allRelations.mapNotNull { it.url?.resource }.distinct()
-                                    val odesliLinks = mutableListOf<String>()
-                                    for (link in relations) {
-                                        if (link.contains("spotify.com") || link.contains("itunes.apple.com") || link.contains("apple.com") ||
-                                            link.contains("youtube.com") || link.contains("amazon.com") || link.contains("deezer.com") ||
-                                            link.contains("tidal.com") || link.contains("bandcamp.com")
-                                        ) {
-                                            val resolved = resolvePlatformLinks(link, priority = HttpClientPriority.LOW)
-                                            if (resolved.isNotEmpty()) {
-                                                odesliLinks.addAll(resolved)
-                                                break
-                                            }
-                                        }
-                                    }
+                                    val odesliResults = odesliService.batchResolve(relations, priority = HttpClientPriority.LOW)
 
-                                    val finalLinks = (relations + odesliLinks).distinct().toMutableList()
+                                    val finalLinks = (relations + odesliResults).distinct().toMutableList()
 
                                     val isSingle =
                                         group.primaryType?.lowercase() == "single" || group.primaryType == null ||
@@ -474,7 +465,7 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
                                             val appleUrl = "https://music.apple.com/album/${matchedAlbum.id}"
                                             finalLinks.add(appleUrl)
                                             finalLinks.addAll(
-                                                resolvePlatformLinks(
+                                                odesliService.resolvePlatformLinks(
                                                     appleUrl,
                                                     priority = HttpClientPriority.LOW
                                                 )
@@ -514,7 +505,7 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
                                             val tidalUrl = "https://tidal.com/album/${matchedAlbum.id}"
                                             finalLinks.add(tidalUrl)
                                             finalLinks.addAll(
-                                                resolvePlatformLinks(
+                                                odesliService.resolvePlatformLinks(
                                                     tidalUrl,
                                                     priority = HttpClientPriority.LOW
                                                 )
@@ -590,6 +581,9 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
                                 FollowedArtistTable.update({ FollowedArtistTable.artistId eq artistId }) {
                                     it[lastCheck] = Clock.System.now().toEpochMilliseconds()
                                 }
+                                ArtistMusicBrainzTable.update({ ArtistMusicBrainzTable.artistId eq artistId }) {
+                                    it[lastReleaseCheck] = Clock.System.now().toEpochMilliseconds() + (0.days .. 5.days).random().inWholeMilliseconds
+                                }
                             }
                         }
 
@@ -628,33 +622,4 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
             )
         ).values.firstOrNull()
     }
-
-    internal suspend fun resolvePlatformLinks(
-        platformUrl: String,
-        priority: HttpClientPriority = HttpClientPriority.NORMAL
-    ): List<String> {
-        return try {
-            val response = ApiClient.queueInstance.enqueue("https://api.song.link/v1-alpha.1/links", priority = priority) {
-                parameter("url", platformUrl)
-                parameter("userCountry", "US")
-            }
-            if (response.status.value in 200..299) {
-                val body = response.body<OdesliResponse>()
-                body.linksByPlatform.values.map { it.url }
-            } else emptyList()
-        } catch (e: Exception) {
-            logger.error("Error resolving platform links via Odesli for $platformUrl", e)
-            emptyList()
-        }
-    }
-
-    @Serializable
-    private data class OdesliResponse(
-        val linksByPlatform: Map<String, OdesliPlatformLink>
-    )
-
-    @Serializable
-    private data class OdesliPlatformLink(
-        val url: String
-    )
 }

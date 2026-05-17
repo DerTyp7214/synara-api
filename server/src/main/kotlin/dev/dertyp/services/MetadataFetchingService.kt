@@ -1,10 +1,7 @@
 package dev.dertyp.services
 
 import dev.dertyp.ApiClient
-import dev.dertyp.core.HttpClientPriority
-import dev.dertyp.core.safeGet
-import dev.dertyp.core.safeQueuedGet
-import dev.dertyp.core.sha256
+import dev.dertyp.core.*
 import dev.dertyp.data.InsertableImage
 import dev.dertyp.db.*
 import dev.dertyp.dbQuery
@@ -25,11 +22,8 @@ import org.jetbrains.exposed.v1.jdbc.update
 import org.koin.core.component.inject
 import java.util.UUID
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
-import kotlin.random.Random
 import kotlin.time.Clock
-import kotlin.time.Duration
 import kotlin.time.Duration.Companion.days
-import kotlin.time.Duration.Companion.nanoseconds
 
 @OptIn(ExperimentalAtomicApi::class)
 class MetadataFetchingService(private val environment: ApplicationEnvironment) : Service() {
@@ -289,14 +283,6 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
 
         return mapOf("songsChecked" to totalChecked, "songsFound" to foundCount)
     }
-
-    private fun ClosedRange<Duration>.random(random: Random = Random): Duration {
-        val startNs = start.inWholeNanoseconds
-        val endNs = endInclusive.inWholeNanoseconds
-
-        return (startNs..endNs).random(random).nanoseconds
-    }
-
 
     private suspend fun updateLastMetadataCheckArtist(id: UUID) = dbQuery {
         ArtistTable.update({ ArtistTable.id eq id }) {

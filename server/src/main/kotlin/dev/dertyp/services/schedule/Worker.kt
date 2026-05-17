@@ -21,6 +21,8 @@ import kotlin.time.Duration.Companion.milliseconds
 abstract class Worker(val name: String) : KoinComponent {
     protected val logger = KtorSimpleLogger(name)
     private val isRunning = AtomicBoolean(false)
+    val active: Boolean
+        get() = isRunning.load()
 
     private val config by inject<ApplicationConfig>()
 
@@ -146,6 +148,8 @@ abstract class Worker(val name: String) : KoinComponent {
         private val mutex = Mutex()
         @Volatile
         internal var overridenProcessorCount: Int? = null
+
+        fun isActive(name: String): Boolean = activeWorkers.containsKey(name)
 
         internal fun resetActiveWorkers() {
             activeWorkers.clear()

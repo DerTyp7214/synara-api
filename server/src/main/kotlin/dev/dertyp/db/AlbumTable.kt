@@ -9,4 +9,5 @@ object AlbumTable : UUIDTable("album") {
     val cover = reference("cover", ImageTable.id).nullable()
     val originalId = text("originalId").nullable()
     val lastMetadataCheck = long("lastMetadataCheck").default(0L)
+    val lastProviderEnrichment = long("lastProviderEnrichment").default(0L)
 }

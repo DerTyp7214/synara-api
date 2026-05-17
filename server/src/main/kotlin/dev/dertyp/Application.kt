@@ -127,6 +127,7 @@ fun Application.module() {
             singleOf(::MusicBrainzService)
             singleOf(::MusicBrainzCacheService)
             singleOf(::CachedMusicBrainzService)
+            singleOf(::OdesliService)
             singleOf(::MusicBrainzWorker)
             singleOf(::MusicBrainzCacheWorker)
             singleOf(::GenreMetadataWorker)
@@ -138,6 +139,7 @@ fun Application.module() {
             singleOf(::FlacAnalysisWorker)
             singleOf(::ReleaseService)
             singleOf(::AutoTranscodeWorker)
+            singleOf(::ProviderEnrichmentWorker)
             singleOf(::ReverseProxyWorker)
             singleOf(::ImageAnalysisWorker)
             singleOf(::CustomMigrationService)
@@ -478,6 +480,19 @@ fun Application.module() {
     )
 
     scheduleService.triggerTask(recentReleaseTask.id)
+
+    val providerEnrichmentWorker = get<ProviderEnrichmentWorker>()
+    scheduleService.schedule(
+        ScheduledTask(
+            name = "Provider Enrichment Worker",
+            trigger = TaskCompletionTrigger(recentReleaseTask.id),
+            task = {
+                scheduleService.logTask("Provider Enrichment Worker") {
+                    providerEnrichmentWorker.run { p, l -> updateProgress(p, l) }
+                }
+            }
+        )
+    )
 
     val cleanAlbumTask = scheduleService.schedule(
         ScheduledTask(

@@ -10,6 +10,7 @@ import dev.dertyp.services.import.Type
 import dev.dertyp.services.metadata.CachedMusicBrainzService
 import dev.dertyp.services.metadata.MusicBrainzCacheService
 import dev.dertyp.services.metadata.MusicBrainzService
+import dev.dertyp.services.metadata.OdesliService
 import dev.dertyp.utils.ColorUtils
 import dev.dertyp.utils.LogParam
 import dev.dertyp.utils.parsers.ParserFactory
@@ -89,6 +90,7 @@ class AlbumService : AlbumLibrary, Service() {
     private val artistService by inject<ArtistService>()
     private val genreService by inject<GenreService>()
     private val libraryMergeService by inject<LibraryMergeService>()
+    private val odesliService by inject<OdesliService>()
     val artistGroupAlias = ArtistTable.alias("artistGroup")
     val artistMemberAlias = ArtistTable.alias("artistMember")
     val artistGroupJoinAlias = ArtistMemberTable.alias("artistGroupJoin")
@@ -401,6 +403,79 @@ class AlbumService : AlbumLibrary, Service() {
         AlbumExtendedMetadata(
             providers = providers
         )
+    }
+
+    fun albumIdsForProviderEnrichment(): Flow<UUID> = flow {
+        val oneWeekAgo = Clock.System.now() - 7.days
+
+        AlbumTable
+            .select(AlbumTable.id)
+            .where {
+                AlbumTable.lastProviderEnrichment.isNull() or
+                        (AlbumTable.lastProviderEnrichment less oneWeekAgo.toEpochMilliseconds())
+            }
+            .orderBy(AlbumTable.lastProviderEnrichment, SortOrder.ASC)
+            .fetchBatchedResults(1000) { batch ->
+                batch.forEach {
+                    emit(it[AlbumTable.id].value)
+                }
+            }
+    }
+
+    suspend fun enrichProviders(id: UUID, priority: HttpClientPriority = HttpClientPriority.NORMAL) {
+        val album = byId(id) ?: return
+        val urls = mutableSetOf<String>()
+
+        album.musicbrainzId?.let { mbId ->
+            cachedMusicBrainzService.getRelease(mbId, priority)?.let { release ->
+                release.relations?.filter { it.type == "stream for free" || it.type == "purchase for download" || it.type == "official homepage" }
+                    ?.mapNotNull { it.url?.resource }
+                    ?.let { urls.addAll(it) }
+
+                release.releaseGroup?.id?.let { rgId ->
+                    val rg = cachedMusicBrainzService.getReleaseGroup(rgId, priority)
+                    rg?.relations?.filter { it.type == "stream for free" || it.type == "purchase for download" || it.type == "official homepage" }
+                        ?.mapNotNull { it.url?.resource }
+                        ?.let { urls.addAll(it) }
+                }
+            }
+        }
+
+        val seedUrls = dbQuery {
+            AlbumProviderTable.selectAll()
+                .where { AlbumProviderTable.albumId eq id }
+                .mapNotNull { it[AlbumProviderTable.rawUrl] }
+        }.toMutableSet()
+        
+        seedUrls.addAll(urls)
+
+        val odesliResults = odesliService.batchResolve(seedUrls, priority)
+        val allUrls = (urls + odesliResults).distinct()
+
+        dbQuery {
+            allUrls.forEach { url ->
+                val parser = ParserFactory.getParser(url)
+                val parsed = parser?.parse(url)
+                val provider = parser?.name ?: "unknown"
+                val externalId = parsed?.first ?: url
+
+                AlbumProviderTable.upsert(
+                    AlbumProviderTable.albumId,
+                    AlbumProviderTable.provider,
+                    AlbumProviderTable.externalId
+                ) {
+                    it[AlbumProviderTable.albumId] = id
+                    it[AlbumProviderTable.provider] = provider
+                    it[AlbumProviderTable.externalId] = externalId
+                    it[AlbumProviderTable.type] = parsed?.second?.value ?: Type.ALBUM.value
+                    it[AlbumProviderTable.rawUrl] = url
+                }
+            }
+
+            AlbumTable.update({ AlbumTable.id eq id }) {
+                it[lastProviderEnrichment] = Clock.System.now().toEpochMilliseconds()
+            }
+        }
     }
 
     override suspend fun byMusicBrainzId(mbId: UUID): List<Album> = byMusicBrainzId(mbId, null)

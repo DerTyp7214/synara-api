@@ -10,10 +10,7 @@ import dev.dertyp.services.AlbumService.Companion.calculateAlbumStats
 import dev.dertyp.services.AlbumService.Companion.mapAlbum
 import dev.dertyp.services.ArtistService.Companion.mapArtist
 import dev.dertyp.services.import.Type
-import dev.dertyp.services.metadata.CachedMusicBrainzService
-import dev.dertyp.services.metadata.IMetadataService
-import dev.dertyp.services.metadata.MusicBrainzCacheService
-import dev.dertyp.services.metadata.MusicBrainzService
+import dev.dertyp.services.metadata.*
 import dev.dertyp.utils.ColorUtils
 import dev.dertyp.utils.LogParam
 import dev.dertyp.utils.parsers.ParserFactory
@@ -222,6 +219,7 @@ class SongService : SongLibrary, Service() {
     private val musicBrainzCacheService by inject<MusicBrainzCacheService>()
     private val artistService by inject<ArtistService>()
     private val genreService by inject<GenreService>()
+    private val odesliService by inject<OdesliService>()
 
     val albumArtistAlias = ArtistTable.alias("albumArtistAlias")
     val albumArtistMusicBrainzAlias = ArtistMusicBrainzTable.alias("albumArtistMusicBrainzAlias")
@@ -677,6 +675,23 @@ class SongService : SongLibrary, Service() {
             byIds(ids).asFlow()
         }
 
+    fun songIdsForProviderEnrichment(): Flow<UUID> = flow {
+        val oneWeekAgo = Clock.System.now() - 7.days
+
+        SongTable
+            .select(SongTable.id)
+            .where {
+                SongTable.lastProviderEnrichment.isNull() or
+                        (SongTable.lastProviderEnrichment less oneWeekAgo.toEpochMilliseconds())
+            }
+            .orderBy(SongTable.lastProviderEnrichment, SortOrder.ASC)
+            .fetchBatchedResults(1000) { batch ->
+                batch.forEach {
+                    emit(it[SongTable.id].value)
+                }
+            }
+    }
+
     suspend fun byId(id: UUID, userId: UUID): UserSong? = querySingle(userId) {
         where { SongTable.id eq id }
     }
@@ -859,6 +874,55 @@ class SongService : SongLibrary, Service() {
         }
 
         return results
+    }
+
+    suspend fun enrichProviders(id: UUID, priority: HttpClientPriority = HttpClientPriority.NORMAL) {
+        val song = byId(id) ?: return
+        val urls = mutableSetOf<String>()
+
+        song.musicBrainzId?.let { mbId ->
+            cachedMusicBrainzService.getRecording(mbId, priority)?.let { recording ->
+                recording.relations?.filter { it.type == "stream for free" || it.type == "purchase for download" || it.type == "official homepage" }
+                    ?.mapNotNull { it.url?.resource }
+                    ?.let { urls.addAll(it) }
+            }
+        }
+
+        val seedUrls = dbQuery {
+            SongProviderTable.selectAll()
+                .where { SongProviderTable.songId eq id }
+                .mapNotNull { it[SongProviderTable.rawUrl] }
+        }.toMutableSet()
+
+        seedUrls.addAll(urls)
+
+        val odesliResults = odesliService.batchResolve(seedUrls, priority)
+        val allUrls = (urls + odesliResults).distinct()
+
+        dbQuery {
+            allUrls.forEach { url ->
+                val parser = ParserFactory.getParser(url)
+                val parsed = parser?.parse(url)
+                val provider = parser?.name ?: "unknown"
+                val externalId = parsed?.first ?: url
+
+                SongProviderTable.upsert(
+                    SongProviderTable.songId,
+                    SongProviderTable.provider,
+                    SongProviderTable.externalId
+                ) {
+                    it[SongProviderTable.songId] = id
+                    it[SongProviderTable.provider] = provider
+                    it[SongProviderTable.externalId] = externalId
+                    it[SongProviderTable.type] = parsed?.second?.value ?: Type.SONG.value
+                    it[SongProviderTable.rawUrl] = url
+                }
+            }
+
+            SongTable.update({ SongTable.id eq id }) {
+                it[lastProviderEnrichment] = Clock.System.now().toEpochMilliseconds()
+            }
+        }
     }
 
     suspend fun addProviderUrl(songId: UUID, url: String) = dbQuery {
