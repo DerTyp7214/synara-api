@@ -8,7 +8,7 @@ class SpotifyParser : UrlParser() {
     override fun canHandle(url: String): Boolean {
         if (handlePrefix(url) != null) return true
         val host = getUri(url)?.host?.lowercase() ?: ""
-        return host == "open.spotify.com" || host.endsWith(".spotify.com")
+        return host == "open.spotify.com" || host == "spotify.com" || host.endsWith(".spotify.com")
     }
 
     override suspend fun parse(url: String): Pair<String, Type>? {

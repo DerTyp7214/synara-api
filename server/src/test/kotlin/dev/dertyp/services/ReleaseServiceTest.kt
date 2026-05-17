@@ -87,6 +87,7 @@ class ReleaseServiceTest : KoinTest {
                 SongMusicBrainzTable,
                 FollowedArtistTable,
                 RecentReleaseTable,
+                RecentReleaseProviderTable,
                 *allMusicBrainzTables
             )
         }
@@ -269,6 +270,16 @@ class ReleaseServiceTest : KoinTest {
         assertEquals(1, releases.size)
         assertEquals("New Album", releases[0].title)
         assertTrue(releases[0].links.contains("https://tidal.com/album/456"))
+
+        transaction(database) {
+            val providers = RecentReleaseProviderTable.selectAll()
+                .where { RecentReleaseProviderTable.releaseId eq releaseId }
+                .associate { it[RecentReleaseProviderTable.provider] to it[RecentReleaseProviderTable.externalId] }
+            
+            assertEquals(2, providers.size)
+            assertEquals("123", providers["spotify"])
+            assertEquals("456", providers["tidal"])
+        }
     }
 
     @ParameterizedTest

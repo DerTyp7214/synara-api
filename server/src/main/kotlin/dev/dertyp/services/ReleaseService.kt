@@ -12,6 +12,7 @@ import dev.dertyp.platformDateFromEpochMilliseconds
 import dev.dertyp.services.metadata.*
 import dev.dertyp.services.models.FollowedArtist
 import dev.dertyp.services.models.RecentRelease
+import dev.dertyp.utils.parsers.ParserFactory
 import io.ktor.client.call.body
 import io.ktor.client.request.parameter
 import io.ktor.server.application.ApplicationEnvironment
@@ -100,32 +101,39 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
             .where { (RecentReleaseTable.artistId inList followedArtistIds) and (RecentReleaseTable.albumId.isNull()) and (RecentReleaseTable.songId.isNull()) and (RecentReleaseTable.releaseDate.isNotNull()) }
             .count()
 
-        val data = RecentReleaseTable
+        val releasesRows = RecentReleaseTable
             .leftJoin(ImageTable, onColumn = { RecentReleaseTable.imageId }, otherColumn = { ImageTable.id })
             .selectAll()
             .where { (RecentReleaseTable.artistId inList followedArtistIds) and (RecentReleaseTable.albumId.isNull()) and (RecentReleaseTable.songId.isNull()) and (RecentReleaseTable.releaseDate.isNotNull()) }
             .orderBy(RecentReleaseTable.releaseDate to SortOrder.DESC)
             .limit(pageSize)
             .offset((page * pageSize).toLong())
-            .map {
-                RecentRelease(
-                    releaseId = it[RecentReleaseTable.releaseId].value,
-                    artistId = it[RecentReleaseTable.artistId].value,
-                    artistName = it[RecentReleaseTable.artistName],
-                    title = it[RecentReleaseTable.title],
-                    releaseDate = it[RecentReleaseTable.releaseDate]?.let { ms -> platformDateFromEpochMilliseconds(ms) },
-                    type = it[RecentReleaseTable.type],
-                    imageId = it[RecentReleaseTable.imageId]?.value,
-                    blurHash = it.getOrNull(ImageTable.blurHash),
-                    links = try {
-                        ApplicationScope.json.decodeFromString<List<String>>(it[RecentReleaseTable.links])
-                    } catch (_: Exception) {
-                        emptyList()
-                    },
-                    albumId = it[RecentReleaseTable.albumId]?.value,
-                    songId = it[RecentReleaseTable.songId]?.value
-                )
-            }
+            .toList()
+
+        val releaseIds = releasesRows.map { it[RecentReleaseTable.releaseId].value }
+
+        val providersMap = releaseIds.chunked(10000).flatMap { chunk ->
+            RecentReleaseProviderTable.selectAll()
+                .where { RecentReleaseProviderTable.releaseId inList chunk }
+                .map { it[RecentReleaseProviderTable.releaseId].value to it[RecentReleaseProviderTable.rawUrl] }
+        }.groupBy({ it.first }, { it.second })
+
+        val data = releasesRows.map {
+            val groupId = it[RecentReleaseTable.releaseId].value
+            RecentRelease(
+                releaseId = groupId,
+                artistId = it[RecentReleaseTable.artistId].value,
+                artistName = it[RecentReleaseTable.artistName],
+                title = it[RecentReleaseTable.title],
+                releaseDate = it[RecentReleaseTable.releaseDate]?.let { ms -> platformDateFromEpochMilliseconds(ms) },
+                type = it[RecentReleaseTable.type],
+                imageId = it[RecentReleaseTable.imageId]?.value,
+                blurHash = it.getOrNull(ImageTable.blurHash),
+                links = providersMap[groupId] ?: emptyList(),
+                albumId = it[RecentReleaseTable.albumId]?.value,
+                songId = it[RecentReleaseTable.songId]?.value
+            )
+        }
 
         PaginatedResponse(
             data = data,
@@ -539,6 +547,25 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
                                                     ApplicationScope.json.encodeToString(distinctLinks)
                                                 it[RecentReleaseTable.albumId] = libraryAlbumId
                                                 it[RecentReleaseTable.songId] = librarySongId
+                                            }
+
+                                            distinctLinks.forEach { url ->
+                                                val parser = ParserFactory.getParser(url)
+                                                val parsed = parser?.parse(url)
+                                                val provider = parser?.name ?: "unknown"
+                                                val externalId = parsed?.first ?: url
+
+                                                RecentReleaseProviderTable.upsert(
+                                                    RecentReleaseProviderTable.releaseId,
+                                                    RecentReleaseProviderTable.provider,
+                                                    RecentReleaseProviderTable.externalId
+                                                ) {
+                                                    it[RecentReleaseProviderTable.releaseId] = groupId
+                                                    it[RecentReleaseProviderTable.provider] = provider
+                                                    it[RecentReleaseProviderTable.externalId] = externalId
+                                                    it[RecentReleaseProviderTable.type] = parsed?.second?.value
+                                                    it[RecentReleaseProviderTable.rawUrl] = url
+                                                }
                                             }
                                         }
                                     }
