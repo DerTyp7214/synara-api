@@ -209,6 +209,9 @@ class SongRpcService(private val user: User, private val songService: SongServic
         if (!user.isAdmin) throw IllegalStateException("Only admins can move songs")
         return songService.moveSongs(oldPath, newPath, originalIdPrefix)
     }
+
+    override suspend fun extendedMetadata(id: UUID): SongExtendedMetadata? =
+        songService.extendedMetadata(id)
 }
 
 class SongService : SongLibrary, Service() {
@@ -608,6 +611,47 @@ class SongService : SongLibrary, Service() {
 
     suspend fun byId(id: UUID): Song? = querySingle {
         where { SongTable.id eq id }
+    }
+
+    suspend fun extendedMetadata(id: UUID): SongExtendedMetadata? = dbQuery {
+        val songRow = SongTable.selectAll().where { SongTable.id eq id }.singleOrNull()
+            ?: return@dbQuery null
+
+        val providers = SongProviderTable.selectAll()
+            .where { SongProviderTable.songId eq id }
+            .map {
+                ProviderEntry(
+                    provider = it[SongProviderTable.provider],
+                    externalId = it[SongProviderTable.externalId],
+                    type = it[SongProviderTable.type],
+                    rawUrl = it[SongProviderTable.rawUrl],
+                    addedAt = it[SongProviderTable.addedAt]
+                )
+            }
+
+        val audioData = SongAudioDataTable.selectAll()
+            .where { SongAudioDataTable.songId eq id }
+            .singleOrNull()
+            ?.let {
+                SongAudioData(
+                    bpm = it[SongAudioDataTable.bpm],
+                    key = it[SongAudioDataTable.key],
+                    scale = AudioScale.fromString(it[SongAudioDataTable.scale]),
+                    loudness = it[SongAudioDataTable.loudness],
+                    energy = it[SongAudioDataTable.energy],
+                    valence = it[SongAudioDataTable.valence],
+                    danceability = it[SongAudioDataTable.danceability],
+                    acousticness = it[SongAudioDataTable.acousticness],
+                    instrumentalness = it[SongAudioDataTable.instrumentalness],
+                    speechiness = it[SongAudioDataTable.speechiness]
+                )
+            }
+
+        SongExtendedMetadata(
+            providers = providers,
+            audioData = audioData,
+            insertedAt = songRow[SongTable.inserted]
+        )
     }
 
     suspend fun byIds(ids: List<UUID>, userId: UUID): List<UserSong> =

@@ -88,6 +88,7 @@ class SongServiceTest : KoinTest {
                 AlbumGenreTable,
                 SongProviderTable,
                 AlbumProviderTable,
+                SongAudioDataTable,
                 *allMusicBrainzTables
             )
             
@@ -1485,5 +1486,50 @@ class SongServiceTest : KoinTest {
             assertEquals("dQw4w9WgXcQ", it[SongProviderTable.externalId])
             assertEquals("https://www.youtube.com/watch?v=dQw4w9WgXcQ", it[SongProviderTable.rawUrl])
         }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `extendedMetadata should return full song information`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val songId = UUID.randomUUID()
+        val albumId = UUID.randomUUID()
+
+        transaction(database) {
+            AlbumTable.insert {
+                it[id] = albumId
+                it[name] = "Test Album"
+            }
+            SongTable.insert {
+                it[id] = songId
+                it[title] = "Test Song"
+                it[this.albumId] = albumId
+                it[inserted] = 1000L
+            }
+            SongProviderTable.insert {
+                it[this.songId] = songId
+                it[provider] = "spotify"
+                it[externalId] = "123"
+                it[rawUrl] = "https://open.spotify.com/track/123"
+                it[addedAt] = 2000L
+            }
+            SongAudioDataTable.insert {
+                it[this.songId] = songId
+                it[bpm] = 120.5
+                it[key] = "C"
+                it[scale] = "Major"
+            }
+        }
+
+        val metadata = rpcService.extendedMetadata(songId)
+        assertNotNull(metadata)
+        metadata!!
+        assertEquals(1, metadata.providers.size)
+        assertEquals("spotify", metadata.providers[0].provider)
+        assertEquals("123", metadata.providers[0].externalId)
+        assertEquals(120.5, metadata.audioData?.bpm)
+        assertEquals("C", metadata.audioData?.key)
+        assertEquals(AudioScale.Major, metadata.audioData?.scale)
+        assertEquals(1000L, metadata.insertedAt)
     }
 }

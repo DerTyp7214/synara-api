@@ -30,9 +30,17 @@ import kotlin.time.Duration.Companion.milliseconds
 class AlbumServiceTest : KoinTest {
     private lateinit var database: Database
     private lateinit var service: AlbumService
+    private lateinit var rpcService: AlbumRpcService
     private val musicBrainzService = mockk<MusicBrainzService>(relaxed = true)
     private val storageService = mockk<StorageService>(relaxed = true)
     private val libraryMergeService = mockk<LibraryMergeService>(relaxed = true)
+    
+    private val user = User(
+        id = UUID.randomUUID(),
+        username = "testuser",
+        passwordHash = "hash",
+        isAdmin = true
+    )
 
     fun setup(dialect: DbDialect) {
         startKoin {
@@ -79,6 +87,7 @@ class AlbumServiceTest : KoinTest {
         every { storageService.albumsPath } returns null
         
         service = AlbumService()
+        rpcService = AlbumRpcService(user, service)
     }
 
     @AfterEach
@@ -1205,5 +1214,33 @@ class AlbumServiceTest : KoinTest {
         assertEquals(albumId1, result[url1]?.id)
         assertEquals(albumId2, result[url2]?.id)
         assertEquals(albumId2, result[url2alt]?.id)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `extendedMetadata should return full album information`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val albumId = UUID.randomUUID()
+
+        transaction(database) {
+            AlbumTable.insert {
+                it[id] = albumId
+                it[name] = "Test Album"
+            }
+            AlbumProviderTable.insert {
+                it[this.albumId] = albumId
+                it[provider] = "spotify"
+                it[externalId] = "456"
+                it[rawUrl] = "https://open.spotify.com/album/456"
+                it[addedAt] = 1000L
+            }
+        }
+
+        val metadata = rpcService.extendedMetadata(albumId)
+        assertNotNull(metadata)
+        metadata!!
+        assertEquals(1, metadata.providers.size)
+        assertEquals("spotify", metadata.providers[0].provider)
+        assertEquals("456", metadata.providers[0].externalId)
     }
 }

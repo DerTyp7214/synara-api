@@ -76,6 +76,9 @@ class AlbumRpcService(private val user: User, private val albumService: AlbumSer
 
     override suspend fun setMusicBrainzId(id: UUID, musicBrainzId: UUID?): Album? =
         albumService.setMusicBrainzId(id, musicBrainzId, user.id)
+
+    override suspend fun extendedMetadata(id: UUID): AlbumExtendedMetadata? =
+        albumService.extendedMetadata(id)
 }
 
 class AlbumService : AlbumLibrary, Service() {
@@ -376,6 +379,27 @@ class AlbumService : AlbumLibrary, Service() {
 
     suspend fun byId(id: UUID, userId: UUID? = null): Album? = querySingle(userId = userId) {
         where { AlbumTable.id eq id }
+    }
+
+    suspend fun extendedMetadata(id: UUID): AlbumExtendedMetadata? = dbQuery {
+        val albumExists = AlbumTable.selectAll().where { AlbumTable.id eq id }.any()
+        if (!albumExists) return@dbQuery null
+
+        val providers = AlbumProviderTable.selectAll()
+            .where { AlbumProviderTable.albumId eq id }
+            .map {
+                ProviderEntry(
+                    provider = it[AlbumProviderTable.provider],
+                    externalId = it[AlbumProviderTable.externalId],
+                    type = it[AlbumProviderTable.type],
+                    rawUrl = it[AlbumProviderTable.rawUrl],
+                    addedAt = it[AlbumProviderTable.addedAt]
+                )
+            }
+
+        AlbumExtendedMetadata(
+            providers = providers
+        )
     }
 
     override suspend fun byMusicBrainzId(mbId: UUID): List<Album> = byMusicBrainzId(mbId, null)
