@@ -416,6 +416,25 @@ class LibraryMergeService : Service() {
             }
         }
         AlbumMusicBrainzTable.deleteWhere { AlbumMusicBrainzTable.albumId eq oldAlbumId }
+
+        val providersForOld = AlbumProviderTable.selectAll().where { AlbumProviderTable.albumId eq oldAlbumId }.toList()
+        val providersForKept = AlbumProviderTable.selectAll().where { AlbumProviderTable.albumId eq keptAlbumId }
+            .map { it[AlbumProviderTable.provider] to it[AlbumProviderTable.externalId] }.toSet()
+
+        for (row in providersForOld) {
+            val provider = row[AlbumProviderTable.provider]
+            val externalId = row[AlbumProviderTable.externalId]
+            if (provider to externalId !in providersForKept) {
+                AlbumProviderTable.update({
+                    (AlbumProviderTable.albumId eq oldAlbumId) and
+                            (AlbumProviderTable.provider eq provider) and
+                            (AlbumProviderTable.externalId eq externalId)
+                }) {
+                    it[AlbumProviderTable.albumId] = keptAlbumId
+                }
+            }
+        }
+        AlbumProviderTable.deleteWhere { AlbumProviderTable.albumId eq oldAlbumId }
     }
 
     private fun mergeDuplicateImages(): Int {

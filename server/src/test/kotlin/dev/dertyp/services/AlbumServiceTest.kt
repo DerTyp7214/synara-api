@@ -71,6 +71,7 @@ class AlbumServiceTest : KoinTest {
                 ArtistGenreTable,
                 SongGenreTable,
                 AlbumGenreTable,
+                AlbumProviderTable,
                 *allMusicBrainzTables
             )
         }
@@ -1084,5 +1085,125 @@ class AlbumServiceTest : KoinTest {
         }
         assertNotNull(mbInfo)
         assertEquals(mbArtistId, mbInfo!![ArtistMusicBrainzTable.musicBrainzId]?.value)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `byOriginalIds should find albums via AlbumProviderTable and AlbumTable`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val albumId1 = UUID.randomUUID()
+        val albumId2 = UUID.randomUUID()
+        val artistId = UUID.randomUUID()
+
+        transaction(database) {
+            ArtistTable.insert {
+                it[id] = artistId
+                it[name] = "Test Artist"
+            }
+            AlbumTable.insert {
+                it[id] = albumId1
+                it[name] = "Album 1"
+                it[originalId] = "tiddl:orig1"
+            }
+            AlbumArtistTable.insert {
+                it[this.albumId] = albumId1
+                it[this.artistId] = artistId
+            }
+            AlbumTable.insert {
+                it[id] = albumId2
+                it[name] = "Album 2"
+                it[originalId] = "spotify:orig2"
+            }
+            AlbumArtistTable.insert {
+                it[this.albumId] = albumId2
+                it[this.artistId] = artistId
+            }
+            AlbumProviderTable.insert {
+                it[AlbumProviderTable.albumId] = albumId2
+                it[provider] = "tidal"
+                it[externalId] = "ext2"
+                it[rawUrl] = "https://tidal.com/album/ext2"
+            }
+            SongTable.insert {
+                it[id] = UUID.randomUUID()
+                it[title] = "Song 1"
+                it[SongTable.albumId] = albumId1
+                it[filePath] = "path1"
+            }
+            SongTable.insert {
+                it[id] = UUID.randomUUID()
+                it[title] = "Song 2"
+                it[SongTable.albumId] = albumId2
+                it[filePath] = "path2"
+            }
+        }
+
+        val results = service.byOriginalIds(listOf("tiddl:orig1", "tidal:ext2"))
+        assertEquals(2, results.size)
+        assertTrue(results.any { it.id == albumId1 })
+        assertTrue(results.any { it.id == albumId2 })
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `byOriginalUrls should find albums via AlbumProviderTable and AlbumTable`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val albumId1 = UUID.randomUUID()
+        val albumId2 = UUID.randomUUID()
+        val artistId = UUID.randomUUID()
+
+        val url1 = "https://tidal.com/album/1"
+        val url2 = "https://tidal.com/album/2"
+        val url2alt = "tidal:2"
+
+        transaction(database) {
+            ArtistTable.insert {
+                it[id] = artistId
+                it[name] = "Test Artist"
+            }
+            AlbumTable.insert {
+                it[id] = albumId1
+                it[name] = "Tidal Album 1"
+                it[originalId] = url1
+            }
+            AlbumArtistTable.insert {
+                it[this.albumId] = albumId1
+                it[this.artistId] = artistId
+            }
+            AlbumTable.insert {
+                it[id] = albumId2
+                it[name] = "Tidal Album 2"
+                it[originalId] = "spotify:something"
+            }
+            AlbumArtistTable.insert {
+                it[this.albumId] = albumId2
+                it[this.artistId] = artistId
+            }
+            AlbumProviderTable.insert {
+                it[AlbumProviderTable.albumId] = albumId2
+                it[provider] = "tidal"
+                it[externalId] = "2"
+                it[rawUrl] = url2
+            }
+            SongTable.insert {
+                it[id] = UUID.randomUUID()
+                it[title] = "Song 1"
+                it[SongTable.albumId] = albumId1
+                it[filePath] = "path1"
+            }
+            SongTable.insert {
+                it[id] = UUID.randomUUID()
+                it[title] = "Song 2"
+                it[SongTable.albumId] = albumId2
+                it[filePath] = "path2"
+            }
+        }
+
+        val result = service.byOriginalUrls(listOf(url1, url2, url2alt))
+        
+        assertEquals(3, result.size)
+        assertEquals(albumId1, result[url1]?.id)
+        assertEquals(albumId2, result[url2]?.id)
+        assertEquals(albumId2, result[url2alt]?.id)
     }
 }

@@ -1,12 +1,9 @@
 package dev.dertyp.services
 
-import dev.dertyp.PlatformLocalDate
+import dev.dertyp.*
 import dev.dertyp.core.*
 import dev.dertyp.data.*
 import dev.dertyp.db.*
-import dev.dertyp.dbQuery
-import dev.dertyp.getDateFromISO
-import dev.dertyp.getISOFromDate
 import dev.dertyp.plugins.AlbumLibrary
 import dev.dertyp.services.ArtistService.Companion.mapArtist
 import dev.dertyp.services.metadata.CachedMusicBrainzService
@@ -14,6 +11,7 @@ import dev.dertyp.services.metadata.MusicBrainzCacheService
 import dev.dertyp.services.metadata.MusicBrainzService
 import dev.dertyp.utils.ColorUtils
 import dev.dertyp.utils.LogParam
+import dev.dertyp.utils.parsers.ParserFactory
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -36,6 +34,9 @@ class AlbumRpcService(private val user: User, private val albumService: AlbumSer
     override suspend fun byId(id: UUID): Album? = albumService.byId(id, user.id)
     override suspend fun byMusicBrainzId(mbId: UUID): List<Album> = albumService.byMusicBrainzId(mbId, user.id)
     override suspend fun byMusicBrainzIds(mbIds: List<UUID>): List<Album?> = albumService.byMusicBrainzIds(mbIds, user.id)
+    override suspend fun byOriginalIds(ids: Collection<PrefixedId>): List<Album> = albumService.byOriginalIds(ids)
+    override suspend fun byOriginalUrls(urls: Collection<String>): Map<String, Album?> = albumService.byOriginalUrls(urls)
+
     override suspend fun byIds(ids: List<UUID>): List<Album> = albumService.byIds(ids, user.id)
     override suspend fun versions(id: UUID): List<Album> = albumService.versions(id, user.id)
     override suspend fun byName(page: Int, pageSize: Int, name: String): PaginatedResponse<Album> =
@@ -454,6 +455,93 @@ class AlbumService : AlbumLibrary, Service() {
         return results
     }
 
+    suspend fun byOriginalIds(ids: Collection<PrefixedId>): List<Album> {
+        if (ids.isEmpty()) return emptyList()
+
+        val parsedLookups = ids.mapNotNull { id ->
+            val parser = ParserFactory.getParser(id)
+            val parsed = parser?.parse(id)
+            if (parser != null && parsed != null) {
+                parser.name to parsed.first
+            } else null
+        }
+
+        return queryAlbums(0, Int.MAX_VALUE) {
+            val albumIdsFromProviders = AlbumProviderTable
+                .select(AlbumProviderTable.albumId)
+                .where {
+                    (AlbumProviderTable.rawUrl inList ids) or
+                            (AlbumProviderTable.externalId inList ids) or
+                            (if (parsedLookups.isNotEmpty()) {
+                                parsedLookups.map { (p, eid) ->
+                                    (AlbumProviderTable.provider eq p) and (AlbumProviderTable.externalId eq eid)
+                                }.reduce { acc, op -> acc or op }
+                            } else Op.FALSE)
+                }
+                .map { it[AlbumProviderTable.albumId].value }
+
+            where {
+                (AlbumTable.originalId inList ids) or
+                        (AlbumTable.id inList albumIdsFromProviders)
+            }
+        }.data
+    }
+
+    suspend fun byOriginalUrls(urls: Collection<String>): Map<String, Album?> {
+        val results = mutableMapOf<String, Album?>()
+        if (urls.isEmpty()) return results
+
+        val parsedLookups = mutableListOf<Triple<String, String, String>>()
+        for (url in urls) {
+            val parser = ParserFactory.getParser(url)
+            val parsed = parser?.parse(url)
+            if (parser != null && parsed != null) {
+                parsedLookups.add(Triple(url, parser.name, parsed.first))
+            }
+        }
+
+        val albumProviders = dbQuery {
+            AlbumProviderTable
+                .select(AlbumProviderTable.albumId, AlbumProviderTable.provider, AlbumProviderTable.externalId, AlbumProviderTable.rawUrl)
+                .where {
+                    (AlbumProviderTable.rawUrl inList urls) or
+                            (if (parsedLookups.isNotEmpty()) {
+                                parsedLookups.map { (_, p, eid) ->
+                                    (AlbumProviderTable.provider eq p) and (AlbumProviderTable.externalId eq eid)
+                                }.reduce { acc, op -> acc or op }
+                            } else Op.FALSE)
+                }
+                .toList()
+        }
+
+        val albumIdsFromProviders = albumProviders.map { it[AlbumProviderTable.albumId].value }.distinct()
+
+        val allAlbums = queryAlbums(0, Int.MAX_VALUE) {
+            where {
+                (AlbumTable.originalId inList urls) or
+                        (AlbumTable.id inList albumIdsFromProviders)
+            }
+        }.data
+
+        for (url in urls) {
+            val parser = ParserFactory.getParser(url)
+            val parsed = parser?.parse(url)
+
+            results[url] = allAlbums.find { album ->
+                album.originalId == url ||
+                        albumProviders.any { row ->
+                            row[AlbumProviderTable.albumId].value == album.id &&
+                                    (row[AlbumProviderTable.rawUrl] == url ||
+                                            (parser != null && parsed != null &&
+                                                    row[AlbumProviderTable.provider] == parser.name &&
+                                                    row[AlbumProviderTable.externalId] == parsed.first))
+                        }
+            }
+        }
+
+        return results
+    }
+
     suspend fun byIds(@LogParam("size") ids: List<UUID>, userId: UUID? = null): List<Album> =
         queryAlbums(0, Int.MAX_VALUE, userId = userId) {
             where { AlbumTable.id inList ids }
@@ -800,11 +888,39 @@ class AlbumService : AlbumLibrary, Service() {
             artistService.getOrBulkCreate(allRequiredArtistNames)
         val imageMap: Map<String, UUID> = imageService.getCoverHashes(uniqueCoverHashed)
 
+        val parsedLookupsForMatching = mutableListOf<Triple<String, String, String>>()
+        for (id in uniqueOriginalIds.filterNotNull()) {
+            val parser = ParserFactory.getParser(id)
+            val parsed = parser?.parse(id)
+            if (parser != null && parsed != null) {
+                parsedLookupsForMatching.add(Triple(id, parser.name, parsed.first))
+            }
+        }
+
+        val albumIdsFromProviders = if (parsedLookupsForMatching.isNotEmpty() || uniqueOriginalIds.filterNotNull().isNotEmpty()) {
+            dbQuery {
+                AlbumProviderTable.select(AlbumProviderTable.albumId).where {
+                    (AlbumProviderTable.rawUrl inList uniqueOriginalIds.filterNotNull()) or
+                            (if (parsedLookupsForMatching.isNotEmpty()) {
+                                parsedLookupsForMatching.map { triple ->
+                                    val p = triple.second
+                                    val eid = triple.third
+                                    (AlbumProviderTable.provider eq p) and (AlbumProviderTable.externalId eq eid)
+                                }.reduce { acc, op -> acc or op }
+                            } else Op.FALSE)
+                }.map { it[AlbumProviderTable.albumId].value }
+            }
+        } else emptyList()
+
         val potentialAlbumRows = queryAlbums(0, Int.MAX_VALUE) {
             where { AlbumTable.name inList uniqueAlbumNames }
             andWhere { AlbumTable.releaseDate inList uniqueReleaseDates }
             andWhere { AlbumTable.songCount inList uniqueSongCounts }
-            andWhere { (AlbumTable.originalId inList uniqueOriginalIds) or (AlbumTable.originalId eq null) }
+            andWhere {
+                (AlbumTable.originalId inList uniqueOriginalIds) or
+                        (AlbumTable.originalId eq null) or
+                        (AlbumTable.id inList albumIdsFromProviders)
+            }
         }.data
 
         val potentialAlbumIds = potentialAlbumRows.map { it.id }.toSet()
@@ -816,13 +932,30 @@ class AlbumService : AlbumLibrary, Service() {
                 .toList()
         }
 
+        val providersByPotentialAlbumId = dbQuery {
+            AlbumProviderTable
+                .select(
+                    AlbumProviderTable.albumId,
+                    AlbumProviderTable.provider,
+                    AlbumProviderTable.externalId,
+                    AlbumProviderTable.rawUrl
+                )
+                .where { AlbumProviderTable.albumId inList potentialAlbumIds }
+                .toList()
+        }.groupBy { it[AlbumProviderTable.albumId].value }
+
         val artistsByPotentialAlbumId = albumArtistLinks
             .groupBy(
                 { it[AlbumArtistTable.albumId].value },
                 { it[AlbumArtistTable.artistId].value })
             .mapValues { (_, artistIds) -> artistIds.toSet() }
 
-        fun getIdentityKey(originalId: String?, name: String, artists: List<String>, releaseDate: PlatformLocalDate?): Any {
+        fun getIdentityKey(
+            originalId: String?,
+            name: String,
+            artists: List<String>,
+            releaseDate: PlatformLocalDate?
+        ): Any {
             return originalId ?: Triple(name, artists.sorted(), getISOFromDate(releaseDate))
         }
 
@@ -831,11 +964,19 @@ class AlbumService : AlbumLibrary, Service() {
         for (row in potentialAlbumRows) {
             val albumId = row.id
             val albumArtists = artistsByPotentialAlbumId[albumId] ?: emptySet()
+            val albumProviders = providersByPotentialAlbumId[albumId] ?: emptyList()
 
             val inputAlbum = uniqueAlbumMetadata.firstOrNull {
-                if (it.originalId != null && row.originalId != null) {
-                    it.originalId == row.originalId
-                } else if (it.originalId == null && row.originalId == null) {
+                if (it.originalId != null) {
+                    if (row.originalId == it.originalId) return@firstOrNull true
+                    val parser = ParserFactory.getParser(it.originalId!!)
+                    val parsed = parser?.parse(it.originalId!!)
+                    if (parser != null && parsed != null) {
+                        albumProviders.any { p ->
+                            p[AlbumProviderTable.provider] == parser.name && p[AlbumProviderTable.externalId] == parsed.first
+                        }
+                    } else albumProviders.any { p -> p[AlbumProviderTable.rawUrl] == it.originalId }
+                } else if (row.originalId == null) {
                     it.name == row.name &&
                             getISOFromDate(it.releaseDate) == getISOFromDate(row.releaseDate) &&
                             it.songCount == row.songCount
@@ -849,7 +990,12 @@ class AlbumService : AlbumLibrary, Service() {
                     inputAlbum.artists.flatMap { artistIdMap[it] ?: emptyList() }.toSet()
 
                 if (inputAlbum.originalId != null || albumArtists == requiredArtistIdsForInput) {
-                    finalMatchMap[getIdentityKey(row.originalId, row.name, inputAlbum.artists, row.releaseDate)] = albumId
+                    finalMatchMap[getIdentityKey(
+                        row.originalId,
+                        row.name,
+                        inputAlbum.artists,
+                        row.releaseDate
+                    )] = albumId
                 }
             }
         }
@@ -871,6 +1017,39 @@ class AlbumService : AlbumLibrary, Service() {
             }
         } else {
             emptyList()
+        }
+
+        if (newRows.isNotEmpty()) {
+            val providerEntries = mutableListOf<Pair<Triple<UUID, String, Pair<String, String>>, String>>()
+            for (row in newRows) {
+                val albumId = row[AlbumTable.id].value
+                val originalId = row[AlbumTable.originalId] ?: continue
+                val parser = ParserFactory.getParser(originalId)
+                val parsed = parser?.parse(originalId)
+                val provider = parser?.name ?: "unknown"
+                val externalId = parsed?.first
+                    ?: (if (originalId.contains(":")) originalId.substringAfter(":") else originalId)
+
+                providerEntries.add(
+                    Triple(
+                        albumId,
+                        provider,
+                        externalId to (parsed?.second?.value ?: dev.dertyp.services.import.Type.ALBUM.value)
+                    ) to originalId
+                )
+            }
+
+            if (providerEntries.isNotEmpty()) {
+                dbQuery {
+                    AlbumProviderTable.batchInsert(providerEntries) { (meta, originalId) ->
+                        this[AlbumProviderTable.albumId] = meta.first
+                        this[AlbumProviderTable.provider] = meta.second
+                        this[AlbumProviderTable.externalId] = meta.third.first
+                        this[AlbumProviderTable.type] = meta.third.second
+                        this[AlbumProviderTable.rawUrl] = originalId
+                    }
+                }
+            }
         }
 
         val newAlbumIdLookupMap = newRows.associate { row ->
@@ -965,6 +1144,29 @@ class AlbumService : AlbumLibrary, Service() {
             it[songCount] = album.songCount
             it[cover] = album.coverId?.let { coverId -> EntityID(coverId, ImageTable) }
             it[originalId] = album.originalId
+        }
+
+        if (album.originalId != null) {
+            val originalId = album.originalId!!
+            val parser = ParserFactory.getParser(originalId)
+            val parsed = parser?.parse(originalId)
+            val provider = parser?.name ?: "unknown"
+            val externalId =
+                parsed?.first ?: (if (originalId.contains(":")) originalId.substringAfter(":") else originalId)
+
+            dbQuery {
+                AlbumProviderTable.upsert(
+                    AlbumProviderTable.albumId,
+                    AlbumProviderTable.provider,
+                    AlbumProviderTable.externalId
+                ) {
+                    it[AlbumProviderTable.albumId] = album.id
+                    it[AlbumProviderTable.provider] = provider
+                    it[AlbumProviderTable.externalId] = externalId
+                    it[AlbumProviderTable.type] = parsed?.second?.value ?: dev.dertyp.services.import.Type.ALBUM.value
+                    it[AlbumProviderTable.rawUrl] = originalId
+                }
+            }
         }
 
         if (album.musicbrainzId != null) {

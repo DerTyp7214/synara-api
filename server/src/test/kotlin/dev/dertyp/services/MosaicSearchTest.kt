@@ -44,7 +44,7 @@ class MosaicSearchTest : KoinTest {
         SyncedLyricsTable, ImageMetadataTable, RecentReleaseTable,
         FollowedArtistTable, TranscodedSongTable, CustomMigrationTable,
         ScheduledTaskLogTable, ArtistSplitAliasTable, SyncServiceTable,
-        SongProviderTable,
+        SongProviderTable, AlbumProviderTable,
         *allMusicBrainzTables
     )
 

@@ -87,6 +87,7 @@ class SongServiceTest : KoinTest {
                 SongGenreTable,
                 AlbumGenreTable,
                 SongProviderTable,
+                AlbumProviderTable,
                 *allMusicBrainzTables
             )
             

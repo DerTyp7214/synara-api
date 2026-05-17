@@ -1143,6 +1143,8 @@ Manages albums and their metadata.
 | `byMusicBrainzId` | `mbId` (`PlatformUUID`): The MusicBrainz release (or release-group) UUID. | `List`<[Album](#devdertypdataalbum)> | - |  | Get album by MusicBrainz ID. |
 | `byMusicBrainzIds` | `mbIds` (`List`<`PlatformUUID`>): Collection of MusicBrainz release (or release-group) UUIDs. | `List`<[Album](#devdertypdataalbum)?> | - |  | Get multiple albums by their MusicBrainz IDs. |
 | `byIds` | `ids` (`List`<`PlatformUUID`>): Collection of album IDs. | `List`<[Album](#devdertypdataalbum)> | - |  | Get multiple albums by their IDs. |
+| `byOriginalIds` | `ids` (`Collection`<`PrefixedId`>): Collection of original platform-specific album identifiers. | `List`<[Album](#devdertypdataalbum)> | - |  | Find albums by their original platform-specific unique identifiers. |
+| `byOriginalUrls` | `urls` (`Collection`<`String`>): Collection of original platform URLs. | `Map`<`String`, [Album](#devdertypdataalbum)?> | - |  | Find albums by their original platform URLs, returning a mapping. |
 | `versions` | `id` (`PlatformUUID`): The album unique identifier. | `List`<[Album](#devdertypdataalbum)> | - |  | List different versions of an album. |
 | `byName` | `page` (`Int`): Page index (starting from 0).<br>`pageSize` (`Int`): Number of items per page.<br>`name` (`String`): The album name to search for. | [PaginatedResponse](#devdertypdatapaginatedresponse)<[Album](#devdertypdataalbum)> | - |  | Search albums by name. |
 | `rankedSearch` | `page` (`Int`): Page index.<br>`pageSize` (`Int`): Number of items per page.<br>`query` (`String`): The search query. | [PaginatedResponse](#devdertypdatapaginatedresponse)<[Album](#devdertypdataalbum)> | - |  | Ranked album search. |
