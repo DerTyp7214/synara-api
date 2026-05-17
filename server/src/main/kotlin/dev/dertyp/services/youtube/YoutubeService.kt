@@ -67,7 +67,7 @@ open class YoutubeService(
         return ParserFactory.getParserForProvider("youtube")?.canHandle(url) ?: false
     }
 
-    override suspend fun parseUrl(url: String): Pair<String, Type>? {
+    override suspend fun parseUrl(url: String): Pair<String, Type?>? {
         return ParserFactory.getParserForProvider("youtube")?.parse(url)
     }
 

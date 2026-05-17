@@ -1,9 +1,10 @@
 package dev.dertyp.services.import
 
-import dev.dertyp.*
+import dev.dertyp.PrefixedId
 import dev.dertyp.core.*
 import dev.dertyp.data.User
 import dev.dertyp.data.UserSong
+import dev.dertyp.getPrefix
 import dev.dertyp.killAll
 import dev.dertyp.plugins.IImporter
 import dev.dertyp.plugins.IPluginImportService
@@ -11,6 +12,7 @@ import dev.dertyp.plugins.PluginManager
 import dev.dertyp.services.*
 import dev.dertyp.services.metadata.IMetadataService
 import dev.dertyp.services.sync.SyncService
+import dev.dertyp.stripPrefix
 import dev.dertyp.utils.LogParam
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.ApplicationEnvironment
@@ -110,7 +112,7 @@ class ImportRpcService(
                     )
                 }
 
-                parsed.mapNotNull { it.second }.groupBy { it.second }.forEach { (type, resultPairs) ->
+                parsed.mapNotNull { it.second }.groupBy { it.second ?: Type.SONG }.forEach { (type, resultPairs) ->
                     val ids = resultPairs.map { it.first }
                     importService.logger.info("Routing ${ids.size} items of type $type to ${importer.id}")
                     importService.importIds(ids.asFlow(), type, user, importer.id)

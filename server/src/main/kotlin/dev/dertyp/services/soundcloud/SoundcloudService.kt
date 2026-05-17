@@ -66,7 +66,7 @@ class SoundcloudService(
         return ParserFactory.getParserForProvider("soundcloud")?.canHandle(url) ?: false
     }
 
-    override suspend fun parseUrl(url: String): Pair<String, Type>? {
+    override suspend fun parseUrl(url: String): Pair<String, Type?>? {
         return ParserFactory.getParserForProvider("soundcloud")?.parse(url)
     }
 

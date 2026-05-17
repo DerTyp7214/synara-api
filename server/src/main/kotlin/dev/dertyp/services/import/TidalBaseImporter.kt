@@ -379,7 +379,7 @@ abstract class TidalBaseImporter(
         return regex.find(log)?.value
     }
 
-    override suspend fun parseUrl(url: String): Pair<String, Type>? {
+    override suspend fun parseUrl(url: String): Pair<String, Type?>? {
         return ParserFactory.getParserForProvider("tidal")?.parse(url)
     }
 

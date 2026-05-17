@@ -6,6 +6,7 @@ import dev.dertyp.data.*
 import dev.dertyp.db.*
 import dev.dertyp.plugins.AlbumLibrary
 import dev.dertyp.services.ArtistService.Companion.mapArtist
+import dev.dertyp.services.import.Type
 import dev.dertyp.services.metadata.CachedMusicBrainzService
 import dev.dertyp.services.metadata.MusicBrainzCacheService
 import dev.dertyp.services.metadata.MusicBrainzService
@@ -485,7 +486,8 @@ class AlbumService : AlbumLibrary, Service() {
         val parsedLookups = ids.mapNotNull { id ->
             val parser = ParserFactory.getParser(id)
             val parsed = parser?.parse(id)
-            if (parser != null && parsed != null) {
+            val validType = parsed?.second == Type.ALBUM || parsed?.second == null
+            if (parser != null && parsed != null && validType) {
                 parser.name to parsed.first
             } else null
         }
@@ -494,13 +496,15 @@ class AlbumService : AlbumLibrary, Service() {
             val albumIdsFromProviders = AlbumProviderTable
                 .select(AlbumProviderTable.albumId)
                 .where {
-                    (AlbumProviderTable.rawUrl inList ids) or
-                            (AlbumProviderTable.externalId inList ids) or
-                            (if (parsedLookups.isNotEmpty()) {
-                                parsedLookups.map { (p, eid) ->
-                                    (AlbumProviderTable.provider eq p) and (AlbumProviderTable.externalId eq eid)
-                                }.reduce { acc, op -> acc or op }
-                            } else Op.FALSE)
+                    (AlbumProviderTable.type eq Type.ALBUM.value) and (
+                        (AlbumProviderTable.rawUrl inList ids) or
+                                (AlbumProviderTable.externalId inList ids) or
+                                (if (parsedLookups.isNotEmpty()) {
+                                    parsedLookups.map { (p, eid) ->
+                                        (AlbumProviderTable.provider eq p) and (AlbumProviderTable.externalId eq eid)
+                                    }.reduce { acc, op -> acc or op }
+                                } else Op.FALSE)
+                        )
                 }
                 .map { it[AlbumProviderTable.albumId].value }
 
@@ -519,7 +523,8 @@ class AlbumService : AlbumLibrary, Service() {
         for (url in urls) {
             val parser = ParserFactory.getParser(url)
             val parsed = parser?.parse(url)
-            if (parser != null && parsed != null) {
+            val validType = parsed?.second == Type.ALBUM || parsed?.second == null
+            if (parser != null && parsed != null && validType) {
                 parsedLookups.add(Triple(url, parser.name, parsed.first))
             }
         }
@@ -528,12 +533,14 @@ class AlbumService : AlbumLibrary, Service() {
             AlbumProviderTable
                 .select(AlbumProviderTable.albumId, AlbumProviderTable.provider, AlbumProviderTable.externalId, AlbumProviderTable.rawUrl)
                 .where {
-                    (AlbumProviderTable.rawUrl inList urls) or
-                            (if (parsedLookups.isNotEmpty()) {
-                                parsedLookups.map { (_, p, eid) ->
-                                    (AlbumProviderTable.provider eq p) and (AlbumProviderTable.externalId eq eid)
-                                }.reduce { acc, op -> acc or op }
-                            } else Op.FALSE)
+                    (AlbumProviderTable.type eq Type.ALBUM.value) and (
+                        (AlbumProviderTable.rawUrl inList urls) or
+                                (if (parsedLookups.isNotEmpty()) {
+                                    parsedLookups.map { (_, p, eid) ->
+                                        (AlbumProviderTable.provider eq p) and (AlbumProviderTable.externalId eq eid)
+                                    }.reduce { acc, op -> acc or op }
+                                } else Op.FALSE)
+                        )
                 }
                 .toList()
         }
@@ -556,7 +563,7 @@ class AlbumService : AlbumLibrary, Service() {
                         albumProviders.any { row ->
                             row[AlbumProviderTable.albumId].value == album.id &&
                                     (row[AlbumProviderTable.rawUrl] == url ||
-                                            (parser != null && parsed != null &&
+                                            (parser != null && parsed != null && (parsed.second == null || parsed.second == Type.ALBUM) &&
                                                     row[AlbumProviderTable.provider] == parser.name &&
                                                     row[AlbumProviderTable.externalId] == parsed.first))
                         }
@@ -1058,7 +1065,7 @@ class AlbumService : AlbumLibrary, Service() {
                     Triple(
                         albumId,
                         provider,
-                        externalId to (parsed?.second?.value ?: dev.dertyp.services.import.Type.ALBUM.value)
+                        externalId to (parsed?.second?.value ?: Type.ALBUM.value)
                     ) to originalId
                 )
             }
@@ -1187,7 +1194,7 @@ class AlbumService : AlbumLibrary, Service() {
                     it[AlbumProviderTable.albumId] = album.id
                     it[AlbumProviderTable.provider] = provider
                     it[AlbumProviderTable.externalId] = externalId
-                    it[AlbumProviderTable.type] = parsed?.second?.value ?: dev.dertyp.services.import.Type.ALBUM.value
+                    it[AlbumProviderTable.type] = parsed?.second?.value ?: Type.ALBUM.value
                     it[AlbumProviderTable.rawUrl] = originalId
                 }
             }

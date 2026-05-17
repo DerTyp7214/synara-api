@@ -26,7 +26,7 @@ interface IImporter {
     val metadataType: IMetadataService.MetadataType? get() = null
 
     fun canHandle(url: String): Boolean
-    suspend fun parseUrl(url: String): Pair<String, Type>? = null
+    suspend fun parseUrl(url: String): Pair<String, Type?>? = null
 
     suspend fun getWrapper(
         type: Type,

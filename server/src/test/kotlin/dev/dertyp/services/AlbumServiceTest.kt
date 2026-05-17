@@ -4,6 +4,7 @@ import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
 import dev.dertyp.data.*
 import dev.dertyp.db.*
+import dev.dertyp.services.import.Type
 import dev.dertyp.services.metadata.CachedMusicBrainzService
 import dev.dertyp.services.metadata.MusicBrainzCacheService
 import dev.dertyp.services.metadata.MusicBrainzService
@@ -1131,6 +1132,7 @@ class AlbumServiceTest : KoinTest {
                 it[AlbumProviderTable.albumId] = albumId2
                 it[provider] = "tidal"
                 it[externalId] = "ext2"
+                it[type] = Type.ALBUM.value
                 it[rawUrl] = "https://tidal.com/album/ext2"
             }
             SongTable.insert {
@@ -1192,6 +1194,7 @@ class AlbumServiceTest : KoinTest {
                 it[AlbumProviderTable.albumId] = albumId2
                 it[provider] = "tidal"
                 it[externalId] = "2"
+                it[type] = Type.ALBUM.value
                 it[rawUrl] = url2
             }
             SongTable.insert {

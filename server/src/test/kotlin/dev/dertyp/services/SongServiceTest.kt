@@ -4,6 +4,7 @@ import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
 import dev.dertyp.data.*
 import dev.dertyp.db.*
+import dev.dertyp.services.import.Type
 import dev.dertyp.services.metadata.CachedMusicBrainzService
 import dev.dertyp.services.metadata.MusicBrainzCacheService
 import dev.dertyp.services.metadata.MusicBrainzService
@@ -1445,6 +1446,7 @@ class SongServiceTest : KoinTest {
                 it[SongProviderTable.songId] = songId2
                 it[provider] = "youtube"
                 it[externalId] = "2"
+                it[type] = Type.SONG.value
                 it[rawUrl] = url2
             }
         }
@@ -1510,6 +1512,7 @@ class SongServiceTest : KoinTest {
                 it[this.songId] = songId
                 it[provider] = "spotify"
                 it[externalId] = "123"
+                it[type] = Type.SONG.value
                 it[rawUrl] = "https://open.spotify.com/track/123"
                 it[addedAt] = 2000L
             }

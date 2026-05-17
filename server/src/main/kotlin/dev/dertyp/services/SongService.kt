@@ -9,6 +9,7 @@ import dev.dertyp.routing.RestFileProvider
 import dev.dertyp.services.AlbumService.Companion.calculateAlbumStats
 import dev.dertyp.services.AlbumService.Companion.mapAlbum
 import dev.dertyp.services.ArtistService.Companion.mapArtist
+import dev.dertyp.services.import.Type
 import dev.dertyp.services.metadata.CachedMusicBrainzService
 import dev.dertyp.services.metadata.IMetadataService
 import dev.dertyp.services.metadata.MusicBrainzCacheService
@@ -757,7 +758,8 @@ class SongService : SongLibrary, Service() {
             val parsedLookups = idChunk.mapNotNull { id ->
                 val parser = ParserFactory.getParser(id)
                 val parsed = parser?.parse(id)
-                if (parser != null && parsed != null) {
+                val validType = parsed?.second == Type.SONG || parsed?.second == null
+                if (parser != null && parsed != null && validType) {
                     parser.name to parsed.first
                 } else null
             }
@@ -766,18 +768,20 @@ class SongService : SongLibrary, Service() {
                 val songIdsFromProviders = SongProviderTable
                     .select(SongProviderTable.songId)
                     .where {
-                        (SongProviderTable.rawUrl inList ids) or
-                                (SongProviderTable.externalId inList ids) or
-                                (if (parsedLookups.isNotEmpty()) {
-                                    parsedLookups.map { (p, eid) ->
-                                        (SongProviderTable.provider eq p) and (SongProviderTable.externalId eq eid)
-                                    }.reduce { acc, op -> acc or op }
-                                } else Op.FALSE)
+                        (SongProviderTable.type eq Type.SONG.value) and (
+                            (SongProviderTable.rawUrl inList idChunk) or
+                                    (SongProviderTable.externalId inList idChunk) or
+                                    (if (parsedLookups.isNotEmpty()) {
+                                        parsedLookups.map { (p, eid) ->
+                                            (SongProviderTable.provider eq p) and (SongProviderTable.externalId eq eid)
+                                        }.reduce { acc, op -> acc or op }
+                                    } else Op.FALSE)
+                            )
                     }
                     .map { it[SongProviderTable.songId].value }
 
                 where {
-                    SongTable.originalUrl inList ids
+                    SongTable.originalUrl inList idChunk
                 }
                 orWhere {
                     SongTable.id inList songIdsFromProviders
@@ -793,7 +797,8 @@ class SongService : SongLibrary, Service() {
         for (url in urls) {
             val parser = ParserFactory.getParser(url)
             val parsed = parser?.parse(url)
-            if (parser != null && parsed != null) {
+            val validType = parsed?.second == Type.SONG || parsed?.second == null
+            if (parser != null && parsed != null && validType) {
                 parsedLookups.add(Triple(url, parser.name, parsed.first))
             }
         }
@@ -802,12 +807,14 @@ class SongService : SongLibrary, Service() {
             val songIdsFromProviders = SongProviderTable
                 .select(SongProviderTable.songId)
                 .where {
-                    (SongProviderTable.rawUrl inList urls) or
-                            (if (parsedLookups.isNotEmpty()) {
-                                parsedLookups.map { (_, p, eid) ->
-                                    (SongProviderTable.provider eq p) and (SongProviderTable.externalId eq eid)
-                                }.reduce { acc, op -> acc or op }
-                            } else Op.FALSE)
+                    (SongProviderTable.type eq Type.SONG.value) and (
+                        (SongProviderTable.rawUrl inList urls) or
+                                (if (parsedLookups.isNotEmpty()) {
+                                    parsedLookups.map { (_, p, eid) ->
+                                        (SongProviderTable.provider eq p) and (SongProviderTable.externalId eq eid)
+                                    }.reduce { acc, op -> acc or op }
+                                } else Op.FALSE)
+                        )
                 }
                 .map { it[SongProviderTable.songId].value }
 
@@ -821,12 +828,14 @@ class SongService : SongLibrary, Service() {
             SongProviderTable
                 .select(SongProviderTable.songId, SongProviderTable.rawUrl, SongProviderTable.provider, SongProviderTable.externalId)
                 .where {
-                    (SongProviderTable.rawUrl inList urls) or
-                            (if (parsedLookups.isNotEmpty()) {
-                                parsedLookups.map { (_, p, eid) ->
-                                    (SongProviderTable.provider eq p) and (SongProviderTable.externalId eq eid)
-                                }.reduce { acc, op -> acc or op }
-                            } else Op.FALSE)
+                    (SongProviderTable.type eq Type.SONG.value) and (
+                        (SongProviderTable.rawUrl inList urls) or
+                                (if (parsedLookups.isNotEmpty()) {
+                                    parsedLookups.map { (_, p, eid) ->
+                                        (SongProviderTable.provider eq p) and (SongProviderTable.externalId eq eid)
+                                    }.reduce { acc, op -> acc or op }
+                                } else Op.FALSE)
+                        )
                 }
                 .map { row ->
                     row[SongProviderTable.songId].value to Triple(
