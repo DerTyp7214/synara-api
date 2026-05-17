@@ -7,7 +7,23 @@ object ParserFactory {
         TidalParser(),
         SpotifyParser(),
         MusicBrainzParser(),
-        ListenBrainzParser()
+        ListenBrainzParser(),
+        AmazonParser(),
+        AppleMusicParser(),
+        DeezerParser(),
+        YandexParser(),
+        PandoraParser(),
+        BeatportParser(),
+        BoomplayParser(),
+        DiscogsParser(),
+        RateYourMusicParser(),
+        WikidataParser(),
+        MoraParser(),
+        NapsterParser(),
+        QobuzParser(),
+        AnghamiParser(),
+        LiveMixtapesParser(),
+        MusikSammlerParser()
     )
 
     fun getParser(url: String): UrlParser? {

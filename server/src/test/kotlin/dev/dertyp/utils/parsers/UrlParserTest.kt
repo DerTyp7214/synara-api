@@ -87,6 +87,22 @@ class UrlParserTest {
         assertTrue(ParserFactory.getParser("spotify:123") is SpotifyParser)
         assertTrue(ParserFactory.getParser("musicbrainz:123") is MusicBrainzParser)
         assertTrue(ParserFactory.getParser("listenbrainz:123") is ListenBrainzParser)
+        assertTrue(ParserFactory.getParser("amazon:123") is AmazonParser)
+        assertTrue(ParserFactory.getParser("apple:123") is AppleMusicParser)
+        assertTrue(ParserFactory.getParser("deezer:123") is DeezerParser)
+        assertTrue(ParserFactory.getParser("yandex:123") is YandexParser)
+        assertTrue(ParserFactory.getParser("pandora:123") is PandoraParser)
+        assertTrue(ParserFactory.getParser("beatport:123") is BeatportParser)
+        assertTrue(ParserFactory.getParser("boomplay:123") is BoomplayParser)
+        assertTrue(ParserFactory.getParser("discogs:123") is DiscogsParser)
+        assertTrue(ParserFactory.getParser("rateyourmusic:123") is RateYourMusicParser)
+        assertTrue(ParserFactory.getParser("wikidata:123") is WikidataParser)
+        assertTrue(ParserFactory.getParser("mora:123") is MoraParser)
+        assertTrue(ParserFactory.getParser("napster:123") is NapsterParser)
+        assertTrue(ParserFactory.getParser("qobuz:123") is QobuzParser)
+        assertTrue(ParserFactory.getParser("anghami:123") is AnghamiParser)
+        assertTrue(ParserFactory.getParser("livemixtapes:123") is LiveMixtapesParser)
+        assertTrue(ParserFactory.getParser("musiksammler:123") is MusikSammlerParser)
     }
 
     @Test
@@ -137,12 +153,28 @@ class UrlParserTest {
 
     @Test
     fun `ParserFactory should return correct parser`() {
-        assertNotNull(ParserFactory.getParser("https://www.youtube.com/watch?v=123"))
-        assertNotNull(ParserFactory.getParser("https://soundcloud.com/artist/song"))
-        assertNotNull(ParserFactory.getParser("https://tidal.com/track/123"))
-        assertNotNull(ParserFactory.getParser("https://open.spotify.com/track/123"))
-        assertNotNull(ParserFactory.getParser("https://musicbrainz.org/artist/123"))
-        assertNotNull(ParserFactory.getParser("https://listenbrainz.org/artist/123"))
+        assertTrue(ParserFactory.getParser("https://www.youtube.com/watch?v=123") is YoutubeParser)
+        assertTrue(ParserFactory.getParser("https://soundcloud.com/artist/song") is SoundcloudParser)
+        assertTrue(ParserFactory.getParser("https://tidal.com/track/123") is TidalParser)
+        assertTrue(ParserFactory.getParser("https://open.spotify.com/track/123") is SpotifyParser)
+        assertTrue(ParserFactory.getParser("https://musicbrainz.org/artist/123") is MusicBrainzParser)
+        assertTrue(ParserFactory.getParser("https://listenbrainz.org/artist/123") is ListenBrainzParser)
+        assertTrue(ParserFactory.getParser("https://www.amazon.de/dp/B01M4OCFDH") is AmazonParser)
+        assertTrue(ParserFactory.getParser("https://music.apple.com/us/album/evermore/1544268285") is AppleMusicParser)
+        assertTrue(ParserFactory.getParser("https://www.deezer.com/album/610328042") is DeezerParser)
+        assertTrue(ParserFactory.getParser("https://music.yandex.ru/album/3882209") is YandexParser)
+        assertTrue(ParserFactory.getParser("https://www.pandora.com/AL:11435696") is PandoraParser)
+        assertTrue(ParserFactory.getParser("https://www.beatport.com/release/slug/1702043") is BeatportParser)
+        assertTrue(ParserFactory.getParser("https://www.boomplay.com/albums/8411102") is BoomplayParser)
+        assertTrue(ParserFactory.getParser("https://www.discogs.com/release/7049051") is DiscogsParser)
+        assertTrue(ParserFactory.getParser("https://rateyourmusic.com/release/album/artist/title/") is RateYourMusicParser)
+        assertTrue(ParserFactory.getParser("https://www.wikidata.org/wiki/Q127446878") is WikidataParser)
+        assertTrue(ParserFactory.getParser("https://mora.jp/package/43000006/00602465618013/") is MoraParser)
+        assertTrue(ParserFactory.getParser("https://play.napster.com/album/alb.595142205") is NapsterParser)
+        assertTrue(ParserFactory.getParser("https://www.qobuz.com/album/slug/id") is QobuzParser)
+        assertTrue(ParserFactory.getParser("https://play.anghami.com/album/4129825") is AnghamiParser)
+        assertTrue(ParserFactory.getParser("https://www.livemixtapes.com/mixtapes/15113/slug.html") is LiveMixtapesParser)
+        assertTrue(ParserFactory.getParser("https://www.musik-sammler.de/album/568467/") is MusikSammlerParser)
         
         assertNull(ParserFactory.getParser("https://example.com"))
     }
@@ -155,6 +187,22 @@ class UrlParserTest {
         assertTrue(ParserFactory.getParserForProvider("Spotify") is SpotifyParser)
         assertTrue(ParserFactory.getParserForProvider("MusicBrainz") is MusicBrainzParser)
         assertTrue(ParserFactory.getParserForProvider("ListenBrainz") is ListenBrainzParser)
+        assertTrue(ParserFactory.getParserForProvider("amazon") is AmazonParser)
+        assertTrue(ParserFactory.getParserForProvider("apple") is AppleMusicParser)
+        assertTrue(ParserFactory.getParserForProvider("deezer") is DeezerParser)
+        assertTrue(ParserFactory.getParserForProvider("yandex") is YandexParser)
+        assertTrue(ParserFactory.getParserForProvider("pandora") is PandoraParser)
+        assertTrue(ParserFactory.getParserForProvider("beatport") is BeatportParser)
+        assertTrue(ParserFactory.getParserForProvider("boomplay") is BoomplayParser)
+        assertTrue(ParserFactory.getParserForProvider("discogs") is DiscogsParser)
+        assertTrue(ParserFactory.getParserForProvider("rateyourmusic") is RateYourMusicParser)
+        assertTrue(ParserFactory.getParserForProvider("wikidata") is WikidataParser)
+        assertTrue(ParserFactory.getParserForProvider("mora") is MoraParser)
+        assertTrue(ParserFactory.getParserForProvider("napster") is NapsterParser)
+        assertTrue(ParserFactory.getParserForProvider("qobuz") is QobuzParser)
+        assertTrue(ParserFactory.getParserForProvider("anghami") is AnghamiParser)
+        assertTrue(ParserFactory.getParserForProvider("livemixtapes") is LiveMixtapesParser)
+        assertTrue(ParserFactory.getParserForProvider("musiksammler") is MusikSammlerParser)
         
         assertNull(ParserFactory.getParserForProvider("unknown"))
     }
@@ -176,5 +224,170 @@ class UrlParserTest {
         assertNotNull(result)
         assertEquals("a/b/c/d/e", result?.first)
         assertEquals(Type.SONG, result?.second)
+    }
+
+    @Test
+    fun `AmazonParser should parse various Amazon URLs`() = runBlocking {
+        val parser = AmazonParser()
+
+        assertEquals("B01M4OCFDH" to Type.ALBUM, parser.parse("https://www.amazon.de/gp/product/B01M4OCFDH"))
+        assertEquals("B07HRCQCNB" to Type.ALBUM, parser.parse("https://amazon.com/dp/B07HRCQCNB"))
+        assertEquals("B009YARQU4" to Type.ALBUM, parser.parse("https://music.amazon.com/albums/B009YARQU4"))
+        assertEquals("B0064UPUDC" to Type.SONG, parser.parse("https://music.amazon.com/albums/B0064UPU4G?trackAsin=B0064UPUDC"))
+
+        assertNull(parser.parse("https://example.com/dp/B01M4OCFDH"))
+    }
+
+    @Test
+    fun `AppleMusicParser should parse various Apple Music URLs`() = runBlocking {
+        val parser = AppleMusicParser()
+
+        assertEquals("1544268285" to Type.ALBUM, parser.parse("https://music.apple.com/us/album/evermore/1544268285"))
+        assertEquals("1544268286" to Type.SONG, parser.parse("https://music.apple.com/us/album/evermore/1544268285?i=1544268286"))
+        assertEquals("1544520973" to Type.VIDEO, parser.parse("https://music.apple.com/us/music-video/willow/1544520973"))
+        assertEquals("571919008" to Type.ALBUM, parser.parse("https://itunes.apple.com/de/album/id571919008"))
+        assertEquals("571919008" to Type.ALBUM, parser.parse("https://geo.music.apple.com/us/album/_/571919008?mt=1"))
+
+        assertNull(parser.parse("https://example.com/us/album/1544268285"))
+    }
+
+    @Test
+    fun `DeezerParser should parse various Deezer URLs`() = runBlocking {
+        val parser = DeezerParser()
+
+        assertEquals("610328042" to Type.ALBUM, parser.parse("https://www.deezer.com/album/610328042"))
+        assertEquals("242075822" to Type.ALBUM, parser.parse("https://www.deezer.com/album/242075822"))
+        assertEquals("3135556" to Type.SONG, parser.parse("https://deezer.com/track/3135556"))
+
+        assertNull(parser.parse("https://example.com/album/610328042"))
+    }
+
+    @Test
+    fun `YandexParser should parse various Yandex URLs`() = runBlocking {
+        val parser = YandexParser()
+
+        assertEquals("3882209" to Type.ALBUM, parser.parse("https://music.yandex.ru/album/3882209"))
+        assertEquals("62579582" to Type.SONG, parser.parse("https://music.yandex.ru/album/9881481/track/62579582"))
+
+        assertNull(parser.parse("https://example.com/album/3882209"))
+    }
+
+    @Test
+    fun `PandoraParser should parse various Pandora URLs`() = runBlocking {
+        val parser = PandoraParser()
+
+        assertEquals("AL:11435696" to Type.ALBUM, parser.parse("https://www.pandora.com/AL:11435696"))
+        assertEquals("TR:11423273" to Type.SONG, parser.parse("https://pandora.com/track/name/TR:11423273"))
+
+        assertNull(parser.parse("https://example.com/AL:11435696"))
+    }
+
+    @Test
+    fun `BeatportParser should parse various Beatport URLs`() = runBlocking {
+        val parser = BeatportParser()
+
+        assertEquals("1702043" to Type.ALBUM, parser.parse("https://www.beatport.com/release/senses-overload-the-remixes/1702043"))
+        assertEquals("23011269" to Type.SONG, parser.parse("https://www.beatport.com/track/greece-2000/23011269"))
+
+        assertNull(parser.parse("https://example.com/release/1702043"))
+    }
+
+    @Test
+    fun `BoomplayParser should parse various Boomplay URLs`() = runBlocking {
+        val parser = BoomplayParser()
+
+        assertEquals("8411102" to Type.ALBUM, parser.parse("https://www.boomplay.com/albums/8411102"))
+        assertEquals("74767514" to Type.SONG, parser.parse("https://www.boomplay.com/songs/74767514"))
+        assertEquals("40002743" to Type.ALBUM, parser.parse("https://www.boomplay.com/share/album/40002743"))
+
+        assertNull(parser.parse("https://example.com/albums/8411102"))
+    }
+
+    @Test
+    fun `DiscogsParser should parse various Discogs URLs`() = runBlocking {
+        val parser = DiscogsParser()
+
+        assertEquals("7049051" to Type.ALBUM, parser.parse("https://www.discogs.com/release/7049051"))
+        assertEquals("26647" to Type.ALBUM, parser.parse("https://www.discogs.com/master/26647-Daft-Punk-Discovery"))
+
+        assertNull(parser.parse("https://example.com/release/7049051"))
+    }
+
+    @Test
+    fun `RateYourMusicParser should parse various RYM URLs`() = runBlocking {
+        val parser = RateYourMusicParser()
+
+        assertEquals("album/achtvier-bonez-mc/zwei-assis-trumpfen-aus" to Type.ALBUM, parser.parse("https://rateyourmusic.com/release/album/achtvier-bonez-mc/zwei-assis-trumpfen-aus/"))
+        assertEquals("single/artist/title" to Type.ALBUM, parser.parse("https://rateyourmusic.com/release/single/artist/title/"))
+
+        assertNull(parser.parse("https://example.com/release/album/artist/title"))
+    }
+
+    @Test
+    fun `WikidataParser should parse various Wikidata URLs`() = runBlocking {
+        val parser = WikidataParser()
+
+        assertEquals("Q127446878" to Type.ALBUM, parser.parse("https://www.wikidata.org/wiki/Q127446878"))
+
+        assertNull(parser.parse("https://example.com/wiki/Q127446878"))
+    }
+
+    @Test
+    fun `MoraParser should parse various Mora URLs`() = runBlocking {
+        val parser = MoraParser()
+
+        assertEquals("00602465618013" to Type.ALBUM, parser.parse("https://mora.jp/package/43000006/00602465618013/"))
+        assertEquals("00602465617924" to Type.SONG, parser.parse("https://mora.jp/track/43000006/00602465617924/1/"))
+
+        assertNull(parser.parse("https://example.com/package/123/456"))
+    }
+
+    @Test
+    fun `NapsterParser should parse various Napster URLs`() = runBlocking {
+        val parser = NapsterParser()
+
+        assertEquals("alb.595142205" to Type.ALBUM, parser.parse("https://play.napster.com/album/alb.595142205"))
+        assertEquals("tra.123" to Type.SONG, parser.parse("https://web.napster.com/track/tra.123"))
+
+        assertNull(parser.parse("https://example.com/album/alb.123"))
+    }
+
+    @Test
+    fun `QobuzParser should parse various Qobuz URLs`() = runBlocking {
+        val parser = QobuzParser()
+
+        assertEquals("yxz0pt2qy7jhb" to Type.ALBUM, parser.parse("https://www.qobuz.com/de-de/album/vulcano-ep-bonez-mc-raf-camora/yxz0pt2qy7jhb"))
+        assertEquals("12345" to Type.SONG, parser.parse("https://open.qobuz.com/track/12345"))
+
+        assertNull(parser.parse("https://example.com/album/123"))
+    }
+
+    @Test
+    fun `AnghamiParser should parse various Anghami URLs`() = runBlocking {
+        val parser = AnghamiParser()
+
+        assertEquals("4129825" to Type.ALBUM, parser.parse("https://play.anghami.com/album/4129825?refer=linktree"))
+        assertEquals("1267509588" to Type.SONG, parser.parse("https://play.anghami.com/song/1267509588"))
+
+        assertNull(parser.parse("https://example.com/album/123"))
+    }
+
+    @Test
+    fun `LiveMixtapesParser should parse various LiveMixtapes URLs`() = runBlocking {
+        val parser = LiveMixtapesParser()
+
+        assertEquals("15113" to Type.ALBUM, parser.parse("https://www.livemixtapes.com/mixtapes/15113/stuey_rock_future_fdu_free_bandz_reloaded.html"))
+        assertEquals("123" to Type.ALBUM, parser.parse("https://www.livemixtapes.com/download/123/slug.html"))
+
+        assertNull(parser.parse("https://example.com/mixtapes/123/slug"))
+    }
+
+    @Test
+    fun `MusikSammlerParser should parse various MusikSammler URLs`() = runBlocking {
+        val parser = MusikSammlerParser()
+
+        assertEquals("568467" to Type.ALBUM, parser.parse("https://www.musik-sammler.de/album/568467/"))
+
+        assertNull(parser.parse("https://example.com/album/123"))
     }
 }
