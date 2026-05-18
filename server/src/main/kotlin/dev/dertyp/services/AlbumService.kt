@@ -444,7 +444,14 @@ class AlbumService : AlbumLibrary, Service() {
         val seedUrls = dbQuery {
             AlbumProviderTable.selectAll()
                 .where { AlbumProviderTable.albumId eq id }
-                .mapNotNull { it[AlbumProviderTable.rawUrl] }
+                .mapNotNull { row ->
+                    val provider = row[AlbumProviderTable.provider]
+                    val externalId = row[AlbumProviderTable.externalId]
+                    val typeValue = row[AlbumProviderTable.type]
+                    val type = typeValue?.let { Type.fromValue(it) } ?: Type.ALBUM
+
+                    ParserFactory.toUrl(provider, externalId, type) ?: row[AlbumProviderTable.rawUrl]
+                }
         }.toMutableSet()
         
         seedUrls.addAll(urls)

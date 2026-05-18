@@ -891,7 +891,14 @@ class SongService : SongLibrary, Service() {
         val seedUrls = dbQuery {
             SongProviderTable.selectAll()
                 .where { SongProviderTable.songId eq id }
-                .mapNotNull { it[SongProviderTable.rawUrl] }
+                .mapNotNull { row ->
+                    val provider = row[SongProviderTable.provider]
+                    val externalId = row[SongProviderTable.externalId]
+                    val typeValue = row[SongProviderTable.type]
+                    val type = typeValue?.let { Type.fromValue(it) } ?: Type.SONG
+
+                    ParserFactory.toUrl(provider, externalId, type) ?: row[SongProviderTable.rawUrl]
+                }
         }.toMutableSet()
 
         seedUrls.addAll(urls)
