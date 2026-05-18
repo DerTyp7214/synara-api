@@ -405,14 +405,22 @@ class AlbumService : AlbumLibrary, Service() {
         )
     }
 
-    fun albumIdsForProviderEnrichment(): Flow<UUID> = flow {
+    fun albumIdsForProviderEnrichment(excludeSingles: Boolean = false, onlySingles: Boolean = false): Flow<UUID> = flow {
         val oneWeekAgo = Clock.System.now() - 7.days
 
         AlbumTable
             .select(AlbumTable.id)
             .where {
-                AlbumTable.lastProviderEnrichment.isNull() or
+                var condition: Op<Boolean> = AlbumTable.lastProviderEnrichment.isNull() or
                         (AlbumTable.lastProviderEnrichment less oneWeekAgo.toEpochMilliseconds())
+
+                if (excludeSingles) {
+                    condition = condition and (AlbumTable.songCount greater 1)
+                }
+                if (onlySingles) {
+                    condition = condition and (AlbumTable.songCount eq 1)
+                }
+                condition
             }
             .orderBy(AlbumTable.lastProviderEnrichment, SortOrder.ASC)
             .fetchBatchedResults(1000) { batch ->
