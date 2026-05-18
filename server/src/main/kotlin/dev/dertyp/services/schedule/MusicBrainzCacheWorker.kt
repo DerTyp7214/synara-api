@@ -1,5 +1,6 @@
 package dev.dertyp.services.schedule
 
+import dev.dertyp.core.HttpClientPriority
 import dev.dertyp.db.MBArtistTable
 import dev.dertyp.db.MBRecordingTable
 import dev.dertyp.db.MBReleaseGroupTable
@@ -71,7 +72,7 @@ class MusicBrainzCacheWorker : Worker("MusicBrainzCacheWorker") {
         logger.info("Updating $totalArtists stale artists in MusicBrainz cache")
         musicBrainzCacheService.staleArtistIdsFlow(oneMonthAgo).collect { id ->
             try {
-                musicBrainzService.fetchArtistById(id)?.let {
+                musicBrainzService.fetchArtistById(id, HttpClientPriority.LOW)?.let {
                     musicBrainzCacheService.updateArtistCache(it)
                     artistsUpdated++
                 } ?: run {
@@ -92,7 +93,7 @@ class MusicBrainzCacheWorker : Worker("MusicBrainzCacheWorker") {
         logger.info("Updating $totalReleaseGroups stale release groups in MusicBrainz cache")
         musicBrainzCacheService.staleReleaseGroupIdsFlow(oneMonthAgo).collect { id ->
             try {
-                musicBrainzService.fetchReleaseGroupById(id)?.let {
+                musicBrainzService.fetchReleaseGroupById(id, HttpClientPriority.LOW)?.let {
                     musicBrainzCacheService.updateReleaseGroupCache(it)
                     releaseGroupsUpdated++
                 } ?: run {
@@ -113,7 +114,7 @@ class MusicBrainzCacheWorker : Worker("MusicBrainzCacheWorker") {
         logger.info("Updating $totalReleases stale releases in MusicBrainz cache")
         musicBrainzCacheService.staleReleaseIdsFlow(oneMonthAgo).collect { id ->
             try {
-                musicBrainzService.fetchReleaseById(id)?.let {
+                musicBrainzService.fetchReleaseById(id, HttpClientPriority.LOW)?.let {
                     musicBrainzCacheService.updateReleaseCache(it)
                     releasesUpdated++
                 } ?: run {
@@ -134,7 +135,7 @@ class MusicBrainzCacheWorker : Worker("MusicBrainzCacheWorker") {
         logger.info("Updating $totalRecordings stale recordings in MusicBrainz cache")
         musicBrainzCacheService.staleRecordingIdsFlow(oneMonthAgo).collect { id ->
             try {
-                musicBrainzService.fetchRecordingById(id)?.let {
+                musicBrainzService.fetchRecordingById(id, HttpClientPriority.LOW)?.let {
                     musicBrainzCacheService.updateRecordingCache(it)
                     recordingsUpdated++
                 } ?: run {

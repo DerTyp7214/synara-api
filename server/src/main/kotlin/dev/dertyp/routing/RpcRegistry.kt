@@ -15,6 +15,7 @@ import dev.dertyp.services.metadata.IMetadataService
 import dev.dertyp.services.metadata.IMusicBrainzService
 import dev.dertyp.services.metadata.MetadataDispatcherService
 import dev.dertyp.utils.withAuthorization
+import dev.dertyp.utils.withCaching
 import dev.dertyp.utils.withLogging
 import io.ktor.server.application.ApplicationCall
 import kotlinx.rpc.RpcServer
@@ -27,10 +28,14 @@ private interface ServiceRegistrar {
     fun <@Rpc T : Any> register(serviceKClass: KClass<T>, serviceFactory: () -> T)
 }
 
+private fun <T : Any> T.wrap(interfaceClass: KClass<T>): T {
+    return this.withCaching(interfaceClass.java)
+}
+
 fun KrpcRoute.registerPublicServices(koin: Koin) {
     val registrar = object : ServiceRegistrar {
         override fun <@Rpc T : Any> register(serviceKClass: KClass<T>, serviceFactory: () -> T) {
-            registerService(serviceKClass, serviceFactory)
+            registerService(serviceKClass) { serviceFactory().wrap(serviceKClass) }
         }
     }
     registerPublic(koin, call, registrar)
@@ -39,7 +44,7 @@ fun KrpcRoute.registerPublicServices(koin: Koin) {
 fun RpcServer.registerPublicServices(koin: Koin, call: ApplicationCall) {
     val registrar = object : ServiceRegistrar {
         override fun <@Rpc T : Any> register(serviceKClass: KClass<T>, serviceFactory: () -> T) {
-            registerService(serviceKClass, serviceFactory)
+            registerService(serviceKClass) { serviceFactory().wrap(serviceKClass) }
         }
     }
     registerPublic(koin, call, registrar)
@@ -60,7 +65,7 @@ suspend fun KrpcRoute.registerAuthenticatedServices(koin: Koin) {
     val user = call.getUser() ?: throw IllegalArgumentException("No user found")
     val registrar = object : ServiceRegistrar {
         override fun <@Rpc T : Any> register(serviceKClass: KClass<T>, serviceFactory: () -> T) {
-            registerService(serviceKClass, serviceFactory)
+            registerService(serviceKClass) { serviceFactory().wrap(serviceKClass) }
         }
     }
     registerAuthenticated(koin, call, user, registrar)
@@ -69,7 +74,7 @@ suspend fun KrpcRoute.registerAuthenticatedServices(koin: Koin) {
 fun RpcServer.registerAuthenticatedServices(koin: Koin, call: ApplicationCall, user: User) {
     val registrar = object : ServiceRegistrar {
         override fun <@Rpc T : Any> register(serviceKClass: KClass<T>, serviceFactory: () -> T) {
-            registerService(serviceKClass, serviceFactory)
+            registerService(serviceKClass) { serviceFactory().wrap(serviceKClass) }
         }
     }
     registerAuthenticated(koin, call, user, registrar)

@@ -5,6 +5,8 @@ import com.ucasoft.ktor.simpleCache.SimpleCacheConfig
 import com.ucasoft.ktor.simpleCache.SimpleCacheProvider
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
+import org.koin.core.context.loadKoinModules
+import org.koin.dsl.module
 import redis.clients.jedis.HostAndPort
 import redis.clients.jedis.RedisClusterClient
 import redis.clients.jedis.params.SetParams
@@ -12,6 +14,12 @@ import kotlin.time.Duration
 
 class RedisCacheProvider(config: Config) : SimpleCacheProvider(config) {
     private val jedis: RedisClusterClient = RedisClusterClient.create(HostAndPort(config.host, config.port))
+
+    init {
+        loadKoinModules(module {
+            single { this@RedisCacheProvider }
+        })
+    }
 
     override suspend fun getCache(key: String): Any? =
         if (jedis.exists(key)) try {

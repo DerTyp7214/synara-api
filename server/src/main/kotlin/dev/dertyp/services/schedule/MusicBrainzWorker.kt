@@ -1,5 +1,6 @@
 package dev.dertyp.services.schedule
 
+import dev.dertyp.core.HttpClientPriority
 import dev.dertyp.services.AlbumService
 import dev.dertyp.services.ArtistService
 import dev.dertyp.services.SongService
@@ -39,7 +40,7 @@ class MusicBrainzWorker : Worker("MusicBrainzWorker") {
                         val songResult = songIdsChannel.receiveCatching()
                         songResult.getOrNull()?.let { songId ->
                             try {
-                                val song = songService.fetchMusicBrainzId(songId, admin.id)
+                                val song = songService.fetchMusicBrainzId(songId, admin.id, HttpClientPriority.LOW)
                                 totalSongsChecked++
                                 if (song?.musicBrainzId != null) {
                                     taggedSongs++
@@ -56,7 +57,7 @@ class MusicBrainzWorker : Worker("MusicBrainzWorker") {
                         val albumResult = albumIdsChannel.receiveCatching()
                         albumResult.getOrNull()?.let { albumId ->
                             try {
-                                val album = albumService.fetchMusicBrainzId(albumId)
+                                val album = albumService.fetchMusicBrainzId(albumId, priority = HttpClientPriority.LOW)
                                 totalAlbumsChecked++
                                 if (album?.musicbrainzId != null) {
                                     taggedAlbums++
@@ -75,7 +76,7 @@ class MusicBrainzWorker : Worker("MusicBrainzWorker") {
                         val artistResult = artistIdsChannel.receiveCatching()
                         artistResult.getOrNull()?.let { artistId ->
                             try {
-                                val artist = artistService.fetchMusicBrainzId(artistId)
+                                val artist = artistService.fetchMusicBrainzId(artistId, priority = HttpClientPriority.LOW)
                                 totalArtistsChecked++
                                 if (artist?.musicbrainzId != null) {
                                     taggedArtists++
