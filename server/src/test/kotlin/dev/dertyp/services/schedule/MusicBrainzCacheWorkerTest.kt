@@ -2,6 +2,7 @@ package dev.dertyp.services.schedule
 
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
+import dev.dertyp.core.HttpClientPriority
 import dev.dertyp.data.MusicBrainzArtist
 import dev.dertyp.db.MBArtistTable
 import dev.dertyp.db.MBRecordingTable
@@ -54,7 +55,7 @@ class MusicBrainzCacheWorkerTest : KoinTest {
         coEvery { musicBrainzCacheService.staleRecordingIdsFlow(any()) } returns flowOf()
 
         val artist = mockk<MusicBrainzArtist>()
-        coEvery { musicBrainzService.fetchArtistById(artistId, any()) } returns artist
+        coEvery { musicBrainzService.fetchArtistById(artistId, HttpClientPriority.LOW) } returns artist
         coEvery { musicBrainzCacheService.updateArtistCache(artist) } returns Unit
 
         startKoin {
@@ -67,7 +68,7 @@ class MusicBrainzCacheWorkerTest : KoinTest {
         val worker = MusicBrainzCacheWorker()
         worker.run()
 
-        coVerify { musicBrainzService.fetchArtistById(artistId, any()) }
+        coVerify { musicBrainzService.fetchArtistById(artistId, HttpClientPriority.LOW) }
         coVerify { musicBrainzCacheService.updateArtistCache(artist) }
     }
 }

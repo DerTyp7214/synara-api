@@ -1,5 +1,6 @@
 package dev.dertyp.services.schedule
 
+import dev.dertyp.core.HttpClientPriority
 import dev.dertyp.data.User
 import dev.dertyp.services.AlbumService
 import dev.dertyp.services.ArtistService
@@ -45,9 +46,9 @@ class MusicBrainzWorkerTest : KoinTest {
         coEvery { albumService.albumIdsWithoutMusicBrainzId() } returns flowOf(albumId)
         coEvery { artistService.artistIdsWithoutMusicBrainzId() } returns flowOf(artistId)
 
-        coEvery { songService.fetchMusicBrainzId(songId, adminId) } returns mockk(relaxed = true)
-        coEvery { albumService.fetchMusicBrainzId(albumId) } returns mockk(relaxed = true)
-        coEvery { artistService.fetchMusicBrainzId(artistId) } returns mockk(relaxed = true)
+        coEvery { songService.fetchMusicBrainzId(songId, adminId, HttpClientPriority.LOW) } returns mockk(relaxed = true)
+        coEvery { albumService.fetchMusicBrainzId(albumId, priority = HttpClientPriority.LOW) } returns mockk(relaxed = true)
+        coEvery { artistService.fetchMusicBrainzId(artistId, priority = HttpClientPriority.LOW) } returns mockk(relaxed = true)
 
         startKoin {
             modules(module {
@@ -61,8 +62,8 @@ class MusicBrainzWorkerTest : KoinTest {
         val worker = MusicBrainzWorker()
         worker.run()
 
-        coVerify { songService.fetchMusicBrainzId(songId, adminId) }
-        coVerify { albumService.fetchMusicBrainzId(albumId) }
-        coVerify { artistService.fetchMusicBrainzId(artistId) }
+        coVerify { songService.fetchMusicBrainzId(songId, adminId, HttpClientPriority.LOW) }
+        coVerify { albumService.fetchMusicBrainzId(albumId, priority = HttpClientPriority.LOW) }
+        coVerify { artistService.fetchMusicBrainzId(artistId, priority = HttpClientPriority.LOW) }
     }
 }
