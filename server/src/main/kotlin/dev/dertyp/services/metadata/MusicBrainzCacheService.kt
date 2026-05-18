@@ -135,12 +135,32 @@ class MusicBrainzCacheService : Service() {
                     )
                 }
 
+            val isrcs = MBRecordingIsrcTable
+                .selectAll()
+                .where { MBRecordingIsrcTable.recordingId eq id }
+                .map { it[MBRecordingIsrcTable.isrc] }
+
+            val relations = MBRelationTable
+                .selectAll()
+                .where { MBRelationTable.ownerId eq id }
+                .map { relRow ->
+                    MusicBrainzRelation(
+                        type = relRow[MBRelationTable.type],
+                        url = MusicBrainzRelationUrl(
+                            id = relRow[MBRelationTable.id],
+                            resource = relRow[MBRelationTable.resource]
+                        )
+                    )
+                }
+
             MusicBrainzRecording(
                 id = id,
                 title = row[MBRecordingTable.title],
                 length = row[MBRecordingTable.length],
                 artistCredit = artistCredits,
                 releases = releases,
+                isrcs = isrcs,
+                relations = relations,
                 fetchedAt = row[MBRecordingTable.lastUpdate]
             )
         }
@@ -198,6 +218,19 @@ class MusicBrainzCacheService : Service() {
                 )
             }
 
+            val relations = MBRelationTable
+                .selectAll()
+                .where { MBRelationTable.ownerId eq id }
+                .map { relRow ->
+                    MusicBrainzRelation(
+                        type = relRow[MBRelationTable.type],
+                        url = MusicBrainzRelationUrl(
+                            id = relRow[MBRelationTable.id],
+                            resource = relRow[MBRelationTable.resource]
+                        )
+                    )
+                }
+
             MusicBrainzRelease(
                 id = id,
                 title = row[MBReleaseTable.title],
@@ -208,6 +241,7 @@ class MusicBrainzCacheService : Service() {
                 date = row[MBReleaseTable.date],
                 disambiguation = row[MBReleaseTable.disambiguation],
                 releaseGroup = releaseGroup,
+                relations = relations,
                 artistCredit = artistCredits,
                 media = media,
                 fetchedAt = row[MBReleaseTable.lastUpdate]
@@ -217,11 +251,25 @@ class MusicBrainzCacheService : Service() {
 
     suspend fun getReleaseGroup(id: UUID): MusicBrainzReleaseGroup? = dbQuery {
         MBReleaseGroupTable.selectAll().where { MBReleaseGroupTable.id eq id }.singleOrNull()?.let { row ->
+            val relations = MBRelationTable
+                .selectAll()
+                .where { MBRelationTable.ownerId eq id }
+                .map { relRow ->
+                    MusicBrainzRelation(
+                        type = relRow[MBRelationTable.type],
+                        url = MusicBrainzRelationUrl(
+                            id = relRow[MBRelationTable.id],
+                            resource = relRow[MBRelationTable.resource]
+                        )
+                    )
+                }
+
             MusicBrainzReleaseGroup(
                 id = id,
                 title = row[MBReleaseGroupTable.title],
                 primaryType = row[MBReleaseGroupTable.primaryType],
                 firstReleaseDate = row[MBReleaseGroupTable.firstReleaseDate],
+                relations = relations,
                 fetchedAt = row[MBReleaseGroupTable.lastUpdate]
             )
         }
@@ -327,6 +375,26 @@ class MusicBrainzCacheService : Service() {
                 it[releaseId] = release.id
             }
         }
+
+        MBRecordingIsrcTable.deleteWhere { MBRecordingIsrcTable.recordingId eq recording.id }
+        recording.isrcs?.forEach { isrc ->
+            MBRecordingIsrcTable.insert {
+                it[recordingId] = recording.id
+                it[this.isrc] = isrc
+            }
+        }
+
+        MBRelationTable.deleteWhere { MBRelationTable.ownerId eq recording.id }
+        recording.relations?.forEach { relation ->
+            relation.url?.let { url ->
+                MBRelationTable.insert {
+                    it[id] = url.id
+                    it[ownerId] = recording.id
+                    it[type] = relation.type ?: ""
+                    it[resource] = url.resource
+                }
+            }
+        }
     }
 
     suspend fun updateReleaseCache(release: MusicBrainzRelease): Unit = dbQuery {
@@ -388,6 +456,18 @@ class MusicBrainzCacheService : Service() {
                 }
             }
         }
+
+        MBRelationTable.deleteWhere { MBRelationTable.ownerId eq release.id }
+        release.relations?.forEach { relation ->
+            relation.url?.let { url ->
+                MBRelationTable.insert {
+                    it[id] = url.id
+                    it[ownerId] = release.id
+                    it[type] = relation.type ?: ""
+                    it[resource] = url.resource
+                }
+            }
+        }
     }
 
     suspend fun updateReleaseGroupCache(group: MusicBrainzReleaseGroup) = dbQuery {
@@ -397,6 +477,18 @@ class MusicBrainzCacheService : Service() {
             it[primaryType] = group.primaryType
             it[firstReleaseDate] = group.firstReleaseDate
             it[lastUpdate] = Clock.System.now().toEpochMilliseconds()
+        }
+
+        MBRelationTable.deleteWhere { MBRelationTable.ownerId eq group.id }
+        group.relations?.forEach { relation ->
+            relation.url?.let { url ->
+                MBRelationTable.insert {
+                    it[id] = url.id
+                    it[ownerId] = group.id
+                    it[type] = relation.type ?: ""
+                    it[resource] = url.resource
+                }
+            }
         }
     }
 

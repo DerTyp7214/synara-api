@@ -30,11 +30,23 @@ class OdesliService : Service() {
 
     suspend fun batchResolve(
         urls: Collection<String>,
+        isrc: String? = null,
+        upc: String? = null,
         priority: HttpClientPriority = HttpClientPriority.NORMAL
     ): List<String> {
+        if (isrc != null) {
+            val resolved = resolvePlatformLinks(isrc = isrc, priority = priority)
+            if (resolved.isNotEmpty()) return resolved
+        }
+
+        if (upc != null) {
+            val resolved = resolvePlatformLinks(upc = upc, priority = priority)
+            if (resolved.isNotEmpty()) return resolved
+        }
+
         for (url in urls) {
             if (canResolve(url)) {
-                val resolved = resolvePlatformLinks(url, priority)
+                val resolved = resolvePlatformLinks(platformUrl = url, priority = priority)
                 if (resolved.isNotEmpty()) return resolved
             }
         }
@@ -42,20 +54,36 @@ class OdesliService : Service() {
     }
 
     suspend fun resolvePlatformLinks(
-        platformUrl: String,
-        priority: HttpClientPriority = HttpClientPriority.NORMAL
+        platformUrl: String? = null,
+        isrc: String? = null,
+        upc: String? = null,
+        priority: HttpClientPriority = HttpClientPriority.NORMAL,
+        userCountry: String? = "US"
     ): List<String> {
+        if (platformUrl == null && isrc == null && upc == null) return emptyList()
+
         return try {
             val response = ApiClient.queueInstance.enqueue("https://api.song.link/v1-alpha.1/links", priority = priority) {
-                parameter("url", platformUrl)
-                parameter("userCountry", "US")
+                when {
+                    platformUrl != null -> parameter("url", platformUrl)
+                    isrc != null -> {
+                        parameter("id", isrc)
+                        parameter("platform", "isrc")
+                    }
+                    upc != null -> {
+                        parameter("id", upc)
+                        parameter("platform", "upc")
+                    }
+                }
+                if (userCountry != null) parameter("userCountry", userCountry)
             }
             if (response.status.value in 200..299) {
                 val body = response.body<OdesliResponse>()
                 body.linksByPlatform.values.map { it.url }
             } else emptyList()
         } catch (e: Exception) {
-            logger.error("Error resolving platform links via Odesli for $platformUrl", e)
+            val id = platformUrl ?: isrc ?: upc
+            logger.error("Error resolving platform links via Odesli for $id", e)
             emptyList()
         }
     }

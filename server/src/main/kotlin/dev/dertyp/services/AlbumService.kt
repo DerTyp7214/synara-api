@@ -425,18 +425,20 @@ class AlbumService : AlbumLibrary, Service() {
     suspend fun enrichProviders(id: UUID, priority: HttpClientPriority = HttpClientPriority.NORMAL) {
         val album = byId(id) ?: return
         val urls = mutableSetOf<String>()
+        var upc: String? = null
 
         album.musicbrainzId?.let { mbId ->
             cachedMusicBrainzService.getRelease(mbId, priority)?.let { release ->
-                release.relations?.filter { it.type == "stream for free" || it.type == "purchase for download" || it.type == "official homepage" }
-                    ?.mapNotNull { it.url?.resource }
-                    ?.let { urls.addAll(it) }
+                val mbUrls = (release.relations ?: emptyList())
+                    .mapNotNull { it.url?.resource }
+                urls.addAll(mbUrls)
+                upc = release.barcode
 
                 release.releaseGroup?.id?.let { rgId ->
                     val rg = cachedMusicBrainzService.getReleaseGroup(rgId, priority)
-                    rg?.relations?.filter { it.type == "stream for free" || it.type == "purchase for download" || it.type == "official homepage" }
-                        ?.mapNotNull { it.url?.resource }
-                        ?.let { urls.addAll(it) }
+                    val rgUrls = (rg?.relations ?: emptyList())
+                        .mapNotNull { it.url?.resource }
+                    urls.addAll(rgUrls)
                 }
             }
         }
@@ -456,7 +458,8 @@ class AlbumService : AlbumLibrary, Service() {
         
         seedUrls.addAll(urls)
 
-        val odesliResults = odesliService.batchResolve(seedUrls, priority)
+        val odesliResults = odesliService.batchResolve(seedUrls, upc = upc, priority = priority)
+        
         val allUrls = (urls + odesliResults).distinct()
 
         dbQuery {

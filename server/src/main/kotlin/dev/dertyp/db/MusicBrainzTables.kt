@@ -141,6 +141,25 @@ object MBTrackTable : MBIdTable("mb_track") {
     val recordingId = reference("recordingId", MBRecordingTable.id, onDelete = ReferenceOption.CASCADE).nullable()
 }
 
+object MBRecordingIsrcTable : Table("mb_recording_isrc") {
+    val recordingId = reference("recordingId", MBRecordingTable.id, onDelete = ReferenceOption.CASCADE)
+    val isrc = varchar("isrc", 12)
+
+    override val primaryKey = PrimaryKey(recordingId, isrc)
+}
+
+object MBRelationTable : Table("mb_relation") {
+    val id = varchar("id", 36)
+        .transform({ UUID.fromString(it) }, { it.toString() })
+    val ownerId = varchar("ownerId", 36)
+        .transform({ UUID.fromString(it) }, { it.toString() })
+        .index()
+    val type = varchar("type", 64)
+    val resource = text("resource")
+
+    override val primaryKey = PrimaryKey(id, ownerId)
+}
+
 val allMusicBrainzTables = arrayOf(
     MBAreaTable,
     MBArtistTable,
@@ -154,5 +173,7 @@ val allMusicBrainzTables = arrayOf(
     MBReleaseArtistCreditTable,
     MBRecordingReleaseTable,
     MBMediaTable,
-    MBTrackTable
+    MBTrackTable,
+    MBRecordingIsrcTable,
+    MBRelationTable
 )

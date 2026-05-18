@@ -879,12 +879,14 @@ class SongService : SongLibrary, Service() {
     suspend fun enrichProviders(id: UUID, priority: HttpClientPriority = HttpClientPriority.NORMAL) {
         val song = byId(id) ?: return
         val urls = mutableSetOf<String>()
+        var isrc: String? = null
 
         song.musicBrainzId?.let { mbId ->
             cachedMusicBrainzService.getRecording(mbId, priority)?.let { recording ->
-                recording.relations?.filter { it.type == "stream for free" || it.type == "purchase for download" || it.type == "official homepage" }
-                    ?.mapNotNull { it.url?.resource }
-                    ?.let { urls.addAll(it) }
+                val mbUrls = (recording.relations ?: emptyList())
+                    .mapNotNull { it.url?.resource }
+                urls.addAll(mbUrls)
+                isrc = recording.isrcs?.firstOrNull()
             }
         }
 
@@ -903,7 +905,7 @@ class SongService : SongLibrary, Service() {
 
         seedUrls.addAll(urls)
 
-        val odesliResults = odesliService.batchResolve(seedUrls, priority)
+        val odesliResults = odesliService.batchResolve(seedUrls, isrc = isrc, priority = priority)
         val allUrls = (urls + odesliResults).distinct()
 
         dbQuery {
