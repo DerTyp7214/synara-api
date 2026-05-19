@@ -1364,6 +1364,8 @@ Track and receive notifications for new music releases.
 | `unfollowArtist` | `artistId` (`PlatformUUID`): The artist unique identifier. | `Boolean` | - |  | Unfollow an artist and stop tracking their releases. |
 | `getFollowedArtists` | - | `List`<[FollowedArtist](#devdertypservicesmodelsfollowedartist)> | - |  | Get a list of all artists the current user is following. |
 | `getRecentReleases` | `page` (`Int`): Page index.<br>`pageSize` (`Int`): Number of items per page. | [PaginatedResponse](#devdertypdatapaginatedresponse)<[RecentRelease](#devdertypservicesmodelsrecentrelease)> | - |  | Retrieve a feed of recent music releases from followed artists. |
+| `getArtistRecentReleases` | `artistId` (`PlatformUUID`): The artist unique identifier.<br>`page` (`Int`): Page index.<br>`pageSize` (`Int`): Number of items per page. | [PaginatedResponse](#devdertypdatapaginatedresponse)<[RecentRelease](#devdertypservicesmodelsrecentrelease)> | - |  | Retrieve recent music releases for a specific artist. |
+| `getRecentReleasesByMusicBrainzId` | `musicBrainzId` (`PlatformUUID`): The MusicBrainz Artist UUID.<br>`page` (`Int`): Page index.<br>`pageSize` (`Int`): Number of items per page. | [PaginatedResponse](#devdertypdatapaginatedresponse)<[RecentRelease](#devdertypservicesmodelsrecentrelease)> | - |  | Retrieve recent music releases for an artist by their MusicBrainz ID. |
 
 ### IRemoteMirrorService <a name="devdertypservicesiremotemirrorservice"></a>
 Instance-to-instance data synchronization.

@@ -142,6 +142,73 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
         )
     }
 
+    suspend fun getArtistRecentReleases(
+        artistId: UUID,
+        page: Int = 0,
+        pageSize: Int = 150
+    ): PaginatedResponse<RecentRelease> = dbQuery {
+        val hasMbId = ArtistMusicBrainzTable.selectAll()
+            .where { (ArtistMusicBrainzTable.artistId eq artistId) and ArtistMusicBrainzTable.musicBrainzId.isNotNull() }
+            .any()
+
+        if (!hasMbId) return@dbQuery PaginatedResponse(emptyList(), 0, page, pageSize, false)
+
+        val query = RecentReleaseTable
+            .leftJoin(ImageTable, onColumn = { RecentReleaseTable.imageId }, otherColumn = { ImageTable.id })
+            .selectAll()
+            .where { RecentReleaseTable.artistId eq artistId }
+
+        val total = query.count()
+
+        val releasesRows = query
+            .orderBy(RecentReleaseTable.releaseDate to SortOrder.DESC)
+            .limit(pageSize)
+            .offset((page * pageSize).toLong())
+            .toList()
+
+        val releaseIds = releasesRows.map { it[RecentReleaseTable.releaseId].value }
+
+        val providersMap = releaseIds.chunked(10000).flatMap { chunk ->
+            RecentReleaseProviderTable.selectAll()
+                .where { RecentReleaseProviderTable.releaseId inList chunk }
+                .map { it[RecentReleaseProviderTable.releaseId].value to it[RecentReleaseProviderTable.rawUrl] }
+        }.groupBy({ it.first }, { it.second })
+
+        val data = releasesRows.map {
+            val groupId = it[RecentReleaseTable.releaseId].value
+            RecentRelease(
+                releaseId = groupId,
+                artistId = it[RecentReleaseTable.artistId].value,
+                artistName = it[RecentReleaseTable.artistName],
+                title = it[RecentReleaseTable.title],
+                releaseDate = it[RecentReleaseTable.releaseDate]?.let { ms -> platformDateFromEpochMilliseconds(ms) },
+                type = it[RecentReleaseTable.type],
+                imageId = it[RecentReleaseTable.imageId]?.value,
+                blurHash = it.getOrNull(ImageTable.blurHash),
+                links = providersMap[groupId] ?: emptyList(),
+                albumId = it[RecentReleaseTable.albumId]?.value,
+                songId = it[RecentReleaseTable.songId]?.value
+            )
+        }
+
+        PaginatedResponse(
+            data = data,
+            total = total.toInt(),
+            page = page,
+            pageSize = pageSize,
+            hasNextPage = (page + 1).toLong() * pageSize < total
+        )
+    }
+
+    suspend fun getRecentReleasesByMusicBrainzId(
+        musicBrainzId: UUID,
+        page: Int = 0,
+        pageSize: Int = 150
+    ): PaginatedResponse<RecentRelease> {
+        val artistId = getOrCreateArtistByMbId(musicBrainzId) ?: return PaginatedResponse(emptyList(), 0, page, pageSize, false)
+        return getArtistRecentReleases(artistId, page, pageSize)
+    }
+
     suspend fun fetchNewReleases(onProgress: suspend (Double, String) -> Unit = { _, _ -> }): Map<String, Int> = coroutineScope {
         val tidalService = MetadataService.getMetadataService(
             IMetadataService.MetadataType.tidal,
