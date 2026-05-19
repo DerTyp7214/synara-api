@@ -328,7 +328,7 @@ class MusicBrainzCacheService : Service() {
         artist.tags?.let { tags ->
             MBArtistTagTable.deleteWhere { MBArtistTagTable.artistId eq artist.id }
             tags.forEach { tag ->
-                MBArtistTagTable.insert {
+                MBArtistTagTable.upsert(MBArtistTagTable.artistId, MBArtistTagTable.name) {
                     it[artistId] = artist.id
                     it[name] = tag.name
                     it[count] = tag.count
@@ -358,7 +358,7 @@ class MusicBrainzCacheService : Service() {
             credit.artist?.let { mbArtist ->
                 updateArtistCache(mbArtist)
 
-                MBRecordingArtistCreditTable.insert {
+                MBRecordingArtistCreditTable.upsert(MBRecordingArtistCreditTable.recordingId, MBRecordingArtistCreditTable.artistId, MBRecordingArtistCreditTable.position) {
                     it[recordingId] = recording.id
                     it[artistId] = mbArtist.id
                     it[name] = credit.name ?: ""
@@ -378,7 +378,7 @@ class MusicBrainzCacheService : Service() {
 
         MBRecordingIsrcTable.deleteWhere { MBRecordingIsrcTable.recordingId eq recording.id }
         recording.isrcs?.forEach { isrc ->
-            MBRecordingIsrcTable.insert {
+            MBRecordingIsrcTable.upsert(MBRecordingIsrcTable.recordingId, MBRecordingIsrcTable.isrc) {
                 it[recordingId] = recording.id
                 it[this.isrc] = isrc
             }
@@ -387,7 +387,7 @@ class MusicBrainzCacheService : Service() {
         MBRelationTable.deleteWhere { MBRelationTable.ownerId eq recording.id }
         recording.relations?.forEach { relation ->
             relation.url?.let { url ->
-                MBRelationTable.insert {
+                MBRelationTable.upsert(MBRelationTable.id, MBRelationTable.ownerId) {
                     it[id] = url.id
                     it[ownerId] = recording.id
                     it[type] = relation.type ?: ""
@@ -422,7 +422,7 @@ class MusicBrainzCacheService : Service() {
             credit.artist?.let { mbArtist ->
                 updateArtistCache(mbArtist)
 
-                MBReleaseArtistCreditTable.insert {
+                MBReleaseArtistCreditTable.upsert(MBReleaseArtistCreditTable.releaseId, MBReleaseArtistCreditTable.artistId, MBReleaseArtistCreditTable.position) {
                     it[releaseId] = release.id
                     it[artistId] = mbArtist.id
                     it[name] = credit.name ?: ""
@@ -460,7 +460,7 @@ class MusicBrainzCacheService : Service() {
         MBRelationTable.deleteWhere { MBRelationTable.ownerId eq release.id }
         release.relations?.forEach { relation ->
             relation.url?.let { url ->
-                MBRelationTable.insert {
+                MBRelationTable.upsert(MBRelationTable.id, MBRelationTable.ownerId) {
                     it[id] = url.id
                     it[ownerId] = release.id
                     it[type] = relation.type ?: ""
@@ -482,7 +482,7 @@ class MusicBrainzCacheService : Service() {
         MBRelationTable.deleteWhere { MBRelationTable.ownerId eq group.id }
         group.relations?.forEach { relation ->
             relation.url?.let { url ->
-                MBRelationTable.insert {
+                MBRelationTable.upsert(MBRelationTable.id, MBRelationTable.ownerId) {
                     it[id] = url.id
                     it[ownerId] = group.id
                     it[type] = relation.type ?: ""
