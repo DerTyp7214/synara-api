@@ -24,7 +24,7 @@ class MusicBrainzCacheWorker : Worker("MusicBrainzCacheWorker") {
         var releasesUpdated = 0
         var releaseGroupsUpdated = 0
 
-        val oneMonthAgo = Clock.System.now().toEpochMilliseconds() - 30.days.inWholeMilliseconds
+        val oneMonthAgo = Clock.System.now().toEpochMilliseconds() - 90.days.inWholeMilliseconds
         fun getRetryTimestamp(): Long = oneMonthAgo + (2..5).random().days.inWholeMilliseconds
 
         val totalArtists = dbQuery {
