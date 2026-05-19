@@ -149,4 +149,198 @@ class SongSearchTest : KoinTest {
         assertEquals(2, result.data.size)
         assertEquals("Target Song", result.data.first().title)
     }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `searchByLyrics should return matching songs`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val songService = SongService()
+        val userId = UUID.randomUUID()
+
+        transaction(database) {
+            UserTable.insert {
+                it[id] = userId
+                it[username] = "testuser"
+                it[passwordHash] = ""
+            }
+            val albumId = AlbumTable.insert {
+                it[id] = UUID.randomUUID()
+                it[name] = "Album"
+            }[AlbumTable.id]
+
+            SongTable.insert {
+                it[id] = UUID.randomUUID()
+                it[title] = "Song with lyrics"
+                it[lyrics] = "I'm a barbie girl, in a barbie world"
+                it[SongTable.albumId] = albumId
+            }
+            SongTable.insert {
+                it[id] = UUID.randomUUID()
+                it[title] = "Other song"
+                it[lyrics] = "Life in plastic, it's fantastic"
+                it[SongTable.albumId] = albumId
+            }
+        }
+
+        val result = songService.searchByLyrics(0, 10, "barbie", true, userId)
+        assertEquals(1, result.data.size)
+        assertEquals("Song with lyrics", result.data.first().title)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `searchByLyrics should find matches in synced lyrics`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val songService = SongService()
+        val userId = UUID.randomUUID()
+
+        transaction(database) {
+            UserTable.insert {
+                it[id] = userId
+                it[username] = "testuser"
+                it[passwordHash] = ""
+            }
+            val albumId = AlbumTable.insert {
+                it[id] = UUID.randomUUID()
+                it[name] = "Album"
+            }[AlbumTable.id]
+
+            val songId = UUID.randomUUID()
+            SongTable.insert {
+                it[id] = songId
+                it[title] = "AI Transcribed"
+                it[SongTable.albumId] = albumId
+            }
+            SyncedLyricsTable.insert {
+                it[SyncedLyricsTable.songId] = songId
+                it[SyncedLyricsTable.rawLyrics] = "This was transcribed by whisper"
+            }
+        }
+
+        val result = songService.searchByLyrics(0, 10, "transcribed", true, userId)
+        assertEquals(1, result.data.size)
+        assertEquals("AI Transcribed", result.data.first().title)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `searchByLyrics should support negative keywords`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val songService = SongService()
+        val userId = UUID.randomUUID()
+
+        transaction(database) {
+            UserTable.insert {
+                it[id] = userId
+                it[username] = "testuser"
+                it[passwordHash] = ""
+            }
+            val albumId = AlbumTable.insert {
+                it[id] = UUID.randomUUID()
+                it[name] = "Album"
+            }[AlbumTable.id]
+
+            SongTable.insert {
+                it[id] = UUID.randomUUID()
+                it[title] = "Good Match"
+                it[lyrics] = "hello world"
+                it[SongTable.albumId] = albumId
+            }
+            SongTable.insert {
+                it[id] = UUID.randomUUID()
+                it[title] = "Bad Match"
+                it[lyrics] = "hello darkness"
+                it[SongTable.albumId] = albumId
+            }
+        }
+
+        val result = songService.searchByLyrics(0, 10, "hello -darkness", true, userId)
+        assertEquals(1, result.data.size)
+        assertEquals("Good Match", result.data.first().title)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `searchByLyrics should respect explicit filter`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val songService = SongService()
+        val userId = UUID.randomUUID()
+
+        transaction(database) {
+            UserTable.insert {
+                it[id] = userId
+                it[username] = "testuser"
+                it[passwordHash] = ""
+            }
+            val albumRow = AlbumTable.insert {
+                it[id] = UUID.randomUUID()
+                it[name] = "Album"
+            }
+            val albumId = albumRow[AlbumTable.id]
+            
+            SongTable.insert {
+                it[id] = UUID.randomUUID()
+                it[title] = "Explicit Song"
+                it[lyrics] = "curse words"
+                it[explicit] = true
+                it[SongTable.albumId] = albumId
+            }
+            SongTable.insert {
+                it[id] = UUID.randomUUID()
+                it[title] = "Clean Song"
+                it[lyrics] = "nice words"
+                it[explicit] = false
+                it[SongTable.albumId] = albumId
+            }
+        }
+
+        val explicitResult = songService.searchByLyrics(0, 10, "words", true, userId)
+        assertEquals(2, explicitResult.data.size)
+
+        val cleanResult = songService.searchByLyrics(0, 10, "words", false, userId)
+        assertEquals(1, cleanResult.data.size)
+        assertEquals("Clean Song", cleanResult.data.first().title)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `searchByLyrics should rank matches in synced lyrics higher than plain lyrics`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val songService = SongService()
+        val userId = UUID.randomUUID()
+
+        transaction(database) {
+            UserTable.insert {
+                it[id] = userId
+                it[username] = "testuser"
+                it[passwordHash] = ""
+            }
+            val albumId = AlbumTable.insert {
+                it[id] = UUID.randomUUID()
+                it[name] = "Album"
+            }[AlbumTable.id]
+
+            SongTable.insert {
+                it[id] = UUID.randomUUID()
+                it[title] = "Plain Match"
+                it[lyrics] = "The quick brown fox"
+                it[SongTable.albumId] = albumId
+            }
+
+            val song2Id = UUID.randomUUID()
+            SongTable.insert {
+                it[id] = song2Id
+                it[title] = "Synced Match"
+                it[SongTable.albumId] = albumId
+            }
+            SyncedLyricsTable.insert {
+                it[SyncedLyricsTable.songId] = song2Id
+                it[SyncedLyricsTable.rawLyrics] = "The quick brown fox"
+            }
+        }
+
+        val result = songService.searchByLyrics(0, 10, "quick brown", true, userId)
+        assertEquals(2, result.data.size)
+        assertEquals("Synced Match", result.data.first().title)
+    }
 }

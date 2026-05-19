@@ -182,6 +182,13 @@ class SongRpcService(private val user: User, private val songService: SongServic
         liked: Boolean
     ): PaginatedResponse<UserSong> = songService.rankedSearch(page, pageSize, query, explicit, user.id, liked)
 
+    override suspend fun searchByLyrics(
+        page: Int,
+        pageSize: Int,
+        query: String,
+        explicit: Boolean
+    ): PaginatedResponse<UserSong> = songService.searchByLyrics(page, pageSize, query, explicit, user.id)
+
     override fun streamSong(id: UUID, offset: Long, chunkSize: Int): Flow<ByteArray>? = songService.streamSong(id, offset, chunkSize)
 
     override fun downloadSong(id: UUID, quality: Int, offset: Long, chunkSize: Int, force: Boolean): Flow<ByteArray>? = songService.downloadSong(id, quality, offset, chunkSize, force)
@@ -1003,6 +1010,27 @@ class SongService : SongLibrary, Service() {
                 if (liked) it.andWhere { UserSongTable.isFavourite eq true }
                 else it
             }
+        }
+
+    suspend fun searchByLyrics(
+        page: Int,
+        pageSize: Int,
+        query: String,
+        explicit: Boolean,
+        userId: UUID
+    ): PaginatedResponse<UserSong> =
+        querySongs(page, pageSize, explicit, userId, columnSet = {
+            leftJoin(SyncedLyricsTable, onColumn = { SongTable.id }, otherColumn = { SyncedLyricsTable.songId })
+        }) {
+            rankedSearchQuery(
+                query,
+                listOf(10, 8),
+                listOf(
+                    SyncedLyricsTable.rawLyrics,
+                    SongTable.lyrics
+                ),
+                SongTable.id
+            )
         }
 
     suspend fun likedSongs(page: Int, pageSize: Int, explicit: Boolean, userId: UUID): PaginatedResponse<UserSong> =
