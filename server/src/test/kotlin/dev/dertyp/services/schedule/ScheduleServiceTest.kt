@@ -3,12 +3,20 @@ package dev.dertyp.services.schedule
 import dev.dertyp.plugins.ScheduleTrigger
 import dev.dertyp.plugins.TaskCompletionTrigger
 import io.mockk.every
+import io.mockk.mockk
 import io.mockk.spyk
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.emptyFlow
 
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.koin.core.context.startKoin
+import org.koin.core.context.stopKoin
+import org.koin.dsl.module
+import org.koin.test.KoinTest
 import java.time.Duration
 import java.time.Instant
 import java.util.UUID
@@ -16,7 +24,24 @@ import java.util.concurrent.atomic.AtomicInteger
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
-class ScheduleServiceTest {
+class ScheduleServiceTest : KoinTest {
+
+    @BeforeEach
+    fun setup() {
+        val configService = mockk<ScheduledTaskConfigurationService>()
+        every { configService.configurationsFlow } returns emptyFlow()
+        
+        startKoin {
+            modules(module {
+                single { configService }
+            })
+        }
+    }
+
+    @AfterEach
+    fun tearDown() {
+        stopKoin()
+    }
 
     @Test
     fun `should execute scheduled task`() = runBlocking {

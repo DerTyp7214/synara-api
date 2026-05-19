@@ -6,11 +6,14 @@ import com.google.gson.TypeAdapter
 import com.google.gson.stream.JsonReader
 import com.google.gson.stream.JsonToken
 import com.google.gson.stream.JsonWriter
-import dev.dertyp.core.logTask
+import dev.dertyp.core.configureScheduledTasks
 import dev.dertyp.data.RemoteServerConfig
 import dev.dertyp.db.SongTable
 import dev.dertyp.db.UserTable
-import dev.dertyp.plugins.*
+import dev.dertyp.plugins.JmDNSPlugin
+import dev.dertyp.plugins.PluginManager
+import dev.dertyp.plugins.RedisCacheProvider
+import dev.dertyp.plugins.pluginModule
 import dev.dertyp.serializers.ByteArrayISO8859TypeAdapter
 import dev.dertyp.serializers.DurationAdapter
 import dev.dertyp.serializers.LocalDateAdapter
@@ -107,6 +110,7 @@ fun Application.module() {
             singleOf(::LibraryMergeService)
             singleOf(::ImportService)
             singleOf(::ScheduleService)
+            singleOf(::ScheduledTaskConfigurationService)
             singleOf(::ServerStatsService)
             singleOf(::UserPlaylistService)
             singleOf(::RefreshTokenService)
@@ -249,305 +253,13 @@ fun Application.module() {
     }
 
     val scheduleService = get<ScheduleService>()
-    val sessionService = get<SessionService>()
-    val imageService = get<ImageService>()
-    val libraryMergeService = get<LibraryMergeService>()
-    val artistService = get<ArtistService>()
-    val albumService = get<AlbumService>()
-    val userPlaylistBackupService = get<UserPlaylistBackupService>()
-    val reverseProxyWorker = get<ReverseProxyWorker>()
-    val metadataFetchingService = get<MetadataFetchingService>()
-    val musicBrainzWorker = get<MusicBrainzWorker>()
-    val musicBrainzCacheWorker = get<MusicBrainzCacheWorker>()
-    val genreMetadataWorker = get<GenreMetadataWorker>()
-    val artistImageWorker = get<ArtistImageWorker>()
-    val recentReleaseWorker = get<RecentReleaseWorker>()
-    val autoTranscodeWorker = get<AutoTranscodeWorker>()
-    val lyricsSyncWorker = get<LyricsSyncWorker>()
-    val audioAnalysisWorker = get<AudioAnalysisWorker>()
-    val flacAnalysisWorker = get<FlacAnalysisWorker>()
-    val imageAnalysisWorker = get<ImageAnalysisWorker>()
-    val lrcLibWorker = get<LrcLibWorker>()
+    val configService = get<ScheduledTaskConfigurationService>()
+    
+    runBlocking {
+        configService.ensureDefaults(ScheduledTaskConfigurationService.DEFAULTS)
+    }
 
-    val reverseProxy = scheduleService.schedule(
-        ScheduledTask(
-            name = "Reverse Proxy Health Check",
-            trigger = CronPresets.hourlyAt(0),
-            task = { reverseProxyWorker.run() }
-        )
-    )
-
-    scheduleService.triggerTask(reverseProxy.id)
-
-    scheduleService.schedule(
-        ScheduledTask(
-            name = "Database Backup",
-            trigger = CronPresets.dailyAt(2, 0),
-            task = {
-                scheduleService.logTask("Database Backup") {
-                    val res = backupService.createBackup { p, l -> updateProgress(p, l) }
-                    mapOf("fileName" to res.fileName, "size" to res.size, "imageCount" to res.imageCount)
-                }
-            }
-        )
-    )
-
-    scheduleService.schedule(
-        ScheduledTask(
-            name = "User Playlist Backup",
-            trigger = CronPresets.dailyAt(2, 0),
-            task = {
-                scheduleService.logTask("User Playlist Backup") {
-                    val count = userPlaylistBackupService.backupAllUsers { p, l -> updateProgress(p, l) }
-                    mapOf("userCount" to count)
-                }
-            }
-        )
-    )
-
-    scheduleService.schedule(
-        ScheduledTask(
-            name = "Session Cleanup",
-            trigger = CronPresets.dailyAt(0, 0),
-            task = {
-                scheduleService.logTask("Session Cleanup") {
-                    val count = sessionService.cleanupOldSessions { p, l -> updateProgress(p, l) }
-                    mapOf("sessionsDeleted" to count)
-                }
-            }
-        )
-    )
-
-    val mergeDuplicates = scheduleService.schedule(
-        ScheduledTask(
-            name = "Merge Library Duplicates",
-            trigger = CronPresets.dailyAt(1, 0),
-            task = {
-                scheduleService.logTask("Merge Library Duplicates") {
-                    libraryMergeService.mergeDuplicates { p, l -> updateProgress(p, l) }
-                }
-            }
-        )
-    )
-
-    scheduleService.triggerTask(mergeDuplicates.id)
-
-    val audioAnalysis = scheduleService.schedule(
-        ScheduledTask(
-            name = "Audio Analysis",
-            trigger = CronPresets.dailyAt(3, 0),
-            task = {
-                scheduleService.logTask("Audio Analysis") {
-                    audioAnalysisWorker.run { p, l -> updateProgress(p, l) }
-                }
-            }
-        )
-    )
-
-    scheduleService.triggerTask(audioAnalysis.id)
-
-    val flacAnalysis = scheduleService.schedule(
-        ScheduledTask(
-            name = "FLAC Analysis",
-            trigger = CronPresets.dailyAt(5, 0),
-            task = {
-                scheduleService.logTask("FLAC Analysis") {
-                    flacAnalysisWorker.run { p, l -> updateProgress(p, l) }
-                }
-            }
-        )
-    )
-
-    scheduleService.triggerTask(flacAnalysis.id)
-
-    val musicBrainzTask = scheduleService.schedule(
-        ScheduledTask(
-            name = "MusicBrainz Worker",
-            trigger = CronPresets.dailyAt(0, 0),
-            task = {
-                scheduleService.logTask("MusicBrainz Worker") {
-                    musicBrainzWorker.run { p, l -> updateProgress(p, l) }
-                }
-            }
-        )
-    )
-
-    scheduleService.triggerTask(musicBrainzTask.id)
-
-    val musicBrainzCacheTask = scheduleService.schedule(
-        ScheduledTask(
-            name = "MusicBrainz Cache Worker",
-            trigger = TaskCompletionTrigger(musicBrainzTask.id),
-            task = {
-                scheduleService.logTask("MusicBrainz Cache Worker") {
-                    musicBrainzCacheWorker.run { p, l -> updateProgress(p, l) }
-                }
-            }
-        )
-    )
-
-    scheduleService.triggerTask(musicBrainzCacheTask.id)
-
-    val genreMetadataTask = scheduleService.schedule(
-        ScheduledTask(
-            name = "Genre Metadata Worker",
-            trigger = TaskCompletionTrigger(musicBrainzTask.id),
-            task = {
-                scheduleService.logTask("Genre Metadata Worker") {
-                    genreMetadataWorker.run { p, l -> updateProgress(p, l) }
-                }
-            }
-        )
-    )
-
-    val artistImageTask = scheduleService.schedule(
-        ScheduledTask(
-            name = "Artist Image Worker",
-            trigger = TaskCompletionTrigger(genreMetadataTask.id),
-            task = {
-                scheduleService.logTask("Artist Image Worker") {
-                    artistImageWorker.run { p, l -> updateProgress(p, l) }
-                }
-            }
-        )
-    )
-
-    scheduleService.schedule(
-        ScheduledTask(
-            name = "Fetch Metadata (TheAudioDB)",
-            trigger = TaskCompletionTrigger(artistImageTask.id),
-            task = {
-                scheduleService.logTask("Fetch Metadata (TheAudioDB)") {
-                    metadataFetchingService.fetchMetadata(IMetadataService.MetadataType.theAudioDB) { p, l ->
-                        updateProgress(p, l)
-                    }
-                }
-            }
-        )
-    )
-
-
-    scheduleService.schedule(
-        ScheduledTask(
-            name = "Auto Transcoding",
-            trigger = CronPresets.dailyAt(3, 0),
-            task = {
-                scheduleService.logTask("Auto Transcoding") {
-                    autoTranscodeWorker.run { p, l -> updateProgress(p, l) }
-                }
-            }
-        )
-    )
-
-    val lyricsSyncTask = scheduleService.schedule(
-        ScheduledTask(
-            name = "Lyrics Sync Worker",
-            trigger = CronPresets.dailyAt(4, 0),
-            task = {
-                scheduleService.logTask("Lyrics Sync Worker") {
-                    lyricsSyncWorker.run { p, l -> updateProgress(p, l) }
-                }
-            }
-        )
-    )
-
-    scheduleService.triggerTask(lyricsSyncTask.id)
-
-    val lrcLibTask = scheduleService.schedule(
-        ScheduledTask(
-            name = "LrcLib Worker",
-            trigger = CronPresets.dailyAt(4, 30),
-            task = {
-                scheduleService.logTask("LrcLib Worker") {
-                    lrcLibWorker.run { p, l -> updateProgress(p, l) }
-                }
-            }
-        )
-    )
-
-    scheduleService.triggerTask(lrcLibTask.id)
-
-    val recentReleaseTask = scheduleService.schedule(
-        ScheduledTask(
-            name = "Recent Release Worker",
-            trigger = CronPresets.dailyAt(1, 0),
-            task = {
-                scheduleService.logTask("Recent Release Worker") {
-                    recentReleaseWorker.run { p, l -> updateProgress(p, l) }
-                }
-            }
-        )
-    )
-
-    scheduleService.triggerTask(recentReleaseTask.id)
-
-    val providerEnrichmentWorker = get<ProviderEnrichmentWorker>()
-    scheduleService.schedule(
-        ScheduledTask(
-            name = "Provider Enrichment Worker",
-            trigger = TaskCompletionTrigger(recentReleaseTask.id),
-            task = {
-                scheduleService.logTask("Provider Enrichment Worker") {
-                    providerEnrichmentWorker.run { p, l -> updateProgress(p, l) }
-                }
-            }
-        )
-    )
-
-    val cleanAlbumTask = scheduleService.schedule(
-        ScheduledTask(
-            name = "Delete Empty Albums",
-            trigger = CronPresets.dailyAt(0, 0),
-            task = {
-                scheduleService.logTask("Delete Empty Albums") {
-                    val count = albumService.deleteEmptyAlbums { p, l -> updateProgress(p, l) }
-                    mapOf("albumsDeleted" to count)
-                }
-            }
-        )
-    )
-
-    val cleanArtistsTask = scheduleService.schedule(
-        ScheduledTask(
-            name = "Delete Unreferenced Artists",
-            trigger = TaskCompletionTrigger(cleanAlbumTask.id),
-            task = {
-                scheduleService.logTask("Delete Unreferenced Artists") {
-                    val count = artistService.deleteUnreferencedArtists { p, l -> updateProgress(p, l) }
-                    mapOf("artistsDeleted" to count)
-                }
-            }
-        )
-    )
-
-    val deleteUnreferencedImages = scheduleService.schedule(
-        ScheduledTask(
-            name = "Delete Unreferenced Images",
-            trigger = TaskCompletionTrigger(cleanArtistsTask.id),
-            task = {
-                scheduleService.logTask("Delete Unreferenced Images") {
-                    val count = imageService.deleteUnreferencedImages { p, l ->
-                        updateProgress(p, l)
-                    }
-                    mapOf("imagesDeleted" to count)
-                }
-            }
-        )
-    )
-
-    val imageAnalysis = scheduleService.schedule(
-        ScheduledTask(
-            name = "Image Analysis",
-            trigger = TaskCompletionTrigger(deleteUnreferencedImages.id),
-            task = {
-                scheduleService.logTask("Image Analysis") {
-                    imageAnalysisWorker.run { p, l -> updateProgress(p, l) }
-                }
-            }
-        )
-    )
-
-    scheduleService.triggerTask(imageAnalysis.id)
+    configureScheduledTasks()
 
     CoroutineScope(Dispatchers.IO).launch {
         launch { scheduleService.startService() }

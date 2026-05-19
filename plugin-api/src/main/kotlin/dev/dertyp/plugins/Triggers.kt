@@ -86,7 +86,8 @@ data class CustomTrigger(
 }
 
 data class TaskCompletionTrigger(
-    val dependencyId: UUID,
+    val dependencyId: UUID? = null,
+    val dependencyKey: String? = null,
 ) : Trigger() {
     private var activatedTime: Instant = Instant.MAX
 

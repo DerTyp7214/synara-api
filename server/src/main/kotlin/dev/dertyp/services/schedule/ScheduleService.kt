@@ -1,11 +1,16 @@
 package dev.dertyp.services.schedule
 
+import dev.dertyp.core.ApplicationScope
 import dev.dertyp.core.plus
+import dev.dertyp.data.TaskConfiguration
+import dev.dertyp.data.TriggerDefinition
 import dev.dertyp.plugins.*
 import dev.dertyp.services.Service
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.time.withTimeoutOrNull
 import org.jetbrains.annotations.Range
 import org.koin.core.component.get
@@ -39,7 +44,7 @@ object CronPresets {
         return create("$minute * * * *")
     }
 
-    private fun create(expression: String): CronTrigger {
+    fun create(expression: String): CronTrigger {
         val base = CronTrigger(expression)
         return base.copy(scheduledTime = base.nextExecution(Instant.now()))
     }
@@ -47,6 +52,7 @@ object CronPresets {
 
 data class ScheduledTask(
     val id: UUID = UUID.randomUUID(),
+    val key: String? = null,
     val name: String? = null,
     val trigger: Trigger,
     val task: Task
@@ -59,13 +65,81 @@ class ScheduleService : IScheduleService, Service() {
     private val stopped: AtomicBoolean = AtomicBoolean(true)
     private val schedules: PriorityBlockingQueue<ScheduledTask> = PriorityBlockingQueue()
     private val eventRegistry = mutableMapOf<String, MutableSet<CustomTrigger>>()
+    
+    private val managedTasks = mutableMapOf<String, ManagedTask>()
 
     private val queueUpdateNotifier = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    
+    data class ManagedTask(
+        val key: String,
+        val name: String,
+        val task: Task
+    )
+
+    override fun registerManagedTask(key: String, name: String, task: Task) {
+        managedTasks[key] = ManagedTask(key, name, task)
+    }
+
+    private fun updateFromConfig(configurations: List<TaskConfiguration>) {
+        val configsByKey = configurations.associateBy { it.key }
+
+        schedules.filter { it.key != null }.toList().forEach { task ->
+            val config = configsByKey[task.key!!]
+            val currentTrigger = task.trigger
+            if (config == null || !config.enabled || !isSameTrigger(config.trigger, currentTrigger)) {
+                unscheduleTask(task.id)
+            }
+        }
+
+        managedTasks.forEach { (key, managedTask) ->
+            val config = configsByKey[key] ?: return@forEach
+            if (!config.enabled) return@forEach
+
+            val isScheduled = schedules.any { it.key == key }
+            if (!isScheduled) {
+                schedule(
+                    ScheduledTask(
+                        key = key,
+                        name = config.name,
+                        trigger = toTrigger(config.trigger),
+                        task = managedTask.task
+                    )
+                )
+            }
+        }
+    }
+
+    private fun isSameTrigger(definition: TriggerDefinition, trigger: Trigger): Boolean {
+        return when (definition) {
+            is TriggerDefinition.Cron -> trigger is CronTrigger && trigger.expression == definition.expression
+            is TriggerDefinition.Interval -> trigger is ScheduleTrigger && trigger.repeat.seconds == definition.intervalSeconds
+            is TriggerDefinition.AfterTask -> trigger is TaskCompletionTrigger && trigger.dependencyKey == definition.dependencyKey
+            is TriggerDefinition.Manual -> trigger is ScheduleTrigger && trigger.scheduledTime == Instant.MAX
+        }
+    }
+
+    private fun toTrigger(definition: TriggerDefinition): Trigger {
+        return when (definition) {
+            is TriggerDefinition.Cron -> CronPresets.create(definition.expression)
+            is TriggerDefinition.Interval -> ScheduleTrigger(
+                Instant.now() + Duration.ofSeconds(definition.intervalSeconds),
+                repeat = Duration.ofSeconds(definition.intervalSeconds)
+            )
+
+            is TriggerDefinition.AfterTask -> TaskCompletionTrigger(dependencyKey = definition.dependencyKey)
+            is TriggerDefinition.Manual -> ScheduleTrigger(Instant.MAX)
+        }
+    }
 
     @OptIn(FlowPreview::class)
     override suspend fun startService() {
         if (!stopped.compareAndSet(expectedValue = true, newValue = false)) return
         logger.info("Starting service")
+
+        val configService = get<ScheduledTaskConfigurationService>()
+        configService.configurationsFlow.onEach {
+            updateFromConfig(it)
+        }.launchIn(ApplicationScope.scope)
 
         coroutineScope {
             launch {
@@ -87,7 +161,7 @@ class ScheduleService : IScheduleService, Service() {
                         launch {
                             try {
                                 scheduledTask.task()
-                                notifyTaskCompletion(scheduledTask.id)
+                                notifyTaskCompletion(scheduledTask.id, scheduledTask.key)
                             } catch (e: Exception) {
                                 logger.error("Error executing scheduled task", e)
 
@@ -177,7 +251,22 @@ class ScheduleService : IScheduleService, Service() {
         CoroutineScope(Dispatchers.Default).launch {
             try {
                 scheduledTask.task()
-                notifyTaskCompletion(scheduledTask.id)
+                notifyTaskCompletion(scheduledTask.id, scheduledTask.key)
+            } catch (e: Exception) {
+                logger.error("Error executing manually triggered task: $taskName", e)
+            }
+        }
+        return true
+    }
+
+    override fun triggerTask(key: String): Boolean {
+        val managedTask = managedTasks[key] ?: return false
+        val taskName = managedTask.name
+        logger.info("Manually triggering managed task: $taskName")
+        CoroutineScope(Dispatchers.Default).launch {
+            try {
+                managedTask.task()
+                notifyTaskCompletion(UUID.randomUUID(), key)
             } catch (e: Exception) {
                 logger.error("Error executing manually triggered task: $taskName", e)
             }
@@ -225,10 +314,10 @@ class ScheduleService : IScheduleService, Service() {
         queueUpdateNotifier.tryEmit(Unit)
     }
 
-    private fun notifyTaskCompletion(completedTaskId: UUID) {
+    private fun notifyTaskCompletion(completedTaskId: UUID, completedTaskKey: String?) {
         val dependentTasks = schedules.filter {
             val trigger = it.trigger
-            trigger is TaskCompletionTrigger && trigger.dependencyId == completedTaskId
+            trigger is TaskCompletionTrigger && (trigger.dependencyId == completedTaskId || (completedTaskKey != null && trigger.dependencyKey == completedTaskKey))
         }
 
         dependentTasks.forEach { task ->

@@ -16,6 +16,7 @@ import dev.dertyp.services.metadata.CachedMusicBrainzService
 import dev.dertyp.services.metadata.IMetadataService
 import dev.dertyp.services.metadata.IMusicBrainzService
 import dev.dertyp.services.metadata.MetadataDispatcherService
+import dev.dertyp.services.schedule.RpcScheduledTaskConfigurationService
 import dev.dertyp.utils.withAuthorization
 import io.github.smiley4.ktoropenapi.*
 import io.github.smiley4.ktoropenapi.config.RouteConfig
@@ -501,6 +502,10 @@ fun Route.registerAuthenticatedRestServices(koin: Koin) {
     registerRestService(IScheduledTaskLogService::class, authenticated = true) {
         val user = call.getUser() ?: throw IllegalArgumentException("No user found")
         RpcScheduledTaskLogService(user, koin.get()).withAuthorization<IScheduledTaskLogService>(user)
+    }
+    registerRestService(IScheduledTaskConfigurationService::class, authenticated = true) {
+        val user = call.getUser() ?: throw IllegalArgumentException("No user found")
+        RpcScheduledTaskConfigurationService(koin.get()).withAuthorization<IScheduledTaskConfigurationService>(user)
     }
     registerRestService(IReleaseService::class, authenticated = true) {
         val user = call.getUser() ?: throw IllegalArgumentException("No user found")
