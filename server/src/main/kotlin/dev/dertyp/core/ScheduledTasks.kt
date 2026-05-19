@@ -247,15 +247,4 @@ fun Application.configureScheduledTasks() {
             }
         }
     )
-
-    scheduleService.triggerTask(TaskKeys.REVERSE_PROXY_HEALTH_CHECK)
-    scheduleService.triggerTask(TaskKeys.MERGE_LIBRARY_DUPLICATES)
-    scheduleService.triggerTask(TaskKeys.AUDIO_ANALYSIS)
-    scheduleService.triggerTask(TaskKeys.FLAC_ANALYSIS)
-    scheduleService.triggerTask(TaskKeys.MUSICBRAINZ_WORKER)
-    scheduleService.triggerTask(TaskKeys.MUSICBRAINZ_CACHE_WORKER)
-    scheduleService.triggerTask(TaskKeys.LYRICS_SYNC_WORKER)
-    scheduleService.triggerTask(TaskKeys.LRCLIB_WORKER)
-    scheduleService.triggerTask(TaskKeys.RECENT_RELEASE_WORKER)
-    scheduleService.triggerTask(TaskKeys.IMAGE_ANALYSIS)
 }
