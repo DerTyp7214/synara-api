@@ -82,7 +82,7 @@ class SongSearchTest : KoinTest {
         transaction(database) {
             UserTable.insert {
                 it[id] = userId
-                it[username] = "testuser"
+                it[username] = "user_${UUID.randomUUID()}"
                 it[passwordHash] = ""
             }
             val artist1 = ArtistTable.insert {
@@ -120,7 +120,7 @@ class SongSearchTest : KoinTest {
         transaction(database) {
             UserTable.insert {
                 it[id] = userId
-                it[username] = "testuser"
+                it[username] = "user_${UUID.randomUUID()}"
                 it[passwordHash] = ""
             }
             val album1 = AlbumTable.insert {
@@ -160,7 +160,7 @@ class SongSearchTest : KoinTest {
         transaction(database) {
             UserTable.insert {
                 it[id] = userId
-                it[username] = "testuser"
+                it[username] = "user_${UUID.randomUUID()}"
                 it[passwordHash] = ""
             }
             val albumId = AlbumTable.insert {
@@ -197,7 +197,7 @@ class SongSearchTest : KoinTest {
         transaction(database) {
             UserTable.insert {
                 it[id] = userId
-                it[username] = "testuser"
+                it[username] = "user_${UUID.randomUUID()}"
                 it[passwordHash] = ""
             }
             val albumId = AlbumTable.insert {
@@ -232,7 +232,7 @@ class SongSearchTest : KoinTest {
         transaction(database) {
             UserTable.insert {
                 it[id] = userId
-                it[username] = "testuser"
+                it[username] = "user_${UUID.randomUUID()}"
                 it[passwordHash] = ""
             }
             val albumId = AlbumTable.insert {
@@ -269,7 +269,7 @@ class SongSearchTest : KoinTest {
         transaction(database) {
             UserTable.insert {
                 it[id] = userId
-                it[username] = "testuser"
+                it[username] = "user_${UUID.randomUUID()}"
                 it[passwordHash] = ""
             }
             val albumRow = AlbumTable.insert {
@@ -312,7 +312,7 @@ class SongSearchTest : KoinTest {
         transaction(database) {
             UserTable.insert {
                 it[id] = userId
-                it[username] = "testuser"
+                it[username] = "user_${UUID.randomUUID()}"
                 it[passwordHash] = ""
             }
             val albumId = AlbumTable.insert {

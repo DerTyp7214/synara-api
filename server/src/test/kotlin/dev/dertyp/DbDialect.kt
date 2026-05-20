@@ -1,5 +1,5 @@
 package dev.dertyp
 
 enum class DbDialect {
-    POSTGRES, SQLITE
+    POSTGRES, SQLITE, H2
 }

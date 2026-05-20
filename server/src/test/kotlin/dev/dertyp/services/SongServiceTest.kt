@@ -1462,7 +1462,7 @@ class SongServiceTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `createBatch should populate SongProviderTable`(dialect: DbDialect) = runBlocking {
+    fun `createBatch should populate SongProviderTable`(dialect: DbDialect): Unit = runBlocking {
         setup(dialect)
         val album = InsertableAlbum("Provider Album", listOf("Provider Artist"))
         val song = InsertableSong(

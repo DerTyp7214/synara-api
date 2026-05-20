@@ -47,7 +47,7 @@ class CapabilityAuthorizationTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `should throw UnauthorizedException when capability is missing`(dialect: DbDialect) = runBlocking {
+    fun `should throw UnauthorizedException when capability is missing`(dialect: DbDialect): Unit = runBlocking {
         setup(dialect)
         val userWithoutEdit = User(
             id = UUID.randomUUID(),
@@ -70,7 +70,7 @@ class CapabilityAuthorizationTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `should allow access when capability is present`(dialect: DbDialect) = runBlocking {
+    fun `should allow access when capability is present`(dialect: DbDialect): Unit = runBlocking {
         setup(dialect)
         val userWithEdit = User(
             id = UUID.randomUUID(),
@@ -89,7 +89,7 @@ class CapabilityAuthorizationTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `should allow access when user is admin regardless of capabilities`(dialect: DbDialect) = runBlocking {
+    fun `should allow access when user is admin regardless of capabilities`(dialect: DbDialect): Unit = runBlocking {
         setup(dialect)
         val adminUser = User(
             id = UUID.randomUUID(),

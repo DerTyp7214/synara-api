@@ -114,7 +114,7 @@ class AudioAnalysisServiceTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `should trigger analysis and correctly persist data to database`(dialect: DbDialect) = runBlocking {
+    fun `should trigger analysis and correctly persist data to database`(dialect: DbDialect): Unit = runBlocking {
         setup(dialect)
         val songId = UUID.randomUUID()
         val albumId = UUID.randomUUID()
