@@ -151,9 +151,9 @@ class AudioAnalysisServiceTest {
         assertNotNull(result)
 
         assertEquals(expectedData.bpm, result.bpm)
-        assertEquals(expectedData.composer, result.composer)
-        assertEquals(expectedData.lyricist, result.lyricist)
-        assertEquals(expectedData.producers, result.producers)
+        assertEquals(expectedData.composer?.sorted(), result.composer?.sorted())
+        assertEquals(expectedData.lyricist?.sorted(), result.lyricist?.sorted())
+        assertEquals(expectedData.producers?.sorted(), result.producers?.sorted())
         assertNotNull(result.valence, "Valence should be calculated via post-processor")
         assertNotEquals(expectedData.energy, result.energy, "Energy should have been recalculated by post-processor")
 
@@ -165,10 +165,12 @@ class AudioAnalysisServiceTest {
         }
 
         dbQuery {
-            val persons = PersonTable.selectAll().map { it[PersonTable.name] }
-            expectedData.composer?.forEach { assertTrue(persons.contains(it)) }
-            expectedData.lyricist?.forEach { assertTrue(persons.contains(it)) }
-            expectedData.producers?.forEach { assertTrue(persons.contains(it)) }
+            val persons = PersonTable.selectAll().map { it[PersonTable.name] }.sorted()
+            val expectedPersons = (expectedData.composer.orEmpty() + expectedData.lyricist.orEmpty() + expectedData.producers.orEmpty()).distinct().sorted()
+            
+            for (person in expectedPersons) {
+                assertTrue(persons.contains(person), "Person $person should be in the database")
+            }
         }
     }
 

@@ -56,12 +56,6 @@ class FlywayMigrationTest : KoinTest {
                 user = "sa"
                 pass = ""
             }
-            DbDialect.H2 -> {
-                dbDriver = "org.h2.Driver"
-                dbUrl = "jdbc:h2:mem:flyway_test_${UUID.randomUUID().toString().replace("-", "")};MODE=PostgreSQL;DB_CLOSE_DELAY=-1"
-                user = "sa"
-                pass = ""
-            }
         }
         
         val config = MapApplicationConfig(

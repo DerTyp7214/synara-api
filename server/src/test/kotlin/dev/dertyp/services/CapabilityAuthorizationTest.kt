@@ -14,14 +14,15 @@ import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.jupiter.api.AfterEach
-import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.EnumSource
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
 import org.koin.dsl.module
 import org.koin.test.KoinTest
+import java.lang.reflect.UndeclaredThrowableException
 import java.util.UUID
+import kotlin.test.assertFailsWith
 
 class CapabilityAuthorizationTest : KoinTest {
     private lateinit var database: Database
@@ -61,9 +62,11 @@ class CapabilityAuthorizationTest : KoinTest {
         val rpcService = SongRpcService(userWithoutEdit, songService)
         val authorizedService = rpcService.withAuthorization<ISongService>(userWithoutEdit)
 
-        assertThrows(UnauthorizedException::class.java) {
-            runBlocking {
+        assertFailsWith<UnauthorizedException> {
+            try {
                 authorizedService.setLyrics(UUID.randomUUID(), listOf("lyrics"))
+            } catch (e: UndeclaredThrowableException) {
+                throw e.undeclaredThrowable
             }
         }
     }

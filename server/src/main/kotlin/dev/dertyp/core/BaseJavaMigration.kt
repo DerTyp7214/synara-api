@@ -8,4 +8,3 @@ fun <T> tempConnection (block: JdbcTransaction.() -> T): T {
     val databaseManager = GlobalContext.get().get<DatabaseManager>()
     return databaseManager.tempConnection(block)
 }
-

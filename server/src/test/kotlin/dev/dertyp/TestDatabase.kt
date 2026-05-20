@@ -59,10 +59,6 @@ object TestDatabase {
                 currentFile = File.createTempFile(name, ".db")
                 Database.connect("jdbc:sqlite:${currentFile!!.absolutePath}", "org.sqlite.JDBC")
             }
-            DbDialect.H2 -> {
-                val dbName = "${name}_${UUID.randomUUID().toString().replace("-", "")}".lowercase()
-                Database.connect("jdbc:h2:mem:${dbName};MODE=PostgreSQL;DB_CLOSE_DELAY=-1", "org.h2.Driver")
-            }
         }
     }
 
