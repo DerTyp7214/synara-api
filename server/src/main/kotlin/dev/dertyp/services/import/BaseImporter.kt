@@ -9,6 +9,7 @@ import dev.dertyp.plugins.IPluginIndexer
 import dev.dertyp.plugins.IServerStorageService
 import dev.dertyp.plugins.SearchResult
 import dev.dertyp.services.Service
+import dev.dertyp.services.metadata.IMetadataService
 import kotlinx.coroutines.yield
 import java.io.File
 import java.nio.file.Path
@@ -205,6 +206,7 @@ abstract class BaseImporter(override var indexer: IPluginIndexer, internal val s
         maxRetries: Int,
         aliveCheck: suspend () -> Boolean,
         userId: PlatformUUID?,
+        metadata: IMetadataService.BaseMetadata?,
         onLiveOutput: suspend (String) -> Unit
     ): ProcessExecutionResult {
         loggingIn.waitForChange(false)

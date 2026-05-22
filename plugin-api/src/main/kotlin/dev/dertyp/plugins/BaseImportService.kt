@@ -123,7 +123,7 @@ abstract class BaseImportService(val context: PluginContext) : IPluginImportServ
                     var lastRes = ProcessExecutionResult.EMPTY
                     for ((importer, groupUrls) in groups) {
                         if (importer != null) {
-                            lastRes = importer.importContent(groupUrls, entry.maxRetries, aliveCheck, entry.byUser, logUnit)
+                            lastRes = importer.importContent(groupUrls, entry.maxRetries, aliveCheck, entry.byUser, entry.metadata, logUnit)
                         }
                     }
                     lastRes

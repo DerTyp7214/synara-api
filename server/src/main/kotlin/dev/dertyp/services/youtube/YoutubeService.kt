@@ -31,6 +31,7 @@ import org.jaudiotagger.audio.AudioFileIO
 import org.jaudiotagger.tag.FieldKey
 import org.koin.core.component.inject
 import java.io.File
+import java.util.UUID
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.io.path.absolutePathString
 import kotlin.io.path.extension
@@ -265,6 +266,7 @@ open class YoutubeService(
         maxRetries: Int,
         aliveCheck: suspend () -> Boolean,
         userId: PlatformUUID?,
+        metadata: IMetadataService.BaseMetadata?,
         onLiveOutput: suspend (String) -> Unit
     ): ProcessExecutionResult {
         loggingIn.waitForChange(false)
@@ -298,7 +300,19 @@ open class YoutubeService(
             var finalMbId: String? = null
             var finalMbReleaseId: String? = null
 
-            if (info != null) {
+            if (metadata is IMetadataService.Track) {
+                val mbid = try { UUID.fromString(metadata.id) } catch (_: Exception) { null }
+                if (mbid != null) {
+                    onLiveOutput("Using provided MusicBrainz metadata for track: ${metadata.title}")
+                    finalTitle = metadata.title
+                    finalArtist = metadata.artists.joinToString(indexer.artistDelimiter)
+                    finalAlbum = metadata.albumTitle
+                    finalMbId = metadata.id
+                    finalMbReleaseId = metadata.albumId
+                }
+            }
+
+            if (finalMbId == null && info != null) {
                 val title = info["track"] ?: info["title"] ?: ""
                 val artist = info["artist"] ?: info["uploader"]?.removeSuffix("- Topic")?.trim() ?: ""
                 val album = info["album"] ?: ""
@@ -313,26 +327,30 @@ open class YoutubeService(
                     finalDate = firstRelease?.date
                     finalMbId = mbRecording.id.toString()
                     finalMbReleaseId = firstRelease?.id?.toString()
-
-                    val coverUrl = when {
-                        firstRelease?.id != null -> "https://coverartarchive.org/release/${firstRelease.id}/front"
-                        else -> null
-                    }
-                    finalCoverUrl = coverUrl
-
-                    cmd.add("--postprocessor-args")
-                    val metadataFields = mutableListOf<String>()
-                    metadataFields.add("title='$finalTitle'")
-                    metadataFields.add("artist='$finalArtist'")
-                    finalAlbum?.let { metadataFields.add("album='$it'") }
-                    finalDate?.let { metadataFields.add("date='$it'") }
-
-                    cmd.add("ffmpeg:" + metadataFields.joinToString(" ") { "-metadata $it" })
                 } else {
                     finalTitle = title
                     finalArtist = artist.split(",").joinToString(indexer.artistDelimiter, transform = String::trim)
                     finalCoverUrl = info["thumbnail"]
                 }
+            }
+            
+            if (finalMbId != null && finalMbReleaseId != null) {
+                finalCoverUrl = "https://coverartarchive.org/release/$finalMbReleaseId/front"
+            }
+            
+            if (finalCoverUrl == null && info != null) {
+                finalCoverUrl = info["thumbnail"]
+            }
+
+            if (finalTitle != null || finalArtist != null) {
+                cmd.add("--postprocessor-args")
+                val metadataFields = mutableListOf<String>()
+                finalTitle?.let { metadataFields.add("title='$it'") }
+                finalArtist?.let { metadataFields.add("artist='$it'") }
+                finalAlbum?.let { metadataFields.add("album='$it'") }
+                finalDate?.let { metadataFields.add("date='$it'") }
+
+                cmd.add("ffmpeg:" + metadataFields.joinToString(" ") { "-metadata $it" })
             }
 
             if (finalCoverUrl != null) {

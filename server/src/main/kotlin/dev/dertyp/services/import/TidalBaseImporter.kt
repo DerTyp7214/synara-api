@@ -107,6 +107,7 @@ abstract class TidalBaseImporter(
         maxRetries: Int,
         aliveCheck: suspend () -> Boolean,
         userId: PlatformUUID?,
+        metadata: IMetadataService.BaseMetadata?,
         onLiveOutput: suspend (String) -> Unit
     ): ProcessExecutionResult = coroutineScope {
         loggingIn.waitForChange(false)
@@ -136,7 +137,16 @@ abstract class TidalBaseImporter(
             val albumArtists = tracks.first().artists
 
             var mbRelease: MusicBrainzRelease? = null
-            if (!albumTitle.isNullOrBlank()) {
+            
+            if (metadata is IMetadataService.Album) {
+                val mbid = try { UUID.fromString(metadata.id) } catch (_: Exception) { null }
+                if (mbid != null) {
+                    onLiveOutput("Using provided MusicBrainz metadata for album: ${metadata.title}")
+                    mbRelease = musicBrainzService.getRelease(mbid)
+                }
+            }
+            
+            if (mbRelease == null && !albumTitle.isNullOrBlank()) {
                 onLiveOutput("Searching MusicBrainz for album: $albumTitle")
                 mbRelease = musicBrainzService.searchRelease(albumTitle, albumArtists)
                 if (mbRelease != null) {
@@ -161,6 +171,18 @@ abstract class TidalBaseImporter(
                 var finalMbReleaseId: String? = null
                 var finalCoverUrl = tidalTrack.images.largest.url
 
+                if (metadata is IMetadataService.Track) {
+                    val mbid = try { UUID.fromString(metadata.id) } catch (_: Exception) { null }
+                    if (mbid != null) {
+                        onLiveOutput("Using provided MusicBrainz metadata for track: ${metadata.title}")
+                        finalMbId = metadata.id
+                        finalTitle = metadata.title
+                        finalArtist = metadata.artists.joinToString(indexer.artistDelimiter)
+                        finalAlbum = metadata.albumTitle
+                        finalMbReleaseId = metadata.albumId
+                    }
+                }
+
                 val mbTrack = mbRelease?.media?.flatMap { it.tracks ?: emptyList() }?.find {
                     it.title?.cleanTitle()?.equals(tidalTrack.title.cleanTitle(), true) == true
                 }
@@ -173,7 +195,7 @@ abstract class TidalBaseImporter(
                     finalDate = mbRelease.date
                     finalMbId = mbTrack.recording?.id?.toString()
                     finalMbReleaseId = mbRelease.id.toString()
-                } else {
+                } else if (finalMbId == null) {
                     if (mbRelease != null) {
                         onLiveOutput("Track '${tidalTrack.title}' not found in album '${mbRelease.title}'. Falling back to recording search.")
                     }

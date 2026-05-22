@@ -24,7 +24,7 @@ class ImporterPriorityTest {
             every { enabled } returns true
             every { canHandle(url1) } returns true
             every { canHandle(url2) } returns false
-            coEvery { importContent(any(), any(), any(), any(), any()) } returns ProcessExecutionResult.EMPTY
+            coEvery { importContent(any(), any(), any(), any(), any(), any()) } returns ProcessExecutionResult.EMPTY
         }
         
         val youtubeImporter = mockk<IImporter> {
@@ -32,15 +32,15 @@ class ImporterPriorityTest {
             every { enabled } returns true
             every { canHandle(url1) } returns false
             every { canHandle(url2) } returns true
-            coEvery { importContent(any(), any(), any(), any(), any()) } returns ProcessExecutionResult.EMPTY
+            coEvery { importContent(any(), any(), any(), any(), any(), any()) } returns ProcessExecutionResult.EMPTY
         }
 
         every { pluginManager.getImporter("tiddl") } returns tidalImporter
         every { pluginManager.getAllImporters() } returns listOf(tidalImporter, youtubeImporter)
 
-        proxy.importContent(listOf(url1, url2), 3, { true }) {}
+        proxy.importContent(listOf(url1, url2), 3, { true }) { _ -> }
 
-        coVerify { tidalImporter.importContent(listOf(url1), 3, any(), any(), any()) }
-        coVerify { youtubeImporter.importContent(listOf(url2), 3, any(), any(), any()) }
+        coVerify { tidalImporter.importContent(listOf(url1), 3, any(), any(), any(), any()) }
+        coVerify { youtubeImporter.importContent(listOf(url2), 3, any(), any(), any(), any()) }
     }
 }

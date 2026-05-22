@@ -8,6 +8,7 @@ import dev.dertyp.plugins.IPluginIndexer
 import dev.dertyp.plugins.PluginManager
 import dev.dertyp.plugins.SearchResult
 import dev.dertyp.services.Service
+import dev.dertyp.services.metadata.IMetadataService
 import kotlinx.coroutines.flow.emptyFlow
 import kotlin.time.ExperimentalTime
 
@@ -34,7 +35,14 @@ class ImporterProxy(
         override fun canHandle(url: String): Boolean = false
         override suspend fun getWrapper(type: Type, ids: List<String>, user: User) = IdsWrapper(type, emptyFlow())
         override suspend fun importIds(ids: List<String>, type: Type, user: User, callback: suspend (List<String>) -> Unit) = Pair(false, emptyList<UserSong>())
-        override suspend fun importContent(urls: List<String>, maxRetries: Int, aliveCheck: suspend () -> Boolean, userId: PlatformUUID?, onLiveOutput: suspend (String) -> Unit): ProcessExecutionResult {
+        override suspend fun importContent(
+            urls: List<String>,
+            maxRetries: Int,
+            aliveCheck: suspend () -> Boolean,
+            userId: PlatformUUID?,
+            metadata: IMetadataService.BaseMetadata?,
+            onLiveOutput: suspend (String) -> Unit
+        ): ProcessExecutionResult {
             onLiveOutput("Error: Importer $id is disabled and no fallback is available.")
             return ProcessExecutionResult(-1, "Importer $id is disabled", "")
         }
@@ -55,6 +63,7 @@ class ImporterProxy(
         aliveCheck: suspend () -> Boolean,
         userId: PlatformUUID? = null,
         service: ImportBackend? = null,
+        metadata: IMetadataService.BaseMetadata? = null,
         onLiveOutput: suspend (String) -> Unit
     ): ProcessExecutionResult {
         val defaultImporter = getImporter(service ?: defaultService)
@@ -66,7 +75,7 @@ class ImporterProxy(
         var lastResult = ProcessExecutionResult.EMPTY
 
         for ((importer, groupUrls) in groups) {
-            lastResult = importer.importContent(groupUrls, maxRetries, aliveCheck, userId, onLiveOutput)
+            lastResult = importer.importContent(groupUrls, maxRetries, aliveCheck, userId, metadata, onLiveOutput)
         }
 
         return lastResult

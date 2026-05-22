@@ -933,6 +933,7 @@ An import queue entry for a user's favorite collection.
 | `byUser` | `PlatformUUID`? | The ID of the user who initiated the import. |
 | `type` | [Type](#devdertypservicesimporttype)? | The type of content. |
 | `importer` | [ImportBackend](#devdertypservicesimportimportbackend)? | The importer backend to use for this entry. |
+| `metadata` | `BaseMetadata`? | Metadata for the content. |
 | `maxRetries` | `Int` |  |
 | `callback` | `SuspendFunction0`<`Unit`> |  |
 
@@ -1022,6 +1023,7 @@ An import queue entry for content specified by its URL.
 | `byUser` | `PlatformUUID`? | The ID of the user who initiated the import. |
 | `type` | [Type](#devdertypservicesimporttype)? | The type of content. |
 | `importer` | [ImportBackend](#devdertypservicesimportimportbackend)? | The importer backend to use for this entry. |
+| `metadata` | `BaseMetadata`? | Metadata for the content. |
 | `maxRetries` | `Int` |  |
 | `callback` | `SuspendFunction0`<`Unit`> |  |
 

@@ -32,8 +32,8 @@ class ImporterProxyTest {
         every { tiddlDownloader.canHandle("tdn:track/2") } returns false
         every { tdnDownloader.canHandle("tdn:track/2") } returns true
 
-        coEvery { tiddlDownloader.importContent(any(), any(), any(), any(), any()) } returns ProcessExecutionResult(0, "tiddl", "")
-        coEvery { tdnDownloader.importContent(any(), any(), any(), any(), any()) } returns ProcessExecutionResult(0, "tdn", "")
+        coEvery { tiddlDownloader.importContent(any(), any(), any(), any(), any(), any()) } returns ProcessExecutionResult(0, "tiddl", "")
+        coEvery { tdnDownloader.importContent(any(), any(), any(), any(), any(), any()) } returns ProcessExecutionResult(0, "tdn", "")
 
         proxy.defaultService = ImportBackend.Tiddl
 
@@ -45,8 +45,8 @@ class ImporterProxyTest {
             onLiveOutput = {}
         )
 
-        coVerify { tiddlDownloader.importContent(listOf("tidal.com/track/1"), 1, any(), any(), any()) }
-        coVerify { tdnDownloader.importContent(listOf("tdn:track/2"), 1, any(), any(), any()) }
+        coVerify { tiddlDownloader.importContent(listOf("tidal.com/track/1"), 1, any(), any(), any(), any()) }
+        coVerify { tdnDownloader.importContent(listOf("tdn:track/2"), 1, any(), any(), any(), any()) }
     }
 
     @Test
@@ -67,12 +67,12 @@ class ImporterProxyTest {
 
         proxy.defaultService = ImportBackend("d1")
         proxy.importContent(listOf("any"), 1, { true }, null, null) {}
-        coVerify { d1.importContent(any(), any(), any(), any(), any()) }
-        coVerify(exactly = 0) { d2.importContent(any(), any(), any(), any(), any()) }
+        coVerify { d1.importContent(any(), any(), any(), any(), any(), any()) }
+        coVerify(exactly = 0) { d2.importContent(any(), any(), any(), any(), any(), any()) }
 
         proxy.defaultService = ImportBackend("d2")
         proxy.importContent(listOf("any"), 1, { true }, null, null) {}
-        coVerify { d2.importContent(any(), any(), any(), any(), any()) }
+        coVerify { d2.importContent(any(), any(), any(), any(), any(), any()) }
     }
 
     @Test
@@ -102,8 +102,8 @@ class ImporterProxyTest {
             onLiveOutput = {}
         )
 
-        coVerify { d2.importContent(any(), any(), any(), any(), any()) }
-        coVerify(exactly = 0) { d1.importContent(any(), any(), any(), any(), any()) }
+        coVerify { d2.importContent(any(), any(), any(), any(), any(), any()) }
+        coVerify(exactly = 0) { d1.importContent(any(), any(), any(), any(), any(), any()) }
     }
 
     @Test

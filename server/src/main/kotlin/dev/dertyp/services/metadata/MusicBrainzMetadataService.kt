@@ -69,15 +69,31 @@ class MusicBrainzMetadataService(
     }
 
     override suspend fun getAlbumByMbId(mbId: PlatformUUID, priority: HttpClientPriority): IMetadataService.Album? {
-        val release = musicBrainzService.getRelease(mbId) ?: return null
-        return IMetadataService.Album(
-            id = release.id.toString(),
-            title = release.title ?: "",
-            artists = release.artistCredit?.mapNotNull { it.name ?: it.artist?.name } ?: emptyList(),
-            trackCount = 0,
-            releaseDate = release.date?.let { getDateFromISO(it) },
-            images = getImageUrlByAlbumMbId(mbId, priority)
-        )
+        val release = musicBrainzService.getRelease(mbId)
+        if (release != null) {
+            return IMetadataService.Album(
+                id = release.id.toString(),
+                title = release.title ?: "",
+                artists = release.artistCredit?.mapNotNull { it.name ?: it.artist?.name } ?: emptyList(),
+                trackCount = 0,
+                releaseDate = release.date?.let { getDateFromISO(it) },
+                images = getImageUrlByAlbumMbId(mbId, priority)
+            )
+        }
+
+        val releaseGroup = musicBrainzService.getReleaseGroup(mbId)
+        if (releaseGroup != null) {
+            return IMetadataService.Album(
+                id = releaseGroup.id.toString(),
+                title = releaseGroup.title,
+                artists = emptyList(),
+                trackCount = 0,
+                releaseDate = releaseGroup.firstReleaseDate?.let { getDateFromISO(it) },
+                images = getImageUrlByAlbumMbId(mbId, priority)
+            )
+        }
+
+        return null
     }
 
     override suspend fun getTrackByMbId(mbId: PlatformUUID, priority: HttpClientPriority): IMetadataService.Track? {

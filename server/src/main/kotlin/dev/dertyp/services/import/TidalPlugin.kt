@@ -223,7 +223,14 @@ class TidalProxyImporter(
     override suspend fun parseUrl(url: String) = current().parseUrl(url)
     override suspend fun getWrapper(type: Type, ids: List<String>, user: User) = current().getWrapper(type, ids, user)
     override suspend fun importIds(ids: List<String>, type: Type, user: User, callback: suspend (List<String>) -> Unit) = current().importIds(ids, type, user, callback)
-    override suspend fun importContent(urls: List<String>, maxRetries: Int, aliveCheck: suspend () -> Boolean, userId: PlatformUUID?, onLiveOutput: suspend (String) -> Unit) = current().importContent(urls, maxRetries, aliveCheck, userId, onLiveOutput)
+    override suspend fun importContent(
+        urls: List<String>,
+        maxRetries: Int,
+        aliveCheck: suspend () -> Boolean,
+        userId: PlatformUUID?,
+        metadata: IMetadataService.BaseMetadata?,
+        onLiveOutput: suspend (String) -> Unit
+    ) = current().importContent(urls, maxRetries, aliveCheck, userId, metadata, onLiveOutput)
     override suspend fun importFavoriteCollection(type: ImportFavType, maxRetries: Int, aliveCheck: suspend () -> Boolean, userId: PlatformUUID?, onLiveOutput: suspend (String) -> Unit) = current().importFavoriteCollection(type, maxRetries, aliveCheck, userId, onLiveOutput)
     override suspend fun syncFavorites(user: User, onProgress: suspend (Double, String) -> Unit) = current().syncFavorites(user, onProgress)
     override suspend fun search(query: String, count: Int) = current().search(query, count)

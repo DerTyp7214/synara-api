@@ -393,6 +393,7 @@ class ImportService(
                     aliveCheck = aliveCheck,
                     userId = entry.byUser,
                     service = entry.importer,
+                    metadata = entry.metadata,
                     onLiveOutput = logUnit
                 )
 

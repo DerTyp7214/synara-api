@@ -4,6 +4,7 @@ import dev.dertyp.Indexer
 import dev.dertyp.services.*
 import dev.dertyp.services.import.ImportBackend
 import dev.dertyp.services.import.ImportService
+import dev.dertyp.services.import.MusicBrainzPlugin
 import dev.dertyp.services.import.TidalPlugin
 import dev.dertyp.services.metadata.IMetadataService
 import dev.dertyp.services.metadata.MetadataDispatcherService
@@ -53,6 +54,7 @@ class PluginManager(
         loadPlugin(TidalPlugin())
         loadPlugin(YoutubePlugin())
         loadPlugin(SoundcloudPlugin())
+        loadPlugin(MusicBrainzPlugin())
         loadPlugins()
     }
 

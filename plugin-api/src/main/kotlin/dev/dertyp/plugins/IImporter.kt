@@ -46,6 +46,7 @@ interface IImporter {
         maxRetries: Int,
         aliveCheck: suspend () -> Boolean,
         userId: PlatformUUID? = null,
+        metadata: IMetadataService.BaseMetadata? = null,
         onLiveOutput: suspend (String) -> Unit
     ): ProcessExecutionResult
 
