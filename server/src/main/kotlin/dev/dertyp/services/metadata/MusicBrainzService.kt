@@ -9,6 +9,7 @@ import dev.dertyp.core.cleanTitle
 import dev.dertyp.data.*
 import dev.dertyp.server.BuildConfig
 import dev.dertyp.services.Service
+import dev.dertyp.toPlatformUUID
 import io.ktor.client.call.body
 import io.ktor.client.request.HttpRequestBuilder
 import io.ktor.client.request.header
@@ -91,6 +92,13 @@ class MusicBrainzService : Service() {
         artists: List<String>,
         priority: HttpClientPriority = HttpClientPriority.NORMAL
     ): MusicBrainzRecording? {
+        if (artists.isEmpty()) {
+            try {
+                val id = title.toPlatformUUID()
+                return fetchRecordingById(id, priority)
+            } catch (_: Exception) {
+            }
+        }
         val query = "recording:\"${title.cleanTitle()}\" AND artist:${artists.joinToString { "\"$it\"" }}"
 
         return try {
@@ -219,6 +227,20 @@ class MusicBrainzService : Service() {
     }
 
     suspend fun searchArtistsMbPaged(query: String, page: Int, pageSize: Int, priority: HttpClientPriority = HttpClientPriority.NORMAL): PaginatedResponse<MusicBrainzArtist> {
+        try {
+            val id = query.toPlatformUUID()
+            val artist = fetchArtistById(id, priority)
+            if (artist != null) {
+                return PaginatedResponse(
+                    data = if (page == 0) listOf(artist) else emptyList(),
+                    total = 1,
+                    page = page,
+                    pageSize = pageSize,
+                    hasNextPage = false
+                )
+            }
+        } catch (_: Exception) {
+        }
         val offset = page * pageSize
 
         val response = try {
@@ -326,6 +348,13 @@ class MusicBrainzService : Service() {
         artists: List<String>,
         priority: HttpClientPriority = HttpClientPriority.NORMAL
     ): MusicBrainzRelease? {
+        if (artists.isEmpty()) {
+            try {
+                val id = title.toPlatformUUID()
+                return fetchReleaseById(id, priority)
+            } catch (_: Exception) {
+            }
+        }
         val query = "release:\"${title.cleanTitle()}\" AND artist:${artists.joinToString { "\"$it\"" }}"
 
         return try {
