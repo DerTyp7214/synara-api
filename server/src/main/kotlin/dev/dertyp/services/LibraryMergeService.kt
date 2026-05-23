@@ -4,10 +4,8 @@ import dev.dertyp.db.*
 import dev.dertyp.dbQuery
 import dev.dertyp.plugins.PluginManager
 import org.jetbrains.exposed.v1.core.*
-import org.jetbrains.exposed.v1.jdbc.deleteWhere
-import org.jetbrains.exposed.v1.jdbc.select
-import org.jetbrains.exposed.v1.jdbc.selectAll
-import org.jetbrains.exposed.v1.jdbc.update
+import org.jetbrains.exposed.v1.core.dao.id.EntityID
+import org.jetbrains.exposed.v1.jdbc.*
 import org.koin.core.component.get
 import org.koin.core.component.inject
 import java.util.UUID
@@ -261,6 +259,12 @@ class LibraryMergeService : Service() {
             .filter { it.value.size > 1 }
 
         for ((originalId, group) in originalIdGroups) {
+            val distinctMbIds = group.mapNotNull { it.getOrNull(AlbumMusicBrainzTable.musicBrainzId)?.value }.distinct()
+            if (distinctMbIds.size > 1) {
+                logger.warn("Found albums with same originalId $originalId but different MusicBrainz IDs: $distinctMbIds. Skipping merge.")
+                continue
+            }
+
             val sortedGroup = group.sortedByDescending {
                 var score = 0
                 if (it[AlbumTable.releaseDate] != null) score++
@@ -286,8 +290,7 @@ class LibraryMergeService : Service() {
                 val albumService = get<AlbumService>()
                 albumService.fetchMusicBrainzId(keptAlbumId, triggerMerge = false)
             } else {
-                val prefix = originalId.substringBefore(":")
-                val importer = pluginManager.getAllImporters().find { it.id == prefix }
+                val importer = pluginManager.getAllImporters().find { it.id == originalId.substringBefore(":") }
                 importer?.updateAlbumMetadata(keptAlbumId, originalId)
             }
         }
@@ -355,11 +358,150 @@ class LibraryMergeService : Service() {
         return totalMerged
     }
 
+    suspend fun fixIncorrectMerges(onProgress: suspend (Double, String) -> Unit = { _, _ -> }): Int = dbQuery {
+        val allAlbums = AlbumTable.leftJoin(AlbumMusicBrainzTable).selectAll().toList()
+        var totalFixed = 0
+
+        allAlbums.forEachIndexed { index, albumRow ->
+            onProgress((index.toDouble() / allAlbums.size) * 100.0, "Checking album ${albumRow[AlbumTable.name]}...")
+
+            val albumId = albumRow[AlbumTable.id].value
+            val albumCover = albumRow[AlbumTable.cover]?.value
+            val albumMbId = albumRow.getOrNull(AlbumMusicBrainzTable.musicBrainzId)?.value
+
+            val songs = SongTable
+                .leftJoin(SongMusicBrainzTable)
+                .select(SongTable.id, SongTable.cover, SongMusicBrainzTable.musicBrainzId)
+                .where { SongTable.albumId eq albumId }
+                .toList()
+
+            if (songs.size <= 1) return@forEachIndexed
+
+            val groups = songs.groupBy { songRow ->
+                val songCover = songRow[SongTable.cover]?.value
+                val songMbId = songRow.getOrNull(SongMusicBrainzTable.musicBrainzId)?.value
+
+                val releases = if (songMbId != null) {
+                    MBRecordingReleaseTable.selectAll()
+                        .where { MBRecordingReleaseTable.recordingId eq songMbId }
+                        .map { it[MBRecordingReleaseTable.releaseId].value }
+                } else emptyList()
+
+                val belongsToAlbumRelease = albumMbId == null || releases.contains(albumMbId)
+                val primaryOtherRelease = if (!belongsToAlbumRelease) releases.firstOrNull() else null
+
+                Triple(songCover, belongsToAlbumRelease, primaryOtherRelease)
+            }
+
+            if (groups.size > 1) {
+                val targetGroupKey = groups.keys.find { it.first == albumCover && it.second }
+                    ?: groups.keys.find { it.second }
+                    ?: groups.keys.find { it.first == albumCover }
+                    ?: groups.keys.maxBy { groups[it]!!.size }
+
+                groups.filter { it.key != targetGroupKey }.forEach { (key, groupSongs) ->
+                    val (groupCover, belongsToAlbumRelease, suggestedMbId) = key
+                    if (groupCover != albumCover || !belongsToAlbumRelease) {
+                        logger.info("Splitting ${groupSongs.size} songs from album ${albumRow[AlbumTable.name]} ($albumId) - Cover matches: ${groupCover == albumCover}, MB matches: $belongsToAlbumRelease")
+                        splitSongsToNewAlbum(albumRow, groupSongs, suggestedMbId)
+                        totalFixed++
+                    }
+                }
+            }
+        }
+        totalFixed
+    }
+
+    private fun splitSongsToNewAlbum(originalAlbum: ResultRow, songs: List<ResultRow>, suggestedMbId: UUID?) {
+        val originalAlbumId = originalAlbum[AlbumTable.id].value
+
+        val existingAlbumId = suggestedMbId?.let { mbId ->
+            AlbumMusicBrainzTable.selectAll()
+                .where { AlbumMusicBrainzTable.musicBrainzId eq mbId }
+                .firstOrNull()?.get(AlbumMusicBrainzTable.albumId)?.value
+        }
+
+        if (existingAlbumId != null) {
+            val songIds = songs.map { it[SongTable.id].value }
+            SongTable.update({ SongTable.id inList songIds }) {
+                it[albumId] = EntityID(existingAlbumId, AlbumTable)
+            }
+
+            val remainingCount = SongTable.selectAll().where { SongTable.albumId eq originalAlbumId }.count().toInt()
+            AlbumTable.update({ AlbumTable.id eq originalAlbumId }) {
+                it[songCount] = remainingCount
+            }
+
+            val newTargetCount = SongTable.selectAll().where { SongTable.albumId eq existingAlbumId }.count().toInt()
+            AlbumTable.update({ AlbumTable.id eq existingAlbumId }) {
+                it[songCount] = newTargetCount
+            }
+            return
+        }
+
+        val newAlbumId = UUID.randomUUID()
+        val mbRelease = suggestedMbId?.let { mbId ->
+            MBReleaseTable.selectAll().where { MBReleaseTable.id eq mbId }.singleOrNull()
+        }
+        val mbTrackCount = suggestedMbId?.let { mbId ->
+            MBMediaTable.select(MBMediaTable.trackCount.sum())
+                .where { MBMediaTable.releaseId eq mbId }
+                .firstOrNull()?.get(MBMediaTable.trackCount.sum())
+        }
+
+        val firstSong = songs.first()
+        val newCover = firstSong[SongTable.cover]?.value
+
+        AlbumTable.insert { album ->
+            album[id] = EntityID(newAlbumId, AlbumTable)
+            album[name] = mbRelease?.get(MBReleaseTable.title) ?: originalAlbum[AlbumTable.name]
+            album[releaseDate] = mbRelease?.get(MBReleaseTable.date) ?: originalAlbum[AlbumTable.releaseDate]
+            album[songCount] = mbTrackCount?.takeIf { it > 0 } ?: songs.size
+            album[cover] = newCover?.let { id -> EntityID(id, ImageTable) }
+            album[originalId] = null
+        }
+
+        if (suggestedMbId != null) {
+            AlbumMusicBrainzTable.insert {
+                it[albumId] = EntityID(newAlbumId, AlbumTable)
+                it[musicBrainzId] = EntityID(suggestedMbId, MBReleaseTable)
+            }
+        }
+
+        val artists = AlbumArtistTable.select(AlbumArtistTable.artistId).where { AlbumArtistTable.albumId eq originalAlbumId }.toList()
+        AlbumArtistTable.batchInsert(artists) { row ->
+            this[AlbumArtistTable.albumId] = EntityID(newAlbumId, AlbumTable)
+            this[AlbumArtistTable.artistId] = row[AlbumArtistTable.artistId]
+        }
+
+        val genres = AlbumGenreTable.select(AlbumGenreTable.genreId).where { AlbumGenreTable.albumId eq originalAlbumId }.toList()
+        AlbumGenreTable.batchInsert(genres) { row ->
+            this[AlbumGenreTable.albumId] = EntityID(newAlbumId, AlbumTable)
+            this[AlbumGenreTable.genreId] = row[AlbumGenreTable.genreId]
+        }
+
+        val songIds = songs.map { it[SongTable.id].value }
+        SongTable.update({ SongTable.id inList songIds }) {
+            it[albumId] = EntityID(newAlbumId, AlbumTable)
+        }
+
+        val remainingCount = SongTable.selectAll().where { SongTable.albumId eq originalAlbumId }.count().toInt()
+        AlbumTable.update({ AlbumTable.id eq originalAlbumId }) {
+            it[songCount] = remainingCount
+        }
+    }
+
     private fun calculateSimilarity(albumA: ResultRow, albumB: ResultRow, artistsA: List<UUID>, artistsB: List<UUID>): Int {
-        var score = 0
+        val mbIdA = albumA.getOrNull(AlbumMusicBrainzTable.musicBrainzId)?.value
+        val mbIdB = albumB.getOrNull(AlbumMusicBrainzTable.musicBrainzId)?.value
+        if (mbIdA != null && mbIdB != null && mbIdA != mbIdB) return 0
 
         val coverA = albumA.getOrNull(AlbumTable.cover)?.value
         val coverB = albumB.getOrNull(AlbumTable.cover)?.value
+        if (coverA != null && coverB != null && coverA != coverB) return 0
+
+        var score = 0
+
         if (coverA != null && coverA == coverB) {
             score += 100
         }
