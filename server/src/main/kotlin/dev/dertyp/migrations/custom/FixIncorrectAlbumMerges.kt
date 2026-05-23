@@ -10,9 +10,11 @@ class FixIncorrectAlbumMerges : CustomMigration() {
     override suspend fun migrate() {
         val service = get<LibraryMergeService>()
         logger.info("Starting fix for incorrect album merges...")
+        var lastLoggedP = -1
         val fixedCount = service.fixIncorrectMerges { progress, message ->
             val p = progress.toInt()
-            if (p % 10 == 0) {
+            if (p != lastLoggedP) {
+                lastLoggedP = p
                 logger.info("[$p%] $message")
             }
         }
