@@ -368,41 +368,80 @@ class LibraryMergeService : Service() {
             val albumId = albumRow[AlbumTable.id].value
             val albumCover = albumRow[AlbumTable.cover]?.value
             val albumMbId = albumRow.getOrNull(AlbumMusicBrainzTable.musicBrainzId)?.value
+            val albumRgId = albumMbId?.let { mbId ->
+                MBReleaseTable.select(MBReleaseTable.releaseGroupId)
+                    .where { MBReleaseTable.id eq mbId }
+                    .firstOrNull()?.getOrNull(MBReleaseTable.releaseGroupId)?.value
+            }
 
             val songs = SongTable
                 .leftJoin(SongMusicBrainzTable)
-                .select(SongTable.id, SongTable.cover, SongMusicBrainzTable.musicBrainzId)
+                .select(
+                    SongTable.id,
+                    SongTable.cover,
+                    SongTable.discNumber,
+                    SongTable.trackNumber,
+                    SongMusicBrainzTable.musicBrainzId
+                )
                 .where { SongTable.albumId eq albumId }
                 .toList()
 
             if (songs.size <= 1) return@forEachIndexed
 
-            val groups = songs.groupBy { songRow ->
+            val identityGroups = songs.groupBy { songRow ->
                 val songCover = songRow[SongTable.cover]?.value
                 val songMbId = songRow.getOrNull(SongMusicBrainzTable.musicBrainzId)?.value
 
                 val releases = if (songMbId != null) {
-                    MBRecordingReleaseTable.selectAll()
+                    MBRecordingReleaseTable.leftJoin(MBReleaseTable)
+                        .select(MBRecordingReleaseTable.releaseId, MBReleaseTable.releaseGroupId)
                         .where { MBRecordingReleaseTable.recordingId eq songMbId }
-                        .map { it[MBRecordingReleaseTable.releaseId].value }
+                        .map { it[MBRecordingReleaseTable.releaseId].value to it[MBReleaseTable.releaseGroupId]?.value }
                 } else emptyList()
 
-                val belongsToAlbumRelease = albumMbId == null || releases.contains(albumMbId)
-                val primaryOtherRelease = if (!belongsToAlbumRelease) releases.firstOrNull() else null
+                val belongs = if (albumMbId != null) {
+                    releases.any { it.first == albumMbId } || (albumRgId != null && releases.any { it.second == albumRgId })
+                } else {
+                    true
+                }
 
-                Triple(songCover, belongsToAlbumRelease, primaryOtherRelease)
+                val primaryOtherRelease = if (!belongs) releases.firstOrNull()?.first else null
+
+                Triple(songCover, belongs, primaryOtherRelease)
             }
 
-            if (groups.size > 1) {
-                val targetGroupKey = groups.keys.find { it.first == albumCover && it.second }
-                    ?: groups.keys.find { it.second }
-                    ?: groups.keys.find { it.first == albumCover }
-                    ?: groups.keys.maxBy { groups[it]!!.size }
+            val finalGroups = mutableListOf<Pair<Triple<UUID?, Boolean, UUID?>, List<ResultRow>>>()
+            identityGroups.forEach { (identity, groupSongs) ->
+                val subgroups = mutableListOf<MutableList<ResultRow>>()
+                groupSongs.forEach { song ->
+                    val pos = song[SongTable.discNumber] to song[SongTable.trackNumber]
+                    val targetSubgroup = subgroups.find { sub ->
+                        sub.none { it[SongTable.discNumber] == pos.first && it[SongTable.trackNumber] == pos.second }
+                    }
+                    if (targetSubgroup != null) {
+                        targetSubgroup.add(song)
+                    } else {
+                        subgroups.add(mutableListOf(song))
+                    }
+                }
+                subgroups.forEach { finalGroups.add(identity to it) }
+            }
 
-                groups.filter { it.key != targetGroupKey }.forEach { (key, groupSongs) ->
-                    val (groupCover, belongsToAlbumRelease, suggestedMbId) = key
-                    if (groupCover != albumCover || !belongsToAlbumRelease) {
-                        logger.info("Splitting ${groupSongs.size} songs from album ${albumRow[AlbumTable.name]} ($albumId) - Cover matches: ${groupCover == albumCover}, MB matches: $belongsToAlbumRelease")
+            if (finalGroups.size > 1) {
+                val targetGroupIndex = finalGroups.indices.find { i ->
+                    val (identity, _) = finalGroups[i]
+                    identity.first == albumCover && identity.second
+                } ?: finalGroups.indices.find { i -> finalGroups[i].first.second }
+                  ?: finalGroups.indices.find { i -> finalGroups[i].first.first == albumCover }
+                  ?: finalGroups.indices.maxBy { finalGroups[it].second.size }
+
+                val targetIdentity = finalGroups[targetGroupIndex].first
+
+                finalGroups.filterIndexed { i, _ -> i != targetGroupIndex }.forEach { (identity, groupSongs) ->
+                    val (groupCover, belongsToAlbum, suggestedMbId) = identity
+                    
+                    if (groupCover != albumCover || !belongsToAlbum || identity == targetIdentity) {
+                        logger.info("Splitting ${groupSongs.size} songs from album ${albumRow[AlbumTable.name]} ($albumId) - Identity match: $belongsToAlbum, Cover match: ${groupCover == albumCover}, Collision: ${identity == targetIdentity}")
                         splitSongsToNewAlbum(albumRow, groupSongs, suggestedMbId)
                         totalFixed++
                     }
@@ -412,7 +451,7 @@ class LibraryMergeService : Service() {
         totalFixed
     }
 
-    private fun splitSongsToNewAlbum(originalAlbum: ResultRow, songs: List<ResultRow>, suggestedMbId: UUID?) {
+    private suspend fun splitSongsToNewAlbum(originalAlbum: ResultRow, songs: List<ResultRow>, suggestedMbId: UUID?) {
         val originalAlbumId = originalAlbum[AlbumTable.id].value
 
         val existingAlbumId = suggestedMbId?.let { mbId ->
@@ -436,6 +475,8 @@ class LibraryMergeService : Service() {
             AlbumTable.update({ AlbumTable.id eq existingAlbumId }) {
                 it[songCount] = newTargetCount
             }
+
+            get<AlbumService>().syncAlbumSongsWithMusicBrainz(existingAlbumId, suggestedMbId)
             return
         }
 
@@ -488,6 +529,10 @@ class LibraryMergeService : Service() {
         val remainingCount = SongTable.selectAll().where { SongTable.albumId eq originalAlbumId }.count().toInt()
         AlbumTable.update({ AlbumTable.id eq originalAlbumId }) {
             it[songCount] = remainingCount
+        }
+
+        if (suggestedMbId != null) {
+            get<AlbumService>().syncAlbumSongsWithMusicBrainz(newAlbumId, suggestedMbId)
         }
     }
 

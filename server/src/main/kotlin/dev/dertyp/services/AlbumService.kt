@@ -28,6 +28,7 @@ import java.util.UUID
 import kotlin.io.path.absolutePathString
 import kotlin.io.path.isSymbolicLink
 import kotlin.io.path.readSymbolicLink
+import kotlin.math.abs
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
 
@@ -281,43 +282,9 @@ class AlbumService : AlbumLibrary, Service() {
                         this[AlbumArtistTable.artistId] = artist.id
                     }
                 }
-
-                if (mbTracks.isNotEmpty()) {
-                    val dbSongs = SongTable
-                        .leftJoin(SongMusicBrainzTable)
-                        .select(
-                            SongTable.id,
-                            SongTable.title,
-                            SongTable.trackNumber,
-                            SongTable.discNumber,
-                            SongMusicBrainzTable.musicBrainzId
-                        )
-                        .where { SongTable.albumId eq id }
-                        .map { row ->
-                            val songId = row[SongTable.id].value
-                            val smbId = row.getOrNull(SongMusicBrainzTable.musicBrainzId)?.value
-                            val title = row[SongTable.title]
-                            Quadruple(songId, smbId, title, row)
-                        }
-
-                    for ((discNo, trackNo, mbTrack) in mbTracks) {
-                        val mbRecordingId = mbTrack.recording?.id
-                        val mbTitle = mbTrack.title ?: mbTrack.recording?.title
-
-                        val matchedSong = dbSongs.find { it.second == mbRecordingId }
-                            ?: if (mbTitle != null) {
-                                dbSongs.find { it.third.equals(mbTitle, ignoreCase = true) }
-                            } else null
-
-                        if (matchedSong != null) {
-                            SongTable.update({ SongTable.id eq matchedSong.first }) {
-                                it[trackNumber] = trackNo
-                                it[discNumber] = discNo
-                            }
-                        }
-                    }
-                }
             }
+
+            syncSongsWithMusicBrainz(id, mbTracks)
 
             val genres = (mbRelease.genres?.map { it.name }
                 ?: emptyList()) + (mbRelease.releaseGroup?.genres?.map { it.name } ?: emptyList())
@@ -333,7 +300,73 @@ class AlbumService : AlbumLibrary, Service() {
             }
         }
 
-        return setMusicBrainzId(id, mbId, userId, triggerMerge)
+        return setMusicBrainzId(id, mbId, userId, triggerMerge, triggerSync = false)
+    }
+
+    suspend fun syncAlbumSongsWithMusicBrainz(albumId: UUID, mbId: UUID) {
+        val mbRelease = cachedMusicBrainzService.getRelease(mbId) ?: return
+        val mbTracks = mbRelease.media?.flatMapIndexed { mediaIndex, media ->
+            val discNumber = mediaIndex + 1
+            media.tracks?.map { track ->
+                Triple(discNumber, track.position ?: 1, track)
+            } ?: emptyList()
+        } ?: emptyList()
+
+        syncSongsWithMusicBrainz(albumId, mbTracks)
+    }
+
+    suspend fun syncSongsWithMusicBrainz(id: UUID, mbTracks: List<Triple<Int, Int, MusicBrainzTrack>>) = dbQuery {
+        if (mbTracks.isEmpty()) return@dbQuery
+
+        val dbSongs = SongTable
+            .leftJoin(SongMusicBrainzTable)
+            .select(
+                SongTable.id,
+                SongTable.title,
+                SongTable.trackNumber,
+                SongTable.discNumber,
+                SongTable.duration,
+                SongMusicBrainzTable.musicBrainzId
+            )
+            .where { SongTable.albumId eq id }
+            .map { row ->
+                val songId = row[SongTable.id].value
+                val smbId = row.getOrNull(SongMusicBrainzTable.musicBrainzId)?.value
+                val title = row[SongTable.title]
+                val duration = row[SongTable.duration]
+                Pair(songId, smbId) to Triple(title, duration, row)
+            }
+
+        for ((discNo, trackNo, mbTrack) in mbTracks) {
+            val mbRecordingId = mbTrack.recording?.id
+            val mbTitle = mbTrack.title ?: mbTrack.recording?.title
+            val mbDuration = mbTrack.recording?.length
+
+            val matchedSong = dbSongs.find { it.first.second == mbRecordingId }
+                ?: dbSongs.find { mbTitle != null && it.second.first.equals(mbTitle, ignoreCase = true) }
+                ?: dbSongs.find { mbTitle != null && it.second.first.cleanTitle().equals(mbTitle.cleanTitle(), ignoreCase = true) }
+                ?: dbSongs.find { 
+                    mbTitle != null && 
+                    mbDuration != null && 
+                    abs(it.second.second - mbDuration) < 2000 &&
+                    it.second.first.cleanTitle().contains(mbTitle.cleanTitle(), ignoreCase = true) 
+                }
+
+            if (matchedSong != null) {
+                SongTable.update({ SongTable.id eq matchedSong.first.first }) {
+                    it[trackNumber] = trackNo
+                    it[discNumber] = discNo
+                }
+
+                if (mbRecordingId != null) {
+                    SongMusicBrainzTable.upsert(SongMusicBrainzTable.songId) {
+                        it[songId] = matchedSong.first.first
+                        it[musicBrainzId] = EntityID(mbRecordingId, MBRecordingTable)
+                        it[lastCheck] = Clock.System.now().toEpochMilliseconds()
+                    }
+                }
+            }
+        }
     }
 
     suspend fun updateMusicBrainzLastCheck(id: UUID) = dbQuery {
@@ -347,17 +380,37 @@ class AlbumService : AlbumLibrary, Service() {
         id: UUID,
         musicBrainzId: UUID?,
         userId: UUID? = null,
-        triggerMerge: Boolean = true
+        triggerMerge: Boolean = true,
+        triggerSync: Boolean = true
     ): Album? {
-        if (musicBrainzId != null) {
+        val currentMbId = dbQuery {
+            AlbumMusicBrainzTable.select(AlbumMusicBrainzTable.musicBrainzId)
+                .where { AlbumMusicBrainzTable.albumId eq id }
+                .firstOrNull()?.getOrNull(AlbumMusicBrainzTable.musicBrainzId)?.value
+        }
+
+        if (musicBrainzId != null && triggerSync && musicBrainzId != currentMbId) {
             val releaseExists = dbQuery {
                 MBReleaseTable.select(MBReleaseTable.id)
                     .where { MBReleaseTable.id eq musicBrainzId }
                     .any()
             }
 
-            if (!releaseExists) {
+            val mbRelease = if (!releaseExists) {
                 cachedMusicBrainzService.getRelease(musicBrainzId)
+            } else {
+                cachedMusicBrainzService.getRelease(musicBrainzId)
+            }
+
+            if (mbRelease != null) {
+                val mbTracks = mbRelease.media?.flatMapIndexed { mediaIndex, media ->
+                    val discNumber = mediaIndex + 1
+                    media.tracks?.map { track ->
+                        Triple(discNumber, track.position ?: 1, track)
+                    } ?: emptyList()
+                } ?: emptyList()
+
+                syncSongsWithMusicBrainz(id, mbTracks)
             }
         }
 
