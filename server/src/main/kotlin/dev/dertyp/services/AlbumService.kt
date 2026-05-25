@@ -305,12 +305,21 @@ class AlbumService : AlbumLibrary, Service() {
 
     suspend fun syncAlbumSongsWithMusicBrainz(albumId: UUID, mbId: UUID) {
         val mbRelease = cachedMusicBrainzService.getRelease(mbId) ?: return
+        val trackCount = mbRelease.media?.sumOf { it.trackCount ?: 0 } ?: 0
         val mbTracks = mbRelease.media?.flatMapIndexed { mediaIndex, media ->
             val discNumber = mediaIndex + 1
             media.tracks?.map { track ->
                 Triple(discNumber, track.position ?: 1, track)
             } ?: emptyList()
         } ?: emptyList()
+
+        if (trackCount > 0) {
+            dbQuery {
+                AlbumTable.update({ AlbumTable.id eq albumId }) {
+                    it[songCount] = trackCount
+                }
+            }
+        }
 
         syncSongsWithMusicBrainz(albumId, mbTracks)
     }
