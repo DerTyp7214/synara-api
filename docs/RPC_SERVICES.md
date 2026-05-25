@@ -1443,6 +1443,7 @@ Management of background task configurations.
 | `getConfigurations` | - | `List`<[TaskConfiguration](#devdertypdatataskconfiguration)> | **Admin** | SecurityException | Retrieve all background task configurations. |
 | `updateConfiguration` | `configuration` ([TaskConfiguration](#devdertypdatataskconfiguration)) | `Unit` | **Admin** | SecurityException, IllegalArgumentException | Update a task configuration. |
 | `getConfigurationsFlow` | - | `Flow`<`List`<[TaskConfiguration](#devdertypdatataskconfiguration)>> | **Admin** | SecurityException | Stream real-time updates for all background task configurations. |
+| `triggerTask` | `key` (`String`) | `Boolean` | **Admin** | SecurityException | Manually trigger a background task by its unique key. |
 
 ### IScheduledTaskLogService <a name="devdertypservicesischeduledtasklogservice"></a>
 Monitoring and tracking of background scheduled tasks.

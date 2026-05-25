@@ -15,6 +15,7 @@ import dev.dertyp.services.metadata.IMetadataService
 import dev.dertyp.services.metadata.IMusicBrainzService
 import dev.dertyp.services.metadata.MetadataDispatcherService
 import dev.dertyp.services.schedule.RpcScheduledTaskConfigurationService
+import dev.dertyp.services.schedule.ScheduleService
 import dev.dertyp.services.schedule.ScheduledTaskConfigurationService
 import dev.dertyp.utils.withAuthorization
 import dev.dertyp.utils.withCaching
@@ -106,6 +107,7 @@ private fun registerAuthenticated(koin: Koin, call: ApplicationCall, user: User,
     val remoteMirrorService = koin.get<RemoteMirrorService>()
     val scheduledTaskLogService = koin.get<ScheduledTaskLogService>()
     val scheduledTaskConfigurationService = koin.get<ScheduledTaskConfigurationService>()
+    val scheduleService = koin.get<ScheduleService>()
     val releaseService = koin.get<ReleaseService>()
     val audioAnalysisService = koin.get<AudioAnalysisService>()
     val discoveryService = koin.get<DiscoveryService>()
@@ -135,7 +137,7 @@ private fun registerAuthenticated(koin: Koin, call: ApplicationCall, user: User,
     registrar.register(IMirrorService::class) { MirrorRpcService(mirrorService).withAuthorization<IMirrorService>(user).withLogging<IMirrorService>(call) }
     registrar.register(IRemoteMirrorService::class) { RemoteMirrorRpcService(user, remoteMirrorService).withAuthorization<IRemoteMirrorService>(user).withLogging<IRemoteMirrorService>(call) }
     registrar.register(IScheduledTaskLogService::class) { RpcScheduledTaskLogService(user, scheduledTaskLogService).withAuthorization<IScheduledTaskLogService>(user).withLogging<IScheduledTaskLogService>(call) }
-    registrar.register(IScheduledTaskConfigurationService::class) { RpcScheduledTaskConfigurationService(scheduledTaskConfigurationService).withAuthorization<IScheduledTaskConfigurationService>(user).withLogging<IScheduledTaskConfigurationService>(call) }
+    registrar.register(IScheduledTaskConfigurationService::class) { RpcScheduledTaskConfigurationService(scheduledTaskConfigurationService, scheduleService).withAuthorization<IScheduledTaskConfigurationService>(user).withLogging<IScheduledTaskConfigurationService>(call) }
     registrar.register(IReleaseService::class) { RpcReleaseService(user, releaseService).withAuthorization<IReleaseService>(user).withLogging<IReleaseService>(call) }
     registrar.register(IMusicBrainzService::class) { cachedMusicBrainzService.withAuthorization<IMusicBrainzService>(user).withLogging<IMusicBrainzService>(call) }
     registrar.register(IMetadataService::class) { metadataDispatcherService.withAuthorization<IMetadataService>(user).withLogging<IMetadataService>(call) }

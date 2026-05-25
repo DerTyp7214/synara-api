@@ -393,28 +393,7 @@ class AlbumService : AlbumLibrary, Service() {
         }
 
         if (musicBrainzId != null && triggerSync && musicBrainzId != currentMbId) {
-            val releaseExists = dbQuery {
-                MBReleaseTable.select(MBReleaseTable.id)
-                    .where { MBReleaseTable.id eq musicBrainzId }
-                    .any()
-            }
-
-            val mbRelease = if (!releaseExists) {
-                cachedMusicBrainzService.getRelease(musicBrainzId)
-            } else {
-                cachedMusicBrainzService.getRelease(musicBrainzId)
-            }
-
-            if (mbRelease != null) {
-                val mbTracks = mbRelease.media?.flatMapIndexed { mediaIndex, media ->
-                    val discNumber = mediaIndex + 1
-                    media.tracks?.map { track ->
-                        Triple(discNumber, track.position ?: 1, track)
-                    } ?: emptyList()
-                } ?: emptyList()
-
-                syncSongsWithMusicBrainz(id, mbTracks)
-            }
+            syncAlbumSongsWithMusicBrainz(id, musicBrainzId)
         }
 
         dbQuery {
@@ -831,7 +810,7 @@ class AlbumService : AlbumLibrary, Service() {
     }
 
     suspend fun updateAlbum(album: Album, userId: UUID? = null): Album? {
-        upsertAlbum(album)
+        upsertAlbum(album, triggerSync = true)
         return byId(album.id, userId)
     }
 
@@ -1316,25 +1295,31 @@ class AlbumService : AlbumLibrary, Service() {
             emptyAlbums.size
         }
 
-    suspend fun upsertAlbum(album: Album) = dbQuery {
-        AlbumTable.upsert(AlbumTable.id) {
-            it[id] = album.id
-            it[name] = album.name
-            it[releaseDate] = getISOFromDate(album.releaseDate)
-            it[songCount] = album.songCount
-            it[cover] = album.coverId?.let { coverId -> EntityID(coverId, ImageTable) }
-            it[originalId] = album.originalId
+    suspend fun upsertAlbum(album: Album, triggerSync: Boolean = false) {
+        val currentMbId = dbQuery {
+            AlbumMusicBrainzTable.select(AlbumMusicBrainzTable.musicBrainzId)
+                .where { AlbumMusicBrainzTable.albumId eq album.id }
+                .firstOrNull()?.getOrNull(AlbumMusicBrainzTable.musicBrainzId)?.value
         }
 
-        if (album.originalId != null) {
-            val originalId = album.originalId!!
-            val parser = ParserFactory.getParser(originalId)
-            val parsed = parser?.parse(originalId)
-            val provider = parser?.name ?: "unknown"
-            val externalId =
-                parsed?.first ?: (if (originalId.contains(":")) originalId.substringAfter(":") else originalId)
+        dbQuery {
+            AlbumTable.upsert(AlbumTable.id) {
+                it[id] = album.id
+                it[name] = album.name
+                it[releaseDate] = getISOFromDate(album.releaseDate)
+                it[songCount] = album.songCount
+                it[cover] = album.coverId?.let { coverId -> EntityID(coverId, ImageTable) }
+                it[originalId] = album.originalId
+            }
 
-            dbQuery {
+            if (album.originalId != null) {
+                val originalId = album.originalId!!
+                val parser = ParserFactory.getParser(originalId)
+                val parsed = parser?.parse(originalId)
+                val provider = parser?.name ?: "unknown"
+                val externalId =
+                    parsed?.first ?: (if (originalId.contains(":")) originalId.substringAfter(":") else originalId)
+
                 AlbumProviderTable.upsert(
                     AlbumProviderTable.albumId,
                     AlbumProviderTable.provider,
@@ -1347,27 +1332,37 @@ class AlbumService : AlbumLibrary, Service() {
                     it[AlbumProviderTable.rawUrl] = originalId
                 }
             }
-        }
 
-        if (album.musicbrainzId != null) {
-            val mbId = album.musicbrainzId!!
-            if (MBReleaseTable.selectAll().where { MBReleaseTable.id eq mbId }.empty()) {
-                MBReleaseTable.insert {
-                    it[id] = EntityID(mbId, MBReleaseTable)
-                    it[title] = album.name
+            if (album.musicbrainzId != null) {
+                val mbId = album.musicbrainzId!!
+                if (MBReleaseTable.selectAll().where { MBReleaseTable.id eq mbId }.empty()) {
+                    MBReleaseTable.insert {
+                        it[id] = EntityID(mbId, MBReleaseTable)
+                        it[title] = album.name
+                    }
+                }
+
+                AlbumMusicBrainzTable.upsert(AlbumMusicBrainzTable.albumId) {
+                    it[albumId] = album.id
+                    it[AlbumMusicBrainzTable.musicBrainzId] = mbId
                 }
             }
 
-            AlbumMusicBrainzTable.upsert(AlbumMusicBrainzTable.albumId) {
-                it[albumId] = album.id
-                it[musicBrainzId] = mbId
+            AlbumArtistTable.deleteWhere { AlbumArtistTable.albumId eq album.id }
+            AlbumArtistTable.batchInsert(album.artists) { artist ->
+                this[AlbumArtistTable.albumId] = album.id
+                this[AlbumArtistTable.artistId] = artist.id
             }
         }
 
-        AlbumArtistTable.deleteWhere { AlbumArtistTable.albumId eq album.id }
-        AlbumArtistTable.batchInsert(album.artists) { artist ->
-            this[AlbumArtistTable.albumId] = album.id
-            this[AlbumArtistTable.artistId] = artist.id
+        if (triggerSync && album.musicbrainzId != null && album.musicbrainzId != currentMbId) {
+            syncAlbumSongsWithMusicBrainz(album.id, album.musicbrainzId!!)
+
+            ApplicationScope.scope.launch {
+                dbQuery {
+                    libraryMergeService.mergeDuplicateAlbums()
+                }
+            }
         }
     }
 }

@@ -15,7 +15,8 @@ import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.upsert
 
 class RpcScheduledTaskConfigurationService(
-    private val configService: ScheduledTaskConfigurationService
+    private val configService: ScheduledTaskConfigurationService,
+    private val scheduleService: ScheduleService,
 ) : IScheduledTaskConfigurationService {
     override suspend fun getConfigurations(): List<TaskConfiguration> {
         return configService.getConfigurations()
@@ -27,6 +28,10 @@ class RpcScheduledTaskConfigurationService(
 
     override fun getConfigurationsFlow(): Flow<List<TaskConfiguration>> {
         return configService.configurationsFlow
+    }
+
+    override suspend fun triggerTask(key: String): Boolean {
+        return scheduleService.triggerTask(key)
     }
 }
 
