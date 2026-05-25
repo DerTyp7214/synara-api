@@ -368,11 +368,6 @@ class LibraryMergeService : Service() {
             val albumId = albumRow[AlbumTable.id].value
             val albumCover = albumRow[AlbumTable.cover]?.value
             val albumMbId = albumRow.getOrNull(AlbumMusicBrainzTable.musicBrainzId)?.value
-            val albumRgId = albumMbId?.let { mbId ->
-                MBReleaseTable.select(MBReleaseTable.releaseGroupId)
-                    .where { MBReleaseTable.id eq mbId }
-                    .firstOrNull()?.getOrNull(MBReleaseTable.releaseGroupId)?.value
-            }
 
             val songs = SongTable
                 .leftJoin(SongMusicBrainzTable)
@@ -392,20 +387,19 @@ class LibraryMergeService : Service() {
                 val songCover = songRow[SongTable.cover]?.value
                 val songMbId = songRow.getOrNull(SongMusicBrainzTable.musicBrainzId)?.value
 
-                val releases = if (songMbId != null) {
-                    MBRecordingReleaseTable.leftJoin(MBReleaseTable)
-                        .select(MBRecordingReleaseTable.releaseId, MBReleaseTable.releaseGroupId)
-                        .where { MBRecordingReleaseTable.recordingId eq songMbId }
-                        .map { it[MBRecordingReleaseTable.releaseId].value to it[MBReleaseTable.releaseGroupId]?.value }
-                } else emptyList()
-
-                val belongs = if (albumMbId != null) {
-                    releases.any { it.first == albumMbId } || (albumRgId != null && releases.any { it.second == albumRgId })
+                val belongs = if (songMbId != null && albumMbId != null) {
+                    MBRecordingReleaseTable.selectAll()
+                        .where { (MBRecordingReleaseTable.recordingId eq songMbId) and (MBRecordingReleaseTable.releaseId eq albumMbId) }
+                        .any()
                 } else {
                     true
                 }
-
-                val primaryOtherRelease = if (!belongs) releases.firstOrNull()?.first else null
+                
+                val primaryOtherRelease = if (songMbId != null && !belongs) {
+                    MBRecordingReleaseTable.select(MBRecordingReleaseTable.releaseId)
+                        .where { MBRecordingReleaseTable.recordingId eq songMbId }
+                        .firstOrNull()?.get(MBRecordingReleaseTable.releaseId)?.value
+                } else null
 
                 Triple(songCover, belongs, primaryOtherRelease)
             }

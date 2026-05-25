@@ -370,6 +370,9 @@ class AlbumService : AlbumLibrary, Service() {
     }
 
     suspend fun updateMusicBrainzLastCheck(id: UUID) = dbQuery {
+        val exists = AlbumTable.select(AlbumTable.id).where { AlbumTable.id eq id }.any()
+        if (!exists) return@dbQuery
+
         AlbumMusicBrainzTable.upsert(AlbumMusicBrainzTable.albumId) {
             it[albumId] = id
             it[lastCheck] = Clock.System.now().toEpochMilliseconds()
