@@ -505,7 +505,7 @@ fun Route.registerAuthenticatedRestServices(koin: Koin) {
     }
     registerRestService(IScheduledTaskConfigurationService::class, authenticated = true) {
         val user = call.getUser() ?: throw IllegalArgumentException("No user found")
-        RpcScheduledTaskConfigurationService(koin.get()).withAuthorization<IScheduledTaskConfigurationService>(user)
+        RpcScheduledTaskConfigurationService(koin.get(), koin.get()).withAuthorization<IScheduledTaskConfigurationService>(user)
     }
     registerRestService(IReleaseService::class, authenticated = true) {
         val user = call.getUser() ?: throw IllegalArgumentException("No user found")
