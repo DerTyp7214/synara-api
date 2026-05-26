@@ -1304,7 +1304,7 @@ class AlbumService : AlbumLibrary, Service() {
             emptyAlbums.size
         }
 
-    suspend fun upsertAlbum(album: Album, triggerSync: Boolean = false) {
+    suspend fun upsertAlbum(album: Album, triggerSync: Boolean = false, triggerMerge: Boolean = true) {
         val currentMbId = dbQuery {
             AlbumMusicBrainzTable.select(AlbumMusicBrainzTable.musicBrainzId)
                 .where { AlbumMusicBrainzTable.albumId eq album.id }
@@ -1367,9 +1367,11 @@ class AlbumService : AlbumLibrary, Service() {
         if (triggerSync && album.musicbrainzId != null && album.musicbrainzId != currentMbId) {
             syncAlbumSongsWithMusicBrainz(album.id, album.musicbrainzId!!)
 
-            ApplicationScope.scope.launch {
-                dbQuery {
-                    libraryMergeService.mergeDuplicateAlbums()
+            if (triggerMerge) {
+                ApplicationScope.scope.launch {
+                    dbQuery {
+                        libraryMergeService.mergeDuplicateAlbums()
+                    }
                 }
             }
         }

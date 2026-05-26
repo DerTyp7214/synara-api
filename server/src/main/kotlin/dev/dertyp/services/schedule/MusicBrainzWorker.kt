@@ -1,10 +1,8 @@
 package dev.dertyp.services.schedule
 
 import dev.dertyp.core.HttpClientPriority
-import dev.dertyp.services.AlbumService
-import dev.dertyp.services.ArtistService
-import dev.dertyp.services.SongService
-import dev.dertyp.services.UserService
+import dev.dertyp.dbQuery
+import dev.dertyp.services.*
 import kotlinx.coroutines.flow.produceIn
 import kotlinx.coroutines.withTimeoutOrNull
 import org.koin.core.component.inject
@@ -15,6 +13,7 @@ class MusicBrainzWorker : Worker("MusicBrainzWorker") {
     private val albumService by inject<AlbumService>()
     private val artistService by inject<ArtistService>()
     private val userService by inject<UserService>()
+    private val libraryMergeService by inject<LibraryMergeService>()
 
     override suspend fun execute(onProgress: suspend (Double, String) -> Unit): Map<String, Int> {
         val admin = userService.findAdmin() ?: return emptyMap()
@@ -57,7 +56,7 @@ class MusicBrainzWorker : Worker("MusicBrainzWorker") {
                         val albumResult = albumIdsChannel.receiveCatching()
                         albumResult.getOrNull()?.let { albumId ->
                             try {
-                                val album = albumService.fetchMusicBrainzId(albumId, priority = HttpClientPriority.LOW)
+                                val album = albumService.fetchMusicBrainzId(albumId, priority = HttpClientPriority.LOW, triggerMerge = false)
                                 totalAlbumsChecked++
                                 if (album?.musicbrainzId != null) {
                                     taggedAlbums++
@@ -96,6 +95,10 @@ class MusicBrainzWorker : Worker("MusicBrainzWorker") {
                 albumIdsChannel.cancel()
                 artistIdsChannel.cancel()
             }
+        }
+
+        dbQuery {
+            libraryMergeService.mergeDuplicateAlbums()
         }
 
         return mapOf(
