@@ -2,13 +2,12 @@ package dev.dertyp.services.schedule
 
 import dev.dertyp.core.HttpClientPriority
 import dev.dertyp.data.User
-import dev.dertyp.services.AlbumService
-import dev.dertyp.services.ArtistService
-import dev.dertyp.services.SongService
-import dev.dertyp.services.UserService
+import dev.dertyp.dbQuery
+import dev.dertyp.services.*
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
+import io.mockk.mockkStatic
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.AfterEach
@@ -28,10 +27,17 @@ class MusicBrainzWorkerTest : KoinTest {
 
     @Test
     fun `worker should tag unmapped entities`() = runBlocking {
+        mockkStatic("dev.dertyp.UtilsKt")
+        coEvery { dbQuery<Any>(any()) } coAnswers {
+            @Suppress("UNCHECKED_CAST")
+            (it.invocation.args[0] as suspend () -> Any).invoke()
+        }
+
         val songService = mockk<SongService>()
         val albumService = mockk<AlbumService>()
         val artistService = mockk<ArtistService>()
         val userService = mockk<UserService>()
+        val libraryMergeService = mockk<LibraryMergeService>()
         
         val admin = mockk<User>()
         val adminId = UUID.randomUUID()
@@ -47,8 +53,9 @@ class MusicBrainzWorkerTest : KoinTest {
         coEvery { artistService.artistIdsWithoutMusicBrainzId() } returns flowOf(artistId)
 
         coEvery { songService.fetchMusicBrainzId(songId, adminId, HttpClientPriority.LOW) } returns mockk(relaxed = true)
-        coEvery { albumService.fetchMusicBrainzId(albumId, priority = HttpClientPriority.LOW) } returns mockk(relaxed = true)
+        coEvery { albumService.fetchMusicBrainzId(albumId, priority = HttpClientPriority.LOW, triggerMerge = false) } returns mockk(relaxed = true)
         coEvery { artistService.fetchMusicBrainzId(artistId, priority = HttpClientPriority.LOW) } returns mockk(relaxed = true)
+        coEvery { libraryMergeService.mergeDuplicateAlbums() } returns 0
 
         startKoin {
             modules(module {
@@ -56,6 +63,7 @@ class MusicBrainzWorkerTest : KoinTest {
                 single { albumService }
                 single { artistService }
                 single { userService }
+                single { libraryMergeService }
             })
         }
 
@@ -63,7 +71,8 @@ class MusicBrainzWorkerTest : KoinTest {
         worker.run()
 
         coVerify { songService.fetchMusicBrainzId(songId, adminId, HttpClientPriority.LOW) }
-        coVerify { albumService.fetchMusicBrainzId(albumId, priority = HttpClientPriority.LOW) }
+        coVerify { albumService.fetchMusicBrainzId(albumId, priority = HttpClientPriority.LOW, triggerMerge = false) }
         coVerify { artistService.fetchMusicBrainzId(artistId, priority = HttpClientPriority.LOW) }
+        coVerify { libraryMergeService.mergeDuplicateAlbums() }
     }
 }
