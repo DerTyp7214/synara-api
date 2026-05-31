@@ -2,6 +2,7 @@ package dev.dertyp.services.schedule
 
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
+import dev.dertyp.core.ApplicationScope
 import dev.dertyp.data.TaskConfiguration
 import dev.dertyp.data.TaskKeys
 import dev.dertyp.data.TriggerDefinition
@@ -50,6 +51,7 @@ class ScheduleServiceConfigIntegrationTest : KoinTest {
     fun tearDown() {
         stopKoin()
         TestDatabase.cleanUp()
+        ApplicationScope.scope.coroutineContext.cancelChildren()
     }
 
     @ParameterizedTest

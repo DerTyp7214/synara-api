@@ -77,16 +77,19 @@ fun Query.rankedSearchQuery(
     }
 
     if (!queryString.startsWith("-")) {
+        val exactMatchBonus = (weights.first() * tokens.size) + 500
         val phraseBonus = (weights.first() * tokens.size) + 100
 
+        val exactMatchOp = columns.first() ilike queryString
         val phraseMatchOp = columns.first() ilike "%$queryString%"
 
         val bonusExpression = case()
+            .When(exactMatchOp, intLiteral(exactMatchBonus))
             .When(phraseMatchOp, intLiteral(phraseBonus))
             .Else(zeroLiteral)
 
         scoreExpression += bonusExpression
-        whereClause = whereClause?.let { it or phraseMatchOp } ?: phraseMatchOp
+        whereClause = whereClause?.let { it or exactMatchOp or phraseMatchOp } ?: (exactMatchOp or phraseMatchOp)
 
         if (tokens.size > 1) {
             val bigrams = tokens.windowed(2, 1)

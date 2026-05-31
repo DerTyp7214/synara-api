@@ -300,6 +300,125 @@ class ArtistServiceTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
+    fun `rankedSearch should find artists with short names`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        transaction(database) {
+            ArtistTable.insert {
+                it[id] = UUID.randomUUID()
+                it[name] = "ABC"
+            }
+            ArtistTable.insert {
+                it[id] = UUID.randomUUID()
+                it[name] = "XYZ"
+            }
+            ArtistTable.insert {
+                it[id] = UUID.randomUUID()
+                it[name] = "A"
+            }
+        }
+
+        val result3Chars = service.rankedSearch(0, 10, "ABC")
+        assertEquals(1, result3Chars.data.size)
+        assertEquals("ABC", result3Chars.data[0].name)
+
+        val result1Char = service.rankedSearch(0, 10, "A")
+        assertTrue(result1Char.data.any { it.name == "A" })
+        assertTrue(result1Char.data.any { it.name == "ABC" })
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `rankedSearch should prioritize exact matches over partial matches`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        transaction(database) {
+            ArtistTable.insert {
+                it[id] = UUID.randomUUID()
+                it[name] = "MARINA"
+            }
+            ArtistTable.insert {
+                it[id] = UUID.randomUUID()
+                it[name] = "RIN"
+            }
+            ArtistTable.insert {
+                it[id] = UUID.randomUUID()
+                it[name] = "CORINA"
+            }
+            ArtistTable.insert {
+                it[id] = UUID.randomUUID()
+                it[name] = "GRIND"
+            }
+        }
+
+        val result = service.rankedSearch(0, 10, "RIN")
+        assertEquals("RIN", result.data[0].name, "Exact match 'RIN' should be the first result")
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `rankedSearch should be case-insensitive for exact matches`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        transaction(database) {
+            ArtistTable.insert {
+                it[id] = UUID.randomUUID()
+                it[name] = "Rin"
+            }
+            ArtistTable.insert {
+                it[id] = UUID.randomUUID()
+                it[name] = "MARINA"
+            }
+        }
+
+        val result = service.rankedSearch(0, 10, "RIN")
+        assertEquals("Rin", result.data[0].name, "Exact match 'Rin' should be found for query 'RIN'")
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `rankedSearch should handle multiple tokens with exact match`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        transaction(database) {
+            ArtistTable.insert {
+                it[id] = UUID.randomUUID()
+                it[name] = "The Offspring"
+            }
+            ArtistTable.insert {
+                it[id] = UUID.randomUUID()
+                it[name] = "Offspring"
+            }
+        }
+
+        val result = service.rankedSearch(0, 10, "Offspring")
+        assertEquals("Offspring", result.data[0].name, "Exact match 'Offspring' should be preferred over 'The Offspring'")
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `rankedSearch should prioritize exact name match over alias partial match`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        transaction(database) {
+            val artist1Id = UUID.randomUUID()
+            ArtistTable.insert {
+                it[id] = artist1Id
+                it[name] = "RIN"
+            }
+            
+            val artist2Id = UUID.randomUUID()
+            ArtistTable.insert {
+                it[id] = artist2Id
+                it[name] = "Other"
+            }
+            ArtistAliasTable.insert {
+                it[artistId] = artist2Id
+                it[name] = "MARINA"
+            }
+        }
+
+        val result = service.rankedSearch(0, 10, "RIN")
+        assertEquals("RIN", result.data[0].name, "Exact match in main column should be first")
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
     fun `createArtist should create a new artist`(dialect: DbDialect) = runBlocking {
         setup(dialect)
         val name = "New Artist"

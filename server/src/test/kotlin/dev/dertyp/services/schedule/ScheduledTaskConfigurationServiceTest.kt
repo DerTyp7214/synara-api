@@ -2,22 +2,39 @@ package dev.dertyp.services.schedule
 
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
+import dev.dertyp.core.ApplicationScope
 import dev.dertyp.data.TaskConfiguration
 import dev.dertyp.data.TaskKeys
 import dev.dertyp.data.TriggerDefinition
 import dev.dertyp.db.ScheduledTaskConfigurationTable
+import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.EnumSource
+import org.koin.core.context.startKoin
+import org.koin.core.context.stopKoin
+import org.koin.dsl.module
+import org.koin.test.KoinTest
 
-class ScheduledTaskConfigurationServiceTest {
+class ScheduledTaskConfigurationServiceTest : KoinTest {
     private lateinit var database: Database
-    private val service = ScheduledTaskConfigurationService()
+    private lateinit var service: ScheduledTaskConfigurationService
+
+    @BeforeEach
+    fun setupKoin() {
+        service = ScheduledTaskConfigurationService()
+        startKoin {
+            modules(module {
+                single { service }
+            })
+        }
+    }
 
     fun setup(dialect: DbDialect) {
         database = TestDatabase.connect(dialect, "task_config_test")
@@ -28,7 +45,9 @@ class ScheduledTaskConfigurationServiceTest {
 
     @AfterEach
     fun tearDown() {
+        stopKoin()
         TestDatabase.cleanUp()
+        ApplicationScope.scope.coroutineContext.cancelChildren()
     }
 
     @ParameterizedTest
