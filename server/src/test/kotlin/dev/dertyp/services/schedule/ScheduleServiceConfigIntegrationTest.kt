@@ -8,6 +8,7 @@ import dev.dertyp.data.TaskKeys
 import dev.dertyp.data.TriggerDefinition
 import dev.dertyp.db.ScheduledTaskConfigurationTable
 import kotlinx.coroutines.*
+import kotlinx.coroutines.Job
 import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
@@ -15,6 +16,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.parallel.Isolated
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.EnumSource
 import org.koin.core.context.startKoin
@@ -25,6 +27,7 @@ import org.koin.test.inject
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
+@Isolated
 class ScheduleServiceConfigIntegrationTest : KoinTest {
     private lateinit var database: Database
     private val scheduleService by inject<ScheduleService>()
@@ -48,10 +51,12 @@ class ScheduleServiceConfigIntegrationTest : KoinTest {
     }
 
     @AfterEach
-    fun tearDown() {
+    fun tearDown() = runBlocking {
+        scheduleService.stopService()
+        ApplicationScope.scope.coroutineContext[Job]?.cancelChildren()
+        ApplicationScope.scope.coroutineContext[Job]?.children?.toList()?.joinAll()
         stopKoin()
         TestDatabase.cleanUp()
-        ApplicationScope.scope.coroutineContext.cancelChildren()
     }
 
     @ParameterizedTest

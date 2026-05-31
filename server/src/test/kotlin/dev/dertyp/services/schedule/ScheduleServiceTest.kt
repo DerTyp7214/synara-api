@@ -1,5 +1,6 @@
 package dev.dertyp.services.schedule
 
+import dev.dertyp.core.ApplicationScope
 import dev.dertyp.plugins.ScheduleTrigger
 import dev.dertyp.plugins.TaskCompletionTrigger
 import io.mockk.every
@@ -7,10 +8,9 @@ import io.mockk.mockk
 import io.mockk.spyk
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.emptyFlow
-
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
-import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.koin.core.context.startKoin
@@ -39,7 +39,9 @@ class ScheduleServiceTest : KoinTest {
     }
 
     @AfterEach
-    fun tearDown() {
+    fun tearDown() = runBlocking {
+        ApplicationScope.scope.coroutineContext.cancelChildren()
+        yield()
         stopKoin()
     }
 

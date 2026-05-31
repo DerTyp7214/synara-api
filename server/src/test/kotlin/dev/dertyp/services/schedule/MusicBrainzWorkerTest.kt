@@ -1,17 +1,18 @@
 package dev.dertyp.services.schedule
 
+import dev.dertyp.DbDialect
+import dev.dertyp.TestDatabase
 import dev.dertyp.core.HttpClientPriority
 import dev.dertyp.data.User
-import dev.dertyp.dbQuery
 import dev.dertyp.services.*
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
-import io.mockk.mockkStatic
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.AfterEach
-import org.junit.jupiter.api.Test
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.EnumSource
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
 import org.koin.dsl.module
@@ -23,16 +24,14 @@ class MusicBrainzWorkerTest : KoinTest {
     @AfterEach
     fun tearDown() {
         stopKoin()
+        TestDatabase.cleanUp()
     }
 
-    @Test
-    fun `worker should tag unmapped entities`() = runBlocking {
-        mockkStatic("dev.dertyp.UtilsKt")
-        coEvery { dbQuery<Any>(any()) } coAnswers {
-            @Suppress("UNCHECKED_CAST")
-            (it.invocation.args[0] as suspend () -> Any).invoke()
-        }
-
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `worker should tag unmapped entities`(dialect: DbDialect) = runBlocking {
+        TestDatabase.connect(dialect, "musicbrainz_worker_test")
+        
         val songService = mockk<SongService>()
         val albumService = mockk<AlbumService>()
         val artistService = mockk<ArtistService>()
