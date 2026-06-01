@@ -122,6 +122,20 @@ class MusicBrainzService : Service() {
     }
 
     suspend fun searchMb(song: BaseSong, priority: HttpClientPriority = HttpClientPriority.NORMAL): MusicBrainzRecording? {
+        if (song.isrc != null) {
+            try {
+                val searchResponse = retryableGet<MusicBrainzSearchResponse>("$mbBaseUrl/recording", priority) {
+                    parameter("query", "isrc:${song.isrc}")
+                    parameter("fmt", "json")
+                    parameter("inc", "tags+genres+releases+release-groups+media")
+                    header("User-Agent", "Synara/${BuildConfig.VERSION} ( https://github.com/dertyp7214/synara )")
+                }
+                searchResponse?.recordings?.firstOrNull()?.let { return it }
+            } catch (e: Exception) {
+                logger.error("Failed to search MusicBrainz for ISRC ${song.isrc}", e)
+            }
+        }
+
         val queryParts = mutableListOf<String>()
         queryParts.add("recording:\"${song.title.cleanTitle()}\"")
         song.artists.forEach {
@@ -167,6 +181,20 @@ class MusicBrainzService : Service() {
     }
 
     suspend fun searchAlbumMb(album: Album, priority: HttpClientPriority = HttpClientPriority.NORMAL): MusicBrainzRelease? {
+        if (album.barcode != null) {
+            try {
+                val response = retryableGet<MusicBrainzReleaseSearchResponse>("$mbBaseUrl/release", priority) {
+                    parameter("query", "barcode:${album.barcode}")
+                    parameter("fmt", "json")
+                    parameter("inc", "artist-credits+recordings+release-groups+tags+genres+media")
+                    header("User-Agent", "Synara/${BuildConfig.VERSION} ( https://github.com/dertyp7214/synara )")
+                }
+                response?.releases?.firstOrNull()?.let { return it }
+            } catch (e: Exception) {
+                logger.error("Failed to search MusicBrainz for barcode ${album.barcode}", e)
+            }
+        }
+
         val queryParts = mutableListOf<String>()
         queryParts.add("release:\"${album.name}\"")
         album.artists.forEach {

@@ -123,6 +123,7 @@ abstract class BaseIndexer(
                             val artists = audioFile.getAlbumArtists(delimiter).ifEmpty { audioFile.getArtists(delimiter) }.sorted()
                             val songCount = audioFile.songCount ?: 0
                             val year = audioFile.year
+                            val barcode = audioFile.barcode
 
                             if (name == null) return@withPermit
 
@@ -145,6 +146,7 @@ abstract class BaseIndexer(
                                 coverHash = hash,
                                 songCount = songCount,
                                 originalId = originalId,
+                                barcode = barcode,
                             )
 
                             val albumList = map.computeIfAbsent(album) { Collections.synchronizedList(mutableListOf()) }
@@ -321,6 +323,7 @@ abstract class BaseIndexer(
         val discNumber = tag.getFirst(FieldKey.DISC_NO).toIntOrNull() ?: 1
 
         val url = tag.getFirst("URL").ifEmpty { "" }
+        val isrc = audioFile.isrc
         val cover = audioFile.coverImage
         val lyrics = tag.getFirst(FieldKey.LYRICS) ?: ""
         val year = tag.getFirst(FieldKey.YEAR)
@@ -379,6 +382,7 @@ abstract class BaseIndexer(
             fileSize = audioFile.file.length(),
             coverHash = cover?.sha256(),
             musicBrainzId = musicBrainzId,
+            isrc = isrc,
             audioData = SongAudioData(bpm = bpm)
         )
     }

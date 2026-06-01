@@ -39,6 +39,12 @@ val AudioFile.songCount: Int?
 val AudioFile.musicBrainzTrackId: String?
     get() = tag.getFirst(FieldKey.MUSICBRAINZ_TRACK_ID)
 
+val AudioFile.isrc: String?
+    get() = tag.getFirst(FieldKey.ISRC)
+
+val AudioFile.barcode: String?
+    get() = tag.getFirst(FieldKey.BARCODE).ifBlank { tag.getFirst("BARCODE") }
+
 val AudioFile.musicBrainzReleaseId: String?
     get() = tag.getFirst(FieldKey.MUSICBRAINZ_RELEASEID)
 

@@ -927,16 +927,19 @@ class AlbumServiceTest : KoinTest {
 
         coEvery { musicBrainzService.fetchReleaseById(mbId, any()) } returns MusicBrainzRelease(
             id = mbId,
-            title = "Fetched Album"
+            title = "Fetched Album",
+            barcode = "123456789012"
         )
 
         service.setMusicBrainzId(albumId, mbId)
 
-        val mbRelease = transaction(database) {
-            MBReleaseTable.selectAll().where { MBReleaseTable.id eq mbId }.singleOrNull()
+        val (dbTitle, dbBarcode) = transaction(database) {
+            val row = MBReleaseTable.selectAll().where { MBReleaseTable.id eq mbId }.single()
+            val albumRow = AlbumTable.selectAll().where { AlbumTable.id eq albumId }.single()
+            row[MBReleaseTable.title] to albumRow[AlbumTable.barcode]
         }
-        assertNotNull(mbRelease)
-        assertEquals("Fetched Album", mbRelease!![MBReleaseTable.title])
+        assertEquals("Fetched Album", dbTitle)
+        assertEquals("123456789012", dbBarcode)
     }
 
     @ParameterizedTest
@@ -1245,5 +1248,91 @@ class AlbumServiceTest : KoinTest {
         assertEquals(1, metadata.providers.size)
         assertEquals("spotify", metadata.providers[0].provider)
         assertEquals("456", metadata.providers[0].externalId)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `syncSongsWithMusicBrainz should match and sync by ISRC`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val albumId = UUID.randomUUID()
+        val songId = UUID.randomUUID()
+        val isrc = "USAT20300184"
+        val mbRecordingId = UUID.randomUUID()
+
+        transaction(database) {
+            AlbumTable.insert {
+                it[id] = albumId
+                it[name] = "Album"
+            }
+            SongTable.insert {
+                it[id] = songId
+                it[SongTable.albumId] = albumId
+                it[title] = "Original Title"
+                it[SongTable.isrc] = isrc
+                it[trackNumber] = 5
+            }
+            MBRecordingTable.insert {
+                it[id] = mbRecordingId
+                it[title] = "MB Title"
+            }
+        }
+
+        val mbTrack = MusicBrainzTrack(
+            id = UUID.randomUUID(),
+            position = 1,
+            recording = MusicBrainzRecording(
+                id = mbRecordingId,
+                title = "MB Title",
+                isrcs = listOf(isrc),
+                artistCredit = emptyList()
+            )
+        )
+
+        service.syncSongsWithMusicBrainz(albumId, listOf(Triple(1, 1, mbTrack)))
+
+        val (dbTrackNo, dbMbId) = transaction(database) {
+            val songRow = SongTable.selectAll().where { SongTable.id eq songId }.single()
+            val mbRow = SongMusicBrainzTable.selectAll().where { SongMusicBrainzTable.songId eq songId }.singleOrNull()
+            songRow[SongTable.trackNumber] to mbRow?.get(SongMusicBrainzTable.musicBrainzId)?.value
+        }
+
+        assertEquals(1, dbTrackNo)
+        assertEquals(mbRecordingId, dbMbId)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `fetchMusicBrainzId should match by Barcode`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val albumId = UUID.randomUUID()
+        val barcode = "123456789012"
+        val mbId = UUID.randomUUID()
+
+        transaction(database) {
+            AlbumTable.insert {
+                it[id] = albumId
+                it[name] = "Album"
+                it[AlbumTable.barcode] = barcode
+            }
+        }
+
+        coEvery { musicBrainzService.searchAlbumMb(match { it.barcode == barcode }, any()) } returns MusicBrainzRelease(
+            id = mbId,
+            title = "Matched Album",
+            barcode = barcode,
+            artistCredit = emptyList()
+        )
+        coEvery { musicBrainzService.fetchReleaseById(mbId, any()) } returns MusicBrainzRelease(
+            id = mbId,
+            title = "Matched Album",
+            barcode = barcode,
+            artistCredit = emptyList()
+        )
+
+        val updated = service.fetchMusicBrainzId(albumId, user.id)
+        assertNotNull(updated)
+        assertEquals(mbId, updated?.musicbrainzId)
+
+        coVerify { musicBrainzService.searchAlbumMb(match { it.barcode == barcode }, any()) }
     }
 }

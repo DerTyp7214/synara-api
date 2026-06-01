@@ -8,6 +8,7 @@ object AlbumTable : UUIDTable("album") {
     val songCount = integer("songCount").default(0)
     val cover = reference("cover", ImageTable.id).nullable()
     val originalId = text("originalId").nullable()
+    val barcode = varchar("barcode", 32).nullable()
     val lastMetadataCheck = long("lastMetadataCheck").default(0L)
     val lastProviderEnrichment = long("lastProviderEnrichment").default(0L)
 }

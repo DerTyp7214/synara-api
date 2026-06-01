@@ -117,6 +117,7 @@ class AlbumService : AlbumLibrary, Service() {
                 blurHash = resultRow.getOrNull(blurHashColumn ?: ImageTable.blurHash),
                 genres = genres,
                 originalId = resultRow[AlbumTable.originalId],
+                barcode = resultRow[AlbumTable.barcode],
                 musicbrainzId = resultRow.getOrNull(AlbumMusicBrainzTable.musicBrainzId)?.value,
             )
         }
@@ -305,6 +306,15 @@ class AlbumService : AlbumLibrary, Service() {
 
     suspend fun syncAlbumSongsWithMusicBrainz(albumId: UUID, mbId: UUID) {
         val mbRelease = cachedMusicBrainzService.getRelease(mbId) ?: return
+
+        if (mbRelease.barcode != null) {
+            dbQuery {
+                AlbumTable.update({ AlbumTable.id eq albumId }) {
+                    it[barcode] = mbRelease.barcode
+                }
+            }
+        }
+
         val trackCount = mbRelease.media?.sumOf { it.trackCount ?: 0 } ?: 0
         val mbTracks = mbRelease.media?.flatMapIndexed { mediaIndex, media ->
             val discNumber = mediaIndex + 1
@@ -335,6 +345,7 @@ class AlbumService : AlbumLibrary, Service() {
                 SongTable.trackNumber,
                 SongTable.discNumber,
                 SongTable.duration,
+                SongTable.isrc,
                 SongMusicBrainzTable.musicBrainzId
             )
             .where { SongTable.albumId eq id }
@@ -343,15 +354,18 @@ class AlbumService : AlbumLibrary, Service() {
                 val smbId = row.getOrNull(SongMusicBrainzTable.musicBrainzId)?.value
                 val title = row[SongTable.title]
                 val duration = row[SongTable.duration]
-                Pair(songId, smbId) to Triple(title, duration, row)
+                val isrc = row[SongTable.isrc]
+                Pair(songId, smbId) to Triple(title, duration, isrc)
             }
 
         for ((discNo, trackNo, mbTrack) in mbTracks) {
             val mbRecordingId = mbTrack.recording?.id
             val mbTitle = mbTrack.title ?: mbTrack.recording?.title
             val mbDuration = mbTrack.recording?.length
+            val mbIsrc = mbTrack.recording?.isrcs?.firstOrNull()
 
             val matchedSong = dbSongs.find { it.first.second == mbRecordingId }
+                ?: dbSongs.find { mbIsrc != null && it.second.third == mbIsrc }
                 ?: dbSongs.find { mbTitle != null && it.second.first.equals(mbTitle, ignoreCase = true) }
                 ?: dbSongs.find { mbTitle != null && it.second.first.cleanTitle().equals(mbTitle.cleanTitle(), ignoreCase = true) }
                 ?: dbSongs.find { 
@@ -365,9 +379,14 @@ class AlbumService : AlbumLibrary, Service() {
                 SongTable.update({ SongTable.id eq matchedSong.first.first }) {
                     it[trackNumber] = trackNo
                     it[discNumber] = discNo
+                    if (mbIsrc != null) {
+                        it[isrc] = mbIsrc
+                    }
                 }
 
                 if (mbRecordingId != null) {
+                    mbTrack.recording?.let { musicBrainzCacheService.updateRecordingCache(it) }
+
                     SongMusicBrainzTable.upsert(SongMusicBrainzTable.songId) {
                         it[songId] = matchedSong.first.first
                         it[musicBrainzId] = EntityID(mbRecordingId, MBRecordingTable)
@@ -405,11 +424,21 @@ class AlbumService : AlbumLibrary, Service() {
             syncAlbumSongsWithMusicBrainz(id, musicBrainzId)
         }
 
+        val mbRelease = if (musicBrainzId != null) {
+            cachedMusicBrainzService.getRelease(musicBrainzId, HttpClientPriority.HIGH)
+        } else null
+
         dbQuery {
             AlbumMusicBrainzTable.upsert(AlbumMusicBrainzTable.albumId) {
                 it[albumId] = id
                 it[AlbumMusicBrainzTable.musicBrainzId] = musicBrainzId
                 it[lastCheck] = Clock.System.now().toEpochMilliseconds()
+            }
+
+            if (mbRelease?.barcode != null) {
+                AlbumTable.update({ AlbumTable.id eq id }) {
+                    it[barcode] = mbRelease.barcode
+                }
             }
         }
 
@@ -1181,6 +1210,7 @@ class AlbumService : AlbumLibrary, Service() {
                     this[AlbumTable.songCount] = album.songCount
                     this[AlbumTable.cover] = imageMap[album.coverHash]
                     this[AlbumTable.originalId] = album.originalId
+                    this[AlbumTable.barcode] = album.barcode
                 }
             }
         } else {
@@ -1319,6 +1349,7 @@ class AlbumService : AlbumLibrary, Service() {
                 it[songCount] = album.songCount
                 it[cover] = album.coverId?.let { coverId -> EntityID(coverId, ImageTable) }
                 it[originalId] = album.originalId
+                it[barcode] = album.barcode
             }
 
             if (album.originalId != null) {

@@ -101,6 +101,7 @@ class TidalIndexer(context: PluginContext) : BaseIndexer(context, IMetadataServi
                 val artists = audioFile.getAlbumArtists(delimiter).ifEmpty { audioFile.getArtists(delimiter) }.sorted()
                 val songCount = audioFile.songCount ?: 0
                 val year = audioFile.year
+                val barcode = audioFile.barcode
 
                 if (name == null) return@forEach
 
@@ -119,6 +120,7 @@ class TidalIndexer(context: PluginContext) : BaseIndexer(context, IMetadataServi
                     coverHash = hash,
                     songCount = songCount,
                     originalId = originalId,
+                    barcode = barcode,
                 )
 
                 val albumList = map.computeIfAbsent(album) { Collections.synchronizedList(mutableListOf()) }

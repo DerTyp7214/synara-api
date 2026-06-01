@@ -148,6 +148,7 @@ Contains metadata about a collection of songs released together.
 | `blurHash` | `String`? | The blur hash of the album cover image. |
 | `genres` | `List`<[Genre](#devdertypdatagenre)> | Collection of genres associated with this album. |
 | `originalId` | `String`? | The original ID of the album on external sources. |
+| `barcode` | `String`? | The barcode or UPC of the album. |
 | `musicbrainzId` | `PlatformUUID`? | The MusicBrainz Release unique identifier. |
 
 ### AlbumExtendedMetadata <a name="devdertypdataalbumextendedmetadata"></a>
@@ -306,6 +307,7 @@ Configuration for creating or updating an album record.
 | `songCount` | `Int` | Total number of songs in the album. |
 | `coverHash` | `String`? | The hash of the album cover image. |
 | `originalId` | `String`? | The original ID of the album on external sources. |
+| `barcode` | `String`? | The barcode or UPC of the album. |
 
 ### InsertableImage <a name="devdertypdatainsertableimage"></a>
 Configuration for uploading or storing a new image.
@@ -350,6 +352,7 @@ Configuration for creating or updating a song record.
 | `fileSize` | `Long` | Size of the audio file in bytes. |
 | `coverHash` | `String`? | The hash of the cover image. |
 | `musicBrainzId` | `PlatformUUID`? | The MusicBrainz Recording unique identifier. |
+| `isrc` | `String`? | The International Standard Recording Code. |
 | `audioData` | [SongAudioData](#devdertypdatasongaudiodata)? | Additional audio analysis data. |
 
 ### MergeArtists <a name="devdertypdatamergeartists"></a>
@@ -632,6 +635,7 @@ A simplified representation of a song.
 | `coverId` | `PlatformUUID`? | The song cover image unique identifier. |
 | `blurHash` | `String`? | The blur hash of the song cover image. |
 | `musicBrainzId` | `PlatformUUID`? | The MusicBrainz Recording unique identifier. |
+| `isrc` | `String`? | The International Standard Recording Code. |
 | `transcodedTo` | `List`<`Int`> | List of bitrates for which a transcoded version exists. |
 
 ### Song <a name="devdertypdatasong"></a>
@@ -659,6 +663,7 @@ Contains core metadata about a track that is common for all users.
 | `coverId` | `PlatformUUID`? | The song cover image unique identifier. |
 | `blurHash` | `String`? | The blur hash of the song cover image. |
 | `musicBrainzId` | `PlatformUUID`? | The MusicBrainz Recording unique identifier. |
+| `isrc` | `String`? | The International Standard Recording Code. |
 | `genres` | `List`<[Genre](#devdertypdatagenre)> | Collection of genres associated with this song. |
 
 ### SongAudioData <a name="devdertypdatasongaudiodata"></a>
@@ -879,6 +884,7 @@ Extends track metadata with user-specific information like favorite status.
 | `coverId` | `PlatformUUID`? | The song cover image unique identifier. |
 | `blurHash` | `String`? | The blur hash of the song cover image. |
 | `musicBrainzId` | `PlatformUUID`? | The MusicBrainz Recording unique identifier. |
+| `isrc` | `String`? | The International Standard Recording Code. |
 | `genres` | `List`<[Genre](#devdertypdatagenre)> | Collection of genres associated with this song. |
 | `isFavourite` | `Boolean`? | Whether the current user has marked this song as a favorite. |
 | `userSongCreatedAt` | `PlatformDate`? | Timestamp of when the song record was created. |

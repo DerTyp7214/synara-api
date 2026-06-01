@@ -14,6 +14,7 @@ object SongTable : UUIDTable("song") {
     val filePath = text("filePath").default("")
     val cover = reference("cover", ImageTable.id).nullable()
     val originalUrl = text("originalUrl").default("")
+    val isrc = varchar("isrc", 32).nullable()
     val trackNumber = integer("trackNumber").default(1)
     val discNumber = integer("discNumber").default(1)
     val copyright = text("copyright").default("")

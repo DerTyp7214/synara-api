@@ -10,6 +10,7 @@ import dev.dertyp.services.metadata.MusicBrainzCacheService
 import dev.dertyp.services.metadata.MusicBrainzService
 import io.ktor.server.application.ApplicationEnvironment
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.flow.toList
@@ -1229,17 +1230,66 @@ class SongServiceTest : KoinTest {
 
         coEvery { musicBrainzService.fetchRecordingById(mbId, any()) } returns MusicBrainzRecording(
             id = mbId,
-            title = "Fetched Title"
+            title = "Fetched Title",
+            isrcs = listOf("USAT20300184"),
+            artistCredit = emptyList()
         )
 
         val updated = rpcService.setMusicBrainzId(songId, mbId)
         assertNotNull(updated)
+        assertEquals("USAT20300184", updated?.isrc)
 
-        val mbRecording = transaction(database) {
-            MBRecordingTable.selectAll().where { MBRecordingTable.id eq mbId }.singleOrNull()
+        val (dbTitle, dbIsrc) = transaction(database) {
+            val row = MBRecordingTable.selectAll().where { MBRecordingTable.id eq mbId }.single()
+            val songRow = SongTable.selectAll().where { SongTable.id eq songId }.single()
+            row[MBRecordingTable.title] to songRow[SongTable.isrc]
         }
-        assertNotNull(mbRecording)
-        assertEquals("Fetched Title", mbRecording!![MBRecordingTable.title])
+        assertEquals("Fetched Title", dbTitle)
+        assertEquals("USAT20300184", dbIsrc)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `fetchMusicBrainzId should match by ISRC`(dialect: DbDialect) {
+        runBlocking {
+            setup(dialect)
+            val songId = UUID.randomUUID()
+            val isrc = "USAT20300184"
+            val mbId = UUID.randomUUID()
+
+            transaction(database) {
+                val albumId = UUID.randomUUID()
+                AlbumTable.insert {
+                    it[id] = albumId
+                    it[name] = "Album"
+                }
+                SongTable.insert {
+                    it[id] = songId
+                    it[title] = "Song"
+                    it[SongTable.albumId] = albumId
+                    it[SongTable.isrc] = isrc
+                }
+            }
+
+            coEvery { musicBrainzService.searchMb(match { it.isrc == isrc }, any()) } returns MusicBrainzRecording(
+                id = mbId,
+                title = "Matched Song",
+                isrcs = listOf(isrc),
+                artistCredit = emptyList()
+            )
+            coEvery { musicBrainzService.fetchRecordingById(mbId, any()) } returns MusicBrainzRecording(
+                id = mbId,
+                title = "Matched Song",
+                isrcs = listOf(isrc),
+                artistCredit = emptyList()
+            )
+
+            val updated = songService.fetchMusicBrainzId(songId, user.id)
+            assertNotNull(updated)
+            assertEquals(mbId, updated?.musicBrainzId)
+
+            coVerify { musicBrainzService.searchMb(match { it.isrc == isrc }, any()) }
+        }
     }
 
     @ParameterizedTest
@@ -1462,31 +1512,33 @@ class SongServiceTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `createBatch should populate SongProviderTable`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        val album = InsertableAlbum("Provider Album", listOf("Provider Artist"))
-        val song = InsertableSong(
-            title = "Provider Song",
-            artists = listOf("Provider Artist"),
-            album = album,
-            duration = 100,
-            explicit = false,
-            path = "/path/provider",
-            originalUrl = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
-        )
+    fun `createBatch should populate SongProviderTable`(dialect: DbDialect) {
+        runBlocking {
+            setup(dialect)
+            val album = InsertableAlbum("Provider Album", listOf("Provider Artist"))
+            val song = InsertableSong(
+                title = "Provider Song",
+                artists = listOf("Provider Artist"),
+                album = album,
+                duration = 100,
+                explicit = false,
+                path = "/path/provider",
+                originalUrl = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+            )
 
-        val result = songService.createBatch(listOf(song))
-        val songId = result.values.first().id
+            val result = songService.createBatch(listOf(song))
+            val songId = result.values.first().id
 
-        val providerInfo = transaction(database) {
-            SongProviderTable.selectAll().where { SongProviderTable.songId eq songId }.singleOrNull()
-        }
+            val providerInfo = transaction(database) {
+                SongProviderTable.selectAll().where { SongProviderTable.songId eq songId }.singleOrNull()
+            }
 
-        assertNotNull(providerInfo)
-        providerInfo?.let {
-            assertEquals("youtube", it[SongProviderTable.provider])
-            assertEquals("dQw4w9WgXcQ", it[SongProviderTable.externalId])
-            assertEquals("https://www.youtube.com/watch?v=dQw4w9WgXcQ", it[SongProviderTable.rawUrl])
+            assertNotNull(providerInfo)
+            providerInfo?.let {
+                assertEquals("youtube", it[SongProviderTable.provider])
+                assertEquals("dQw4w9WgXcQ", it[SongProviderTable.externalId])
+                assertEquals("https://www.youtube.com/watch?v=dQw4w9WgXcQ", it[SongProviderTable.rawUrl])
+            }
         }
     }
 

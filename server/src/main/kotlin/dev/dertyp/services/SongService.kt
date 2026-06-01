@@ -276,6 +276,7 @@ class SongService : SongLibrary, Service() {
                 bitsPerSample = resultRow[SongTable.bitsPerSample],
                 bitRate = resultRow[SongTable.bitRate],
                 fileSize = resultRow[SongTable.fileSize],
+                isrc = resultRow[SongTable.isrc],
                 coverId = resultRow[SongTable.cover]?.value,
                 blurHash = resultRow.getOrNull(blurHashColumn ?: ImageTable.blurHash),
                 musicBrainzId = resultRow.getOrNull(SongMusicBrainzTable.musicBrainzId)?.value,
@@ -308,6 +309,7 @@ class SongService : SongLibrary, Service() {
                 bitsPerSample = resultRow[SongTable.bitsPerSample],
                 bitRate = resultRow[SongTable.bitRate],
                 fileSize = resultRow[SongTable.fileSize],
+                isrc = resultRow[SongTable.isrc],
                 coverId = resultRow[SongTable.cover]?.value,
                 blurHash = resultRow.getOrNull(blurHashColumn ?: ImageTable.blurHash),
                 musicBrainzId = resultRow.getOrNull(SongMusicBrainzTable.musicBrainzId)?.value,
@@ -431,19 +433,9 @@ class SongService : SongLibrary, Service() {
     }
 
     suspend fun setMusicBrainzId(id: UUID, musicBrainzId: UUID?, userId: UUID): UserSong? {
-        if (musicBrainzId != null) {
-            val recordingExists = dbQuery {
-                MBRecordingTable.select(MBRecordingTable.id)
-                    .where { MBRecordingTable.id eq musicBrainzId }
-                    .any()
-            }
-
-            if (!recordingExists) {
-                musicBrainzService.fetchRecordingById(musicBrainzId, HttpClientPriority.HIGH)?.let {
-                    musicBrainzCacheService.updateRecordingCache(it)
-                }
-            }
-        }
+        val mbRecording = if (musicBrainzId != null) {
+            cachedMusicBrainzService.getRecording(musicBrainzId, HttpClientPriority.HIGH)
+        } else null
 
         dbQuery {
             val exists = SongMusicBrainzTable.select(SongMusicBrainzTable.songId)
@@ -462,6 +454,12 @@ class SongService : SongLibrary, Service() {
                     it[SongMusicBrainzTable.lastCheck] = System.currentTimeMillis()
                 }
             }
+
+            if (mbRecording?.isrcs?.isNotEmpty() == true) {
+                SongTable.update({ SongTable.id eq id }) {
+                    it[isrc] = mbRecording.isrcs!!.first()
+                }
+            }
         }
 
         return byId(id, userId).also { song ->
@@ -473,6 +471,10 @@ class SongService : SongLibrary, Service() {
                     file.tag.setField(FieldKey.MUSICBRAINZ_TRACK_ID, musicBrainzId.toString())
                 } else {
                     file.tag.deleteField(FieldKey.MUSICBRAINZ_TRACK_ID)
+                }
+
+                if (mbRecording?.isrcs?.isNotEmpty() == true) {
+                    file.tag.setField(FieldKey.ISRC, mbRecording.isrcs!!.first())
                 }
 
                 file.commit()
@@ -1853,6 +1855,7 @@ class SongService : SongLibrary, Service() {
                     this[SongTable.bitRate] = song.bitRate
                     this[SongTable.fileSize] = song.fileSize
                     this[SongTable.cover] = imageId
+                    this[SongTable.isrc] = song.isrc
                 }
             }
 
@@ -1943,6 +1946,7 @@ class SongService : SongLibrary, Service() {
         SongTable.upsert(SongTable.id) {
             it[id] = song.id
             it[title] = song.title
+            it[isrc] = song.isrc
             it[albumId] = song.album?.id?.let { albumId -> EntityID(albumId, AlbumTable) }!!
             it[duration] = song.duration
             it[explicit] = song.explicit
