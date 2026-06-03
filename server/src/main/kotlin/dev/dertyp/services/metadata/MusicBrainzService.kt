@@ -433,7 +433,8 @@ class MusicBrainzService : Service() {
 
                 response.mapNotNull { (mbid, data) ->
                     try {
-                        mapLBToMusicBrainzRecording(UUID.fromString(mbid), data.jsonObject)
+                        val dataObj = data as? JsonObject ?: return@mapNotNull null
+                        mapLBToMusicBrainzRecording(UUID.fromString(mbid), dataObj)
                     } catch (e: Exception) {
                         logger.error("Failed to map LB metadata for $mbid", e)
                         null
@@ -447,17 +448,17 @@ class MusicBrainzService : Service() {
     }
 
     private fun mapLBToMusicBrainzRecording(mbId: UUID, data: JsonObject): MusicBrainzRecording? {
-        val rec = data["recording"]?.jsonObject ?: return null
-        val tagData = data["tag"]?.jsonObject?.get("recording")?.jsonArray
-        val artistData = data["artist"]?.jsonObject
-        val releaseData = data["release"]?.jsonObject
+        val rec = data["recording"] as? JsonObject ?: return null
+        val tagData = (data["tag"] as? JsonObject)?.get("recording") as? JsonArray
+        val artistData = data["artist"] as? JsonObject
+        val releaseData = data["release"] as? JsonObject
 
         val title = rec["name"]?.jsonPrimitive?.contentOrNull
         val length = rec["length"]?.jsonPrimitive?.longOrNull
-        val isrcs = rec["isrcs"]?.jsonArray?.mapNotNull { it.jsonPrimitive.contentOrNull }
+        val isrcs = (rec["isrcs"] as? JsonArray)?.mapNotNull { it.jsonPrimitive.contentOrNull }
 
-        val artistCredits = artistData?.get("artists")?.jsonArray?.mapNotNull { artistElement ->
-            val art = artistElement.jsonObject
+        val artistCredits = (artistData?.get("artists") as? JsonArray)?.mapNotNull { artistElement ->
+            val art = artistElement as? JsonObject ?: return@mapNotNull null
             val artistId = art["artist_mbid"]?.jsonPrimitive?.contentOrNull?.let { UUID.fromString(it) } ?: return@mapNotNull null
             MusicBrainzArtistCredit(
                 name = art["name"]?.jsonPrimitive?.contentOrNull,
@@ -490,7 +491,7 @@ class MusicBrainzService : Service() {
 
         val tags = tagData?.mapNotNull { tagElement ->
             try {
-                val tagObj = tagElement.jsonObject
+                val tagObj = tagElement as? JsonObject ?: return@mapNotNull null
                 MusicBrainzTag(
                     name = tagObj["tag"]?.jsonPrimitive?.content ?: return@mapNotNull null,
                     count = tagObj["count"]?.jsonPrimitive?.int ?: 0
@@ -500,9 +501,9 @@ class MusicBrainzService : Service() {
             }
         }
 
-        val lbRels = rec["rels"]?.jsonArray
+        val lbRels = rec["rels"] as? JsonArray
         val relations = lbRels?.mapNotNull { relElement ->
-            val rel = relElement.jsonObject
+            val rel = relElement as? JsonObject ?: return@mapNotNull null
             val target = rel["target"]?.jsonPrimitive?.contentOrNull
                 ?: rel["artist_mbid"]?.jsonPrimitive?.contentOrNull?.let { "https://musicbrainz.org/artist/$it" }
                 ?: return@mapNotNull null
