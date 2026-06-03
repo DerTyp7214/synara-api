@@ -3,9 +3,7 @@ package dev.dertyp.migrations.custom
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
 import dev.dertyp.data.MusicBrainzRecording
-import dev.dertyp.db.MBRecordingIsrcTable
-import dev.dertyp.db.MBRecordingTable
-import dev.dertyp.db.ScheduledTaskLogTable
+import dev.dertyp.db.*
 import dev.dertyp.services.ScheduledTaskLogService
 import dev.dertyp.services.metadata.MusicBrainzCacheService
 import dev.dertyp.services.metadata.MusicBrainzService
@@ -15,11 +13,11 @@ import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.core.dao.id.EntityID
-import org.jetbrains.exposed.v1.jdbc.Database
-import org.jetbrains.exposed.v1.jdbc.SchemaUtils
-import org.jetbrains.exposed.v1.jdbc.insert
+import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.jdbc.*
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.EnumSource
 import org.koin.core.context.startKoin
@@ -50,6 +48,10 @@ class FetchMissingRecordingIsrcsTest : KoinTest {
             SchemaUtils.create(
                 MBRecordingTable,
                 MBRecordingIsrcTable,
+                ImageTable,
+                AlbumTable,
+                SongTable,
+                SongMusicBrainzTable,
                 ScheduledTaskLogTable
             )
         }
@@ -70,6 +72,7 @@ class FetchMissingRecordingIsrcsTest : KoinTest {
         val recordingId2 = UUID.randomUUID()
         val recordingId3 = UUID.randomUUID()
 
+        val songId = UUID.randomUUID()
         transaction(database) {
             MBRecordingTable.insert {
                 it[id] = recordingId1
@@ -88,6 +91,19 @@ class FetchMissingRecordingIsrcsTest : KoinTest {
                 it[recordingId] = recordingId1
                 it[isrc] = "ISRC1"
             }
+
+            val albumId = AlbumTable.insertAndGetId {
+                it[name] = "Test Album"
+            }
+            SongTable.insert {
+                it[id] = songId
+                it[title] = "Test Song"
+                it[this.albumId] = albumId
+            }
+            SongMusicBrainzTable.insert {
+                it[this.songId] = songId
+                it[musicBrainzId] = recordingId2
+            }
         }
 
         val mockRecording2 = MusicBrainzRecording(id = recordingId2, title = "Recording 2", isrcs = listOf("ISRC2"))
@@ -104,5 +120,10 @@ class FetchMissingRecordingIsrcsTest : KoinTest {
 
         coVerify(exactly = 1) { musicBrainzCacheService.updateRecordingIsrcs(recordingId2, mockRecording2.isrcs!!) }
         coVerify(exactly = 0) { musicBrainzCacheService.updateRecordingCache(any()) }
+
+        val updatedSongIsrc = transaction(database) {
+            SongTable.select(SongTable.isrc).where { SongTable.id eq songId }.single()[SongTable.isrc]
+        }
+        assertEquals("ISRC2", updatedSongIsrc)
     }
 }

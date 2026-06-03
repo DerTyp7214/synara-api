@@ -6,12 +6,14 @@ import dev.dertyp.core.Migration
 import dev.dertyp.core.logTask
 import dev.dertyp.db.MBRecordingIsrcTable
 import dev.dertyp.db.MBRecordingTable
+import dev.dertyp.db.SongMusicBrainzTable
+import dev.dertyp.db.SongTable
 import dev.dertyp.dbQuery
 import dev.dertyp.services.metadata.MusicBrainzCacheService
 import dev.dertyp.services.metadata.MusicBrainzService
-import org.jetbrains.exposed.v1.core.isNull
-import org.jetbrains.exposed.v1.core.leftJoin
+import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.jdbc.select
+import org.jetbrains.exposed.v1.jdbc.update
 import org.koin.core.component.inject
 
 @Migration("2.5")
@@ -39,10 +41,27 @@ class FetchMissingRecordingIsrcs : CustomMigration() {
                 try {
                     val recordings = musicBrainzService.fetchRecordingsMetadataLB(chunk, HttpClientPriority.LOW)
                     recordings.forEach { recording ->
-                        if (recording.isrcs?.isNotEmpty() == true) {
+                        val isrcs = recording.isrcs
+                        if (isrcs?.isNotEmpty() == true) {
                             musicBrainzCacheService.updateRecordingIsrcs(recording.id,
-                                recording.isrcs!!
+                                isrcs
                             )
+
+                            dbQuery {
+                                val songIds = SongMusicBrainzTable
+                                    .select(SongMusicBrainzTable.songId)
+                                    .where { SongMusicBrainzTable.musicBrainzId eq recording.id }
+                                    .map { it[SongMusicBrainzTable.songId].value }
+
+                                if (songIds.isNotEmpty()) {
+                                    SongTable.update({
+                                        (SongTable.id inList songIds) and (SongTable.isrc.isNull() or (SongTable.isrc eq ""))
+                                    }) {
+                                        it[isrc] = isrcs.first()
+                                    }
+                                }
+                            }
+
                             recordingsUpdated++
                         }
                     }
