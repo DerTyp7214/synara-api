@@ -2,7 +2,9 @@ package dev.dertyp.services
 
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
+import dev.dertyp.data.ServerStats
 import dev.dertyp.db.*
+import dev.dertyp.services.metadata.MusicBrainzCacheService
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
@@ -21,6 +23,7 @@ class ServerStatsServiceTest {
     private lateinit var service: ServerStatsService
     private lateinit var storageService: StorageService
     private lateinit var reverseProxyService: ReverseProxyService
+    private lateinit var musicBrainzCacheService: MusicBrainzCacheService
 
     fun setup(dialect: DbDialect) {
         database = TestDatabase.connect(dialect, "stats_test")
@@ -29,7 +32,8 @@ class ServerStatsServiceTest {
         }
         storageService = mockk()
         reverseProxyService = mockk()
-        service = ServerStatsService(storageService, reverseProxyService)
+        musicBrainzCacheService = mockk()
+        service = ServerStatsService(storageService, reverseProxyService, musicBrainzCacheService)
     }
 
     @AfterEach
@@ -43,6 +47,7 @@ class ServerStatsServiceTest {
         setup(dialect)
         
         coEvery { storageService.getTotalStorage() } returns 1000L
+        coEvery { musicBrainzCacheService.getStats() } returns ServerStats.MusicBrainzCacheStats(0, 0, 0, 0, 0, 0, 0, 0)
 
         transaction(database) {
             ArtistTable.insert { it[name] = "Artist" }[ArtistTable.id]

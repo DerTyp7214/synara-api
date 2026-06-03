@@ -5,6 +5,7 @@ import dev.dertyp.data.ServerStats
 import dev.dertyp.db.*
 import dev.dertyp.dbQuery
 import dev.dertyp.server.BuildConfig
+import dev.dertyp.services.metadata.MusicBrainzCacheService
 import org.jetbrains.exposed.v1.core.sum
 import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.jdbc.selectAll
@@ -12,6 +13,7 @@ import org.jetbrains.exposed.v1.jdbc.selectAll
 class ServerStatsService(
     private val storageService: StorageService,
     private val reverseProxyService: ReverseProxyService,
+    private val musicBrainzCacheService: MusicBrainzCacheService,
 ) : IServerStatsService, Service() {
     override suspend fun getStats(): ServerStats = dbQuery {
         val songCount = SongTable.selectAll().count().toInt()
@@ -42,6 +44,7 @@ class ServerStatsService(
             indexedFileSize = indexedFileSize,
             averageSizePerSong = if (songCount > 0) indexedFileSize / songCount else 0L,
             totalDuration = totalDuration,
+            musicBrainzCache = musicBrainzCacheService.getStats(),
             version = ServerStats.Version(
                 version = BuildConfig.VERSION,
                 buildTime = BuildConfig.BUILD_TIME,

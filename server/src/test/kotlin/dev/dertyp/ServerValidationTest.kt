@@ -51,6 +51,7 @@ class ServerValidationTest {
             indexedFileSize = 0,
             averageSizePerSong = 0,
             totalDuration = 0,
+            musicBrainzCache = ServerStats.MusicBrainzCacheStats(0, 0, 0, 0, 0, 0, 0, 0),
             version = ServerStats.Version("", "", "", "", "")
         )
         override suspend fun health(): Boolean = true

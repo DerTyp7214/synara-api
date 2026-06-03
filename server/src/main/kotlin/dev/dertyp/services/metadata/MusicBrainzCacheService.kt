@@ -16,6 +16,21 @@ import kotlin.time.Duration.Companion.days
 
 class MusicBrainzCacheService : Service() {
 
+    suspend fun getStats(): ServerStats.MusicBrainzCacheStats = dbQuery {
+        val staleSince = Clock.System.now().toEpochMilliseconds() - 90.days.inWholeMilliseconds
+        ServerStats.MusicBrainzCacheStats(
+            artistCount = MBArtistTable.selectAll().count().toInt(),
+            staleArtistCount = MBArtistTable.selectAll().where { MBArtistTable.lastUpdate less staleSince }.count().toInt(),
+            releaseGroupCount = MBReleaseGroupTable.selectAll().count().toInt(),
+            staleReleaseGroupCount = MBReleaseGroupTable.selectAll().where { MBReleaseGroupTable.lastUpdate less staleSince }.count().toInt(),
+            releaseCount = MBReleaseTable.selectAll().count().toInt(),
+            staleReleaseCount = MBReleaseTable.selectAll().where { MBReleaseTable.lastUpdate less staleSince }.count().toInt(),
+            recordingCount = MBRecordingTable.selectAll().count().toInt(),
+            staleRecordingCount = MBRecordingTable.selectAll().where { MBRecordingTable.lastUpdate less staleSince }.count().toInt()
+        )
+    }
+
+
     fun staleArtistIdsFlow(staleSince: Long = Clock.System.now().toEpochMilliseconds() - 30.days.inWholeMilliseconds): Flow<UUID> = flow {
         MBArtistTable.select(MBArtistTable.id).where { MBArtistTable.lastUpdate less staleSince }
             .fetchBatchedResultsByIdKeyset(MBArtistTable.id, 100) { batch ->
