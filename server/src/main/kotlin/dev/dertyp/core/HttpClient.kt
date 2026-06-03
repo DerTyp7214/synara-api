@@ -55,7 +55,26 @@ class HttpClientQueueService : Service() {
     private val hostQueues = ConcurrentHashMap<String, PriorityBlockingQueue<QueuedRequest>>()
     private val hostLastRequest = ConcurrentHashMap<String, Instant>()
 
+    private data class RateLimitState(
+        val limit: Int,
+        val remaining: Int,
+        val resetIn: Int,
+        val updatedAt: Instant
+    )
+
+    private val hostRateLimits = ConcurrentHashMap<String, RateLimitState>()
+
     private val stopped = AtomicBoolean(true)
+
+    private fun updateRateLimit(host: String, response: HttpResponse) {
+        val limit = response.headers["X-RateLimit-Limit"]?.toIntOrNull()
+        val remaining = response.headers["X-RateLimit-Remaining"]?.toIntOrNull()
+        val resetIn = response.headers["X-RateLimit-Reset-In"]?.toIntOrNull()
+
+        if (limit != null && remaining != null && resetIn != null) {
+            hostRateLimits[host] = RateLimitState(limit, remaining, resetIn, Clock.System.now())
+        }
+    }
 
     private data class QueuedRequest(
         val priority: HttpClientPriority,
@@ -123,12 +142,26 @@ class HttpClientQueueService : Service() {
                 val last = hostLastRequest[host]
                 val now = Clock.System.now()
 
-                val delayTime = when {
+                var delayTime = when {
                     host.contains("musicbrainz.org") -> 1.seconds
                     host.contains("api.song.link") -> 6.seconds
                     host.contains("theaudiodb.com") -> 2.seconds
                     host.contains("googleapis.com") || host.contains("youtube.com") -> 1.seconds
+                    host.contains("listenbrainz.org") -> 10.milliseconds
                     else -> 250.milliseconds
+                }
+
+                hostRateLimits[host]?.let { rl ->
+                    val passed = Clock.System.now() - rl.updatedAt
+                    if (rl.remaining <= 0) {
+                        val wait = rl.resetIn.seconds - passed
+                        if (wait > 0.seconds) {
+                            delayTime = maxOf(delayTime, wait)
+                        }
+                    } else if (host.contains("listenbrainz.org")) {
+                        val pace = (rl.resetIn.toDouble() / rl.remaining).seconds
+                        delayTime = maxOf(delayTime, pace)
+                    }
                 }
 
                 if (last != null) {
@@ -139,9 +172,21 @@ class HttpClientQueueService : Service() {
                 }
 
                 try {
-                    val response = ApiClient.instance.get(next.urlString) {
+                    var response = ApiClient.instance.get(next.urlString) {
                         next.block(this)
                     }
+                    updateRateLimit(host, response)
+
+                    if (response.status.value == 429) {
+                        val retryAfter = response.headers["Retry-After"]?.toIntOrNull() ?: 5
+                        logger.warn("Rate limit exceeded for $host, waiting $retryAfter seconds before retry")
+                        delay(retryAfter.seconds)
+                        response = ApiClient.instance.get(next.urlString) {
+                            next.block(this)
+                        }
+                        updateRateLimit(host, response)
+                    }
+
                     next.deferred.complete(response)
                 } catch (e: Exception) {
                     logger.error("Error executing queued request for $host", e)
