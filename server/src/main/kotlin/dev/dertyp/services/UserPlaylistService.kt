@@ -5,8 +5,14 @@ import dev.dertyp.core.*
 import dev.dertyp.data.*
 import dev.dertyp.db.*
 import dev.dertyp.dbQuery
+import dev.dertyp.formatISO
 import dev.dertyp.plugins.PlaylistLibrary
+import dev.dertyp.services.metadata.CachedMusicBrainzService
+import dev.dertyp.utils.ColorUtils
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
@@ -20,6 +26,10 @@ import java.util.Date
 import java.util.UUID
 
 class UserPlaylistService : PlaylistLibrary, IUserPlaylistService, Service() {
+    private val imageService by inject<ImageService>()
+    private val songService by inject<SongService>()
+    private val cachedMusicBrainzService by inject<CachedMusicBrainzService>()
+
     companion object {
         fun mapPlaylist(resultRow: ResultRow): UserPlaylist {
             val id = resultRow[UserPlaylistTable.id].value
@@ -82,7 +92,7 @@ class UserPlaylistService : PlaylistLibrary, IUserPlaylistService, Service() {
         color: Int,
         range: Int
     ): PaginatedResponse<UserPlaylist> {
-        val (l, a, b) = dev.dertyp.utils.ColorUtils.rgbToLab((color shr 16) and 0xFF, (color shr 8) and 0xFF, color and 0xFF)
+        val (l, a, b) = ColorUtils.rgbToLab((color shr 16) and 0xFF, (color shr 8) and 0xFF, color and 0xFF)
         return queryPlaylists(page, pageSize, columnSet = {
             leftJoin(ImageMetadataTable, onColumn = { UserPlaylistTable.imageId }, otherColumn = { ImageMetadataTable.imageId })
         }) {
@@ -107,14 +117,12 @@ class UserPlaylistService : PlaylistLibrary, IUserPlaylistService, Service() {
         UserPlaylistTable.deleteWhere { UserPlaylistTable.id eq id } == 1
     }
 
-    override suspend fun getOrAddPlaylist(user: User, customIdentifier: String?, playlist: InsertablePlaylist): UUID = dbQuery {
+    override suspend fun getOrAddPlaylist(userId: UUID, customIdentifier: String?, playlist: InsertablePlaylist): UUID = dbQuery {
         if (customIdentifier != null) querySingle {
-            where { UserPlaylistTable.creator eq user.id and (UserPlaylistTable.customIdentifier eq customIdentifier) }
+            where { UserPlaylistTable.creator eq userId and (UserPlaylistTable.customIdentifier eq customIdentifier) }
         }.let { result ->
             if (result != null) return@dbQuery result.id
         }
-
-        val imageService by inject<ImageService>()
 
         val coverImageId = playlist.imageHash?.let { imageService.byHash(it) }
 
@@ -122,7 +130,7 @@ class UserPlaylistService : PlaylistLibrary, IUserPlaylistService, Service() {
             this[UserPlaylistTable.name] = playlist.name
             this[UserPlaylistTable.customIdentifier] = customIdentifier
             this[UserPlaylistTable.description] = playlist.description
-            this[UserPlaylistTable.creator] = EntityID(user.id, UserTable)
+            this[UserPlaylistTable.creator] = EntityID(userId, UserTable)
             this[UserPlaylistTable.imageId] = coverImageId?.id?.let { EntityID(it, ImageTable) }
             this[UserPlaylistTable.origin] = playlist.origin
         }.first()[UserPlaylistTable.id].value
@@ -148,19 +156,16 @@ class UserPlaylistService : PlaylistLibrary, IUserPlaylistService, Service() {
     }
 
     override suspend fun addAlbumToPlaylist(id: UUID, albumId: UUID) {
-        val songService by inject<SongService>()
         val songIds = songService.songIdsByAlbum(albumId).toList()
         addSongsToPlaylist(id, songIds)
     }
 
     override suspend fun addPlaylistToPlaylist(id: UUID, sourcePlaylistId: UUID) {
-        val songService by inject<SongService>()
         val songIds = songService.songIdsByPlaylist(sourcePlaylistId).toList()
         addSongsToPlaylist(id, songIds)
     }
 
     override suspend fun addUserPlaylistToPlaylist(id: UUID, sourcePlaylistId: UUID) {
-        val songService by inject<SongService>()
         val songIds = songService.songIdsByUserPlaylist(sourcePlaylistId).toList()
         addSongsToPlaylist(id, songIds)
     }
@@ -177,10 +182,66 @@ class UserPlaylistService : PlaylistLibrary, IUserPlaylistService, Service() {
         } == 1
     }
 
+    override suspend fun createPlaylistFromArtists(
+        userId: UUID,
+        name: String,
+        artistIds: List<UUID>,
+        maxSongsPerArtist: Int,
+        sortStrategy: ArtistPlaylistSortStrategy
+    ): UUID = coroutineScope {
+        val allSongs = artistIds.flatMap { artistId ->
+            songService.byArtist(0, maxSongsPerArtist, artistId, userId).data
+        }.distinctBy { it.id }
+
+        if (allSongs.isEmpty()) {
+            return@coroutineScope getOrAddPlaylist(userId, null, InsertablePlaylist(name))
+        }
+
+        val sortedSongs = when (sortStrategy) {
+            ArtistPlaylistSortStrategy.MB_RELEASE_DATE, ArtistPlaylistSortStrategy.MB_RELEASE_DATE_ASC -> {
+                val songsWithDates = allSongs.chunked(10).flatMap { chunk ->
+                    chunk.map { userSong ->
+                        async(Dispatchers.IO) {
+                            val songDate = userSong.releaseDate?.formatISO()
+                            if (songDate != null) return@async userSong to songDate
+
+                            val mbId = userSong.musicBrainzId
+                            val date = if (mbId != null) {
+                                val recording = cachedMusicBrainzService.getRecording(mbId)
+                                recording?.releases?.mapNotNull { it.date }?.minOrNull()
+                            } else null
+                            userSong to date
+                        }
+                    }.awaitAll()
+                }
+
+                val comparator = compareBy<Pair<UserSong, String?>> { it.second ?: "9999-12-31" }
+                val result = if (sortStrategy == ArtistPlaylistSortStrategy.MB_RELEASE_DATE) {
+                    songsWithDates.sortedWith(comparator.reversed())
+                } else {
+                    songsWithDates.sortedWith(comparator)
+                }
+                result.map { it.first }
+            }
+
+            ArtistPlaylistSortStrategy.SHUFFLED -> allSongs.shuffled()
+            ArtistPlaylistSortStrategy.ALBUM_ORDER -> {
+                allSongs.sortedWith(compareBy({ it.album?.name }, { it.trackNumber }))
+            }
+
+            ArtistPlaylistSortStrategy.BY_GENRE -> {
+                allSongs.sortedBy { it.genres.firstOrNull()?.name ?: "" }
+            }
+        }
+
+        val playlistId = getOrAddPlaylist(userId, null, InsertablePlaylist(name))
+        addSongsToPlaylist(playlistId, sortedSongs.map { it.id })
+
+        playlistId
+    }
+
     override suspend fun createBatch(playlists: List<InsertablePlaylist>, userId: PlatformUUID?): List<PlatformUUID> {
         if (playlists.isEmpty() || userId == null) return emptyList()
-
-        val imageService by inject<ImageService>()
 
         val allUniqueImageHashes = playlists.mapNotNull { it.imageHash }.distinct()
         val allUniqueSongPaths = playlists.flatMap { it.songPaths }.distinct()

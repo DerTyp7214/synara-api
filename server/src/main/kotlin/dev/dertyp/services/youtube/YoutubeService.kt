@@ -115,7 +115,7 @@ open class YoutubeService(
                     val playlistId = idGroup.metadata?.let { playlist ->
                         if (playlist is IMetadataService.FlowPlaylist) {
                             userPlaylistService.getOrAddPlaylist(
-                                user, idGroup.id, InsertablePlaylist(
+                                user.id, idGroup.id, InsertablePlaylist(
                                     name = playlist.name,
                                     description = playlist.description,
                                     songPaths = emptyList(),

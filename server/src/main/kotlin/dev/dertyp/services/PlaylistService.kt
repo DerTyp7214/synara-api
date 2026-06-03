@@ -3,7 +3,10 @@ package dev.dertyp.services
 import dev.dertyp.PlatformUUID
 import dev.dertyp.core.paging
 import dev.dertyp.core.rankedSearchQuery
-import dev.dertyp.data.*
+import dev.dertyp.data.InsertablePlaylist
+import dev.dertyp.data.PaginatedResponse
+import dev.dertyp.data.Playlist
+import dev.dertyp.data.PlaylistEntry
 import dev.dertyp.db.ImageTable
 import dev.dertyp.db.PlaylistSongTable
 import dev.dertyp.db.PlaylistTable
@@ -21,10 +24,12 @@ import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.core.leftJoin
 import org.jetbrains.exposed.v1.jdbc.*
-import org.koin.core.component.get
+import org.koin.core.component.inject
 import java.util.UUID
 
 class PlaylistService : PlaylistLibrary, IPlaylistService, Service() {
+    private val imageService by inject<ImageService>()
+
     companion object {
         fun mapPlaylist(resultRow: ResultRow): Playlist {
             val id = resultRow[PlaylistTable.id].value
@@ -224,8 +229,6 @@ class PlaylistService : PlaylistLibrary, IPlaylistService, Service() {
     override suspend fun createBatch(playlists: List<InsertablePlaylist>, userId: PlatformUUID?): List<PlatformUUID> = dbQuery {
         if (playlists.isEmpty()) return@dbQuery emptyList()
 
-        val imageService = get<ImageService>()
-
         val allUniqueImageHashes = playlists.mapNotNull { it.imageHash }.distinct()
         val allUniqueSongPaths = playlists.flatMap { it.songPaths }.distinct()
 
@@ -296,7 +299,7 @@ class PlaylistService : PlaylistLibrary, IPlaylistService, Service() {
         insertedPlaylistIds
     }
 
-    override suspend fun getOrAddPlaylist(user: User, customIdentifier: String?, playlist: InsertablePlaylist): UUID = dbQuery {
+    override suspend fun getOrAddPlaylist(userId: PlatformUUID, customIdentifier: String?, playlist: InsertablePlaylist): UUID = dbQuery {
         val existingId = PlaylistTable
             .select(PlaylistTable.id)
             .where { PlaylistTable.name eq playlist.name }
@@ -307,7 +310,6 @@ class PlaylistService : PlaylistLibrary, IPlaylistService, Service() {
         PlaylistTable.insertAndGetId {
             it[name] = playlist.name
             it[imageId] = playlist.imageHash?.let { hash ->
-                val imageService = get<ImageService>()
                 runBlocking { imageService.byHash(hash)?.id }
             }
         }.value

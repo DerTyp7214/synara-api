@@ -8,7 +8,6 @@ import io.ktor.server.application.ApplicationEnvironment
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.withContext
-import org.koin.core.component.inject
 import java.io.File
 import java.nio.file.Paths
 import java.time.LocalDateTime
@@ -42,6 +41,7 @@ class RpcUserPlaylistBackupService(
 class UserPlaylistBackupService(
     private val userPlaylistService: UserPlaylistService,
     private val imageService: ImageService,
+    private val userService: UserService,
     environment: ApplicationEnvironment
 ) : Service() {
     private val backupDir =
@@ -100,7 +100,6 @@ class UserPlaylistBackupService(
     }
 
     suspend fun backupAllUsers(onProgress: suspend (Double, String) -> Unit = { _, _ -> }): Int {
-        val userService by inject<UserService>()
         val users = userService.queryUser()
         for ((index, user) in users.withIndex()) {
             val userProgress = (index.toDouble() / users.size) * 100.0

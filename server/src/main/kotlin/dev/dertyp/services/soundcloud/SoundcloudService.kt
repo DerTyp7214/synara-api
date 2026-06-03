@@ -115,7 +115,7 @@ class SoundcloudService(
                         if (playlist is IMetadataService.FlowPlaylist) {
                             val url = if (idGroup.id.startsWith("http")) idGroup.id else "https://soundcloud.com/${idGroup.id}"
                             userPlaylistService.getOrAddPlaylist(
-                                user, idGroup.id, InsertablePlaylist(
+                                user.id, idGroup.id, InsertablePlaylist(
                                     name = playlist.name,
                                     description = playlist.description,
                                     songPaths = emptyList(),

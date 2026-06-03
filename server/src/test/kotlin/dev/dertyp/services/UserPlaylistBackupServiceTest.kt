@@ -16,9 +16,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
-import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
-import org.koin.dsl.module
 import java.io.File
 import java.nio.file.Path
 import java.util.UUID
@@ -38,6 +36,7 @@ class UserPlaylistBackupServiceTest {
         val user = User(id = UUID.randomUUID(), username = "testuser", passwordHash = "hash")
         val userPlaylistService = mockk<UserPlaylistService>()
         val imageService = mockk<ImageService>()
+        val userService = mockk<UserService>()
         val environment = mockk<ApplicationEnvironment>()
 
         every { environment.config } returns MapApplicationConfig("backup.dir" to tempDir.toString())
@@ -51,7 +50,7 @@ class UserPlaylistBackupServiceTest {
         )
         every { userPlaylistService.allPlaylistsFlow(user.id) } returns listOf(playlist).asFlow()
         
-        val service = UserPlaylistBackupService(userPlaylistService, imageService, environment)
+        val service = UserPlaylistBackupService(userPlaylistService, imageService, userService, environment)
 
         for (i in 1..12) {
             service.createBackup(user)
@@ -73,11 +72,12 @@ class UserPlaylistBackupServiceTest {
         val user = User(id = UUID.randomUUID(), username = "testuser", passwordHash = "hash")
         val userPlaylistService = mockk<UserPlaylistService>(relaxed = true)
         val imageService = mockk<ImageService>(relaxed = true)
+        val userService = mockk<UserService>()
         val environment = mockk<ApplicationEnvironment>()
 
         every { environment.config } returns MapApplicationConfig("backup.dir" to tempDir.toString())
         
-        val service = UserPlaylistBackupService(userPlaylistService, imageService, environment)
+        val service = UserPlaylistBackupService(userPlaylistService, imageService, userService, environment)
         
         val playlist = UserPlaylist(
             id = UUID.randomUUID(),
@@ -104,10 +104,11 @@ class UserPlaylistBackupServiceTest {
         val user = User(id = UUID.randomUUID(), username = "testuser", passwordHash = "hash")
         val userPlaylistService = mockk<UserPlaylistService>()
         val imageService = mockk<ImageService>()
+        val userService = mockk<UserService>()
         val environment = mockk<ApplicationEnvironment>()
         every { environment.config } returns MapApplicationConfig("backup.dir" to tempDir.toString())
 
-        val service = UserPlaylistBackupService(userPlaylistService, imageService, environment)
+        val service = UserPlaylistBackupService(userPlaylistService, imageService, userService, environment)
         
         val backupDir = File(tempDir.toFile(), "user-playlists")
         backupDir.mkdirs()
@@ -124,10 +125,11 @@ class UserPlaylistBackupServiceTest {
         val user = User(id = UUID.randomUUID(), username = "testuser", passwordHash = "hash")
         val userPlaylistService = mockk<UserPlaylistService>()
         val imageService = mockk<ImageService>()
+        val userService = mockk<UserService>()
         val environment = mockk<ApplicationEnvironment>()
         every { environment.config } returns MapApplicationConfig("backup.dir" to tempDir.toString())
 
-        val service = UserPlaylistBackupService(userPlaylistService, imageService, environment)
+        val service = UserPlaylistBackupService(userPlaylistService, imageService, userService, environment)
         
         val backupDir = File(tempDir.toFile(), "user-playlists")
         backupDir.mkdirs()
@@ -143,10 +145,11 @@ class UserPlaylistBackupServiceTest {
         val user = User(id = UUID.randomUUID(), username = "testuser", passwordHash = "hash")
         val userPlaylistService = mockk<UserPlaylistService>()
         val imageService = mockk<ImageService>()
+        val userService = mockk<UserService>()
         val environment = mockk<ApplicationEnvironment>()
         every { environment.config } returns MapApplicationConfig("backup.dir" to tempDir.toString())
 
-        val service = UserPlaylistBackupService(userPlaylistService, imageService, environment)
+        val service = UserPlaylistBackupService(userPlaylistService, imageService, userService, environment)
         
         val backup = UserPlaylistBackup(user.id, emptyList(), emptyList())
         val backupDir = File(tempDir.toFile(), "user-playlists")
@@ -174,13 +177,7 @@ class UserPlaylistBackupServiceTest {
         val environment = mockk<ApplicationEnvironment>()
         every { environment.config } returns MapApplicationConfig("backup.dir" to tempDir.toString())
 
-        startKoin {
-            modules(module {
-                single { userService }
-            })
-        }
-
-        val service = UserPlaylistBackupService(userPlaylistService, imageService, environment)
+        val service = UserPlaylistBackupService(userPlaylistService, imageService, userService, environment)
         val count = service.backupAllUsers()
 
         assertEquals(2, count)

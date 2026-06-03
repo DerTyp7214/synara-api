@@ -447,7 +447,7 @@ abstract class TidalBaseImporter(
                             }
 
                             userPlaylistService.getOrAddPlaylist(
-                                user, idGroup.id, InsertablePlaylist(
+                                user.id, idGroup.id, InsertablePlaylist(
                                     name = playlist.name,
                                     description = playlist.description,
                                     songPaths = emptyList(),

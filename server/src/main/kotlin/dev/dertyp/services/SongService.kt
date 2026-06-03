@@ -455,9 +455,13 @@ class SongService : SongLibrary, Service() {
                 }
             }
 
-            if (mbRecording?.isrcs?.isNotEmpty() == true) {
+            val mbIsrc = mbRecording?.isrcs?.firstOrNull()
+            val mbDate = mbRecording?.releases?.mapNotNull { it.date }?.minOrNull()
+
+            if (mbIsrc != null || mbDate != null) {
                 SongTable.update({ SongTable.id eq id }) {
-                    it[isrc] = mbRecording.isrcs!!.first()
+                    if (mbIsrc != null) it[isrc] = mbIsrc
+                    if (mbDate != null) it[releaseDate] = mbDate
                 }
             }
         }
