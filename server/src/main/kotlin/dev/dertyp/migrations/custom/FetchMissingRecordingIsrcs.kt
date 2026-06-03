@@ -34,24 +34,34 @@ class FetchMissingRecordingIsrcs : CustomMigration() {
             logger.info("Found ${recordingIds.size} recordings without cached ISRCs.")
 
             var recordingsUpdated = 0
-            recordingIds.forEachIndexed { index, id ->
+            val batchSize = 50
+            recordingIds.chunked(batchSize).forEachIndexed { batchIndex, chunk ->
                 try {
-                    musicBrainzService.fetchRecordingById(id, HttpClientPriority.LOW)?.let { recording ->
-                        musicBrainzCacheService.updateRecordingCache(recording)
+                    val recordings = musicBrainzService.fetchRecordingsMetadataLB(chunk, HttpClientPriority.LOW)
+                    recordings.forEach { recording ->
                         if (recording.isrcs?.isNotEmpty() == true) {
+                            musicBrainzCacheService.updateRecordingIsrcs(recording.id,
+                                recording.isrcs!!
+                            )
                             recordingsUpdated++
                         }
                     }
                 } catch (e: Exception) {
-                    logger.error("Failed to fetch recording $id: ${e.message}")
+                    logger.error("Failed to fetch recordings batch ${batchIndex + 1}: ${e.message}")
                 }
 
-                if (index % 10 == 0 || index == recordingIds.lastIndex) {
-                    val progress = if (recordingIds.isNotEmpty()) index.toDouble() / recordingIds.size else 1.0
-                    updateProgress(progress, "Fetching ISRCs: ${index + 1}/${recordingIds.size}")
-                }
+                val processedCount = (batchIndex + 1) * batchSize
+                val progress =
+                    if (recordingIds.isNotEmpty()) processedCount.toDouble() / recordingIds.size else 1.0
+                updateProgress(
+                    progress.coerceAtMost(1.0),
+                    "Fetching ISRCs: ${processedCount.coerceAtMost(recordingIds.size)}/${recordingIds.size} | Updated: $recordingsUpdated"
+                )
             }
-            mapOf("recordingsChecked" to recordingIds.size, "recordingsUpdated" to recordingsUpdated)
+            mapOf(
+                "recordingsChecked" to recordingIds.size,
+                "recordingsUpdated" to recordingsUpdated
+            )
         }
     }
 }

@@ -397,6 +397,19 @@ class MusicBrainzCacheService : Service() {
         }
     }
 
+    suspend fun updateRecordingIsrcs(recordingId: UUID, isrcs: List<String>) = dbQuery {
+        MBRecordingTable.update({ MBRecordingTable.id eq recordingId }) {
+            it[lastUpdate] = Clock.System.now().toEpochMilliseconds()
+        }
+        MBRecordingIsrcTable.deleteWhere { MBRecordingIsrcTable.recordingId eq recordingId }
+        isrcs.forEach { isrc ->
+            MBRecordingIsrcTable.upsert(MBRecordingIsrcTable.recordingId, MBRecordingIsrcTable.isrc) {
+                it[this.recordingId] = recordingId
+                it[this.isrc] = isrc
+            }
+        }
+    }
+
     suspend fun updateReleaseCache(release: MusicBrainzRelease): Unit = dbQuery {
         MBReleaseTable.upsert(MBReleaseTable.id) {
             it[id] = release.id

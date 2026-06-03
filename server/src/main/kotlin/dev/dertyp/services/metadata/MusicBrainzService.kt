@@ -20,6 +20,9 @@ import kotlinx.coroutines.delay
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.UseContextualSerialization
+import kotlinx.serialization.json.*
+import java.util.UUID
+import kotlin.time.Clock
 import kotlin.time.Duration.Companion.seconds
 
 @Serializable
@@ -412,6 +415,115 @@ class MusicBrainzService : Service() {
             logger.error("Error fetching recording by ID $mbId", e)
             null
         }
+    }
+
+    suspend fun fetchRecordingsMetadataLB(
+        mbIds: List<PlatformUUID>,
+        priority: HttpClientPriority = HttpClientPriority.NORMAL
+    ): List<MusicBrainzRecording> {
+        if (mbIds.isEmpty()) return emptyList()
+
+        return mbIds.chunked(50).flatMap { chunk ->
+            try {
+                val mbidsString = chunk.joinToString(",")
+                val response = retryableGet<JsonObject>("https://api.listenbrainz.org/1/metadata/recording/", priority) {
+                    parameter("recording_mbids", mbidsString)
+                    parameter("inc", "artist release tag")
+                } ?: return@flatMap emptyList()
+
+                response.mapNotNull { (mbid, data) ->
+                    try {
+                        mapLBToMusicBrainzRecording(UUID.fromString(mbid), data.jsonObject)
+                    } catch (e: Exception) {
+                        logger.error("Failed to map LB metadata for $mbid", e)
+                        null
+                    }
+                }
+            } catch (e: Exception) {
+                logger.error("Error fetching recordings from ListenBrainz", e)
+                emptyList()
+            }
+        }
+    }
+
+    private fun mapLBToMusicBrainzRecording(mbId: UUID, data: JsonObject): MusicBrainzRecording? {
+        val rec = data["recording"]?.jsonObject ?: return null
+        val tagData = data["tag"]?.jsonObject?.get("recording")?.jsonArray
+        val artistData = data["artist"]?.jsonObject
+        val releaseData = data["release"]?.jsonObject
+
+        val title = rec["name"]?.jsonPrimitive?.contentOrNull
+        val length = rec["length"]?.jsonPrimitive?.longOrNull
+        val isrcs = rec["isrcs"]?.jsonArray?.mapNotNull { it.jsonPrimitive.contentOrNull }
+
+        val artistCredits = artistData?.get("artists")?.jsonArray?.mapNotNull { artistElement ->
+            val art = artistElement.jsonObject
+            val artistId = art["artist_mbid"]?.jsonPrimitive?.contentOrNull?.let { UUID.fromString(it) } ?: return@mapNotNull null
+            MusicBrainzArtistCredit(
+                name = art["name"]?.jsonPrimitive?.contentOrNull,
+                artist = MusicBrainzArtist(
+                    id = artistId,
+                    name = art["name"]?.jsonPrimitive?.contentOrNull,
+                    type = art["type"]?.jsonPrimitive?.contentOrNull?.let { type ->
+                        ArtistType.entries.find { it.name.equals(type, ignoreCase = true) }
+                    },
+                    country = art["area"]?.jsonPrimitive?.contentOrNull
+                )
+            )
+        }
+
+        val releases = releaseData?.let { rel ->
+            val relId = rel["mbid"]?.jsonPrimitive?.contentOrNull?.let { UUID.fromString(it) }
+            if (relId != null) {
+                listOf(
+                    MusicBrainzRelease(
+                        id = relId,
+                        title = rel["name"]?.jsonPrimitive?.contentOrNull,
+                        date = rel["year"]?.jsonPrimitive?.contentOrNull,
+                        releaseGroup = rel["release_group_mbid"]?.jsonPrimitive?.contentOrNull?.let {
+                            MusicBrainzReleaseGroup(id = UUID.fromString(it), title = "")
+                        }
+                    )
+                )
+            } else null
+        }
+
+        val tags = tagData?.mapNotNull { tagElement ->
+            try {
+                val tagObj = tagElement.jsonObject
+                MusicBrainzTag(
+                    name = tagObj["tag"]?.jsonPrimitive?.content ?: return@mapNotNull null,
+                    count = tagObj["count"]?.jsonPrimitive?.int ?: 0
+                )
+            } catch (_: Exception) {
+                null
+            }
+        }
+
+        val lbRels = rec["rels"]?.jsonArray
+        val relations = lbRels?.mapNotNull { relElement ->
+            val rel = relElement.jsonObject
+            val target = rel["target"]?.jsonPrimitive?.contentOrNull
+                ?: rel["artist_mbid"]?.jsonPrimitive?.contentOrNull?.let { "https://musicbrainz.org/artist/$it" }
+                ?: return@mapNotNull null
+            val type = rel["type"]?.jsonPrimitive?.contentOrNull
+            MusicBrainzRelation(
+                type = type,
+                url = MusicBrainzRelationUrl(id = UUID.randomUUID(), resource = target)
+            )
+        }
+
+        return MusicBrainzRecording(
+            id = mbId,
+            title = title,
+            length = length,
+            isrcs = isrcs,
+            artistCredit = artistCredits,
+            releases = releases,
+            tags = tags,
+            relations = relations,
+            fetchedAt = Clock.System.now().toEpochMilliseconds()
+        )
     }
 
     suspend fun fetchReleaseById(mbId: PlatformUUID, priority: HttpClientPriority = HttpClientPriority.NORMAL): MusicBrainzRelease? {
