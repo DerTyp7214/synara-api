@@ -323,6 +323,7 @@ object AudioUtils {
                 it[TranscodedSongTable.bitrate] = version.bitrate
                 it[TranscodedSongTable.format] = version.format
                 it[TranscodedSongTable.path] = file.absolutePath
+                it[TranscodedSongTable.fileSize] = file.length()
             }
         }
     }
@@ -333,6 +334,7 @@ object AudioUtils {
             it[TranscodedSongTable.bitrate] = bitrate
             it[TranscodedSongTable.format] = format
             it[TranscodedSongTable.path] = file.absolutePath
+            it[TranscodedSongTable.fileSize] = file.length()
         }
     }
 }

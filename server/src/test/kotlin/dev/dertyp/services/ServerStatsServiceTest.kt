@@ -28,7 +28,7 @@ class ServerStatsServiceTest {
     fun setup(dialect: DbDialect) {
         database = TestDatabase.connect(dialect, "stats_test")
         transaction(database) {
-            SchemaUtils.create(ArtistTable, AlbumTable, ImageTable, SongTable, PlaylistTable, UserTable, UserPlaylistTable)
+            SchemaUtils.create(ArtistTable, AlbumTable, ImageTable, SongTable, PlaylistTable, UserTable, UserPlaylistTable, TranscodedSongTable)
         }
         storageService = mockk()
         reverseProxyService = mockk()

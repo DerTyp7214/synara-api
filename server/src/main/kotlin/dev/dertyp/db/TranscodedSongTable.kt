@@ -9,6 +9,7 @@ object TranscodedSongTable: Table("transcodedSong") {
     val bitrate = integer("bitrate")
     val format = enumerationByName("format", 10, AudioFormat::class).default(AudioFormat.OPUS)
     val path = text("path")
+    val fileSize = long("fileSize").default(0L)
 
     override val primaryKey = PrimaryKey(songId, bitrate, format)
 }

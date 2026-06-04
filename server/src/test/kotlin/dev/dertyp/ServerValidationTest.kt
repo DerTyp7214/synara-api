@@ -51,6 +51,7 @@ class ServerValidationTest {
             indexedFileSize = 0,
             averageSizePerSong = 0,
             totalDuration = 0,
+            transcodeStats = emptyList(),
             musicBrainzCache = ServerStats.MusicBrainzCacheStats(0, 0, 0, 0, 0, 0, 0, 0),
             version = ServerStats.Version("", "", "", "", "")
         )

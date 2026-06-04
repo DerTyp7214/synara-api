@@ -6,6 +6,7 @@ import dev.dertyp.db.*
 import dev.dertyp.dbQuery
 import dev.dertyp.server.BuildConfig
 import dev.dertyp.services.metadata.MusicBrainzCacheService
+import org.jetbrains.exposed.v1.core.count
 import org.jetbrains.exposed.v1.core.sum
 import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.jdbc.selectAll
@@ -30,6 +31,23 @@ class ServerStatsService(
             SongTable.select(it).singleOrNull()?.get(it)
         } ?: 0L
 
+        val transcodeStats = TranscodedSongTable
+            .select(
+                TranscodedSongTable.bitrate,
+                TranscodedSongTable.format,
+                TranscodedSongTable.bitrate.count(),
+                TranscodedSongTable.fileSize.sum()
+            )
+            .groupBy(TranscodedSongTable.bitrate, TranscodedSongTable.format)
+            .map {
+                ServerStats.TranscodeStats(
+                    bitrate = it[TranscodedSongTable.bitrate],
+                    format = it[TranscodedSongTable.format],
+                    count = it[TranscodedSongTable.bitrate.count()].toInt(),
+                    totalSize = it[TranscodedSongTable.fileSize.sum()] ?: 0L
+                )
+            }
+
         val osName = System.getProperty("os.name")
         val osVersion = System.getProperty("os.version")
         val osArch = System.getProperty("os.arch")
@@ -44,6 +62,7 @@ class ServerStatsService(
             indexedFileSize = indexedFileSize,
             averageSizePerSong = if (songCount > 0) indexedFileSize / songCount else 0L,
             totalDuration = totalDuration,
+            transcodeStats = transcodeStats,
             musicBrainzCache = musicBrainzCacheService.getStats(),
             version = ServerStats.Version(
                 version = BuildConfig.VERSION,
