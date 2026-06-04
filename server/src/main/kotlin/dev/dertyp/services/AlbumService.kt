@@ -1079,6 +1079,7 @@ class AlbumService : AlbumLibrary, Service() {
         val uniqueSongCounts = uniqueAlbumMetadata.map { it.songCount }
         val uniqueReleaseDates = uniqueAlbumMetadata.map { getISOFromDate(it.releaseDate) }
         val uniqueOriginalIds = uniqueAlbumMetadata.map { it.originalId }
+        val uniqueBarcodes = uniqueAlbumMetadata.mapNotNull { it.barcode }.filter { it.isNotBlank() }
         val allRequiredArtistNames = albums.flatMap { it.artists }.distinct()
 
         val artistIdMap: Map<String, List<UUID>> =
@@ -1113,11 +1114,9 @@ class AlbumService : AlbumLibrary, Service() {
             where { AlbumTable.name inList uniqueAlbumNames }
             andWhere { AlbumTable.releaseDate inList uniqueReleaseDates }
             andWhere { AlbumTable.songCount inList uniqueSongCounts }
-            andWhere {
-                (AlbumTable.originalId inList uniqueOriginalIds) or
-                        (AlbumTable.originalId eq null) or
-                        (AlbumTable.id inList albumIdsFromProviders)
-            }
+            orWhere { AlbumTable.originalId inList uniqueOriginalIds.filterNotNull() }
+            orWhere { if (uniqueBarcodes.isNotEmpty()) AlbumTable.barcode inList uniqueBarcodes else Op.FALSE }
+            orWhere { AlbumTable.id inList albumIdsFromProviders }
         }.data
 
         val potentialAlbumIds = potentialAlbumRows.map { it.id }.toSet()
@@ -1164,6 +1163,8 @@ class AlbumService : AlbumLibrary, Service() {
             val albumProviders = providersByPotentialAlbumId[albumId] ?: emptyList()
 
             val inputAlbum = uniqueAlbumMetadata.firstOrNull {
+                if (it.barcode?.isNotBlank() == true && row.barcode == it.barcode) return@firstOrNull true
+
                 if (it.originalId != null) {
                     if (row.originalId == it.originalId) return@firstOrNull true
                     val parser = ParserFactory.getParser(it.originalId!!)
@@ -1188,10 +1189,10 @@ class AlbumService : AlbumLibrary, Service() {
 
                 if (inputAlbum.originalId != null || albumArtists == requiredArtistIdsForInput) {
                     finalMatchMap[getIdentityKey(
-                        row.originalId,
-                        row.name,
+                        inputAlbum.originalId,
+                        inputAlbum.name,
                         inputAlbum.artists,
-                        row.releaseDate
+                        inputAlbum.releaseDate
                     )] = albumId
                 }
             }

@@ -52,7 +52,8 @@ class AppleMusicService(
                         width = 600,
                         height = 600
                     )
-                )
+                ),
+                isrc = track.primaryIsrc
             )
         }
     }
@@ -145,6 +146,7 @@ class AppleMusicService(
         val artworkUrl100: String,
         val trackCount: Int,
         val trackName: String? = null,
-        val trackTimeMillis: Long? = null
+        val trackTimeMillis: Long? = null,
+        val primaryIsrc: String? = null
     )
 }

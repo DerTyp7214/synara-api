@@ -184,7 +184,8 @@ abstract class TidalBaseImporter(
                 }
 
                 val mbTrack = mbRelease?.media?.flatMap { it.tracks ?: emptyList() }?.find {
-                    it.title?.cleanTitle()?.equals(tidalTrack.title.cleanTitle(), true) == true
+                    (it.recording?.isrcs?.contains(tidalTrack.isrc) == true) ||
+                            it.title?.cleanTitle()?.equals(tidalTrack.title.cleanTitle(), true) == true
                 }
 
                 if (mbTrack != null) {

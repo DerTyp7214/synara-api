@@ -1118,6 +1118,7 @@ External metadata for a music album.
 | `images` | `List`<[Image](#devdertypservicesmetadataimetadataserviceimage)> | Collection of album images. |
 | `genres` | `List`<`String`> | Genres associated with the album. |
 | `additionalTitles` | `List`<`String`> | Alternative titles for the album. |
+| `barcode` | `String`? | The barcode or UPC of the album. |
 
 ### Artist <a name="devdertypservicesmetadataimetadataserviceartist"></a>
 *Full name: `dev.dertyp.services.metadata.IMetadataService.Artist`*
@@ -1208,6 +1209,7 @@ External metadata for a music track.
 | `genres` | `List`<`String`> | Genres associated with the track. |
 | `albumId` | `String`? | The external album ID. |
 | `albumTitle` | `String`? | The title of the album. |
+| `isrc` | `String`? | The International Standard Recording Code. |
 
 ### FollowedArtist <a name="devdertypservicesmodelsfollowedartist"></a>
 Represents an artist that a user is following for release tracking.

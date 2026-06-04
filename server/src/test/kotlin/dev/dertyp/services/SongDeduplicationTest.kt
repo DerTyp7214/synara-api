@@ -200,6 +200,64 @@ class SongDeduplicationTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
+    fun `createBatch should not insert duplicate if ISRC matches`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val songService = SongService()
+
+        val artistId = UUID.randomUUID()
+        val albumId = UUID.randomUUID()
+        val isrc = "USAT20300184"
+
+        transaction(database) {
+            ArtistTable.insert {
+                it[id] = artistId
+                it[name] = "Test Artist"
+            }
+            AlbumTable.insert {
+                it[id] = albumId
+                it[name] = "Test Album"
+            }
+        }
+
+        coEvery { artistService.getOrBulkCreate(any()) } answers {
+            val names = it.invocation.args[0] as List<String>
+            names.associateWith { listOf(artistId) }
+        }
+        coEvery { albumService.getOrBulkCreate(any()) } answers {
+            val albums = it.invocation.args[0] as List<InsertableAlbum>
+            albums.associateWith { albumId }
+        }
+
+        val song1 = InsertableSong(
+            title = "Title A",
+            artists = listOf("Test Artist"),
+            album = InsertableAlbum(name = "Test Album", artists = listOf("Test Artist")),
+            path = "/path/1.flac",
+            originalUrl = "https://service1.com/track/1",
+            isrc = isrc,
+            duration = 180000,
+            explicit = false
+        )
+
+        val song2 = song1.copy(
+            title = "Title B",
+            path = "/path/2.flac",
+            originalUrl = "https://service2.com/track/2"
+        )
+
+        songService.createBatch(listOf(song1))
+        transaction(database) {
+            assertEquals(1L, SongTable.selectAll().count())
+        }
+
+        songService.createBatch(listOf(song2))
+        transaction(database) {
+            assertEquals(1L, SongTable.selectAll().count(), "Should not have inserted a second song when ISRC matches")
+        }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
     fun `createBatch should not insert duplicate if different URLs point to the same song via SongProviderTable`(dialect: DbDialect) = runBlocking {
         setup(dialect)
         val songService = SongService()

@@ -67,7 +67,8 @@ class SpotifyService(
                         width = image.width,
                         height = image.height,
                     )
-                }
+                },
+                isrc = track.externalIds?.isrc
             )
         } ?: emptyList()
     }
@@ -154,7 +155,8 @@ class SpotifyService(
                         width = image.width,
                         height = image.height,
                     )
-                }
+                },
+                barcode = album.externalIds?.upc ?: album.externalIds?.ean
             )
         } ?: emptyList()
     }
@@ -185,7 +187,16 @@ class SpotifyService(
         val album: Album,
         @SerialName("duration_ms")
         val durationMs: Int,
-        val href: String
+        val href: String,
+        @SerialName("external_ids")
+        val externalIds: ExternalIds? = null
+    )
+
+    @Serializable
+    data class ExternalIds(
+        val isrc: String? = null,
+        val ean: String? = null,
+        val upc: String? = null
     )
 
     @Serializable
@@ -207,7 +218,9 @@ class SpotifyService(
         val images: List<SpotifyImage>,
         @SerialName("total_tracks")
         val totalTracks: Int,
-        val href: String
+        val href: String,
+        @SerialName("external_ids")
+        val externalIds: ExternalIds? = null
     )
 
     @Serializable

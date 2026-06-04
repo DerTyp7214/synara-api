@@ -504,7 +504,8 @@ class TidalService(
                     artists = body.data.artists(artists),
                     images = imageUrls,
                     albumId = albumId,
-                    albumTitle = albumId?.let { albums[it]?.title }
+                    albumTitle = albumId?.let { albums[it]?.title },
+                    isrc = track.isrc
                 )
             }?.also { writeToJedis(it) }
         } catch (e: Exception) {
@@ -576,7 +577,8 @@ class TidalService(
                         artists = trackObj.artists(artists),
                         images = trackObj.images(imageUrls),
                         albumId = albumId,
-                        albumTitle = albumId?.let { albums[it]?.title }
+                        albumTitle = albumId?.let { albums[it]?.title },
+                        isrc = track.isrc
                     )
                 }
             }.cacheTracks() + getTracksFromCache(existing)
@@ -668,7 +670,8 @@ class TidalService(
                         discCount = album.numberOfVolumes,
                         releaseDate = album.releaseDate,
                         artists = albumObj.artists(artists),
-                        images = albumObj.images(images)
+                        images = albumObj.images(images),
+                        barcode = album.barcodeId
                     )
                 }
             }.cacheAlbums() + getAlbumsFromCache(existing)
@@ -790,7 +793,8 @@ class TidalService(
                         createdAt = track.createdAt,
                         artists = emptyList(),
                         images = emptyList(),
-                        albumId = it.relationships?.albums?.data?.firstOrNull()?.id
+                        albumId = it.relationships?.albums?.data?.firstOrNull()?.id,
+                        isrc = track.isrc
                     )
                 } ?: emptyList()
 
@@ -864,7 +868,8 @@ class TidalService(
                         discNumber = meta[id]?.volumeNumber,
                         artists = emptyList(),
                         images = emptyList(),
-                        albumId = albumId
+                        albumId = albumId,
+                        isrc = track.isrc
                     )
                 }.asFlow())
 
@@ -925,6 +930,7 @@ class TidalService(
                     addedAt = meta[id]?.addedAt,
                     artists = emptyList(),
                     images = emptyList(),
+                    isrc = track.isrc
                 )
             }.asFlow())
             if (nextCursor != null) {

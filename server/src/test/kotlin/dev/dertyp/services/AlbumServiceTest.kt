@@ -671,6 +671,39 @@ class AlbumServiceTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
+    fun `getOrBulkCreate should match existing album by barcode`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val artistName = "Test Artist"
+        val barcode = "123456789012"
+        
+        val artistId = transaction(database) {
+            ArtistTable.insertAndGetId {
+                it[ArtistTable.name] = artistName
+            }.value
+        }
+        val albumId = transaction(database) {
+            val aId = AlbumTable.insertAndGetId {
+                it[AlbumTable.name] = "Original Name"
+                it[AlbumTable.barcode] = barcode
+            }.value
+            AlbumArtistTable.insert {
+                it[AlbumArtistTable.albumId] = aId
+                it[AlbumArtistTable.artistId] = artistId
+            }
+            aId
+        }
+
+        val albums = listOf(
+            InsertableAlbum("New Name", listOf(artistName), barcode = barcode)
+        )
+        val result = service.getOrBulkCreate(albums)
+        
+        assertEquals(1, result.size)
+        assertEquals(albumId, result.values.first(), "Should return existing album ID when barcode matches")
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
     fun `byMusicBrainzId should return matching albums`(dialect: DbDialect) = runBlocking {
         setup(dialect)
         val mbId = UUID.randomUUID()

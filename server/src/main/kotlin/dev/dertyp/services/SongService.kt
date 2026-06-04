@@ -972,6 +972,7 @@ class SongService : SongLibrary, Service() {
             where {
                 tracks.map { track ->
                     (SongTable.originalUrl eq "https://tidal.com/browse/track/${track.id}") or
+                            (if (track.isrc?.isNotBlank() == true) SongTable.isrc eq track.isrc else Op.FALSE) or
                             ((SongTable.title eq track.title) and
                                     (SongTable.duration eq track.duration.inWholeMilliseconds))
                 }.reduce { acc, op -> acc or op }
@@ -1661,6 +1662,7 @@ class SongService : SongLibrary, Service() {
                     SongTable.explicit,
                     SongTable.filePath,
                     SongTable.originalUrl,
+                    SongTable.isrc,
                     AlbumTable.name,
                     SongProviderTable.rawUrl,
                     SongProviderTable.provider,
@@ -1670,8 +1672,10 @@ class SongService : SongLibrary, Service() {
                 .where { SongTable.filePath inList songs.map { it.path } }
                 .orWhere {
                     val urls = songs.map { it.originalUrl }.filter { it.isNotBlank() }
+                    val isrcs = songs.mapNotNull { it.isrc }.filter { it.isNotBlank() }
                     (SongTable.originalUrl inList urls) or
                             (SongProviderTable.rawUrl inList urls) or
+                            (if (isrcs.isNotEmpty()) SongTable.isrc inList isrcs else Op.FALSE) or
                             (if (parsedLookups.isNotEmpty()) {
                                 parsedLookups.map { (_, p, eid) ->
                                     (SongProviderTable.provider eq p) and (SongProviderTable.externalId eq eid)
@@ -1707,8 +1711,9 @@ class SongService : SongLibrary, Service() {
                             )
 
                     val legacyMatch = song.originalUrl.isNotBlank() && row[SongTable.originalUrl] == song.originalUrl
+                    val isrcMatch = song.isrc?.isNotBlank() == true && row[SongTable.isrc] == song.isrc
 
-                    val metadataMatch = legacyMatch || providerMatch || (
+                    val metadataMatch = legacyMatch || providerMatch || isrcMatch || (
                             song.originalUrl.isBlank() &&
                                     row[SongTable.title] == song.title &&
                                     row[SongTable.trackNumber] == song.trackNumber &&

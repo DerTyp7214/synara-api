@@ -6,11 +6,7 @@ import dev.dertyp.data.User
 import dev.dertyp.services.SongService
 import dev.dertyp.services.metadata.IMetadataService
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.asFlow
-import kotlinx.coroutines.flow.chunked
-import kotlinx.coroutines.flow.flattenConcat
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.*
 import java.util.UUID
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -26,11 +22,20 @@ fun Flow<IMetadataService.Track>.filterExisting(
                 tracks.map { it.id },
                 user.id
             )
-            val existingUrls = existingSongs.map { track -> track.originalUrl }
+            val isrcs = tracks.mapNotNull { it.isrc }.filter { it.isNotBlank() }
+            val existingSongsByIsrc = if (isrcs.isNotEmpty()) {
+                songService.byOriginalTracks(tracks, user.id)
+            } else emptyList()
+
+            val allExistingSongs = (existingSongs + existingSongsByIsrc).distinctBy { it.id }
+            val existingUrls = allExistingSongs.map { track -> track.originalUrl }
+            val existingIsrcs = allExistingSongs.mapNotNull { it.isrc }
 
             val songIds = tracks.map { track ->
                 track.addedAt?.toInstant()
-                    ?.toEpochMilli() to existingSongs.find { it.originalUrl.endsWith("/${track.id}") }?.id
+                    ?.toEpochMilli() to allExistingSongs.find {
+                    it.originalUrl.endsWith("/${track.id}") || (track.isrc?.isNotBlank() == true && it.isrc == track.isrc)
+                }?.id
             }.filterNotNull()
 
             existingCallback(songIds)
@@ -38,7 +43,7 @@ fun Flow<IMetadataService.Track>.filterExisting(
             tracks.filter { track ->
                 existingUrls.none { url ->
                     url.endsWith("/${track.id}")
-                }
+                } && (track.isrc.isNullOrBlank() || existingIsrcs.none { it == track.isrc })
             }.asFlow()
         }
         .flattenConcat()
