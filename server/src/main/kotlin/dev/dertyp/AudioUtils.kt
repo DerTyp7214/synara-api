@@ -204,14 +204,15 @@ object AudioUtils {
                         if (audioFormat == AudioFormat.AAC) {
                             audioCodec = avcodec.AV_CODEC_ID_AAC
                             format = "mp4"
+                            sampleFormat = avutil.AV_SAMPLE_FMT_FLTP
                         } else {
                             audioCodec = avcodec.AV_CODEC_ID_OPUS
                             format = "ogg"
+                            sampleFormat = AV_SAMPLE_FMT_S16
                         }
 
                         sampleRate = closestSampleRate(grabber.sampleRate)
                         audioBitrate = targetKbps * 1000
-                        sampleFormat = AV_SAMPLE_FMT_S16
 
                         frameRate = 1.0
 
