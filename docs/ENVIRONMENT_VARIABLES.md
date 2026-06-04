@@ -56,7 +56,6 @@ Most variables have sensible defaults and are **optional**. Only variables witho
 
 | Variable | Description | Required | Default (Standalone) | Default (Docker) |
 |:---|:---|:---:|:---|:---|
-| `AUDIO_AUTO_TRANSCODE_QUALITIES_AAC` |  | No | - | - |
 | `SERVER_SSL_SUPPORTED` |  | No | `false` | - |
 | `WORKER_THREAD_MULTIPLIER` | Multiplier for background worker threads. Scales the number of parallel tasks relative to CPU cores. | No | `1.0` | - |
 | `YOUTUBE_API_KEY` | Youtube API key for YouTube Data API v3 (Downloader). | No | - | - |
@@ -84,7 +83,8 @@ Most variables have sensible defaults and are **optional**. Only variables witho
 | Variable | Description | Required | Default (Standalone) | Default (Docker) |
 |:---|:---|:---:|:---|:---|
 | `AUDIO_ALBUMS_PATH` | Base path for albums. | No | `music/albums` | `/data/Synara/Albums` |
-| `AUDIO_AUTO_TRANSCODE_QUALITIES` | Bitrates for auto-transcoding. | No | - | - |
+| `AUDIO_AUTO_TRANSCODE_QUALITIES` | Bitrates for auto-transcoding (Opus). | No | - | - |
+| `AUDIO_AUTO_TRANSCODE_QUALITIES_AAC` | Bitrates for auto-transcoding (AAC). | No | - | - |
 | `AUDIO_CUSTOM_PATH` | Path for custom uploaded audio. | No | `music/custom` | `/data/Synara/custom` |
 | `AUDIO_PLAYLISTS_PATH` | Base path for playlists. | No | `music/playlists` | `/data/Synara/Playlists` |
 | `AUDIO_TRACKS_PATH` | Base path for audio tracks. | No | `music/tracks` | `/data/Synara/Tracks` |
