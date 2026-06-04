@@ -39,6 +39,7 @@ audio:
   playlists: ${AUDIO_PLAYLISTS_PATH:music/playlists}
   transcode: ${AUDIO_TRANSCODE_PATH:music/transcode}
   autoTranscode: ${AUDIO_AUTO_TRANSCODE_QUALITIES:}
+  autoTranscodeAac: ${AUDIO_AUTO_TRANSCODE_QUALITIES_AAC:}
   custom: ${AUDIO_CUSTOM_PATH:music/custom}
   secondary-tracks:
     - ${AUDIO_TRACKS_SECONDARY_PATH:}

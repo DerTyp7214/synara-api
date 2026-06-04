@@ -1,7 +1,9 @@
 package dev.dertyp
 
 import dev.dertyp.core.deleteOnExitRecursive
+import dev.dertyp.data.AudioFormat
 import dev.dertyp.data.SimpleSong
+import dev.dertyp.data.TranscodedVersion
 import dev.dertyp.db.SongTable
 import dev.dertyp.db.TranscodedSongTable
 import io.ktor.http.ContentType
@@ -19,8 +21,7 @@ import org.bytedeco.ffmpeg.global.avutil.AV_SAMPLE_FMT_S16
 import org.bytedeco.javacv.FFmpegFrameGrabber
 import org.bytedeco.javacv.FFmpegFrameRecorder
 import org.bytedeco.javacv.FFmpegLogCallback
-import org.jetbrains.exposed.v1.core.inList
-import org.jetbrains.exposed.v1.core.notInList
+import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.jdbc.insertIgnore
 import org.jetbrains.exposed.v1.jdbc.select
 import java.io.File
@@ -55,7 +56,7 @@ object AudioUtils {
 
     val isTranscoderActive = AtomicBoolean(false)
 
-    private val transcodeMutexes = ConcurrentHashMap<Pair<String, Int>, Mutex>()
+    private val transcodeMutexes = ConcurrentHashMap<Triple<String, Int, AudioFormat>, Mutex>()
 
     internal fun closestSampleRate(rate: Int): Int {
         val supported = listOf(8000, 12000, 16000, 24000, 48000)
@@ -78,26 +79,29 @@ object AudioUtils {
         }
     }
 
-    suspend fun Application.transcodeFlacToOpus(
+    suspend fun Application.transcodeAudio(
         flacFile: File,
         targetKbps: Int,
-        force: Boolean = true
-    ) = transcodeFlacToOpus(environment, flacFile, targetKbps, force)
+        force: Boolean = true,
+        audioFormat: AudioFormat = AudioFormat.OPUS
+    ) = transcodeAudio(environment, flacFile, targetKbps, force, audioFormat)
 
-    suspend fun Route.transcodeFlacToOpus(
+    suspend fun Route.transcodeAudio(
         flacFile: File,
         targetKbps: Int,
-        force: Boolean = true
-    ) = transcodeFlacToOpus(environment, flacFile, targetKbps, force)
+        force: Boolean = true,
+        audioFormat: AudioFormat = AudioFormat.OPUS
+    ) = transcodeAudio(environment, flacFile, targetKbps, force, audioFormat)
 
-    suspend fun transcodeFlacToOpus(
+    suspend fun transcodeAudio(
         environment: ApplicationEnvironment,
         flacFile: File,
         targetKbps: Int,
         force: Boolean = true,
+        audioFormat: AudioFormat = AudioFormat.OPUS,
     ): StreamInfo = withContext(Dispatchers.IO) {
         val mutex =
-            transcodeMutexes.computeIfAbsent(flacFile.absolutePath to targetKbps) { Mutex() }
+            transcodeMutexes.computeIfAbsent(Triple(flacFile.absolutePath, targetKbps, audioFormat)) { Mutex() }
 
         mutex.withLock {
             if (!flacFile.exists()) {
@@ -124,17 +128,21 @@ object AudioUtils {
                 flacFile.absoluteFile.parentFile.absolutePath.removePrefix(tracksPath)
             else flacFile.absoluteFile.parentFile.name
 
+            val extension = if (audioFormat == AudioFormat.AAC) "m4a" else "ogg"
+            val contentType = if (audioFormat == AudioFormat.AAC) ContentType.Audio.MP4 else ContentType.Audio.OGG
+
+            val folder = if (audioFormat == AudioFormat.AAC) "${targetKbps}kbps_aac" else "${targetKbps}kbps"
             val fileName =
                 Paths.get(
                     transcoderPath,
-                    "${targetKbps}kbps",
+                    folder,
                     parent,
-                    "${flacFile.nameWithoutExtension}.ogg"
+                    "${flacFile.nameWithoutExtension}.$extension"
                 ).toFile()
 
             val transcodingFile = Files.createTempDirectory("transcoder_").toFile().apply {
                 deleteOnExitRecursive()
-            }.resolve("transcoding_${flacFile.nameWithoutExtension}.ogg")
+            }.resolve("transcoding_${flacFile.nameWithoutExtension}.$extension")
 
             val tempFolder =
                 if (fileName.isRooted) Paths.get("/").toFile()
@@ -147,7 +155,7 @@ object AudioUtils {
                 if (!force) {
                     return@withLock StreamInfo(
                         tempFile,
-                        ContentType.Audio.OGG,
+                        contentType,
                         tempFile.length(),
                         tempFile.name,
                     )
@@ -159,7 +167,7 @@ object AudioUtils {
                 if (flacDuration != Duration.ZERO && tempDuration != Duration.ZERO && (flacDuration - tempDuration).absoluteValue < 1.seconds) {
                     return@withLock StreamInfo(
                         tempFile,
-                        ContentType.Audio.OGG,
+                        contentType,
                         tempFile.length(),
                         tempFile.name,
                     )
@@ -193,8 +201,14 @@ object AudioUtils {
                         imageHeight = 0
                         videoCodec = avcodec.AV_CODEC_ID_NONE
 
-                        audioCodec = avcodec.AV_CODEC_ID_OPUS
-                        format = "ogg"
+                        if (audioFormat == AudioFormat.AAC) {
+                            audioCodec = avcodec.AV_CODEC_ID_AAC
+                            format = "mp4"
+                        } else {
+                            audioCodec = avcodec.AV_CODEC_ID_OPUS
+                            format = "ogg"
+                        }
+
                         sampleRate = closestSampleRate(grabber.sampleRate)
                         audioBitrate = targetKbps * 1000
                         sampleFormat = AV_SAMPLE_FMT_S16
@@ -206,12 +220,14 @@ object AudioUtils {
                         }
 
                         setOption("id3v2_version", "0")
-                        setMetadata("encoder", "Lavc-Ogg-Opus")
+                        if (audioFormat == AudioFormat.OPUS) {
+                            setMetadata("encoder", "Lavc-Ogg-Opus")
+                        }
 
                         try {
                             start()
                         } catch (e: Exception) {
-                            logger.error("FFmpeg recorder failed to start for ${transcodingFile.absolutePath}. grabber.audioChannels=${grabber.audioChannels}, grabber.sampleRate=${grabber.sampleRate}, targetKbps=$targetKbps")
+                            logger.error("FFmpeg recorder failed to start for ${transcodingFile.absolutePath}. grabber.audioChannels=${grabber.audioChannels}, grabber.sampleRate=${grabber.sampleRate}, targetKbps=$targetKbps, format=$audioFormat")
                             throw e
                         }
                     }
@@ -231,7 +247,7 @@ object AudioUtils {
 
                 StreamInfo(
                     tempFile,
-                    ContentType.Audio.OGG,
+                    contentType,
                     tempFile.length(),
                     tempFile.name
                 )
@@ -249,10 +265,15 @@ object AudioUtils {
         }
     }
 
-    suspend fun getSongsWithTranscodingInfo(exclude: List<Int> = emptyList()) = dbQuery {
+    suspend fun getSongsWithTranscodingInfo(exclude: List<TranscodedVersion> = emptyList()) = dbQuery {
         val excludedSongIds = TranscodedSongTable
             .select(TranscodedSongTable.songId)
-            .where { TranscodedSongTable.bitrate inList exclude }
+            .where {
+                if (exclude.isEmpty()) Op.FALSE
+                else exclude.map { (bitrate, format) ->
+                    (TranscodedSongTable.bitrate eq bitrate) and (TranscodedSongTable.format eq format)
+                }.reduce { acc, op -> acc or op }
+            }
             .map { it[TranscodedSongTable.songId].value }
             .distinct()
 
@@ -276,7 +297,14 @@ object AudioUtils {
                     bitRate = it[SongTable.bitRate],
                     fileSize = it[SongTable.fileSize],
                     coverId = it[SongTable.cover]?.value,
-                    transcodedTo = listOfNotNull(it[TranscodedSongTable.bitrate]),
+                    transcodedTo = listOfNotNull(
+                        if (it.getOrNull(TranscodedSongTable.bitrate) != null) {
+                            TranscodedVersion(
+                                it[TranscodedSongTable.bitrate],
+                                it[TranscodedSongTable.format]
+                            )
+                        } else null
+                    ),
                 )
             }
             .groupBy { it.id }
@@ -287,20 +315,22 @@ object AudioUtils {
             }
     }
 
-    suspend fun insertTranscodedSong(songs: List<Triple<SimpleSong, File, Int>>) = dbQuery {
-        songs.forEach { (song, file, bitrate) ->
+    suspend fun insertTranscodedSong(songs: List<Triple<SimpleSong, File, TranscodedVersion>>) = dbQuery {
+        songs.forEach { (song, file, version) ->
             TranscodedSongTable.insertIgnore {
                 it[TranscodedSongTable.songId] = song.id
-                it[TranscodedSongTable.bitrate] = bitrate
+                it[TranscodedSongTable.bitrate] = version.bitrate
+                it[TranscodedSongTable.format] = version.format
                 it[TranscodedSongTable.path] = file.absolutePath
             }
         }
     }
 
-    suspend fun insertTranscodedSong(songId: UUID, file: File, bitrate: Int) = dbQuery {
+    suspend fun insertTranscodedSong(songId: UUID, file: File, bitrate: Int, format: AudioFormat = AudioFormat.OPUS) = dbQuery {
         TranscodedSongTable.insertIgnore {
             it[TranscodedSongTable.songId] = songId
             it[TranscodedSongTable.bitrate] = bitrate
+            it[TranscodedSongTable.format] = format
             it[TranscodedSongTable.path] = file.absolutePath
         }
     }

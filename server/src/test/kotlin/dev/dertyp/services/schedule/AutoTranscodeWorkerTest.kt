@@ -2,6 +2,7 @@ package dev.dertyp.services.schedule
 
 import dev.dertyp.AudioUtils
 import dev.dertyp.data.SimpleSong
+import dev.dertyp.data.TranscodedVersion
 import io.ktor.server.application.ApplicationEnvironment
 import io.ktor.server.config.ApplicationConfig
 import io.ktor.server.config.MapApplicationConfig
@@ -59,7 +60,7 @@ class AutoTranscodeWorkerTest : KoinTest {
         every { AudioUtils.isTranscoderActive.compareAndSet(any(), any()) } returns true
         every { AudioUtils.isTranscoderActive.store(any()) } just Runs
         coEvery { AudioUtils.getSongsWithTranscodingInfo(any()) } returns listOf(song)
-        coEvery { AudioUtils.insertTranscodedSong(any<List<Triple<SimpleSong, File, Int>>>()) } just Runs
+        coEvery { AudioUtils.insertTranscodedSong(any<List<Triple<SimpleSong, File, TranscodedVersion>>>()) } just Runs
 
         startKoin {
             modules(
@@ -73,7 +74,7 @@ class AutoTranscodeWorkerTest : KoinTest {
         val worker = AutoTranscodeWorker()
         val results = worker.run()
 
-        assertEquals(0, results["quality_128"])
-        coVerify(exactly = 0) { AudioUtils.transcodeFlacToOpus(any(), any(), any()) }
+        assertEquals(0, results["quality_OPUS_128"])
+        coVerify(exactly = 0) { AudioUtils.transcodeAudio(any(), any(), any(), any(), any()) }
     }
 }

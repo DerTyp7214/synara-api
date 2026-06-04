@@ -1,5 +1,7 @@
 package dev.dertyp
 
+import dev.dertyp.data.AudioFormat
+import dev.dertyp.data.TranscodedVersion
 import dev.dertyp.db.*
 import io.ktor.server.application.ApplicationEnvironment
 import io.ktor.server.config.MapApplicationConfig
@@ -92,7 +94,10 @@ class AudioUtilsTest {
 
         val songs = AudioUtils.getSongsWithTranscodingInfo()
         assertEquals(1, songs.size)
-        assertEquals(listOf(128, 192), songs[0].transcodedTo.sorted())
+        assertEquals(
+            listOf(TranscodedVersion(128, AudioFormat.OPUS), TranscodedVersion(192, AudioFormat.OPUS)),
+            songs[0].transcodedTo.sortedBy { it.bitrate }
+        )
     }
 
     @ParameterizedTest
@@ -114,11 +119,11 @@ class AudioUtilsTest {
 
         val songs = AudioUtils.getSongsWithTranscodingInfo()
         assertEquals(1, songs.size)
-        assertEquals(listOf(320), songs[0].transcodedTo)
+        assertEquals(listOf(TranscodedVersion(320, AudioFormat.OPUS)), songs[0].transcodedTo)
     }
 
     @Test
-    fun `transcodeFlacToOpus should create ogg file`(@TempDir tempDir: Path) = runBlocking {
+    fun `transcodeAudio should create ogg file`(@TempDir tempDir: Path) = runBlocking {
         val flacFile = tempDir.resolve("test.flac").toFile().apply { writeText("fake flac content") }
         val environment = mockk<ApplicationEnvironment>()
         val config = MapApplicationConfig(
@@ -157,7 +162,7 @@ class AudioUtilsTest {
         every { anyConstructed<FFmpegFrameRecorder>().setMetadata(any(), any()) } just Runs
         every { anyConstructed<FFmpegFrameRecorder>().setOption(any(), any()) } just Runs
 
-        val streamInfo = AudioUtils.transcodeFlacToOpus(environment, flacFile, 128)
+        val streamInfo = AudioUtils.transcodeAudio(environment, flacFile, 128)
 
         assertTrue(streamInfo.file.exists())
         assertEquals("test.ogg", streamInfo.file.name)
@@ -166,37 +171,85 @@ class AudioUtilsTest {
     }
 
     @Test
-    fun `transcodeFlacToOpus should throw FileNotFoundException when file does not exist`() {
+    fun `transcodeAudio should create aac file`(@TempDir tempDir: Path) = runBlocking {
+        val flacFile = tempDir.resolve("test.flac").toFile().apply { writeText("fake flac content") }
+        val environment = mockk<ApplicationEnvironment>()
+        val config = MapApplicationConfig(
+            "audio.tracks" to tempDir.toString(),
+            "audio.transcode" to tempDir.resolve("transcode").toString()
+        )
+        every { environment.config } returns config
+
+        mockkConstructor(FFmpegFrameGrabber::class)
+        every { anyConstructed<FFmpegFrameGrabber>().start() } just Runs
+        every { anyConstructed<FFmpegFrameGrabber>().stop() } just Runs
+        every { anyConstructed<FFmpegFrameGrabber>().release() } just Runs
+        every { anyConstructed<FFmpegFrameGrabber>().audioChannels } returns 2
+        every { anyConstructed<FFmpegFrameGrabber>().metadata } returns HashMap<String, String>()
+        every { anyConstructed<FFmpegFrameGrabber>().sampleRate } returns 44100
+        every { anyConstructed<FFmpegFrameGrabber>().lengthInTime } returns 1000000
+
+        val mockFrame = mockk<Frame>(relaxed = true)
+        every { anyConstructed<FFmpegFrameGrabber>().grabFrame(any(), any(), any(), any()) } returnsMany listOf(mockFrame, null)
+
+        mockkConstructor(FFmpegFrameRecorder::class)
+        every { anyConstructed<FFmpegFrameRecorder>().start() } just Runs
+        every { anyConstructed<FFmpegFrameRecorder>().stop() } just Runs
+        every { anyConstructed<FFmpegFrameRecorder>().release() } just Runs
+        every { anyConstructed<FFmpegFrameRecorder>().record(any<Frame>()) } just Runs
+
+        every { anyConstructed<FFmpegFrameRecorder>().setImageWidth(any()) } just Runs
+        every { anyConstructed<FFmpegFrameRecorder>().setImageHeight(any()) } just Runs
+        every { anyConstructed<FFmpegFrameRecorder>().setVideoCodec(any()) } just Runs
+        every { anyConstructed<FFmpegFrameRecorder>().setAudioCodec(any()) } just Runs
+        every { anyConstructed<FFmpegFrameRecorder>().setFormat(any()) } just Runs
+        every { anyConstructed<FFmpegFrameRecorder>().setSampleRate(any()) } just Runs
+        every { anyConstructed<FFmpegFrameRecorder>().setAudioBitrate(any()) } just Runs
+        every { anyConstructed<FFmpegFrameRecorder>().setSampleFormat(any()) } just Runs
+        every { anyConstructed<FFmpegFrameRecorder>().setFrameRate(any()) } just Runs
+        every { anyConstructed<FFmpegFrameRecorder>().setMetadata(any(), any()) } just Runs
+        every { anyConstructed<FFmpegFrameRecorder>().setOption(any(), any()) } just Runs
+
+        val streamInfo = AudioUtils.transcodeAudio(environment, flacFile, 128, audioFormat = AudioFormat.AAC)
+
+        assertTrue(streamInfo.file.exists())
+        assertEquals("test.m4a", streamInfo.file.name)
+
+        verify { anyConstructed<FFmpegFrameRecorder>().record(any<Frame>()) }
+    }
+
+    @Test
+    fun `transcodeAudio should throw FileNotFoundException when file does not exist`() {
         runBlocking {
             val environment = mockk<ApplicationEnvironment>(relaxed = true)
             val nonExistentFile = File("non_existent_file.flac")
 
             assertThrows<FileNotFoundException> {
-                AudioUtils.transcodeFlacToOpus(environment, nonExistentFile, 128)
+                AudioUtils.transcodeAudio(environment, nonExistentFile, 128)
             }
         }
     }
 
     @Test
-    fun `transcodeFlacToOpus should throw IOException when file is empty`(@TempDir tempDir: Path) {
+    fun `transcodeAudio should throw IOException when file is empty`(@TempDir tempDir: Path) {
         runBlocking {
             val emptyFile = tempDir.resolve("empty.flac").toFile().apply { createNewFile() }
             val environment = mockk<ApplicationEnvironment>(relaxed = true)
 
             assertThrows<IOException> {
-                AudioUtils.transcodeFlacToOpus(environment, emptyFile, 128)
+                AudioUtils.transcodeAudio(environment, emptyFile, 128)
             }
         }
     }
 
     @Test
-    fun `transcodeFlacToOpus should throw IOException when file is a directory`(@TempDir tempDir: Path) {
+    fun `transcodeAudio should throw IOException when file is a directory`(@TempDir tempDir: Path) {
         runBlocking {
             val directory = tempDir.resolve("dir").toFile().apply { mkdir() }
             val environment = mockk<ApplicationEnvironment>(relaxed = true)
 
             assertThrows<IOException> {
-                AudioUtils.transcodeFlacToOpus(environment, directory, 128)
+                AudioUtils.transcodeAudio(environment, directory, 128)
             }
         }
     }
