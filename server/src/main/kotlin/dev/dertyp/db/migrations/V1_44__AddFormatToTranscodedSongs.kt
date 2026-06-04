@@ -12,29 +12,26 @@ class V1_44__AddFormatToTranscodedSongs : BaseJavaMigration() {
     override fun migrate(context: Context) {
         foreignKeyOn(context.connection)
 
-        val databaseProductName = context.connection.metaData.databaseProductName
-        if (databaseProductName.contains("PostgreSQL", ignoreCase = true)) {
-            val tableNames = listOf("transcodedSong", "transcodedsong")
-            val schema = try { context.connection.schema } catch (e: Exception) { null }
-
-            for (tableName in tableNames) {
-                val pkName = context.connection.metaData.getPrimaryKeys(null, schema, tableName).use { rs ->
-                    if (rs.next()) rs.getString("PK_NAME") else null
-                }
-                if (pkName != null) {
-                    context.connection.createStatement().use { statement ->
-                        statement.execute("ALTER TABLE \"$tableName\" DROP CONSTRAINT \"$pkName\"")
-                    }
-                    break
-                }
-            }
-        }
-
         val alterStatements = tempConnection {
             MigrationUtils.statementsRequiredForDatabaseMigration(TranscodedSongTable)
         }
 
         context.connection.createStatement().use { statement ->
+            if (context.connection.metaData.databaseProductName.contains("PostgreSQL", ignoreCase = true)) {
+                val schema = try { context.connection.schema } catch (e: Exception) { null }
+                val pkInfo = listOf("transcodedSong", "transcodedsong").firstNotNullOfOrNull { tableName ->
+                    context.connection.metaData.getPrimaryKeys(null, schema, tableName).use { rs ->
+                        if (rs.next()) tableName to rs.getString("PK_NAME") else null
+                    }
+                }
+
+                if (pkInfo != null) {
+                    val (tableName, pkName) = pkInfo
+                    val escapedTable = if (tableName.any { it.isUpperCase() }) "\"$tableName\"" else tableName
+                    statement.execute("ALTER TABLE $escapedTable DROP CONSTRAINT \"$pkName\"")
+                }
+            }
+
             for (sql in alterStatements) {
                 statement.execute(sql)
             }
