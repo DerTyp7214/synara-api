@@ -1,17 +1,19 @@
 package dev.dertyp.services.schedule
 
 import dev.dertyp.core.HttpClientPriority
+import dev.dertyp.data.TaskKeys
 import dev.dertyp.services.AlbumService
 import dev.dertyp.services.SongService
 import kotlinx.coroutines.flow.toList
 import org.koin.core.component.inject
 
+@WorkerTask(TaskKeys.PROVIDER_ENRICHMENT_WORKER, "Provider Enrichment Worker")
 class ProviderEnrichmentWorker : Worker("Provider Enrichment Worker") {
     private val albumService by inject<AlbumService>()
     private val songService by inject<SongService>()
     private val recentReleaseWorker by inject<RecentReleaseWorker>()
 
-    override suspend fun execute(onProgress: suspend (Double, String) -> Unit): Map<String, Int> {
+    override suspend fun execute(onProgress: suspend (Double, String) -> Unit): Map<String, Any?> {
         if (recentReleaseWorker.active) {
             logger.info("Skipping ProviderEnrichmentWorker because RecentReleaseWorker is running")
             return mapOf("skipped" to 1)

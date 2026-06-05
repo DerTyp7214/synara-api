@@ -7,6 +7,7 @@ import dev.dertyp.AudioUtils.transcodeAudio
 import dev.dertyp.core.nullIfEmpty
 import dev.dertyp.data.AudioFormat
 import dev.dertyp.data.SimpleSong
+import dev.dertyp.data.TaskKeys
 import dev.dertyp.data.TranscodedVersion
 import io.ktor.server.application.ApplicationEnvironment
 import kotlinx.coroutines.sync.Mutex
@@ -17,10 +18,11 @@ import java.nio.file.Paths
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 
 @OptIn(ExperimentalAtomicApi::class)
+@WorkerTask(TaskKeys.AUTO_TRANSCODING, "Auto Transcoding")
 class AutoTranscodeWorker : Worker("AutoTranscodeWorker") {
     private val environment by inject<ApplicationEnvironment>()
 
-    override suspend fun execute(onProgress: suspend (Double, String) -> Unit): Map<String, Int> {
+    override suspend fun execute(onProgress: suspend (Double, String) -> Unit): Map<String, Any?> {
         val opusQualities = environment.config.propertyOrNull("audio.autoTranscode")?.getString()
             ?.split(",")
             ?.mapNotNull { it.trim().toIntOrNull() }

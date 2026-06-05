@@ -1,6 +1,7 @@
 package dev.dertyp.services.schedule
 
 import dev.dertyp.core.HttpClientPriority
+import dev.dertyp.data.TaskKeys
 import dev.dertyp.db.MBArtistTable
 import dev.dertyp.db.MBRecordingTable
 import dev.dertyp.db.MBReleaseGroupTable
@@ -14,11 +15,12 @@ import org.koin.core.component.inject
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
 
+@WorkerTask(TaskKeys.MUSICBRAINZ_CACHE_WORKER, "MusicBrainz Cache Worker")
 class MusicBrainzCacheWorker : Worker("MusicBrainzCacheWorker") {
     private val musicBrainzService by inject<MusicBrainzService>()
     private val musicBrainzCacheService by inject<MusicBrainzCacheService>()
 
-    override suspend fun execute(onProgress: suspend (Double, String) -> Unit): Map<String, Int> {
+    override suspend fun execute(onProgress: suspend (Double, String) -> Unit): Map<String, Any?> {
         var artistsUpdated = 0
         var recordingsUpdated = 0
         var releasesUpdated = 0

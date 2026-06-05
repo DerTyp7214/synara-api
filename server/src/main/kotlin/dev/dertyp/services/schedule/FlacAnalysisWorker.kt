@@ -1,14 +1,16 @@
 package dev.dertyp.services.schedule
 
+import dev.dertyp.data.TaskKeys
 import dev.dertyp.services.FlacAnalysisService
 import kotlinx.coroutines.CancellationException
 import org.koin.core.component.inject
 import java.util.concurrent.atomic.AtomicInteger
 
+@WorkerTask(TaskKeys.FLAC_ANALYSIS, "FLAC Analysis")
 class FlacAnalysisWorker : Worker("FlacAnalysisWorker") {
     private val flacAnalysisService by inject<FlacAnalysisService>()
 
-    override suspend fun execute(onProgress: suspend (Double, String) -> Unit): Map<String, Int> {
+    override suspend fun execute(onProgress: suspend (Double, String) -> Unit): Map<String, Any?> {
         val unanalyzedIds = flacAnalysisService.getUnanalyzedSongIds()
         val needingFixIds = flacAnalysisService.getIdsNeedingFix(2.1)
 

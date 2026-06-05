@@ -23,7 +23,11 @@ import dev.dertyp.services.*
 import dev.dertyp.services.import.ImportService
 import dev.dertyp.services.import.ImporterProxy
 import dev.dertyp.services.metadata.*
-import dev.dertyp.services.schedule.*
+import dev.dertyp.services.schedule.ScheduleService
+import dev.dertyp.services.schedule.ScheduledTaskConfigurationService
+import dev.dertyp.services.schedule.Worker
+import dev.dertyp.services.schedule.WorkerTask
+import io.github.classgraph.ClassGraph
 import io.ktor.server.application.Application
 import io.ktor.server.application.ApplicationEnvironment
 import io.ktor.server.application.install
@@ -36,6 +40,7 @@ import kotlinx.coroutines.flow.emptyFlow
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.koin.core.module.dsl.singleOf
+import org.koin.dsl.binds
 import org.koin.dsl.module
 import org.koin.ktor.ext.get
 import org.koin.ktor.plugin.Koin
@@ -132,21 +137,19 @@ fun Application.module() {
             singleOf(::MusicBrainzCacheService)
             singleOf(::CachedMusicBrainzService)
             singleOf(::OdesliService)
-            singleOf(::MusicBrainzWorker)
-            singleOf(::MusicBrainzCacheWorker)
-            singleOf(::GenreMetadataWorker)
-            singleOf(::ArtistImageWorker)
-            singleOf(::RecentReleaseWorker)
-            singleOf(::LyricsSyncWorker)
-            singleOf(::LrcLibWorker)
-            singleOf(::AudioAnalysisWorker)
-            singleOf(::FlacAnalysisWorker)
             singleOf(::ReleaseService)
-            singleOf(::AutoTranscodeWorker)
-            singleOf(::ProviderEnrichmentWorker)
-            singleOf(::ReverseProxyWorker)
-            singleOf(::ImageAnalysisWorker)
-            singleOf(::LogCleanupWorker)
+
+            ClassGraph()
+                .enableClassInfo()
+                .enableAnnotationInfo()
+                .acceptPackages("dev.dertyp.services.schedule")
+                .scan().use { scanResult ->
+                    scanResult.getClassesWithAnnotation(WorkerTask::class.java.name).forEach { classInfo ->
+                        val clazz = classInfo.loadClass()
+                        single { clazz.getDeclaredConstructor().newInstance() } binds arrayOf(clazz.kotlin, Worker::class)
+                    }
+                }
+            
             singleOf(::CustomMigrationService)
 
             single<IMusicBrainzService> { get<CachedMusicBrainzService>() }

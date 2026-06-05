@@ -1,6 +1,7 @@
 package dev.dertyp.services.schedule
 
 import dev.dertyp.core.cleanTitle
+import dev.dertyp.data.TaskKeys
 import dev.dertyp.db.SongTable
 import dev.dertyp.dbQuery
 import dev.dertyp.services.LrcLibService
@@ -14,11 +15,12 @@ import org.koin.core.component.inject
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
 
+@WorkerTask(TaskKeys.LRCLIB_WORKER, "LrcLib Worker")
 class LrcLibWorker : Worker("LrcLibWorker") {
     private val lrcLibService by inject<LrcLibService>()
     private val songService by inject<SongService>()
 
-    override suspend fun execute(onProgress: suspend (Double, String) -> Unit): Map<String, Int> {
+    override suspend fun execute(onProgress: suspend (Double, String) -> Unit): Map<String, Any?> {
         var synced = 0
         var notFound = 0
         var failed = 0

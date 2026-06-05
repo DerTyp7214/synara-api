@@ -1,5 +1,6 @@
 package dev.dertyp.services.schedule
 
+import dev.dertyp.data.TaskKeys
 import dev.dertyp.db.SongTable
 import dev.dertyp.db.SyncedLyricsTable
 import dev.dertyp.dbQuery
@@ -13,10 +14,11 @@ import org.koin.core.component.inject
 import java.util.UUID
 import kotlin.time.Duration.Companion.seconds
 
+@WorkerTask(TaskKeys.LYRICS_SYNC_WORKER, "Lyrics Sync Worker")
 class LyricsSyncWorker : Worker("LyricsSyncWorker") {
     private val lyricsService by inject<LyricsService>()
 
-    override suspend fun execute(onProgress: suspend (Double, String) -> Unit): Map<String, Int> {
+    override suspend fun execute(onProgress: suspend (Double, String) -> Unit): Map<String, Any?> {
         if (!lyricsService.isConfigured()) {
             logger.info("Lyrics sync service is not configured. Skipping worker run.")
             return emptyMap()

@@ -77,6 +77,7 @@ class ScheduleService : IScheduleService, Service() {
     )
 
     override fun registerManagedTask(key: String, name: String, task: Task) {
+        logger.info("Registering managed task: $name ($key)")
         managedTasks[key] = ManagedTask(key, name, task)
     }
 
@@ -287,6 +288,7 @@ class ScheduleService : IScheduleService, Service() {
     }
 
     fun getScheduledTasks() = schedules.sorted()
+    fun getManagedTasks() = managedTasks.toMap()
 
     fun register(key: String, task: Task): ScheduledTask {
         logger.info("Registering task for key: $key")

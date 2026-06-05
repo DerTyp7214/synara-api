@@ -1,15 +1,17 @@
 package dev.dertyp.services.schedule
 
 import dev.dertyp.core.ApplicationScope
+import dev.dertyp.data.TaskKeys
 import dev.dertyp.services.ReverseProxyService
 import kotlinx.coroutines.launch
 import org.koin.core.component.inject
 import kotlin.time.Duration.Companion.seconds
 
+@WorkerTask(TaskKeys.REVERSE_PROXY_HEALTH_CHECK, "Reverse Proxy Health Check")
 class ReverseProxyWorker : Worker("ReverseProxyWorker") {
     private val reverseProxyService by inject<ReverseProxyService>()
 
-    override suspend fun execute(onProgress: suspend (Double, String) -> Unit): Map<String, Int> {
+    override suspend fun execute(onProgress: suspend (Double, String) -> Unit): Map<String, Any?> {
         if (!reverseProxyService.isConfigured) {
             return mapOf("restarted" to 0, "configured" to 0)
         }

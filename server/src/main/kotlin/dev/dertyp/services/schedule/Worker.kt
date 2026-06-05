@@ -120,9 +120,9 @@ abstract class Worker(val name: String) : KoinComponent {
         }
     }
 
-    protected abstract suspend fun execute(onProgress: suspend (Double, String) -> Unit): Map<String, Int>
+    protected abstract suspend fun execute(onProgress: suspend (Double, String) -> Unit): Map<String, Any?>
 
-    suspend fun run(onProgress: suspend (Double, String) -> Unit = { _, _ -> }): Map<String, Int> {
+    suspend fun run(onProgress: suspend (Double, String) -> Unit = { _, _ -> }): Map<String, Any?> {
         if (!isRunning.compareAndSet(expectedValue = false, newValue = true)) {
             logger.info("$name is already running. Skipping this run.")
             return emptyMap()

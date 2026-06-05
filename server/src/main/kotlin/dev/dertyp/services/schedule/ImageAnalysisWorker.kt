@@ -1,15 +1,17 @@
 package dev.dertyp.services.schedule
 
+import dev.dertyp.data.TaskKeys
 import dev.dertyp.services.ImageService
 import kotlinx.coroutines.withTimeoutOrNull
 import org.koin.core.component.inject
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.time.Duration.Companion.hours
 
+@WorkerTask(TaskKeys.IMAGE_ANALYSIS, "Image Analysis")
 class ImageAnalysisWorker : Worker("ImageAnalysisWorker") {
     private val imageService by inject<ImageService>()
 
-    override suspend fun execute(onProgress: suspend (Double, String) -> Unit): Map<String, Int> {
+    override suspend fun execute(onProgress: suspend (Double, String) -> Unit): Map<String, Any?> {
         val unanalyzedIds = imageService.getUnanalyzedImageIds()
         if (unanalyzedIds.isEmpty()) {
             logger.info("No images to analyze")

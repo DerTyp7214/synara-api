@@ -1,15 +1,17 @@
 package dev.dertyp.services.schedule
 
+import dev.dertyp.data.TaskKeys
 import dev.dertyp.services.AudioAnalysisService
 import kotlinx.coroutines.withTimeoutOrNull
 import org.koin.core.component.inject
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.time.Duration.Companion.hours
 
+@WorkerTask(TaskKeys.AUDIO_ANALYSIS, "Audio Analysis")
 class AudioAnalysisWorker : Worker("AudioAnalysisWorker") {
     private val audioAnalysisService by inject<AudioAnalysisService>()
 
-    override suspend fun execute(onProgress: suspend (Double, String) -> Unit): Map<String, Int> {
+    override suspend fun execute(onProgress: suspend (Double, String) -> Unit): Map<String, Any?> {
         val unanalyzedIds = audioAnalysisService.getUnanalyzedSongIds()
         if (unanalyzedIds.isEmpty()) {
             logger.info("No songs to analyze")

@@ -1,6 +1,7 @@
 package dev.dertyp.services.schedule
 
 import dev.dertyp.core.HttpClientPriority
+import dev.dertyp.data.TaskKeys
 import dev.dertyp.dbQuery
 import dev.dertyp.services.*
 import kotlinx.coroutines.flow.produceIn
@@ -8,6 +9,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import org.koin.core.component.inject
 import kotlin.time.Duration.Companion.hours
 
+@WorkerTask(TaskKeys.MUSICBRAINZ_WORKER, "MusicBrainz Worker")
 class MusicBrainzWorker : Worker("MusicBrainzWorker") {
     private val songService by inject<SongService>()
     private val albumService by inject<AlbumService>()
@@ -15,7 +17,7 @@ class MusicBrainzWorker : Worker("MusicBrainzWorker") {
     private val userService by inject<UserService>()
     private val libraryMergeService by inject<LibraryMergeService>()
 
-    override suspend fun execute(onProgress: suspend (Double, String) -> Unit): Map<String, Int> {
+    override suspend fun execute(onProgress: suspend (Double, String) -> Unit): Map<String, Any?> {
         val admin = userService.findAdmin() ?: return emptyMap()
 
         var taggedSongs = 0
