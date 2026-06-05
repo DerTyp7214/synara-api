@@ -146,6 +146,11 @@ abstract class TidalBaseImporter(
                     if (barcode != null && barcode.length >= 8 && barcode.uppercase() != "BARCODE") {
                         onLiveOutput("Searching MusicBrainz for album by barcode: $barcode")
                         mbRelease = musicBrainzService.searchReleaseByBarcode(barcode, albumArtists)
+                        if (mbRelease != null) {
+                            onLiveOutput("Matched MusicBrainz Release by barcode: ${mbRelease.title}")
+                            val fullRelease = musicBrainzService.getRelease(mbRelease.id)
+                            if (fullRelease != null) mbRelease = fullRelease
+                        }
                     }
                 } catch (e: Exception) {
                     logger.warn("Failed to fetch Tidal album metadata for barcode matching: $albumId", e)
