@@ -193,7 +193,7 @@ class MusicBrainzService : Service() {
                 val response = retryableGet<MusicBrainzReleaseSearchResponse>("$mbBaseUrl/release", priority) {
                     parameter("query", "barcode:${album.barcode}")
                     parameter("fmt", "json")
-                    parameter("inc", "artist-credits+recordings+release-groups+tags+genres+media")
+                    parameter("inc", "artist-credits+recordings+isrcs+release-groups+tags+genres+media")
                     header("User-Agent", "Synara/${BuildConfig.VERSION} ( https://github.com/dertyp7214/synara )")
                 }
                 response?.releases?.firstOrNull { rel ->
@@ -223,7 +223,7 @@ class MusicBrainzService : Service() {
                 parameter("query", query)
                 parameter("limit", 5)
                 parameter("fmt", "json")
-                parameter("inc", "artist-credits+recordings+release-groups+tags+genres+media")
+                parameter("inc", "artist-credits+recordings+isrcs+release-groups+tags+genres+media")
                 header("User-Agent", "Synara/${BuildConfig.VERSION} ( https://github.com/dertyp7214/synara )")
             }
 
@@ -249,7 +249,7 @@ class MusicBrainzService : Service() {
             val response = retryableGet<MusicBrainzReleaseSearchResponse>("$mbBaseUrl/release", priority) {
                 parameter("query", "barcode:$barcode")
                 parameter("fmt", "json")
-                parameter("inc", "artist-credits+recordings+release-groups+tags+genres+media")
+                parameter("inc", "artist-credits+recordings+isrcs+release-groups+tags+genres+media")
                 header("User-Agent", "Synara/${BuildConfig.VERSION} ( https://github.com/dertyp7214/synara )")
             }
 
@@ -380,7 +380,7 @@ class MusicBrainzService : Service() {
         return try {
             val response = retryableGet<MusicBrainzReleaseResponse>("$mbBaseUrl/release", priority) {
                 parameter("artist", artistMbId.toString())
-                parameter("inc", "release-groups+tags+genres")
+                parameter("inc", "artist-credits+recordings+isrcs+release-groups+tags+genres+media")
                 parameter("limit", 100)
                 parameter("fmt", "json")
                 header("User-Agent", "Synara/${BuildConfig.VERSION} ( https://github.com/dertyp7214/synara )")
@@ -396,7 +396,7 @@ class MusicBrainzService : Service() {
         return try {
             val response = retryableGet<MusicBrainzReleaseResponse>("$mbBaseUrl/release", priority) {
                 parameter("release-group", releaseGroupId.toString())
-                parameter("inc", "url-rels+tags+genres")
+                parameter("inc", "artist-credits+recordings+isrcs+url-rels+tags+genres+media")
                 parameter("limit", 100)
                 parameter("fmt", "json")
                 header("User-Agent", "Synara/${BuildConfig.VERSION} ( https://github.com/dertyp7214/synara )")
@@ -427,7 +427,7 @@ class MusicBrainzService : Service() {
                 parameter("query", query)
                 parameter("limit", 5)
                 parameter("fmt", "json")
-                parameter("inc", "artist-credits+recordings+release-groups+tags+genres+media")
+                parameter("inc", "artist-credits+recordings+isrcs+release-groups+tags+genres+media")
                 header("User-Agent", "Synara/${BuildConfig.VERSION} ( https://github.com/dertyp7214/synara )")
             }
 
@@ -568,7 +568,7 @@ class MusicBrainzService : Service() {
     suspend fun fetchReleaseById(mbId: PlatformUUID, priority: HttpClientPriority = HttpClientPriority.NORMAL): MusicBrainzRelease? {
         return try {
             retryableGet<MusicBrainzRelease>("$mbBaseUrl/release/$mbId", priority) {
-                parameter("inc", "artist-credits+recordings+release-groups+tags+genres+media+url-rels")
+                parameter("inc", "artist-credits+recordings+isrcs+release-groups+tags+genres+media+url-rels")
                 parameter("fmt", "json")
                 header("User-Agent", "Synara/${BuildConfig.VERSION} ( https://github.com/dertyp7214/synara )")
             }
@@ -654,24 +654,21 @@ class CachedMusicBrainzService(
     override suspend fun searchRecording(title: String, artists: List<String>) = searchRecording(title, artists, HttpClientPriority.HIGH)
 
     suspend fun searchRecording(title: String, artists: List<String>, priority: HttpClientPriority = HttpClientPriority.NORMAL): MusicBrainzRecording? {
-        return musicBrainzService.searchRecordingMb(title, artists, priority)?.also {
-            musicBrainzCacheService.updateRecordingCache(it)
-        }
+        val result = musicBrainzService.searchRecordingMb(title, artists, priority) ?: return null
+        return getRecording(result.id, priority)
     }
 
     override suspend fun searchRelease(title: String, artists: List<String>) = searchRelease(title, artists, HttpClientPriority.HIGH)
 
     suspend fun searchRelease(title: String, artists: List<String>, priority: HttpClientPriority = HttpClientPriority.NORMAL): MusicBrainzRelease? {
-        return musicBrainzService.searchReleaseMb(title, artists, priority)?.also {
-            musicBrainzCacheService.updateReleaseCache(it)
-        }
+        val result = musicBrainzService.searchReleaseMb(title, artists, priority) ?: return null
+        return getRelease(result.id, priority)
     }
 
     override suspend fun searchReleaseByBarcode(barcode: String, artists: List<String>) = searchReleaseByBarcode(barcode, artists, HttpClientPriority.HIGH)
 
     suspend fun searchReleaseByBarcode(barcode: String, artists: List<String>, priority: HttpClientPriority = HttpClientPriority.NORMAL): MusicBrainzRelease? {
-        return musicBrainzService.searchReleaseByBarcodeMb(barcode, artists, priority)?.also {
-            musicBrainzCacheService.updateReleaseCache(it)
-        }
+        val result = musicBrainzService.searchReleaseByBarcodeMb(barcode, artists, priority) ?: return null
+        return getRelease(result.id, priority)
     }
 }

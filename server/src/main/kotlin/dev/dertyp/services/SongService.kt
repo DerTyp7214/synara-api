@@ -1883,23 +1883,12 @@ class SongService : SongLibrary, Service() {
             }
 
             if (musicBrainzBatch.isNotEmpty()) {
+                val uniqueMbIds = musicBrainzBatch.map { it.second }.distinct()
+                uniqueMbIds.forEach { mbId ->
+                    cachedMusicBrainzService.getRecording(mbId, HttpClientPriority.NORMAL)
+                }
+
                 dbQuery {
-                    val uniqueMbIds = musicBrainzBatch.map { it.second }.distinct()
-                    val existingMbIds = MBRecordingTable
-                        .select(MBRecordingTable.id)
-                        .where { MBRecordingTable.id inList uniqueMbIds }
-                        .map { it[MBRecordingTable.id].value }
-                        .toSet()
-
-                    val missingMbIds = uniqueMbIds.filter { it !in existingMbIds }
-
-                    if (missingMbIds.isNotEmpty()) {
-                        MBRecordingTable.batchInsert(missingMbIds) { mbId ->
-                            this[MBRecordingTable.id] = EntityID(mbId, MBRecordingTable)
-                            this[MBRecordingTable.title] = ""
-                        }
-                    }
-
                     SongMusicBrainzTable.batchInsert(musicBrainzBatch) { (songId, mbId) ->
                         this[SongMusicBrainzTable.songId] = songId
                         this[SongMusicBrainzTable.musicBrainzId] = mbId
@@ -1988,17 +1977,14 @@ class SongService : SongLibrary, Service() {
 
         if (song.musicBrainzId != null) {
             val mbId = song.musicBrainzId!!
-            if (MBRecordingTable.selectAll().where { MBRecordingTable.id eq mbId }.empty()) {
-                MBRecordingTable.insert {
-                    it[id] = EntityID(mbId, MBRecordingTable)
-                    it[title] = song.title
-                }
-            }
+            cachedMusicBrainzService.getRecording(mbId, HttpClientPriority.NORMAL)
 
-            SongMusicBrainzTable.upsert(SongMusicBrainzTable.songId) {
-                it[songId] = song.id
-                it[musicBrainzId] = mbId
-                it[lastCheck] = System.currentTimeMillis()
+            dbQuery {
+                SongMusicBrainzTable.upsert(SongMusicBrainzTable.songId) {
+                    it[songId] = song.id
+                    it[musicBrainzId] = mbId
+                    it[lastCheck] = System.currentTimeMillis()
+                }
             }
         }
     }
