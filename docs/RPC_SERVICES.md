@@ -332,6 +332,7 @@ Configuration for creating or updating an album record.
 | `coverHash` | `String`? | The hash of the album cover image. |
 | `originalId` | `String`? | The original ID of the album on external sources. |
 | `barcode` | `String`? | The barcode or UPC of the album. |
+| `musicBrainzId` | `PlatformUUID`? | The MusicBrainz Release unique identifier. |
 
 ### InsertableImage <a name="devdertypdatainsertableimage"></a>
 Configuration for uploading or storing a new image.

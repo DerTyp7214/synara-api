@@ -125,6 +125,9 @@ abstract class BaseIndexer(
                             val year = audioFile.year
                             val rawBarcode = audioFile.barcode
                             val barcode = if (rawBarcode?.uppercase() == "BARCODE") null else rawBarcode
+                            val mbReleaseId = audioFile.musicBrainzReleaseId?.let {
+                                try { UUID.fromString(it) } catch (_: Exception) { null }
+                            }
 
                             if (name == null) return@withPermit
 
@@ -148,6 +151,7 @@ abstract class BaseIndexer(
                                 songCount = songCount,
                                 originalId = originalId,
                                 barcode = barcode,
+                                musicBrainzId = mbReleaseId,
                             )
 
                             val albumList = map.computeIfAbsent(album) { Collections.synchronizedList(mutableListOf()) }
@@ -189,7 +193,8 @@ abstract class BaseIndexer(
                 .mapValues { (_, lists) ->
                     val mergedAlbum = lists.first().first.copy(
                         coverHash = lists.firstNotNullOfOrNull { it.first.coverHash },
-                        originalId = lists.firstNotNullOfOrNull { it.first.originalId }
+                        originalId = lists.firstNotNullOfOrNull { it.first.originalId },
+                        musicBrainzId = lists.firstNotNullOfOrNull { it.first.musicBrainzId }
                     )
                     mergedAlbum to lists.flatMap { it.second }
                 }

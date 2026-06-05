@@ -1081,6 +1081,7 @@ class AlbumService : AlbumLibrary, Service() {
         val uniqueOriginalIds = uniqueAlbumMetadata.map { it.originalId }
         val uniqueBarcodes = uniqueAlbumMetadata.mapNotNull { it.barcode }
             .filter { it.isNotBlank() && it.length >= 8 && it.uppercase() != "BARCODE" }
+        val uniqueMbIds = uniqueAlbumMetadata.mapNotNull { it.musicBrainzId }.distinct()
         val allRequiredArtistNames = albums.flatMap { it.artists }.distinct()
 
         val artistIdMap: Map<String, List<UUID>> =
@@ -1117,6 +1118,7 @@ class AlbumService : AlbumLibrary, Service() {
             andWhere { AlbumTable.songCount inList uniqueSongCounts }
             orWhere { AlbumTable.originalId inList uniqueOriginalIds.filterNotNull() }
             orWhere { if (uniqueBarcodes.isNotEmpty()) AlbumTable.barcode inList uniqueBarcodes else Op.FALSE }
+            orWhere { if (uniqueMbIds.isNotEmpty()) AlbumMusicBrainzTable.musicBrainzId inList uniqueMbIds.map { EntityID(it, MBReleaseTable) } else Op.FALSE }
             orWhere { AlbumTable.id inList albumIdsFromProviders }
         }.data
 
@@ -1164,6 +1166,9 @@ class AlbumService : AlbumLibrary, Service() {
             val albumProviders = providersByPotentialAlbumId[albumId] ?: emptyList()
 
             val inputAlbum = uniqueAlbumMetadata.firstOrNull {
+                val inputMbId = it.musicBrainzId
+                if (inputMbId != null && row.musicbrainzId == inputMbId) return@firstOrNull true
+
                 val inputBarcode = it.barcode
                 if (inputBarcode?.isNotBlank() == true && inputBarcode.length >= 8 && inputBarcode.uppercase() != "BARCODE" && row.barcode == inputBarcode) return@firstOrNull true
 
@@ -1221,6 +1226,31 @@ class AlbumService : AlbumLibrary, Service() {
         }
 
         if (newRows.isNotEmpty()) {
+            val mbEntries = newRows.mapNotNull { row ->
+                val albumId = row[AlbumTable.id].value
+                val originalId = row[AlbumTable.originalId]
+                val name = row[AlbumTable.name]
+                val releaseDate = row[AlbumTable.releaseDate]
+
+                val matchedAlbum = newAlbumsToInsert.first {
+                    if (it.originalId != null && originalId != null) {
+                        it.originalId == originalId
+                    } else if (it.originalId == null && originalId == null) {
+                        it.name == name && getISOFromDate(it.releaseDate) == releaseDate
+                    } else false
+                }
+
+                matchedAlbum.musicBrainzId?.let { mbId ->
+                    albumId to mbId
+                }
+            }
+
+            if (mbEntries.isNotEmpty()) {
+                mbEntries.forEach { (albumId, mbId) ->
+                    setMusicBrainzId(albumId, mbId, triggerSync = false, triggerMerge = false)
+                }
+            }
+
             val providerEntries = mutableListOf<Pair<Triple<UUID, String, Pair<String, String>>, String>>()
             for (row in newRows) {
                 val albumId = row[AlbumTable.id].value

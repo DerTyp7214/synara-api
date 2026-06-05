@@ -104,6 +104,7 @@ class YoutubeIndexer(context: PluginContext) : BaseIndexer(context, IMetadataSer
                                 coverHash = hash,
                                 songCount = songCount,
                                 originalId = finalOriginalId,
+                                musicBrainzId = mbReleaseId?.let { try { UUID.fromString(it) } catch (_: Exception) { null } }
                             )
 
                             val albumList = map.computeIfAbsent(album) { Collections.synchronizedList(mutableListOf()) }
