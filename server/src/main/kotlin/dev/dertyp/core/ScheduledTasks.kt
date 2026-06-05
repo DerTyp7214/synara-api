@@ -29,6 +29,7 @@ fun Application.configureScheduledTasks() {
     val audioAnalysisWorker = get<AudioAnalysisWorker>()
     val flacAnalysisWorker = get<FlacAnalysisWorker>()
     val imageAnalysisWorker = get<ImageAnalysisWorker>()
+    val logCleanupWorker = get<LogCleanupWorker>()
     val lrcLibWorker = get<LrcLibWorker>()
     val providerEnrichmentWorker = get<ProviderEnrichmentWorker>()
 
@@ -244,6 +245,16 @@ fun Application.configureScheduledTasks() {
         task = {
             scheduleService.logTask("Image Analysis") {
                 imageAnalysisWorker.run { p, l -> updateProgress(p, l) }
+            }
+        }
+    )
+
+    scheduleService.registerManagedTask(
+        key = TaskKeys.LOG_CLEANUP_WORKER,
+        name = "Log Cleanup Worker",
+        task = {
+            scheduleService.logTask("Log Cleanup Worker") {
+                logCleanupWorker.run { p, l -> updateProgress(p, l) }
             }
         }
     )

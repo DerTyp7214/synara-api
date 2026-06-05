@@ -146,6 +146,7 @@ fun Application.module() {
             singleOf(::ProviderEnrichmentWorker)
             singleOf(::ReverseProxyWorker)
             singleOf(::ImageAnalysisWorker)
+            singleOf(::LogCleanupWorker)
             singleOf(::CustomMigrationService)
 
             single<IMusicBrainzService> { get<CachedMusicBrainzService>() }
