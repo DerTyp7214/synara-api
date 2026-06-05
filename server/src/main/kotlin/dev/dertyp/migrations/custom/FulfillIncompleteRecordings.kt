@@ -7,7 +7,8 @@ import dev.dertyp.core.logTask
 import dev.dertyp.db.MBRecordingArtistCreditTable
 import dev.dertyp.db.MBRecordingTable
 import dev.dertyp.dbQuery
-import dev.dertyp.services.metadata.CachedMusicBrainzService
+import dev.dertyp.services.metadata.MusicBrainzCacheService
+import dev.dertyp.services.metadata.MusicBrainzService
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.isNull
 import org.jetbrains.exposed.v1.core.leftJoin
@@ -17,7 +18,8 @@ import org.koin.core.component.inject
 
 @Migration("2.6")
 class FulfillIncompleteRecordings : CustomMigration() {
-    private val cachedMusicBrainzService by inject<CachedMusicBrainzService>()
+    private val musicBrainzService by inject<MusicBrainzService>()
+    private val musicBrainzCacheService by inject<MusicBrainzCacheService>()
 
     override suspend fun migrate() {
         logTask("Fulfill Incomplete MusicBrainz Recordings") {
@@ -41,8 +43,10 @@ class FulfillIncompleteRecordings : CustomMigration() {
             var updated = 0
             incompleteIds.forEachIndexed { index, id ->
                 try {
-                    cachedMusicBrainzService.getRecording(id, HttpClientPriority.LOW)
-                    updated++
+                    musicBrainzService.fetchRecordingById(id, HttpClientPriority.LOW)?.let {
+                        musicBrainzCacheService.updateRecordingCache(it)
+                        updated++
+                    }
                 } catch (e: Exception) {
                     logger.error("Failed to fulfill recording $id: ${e.message}")
                 }
