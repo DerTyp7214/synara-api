@@ -123,7 +123,8 @@ abstract class BaseIndexer(
                             val artists = audioFile.getAlbumArtists(delimiter).ifEmpty { audioFile.getArtists(delimiter) }.sorted()
                             val songCount = audioFile.songCount ?: 0
                             val year = audioFile.year
-                            val barcode = audioFile.barcode
+                            val rawBarcode = audioFile.barcode
+                            val barcode = if (rawBarcode?.uppercase() == "BARCODE") null else rawBarcode
 
                             if (name == null) return@withPermit
 

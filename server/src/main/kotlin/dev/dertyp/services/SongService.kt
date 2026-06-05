@@ -1672,7 +1672,9 @@ class SongService : SongLibrary, Service() {
                 .where { SongTable.filePath inList songs.map { it.path } }
                 .orWhere {
                     val urls = songs.map { it.originalUrl }.filter { it.isNotBlank() }
-                    val isrcs = songs.mapNotNull { it.isrc }.filter { it.isNotBlank() }
+                    val isrcs = songs.mapNotNull { it.isrc }
+                        .filter { it.isNotBlank() && it.length >= 10 && it.uppercase() != "ISRC" }
+
                     (SongTable.originalUrl inList urls) or
                             (SongProviderTable.rawUrl inList urls) or
                             (if (isrcs.isNotEmpty()) SongTable.isrc inList isrcs else Op.FALSE) or
@@ -1711,7 +1713,7 @@ class SongService : SongLibrary, Service() {
                             )
 
                     val legacyMatch = song.originalUrl.isNotBlank() && row[SongTable.originalUrl] == song.originalUrl
-                    val isrcMatch = song.isrc?.isNotBlank() == true && row[SongTable.isrc] == song.isrc
+                    val isrcMatch = song.isrc?.isNotBlank() == true && song.isrc!!.length >= 10 && song.isrc!!.uppercase() != "ISRC" && row[SongTable.isrc] == song.isrc
 
                     val metadataMatch = legacyMatch || providerMatch || isrcMatch || (
                             song.originalUrl.isBlank() &&

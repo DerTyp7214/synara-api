@@ -1079,7 +1079,8 @@ class AlbumService : AlbumLibrary, Service() {
         val uniqueSongCounts = uniqueAlbumMetadata.map { it.songCount }
         val uniqueReleaseDates = uniqueAlbumMetadata.map { getISOFromDate(it.releaseDate) }
         val uniqueOriginalIds = uniqueAlbumMetadata.map { it.originalId }
-        val uniqueBarcodes = uniqueAlbumMetadata.mapNotNull { it.barcode }.filter { it.isNotBlank() }
+        val uniqueBarcodes = uniqueAlbumMetadata.mapNotNull { it.barcode }
+            .filter { it.isNotBlank() && it.length >= 8 && it.uppercase() != "BARCODE" }
         val allRequiredArtistNames = albums.flatMap { it.artists }.distinct()
 
         val artistIdMap: Map<String, List<UUID>> =
@@ -1163,7 +1164,8 @@ class AlbumService : AlbumLibrary, Service() {
             val albumProviders = providersByPotentialAlbumId[albumId] ?: emptyList()
 
             val inputAlbum = uniqueAlbumMetadata.firstOrNull {
-                if (it.barcode?.isNotBlank() == true && row.barcode == it.barcode) return@firstOrNull true
+                val inputBarcode = it.barcode
+                if (inputBarcode?.isNotBlank() == true && inputBarcode.length >= 8 && inputBarcode.uppercase() != "BARCODE" && row.barcode == inputBarcode) return@firstOrNull true
 
                 if (it.originalId != null) {
                     if (row.originalId == it.originalId) return@firstOrNull true

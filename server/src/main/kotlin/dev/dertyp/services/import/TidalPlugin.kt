@@ -96,21 +96,28 @@ class TidalIndexer(context: PluginContext) : BaseIndexer(context, IMetadataServi
             audioFilesWithTags.forEach { (file, audioFile, hash) ->
                 val mbTrack = audioFile.musicBrainzTrackId?.let { resolvedMbTracks[it] }
 
-                val name = mbTrack?.albumTitle ?: audioFile.album ?: audioFile.title
+                val name = mbTrack?.albumTitle ?: audioFile.album ?: audioFile.title ?: "Unknown Album"
                 val delimiter = getArtistDelimiter(audioFile)
                 val artists = audioFile.getAlbumArtists(delimiter).ifEmpty { audioFile.getArtists(delimiter) }.sorted()
                 val songCount = audioFile.songCount ?: 0
                 val year = audioFile.year
-                val barcode = audioFile.barcode
-
-                if (name == null) return@forEach
-
                 val releaseDate = getDateFromISO(year) ?: mbTrack?.albumId?.let { resolvedMbAlbums[it]?.releaseDate }
 
-                val originalId = pluginStorages.firstNotNullOfOrNull { it.tracksPath }?.let { _ ->
+                val rawBarcode = audioFile.barcode
+                val barcode = if (rawBarcode?.uppercase() == "BARCODE") null else rawBarcode
+
+                val albumUrl = audioFile.tag.getFirst("URL")
+                val tidalAlbumId = if (albumUrl.contains("/album/")) {
+                    albumUrl.substringAfter("/album/").substringBefore("/")
+                } else null
+
+                val originalId = tidalAlbumId?.let { "tidal:$it" } ?: pluginStorages.firstNotNullOfOrNull { it.tracksPath }?.let { _ ->
                     pluginStorages.find { storage ->
                         storage.tracksPath?.let { file.absolutePathString().startsWith(it) } == true
-                    }?.let { "$id:${file.parent.name}" }
+                    }?.let { _ ->
+                        val folderName = file.parent.name
+                        if (folderName.all { it.isDigit() }) "$id:$folderName" else null
+                    }
                 }
 
                 val album = InsertableAlbum(

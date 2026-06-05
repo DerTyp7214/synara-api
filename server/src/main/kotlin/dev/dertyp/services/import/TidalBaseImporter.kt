@@ -132,13 +132,27 @@ abstract class TidalBaseImporter(
 
         val coverDownloads = mutableMapOf<String, Deferred<ByteArray?>>()
 
-        tracksByAlbum.forEach { (_, tracks) ->
-            val albumTitle = tracks.first().albumTitle
-            val albumArtists = tracks.first().artists
+        tracksByAlbum.forEach { (albumId, tracks) ->
+            val firstTrack = tracks.first()
+            val albumTitle = firstTrack.albumTitle
+            val albumArtists = firstTrack.artists
 
             var mbRelease: MusicBrainzRelease? = null
-            
-            if (metadata is IMetadataService.Album) {
+
+            if (albumId != "unknown") {
+                try {
+                    val tidalAlbum = metadataService.getAlbumsByIds(listOf(albumId)).firstOrNull()
+                    val barcode = tidalAlbum?.barcode
+                    if (barcode != null && barcode.length >= 8 && barcode.uppercase() != "BARCODE") {
+                        onLiveOutput("Searching MusicBrainz for album by barcode: $barcode")
+                        mbRelease = musicBrainzService.searchReleaseByBarcode(barcode, albumArtists)
+                    }
+                } catch (e: Exception) {
+                    logger.warn("Failed to fetch Tidal album metadata for barcode matching: $albumId", e)
+                }
+            }
+
+            if (mbRelease == null && metadata is IMetadataService.Album) {
                 val mbid = try { UUID.fromString(metadata.id) } catch (_: Exception) { null }
                 if (mbid != null) {
                     onLiveOutput("Using provided MusicBrainz metadata for album: ${metadata.title}")

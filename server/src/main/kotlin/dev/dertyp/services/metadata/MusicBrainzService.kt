@@ -125,7 +125,7 @@ class MusicBrainzService : Service() {
     }
 
     suspend fun searchMb(song: BaseSong, priority: HttpClientPriority = HttpClientPriority.NORMAL): MusicBrainzRecording? {
-        if (song.isrc != null) {
+        if (song.isrc != null && song.isrc!!.length >= 10 && song.isrc!!.uppercase() != "ISRC") {
             try {
                 val searchResponse = retryableGet<MusicBrainzSearchResponse>("$mbBaseUrl/recording", priority) {
                     parameter("query", "isrc:${song.isrc}")
@@ -133,7 +133,11 @@ class MusicBrainzService : Service() {
                     parameter("inc", "tags+genres+releases+release-groups+media")
                     header("User-Agent", "Synara/${BuildConfig.VERSION} ( https://github.com/dertyp7214/synara )")
                 }
-                searchResponse?.recordings?.firstOrNull()?.let { return it }
+                searchResponse?.recordings?.firstOrNull { rec ->
+                    val recArtists = rec.artistCredit?.mapNotNull { it.artist?.name?.lowercase() } ?: emptyList()
+                    val targetArtists = song.artists.map { it.name.lowercase() }
+                    targetArtists.any { it in recArtists }
+                }?.let { return it }
             } catch (e: Exception) {
                 logger.error("Failed to search MusicBrainz for ISRC ${song.isrc}", e)
             }
@@ -184,7 +188,7 @@ class MusicBrainzService : Service() {
     }
 
     suspend fun searchAlbumMb(album: Album, priority: HttpClientPriority = HttpClientPriority.NORMAL): MusicBrainzRelease? {
-        if (album.barcode != null) {
+        if (album.barcode != null && album.barcode!!.length >= 8 && album.barcode!!.uppercase() != "BARCODE") {
             try {
                 val response = retryableGet<MusicBrainzReleaseSearchResponse>("$mbBaseUrl/release", priority) {
                     parameter("query", "barcode:${album.barcode}")
@@ -192,7 +196,11 @@ class MusicBrainzService : Service() {
                     parameter("inc", "artist-credits+recordings+release-groups+tags+genres+media")
                     header("User-Agent", "Synara/${BuildConfig.VERSION} ( https://github.com/dertyp7214/synara )")
                 }
-                response?.releases?.firstOrNull()?.let { return it }
+                response?.releases?.firstOrNull { rel ->
+                    val relArtists = rel.artistCredit?.mapNotNull { it.artist?.name?.lowercase() } ?: emptyList()
+                    val targetArtists = album.artists.map { it.name.lowercase() }
+                    targetArtists.any { it in relArtists }
+                }?.let { return it }
             } catch (e: Exception) {
                 logger.error("Failed to search MusicBrainz for barcode ${album.barcode}", e)
             }
@@ -226,6 +234,32 @@ class MusicBrainzService : Service() {
             }
         } catch (e: Exception) {
             logger.error("Error searching MusicBrainz for $query", e)
+            null
+        }
+    }
+
+    suspend fun searchReleaseByBarcodeMb(
+        barcode: String,
+        artists: List<String>,
+        priority: HttpClientPriority = HttpClientPriority.NORMAL
+    ): MusicBrainzRelease? {
+        if (barcode.length < 8 || barcode.uppercase() == "BARCODE") return null
+
+        return try {
+            val response = retryableGet<MusicBrainzReleaseSearchResponse>("$mbBaseUrl/release", priority) {
+                parameter("query", "barcode:$barcode")
+                parameter("fmt", "json")
+                parameter("inc", "artist-credits+recordings+release-groups+tags+genres+media")
+                header("User-Agent", "Synara/${BuildConfig.VERSION} ( https://github.com/dertyp7214/synara )")
+            }
+
+            response?.releases?.firstOrNull { rel ->
+                val relArtists = rel.artistCredit?.mapNotNull { it.artist?.name?.lowercase() } ?: emptyList()
+                val targetArtists = artists.map { it.lowercase() }
+                targetArtists.any { it in relArtists }
+            }
+        } catch (e: Exception) {
+            logger.error("Failed to search MusicBrainz for barcode $barcode", e)
             null
         }
     }
@@ -391,13 +425,17 @@ class MusicBrainzService : Service() {
         return try {
             val response = retryableGet<MusicBrainzReleaseSearchResponse>("$mbBaseUrl/release", priority) {
                 parameter("query", query)
-                parameter("limit", 1)
+                parameter("limit", 5)
                 parameter("fmt", "json")
                 parameter("inc", "artist-credits+recordings+release-groups+tags+genres+media")
                 header("User-Agent", "Synara/${BuildConfig.VERSION} ( https://github.com/dertyp7214/synara )")
             }
 
-            response?.releases?.firstOrNull()
+            response?.releases?.firstOrNull { rel ->
+                val relArtists = rel.artistCredit?.mapNotNull { it.artist?.name?.lowercase() } ?: emptyList()
+                val targetArtists = artists.map { it.lowercase() }
+                targetArtists.any { it in relArtists }
+            }
         } catch (e: Exception) {
             logger.error("Failed to search MusicBrainz for release $query", e)
             null
@@ -625,6 +663,14 @@ class CachedMusicBrainzService(
 
     suspend fun searchRelease(title: String, artists: List<String>, priority: HttpClientPriority = HttpClientPriority.NORMAL): MusicBrainzRelease? {
         return musicBrainzService.searchReleaseMb(title, artists, priority)?.also {
+            musicBrainzCacheService.updateReleaseCache(it)
+        }
+    }
+
+    override suspend fun searchReleaseByBarcode(barcode: String, artists: List<String>) = searchReleaseByBarcode(barcode, artists, HttpClientPriority.HIGH)
+
+    suspend fun searchReleaseByBarcode(barcode: String, artists: List<String>, priority: HttpClientPriority = HttpClientPriority.NORMAL): MusicBrainzRelease? {
+        return musicBrainzService.searchReleaseByBarcodeMb(barcode, artists, priority)?.also {
             musicBrainzCacheService.updateReleaseCache(it)
         }
     }
