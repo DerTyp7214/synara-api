@@ -73,6 +73,11 @@ class HttpClientQueueService : Service() {
 
         if (limit != null && remaining != null && resetIn != null) {
             hostRateLimits[host] = RateLimitState(limit, remaining, resetIn, Clock.System.now())
+        } else if (response.status.value == 429) {
+            val retryAfter = response.headers["Retry-After"]?.toIntOrNull()
+            if (retryAfter != null) {
+                hostRateLimits[host] = RateLimitState(limit ?: 0, 0, retryAfter, Clock.System.now())
+            }
         }
     }
 
@@ -144,7 +149,7 @@ class HttpClientQueueService : Service() {
 
                 var delayTime = when {
                     host.contains("musicbrainz.org") -> 1.seconds
-                    host.contains("api.song.link") -> 6.seconds
+                    host.contains("song.link") || host.contains("odesli.co") -> 6.seconds
                     host.contains("theaudiodb.com") -> 2.seconds
                     host.contains("googleapis.com") || host.contains("youtube.com") -> 1.seconds
                     host.contains("listenbrainz.org") -> 10.milliseconds
@@ -177,14 +182,16 @@ class HttpClientQueueService : Service() {
                     }
                     updateRateLimit(host, response)
 
-                    if (response.status.value == 429) {
-                        val retryAfter = response.headers["Retry-After"]?.toIntOrNull() ?: 5
-                        logger.warn("Rate limit exceeded for $host, waiting $retryAfter seconds before retry")
-                        delay(retryAfter.seconds)
+                    var attempts = 1
+                    while (response.status.value == 429 && attempts < 3) {
+                        val retryAfter = response.headers["Retry-After"]?.toIntOrNull()?.seconds ?: (delayTime + 500.milliseconds)
+                        logger.warn("Rate limit exceeded for $host (attempt $attempts), waiting $retryAfter before retry")
+                        delay(retryAfter)
                         response = ApiClient.instance.get(next.urlString) {
                             next.block(this)
                         }
                         updateRateLimit(host, response)
+                        attempts++
                     }
 
                     next.deferred.complete(response)

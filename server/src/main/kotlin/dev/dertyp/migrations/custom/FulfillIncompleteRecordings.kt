@@ -51,7 +51,7 @@ class FulfillIncompleteRecordings : CustomMigration() {
                     logger.error("Failed to fulfill recording $id: ${e.message}")
                 }
 
-                if (index % 10 == 0 || index == incompleteIds.size - 1) {
+                if (index == incompleteIds.size - 1) {
                     updateProgress(
                         (index + 1).toDouble() / incompleteIds.size,
                         "Fulfilling recordings: ${index + 1}/${incompleteIds.size} | Updated: $updated"
