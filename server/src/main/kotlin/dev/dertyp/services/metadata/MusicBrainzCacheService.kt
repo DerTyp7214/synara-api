@@ -297,17 +297,17 @@ class MusicBrainzCacheService : Service() {
     }
 
     suspend fun updateArtistCache(artist: MusicBrainzArtist) = dbQuery {
-        MBArtistTable.upsert(MBArtistTable.id) {
-            it[id] = artist.id
-            it[name] = artist.name ?: ""
-            it[sortName] = artist.sortName ?: ""
-            it[type] = artist.type?.name
-            it[disambiguation] = artist.disambiguation
-            it[country] = artist.country
-            it[lifeSpanBegin] = artist.lifeSpan?.begin
-            it[lifeSpanEnd] = artist.lifeSpan?.end
-            it[lifeSpanEnded] = artist.lifeSpan?.ended
-            it[lastUpdate] = Clock.System.now().toEpochMilliseconds()
+        MBArtistTable.upsert(MBArtistTable.id) { b ->
+            b[id] = artist.id
+            artist.name?.let { b[name] = it }
+            artist.sortName?.let { b[sortName] = it }
+            artist.type?.name?.let { b[type] = it }
+            artist.disambiguation?.let { b[disambiguation] = it }
+            artist.country?.let { b[country] = it }
+            artist.lifeSpan?.begin?.let { b[lifeSpanBegin] = it }
+            artist.lifeSpan?.end?.let { b[lifeSpanEnd] = it }
+            artist.lifeSpan?.ended?.let { b[lifeSpanEnded] = it }
+            b[lastUpdate] = Clock.System.now().toEpochMilliseconds()
         }
 
         artist.area?.let { area ->
@@ -353,19 +353,19 @@ class MusicBrainzCacheService : Service() {
     }
 
     suspend fun updateAreaCache(area: MusicBrainzArea) = dbQuery {
-        MBAreaTable.upsert(MBAreaTable.id) {
-            it[id] = area.id
-            it[name] = area.name ?: ""
-            it[sortName] = area.sortName ?: ""
+        MBAreaTable.upsert(MBAreaTable.id) { b ->
+            b[id] = area.id
+            area.name?.let { b[name] = it }
+            area.sortName?.let { b[sortName] = it }
         }
     }
 
     suspend fun updateRecordingCache(recording: MusicBrainzRecording) = dbQuery {
-        MBRecordingTable.upsert(MBRecordingTable.id) {
-            it[id] = recording.id
-            it[title] = recording.title ?: ""
-            it[length] = recording.length
-            it[lastUpdate] = Clock.System.now().toEpochMilliseconds()
+        MBRecordingTable.upsert(MBRecordingTable.id) { b ->
+            b[id] = recording.id
+            recording.title?.let { b[title] = it }
+            recording.length?.let { b[length] = it }
+            b[lastUpdate] = Clock.System.now().toEpochMilliseconds()
         }
 
         MBRecordingArtistCreditTable.deleteWhere { MBRecordingArtistCreditTable.recordingId eq recording.id }
@@ -426,16 +426,16 @@ class MusicBrainzCacheService : Service() {
     }
 
     suspend fun updateReleaseCache(release: MusicBrainzRelease): Unit = dbQuery {
-        MBReleaseTable.upsert(MBReleaseTable.id) {
-            it[id] = release.id
-            it[title] = release.title ?: ""
-            it[status] = release.status
-            it[quality] = release.quality
-            it[barcode] = release.barcode
-            it[country] = release.country
-            it[date] = release.date
-            it[disambiguation] = release.disambiguation
-            it[lastUpdate] = Clock.System.now().toEpochMilliseconds()
+        MBReleaseTable.upsert(MBReleaseTable.id) { b ->
+            b[id] = release.id
+            release.title?.let { b[title] = it }
+            release.status?.let { b[status] = it }
+            release.quality?.let { b[quality] = it }
+            release.barcode?.let { b[barcode] = it }
+            release.country?.let { b[country] = it }
+            release.date?.let { b[date] = it }
+            release.disambiguation?.let { b[disambiguation] = it }
+            b[lastUpdate] = Clock.System.now().toEpochMilliseconds()
         }
 
         release.releaseGroup?.let { group ->
@@ -474,13 +474,13 @@ class MusicBrainzCacheService : Service() {
                     updateRecordingCache(recording)
                 }
 
-                MBTrackTable.upsert(MBTrackTable.id) {
-                    it[id] = track.id
-                    it[MBTrackTable.mediaId] = mediaId
-                    it[position] = track.position
-                    it[number] = track.number
-                    it[title] = track.title
-                    it[recordingId] = track.recording?.id
+                MBTrackTable.upsert(MBTrackTable.id) { b ->
+                    b[id] = track.id
+                    b[MBTrackTable.mediaId] = mediaId
+                    track.position?.let { b[position] = it }
+                    track.number?.let { b[number] = it }
+                    track.title?.let { b[title] = it }
+                    track.recording?.id?.let { b[recordingId] = it }
                 }
             }
         }
@@ -499,12 +499,12 @@ class MusicBrainzCacheService : Service() {
     }
 
     suspend fun updateReleaseGroupCache(group: MusicBrainzReleaseGroup) = dbQuery {
-        MBReleaseGroupTable.upsert(MBReleaseGroupTable.id) {
-            it[id] = group.id
-            it[title] = group.title
-            it[primaryType] = group.primaryType
-            it[firstReleaseDate] = group.firstReleaseDate
-            it[lastUpdate] = Clock.System.now().toEpochMilliseconds()
+        MBReleaseGroupTable.upsert(MBReleaseGroupTable.id) { b ->
+            b[id] = group.id
+            b[title] = group.title
+            group.primaryType?.let { b[primaryType] = it }
+            group.firstReleaseDate?.let { b[firstReleaseDate] = it }
+            b[lastUpdate] = Clock.System.now().toEpochMilliseconds()
         }
 
         MBRelationTable.deleteWhere { MBRelationTable.ownerId eq group.id }
