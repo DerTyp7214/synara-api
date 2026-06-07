@@ -299,8 +299,8 @@ class MusicBrainzCacheService : Service() {
     suspend fun updateArtistCache(artist: MusicBrainzArtist) = dbQuery {
         MBArtistTable.upsert(MBArtistTable.id) { b ->
             b[id] = artist.id
-            artist.name?.let { b[name] = it }
-            artist.sortName?.let { b[sortName] = it }
+            b[name] = artist.name ?: ""
+            b[sortName] = artist.sortName ?: artist.name ?: ""
             artist.type?.name?.let { b[type] = it }
             artist.disambiguation?.let { b[disambiguation] = it }
             artist.country?.let { b[country] = it }
@@ -355,15 +355,15 @@ class MusicBrainzCacheService : Service() {
     suspend fun updateAreaCache(area: MusicBrainzArea) = dbQuery {
         MBAreaTable.upsert(MBAreaTable.id) { b ->
             b[id] = area.id
-            area.name?.let { b[name] = it }
-            area.sortName?.let { b[sortName] = it }
+            b[name] = area.name ?: ""
+            b[sortName] = area.sortName ?: area.name ?: ""
         }
     }
 
     suspend fun updateRecordingCache(recording: MusicBrainzRecording) = dbQuery {
         MBRecordingTable.upsert(MBRecordingTable.id) { b ->
             b[id] = recording.id
-            recording.title?.let { b[title] = it }
+            b[title] = recording.title ?: ""
             recording.length?.let { b[length] = it }
             b[lastUpdate] = Clock.System.now().toEpochMilliseconds()
         }
@@ -428,7 +428,7 @@ class MusicBrainzCacheService : Service() {
     suspend fun updateReleaseCache(release: MusicBrainzRelease): Unit = dbQuery {
         MBReleaseTable.upsert(MBReleaseTable.id) { b ->
             b[id] = release.id
-            release.title?.let { b[title] = it }
+            b[title] = release.title ?: ""
             release.status?.let { b[status] = it }
             release.quality?.let { b[quality] = it }
             release.barcode?.let { b[barcode] = it }
