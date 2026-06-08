@@ -1329,6 +1329,9 @@ Manages artist data and complex library maintenance.
 | `setArtistImageByUrl` | `id` (`PlatformUUID`): The artist unique identifier.<br>`url` (`String`): The direct image URL. | [Artist](#devdertypdataartist)? | `EDIT` |  | Set an artist's image from a direct URL. |
 | `artistsWithoutMusicBrainzIdFlow` | - | `Flow`<[Artist](#devdertypdataartist)> | - |  | Stream all artists that are missing a MusicBrainz ID. |
 | `artistIdsWithoutMusicBrainzId` | - | `Flow`<`PlatformUUID`> | - |  | Stream IDs of all artists that are missing a MusicBrainz ID. |
+| `aliases` | `id` (`PlatformUUID`): The artist unique identifier. | `List`<[ArtistAlias](#devdertypdataartistalias)> | - |  | List aliases for an artist. |
+| `addAlias` | `artistId` (`PlatformUUID`): The artist unique identifier.<br>`name` (`String`): The alternative name. | `Boolean` | `EDIT` |  | Add an alias to an artist. |
+| `removeAlias` | `artistId` (`PlatformUUID`): The artist unique identifier.<br>`name` (`String`): The alternative name. | `Boolean` | `EDIT` |  | Remove an alias from an artist. |
 
 ### IAudioAnalysisService <a name="devdertypservicesiaudioanalysisservice"></a>
 Service for audio analysis and related data management.

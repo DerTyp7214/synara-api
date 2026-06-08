@@ -1186,4 +1186,37 @@ class ArtistServiceTest : KoinTest {
 
         coVerify(exactly = 0) { metadataFetchingService.refreshArtistMetadata(any()) }
     }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `alias management should work`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val artistId = UUID.randomUUID()
+        transaction(database) {
+            ArtistTable.insert {
+                it[id] = artistId
+                it[name] = "Main Artist"
+            }
+        }
+
+        val added = service.addAlias(artistId, "Alias 1")
+        assertTrue(added)
+
+        val alreadyAdded = service.addAlias(artistId, "Alias 1")
+        assertFalse(alreadyAdded)
+
+        val aliases = service.aliases(artistId)
+        assertEquals(1, aliases.size)
+        assertEquals("Alias 1", aliases[0].name)
+        assertEquals(artistId, aliases[0].artistId)
+
+        val removed = service.removeAlias(artistId, "Alias 1")
+        assertTrue(removed)
+
+        val aliasesEmpty = service.aliases(artistId)
+        assertEquals(0, aliasesEmpty.size)
+
+        val removedAgain = service.removeAlias(artistId, "Alias 1")
+        assertFalse(removedAgain)
+    }
 }

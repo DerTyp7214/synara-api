@@ -72,6 +72,10 @@ class ArtistRpcService(private val user: User, private val artistService: Artist
 
     override fun artistsWithoutMusicBrainzIdFlow(): Flow<Artist> = artistService.artistsWithoutMusicBrainzIdFlow(user.id)
     override fun artistIdsWithoutMusicBrainzId(): Flow<UUID> = artistService.artistIdsWithoutMusicBrainzId()
+
+    override suspend fun aliases(id: UUID): List<ArtistAlias> = artistService.aliases(id)
+    override suspend fun addAlias(artistId: UUID, name: String): Boolean = artistService.addAlias(artistId, name)
+    override suspend fun removeAlias(artistId: UUID, name: String): Boolean = artistService.removeAlias(artistId, name)
 }
 
 class ArtistService : ArtistLibrary, Service() {
@@ -701,6 +705,34 @@ class ArtistService : ArtistLibrary, Service() {
     @OptIn(ExperimentalCoroutinesApi::class)
     fun artistsWithoutMusicBrainzIdFlow(userId: UUID? = null): Flow<Artist> = artistIdsWithoutMusicBrainzId().chunked(100).flatMapConcat { ids ->
         byIds(ids, userId).asFlow()
+    }
+
+    suspend fun aliases(id: UUID): List<ArtistAlias> = dbQuery {
+        ArtistAliasTable
+            .selectAll()
+            .where { ArtistAliasTable.artistId eq id }
+            .map { ArtistAlias(it[ArtistAliasTable.artistId].value, it[ArtistAliasTable.name]) }
+    }
+
+    suspend fun addAlias(artistId: UUID, name: String): Boolean = dbQuery {
+        val exists = ArtistAliasTable
+            .selectAll()
+            .where { (ArtistAliasTable.artistId eq artistId) and (ArtistAliasTable.name eq name) }
+            .any()
+
+        if (exists) return@dbQuery false
+
+        ArtistAliasTable.insert {
+            it[this.artistId] = artistId
+            it[this.name] = name
+        }
+        true
+    }
+
+    suspend fun removeAlias(artistId: UUID, name: String): Boolean = dbQuery {
+        ArtistAliasTable.deleteWhere {
+            (ArtistAliasTable.artistId eq artistId) and (ArtistAliasTable.name eq name)
+        } > 0
     }
 
     private suspend fun querySingle(
