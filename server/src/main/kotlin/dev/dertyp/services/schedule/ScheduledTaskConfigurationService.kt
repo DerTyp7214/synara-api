@@ -59,7 +59,8 @@ class ScheduledTaskConfigurationService : Service() {
             TaskConfiguration(TaskKeys.DELETE_UNREFERENCED_ARTISTS, "Delete Unreferenced Artists", true, TriggerDefinition.AfterTask(TaskKeys.DELETE_EMPTY_ALBUMS)),
             TaskConfiguration(TaskKeys.DELETE_UNREFERENCED_IMAGES, "Delete Unreferenced Images", true, TriggerDefinition.AfterTask(TaskKeys.DELETE_UNREFERENCED_ARTISTS)),
             TaskConfiguration(TaskKeys.IMAGE_ANALYSIS, "Image Analysis", true, TriggerDefinition.AfterTask(TaskKeys.DELETE_UNREFERENCED_IMAGES)),
-            TaskConfiguration(TaskKeys.LOG_CLEANUP_WORKER, "Log Cleanup Worker", true, TriggerDefinition.Cron("0 0 * * *"))
+            TaskConfiguration(TaskKeys.LOG_CLEANUP_WORKER, "Log Cleanup Worker", true, TriggerDefinition.Cron("0 0 * * *")),
+            TaskConfiguration(TaskKeys.SEARCH_INDEX_REBUILD_WORKER, "Search Index Rebuild Worker", true, TriggerDefinition.Manual)
         )
     }
 

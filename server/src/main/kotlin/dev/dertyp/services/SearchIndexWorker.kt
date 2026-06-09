@@ -1,5 +1,6 @@
 package dev.dertyp.services
 
+import dev.dertyp.core.logTask
 import dev.dertyp.db.SearchIndexEntityType
 import dev.dertyp.db.SearchIndexQueueTable
 import dev.dertyp.dbQuery
@@ -12,10 +13,11 @@ import org.jetbrains.exposed.v1.core.vendors.currentDialect
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.TransactionManager
+import org.koin.core.component.KoinComponent
 import java.util.UUID
 import kotlin.time.Duration.Companion.seconds
 
-class SearchIndexWorker {
+class SearchIndexWorker : KoinComponent {
     private val batchSize = 100
     private val logger = KtorSimpleLogger("SearchIndexWorker")
 
@@ -24,8 +26,21 @@ class SearchIndexWorker {
             logger.info("SearchIndexWorker background service started")
             while (isActive) {
                 try {
-                    val processedCount = processBatch()
-                    if (processedCount == 0) {
+                    val queueSize = dbQuery { SearchIndexQueueTable.selectAll().count() }
+                    if (queueSize > 0) {
+                        logTask("Search Index Worker") {
+                            var processed = 0
+                            val total = queueSize.toDouble()
+                            while (isActive) {
+                                val processedInBatch = processBatch()
+                                if (processedInBatch == 0) break
+                                processed += processedInBatch
+                                val progress = (processed / total * 100.0).coerceAtMost(100.0)
+                                updateProgress(progress, "Processed $processed / ${total.toInt()} items")
+                            }
+                            emptyMap()
+                        }
+                    } else {
                         delay(2.seconds)
                     }
                 } catch (e: Exception) {
