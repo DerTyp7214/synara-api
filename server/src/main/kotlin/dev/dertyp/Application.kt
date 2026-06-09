@@ -39,6 +39,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
+import org.koin.core.module.Module
 import org.koin.core.module.dsl.singleOf
 import org.koin.dsl.binds
 import org.koin.dsl.module
@@ -88,106 +89,7 @@ fun Application.module() {
     val application = this
     install(Koin) {
         slf4jLogger()
-        modules(module {
-            single<Application> { application }
-            single<ApplicationEnvironment> { environment }
-            single { environment.config }
-
-            singleOf(::Indexer)
-            singleOf(::PluginManager)
-            singleOf(::JwtService)
-            singleOf(::UserService)
-            singleOf(::AuthService)
-            singleOf(::SongService)
-            singleOf(::AudioAnalysisService)
-            singleOf(::FlacAnalysisService)
-            singleOf(::ImageService)
-            singleOf(::AlbumService)
-            singleOf(::LyricsSearch)
-            singleOf(::LyricsService)
-            singleOf(::LrcLibService)
-            singleOf(::GenreService)
-            singleOf(::ArtistService)
-            singleOf(::StorageService)
-            singleOf(::FavSyncService)
-            singleOf(::DatabaseManager)
-            singleOf(::PlaylistService)
-            singleOf(::LibraryMergeService)
-            singleOf(::ImportService)
-            singleOf(::ScheduleService)
-            singleOf(::ScheduledTaskConfigurationService)
-            singleOf(::ServerStatsService)
-            singleOf(::UserPlaylistService)
-            singleOf(::RefreshTokenService)
-            singleOf(::ScheduledTaskLogService)
-            singleOf(::DiscoveryService)
-            singleOf(::ImporterProxy)
-            singleOf(::SessionService)
-            singleOf(::PlaybackService)
-            singleOf(::CustomAudioService)
-            singleOf(::ReverseProxyService)
-            singleOf(::DbManagementService)
-            singleOf(::BackupService)
-            singleOf(::UserPlaylistBackupService)
-            singleOf(::MetadataFetchingService)
-            singleOf(::MetadataDispatcherService)
-            singleOf(::MirrorService)
-            singleOf(::RemoteMirrorService)
-            singleOf(::MusicBrainzService)
-            singleOf(::MusicBrainzCacheService)
-            singleOf(::CachedMusicBrainzService)
-            singleOf(::OdesliService)
-            singleOf(::ReleaseService)
-            singleOf(::SearchIndexWorker)
-
-            ClassGraph()
-                .enableClassInfo()
-                .enableAnnotationInfo()
-                .acceptPackages("dev.dertyp.services.schedule")
-                .scan().use { scanResult ->
-                    scanResult.getClassesWithAnnotation(WorkerTask::class.java.name).forEach { classInfo ->
-                        val clazz = classInfo.loadClass()
-                        single { clazz.getDeclaredConstructor().newInstance() } binds arrayOf(clazz.kotlin, Worker::class)
-                    }
-                }
-            
-            singleOf(::CustomMigrationService)
-
-            single<IMusicBrainzService> { get<CachedMusicBrainzService>() }
-
-            single<Gson> {
-                GsonBuilder()
-                    .registerTypeAdapter(OffsetDateTime::class.java, OffsetDateTimeAdapter())
-                    .registerTypeAdapter(ByteArray::class.java, ByteArrayISO8859TypeAdapter())
-                    .registerTypeAdapter(LocalDate::class.java, LocalDateAdapter())
-                    .registerTypeAdapter(Duration::class.java, DurationAdapter())
-                    .registerTypeHierarchyAdapter(Flow::class.java, object : TypeAdapter<Flow<*>>() {
-                        override fun write(out: JsonWriter, value: Flow<*>?) {
-                            out.nullValue()
-                        }
-
-                        override fun read(reader: JsonReader): Flow<*> {
-                            if (reader.peek() == JsonToken.NULL) {
-                                reader.nextNull()
-                            } else {
-                                reader.skipValue()
-                            }
-                            return emptyFlow<Any>()
-                        }
-                    })
-                    .create()
-            }
-
-            single<RedisCacheProvider.Config> {
-                if (!environment.config.propertyOrNull("redis.host")?.getString().isNullOrBlank()) {
-                    RedisCacheProvider.Config().apply {
-                        invalidateAt = 30.days
-                        host = environment.config.propertyOrNull("redis.host")!!.getString()
-                        port = environment.config.propertyOrNull("redis.port")?.getString()?.toInt() ?: port
-                    }
-                } else RedisCacheProvider.Config().apply { host = "none" }
-            }
-        }, pluginModule)
+        modules(mainModule(application, environment), pluginModule)
     }
 
     get<DatabaseManager>().init()
@@ -273,4 +175,105 @@ fun Application.module() {
     configureHTTP()
     configureRouting()
     configureServices()
+}
+
+fun mainModule(application: Application, environment: ApplicationEnvironment): Module = module {
+    single<Application> { application }
+    single<ApplicationEnvironment> { environment }
+    single { environment.config }
+
+    singleOf(::Indexer)
+    singleOf(::PluginManager)
+    singleOf(::JwtService)
+    singleOf(::UserService)
+    singleOf(::AuthService)
+    singleOf(::SongService)
+    singleOf(::AudioAnalysisService)
+    singleOf(::FlacAnalysisService)
+    singleOf(::ImageService)
+    singleOf(::AlbumService)
+    singleOf(::LyricsSearch)
+    singleOf(::LyricsService)
+    singleOf(::LrcLibService)
+    singleOf(::GenreService)
+    singleOf(::ArtistService)
+    singleOf(::StorageService)
+    singleOf(::FavSyncService)
+    singleOf(::DatabaseManager)
+    singleOf(::PlaylistService)
+    singleOf(::LibraryMergeService)
+    singleOf(::ImportService)
+    singleOf(::ScheduleService)
+    singleOf(::ScheduledTaskConfigurationService)
+    singleOf(::ServerStatsService)
+    singleOf(::UserPlaylistService)
+    singleOf(::RefreshTokenService)
+    singleOf(::ScheduledTaskLogService)
+    singleOf(::DiscoveryService)
+    singleOf(::ImporterProxy)
+    singleOf(::SessionService)
+    singleOf(::PlaybackService)
+    singleOf(::CustomAudioService)
+    singleOf(::ReverseProxyService)
+    singleOf(::DbManagementService)
+    singleOf(::BackupService)
+    singleOf(::UserPlaylistBackupService)
+    singleOf(::MetadataFetchingService)
+    singleOf(::MetadataDispatcherService)
+    singleOf(::MirrorService)
+    singleOf(::RemoteMirrorService)
+    singleOf(::MusicBrainzService)
+    singleOf(::MusicBrainzCacheService)
+    singleOf(::CachedMusicBrainzService)
+    singleOf(::OdesliService)
+    singleOf(::ReleaseService)
+    singleOf(::SearchIndexWorker)
+
+    ClassGraph()
+        .enableClassInfo()
+        .enableAnnotationInfo()
+        .acceptPackages("dev.dertyp.services.schedule")
+        .scan().use { scanResult ->
+            scanResult.getClassesWithAnnotation(WorkerTask::class.java.name).forEach { classInfo ->
+                val clazz = classInfo.loadClass()
+                single { clazz.getDeclaredConstructor().newInstance() } binds arrayOf(clazz.kotlin, Worker::class)
+            }
+        }
+    
+    singleOf(::CustomMigrationService)
+
+    single<IMusicBrainzService> { get<CachedMusicBrainzService>() }
+
+    single<Gson> {
+        GsonBuilder()
+            .registerTypeAdapter(OffsetDateTime::class.java, OffsetDateTimeAdapter())
+            .registerTypeAdapter(ByteArray::class.java, ByteArrayISO8859TypeAdapter())
+            .registerTypeAdapter(LocalDate::class.java, LocalDateAdapter())
+            .registerTypeAdapter(Duration::class.java, DurationAdapter())
+            .registerTypeHierarchyAdapter(Flow::class.java, object : TypeAdapter<Flow<*>>() {
+                override fun write(out: JsonWriter, value: Flow<*>?) {
+                    out.nullValue()
+                }
+
+                override fun read(reader: JsonReader): Flow<*> {
+                    if (reader.peek() == JsonToken.NULL) {
+                        reader.nextNull()
+                    } else {
+                        reader.skipValue()
+                    }
+                    return emptyFlow<Any>()
+                }
+            })
+            .create()
+    }
+
+    single<RedisCacheProvider.Config> {
+        if (!environment.config.propertyOrNull("redis.host")?.getString().isNullOrBlank()) {
+            RedisCacheProvider.Config().apply {
+                invalidateAt = 30.days
+                host = environment.config.propertyOrNull("redis.host")!!.getString()
+                port = environment.config.propertyOrNull("redis.port")?.getString()?.toInt() ?: port
+            }
+        } else RedisCacheProvider.Config().apply { host = "none" }
+    }
 }

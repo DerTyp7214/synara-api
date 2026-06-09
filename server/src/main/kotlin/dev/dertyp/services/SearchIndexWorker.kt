@@ -15,7 +15,8 @@ import org.jetbrains.exposed.v1.jdbc.transactions.TransactionManager
 import java.util.UUID
 import kotlin.time.Duration.Companion.seconds
 
-class SearchIndexWorker(private val batchSize: Int = 100) {
+class SearchIndexWorker {
+    private val batchSize = 100
     private val logger = KtorSimpleLogger("SearchIndexWorker")
 
     fun startService(scope: CoroutineScope) {
