@@ -690,7 +690,7 @@ class SongService : SongLibrary, Service() {
         }
 
     fun songIdsForProviderEnrichment(): Flow<UUID> = flow {
-        val oneWeekAgo = Clock.System.now() - 7.days
+        val oneWeekAgo = Clock.System.now() - 30.days
 
         SongTable
             .select(SongTable.id)
@@ -943,7 +943,7 @@ class SongService : SongLibrary, Service() {
             }
 
             SongTable.update({ SongTable.id eq id }) {
-                it[lastProviderEnrichment] = Clock.System.now().toEpochMilliseconds()
+                it[lastProviderEnrichment] = Clock.System.now().toEpochMilliseconds() + (1.days .. 5.days).random().inWholeMilliseconds
             }
         }
     }
