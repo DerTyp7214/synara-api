@@ -1680,6 +1680,7 @@ Service for fetching metadata from external sources.
 | `getImageUrlsByAlbumIds` | `type` (`MetadataType`): The metadata provider to use.<br>`albumIds` (`List`<`String`>): List of external album IDs. | `Map`<`String`, `List`<[Image](#devdertypservicesmetadataimetadataserviceimage)>> | - |  | Get image URLs for multiple album IDs. |
 | `getImageUrlByImageId` | `type` (`MetadataType`): The metadata provider to use.<br>`imageId` (`PlatformUUID`): The image UUID. | `String`? | - |  | Get the URL for a cached image by its ID. |
 | `getTrackById` | `type` (`MetadataType`): The metadata provider to use.<br>`trackId` (`String`): The external track ID. | [Track](#devdertypservicesmetadataimetadataservicetrack)? | - |  | Get a track by its external ID. |
+| `getTrackByIsrc` | `type` (`MetadataType`): The metadata provider to use.<br>`isrc` (`String`): The ISRC. | [Track](#devdertypservicesmetadataimetadataservicetrack)? | - |  | Get a track by its ISRC. |
 | `getTracksByIds` | `type` (`MetadataType`): The metadata provider to use.<br>`trackIds` (`List`<`String`>): List of external track IDs. | `List`<[Track](#devdertypservicesmetadataimetadataservicetrack)> | - |  | Get multiple tracks by their external IDs. |
 | `getAlbumsByIds` | `type` (`MetadataType`): The metadata provider to use.<br>`albumIds` (`List`<`String`>): List of external album IDs. | `List`<[Album](#devdertypservicesmetadataimetadataservicealbum)> | - |  | Get multiple albums by their external IDs. |
 | `albumExistsById` | `type` (`MetadataType`): The metadata provider to use.<br>`albumId` (`String`): The external album ID. | `Boolean` | - |  | Check if an album exists by its external ID. |
@@ -1691,7 +1692,8 @@ Fetch raw metadata records directly from the MusicBrainz database.
 | Function | Parameters | Returns | Permissions | Errors | Description |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | `getArtist` | `id` (`PlatformUUID`): The MusicBrainz Artist UUID. | `MusicBrainzArtist`? | - |  | Retrieve a MusicBrainz Artist record. |
-| `getRecording` | `id` (`PlatformUUID`): The MusicBrainz Recording UUID. | `MusicBrainzRecording`? | - |  | Retrieve a MusicBrainz Recording record. |
+| `getRecording` | `id` (`PlatformUUID`): The MusicBrainz Recording UUID. | `MusicBrainzRecording`? | - |  | Retrieve a MusicBrainz Recording record by its MusicBrainz Recording UUID. |
+| `getRecordingByIsrc` | `isrc` (`String`): The ISRC. | `MusicBrainzRecording`? | - |  | Retrieve a MusicBrainz Recording record by its ISRC. |
 | `getRelease` | `id` (`PlatformUUID`): The MusicBrainz Release UUID. | `MusicBrainzRelease`? | - |  | Retrieve a MusicBrainz Release record. |
 | `getReleaseGroup` | `id` (`PlatformUUID`): The MusicBrainz Release Group UUID. | `MusicBrainzReleaseGroup`? | - |  | Retrieve a MusicBrainz Release Group record. |
 | `searchRecording` | `title` (`String`): The title of the recording.<br>`artists` (`List`<`String`>): The artists of the recording. | `MusicBrainzRecording`? | - |  | Search for a recording on MusicBrainz. |

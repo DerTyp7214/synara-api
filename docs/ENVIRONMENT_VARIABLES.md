@@ -32,6 +32,9 @@ Most variables have sensible defaults and are **optional**. Only variables witho
 
 | Variable | Description | Required | Default (Standalone) | Default (Docker) |
 |:---|:---|:---:|:---|:---|
+| `APPLE_MUSIC_KEY_ID` | Apple Music Key ID. | No | - | - |
+| `APPLE_MUSIC_P8_PATH` | Path to the Apple Music .p8 private key file. | No | - | - |
+| `APPLE_MUSIC_TEAM_ID` | Apple Music Team ID. | No | - | - |
 | `IMAGE_CACHE_TOKEN` | Image Cache auth token. | No | - | - |
 | `IMAGE_CACHE_URL` | Image Cache service URL. | No | - | - |
 | `SPOTIFY_CLIENT_ID` | Spotify API Client ID. | No | - | - |

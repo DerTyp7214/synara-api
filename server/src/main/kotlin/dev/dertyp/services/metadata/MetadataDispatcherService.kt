@@ -99,6 +99,11 @@ class MetadataDispatcherService(
         trackId: String
     ): IMetadataService.Track? = getService(type).getTrackById(type, trackId)
 
+    override suspend fun getTrackByIsrc(
+        type: IMetadataService.MetadataType,
+        isrc: String
+    ): IMetadataService.Track? = getService(type).getTrackByIsrc(type, isrc)
+
     override suspend fun getTracksByIds(
         type: IMetadataService.MetadataType,
         trackIds: List<String>

@@ -455,6 +455,23 @@ class MusicBrainzService : Service() {
         }
     }
 
+    suspend fun fetchRecordingByIsrc(isrc: String, priority: HttpClientPriority = HttpClientPriority.NORMAL): MusicBrainzRecording? {
+        if (isrc.length < 10 || isrc.uppercase() == "ISRC") return null
+
+        return try {
+            val searchResponse = retryableGet<MusicBrainzSearchResponse>("$mbBaseUrl/recording", priority) {
+                parameter("query", "isrc:$isrc")
+                parameter("fmt", "json")
+                parameter("inc", "artist-credits+releases+tags+genres+url-rels+isrcs")
+                header("User-Agent", "Synara/${BuildConfig.VERSION} ( https://github.com/dertyp7214/synara )")
+            }
+            searchResponse?.recordings?.firstOrNull()
+        } catch (e: Exception) {
+            logger.error("Error fetching recording by ISRC $isrc", e)
+            null
+        }
+    }
+
     suspend fun fetchRecordingsMetadataLB(
         mbIds: List<PlatformUUID>,
         priority: HttpClientPriority = HttpClientPriority.NORMAL
@@ -612,8 +629,18 @@ class CachedMusicBrainzService(
 
     suspend fun getRecording(id: PlatformUUID, priority: HttpClientPriority = HttpClientPriority.NORMAL): MusicBrainzRecording? {
         val cached = musicBrainzCacheService.getRecording(id)
-        if (cached != null && cached.fetchedAt != 0L) return cached
+        if (cached != null && cached.fetchedAt != 0L && !cached.title.isNullOrBlank() && !cached.artistCredit.isNullOrEmpty()) return cached
         return musicBrainzService.fetchRecordingById(id, priority)?.also {
+            musicBrainzCacheService.updateRecordingCache(it)
+        } ?: cached
+    }
+
+    override suspend fun getRecordingByIsrc(isrc: String) = getRecordingByIsrc(isrc, HttpClientPriority.HIGH)
+
+    suspend fun getRecordingByIsrc(isrc: String, priority: HttpClientPriority = HttpClientPriority.NORMAL): MusicBrainzRecording? {
+        val cached = musicBrainzCacheService.getRecordingByIsrc(isrc)
+        if (cached != null && cached.fetchedAt != 0L && !cached.title.isNullOrBlank() && !cached.artistCredit.isNullOrEmpty()) return cached
+        return musicBrainzService.fetchRecordingByIsrc(isrc, priority)?.also {
             musicBrainzCacheService.updateRecordingCache(it)
         } ?: cached
     }

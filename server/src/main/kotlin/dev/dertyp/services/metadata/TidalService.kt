@@ -516,6 +516,69 @@ class TidalService(
         }
     }
 
+    override suspend fun getTrackByIsrc(
+        isrc: String,
+        priority: HttpClientPriority
+    ): IMetadataService.Track? {
+        val url = getUrl("/tracks") {
+            parameters {
+                append("countryCode", "US")
+                append("locale", "en-US")
+                appendAll("include", listOf("albums", "artists"))
+                append("filter[isrc]", isrc)
+            }
+        }
+
+        val response = makeRequest(url, priority = priority)
+        when (response.status) {
+            HttpStatusCode.OK -> {}
+            HttpStatusCode.TooManyRequests -> {
+                logger.warn("[getTrackByIsrc]: Too many requests, waiting 10 seconds")
+                delay(10.seconds)
+                return getTrackByIsrc(isrc, priority)
+            }
+
+            else -> {
+                println("error: ${response.status}")
+                return null
+            }
+        }
+
+        try {
+            val body =
+                response.body<TracksMultiResourceDataDocument<JsonAttribute, EmptyRelationships>>()
+
+            val trackObj = body.data.firstOrNull() ?: return null
+
+            val albumIds =
+                listOfNotNull(trackObj.relationships?.albums?.data?.firstOrNull()?.id)
+            val imageUrls = getImageUrlsByAlbumIds(albumIds)
+
+            val albums = body.included?.mapAttributes<AlbumsAttributes>() ?: emptyMap()
+            val artists = body.included?.mapAttributes<ArtistsAttributes>() ?: emptyMap()
+
+            return trackObj.attributes?.let { track ->
+                val albumId = trackObj.relationships?.albums?.data?.firstOrNull()?.id
+                IMetadataService.Track(
+                    id = trackObj.id,
+                    title = track.title,
+                    duration = track.duration,
+                    createdAt = track.createdAt,
+                    artists = trackObj.artists(artists),
+                    images = trackObj.images(imageUrls),
+                    albumId = albumId,
+                    albumTitle = albumId?.let { albums[it]?.title },
+                    isrc = track.isrc
+                )
+            }?.also { writeToJedis(it) }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            println(response.bodyAsText())
+
+            return null
+        }
+    }
+
     override suspend fun getTracksByIds(
         trackIds: List<String>,
         priority: HttpClientPriority

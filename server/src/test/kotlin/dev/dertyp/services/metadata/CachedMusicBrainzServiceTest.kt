@@ -1,17 +1,7 @@
 package dev.dertyp.services.metadata
 
-import dev.dertyp.data.MusicBrainzArtist
-import dev.dertyp.data.MusicBrainzMedia
-import dev.dertyp.data.MusicBrainzRecording
-import dev.dertyp.data.MusicBrainzRelease
-import dev.dertyp.data.MusicBrainzReleaseGroup
-import dev.dertyp.data.MusicBrainzTrack
-import io.mockk.MockKMatcherScope
-import io.mockk.clearMocks
-import io.mockk.coEvery
-import io.mockk.coVerify
-import io.mockk.mockk
-import io.mockk.unmockkAll
+import dev.dertyp.data.*
+import io.mockk.*
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -91,15 +81,37 @@ class CachedMusicBrainzServiceTest {
     @Test
     fun `getRecording fetch logic`() = runBlocking {
         val id = UUID.randomUUID()
+        val artists = listOf(MusicBrainzArtistCredit(name = "Artist", artist = MusicBrainzArtist(id = UUID.randomUUID(), name = "Artist")))
         testMetadataFetchLogic(
             rpcCall = { rpcService.getRecording(it) },
             cacheGet = { musicBrainzCacheService.getRecording(any()) },
             networkFetch = { musicBrainzService.fetchRecordingById(any(), any()) },
             cacheUpdate = { musicBrainzCacheService.updateRecordingCache(any()) },
-            cachedValue = MusicBrainzRecording(id = id, fetchedAt = 123L),
-            fetchedValue = MusicBrainzRecording(id = id, fetchedAt = 456L),
-            fetchedAtZeroValue = MusicBrainzRecording(id = id, fetchedAt = 0L)
+            cachedValue = MusicBrainzRecording(id = id, title = "Title", artistCredit = artists, fetchedAt = 123L),
+            fetchedValue = MusicBrainzRecording(id = id, title = "Title", artistCredit = artists, fetchedAt = 456L),
+            fetchedAtZeroValue = MusicBrainzRecording(id = id, title = "Title", artistCredit = artists, fetchedAt = 0L)
         )
+    }
+
+    @Test
+    fun `getRecording should fetch from network if cached recording is incomplete`() = runBlocking {
+        val id = UUID.randomUUID()
+        val artists = listOf(MusicBrainzArtistCredit(name = "Artist", artist = MusicBrainzArtist(id = UUID.randomUUID(), name = "Artist")))
+        val completeRecording = MusicBrainzRecording(id = id, title = "Title", artistCredit = artists, fetchedAt = 456L)
+
+        val incomplete1 = MusicBrainzRecording(id = id, title = null, artistCredit = artists, fetchedAt = 123L)
+        coEvery { musicBrainzCacheService.getRecording(id) } returns incomplete1
+        coEvery { musicBrainzService.fetchRecordingById(id, any()) } returns completeRecording
+        coEvery { musicBrainzCacheService.updateRecordingCache(completeRecording) } returns mockk()
+        
+        assertEquals(completeRecording, rpcService.getRecording(id))
+        coVerify(exactly = 1) { musicBrainzService.fetchRecordingById(id, any()) }
+
+        val incomplete2 = MusicBrainzRecording(id = id, title = "Title", artistCredit = emptyList(), fetchedAt = 123L)
+        coEvery { musicBrainzCacheService.getRecording(id) } returns incomplete2
+        
+        assertEquals(completeRecording, rpcService.getRecording(id))
+        coVerify(exactly = 2) { musicBrainzService.fetchRecordingById(id, any()) }
     }
 
     @Test
@@ -129,5 +141,34 @@ class CachedMusicBrainzServiceTest {
             fetchedValue = MusicBrainzReleaseGroup(id = id, title = "T", fetchedAt = 456L),
             fetchedAtZeroValue = MusicBrainzReleaseGroup(id = id, title = "T", fetchedAt = 0L)
         )
+    }
+
+    @Test
+    fun `getRecordingByIsrc fetch logic`() = runBlocking {
+        val id = UUID.randomUUID()
+        val isrc = "USUM71900764"
+        val artists = listOf(MusicBrainzArtistCredit(name = "Artist", artist = MusicBrainzArtist(id = UUID.randomUUID(), name = "Artist")))
+        val cachedValue = MusicBrainzRecording(id = id, title = "Title", artistCredit = artists, fetchedAt = 123L, isrcs = listOf(isrc))
+        val fetchedValue = MusicBrainzRecording(id = id, title = "Title", artistCredit = artists, fetchedAt = 456L, isrcs = listOf(isrc))
+        val fetchedAtZeroValue = MusicBrainzRecording(id = id, title = "Title", artistCredit = artists, fetchedAt = 0L, isrcs = listOf(isrc))
+
+        coEvery { musicBrainzCacheService.getRecordingByIsrc(isrc) } returns cachedValue
+        assertEquals(cachedValue, rpcService.getRecordingByIsrc(isrc))
+        coVerify(exactly = 0) { musicBrainzService.fetchRecordingByIsrc(any(), any()) }
+
+        coEvery { musicBrainzCacheService.getRecordingByIsrc(isrc) } returns fetchedAtZeroValue
+        coEvery { musicBrainzService.fetchRecordingByIsrc(isrc, any()) } returns fetchedValue
+        coEvery { musicBrainzCacheService.updateRecordingCache(any()) } returns mockk()
+        assertEquals(fetchedValue, rpcService.getRecordingByIsrc(isrc))
+        coVerify(exactly = 1) { musicBrainzService.fetchRecordingByIsrc(isrc, any()) }
+        coVerify(exactly = 1) { musicBrainzCacheService.updateRecordingCache(any()) }
+
+        clearMocks(musicBrainzService, musicBrainzCacheService, answers = true, verificationMarks = true)
+        coEvery { musicBrainzCacheService.getRecordingByIsrc(isrc) } returns null
+        coEvery { musicBrainzService.fetchRecordingByIsrc(isrc, any()) } returns fetchedValue
+        coEvery { musicBrainzCacheService.updateRecordingCache(any()) } returns mockk()
+        assertEquals(fetchedValue, rpcService.getRecordingByIsrc(isrc))
+        coVerify(exactly = 1) { musicBrainzService.fetchRecordingByIsrc(isrc, any()) }
+        coVerify(exactly = 1) { musicBrainzCacheService.updateRecordingCache(any()) }
     }
 }

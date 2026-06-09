@@ -7,6 +7,7 @@ import dev.dertyp.dbQuery
 import dev.dertyp.services.Service
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.less
 import org.jetbrains.exposed.v1.jdbc.*
@@ -122,63 +123,78 @@ class MusicBrainzCacheService : Service() {
 
     suspend fun getRecording(id: UUID): MusicBrainzRecording? = dbQuery {
         MBRecordingTable.selectAll().where { MBRecordingTable.id eq id }.singleOrNull()?.let { row ->
-            val artistCredits = MBRecordingArtistCreditTable
-                .leftJoin(MBArtistTable)
-                .selectAll()
-                .where { MBRecordingArtistCreditTable.recordingId eq id }
-                .orderBy(MBRecordingArtistCreditTable.position)
-                .map { creditRow ->
-                    MusicBrainzArtistCredit(
-                        name = creditRow[MBRecordingArtistCreditTable.name],
-                        joinphrase = creditRow[MBRecordingArtistCreditTable.joinPhrase],
-                        artist = MusicBrainzArtist(
-                            id = creditRow[MBArtistTable.id].value,
-                            name = creditRow[MBArtistTable.name],
-                            sortName = creditRow[MBArtistTable.sortName]
-                        )
-                    )
-                }
-
-            val releases = MBRecordingReleaseTable
-                .leftJoin(MBReleaseTable)
-                .selectAll()
-                .where { MBRecordingReleaseTable.recordingId eq id }
-                .map { releaseRow ->
-                    MusicBrainzRelease(
-                        id = releaseRow[MBReleaseTable.id].value,
-                        title = releaseRow[MBReleaseTable.title]
-                    )
-                }
-
-            val isrcs = MBRecordingIsrcTable
-                .selectAll()
-                .where { MBRecordingIsrcTable.recordingId eq id }
-                .map { it[MBRecordingIsrcTable.isrc] }
-
-            val relations = MBRelationTable
-                .selectAll()
-                .where { MBRelationTable.ownerId eq id }
-                .map { relRow ->
-                    MusicBrainzRelation(
-                        type = relRow[MBRelationTable.type],
-                        url = MusicBrainzRelationUrl(
-                            id = relRow[MBRelationTable.id],
-                            resource = relRow[MBRelationTable.resource]
-                        )
-                    )
-                }
-
-            MusicBrainzRecording(
-                id = id,
-                title = row[MBRecordingTable.title],
-                length = row[MBRecordingTable.length],
-                artistCredit = artistCredits,
-                releases = releases,
-                isrcs = isrcs,
-                relations = relations,
-                fetchedAt = row[MBRecordingTable.lastUpdate]
-            )
+            mapRecording(id, row)
         }
+    }
+
+    suspend fun getRecordingByIsrc(isrc: String): MusicBrainzRecording? = dbQuery {
+        MBRecordingIsrcTable
+            .leftJoin(MBRecordingTable)
+            .selectAll()
+            .where { MBRecordingIsrcTable.isrc eq isrc }
+            .singleOrNull()?.let { row ->
+                val id = row[MBRecordingTable.id].value
+                mapRecording(id, row)
+            }
+    }
+
+    private fun mapRecording(id: UUID, row: ResultRow): MusicBrainzRecording {
+        val artistCredits = MBRecordingArtistCreditTable
+            .leftJoin(MBArtistTable)
+            .selectAll()
+            .where { MBRecordingArtistCreditTable.recordingId eq id }
+            .orderBy(MBRecordingArtistCreditTable.position)
+            .map { creditRow ->
+                MusicBrainzArtistCredit(
+                    name = creditRow[MBRecordingArtistCreditTable.name],
+                    joinphrase = creditRow[MBRecordingArtistCreditTable.joinPhrase],
+                    artist = MusicBrainzArtist(
+                        id = creditRow[MBArtistTable.id].value,
+                        name = creditRow[MBArtistTable.name],
+                        sortName = creditRow[MBArtistTable.sortName]
+                    )
+                )
+            }
+
+        val releases = MBRecordingReleaseTable
+            .leftJoin(MBReleaseTable)
+            .selectAll()
+            .where { MBRecordingReleaseTable.recordingId eq id }
+            .map { releaseRow ->
+                MusicBrainzRelease(
+                    id = releaseRow[MBReleaseTable.id].value,
+                    title = releaseRow[MBReleaseTable.title]
+                )
+            }
+
+        val isrcs = MBRecordingIsrcTable
+            .selectAll()
+            .where { MBRecordingIsrcTable.recordingId eq id }
+            .map { it[MBRecordingIsrcTable.isrc] }
+
+        val relations = MBRelationTable
+            .selectAll()
+            .where { MBRelationTable.ownerId eq id }
+            .map { relRow ->
+                MusicBrainzRelation(
+                    type = relRow[MBRelationTable.type],
+                    url = MusicBrainzRelationUrl(
+                        id = relRow[MBRelationTable.id],
+                        resource = relRow[MBRelationTable.resource]
+                    )
+                )
+            }
+
+        return MusicBrainzRecording(
+            id = id,
+            title = row[MBRecordingTable.title],
+            length = row[MBRecordingTable.length],
+            artistCredit = artistCredits,
+            releases = releases,
+            isrcs = isrcs,
+            relations = relations,
+            fetchedAt = row[MBRecordingTable.lastUpdate]
+        )
     }
 
     suspend fun getRelease(id: UUID): MusicBrainzRelease? = dbQuery {

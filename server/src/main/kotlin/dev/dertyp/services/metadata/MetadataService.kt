@@ -218,6 +218,16 @@ abstract class MetadataService(
         priority: HttpClientPriority = HttpClientPriority.NORMAL
     ): IMetadataService.Track? = null
 
+    override suspend fun getTrackByIsrc(
+        type: MetadataType,
+        isrc: String
+    ): IMetadataService.Track? = getTrackByIsrc(isrc)
+
+    open suspend fun getTrackByIsrc(
+        isrc: String,
+        priority: HttpClientPriority = HttpClientPriority.NORMAL
+    ): IMetadataService.Track? = null
+
     override suspend fun getTracksByIds(
         type: MetadataType,
         trackIds: List<String>

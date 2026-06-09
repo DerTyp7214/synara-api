@@ -312,4 +312,67 @@ class TidalServiceTest : KoinTest {
         assertEquals(1, tracks.size)
         assertEquals("Track 1", tracks[0].title)
     }
+
+    @Test
+    fun `getTrackByIsrc should return track for valid ISRC`() = runBlocking {
+        val isrc = "USUM71900764"
+        mockEngine = MockEngine { request ->
+            when (request.url.encodedPath) {
+                "/v1/oauth2/token" -> respond(
+                    content = """{"access_token": "test-token", "token_type": "Bearer", "expires_in": 3600}""",
+                    status = HttpStatusCode.OK,
+                    headers = headersOf(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+                )
+                "/v2/tracks" -> {
+                    assertEquals(isrc, request.url.parameters["filter[isrc]"])
+                    respond(
+                        content = """
+                            {
+                              "data": [
+                                {
+                                  "id": "track-isrc-1",
+                                  "type": "tracks",
+                                  "attributes": {
+                                    "title": "Test Track ISRC",
+                                    "duration": "PT3M",
+                                    "isrc": "$isrc",
+                                    "explicit": false,
+                                    "mediaTags": [],
+                                    "popularity": 0.5
+                                  },
+                                  "relationships": {
+                                    "albums": { "data": [{"id": "album-1", "type": "albums"}], "links": { "self": "url" } },
+                                    "artists": { "data": [{"id": "artist-1", "type": "artists"}], "links": { "self": "url" } }
+                                  }
+                                }
+                              ],
+                              "included": [
+                                { "id": "artist-1", "type": "artists", "attributes": { "name": "Artist 1", "popularity": 0.9 } },
+                                { "id": "album-1", "type": "albums", "attributes": { "barcodeId": "123", "title": "Album 1", "duration": "PT40M", "explicit": false, "mediaTags": [], "numberOfItems": 10, "numberOfVolumes": 1, "popularity": 0.5, "type": "ALBUM" } }
+                              ],
+                              "links": { "self": "/v2/tracks" }
+                            }
+                        """.trimIndent(),
+                        status = HttpStatusCode.OK,
+                        headers = headersOf(HttpHeaders.ContentType, "application/vnd.api+json")
+                    )
+                }
+                "/v2/albums/album-1/relationships/coverArt" -> respond(
+                    content = """{"data": [], "included": [], "links": {"self": "url"}}""",
+                    status = HttpStatusCode.OK,
+                    headers = headersOf(HttpHeaders.ContentType, "application/vnd.api+json")
+                )
+                else -> respondError(HttpStatusCode.NotFound)
+            }
+        }
+        every { ApiClient.instance } returns HttpClient(mockEngine) {
+            install(ContentNegotiation) { json(ApplicationScope.json) }
+        }
+
+        val track = tidalService.getTrackByIsrc(isrc)
+
+        assertEquals("track-isrc-1", track?.id)
+        assertEquals("Test Track ISRC", track?.title)
+        assertEquals(isrc, track?.isrc)
+    }
 }

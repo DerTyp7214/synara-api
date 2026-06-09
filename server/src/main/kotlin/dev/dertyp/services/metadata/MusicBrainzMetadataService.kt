@@ -2,6 +2,7 @@ package dev.dertyp.services.metadata
 
 import dev.dertyp.PlatformUUID
 import dev.dertyp.core.HttpClientPriority
+import dev.dertyp.data.MusicBrainzRecording
 import dev.dertyp.getDateFromISO
 import io.ktor.client.request.HttpRequestBuilder
 import io.ktor.server.application.ApplicationEnvironment
@@ -98,15 +99,25 @@ class MusicBrainzMetadataService(
 
     override suspend fun getTrackByMbId(mbId: PlatformUUID, priority: HttpClientPriority): IMetadataService.Track? {
         val recording = musicBrainzService.getRecording(mbId) ?: return null
+        return mapTrack(recording, priority)
+    }
+
+    override suspend fun getTrackByIsrc(isrc: String, priority: HttpClientPriority): IMetadataService.Track? {
+        val recording = musicBrainzService.getRecordingByIsrc(isrc) ?: return null
+        return mapTrack(recording, priority)
+    }
+
+    private suspend fun mapTrack(recording: MusicBrainzRecording, priority: HttpClientPriority): IMetadataService.Track {
         val firstRelease = recording.releases?.firstOrNull()
         return IMetadataService.Track(
             id = recording.id.toString(),
             title = recording.title ?: "",
             artists = recording.artistCredit?.mapNotNull { it.name ?: it.artist?.name } ?: emptyList(),
             duration = recording.length?.milliseconds ?: Duration.ZERO,
-            images = getImageUrlByTrackMbId(mbId, priority),
+            images = getImageUrlByTrackMbId(recording.id, priority),
             albumId = firstRelease?.id?.toString(),
-            albumTitle = firstRelease?.title
+            albumTitle = firstRelease?.title,
+            isrc = recording.isrcs?.firstOrNull()
         )
     }
 

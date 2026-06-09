@@ -333,8 +333,18 @@ abstract class BaseIndexer(
         val cover = audioFile.coverImage
         val lyrics = tag.getFirst(FieldKey.LYRICS) ?: ""
         val year = tag.getFirst(FieldKey.YEAR)
-        val musicBrainzId = tag.getFirst(FieldKey.MUSICBRAINZ_TRACK_ID).ifBlank { null }?.let {
+        var musicBrainzId = tag.getFirst(FieldKey.MUSICBRAINZ_TRACK_ID).ifBlank { null }?.let {
             try { UUID.fromString(it) } catch (_: Exception) { null }
+        }
+
+        if (musicBrainzId == null && !isrc.isNullOrBlank() && metadataType == IMetadataService.MetadataType.musicBrainz) {
+            try {
+                val recording = context.metadataService.getTrackByIsrc(IMetadataService.MetadataType.musicBrainz, isrc)
+                if (recording != null) {
+                    musicBrainzId = try { UUID.fromString(recording.id) } catch (_: Exception) { null }
+                }
+            } catch (_: Exception) {
+            }
         }
 
         val duration = header.preciseTrackLength.seconds.inWholeMilliseconds

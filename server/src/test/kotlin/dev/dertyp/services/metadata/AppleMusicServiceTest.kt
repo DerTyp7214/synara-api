@@ -204,4 +204,101 @@ class AppleMusicServiceTest : KoinTest {
         assertTrue(hollywoodAlbum.additionalTitles.contains("Papa ist in Hollywood"))
         assertTrue(hollywoodAlbum.additionalTitles.contains("Tilidin Weg"))
     }
+
+    @Test
+    fun `getTrackByIsrc should return track from catalog API when token is provided`() = runBlocking {
+        val isrc = "USUM71900764"
+
+        val tokenField = appleMusicService.javaClass.getDeclaredField("appleMusicToken")
+        tokenField.isAccessible = true
+        tokenField.set(appleMusicService, "mock-token")
+        val expirationField = appleMusicService.javaClass.getDeclaredField("tokenExpiration")
+        expirationField.isAccessible = true
+        expirationField.set(appleMusicService, System.currentTimeMillis() + 100000)
+
+        mockEngine = MockEngine { request ->
+            if (request.url.toString().contains("api.music.apple.com")) {
+                assertEquals("Bearer mock-token", request.headers[HttpHeaders.Authorization])
+                assertEquals(isrc, request.url.parameters["filter[isrc]"])
+                respond(
+                    content = """
+                        {
+                          "data": [
+                            {
+                              "id": "1471758375",
+                              "type": "songs",
+                              "attributes": {
+                                "name": "Lover",
+                                "artistName": "Taylor Swift",
+                                "durationInMillis": 221000,
+                                "artwork": {
+                                  "url": "https://example.com/image-{w}x{h}-{f}.jpg"
+                                }
+                              }
+                            }
+                          ]
+                        }
+                    """.trimIndent(),
+                    status = HttpStatusCode.OK,
+                    headers = headersOf(HttpHeaders.ContentType, "application/json")
+                )
+            } else {
+                respondError(HttpStatusCode.NotFound)
+            }
+        }
+        every { ApiClient.instance } returns HttpClient(mockEngine) {
+            install(ContentNegotiation) { json(ApplicationScope.json) }
+        }
+
+        val track = appleMusicService.getTrackByIsrc(isrc)
+
+        assertEquals("1471758375", track?.id)
+        assertEquals("Lover", track?.title)
+        assertEquals("https://example.com/image-600x600-jpg.jpg", track?.images?.firstOrNull()?.url)
+    }
+
+    @Test
+    fun `getTrackByIsrc should return track for valid ISRC using iTunes fallback`() = runBlocking {
+        every { environment.config.propertyOrNull("appleMusic.teamId") } returns null
+        every { environment.config.propertyOrNull("appleMusic.keyId") } returns null
+        every { environment.config.propertyOrNull("appleMusic.p8Path") } returns null
+
+        val isrc = "USUM71900764"
+        mockEngine = MockEngine { request ->
+            assertEquals("/lookup", request.url.encodedPath)
+            assertEquals(isrc, request.url.parameters["isrc"])
+            respond(
+                content = """
+                    {
+                      "resultCount": 1,
+                      "results": [
+                        {
+                          "wrapperType": "track",
+                          "kind": "song",
+                          "collectionId": 1471758375,
+                          "artistName": "Taylor Swift",
+                          "collectionName": "Lover",
+                          "trackName": "Lover",
+                          "artworkUrl100": "https://example.com/100x100bb.jpg",
+                          "trackCount": 18,
+                          "trackTimeMillis": 221000,
+                          "primaryIsrc": "$isrc"
+                        }
+                      ]
+                    }
+                """.trimIndent(),
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, "text/javascript; charset=utf-8")
+            )
+        }
+        every { ApiClient.instance } returns HttpClient(mockEngine) {
+            install(ContentNegotiation) { json(ApplicationScope.json) }
+        }
+
+        val track = appleMusicService.getTrackByIsrc(isrc)
+
+        assertEquals("1471758375", track?.id)
+        assertEquals("Lover", track?.title)
+        assertEquals(isrc, track?.isrc)
+    }
 }

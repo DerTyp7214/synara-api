@@ -73,6 +73,48 @@ class SpotifyService(
         } ?: emptyList()
     }
 
+    override suspend fun getTrackByIsrc(
+        isrc: String,
+        priority: HttpClientPriority
+    ): IMetadataService.Track? {
+        val response = ApiClient.instance.get("https://api.spotify.com/v1/search") {
+            val token = getAccessToken()
+            header(HttpHeaders.Authorization, "${token.tokenType} ${token.accessToken}")
+            header(HttpHeaders.ContentType, ContentType.Application.Json)
+            parameter("q", "isrc:$isrc")
+            parameter("type", "track")
+            parameter("limit", 1)
+        }
+
+        if (response.status == HttpStatusCode.TooManyRequests) {
+            delay(30.seconds)
+            return getTrackByIsrc(isrc, priority)
+        }
+
+        if (response.status != HttpStatusCode.OK) {
+            logger.error("Fetching track for ISRC $isrc failed with status ${response.status}")
+            return null
+        }
+
+        val searchResponse = response.body<SearchResponse>()
+        val track = searchResponse.tracks?.items?.firstOrNull() ?: return null
+
+        return IMetadataService.Track(
+            id = track.id,
+            title = track.name,
+            artists = track.artists.map { it.name },
+            duration = track.durationMs.milliseconds,
+            images = track.album.images.map { image ->
+                IMetadataService.Image(
+                    url = image.url,
+                    width = image.width,
+                    height = image.height,
+                )
+            },
+            isrc = track.externalIds?.isrc
+        )
+    }
+
     override suspend fun searchArtists(
         query: String,
         limit: Int,

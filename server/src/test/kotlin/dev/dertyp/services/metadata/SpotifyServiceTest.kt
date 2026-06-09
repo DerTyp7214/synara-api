@@ -159,4 +159,54 @@ class SpotifyServiceTest : KoinTest {
         assertEquals("album-id-1", albums[0].id)
         assertEquals("Test Album", albums[0].title)
     }
+
+    @Test
+    fun `getTrackByIsrc should return track for valid ISRC`() = runBlocking {
+        val isrc = "USUM71900764"
+        mockEngine = MockEngine { request ->
+            when (request.url.encodedPath) {
+                "/api/token" -> respond(
+                    content = """{"access_token": "test-token", "token_type": "Bearer", "expires_in": 3600}""",
+                    status = HttpStatusCode.OK,
+                    headers = headersOf(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+                )
+                "/v1/search" -> {
+                    assertEquals("isrc:$isrc", request.url.parameters["q"])
+                    assertEquals("track", request.url.parameters["type"])
+                    respond(
+                        content = """
+                            {
+                              "tracks": {
+                                "href": "url", "limit": 1, "next": null, "offset": 0, "previous": null, "total": 1,
+                                "items": [
+                                  {
+                                    "id": "track-id-1",
+                                    "name": "Test Track",
+                                    "duration_ms": 180000,
+                                    "href": "https://api.spotify.com/v1/tracks/track-id-1",
+                                    "artists": [{ "id": "a1", "name": "Test Artist", "href": "h", "uri": "u" }],
+                                    "album": { "id": "al1", "name": "Test Album", "href": "h", "total_tracks": 1, "artists": [], "images": [{ "url": "https://example.com/cover.jpg", "width": 640, "height": 640 }] },
+                                    "external_ids": { "isrc": "$isrc" }
+                                  }
+                                ]
+                              }
+                            }
+                        """.trimIndent(),
+                        status = HttpStatusCode.OK,
+                        headers = headersOf(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+                    )
+                }
+                else -> respondError(HttpStatusCode.NotFound)
+            }
+        }
+        every { ApiClient.instance } returns HttpClient(mockEngine) {
+            install(ContentNegotiation) { json(ApplicationScope.json) }
+        }
+
+        val track = spotifyService.getTrackByIsrc(isrc)
+
+        assertEquals("track-id-1", track?.id)
+        assertEquals("Test Track", track?.title)
+        assertEquals(isrc, track?.isrc)
+    }
 }

@@ -71,8 +71,9 @@ class TidalIndexer(context: PluginContext) : BaseIndexer(context, IMetadataServi
                 }
             }.awaitAll().filterNotNull()
 
-            val tracksToResolve = audioFilesWithTags.filter { it.second.album == null && it.second.musicBrainzTrackId != null }
+            val tracksToResolve = audioFilesWithTags.filter { it.second.album == null && (it.second.musicBrainzTrackId != null || it.second.isrc != null) }
             val mbTrackIds = tracksToResolve.mapNotNull { it.second.musicBrainzTrackId }.distinct()
+            val isrcsToResolve = tracksToResolve.filter { it.second.musicBrainzTrackId == null }.mapNotNull { it.second.isrc }.distinct()
 
             val resolvedMbTracks = if (mbTrackIds.isNotEmpty()) {
                 try {
@@ -83,7 +84,19 @@ class TidalIndexer(context: PluginContext) : BaseIndexer(context, IMetadataServi
                 }
             } else emptyMap()
 
-            val mbAlbumIds = resolvedMbTracks.values.mapNotNull { it.albumId }.distinct()
+            val resolvedIsrcTracks = if (isrcsToResolve.isNotEmpty()) {
+                isrcsToResolve.mapNotNull { isrc ->
+                    try {
+                        context.metadataService.getTrackByIsrc(IMetadataService.MetadataType.musicBrainz, isrc)
+                    } catch (_: Exception) {
+                        null
+                    }
+                }.associateBy { it.isrc!! }
+            } else emptyMap()
+
+            val allResolvedTracks = resolvedMbTracks + resolvedIsrcTracks.values.associateBy { it.id }
+
+            val mbAlbumIds = allResolvedTracks.values.mapNotNull { it.albumId }.distinct()
             val resolvedMbAlbums = if (mbAlbumIds.isNotEmpty()) {
                 try {
                     context.metadataService.getAlbumsByIds(IMetadataService.MetadataType.musicBrainz, mbAlbumIds).associateBy { it.id }
@@ -95,6 +108,7 @@ class TidalIndexer(context: PluginContext) : BaseIndexer(context, IMetadataServi
 
             audioFilesWithTags.forEach { (file, audioFile, hash) ->
                 val mbTrack = audioFile.musicBrainzTrackId?.let { resolvedMbTracks[it] }
+                    ?: audioFile.isrc?.let { resolvedIsrcTracks[it] }
 
                 val name = mbTrack?.albumTitle ?: audioFile.album ?: audioFile.title ?: "Unknown Album"
                 val delimiter = getArtistDelimiter(audioFile)
