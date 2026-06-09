@@ -36,10 +36,6 @@ val mbRecordingSearchTable = MBRecordingTable.alias("mbRecordingSearch")
 fun ColumnSet.withMBRecordingSearch(): ColumnSet = this
     .leftJoin(mbRecordingSearchTable, { SongMusicBrainzTable.musicBrainzId }, { mbRecordingSearchTable[MBRecordingTable.id] })
 
-val mbRecordingSearchColumns: List<Expression<out String?>> = listOf(
-    mbRecordingSearchTable[MBRecordingTable.title]
-)
-
 fun Query.paging(page: Int, pageSize: Int, offset: Int = 0) = apply {
     offset((pageSize * page).toLong())
     limit(pageSize + offset)
@@ -79,7 +75,8 @@ fun Query.rankedSearchQuery(
     queryString: String,
     weights: List<Int>,
     columns: Collection<Expression<out String?>>,
-    sortFallback: Column<*>? = null
+    sortFallback: Column<*>? = null,
+    searchVectorColumn: Column<*>? = null
 ): Query {
     val normalizedQuery = if (currentDialect is PostgreSQLDialect) {
         queryString.replace(Regex("[&|!()\\\\:*'\"]"), " ")
@@ -99,30 +96,43 @@ fun Query.rankedSearchQuery(
 
         var whereClause: Op<Boolean>? = null
 
-        for (token in positiveTokens) {
-            val tsQuery = toTsQuery("$token:*")
-
-            val matchConditions = columns.map { col ->
-                val coalesceCol = CustomFunction<String>("coalesce", VarCharColumnType(), col, stringLiteral(""))
-                val vector = toTsVector(coalesceCol)
-                MatchOp(vector, tsQuery) as Op<Boolean>
+        if (searchVectorColumn != null) {
+            for (token in positiveTokens) {
+                val tokenMatchOp = MatchOp(searchVectorColumn, toTsQuery("$token:*"))
+                whereClause = whereClause?.let { it and tokenMatchOp } ?: tokenMatchOp
             }
-            val tokenMatchOp = matchConditions.reduce { acc, op -> acc or op }
-            whereClause = whereClause?.let { it and tokenMatchOp } ?: tokenMatchOp
-        }
-
-        for (token in negativeTokens) {
-            val clean = token.substring(1)
-            if (clean.isBlank()) continue
-            val tsQuery = toTsQuery("$clean:*")
-
-            val matchConditions = columns.map { col ->
-                val coalesceCol = CustomFunction<String>("coalesce", VarCharColumnType(), col, stringLiteral(""))
-                val vector = toTsVector(coalesceCol)
-                MatchOp(vector, tsQuery) as Op<Boolean>
+            for (token in negativeTokens) {
+                val clean = token.substring(1)
+                if (clean.isBlank()) continue
+                val tokenMatchOp = not(MatchOp(searchVectorColumn, toTsQuery("$clean:*")))
+                whereClause = whereClause?.let { it and tokenMatchOp } ?: tokenMatchOp
             }
-            val tokenMatchOp = matchConditions.reduce { acc, op -> acc or op }
-            whereClause = whereClause?.let { it and not(tokenMatchOp) } ?: not(tokenMatchOp)
+        } else {
+            for (token in positiveTokens) {
+                val tsQuery = toTsQuery("$token:*")
+
+                val matchConditions = columns.map { col ->
+                    val coalesceCol = CustomFunction("coalesce", VarCharColumnType(), col, stringLiteral(""))
+                    val vector = toTsVector(coalesceCol)
+                    MatchOp(vector, tsQuery) as Op<Boolean>
+                }
+                val tokenMatchOp = matchConditions.reduce { acc, op -> acc or op }
+                whereClause = whereClause?.let { it and tokenMatchOp } ?: tokenMatchOp
+            }
+
+            for (token in negativeTokens) {
+                val clean = token.substring(1)
+                if (clean.isBlank()) continue
+                val tsQuery = toTsQuery("$clean:*")
+
+                val matchConditions = columns.map { col ->
+                    val coalesceCol = CustomFunction("coalesce", VarCharColumnType(), col, stringLiteral(""))
+                    val vector = toTsVector(coalesceCol)
+                    MatchOp(vector, tsQuery) as Op<Boolean>
+                }
+                val tokenMatchOp = matchConditions.reduce { acc, op -> acc or op }
+                whereClause = whereClause?.let { it and not(tokenMatchOp) } ?: not(tokenMatchOp)
+            }
         }
 
         if (whereClause != null) {
@@ -132,10 +142,10 @@ fun Query.rankedSearchQuery(
         }
 
         val exactScoreExpression = columns.mapIndexed { index, col ->
-            val coalesceCol = CustomFunction<String>("coalesce", VarCharColumnType(), col, stringLiteral(""))
+            val coalesceCol = CustomFunction("coalesce", VarCharColumnType(), col, stringLiteral(""))
             
-            val exactMatchOp = CustomFunction<String>("lower", VarCharColumnType(), coalesceCol) eq queryString.lowercase()
-            val phraseMatchOp = MatchOp(toTsVector(coalesceCol), CustomFunction<String>("phraseto_tsquery", VarCharColumnType(), stringLiteral("simple"), stringParam(queryString))) as Op<Boolean>
+            val exactMatchOp = CustomFunction("lower", VarCharColumnType(), coalesceCol) eq queryString.lowercase()
+            val phraseMatchOp = MatchOp(toTsVector(coalesceCol), CustomFunction("phraseto_tsquery", VarCharColumnType(), stringLiteral("simple"), stringParam(queryString))) as Op<Boolean>
             
             val exactMatchBonus = case()
                 .When(exactMatchOp, intLiteral(1000 * weights[index]))

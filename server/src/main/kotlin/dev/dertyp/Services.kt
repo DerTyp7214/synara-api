@@ -2,6 +2,7 @@ package dev.dertyp
 
 import dev.dertyp.plugins.PluginManager
 import dev.dertyp.services.import.ImportService
+import dev.dertyp.services.SearchIndexWorker
 import io.ktor.server.application.Application
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -11,9 +12,11 @@ import org.koin.ktor.ext.inject
 fun Application.configureServices() {
     val pluginManager by inject<PluginManager>()
     val importService by inject<ImportService>()
+    val searchIndexWorker by inject<SearchIndexWorker>()
 
     CoroutineScope(Dispatchers.IO).launch {
         launch { pluginManager.startService() }
         launch { importService.startService() }
+        launch { searchIndexWorker.startService(this) }
     }
 }

@@ -138,6 +138,7 @@ fun Application.module() {
             singleOf(::CachedMusicBrainzService)
             singleOf(::OdesliService)
             singleOf(::ReleaseService)
+            singleOf(::SearchIndexWorker)
 
             ClassGraph()
                 .enableClassInfo()

@@ -220,7 +220,7 @@ class SongRpcService(private val user: User, private val songService: SongServic
         songService.extendedMetadata(id)
 }
 
-class SongService : SongLibrary, Service() {
+class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : SongLibrary, Service() {
     private val environment by inject<ApplicationEnvironment>()
     private val musicBrainzService by inject<MusicBrainzService>()
     private val cachedMusicBrainzService by inject<CachedMusicBrainzService>()
@@ -1013,7 +1013,8 @@ class SongService : SongLibrary, Service() {
                     mbArtistAliasSearchTable[MBArtistAliasTable.name],
                     mbArtistSearchTable[MBArtistTable.disambiguation]
                 ),
-                SongTable.id
+                SongTable.id,
+                searchVectorColumn = if (searchIndexWorker != null) SongTable.searchVector else null
             ).let { it ->
                 if (liked) it.andWhere { UserSongTable.isFavourite eq true }
                 else it

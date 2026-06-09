@@ -11,4 +11,5 @@ object AlbumTable : UUIDTable("album") {
     val barcode = varchar("barcode", 32).nullable()
     val lastMetadataCheck = long("lastMetadataCheck").default(0L)
     val lastProviderEnrichment = long("lastProviderEnrichment").default(0L)
+    val searchVector = tsvector("search_vector").nullable()
 }

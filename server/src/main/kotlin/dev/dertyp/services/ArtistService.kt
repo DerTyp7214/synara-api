@@ -78,7 +78,7 @@ class ArtistRpcService(private val user: User, private val artistService: Artist
     override suspend fun removeAlias(artistId: UUID, name: String): Boolean = artistService.removeAlias(artistId, name)
 }
 
-class ArtistService : ArtistLibrary, Service() {
+class ArtistService(private val searchIndexWorker: SearchIndexWorker? = null) : ArtistLibrary, Service() {
     private val environment by inject<ApplicationEnvironment>()
     private val musicBrainzService by inject<MusicBrainzService>()
     private val cachedMusicBrainzService by inject<CachedMusicBrainzService>()
@@ -333,7 +333,8 @@ class ArtistService : ArtistLibrary, Service() {
                     artistGroupAlias[ArtistTable.name],
                     artistMemberAlias[ArtistTable.name]
                 ) + mbArtistSearchColumns,
-                ArtistTable.id
+                ArtistTable.id,
+                searchVectorColumn = if (searchIndexWorker != null) ArtistTable.searchVector else null
             )
         }
 
@@ -747,8 +748,7 @@ class ArtistService : ArtistLibrary, Service() {
         columnSet: ColumnSet.() -> ColumnSet = { this },
         query: Query.() -> Query = { this }
     ) = dbQuery {
-        val offset = if (pageSize == Int.MAX_VALUE) 0 else 1
-        val mainArtistRows = ArtistTable
+        val baseSelect = ArtistTable
             .followedArtist(userId)
             .leftJoin(ArtistAliasTable)
             .leftJoin(ArtistMusicBrainzTable)
@@ -758,6 +758,53 @@ class ArtistService : ArtistLibrary, Service() {
             .columnSet()
             .selectAll()
             .query()
+
+        val countExpression = ArtistTable.id.countDistinct()
+        val countQuery = Query(Slice(baseSelect.set.source, listOf(countExpression)), baseSelect.where)
+        baseSelect.having?.let { h -> countQuery.having { h } }
+        val total = countQuery.first()[countExpression]
+
+        if (total == 0L) return@dbQuery PaginatedResponse(
+            data = listOf(),
+            total = 0,
+            page = page,
+            pageSize = pageSize,
+        )
+
+        val sortAliases = baseSelect.orderByExpressions.mapIndexed { index, (expr, _) ->
+            expr.alias("sort_$index")
+        }
+        val idQuery = Query(Slice(baseSelect.set.source, listOf(ArtistTable.id) + sortAliases), baseSelect.where)
+        baseSelect.having?.let { h -> idQuery.having { h } }
+        baseSelect.orderByExpressions.forEachIndexed { index, (_, order) ->
+            idQuery.orderBy(sortAliases[index], order)
+        }
+        idQuery.withDistinct(true)
+
+        if (pageSize != Int.MAX_VALUE) {
+            idQuery.limit(pageSize)
+            idQuery.offset((page * pageSize).toLong())
+        }
+
+        val ids = idQuery.map { it[ArtistTable.id].value }.distinct()
+
+        if (ids.isEmpty()) return@dbQuery PaginatedResponse(
+            data = listOf(),
+            total = total.toInt(),
+            page = page,
+            pageSize = pageSize,
+        )
+
+        val mainArtistRows = ArtistTable
+            .followedArtist(userId)
+            .leftJoin(ArtistAliasTable)
+            .leftJoin(ArtistMusicBrainzTable)
+            .leftJoin(ArtistGenreTable)
+            .leftJoin(GenreTable)
+            .leftJoin(ImageTable, onColumn = { ArtistTable.image }, otherColumn = { ImageTable.id })
+            .columnSet()
+            .selectAll()
+            .where { ArtistTable.id inList ids }
             .toList()
 
         val groupIds = mainArtistRows
@@ -765,39 +812,30 @@ class ArtistService : ArtistLibrary, Service() {
             .map { it[ArtistTable.id].value }
             .distinct()
 
-        if (groupIds.isEmpty()) {
-            return@dbQuery mapEagerly(mainArtistRows, emptyList(), userId)
-                .distinctBy { it.id }
-                .let {
-                    PaginatedResponse(
-                        data = it.drop(page * pageSize).take(pageSize),
-                        total = it.size,
-                        page = page,
-                        pageSize = pageSize,
-                        hasNextPage = it.drop(page * pageSize).size >= pageSize + offset,
-                    )
-                }
+        val memberDataRows = if (groupIds.isNotEmpty()) {
+            ArtistTable
+                .followedArtist(userId)
+                .leftJoin(ArtistMusicBrainzTable)
+                .leftJoin(ArtistGenreTable)
+                .leftJoin(GenreTable)
+                .leftJoin(ImageTable, onColumn = { ArtistTable.image }, otherColumn = { ImageTable.id })
+                .innerJoin(ArtistMemberTable, onColumn = { ArtistTable.id }, otherColumn = { ArtistMemberTable.artistId })
+                .selectAll()
+                .where { ArtistMemberTable.groupId inList groupIds }
+                .toList()
+        } else {
+            emptyList()
         }
 
-        val memberDataRows = ArtistTable
-            .followedArtist(userId)
-            .leftJoin(ArtistMusicBrainzTable)
-            .leftJoin(ArtistGenreTable)
-            .leftJoin(GenreTable)
-            .leftJoin(ImageTable, onColumn = { ArtistTable.image }, otherColumn = { ImageTable.id })
-            .innerJoin(ArtistMemberTable, onColumn = { ArtistTable.id }, otherColumn = { ArtistMemberTable.artistId })
-            .selectAll()
-            .where { ArtistMemberTable.groupId inList groupIds }
-            .toList()
-
-        val data = mapEagerly(mainArtistRows, memberDataRows, userId).distinctBy { it.id }
+        val unsortedData = mapEagerly(mainArtistRows, memberDataRows, userId).distinctBy { it.id }
+        val data = ids.mapNotNull { id -> unsortedData.find { it.id == id } }
 
         PaginatedResponse(
-            data = data.drop(page * pageSize).take(pageSize),
-            total = data.size,
+            data = data,
+            total = total.toInt(),
             page = page,
             pageSize = pageSize,
-            hasNextPage = data.drop(page * pageSize).size >= pageSize + offset,
+            hasNextPage = (page + 1).toLong() * pageSize < total,
         )
     }
 
