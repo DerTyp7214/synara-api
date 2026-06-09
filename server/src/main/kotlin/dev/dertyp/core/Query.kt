@@ -81,39 +81,58 @@ fun Query.rankedSearchQuery(
     columns: Collection<Expression<out String?>>,
     sortFallback: Column<*>? = null
 ): Query {
-    val tokens = queryString
+    val normalizedQuery = if (currentDialect is PostgreSQLDialect) {
+        queryString.replace(Regex("[&|!()\\\\:*'\"]"), " ")
+    } else {
+        queryString
+    }
+
+    val tokens = normalizedQuery
         .split(Regex("\\s+"))
         .filter { it.isNotBlank() }
 
     if (tokens.isEmpty()) return this
 
     if (currentDialect is PostgreSQLDialect) {
-        val concatenatedColumns = columns.reduce { acc, col ->
-            CustomFunction("concat_ws", VarCharColumnType(), stringLiteral(" "), acc, CustomFunction("coalesce", VarCharColumnType(), col, stringLiteral("")))
+        val positiveTokens = tokens.filter { !it.startsWith("-") }
+        val negativeTokens = tokens.filter { it.startsWith("-") && it.length > 1 }
+
+        var whereClause: Op<Boolean>? = null
+
+        for (token in positiveTokens) {
+            val tsQuery = toTsQuery("$token:*")
+
+            val matchConditions = columns.map { col ->
+                val coalesceCol = CustomFunction<String>("coalesce", VarCharColumnType(), col, stringLiteral(""))
+                val vector = toTsVector(coalesceCol)
+                MatchOp(vector, tsQuery) as Op<Boolean>
+            }
+            val tokenMatchOp = matchConditions.reduce { acc, op -> acc or op }
+            whereClause = whereClause?.let { it and tokenMatchOp } ?: tokenMatchOp
         }
 
-        val masterVector = toTsVector(concatenatedColumns)
-        val tsQueryString = tokens.mapNotNull { token ->
-            val clean = token.replace(Regex("[&|!()\\\\:*'\"]"), "")
-            if (clean.startsWith("-") && clean.length > 1) {
-                "!" + clean.substring(1) + ":*"
-            } else if (clean.isNotBlank() && clean != "-") {
-                "$clean:*"
-            } else {
-                null
+        for (token in negativeTokens) {
+            val clean = token.substring(1)
+            if (clean.isBlank()) continue
+            val tsQuery = toTsQuery("$clean:*")
+
+            val matchConditions = columns.map { col ->
+                val coalesceCol = CustomFunction<String>("coalesce", VarCharColumnType(), col, stringLiteral(""))
+                val vector = toTsVector(coalesceCol)
+                MatchOp(vector, tsQuery) as Op<Boolean>
             }
-        }.joinToString(" & ")
+            val tokenMatchOp = matchConditions.reduce { acc, op -> acc or op }
+            whereClause = whereClause?.let { it and not(tokenMatchOp) } ?: not(tokenMatchOp)
+        }
 
-        if (tsQueryString.isBlank()) return this
-
-        val tsQuery = toTsQuery(tsQueryString)
-
-        where { masterVector match tsQuery }
+        if (whereClause != null) {
+            where { whereClause }
+        } else if (positiveTokens.isEmpty() && negativeTokens.isEmpty()) {
+            return this
+        }
 
         val exactScoreExpression = columns.mapIndexed { index, col ->
             val coalesceCol = CustomFunction<String>("coalesce", VarCharColumnType(), col, stringLiteral(""))
-            val vector = toTsVector(coalesceCol)
-            val rank = tsRank(vector, tsQuery)
             
             val exactMatchOp = coalesceCol ilike queryString
             val phraseMatchOp = coalesceCol ilike "%$queryString%"
@@ -122,8 +141,17 @@ fun Query.rankedSearchQuery(
                 .When(phraseMatchOp, intLiteral(100 * weights[index]))
                 .Else(intLiteral(0))
 
-            val rankWeighted = FloatMathOp("*", rank, intLiteral(weights[index]))
-            FloatMathOp("+", rankWeighted, exactMatchBonus)
+            var totalRankForCol: ExpressionWithColumnType<Float> = intLiteral(0).castTo(FloatColumnType())
+            
+            for (token in positiveTokens) {
+                val tsQuery = toTsQuery("$token:*")
+                val vector = toTsVector(coalesceCol)
+                val rank = tsRank(vector, tsQuery)
+                val rankWeighted = FloatMathOp("*", rank, intLiteral(weights[index]))
+                totalRankForCol = FloatMathOp("+", totalRankForCol, rankWeighted)
+            }
+            
+            FloatMathOp("+", totalRankForCol, exactMatchBonus)
         }.reduce { acc, weightedRank ->
             FloatMathOp("+", acc, weightedRank)
         }
