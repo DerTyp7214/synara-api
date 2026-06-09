@@ -145,13 +145,38 @@ class SearchIndexWorker : KoinComponent {
         val query = """
             UPDATE artist a
             SET search_vector = (
+                WITH artist_data AS (
+                    SELECT 
+                        a_inner.id,
+                        a_inner.name AS artist_name,
+                        coalesce(string_agg(DISTINCT art_alias.name, ' '), '') AS artist_aliases,
+                        coalesce(string_agg(DISTINCT grp.name, ' '), '') AS group_names,
+                        coalesce(string_agg(DISTINCT mem.name, ' '), '') AS member_names,
+                        coalesce(string_agg(DISTINCT mb_art.name, ' '), '') AS mb_art_names,
+                        coalesce(string_agg(DISTINCT mb_art_alias.name, ' '), '') AS mb_art_aliases,
+                        coalesce(string_agg(DISTINCT mb_art.disambiguation, ' '), '') AS mb_art_disambig
+                    FROM artist a_inner
+                    LEFT JOIN artistalias art_alias ON a_inner.id = art_alias."artistId"
+                    LEFT JOIN artist_member am_grp ON a_inner.id = am_grp."artistId"
+                    LEFT JOIN artist grp ON am_grp."groupId" = grp.id
+                    LEFT JOIN artist_member am_mem ON a_inner.id = am_mem."groupId"
+                    LEFT JOIN artist mem ON am_mem."artistId" = mem.id
+                    LEFT JOIN artist_musicbrainz art_mb ON a_inner.id = art_mb."artistId"
+                    LEFT JOIN mb_artist mb_art ON art_mb."musicBrainzId" = mb_art.id
+                    LEFT JOIN mb_artist_alias mb_art_alias ON mb_art.id = mb_art_alias."artistId"
+                    WHERE a_inner.id = a.id
+                    GROUP BY a_inner.id, a_inner.name
+                )
                 SELECT 
-                    setweight(to_tsvector('simple', coalesce(a_inner.name, '')), 'A') ||
-                    setweight(to_tsvector('simple', coalesce(string_agg(DISTINCT art_alias.name, ' '), '')), 'B')
-                FROM artist a_inner
-                LEFT JOIN artistalias art_alias ON a_inner.id = art_alias."artistId"
-                WHERE a_inner.id = a.id
-                GROUP BY a_inner.id, a_inner.name
+                    setweight(to_tsvector('simple', artist_name), 'A') ||
+                    setweight(to_tsvector('simple', artist_aliases), 'B') ||
+                    setweight(to_tsvector('simple', group_names || ' ' || member_names), 'C') ||
+                    setweight(to_tsvector('simple', 
+                        mb_art_names || ' ' || 
+                        mb_art_aliases || ' ' || 
+                        mb_art_disambig
+                    ), 'D')
+                FROM artist_data
             )
             WHERE a.id = ?
         """.trimIndent()
@@ -164,14 +189,40 @@ class SearchIndexWorker : KoinComponent {
         val query = """
             UPDATE album alb
             SET search_vector = (
+                WITH album_data AS (
+                    SELECT 
+                        alb_inner.id,
+                        alb_inner.name AS album_name,
+                        coalesce(string_agg(DISTINCT art.name, ' '), '') AS artist_names,
+                        coalesce(string_agg(DISTINCT art_alias.name, ' '), '') AS artist_aliases,
+                        coalesce(string_agg(DISTINCT grp.name, ' '), '') AS group_names,
+                        coalesce(string_agg(DISTINCT mem.name, ' '), '') AS member_names,
+                        coalesce(string_agg(DISTINCT mb_rel.title, ' '), '') AS mb_rel_titles,
+                        coalesce(string_agg(DISTINCT mb_rel.disambiguation, ' '), '') AS mb_rel_disambig,
+                        coalesce(string_agg(DISTINCT mb_art.name, ' '), '') AS mb_art_names,
+                        coalesce(string_agg(DISTINCT mb_art_alias.name, ' '), '') AS mb_art_aliases,
+                        coalesce(string_agg(DISTINCT mb_art.disambiguation, ' '), '') AS mb_art_disambig
+                    FROM album alb_inner
+                    LEFT JOIN albumartist aa ON alb_inner.id = aa."albumId"
+                    LEFT JOIN artist art ON aa."artistId" = art.id
+                    LEFT JOIN artistalias art_alias ON art.id = art_alias."artistId"
+                    LEFT JOIN artist_member am_grp ON art.id = am_grp."artistId"
+                    LEFT JOIN artist grp ON am_grp."groupId" = grp.id
+                    LEFT JOIN artist_member am_mem ON art.id = am_mem."groupId"
+                    LEFT JOIN artist mem ON am_mem."artistId" = mem.id
+                    LEFT JOIN album_musicbrainz amb ON alb_inner.id = amb."albumId"
+                    LEFT JOIN mb_release mb_rel ON amb."musicBrainzId" = mb_rel.id
+                    LEFT JOIN artist_musicbrainz art_mb ON art.id = art_mb."artistId"
+                    LEFT JOIN mb_artist mb_art ON art_mb."musicBrainzId" = mb_art.id
+                    LEFT JOIN mb_artist_alias mb_art_alias ON mb_art.id = mb_art_alias."artistId"
+                    WHERE alb_inner.id = alb.id
+                    GROUP BY alb_inner.id, alb_inner.name
+                )
                 SELECT 
-                    setweight(to_tsvector('simple', coalesce(alb_inner.name, '')), 'A') ||
-                    setweight(to_tsvector('simple', coalesce(string_agg(DISTINCT art.name, ' '), '')), 'B')
-                FROM album alb_inner
-                LEFT JOIN albumartist aa ON alb_inner.id = aa."albumId"
-                LEFT JOIN artist art ON aa."artistId" = art.id
-                WHERE alb_inner.id = alb.id
-                GROUP BY alb_inner.id, alb_inner.name
+                    setweight(to_tsvector('simple', album_name), 'A') ||
+                    setweight(to_tsvector('simple', artist_names || ' ' || artist_aliases || ' ' || mb_rel_titles || ' ' || mb_art_names || ' ' || mb_art_aliases), 'B') ||
+                    setweight(to_tsvector('simple', group_names || ' ' || member_names || ' ' || mb_rel_disambig || ' ' || mb_art_disambig), 'C')
+                FROM album_data
             )
             WHERE alb.id = ?
         """.trimIndent()
