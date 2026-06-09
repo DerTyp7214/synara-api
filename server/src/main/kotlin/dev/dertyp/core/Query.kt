@@ -134,8 +134,9 @@ fun Query.rankedSearchQuery(
         val exactScoreExpression = columns.mapIndexed { index, col ->
             val coalesceCol = CustomFunction<String>("coalesce", VarCharColumnType(), col, stringLiteral(""))
             
-            val exactMatchOp = coalesceCol ilike queryString
-            val phraseMatchOp = coalesceCol ilike "%$queryString%"
+            val exactMatchOp = CustomFunction<String>("lower", VarCharColumnType(), coalesceCol) eq queryString.lowercase()
+            val phraseMatchOp = MatchOp(toTsVector(coalesceCol), CustomFunction<String>("phraseto_tsquery", VarCharColumnType(), stringLiteral("simple"), stringParam(queryString))) as Op<Boolean>
+            
             val exactMatchBonus = case()
                 .When(exactMatchOp, intLiteral(1000 * weights[index]))
                 .When(phraseMatchOp, intLiteral(100 * weights[index]))
