@@ -3,6 +3,9 @@ package dev.dertyp.core
 import dev.dertyp.db.*
 import dev.dertyp.dbQuery
 import org.jetbrains.exposed.v1.core.*
+import org.jetbrains.exposed.v1.core.Function
+import org.jetbrains.exposed.v1.core.vendors.PostgreSQLDialect
+import org.jetbrains.exposed.v1.core.vendors.currentDialect
 import org.jetbrains.exposed.v1.jdbc.Query
 
 val mbArtistSearchTable = MBArtistTable.alias("mbArtistSearch")
@@ -42,6 +45,36 @@ fun Query.paging(page: Int, pageSize: Int, offset: Int = 0) = apply {
     limit(pageSize + offset)
 }
 
+fun toTsVector(column: Expression<*>): Function<String> =
+    CustomFunction("to_tsvector", VarCharColumnType(), stringLiteral("simple"), column)
+
+fun toTsQuery(query: String): Function<String> =
+    CustomFunction("to_tsquery", VarCharColumnType(), stringLiteral("simple"), stringParam(query))
+
+class MatchOp(val expr1: Expression<*>, val expr2: Expression<*>) : Op<Boolean>() {
+    override fun toQueryBuilder(queryBuilder: QueryBuilder) {
+        expr1.toQueryBuilder(queryBuilder)
+        queryBuilder.append(" @@ ")
+        expr2.toQueryBuilder(queryBuilder)
+    }
+}
+
+infix fun Expression<*>.match(query: Expression<*>): Op<Boolean> = MatchOp(this, query)
+
+fun tsRank(vector: Expression<*>, query: Expression<*>): Function<Float> =
+    CustomFunction("ts_rank_cd", FloatColumnType(), vector, query)
+
+class FloatMathOp(val operator: String, val expr1: Expression<*>, val expr2: Expression<*>) : ExpressionWithColumnType<Float>() {
+    override val columnType = FloatColumnType()
+    override fun toQueryBuilder(queryBuilder: QueryBuilder) {
+        queryBuilder.append("(")
+        expr1.toQueryBuilder(queryBuilder)
+        queryBuilder.append(" $operator ")
+        expr2.toQueryBuilder(queryBuilder)
+        queryBuilder.append(")")
+    }
+}
+
 fun Query.rankedSearchQuery(
     queryString: String,
     weights: List<Int>,
@@ -53,6 +86,53 @@ fun Query.rankedSearchQuery(
         .filter { it.isNotBlank() }
 
     if (tokens.isEmpty()) return this
+
+    if (currentDialect is PostgreSQLDialect) {
+        val concatenatedColumns = columns.reduce { acc, col ->
+            CustomFunction("concat_ws", VarCharColumnType(), stringLiteral(" "), acc, CustomFunction("coalesce", VarCharColumnType(), col, stringLiteral("")))
+        }
+
+        val masterVector = toTsVector(concatenatedColumns)
+        val tsQueryString = tokens.mapNotNull { token ->
+            val clean = token.replace(Regex("[&|!()\\\\:*'\"]"), "")
+            if (clean.startsWith("-") && clean.length > 1) {
+                "!" + clean.substring(1) + ":*"
+            } else if (clean.isNotBlank() && clean != "-") {
+                "$clean:*"
+            } else {
+                null
+            }
+        }.joinToString(" & ")
+
+        if (tsQueryString.isBlank()) return this
+
+        val tsQuery = toTsQuery(tsQueryString)
+
+        where { masterVector match tsQuery }
+
+        val exactScoreExpression = columns.mapIndexed { index, col ->
+            val coalesceCol = CustomFunction<String>("coalesce", VarCharColumnType(), col, stringLiteral(""))
+            val vector = toTsVector(coalesceCol)
+            val rank = tsRank(vector, tsQuery)
+            
+            val exactMatchOp = coalesceCol ilike queryString
+            val phraseMatchOp = coalesceCol ilike "%$queryString%"
+            val exactMatchBonus = case()
+                .When(exactMatchOp, intLiteral(1000 * weights[index]))
+                .When(phraseMatchOp, intLiteral(100 * weights[index]))
+                .Else(intLiteral(0))
+
+            val rankWeighted = FloatMathOp("*", rank, intLiteral(weights[index]))
+            FloatMathOp("+", rankWeighted, exactMatchBonus)
+        }.reduce { acc, weightedRank ->
+            FloatMathOp("+", acc, weightedRank)
+        }
+
+        orderBy(exactScoreExpression, SortOrder.DESC)
+        sortFallback?.let { orderBy(it, SortOrder.ASC) }
+
+        return this
+    }
 
     val zeroLiteral = intLiteral(0)
 
