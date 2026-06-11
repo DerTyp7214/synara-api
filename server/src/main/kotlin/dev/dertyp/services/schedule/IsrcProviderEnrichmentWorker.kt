@@ -30,12 +30,14 @@ class IsrcProviderEnrichmentWorker : Worker("ISRC/Barcode Provider Enrichment Wo
 
         logger.info("Starting IsrcProviderEnrichmentWorker")
 
-        val providers = IMetadataService.MetadataType.all().map {
-            it to MetadataService.getMetadataService(it, environment)
-        }.filter { (_, service) ->
-            service.supportedFeatures.contains(IMetadataService.Feature.GET_TRACK_BY_ISRC) ||
-                    service.supportedFeatures.contains(IMetadataService.Feature.GET_ALBUM_BY_BARCODE)
-        }
+        val providers = IMetadataService.MetadataType.all()
+            .filter { it != IMetadataService.MetadataType.musicBrainz }
+            .map {
+                it to MetadataService.getMetadataService(it, environment)
+            }.filter { (_, service) ->
+                service.supportedFeatures.contains(IMetadataService.Feature.GET_TRACK_BY_ISRC) ||
+                        service.supportedFeatures.contains(IMetadataService.Feature.GET_ALBUM_BY_BARCODE)
+            }
 
         if (providers.isEmpty()) {
             logger.info("No providers support ISRC or Barcode lookup")
