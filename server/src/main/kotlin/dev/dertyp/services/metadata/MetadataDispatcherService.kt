@@ -114,6 +114,11 @@ class MetadataDispatcherService(
         albumIds: List<String>
     ): List<IMetadataService.Album> = getService(type).getAlbumsByIds(type, albumIds)
 
+    override suspend fun getAlbumByBarcode(
+        type: IMetadataService.MetadataType,
+        barcode: String
+    ): IMetadataService.Album? = getService(type).getAlbumByBarcode(type, barcode)
+
     override suspend fun albumExistsById(
         type: IMetadataService.MetadataType,
         albumId: String

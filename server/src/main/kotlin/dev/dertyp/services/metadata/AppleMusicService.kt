@@ -189,6 +189,36 @@ class AppleMusicService(
         )
     }
 
+    override suspend fun getAlbumByBarcode(
+        barcode: String,
+        priority: HttpClientPriority
+    ): IMetadataService.Album? {
+        val response = ApiClient.instance.get("https://itunes.apple.com/lookup") {
+            parameter("upc", barcode)
+        }
+
+        if (response.status != HttpStatusCode.OK) return null
+
+        val body = response.bodyAsText().trim()
+        val searchResponse = ApplicationScope.json.decodeFromString<ITunesSearchResponse<ITunesAlbum>>(body)
+        val album = searchResponse.results.firstOrNull { it.wrapperType == "collection" } ?: return null
+
+        return IMetadataService.Album(
+            id = album.collectionId.toString(),
+            title = album.collectionName,
+            artists = listOf(album.artistName),
+            trackCount = album.trackCount,
+            images = listOf(
+                IMetadataService.Image(
+                    url = album.artworkUrl100.replace("100x100bb", "600x600bb"),
+                    width = 600,
+                    height = 600
+                )
+            ),
+            barcode = barcode
+        )
+    }
+
     override suspend fun searchArtists(
         query: String,
         limit: Int,

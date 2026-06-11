@@ -503,6 +503,66 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
             }
     }
 
+    fun albumIdsForBarcodeEnrichment(provider: String): Flow<UUID> = flow {
+        val now = Clock.System.now().toEpochMilliseconds()
+        val threshold = now - 30.days.inWholeMilliseconds
+
+        AlbumTable
+            .leftJoin(ProviderEnrichmentCheckTable,
+                onColumn = { AlbumTable.id },
+                otherColumn = { ProviderEnrichmentCheckTable.entityId },
+                additionalConstraint = {
+                    (ProviderEnrichmentCheckTable.provider eq provider) and
+                            (ProviderEnrichmentCheckTable.type eq ProviderEnrichmentType.ALBUM)
+                }
+            )
+            .select(AlbumTable.id)
+            .where { (AlbumTable.barcode.isNotNull()) and (AlbumTable.barcode neq "") }
+            .andWhere {
+                notExists(AlbumProviderTable.select(AlbumProviderTable.albumId).where {
+                    (AlbumProviderTable.albumId eq AlbumTable.id) and (AlbumProviderTable.provider eq provider)
+                })
+            }
+            .andWhere {
+                ProviderEnrichmentCheckTable.lastCheck.isNull() or
+                        (ProviderEnrichmentCheckTable.lastCheck less threshold)
+            }
+            .fetchBatchedResults(1000) { batch ->
+                batch.forEach {
+                    emit(it[AlbumTable.id].value)
+                }
+            }
+    }
+
+    suspend fun updateProviderEnrichmentCheck(id: UUID, provider: String, type: ProviderEnrichmentType) = dbQuery {
+        ProviderEnrichmentCheckTable.upsert(
+            ProviderEnrichmentCheckTable.entityId,
+            ProviderEnrichmentCheckTable.provider,
+            ProviderEnrichmentCheckTable.type
+        ) {
+            it[entityId] = id
+            it[ProviderEnrichmentCheckTable.provider] = provider
+            it[ProviderEnrichmentCheckTable.type] = type
+            it[lastCheck] = Clock.System.now().toEpochMilliseconds() + (1..5).random().days.inWholeMilliseconds
+        }
+    }
+
+    suspend fun addProviderUrl(albumId: UUID, url: String) = dbQuery {
+        val parser = ParserFactory.getParser(url)
+        val parsed = parser?.parse(url)
+
+        val provider = parser?.name ?: "unknown"
+        val externalId = parsed?.first ?: url
+
+        AlbumProviderTable.upsert(AlbumProviderTable.albumId, AlbumProviderTable.provider, AlbumProviderTable.externalId) {
+            it[AlbumProviderTable.albumId] = albumId
+            it[AlbumProviderTable.provider] = provider
+            it[AlbumProviderTable.externalId] = externalId
+            it[AlbumProviderTable.type] = parsed?.second?.value ?: Type.ALBUM.value
+            it[AlbumProviderTable.rawUrl] = url
+        }
+    }
+
     suspend fun enrichProviders(id: UUID, priority: HttpClientPriority = HttpClientPriority.NORMAL) {
         val album = byId(id) ?: return
         val urls = mutableSetOf<String>()

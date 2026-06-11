@@ -706,6 +706,50 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
             }
     }
 
+    fun songIdsForIsrcEnrichment(provider: String): Flow<UUID> = flow {
+        val now = Clock.System.now().toEpochMilliseconds()
+        val threshold = now - 30.days.inWholeMilliseconds
+
+        SongTable
+            .leftJoin(ProviderEnrichmentCheckTable,
+                onColumn = { SongTable.id },
+                otherColumn = { ProviderEnrichmentCheckTable.entityId },
+                additionalConstraint = {
+                    (ProviderEnrichmentCheckTable.provider eq provider) and
+                            (ProviderEnrichmentCheckTable.type eq ProviderEnrichmentType.SONG)
+                }
+            )
+            .select(SongTable.id)
+            .where { (SongTable.isrc.isNotNull()) and (SongTable.isrc neq "") }
+            .andWhere {
+                notExists(SongProviderTable.select(SongProviderTable.songId).where {
+                    (SongProviderTable.songId eq SongTable.id) and (SongProviderTable.provider eq provider)
+                })
+            }
+            .andWhere {
+                ProviderEnrichmentCheckTable.lastCheck.isNull() or
+                        (ProviderEnrichmentCheckTable.lastCheck less threshold)
+            }
+            .fetchBatchedResults(1000) { batch ->
+                batch.forEach {
+                    emit(it[SongTable.id].value)
+                }
+            }
+    }
+
+    suspend fun updateProviderEnrichmentCheck(id: UUID, provider: String, type: ProviderEnrichmentType) = dbQuery {
+        ProviderEnrichmentCheckTable.upsert(
+            ProviderEnrichmentCheckTable.entityId,
+            ProviderEnrichmentCheckTable.provider,
+            ProviderEnrichmentCheckTable.type
+        ) {
+            it[entityId] = id
+            it[ProviderEnrichmentCheckTable.provider] = provider
+            it[ProviderEnrichmentCheckTable.type] = type
+            it[lastCheck] = Clock.System.now().toEpochMilliseconds() + (1..5).random().days.inWholeMilliseconds
+        }
+    }
+
     suspend fun byId(id: UUID, userId: UUID): UserSong? = querySingle(userId) {
         where { SongTable.id eq id }
     }
@@ -959,7 +1003,7 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
             it[SongProviderTable.songId] = songId
             it[SongProviderTable.provider] = provider
             it[SongProviderTable.externalId] = externalId
-            it[SongProviderTable.type] = parsed?.second?.value
+            it[SongProviderTable.type] = parsed?.second?.value ?: Type.SONG.value
             it[SongProviderTable.rawUrl] = url
         }
     }

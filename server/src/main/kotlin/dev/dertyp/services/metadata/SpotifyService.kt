@@ -115,6 +115,48 @@ class SpotifyService(
         )
     }
 
+    override suspend fun getAlbumByBarcode(
+        barcode: String,
+        priority: HttpClientPriority
+    ): IMetadataService.Album? {
+        val response = ApiClient.instance.get("https://api.spotify.com/v1/search") {
+            val token = getAccessToken()
+            header(HttpHeaders.Authorization, "${token.tokenType} ${token.accessToken}")
+            header(HttpHeaders.ContentType, ContentType.Application.Json)
+            parameter("q", "upc:$barcode")
+            parameter("type", "album")
+            parameter("limit", 1)
+        }
+
+        if (response.status == HttpStatusCode.TooManyRequests) {
+            delay(30.seconds)
+            return getAlbumByBarcode(barcode, priority)
+        }
+
+        if (response.status != HttpStatusCode.OK) {
+            logger.error("Fetching album for barcode $barcode failed with status ${response.status}")
+            return null
+        }
+
+        val searchResponse = response.body<SearchResponse>()
+        val album = searchResponse.albums?.items?.firstOrNull() ?: return null
+
+        return IMetadataService.Album(
+            id = album.id,
+            title = album.name,
+            artists = album.artists.map { it.name },
+            trackCount = album.totalTracks,
+            images = album.images.map { image ->
+                IMetadataService.Image(
+                    url = image.url,
+                    width = image.width,
+                    height = image.height,
+                )
+            },
+            barcode = album.externalIds?.upc ?: album.externalIds?.ean
+        )
+    }
+
     override suspend fun searchArtists(
         query: String,
         limit: Int,

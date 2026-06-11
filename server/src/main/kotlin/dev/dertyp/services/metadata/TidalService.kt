@@ -746,6 +746,64 @@ class TidalService(
         }
     }
 
+    override suspend fun getAlbumByBarcode(
+        barcode: String,
+        priority: HttpClientPriority
+    ): IMetadataService.Album? {
+        val url = getUrl("/albums") {
+            parameters {
+                append("countryCode", "US")
+                append("locale", "en-US")
+                appendAll("include", listOf("artists", "coverArt"))
+                append("filter[barcodeId]", barcode)
+            }
+        }
+
+        val response = makeRequest(url, priority = priority)
+        when (response.status) {
+            HttpStatusCode.OK -> {}
+            HttpStatusCode.TooManyRequests -> {
+                logger.warn("[getAlbumByBarcode]: Too many requests, waiting 10 seconds")
+                delay(10.seconds)
+                return getAlbumByBarcode(barcode, priority)
+            }
+
+            else -> {
+                println("error: ${response.status}")
+                return null
+            }
+        }
+
+        try {
+            val body =
+                response.body<AlbumsMultiRelationshipDataDocument<JsonAttribute, EmptyRelationships>>()
+
+            val images = body.included?.mapAttributes<ArtworksAttributes>() ?: emptyMap()
+            val artists = body.included?.mapAttributes<ArtistsAttributes>() ?: emptyMap()
+
+            return body.data.firstOrNull()?.let { albumObj ->
+                albumObj.attributes?.let { album ->
+                    IMetadataService.Album(
+                        id = albumObj.id,
+                        title = album.title,
+                        duration = album.duration,
+                        trackCount = album.numberOfItems,
+                        discCount = album.numberOfVolumes,
+                        releaseDate = album.releaseDate,
+                        artists = albumObj.artists(artists),
+                        images = albumObj.images(images),
+                        barcode = album.barcodeId
+                    )
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            println(response.bodyAsText())
+
+            return null
+        }
+    }
+
     override suspend fun getArtistsByIds(
         artistIds: List<String>,
         priority: HttpClientPriority

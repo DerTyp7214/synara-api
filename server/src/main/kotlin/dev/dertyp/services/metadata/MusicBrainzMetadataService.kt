@@ -3,6 +3,7 @@ package dev.dertyp.services.metadata
 import dev.dertyp.PlatformUUID
 import dev.dertyp.core.HttpClientPriority
 import dev.dertyp.data.MusicBrainzRecording
+import dev.dertyp.data.MusicBrainzRelease
 import dev.dertyp.getDateFromISO
 import io.ktor.client.request.HttpRequestBuilder
 import io.ktor.server.application.ApplicationEnvironment
@@ -72,14 +73,7 @@ class MusicBrainzMetadataService(
     override suspend fun getAlbumByMbId(mbId: PlatformUUID, priority: HttpClientPriority): IMetadataService.Album? {
         val release = musicBrainzService.getRelease(mbId)
         if (release != null) {
-            return IMetadataService.Album(
-                id = release.id.toString(),
-                title = release.title ?: "",
-                artists = release.artistCredit?.mapNotNull { it.name ?: it.artist?.name } ?: emptyList(),
-                trackCount = 0,
-                releaseDate = release.date?.let { getDateFromISO(it) },
-                images = getImageUrlByAlbumMbId(mbId, priority)
-            )
+            return mapAlbum(release, priority)
         }
 
         val releaseGroup = musicBrainzService.getReleaseGroup(mbId)
@@ -95,6 +89,26 @@ class MusicBrainzMetadataService(
         }
 
         return null
+    }
+
+    override suspend fun getAlbumByBarcode(
+        barcode: String,
+        priority: HttpClientPriority
+    ): IMetadataService.Album? {
+        val release = musicBrainzService.searchReleaseByBarcode(barcode, emptyList()) ?: return null
+        return mapAlbum(release, priority)
+    }
+
+    private suspend fun mapAlbum(release: MusicBrainzRelease, priority: HttpClientPriority): IMetadataService.Album {
+        return IMetadataService.Album(
+            id = release.id.toString(),
+            title = release.title ?: "",
+            artists = release.artistCredit?.mapNotNull { it.name ?: it.artist?.name } ?: emptyList(),
+            trackCount = 0,
+            releaseDate = release.date?.let { getDateFromISO(it) },
+            images = getImageUrlByAlbumMbId(release.id, priority),
+            barcode = release.barcode
+        )
     }
 
     override suspend fun getTrackByMbId(mbId: PlatformUUID, priority: HttpClientPriority): IMetadataService.Track? {

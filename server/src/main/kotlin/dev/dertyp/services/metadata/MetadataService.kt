@@ -248,6 +248,16 @@ abstract class MetadataService(
         priority: HttpClientPriority = HttpClientPriority.NORMAL
     ): List<IMetadataService.Album> = emptyList()
 
+    override suspend fun getAlbumByBarcode(
+        type: MetadataType,
+        barcode: String
+    ): IMetadataService.Album? = getAlbumByBarcode(barcode)
+
+    open suspend fun getAlbumByBarcode(
+        barcode: String,
+        priority: HttpClientPriority = HttpClientPriority.NORMAL
+    ): IMetadataService.Album? = null
+
     override suspend fun albumExistsById(
         type: MetadataType,
         albumId: String

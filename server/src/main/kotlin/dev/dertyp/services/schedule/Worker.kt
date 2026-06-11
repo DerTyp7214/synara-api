@@ -4,8 +4,10 @@ import io.ktor.server.config.ApplicationConfig
 import io.ktor.util.logging.KtorSimpleLogger
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.koin.core.component.KoinComponent
@@ -35,19 +37,37 @@ abstract class Worker(val name: String) : KoinComponent {
      * Runs the block for each item in parallel, dynamically scaling the number of coroutines
      * based on global server load and other active workers.
      */
-    @OptIn(DelicateCoroutinesApi::class)
     protected suspend fun <T> runParallel(
         items: Iterable<T>,
         baseThreadCount: Int,
         onItemProcessed: suspend (Int) -> Unit = {},
         block: suspend (T) -> Unit
+    ) = runParallel(
+        items = flow { items.forEach { emit(it) } },
+        baseThreadCount = baseThreadCount,
+        onItemProcessed = onItemProcessed,
+        block = block
+    )
+
+    /**
+     * Runs the block for each item from the flow in parallel, dynamically scaling the number of coroutines.
+     * Uses a buffered channel to avoid pre-fetching everything into memory.
+     */
+    @OptIn(DelicateCoroutinesApi::class)
+    protected suspend fun <T> runParallel(
+        items: Flow<T>,
+        baseThreadCount: Int,
+        workerName: String = name,
+        onItemProcessed: suspend (Int) -> Unit = {},
+        block: suspend (T) -> Unit
     ) = coroutineScope {
         val desired = (baseThreadCount * threadMultiplier).toInt().coerceAtLeast(1)
-        val itemChannel = Channel<T>(Channel.UNLIMITED)
+        val itemChannel = Channel<T>(Channel.BUFFERED)
         val processedCount = AtomicInteger(0)
+        val localGrantedThreads = if (workerName == name) grantedThreads else MutableStateFlow(0)
         
-        registerWorker(name, desired, grantedThreads)
-        grantedThreads.first { it > 0 }
+        registerWorker(workerName, desired, localGrantedThreads)
+        localGrantedThreads.first { it > 0 }
         
         try {
             val activeWorkerJobs = ConcurrentHashMap<Int, Job>()
@@ -57,13 +77,13 @@ abstract class Worker(val name: String) : KoinComponent {
                 while (isActive) {
                     if (itemChannel.isClosedForReceive) break
 
-                    val targetCount = grantedThreads.value
+                    val targetCount = localGrantedThreads.value
                     for (i in 0 until targetCount) {
                         if (!activeWorkerJobs.containsKey(i)) {
                             activeWorkerJobs[i] = outerScope.launch {
                                 try {
                                     while (isActive) {
-                                        if (i >= grantedThreads.value) break
+                                        if (i >= localGrantedThreads.value) break
                                         
                                         val result = itemChannel.tryReceive()
                                         if (result.isSuccess) {
@@ -82,7 +102,7 @@ abstract class Worker(val name: String) : KoinComponent {
                                                 break
                                             }
                                             
-                                            if (i >= grantedThreads.value) {
+                                            if (i >= localGrantedThreads.value) {
                                                 if (!itemChannel.isClosedForSend) {
                                                     itemChannel.trySend(item)
                                                 }
@@ -106,7 +126,7 @@ abstract class Worker(val name: String) : KoinComponent {
                 }
             }
 
-            items.forEach { itemChannel.send(it) }
+            items.collect { itemChannel.send(it) }
             itemChannel.close()
 
             while (isActive) {
@@ -116,7 +136,7 @@ abstract class Worker(val name: String) : KoinComponent {
             
             supervisor.cancel()
         } finally {
-            unregisterWorker(name)
+            unregisterWorker(workerName)
         }
     }
 
@@ -156,12 +176,12 @@ abstract class Worker(val name: String) : KoinComponent {
             overridenProcessorCount = null
         }
 
-        private suspend fun registerWorker(name: String, desired: Int, flow: MutableStateFlow<Int>) {
+        internal suspend fun registerWorker(name: String, desired: Int, flow: MutableStateFlow<Int>) {
             activeWorkers[name] = desired to flow
             recalculateAllocations()
         }
 
-        private suspend fun unregisterWorker(name: String) {
+        internal suspend fun unregisterWorker(name: String) {
             activeWorkers.remove(name)
             recalculateAllocations()
         }

@@ -1683,6 +1683,7 @@ Service for fetching metadata from external sources.
 | `getTrackByIsrc` | `type` (`MetadataType`): The metadata provider to use.<br>`isrc` (`String`): The ISRC. | [Track](#devdertypservicesmetadataimetadataservicetrack)? | - |  | Get a track by its ISRC. |
 | `getTracksByIds` | `type` (`MetadataType`): The metadata provider to use.<br>`trackIds` (`List`<`String`>): List of external track IDs. | `List`<[Track](#devdertypservicesmetadataimetadataservicetrack)> | - |  | Get multiple tracks by their external IDs. |
 | `getAlbumsByIds` | `type` (`MetadataType`): The metadata provider to use.<br>`albumIds` (`List`<`String`>): List of external album IDs. | `List`<[Album](#devdertypservicesmetadataimetadataservicealbum)> | - |  | Get multiple albums by their external IDs. |
+| `getAlbumByBarcode` | `type` (`MetadataType`): The metadata provider to use.<br>`barcode` (`String`): The barcode. | [Album](#devdertypservicesmetadataimetadataservicealbum)? | - |  | Get an album by its barcode. |
 | `albumExistsById` | `type` (`MetadataType`): The metadata provider to use.<br>`albumId` (`String`): The external album ID. | `Boolean` | - |  | Check if an album exists by its external ID. |
 | `getArtistsByIds` | `type` (`MetadataType`): The metadata provider to use.<br>`artistIds` (`List`<`String`>): List of external artist IDs. | `List`<[Artist](#devdertypservicesmetadataimetadataserviceartist)> | - |  | Get multiple artists by their external IDs. |
 
