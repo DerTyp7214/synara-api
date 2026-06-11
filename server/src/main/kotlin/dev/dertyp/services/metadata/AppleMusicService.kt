@@ -93,7 +93,7 @@ class AppleMusicService(
         val searchResponse = ApplicationScope.json.decodeFromString<ITunesSearchResponse<ITunesAlbum>>(body.trim())
         return searchResponse.results.filter { it.wrapperType == "track" }.map { track ->
             IMetadataService.Track(
-                id = track.collectionId.toString(),
+                id = track.collectionId?.toString() ?: "",
                 title = track.trackName ?: "",
                 artists = listOf(track.artistName),
                 duration = (track.trackTimeMillis ?: 0L).milliseconds,
@@ -168,7 +168,7 @@ class AppleMusicService(
         val track = searchResponse.results.firstOrNull { it.wrapperType == "track" } ?: return null
 
         return IMetadataService.Track(
-            id = track.collectionId.toString(),
+            id = track.collectionId?.toString() ?: "",
             title = track.trackName ?: "",
             artists = listOf(track.artistName),
             duration = (track.trackTimeMillis ?: 0L).milliseconds,
@@ -192,11 +192,11 @@ class AppleMusicService(
         } ?: return null
 
         val searchResponse = ApplicationScope.json.decodeFromString<ITunesSearchResponse<ITunesAlbum>>(body.trim())
-        val album = searchResponse.results.firstOrNull { it.wrapperType == "collection" } ?: return null
+        val album = searchResponse.results.firstOrNull { it.wrapperType == "collection" && it.collectionId != null } ?: return null
 
         return IMetadataService.Album(
             id = album.collectionId.toString(),
-            title = album.collectionName,
+            title = album.collectionName ?: "",
             artists = listOf(album.artistName),
             trackCount = album.trackCount,
             images = listOf(
@@ -249,12 +249,12 @@ class AppleMusicService(
         return searchResponse.results
             .groupBy { it.collectionId }
             .map { (collectionId, results) ->
-                val album = results.first { it.wrapperType == "collection" || it.wrapperType == "track" }
+                val album = results.first { (it.wrapperType == "collection" || it.wrapperType == "track") && it.collectionId != null }
                 val additionalTitles = results.mapNotNull { it.trackName }
 
                 IMetadataService.Album(
-                    id = collectionId.toString(),
-                    title = album.collectionName,
+                    id = (collectionId ?: 0L).toString(),
+                    title = album.collectionName ?: "",
                     artists = listOf(album.artistName),
                     trackCount = album.trackCount,
                     images = listOf(
@@ -286,11 +286,11 @@ class AppleMusicService(
     @Serializable
     data class ITunesAlbum(
         val wrapperType: String,
-        val collectionId: Long,
-        val artistName: String,
-        val collectionName: String,
-        val artworkUrl100: String,
-        val trackCount: Int,
+        val collectionId: Long? = null,
+        val artistName: String = "",
+        val collectionName: String? = null,
+        val artworkUrl100: String = "",
+        val trackCount: Int = 0,
         val trackName: String? = null,
         val trackTimeMillis: Long? = null,
         val primaryIsrc: String? = null
