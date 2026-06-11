@@ -2,11 +2,9 @@ package dev.dertyp.services.metadata
 
 import dev.dertyp.ApiClient
 import dev.dertyp.core.HttpClientPriority
-import io.ktor.client.call.body
+import dev.dertyp.core.safeQueuedGet
 import io.ktor.client.request.HttpRequestBuilder
-import io.ktor.client.request.get
 import io.ktor.client.request.parameter
-import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationEnvironment
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -29,19 +27,12 @@ class DeezerService(
         limit: Int,
         priority: HttpClientPriority
     ): List<IMetadataService.Artist> {
-        val response = ApiClient.instance.get("$baseUrl/search/artist") {
+        val response = ApiClient.instance.safeQueuedGet<SearchResponse>("$baseUrl/search/artist", priority) {
             parameter("q", query)
             parameter("limit", limit)
         }
 
-        if (response.status != HttpStatusCode.OK) {
-            logger.error("Searching artists on Deezer for $query failed with status ${response.status}")
-            return emptyList()
-        }
-
-        val searchResponse = response.body<SearchResponse>()
-
-        return searchResponse.data.map { artist ->
+        return response?.data?.map { artist ->
             IMetadataService.Artist(
                 id = artist.id.toString(),
                 name = artist.name,
@@ -54,17 +45,15 @@ class DeezerService(
                     IMetadataService.Image(artist.pictureXl, 1000, 1000)
                 )
             )
-        }
+        } ?: emptyList()
     }
 
     override suspend fun getTrackByIsrc(
         isrc: String,
         priority: HttpClientPriority
     ): IMetadataService.Track? {
-        val response = ApiClient.instance.get("$baseUrl/track/isrc:$isrc")
-        if (response.status != HttpStatusCode.OK) return null
+        val track = ApiClient.instance.safeQueuedGet<Track>("$baseUrl/track/isrc:$isrc", priority) ?: return null
 
-        val track = response.body<Track>()
         return IMetadataService.Track(
             id = track.id.toString(),
             title = track.title,
@@ -86,14 +75,12 @@ class DeezerService(
         barcode: String,
         priority: HttpClientPriority
     ): IMetadataService.Album? {
-        val response = ApiClient.instance.get("$baseUrl/album/upc:$barcode")
-        if (response.status != HttpStatusCode.OK) return null
+        val album = ApiClient.instance.safeQueuedGet<Album>("$baseUrl/album/upc:$barcode", priority) ?: return null
 
-        val album = response.body<Album>()
         return IMetadataService.Album(
             id = album.id.toString(),
             title = album.title,
-            artists = listOf(album.artist.name),
+            artists = listOfNotNull(album.artist?.name),
             trackCount = album.nbTracks ?: 0,
             images = listOfNotNull(
                 IMetadataService.Image(album.coverSmall, 56, 56),
@@ -148,6 +135,6 @@ class DeezerService(
         @SerialName("cover_big") val coverBig: String = "",
         @SerialName("cover_xl") val coverXl: String = "",
         @SerialName("nb_tracks") val nbTracks: Int? = null,
-        val artist: Artist
+        val artist: Artist? = null
     )
 }

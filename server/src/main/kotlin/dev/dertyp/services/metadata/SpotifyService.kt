@@ -2,20 +2,16 @@ package dev.dertyp.services.metadata
 
 import dev.dertyp.ApiClient
 import dev.dertyp.core.HttpClientPriority
-import io.ktor.client.call.body
+import dev.dertyp.core.safeQueuedGet
 import io.ktor.client.request.HttpRequestBuilder
-import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.parameter
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
-import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationEnvironment
-import kotlinx.coroutines.delay
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlin.time.Duration.Companion.milliseconds
-import kotlin.time.Duration.Companion.seconds
 
 class SpotifyService(
     environment: ApplicationEnvironment
@@ -34,7 +30,7 @@ class SpotifyService(
         limit: Int,
         priority: HttpClientPriority
     ): List<IMetadataService.Track> {
-        val response = ApiClient.instance.get("https://api.spotify.com/v1/search") {
+        val searchResponse = ApiClient.instance.safeQueuedGet<SearchResponse>("https://api.spotify.com/v1/search", priority) {
             val token = getAccessToken()
             header(HttpHeaders.Authorization, "${token.tokenType} ${token.accessToken}")
             header(HttpHeaders.ContentType, ContentType.Application.Json)
@@ -43,19 +39,7 @@ class SpotifyService(
             parameter("limit", limit)
         }
 
-        if (response.status == HttpStatusCode.TooManyRequests) {
-            delay(30.seconds)
-            return search(query, limit, priority)
-        }
-
-        if (response.status != HttpStatusCode.OK) {
-            logger.error("Searching tracks for $query failed with status ${response.status}")
-            return emptyList()
-        }
-
-        val searchResponse = response.body<SearchResponse>()
-
-        return searchResponse.tracks?.items?.map { track ->
+        return searchResponse?.tracks?.items?.map { track ->
             IMetadataService.Track(
                 id = track.id,
                 title = track.name,
@@ -77,7 +61,7 @@ class SpotifyService(
         isrc: String,
         priority: HttpClientPriority
     ): IMetadataService.Track? {
-        val response = ApiClient.instance.get("https://api.spotify.com/v1/search") {
+        val searchResponse = ApiClient.instance.safeQueuedGet<SearchResponse>("https://api.spotify.com/v1/search", priority) {
             val token = getAccessToken()
             header(HttpHeaders.Authorization, "${token.tokenType} ${token.accessToken}")
             header(HttpHeaders.ContentType, ContentType.Application.Json)
@@ -86,18 +70,7 @@ class SpotifyService(
             parameter("limit", 1)
         }
 
-        if (response.status == HttpStatusCode.TooManyRequests) {
-            delay(30.seconds)
-            return getTrackByIsrc(isrc, priority)
-        }
-
-        if (response.status != HttpStatusCode.OK) {
-            logger.error("Fetching track for ISRC $isrc failed with status ${response.status}")
-            return null
-        }
-
-        val searchResponse = response.body<SearchResponse>()
-        val track = searchResponse.tracks?.items?.firstOrNull() ?: return null
+        val track = searchResponse?.tracks?.items?.firstOrNull() ?: return null
 
         return IMetadataService.Track(
             id = track.id,
@@ -119,7 +92,7 @@ class SpotifyService(
         barcode: String,
         priority: HttpClientPriority
     ): IMetadataService.Album? {
-        val response = ApiClient.instance.get("https://api.spotify.com/v1/search") {
+        val searchResponse = ApiClient.instance.safeQueuedGet<SearchResponse>("https://api.spotify.com/v1/search", priority) {
             val token = getAccessToken()
             header(HttpHeaders.Authorization, "${token.tokenType} ${token.accessToken}")
             header(HttpHeaders.ContentType, ContentType.Application.Json)
@@ -128,18 +101,7 @@ class SpotifyService(
             parameter("limit", 1)
         }
 
-        if (response.status == HttpStatusCode.TooManyRequests) {
-            delay(30.seconds)
-            return getAlbumByBarcode(barcode, priority)
-        }
-
-        if (response.status != HttpStatusCode.OK) {
-            logger.error("Fetching album for barcode $barcode failed with status ${response.status}")
-            return null
-        }
-
-        val searchResponse = response.body<SearchResponse>()
-        val album = searchResponse.albums?.items?.firstOrNull() ?: return null
+        val album = searchResponse?.albums?.items?.firstOrNull() ?: return null
 
         return IMetadataService.Album(
             id = album.id,
@@ -162,7 +124,7 @@ class SpotifyService(
         limit: Int,
         priority: HttpClientPriority
     ): List<IMetadataService.Artist> {
-        val response = ApiClient.instance.get("https://api.spotify.com/v1/search") {
+        val searchResponse = ApiClient.instance.safeQueuedGet<SearchResponse>("https://api.spotify.com/v1/search", priority) {
             val token = getAccessToken()
             header(HttpHeaders.Authorization, "${token.tokenType} ${token.accessToken}")
             header(HttpHeaders.ContentType, ContentType.Application.Json)
@@ -171,19 +133,7 @@ class SpotifyService(
             parameter("limit", limit)
         }
 
-        if (response.status == HttpStatusCode.TooManyRequests) {
-            delay(30.seconds)
-            return searchArtists(query, limit, priority)
-        }
-
-        if (response.status != HttpStatusCode.OK) {
-            logger.error("Searching artists for $query failed with status ${response.status}")
-            return emptyList()
-        }
-
-        val searchResponse = response.body<SearchResponse>()
-
-        return searchResponse.artists?.items?.map { artist ->
+        return searchResponse?.artists?.items?.map { artist ->
             IMetadataService.Artist(
                 id = artist.id,
                 name = artist.name,
@@ -206,7 +156,7 @@ class SpotifyService(
         includeTracks: Boolean,
         priority: HttpClientPriority
     ): List<IMetadataService.Album> {
-        val response = ApiClient.instance.get("https://api.spotify.com/v1/search") {
+        val searchResponse = ApiClient.instance.safeQueuedGet<SearchResponse>("https://api.spotify.com/v1/search", priority) {
             val token = getAccessToken()
             header(HttpHeaders.Authorization, "${token.tokenType} ${token.accessToken}")
             header(HttpHeaders.ContentType, ContentType.Application.Json)
@@ -215,19 +165,7 @@ class SpotifyService(
             parameter("limit", limit)
         }
 
-        if (response.status == HttpStatusCode.TooManyRequests) {
-            delay(30.seconds)
-            return searchAlbums(query, limit, includeTracks, priority)
-        }
-
-        if (response.status != HttpStatusCode.OK) {
-            logger.error("Searching albums for $query failed with status ${response.status}")
-            return emptyList()
-        }
-
-        val searchResponse = response.body<SearchResponse>()
-
-        return searchResponse.albums?.items?.map { album ->
+        return searchResponse?.albums?.items?.map { album ->
             IMetadataService.Album(
                 id = album.id,
                 title = album.name,

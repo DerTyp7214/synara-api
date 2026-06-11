@@ -68,13 +68,22 @@ class HttpClientQueueService : Service() {
 
     private fun updateRateLimit(host: String, response: HttpResponse) {
         val limit = response.headers["X-RateLimit-Limit"]?.toIntOrNull()
+            ?: response.headers["X-Rate-Limit-Limit"]?.toIntOrNull()
+            ?: response.headers["RateLimit-Limit"]?.toIntOrNull()
+
         val remaining = response.headers["X-RateLimit-Remaining"]?.toIntOrNull()
+            ?: response.headers["X-Rate-Limit-Remaining"]?.toIntOrNull()
+            ?: response.headers["RateLimit-Remaining"]?.toIntOrNull()
+
         val resetIn = response.headers["X-RateLimit-Reset-In"]?.toIntOrNull()
+            ?: response.headers["X-Rate-Limit-Reset"]?.toIntOrNull()
+            ?: response.headers["RateLimit-Reset"]?.toIntOrNull()
 
         if (limit != null && remaining != null && resetIn != null) {
             hostRateLimits[host] = RateLimitState(limit, remaining, resetIn, Clock.System.now())
         } else if (response.status.value == 429) {
             val retryAfter = response.headers["Retry-After"]?.toIntOrNull()
+                ?: response.headers["X-Retry-After"]?.toIntOrNull()
             if (retryAfter != null) {
                 hostRateLimits[host] = RateLimitState(limit ?: 0, 0, retryAfter, Clock.System.now())
             }
@@ -150,9 +159,12 @@ class HttpClientQueueService : Service() {
                 var delayTime = when {
                     host.contains("musicbrainz.org") -> 1.seconds
                     host.contains("song.link") || host.contains("odesli.co") -> 6.seconds
-                    host.contains("theaudiodb.com") -> 2.seconds
+                    host.contains("theaudiodb.com") -> 500.milliseconds
                     host.contains("googleapis.com") || host.contains("youtube.com") -> 1.seconds
                     host.contains("listenbrainz.org") -> 10.milliseconds
+                    host.contains("deezer.com") -> 100.milliseconds
+                    host.contains("spotify.com") -> 100.milliseconds
+                    host.contains("apple.com") -> 100.milliseconds
                     else -> 250.milliseconds
                 }
 
@@ -163,7 +175,7 @@ class HttpClientQueueService : Service() {
                         if (wait > 0.seconds) {
                             delayTime = maxOf(delayTime, wait)
                         }
-                    } else if (host.contains("listenbrainz.org")) {
+                    } else {
                         val pace = (rl.resetIn.toDouble() / rl.remaining).seconds
                         delayTime = maxOf(delayTime, pace)
                     }

@@ -5,8 +5,8 @@ import com.auth0.jwt.algorithms.Algorithm
 import dev.dertyp.ApiClient
 import dev.dertyp.core.ApplicationScope
 import dev.dertyp.core.HttpClientPriority
+import dev.dertyp.core.safeQueuedGet
 import io.ktor.client.request.HttpRequestBuilder
-import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.parameter
 import io.ktor.client.statement.bodyAsText
@@ -84,16 +84,13 @@ class AppleMusicService(
         limit: Int,
         priority: HttpClientPriority
     ): List<IMetadataService.Track> {
-        val response = ApiClient.instance.get("https://itunes.apple.com/search") {
+        val body = ApiClient.instance.safeQueuedGet<String>("https://itunes.apple.com/search", priority) {
             parameter("term", query)
             parameter("entity", "song")
             parameter("limit", limit)
-        }
+        } ?: return emptyList()
 
-        if (response.status != HttpStatusCode.OK) return emptyList()
-
-        val body = response.bodyAsText().trim()
-        val searchResponse = ApplicationScope.json.decodeFromString<ITunesSearchResponse<ITunesAlbum>>(body)
+        val searchResponse = ApplicationScope.json.decodeFromString<ITunesSearchResponse<ITunesAlbum>>(body.trim())
         return searchResponse.results.filter { it.wrapperType == "track" }.map { track ->
             IMetadataService.Track(
                 id = track.collectionId.toString(),
@@ -120,7 +117,7 @@ class AppleMusicService(
         if (token != null) {
             val storefront = "us"
             val response = try {
-                ApiClient.instance.get("https://api.music.apple.com/v1/catalog/$storefront/songs") {
+                ApiClient.queueInstance.enqueue("https://api.music.apple.com/v1/catalog/$storefront/songs", priority) {
                     header(HttpHeaders.Authorization, "Bearer $token")
                     parameter("filter[isrc]", isrc)
                 }
@@ -163,14 +160,11 @@ class AppleMusicService(
             }
         }
 
-        val response = ApiClient.instance.get("https://itunes.apple.com/lookup") {
+        val body = ApiClient.instance.safeQueuedGet<String>("https://itunes.apple.com/lookup", priority) {
             parameter("isrc", isrc)
-        }
+        } ?: return null
 
-        if (response.status != HttpStatusCode.OK) return null
-
-        val body = response.bodyAsText().trim()
-        val searchResponse = ApplicationScope.json.decodeFromString<ITunesSearchResponse<ITunesAlbum>>(body)
+        val searchResponse = ApplicationScope.json.decodeFromString<ITunesSearchResponse<ITunesAlbum>>(body.trim())
         val track = searchResponse.results.firstOrNull { it.wrapperType == "track" } ?: return null
 
         return IMetadataService.Track(
@@ -193,14 +187,11 @@ class AppleMusicService(
         barcode: String,
         priority: HttpClientPriority
     ): IMetadataService.Album? {
-        val response = ApiClient.instance.get("https://itunes.apple.com/lookup") {
+        val body = ApiClient.instance.safeQueuedGet<String>("https://itunes.apple.com/lookup", priority) {
             parameter("upc", barcode)
-        }
+        } ?: return null
 
-        if (response.status != HttpStatusCode.OK) return null
-
-        val body = response.bodyAsText().trim()
-        val searchResponse = ApplicationScope.json.decodeFromString<ITunesSearchResponse<ITunesAlbum>>(body)
+        val searchResponse = ApplicationScope.json.decodeFromString<ITunesSearchResponse<ITunesAlbum>>(body.trim())
         val album = searchResponse.results.firstOrNull { it.wrapperType == "collection" } ?: return null
 
         return IMetadataService.Album(
@@ -224,16 +215,13 @@ class AppleMusicService(
         limit: Int,
         priority: HttpClientPriority
     ): List<IMetadataService.Artist> {
-        val response = ApiClient.instance.get("https://itunes.apple.com/search") {
+        val body = ApiClient.instance.safeQueuedGet<String>("https://itunes.apple.com/search", priority) {
             parameter("term", query)
             parameter("entity", "musicArtist")
             parameter("limit", limit)
-        }
+        } ?: return emptyList()
 
-        if (response.status != HttpStatusCode.OK) return emptyList()
-
-        val body = response.bodyAsText().trim()
-        val searchResponse = ApplicationScope.json.decodeFromString<ITunesSearchResponse<ITunesArtist>>(body)
+        val searchResponse = ApplicationScope.json.decodeFromString<ITunesSearchResponse<ITunesArtist>>(body.trim())
         return searchResponse.results.map { artist ->
             IMetadataService.Artist(
                 id = artist.artistId.toString(),
@@ -251,16 +239,13 @@ class AppleMusicService(
         includeTracks: Boolean,
         priority: HttpClientPriority
     ): List<IMetadataService.Album> {
-        val response = ApiClient.instance.get("https://itunes.apple.com/search") {
+        val body = ApiClient.instance.safeQueuedGet<String>("https://itunes.apple.com/search", priority) {
             parameter("term", query)
             parameter("entity", if (includeTracks) "album,song" else "album")
             parameter("limit", limit)
-        }
+        } ?: return emptyList()
 
-        if (response.status != HttpStatusCode.OK) return emptyList()
-
-        val body = response.bodyAsText().trim()
-        val searchResponse = ApplicationScope.json.decodeFromString<ITunesSearchResponse<ITunesAlbum>>(body)
+        val searchResponse = ApplicationScope.json.decodeFromString<ITunesSearchResponse<ITunesAlbum>>(body.trim())
         return searchResponse.results
             .groupBy { it.collectionId }
             .map { (collectionId, results) ->
