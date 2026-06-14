@@ -2,11 +2,16 @@ package dev.dertyp.core
 
 import dev.dertyp.db.*
 import dev.dertyp.dbQuery
+import dev.dertyp.services.RedisSearchService
 import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.core.Function
+import org.jetbrains.exposed.v1.core.dao.id.EntityID
+import org.jetbrains.exposed.v1.core.dao.id.IdTable
 import org.jetbrains.exposed.v1.core.vendors.PostgreSQLDialect
 import org.jetbrains.exposed.v1.core.vendors.currentDialect
 import org.jetbrains.exposed.v1.jdbc.Query
+import org.koin.core.context.GlobalContext
+import java.util.UUID
 
 val mbArtistSearchTable = MBArtistTable.alias("mbArtistSearch")
 val mbArtistAliasSearchTable = MBArtistAliasTable.alias("mbArtistAliasSearch")
@@ -78,6 +83,84 @@ fun Query.rankedSearchQuery(
     sortFallback: Column<*>? = null,
     searchVectorColumn: Column<*>? = null
 ): Query {
+    val redisSearchService = try {
+        GlobalContext.get().get<RedisSearchService>()
+    } catch (_: Exception) {
+        null
+    }
+
+    if (redisSearchService?.isEnabled() == true) {
+        val tableName = columns.firstNotNullOfOrNull {
+            if (it is Column<*>) {
+                val table = it.table
+                if (table is Alias<*>) table.delegate.tableName else table.tableName
+            } else null
+        }
+
+        val index = when (tableName) {
+            "song" -> "song"
+            "artist" -> "artist"
+            "album" -> "album"
+            else -> null
+        }
+
+        if (index != null) {
+            val ids = redisSearchService.search(index, queryString)
+            if (ids.isNotEmpty()) {
+                val idColumn = columns.firstNotNullOfOrNull { expression ->
+                    if (expression is Column<*>) {
+                        val table = expression.table
+                        val (baseTable, alias) = if (table is Alias<*>) {
+                            table.delegate to table
+                        } else {
+                            table to null
+                        }
+
+                        val originalId = baseTable.columns.find { it.name == "id" }
+                        if (originalId != null) {
+                            if (alias != null) alias[originalId]
+                            else originalId
+                        } else null
+                    } else null
+                }.let {
+                    @Suppress("UNCHECKED_CAST")
+                    it as? Column<Any>
+                }
+
+                if (idColumn != null) {
+                    val table = idColumn.table
+                    val (baseTable, alias) = if (table is Alias<*>) {
+                        (table.delegate as IdTable<*>) to table
+                    } else {
+                        (table as IdTable<*>) to null
+                    }
+
+                    @Suppress("UNCHECKED_CAST")
+                    val wrappedIds = ids.map { EntityID(it, baseTable as IdTable<UUID>) }
+
+                    val rawIdColumn = if (alias != null) {
+                        alias[baseTable.id]
+                    } else {
+                        baseTable.id
+                    }
+
+                    @Suppress("UNCHECKED_CAST")
+                    val finalIdColumn = rawIdColumn as Column<EntityID<UUID>>
+
+                    where { finalIdColumn inList wrappedIds }
+
+                    val firstId = wrappedIds.first()
+                    val initialCase = case().When(finalIdColumn eq firstId, intLiteral(0))
+                    val orderCase = wrappedIds.drop(1).foldIndexed(initialCase) { idx, acc, eid ->
+                        acc.When(finalIdColumn eq eid, intLiteral(idx + 1))
+                    }
+                    orderBy(orderCase.Else(intLiteral(ids.size)), SortOrder.ASC)
+                    return this
+                }
+            }
+        }
+    }
+
     val normalizedQuery = if (currentDialect is PostgreSQLDialect) {
         queryString.replace(Regex("[&|!()\\\\:*'\"]"), " ")
     } else {

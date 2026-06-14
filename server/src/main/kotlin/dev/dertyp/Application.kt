@@ -93,6 +93,7 @@ fun Application.module() {
     }
 
     get<DatabaseManager>().init()
+    get<RedisSearchService>().initIndex()
 
     val backupService = get<BackupService>()
     val remoteMirrorService = get<RemoteMirrorService>()
@@ -228,6 +229,7 @@ fun mainModule(application: Application, environment: ApplicationEnvironment): M
     singleOf(::OdesliService)
     singleOf(::ReleaseService)
     singleOf(::SearchIndexWorker)
+    singleOf(::RedisSearchService)
 
     ClassGraph()
         .enableClassInfo()
@@ -273,6 +275,8 @@ fun mainModule(application: Application, environment: ApplicationEnvironment): M
                 invalidateAt = 30.days
                 host = environment.config.propertyOrNull("redis.host")!!.getString()
                 port = environment.config.propertyOrNull("redis.port")?.getString()?.toInt() ?: port
+                useRedisSearch = environment.config.propertyOrNull("redis.useSearch")?.getString()?.toBoolean() ?: useRedisSearch
+                indexPrefix = environment.config.propertyOrNull("redis.indexPrefix")?.getString() ?: indexPrefix
             }
         } else RedisCacheProvider.Config().apply { host = "none" }
     }

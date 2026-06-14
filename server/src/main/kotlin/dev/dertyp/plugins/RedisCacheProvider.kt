@@ -13,7 +13,7 @@ import redis.clients.jedis.params.SetParams
 import kotlin.time.Duration
 
 class RedisCacheProvider(config: Config) : SimpleCacheProvider(config) {
-    private val jedis: RedisClusterClient = RedisClusterClient.create(HostAndPort(config.host, config.port))
+    val jedis: RedisClusterClient = RedisClusterClient.create(HostAndPort(config.host, config.port))
 
     init {
         loadKoinModules(module {
@@ -47,6 +47,10 @@ class RedisCacheProvider(config: Config) : SimpleCacheProvider(config) {
         var port = 6379
 
         var ssl = false
+
+        var useRedisSearch = false
+
+        var indexPrefix = "synara"
     }
 }
 

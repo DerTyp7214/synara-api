@@ -14,12 +14,14 @@ import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.TransactionManager
 import org.koin.core.component.KoinComponent
+import org.koin.core.component.inject
 import java.util.UUID
 import kotlin.time.Duration.Companion.seconds
 
 class SearchIndexWorker : KoinComponent {
     private val batchSize = 100
     private val logger = KtorSimpleLogger("SearchIndexWorker")
+    private val redisSearchService by inject<RedisSearchService>()
 
     fun startService(scope: CoroutineScope) {
         scope.launch(Dispatchers.Default) {
@@ -138,6 +140,18 @@ class SearchIndexWorker : KoinComponent {
         """.trimIndent()
         
         TransactionManager.current().exec(query, args = listOf(UUIDColumnType() to songId))
+
+        if (redisSearchService.isEnabled()) {
+            fetchSongData(songId)?.let { data ->
+                redisSearchService.indexSong(
+                    songId,
+                    data["title"] ?: "",
+                    data["artist"] ?: "",
+                    data["album"] ?: "",
+                    data["metadata"] ?: ""
+                )
+            }
+        }
     }
 
     private fun rebuildArtistSearchVector(artistId: UUID) {
@@ -182,6 +196,18 @@ class SearchIndexWorker : KoinComponent {
         """.trimIndent()
 
         TransactionManager.current().exec(query, args = listOf(UUIDColumnType() to artistId))
+
+        if (redisSearchService.isEnabled()) {
+            fetchArtistData(artistId)?.let { data ->
+                redisSearchService.indexArtist(
+                    artistId,
+                    data["name"] ?: "",
+                    data["aliases"] ?: "",
+                    data["groups"] ?: "",
+                    data["metadata"] ?: ""
+                )
+            }
+        }
     }
 
     private fun rebuildAlbumSearchVector(albumId: UUID) {
@@ -228,5 +254,176 @@ class SearchIndexWorker : KoinComponent {
         """.trimIndent()
 
         TransactionManager.current().exec(query, args = listOf(UUIDColumnType() to albumId))
+
+        if (redisSearchService.isEnabled()) {
+            fetchAlbumData(albumId)?.let { data ->
+                redisSearchService.indexAlbum(
+                    albumId,
+                    data["name"] ?: "",
+                    data["artists"] ?: "",
+                    data["groups"] ?: ""
+                )
+            }
+        }
+    }
+
+    private fun fetchSongData(songId: UUID): Map<String, String>? {
+        val query = """
+            SELECT 
+                s_inner.title AS song_title,
+                coalesce(alb.name, '') AS album_name,
+                coalesce(string_agg(DISTINCT art.name, ' '), '') AS artist_names,
+                coalesce(string_agg(DISTINCT art_alias.name, ' '), '') AS artist_aliases,
+                coalesce(string_agg(DISTINCT mb_rec.title, ' '), '') AS mb_rec_titles,
+                coalesce(string_agg(DISTINCT mb_rel.title, ' '), '') AS mb_rel_titles,
+                coalesce(string_agg(DISTINCT mb_rel.disambiguation, ' '), '') AS mb_rel_disambig,
+                coalesce(string_agg(DISTINCT mb_art.name, ' '), '') AS mb_art_names,
+                coalesce(string_agg(DISTINCT mb_art_alias.name, ' '), '') AS mb_art_aliases,
+                coalesce(string_agg(DISTINCT grp.name, ' '), '') AS group_names,
+                coalesce(string_agg(DISTINCT mem.name, ' '), '') AS member_names
+            FROM song s_inner
+            LEFT JOIN album alb ON s_inner."albumId" = alb.id
+            LEFT JOIN songartist sa ON s_inner.id = sa."songId"
+            LEFT JOIN artist art ON sa."artistId" = art.id
+            LEFT JOIN artistalias art_alias ON art.id = art_alias."artistId"
+            LEFT JOIN artist_member am_grp ON art.id = am_grp."artistId"
+            LEFT JOIN artist grp ON am_grp."groupId" = grp.id
+            LEFT JOIN artist_member am_mem ON art.id = am_mem."groupId"
+            LEFT JOIN artist mem ON am_mem."artistId" = mem.id
+            LEFT JOIN song_musicbrainz smb ON s_inner.id = smb."songId"
+            LEFT JOIN mb_recording mb_rec ON smb."musicBrainzId" = mb_rec.id
+            LEFT JOIN album_musicbrainz amb ON alb.id = amb."albumId"
+            LEFT JOIN mb_release mb_rel ON amb."musicBrainzId" = mb_rel.id
+            LEFT JOIN artist_musicbrainz art_mb ON art.id = art_mb."artistId"
+            LEFT JOIN mb_artist mb_art ON art_mb."musicBrainzId" = mb_art.id
+            LEFT JOIN mb_artist_alias mb_art_alias ON mb_art.id = mb_art_alias."artistId"
+            WHERE s_inner.id = ?
+            GROUP BY s_inner.id, s_inner.title, alb.name
+        """.trimIndent()
+
+        var result: Map<String, String>? = null
+        TransactionManager.current().exec(query, args = listOf(UUIDColumnType() to songId)) { rs ->
+            if (rs.next()) {
+                val metadataParts = listOf(
+                    rs.getString("artist_aliases"),
+                    rs.getString("mb_rec_titles"),
+                    rs.getString("mb_rel_titles"),
+                    rs.getString("mb_rel_disambig"),
+                    rs.getString("mb_art_names"),
+                    rs.getString("mb_art_aliases"),
+                    rs.getString("group_names"),
+                    rs.getString("member_names")
+                ).filter { !it.isNullOrBlank() }
+                
+                result = mapOf(
+                    "title" to (rs.getString("song_title") ?: ""),
+                    "artist" to (rs.getString("artist_names") ?: ""),
+                    "album" to (rs.getString("album_name") ?: ""),
+                    "metadata" to metadataParts.joinToString(" ")
+                )
+            }
+        }
+        return result
+    }
+
+    private fun fetchArtistData(artistId: UUID): Map<String, String>? {
+        val query = """
+            SELECT 
+                a_inner.name AS artist_name,
+                coalesce(string_agg(DISTINCT art_alias.name, ' '), '') AS artist_aliases,
+                coalesce(string_agg(DISTINCT grp.name, ' '), '') AS group_names,
+                coalesce(string_agg(DISTINCT mem.name, ' '), '') AS member_names,
+                coalesce(string_agg(DISTINCT mb_art.name, ' '), '') AS mb_art_names,
+                coalesce(string_agg(DISTINCT mb_art_alias.name, ' '), '') AS mb_art_aliases,
+                coalesce(string_agg(DISTINCT mb_art.disambiguation, ' '), '') AS mb_art_disambig
+            FROM artist a_inner
+            LEFT JOIN artistalias art_alias ON a_inner.id = art_alias."artistId"
+            LEFT JOIN artist_member am_grp ON a_inner.id = am_grp."artistId"
+            LEFT JOIN artist grp ON am_grp."groupId" = grp.id
+            LEFT JOIN artist_member am_mem ON a_inner.id = am_mem."groupId"
+            LEFT JOIN artist mem ON am_mem."artistId" = mem.id
+            LEFT JOIN artist_musicbrainz art_mb ON a_inner.id = art_mb."artistId"
+            LEFT JOIN mb_artist mb_art ON art_mb."musicBrainzId" = mb_art.id
+            LEFT JOIN mb_artist_alias mb_art_alias ON mb_art.id = mb_art_alias."artistId"
+            WHERE a_inner.id = ?
+            GROUP BY a_inner.id, a_inner.name
+        """.trimIndent()
+
+        var result: Map<String, String>? = null
+        TransactionManager.current().exec(query, args = listOf(UUIDColumnType() to artistId)) { rs ->
+            if (rs.next()) {
+                val metadataParts = listOf(
+                    rs.getString("mb_art_names"),
+                    rs.getString("mb_art_aliases"),
+                    rs.getString("mb_art_disambig")
+                ).filter { !it.isNullOrBlank() }
+
+                result = mapOf(
+                    "name" to (rs.getString("artist_name") ?: ""),
+                    "aliases" to (rs.getString("artist_aliases") ?: ""),
+                    "groups" to listOf(rs.getString("group_names"), rs.getString("member_names")).filter { !it.isNullOrBlank() }.joinToString(" "),
+                    "metadata" to metadataParts.joinToString(" ")
+                )
+            }
+        }
+        return result
+    }
+
+    private fun fetchAlbumData(albumId: UUID): Map<String, String>? {
+        val query = """
+            SELECT 
+                alb_inner.name AS album_name,
+                coalesce(string_agg(DISTINCT art.name, ' '), '') AS artist_names,
+                coalesce(string_agg(DISTINCT art_alias.name, ' '), '') AS artist_aliases,
+                coalesce(string_agg(DISTINCT grp.name, ' '), '') AS group_names,
+                coalesce(string_agg(DISTINCT mem.name, ' '), '') AS member_names,
+                coalesce(string_agg(DISTINCT mb_rel.title, ' '), '') AS mb_rel_titles,
+                coalesce(string_agg(DISTINCT mb_rel.disambiguation, ' '), '') AS mb_rel_disambig,
+                coalesce(string_agg(DISTINCT mb_art.name, ' '), '') AS mb_art_names,
+                coalesce(string_agg(DISTINCT mb_art_alias.name, ' '), '') AS mb_art_aliases,
+                coalesce(string_agg(DISTINCT mb_art.disambiguation, ' '), '') AS mb_art_disambig
+            FROM album alb_inner
+            LEFT JOIN albumartist aa ON alb_inner.id = aa."albumId"
+            LEFT JOIN artist art ON aa."artistId" = art.id
+            LEFT JOIN artistalias art_alias ON art.id = art_alias."artistId"
+            LEFT JOIN artist_member am_grp ON art.id = am_grp."artistId"
+            LEFT JOIN artist grp ON am_grp."groupId" = grp.id
+            LEFT JOIN artist_member am_mem ON art.id = am_mem."groupId"
+            LEFT JOIN artist mem ON am_mem."artistId" = mem.id
+            LEFT JOIN album_musicbrainz amb ON alb_inner.id = amb."albumId"
+            LEFT JOIN mb_release mb_rel ON amb."musicBrainzId" = mb_rel.id
+            LEFT JOIN artist_musicbrainz art_mb ON art.id = art_mb."artistId"
+            LEFT JOIN mb_artist mb_art ON art_mb."musicBrainzId" = mb_art.id
+            LEFT JOIN mb_artist_alias mb_art_alias ON mb_art.id = mb_art_alias."artistId"
+            WHERE alb_inner.id = ?
+            GROUP BY alb_inner.id, alb_inner.name
+        """.trimIndent()
+
+        var result: Map<String, String>? = null
+        TransactionManager.current().exec(query, args = listOf(UUIDColumnType() to albumId)) { rs ->
+            if (rs.next()) {
+                val artistParts = listOf(
+                    rs.getString("artist_names"),
+                    rs.getString("artist_aliases"),
+                    rs.getString("mb_rel_titles"),
+                    rs.getString("mb_art_names"),
+                    rs.getString("mb_art_aliases")
+                ).filter { !it.isNullOrBlank() }
+
+                val groupParts = listOf(
+                    rs.getString("group_names"),
+                    rs.getString("member_names"),
+                    rs.getString("mb_rel_disambig"),
+                    rs.getString("mb_art_disambig")
+                ).filter { !it.isNullOrBlank() }
+
+                result = mapOf(
+                    "name" to (rs.getString("album_name") ?: ""),
+                    "artists" to artistParts.joinToString(" "),
+                    "groups" to groupParts.joinToString(" ")
+                )
+            }
+        }
+        return result
     }
 }
