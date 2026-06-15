@@ -1,7 +1,6 @@
 package dev.dertyp.services
 
 import dev.dertyp.plugins.RedisCacheProvider
-import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 import redis.clients.jedis.search.IndexDefinition
 import redis.clients.jedis.search.IndexOptions
@@ -9,7 +8,7 @@ import redis.clients.jedis.search.Query
 import redis.clients.jedis.search.Schema
 import java.util.UUID
 
-class RedisSearchService : KoinComponent {
+class RedisSearchService : Service() {
     private val config by inject<RedisCacheProvider.Config>()
     private val redisProvider by inject<RedisCacheProvider>()
 
@@ -89,25 +88,65 @@ class RedisSearchService : KoinComponent {
         ))
     }
 
-    fun search(index: String, query: String, limit: Int = 20): List<UUID> {
-        if (!isEnabled()) return emptyList()
+    data class SearchResult(val ids: List<UUID>, val total: Long)
+
+    fun search(index: String, query: String, offset: Int = 0, limit: Int = 1000): SearchResult {
+        if (!isEnabled()) return SearchResult(emptyList(), 0)
         val indexName = "${config.indexPrefix}:$index-index"
 
         val tokens = query.split(Regex("\\s+")).filter { it.isNotBlank() }
-        if (tokens.isEmpty()) return emptyList()
+        if (tokens.isEmpty()) return SearchResult(emptyList(), 0)
 
-        val redisQuery = tokens.joinToString(" ") { 
-            if (it.startsWith("-")) "-${it.substring(1)}*" else "$it*" 
+        val redisQuery = tokens.joinToString(" ") { token ->
+            if (token.startsWith("-")) {
+                "-${token.substring(1)}"
+            } else {
+                if (token.length >= 3) {
+                    "($token* | %$token%)"
+                } else {
+                    "$token*"
+                }
+            }
         }
 
-        val q = Query(redisQuery).limit(0, limit)
+        val q = Query(redisQuery).limit(offset, limit)
         val result = try {
             jedis.ftSearch(indexName, q)
-        } catch (_: Exception) {
-            return emptyList()
+        } catch (e: Exception) {
+            logger.error("Redis search failed: ${e.message}")
+            return SearchResult(emptyList(), 0)
         }
-        return result.documents.map { doc ->
+        
+        val ids = result.documents.map { doc ->
             UUID.fromString(doc.id.substringAfterLast(":"))
+        }
+        return SearchResult(ids, result.totalResults)
+    }
+
+    fun getMemoryUsage(): Long {
+        if (!isEnabled()) return 0
+        return try {
+            val songInfo = jedis.ftInfo("${config.indexPrefix}:song-index")
+            val artistInfo = jedis.ftInfo("${config.indexPrefix}:artist-index")
+            val albumInfo = jedis.ftInfo("${config.indexPrefix}:album-index")
+
+            fun extract(map: Map<String, Any?>): Long {
+                val value = map["total_index_memory_sz_mb"] 
+                    ?: map["inverted_sz_mb"] 
+                    ?: map["total_index_memory_mib"] 
+                    ?: return 0L
+                
+                return when (value) {
+                    is Number -> value.toLong()
+                    is String -> value.toDoubleOrNull()?.toLong() ?: 0L
+                    else -> 0L
+                }
+            }
+
+            extract(songInfo) + extract(artistInfo) + extract(albumInfo)
+        } catch (e: Exception) {
+            logger.error("Failed to get Redis memory usage: ${e.message}")
+            0
         }
     }
 }

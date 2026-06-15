@@ -79,7 +79,9 @@ Most variables have sensible defaults and are **optional**. Only variables witho
 | Variable | Description | Required | Default (Standalone) | Default (Docker) |
 |:---|:---|:---:|:---|:---|
 | `REDIS_HOST` | Redis server hostname. | No | - | - |
+| `REDIS_INDEX_PREFIX` | Prefix for Redis Search indices. | No | `synara` | - |
 | `REDIS_PORT` | Redis server port. | No | - | - |
+| `REDIS_USE_SEARCH` | Whether to use RediSearch for ranked searching. | No | `false` | - |
 
 ## Storage & Paths
 

@@ -36,6 +36,16 @@ tasks.shadowJar {
     }
 }
 
+tasks.register<JavaExec>("runSearchBenchmark") {
+    group = "verification"
+    description = "Runs the search performance benchmark comparing SQLite, PostgreSQL, and Redis."
+    mainClass.set("dev.dertyp.benchmarks.SearchBenchmark")
+    classpath = sourceSets["test"].runtimeClasspath
+
+    standardInput = System.`in`
+    standardOutput = System.out
+}
+
 dependencies {
     add("ksp", project(":common-rpc:doc-compiler"))
 

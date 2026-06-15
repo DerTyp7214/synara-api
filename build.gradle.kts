@@ -49,6 +49,8 @@ tasks.register("generateEnvDocs") {
             "SETUP_FROM_MIRROR_PASSWORD" to mapOf("desc" to "Password for the remote server mirroring setup.", "cat" to "Database Configuration"),
             "REDIS_HOST" to mapOf("desc" to "Redis server hostname.", "cat" to "Redis Configuration"),
             "REDIS_PORT" to mapOf("desc" to "Redis server port.", "cat" to "Redis Configuration"),
+            "REDIS_USE_SEARCH" to mapOf("desc" to "Whether to use RediSearch for ranked searching.", "cat" to "Redis Configuration"),
+            "REDIS_INDEX_PREFIX" to mapOf("desc" to "Prefix for Redis Search indices.", "cat" to "Redis Configuration"),
             "IMAGE_CACHE_URL" to mapOf("desc" to "Image Cache service URL.", "cat" to "External Services"),
             "IMAGE_CACHE_TOKEN" to mapOf("desc" to "Image Cache auth token.", "cat" to "External Services"),
             "TRANSCRIBER_URL" to mapOf("desc" to "Transcriber service URL.", "cat" to "External Services"),

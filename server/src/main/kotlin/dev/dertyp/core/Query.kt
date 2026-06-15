@@ -13,6 +13,16 @@ import org.jetbrains.exposed.v1.jdbc.Query
 import org.koin.core.context.GlobalContext
 import java.util.UUID
 
+object SearchContext {
+    private val total = ThreadLocal<Long?>()
+
+    var redisTotal: Long?
+        get() = total.get()
+        set(value) = total.set(value)
+
+    fun clear() = total.remove()
+}
+
 val mbArtistSearchTable = MBArtistTable.alias("mbArtistSearch")
 val mbArtistAliasSearchTable = MBArtistAliasTable.alias("mbArtistAliasSearch")
 
@@ -105,8 +115,12 @@ fun Query.rankedSearchQuery(
         }
 
         if (index != null) {
-            val ids = redisSearchService.search(index, queryString)
+            val redisLimit = this.limit ?: 1000
+            val redisOffset = this.offset.toInt()
+            val result = redisSearchService.search(index, queryString, redisOffset, redisLimit)
+            val ids = result.ids
             if (ids.isNotEmpty()) {
+                SearchContext.redisTotal = result.total
                 val idColumn = columns.firstNotNullOfOrNull { expression ->
                     if (expression is Column<*>) {
                         val table = expression.table
@@ -136,23 +150,16 @@ fun Query.rankedSearchQuery(
                     }
 
                     @Suppress("UNCHECKED_CAST")
-                    val wrappedIds = ids.map { EntityID(it, baseTable as IdTable<UUID>) }
+                    val idTable = baseTable as IdTable<UUID>
+                    val entityIdColumn = if (alias != null) alias[idTable.id] else idTable.id
 
-                    val rawIdColumn = if (alias != null) {
-                        alias[baseTable.id]
-                    } else {
-                        baseTable.id
-                    }
+                    where { entityIdColumn inList ids }
 
-                    @Suppress("UNCHECKED_CAST")
-                    val finalIdColumn = rawIdColumn as Column<EntityID<UUID>>
-
-                    where { finalIdColumn inList wrappedIds }
-
+                    val wrappedIds = ids.map { EntityID(it, idTable) }
                     val firstId = wrappedIds.first()
-                    val initialCase = case().When(finalIdColumn eq firstId, intLiteral(0))
+                    val initialCase = case().When(entityIdColumn eq firstId, intLiteral(0))
                     val orderCase = wrappedIds.drop(1).foldIndexed(initialCase) { idx, acc, eid ->
-                        acc.When(finalIdColumn eq eid, intLiteral(idx + 1))
+                        acc.When(entityIdColumn eq eid, intLiteral(idx + 1))
                     }
                     orderBy(orderCase.Else(intLiteral(ids.size)), SortOrder.ASC)
                     return this
@@ -187,7 +194,7 @@ fun Query.rankedSearchQuery(
             for (token in negativeTokens) {
                 val clean = token.substring(1)
                 if (clean.isBlank()) continue
-                val tokenMatchOp = not(MatchOp(searchVectorColumn, toTsQuery("$clean:*")))
+                val tokenMatchOp = not(MatchOp(searchVectorColumn, toTsQuery(clean)))
                 whereClause = whereClause?.let { it and tokenMatchOp } ?: tokenMatchOp
             }
         } else {
@@ -206,7 +213,7 @@ fun Query.rankedSearchQuery(
             for (token in negativeTokens) {
                 val clean = token.substring(1)
                 if (clean.isBlank()) continue
-                val tsQuery = toTsQuery("$clean:*")
+                val tsQuery = toTsQuery(clean)
 
                 val matchConditions = columns.map { col ->
                     val coalesceCol = CustomFunction("coalesce", VarCharColumnType(), col, stringLiteral(""))
@@ -310,7 +317,15 @@ fun Query.rankedSearchQuery(
     }
 
     for (token in tokens.filter { it.startsWith("-") && it.length > 1 }) {
-        val matches = columns.map { it.isNull() or (it notIlike "%${token.substring(1)}%") }
+        val clean = token.substring(1)
+        val matches = columns.map { col ->
+            col.isNull() or not(
+                (col ilike "$clean %") or
+                (col ilike "% $clean") or
+                (col ilike "% $clean %") or
+                (col eq stringLiteral(clean))
+            )
+        }
 
         val tokenMatchOp = matches.reduce { a, b -> a and b }
         whereClause = whereClause?.let { it and tokenMatchOp } ?: tokenMatchOp

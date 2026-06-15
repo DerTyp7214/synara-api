@@ -762,7 +762,8 @@ class ArtistService(private val searchIndexWorker: SearchIndexWorker? = null) : 
         val countExpression = ArtistTable.id.countDistinct()
         val countQuery = Query(Slice(baseSelect.set.source, listOf(countExpression)), baseSelect.where)
         baseSelect.having?.let { h -> countQuery.having { h } }
-        val total = countQuery.first()[countExpression]
+        val total = SearchContext.redisTotal ?: countQuery.first()[countExpression]
+        SearchContext.clear()
 
         if (total == 0L) return@dbQuery PaginatedResponse(
             data = listOf(),

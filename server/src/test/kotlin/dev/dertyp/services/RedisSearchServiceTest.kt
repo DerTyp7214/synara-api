@@ -70,19 +70,21 @@ class RedisSearchServiceTest {
             metadata = "rock opera classic"
         )
 
+        Thread.sleep(200)
+
         val results = service.search("song", "bohemian")
         
-        assertTrue(results.contains(songId), "Should find the song by title")
-        assertEquals(1, results.size)
+        assertTrue(results.ids.contains(songId), "Should find the song by title")
+        assertEquals(1, results.ids.size)
 
         val artistResults = service.search("song", "queen")
-        assertTrue(artistResults.contains(songId), "Should find the song by artist")
+        assertTrue(artistResults.ids.contains(songId), "Should find the song by artist")
 
         val metaResults = service.search("song", "opera")
-        assertTrue(metaResults.contains(songId), "Should find the song by metadata")
+        assertTrue(metaResults.ids.contains(songId), "Should find the song by metadata")
 
         val negativeResults = service.search("song", "bohemian -opera")
-        assertTrue(negativeResults.isEmpty(), "Should not find the song if excluded by negative term")
+        assertTrue(negativeResults.ids.isEmpty(), "Should not find the song if excluded by negative term")
     }
 
     @Test
@@ -92,11 +94,13 @@ class RedisSearchServiceTest {
         val id = UUID.randomUUID()
         service.indexSong(id, "Deeply Disturbed", "Infected Mushroom", "Converting Vegetarians", "")
 
+        Thread.sleep(200)
+
         val results = service.search("song", "deeply distu")
-        assertTrue(results.contains(id), "Should find song with partial tokens")
+        assertTrue(results.ids.contains(id), "Should find song with partial tokens")
 
         val multiResults = service.search("song", "infected deeply")
-        assertTrue(multiResults.contains(id), "Should find song with tokens from different fields")
+        assertTrue(multiResults.ids.contains(id), "Should find song with tokens from different fields")
     }
 
     @Test
@@ -109,11 +113,13 @@ class RedisSearchServiceTest {
         service.indexArtist(artistId, "Infected Mushroom", "IM", "Infected", "psytrance")
         service.indexAlbum(albumId, "Converting Vegetarians", "Infected Mushroom", "Psy")
 
+        Thread.sleep(200)
+
         val artistResults = service.search("artist", "mushroom")
-        assertTrue(artistResults.contains(artistId))
+        assertTrue(artistResults.ids.contains(artistId))
 
         val albumResults = service.search("album", "vegetarians")
-        assertTrue(albumResults.contains(albumId))
+        assertTrue(albumResults.ids.contains(albumId))
     }
 
     @Test
@@ -132,10 +138,10 @@ class RedisSearchServiceTest {
 
         val results = service.search("song", "Target")
         
-        assertEquals(3, results.size)
-        assertEquals(id1, results[0], "Title match (weight 5) should be first")
-        assertEquals(id3, results[1], "Artist match (weight 2) should be second")
-        assertEquals(id2, results[2], "Album match (weight 1) should be third")
+        assertEquals(3, results.ids.size)
+        assertEquals(id1, results.ids[0], "Title match (weight 5) should be first")
+        assertEquals(id3, results.ids[1], "Artist match (weight 2) should be second")
+        assertEquals(id2, results.ids[2], "Album match (weight 1) should be third")
     }
 
     @Test
@@ -152,8 +158,43 @@ class RedisSearchServiceTest {
 
         val results = service.search("artist", "Target")
         
-        assertEquals(2, results.size)
-        assertEquals(id1, results[0], "Name match should be first")
-        assertEquals(id2, results[1], "Alias match should be second")
+        assertEquals(2, results.ids.size)
+        assertEquals(id1, results.ids[0], "Name match should be first")
+        assertEquals(id2, results.ids[1], "Alias match should be second")
+    }
+
+    @Test
+    fun `search should respect offset and limit`() {
+        if (TestRedis.redisContainer == null) return
+
+        (1..10).forEach { 
+            val id = UUID.randomUUID()
+            service.indexSong(id, "Test Song $it", "", "", "")
+        }
+
+        Thread.sleep(200)
+
+        val firstPage = service.search("song", "Test", offset = 0, limit = 5)
+        assertEquals(5, firstPage.ids.size)
+        assertEquals(10, firstPage.total)
+
+        val secondPage = service.search("song", "Test", offset = 5, limit = 5)
+        assertEquals(5, secondPage.ids.size)
+
+        assertTrue(firstPage.ids.none { it in secondPage.ids })
+    }
+
+    @Test
+    fun `test getMemoryUsage reporting`() {
+        if (TestRedis.redisContainer == null) return
+
+        service.indexSong(UUID.randomUUID(), "Song 1", "Artist 1", "Album 1", "meta")
+        service.indexArtist(UUID.randomUUID(), "Artist 2", "Alias", "Group", "meta")
+        service.indexAlbum(UUID.randomUUID(), "Album 2", "Artist", "Group")
+
+        Thread.sleep(200)
+
+        val usage = service.getMemoryUsage()
+        println("MEMORY USAGE REPORTED: $usage")
     }
 }
