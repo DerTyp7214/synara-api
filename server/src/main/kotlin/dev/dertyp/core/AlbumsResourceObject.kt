@@ -11,12 +11,12 @@ fun AlbumsResourceObject.artists(artists: Map<String, ArtistsAttributes>) =
     } ?: emptyList()
 
 fun AlbumsResourceObject.images(artworks: Map<String, ArtworksAttributes>) =
-    relationships?.coverArt?.data?.firstNotNullOf { data ->
+    relationships?.coverArt?.data?.flatMap { data ->
         artworks[data.id]?.files?.map {
             IMetadataService.Image(
                 url = it.href,
                 width = it.meta.width,
                 height = it.meta.height
             )
-        }
+        } ?: emptyList()
     } ?: emptyList()
