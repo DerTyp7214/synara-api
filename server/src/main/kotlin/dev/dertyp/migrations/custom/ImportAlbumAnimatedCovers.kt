@@ -83,37 +83,48 @@ class ImportAlbumAnimatedCovers : CustomMigration() {
                 if (tidalIdToAnimatedUrl.isEmpty()) return@coroutineScope
 
                 val uniqueUrls = tidalIdToAnimatedUrl.values.distinct()
-                ctx.log("Downloading ${uniqueUrls.size} unique animated image(s)...")
+                ctx.log("Downloading ${uniqueUrls.size} unique animated image(s) in batches...")
 
-                val urlToBytes = uniqueUrls.map { url ->
-                    async {
-                        try {
-                            url to ApiClient.instance.safeQueuedGet<ByteArray>(url)
-                        } catch (_: Exception) {
-                            url to null
+                val urlToAnimId = mutableMapOf<String, java.util.UUID>()
+                var downloaded = 0
+                val downloadBatches = uniqueUrls.chunked(5)
+                downloadBatches.forEachIndexed { batchIndex, batch ->
+                    val batchBytes = batch.map { url ->
+                        async {
+                            try {
+                                url to ApiClient.instance.safeQueuedGet<ByteArray>(url)
+                            } catch (_: Exception) {
+                                url to null
+                            }
                         }
+                    }.awaitAll()
+
+                    val insertables = batchBytes.mapNotNull { (url, bytes) ->
+                        bytes?.let { InsertableAnimatedImage(it, it.sha256(), url) }
+                    }.distinctBy { it.contentHash }
+
+                    if (insertables.isNotEmpty()) {
+                        val hashToId = animatedImageService.createBatch(insertables)
+                        batchBytes.forEach { (url, bytes) ->
+                            bytes?.sha256()?.let { hash -> hashToId[hash]?.let { urlToAnimId[url] = it } }
+                        }
+                        downloaded += insertables.size
                     }
-                }.awaitAll().toMap()
 
-                val downloaded = urlToBytes.count { it.value != null }
-                ctx.updateProgress(0.7, "Downloaded $downloaded/${uniqueUrls.size} animated images")
+                    ctx.updateProgress(
+                        0.5 + (batchIndex + 1).toDouble() / downloadBatches.size * 0.3,
+                        "Downloaded $downloaded/${uniqueUrls.size} animated images"
+                    )
+                }
 
-                val insertables = urlToBytes.mapNotNull { (url, bytes) ->
-                    bytes?.let { InsertableAnimatedImage(it, it.sha256(), url) }
-                }.distinctBy { it.contentHash }
-
-                if (insertables.isEmpty()) return@coroutineScope
-
-                ctx.log("Saving ${insertables.size} animated image(s) to database...")
-                val hashToId = animatedImageService.createBatch(insertables)
+                if (urlToAnimId.isEmpty()) return@coroutineScope
 
                 ctx.updateProgress(0.8, "Updating albums and songs...")
 
                 dbQuery {
                     val albumToAnimId = allTidalAlbums.mapNotNull { (albumId, tidalId) ->
                         val url = tidalIdToAnimatedUrl[tidalId] ?: return@mapNotNull null
-                        val bytes = urlToBytes[url] ?: return@mapNotNull null
-                        val animId = hashToId[bytes.sha256()] ?: return@mapNotNull null
+                        val animId = urlToAnimId[url] ?: return@mapNotNull null
                         albumId to animId
                     }.toMap()
 
