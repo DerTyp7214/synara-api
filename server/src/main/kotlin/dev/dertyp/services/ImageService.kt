@@ -25,7 +25,7 @@ import java.awt.Color
 import java.awt.image.BufferedImage
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
-import java.util.UUID
+import java.util.*
 import javax.imageio.IIOImage
 import javax.imageio.ImageIO
 import javax.imageio.ImageWriteParam
@@ -335,6 +335,7 @@ class ImageService(
         referencedImages.addAll(UserPlaylistTable.selectAll().mapNotNull { it[UserPlaylistTable.imageId]?.value })
         referencedImages.addAll(UserTable.selectAll().mapNotNull { it[UserTable.profileImage]?.value })
         referencedImages.addAll(RecentReleaseTable.selectAll().mapNotNull { it[RecentReleaseTable.imageId]?.value })
+        referencedImages.addAll(AnimatedImageTable.selectAll().mapNotNull { it[AnimatedImageTable.imageId]?.value })
 
         val allImages = ImageTable.selectAll().map {
             it[ImageTable.id].value to it[ImageTable.path]

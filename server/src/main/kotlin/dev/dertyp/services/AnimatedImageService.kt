@@ -5,8 +5,10 @@ import dev.dertyp.core.sha256
 import dev.dertyp.data.AnimatedImage
 import dev.dertyp.data.InsertableAnimatedImage
 import dev.dertyp.data.PaginatedResponse
+import dev.dertyp.db.AlbumTable
 import dev.dertyp.db.AnimatedImageTable
 import dev.dertyp.db.ImageTable
+import dev.dertyp.db.SongTable
 import dev.dertyp.dbQuery
 import dev.dertyp.plugins.RedisCacheProvider
 import dev.dertyp.utils.LogParam
@@ -21,6 +23,7 @@ import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.jdbc.Query
 import org.jetbrains.exposed.v1.jdbc.batchInsert
+import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import redis.clients.jedis.HostAndPort
@@ -136,6 +139,38 @@ class AnimatedImageService(
             pageSize = pageSize,
             hasNextPage = data.drop(page * pageSize).size >= pageSize + offset,
         )
+    }
+
+    suspend fun deleteUnreferencedAnimatedImages(onProgress: suspend (Double, String) -> Unit = { _, _ -> }): Int = dbQuery {
+        val referencedIds = mutableSetOf<UUID>()
+        referencedIds.addAll(AlbumTable.selectAll().mapNotNull { it[AlbumTable.animatedCover]?.value })
+        referencedIds.addAll(SongTable.selectAll().mapNotNull { it[SongTable.animatedCover]?.value })
+
+        val allAnimatedImages = AnimatedImageTable.selectAll().map {
+            it[AnimatedImageTable.id].value to it[AnimatedImageTable.path]
+        }
+
+        val unreferenced = allAnimatedImages.filter { (id, _) -> id !in referencedIds }
+        onProgress(0.0, "Found ${unreferenced.size} unreferenced animated images")
+
+        val chunks = unreferenced.chunked(5000)
+        chunks.forEachIndexed { index, batch ->
+            val progress = (index.toDouble() / chunks.size) * 100.0
+            onProgress(progress, "Deleting batch ${index + 1}/${chunks.size} (${batch.size} animated images)")
+
+            val idsToDelete = batch.map { it.first }
+
+            batch.forEach { (_, path) ->
+                val filePath = Path(storageService.animatedImagesPath, path)
+                if (filePath.exists()) filePath.deleteIfExists()
+            }
+
+            AnimatedImageTable.deleteWhere { AnimatedImageTable.id inList idsToDelete }
+        }
+
+        onProgress(100.0, "Deleted ${unreferenced.size} animated images")
+        logger.info("Deleted ${unreferenced.size} unreferenced animated images")
+        unreferenced.size
     }
 
     override suspend fun createBatch(images: List<InsertableAnimatedImage>): Map<String, UUID> {
