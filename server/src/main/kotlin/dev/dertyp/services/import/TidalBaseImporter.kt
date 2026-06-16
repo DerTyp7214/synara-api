@@ -4,14 +4,11 @@ import dev.dertyp.ApiClient
 import dev.dertyp.PlatformUUID
 import dev.dertyp.core.*
 import dev.dertyp.data.*
-import dev.dertyp.db.AlbumTable
+import dev.dertyp.db.*
 import dev.dertyp.dbQuery
 import dev.dertyp.getISOFromDate
 import dev.dertyp.plugins.*
-import dev.dertyp.services.ILrcLibService
-import dev.dertyp.services.ImageService
-import dev.dertyp.services.SongService
-import dev.dertyp.services.UserPlaylistService
+import dev.dertyp.services.*
 import dev.dertyp.services.metadata.IMetadataService
 import dev.dertyp.services.metadata.IMusicBrainzService
 import dev.dertyp.services.metadata.MetadataService
@@ -22,11 +19,15 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.jaudiotagger.audio.AudioFileIO
 import org.jaudiotagger.tag.FieldKey
+import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.inList
+import org.jetbrains.exposed.v1.jdbc.andWhere
+import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.jdbc.update
 import org.koin.core.component.get
 import org.koin.core.component.inject
-import java.util.UUID
+import java.util.*
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.io.path.absolutePathString
 import kotlin.io.path.extension
@@ -44,7 +45,9 @@ private data class TrackMetadata(
     val coverUrl: String?,
     val coverData: ByteArray?,
     val originalTitle: String,
-    val originalArtists: List<String>
+    val originalArtists: List<String>,
+    val animatedCoverUrl: String? = null,
+    val tidalAlbumId: String? = null,
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
@@ -98,6 +101,7 @@ abstract class TidalBaseImporter(
     private val songService by inject<SongService>()
     private val userPlaylistService by inject<UserPlaylistService>()
     private val imageService by inject<ImageService>()
+    private val animatedImageService by inject<AnimatedImageService>()
     private val importService by inject<ImportService>()
     private val lrcLibService by inject<ILrcLibService>()
     private val musicBrainzService by inject<IMusicBrainzService>()
@@ -131,6 +135,7 @@ abstract class TidalBaseImporter(
         onLiveOutput("Grouping ${tidalTracks.size} tracks into ${tracksByAlbum.size} album(s) for MusicBrainz matching...")
 
         val coverDownloads = mutableMapOf<String, Deferred<ByteArray?>>()
+        val animatedCoverDownloads = mutableMapOf<String, Deferred<ByteArray?>>()
 
         tracksByAlbum.forEach { (albumId, tracks) ->
             val firstTrack = tracks.first()
@@ -255,6 +260,21 @@ abstract class TidalBaseImporter(
                     }
                 }
 
+                val animatedImage = tidalTrack.images.filter { it.animated }.maxByOrNull { it.width }
+                val animatedCoverUrl = animatedImage?.url
+                if (animatedCoverUrl != null) {
+                    @Suppress("UnusedVariable", "unused")
+                    val animatedCoverDeferred = animatedCoverDownloads.getOrPut(animatedCoverUrl) {
+                        async {
+                            try {
+                                ApiClient.instance.safeQueuedGet<ByteArray>(animatedCoverUrl)
+                            } catch (_: Exception) {
+                                null
+                            }
+                        }
+                    }
+                }
+
                 trackMetadataMap[url] = TrackMetadata(
                     url = url,
                     tidalId = tidalTrack.id,
@@ -267,7 +287,9 @@ abstract class TidalBaseImporter(
                     coverUrl = finalCoverUrl,
                     coverData = null,
                     originalTitle = tidalTrack.title,
-                    originalArtists = tidalTrack.artists
+                    originalArtists = tidalTrack.artists,
+                    animatedCoverUrl = animatedCoverUrl,
+                    tidalAlbumId = tidalTrack.albumId,
                 )
             }
         }
@@ -336,6 +358,63 @@ abstract class TidalBaseImporter(
                 }
             }
         }
+
+        val animatedDataMap = animatedCoverDownloads.mapValues { it.value.await() }
+        val insertables = trackMetadataMap.values
+            .mapNotNull { meta ->
+                val bytes = animatedDataMap[meta.animatedCoverUrl] ?: return@mapNotNull null
+                InsertableAnimatedImage(bytes, bytes.sha256(), meta.animatedCoverUrl!!)
+            }
+            .distinctBy { it.contentHash }
+
+        if (insertables.isNotEmpty()) {
+            try {
+                val hashToId = animatedImageService.createBatch(insertables)
+                val providerName = metadataType.value
+
+                dbQuery {
+                    val tidalIdToSongId = SongProviderTable
+                        .select(SongProviderTable.songId, SongProviderTable.externalId)
+                        .where { SongProviderTable.provider eq providerName }
+                        .andWhere { SongProviderTable.externalId inList trackMetadataMap.values.map { it.tidalId } }
+                        .associate { it[SongProviderTable.externalId] to it[SongProviderTable.songId].value }
+
+                    trackMetadataMap.values.forEach { meta ->
+                        val bytes = animatedDataMap[meta.animatedCoverUrl] ?: return@forEach
+                        val animId = hashToId[bytes.sha256()] ?: return@forEach
+                        val songId = tidalIdToSongId[meta.tidalId] ?: return@forEach
+                        SongTable.update({ SongTable.id eq songId }) {
+                            it[SongTable.animatedCover] = EntityID(animId, AnimatedImageTable)
+                        }
+                    }
+
+                    val animatedByAlbum = trackMetadataMap.values
+                        .filter { it.animatedCoverUrl != null && it.tidalAlbumId != null }
+                        .groupBy { it.tidalAlbumId!! }
+
+                    if (animatedByAlbum.isNotEmpty()) {
+                        val tidalAlbumIdToAlbumId = AlbumProviderTable
+                            .select(AlbumProviderTable.albumId, AlbumProviderTable.externalId)
+                            .where { AlbumProviderTable.provider eq providerName }
+                            .andWhere { AlbumProviderTable.externalId inList animatedByAlbum.keys.toList() }
+                            .associate { it[AlbumProviderTable.externalId] to it[AlbumProviderTable.albumId].value }
+
+                        animatedByAlbum.forEach { (tidalAlbumId, tracks) ->
+                            val meta = tracks.first()
+                            val bytes = animatedDataMap[meta.animatedCoverUrl] ?: return@forEach
+                            val animId = hashToId[bytes.sha256()] ?: return@forEach
+                            val albumId = tidalAlbumIdToAlbumId[tidalAlbumId] ?: return@forEach
+                            AlbumTable.update({ AlbumTable.id eq albumId }) {
+                                it[AlbumTable.animatedCover] = EntityID(animId, AnimatedImageTable)
+                            }
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                logger.error("Failed to save animated covers", e)
+            }
+        }
+
         result
     }
 

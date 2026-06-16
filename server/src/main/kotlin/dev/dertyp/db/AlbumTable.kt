@@ -7,6 +7,7 @@ object AlbumTable : UUIDTable("album") {
     val releaseDate = varchar("releaseDate", 128).nullable()
     val songCount = integer("songCount").default(0)
     val cover = reference("cover", ImageTable.id).nullable()
+    val animatedCover = reference("animatedCover", AnimatedImageTable.id).nullable()
     val originalId = text("originalId").nullable()
     val barcode = varchar("barcode", 32).nullable()
     val lastMetadataCheck = long("lastMetadataCheck").default(0L)
