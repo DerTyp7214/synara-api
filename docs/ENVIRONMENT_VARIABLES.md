@@ -78,6 +78,7 @@ Most variables have sensible defaults and are **optional**. Only variables witho
 
 | Variable | Description | Required | Default (Standalone) | Default (Docker) |
 |:---|:---|:---:|:---|:---|
+| `REDIS_CACHE_ANIMATED_IMAGES` | Whether to cache animated cover bytes in Redis. | No | `false` | - |
 | `REDIS_HOST` | Redis server hostname. | No | - | - |
 | `REDIS_INDEX_PREFIX` | Prefix for Redis Search indices. | No | `synara` | - |
 | `REDIS_PORT` | Redis server port. | No | - | - |
@@ -95,6 +96,7 @@ Most variables have sensible defaults and are **optional**. Only variables witho
 | `AUDIO_TRACKS_PATH` | Base path for audio tracks. | No | `music/tracks` | `/data/Synara/Tracks` |
 | `AUDIO_TRACKS_SECONDARY_PATH` | Optional secondary audio path. | No | - | `/data/Synara/other` |
 | `AUDIO_TRANSCODE_PATH` | Path for transcoded files. | No | `music/transcode` | `/data/Synara/Transcode` |
+| `DATA_ANIMATED_IMAGES_PATH` | Path for cached animated covers. | No | `data/animated-images` | `/data/Synara/AnimatedImages` |
 | `DATA_IMAGES_PATH` | Path for cached images/covers. | No | `data/images` | `/data/Synara/Images` |
 | `YTDLP_CONFIG_PATH` | Path to yt-dlp.conf for yt-dlp. | No | - | `/data/config/yt-dlp.conf` |
 

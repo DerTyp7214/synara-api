@@ -85,6 +85,7 @@ ENV AUDIO_PLAYLISTS_PATH="/data/Synara/Playlists"
 ENV AUDIO_TRANSCODE_PATH="/data/Synara/Transcode"
 ENV AUDIO_CUSTOM_PATH="/data/Synara/custom"
 ENV DATA_IMAGES_PATH="/data/Synara/Images"
+ENV DATA_ANIMATED_IMAGES_PATH="/data/Synara/AnimatedImages"
 ENV BACKUP_DIR="/backups"
 ENV YTDLP_CONFIG_PATH="/data/config/yt-dlp.conf"
 

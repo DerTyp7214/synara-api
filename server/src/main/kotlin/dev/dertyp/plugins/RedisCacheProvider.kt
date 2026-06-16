@@ -51,6 +51,8 @@ class RedisCacheProvider(config: Config) : SimpleCacheProvider(config) {
         var useRedisSearch = false
 
         var indexPrefix = "synara"
+
+        var cacheAnimatedImages = false
     }
 }
 

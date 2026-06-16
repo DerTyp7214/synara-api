@@ -192,6 +192,7 @@ fun mainModule(application: Application, environment: ApplicationEnvironment): M
     singleOf(::AudioAnalysisService)
     singleOf(::FlacAnalysisService)
     singleOf(::ImageService)
+    singleOf(::AnimatedImageService)
     singleOf(::AlbumService)
     singleOf(::LyricsSearch)
     singleOf(::LyricsService)
@@ -277,6 +278,7 @@ fun mainModule(application: Application, environment: ApplicationEnvironment): M
                 port = environment.config.propertyOrNull("redis.port")?.getString()?.toInt() ?: port
                 useRedisSearch = environment.config.propertyOrNull("redis.useSearch")?.getString()?.toBoolean() ?: useRedisSearch
                 indexPrefix = environment.config.propertyOrNull("redis.indexPrefix")?.getString() ?: indexPrefix
+                cacheAnimatedImages = environment.config.propertyOrNull("redis.cacheAnimatedImages")?.getString()?.toBoolean() ?: cacheAnimatedImages
             }
         } else RedisCacheProvider.Config().apply { host = "none" }
     }

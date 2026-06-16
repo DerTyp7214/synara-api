@@ -17,6 +17,8 @@ class StorageService(environment: ApplicationEnvironment) : IStorageService, ISe
         environment.config.property("audio.custom").getString().removeSuffix("/")
     override val imagesPath =
         environment.config.property("data.images").getString().removeSuffix("/")
+    override val animatedImagesPath =
+        environment.config.property("data.animated-images").getString().removeSuffix("/")
     override val secondaryTracksPaths = try {
         environment.config.propertyOrNull("audio.secondary-tracks")?.getList()?.map {
             it.removeSuffix("/")
@@ -67,6 +69,7 @@ class ImporterStorageService(
     override val playlistsPath: String? get() = pluginPath(delegate.playlistsPath)
     override val customAudioPath: String get() = delegate.customAudioPath
     override val imagesPath: String get() = delegate.imagesPath
+    override val animatedImagesPath: String get() = delegate.animatedImagesPath
     override val secondaryTracksPaths: List<String> get() = delegate.secondaryTracksPaths
 
     override fun forImporter(backend: ImportBackend): IServerStorageService =

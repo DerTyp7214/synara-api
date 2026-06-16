@@ -89,6 +89,7 @@ private fun registerAuthenticated(koin: Koin, call: ApplicationCall, user: User,
     val songService = koin.get<SongService>()
     val albumService = koin.get<AlbumService>()
     val imageService = koin.get<ImageService>()
+    val animatedImageService = koin.get<AnimatedImageService>()
     val lyricsSearch = koin.get<LyricsSearch>()
     val lyricsService = koin.get<LyricsService>()
     val artistService = koin.get<ArtistService>()
@@ -119,6 +120,7 @@ private fun registerAuthenticated(koin: Koin, call: ApplicationCall, user: User,
     registrar.register(ISongService::class) { SongRpcService(songService = songService, user = user).withAuthorization<ISongService>(user).withLogging<ISongService>(call) }
     registrar.register(IAlbumService::class) { AlbumRpcService(user, albumService).withAuthorization<IAlbumService>(user).withLogging<IAlbumService>(call) }
     registrar.register(IImageService::class) { ImageRpcService(user, imageService).withAuthorization<IImageService>(user).withLogging<IImageService>(call) }
+    registrar.register(IAnimatedImageService::class) { AnimatedImageRpcService(animatedImageService).withAuthorization<IAnimatedImageService>(user).withLogging<IAnimatedImageService>(call) }
     registrar.register(IAudioAnalysisService::class) { audioAnalysisService.withAuthorization<IAudioAnalysisService>(user).withLogging<IAudioAnalysisService>(call) }
     registrar.register(IDiscoveryService::class) { DiscoveryRpcService(user, discoveryService).withAuthorization<IDiscoveryService>(user).withLogging<IDiscoveryService>(call) }
     registrar.register(ILyricsSearch::class) { lyricsSearch.withAuthorization<ILyricsSearch>(user).withLogging<ILyricsSearch>(call) }

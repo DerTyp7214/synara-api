@@ -22,6 +22,7 @@ redis:
   port: ${REDIS_PORT:}
   useSearch: ${REDIS_USE_SEARCH:false}
   indexPrefix: ${REDIS_INDEX_PREFIX:synara}
+  cacheAnimatedImages: ${REDIS_CACHE_ANIMATED_IMAGES:false}
 imageCache:
   url: ${IMAGE_CACHE_URL:}
   token: ${IMAGE_CACHE_TOKEN:}
@@ -49,6 +50,7 @@ transcriber:
   url: ${TRANSCRIBER_URL:http://localhost:8000}
 data:
   images: ${DATA_IMAGES_PATH:data/images}
+  animated-images: ${DATA_ANIMATED_IMAGES_PATH:data/animated-images}
 spotify:
   clientId: ${SPOTIFY_CLIENT_ID:}
   clientSecret: ${SPOTIFY_CLIENT_SECRET:}

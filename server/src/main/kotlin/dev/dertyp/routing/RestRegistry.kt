@@ -21,21 +21,19 @@ import dev.dertyp.utils.withAuthorization
 import io.github.smiley4.ktoropenapi.*
 import io.github.smiley4.ktoropenapi.config.RouteConfig
 import io.ktor.http.*
-import io.ktor.http.content.OutgoingContent
-import io.ktor.server.plugins.partialcontent.PartialContent
-import io.ktor.server.request.receiveText
+import io.ktor.http.content.*
+import io.ktor.server.plugins.partialcontent.*
+import io.ktor.server.request.*
 import io.ktor.server.response.*
-import io.ktor.server.routing.Route
-import io.ktor.server.routing.RoutingContext
-import io.ktor.server.routing.route
-import io.ktor.server.sse.SSEServerContent
-import io.ktor.sse.ServerSentEvent
-import io.ktor.utils.io.writeFully
+import io.ktor.server.routing.*
+import io.ktor.server.sse.*
+import io.ktor.sse.*
+import io.ktor.utils.io.*
 import kotlinx.coroutines.flow.Flow
 import kotlinx.serialization.serializer
 import org.koin.core.Koin
 import java.time.Instant
-import java.util.UUID
+import java.util.*
 import kotlin.reflect.*
 import kotlin.reflect.full.*
 
@@ -174,10 +172,10 @@ fun Route.registerRestService(
                     when (result) {
                         null -> call.respond(HttpStatusCode.NotFound)
                         is ByteArray -> {
-                            val contentType = if (func.name.contains("Image", ignoreCase = true)) {
-                                ContentType.Image.JPEG
-                            } else {
-                                ContentType.Application.OctetStream
+                            val contentType = when {
+                                func.name.contains("Animated", ignoreCase = true) -> ContentType.Video.MP4
+                                func.name.contains("Image", ignoreCase = true) -> ContentType.Image.JPEG
+                                else -> ContentType.Application.OctetStream
                             }
                             call.respondBytes(result, contentType)
                         }
@@ -411,6 +409,9 @@ fun Route.registerPublicRestServices(koin: Koin) {
     registerRestService(IHandshakeService::class) { HandshakeService(call) }
     registerRestService(IImageService::class, authenticated = true) {
         ImageRpcService(call.getUser(), koin.get<ImageService>())
+    }
+    registerRestService(IAnimatedImageService::class, authenticated = true) {
+        AnimatedImageRpcService(koin.get<AnimatedImageService>())
     }
 }
 
