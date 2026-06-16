@@ -83,6 +83,7 @@ class SongServiceTest : KoinTest {
                 UserPlaylistSongTable,
                 ImageTable,
                 ImageMetadataTable,
+                AnimatedImageTable,
                 ArtistSplitAliasTable,
                 GenreTable,
                 ArtistGenreTable,
@@ -1099,6 +1100,57 @@ class SongServiceTest : KoinTest {
         assertNotNull(song)
         assertEquals(imageId, song?.coverId)
         assertEquals("song_blurhash", song?.blurHash)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `byId should return song with animated cover fields`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val songId = UUID.randomUUID()
+        val frameImageId = UUID.randomUUID()
+        val animatedImageId = UUID.randomUUID()
+        transaction(database) {
+            ImageTable.insert {
+                it[id] = frameImageId
+                it[path] = "frame.png"
+                it[imageHash] = "framehash"
+                it[origin] = "test"
+                it[blurHash] = "animated_blurhash"
+            }
+            AnimatedImageTable.insert {
+                it[id] = animatedImageId
+                it[path] = "cover.mp4"
+                it[contentHash] = "animhash"
+                it[origin] = "test"
+                it[imageId] = frameImageId
+            }
+            SongTable.insert {
+                it[id] = songId
+                it[title] = "Song with Animated Cover"
+                it[animatedCover] = animatedImageId
+                it[filePath] = "test.flac"
+                it[duration] = 1000
+                it[explicit] = false
+                it[trackNumber] = 1
+                it[discNumber] = 1
+                it[sampleRate] = 44100
+                it[bitsPerSample] = 16
+                it[bitRate] = 128000
+                it[fileSize] = 1024
+                it[albumId] = UUID.randomUUID().also { albumId ->
+                    AlbumTable.insert { album ->
+                        album[id] = albumId
+                        album[name] = "Album"
+                    }
+                }
+            }
+        }
+
+        val song = songService.byId(songId)
+        assertNotNull(song)
+        assertEquals(animatedImageId, song?.animatedCoverId)
+        assertEquals(frameImageId, song?.animatedCoverImageId)
+        assertEquals("animated_blurhash", song?.animatedCoverBlurHash)
     }
 
     @ParameterizedTest

@@ -72,6 +72,7 @@ class AlbumServiceTest : KoinTest {
                 AlbumMusicBrainzTable,
                 ImageTable,
                 ImageMetadataTable,
+                AnimatedImageTable,
                 SongTable,
                 SongArtistTable,
                 SongMusicBrainzTable,
@@ -561,6 +562,43 @@ class AlbumServiceTest : KoinTest {
         assertNotNull(album)
         assertEquals(imageId, album?.coverId)
         assertEquals("album_blurhash", album?.blurHash)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `byId should return album with animated cover fields`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val albumId = UUID.randomUUID()
+        val frameImageId = UUID.randomUUID()
+        val animatedImageId = UUID.randomUUID()
+        transaction(database) {
+            ImageTable.insert {
+                it[id] = frameImageId
+                it[path] = "frame.png"
+                it[imageHash] = "framehash"
+                it[origin] = "test"
+                it[blurHash] = "animated_blurhash"
+            }
+            AnimatedImageTable.insert {
+                it[id] = animatedImageId
+                it[path] = "cover.mp4"
+                it[contentHash] = "animhash"
+                it[origin] = "test"
+                it[imageId] = frameImageId
+            }
+            AlbumTable.insert {
+                it[id] = albumId
+                it[name] = "Album with Animated Cover"
+                it[animatedCover] = animatedImageId
+                it[songCount] = 1
+            }
+        }
+
+        val album = service.byId(albumId)
+        assertNotNull(album)
+        assertEquals(animatedImageId, album?.animatedCoverId)
+        assertEquals(frameImageId, album?.animatedCoverImageId)
+        assertEquals("animated_blurhash", album?.animatedCoverBlurHash)
     }
 
     @ParameterizedTest

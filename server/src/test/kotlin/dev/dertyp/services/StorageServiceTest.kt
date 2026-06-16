@@ -70,6 +70,7 @@ class StorageServiceTest {
             put("audio.secondary-tracks", listOf(secondaryDir.absolutePath))
             put("audio.custom", customDir.absolutePath)
             put("data.images", imagesDir.absolutePath)
+            put("data.animated-images", File(tempDir.toFile(), "animated-images").absolutePath)
         }
         val environment = mockk<ApplicationEnvironment>()
         every { environment.config } returns config
@@ -93,6 +94,7 @@ class StorageServiceTest {
             put("audio.playlists", "/non/existent/playlists")
             put("audio.custom", "/non/existent/custom")
             put("data.images", "/non/existent/images")
+            put("data.animated-images", "/non/existent/animated-images")
         }
         val environment = mockk<ApplicationEnvironment>()
         every { environment.config } returns config
@@ -124,12 +126,13 @@ class StorageServiceTest {
             put("audio.playlists", albumsDir.absolutePath) // Same as albums
             put("audio.custom", File(tempDir.toFile(), "nonexistent").absolutePath)
             put("data.images", File(tempDir.toFile(), "images").absolutePath)
+            put("data.animated-images", File(tempDir.toFile(), "animated-images").absolutePath)
         }
         val environment = mockk<ApplicationEnvironment>()
         every { environment.config } returns config
 
         val service = StorageService(environment)
-        
+
         // Parent is 'audio', total size 8.
         assertEquals(8L, service.getTotalStorage())
     }
@@ -157,6 +160,7 @@ class StorageServiceTest {
             put("audio.albums", File(tempDir.toFile(), "nonexistent_albums").absolutePath)
             put("audio.playlists", File(tempDir.toFile(), "nonexistent_playlists").absolutePath)
             put("data.images", File(tempDir.toFile(), "images").absolutePath)
+            put("data.animated-images", File(tempDir.toFile(), "animated-images").absolutePath)
         }
         val environment = mockk<ApplicationEnvironment>()
         every { environment.config } returns config

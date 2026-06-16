@@ -97,12 +97,16 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
     val artistGroupJoinAlias = ArtistMemberTable.alias("artistGroupJoin")
     val artistMemberJoinAlias = ArtistMemberTable.alias("artistMemberJoin")
     val followedArtistAlias = FollowedArtistTable.alias("followedArtist")
+    val albumAnimatedImageAlias = AnimatedImageTable.alias("albumAnimatedImage")
+    val albumAnimatedFrameAlias = ImageTable.alias("albumAnimatedFrame")
 
     companion object {
         fun mapAlbum(
             resultRow: ResultRow,
             genres: List<Genre> = listOf(),
-            blurHashColumn: Expression<String?>? = null
+            blurHashColumn: Expression<String?>? = null,
+            animatedCoverImageIdColumn: Expression<EntityID<UUID>?>? = null,
+            animatedCoverBlurHashColumn: Expression<String?>? = null,
         ): Album {
             val id = resultRow[AlbumTable.id].value
 
@@ -119,6 +123,9 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
                 originalId = resultRow[AlbumTable.originalId],
                 barcode = resultRow[AlbumTable.barcode],
                 musicbrainzId = resultRow.getOrNull(AlbumMusicBrainzTable.musicBrainzId)?.value,
+                animatedCoverId = resultRow[AlbumTable.animatedCover]?.value,
+                animatedCoverImageId = animatedCoverImageIdColumn?.let { resultRow.getOrNull(it) }?.value,
+                animatedCoverBlurHash = animatedCoverBlurHashColumn?.let { resultRow.getOrNull(it) },
             )
         }
 
@@ -1027,6 +1034,8 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
             .leftJoin(AlbumGenreTable)
             .leftJoin(GenreTable)
             .leftJoin(ImageTable, onColumn = { AlbumTable.cover }, otherColumn = { ImageTable.id })
+            .leftJoin(albumAnimatedImageAlias, onColumn = { AlbumTable.animatedCover }, otherColumn = { albumAnimatedImageAlias[AnimatedImageTable.id] })
+            .leftJoin(albumAnimatedFrameAlias, onColumn = { albumAnimatedImageAlias[AnimatedImageTable.imageId] }, otherColumn = { albumAnimatedFrameAlias[ImageTable.id] })
             .columnSet()
             .selectAll()
             .query()
@@ -1089,6 +1098,8 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
             .leftJoin(AlbumGenreTable)
             .leftJoin(GenreTable)
             .leftJoin(ImageTable, onColumn = { AlbumTable.cover }, otherColumn = { ImageTable.id })
+            .leftJoin(albumAnimatedImageAlias, onColumn = { AlbumTable.animatedCover }, otherColumn = { albumAnimatedImageAlias[AnimatedImageTable.id] })
+            .leftJoin(albumAnimatedFrameAlias, onColumn = { albumAnimatedImageAlias[AnimatedImageTable.imageId] }, otherColumn = { albumAnimatedFrameAlias[ImageTable.id] })
             .columnSet()
             .selectAll()
             .where { AlbumTable.id inList ids }
@@ -1130,7 +1141,11 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
                         val gname = r.getOrNull(GenreTable.name) ?: return@mapNotNull null
                         Genre(gid, gname)
                     }.distinctBy { it.id }
-                mapAlbum(row, genres)
+                mapAlbum(
+                    row, genres,
+                    animatedCoverImageIdColumn = albumAnimatedImageAlias[AnimatedImageTable.imageId],
+                    animatedCoverBlurHashColumn = albumAnimatedFrameAlias[ImageTable.blurHash],
+                )
             }
 
             if (row.getOrNull(ArtistTable.id) != null) {

@@ -158,6 +158,9 @@ Contains metadata about a collection of songs released together.
 | `originalId` | `String`? | The original ID of the album on external sources. |
 | `barcode` | `String`? | The barcode or UPC of the album. |
 | `musicbrainzId` | `PlatformUUID`? | The MusicBrainz Release unique identifier. |
+| `animatedCoverId` | `PlatformUUID`? | The animated cover unique identifier. |
+| `animatedCoverImageId` | `PlatformUUID`? | Identifier of the still Image from the animated cover's first frame. |
+| `animatedCoverBlurHash` | `String`? | BlurHash of the animated cover's first frame. |
 
 ### AlbumExtendedMetadata <a name="devdertypdataalbumextendedmetadata"></a>
 Extended metadata for an album.
@@ -741,6 +744,9 @@ Contains core metadata about a track that is common for all users.
 | `musicBrainzId` | `PlatformUUID`? | The MusicBrainz Recording unique identifier. |
 | `isrc` | `String`? | The International Standard Recording Code. |
 | `genres` | `List`<[Genre](#devdertypdatagenre)> | Collection of genres associated with this song. |
+| `animatedCoverId` | `PlatformUUID`? | The animated cover unique identifier. |
+| `animatedCoverImageId` | `PlatformUUID`? | Identifier of the still Image from the animated cover's first frame. |
+| `animatedCoverBlurHash` | `String`? | BlurHash of the animated cover's first frame. |
 
 ### SongAudioData <a name="devdertypdatasongaudiodata"></a>
 Additional audio analysis data for a song.
@@ -970,6 +976,9 @@ Extends track metadata with user-specific information like favorite status.
 | `musicBrainzId` | `PlatformUUID`? | The MusicBrainz Recording unique identifier. |
 | `isrc` | `String`? | The International Standard Recording Code. |
 | `genres` | `List`<[Genre](#devdertypdatagenre)> | Collection of genres associated with this song. |
+| `animatedCoverId` | `PlatformUUID`? | The animated cover unique identifier. |
+| `animatedCoverImageId` | `PlatformUUID`? | Identifier of the still Image from the animated cover's first frame. |
+| `animatedCoverBlurHash` | `String`? | BlurHash of the animated cover's first frame. |
 | `isFavourite` | `Boolean`? | Whether the current user has marked this song as a favorite. |
 | `userSongCreatedAt` | `PlatformDate`? | Timestamp of when the song record was created. |
 | `userSongUpdatedAt` | `PlatformDate`? | Timestamp of the last update to the song metadata. |
