@@ -46,6 +46,7 @@ class ServerValidationTest {
             albumCount = 0,
             artistCount = 0,
             imagesCount = 0,
+            animatedImagesCount = 0,
             playlistCount = 0,
             totalFileSize = 0,
             indexedFileSize = 0,

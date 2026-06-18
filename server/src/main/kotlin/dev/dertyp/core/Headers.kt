@@ -17,7 +17,7 @@ val HttpHeaders.unsafeHeader
 
 val HttpHeaders.allHeaders
     get() = listOf(
-        Accept, AcceptCharset, AcceptEncoding, AcceptLanguage, AcceptRanges,
+        Accept, AcceptEncoding, AcceptLanguage, AcceptRanges,
         Age, Allow, ALPN, AuthenticationInfo, Authorization, CacheControl, Connection,
         ContentDisposition, ContentEncoding, ContentLanguage, ContentLength, ContentLocation,
         ContentRange, ContentType, Cookie, DASL, Date, DAV, Depth, Destination, ETag, Expect,
