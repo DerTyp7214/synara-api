@@ -28,7 +28,7 @@ class ServerStatsServiceTest {
     fun setup(dialect: DbDialect) {
         database = TestDatabase.connect(dialect, "stats_test")
         transaction(database) {
-            SchemaUtils.create(ArtistTable, AlbumTable, ImageTable, SongTable, PlaylistTable, UserTable, UserPlaylistTable, TranscodedSongTable)
+            SchemaUtils.create(ArtistTable, AlbumTable, ImageTable, AnimatedImageTable, SongTable, PlaylistTable, UserTable, UserPlaylistTable, TranscodedSongTable)
         }
         storageService = mockk()
         reverseProxyService = mockk()
@@ -75,6 +75,7 @@ class ServerStatsServiceTest {
         assertEquals(1, stats.albumCount)
         assertEquals(1, stats.artistCount)
         assertEquals(1, stats.playlistCount)
+        assertEquals(0, stats.animatedImagesCount)
         assertEquals(300L, stats.indexedFileSize)
         assertEquals(180L, stats.totalDuration)
         assertEquals(1000L, stats.totalFileSize)

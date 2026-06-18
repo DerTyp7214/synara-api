@@ -638,6 +638,7 @@ Detailed system metrics and library statistics.
 | `albumCount` | `Int` | Total number of albums. |
 | `artistCount` | `Int` | Total number of artists. |
 | `imagesCount` | `Int` | Total number of images stored. |
+| `animatedImagesCount` | `Int` | Total number of animated images stored. |
 | `playlistCount` | `Int` | Total number of system playlists. |
 | `totalFileSize` | `Long` | Total file size of the media library in bytes. |
 | `indexedFileSize` | `Long` | Size of files that have been successfully indexed. |

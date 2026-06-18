@@ -21,6 +21,7 @@ class ServerStatsService(
         val albumCount = AlbumTable.selectAll().count().toInt()
         val artistCount = ArtistTable.selectAll().count().toInt()
         val imagesCount = ImageTable.selectAll().count().toInt()
+        val animatedImagesCount = AnimatedImageTable.selectAll().count().toInt()
         val playlistCount = PlaylistTable.selectAll().count().toInt() + UserPlaylistTable.selectAll().count().toInt()
 
         val indexedFileSize = SongTable.fileSize.sum().let {
@@ -57,6 +58,7 @@ class ServerStatsService(
             albumCount = albumCount,
             artistCount = artistCount,
             imagesCount = imagesCount,
+            animatedImagesCount = animatedImagesCount,
             playlistCount = playlistCount,
             totalFileSize = storageService.getTotalStorage(),
             indexedFileSize = indexedFileSize,
