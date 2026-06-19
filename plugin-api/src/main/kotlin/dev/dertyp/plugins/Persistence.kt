@@ -16,6 +16,7 @@ interface SongLibrary {
 interface AlbumLibrary {
     suspend fun createBatch(albums: List<InsertableAlbum>): Map<PlatformUUID, Album>
     suspend fun byMusicBrainzId(mbId: PlatformUUID): List<Album>
+    suspend fun syncMusicBrainzForAlbums(albumIds: List<PlatformUUID>)
 }
 
 interface ArtistLibrary {

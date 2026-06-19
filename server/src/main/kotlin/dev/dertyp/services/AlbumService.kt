@@ -638,6 +638,21 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
 
     override suspend fun byMusicBrainzId(mbId: UUID): List<Album> = byMusicBrainzId(mbId, null)
 
+    override suspend fun syncMusicBrainzForAlbums(albumIds: List<UUID>) {
+        if (albumIds.isEmpty()) return
+        albumIds.forEach { albumId ->
+            val mbId = dbQuery {
+                AlbumMusicBrainzTable.select(AlbumMusicBrainzTable.musicBrainzId)
+                    .where { AlbumMusicBrainzTable.albumId eq albumId }
+                    .firstOrNull()?.getOrNull(AlbumMusicBrainzTable.musicBrainzId)?.value
+            } ?: return@forEach
+            syncAlbumSongsWithMusicBrainz(albumId, mbId)
+        }
+        ApplicationScope.scope.launch {
+            dbQuery { libraryMergeService.mergeDuplicateAlbums() }
+        }
+    }
+
     suspend fun byMusicBrainzId(mbId: UUID, userId: UUID? = null): List<Album> {
         return byMusicBrainzIdsMap(listOf(mbId), userId)[mbId] ?: emptyList()
     }
@@ -1330,6 +1345,35 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
                         inputAlbum.artists,
                         inputAlbum.releaseDate
                     )] = albumId
+                }
+            }
+        }
+
+        val existingAlbumsWithMb = uniqueAlbumMetadata.filter { album ->
+            if (album.musicBrainzId == null) return@filter false
+            val key = getIdentityKey(album.originalId, album.name, album.artists, album.releaseDate)
+            finalMatchMap.containsKey(key)
+        }
+
+        if (existingAlbumsWithMb.isNotEmpty()) {
+            val existingIds = existingAlbumsWithMb.mapNotNull { album ->
+                val key = getIdentityKey(album.originalId, album.name, album.artists, album.releaseDate)
+                finalMatchMap[key]
+            }
+            val alreadyHasMbIds = dbQuery {
+                AlbumMusicBrainzTable.select(AlbumMusicBrainzTable.albumId)
+                    .where {
+                        (AlbumMusicBrainzTable.albumId inList existingIds) and
+                                AlbumMusicBrainzTable.musicBrainzId.isNotNull()
+                    }
+                    .map { it[AlbumMusicBrainzTable.albumId].value }
+                    .toSet()
+            }
+            existingAlbumsWithMb.forEach { album ->
+                val key = getIdentityKey(album.originalId, album.name, album.artists, album.releaseDate)
+                val albumId = finalMatchMap[key] ?: return@forEach
+                if (albumId !in alreadyHasMbIds) {
+                    setMusicBrainzId(albumId, album.musicBrainzId, triggerSync = false, triggerMerge = false)
                 }
             }
         }

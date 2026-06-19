@@ -1,8 +1,11 @@
 package dev.dertyp.plugins
 
 import dev.dertyp.PlatformUUID
+import dev.dertyp.data.Album
 import dev.dertyp.data.InsertableAlbum
+import dev.dertyp.data.InsertableImage
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -109,5 +112,56 @@ class BaseIndexerTest {
         assertEquals("Song Title", song.title)
         assertTrue(song.explicit)
         verify { tag.setField(org.jaudiotagger.tag.FieldKey.TITLE, "Song Title") }
+    }
+
+    @Test
+    fun `start should call syncMusicBrainzForAlbums when albums have musicBrainzId`() = runBlocking {
+        val tempDir = Files.createTempDirectory("base-indexer-mb-test")
+        try {
+            val mbId = UUID.randomUUID()
+            val albumDbId = UUID.randomUUID()
+            val album = InsertableAlbum("MB Album", listOf("Artist"), musicBrainzId = mbId)
+            val dbAlbum = mockk<Album>(relaxed = true)
+            every { dbAlbum.id } returns albumDbId
+
+            val testIndexer = object : BaseIndexer(context) {
+                override val id = "test"
+                override val name = "test"
+                override suspend fun groupByAlbum(files: List<Path>): Pair<Map<String, InsertableImage>, Map<InsertableAlbum, List<AudioFile>>> =
+                    emptyMap<String, InsertableImage>() to mapOf(album to emptyList())
+            }
+
+            coEvery { context.albumLibrary.byMusicBrainzId(mbId) } returns listOf(dbAlbum)
+            coEvery { context.songLibrary.createBatch(any()) } returns emptyMap()
+
+            testIndexer.start(listOf(tempDir), emptyList()) {}
+
+            coVerify { context.albumLibrary.syncMusicBrainzForAlbums(listOf(albumDbId)) }
+        } finally {
+            tempDir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `start should not call syncMusicBrainzForAlbums when albums have no musicBrainzId`() = runBlocking {
+        val tempDir = Files.createTempDirectory("base-indexer-no-mb-test")
+        try {
+            val album = InsertableAlbum("Album Without MB", listOf("Artist"))
+
+            val testIndexer = object : BaseIndexer(context) {
+                override val id = "test"
+                override val name = "test"
+                override suspend fun groupByAlbum(files: List<Path>): Pair<Map<String, InsertableImage>, Map<InsertableAlbum, List<AudioFile>>> =
+                    emptyMap<String, InsertableImage>() to mapOf(album to emptyList())
+            }
+
+            coEvery { context.songLibrary.createBatch(any()) } returns emptyMap()
+
+            testIndexer.start(listOf(tempDir), emptyList()) {}
+
+            coVerify(exactly = 0) { context.albumLibrary.syncMusicBrainzForAlbums(any()) }
+        } finally {
+            tempDir.toFile().deleteRecursively()
+        }
     }
 }

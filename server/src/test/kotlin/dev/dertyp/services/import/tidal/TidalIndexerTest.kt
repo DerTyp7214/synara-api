@@ -17,6 +17,7 @@ import org.junit.jupiter.api.io.TempDir
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.Path
+import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
 
 class TidalIndexerTest {
@@ -85,6 +86,77 @@ class TidalIndexerTest {
         val album = albums.keys.first()
         assertEquals("Discovery", album.name)
         assertEquals(listOf("Daft Punk", "Romanthony"), album.artists)
+    }
+
+    @Test
+    fun `groupByAlbum should set musicBrainzId on InsertableAlbum from MUSICBRAINZ_RELEASEID tag`() = runBlocking {
+        val file1 = tempDir.resolve("track1.flac")
+        Files.createFile(file1)
+
+        val mbReleaseId = UUID.randomUUID()
+        val tag1 = mockk<Tag>(relaxed = true)
+        val audio1 = mockk<AudioFile>(relaxed = true)
+
+        every { audio1.tag } returns tag1
+        every { AudioFileIO.read(file1.toFile()) } returns audio1
+
+        every { tag1.getFirst(any<FieldKey>()) } answers {
+            when (it.invocation.args[0] as FieldKey) {
+                FieldKey.ALBUM -> "Test Album"
+                FieldKey.YEAR -> "2020"
+                FieldKey.MUSICBRAINZ_RELEASEID -> mbReleaseId.toString()
+                else -> ""
+            }
+        }
+        every { tag1.getAll(FieldKey.ALBUM_ARTIST) } returns listOf("Artist")
+
+        val (_, albums) = indexer.groupByAlbum(listOf(file1))
+
+        assertEquals(1, albums.size)
+        assertEquals(mbReleaseId, albums.keys.first().musicBrainzId)
+    }
+
+    @Test
+    fun `groupByAlbum should preserve musicBrainzId in merge step`() = runBlocking {
+        val file1 = tempDir.resolve("track1.flac")
+        val file2 = tempDir.resolve("track2.flac")
+        Files.createFile(file1)
+        Files.createFile(file2)
+
+        val mbReleaseId = UUID.randomUUID()
+        val tag1 = mockk<Tag>(relaxed = true)
+        val tag2 = mockk<Tag>(relaxed = true)
+        val audio1 = mockk<AudioFile>(relaxed = true)
+        val audio2 = mockk<AudioFile>(relaxed = true)
+
+        every { audio1.tag } returns tag1
+        every { audio2.tag } returns tag2
+        every { AudioFileIO.read(file1.toFile()) } returns audio1
+        every { AudioFileIO.read(file2.toFile()) } returns audio2
+
+        every { tag1.getFirst(any<FieldKey>()) } answers {
+            when (it.invocation.args[0] as FieldKey) {
+                FieldKey.ALBUM -> "Test Album"
+                FieldKey.YEAR -> "2020"
+                FieldKey.MUSICBRAINZ_RELEASEID -> mbReleaseId.toString()
+                else -> ""
+            }
+        }
+
+        every { tag2.getFirst(any<FieldKey>()) } answers {
+            when (it.invocation.args[0] as FieldKey) {
+                FieldKey.ALBUM -> "Test Album"
+                FieldKey.YEAR -> "2020"
+                else -> ""
+            }
+        }
+        every { tag1.getAll(FieldKey.ALBUM_ARTIST) } returns listOf("Artist")
+        every { tag2.getAll(FieldKey.ALBUM_ARTIST) } returns listOf("Artist")
+
+        val (_, albums) = indexer.groupByAlbum(listOf(file1, file2))
+
+        assertEquals(1, albums.size)
+        assertEquals(mbReleaseId, albums.keys.first().musicBrainzId, "Merged album should retain musicBrainzId from the track that had it")
     }
 
     @Test

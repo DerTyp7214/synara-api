@@ -24,6 +24,7 @@ import org.koin.dsl.module
 import java.io.File
 import java.nio.file.Path
 import java.util.Collections
+import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.io.path.absolutePathString
 import kotlin.io.path.extension
@@ -120,6 +121,10 @@ class TidalIndexer(context: PluginContext) : BaseIndexer(context, IMetadataServi
                 val rawBarcode = audioFile.barcode
                 val barcode = if (rawBarcode?.uppercase() == "BARCODE") null else rawBarcode
 
+                val mbReleaseId = audioFile.musicBrainzReleaseId?.let {
+                    try { UUID.fromString(it) } catch (_: Exception) { null }
+                }
+
                 val albumUrl = audioFile.tag.getFirst("URL")
                 val tidalAlbumId = if (albumUrl.contains("/album/")) {
                     albumUrl.substringAfter("/album/").substringBefore("/")
@@ -142,6 +147,7 @@ class TidalIndexer(context: PluginContext) : BaseIndexer(context, IMetadataServi
                     songCount = songCount,
                     originalId = originalId,
                     barcode = barcode,
+                    musicBrainzId = mbReleaseId,
                 )
 
                 val albumList = map.computeIfAbsent(album) { Collections.synchronizedList(mutableListOf()) }
@@ -172,13 +178,15 @@ class TidalIndexer(context: PluginContext) : BaseIndexer(context, IMetadataServi
                         album.name,
                         album.artists.sorted().joinToString(", "),
                         album.releaseDate,
-                        album.songCount
+                        album.songCount,
+                        album.musicBrainzId
                     )
                 }
                 .mapValues { (_, lists) ->
                     val mergedAlbum = lists.first().first.copy(
                         coverHash = lists.firstNotNullOfOrNull { it.first.coverHash },
-                        originalId = lists.firstNotNullOfOrNull { it.first.originalId }
+                        originalId = lists.firstNotNullOfOrNull { it.first.originalId },
+                        musicBrainzId = lists.firstNotNullOfOrNull { it.first.musicBrainzId },
                     )
                     mergedAlbum to lists.flatMap { it.second }
                 }

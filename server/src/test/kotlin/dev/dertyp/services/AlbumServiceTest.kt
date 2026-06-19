@@ -12,6 +12,7 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.*
@@ -1035,7 +1036,7 @@ class AlbumServiceTest : KoinTest {
 
         service.setMusicBrainzId(albumId, mbId)
 
-        kotlinx.coroutines.delay(500.milliseconds)
+        delay(500.milliseconds)
 
         coVerify { libraryMergeService.mergeDuplicateAlbums() }
     }
@@ -1405,5 +1406,160 @@ class AlbumServiceTest : KoinTest {
         assertEquals(mbId, updated?.musicbrainzId)
 
         coVerify { musicBrainzService.searchAlbumMb(match { it.barcode == barcode }, any()) }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `getOrBulkCreateWithResult should store musicBrainzId in AlbumMusicBrainzTable for new albums`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val mbId = UUID.randomUUID()
+        val artistName = "Test Artist"
+
+        coEvery { musicBrainzService.fetchReleaseById(mbId, any()) } returns MusicBrainzRelease(
+            id = mbId,
+            title = "MB Album"
+        )
+
+        val albums = listOf(InsertableAlbum("New Album", listOf(artistName), musicBrainzId = mbId))
+        service.getOrBulkCreate(albums)
+
+        val storedMbId = transaction(database) {
+            val albumId = AlbumTable.select(AlbumTable.id)
+                .where { AlbumTable.name eq "New Album" }
+                .firstOrNull()?.get(AlbumTable.id)?.value ?: return@transaction null
+            AlbumMusicBrainzTable.select(AlbumMusicBrainzTable.musicBrainzId)
+                .where { AlbumMusicBrainzTable.albumId eq albumId }
+                .firstOrNull()?.getOrNull(AlbumMusicBrainzTable.musicBrainzId)?.value
+        }
+        assertEquals(mbId, storedMbId)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `getOrBulkCreateWithResult should store musicBrainzId in AlbumMusicBrainzTable for existing albums without one`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val mbId = UUID.randomUUID()
+        val artistName = "Test Artist"
+        val originalId = "tidal:12345"
+
+        val artistId = transaction(database) {
+            ArtistTable.insertAndGetId { it[ArtistTable.name] = artistName }.value
+        }
+        val albumId = transaction(database) {
+            val aId = AlbumTable.insertAndGetId {
+                it[AlbumTable.name] = "Existing Album"
+                it[AlbumTable.originalId] = originalId
+            }.value
+            AlbumArtistTable.insert {
+                it[AlbumArtistTable.albumId] = aId
+                it[AlbumArtistTable.artistId] = artistId
+            }
+            aId
+        }
+
+        coEvery { musicBrainzService.fetchReleaseById(mbId, any()) } returns MusicBrainzRelease(
+            id = mbId,
+            title = "MB Album"
+        )
+
+        val albums = listOf(
+            InsertableAlbum("Existing Album", listOf(artistName), originalId = originalId, musicBrainzId = mbId)
+        )
+        service.getOrBulkCreate(albums)
+
+        val storedMbId = transaction(database) {
+            AlbumMusicBrainzTable.select(AlbumMusicBrainzTable.musicBrainzId)
+                .where { AlbumMusicBrainzTable.albumId eq albumId }
+                .firstOrNull()?.getOrNull(AlbumMusicBrainzTable.musicBrainzId)?.value
+        }
+        assertEquals(mbId, storedMbId, "Existing album should have its MB ID stored")
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `syncMusicBrainzForAlbums should sync songs and trigger library merge`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val albumId = UUID.randomUUID()
+        val songId = UUID.randomUUID()
+        val mbId = UUID.randomUUID()
+        val mbRecordingId = UUID.randomUUID()
+        val songTitle = "Test Track"
+
+        transaction(database) {
+            MBReleaseTable.insert {
+                it[id] = mbId
+                it[title] = "MB Album"
+            }
+            MBRecordingTable.insert {
+                it[id] = mbRecordingId
+                it[title] = songTitle
+            }
+            AlbumTable.insert {
+                it[id] = albumId
+                it[name] = "Test Album"
+                it[songCount] = 1
+            }
+            AlbumMusicBrainzTable.insert {
+                it[AlbumMusicBrainzTable.albumId] = albumId
+                it[AlbumMusicBrainzTable.musicBrainzId] = mbId
+                it[lastCheck] = 0L
+            }
+            SongTable.insert {
+                it[id] = songId
+                it[SongTable.albumId] = albumId
+                it[title] = songTitle
+                it[trackNumber] = 5
+            }
+        }
+
+        coEvery { musicBrainzService.fetchReleaseById(mbId, any()) } returns MusicBrainzRelease(
+            id = mbId,
+            title = "MB Album",
+            media = listOf(
+                MusicBrainzMedia(
+                    trackCount = 1,
+                    tracks = listOf(
+                        MusicBrainzTrack(
+                            id = UUID.randomUUID(),
+                            position = 1,
+                            title = songTitle,
+                            recording = MusicBrainzRecording(id = mbRecordingId, title = songTitle)
+                        )
+                    )
+                )
+            )
+        )
+        coEvery { libraryMergeService.mergeDuplicateAlbums() } returns 0
+
+        service.syncMusicBrainzForAlbums(listOf(albumId))
+
+        val (dbTrackNo, dbMbRecordingId) = transaction(database) {
+            val songRow = SongTable.selectAll().where { SongTable.id eq songId }.single()
+            val mbRow = SongMusicBrainzTable.selectAll().where { SongMusicBrainzTable.songId eq songId }.singleOrNull()
+            songRow[SongTable.trackNumber] to mbRow?.get(SongMusicBrainzTable.musicBrainzId)?.value
+        }
+        assertEquals(1, dbTrackNo, "Track number should be updated from MB")
+        assertEquals(mbRecordingId, dbMbRecordingId, "Song should be linked to MB recording")
+
+        delay(500.milliseconds)
+        coVerify { libraryMergeService.mergeDuplicateAlbums() }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `syncMusicBrainzForAlbums should skip albums with no AlbumMusicBrainzTable entry`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val albumId = UUID.randomUUID()
+
+        transaction(database) {
+            AlbumTable.insert {
+                it[id] = albumId
+                it[name] = "Album Without MB"
+            }
+        }
+
+        service.syncMusicBrainzForAlbums(listOf(albumId))
+
+        coVerify(exactly = 0) { musicBrainzService.fetchReleaseById(any(), any()) }
     }
 }

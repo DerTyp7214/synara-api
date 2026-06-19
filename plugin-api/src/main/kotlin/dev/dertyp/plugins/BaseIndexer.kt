@@ -302,6 +302,15 @@ abstract class BaseIndexer(
         val playlistCount = parsePlaylists(playlists, userId)
         log("Parsed and inserted $playlistCount playlists.").await()
 
+        val albumsWithMbIds = albums.keys.filter { it.musicBrainzId != null }
+        if (albumsWithMbIds.isNotEmpty()) {
+            log("Syncing MusicBrainz metadata for ${albumsWithMbIds.size} matched album(s).").await()
+            val albumDbIds = albumsWithMbIds.mapNotNull { it.musicBrainzId }
+                .flatMap { context.albumLibrary.byMusicBrainzId(it) }
+                .map { it.id }
+            context.albumLibrary.syncMusicBrainzForAlbums(albumDbIds)
+        }
+
         afterIndex(songResult, log)
     }
 
