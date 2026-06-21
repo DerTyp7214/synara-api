@@ -165,6 +165,9 @@ class SongRpcService(private val user: User, private val songService: SongServic
         explicit: Boolean
     ): PaginatedResponse<UserSong> = songService.likedSongs(page, pageSize, explicit, user.id)
 
+    override suspend fun exportFavouritesAsCsv(): String =
+        songService.exportFavouritesAsCsv(user.id)
+
     override suspend fun allSongs(
         page: Int,
         pageSize: Int,
@@ -1243,6 +1246,64 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
             where { UserSongTable.isFavourite eq true }
             orderBy(UserSongTable.updatedAt to SortOrder.DESC)
         }
+
+    suspend fun exportFavouritesAsCsv(userId: UUID): String = dbQuery {
+        fun csvEscape(value: String): String =
+            if (value.contains(',') || value.contains('"') || value.contains('\n'))
+                "\"${value.replace("\"", "\"\"")}\""
+            else value
+
+        val rows = SongTable
+            .leftJoin(AlbumTable, onColumn = { SongTable.albumId }, otherColumn = { AlbumTable.id })
+            .leftJoin(SongArtistTable)
+            .leftJoin(ArtistTable, onColumn = { SongArtistTable.artistId }, otherColumn = { ArtistTable.id })
+            .leftJoin(SongMusicBrainzTable)
+            .leftJoin(
+                UserSongTable,
+                onColumn = { SongTable.id },
+                otherColumn = { UserSongTable.songId },
+                additionalConstraint = { UserSongTable.userId eq userId }
+            )
+            .selectAll()
+            .where { UserSongTable.isFavourite eq true }
+            .toList()
+
+        data class CsvRow(
+            val title: String,
+            val artists: MutableList<String> = mutableListOf(),
+            val albumName: String?,
+            val isrc: String?,
+            val mbid: UUID?,
+            val favouritedAt: Long
+        )
+
+        val songs = linkedMapOf<UUID, CsvRow>()
+        for (row in rows) {
+            val songId = row[SongTable.id].value
+            val entry = songs.getOrPut(songId) {
+                CsvRow(
+                    title = row[SongTable.title],
+                    albumName = row.getOrNull(AlbumTable.name),
+                    isrc = row.getOrNull(SongTable.isrc),
+                    mbid = row.getOrNull(SongMusicBrainzTable.musicBrainzId)?.value,
+                    favouritedAt = row[UserSongTable.updatedAt]
+                )
+            }
+            row.getOrNull(ArtistTable.name)?.let { if (it !in entry.artists) entry.artists.add(it) }
+        }
+
+        buildString {
+            appendLine("title,artists,album,isrc,mbid,favourited_at")
+            for ((_, song) in songs) {
+                append(csvEscape(song.title)); append(',')
+                append(csvEscape(song.artists.joinToString("; "))); append(',')
+                append(song.albumName?.let { csvEscape(it) } ?: ""); append(',')
+                append(song.isrc ?: ""); append(',')
+                append(song.mbid?.toString() ?: ""); append(',')
+                append(song.favouritedAt).appendLine()
+            }
+        }
+    }
 
     suspend fun allSongs(
         page: Int,
