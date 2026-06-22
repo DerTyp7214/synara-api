@@ -37,6 +37,7 @@ Most variables have sensible defaults and are **optional**. Only variables witho
 | `APPLE_MUSIC_TEAM_ID` | Apple Music Team ID. | No | - | - |
 | `IMAGE_CACHE_TOKEN` | Image Cache auth token. | No | - | - |
 | `IMAGE_CACHE_URL` | Image Cache service URL. | No | - | - |
+| `LINKRESOLVER_API_KEY` | API key for the self-hosted LinkResolver service (linkresolver.synara.audio). | No | - | - |
 | `SPOTIFY_CLIENT_ID` | Spotify API Client ID. | No | - | - |
 | `SPOTIFY_CLIENT_SECRET` | Spotify API Client Secret. | No | - | - |
 | `TIDAL_CLIENT_ID` | Tidal API Client ID. | No | - | - |

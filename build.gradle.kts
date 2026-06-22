@@ -55,6 +55,7 @@ tasks.register("generateEnvDocs") {
             "IMAGE_CACHE_URL" to mapOf("desc" to "Image Cache service URL.", "cat" to "External Services"),
             "IMAGE_CACHE_TOKEN" to mapOf("desc" to "Image Cache auth token.", "cat" to "External Services"),
             "TRANSCRIBER_URL" to mapOf("desc" to "Transcriber service URL.", "cat" to "External Services"),
+            "LINKRESOLVER_API_KEY" to mapOf("desc" to "API key for the self-hosted LinkResolver service (linkresolver.synara.audio).", "cat" to "External Services"),
             "SPOTIFY_CLIENT_ID" to mapOf("desc" to "Spotify API Client ID.", "cat" to "External Services"),
             "SPOTIFY_CLIENT_SECRET" to mapOf("desc" to "Spotify API Client Secret.", "cat" to "External Services"),
             "TIDAL_CLIENT_ID" to mapOf("desc" to "Tidal API Client ID.", "cat" to "External Services"),

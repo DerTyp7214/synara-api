@@ -15,7 +15,7 @@ import dev.dertyp.services.*
 import dev.dertyp.services.metadata.CachedMusicBrainzService
 import dev.dertyp.services.metadata.MusicBrainzCacheService
 import dev.dertyp.services.metadata.MusicBrainzService
-import dev.dertyp.services.metadata.OdesliService
+import dev.dertyp.services.metadata.LinkResolverService
 import io.ktor.server.application.ApplicationEnvironment
 import io.mockk.every
 import io.mockk.mockk
@@ -380,7 +380,7 @@ object SearchBenchmark {
                 single { mockk<MusicBrainzService>(relaxed = true) }
                 single { mockk<CachedMusicBrainzService>(relaxed = true) }
                 single { mockk<MusicBrainzCacheService>(relaxed = true) }
-                single { mockk<OdesliService>(relaxed = true) }
+                single { mockk<LinkResolverService>(relaxed = true) }
                 single { mockk<GenreService>(relaxed = true) }
                 single {
                     val storageService = mockk<StorageService>(relaxed = true)

@@ -158,7 +158,7 @@ class HttpClientQueueService : Service() {
 
                 var delayTime = when {
                     host.contains("musicbrainz.org") -> 1.seconds
-                    host.contains("song.link") || host.contains("odesli.co") -> 6.seconds
+                    host.contains("linkresolver.synara.audio") -> 10.milliseconds
                     host.contains("theaudiodb.com") -> 500.milliseconds
                     host.contains("googleapis.com") || host.contains("youtube.com") -> 1.seconds
                     host.contains("listenbrainz.org") -> 10.milliseconds

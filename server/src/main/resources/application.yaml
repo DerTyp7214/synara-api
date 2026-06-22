@@ -68,6 +68,8 @@ proxy:
   name: ${PROXY_NAME:}
   id: ${PROXY_ID:}
   key: ${PROXY_KEY:}
+linkresolver:
+  apiKey: ${LINKRESOLVER_API_KEY:}
 youtube:
   apiKey: ${YOUTUBE_API_KEY:}
 ytdlp:

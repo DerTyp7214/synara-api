@@ -10,7 +10,7 @@ import dev.dertyp.services.import.Type
 import dev.dertyp.services.metadata.CachedMusicBrainzService
 import dev.dertyp.services.metadata.MusicBrainzCacheService
 import dev.dertyp.services.metadata.MusicBrainzService
-import dev.dertyp.services.metadata.OdesliService
+import dev.dertyp.services.metadata.LinkResolverService
 import dev.dertyp.utils.ColorUtils
 import dev.dertyp.utils.LogParam
 import dev.dertyp.utils.parsers.ParserFactory
@@ -91,7 +91,7 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
     private val artistService by inject<ArtistService>()
     private val genreService by inject<GenreService>()
     private val libraryMergeService by inject<LibraryMergeService>()
-    private val odesliService by inject<OdesliService>()
+    private val linkResolverService by inject<LinkResolverService>()
     val artistGroupAlias = ArtistTable.alias("artistGroup")
     val artistMemberAlias = ArtistTable.alias("artistMember")
     val artistGroupJoinAlias = ArtistMemberTable.alias("artistGroupJoin")
@@ -606,9 +606,9 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
         
         seedUrls.addAll(urls)
 
-        val odesliResults = odesliService.batchResolve(seedUrls, upc = upc, priority = priority)
+        val resolvedLinks = linkResolverService.batchResolve(seedUrls, upc = upc, priority = priority)
         
-        val allUrls = (urls + odesliResults).distinct()
+        val allUrls = (urls + resolvedLinks).distinct()
 
         dbQuery {
             allUrls.forEach { url ->

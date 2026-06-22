@@ -268,7 +268,7 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
     private val musicBrainzCacheService by inject<MusicBrainzCacheService>()
     private val artistService by inject<ArtistService>()
     private val genreService by inject<GenreService>()
-    private val odesliService by inject<OdesliService>()
+    private val linkResolverService by inject<LinkResolverService>()
 
     val albumArtistAlias = ArtistTable.alias("albumArtistAlias")
     val albumArtistMusicBrainzAlias = ArtistMusicBrainzTable.alias("albumArtistMusicBrainzAlias")
@@ -1103,8 +1103,8 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
 
         seedUrls.addAll(urls)
 
-        val odesliResults = odesliService.batchResolve(seedUrls, isrc = isrc, priority = priority)
-        val allUrls = (urls + odesliResults).distinct()
+        val resolvedLinks = linkResolverService.batchResolve(seedUrls, isrc = isrc, priority = priority)
+        val allUrls = (urls + resolvedLinks).distinct()
 
         dbQuery {
             allUrls.forEach { url ->

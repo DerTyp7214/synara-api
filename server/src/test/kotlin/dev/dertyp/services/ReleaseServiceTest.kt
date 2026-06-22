@@ -45,7 +45,7 @@ class ReleaseServiceTest : KoinTest {
     private lateinit var tidalService: TidalService
     private lateinit var appleMusicService: AppleMusicService
     private lateinit var spotifyService: SpotifyService
-    private lateinit var odesliService: OdesliService
+    private lateinit var linkResolverService: LinkResolverService
 
     fun setup(dialect: DbDialect) {
         startKoin {
@@ -61,7 +61,7 @@ class ReleaseServiceTest : KoinTest {
                 single { mockk<AppleMusicService>(relaxed = true) }
                 single { mockk<ApplicationEnvironment>(relaxed = true) }
                 single { mockk<TidalService>(relaxed = true) }
-                single { mockk<OdesliService>(relaxed = true) }
+                single { mockk<LinkResolverService>(relaxed = true) }
             })
         }
 
@@ -72,7 +72,7 @@ class ReleaseServiceTest : KoinTest {
         tidalService = get()
         spotifyService = get()
         appleMusicService = get()
-        odesliService = get()
+        linkResolverService = get()
 
         database = TestDatabase.connect(dialect, "release_test")
         transaction(database) {
@@ -253,7 +253,7 @@ class ReleaseServiceTest : KoinTest {
             )
         )
 
-        coEvery { odesliService.batchResolve(any(), priority = HttpClientPriority.LOW) } returns listOf("https://tidal.com/album/456")
+        coEvery { linkResolverService.batchResolve(any(), priority = HttpClientPriority.LOW) } returns listOf("https://tidal.com/album/456")
         
         val spiedService = spyk(service, recordPrivateCalls = true)
         val dummyImageId = UUID.randomUUID()
@@ -361,7 +361,7 @@ class ReleaseServiceTest : KoinTest {
         )
 
         val spiedService = spyk(service, recordPrivateCalls = true)
-        coEvery { odesliService.batchResolve(any(), priority = HttpClientPriority.LOW) } returns emptyList()
+        coEvery { linkResolverService.batchResolve(any(), priority = HttpClientPriority.LOW) } returns emptyList()
         coEvery { spiedService.fetchReleaseGroupImage(any()) } returns null
 
         spiedService.fetchNewReleases()
@@ -577,7 +577,7 @@ class ReleaseServiceTest : KoinTest {
         )
         
         val spiedService = spyk(service, recordPrivateCalls = true)
-        coEvery { odesliService.batchResolve(any(), priority = HttpClientPriority.LOW) } returns emptyList()
+        coEvery { linkResolverService.batchResolve(any(), priority = HttpClientPriority.LOW) } returns emptyList()
         coEvery { spiedService.fetchReleaseGroupImage(any()) } returns null
 
         val result = spiedService.fetchNewReleases()

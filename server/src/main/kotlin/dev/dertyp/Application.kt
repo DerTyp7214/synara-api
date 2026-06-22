@@ -227,7 +227,7 @@ fun mainModule(application: Application, environment: ApplicationEnvironment): M
     singleOf(::MusicBrainzService)
     singleOf(::MusicBrainzCacheService)
     singleOf(::CachedMusicBrainzService)
-    singleOf(::OdesliService)
+    singleOf(::LinkResolverService)
     singleOf(::ReleaseService)
     singleOf(::SearchIndexWorker)
     singleOf(::RedisSearchService)

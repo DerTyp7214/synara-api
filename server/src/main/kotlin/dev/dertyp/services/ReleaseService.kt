@@ -34,7 +34,7 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
     private val musicBrainzCacheService by inject<MusicBrainzCacheService>()
     private val artistService by inject<ArtistService>()
     private val imageService by inject<ImageService>()
-    private val odesliService by inject<OdesliService>()
+    private val linkResolverService by inject<LinkResolverService>()
 
     suspend fun followArtist(userId: UUID, musicBrainzId: UUID, priority: HttpClientPriority = HttpClientPriority.NORMAL): Boolean {
         val artistId = getOrCreateArtistByMbId(musicBrainzId, priority) ?: return false
@@ -452,9 +452,9 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
                                     val allRelations =
                                         (group.relations ?: emptyList()) + mbReleasesForGroup.flatMap { it.relations ?: emptyList() }
                                     val relations = allRelations.mapNotNull { it.url?.resource }.distinct()
-                                    val odesliResults = odesliService.batchResolve(relations, priority = HttpClientPriority.LOW)
+                                    val resolvedLinks = linkResolverService.batchResolve(relations, priority = HttpClientPriority.LOW)
 
-                                    val finalLinks = (relations + odesliResults).distinct().toMutableList()
+                                    val finalLinks = (relations + resolvedLinks).distinct().toMutableList()
 
                                     val isSingle =
                                         group.primaryType?.lowercase() == "single" || group.primaryType == null ||
@@ -532,7 +532,7 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
                                             val appleUrl = "https://music.apple.com/album/${matchedAlbum.id}"
                                             finalLinks.add(appleUrl)
                                             finalLinks.addAll(
-                                                odesliService.resolvePlatformLinks(
+                                                linkResolverService.resolvePlatformLinks(
                                                     appleUrl,
                                                     priority = HttpClientPriority.LOW
                                                 )
@@ -572,7 +572,7 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
                                             val tidalUrl = "https://tidal.com/album/${matchedAlbum.id}"
                                             finalLinks.add(tidalUrl)
                                             finalLinks.addAll(
-                                                odesliService.resolvePlatformLinks(
+                                                linkResolverService.resolvePlatformLinks(
                                                     tidalUrl,
                                                     priority = HttpClientPriority.LOW
                                                 )
