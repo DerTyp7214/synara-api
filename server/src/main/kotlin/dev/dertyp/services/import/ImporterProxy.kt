@@ -10,12 +10,14 @@ import dev.dertyp.plugins.SearchResult
 import dev.dertyp.services.Service
 import dev.dertyp.services.metadata.IMetadataService
 import dev.dertyp.services.metadata.LinkResolverService
+import dev.dertyp.services.metadata.MusicBrainzCacheService
 import kotlinx.coroutines.flow.emptyFlow
 import kotlin.time.ExperimentalTime
 
 class ImporterProxy(
     private val pluginManager: PluginManager,
     private val linkResolver: LinkResolverService,
+    private val musicBrainz: MusicBrainzCacheService,
 ) : Service() {
     var defaultService: ImportBackend = ImportBackend.Tiddl
 
@@ -30,21 +32,22 @@ class ImporterProxy(
     private fun findEnabledImporter(url: String): IImporter? =
         pluginManager.getAllImporters().find { it.enabled && it.canHandle(url) }
 
+    private fun match(candidates: List<String>, pref: IImporter?): Pair<IImporter, String>? {
+        if (pref != null) candidates.firstOrNull { pref.canHandle(it) }?.let { return pref to it }
+        for (candidate in candidates) findEnabledImporter(candidate)?.let { return it to candidate }
+        return null
+    }
+
     suspend fun resolveImporter(
         url: String,
         preferred: ImportBackend = defaultService,
     ): Pair<IImporter, String>? {
         val pref = pluginManager.getImporter(preferred.id)?.takeIf { it.enabled }
 
-        if (pref != null && pref.canHandle(url)) return pref to url
-        findEnabledImporter(url)?.let { return it to url }
-
+        match(listOf(url), pref)?.let { return it }
+        match(musicBrainz.relationSiblingUrls(url), pref)?.let { return it }
         if (!linkResolver.enabled) return null
-        val candidates = linkResolver.resolvePlatformLinks(url)
-
-        if (pref != null) candidates.firstOrNull { pref.canHandle(it) }?.let { return pref to it }
-        for (candidate in candidates) findEnabledImporter(candidate)?.let { return it to candidate }
-        return null
+        return match(linkResolver.resolvePlatformLinks(url), pref)
     }
 
     private class DisabledImporter(override val id: String) : IImporter {

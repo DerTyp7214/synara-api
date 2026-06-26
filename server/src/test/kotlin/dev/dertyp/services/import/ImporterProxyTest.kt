@@ -3,6 +3,7 @@ package dev.dertyp.services.import
 import dev.dertyp.plugins.IImporter
 import dev.dertyp.plugins.PluginManager
 import dev.dertyp.services.metadata.LinkResolverService
+import dev.dertyp.services.metadata.MusicBrainzCacheService
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -13,7 +14,8 @@ import org.junit.jupiter.api.Test
 class ImporterProxyTest {
     private val pluginManager = mockk<PluginManager>()
     private val linkResolver = mockk<LinkResolverService>(relaxed = true)
-    private val proxy = ImporterProxy(pluginManager, linkResolver)
+    private val musicBrainz = mockk<MusicBrainzCacheService>(relaxed = true)
+    private val proxy = ImporterProxy(pluginManager, linkResolver, musicBrainz)
 
     @Test
     fun testRouting() = runBlocking {

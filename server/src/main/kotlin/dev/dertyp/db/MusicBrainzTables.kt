@@ -175,5 +175,6 @@ val allMusicBrainzTables = arrayOf(
     MBMediaTable,
     MBTrackTable,
     MBRecordingIsrcTable,
-    MBRelationTable
+    MBRelationTable,
+    MBRelationProviderTable
 )

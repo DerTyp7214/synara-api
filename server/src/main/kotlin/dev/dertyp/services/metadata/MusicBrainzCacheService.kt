@@ -5,11 +5,16 @@ import dev.dertyp.data.*
 import dev.dertyp.db.*
 import dev.dertyp.dbQuery
 import dev.dertyp.services.Service
+import dev.dertyp.utils.parsers.ParserFactory
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import org.jetbrains.exposed.v1.core.Op
 import org.jetbrains.exposed.v1.core.ResultRow
+import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.core.less
+import org.jetbrains.exposed.v1.core.or
 import org.jetbrains.exposed.v1.jdbc.*
 import java.util.UUID
 import kotlin.time.Clock
@@ -415,17 +420,7 @@ class MusicBrainzCacheService : Service() {
             }
         }
 
-        MBRelationTable.deleteWhere { MBRelationTable.ownerId eq recording.id }
-        recording.relations?.forEach { relation ->
-            relation.url?.let { url ->
-                MBRelationTable.upsert(MBRelationTable.id, MBRelationTable.ownerId) {
-                    it[id] = url.id
-                    it[ownerId] = recording.id
-                    it[type] = relation.type ?: ""
-                    it[resource] = url.resource
-                }
-            }
-        }
+        cacheRelations(recording.id, recording.relations)
     }
 
     suspend fun updateRecordingIsrcs(recordingId: UUID, isrcs: List<String>) = dbQuery {
@@ -501,17 +496,7 @@ class MusicBrainzCacheService : Service() {
             }
         }
 
-        MBRelationTable.deleteWhere { MBRelationTable.ownerId eq release.id }
-        release.relations?.forEach { relation ->
-            relation.url?.let { url ->
-                MBRelationTable.upsert(MBRelationTable.id, MBRelationTable.ownerId) {
-                    it[id] = url.id
-                    it[ownerId] = release.id
-                    it[type] = relation.type ?: ""
-                    it[resource] = url.resource
-                }
-            }
-        }
+        cacheRelations(release.id, release.relations)
     }
 
     suspend fun updateReleaseGroupCache(group: MusicBrainzReleaseGroup) = dbQuery {
@@ -523,16 +508,63 @@ class MusicBrainzCacheService : Service() {
             b[lastUpdate] = Clock.System.now().toEpochMilliseconds()
         }
 
-        MBRelationTable.deleteWhere { MBRelationTable.ownerId eq group.id }
-        group.relations?.forEach { relation ->
+        cacheRelations(group.id, group.relations)
+    }
+
+    private suspend fun cacheRelations(mbId: UUID, relations: List<MusicBrainzRelation>?) {
+        MBRelationTable.deleteWhere { MBRelationTable.ownerId eq mbId }
+        MBRelationProviderTable.deleteWhere { MBRelationProviderTable.ownerId eq mbId }
+
+        relations?.forEach { relation ->
             relation.url?.let { url ->
                 MBRelationTable.upsert(MBRelationTable.id, MBRelationTable.ownerId) {
                     it[id] = url.id
-                    it[ownerId] = group.id
+                    it[ownerId] = mbId
                     it[type] = relation.type ?: ""
                     it[resource] = url.resource
                 }
+
+                val parser = ParserFactory.getParser(url.resource)
+                val parsed = parser?.parse(url.resource)
+                MBRelationProviderTable.upsert(
+                    MBRelationProviderTable.ownerId,
+                    MBRelationProviderTable.provider,
+                    MBRelationProviderTable.externalId
+                ) {
+                    it[ownerId] = mbId
+                    it[provider] = parser?.name ?: "unknown"
+                    it[externalId] = parsed?.first ?: url.resource
+                    it[type] = parsed?.second?.value
+                    it[rawUrl] = url.resource
+                }
             }
+        }
+    }
+
+    suspend fun relationSiblingUrls(url: String): List<String> {
+        val parser = ParserFactory.getParser(url) ?: return emptyList()
+        val parsed = parser.parse(url)
+        return dbQuery {
+            val owners = if (parser.name == "musicbrainz" && parsed != null) {
+                runCatching { listOf(UUID.fromString(parsed.first)) }.getOrDefault(emptyList())
+            } else {
+                MBRelationProviderTable.select(MBRelationProviderTable.ownerId)
+                    .where {
+                        (MBRelationProviderTable.rawUrl eq url) or
+                            (if (parsed != null) {
+                                (MBRelationProviderTable.provider eq parser.name) and
+                                    (MBRelationProviderTable.externalId eq parsed.first)
+                            } else Op.FALSE)
+                    }
+                    .map { it[MBRelationProviderTable.ownerId] }
+                    .distinct()
+            }
+
+            if (owners.isEmpty()) emptyList()
+            else MBRelationProviderTable.select(MBRelationProviderTable.rawUrl)
+                .where { MBRelationProviderTable.ownerId inList owners }
+                .map { it[MBRelationProviderTable.rawUrl] }
+                .distinct()
         }
     }
 
