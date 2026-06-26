@@ -17,7 +17,10 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.flowOn
 import net.coobird.thumbnailator.Thumbnails
-import org.jetbrains.exposed.v1.core.*
+import org.jetbrains.exposed.v1.core.ResultRow
+import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.inList
+import org.jetbrains.exposed.v1.core.like
 import org.jetbrains.exposed.v1.jdbc.*
 import redis.clients.jedis.HostAndPort
 import redis.clients.jedis.RedisClusterClient
@@ -384,9 +387,8 @@ class ImageService(
 
     suspend fun getUnanalyzedImageIds(): List<UUID> = dbQuery {
         val analyzedIds = ImageMetadataTable.selectAll().map { it[ImageMetadataTable.imageId].value }
-        ImageTable.selectAll()
-            .where { ImageTable.id notInList analyzedIds }
-            .map { it[ImageTable.id].value }
+        val allImages = ImageTable.selectAll().map { it[ImageTable.id].value }
+        allImages - analyzedIds.toSet()
     }
 
     suspend fun analyzeImage(imageId: UUID) {
