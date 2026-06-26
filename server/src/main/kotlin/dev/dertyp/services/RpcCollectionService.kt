@@ -1,7 +1,7 @@
 package dev.dertyp.services
 
-import dev.dertyp.data.Collection
 import dev.dertyp.data.CollectionItemType
+import dev.dertyp.data.MediaCollection
 import dev.dertyp.data.InsertableCollection
 import dev.dertyp.data.User
 import kotlinx.coroutines.flow.Flow
@@ -11,9 +11,9 @@ class RpcCollectionService(
     private val user: User,
     private val collectionService: CollectionService
 ) : ICollectionService {
-    override suspend fun byId(id: UUID): Collection? = collectionService.byId(id)
+    override suspend fun byId(id: UUID): MediaCollection? = collectionService.byId(id)
 
-    override suspend fun allCollections(): List<Collection> = collectionService.allCollections(user.id)
+    override suspend fun allCollections(): List<MediaCollection> = collectionService.allCollections(user.id)
 
     override suspend fun createCollection(collection: InsertableCollection): UUID =
         collectionService.createCollection(user.id, collection)

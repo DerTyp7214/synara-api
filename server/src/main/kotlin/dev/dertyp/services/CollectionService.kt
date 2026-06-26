@@ -1,8 +1,8 @@
 package dev.dertyp.services
 
 import dev.dertyp.core.*
-import dev.dertyp.data.Collection
 import dev.dertyp.data.CollectionItemType
+import dev.dertyp.data.MediaCollection
 import dev.dertyp.data.InsertableCollection
 import dev.dertyp.db.*
 import dev.dertyp.dbQuery
@@ -17,7 +17,7 @@ import java.util.UUID
 
 class CollectionService : Service() {
     companion object {
-        fun mapCollection(resultRow: ResultRow): Collection = Collection(
+        fun mapCollection(resultRow: ResultRow): MediaCollection = MediaCollection(
             id = resultRow[CollectionTable.id].value,
             name = resultRow[CollectionTable.name],
             description = resultRow[CollectionTable.description],
@@ -27,7 +27,7 @@ class CollectionService : Service() {
         )
     }
 
-    suspend fun byId(id: UUID): Collection? {
+    suspend fun byId(id: UUID): MediaCollection? {
         val base = dbQuery {
             CollectionTable
                 .leftJoin(ImageTable, onColumn = { CollectionTable.imageId }, otherColumn = { ImageTable.id })
@@ -40,7 +40,7 @@ class CollectionService : Service() {
         return base.withComputedStats()
     }
 
-    suspend fun allCollections(creator: UUID?): List<Collection> {
+    suspend fun allCollections(creator: UUID?): List<MediaCollection> {
         val bases = dbQuery {
             val query = CollectionTable
                 .leftJoin(ImageTable, onColumn = { CollectionTable.imageId }, otherColumn = { ImageTable.id })
@@ -137,7 +137,7 @@ class CollectionService : Service() {
             }
     }.flowOn(Dispatchers.IO)
 
-    private suspend fun Collection.withComputedStats(): Collection = dbQuery {
+    private suspend fun MediaCollection.withComputedStats(): MediaCollection = dbQuery {
         val songItemIds = linkedIds(id, CollectionSongTable.collectionId, CollectionSongTable.songId)
         val albumItemIds = linkedIds(id, CollectionAlbumTable.collectionId, CollectionAlbumTable.albumId)
         val artistItemIds = linkedIds(id, CollectionArtistTable.collectionId, CollectionArtistTable.artistId)
