@@ -84,8 +84,9 @@ class ImportRpcService(
 
     override suspend fun importUrls(urls: List<String>) {
         importService.logger.info("Processing ${urls.size} import URLs for user ${user.username}")
-        val groups = urls.groupBy { url ->
-            importService.pluginManager.getAllImporters().find { it.enabled && it.canHandle(url) }
+        val resolved = urls.map { it to importerProxy.resolveImporter(it) }
+        val groups = resolved.groupBy({ it.second?.first }) { (originalUrl, match) ->
+            match?.second ?: originalUrl
         }
 
         groups.forEach { (importer, groupUrls) ->
@@ -122,9 +123,7 @@ class ImportRpcService(
     }
 
     override suspend fun getImporterForUrl(url: String): ImportBackend? {
-        return importService.pluginManager.getAllImporters()
-            .find { it.enabled && it.canHandle(url) }
-            ?.let { ImportBackend(it.id) }
+        return importerProxy.resolveImporter(url)?.let { ImportBackend(it.first.id) }
     }
 
     override suspend fun existsByOriginalId(id: PrefixedId, type: Type): Boolean {

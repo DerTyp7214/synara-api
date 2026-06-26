@@ -2,6 +2,7 @@ package dev.dertyp.services.import
 
 import dev.dertyp.plugins.IImporter
 import dev.dertyp.plugins.PluginManager
+import dev.dertyp.services.metadata.LinkResolverService
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -11,10 +12,11 @@ import org.junit.jupiter.api.Test
 
 class ImporterPriorityTest {
     private val pluginManager = mockk<PluginManager>()
+    private val linkResolver = mockk<LinkResolverService>(relaxed = true)
 
     @Test
     fun `importContent should group URLs by importer and prioritize default`() = runBlocking {
-        val proxy = ImporterProxy(pluginManager)
+        val proxy = ImporterProxy(pluginManager, linkResolver)
         
         val url1 = "https://tidal.com/1"
         val url2 = "https://youtube.com/2"

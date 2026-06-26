@@ -9,11 +9,13 @@ import dev.dertyp.plugins.PluginManager
 import dev.dertyp.plugins.SearchResult
 import dev.dertyp.services.Service
 import dev.dertyp.services.metadata.IMetadataService
+import dev.dertyp.services.metadata.LinkResolverService
 import kotlinx.coroutines.flow.emptyFlow
 import kotlin.time.ExperimentalTime
 
 class ImporterProxy(
-    private val pluginManager: PluginManager
+    private val pluginManager: PluginManager,
+    private val linkResolver: LinkResolverService,
 ) : Service() {
     var defaultService: ImportBackend = ImportBackend.Tiddl
 
@@ -23,6 +25,26 @@ class ImporterProxy(
 
         return pluginManager.getAllImporters().find { it.enabled }
             ?: DisabledImporter(service.id)
+    }
+
+    private fun findEnabledImporter(url: String): IImporter? =
+        pluginManager.getAllImporters().find { it.enabled && it.canHandle(url) }
+
+    suspend fun resolveImporter(
+        url: String,
+        preferred: ImportBackend = defaultService,
+    ): Pair<IImporter, String>? {
+        val pref = pluginManager.getImporter(preferred.id)?.takeIf { it.enabled }
+
+        if (pref != null && pref.canHandle(url)) return pref to url
+        findEnabledImporter(url)?.let { return it to url }
+
+        if (!linkResolver.enabled) return null
+        val candidates = linkResolver.resolvePlatformLinks(url)
+
+        if (pref != null) candidates.firstOrNull { pref.canHandle(it) }?.let { return pref to it }
+        for (candidate in candidates) findEnabledImporter(candidate)?.let { return it to candidate }
+        return null
     }
 
     private class DisabledImporter(override val id: String) : IImporter {
@@ -66,10 +88,13 @@ class ImporterProxy(
         metadata: IMetadataService.BaseMetadata? = null,
         onLiveOutput: suspend (String) -> Unit
     ): ProcessExecutionResult {
-        val defaultImporter = getImporter(service ?: defaultService)
-        val groups = urls.groupBy { url ->
-            if (defaultImporter.enabled && defaultImporter.canHandle(url)) defaultImporter
-            else pluginManager.getAllImporters().find { it.enabled && it.canHandle(url) } ?: defaultImporter
+        val preferred = service ?: defaultService
+        val defaultImporter = getImporter(preferred)
+
+        val groups = mutableMapOf<IImporter, MutableList<String>>()
+        for (url in urls) {
+            val (importer, handleUrl) = resolveImporter(url, preferred) ?: (defaultImporter to url)
+            groups.getOrPut(importer) { mutableListOf() }.add(handleUrl)
         }
 
         var lastResult = ProcessExecutionResult.EMPTY
