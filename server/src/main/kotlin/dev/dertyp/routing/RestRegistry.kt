@@ -468,6 +468,10 @@ fun Route.registerAuthenticatedRestServices(koin: Koin) {
         val user = call.getUser()
         koin.get<UserPlaylistService>().withAuthorization<IUserPlaylistService>(user)
     }
+    registerRestService(ICollectionService::class, authenticated = true) {
+        val user = call.getUser() ?: throw IllegalArgumentException("No user found")
+        RpcCollectionService(user, koin.get()).withAuthorization<ICollectionService>(user)
+    }
     registerRestService(ISessionService::class, authenticated = true) {
         val user = call.getUser() ?: throw IllegalArgumentException("No user found")
         RpcSessionService(user, koin.get()).withAuthorization<ISessionService>(user)

@@ -209,6 +209,7 @@ fun mainModule(application: Application, environment: ApplicationEnvironment): M
     singleOf(::ScheduledTaskConfigurationService)
     singleOf(::ServerStatsService)
     singleOf(::UserPlaylistService)
+    singleOf(::CollectionService)
     singleOf(::RefreshTokenService)
     singleOf(::ScheduledTaskLogService)
     singleOf(::DiscoveryService)

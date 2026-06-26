@@ -97,6 +97,7 @@ private fun registerAuthenticated(koin: Koin, call: ApplicationCall, user: User,
     val favSyncService = koin.get<FavSyncService>()
     val playlistService = koin.get<PlaylistService>()
     val userPlaylistService = koin.get<UserPlaylistService>()
+    val collectionService = koin.get<CollectionService>()
     val importerProxy = koin.get<ImporterProxy>()
     val sessionService = koin.get<SessionService>()
     val playbackService = koin.get<PlaybackService>()
@@ -130,6 +131,7 @@ private fun registerAuthenticated(koin: Koin, call: ApplicationCall, user: User,
     registrar.register(IImportService::class) { ImportRpcService(user, call, importService, importerProxy).withAuthorization<IImportService>(user).withLogging<IImportService>(call) }
     registrar.register(IPlaylistService::class) { playlistService.withAuthorization<IPlaylistService>(user).withLogging<IPlaylistService>(call) }
     registrar.register(IUserPlaylistService::class) { userPlaylistService.withAuthorization<IUserPlaylistService>(user).withLogging<IUserPlaylistService>(call) }
+    registrar.register(ICollectionService::class) { RpcCollectionService(user, collectionService).withAuthorization<ICollectionService>(user).withLogging<ICollectionService>(call) }
     registrar.register(ISessionService::class) { RpcSessionService(user, sessionService).withAuthorization<ISessionService>(user).withLogging<ISessionService>(call) }
     registrar.register(IPlaybackService::class) { RpcPlaybackService(playbackService).withAuthorization<IPlaybackService>(user).withLogging<IPlaybackService>(call) }
     registrar.register(ICustomAudioService::class) { CustomAudioRpcService(customAudioService).withAuthorization<ICustomAudioService>(user).withLogging<ICustomAudioService>(call) }
