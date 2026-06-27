@@ -53,6 +53,7 @@ class SongDeduplicationTest : KoinTest {
         FollowedArtistTable, TranscodedSongTable, CustomMigrationTable,
         ScheduledTaskLogTable, ArtistSplitAliasTable, SyncServiceTable,
         SongProviderTable,
+        CollectionTable, CollectionSongTable, CollectionAlbumTable, CollectionArtistTable, CollectionPlaylistTable,
         *allMusicBrainzTables
     )
 
