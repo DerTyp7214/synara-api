@@ -444,6 +444,49 @@ class ArtistService(private val searchIndexWorker: SearchIndexWorker? = null) : 
             this[AlbumArtistTable.artistId] = newArtist
         }
 
+        val collectionIdsForArtist = CollectionArtistTable
+            .select(CollectionArtistTable.collectionId, CollectionArtistTable.artistId)
+            .where { CollectionArtistTable.artistId inList currentArtistIds }
+            .map { it[CollectionArtistTable.collectionId].value }
+            .distinct()
+
+        CollectionArtistTable.batchInsert(collectionIdsForArtist) { collectionId ->
+            this[CollectionArtistTable.collectionId] = collectionId
+            this[CollectionArtistTable.artistId] = newArtist
+        }
+
+        val loserSet = currentArtistIds.toSet()
+        val remappedMemberships = ArtistMemberTable
+            .select(ArtistMemberTable.artistId, ArtistMemberTable.groupId)
+            .where { (ArtistMemberTable.artistId inList currentArtistIds) or (ArtistMemberTable.groupId inList currentArtistIds) }
+            .map { it[ArtistMemberTable.artistId].value to it[ArtistMemberTable.groupId].value }
+            .map { (member, group) ->
+                (if (member in loserSet) newArtist else member) to (if (group in loserSet) newArtist else group)
+            }
+            .filter { (member, group) -> member != group }
+            .distinct()
+
+        ArtistMemberTable.batchInsert(remappedMemberships) { membership ->
+            this[ArtistMemberTable.artistId] = membership.first
+            this[ArtistMemberTable.groupId] = membership.second
+        }
+
+        val followerIds = FollowedArtistTable
+            .select(FollowedArtistTable.userId, FollowedArtistTable.artistId)
+            .where { FollowedArtistTable.artistId inList currentArtistIds }
+            .map { it[FollowedArtistTable.userId].value }
+            .distinct()
+
+        FollowedArtistTable.batchInsert(followerIds) { userId ->
+            this[FollowedArtistTable.userId] = userId
+            this[FollowedArtistTable.artistId] = newArtist
+        }
+
+        RecentReleaseTable.update({ RecentReleaseTable.artistId inList currentArtistIds }) {
+            it[RecentReleaseTable.artistId] = newArtist
+            it[RecentReleaseTable.artistName] = mergeArtists.name
+        }
+
         val existingMbIds = ArtistMusicBrainzTable
             .select(ArtistMusicBrainzTable.musicBrainzId)
             .where { ArtistMusicBrainzTable.artistId inList currentArtistIds }
@@ -472,6 +515,9 @@ class ArtistService(private val searchIndexWorker: SearchIndexWorker? = null) : 
 
         SongArtistTable.deleteWhere { SongArtistTable.artistId inList currentArtistIds }
         AlbumArtistTable.deleteWhere { AlbumArtistTable.artistId inList currentArtistIds }
+        CollectionArtistTable.deleteWhere { CollectionArtistTable.artistId inList currentArtistIds }
+        ArtistMemberTable.deleteWhere { (ArtistMemberTable.artistId inList currentArtistIds) or (ArtistMemberTable.groupId inList currentArtistIds) }
+        FollowedArtistTable.deleteWhere { FollowedArtistTable.artistId inList currentArtistIds }
 
         ArtistTable.deleteWhere { ArtistTable.id inList currentArtistIds }
         ArtistAliasTable.deleteWhere { ArtistAliasTable.artistId inList currentArtistIds }

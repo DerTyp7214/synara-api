@@ -69,7 +69,10 @@ class ArtistServiceTest : KoinTest {
                 ArtistGenreTable,
                 SongGenreTable,
                 AlbumGenreTable,
-                *allMusicBrainzTables
+                CollectionTable,
+                CollectionArtistTable,
+                *allMusicBrainzTables,
+                RecentReleaseTable
             )
         }
         
@@ -673,6 +676,148 @@ class ArtistServiceTest : KoinTest {
 
         assertEquals(null, service.byId(artistId1))
         assertEquals(null, service.byId(artistId2))
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `mergeArtists repoints collection memberships to the merged artist`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val artistId1 = UUID.randomUUID()
+        val artistId2 = UUID.randomUUID()
+        val collectionId = UUID.randomUUID()
+
+        transaction(database) {
+            ArtistTable.insert { it[id] = artistId1; it[name] = "Artist A" }
+            ArtistTable.insert { it[id] = artistId2; it[name] = "Artist B" }
+            val userId = UserTable.insert { it[username] = "u"; it[passwordHash] = "p" }[UserTable.id]
+            CollectionTable.insert { it[id] = collectionId; it[name] = "C"; it[creator] = userId }
+
+            CollectionArtistTable.insert { it[CollectionArtistTable.collectionId] = collectionId; it[artistId] = artistId1 }
+        }
+
+        val merged = service.mergeArtists(MergeArtists(name = "Merged", artistIds = listOf(artistId1, artistId2)))
+        assertNotNull(merged)
+
+        val artistsInCollection = transaction(database) {
+            CollectionArtistTable.selectAll().where { CollectionArtistTable.collectionId eq collectionId }
+                .map { it[CollectionArtistTable.artistId].value }
+        }
+
+        assertEquals(listOf(merged!!.id), artistsInCollection)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `mergeArtists collapses a collection holding several merged artists into one row`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val artistId1 = UUID.randomUUID()
+        val artistId2 = UUID.randomUUID()
+        val collectionId = UUID.randomUUID()
+
+        transaction(database) {
+            ArtistTable.insert { it[id] = artistId1; it[name] = "Artist A" }
+            ArtistTable.insert { it[id] = artistId2; it[name] = "Artist B" }
+            val userId = UserTable.insert { it[username] = "u"; it[passwordHash] = "p" }[UserTable.id]
+            CollectionTable.insert { it[id] = collectionId; it[name] = "C"; it[creator] = userId }
+
+            CollectionArtistTable.insert { it[CollectionArtistTable.collectionId] = collectionId; it[artistId] = artistId1 }
+            CollectionArtistTable.insert { it[CollectionArtistTable.collectionId] = collectionId; it[artistId] = artistId2 }
+        }
+
+        val merged = service.mergeArtists(MergeArtists(name = "Merged", artistIds = listOf(artistId1, artistId2)))
+        assertNotNull(merged)
+
+        val artistsInCollection = transaction(database) {
+            CollectionArtistTable.selectAll().where { CollectionArtistTable.collectionId eq collectionId }
+                .map { it[CollectionArtistTable.artistId].value }
+        }
+
+        assertEquals(listOf(merged!!.id), artistsInCollection)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `mergeArtists repoints followers to the merged artist`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val artistId1 = UUID.randomUUID()
+        val artistId2 = UUID.randomUUID()
+        val userId = UUID.randomUUID()
+
+        transaction(database) {
+            ArtistTable.insert { it[id] = artistId1; it[name] = "Artist A" }
+            ArtistTable.insert { it[id] = artistId2; it[name] = "Artist B" }
+            UserTable.insert { it[id] = userId; it[username] = "u"; it[passwordHash] = "p" }
+
+            FollowedArtistTable.insert { it[FollowedArtistTable.userId] = userId; it[artistId] = artistId1 }
+            FollowedArtistTable.insert { it[FollowedArtistTable.userId] = userId; it[artistId] = artistId2 }
+        }
+
+        val merged = service.mergeArtists(MergeArtists(name = "Merged", artistIds = listOf(artistId1, artistId2)))
+        assertNotNull(merged)
+
+        val follows = transaction(database) {
+            FollowedArtistTable.selectAll().map { it[FollowedArtistTable.userId].value to it[FollowedArtistTable.artistId].value }
+        }
+
+        assertEquals(listOf(userId to merged!!.id), follows)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `mergeArtists repoints group memberships and drops self-membership`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val memberId = UUID.randomUUID()
+        val otherMergedId = UUID.randomUUID()
+        val groupId = UUID.randomUUID()
+        val standaloneMemberId = UUID.randomUUID()
+
+        transaction(database) {
+            ArtistTable.insert { it[id] = memberId; it[name] = "Member" }
+            ArtistTable.insert { it[id] = otherMergedId; it[name] = "Other" }
+            ArtistTable.insert { it[id] = groupId; it[name] = "Group"; it[isGroup] = true }
+            ArtistTable.insert { it[id] = standaloneMemberId; it[name] = "Standalone" }
+
+            ArtistMemberTable.insert { it[artistId] = memberId; it[this.groupId] = groupId }
+            ArtistMemberTable.insert { it[artistId] = memberId; it[this.groupId] = otherMergedId }
+            ArtistMemberTable.insert { it[artistId] = standaloneMemberId; it[this.groupId] = otherMergedId }
+        }
+
+        val merged = service.mergeArtists(MergeArtists(name = "Merged", artistIds = listOf(memberId, otherMergedId)))
+        assertNotNull(merged)
+
+        val memberships = transaction(database) {
+            ArtistMemberTable.selectAll().map { it[ArtistMemberTable.artistId].value to it[ArtistMemberTable.groupId].value }.toSet()
+        }
+        assertEquals(setOf(merged!!.id to groupId, standaloneMemberId to merged.id), memberships)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `mergeArtists repoints recent releases to the merged artist`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val artistId1 = UUID.randomUUID()
+        val artistId2 = UUID.randomUUID()
+        val releaseGroupId = UUID.randomUUID()
+
+        transaction(database) {
+            ArtistTable.insert { it[id] = artistId1; it[name] = "Artist A" }
+            ArtistTable.insert { it[id] = artistId2; it[name] = "Artist B" }
+            MBReleaseGroupTable.insert { it[id] = releaseGroupId; it[title] = "RG" }
+            RecentReleaseTable.insert {
+                it[releaseId] = releaseGroupId
+                it[artistId] = artistId1
+                it[artistName] = "Artist A"
+                it[title] = "New Release"
+            }
+        }
+
+        val merged = service.mergeArtists(MergeArtists(name = "Merged", artistIds = listOf(artistId1, artistId2)))
+        assertNotNull(merged)
+
+        val release = transaction(database) { RecentReleaseTable.selectAll().single() }
+
+        assertEquals(merged!!.id, release[RecentReleaseTable.artistId].value)
+        assertEquals("Merged", release[RecentReleaseTable.artistName])
     }
 
     @ParameterizedTest

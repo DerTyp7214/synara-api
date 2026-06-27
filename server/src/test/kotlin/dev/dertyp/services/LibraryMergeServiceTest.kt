@@ -57,7 +57,8 @@ class LibraryMergeServiceTest : KoinTest {
                 ArtistTable, AlbumTable, SongTable, ImageTable, PlaylistTable,
                 UserTable, UserPlaylistTable, UserPlaylistSongTable, PlaylistSongTable,
                 SongArtistTable, AlbumArtistTable, AlbumMusicBrainzTable, SongMusicBrainzTable,
-                TranscodedSongTable, UserSongTable, SongProviderTable, AlbumProviderTable
+                TranscodedSongTable, UserSongTable, SongProviderTable, AlbumProviderTable,
+                CollectionTable, CollectionSongTable, CollectionAlbumTable, CollectionArtistTable, CollectionPlaylistTable
             )
         }
         service = LibraryMergeService()
@@ -358,6 +359,108 @@ class LibraryMergeServiceTest : KoinTest {
             
             assertEquals(1, PlaylistSongTable.selectAll().count())
             assertEquals(remainingSongId, PlaylistSongTable.selectAll().single()[PlaylistSongTable.songId].value)
+        }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `mergeDuplicateSongs repoints collection song links to the kept song`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        mockkObject(MetadataService.Companion)
+        every { MetadataService.getMetadataService(any(), any()) } returns tidalService
+        val collectionId = UUID.randomUUID()
+
+        val (keptSong, removedSong) = transaction(database) {
+            val albumId = AlbumTable.insert { it[name] = "Album" }[AlbumTable.id]
+            // song dedup keeps the lowest `inserted`
+            val kept = SongTable.insert {
+                it[title] = "Dup"; it[this.albumId] = albumId; it[fileSize] = 100L; it[duration] = 60L; it[filePath] = "p"; it[inserted] = 1000L
+            }[SongTable.id].value
+            val removed = SongTable.insert {
+                it[title] = "Dup"; it[this.albumId] = albumId; it[fileSize] = 100L; it[duration] = 60L; it[filePath] = "p"; it[inserted] = 2000L
+            }[SongTable.id].value
+
+            val userId = UserTable.insert { it[username] = "u"; it[passwordHash] = "p" }[UserTable.id]
+            CollectionTable.insert { it[id] = collectionId; it[name] = "C"; it[creator] = userId }
+            // collection references the song that will be merged away
+            CollectionSongTable.insert { it[CollectionSongTable.collectionId] = collectionId; it[songId] = removed }
+            kept to removed
+        }
+
+        service.mergeDuplicates()
+
+        transaction(database) {
+            val songs = CollectionSongTable.selectAll().where { CollectionSongTable.collectionId eq collectionId }
+                .map { it[CollectionSongTable.songId].value }
+            assertEquals(listOf(keptSong), songs)
+            assertEquals(0, SongTable.selectAll().where { SongTable.id eq removedSong }.count())
+        }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `mergeDuplicateSongs collapses a collection holding both songs into one row`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        mockkObject(MetadataService.Companion)
+        every { MetadataService.getMetadataService(any(), any()) } returns tidalService
+        val collectionId = UUID.randomUUID()
+
+        val keptSong = transaction(database) {
+            val albumId = AlbumTable.insert { it[name] = "Album" }[AlbumTable.id]
+            val kept = SongTable.insert {
+                it[title] = "Dup"; it[this.albumId] = albumId; it[fileSize] = 100L; it[duration] = 60L; it[filePath] = "p"; it[inserted] = 1000L
+            }[SongTable.id].value
+            val removed = SongTable.insert {
+                it[title] = "Dup"; it[this.albumId] = albumId; it[fileSize] = 100L; it[duration] = 60L; it[filePath] = "p"; it[inserted] = 2000L
+            }[SongTable.id].value
+
+            val userId = UserTable.insert { it[username] = "u"; it[passwordHash] = "p" }[UserTable.id]
+            CollectionTable.insert { it[id] = collectionId; it[name] = "C"; it[creator] = userId }
+            // collection holds BOTH duplicates
+            CollectionSongTable.insert { it[CollectionSongTable.collectionId] = collectionId; it[songId] = kept }
+            CollectionSongTable.insert { it[CollectionSongTable.collectionId] = collectionId; it[songId] = removed }
+            kept
+        }
+
+        service.mergeDuplicates()
+
+        transaction(database) {
+            val songs = CollectionSongTable.selectAll().where { CollectionSongTable.collectionId eq collectionId }
+                .map { it[CollectionSongTable.songId].value }
+            assertEquals(listOf(keptSong), songs)
+        }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `mergeDuplicateAlbums repoints collection album links to the kept album`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+
+        mockkObject(MetadataService.Companion)
+        every { MetadataService.getMetadataService(any(), any()) } returns tidalService
+        coEvery { tidalService.getAlbumsByIds(any()) } returns emptyList()
+        coEvery { albumService.fetchMusicBrainzId(any()) } returns null
+        every { pluginManager.getAllImporters() } returns emptyList()
+
+        val removedAlbum = UUID.randomUUID() // lower songCount → merged away
+        val keptAlbum = UUID.randomUUID()    // higher songCount → kept
+        val collectionId = UUID.randomUUID()
+
+        transaction(database) {
+            AlbumTable.insert { it[id] = removedAlbum; it[name] = "Album"; it[originalId] = "tidal:orig"; it[songCount] = 10 }
+            AlbumTable.insert { it[id] = keptAlbum; it[name] = "Album (dup)"; it[originalId] = "tidal:orig"; it[songCount] = 12 }
+
+            val userId = UserTable.insert { it[username] = "u"; it[passwordHash] = "p" }[UserTable.id]
+            CollectionTable.insert { it[id] = collectionId; it[name] = "C"; it[creator] = userId }
+            CollectionAlbumTable.insert { it[CollectionAlbumTable.collectionId] = collectionId; it[albumId] = removedAlbum }
+        }
+
+        service.mergeDuplicates()
+
+        transaction(database) {
+            val albums = CollectionAlbumTable.selectAll().where { CollectionAlbumTable.collectionId eq collectionId }
+                .map { it[CollectionAlbumTable.albumId].value }
+            assertEquals(listOf(keptAlbum), albums)
         }
     }
 }

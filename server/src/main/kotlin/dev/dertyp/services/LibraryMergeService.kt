@@ -616,6 +616,18 @@ class LibraryMergeService : Service() {
             }
         }
         AlbumProviderTable.deleteWhere { AlbumProviderTable.albumId eq oldAlbumId }
+
+        val collectionsForOldAlbum = CollectionAlbumTable.select(CollectionAlbumTable.collectionId).where { CollectionAlbumTable.albumId eq oldAlbumId }.map { it[CollectionAlbumTable.collectionId].value }
+        val collectionsForKeptAlbum = CollectionAlbumTable.select(CollectionAlbumTable.collectionId).where { CollectionAlbumTable.albumId eq keptAlbumId }.map { it[CollectionAlbumTable.collectionId].value }.toSet()
+
+        for (collectionId in collectionsForOldAlbum) {
+            if (collectionId !in collectionsForKeptAlbum) {
+                CollectionAlbumTable.update({ (CollectionAlbumTable.albumId eq oldAlbumId) and (CollectionAlbumTable.collectionId eq collectionId) }) {
+                    it[CollectionAlbumTable.albumId] = keptAlbumId
+                }
+            }
+        }
+        CollectionAlbumTable.deleteWhere { CollectionAlbumTable.albumId eq oldAlbumId }
     }
 
     private fun mergeDuplicateImages(): Int {
@@ -747,6 +759,18 @@ class LibraryMergeService : Service() {
             }
         }
         SongProviderTable.deleteWhere { SongProviderTable.songId eq oldSongId }
+
+        val collectionsForOldSong = CollectionSongTable.select(CollectionSongTable.collectionId).where { CollectionSongTable.songId eq oldSongId }.map { it[CollectionSongTable.collectionId].value }
+        val collectionsForKeptSong = CollectionSongTable.select(CollectionSongTable.collectionId).where { CollectionSongTable.songId eq keptSongId }.map { it[CollectionSongTable.collectionId].value }.toSet()
+
+        for (collectionId in collectionsForOldSong) {
+            if (collectionId !in collectionsForKeptSong) {
+                CollectionSongTable.update({ (CollectionSongTable.songId eq oldSongId) and (CollectionSongTable.collectionId eq collectionId) }) {
+                    it[CollectionSongTable.songId] = keptSongId
+                }
+            }
+        }
+        CollectionSongTable.deleteWhere { CollectionSongTable.songId eq oldSongId }
     }
 
     private fun mergeImageReferences(oldImageId: UUID, keptImageId: UUID) {
