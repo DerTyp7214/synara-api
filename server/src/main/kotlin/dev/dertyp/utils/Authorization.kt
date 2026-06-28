@@ -4,17 +4,22 @@ import dev.dertyp.core.UnauthorizedException
 import dev.dertyp.data.RequiresAdmin
 import dev.dertyp.data.RequiresCapability
 import dev.dertyp.data.User
+import java.lang.reflect.InvocationHandler
 import java.lang.reflect.InvocationTargetException
+import java.lang.reflect.Method
 import java.lang.reflect.Proxy
 
-@Suppress("PLATFORM_CLASS_MAPPED_TO_KOTLIN")
-inline fun <reified T : Any> T.withAuthorization(user: User?): T {
-    val interfaceClass = T::class.java
-    val target = this
+class AuthorizationInvocationHandler(
+    private val target: Any,
+    private val interfaceClass: Class<*>,
+    private val user: User?,
+) : InvocationHandler, ProxyTargetHolder {
+    override val proxyTarget: Any get() = target
 
-    return Proxy.newProxyInstance(interfaceClass.classLoader, arrayOf(interfaceClass)) { proxy, method, args ->
+    @Suppress("PLATFORM_CLASS_MAPPED_TO_KOTLIN")
+    override fun invoke(proxy: Any, method: Method, args: Array<out Any?>?): Any? {
         if (method.declaringClass == Object::class.java) {
-            return@newProxyInstance when (method.name) {
+            return when (method.name) {
                 "toString" -> $$"$$${interfaceClass.simpleName}$Proxy"
                 "hashCode" -> System.identityHashCode(proxy)
                 "equals" -> proxy === args?.get(0)
@@ -22,8 +27,9 @@ inline fun <reified T : Any> T.withAuthorization(user: User?): T {
             }
         }
 
+        val realTarget = unwrapProxyTarget(target)
         val implMethod = try {
-            target.javaClass.getMethod(method.name, *method.parameterTypes)
+            realTarget.javaClass.getMethod(method.name, *method.parameterTypes)
         } catch (_: NoSuchMethodException) {
             null
         }
@@ -46,10 +52,20 @@ inline fun <reified T : Any> T.withAuthorization(user: User?): T {
             }
         }
 
-        try {
+        return try {
             method.invoke(target, *(args ?: emptyArray()))
         } catch (e: InvocationTargetException) {
             throw e.targetException
         }
-    } as T
+    }
+}
+
+@Suppress("PLATFORM_CLASS_MAPPED_TO_KOTLIN")
+inline fun <reified T : Any> T.withAuthorization(user: User?): T {
+    val interfaceClass = T::class.java
+    return Proxy.newProxyInstance(
+        interfaceClass.classLoader,
+        arrayOf(interfaceClass),
+        AuthorizationInvocationHandler(this, interfaceClass, user),
+    ) as T
 }

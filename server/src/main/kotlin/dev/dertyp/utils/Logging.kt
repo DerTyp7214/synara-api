@@ -2,9 +2,11 @@ package dev.dertyp.utils
 
 import dev.dertyp.core.isProxied
 import dev.dertyp.core.principalUsername
-import io.ktor.server.application.ApplicationCall
-import io.ktor.util.logging.KtorSimpleLogger
+import io.ktor.server.application.*
+import io.ktor.util.logging.*
+import java.lang.reflect.InvocationHandler
 import java.lang.reflect.InvocationTargetException
+import java.lang.reflect.Method
 import java.lang.reflect.Proxy
 import kotlin.coroutines.Continuation
 
@@ -16,20 +18,32 @@ enum class LogMode {
 @Retention(AnnotationRetention.RUNTIME)
 annotation class LogParam(val property: String = "", val mode: LogMode = LogMode.DEFAULT)
 
-@Suppress("PLATFORM_CLASS_MAPPED_TO_KOTLIN")
-inline fun <reified T : Any> T.withLogging(call: ApplicationCall? = null): T {
-    val interfaceClass = T::class.java
-    val logger = KtorSimpleLogger(interfaceClass.simpleName)
-    val target = this
-    val prefix = buildString {
-        if (call?.isProxied == true) append("[Proxy] ")
-        call?.principalUsername?.let { append("[$it] ") }
-        //if (call?.request?.header(SynaraPackHeader) != "true") append("[No-Pack] ")
-    }
+interface ProxyTargetHolder {
+    val proxyTarget: Any
+}
 
-    return Proxy.newProxyInstance(interfaceClass.classLoader, arrayOf(interfaceClass)) { proxy, method, args ->
+fun unwrapProxyTarget(obj: Any): Any {
+    var current = obj
+    while (Proxy.isProxyClass(current.javaClass)) {
+        val handler = Proxy.getInvocationHandler(current)
+        current = (handler as? ProxyTargetHolder)?.proxyTarget ?: break
+    }
+    return current
+}
+
+class LoggingInvocationHandler(
+    private val target: Any,
+    private val interfaceClass: Class<*>,
+    private val prefix: String,
+) : InvocationHandler, ProxyTargetHolder {
+    override val proxyTarget: Any get() = target
+
+    private val logger = KtorSimpleLogger(interfaceClass.simpleName)
+
+    @Suppress("PLATFORM_CLASS_MAPPED_TO_KOTLIN")
+    override fun invoke(proxy: Any, method: Method, args: Array<out Any?>?): Any? {
         if (method.declaringClass == Object::class.java) {
-            return@newProxyInstance when (method.name) {
+            return when (method.name) {
                 "toString" -> $$"$${interfaceClass.simpleName}$Proxy"
                 "hashCode" -> System.identityHashCode(proxy)
                 "equals" -> proxy === args?.get(0)
@@ -37,8 +51,9 @@ inline fun <reified T : Any> T.withLogging(call: ApplicationCall? = null): T {
             }
         }
 
+        val realTarget = unwrapProxyTarget(target)
         val implMethod = try {
-            target.javaClass.getMethod(method.name, *method.parameterTypes)
+            realTarget.javaClass.getMethod(method.name, *method.parameterTypes)
         } catch (_: NoSuchMethodException) {
             null
         }
@@ -95,10 +110,26 @@ inline fun <reified T : Any> T.withLogging(call: ApplicationCall? = null): T {
 
         logger.info("$prefix${method.name}(${logArgs.joinToString(", ")})")
 
-        try {
+        return try {
             method.invoke(target, *(args ?: emptyArray()))
         } catch (e: InvocationTargetException) {
             throw e.targetException
         }
-    } as T
+    }
+}
+
+@Suppress("PLATFORM_CLASS_MAPPED_TO_KOTLIN")
+inline fun <reified T : Any> T.withLogging(call: ApplicationCall? = null): T {
+    val interfaceClass = T::class.java
+    val prefix = buildString {
+        if (call?.isProxied == true) append("[Proxy] ")
+        call?.principalUsername?.let { append("[$it] ") }
+        //if (call?.request?.header(SynaraPackHeader) != "true") append("[No-Pack] ")
+    }
+
+    return Proxy.newProxyInstance(
+        interfaceClass.classLoader,
+        arrayOf(interfaceClass),
+        LoggingInvocationHandler(this, interfaceClass, prefix),
+    ) as T
 }
