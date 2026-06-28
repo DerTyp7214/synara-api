@@ -103,7 +103,10 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
             .leftJoin(ImageTable, onColumn = { RecentReleaseTable.imageId }, otherColumn = { ImageTable.id })
             .selectAll()
             .where { (RecentReleaseTable.artistId inList followedArtistIds) and (RecentReleaseTable.albumId.isNull()) and (RecentReleaseTable.songId.isNull()) and (RecentReleaseTable.releaseDate.isNotNull()) }
-            .orderBy(RecentReleaseTable.releaseDate to SortOrder.DESC)
+            .orderBy(
+                RecentReleaseTable.releaseDate to SortOrder.DESC,
+                RecentReleaseTable.releaseId to SortOrder.DESC,
+            )
             .limit(pageSize)
             .offset((page * pageSize).toLong())
             .toList()
@@ -113,6 +116,10 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
         val providersMap = releaseIds.chunked(10000).flatMap { chunk ->
             RecentReleaseProviderTable.selectAll()
                 .where { RecentReleaseProviderTable.releaseId inList chunk }
+                .orderBy(
+                    RecentReleaseProviderTable.provider to SortOrder.ASC,
+                    RecentReleaseProviderTable.externalId to SortOrder.ASC,
+                )
                 .map { it[RecentReleaseProviderTable.releaseId].value to it[RecentReleaseProviderTable.rawUrl] }
         }.groupBy({ it.first }, { it.second })
 
@@ -161,7 +168,10 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
         val total = query.count()
 
         val releasesRows = query
-            .orderBy(RecentReleaseTable.releaseDate to SortOrder.DESC)
+            .orderBy(
+                RecentReleaseTable.releaseDate to SortOrder.DESC,
+                RecentReleaseTable.releaseId to SortOrder.DESC,
+            )
             .limit(pageSize)
             .offset((page * pageSize).toLong())
             .toList()
@@ -171,6 +181,10 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
         val providersMap = releaseIds.chunked(10000).flatMap { chunk ->
             RecentReleaseProviderTable.selectAll()
                 .where { RecentReleaseProviderTable.releaseId inList chunk }
+                .orderBy(
+                    RecentReleaseProviderTable.provider to SortOrder.ASC,
+                    RecentReleaseProviderTable.externalId to SortOrder.ASC,
+                )
                 .map { it[RecentReleaseProviderTable.releaseId].value to it[RecentReleaseProviderTable.rawUrl] }
         }.groupBy({ it.first }, { it.second })
 
