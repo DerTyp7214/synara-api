@@ -24,7 +24,7 @@ import kotlin.time.Duration.Companion.days
 class ArtistRpcService(private val user: User, private val artistService: ArtistService) : IArtistService {
     override suspend fun byId(id: UUID): Artist? = artistService.byId(id, user.id)
     override suspend fun byMusicBrainzId(mbId: UUID): List<Artist> = artistService.byMusicBrainzId(mbId, user.id)
-    override suspend fun byIds(ids: List<UUID>): List<Artist> = artistService.byIds(ids, user.id)
+    override suspend fun byIds(@LogParam("size") ids: List<UUID>): List<Artist> = artistService.byIds(ids, user.id)
     override suspend fun rankedSearch(page: Int, pageSize: Int, query: String): PaginatedResponse<Artist> =
         artistService.rankedSearch(page, pageSize, query, user.id)
 

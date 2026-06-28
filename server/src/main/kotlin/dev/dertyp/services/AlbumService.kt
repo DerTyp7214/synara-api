@@ -36,11 +36,11 @@ class AlbumRpcService(private val user: User, private val albumService: AlbumSer
     IAlbumService {
     override suspend fun byId(id: UUID): Album? = albumService.byId(id, user.id)
     override suspend fun byMusicBrainzId(mbId: UUID): List<Album> = albumService.byMusicBrainzId(mbId, user.id)
-    override suspend fun byMusicBrainzIds(mbIds: List<UUID>): List<Album?> = albumService.byMusicBrainzIds(mbIds, user.id)
-    override suspend fun byOriginalIds(ids: Collection<PrefixedId>): List<Album> = albumService.byOriginalIds(ids)
+    override suspend fun byMusicBrainzIds(@LogParam("size") mbIds: List<UUID>): List<Album?> = albumService.byMusicBrainzIds(mbIds, user.id)
+    override suspend fun byOriginalIds(@LogParam("size") ids: Collection<PrefixedId>): List<Album> = albumService.byOriginalIds(ids)
     override suspend fun byOriginalUrls(urls: Collection<String>): Map<String, Album?> = albumService.byOriginalUrls(urls)
 
-    override suspend fun byIds(ids: List<UUID>): List<Album> = albumService.byIds(ids, user.id)
+    override suspend fun byIds(@LogParam("size") ids: List<UUID>): List<Album> = albumService.byIds(ids, user.id)
     override suspend fun versions(id: UUID): List<Album> = albumService.versions(id, user.id)
     override suspend fun byName(page: Int, pageSize: Int, name: String): PaginatedResponse<Album> =
         albumService.byName(page, pageSize, name, user.id)

@@ -2,6 +2,7 @@ package dev.dertyp.services.metadata
 
 import dev.dertyp.PlatformUUID
 import dev.dertyp.services.Service
+import dev.dertyp.utils.LogParam
 import io.ktor.server.application.ApplicationEnvironment
 
 class MetadataDispatcherService(
@@ -86,7 +87,7 @@ class MetadataDispatcherService(
 
     override suspend fun getImageUrlsByAlbumIds(
         type: IMetadataService.MetadataType,
-        albumIds: List<String>
+        @LogParam("size") albumIds: List<String>
     ): Map<String, List<IMetadataService.Image>> = getService(type).getImageUrlsByAlbumIds(type, albumIds)
 
     override suspend fun getImageUrlByImageId(
@@ -106,12 +107,12 @@ class MetadataDispatcherService(
 
     override suspend fun getTracksByIds(
         type: IMetadataService.MetadataType,
-        trackIds: List<String>
+        @LogParam("size") trackIds: List<String>
     ): List<IMetadataService.Track> = getService(type).getTracksByIds(type, trackIds)
 
     override suspend fun getAlbumsByIds(
         type: IMetadataService.MetadataType,
-        albumIds: List<String>
+        @LogParam("size") albumIds: List<String>
     ): List<IMetadataService.Album> = getService(type).getAlbumsByIds(type, albumIds)
 
     override suspend fun getAlbumByBarcode(
@@ -126,6 +127,6 @@ class MetadataDispatcherService(
 
     override suspend fun getArtistsByIds(
         type: IMetadataService.MetadataType,
-        artistIds: List<String>
+        @LogParam("size") artistIds: List<String>
     ): List<IMetadataService.Artist> = getService(type).getArtistsByIds(type, artistIds)
 }

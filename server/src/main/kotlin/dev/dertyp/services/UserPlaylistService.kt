@@ -9,6 +9,7 @@ import dev.dertyp.formatISO
 import dev.dertyp.plugins.PlaylistLibrary
 import dev.dertyp.services.metadata.CachedMusicBrainzService
 import dev.dertyp.utils.ColorUtils
+import dev.dertyp.utils.LogParam
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -59,7 +60,7 @@ class UserPlaylistService : PlaylistLibrary, IUserPlaylistService, Service() {
         where { UserPlaylistTable.id eq id }
     }
 
-    override suspend fun byIds(ids: List<UUID>): List<UserPlaylist> = queryPlaylists(0, Int.MAX_VALUE) {
+    override suspend fun byIds(@LogParam("size") ids: List<UUID>): List<UserPlaylist> = queryPlaylists(0, Int.MAX_VALUE) {
         where { UserPlaylistTable.id inList ids }
     }.data
 

@@ -13,6 +13,7 @@ import dev.dertyp.db.PlaylistTable
 import dev.dertyp.db.SongTable
 import dev.dertyp.dbQuery
 import dev.dertyp.plugins.PlaylistLibrary
+import dev.dertyp.utils.LogParam
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -53,7 +54,7 @@ class PlaylistService : PlaylistLibrary, IPlaylistService, Service() {
         where { PlaylistTable.id eq id }
     }
 
-    override suspend fun byIds(ids: List<UUID>): List<Playlist> = queryPlaylists(0, Int.MAX_VALUE) {
+    override suspend fun byIds(@LogParam("size") ids: List<UUID>): List<Playlist> = queryPlaylists(0, Int.MAX_VALUE) {
         where { PlaylistTable.id inList ids }
     }.data
 
