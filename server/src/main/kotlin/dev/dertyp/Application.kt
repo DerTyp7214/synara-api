@@ -173,6 +173,11 @@ fun Application.module() {
         launch { scheduleService.startService() }
     }
 
+    val linkResolverService = get<LinkResolverService>()
+    CoroutineScope(Dispatchers.IO).launch {
+        linkResolverService.refreshSupported()
+    }
+
     configureHTTP()
     configureRouting()
     configureServices()
