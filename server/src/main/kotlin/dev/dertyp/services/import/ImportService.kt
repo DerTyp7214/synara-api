@@ -11,6 +11,7 @@ import dev.dertyp.plugins.IPluginImportService
 import dev.dertyp.plugins.PluginManager
 import dev.dertyp.services.*
 import dev.dertyp.services.metadata.IMetadataService
+import dev.dertyp.services.metadata.LinkResolverService
 import dev.dertyp.services.sync.SyncService
 import dev.dertyp.stripPrefix
 import dev.dertyp.utils.LogParam
@@ -39,6 +40,7 @@ class ImportRpcService(
     private val importerProxy: ImporterProxy,
 ) : IImportService, KoinComponent {
     private val applicationEnvironment by inject<ApplicationEnvironment>()
+    private val linkResolver by inject<LinkResolverService>()
     private val syncService by lazy {
         SyncService.getInstance(
             user,
@@ -85,19 +87,27 @@ class ImportRpcService(
     override suspend fun importUrls(urls: List<String>) {
         importService.logger.info("Processing ${urls.size} import inputs for user ${user.username}")
 
-        val urlsToImport = urls.flatMap { input ->
+        val targets = urls.mapNotNull { input ->
             val trimmed = input.trim()
             when (val code = MusicCode.classify(trimmed)) {
+                MusicCode.Url -> ImportTarget.Route(input)
                 is MusicCode.Isrc -> resolveCode(trimmed, isrc = code.value)
                 is MusicCode.Upc -> resolveCode(trimmed, upc = code.value)
-                MusicCode.Url -> listOf(input)
             }
         }
 
-        if (urlsToImport.isEmpty()) {
-            importService.logger.warn("No import inputs could be resolved to an importable URL")
+        if (targets.isEmpty()) {
+            importService.logger.warn("No import inputs could be resolved")
             return
         }
+
+        targets.filterIsInstance<ImportTarget.Ids>().forEach { target ->
+            importService.logger.info("Routing ${target.ids.size} items of type ${target.type} to ${target.importerId} (resolved via metadata)")
+            importService.importIds(target.ids.asFlow(), target.type, user, target.importerId)
+        }
+
+        val urlsToImport = targets.filterIsInstance<ImportTarget.Route>().map { it.url }
+        if (urlsToImport.isEmpty()) return
 
         val resolved = urlsToImport.map { it to importerProxy.resolveImporter(it) }
         val groups = resolved.groupBy({ it.second?.first }) { (originalUrl, match) ->
@@ -137,13 +147,54 @@ class ImportRpcService(
         }
     }
 
-    private suspend fun resolveCode(original: String, isrc: String? = null, upc: String? = null): List<String> {
-        val resolved = importerProxy.resolveImporterByCode(isrc = isrc, upc = upc)
-        if (resolved == null) {
-            importService.logger.warn("No importer could resolve ${if (isrc != null) "ISRC" else "UPC"} $original")
-            return emptyList()
+    private sealed interface ImportTarget {
+        data class Route(val url: String) : ImportTarget
+        data class Ids(val importerId: String, val ids: List<String>, val type: Type) : ImportTarget
+    }
+
+    private suspend fun resolveCode(original: String, isrc: String? = null, upc: String? = null): ImportTarget? {
+        val label = if (isrc != null) "ISRC" else "UPC"
+
+        if (linkResolver.enabled) {
+            val resolved = importerProxy.resolveImporterByCode(isrc = isrc, upc = upc)
+            if (resolved == null) {
+                importService.logger.warn("Link resolver could not resolve $label $original")
+                return null
+            }
+            val (importer, url) = resolved
+            val parsed = importer.parseUrl(url)
+            return if (parsed != null) ImportTarget.Ids(importer.id, listOf(parsed.first), parsed.second ?: Type.SONG)
+            else ImportTarget.Route(url)
         }
-        return listOf(resolved.second)
+
+        val importer = importerProxy.getImporter(importerProxy.defaultService)
+        val metadataType = importer.metadataType
+        if (metadataType == null) {
+            importService.logger.warn("Default importer ${importer.id} has no metadata service to resolve $label $original")
+            return null
+        }
+        val metadata = call.getMetadataProvider(metadataType)
+        if (metadata == null) {
+            importService.logger.warn("No metadata provider for ${metadataType.value} to resolve $label $original")
+            return null
+        }
+
+        val id: String?
+        val type: Type
+        if (isrc != null) {
+            id = metadata.getTrackByIsrc(isrc)?.id
+            type = Type.SONG
+        } else {
+            id = metadata.getAlbumByBarcode(upc!!)?.id
+            type = Type.ALBUM
+        }
+
+        if (id == null) {
+            importService.logger.warn("Default importer ${importer.id} metadata could not resolve $label $original")
+            return null
+        }
+
+        return ImportTarget.Ids(importer.id, listOf(id), type)
     }
 
     override suspend fun getImporterForUrl(url: String): ImportBackend? {
