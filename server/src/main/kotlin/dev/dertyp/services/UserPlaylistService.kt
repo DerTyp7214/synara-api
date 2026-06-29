@@ -69,15 +69,38 @@ class UserPlaylistService : PlaylistLibrary, IUserPlaylistService, Service() {
     }
 
     override suspend fun rankedSearch(creator: UUID?, page: Int, pageSize: Int, query: String): PaginatedResponse<UserPlaylist> =
+        rankedPlaylistSearch(page, pageSize, query) {
+            if (creator != null) andWhere { UserPlaylistTable.creator eq creator }
+            else this
+        }
+
+    suspend fun rankedSearchInCollection(
+        collectionId: UUID,
+        page: Int,
+        pageSize: Int,
+        query: String
+    ): PaginatedResponse<UserPlaylist> =
+        rankedPlaylistSearch(page, pageSize, query) {
+            andWhere {
+                UserPlaylistTable.id inSubQuery CollectionPlaylistTable
+                    .select(CollectionPlaylistTable.playlistId)
+                    .where { CollectionPlaylistTable.collectionId eq collectionId }
+            }
+        }
+
+    private suspend fun rankedPlaylistSearch(
+        page: Int,
+        pageSize: Int,
+        query: String,
+        scope: Query.() -> Query = { this }
+    ): PaginatedResponse<UserPlaylist> =
         queryPlaylists(page, pageSize) {
             rankedSearchQuery(
                 query,
                 listOf(10),
                 listOf(UserPlaylistTable.name),
                 UserPlaylistTable.id
-            )
-            if (creator != null) andWhere { UserPlaylistTable.creator eq creator }
-            else this
+            ).scope()
         }
 
     override suspend fun allPlaylists(creator: UUID?, page: Int, pageSize: Int): PaginatedResponse<UserPlaylist> =

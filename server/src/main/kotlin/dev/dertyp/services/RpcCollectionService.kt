@@ -1,6 +1,7 @@
 package dev.dertyp.services
 
 import dev.dertyp.data.CollectionItemType
+import dev.dertyp.data.CollectionSearchResults
 import dev.dertyp.data.MediaCollection
 import dev.dertyp.data.InsertableCollection
 import dev.dertyp.data.User
@@ -31,6 +32,15 @@ class RpcCollectionService(
         collectionService.setCollectionImage(id, imageId)
 
     override suspend fun delete(id: UUID): Boolean = collectionService.delete(id)
+
+    override suspend fun rankedSearch(
+        collectionId: UUID,
+        query: String,
+        explicit: Boolean,
+        page: Int,
+        pageSize: Int
+    ): CollectionSearchResults =
+        collectionService.rankedSearch(collectionId, query, explicit, page, pageSize, user.id)
 
     override fun songIds(collectionId: UUID): Flow<UUID> = collectionService.songIds(collectionId)
     override fun albumIds(collectionId: UUID): Flow<UUID> = collectionService.albumIds(collectionId)

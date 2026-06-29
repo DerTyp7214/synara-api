@@ -5,6 +5,13 @@ import dev.dertyp.TestDatabase
 import dev.dertyp.data.CollectionItemType
 import dev.dertyp.data.InsertableCollection
 import dev.dertyp.db.*
+import dev.dertyp.services.metadata.CachedMusicBrainzService
+import dev.dertyp.services.metadata.LinkResolverService
+import dev.dertyp.services.metadata.MusicBrainzCacheService
+import dev.dertyp.services.metadata.MusicBrainzService
+import io.ktor.server.application.ApplicationEnvironment
+import io.mockk.every
+import io.mockk.mockk
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.core.dao.id.EntityID
@@ -453,5 +460,160 @@ class CollectionServiceTest : KoinTest {
 
         assertEquals(emptyList<UUID>(), service.songIds(id).toList())
         assertEquals(0, service.byId(id)!!.songItemCount)
+    }
+
+    private val searchTables = arrayOf(
+        UserTable, ImageTable, ImageMetadataTable, AnimatedImageTable,
+        ArtistTable, AlbumTable, SongTable, SongArtistTable, SongMusicBrainzTable, SongAudioDataTable,
+        GenreTable, AlbumMusicBrainzTable, ArtistMusicBrainzTable, ArtistAliasTable, ArtistMemberTable,
+        AlbumArtistTable, PlaylistTable, UserSongTable, UserPlaylistTable, SongGenreTable, ArtistGenreTable,
+        AlbumGenreTable, PlaylistSongTable, UserPlaylistSongTable, SyncedLyricsTable, RecentReleaseTable,
+        FollowedArtistTable, TranscodedSongTable, CustomMigrationTable, ScheduledTaskLogTable,
+        ArtistSplitAliasTable, SyncServiceTable, SongProviderTable, AlbumProviderTable,
+        CollectionTable, CollectionSongTable, CollectionAlbumTable, CollectionArtistTable, CollectionPlaylistTable,
+        *allMusicBrainzTables,
+    )
+
+    private fun setupSearch(dialect: DbDialect) {
+        val storageService = mockk<StorageService>(relaxed = true)
+        every { storageService.albumsPath } returns null
+        startKoin {
+            modules(module {
+                single { mockk<ApplicationEnvironment>(relaxed = true) }
+                single { mockk<MusicBrainzService>(relaxed = true) }
+                single { mockk<CachedMusicBrainzService>(relaxed = true) }
+                single { mockk<MusicBrainzCacheService>(relaxed = true) }
+                single { mockk<MetadataFetchingService>(relaxed = true) }
+                single { mockk<GenreService>(relaxed = true) }
+                single { mockk<ImageService>(relaxed = true) }
+                single { mockk<LibraryMergeService>(relaxed = true) }
+                single { mockk<LinkResolverService>(relaxed = true) }
+                single { storageService }
+                single { SongService() }
+                single { ArtistService() }
+                single { AlbumService() }
+                single { UserPlaylistService() }
+            })
+        }
+        database = TestDatabase.connect(dialect, "collection_search_test")
+        transaction(database) { SchemaUtils.create(*searchTables) }
+        service = CollectionService()
+    }
+
+    private fun insertNamedSong(albumId: UUID, title: String): UUID {
+        val sid = UUID.randomUUID()
+        SongTable.insert {
+            it[id] = sid
+            it[SongTable.title] = title
+            it[SongTable.albumId] = albumId
+            it[fileSize] = 0
+        }
+        return sid
+    }
+
+    private fun insertNamedUserPlaylist(creator: UUID, name: String, songIds: List<UUID> = emptyList()): UUID {
+        val pid = UUID.randomUUID()
+        UserPlaylistTable.insert {
+            it[id] = pid
+            it[UserPlaylistTable.name] = name
+            it[description] = ""
+            it[UserPlaylistTable.creator] = EntityID(creator, UserTable)
+        }
+        songIds.forEachIndexed { i, sid ->
+            UserPlaylistSongTable.insert {
+                it[playlistId] = pid
+                it[UserPlaylistSongTable.songId] = sid
+                it[addedAt] = 1_000L + i
+            }
+        }
+        return pid
+    }
+
+    private data class SongSearchFixture(
+        val userId: UUID,
+        val directSong: UUID,
+        val collectionAlbum: UUID,
+        val albumSong: UUID,
+        val artist: UUID,
+        val artistSong: UUID,
+        val playlist: UUID,
+        val playlistSong: UUID,
+    )
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `rankedSearch returns explicit and implicit songs flagged by membership`(dialect: DbDialect) = runBlocking {
+        setupSearch(dialect)
+        val f = transaction(database) {
+            val userId = insertUser()
+            val artist = insertArtist("Alpha Artist")
+
+            val directSong = insertNamedSong(insertAlbum("Direct Album"), "Alpha One")
+
+            val collectionAlbum = insertAlbum("Second Album")
+            val albumSong = insertNamedSong(collectionAlbum, "Alpha Two")
+
+            val artistAlbum = insertAlbum("Third Album")
+            val artistSong = insertNamedSong(artistAlbum, "Alpha Three")
+            linkSongArtist(artistSong, artist)
+
+            val playlistSong = insertNamedSong(insertAlbum("Fourth Album"), "Alpha Four")
+            val playlist = insertNamedUserPlaylist(userId, "PL", listOf(playlistSong))
+
+            insertNamedSong(insertAlbum("Fifth Album"), "Alpha Five")
+
+            SongSearchFixture(userId, directSong, collectionAlbum, albumSong, artist, artistSong, playlist, playlistSong)
+        }
+
+        val id = service.createCollection(f.userId, InsertableCollection("C"))
+        transaction(database) {
+            insertItem(id, CollectionItemType.SONG, f.directSong, 1)
+            insertItem(id, CollectionItemType.ALBUM, f.collectionAlbum, 2)
+            insertItem(id, CollectionItemType.ARTIST, f.artist, 3)
+            insertItem(id, CollectionItemType.PLAYLIST, f.playlist, 4)
+        }
+
+        val results = service.rankedSearch(id, "Alpha", explicit = true, page = 0, pageSize = 50, userId = f.userId)
+        val byId = results.songs.data.associateBy { it.song.id }
+
+        assertEquals(
+            setOf(f.directSong, f.albumSong, f.artistSong, f.playlistSong),
+            byId.keys,
+        )
+        assertTrue(byId.getValue(f.directSong).explicitMember)
+        assertFalse(byId.getValue(f.albumSong).explicitMember)
+        assertFalse(byId.getValue(f.artistSong).explicitMember)
+        assertFalse(byId.getValue(f.playlistSong).explicitMember)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `rankedSearch scopes artists albums and playlists to collection items`(dialect: DbDialect) = runBlocking {
+        setupSearch(dialect)
+        data class Fixture(val userId: UUID, val artistIn: UUID, val albumIn: UUID, val playlistIn: UUID)
+        val f = transaction(database) {
+            val userId = insertUser()
+            val artistIn = insertArtist("Alpha Artist")
+            insertArtist("Alpha Other Artist")
+            val albumIn = insertAlbum("Alpha Album")
+            insertAlbum("Alpha Other Album")
+            val playlistIn = insertNamedUserPlaylist(userId, "Alpha Playlist")
+            insertNamedUserPlaylist(userId, "Alpha Other Playlist")
+            Fixture(userId, artistIn, albumIn, playlistIn)
+        }
+
+        val id = service.createCollection(f.userId, InsertableCollection("C"))
+        transaction(database) {
+            insertItem(id, CollectionItemType.ARTIST, f.artistIn, 1)
+            insertItem(id, CollectionItemType.ALBUM, f.albumIn, 2)
+            insertItem(id, CollectionItemType.PLAYLIST, f.playlistIn, 3)
+        }
+
+        val results = service.rankedSearch(id, "Alpha", explicit = true, page = 0, pageSize = 50, userId = f.userId)
+
+        assertEquals(listOf(f.artistIn), results.artists.data.map { it.id })
+        assertEquals(listOf(f.albumIn), results.albums.data.map { it.id })
+        assertEquals(listOf(f.playlistIn), results.playlists.data.map { it.id })
+        assertTrue(results.songs.data.isEmpty())
     }
 }

@@ -317,6 +317,30 @@ class ArtistService(private val searchIndexWorker: SearchIndexWorker? = null) : 
     }.data
 
     suspend fun rankedSearch(page: Int, pageSize: Int, query: String, userId: UUID? = null): PaginatedResponse<Artist> =
+        rankedArtistSearch(page, pageSize, query, userId)
+
+    suspend fun rankedSearchInCollection(
+        collectionId: UUID,
+        page: Int,
+        pageSize: Int,
+        query: String,
+        userId: UUID? = null
+    ): PaginatedResponse<Artist> =
+        rankedArtistSearch(page, pageSize, query, userId) {
+            andWhere {
+                ArtistTable.id inSubQuery CollectionArtistTable
+                    .select(CollectionArtistTable.artistId)
+                    .where { CollectionArtistTable.collectionId eq collectionId }
+            }
+        }
+
+    private suspend fun rankedArtistSearch(
+        page: Int,
+        pageSize: Int,
+        query: String,
+        userId: UUID? = null,
+        scope: Query.() -> Query = { this }
+    ): PaginatedResponse<Artist> =
         queryArtists(page, pageSize, userId = userId, columnSet = {
             leftJoin(artistGroupJoinAlias, onColumn = { ArtistTable.id }, otherColumn = { artistGroupJoinAlias[ArtistMemberTable.artistId] })
                 .leftJoin(artistGroupAlias, onColumn = { artistGroupJoinAlias[ArtistMemberTable.groupId] }, otherColumn = { artistGroupAlias[ArtistTable.id] })
@@ -335,7 +359,7 @@ class ArtistService(private val searchIndexWorker: SearchIndexWorker? = null) : 
                 ) + mbArtistSearchColumns,
                 ArtistTable.id,
                 searchVectorColumn = if (searchIndexWorker != null) ArtistTable.searchVector else null
-            )
+            ).scope()
         }
 
     suspend fun byGroup(page: Int, pageSize: Int, groupId: UUID, userId: UUID? = null): PaginatedResponse<Artist> =

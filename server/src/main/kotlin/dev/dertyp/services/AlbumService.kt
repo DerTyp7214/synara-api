@@ -884,6 +884,32 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
         query: String,
         userId: UUID? = null
     ): PaginatedResponse<Album> =
+        rankedAlbumSearch(page, pageSize, query, userId) {
+            andWhere { AlbumTable.songCount greater 1 }
+        }
+
+    suspend fun rankedSearchInCollection(
+        collectionId: UUID,
+        page: Int,
+        pageSize: Int,
+        query: String,
+        userId: UUID? = null
+    ): PaginatedResponse<Album> =
+        rankedAlbumSearch(page, pageSize, query, userId) {
+            andWhere {
+                AlbumTable.id inSubQuery CollectionAlbumTable
+                    .select(CollectionAlbumTable.albumId)
+                    .where { CollectionAlbumTable.collectionId eq collectionId }
+            }
+        }
+
+    private suspend fun rankedAlbumSearch(
+        page: Int,
+        pageSize: Int,
+        query: String,
+        userId: UUID? = null,
+        scope: Query.() -> Query = { this }
+    ): PaginatedResponse<Album> =
         queryAlbums(page, pageSize, userId = userId, columnSet = {
             leftJoin(artistGroupJoinAlias, onColumn = { ArtistTable.id }, otherColumn = { artistGroupJoinAlias[ArtistMemberTable.artistId] })
                 .leftJoin(artistGroupAlias, onColumn = { artistGroupJoinAlias[ArtistMemberTable.groupId] }, otherColumn = { artistGroupAlias[ArtistTable.id] })
@@ -904,8 +930,7 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
                 ) + mbReleaseSearchColumns + mbArtistSearchColumns,
                 AlbumTable.id,
                 searchVectorColumn = if (searchIndexWorker != null) AlbumTable.searchVector else null
-            )
-            andWhere { AlbumTable.songCount greater 1 }
+            ).scope()
         }
 
     suspend fun allAlbums(

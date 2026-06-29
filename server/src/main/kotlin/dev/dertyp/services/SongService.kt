@@ -1176,6 +1176,51 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
         userId: UUID,
         liked: Boolean = false
     ): PaginatedResponse<UserSong> =
+        rankedSongSearch(page, pageSize, query, explicit, userId) {
+            if (liked) andWhere { UserSongTable.isFavourite eq true }
+            else this
+        }
+
+    suspend fun rankedSearchInCollection(
+        collectionId: UUID,
+        page: Int,
+        pageSize: Int,
+        query: String,
+        explicit: Boolean,
+        userId: UUID
+    ): PaginatedResponse<UserSong> =
+        rankedSongSearch(page, pageSize, query, explicit, userId) {
+            andWhere {
+                (SongTable.id inSubQuery CollectionSongTable
+                    .select(CollectionSongTable.songId)
+                    .where { CollectionSongTable.collectionId eq collectionId }
+                ) or (SongTable.albumId inSubQuery CollectionAlbumTable
+                    .select(CollectionAlbumTable.albumId)
+                    .where { CollectionAlbumTable.collectionId eq collectionId }
+                ) or (SongTable.id inSubQuery SongArtistTable
+                    .innerJoin(CollectionArtistTable, onColumn = { SongArtistTable.artistId }, otherColumn = { CollectionArtistTable.artistId })
+                    .select(SongArtistTable.songId)
+                    .where { CollectionArtistTable.collectionId eq collectionId }
+                ) or (SongTable.albumId inSubQuery AlbumArtistTable
+                    .innerJoin(CollectionArtistTable, onColumn = { AlbumArtistTable.artistId }, otherColumn = { CollectionArtistTable.artistId })
+                    .select(AlbumArtistTable.albumId)
+                    .where { CollectionArtistTable.collectionId eq collectionId }
+                ) or (SongTable.id inSubQuery UserPlaylistSongTable
+                    .innerJoin(CollectionPlaylistTable, onColumn = { UserPlaylistSongTable.playlistId }, otherColumn = { CollectionPlaylistTable.playlistId })
+                    .select(UserPlaylistSongTable.songId)
+                    .where { CollectionPlaylistTable.collectionId eq collectionId }
+                )
+            }
+        }
+
+    private suspend fun rankedSongSearch(
+        page: Int,
+        pageSize: Int,
+        query: String,
+        explicit: Boolean,
+        userId: UUID,
+        scope: Query.() -> Query = { this }
+    ): PaginatedResponse<UserSong> =
         querySongs(page, pageSize, explicit, userId, columnSet = {
             withMBRecordingSearch()
                 .withMBReleaseSearch()
@@ -1204,10 +1249,7 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                 ),
                 SongTable.id,
                 searchVectorColumn = if (searchIndexWorker != null) SongTable.searchVector else null
-            ).let { it ->
-                if (liked) it.andWhere { UserSongTable.isFavourite eq true }
-                else it
-            }
+            ).scope()
         }
 
     suspend fun searchByLyrics(

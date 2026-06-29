@@ -2,20 +2,31 @@ package dev.dertyp.services
 
 import dev.dertyp.core.*
 import dev.dertyp.data.CollectionItemType
+import dev.dertyp.data.CollectionSearchResults
+import dev.dertyp.data.CollectionSongMatch
 import dev.dertyp.data.MediaCollection
 import dev.dertyp.data.InsertableCollection
+import dev.dertyp.data.PaginatedResponse
 import dev.dertyp.db.*
 import dev.dertyp.dbQuery
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import org.jetbrains.exposed.v1.jdbc.*
+import org.koin.core.component.inject
 import java.util.UUID
 
 class CollectionService : Service() {
+    private val songService by inject<SongService>()
+    private val artistService by inject<ArtistService>()
+    private val albumService by inject<AlbumService>()
+    private val userPlaylistService by inject<UserPlaylistService>()
+
     companion object {
         fun mapCollection(resultRow: ResultRow): MediaCollection = MediaCollection(
             id = resultRow[CollectionTable.id].value,
@@ -111,6 +122,47 @@ class CollectionService : Service() {
 
     suspend fun delete(id: UUID): Boolean = dbQuery {
         CollectionTable.deleteWhere { CollectionTable.id eq id } == 1
+    }
+
+    suspend fun rankedSearch(
+        collectionId: UUID,
+        query: String,
+        explicit: Boolean,
+        page: Int,
+        pageSize: Int,
+        userId: UUID,
+    ): CollectionSearchResults = coroutineScope {
+        val songsDeferred = async {
+            val songPage = songService.rankedSearchInCollection(collectionId, page, pageSize, query, explicit, userId)
+
+            val explicitIds = if (songPage.data.isEmpty()) emptySet() else dbQuery {
+                songPage.data.map { it.id }.chunked(maxBatchSize).flatMap { chunk ->
+                    CollectionSongTable
+                        .select(CollectionSongTable.songId)
+                        .where { CollectionSongTable.collectionId eq collectionId }
+                        .andWhere { CollectionSongTable.songId inList chunk }
+                        .map { it[CollectionSongTable.songId].value }
+                }.toSet()
+            }
+
+            PaginatedResponse(
+                data = songPage.data.map { CollectionSongMatch(it, explicitMember = it.id in explicitIds) },
+                page = songPage.page,
+                total = songPage.total,
+                pageSize = songPage.pageSize,
+                hasNextPage = songPage.hasNextPage,
+            )
+        }
+        val artistsDeferred = async { artistService.rankedSearchInCollection(collectionId, page, pageSize, query, userId) }
+        val albumsDeferred = async { albumService.rankedSearchInCollection(collectionId, page, pageSize, query, userId) }
+        val playlistsDeferred = async { userPlaylistService.rankedSearchInCollection(collectionId, page, pageSize, query) }
+
+        CollectionSearchResults(
+            songs = songsDeferred.await(),
+            artists = artistsDeferred.await(),
+            albums = albumsDeferred.await(),
+            playlists = playlistsDeferred.await(),
+        )
     }
 
     fun songIds(collectionId: UUID): Flow<UUID> =
