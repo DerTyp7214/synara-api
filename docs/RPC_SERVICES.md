@@ -1753,7 +1753,7 @@ Management of the integrated media importer.
 | `syncFavouritesAvailable` | - | `Boolean` | - |  | Check if favorite synchronization is available. |
 | `syncFavourites` | - | `Unit` | `IMPORT` | IllegalStateException | Synchronize favorites with the local library. |
 | `importIds` | `ids` (`List`<`PrefixedId`>): Collection of IDs.<br>`type` ([Type](#devdertypservicesimporttype)): The type of content (SONG, ALBUM, etc.).<br>`importer` ([ImportBackend](#devdertypservicesimportimportbackend)?): The importer to use. | `Unit` | `IMPORT` |  | Queue content for import by its IDs. |
-| `importUrls` | `urls` (`List`<`String`>): Collection of URLs. | `Unit` | `IMPORT` |  | Queue content for import by its URLs. |
+| `importUrls` | `urls` (`List`<`String`>): Collection of URLs, ISRCs, or UPCs. | `Unit` | `IMPORT` |  | Queue content for import. Each entry may be a URL, an ISRC (track), or a UPC (album barcode); codes are resolved to a supported importer (preferring the default). |
 | `getImporterForUrl` | `url` (`String`): The URL to check. | [ImportBackend](#devdertypservicesimportimportbackend)? | - |  | Get the appropriate importer backend for a given URL. |
 | `existsByOriginalId` | `id` (`PrefixedId`): The original ID to check.<br>`type` ([Type](#devdertypservicesimporttype)): The type of content. | `Boolean` | - |  | Check if content with a specific original ID is already present in the library. |
 | `setImportService` | `service` ([ImportBackend](#devdertypservicesimportimportbackend)): The importer service to use. | `Unit` | **Admin** |  | Set the preferred importer backend. |

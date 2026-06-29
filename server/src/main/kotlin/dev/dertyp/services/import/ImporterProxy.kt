@@ -50,6 +50,17 @@ class ImporterProxy(
         return match(linkResolver.resolvePlatformLinks(url), pref)
     }
 
+    suspend fun resolveImporterByCode(
+        isrc: String? = null,
+        upc: String? = null,
+        preferred: ImportBackend = defaultService,
+    ): Pair<IImporter, String>? {
+        if (isrc == null && upc == null) return null
+        if (!linkResolver.enabled) return null
+        val pref = pluginManager.getImporter(preferred.id)?.takeIf { it.enabled }
+        return match(linkResolver.batchResolve(emptyList(), isrc = isrc, upc = upc), pref)
+    }
+
     private class DisabledImporter(override val id: String) : IImporter {
         override val name: String = "Disabled ($id)"
         override val pluginId: String = id

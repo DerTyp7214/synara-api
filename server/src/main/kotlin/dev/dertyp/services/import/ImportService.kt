@@ -83,8 +83,23 @@ class ImportRpcService(
     }
 
     override suspend fun importUrls(urls: List<String>) {
-        importService.logger.info("Processing ${urls.size} import URLs for user ${user.username}")
-        val resolved = urls.map { it to importerProxy.resolveImporter(it) }
+        importService.logger.info("Processing ${urls.size} import inputs for user ${user.username}")
+
+        val urlsToImport = urls.flatMap { input ->
+            val trimmed = input.trim()
+            when (val code = MusicCode.classify(trimmed)) {
+                is MusicCode.Isrc -> resolveCode(trimmed, isrc = code.value)
+                is MusicCode.Upc -> resolveCode(trimmed, upc = code.value)
+                MusicCode.Url -> listOf(input)
+            }
+        }
+
+        if (urlsToImport.isEmpty()) {
+            importService.logger.warn("No import inputs could be resolved to an importable URL")
+            return
+        }
+
+        val resolved = urlsToImport.map { it to importerProxy.resolveImporter(it) }
         val groups = resolved.groupBy({ it.second?.first }) { (originalUrl, match) ->
             match?.second ?: originalUrl
         }
@@ -120,6 +135,15 @@ class ImportRpcService(
                 }
             }
         }
+    }
+
+    private suspend fun resolveCode(original: String, isrc: String? = null, upc: String? = null): List<String> {
+        val resolved = importerProxy.resolveImporterByCode(isrc = isrc, upc = upc)
+        if (resolved == null) {
+            importService.logger.warn("No importer could resolve ${if (isrc != null) "ISRC" else "UPC"} $original")
+            return emptyList()
+        }
+        return listOf(resolved.second)
     }
 
     override suspend fun getImporterForUrl(url: String): ImportBackend? {

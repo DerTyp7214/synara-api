@@ -9,6 +9,8 @@ import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
+import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import org.junit.jupiter.api.Test
 
 class ImporterProxyTest {
@@ -131,5 +133,50 @@ class ImporterProxyTest {
 
         assert(result.exitCode == -1)
         assert(result.fullOutput.contains("is disabled"))
+    }
+
+    @Test
+    fun `resolveImporterByCode resolves isrc via link resolver to default importer`() = runBlocking {
+        val tiddl = mockk<IImporter>(relaxed = true)
+        every { tiddl.id } returns ImportBackend.Tiddl.id
+        every { tiddl.enabled } returns true
+        every { tiddl.canHandle("https://tidal.com/track/1") } returns true
+
+        every { pluginManager.getImporter(ImportBackend.Tiddl.id) } returns tiddl
+        every { pluginManager.getAllImporters() } returns listOf(tiddl)
+
+        every { linkResolver.enabled } returns true
+        coEvery { linkResolver.batchResolve(any(), any(), any(), any()) } returns listOf("https://tidal.com/track/1")
+
+        proxy.defaultService = ImportBackend.Tiddl
+
+        val result = proxy.resolveImporterByCode(isrc = "USUG12300001")
+        assertEquals(tiddl, result?.first)
+        assertEquals("https://tidal.com/track/1", result?.second)
+    }
+
+    @Test
+    fun `resolveImporterByCode returns null when nothing resolves`() = runBlocking {
+        val tiddl = mockk<IImporter>(relaxed = true)
+        every { tiddl.id } returns ImportBackend.Tiddl.id
+        every { tiddl.enabled } returns true
+        every { tiddl.canHandle(any()) } returns false
+
+        every { pluginManager.getImporter(ImportBackend.Tiddl.id) } returns tiddl
+        every { pluginManager.getAllImporters() } returns listOf(tiddl)
+
+        every { linkResolver.enabled } returns true
+        coEvery { linkResolver.batchResolve(any(), any(), any(), any()) } returns emptyList()
+
+        proxy.defaultService = ImportBackend.Tiddl
+
+        assertNull(proxy.resolveImporterByCode(upc = "00602435329383"))
+    }
+
+    @Test
+    fun `resolveImporterByCode returns null when link resolver disabled`() = runBlocking {
+        every { linkResolver.enabled } returns false
+        proxy.defaultService = ImportBackend.Tiddl
+        assertNull(proxy.resolveImporterByCode(isrc = "USUG12300001"))
     }
 }
