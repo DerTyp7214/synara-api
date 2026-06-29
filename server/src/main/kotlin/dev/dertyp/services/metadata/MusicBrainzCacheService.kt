@@ -94,6 +94,18 @@ class MusicBrainzCacheService : Service() {
                     name = tagRow[MBArtistTagTable.name]
                 )
             }
+            val relations = MBRelationTable
+                .selectAll()
+                .where { MBRelationTable.ownerId eq id }
+                .map { relRow ->
+                    MusicBrainzRelation(
+                        type = relRow[MBRelationTable.type],
+                        url = MusicBrainzRelationUrl(
+                            id = relRow[MBRelationTable.id],
+                            resource = relRow[MBRelationTable.resource]
+                        )
+                    )
+                }
 
             MusicBrainzArtist(
                 id = id,
@@ -111,6 +123,7 @@ class MusicBrainzCacheService : Service() {
                 ),
                 aliases = aliases,
                 tags = tags,
+                relations = relations,
                 fetchedAt = row[MBArtistTable.lastUpdate]
             )
         }
@@ -371,6 +384,8 @@ class MusicBrainzCacheService : Service() {
                 }
             }
         }
+
+        cacheRelations(artist.id, artist.relations)
     }
 
     suspend fun updateAreaCache(area: MusicBrainzArea) = dbQuery {
@@ -512,10 +527,12 @@ class MusicBrainzCacheService : Service() {
     }
 
     private suspend fun cacheRelations(mbId: UUID, relations: List<MusicBrainzRelation>?) {
+        if (relations == null) return
+
         MBRelationTable.deleteWhere { MBRelationTable.ownerId eq mbId }
         MBRelationProviderTable.deleteWhere { MBRelationProviderTable.ownerId eq mbId }
 
-        relations?.forEach { relation ->
+        relations.forEach { relation ->
             relation.url?.let { url ->
                 MBRelationTable.upsert(MBRelationTable.id, MBRelationTable.ownerId) {
                     it[id] = url.id

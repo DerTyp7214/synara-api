@@ -353,7 +353,7 @@ class MusicBrainzService : Service() {
     suspend fun fetchArtistById(mbId: PlatformUUID, priority: HttpClientPriority = HttpClientPriority.NORMAL): MusicBrainzArtist? {
         return try {
             retryableGet<MusicBrainzArtist>("$mbBaseUrl/artist/$mbId", priority) {
-                parameter("inc", "tags+genres+aliases")
+                parameter("inc", "tags+genres+aliases+url-rels")
                 parameter("fmt", "json")
                 header("User-Agent", "Synara/${BuildConfig.VERSION} ( https://github.com/dertyp7214/synara )")
             }
