@@ -259,6 +259,64 @@ class SongDeduplicationTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
+    fun `createBatch should insert a duplicate when ISRC matches but album differs`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val songService = SongService()
+
+        val artistId = UUID.randomUUID()
+        val isrc = "USAT20300184"
+
+        transaction(database) {
+            ArtistTable.insert { it[id] = artistId; it[name] = "Test Artist" }
+        }
+
+        // Resolve each album name to a real, inserted album row (mirrors getOrBulkCreate creating albums).
+        val albumIdsByName = mutableMapOf<String, UUID>()
+        coEvery { artistService.getOrBulkCreate(any()) } answers {
+            val names = it.invocation.args[0] as List<String>
+            names.associateWith { listOf(artistId) }
+        }
+        coEvery { albumService.getOrBulkCreate(any()) } answers {
+            val albums = it.invocation.args[0] as List<InsertableAlbum>
+            albums.associateWith { album ->
+                albumIdsByName.getOrPut(album.name) {
+                    val newId = UUID.randomUUID()
+                    transaction(database) { AlbumTable.insert { it[id] = newId; it[name] = album.name } }
+                    newId
+                }
+            }
+        }
+
+        val single = InsertableSong(
+            title = "Title A",
+            artists = listOf("Test Artist"),
+            album = InsertableAlbum(name = "The Single", artists = listOf("Test Artist")),
+            path = "/path/single.flac",
+            originalUrl = "https://tidal.com/track/single-id",
+            isrc = isrc,
+            duration = 180000,
+            explicit = false
+        )
+
+        val albumVersion = single.copy(
+            album = InsertableAlbum(name = "The Album", artists = listOf("Test Artist")),
+            path = "/path/album.flac",
+            originalUrl = "https://tidal.com/track/album-id"
+        )
+
+        songService.createBatch(listOf(single))
+        transaction(database) {
+            assertEquals(1L, SongTable.selectAll().count())
+        }
+
+        songService.createBatch(listOf(albumVersion))
+        transaction(database) {
+            assertEquals(2L, SongTable.selectAll().count(), "Same ISRC on a different album must be inserted as a separate song")
+        }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
     fun `createBatch should not insert duplicate if different URLs point to the same song via SongProviderTable`(dialect: DbDialect) = runBlocking {
         setup(dialect)
         val songService = SongService()

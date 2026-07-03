@@ -558,7 +558,6 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
     }
 
     suspend fun updateSong(song: Song, userId: UUID): UserSong? {
-        // Handles the MusicBrainz recording link plus its side effects (isrc/date/tags).
         setMusicBrainzId(song.id, song.musicBrainzId, userId)
 
         dbQuery {

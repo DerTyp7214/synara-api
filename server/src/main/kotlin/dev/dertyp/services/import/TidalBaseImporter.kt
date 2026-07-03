@@ -620,7 +620,8 @@ abstract class TidalBaseImporter(
                             .filterExisting(
                                 songService = songService,
                                 user = user,
-                                chunkSize = 100
+                                chunkSize = 100,
+                                deduplicateByIsrc = false
                             ).collect { trackChunk ->
                                 importService.addToQueue(
                                     UrlImportQueueEntry(
@@ -650,6 +651,7 @@ abstract class TidalBaseImporter(
                             .filterExisting(
                                 songService = songService,
                                 user = user,
+                                deduplicateByIsrc = false
                             ).collect { trackChunk ->
                                 importService.addToQueue(
                                     UrlImportQueueEntry(
