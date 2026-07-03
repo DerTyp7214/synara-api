@@ -76,3 +76,7 @@ ytdlp:
   config: ${YTDLP_CONFIG_PATH:}
 workers:
   threadMultiplier: ${WORKER_THREAD_MULTIPLIER:1.0}
+metrics:
+  enabled: ${METRICS_ENABLED:true}
+  flushIntervalSeconds: ${METRICS_FLUSH_INTERVAL_SECONDS:60}
+  eventLogRetentionHours: ${METRICS_EVENT_LOG_RETENTION_HOURS:24}

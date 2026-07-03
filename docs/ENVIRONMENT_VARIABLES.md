@@ -56,6 +56,14 @@ Most variables have sensible defaults and are **optional**. Only variables witho
 | `JWT_SECRET` | Secret key for signing tokens. | No | `changeme` | - |
 | `PORT` | The port the server listens on. | No | `8080` | - |
 
+## Metrics
+
+| Variable | Description | Required | Default (Standalone) | Default (Docker) |
+|:---|:---|:---:|:---|:---|
+| `METRICS_ENABLED` | Whether to collect RPC call usage metrics (invocation counts per call, per user, over time). | No | `true` | - |
+| `METRICS_EVENT_LOG_RETENTION_HOURS` | How long (in hours) individual call events are retained in the capped event log before pruning. Lifetime totals are never pruned. | No | `24` | - |
+| `METRICS_FLUSH_INTERVAL_SECONDS` | How often (in seconds) buffered in-memory call counts are flushed to the database. | No | `60` | - |
+
 ## Other
 
 | Variable | Description | Required | Default (Standalone) | Default (Docker) |

@@ -17,9 +17,11 @@ import dev.dertyp.services.metadata.MetadataDispatcherService
 import dev.dertyp.services.schedule.RpcScheduledTaskConfigurationService
 import dev.dertyp.services.schedule.ScheduleService
 import dev.dertyp.services.schedule.ScheduledTaskConfigurationService
+import dev.dertyp.core.principalUsername
 import dev.dertyp.utils.withAuthorization
 import dev.dertyp.utils.withCaching
 import dev.dertyp.utils.withLogging
+import dev.dertyp.utils.withMetrics
 import io.ktor.server.application.ApplicationCall
 import kotlinx.rpc.RpcServer
 import kotlinx.rpc.annotations.Rpc
@@ -31,23 +33,28 @@ private interface ServiceRegistrar {
     fun <@Rpc T : Any> register(serviceKClass: KClass<T>, serviceFactory: () -> T)
 }
 
-private fun <T : Any> T.wrap(interfaceClass: KClass<T>): T {
-    return this.withCaching(interfaceClass.java)
+private fun <T : Any> T.wrap(interfaceClass: KClass<T>, username: String, collector: RpcMetricsCollector): T {
+    val cached = this.withCaching(interfaceClass.java)
+    return if (collector.enabled) cached.withMetrics(interfaceClass.java, username, collector) else cached
 }
 
 fun KrpcRoute.registerPublicServices(koin: Koin) {
+    val collector = koin.get<RpcMetricsCollector>()
+    val username = call.principalUsername ?: ""
     val registrar = object : ServiceRegistrar {
         override fun <@Rpc T : Any> register(serviceKClass: KClass<T>, serviceFactory: () -> T) {
-            registerService(serviceKClass) { serviceFactory().wrap(serviceKClass) }
+            registerService(serviceKClass) { serviceFactory().wrap(serviceKClass, username, collector) }
         }
     }
     registerPublic(koin, call, registrar)
 }
 
 fun RpcServer.registerPublicServices(koin: Koin, call: ApplicationCall) {
+    val collector = koin.get<RpcMetricsCollector>()
+    val username = call.principalUsername ?: ""
     val registrar = object : ServiceRegistrar {
         override fun <@Rpc T : Any> register(serviceKClass: KClass<T>, serviceFactory: () -> T) {
-            registerService(serviceKClass) { serviceFactory().wrap(serviceKClass) }
+            registerService(serviceKClass) { serviceFactory().wrap(serviceKClass, username, collector) }
         }
     }
     registerPublic(koin, call, registrar)
@@ -66,18 +73,22 @@ private fun registerPublic(koin: Koin, call: ApplicationCall, registrar: Service
 
 suspend fun KrpcRoute.registerAuthenticatedServices(koin: Koin) {
     val user = call.getUser() ?: throw IllegalArgumentException("No user found")
+    val collector = koin.get<RpcMetricsCollector>()
+    val username = call.principalUsername ?: ""
     val registrar = object : ServiceRegistrar {
         override fun <@Rpc T : Any> register(serviceKClass: KClass<T>, serviceFactory: () -> T) {
-            registerService(serviceKClass) { serviceFactory().wrap(serviceKClass) }
+            registerService(serviceKClass) { serviceFactory().wrap(serviceKClass, username, collector) }
         }
     }
     registerAuthenticated(koin, call, user, registrar)
 }
 
 fun RpcServer.registerAuthenticatedServices(koin: Koin, call: ApplicationCall, user: User) {
+    val collector = koin.get<RpcMetricsCollector>()
+    val username = call.principalUsername ?: ""
     val registrar = object : ServiceRegistrar {
         override fun <@Rpc T : Any> register(serviceKClass: KClass<T>, serviceFactory: () -> T) {
-            registerService(serviceKClass) { serviceFactory().wrap(serviceKClass) }
+            registerService(serviceKClass) { serviceFactory().wrap(serviceKClass, username, collector) }
         }
     }
     registerAuthenticated(koin, call, user, registrar)
@@ -115,6 +126,7 @@ private fun registerAuthenticated(koin: Koin, call: ApplicationCall, user: User,
     val discoveryService = koin.get<DiscoveryService>()
     val cachedMusicBrainzService = koin.get<CachedMusicBrainzService>()
     val metadataDispatcherService = koin.get<MetadataDispatcherService>()
+    val rpcMetricsService = koin.get<RpcMetricsService>()
 
     registrar.register(IIndexer::class) { RpcIndexer(indexer, user).withAuthorization<IIndexer>(user).withLogging<IIndexer>(call) }
     registrar.register(IUserService::class) { RpcUserService(user, userService, imageService).withAuthorization<IUserService>(user).withLogging<IUserService>(call) }
@@ -145,4 +157,5 @@ private fun registerAuthenticated(koin: Koin, call: ApplicationCall, user: User,
     registrar.register(IReleaseService::class) { RpcReleaseService(user, releaseService).withAuthorization<IReleaseService>(user).withLogging<IReleaseService>(call) }
     registrar.register(IMusicBrainzService::class) { cachedMusicBrainzService.withAuthorization<IMusicBrainzService>(user).withLogging<IMusicBrainzService>(call) }
     registrar.register(IMetadataService::class) { metadataDispatcherService.withAuthorization<IMetadataService>(user).withLogging<IMetadataService>(call) }
+    registrar.register(IRpcMetricsService::class) { rpcMetricsService.withAuthorization<IRpcMetricsService>(user).withLogging<IRpcMetricsService>(call) }
 }

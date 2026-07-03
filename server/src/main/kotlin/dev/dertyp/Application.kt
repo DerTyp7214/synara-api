@@ -32,6 +32,7 @@ import io.ktor.server.application.Application
 import io.ktor.server.application.ApplicationEnvironment
 import io.ktor.server.application.install
 import io.ktor.server.application.log
+import io.ktor.server.config.ApplicationConfig
 import io.ktor.server.netty.EngineMain
 import io.ktor.server.plugins.calllogging.CallLogging
 import kotlinx.coroutines.*
@@ -178,6 +179,13 @@ fun Application.module() {
         linkResolverService.refreshSupported()
     }
 
+    val metricsCollector = get<RpcMetricsCollector>()
+    if (metricsCollector.enabled) {
+        CoroutineScope(Dispatchers.IO).launch {
+            metricsCollector.runFlushLoop()
+        }
+    }
+
     configureHTTP()
     configureRouting()
     configureServices()
@@ -213,6 +221,9 @@ fun mainModule(application: Application, environment: ApplicationEnvironment): M
     singleOf(::ScheduleService)
     singleOf(::ScheduledTaskConfigurationService)
     singleOf(::ServerStatsService)
+    singleOf(ApplicationConfig::toMetricsConfig)
+    singleOf(::RpcMetricsCollector)
+    singleOf(::RpcMetricsService)
     singleOf(::UserPlaylistService)
     singleOf(::CollectionService)
     singleOf(::RefreshTokenService)

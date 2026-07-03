@@ -81,7 +81,10 @@ tasks.register("generateEnvDocs") {
             "PROXY_ID" to mapOf("desc" to "Unique identifier for this proxy.", "cat" to "Proxy Configuration"),
             "PROXY_KEY" to mapOf("desc" to "Authentication key for the proxy.", "cat" to "Proxy Configuration"),
             "YOUTUBE_API_KEY" to mapOf("desc" to "Youtube API key for YouTube Data API v3 (Downloader).", "cat" to "Other"),
-            "WORKER_THREAD_MULTIPLIER" to mapOf("desc" to "Multiplier for background worker threads. Scales the number of parallel tasks relative to CPU cores.", "cat" to "Other")
+            "WORKER_THREAD_MULTIPLIER" to mapOf("desc" to "Multiplier for background worker threads. Scales the number of parallel tasks relative to CPU cores.", "cat" to "Other"),
+            "METRICS_ENABLED" to mapOf("desc" to "Whether to collect RPC call usage metrics (invocation counts per call, per user, over time).", "cat" to "Metrics"),
+            "METRICS_FLUSH_INTERVAL_SECONDS" to mapOf("desc" to "How often (in seconds) buffered in-memory call counts are flushed to the database.", "cat" to "Metrics"),
+            "METRICS_EVENT_LOG_RETENTION_HOURS" to mapOf("desc" to "How long (in hours) individual call events are retained in the capped event log before pruning. Lifetime totals are never pruned.", "cat" to "Metrics")
         )
 
         val varsFound = mutableMapOf<String, String?>()
