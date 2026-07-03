@@ -97,6 +97,7 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
     val artistGroupJoinAlias = ArtistMemberTable.alias("artistGroupJoin")
     val artistMemberJoinAlias = ArtistMemberTable.alias("artistMemberJoin")
     val followedArtistAlias = FollowedArtistTable.alias("followedArtist")
+    val albumArtistCreditedAlias = ArtistAliasTable.alias("albumArtistCreditedAlias")
     val albumAnimatedImageAlias = AnimatedImageTable.alias("albumAnimatedImage")
     val albumAnimatedFrameAlias = ImageTable.alias("albumAnimatedFrame")
 
@@ -179,7 +180,7 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
                 artistService.byMusicBrainzIds(mbArtistIds, userId).associateBy { it.musicbrainzId }
             } else emptyMap()
 
-            val resolvedArtists = mutableListOf<Artist>()
+            val resolvedArtists = mutableListOf<Pair<Artist, String?>>()
             val namesToResolve = artistCredits
                 .filter { it.artist?.id == null || !existingArtistsByMbId.containsKey(it.artist?.id) }
                 .mapNotNull { it.name ?: it.artist?.name }
@@ -236,6 +237,7 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
             artistCredits.forEach { credit ->
                 val mbId = credit.artist?.id
                 val name = credit.name ?: credit.artist?.name ?: return@forEach
+                val canonicalName = credit.artist?.name ?: name
 
                 var artist = existingArtistsByMbId[mbId]
                 if (artist == null && artistsByName != null) {
@@ -253,7 +255,7 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
                         }
                     } else if (mbId != null) {
                         artist = artistService.createArtist(
-                            name = name,
+                            name = canonicalName,
                             musicBrainzId = mbId,
                             userId = userId
                         )
@@ -263,11 +265,12 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
                 }
 
                 if (artist != null) {
-                    resolvedArtists.add(artist)
+                    val creditedName = credit.name?.takeIf { it.isNotBlank() && it != artist.name }
+                    resolvedArtists.add(artist to creditedName)
                 }
             }
 
-            val finalArtists = resolvedArtists.distinctBy { it.id }
+            val finalArtists = resolvedArtists.distinctBy { it.first.id }
 
             val mbTracks = mbRelease.media?.flatMapIndexed { mediaIndex, media ->
                 val discNumber = mediaIndex + 1
@@ -285,9 +288,13 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
 
                 if (finalArtists.isNotEmpty()) {
                     AlbumArtistTable.deleteWhere { AlbumArtistTable.albumId eq id }
-                    AlbumArtistTable.batchInsert(finalArtists) { artist ->
+                    val creditedAliasIds = finalArtists.associate { (artist, creditedName) ->
+                        artist.id to creditedName?.let { artistService.getOrCreateAliasTx(artist.id, it) }
+                    }
+                    AlbumArtistTable.batchInsert(finalArtists) { (artist, _) ->
                         this[AlbumArtistTable.albumId] = id
                         this[AlbumArtistTable.artistId] = artist.id
+                        this[AlbumArtistTable.creditedAliasId] = creditedAliasIds[artist.id]
                     }
                 }
             }
@@ -1134,6 +1141,11 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
                 otherColumn = { ArtistMusicBrainzTable.artistId }
             )
             .leftJoin(ArtistAliasTable)
+            .leftJoin(
+                albumArtistCreditedAlias,
+                onColumn = { AlbumArtistTable.creditedAliasId },
+                otherColumn = { albumArtistCreditedAlias[ArtistAliasTable.id] }
+            )
             .leftJoin(AlbumMusicBrainzTable)
             .leftJoin(AlbumGenreTable)
             .leftJoin(GenreTable)
@@ -1190,6 +1202,7 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
 
             if (row.getOrNull(ArtistTable.id) != null) {
                 val artist = mapArtist(row, followedTable = followedArtistAlias)
+                    .copy(creditedName = row.getOrNull(albumArtistCreditedAlias[ArtistAliasTable.name]))
                 if (artist !in albumArtistsMap.getOrDefault(albumId, emptyList())) {
                     albumArtistsMap.getOrPut(albumId) { mutableListOf() }.add(artist)
                 }
@@ -1620,9 +1633,15 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
             }
 
             AlbumArtistTable.deleteWhere { AlbumArtistTable.albumId eq album.id }
+            val creditedAliasIds = album.artists.associate { artist ->
+                artist.id to artist.creditedName
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let { artistService.getOrCreateAliasTx(artist.id, it) }
+            }
             AlbumArtistTable.batchInsert(album.artists) { artist ->
                 this[AlbumArtistTable.albumId] = album.id
                 this[AlbumArtistTable.artistId] = artist.id
+                this[AlbumArtistTable.creditedAliasId] = creditedAliasIds[artist.id]
             }
         }
 

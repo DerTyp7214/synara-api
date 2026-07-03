@@ -205,6 +205,7 @@ Contains metadata about a music artist or group.
 | `blurHash` | `String`? | The blur hash of the artist image. |
 | `musicbrainzId` | `PlatformUUID`? | The MusicBrainz Artist unique identifier. |
 | `isFollowed` | `Boolean` | Whether the current user is following this artist. |
+| `creditedName` | `String`? | The name this artist was credited as in the current song/album context, if different from the canonical name. |
 
 ### ArtistAlias <a name="devdertypdataartistalias"></a>
 Represents an alternative name for an artist.
@@ -1675,6 +1676,7 @@ The primary interface for song discovery, streaming, and metadata.
 | `setLiked` | `id` (`PlatformUUID`): The unique UUID of the song.<br>`liked` (`Boolean`): Whether to mark as liked.<br>`addedAt` (`PlatformInstant`?): Optional timestamp of when it was added. | [UserSong](#devdertypdatausersong)? | - |  | Toggle favorite status. |
 | `setLyrics` | `id` (`PlatformUUID`): The song unique identifier.<br>`lyrics` (`List`<`String`>): List of lyric lines. | [UserSong](#devdertypdatausersong)? | `EDIT` |  | Manually set song lyrics. |
 | `setArtists` | `id` (`PlatformUUID`): The song unique identifier.<br>`artistIds` (`List`<`PlatformUUID`>): Collection of artist IDs. | [UserSong](#devdertypdatausersong)? | `EDIT` |  | Update song artists. |
+| `updateSong` | `song` ([Song](#devdertypdatasong)): The song with its updated editable fields. | [UserSong](#devdertypdatausersong)? | `EDIT` |  | Update a song's editable metadata (title, artists and their credited names, MusicBrainz link, album, lyrics, release date, track and disc number). |
 | `setMusicBrainzId` | `id` (`PlatformUUID`): The song unique identifier.<br>`musicBrainzId` (`PlatformUUID`?): The MusicBrainz Recording UUID. | [UserSong](#devdertypdatausersong)? | `EDIT` |  | Link a song to its MusicBrainz Recording record. |
 | `fetchMusicBrainzId` | `id` (`PlatformUUID`): The song unique identifier. | [UserSong](#devdertypdatausersong)? | `EDIT` |  | Trigger automatic MusicBrainz ID matching for a song. |
 | `byId` | `id` (`PlatformUUID`): The song unique identifier. | [UserSong](#devdertypdatausersong)? | - |  | Get song by its unique identifier. |

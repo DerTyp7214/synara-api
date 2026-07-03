@@ -14,8 +14,8 @@ import dev.dertyp.services.metadata.*
 import dev.dertyp.utils.ColorUtils
 import dev.dertyp.utils.LogParam
 import dev.dertyp.utils.parsers.ParserFactory
-import io.ktor.http.ContentType
-import io.ktor.server.application.ApplicationEnvironment
+import io.ktor.http.*
+import io.ktor.server.application.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import kotlinx.io.IOException
@@ -30,7 +30,7 @@ import java.io.File
 import java.nio.file.Files
 import java.nio.file.Paths
 import java.time.Instant
-import java.util.UUID
+import java.util.*
 import kotlin.io.path.absolutePathString
 import kotlin.io.path.isSymbolicLink
 import kotlin.io.path.readSymbolicLink
@@ -97,6 +97,9 @@ class SongRpcService(private val user: User, private val songService: SongServic
 
     override suspend fun setArtists(id: UUID, artistIds: List<UUID>): UserSong? =
         songService.setArtists(id, artistIds, user.id)
+
+    override suspend fun updateSong(song: Song): UserSong? =
+        songService.updateSong(song, user.id)
 
     override suspend fun setMusicBrainzId(id: UUID, musicBrainzId: UUID?): UserSong? =
         songService.setMusicBrainzId(id, musicBrainzId, user.id)
@@ -273,6 +276,9 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
     val albumArtistAlias = ArtistTable.alias("albumArtistAlias")
     val albumArtistMusicBrainzAlias = ArtistMusicBrainzTable.alias("albumArtistMusicBrainzAlias")
     val albumArtistAliasAlias = ArtistAliasTable.alias("albumArtistAliasAlias")
+
+    val songCreditedAliasAlias = ArtistAliasTable.alias("songCreditedAliasAlias")
+    val albumCreditedAliasAlias = ArtistAliasTable.alias("albumCreditedAliasAlias")
 
     val artistGroupAlias = ArtistTable.alias("artistGroup")
     val artistMemberAlias = ArtistTable.alias("artistMember")
@@ -551,6 +557,54 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
         }
     }
 
+    suspend fun updateSong(song: Song, userId: UUID): UserSong? {
+        // Handles the MusicBrainz recording link plus its side effects (isrc/date/tags).
+        setMusicBrainzId(song.id, song.musicBrainzId, userId)
+
+        dbQuery {
+            SongTable.update({ SongTable.id eq song.id }) {
+                it[title] = song.title
+                song.album?.id?.let { albumUuid -> it[albumId] = EntityID(albumUuid, AlbumTable) }
+                it[releaseDate] = getISOFromDate(song.releaseDate)
+                it[lyrics] = song.lyrics
+                it[trackNumber] = song.trackNumber
+                it[discNumber] = song.discNumber
+            }
+
+            SongArtistTable.deleteWhere { SongArtistTable.songId eq song.id }
+            val creditedAliasIds = song.artists.associate { artist ->
+                artist.id to artist.creditedName
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let { artistService.getOrCreateAliasTx(artist.id, it) }
+            }
+            SongArtistTable.batchInsert(song.artists) { artist ->
+                this[SongArtistTable.songId] = song.id
+                this[SongArtistTable.artistId] = artist.id
+                this[SongArtistTable.creditedAliasId] = creditedAliasIds[artist.id]
+            }
+        }
+
+        return byId(song.id, userId).also { updated ->
+            updated?.let { s ->
+                if (!s.path.endsWith(".flac", true)) return@let
+                try {
+                    val file = AudioFileIO.read(File(s.path))
+                    file.tag.apply {
+                        setField(FieldKey.TITLE, s.title)
+                        deleteField(FieldKey.ARTIST)
+                        for (name in s.artists.map { artist -> artist.name }.sorted()) {
+                            addField(FieldKey.ARTIST, name)
+                        }
+                        setField(FieldKey.LYRICS, s.lyrics)
+                    }
+                    file.commit()
+                } catch (e: Exception) {
+                    logger.error("Failed to update song ${song.id}: ${e.message}", e)
+                }
+            }
+        }
+    }
+
     suspend fun fetchMusicBrainzId(
         id: UUID,
         userId: UUID,
@@ -576,7 +630,7 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                 artistService.byMusicBrainzIds(mbArtistIds, userId).associateBy { it.musicbrainzId }
             } else emptyMap()
 
-            val resolvedArtists = mutableListOf<Artist>()
+            val resolvedArtists = mutableListOf<Pair<Artist, String?>>()
             val namesToResolve = artistCredits
                 .filter { it.artist?.id == null || !existingArtistsByMbId.containsKey(it.artist?.id) }
                 .mapNotNull { it.name ?: it.artist?.name }
@@ -632,6 +686,7 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
             artistCredits.forEach { credit ->
                 val mbId = credit.artist?.id
                 val name = credit.name ?: credit.artist?.name ?: return@forEach
+                val canonicalName = credit.artist?.name ?: name
 
                 var artist = existingArtistsByMbId[mbId]
                 if (artist == null && artistsByName != null) {
@@ -649,7 +704,7 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                         }
                     } else if (mbId != null) {
                         artist = artistService.createArtist(
-                            name = name,
+                            name = canonicalName,
                             musicBrainzId = mbId,
                             userId = userId
                         )
@@ -659,18 +714,23 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                 }
 
                 if (artist != null) {
-                    resolvedArtists.add(artist)
+                    val creditedName = credit.name?.takeIf { it.isNotBlank() && it != artist.name }
+                    resolvedArtists.add(artist to creditedName)
                 }
             }
 
-            val finalArtists = resolvedArtists.distinctBy { it.id }
+            val finalArtists = resolvedArtists.distinctBy { it.first.id }
 
             if (finalArtists.isNotEmpty()) {
                 dbQuery {
                     SongArtistTable.deleteWhere { SongArtistTable.songId eq id }
-                    SongArtistTable.batchInsert(finalArtists) { artist ->
+                    val creditedAliasIds = finalArtists.associate { (artist, creditedName) ->
+                        artist.id to creditedName?.let { artistService.getOrCreateAliasTx(artist.id, it) }
+                    }
+                    SongArtistTable.batchInsert(finalArtists) { (artist, _) ->
                         this[SongArtistTable.songId] = id
                         this[SongArtistTable.artistId] = artist.id
+                        this[SongArtistTable.creditedAliasId] = creditedAliasIds[artist.id]
                     }
                 }
             }
@@ -1732,6 +1792,11 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                 otherColumn = { artistMemberAlias[ArtistTable.id] })
             .leftJoin(ArtistAliasTable)
             .leftJoin(
+                songCreditedAliasAlias,
+                onColumn = { SongArtistTable.creditedAliasId },
+                otherColumn = { songCreditedAliasAlias[ArtistAliasTable.id] }
+            )
+            .leftJoin(
                 AlbumArtistTable,
                 onColumn = { AlbumTable.id },
                 otherColumn = { AlbumArtistTable.albumId }
@@ -1750,6 +1815,11 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                 albumArtistAliasAlias,
                 onColumn = { AlbumArtistTable.artistId },
                 otherColumn = { albumArtistAliasAlias[ArtistAliasTable.artistId] }
+            )
+            .leftJoin(
+                albumCreditedAliasAlias,
+                onColumn = { AlbumArtistTable.creditedAliasId },
+                otherColumn = { albumCreditedAliasAlias[ArtistAliasTable.id] }
             )
             .leftJoin(
                 albumArtistGroupJoinAlias,
@@ -1935,7 +2005,7 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                     ArtistTable,
                     followedTable = followedArtistAlias,
                     blurHashColumn = artistBlurHashColumn
-                )
+                ).copy(creditedName = row.getOrNull(songCreditedAliasAlias[ArtistAliasTable.name]))
                 if (artist !in songArtistsMap.getOrDefault(songId, emptyList())) {
                     songArtistsMap.getOrPut(songId) { mutableListOf() }.add(artist)
                 }
@@ -1948,7 +2018,7 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                     row.getOrNull(albumArtistMusicBrainzAlias[ArtistMusicBrainzTable.musicBrainzId])?.value,
                     followedTable = albumFollowedArtistAlias,
                     blurHashColumn = albumArtistBlurHashColumn
-                )
+                ).copy(creditedName = row.getOrNull(albumCreditedAliasAlias[ArtistAliasTable.name]))
                 if (artist !in albumArtistsMap.getOrDefault(albumId, emptyList())) {
                     albumArtistsMap.getOrPut(albumId) { mutableListOf() }.add(artist)
                 }

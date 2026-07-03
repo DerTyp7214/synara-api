@@ -10,14 +10,14 @@ import dev.dertyp.plugins.ArtistLibrary
 import dev.dertyp.services.metadata.*
 import dev.dertyp.utils.ColorUtils
 import dev.dertyp.utils.LogParam
-import io.ktor.server.application.ApplicationEnvironment
+import io.ktor.server.application.*
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import org.jetbrains.exposed.v1.jdbc.*
 import org.koin.core.component.inject
-import java.util.UUID
+import java.util.*
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
 
@@ -804,6 +804,25 @@ class ArtistService(private val searchIndexWorker: SearchIndexWorker? = null) : 
         ArtistAliasTable.deleteWhere {
             (ArtistAliasTable.artistId eq artistId) and (ArtistAliasTable.name eq name)
         } > 0
+    }
+
+    fun getOrCreateAliasTx(artistId: UUID, name: String): UUID {
+        val existing = ArtistAliasTable
+            .select(ArtistAliasTable.id)
+            .where { (ArtistAliasTable.artistId eq artistId) and (ArtistAliasTable.name eq name) }
+            .firstOrNull()
+            ?.get(ArtistAliasTable.id)
+            ?.value
+        if (existing != null) return existing
+
+        return ArtistAliasTable.insertAndGetId {
+            it[this.artistId] = artistId
+            it[this.name] = name
+        }.value
+    }
+
+    suspend fun getOrCreateAlias(artistId: UUID, name: String): UUID = dbQuery {
+        getOrCreateAliasTx(artistId, name)
     }
 
     private suspend fun querySingle(
