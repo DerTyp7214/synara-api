@@ -1646,6 +1646,7 @@ Manage the current user's ListenBrainz connection and listen-history sync.
 | `link` | `username` (`String`): The ListenBrainz username.<br>`token` (`String`?): Optional ListenBrainz user token, required for private listens. | [ListenBrainzStatus](#devdertypdatalistenbrainzstatus) | - |  | Link the current user to a ListenBrainz account and trigger an initial sync. |
 | `unlink` | - | `Unit` | - |  | Remove the current user's ListenBrainz link. |
 | `getStatus` | - | [ListenBrainzStatus](#devdertypdatalistenbrainzstatus)? | - |  | Get the current user's ListenBrainz connection status, or null if not linked. |
+| `getStatusFlow` | - | `Flow`<[ListenBrainzStatus](#devdertypdatalistenbrainzstatus)?> | - |  | Stream the current user's ListenBrainz status, re-emitting whenever it changes (e.g. during a sync). |
 | `syncNow` | - | [ListenBrainzStatus](#devdertypdatalistenbrainzstatus) | - |  | Trigger an incremental sync of the current user's ListenBrainz listens now. |
 
 ### ILyricsSearch <a name="devdertypservicesilyricssearch"></a>

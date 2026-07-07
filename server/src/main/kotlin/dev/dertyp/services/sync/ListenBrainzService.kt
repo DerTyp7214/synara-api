@@ -16,6 +16,9 @@ import io.ktor.client.request.*
 import io.ktor.http.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -24,11 +27,26 @@ import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.jdbc.*
 import org.koin.core.component.inject
+import kotlin.time.Duration.Companion.milliseconds
 
 class ListenBrainzService : Service() {
     private val listenService by inject<ListenService>()
 
     private val serviceScope = CoroutineScope(Dispatchers.IO)
+
+    private val changes = MutableSharedFlow<Unit>(extraBufferCapacity = 8, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+
+    private fun signalChange() {
+        changes.tryEmit(Unit)
+    }
+
+    @OptIn(FlowPreview::class)
+    fun statusFlow(userId: PlatformUUID): Flow<ListenBrainzStatus?> =
+        changes
+            .onStart { emit(Unit) }
+            .debounce(100.milliseconds)
+            .map { getStatus(userId) }
+            .distinctUntilChanged()
 
     suspend fun link(userId: PlatformUUID, username: String, token: String?): ListenBrainzStatus {
         val lbUserId = dbQuery {
@@ -57,6 +75,7 @@ class ListenBrainzService : Service() {
             id
         }
 
+        signalChange()
         serviceScope.launch {
             runCatching { syncAccount(lbUserId) }
                 .onFailure { logger.error("Initial ListenBrainz backfill failed for account $lbUserId", it) }
@@ -66,6 +85,7 @@ class ListenBrainzService : Service() {
 
     suspend fun unlink(userId: PlatformUUID) {
         dbQuery { UserListenBrainzLinkTable.deleteWhere { UserListenBrainzLinkTable.userId eq userId } }
+        signalChange()
     }
 
     suspend fun getStatus(userId: PlatformUUID): ListenBrainzStatus? = dbQuery {
@@ -95,7 +115,12 @@ class ListenBrainzService : Service() {
                 .where { (UserListenBrainzLinkTable.userId eq userId) and (UserListenBrainzLinkTable.enabled eq true) }
                 .singleOrNull()?.get(UserListenBrainzLinkTable.listenBrainzUserId)?.value
         }
-        if (lbId != null) syncAccount(lbId)
+        if (lbId != null) {
+            serviceScope.launch {
+                runCatching { syncAccount(lbId) }
+                    .onFailure { logger.error("ListenBrainz sync failed for account $lbId", it) }
+            }
+        }
         return getStatus(userId) ?: error("No ListenBrainz link for user")
     }
 
@@ -152,6 +177,7 @@ class ListenBrainzService : Service() {
             total += ingested
             logger.info("[$username] page $pages: fetched ${page.size}, ingested $ingested (total $total)")
             onProgress("$username: $total listen(s) synced")
+            if (ingested > 0) signalChange()
 
             newestSeen = maxOf(newestSeen, page.maxOf { it.listenedAt })
             val reachedWatermark = page.any { it.listenedAt <= watermark }
@@ -166,6 +192,7 @@ class ListenBrainzService : Service() {
             }
         }
         logger.info("[$username] sync complete: $total new listen(s) over $pages page(s)")
+        signalChange()
         return total
     }
 
@@ -253,6 +280,8 @@ class RpcListenBrainzService(
     override suspend fun unlink() = service.unlink(user.id)
 
     override suspend fun getStatus(): ListenBrainzStatus? = service.getStatus(user.id)
+
+    override fun getStatusFlow(): Flow<ListenBrainzStatus?> = service.statusFlow(user.id)
 
     override suspend fun syncNow(): ListenBrainzStatus = service.syncNow(user.id)
 }
