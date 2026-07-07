@@ -22,10 +22,13 @@ services:
       - REDIS_PORT=7000
       - BACKUP_DIR=/backups
       - TRANSCRIBER_URL=http://127.0.0.1:8000
+      - AUDIO_EMBED_URL=http://127.0.0.1:8200
+      - RECSYS_DATA_DIR=/recsys
     volumes:
       - /home/typ/Music:/data
       - config:/home/appuser/.config
       - backups:/backups
+      - recsys_data:/recsys
     depends_on:
       db:
         condition: service_healthy
@@ -92,9 +95,41 @@ services:
       - transcriber_cache:/root/.cache
     restart: unless-stopped
 
+  audio-embed:
+    build:
+      context: ./audio-embed
+      dockerfile: Dockerfile
+    ports:
+      - "8200:8200"
+    volumes:
+      - /home/typ/Music:/data:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8200/health"]
+      interval: 30s
+      start_interval: 2s
+      start_period: 30s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+
+  recsys:
+    build:
+      context: ./recsys
+      dockerfile: Dockerfile
+    volumes:
+      - recsys_data:/data
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+
 volumes:
   config:
   postgres:
   redis_data:
   backups:
   transcriber_cache:
+  recsys_data:

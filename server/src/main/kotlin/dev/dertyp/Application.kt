@@ -25,6 +25,7 @@ import dev.dertyp.services.import.ImporterProxy
 import dev.dertyp.services.metadata.*
 import dev.dertyp.services.schedule.ScheduleService
 import dev.dertyp.services.schedule.ScheduledTaskConfigurationService
+import dev.dertyp.services.sync.ListenBrainzService
 import dev.dertyp.services.schedule.Worker
 import dev.dertyp.services.schedule.WorkerTask
 import io.github.classgraph.ClassGraph
@@ -197,6 +198,12 @@ fun mainModule(application: Application, environment: ApplicationEnvironment): M
     single { environment.config }
 
     singleOf(::Indexer)
+    singleOf(::HookService)
+    singleOf(::ListenService)
+    singleOf(::ListenBrainzService)
+    singleOf(::AudioEmbeddingService)
+    singleOf(::RecommendationService)
+    singleOf(::RecommendationServingService)
     singleOf(::PluginManager)
     singleOf(::JwtService)
     singleOf(::UserService)

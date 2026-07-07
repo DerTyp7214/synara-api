@@ -1,10 +1,10 @@
 package dev.dertyp.services.import
 
+import dev.dertyp.plugins.IContentSourcePlugin
 import dev.dertyp.plugins.IImporter
-import dev.dertyp.plugins.ISynaraPlugin
 import dev.dertyp.plugins.PluginContext
 
-class MusicBrainzPlugin : ISynaraPlugin {
+class MusicBrainzPlugin : IContentSourcePlugin {
     override val id: String = "musicbrainz"
     override val name: String = "MusicBrainz"
 

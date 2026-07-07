@@ -17,4 +17,5 @@ interface PluginContext {
     val metadataService: IMetadataService
     val lrcLibService: ILrcLibService
     val scheduleService: IScheduleService
+    val hooks: HookBus
 }

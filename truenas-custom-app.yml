@@ -23,6 +23,8 @@ services:
       REDIS_PORT: '7000'
       BACKUP_DIR: /backups
       TRANSCRIBER_URL: http://127.0.0.1:8000
+      AUDIO_EMBED_URL: http://127.0.0.1:8200
+      RECSYS_DATA_DIR: /recsys
     image: ghcr.io/dertyp7214/synara:latest-dev
     network_mode: host
     platform: linux/amd64
@@ -48,6 +50,10 @@ services:
       - read_only: False
         source: backups
         target: /backups
+        type: volume
+      - read_only: False
+        source: recsys_data
+        target: /recsys
         type: volume
 
   db:
@@ -131,6 +137,42 @@ services:
               count: 1
               capabilities: [gpu]
 
+  audio-embed:
+    image: ghcr.io/dertyp7214/synara-audio-embed:latest-dev
+    platform: linux/amd64
+    pull_policy: always
+    restart: unless-stopped
+    ports:
+      - '8200:8200'
+    healthcheck:
+      interval: 30s
+      start_interval: 2s
+      start_period: 30s
+      test:
+        - CMD
+        - curl
+        - -f
+        - http://localhost:8200/health
+    volumes:
+      - bind:
+          create_host_path: False
+          propagation: rprivate
+        read_only: True
+        source: /mnt/External/Synara
+        target: /data
+        type: bind
+
+  recsys:
+    image: ghcr.io/dertyp7214/synara-recsys:latest-dev
+    platform: linux/amd64
+    pull_policy: always
+    restart: unless-stopped
+    volumes:
+      - read_only: False
+        source: recsys_data
+        target: /data
+        type: volume
+
 volumes:
   tiddl: {}
   config: {}
@@ -138,6 +180,7 @@ volumes:
   redis_cluster_data: {}
   backups: {}
   transcriber_cache: {}
+  recsys_data: {}
 
 x-portals:
   - host: 0.0.0.0

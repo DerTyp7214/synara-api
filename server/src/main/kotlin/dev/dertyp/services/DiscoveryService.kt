@@ -80,6 +80,7 @@ class DiscoveryService : Service() {
     private val songService: SongService by inject()
     private val albumService: AlbumService by inject()
     private val audioAnalysisService: AudioAnalysisService by inject()
+    private val recommendationServingService: RecommendationServingService by inject()
 
     suspend fun getSongsBySameComposers(seedSongIds: List<PlatformUUID>, limit: Int = 20, userId: PlatformUUID): List<UserSong> {
         return getSongsBySameCredits(seedSongIds, SongComposerTable, limit, userId)
@@ -288,6 +289,9 @@ class DiscoveryService : Service() {
         limit: Int,
         userId: PlatformUUID
     ): List<UserSong> {
+        val embeddingBased = recommendationServingService.similarSongs(seedSongIds, userId, limit)
+        if (embeddingBased.isNotEmpty()) return embeddingBased
+
         val seedSet = seedSongIds.toSet()
         val seeds = audioAnalysisService.getAudioDataBatch(seedSongIds).values.map(::mapToFeatureVector)
         if (seeds.isEmpty()) return emptyList()

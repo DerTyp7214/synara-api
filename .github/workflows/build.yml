@@ -14,6 +14,8 @@ on:
       - mock-server/**
       - gradle/**
       - transcriber/**
+      - audio-embed/**
+      - recsys/**
       - common-rpc
       - common-proxy/**
       - Dockerfile.nobuild
@@ -30,7 +32,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           submodules: recursive
 
@@ -82,12 +84,12 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           submodules: recursive
 
       - name: Cache Gradle dependencies
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: |
             ~/.gradle/caches
@@ -167,6 +169,17 @@ jobs:
             dockerfile: "./transcriber/Dockerfile"
             artifact: ""
             context: "./transcriber"
+          - name: audio-embed
+            repo: "dertyp7214/synara-audio-embed"
+            dockerfile: "./audio-embed/Dockerfile"
+            artifact: ""
+            context: "./audio-embed"
+            platforms: "linux/amd64"
+          - name: recsys
+            repo: "dertyp7214/synara-recsys"
+            dockerfile: "./recsys/Dockerfile"
+            artifact: ""
+            context: "./recsys"
     timeout-minutes: 240
     permissions:
       contents: read
@@ -174,7 +187,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           submodules: recursive
 
@@ -220,7 +233,7 @@ jobs:
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
           push: true
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ matrix.platforms || 'linux/amd64,linux/arm64' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=registry,ref=ghcr.io/${{ matrix.repo }}:buildcache

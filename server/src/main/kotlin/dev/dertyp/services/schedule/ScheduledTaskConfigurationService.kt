@@ -61,7 +61,10 @@ class ScheduledTaskConfigurationService : Service() {
             TaskConfiguration(TaskKeys.DELETE_UNREFERENCED_IMAGES, "Delete Unreferenced Images", true, TriggerDefinition.AfterTask(TaskKeys.DELETE_UNREFERENCED_ARTISTS)),
             TaskConfiguration(TaskKeys.IMAGE_ANALYSIS, "Image Analysis", true, TriggerDefinition.AfterTask(TaskKeys.DELETE_UNREFERENCED_IMAGES)),
             TaskConfiguration(TaskKeys.LOG_CLEANUP_WORKER, "Log Cleanup Worker", true, TriggerDefinition.Cron("0 0 * * *")),
-            TaskConfiguration(TaskKeys.SEARCH_INDEX_REBUILD_WORKER, "Search Index Rebuild Worker", true, TriggerDefinition.Manual)
+            TaskConfiguration(TaskKeys.SEARCH_INDEX_REBUILD_WORKER, "Search Index Rebuild Worker", true, TriggerDefinition.Manual),
+            TaskConfiguration(TaskKeys.LISTENBRAINZ_SYNC, "ListenBrainz Sync", true, TriggerDefinition.Cron("0 * * * *")),
+            TaskConfiguration(TaskKeys.AUDIO_EMBEDDING, "Audio Embedding", true, TriggerDefinition.AfterTask(TaskKeys.AUDIO_ANALYSIS)),
+            TaskConfiguration(TaskKeys.RECOMMENDATION_TRAINING, "Recommendation Model Training", true, TriggerDefinition.Cron("0 7 * * *"))
         )
     }
 

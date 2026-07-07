@@ -43,6 +43,11 @@ class DiscoveryServiceTest : KoinTest {
             modules(module {
                 single { mockk<SongService>() }
                 single { mockAudioAnalysisService }
+                single {
+                    mockk<RecommendationServingService> {
+                        coEvery { similarSongs(any(), any(), any()) } returns emptyList()
+                    }
+                }
             })
         }
     }

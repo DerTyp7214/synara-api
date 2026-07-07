@@ -10,6 +10,7 @@ import dev.dertyp.services.metadata.IMetadataService
 import dev.dertyp.services.metadata.MetadataDispatcherService
 import dev.dertyp.services.schedule.ScheduleService
 import dev.dertyp.services.gamdl.GamdlPlugin
+import dev.dertyp.services.recommendation.RecommendationPlugin
 import dev.dertyp.services.soundcloud.SoundcloudPlugin
 import dev.dertyp.services.youtube.YoutubePlugin
 import io.ktor.util.logging.KtorSimpleLogger
@@ -34,6 +35,7 @@ val pluginModule = module {
     single<IScheduleService> { get<ScheduleService>() }
     single<ILrcLibService> { get<LrcLibService>() }
     single<IServerStorageService> { get<StorageService>() }
+    single<HookBus> { get<HookService>() }
 }
 
 class PluginManager(
@@ -57,6 +59,7 @@ class PluginManager(
         loadPlugin(SoundcloudPlugin())
         loadPlugin(GamdlPlugin())
         loadPlugin(MusicBrainzPlugin())
+        loadPlugin(RecommendationPlugin())
         loadPlugins()
     }
 
@@ -90,13 +93,15 @@ class PluginManager(
             plugin.init(pluginContext)
             loadedPlugins.add(plugin)
 
-            plugin.getIndexers().forEach {
-                indexers.add(it)
-                indexer.registerIndexer(it)
-            }
+            if (plugin is IContentSourcePlugin) {
+                plugin.getIndexers().forEach {
+                    indexers.add(it)
+                    indexer.registerIndexer(it)
+                }
 
-            plugin.getImporters().forEach {
-                registerImporter(it)
+                plugin.getImporters().forEach {
+                    registerImporter(it)
+                }
             }
             logger.info("Loaded plugin: ${plugin.name} (${plugin.id})")
         } catch (e: Exception) {
@@ -117,6 +122,7 @@ class PluginManager(
         override val metadataService: IMetadataService by inject()
         override val lrcLibService: ILrcLibService by inject()
         override val scheduleService: IScheduleService by inject()
+        override val hooks: HookBus by inject()
     }
 
     private fun loadPlugins() {
@@ -137,6 +143,7 @@ class PluginManager(
     fun getAllIndexers(): Collection<IPluginIndexer> = indexers
 
     fun getMetadataService(type: IMetadataService.MetadataType): IMetadataService? {
-        return loadedPlugins.firstNotNullOfOrNull { it.getMetadataService(type) }
+        return loadedPlugins.filterIsInstance<IContentSourcePlugin>()
+            .firstNotNullOfOrNull { it.getMetadataService(type) }
     }
 }

@@ -17,11 +17,14 @@ services:
       - REDIS_PORT=7000
       - BACKUP_DIR=/backups
       - TRANSCRIBER_URL=http://127.0.0.1:8000
+      - AUDIO_EMBED_URL=http://127.0.0.1:8200
+      - RECSYS_DATA_DIR=/recsys
     volumes:
       - /home/typ/Music:/data
       - tiddl:/home/appuser/.tiddl
       - config:/home/appuser/.config
       - backups:/backups
+      - recsys_data:/recsys
     depends_on:
       db:
         condition: service_healthy
@@ -92,6 +95,33 @@ services:
               capabilities: [gpu]
     restart: unless-stopped
 
+  audio-embed:
+    image: ghcr.io/dertyp7214/synara-audio-embed:latest-dev
+    ports:
+      - "8200:8200"
+    volumes:
+      - /home/typ/Music:/data:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8200/health"]
+      interval: 30s
+      start_interval: 2s
+      start_period: 30s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+
+  recsys:
+    image: ghcr.io/dertyp7214/synara-recsys:latest-dev
+    volumes:
+      - recsys_data:/data
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+
 volumes:
   tiddl:
   config:
@@ -99,3 +129,4 @@ volumes:
   redis_data:
   backups:
   transcriber_cache:
+  recsys_data:

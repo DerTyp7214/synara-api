@@ -17,6 +17,8 @@ import dev.dertyp.services.metadata.MetadataDispatcherService
 import dev.dertyp.services.schedule.RpcScheduledTaskConfigurationService
 import dev.dertyp.services.schedule.ScheduleService
 import dev.dertyp.services.schedule.ScheduledTaskConfigurationService
+import dev.dertyp.services.sync.ListenBrainzService
+import dev.dertyp.services.sync.RpcListenBrainzService
 import dev.dertyp.core.principalUsername
 import dev.dertyp.utils.withAuthorization
 import dev.dertyp.utils.withCaching
@@ -127,6 +129,8 @@ private fun registerAuthenticated(koin: Koin, call: ApplicationCall, user: User,
     val cachedMusicBrainzService = koin.get<CachedMusicBrainzService>()
     val metadataDispatcherService = koin.get<MetadataDispatcherService>()
     val rpcMetricsService = koin.get<RpcMetricsService>()
+    val listenBrainzService = koin.get<ListenBrainzService>()
+    val recommendationServingService = koin.get<RecommendationServingService>()
 
     registrar.register(IIndexer::class) { RpcIndexer(indexer, user).withAuthorization<IIndexer>(user).withLogging<IIndexer>(call) }
     registrar.register(IUserService::class) { RpcUserService(user, userService, imageService).withAuthorization<IUserService>(user).withLogging<IUserService>(call) }
@@ -158,4 +162,6 @@ private fun registerAuthenticated(koin: Koin, call: ApplicationCall, user: User,
     registrar.register(IMusicBrainzService::class) { cachedMusicBrainzService.withAuthorization<IMusicBrainzService>(user).withLogging<IMusicBrainzService>(call) }
     registrar.register(IMetadataService::class) { metadataDispatcherService.withAuthorization<IMetadataService>(user).withLogging<IMetadataService>(call) }
     registrar.register(IRpcMetricsService::class) { rpcMetricsService.withAuthorization<IRpcMetricsService>(user).withLogging<IRpcMetricsService>(call) }
+    registrar.register(IListenBrainzService::class) { RpcListenBrainzService(user, listenBrainzService).withAuthorization<IListenBrainzService>(user).withLogging<IListenBrainzService>(call) }
+    registrar.register(IRecommendationService::class) { RpcRecommendationService(user, recommendationServingService).withAuthorization<IRecommendationService>(user).withLogging<IRecommendationService>(call) }
 }

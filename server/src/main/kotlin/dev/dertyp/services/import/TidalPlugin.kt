@@ -197,7 +197,7 @@ class TidalIndexer(context: PluginContext) : BaseIndexer(context, IMetadataServi
         }
 }
 
-class TidalPlugin : ISynaraPlugin, KoinComponent {
+class TidalPlugin : IContentSourcePlugin, KoinComponent {
     override val id: String = "tidal"
     override val name: String = "Tidal"
     override val enabled: Boolean get() = tiddlService.enabled || tdnService.enabled

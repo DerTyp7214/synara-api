@@ -4,6 +4,7 @@ import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
 import dev.dertyp.data.*
 import dev.dertyp.db.*
+import dev.dertyp.plugins.HookBus
 import dev.dertyp.services.metadata.CachedMusicBrainzService
 import dev.dertyp.services.metadata.IMusicBrainzService
 import io.mockk.coEvery
@@ -39,6 +40,7 @@ class UserPlaylistServiceTest : KoinTest {
                 single<IMusicBrainzService> { mbService }
                 single { mbService }
                 single { songService }
+                single<HookBus> { HookService() }
             })
         }
 

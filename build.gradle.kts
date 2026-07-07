@@ -55,6 +55,8 @@ tasks.register("generateEnvDocs") {
             "IMAGE_CACHE_URL" to mapOf("desc" to "Image Cache service URL.", "cat" to "External Services"),
             "IMAGE_CACHE_TOKEN" to mapOf("desc" to "Image Cache auth token.", "cat" to "External Services"),
             "TRANSCRIBER_URL" to mapOf("desc" to "Transcriber service URL.", "cat" to "External Services"),
+            "AUDIO_EMBED_URL" to mapOf("desc" to "URL of the audio embedding service (MusiCNN). Empty disables per-song audio embeddings.", "cat" to "Recommendations"),
+            "RECSYS_DATA_DIR" to mapOf("desc" to "Shared directory used to exchange training data with the recommendation (recsys) service. Empty disables recommendation training.", "cat" to "Recommendations"),
             "LINKRESOLVER_API_KEY" to mapOf("desc" to "API key for the self-hosted LinkResolver service (linkresolver.synara.audio).", "cat" to "External Services"),
             "SPOTIFY_CLIENT_ID" to mapOf("desc" to "Spotify API Client ID.", "cat" to "External Services"),
             "SPOTIFY_CLIENT_SECRET" to mapOf("desc" to "Spotify API Client Secret.", "cat" to "External Services"),

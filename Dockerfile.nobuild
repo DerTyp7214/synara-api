@@ -64,6 +64,8 @@ RUN mkdir /data && chown appuser:appgroup /data
 
 RUN mkdir /backups && chown appuser:appgroup /backups
 
+RUN mkdir /recsys && chown appuser:appgroup /recsys
+
 RUN mkdir -p /home/appuser/.tiddl
 RUN mkdir -p /home/appuser/.config/tidal_dl_ng
 RUN chown -R appuser:appgroup /home/appuser

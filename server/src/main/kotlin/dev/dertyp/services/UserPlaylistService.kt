@@ -6,6 +6,8 @@ import dev.dertyp.data.*
 import dev.dertyp.db.*
 import dev.dertyp.dbQuery
 import dev.dertyp.formatISO
+import dev.dertyp.plugins.HookBus
+import dev.dertyp.plugins.HookEvent
 import dev.dertyp.plugins.PlaylistLibrary
 import dev.dertyp.services.metadata.CachedMusicBrainzService
 import dev.dertyp.utils.ColorUtils
@@ -30,6 +32,7 @@ class UserPlaylistService : PlaylistLibrary, IUserPlaylistService, Service() {
     private val imageService by inject<ImageService>()
     private val songService by inject<SongService>()
     private val cachedMusicBrainzService by inject<CachedMusicBrainzService>()
+    private val hooks by inject<HookBus>()
 
     companion object {
         fun mapPlaylist(resultRow: ResultRow): UserPlaylist {
@@ -160,18 +163,22 @@ class UserPlaylistService : PlaylistLibrary, IUserPlaylistService, Service() {
         }.first()[UserPlaylistTable.id].value
     }
 
-    override suspend fun addToPlaylist(id: UUID, songIds: List<Pair<Long, UUID>>): List<UUID> = dbQuery {
-        val existing = UserPlaylistSongTable
-            .select(UserPlaylistSongTable.playlistId, UserPlaylistSongTable.songId, UserPlaylistSongTable.addedAt)
-            .where { UserPlaylistSongTable.playlistId eq id }
-            .andWhere { UserPlaylistSongTable.songId inList songIds.values }
-            .map { Pair(it[UserPlaylistSongTable.addedAt], it[UserPlaylistSongTable.songId].value) }
+    override suspend fun addToPlaylist(id: UUID, songIds: List<Pair<Long, UUID>>): List<UUID> {
+        val added = dbQuery {
+            val existing = UserPlaylistSongTable
+                .select(UserPlaylistSongTable.playlistId, UserPlaylistSongTable.songId, UserPlaylistSongTable.addedAt)
+                .where { UserPlaylistSongTable.playlistId eq id }
+                .andWhere { UserPlaylistSongTable.songId inList songIds.values }
+                .map { Pair(it[UserPlaylistSongTable.addedAt], it[UserPlaylistSongTable.songId].value) }
 
-        UserPlaylistSongTable.batchInsert(songIds.minusOnce(existing.toSet())) { (addedAt, songId) ->
-            this[UserPlaylistSongTable.playlistId] = id
-            this[UserPlaylistSongTable.songId] = songId
-            this[UserPlaylistSongTable.addedAt] = addedAt
-        }.map { it[UserPlaylistSongTable.songId].value }
+            UserPlaylistSongTable.batchInsert(songIds.minusOnce(existing.toSet())) { (addedAt, songId) ->
+                this[UserPlaylistSongTable.playlistId] = id
+                this[UserPlaylistSongTable.songId] = songId
+                this[UserPlaylistSongTable.addedAt] = addedAt
+            }.map { it[UserPlaylistSongTable.songId].value }
+        }
+        hooks.emit(HookEvent.PlaylistChanged(id))
+        return added
     }
 
     override suspend fun addSongsToPlaylist(id: UUID, songIds: List<UUID>) {
@@ -194,10 +201,14 @@ class UserPlaylistService : PlaylistLibrary, IUserPlaylistService, Service() {
         addSongsToPlaylist(id, songIds)
     }
 
-    override suspend fun removeFromPlaylist(id: UUID, songIds: List<UUID>): Int = dbQuery {
-        UserPlaylistSongTable.deleteWhere {
-            (UserPlaylistSongTable.playlistId eq id) and (UserPlaylistSongTable.songId inList songIds)
+    override suspend fun removeFromPlaylist(id: UUID, songIds: List<UUID>): Int {
+        val removed = dbQuery {
+            UserPlaylistSongTable.deleteWhere {
+                (UserPlaylistSongTable.playlistId eq id) and (UserPlaylistSongTable.songId inList songIds)
+            }
         }
+        hooks.emit(HookEvent.PlaylistChanged(id))
+        return removed
     }
 
     override suspend fun setPlaylistImage(id: UUID, imageId: UUID?): Boolean = dbQuery {

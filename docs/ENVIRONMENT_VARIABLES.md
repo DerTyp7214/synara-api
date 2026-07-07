@@ -86,6 +86,13 @@ Most variables have sensible defaults and are **optional**. Only variables witho
 | `PROXY_NAME` | Display name for this proxy instance. | No | - | - |
 | `PROXY_SSL` | Whether to use SSL (true/false). | No | `false` | - |
 
+## Recommendations
+
+| Variable | Description | Required | Default (Standalone) | Default (Docker) |
+|:---|:---|:---:|:---|:---|
+| `AUDIO_EMBED_URL` | URL of the audio embedding service (MusiCNN). Empty disables per-song audio embeddings. | No | - | - |
+| `RECSYS_DATA_DIR` | Shared directory used to exchange training data with the recommendation (recsys) service. Empty disables recommendation training. | No | - | - |
+
 ## Redis Configuration
 
 | Variable | Description | Required | Default (Standalone) | Default (Docker) |
