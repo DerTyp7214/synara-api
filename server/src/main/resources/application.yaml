@@ -74,6 +74,10 @@ youtube:
   apiKey: ${YOUTUBE_API_KEY:}
 ytdlp:
   config: ${YTDLP_CONFIG_PATH:}
+gamdl:
+  cookiesPath: ${GAMDL_COOKIES_PATH:cookies.txt}
+  wvdPath: ${GAMDL_WVD_PATH:}
+  codecSong: ${GAMDL_CODEC_SONG:}
 workers:
   threadMultiplier: ${WORKER_THREAD_MULTIPLIER:1.0}
 metrics:

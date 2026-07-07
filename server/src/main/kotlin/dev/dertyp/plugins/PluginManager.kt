@@ -9,6 +9,7 @@ import dev.dertyp.services.import.TidalPlugin
 import dev.dertyp.services.metadata.IMetadataService
 import dev.dertyp.services.metadata.MetadataDispatcherService
 import dev.dertyp.services.schedule.ScheduleService
+import dev.dertyp.services.gamdl.GamdlPlugin
 import dev.dertyp.services.soundcloud.SoundcloudPlugin
 import dev.dertyp.services.youtube.YoutubePlugin
 import io.ktor.util.logging.KtorSimpleLogger
@@ -54,6 +55,7 @@ class PluginManager(
         loadPlugin(TidalPlugin())
         loadPlugin(YoutubePlugin())
         loadPlugin(SoundcloudPlugin())
+        loadPlugin(GamdlPlugin())
         loadPlugin(MusicBrainzPlugin())
         loadPlugins()
     }

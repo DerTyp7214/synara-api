@@ -19,10 +19,12 @@ import io.mockk.unmockkAll
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.koin.test.KoinTest
+import java.time.LocalDate
 
 class AppleMusicServiceTest : KoinTest {
 
@@ -183,8 +185,7 @@ class AppleMusicServiceTest : KoinTest {
                 headers = headersOf(HttpHeaders.ContentType, "text/javascript; charset=utf-8")
             )
         }
-        
-        // Re-inject mocked client with new engine
+
         mockkObject(ApiClient)
         every { ApiClient.instance } returns HttpClient(mockEngine) {
             install(ContentNegotiation) { json(ApplicationScope.json) }
@@ -300,5 +301,74 @@ class AppleMusicServiceTest : KoinTest {
         assertEquals("1471758375", track?.id)
         assertEquals("Lover", track?.title)
         assertEquals(isrc, track?.isrc)
+    }
+
+    @Test
+    fun `maxArtworkUrl rewrites catalog templates and thumbnails to the native-max request`() {
+        val base = "https://is1-ssl.mzstatic.com/image/thumb/Music/v4/aa/bb/cc/xyz"
+
+        assertEquals("$base/10000x0w-999.jpg", AppleMusicService.maxArtworkUrl("$base/{w}x{h}bb.jpg"))
+        assertEquals("$base/10000x0w-999.jpg", AppleMusicService.maxArtworkUrl("$base/{w}x{h}{c}.{f}"))
+        assertEquals("$base/10000x0w-999.jpg", AppleMusicService.maxArtworkUrl("$base/1200x630bb.jpg"))
+        assertEquals("$base/source/10000x0w-999.jpg", AppleMusicService.maxArtworkUrl("$base/source/165x165bb.jpg"))
+
+        assertEquals(
+            "https://x/image/thumb/Podcasts123/v4/xx/mza_348.jpg/10000x0w-999.jpg",
+            AppleMusicService.maxArtworkUrl("https://x/image/thumb/Podcasts123/v4/xx/mza_348.jpg/100x100bb.jpg")
+        )
+    }
+
+    @Test
+    fun `maxArtworkUrl is idempotent on an already-maximised url`() {
+        val maxed = "https://is1-ssl.mzstatic.com/image/thumb/Music/v4/aa/bb/cc/xyz/10000x0w-999.jpg"
+        assertEquals(maxed, AppleMusicService.maxArtworkUrl(maxed))
+    }
+
+    @Test
+    fun `parseReleaseDate accepts catalog date-only and iTunes datetime, and rejects garbage`() {
+        assertEquals(LocalDate.of(2019, 6, 21), AppleMusicService.parseReleaseDate("2019-06-21"))
+        assertEquals(LocalDate.of(2019, 6, 21), AppleMusicService.parseReleaseDate("2019-06-21T12:00:00Z"))
+        assertNull(AppleMusicService.parseReleaseDate(null))
+        assertNull(AppleMusicService.parseReleaseDate("not-a-date"))
+    }
+
+    @Test
+    fun `getAlbumsByIds maximises artwork and parses date via the iTunes fallback`() = runBlocking {
+        every { environment.config.propertyOrNull("appleMusic.teamId") } returns null
+        every { environment.config.propertyOrNull("appleMusic.keyId") } returns null
+        every { environment.config.propertyOrNull("appleMusic.p8Path") } returns null
+
+        mockEngine = MockEngine { request ->
+            assertEquals("/lookup", request.url.encodedPath)
+            assertEquals("67890", request.url.parameters["id"])
+            respond(
+                content = """
+                    {
+                      "resultCount": 2,
+                      "results": [
+                        {"wrapperType":"collection","collectionId":67890,"artistName":"Test Artist","collectionName":"Test Album","artworkUrl100":"https://example.com/100x100bb.jpg","trackCount":12,"releaseDate":"2019-06-21T12:00:00Z"},
+                        {"wrapperType":"track","collectionId":67890,"trackId":1,"trackName":"Song","artworkUrl100":"https://example.com/100x100bb.jpg","trackCount":12}
+                      ]
+                    }
+                """.trimIndent(),
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, "text/javascript; charset=utf-8")
+            )
+        }
+        every { ApiClient.instance } returns HttpClient(mockEngine) {
+            install(ContentNegotiation) { json(ApplicationScope.json) }
+        }
+
+        val albums = appleMusicService.getAlbumsByIds(
+            IMetadataService.MetadataType.appleMusic,
+            listOf("appleMusic:67890")
+        )
+
+        assertEquals(1, albums.size)
+        assertEquals("appleMusic:67890", albums[0].id)
+        assertEquals("Test Album", albums[0].title)
+        assertEquals(12, albums[0].trackCount)
+        assertEquals(LocalDate.of(2019, 6, 21), albums[0].releaseDate)
+        assertEquals("https://example.com/10000x0w-999.jpg", albums[0].images[0].url)
     }
 }

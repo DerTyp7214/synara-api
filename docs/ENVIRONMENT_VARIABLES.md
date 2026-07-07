@@ -35,6 +35,9 @@ Most variables have sensible defaults and are **optional**. Only variables witho
 | `APPLE_MUSIC_KEY_ID` | Apple Music Key ID. | No | - | - |
 | `APPLE_MUSIC_P8_PATH` | Path to the Apple Music .p8 private key file. | No | - | - |
 | `APPLE_MUSIC_TEAM_ID` | Apple Music Team ID. | No | - | - |
+| `GAMDL_CODEC_SONG` | Optional gamdl song codec override (empty = gamdl default, e.g. aac-web). Advanced/version-sensitive. | No | - | - |
+| `GAMDL_COOKIES_PATH` | Path to the Netscape cookies.txt for Apple Music (gamdl importer). | No | `cookies.txt` | - |
+| `GAMDL_WVD_PATH` | Optional path to a Widevine .wvd device for higher-quality gamdl codecs. | No | - | - |
 | `IMAGE_CACHE_TOKEN` | Image Cache auth token. | No | - | - |
 | `IMAGE_CACHE_URL` | Image Cache service URL. | No | - | - |
 | `LINKRESOLVER_API_KEY` | API key for the self-hosted LinkResolver service (linkresolver.synara.audio). | No | - | - |

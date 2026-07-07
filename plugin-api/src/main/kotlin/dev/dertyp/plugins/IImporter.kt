@@ -5,6 +5,8 @@ import dev.dertyp.data.User
 import dev.dertyp.data.UserSong
 import dev.dertyp.services.import.IdsWrapper
 import dev.dertyp.services.import.ImportFavType
+import dev.dertyp.services.import.ImporterCapability
+import dev.dertyp.services.import.ImporterCredentials
 import dev.dertyp.services.import.ProcessExecutionResult
 import dev.dertyp.services.import.Type
 import dev.dertyp.services.metadata.IMetadataService
@@ -24,6 +26,10 @@ interface IImporter {
     var indexer: IPluginIndexer
     val enabled: Boolean get() = true
     val metadataType: IMetadataService.MetadataType? get() = null
+
+    val capabilities: Set<ImporterCapability> get() = emptySet()
+
+    suspend fun provideCredentials(credentials: ImporterCredentials) {}
 
     fun canHandle(url: String): Boolean
     suspend fun parseUrl(url: String): Pair<String, Type?>? = null

@@ -235,6 +235,18 @@ class ImportRpcService(
         importerProxy.defaultService = service
     }
 
+    override suspend fun getImporterCapabilities(): Map<String, Set<ImporterCapability>> =
+        importService.pluginManager.getAllImporters().associate { it.id to it.capabilities }
+
+    override suspend fun setImportCredentials(backend: ImportBackend, credentials: ImporterCredentials) {
+        val importer = importService.pluginManager.getImporter(backend.id)
+            ?: throw IllegalArgumentException("Unknown importer backend: ${backend.id}")
+        require(importer.capabilities.contains(ImporterCapability.CREDENTIALS)) {
+            "Importer '${backend.id}' does not support credential injection."
+        }
+        importer.provideCredentials(credentials)
+    }
+
     override suspend fun importAuthorized(): Boolean = importerProxy.tokenFileExists()
 
     override fun importLogin() = channelFlow {
