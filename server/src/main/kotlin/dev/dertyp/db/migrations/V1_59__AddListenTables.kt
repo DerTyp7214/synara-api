@@ -9,7 +9,7 @@ import org.flywaydb.core.api.migration.Context
 import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 
 @Suppress("unused", "ClassName", "SqlSourceToSinkFlow")
-class V1_56__AddListenTables : BaseJavaMigration() {
+class V1_59__AddListenTables : BaseJavaMigration() {
     override fun migrate(context: Context) {
         val statements = tempConnection {
             SchemaUtils.createStatements(ListenBrainzUserTable, UserListenBrainzLinkTable, ListenTable)
