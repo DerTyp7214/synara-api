@@ -10,8 +10,14 @@ import org.jetbrains.exposed.v1.jdbc.batchInsert
 import org.koin.core.component.inject
 
 data class IncomingListen(
-    val songId: PlatformUUID,
     val listenedAtMs: Long,
+    val songId: PlatformUUID? = null,
+    val recordingMbid: PlatformUUID? = null,
+    val releaseMbid: PlatformUUID? = null,
+    val artistMbids: String? = null,
+    val trackName: String? = null,
+    val artistName: String? = null,
+    val releaseName: String? = null,
     val msPlayed: Long? = null,
 )
 
@@ -25,6 +31,12 @@ class ListenService : Service() {
             ListenTable.batchInsert(listens, ignore = true) { listen ->
                 this[ListenTable.listenBrainzUserId] = listenBrainzUserId
                 this[ListenTable.songId] = listen.songId
+                this[ListenTable.recordingMbid] = listen.recordingMbid
+                this[ListenTable.releaseMbid] = listen.releaseMbid
+                this[ListenTable.artistMbids] = listen.artistMbids
+                this[ListenTable.trackName] = listen.trackName
+                this[ListenTable.artistName] = listen.artistName
+                this[ListenTable.releaseName] = listen.releaseName
                 this[ListenTable.listenedAt] = listen.listenedAtMs
                 this[ListenTable.listenSource] = ListenSource.LISTENBRAINZ
                 this[ListenTable.msPlayed] = listen.msPlayed

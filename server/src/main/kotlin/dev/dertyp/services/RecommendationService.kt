@@ -9,6 +9,7 @@ import io.ktor.server.application.*
 import kotlinx.coroutines.delay
 import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.v1.core.SortOrder
+import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.core.isNotNull
 import org.jetbrains.exposed.v1.jdbc.select
@@ -171,7 +172,7 @@ class RecommendationService : Service() {
 
         ListenTable
             .select(ListenTable.listenBrainzUserId, ListenTable.songId, ListenTable.listenedAt)
-            .where { ListenTable.listenBrainzUserId.isNotNull() }
+            .where { ListenTable.listenBrainzUserId.isNotNull() and ListenTable.songId.isNotNull() }
             .orderBy(ListenTable.listenBrainzUserId to SortOrder.ASC, ListenTable.listenedAt to SortOrder.ASC)
             .forEach { row ->
                 val account = row[ListenTable.listenBrainzUserId]!!.value
@@ -180,7 +181,7 @@ class RecommendationService : Service() {
                     writer.emitSequence(current.toList())
                     current.clear()
                 }
-                current.add(row[ListenTable.songId].value.toString())
+                current.add(row[ListenTable.songId]!!.value.toString())
                 lastAccount = account
                 lastTs = ts
             }

@@ -79,8 +79,8 @@ class RecommendationServingService : Service() {
 
             val recent = if (account != null) {
                 ListenTable.select(ListenTable.songId)
-                    .where { (ListenTable.listenBrainzUserId eq account) and (ListenTable.listenedAt greater cutoff) }
-                    .map { it[ListenTable.songId].value }
+                    .where { (ListenTable.listenBrainzUserId eq account) and (ListenTable.listenedAt greater cutoff) and ListenTable.songId.isNotNull() }
+                    .mapNotNull { it[ListenTable.songId]?.value }
                     .toHashSet()
             } else emptySet()
 
