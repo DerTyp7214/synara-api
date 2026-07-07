@@ -17,6 +17,7 @@ import dev.dertyp.services.metadata.IMetadataService
 import dev.dertyp.services.metadata.IMusicBrainzService
 import dev.dertyp.services.metadata.MetadataDispatcherService
 import dev.dertyp.services.schedule.RpcScheduledTaskConfigurationService
+import dev.dertyp.services.sync.RpcListenBrainzService
 import dev.dertyp.utils.withAuthorization
 import io.github.smiley4.ktoropenapi.*
 import io.github.smiley4.ktoropenapi.config.RouteConfig
@@ -523,6 +524,14 @@ fun Route.registerAuthenticatedRestServices(koin: Koin) {
     registerRestService(IMetadataService::class, authenticated = true) {
         val user = call.getUser()
         koin.get<MetadataDispatcherService>().withAuthorization<IMetadataService>(user)
+    }
+    registerRestService(IListenBrainzService::class, authenticated = true) {
+        val user = call.getUser() ?: throw IllegalArgumentException("No user found")
+        RpcListenBrainzService(user, koin.get()).withAuthorization<IListenBrainzService>(user)
+    }
+    registerRestService(IRecommendationService::class, authenticated = true) {
+        val user = call.getUser() ?: throw IllegalArgumentException("No user found")
+        RpcRecommendationService(user, koin.get()).withAuthorization<IRecommendationService>(user)
     }
 }
 
