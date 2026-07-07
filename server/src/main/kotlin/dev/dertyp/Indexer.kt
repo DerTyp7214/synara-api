@@ -84,6 +84,7 @@ class Indexer(
         override val metadataService: IMetadataService get() = getKoin().get<MetadataDispatcherService>()
         override val lrcLibService: ILrcLibService get() = getKoin().get<LrcLibService>()
         override val scheduleService: IScheduleService get() = this@Indexer.scheduleService
+        override val hooks: HookBus get() = getKoin().get<HookBus>()
     }, metadataType = null) {
         override val id: String = "core"
         override val name: String = "Core Indexer"
