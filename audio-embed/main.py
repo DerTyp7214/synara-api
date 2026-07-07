@@ -2,9 +2,13 @@ import logging
 from typing import List
 
 import numpy as np
+import essentia
 from fastapi import FastAPI
 from pydantic import BaseModel
 from essentia.standard import MonoLoader, TensorflowPredictMusiCNN
+
+essentia.log.infoActive = False
+essentia.log.warningActive = False
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("audio-embed")
