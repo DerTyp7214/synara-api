@@ -1728,6 +1728,7 @@ Track and receive notifications for new music releases.
 | `getRecentReleases` | `page` (`Int`): Page index.<br>`pageSize` (`Int`): Number of items per page. | [PaginatedResponse](#devdertypdatapaginatedresponse)<[RecentRelease](#devdertypservicesmodelsrecentrelease)> | - |  | Retrieve a feed of recent music releases from followed artists. |
 | `getArtistRecentReleases` | `artistId` (`PlatformUUID`): The artist unique identifier.<br>`page` (`Int`): Page index.<br>`pageSize` (`Int`): Number of items per page. | [PaginatedResponse](#devdertypdatapaginatedresponse)<[RecentRelease](#devdertypservicesmodelsrecentrelease)> | - |  | Retrieve recent music releases for a specific artist. |
 | `getRecentReleasesByMusicBrainzId` | `musicBrainzId` (`PlatformUUID`): The MusicBrainz Artist UUID.<br>`page` (`Int`): Page index.<br>`pageSize` (`Int`): Number of items per page. | [PaginatedResponse](#devdertypdatapaginatedresponse)<[RecentRelease](#devdertypservicesmodelsrecentrelease)> | - |  | Retrieve recent music releases for an artist by their MusicBrainz ID. |
+| `refreshRecentRelease` | `releaseId` (`PlatformUUID`): The MusicBrainz release-group UUID of the recent release to refresh. | [RecentRelease](#devdertypservicesmodelsrecentrelease)? | `EDIT` |  | Force-refresh the cached metadata, provider links and cover image for a single recent release. |
 
 ### IRemoteMirrorService <a name="devdertypservicesiremotemirrorservice"></a>
 Instance-to-instance data synchronization.

@@ -4,6 +4,8 @@ import dev.dertyp.ApiClient
 import dev.dertyp.core.*
 import dev.dertyp.data.ArtistType
 import dev.dertyp.data.InsertableImage
+import dev.dertyp.data.MusicBrainzRelease
+import dev.dertyp.data.MusicBrainzReleaseGroup
 import dev.dertyp.data.PaginatedResponse
 import dev.dertyp.data.ReleaseType
 import dev.dertyp.db.*
@@ -35,6 +37,9 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
     private val artistService by inject<ArtistService>()
     private val imageService by inject<ImageService>()
     private val linkResolverService by inject<LinkResolverService>()
+
+    private val RELEASE_REFRESH_WINDOW = 14.days
+    private val REFRESH_COOLDOWN = 20.hours
 
     suspend fun followArtist(userId: UUID, musicBrainzId: UUID, priority: HttpClientPriority = HttpClientPriority.NORMAL): Boolean {
         val artistId = getOrCreateArtistByMbId(musicBrainzId, priority) ?: return false
@@ -223,6 +228,131 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
         return getArtistRecentReleases(artistId, page, pageSize)
     }
 
+    suspend fun refreshRecentRelease(releaseId: UUID): RecentRelease? {
+        val cachedArtistId = dbQuery {
+            RecentReleaseTable.select(RecentReleaseTable.artistId)
+                .where { RecentReleaseTable.releaseId eq releaseId }
+                .singleOrNull()?.get(RecentReleaseTable.artistId)?.value
+        }
+
+        val artistId: UUID
+        val mbId: UUID
+        if (cachedArtistId != null) {
+            val cachedMbId = dbQuery {
+                ArtistMusicBrainzTable.select(ArtistMusicBrainzTable.musicBrainzId)
+                    .where { ArtistMusicBrainzTable.artistId eq cachedArtistId }
+                    .andWhere { ArtistMusicBrainzTable.musicBrainzId.isNotNull() }
+                    .firstOrNull()?.get(ArtistMusicBrainzTable.musicBrainzId)?.value
+            } ?: return null
+            artistId = cachedArtistId
+            mbId = cachedMbId
+        } else {
+            val releases = musicBrainzService.fetchReleasesByReleaseGroup(releaseId, priority = HttpClientPriority.HIGH)
+            val artistMbId = releases.firstNotNullOfOrNull { release ->
+                release.artistCredit?.firstNotNullOfOrNull { it.artist?.id }
+            } ?: return null
+            artistId = getOrCreateArtistByMbId(artistMbId, HttpClientPriority.HIGH) ?: return null
+            mbId = artistMbId
+        }
+
+        val artistName = dbQuery {
+            ArtistTable.select(ArtistTable.name)
+                .where { ArtistTable.id eq artistId }
+                .singleOrNull()?.get(ArtistTable.name)
+        } ?: return null
+
+        val tidalService = MetadataService.getMetadataService(
+            IMetadataService.MetadataType.tidal,
+            environment
+        ) as TidalService
+
+        val appleMusicService = MetadataService.getMetadataService(
+            IMetadataService.MetadataType.appleMusic,
+            environment
+        ) as AppleMusicService
+
+        val mbReleases = musicBrainzService.fetchReleasesByArtist(mbId, priority = HttpClientPriority.HIGH)
+
+        val albumMappings = dbQuery {
+            AlbumMusicBrainzTable.innerJoin(
+                AlbumArtistTable,
+                onColumn = { AlbumMusicBrainzTable.albumId },
+                otherColumn = { AlbumArtistTable.albumId })
+                .selectAll()
+                .where { AlbumArtistTable.artistId eq artistId }
+                .mapNotNull {
+                    it[AlbumMusicBrainzTable.musicBrainzId]?.let { mb ->
+                        mb.value to it[AlbumMusicBrainzTable.albumId].value
+                    }
+                }
+                .toMap()
+        }
+
+        val songMappings = dbQuery {
+            SongMusicBrainzTable.innerJoin(
+                SongArtistTable,
+                onColumn = { SongMusicBrainzTable.songId },
+                otherColumn = { SongArtistTable.songId })
+                .selectAll()
+                .where { SongArtistTable.artistId eq artistId }
+                .mapNotNull {
+                    it[SongMusicBrainzTable.musicBrainzId]?.let { mb ->
+                        mb.value to it[SongMusicBrainzTable.songId].value
+                    }
+                }
+                .toMap()
+        }
+
+        val group = musicBrainzService.fetchReleaseGroupById(releaseId, priority = HttpClientPriority.HIGH)
+            ?: musicBrainzCacheService.getReleaseGroup(releaseId)
+            ?: return null
+
+        processReleaseGroup(
+            group = group,
+            artistId = artistId,
+            artistName = artistName,
+            mbReleases = mbReleases,
+            albumMappings = albumMappings,
+            songMappings = songMappings,
+            tidalService = tidalService,
+            appleMusicService = appleMusicService,
+            dbSemaphore = Semaphore(1),
+            forceRefresh = true
+        )
+
+        return getRecentReleaseById(releaseId)
+    }
+
+    private suspend fun getRecentReleaseById(releaseId: UUID): RecentRelease? = dbQuery {
+        val row = RecentReleaseTable
+            .leftJoin(ImageTable, onColumn = { RecentReleaseTable.imageId }, otherColumn = { ImageTable.id })
+            .selectAll()
+            .where { RecentReleaseTable.releaseId eq releaseId }
+            .singleOrNull() ?: return@dbQuery null
+
+        val links = RecentReleaseProviderTable.selectAll()
+            .where { RecentReleaseProviderTable.releaseId eq releaseId }
+            .orderBy(
+                RecentReleaseProviderTable.provider to SortOrder.ASC,
+                RecentReleaseProviderTable.externalId to SortOrder.ASC,
+            )
+            .map { it[RecentReleaseProviderTable.rawUrl] }
+
+        RecentRelease(
+            releaseId = row[RecentReleaseTable.releaseId].value,
+            artistId = row[RecentReleaseTable.artistId].value,
+            artistName = row[RecentReleaseTable.artistName],
+            title = row[RecentReleaseTable.title],
+            releaseDate = row[RecentReleaseTable.releaseDate]?.let { platformDateFromEpochMilliseconds(it) },
+            type = row[RecentReleaseTable.type],
+            imageId = row[RecentReleaseTable.imageId]?.value,
+            blurHash = row.getOrNull(ImageTable.blurHash),
+            links = links,
+            albumId = row[RecentReleaseTable.albumId]?.value,
+            songId = row[RecentReleaseTable.songId]?.value
+        )
+    }
+
     suspend fun fetchNewReleases(onProgress: suspend (Double, String) -> Unit = { _, _ -> }): Map<String, Int> = coroutineScope {
         val tidalService = MetadataService.getMetadataService(
             IMetadataService.MetadataType.tidal,
@@ -374,14 +504,15 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
                     var progressAddedForArtist = 0.0
                     var artistName: String? = null
                     try {
-                        artistName = dbSemaphore.withPermit {
+                        val resolvedArtistName = dbSemaphore.withPermit {
                             dbQuery {
                                 ArtistTable.selectAll().where { ArtistTable.id eq artistId }.singleOrNull()
                                     ?.get(ArtistTable.name)
                             }
                         } ?: return@withPermit null
+                        artistName = resolvedArtistName
 
-                        logger.info("Fetching releases for $label artist: $artistName")
+                        logger.info("Fetching releases for $label artist: $resolvedArtistName")
 
                         val mbReleases = musicBrainzService.fetchReleasesByArtist(mbId, priority = HttpClientPriority.LOW)
 
@@ -434,214 +565,18 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
                         val newReleasesCount = groups.map { group ->
                             async {
                                 try {
-                                    val groupId = group.id
-                                    val alreadyExists = dbSemaphore.withPermit {
-                                        dbQuery {
-                                            RecentReleaseTable.selectAll()
-                                                .where { RecentReleaseTable.releaseId eq groupId }
-                                                .any()
-                                        }
-                                    }
-                                    if (alreadyExists) return@async false
-
-                                    val groupReleases = mbReleases.filter { it.releaseGroup?.id == group.id }
-                                    val groupReleaseIds = (groupReleases.map { it.id } + group.id).toSet()
-
-                                    logger.info("New release found for $artistName: ${group.title}")
-
-                                    val releaseDate = try {
-                                        val dateParts = group.firstReleaseDate?.split("-") ?: emptyList()
-                                        when (dateParts.size) {
-                                            3 -> LocalDate.of(dateParts[0].toInt(), dateParts[1].toInt(), dateParts[2].toInt())
-                                            2 -> LocalDate.of(dateParts[0].toInt(), dateParts[1].toInt(), 1)
-                                            1 -> LocalDate.of(dateParts[0].toInt(), 1, 1)
-                                            else -> null
-                                        }?.atStartOfDay(ZoneOffset.UTC)?.toInstant()?.toEpochMilli()
-                                    } catch (_: Exception) {
-                                        null
-                                    }
-
-                                    val mbReleasesForGroup =
-                                        musicBrainzService.fetchReleasesByReleaseGroup(groupId, priority = HttpClientPriority.LOW)
-                                    val allRelations =
-                                        (group.relations ?: emptyList()) + mbReleasesForGroup.flatMap { it.relations ?: emptyList() }
-                                    val relations = allRelations.mapNotNull { it.url?.resource }.distinct()
-                                    val resolvedLinks = linkResolverService.batchResolve(relations, priority = HttpClientPriority.LOW)
-
-                                    val finalLinks = (relations + resolvedLinks).distinct().toMutableList()
-
-                                    val isSingle =
-                                        group.primaryType?.lowercase() == "single" || group.primaryType == null ||
-                                                group.relations?.any { it.type == "single from" } == true
-
-                                    val groupRecordings = if (isSingle) {
-                                        musicBrainzService.fetchRecordingsByReleaseGroup(
-                                            groupId,
-                                            priority = HttpClientPriority.LOW
-                                        )
-                                    } else emptyList()
-                                    val groupRecordingIds = groupRecordings.map { it.id }.toSet()
-
-                                    val libraryAlbumId = albumMappings.entries.find { (mbId, _) ->
-                                        groupReleaseIds.contains(mbId)
-                                    }?.value
-
-                                    val librarySongId = songMappings.entries.find { (mbId, _) ->
-                                        groupReleaseIds.contains(mbId) || groupRecordingIds.contains(mbId)
-                                    }?.value
-
-                                    val albumNames = if (isSingle) {
-                                        val recordingAlbums = groupRecordings
-                                            .asSequence()
-                                            .flatMap { it.releases ?: emptyList() }
-                                            .mapNotNull { it.releaseGroup }
-                                            .filter { it.primaryType?.lowercase() == "album" }
-                                            .map { it.title }
-                                            .toList()
-
-                                        val relationAlbums = group.relations?.filter { it.type == "single from" }
-                                            ?.mapNotNull { it.releaseGroup?.title } ?: emptyList()
-
-                                        (recordingAlbums + relationAlbums).distinct()
-                                    } else emptyList()
-
-                                    if (finalLinks.none { it.contains("apple.com") || it.contains("itunes.apple.com") }) {
-                                        val searchQueries = mutableListOf("$artistName ${group.title.cleanTitle()}")
-                                        if (isSingle) {
-                                            albumNames.forEach { searchQueries.add("$artistName $it") }
-                                        }
-
-                                        var matchedAlbum: IMetadataService.Album? = null
-                                        for (query in searchQueries.distinct()) {
-                                            val searchedApple = appleMusicService.searchAlbums(
-                                                query,
-                                                25,
-                                                includeTracks = isSingle,
-                                                priority = HttpClientPriority.LOW
-                                            )
-                                            matchedAlbum = searchedApple.firstOrNull { album ->
-                                                val cleanGroupTitle = group.title.cleanTitle()
-                                                val titleMatches =
-                                                    album.title.cleanTitle().removeSuffix("- Single").trim()
-                                                        .equals(cleanGroupTitle, ignoreCase = true) ||
-                                                            album.additionalTitles.any {
-                                                                it.cleanTitle().removeSuffix("- Single").trim()
-                                                                    .equals(cleanGroupTitle, ignoreCase = true)
-                                                            } ||
-                                                            albumNames.any { albumName ->
-                                                                album.title.cleanTitle()
-                                                                    .equals(albumName.cleanTitle(), ignoreCase = true) ||
-                                                                        album.additionalTitles.any {
-                                                                            it.cleanTitle()
-                                                                                .equals(albumName.cleanTitle(), ignoreCase = true)
-                                                                        }
-                                                            }
-
-                                                titleMatches && album.artists.any { it.equals(artistName, ignoreCase = true) }
-                                            }
-                                            if (matchedAlbum != null) break
-                                        }
-
-                                        if (matchedAlbum != null) {
-                                            val appleUrl = "https://music.apple.com/album/${matchedAlbum.id}"
-                                            finalLinks.add(appleUrl)
-                                            finalLinks.addAll(
-                                                linkResolverService.resolvePlatformLinks(
-                                                    appleUrl,
-                                                    priority = HttpClientPriority.LOW
-                                                )
-                                            )
-                                        } else {
-                                            logger.info("AppleMusic search returned no results for \"$artistName ${group.title}\" or related albums.")
-                                        }
-                                    }
-
-                                    if (finalLinks.none { it.contains("tidal.com") }) {
-                                        val searchQueries = mutableListOf("\"$artistName\" \"${group.title.cleanTitle()}\"")
-                                        if (isSingle) {
-                                            albumNames.forEach { searchQueries.add("\"$artistName\" \"$it\"") }
-                                        }
-
-                                        var matchedAlbum: IMetadataService.Album? = null
-                                        for (query in searchQueries.distinct()) {
-                                            val searchedTidal = tidalService.searchAlbums(
-                                                query,
-                                                15,
-                                                includeTracks = isSingle,
-                                                priority = HttpClientPriority.LOW
-                                            )
-                                            matchedAlbum = searchedTidal.firstOrNull { album ->
-                                                val cleanGroupTitle = group.title.cleanTitle()
-                                                val titleMatches = album.title.cleanTitle().equals(cleanGroupTitle, ignoreCase = true) ||
-                                                        albumNames.any { albumName ->
-                                                            album.title.cleanTitle().equals(albumName.cleanTitle(), ignoreCase = true)
-                                                        }
-
-                                                titleMatches && album.artists.any { it.equals(artistName, ignoreCase = true) }
-                                            }
-                                            if (matchedAlbum != null) break
-                                        }
-
-                                        if (matchedAlbum != null) {
-                                            val tidalUrl = "https://tidal.com/album/${matchedAlbum.id}"
-                                            finalLinks.add(tidalUrl)
-                                            finalLinks.addAll(
-                                                linkResolverService.resolvePlatformLinks(
-                                                    tidalUrl,
-                                                    priority = HttpClientPriority.LOW
-                                                )
-                                            )
-                                        } else {
-                                            logger.info("Tidal search returned no results for \"$artistName ${group.title}\" or related albums.")
-                                        }
-                                    }
-
-                                    val distinctLinks = finalLinks.distinct()
-
-                                    val imageId = fetchReleaseGroupImage(group.id)
-
-                                    dbSemaphore.withPermit {
-                                        musicBrainzCacheService.updateReleaseGroupCache(group)
-
-                                        dbQuery {
-                                            RecentReleaseTable.upsert(RecentReleaseTable.releaseId) {
-                                                it[releaseId] = groupId
-                                                it[RecentReleaseTable.artistId] = artistId
-                                                it[RecentReleaseTable.artistName] = artistName
-                                                it[title] = group.title
-                                                it[RecentReleaseTable.releaseDate] = releaseDate
-
-                                                val determinedType =
-                                                    if (isSingle) ReleaseType.Single else ReleaseType.fromString(group.primaryType)
-                                                it[type] = determinedType
-                                                it[RecentReleaseTable.imageId] = imageId
-                                                it[RecentReleaseTable.links] =
-                                                    ApplicationScope.json.encodeToString(distinctLinks)
-                                                it[RecentReleaseTable.albumId] = libraryAlbumId
-                                                it[RecentReleaseTable.songId] = librarySongId
-                                            }
-
-                                            distinctLinks.forEach { url ->
-                                                val parser = ParserFactory.getParser(url)
-                                                val parsed = parser?.parse(url)
-                                                val provider = parser?.name ?: "unknown"
-                                                val externalId = parsed?.first ?: url
-
-                                                RecentReleaseProviderTable.upsert(
-                                                    RecentReleaseProviderTable.releaseId,
-                                                    RecentReleaseProviderTable.provider,
-                                                    RecentReleaseProviderTable.externalId
-                                                ) {
-                                                    it[RecentReleaseProviderTable.releaseId] = groupId
-                                                    it[RecentReleaseProviderTable.provider] = provider
-                                                    it[RecentReleaseProviderTable.externalId] = externalId
-                                                    it[RecentReleaseProviderTable.type] = parsed?.second?.value
-                                                    it[RecentReleaseProviderTable.rawUrl] = url
-                                                }
-                                            }
-                                        }
-                                    }
-                                    true
+                                    processReleaseGroup(
+                                        group = group,
+                                        artistId = artistId,
+                                        artistName = resolvedArtistName,
+                                        mbReleases = mbReleases,
+                                        albumMappings = albumMappings,
+                                        songMappings = songMappings,
+                                        tidalService = tidalService,
+                                        appleMusicService = appleMusicService,
+                                        dbSemaphore = dbSemaphore,
+                                        forceRefresh = false
+                                    )
                                 } catch (e: Exception) {
                                     logger.error("Failed to process group ${group.id}", e)
                                     false
@@ -651,7 +586,7 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
                                         progressAddedForArtist += groupWeight
                                     }
                                     dbSemaphore.withPermit {
-                                        onProgress(currentProgress * 100.0, "Processed $artistName: ${group.title}")
+                                        onProgress(currentProgress * 100.0, "Processed $resolvedArtistName: ${group.title}")
                                     }
                                 }
                             }
@@ -668,7 +603,7 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
                             }
                         }
 
-                        if (newReleasesCount > 0) artistName to newReleasesCount else null
+                        if (newReleasesCount > 0) resolvedArtistName to newReleasesCount else null
                     } catch (e: Exception) {
                         logger.error("Failed to fetch new releases for artist $artistId", e)
                         null
@@ -688,6 +623,251 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
         results
     }
 
+    private suspend fun processReleaseGroup(
+        group: MusicBrainzReleaseGroup,
+        artistId: UUID,
+        artistName: String,
+        mbReleases: List<MusicBrainzRelease>,
+        albumMappings: Map<UUID, UUID>,
+        songMappings: Map<UUID, UUID>,
+        tidalService: TidalService,
+        appleMusicService: AppleMusicService,
+        dbSemaphore: Semaphore,
+        forceRefresh: Boolean = false
+    ): Boolean {
+        val groupId = group.id
+
+        val existing = dbSemaphore.withPermit {
+            dbQuery {
+                RecentReleaseTable
+                    .select(RecentReleaseTable.lastUpdate, RecentReleaseTable.releaseDate)
+                    .where { RecentReleaseTable.releaseId eq groupId }
+                    .singleOrNull()
+            }
+        }
+        if (existing != null && !forceRefresh) {
+            val lastUpdate = existing[RecentReleaseTable.lastUpdate]
+            val storedReleaseDate = existing[RecentReleaseTable.releaseDate]
+            val nowMs = Clock.System.now().toEpochMilliseconds()
+            val withinRefreshWindow = storedReleaseDate != null &&
+                    nowMs >= storedReleaseDate &&
+                    nowMs < storedReleaseDate + RELEASE_REFRESH_WINDOW.inWholeMilliseconds
+            val cooldownPassed = lastUpdate == null ||
+                    (nowMs - lastUpdate) >= REFRESH_COOLDOWN.inWholeMilliseconds
+            if (!(withinRefreshWindow && cooldownPassed)) return false
+        }
+        val isRefresh = existing != null
+
+        val groupReleases = mbReleases.filter { it.releaseGroup?.id == group.id }
+        val groupReleaseIds = (groupReleases.map { it.id } + group.id).toSet()
+
+        logger.info("Processing release for $artistName: ${group.title}")
+
+        val releaseDate = try {
+            val dateParts = group.firstReleaseDate?.split("-") ?: emptyList()
+            when (dateParts.size) {
+                3 -> LocalDate.of(dateParts[0].toInt(), dateParts[1].toInt(), dateParts[2].toInt())
+                2 -> LocalDate.of(dateParts[0].toInt(), dateParts[1].toInt(), 1)
+                1 -> LocalDate.of(dateParts[0].toInt(), 1, 1)
+                else -> null
+            }?.atStartOfDay(ZoneOffset.UTC)?.toInstant()?.toEpochMilli()
+        } catch (_: Exception) {
+            null
+        }
+
+        val mbReleasesForGroup =
+            musicBrainzService.fetchReleasesByReleaseGroup(groupId, priority = HttpClientPriority.LOW)
+        val allRelations =
+            (group.relations ?: emptyList()) + mbReleasesForGroup.flatMap { it.relations ?: emptyList() }
+        val relations = allRelations.mapNotNull { it.url?.resource }.distinct()
+        val resolvedLinks = linkResolverService.batchResolve(relations, priority = HttpClientPriority.LOW)
+
+        val finalLinks = (relations + resolvedLinks).distinct().toMutableList()
+
+        val isSingle =
+            group.primaryType?.lowercase() == "single" || group.primaryType == null ||
+                    group.relations?.any { it.type == "single from" } == true
+
+        val groupRecordings = if (isSingle) {
+            musicBrainzService.fetchRecordingsByReleaseGroup(
+                groupId,
+                priority = HttpClientPriority.LOW
+            )
+        } else emptyList()
+        val groupRecordingIds = groupRecordings.map { it.id }.toSet()
+
+        val libraryAlbumId = albumMappings.entries.find { (mbId, _) ->
+            groupReleaseIds.contains(mbId)
+        }?.value
+
+        val librarySongId = songMappings.entries.find { (mbId, _) ->
+            groupReleaseIds.contains(mbId) || groupRecordingIds.contains(mbId)
+        }?.value
+
+        val albumNames = if (isSingle) {
+            val recordingAlbums = groupRecordings
+                .asSequence()
+                .flatMap { it.releases ?: emptyList() }
+                .mapNotNull { it.releaseGroup }
+                .filter { it.primaryType?.lowercase() == "album" }
+                .map { it.title }
+                .toList()
+
+            val relationAlbums = group.relations?.filter { it.type == "single from" }
+                ?.mapNotNull { it.releaseGroup?.title } ?: emptyList()
+
+            (recordingAlbums + relationAlbums).distinct()
+        } else emptyList()
+
+        if (finalLinks.none { it.contains("apple.com") || it.contains("itunes.apple.com") }) {
+            val searchQueries = mutableListOf("$artistName ${group.title.cleanTitle()}")
+            if (isSingle) {
+                albumNames.forEach { searchQueries.add("$artistName $it") }
+            }
+
+            var matchedAlbum: IMetadataService.Album? = null
+            for (query in searchQueries.distinct()) {
+                val searchedApple = appleMusicService.searchAlbums(
+                    query,
+                    25,
+                    includeTracks = isSingle,
+                    priority = HttpClientPriority.LOW
+                )
+                matchedAlbum = searchedApple.firstOrNull { album ->
+                    val cleanGroupTitle = group.title.cleanTitle()
+                    val titleMatches =
+                        album.title.cleanTitle().removeSuffix("- Single").trim()
+                            .equals(cleanGroupTitle, ignoreCase = true) ||
+                                album.additionalTitles.any {
+                                    it.cleanTitle().removeSuffix("- Single").trim()
+                                        .equals(cleanGroupTitle, ignoreCase = true)
+                                } ||
+                                albumNames.any { albumName ->
+                                    album.title.cleanTitle()
+                                        .equals(albumName.cleanTitle(), ignoreCase = true) ||
+                                            album.additionalTitles.any {
+                                                it.cleanTitle()
+                                                    .equals(albumName.cleanTitle(), ignoreCase = true)
+                                            }
+                                }
+
+                    titleMatches && album.artists.any { it.equals(artistName, ignoreCase = true) }
+                }
+                if (matchedAlbum != null) break
+            }
+
+            if (matchedAlbum != null) {
+                val appleUrl = "https://music.apple.com/album/${matchedAlbum.id}"
+                finalLinks.add(appleUrl)
+                finalLinks.addAll(
+                    linkResolverService.resolvePlatformLinks(
+                        appleUrl,
+                        priority = HttpClientPriority.LOW
+                    )
+                )
+            } else {
+                logger.info("AppleMusic search returned no results for \"$artistName ${group.title}\" or related albums.")
+            }
+        }
+
+        if (finalLinks.none { it.contains("tidal.com") }) {
+            val searchQueries = mutableListOf("\"$artistName\" \"${group.title.cleanTitle()}\"")
+            if (isSingle) {
+                albumNames.forEach { searchQueries.add("\"$artistName\" \"$it\"") }
+            }
+
+            var matchedAlbum: IMetadataService.Album? = null
+            for (query in searchQueries.distinct()) {
+                val searchedTidal = tidalService.searchAlbums(
+                    query,
+                    15,
+                    includeTracks = isSingle,
+                    priority = HttpClientPriority.LOW
+                )
+                matchedAlbum = searchedTidal.firstOrNull { album ->
+                    val cleanGroupTitle = group.title.cleanTitle()
+                    val titleMatches = album.title.cleanTitle().equals(cleanGroupTitle, ignoreCase = true) ||
+                            albumNames.any { albumName ->
+                                album.title.cleanTitle().equals(albumName.cleanTitle(), ignoreCase = true)
+                            }
+
+                    titleMatches && album.artists.any { it.equals(artistName, ignoreCase = true) }
+                }
+                if (matchedAlbum != null) break
+            }
+
+            if (matchedAlbum != null) {
+                val tidalUrl = "https://tidal.com/album/${matchedAlbum.id}"
+                finalLinks.add(tidalUrl)
+                finalLinks.addAll(
+                    linkResolverService.resolvePlatformLinks(
+                        tidalUrl,
+                        priority = HttpClientPriority.LOW
+                    )
+                )
+            } else {
+                logger.info("Tidal search returned no results for \"$artistName ${group.title}\" or related albums.")
+            }
+        }
+
+        val distinctLinks = finalLinks.distinct()
+
+        val fetchedImageId = fetchReleaseGroupImage(group.id)
+        val nowMs = Clock.System.now().toEpochMilliseconds()
+
+        dbSemaphore.withPermit {
+            musicBrainzCacheService.updateReleaseGroupCache(group)
+
+            dbQuery {
+                RecentReleaseTable.upsert(RecentReleaseTable.releaseId) {
+                    it[releaseId] = groupId
+                    it[RecentReleaseTable.artistId] = artistId
+                    it[RecentReleaseTable.artistName] = artistName
+                    it[title] = group.title
+                    it[RecentReleaseTable.releaseDate] = releaseDate
+
+                    val determinedType =
+                        if (isSingle) ReleaseType.Single else ReleaseType.fromString(group.primaryType)
+                    it[type] = determinedType
+                    if (fetchedImageId != null || !isRefresh) {
+                        it[RecentReleaseTable.imageId] = fetchedImageId
+                    }
+                    if (isRefresh) {
+                        it[RecentReleaseTable.lastImageFetch] = nowMs
+                    }
+                    it[RecentReleaseTable.links] =
+                        ApplicationScope.json.encodeToString(distinctLinks)
+                    it[RecentReleaseTable.albumId] = libraryAlbumId
+                    it[RecentReleaseTable.songId] = librarySongId
+                    it[RecentReleaseTable.lastUpdate] = nowMs
+                }
+
+                if (isRefresh) {
+                    RecentReleaseProviderTable.deleteWhere { RecentReleaseProviderTable.releaseId eq groupId }
+                }
+
+                distinctLinks.forEach { url ->
+                    val parser = ParserFactory.getParser(url)
+                    val parsed = parser?.parse(url)
+                    val provider = parser?.name ?: "unknown"
+                    val externalId = parsed?.first ?: url
+
+                    RecentReleaseProviderTable.upsert(
+                        RecentReleaseProviderTable.releaseId,
+                        RecentReleaseProviderTable.provider,
+                        RecentReleaseProviderTable.externalId
+                    ) {
+                        it[RecentReleaseProviderTable.releaseId] = groupId
+                        it[RecentReleaseProviderTable.provider] = provider
+                        it[RecentReleaseProviderTable.externalId] = externalId
+                        it[RecentReleaseProviderTable.type] = parsed?.second?.value
+                        it[RecentReleaseProviderTable.rawUrl] = url
+                    }
+                }
+            }
+        }
+        return true
+    }
 
     internal suspend fun fetchReleaseGroupImage(releaseGroupId: UUID): UUID? {
         val imageUrl = "https://coverartarchive.org/release-group/$releaseGroupId/front"

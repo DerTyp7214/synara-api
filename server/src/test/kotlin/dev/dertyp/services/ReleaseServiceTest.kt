@@ -700,4 +700,290 @@ class ReleaseServiceTest : KoinTest {
         coVerify(exactly = 1) { spiedService.fetchReleaseGroupImage(any()) }
         coVerify { spiedService.fetchReleaseGroupImage(rel4) }
     }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `refreshRecentRelease re-fetches a cached release and prunes stale providers`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        mockkObject(MetadataService.Companion)
+        every { MetadataService.getMetadataService(IMetadataService.MetadataType.tidal, any()) } returns tidalService
+        every { MetadataService.getMetadataService(IMetadataService.MetadataType.appleMusic, any()) } returns appleMusicService
+
+        val userId = UUID.randomUUID()
+        val artistId = UUID.randomUUID()
+        val mbId = UUID.randomUUID()
+        val releaseId = UUID.randomUUID()
+
+        transaction(database) {
+            UserTable.insert { it[id] = userId; it[username] = "user"; it[passwordHash] = "hash" }
+            ArtistTable.insert { it[id] = artistId; it[name] = "Test Artist" }
+            MBArtistTable.insert { it[id] = mbId; it[name] = "Test Artist"; it[sortName] = "Test Artist" }
+            ArtistMusicBrainzTable.insert { it[this.artistId] = artistId; it[musicBrainzId] = mbId }
+            MBReleaseGroupTable.insert { it[id] = releaseId; it[title] = "Album" }
+            RecentReleaseTable.insert {
+                it[RecentReleaseTable.releaseId] = releaseId
+                it[RecentReleaseTable.artistId] = artistId
+                it[RecentReleaseTable.artistName] = "Test Artist"
+                it[RecentReleaseTable.title] = "Album"
+                it[RecentReleaseTable.releaseDate] = 1672531200000L
+                it[RecentReleaseTable.links] = "[]"
+            }
+            RecentReleaseProviderTable.insert {
+                it[RecentReleaseProviderTable.releaseId] = releaseId
+                it[RecentReleaseProviderTable.provider] = "deezer"
+                it[RecentReleaseProviderTable.externalId] = "stale-999"
+                it[RecentReleaseProviderTable.rawUrl] = "https://deezer.com/album/999"
+            }
+        }
+
+        coEvery { musicBrainzService.fetchReleasesByArtist(mbId, priority = HttpClientPriority.HIGH) } returns emptyList()
+        coEvery { musicBrainzService.fetchReleaseGroupById(releaseId, priority = HttpClientPriority.HIGH) } returns MusicBrainzReleaseGroup(
+            id = releaseId,
+            title = "Album",
+            firstReleaseDate = "2023-01-01",
+            relations = listOf(
+                MusicBrainzRelation(
+                    type = "spotify",
+                    url = MusicBrainzRelationUrl(id = UUID.randomUUID(), resource = "https://spotify.com/album/123")
+                )
+            )
+        )
+        coEvery { linkResolverService.batchResolve(any(), priority = HttpClientPriority.LOW) } returns listOf("https://tidal.com/album/456")
+
+        val spiedService = spyk(service, recordPrivateCalls = true)
+        coEvery { spiedService.fetchReleaseGroupImage(any()) } returns null
+
+        val result = spiedService.refreshRecentRelease(releaseId)
+
+        assertNotNull(result)
+        assertTrue(result!!.links.contains("https://tidal.com/album/456"))
+        assertTrue(result.links.contains("https://spotify.com/album/123"))
+
+        transaction(database) {
+            val providers = RecentReleaseProviderTable.selectAll()
+                .where { RecentReleaseProviderTable.releaseId eq releaseId }
+                .associate { it[RecentReleaseProviderTable.provider] to it[RecentReleaseProviderTable.externalId] }
+            assertEquals(2, providers.size)
+            assertEquals("123", providers["spotify"])
+            assertEquals("456", providers["tidal"])
+            assertNull(providers["deezer"])
+
+            val row = RecentReleaseTable.selectAll().where { RecentReleaseTable.releaseId eq releaseId }.single()
+            assertNotNull(row[RecentReleaseTable.lastUpdate])
+        }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `refreshRecentRelease returns null when release cannot be resolved`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val releaseId = UUID.randomUUID()
+
+        coEvery { musicBrainzService.fetchReleasesByReleaseGroup(releaseId, priority = HttpClientPriority.HIGH) } returns emptyList()
+
+        val result = service.refreshRecentRelease(releaseId)
+        assertNull(result)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `refreshRecentRelease inserts a not-yet-cached release`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        mockkObject(MetadataService.Companion)
+        every { MetadataService.getMetadataService(IMetadataService.MetadataType.tidal, any()) } returns tidalService
+        every { MetadataService.getMetadataService(IMetadataService.MetadataType.appleMusic, any()) } returns appleMusicService
+
+        val userId = UUID.randomUUID()
+        val artistId = UUID.randomUUID()
+        val mbId = UUID.randomUUID()
+        val releaseId = UUID.randomUUID()
+
+        transaction(database) {
+            UserTable.insert { it[id] = userId; it[username] = "user"; it[passwordHash] = "hash" }
+            ArtistTable.insert { it[id] = artistId; it[name] = "Test Artist" }
+            MBArtistTable.insert { it[id] = mbId; it[name] = "Test Artist"; it[sortName] = "Test Artist" }
+            ArtistMusicBrainzTable.insert { it[this.artistId] = artistId; it[musicBrainzId] = mbId }
+            MBReleaseGroupTable.insert { it[id] = releaseId; it[title] = "Fresh Album" }
+        }
+
+        coEvery { musicBrainzService.fetchReleasesByReleaseGroup(releaseId, priority = HttpClientPriority.HIGH) } returns listOf(
+            MusicBrainzRelease(
+                id = releaseId,
+                artistCredit = listOf(MusicBrainzArtistCredit(artist = MusicBrainzArtist(id = mbId, name = "Test Artist")))
+            )
+        )
+        coEvery { musicBrainzService.fetchReleasesByArtist(mbId, priority = HttpClientPriority.HIGH) } returns emptyList()
+        coEvery { musicBrainzService.fetchReleaseGroupById(releaseId, priority = HttpClientPriority.HIGH) } returns MusicBrainzReleaseGroup(
+            id = releaseId,
+            title = "Fresh Album",
+            firstReleaseDate = "2023-01-01"
+        )
+        coEvery { linkResolverService.batchResolve(any(), priority = HttpClientPriority.LOW) } returns emptyList()
+
+        val spiedService = spyk(service, recordPrivateCalls = true)
+        coEvery { spiedService.fetchReleaseGroupImage(any()) } returns null
+
+        val result = spiedService.refreshRecentRelease(releaseId)
+
+        assertNotNull(result)
+        assertEquals("Fresh Album", result!!.title)
+
+        transaction(database) {
+            val row = RecentReleaseTable.selectAll().where { RecentReleaseTable.releaseId eq releaseId }.singleOrNull()
+            assertNotNull(row)
+            assertEquals(artistId, row!![RecentReleaseTable.artistId].value)
+        }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `fetchNewReleases refreshes a released entry inside the refresh window`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        mockkObject(MetadataService.Companion)
+        every { MetadataService.getMetadataService(IMetadataService.MetadataType.tidal, any()) } returns tidalService
+        every { MetadataService.getMetadataService(IMetadataService.MetadataType.appleMusic, any()) } returns appleMusicService
+
+        val userId = UUID.randomUUID()
+        val artistId = UUID.randomUUID()
+        val mbId = UUID.randomUUID()
+        val releaseId = UUID.randomUUID()
+        val now = Clock.System.now().toEpochMilliseconds()
+        val originalLastUpdate = now - 25.hours.inWholeMilliseconds
+
+        transaction(database) {
+            UserTable.insert { it[id] = userId; it[username] = "user"; it[passwordHash] = "hash" }
+            ArtistTable.insert { it[id] = artistId; it[name] = "Test Artist" }
+            MBArtistTable.insert { it[id] = mbId; it[name] = "Test Artist"; it[sortName] = "Test Artist" }
+            ArtistMusicBrainzTable.insert { it[this.artistId] = artistId; it[musicBrainzId] = mbId }
+            FollowedArtistTable.insert { it[this.userId] = userId; it[this.artistId] = artistId }
+            MBReleaseGroupTable.insert { it[id] = releaseId; it[title] = "Just Released" }
+            RecentReleaseTable.insert {
+                it[RecentReleaseTable.releaseId] = releaseId
+                it[RecentReleaseTable.artistId] = artistId
+                it[RecentReleaseTable.artistName] = "Test Artist"
+                it[RecentReleaseTable.title] = "Just Released"
+                it[RecentReleaseTable.releaseDate] = now - 2.days.inWholeMilliseconds
+                it[RecentReleaseTable.links] = "[]"
+                it[RecentReleaseTable.lastUpdate] = originalLastUpdate
+            }
+        }
+
+        coEvery { musicBrainzService.fetchReleaseGroups(mbId, priority = HttpClientPriority.LOW) } returns listOf(
+            MusicBrainzReleaseGroup(id = releaseId, title = "Just Released", firstReleaseDate = "2023-01-01")
+        )
+        coEvery { musicBrainzService.fetchReleasesByArtist(mbId, priority = HttpClientPriority.LOW) } returns emptyList()
+        coEvery { linkResolverService.batchResolve(any(), priority = HttpClientPriority.LOW) } returns listOf("https://tidal.com/album/456")
+
+        val spiedService = spyk(service, recordPrivateCalls = true)
+        coEvery { spiedService.fetchReleaseGroupImage(any()) } returns null
+
+        spiedService.fetchNewReleases()
+
+        transaction(database) {
+            val row = RecentReleaseTable.selectAll().where { RecentReleaseTable.releaseId eq releaseId }.single()
+            assertTrue(row[RecentReleaseTable.lastUpdate]!! > originalLastUpdate)
+            val links = ApplicationScope.json.decodeFromString<List<String>>(row[RecentReleaseTable.links])
+            assertTrue(links.contains("https://tidal.com/album/456"))
+        }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `fetchNewReleases skips an upcoming entry`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        mockkObject(MetadataService.Companion)
+        every { MetadataService.getMetadataService(IMetadataService.MetadataType.tidal, any()) } returns tidalService
+        every { MetadataService.getMetadataService(IMetadataService.MetadataType.appleMusic, any()) } returns appleMusicService
+
+        val userId = UUID.randomUUID()
+        val artistId = UUID.randomUUID()
+        val mbId = UUID.randomUUID()
+        val releaseId = UUID.randomUUID()
+        val now = Clock.System.now().toEpochMilliseconds()
+        val originalLastUpdate = now - 25.hours.inWholeMilliseconds
+
+        transaction(database) {
+            UserTable.insert { it[id] = userId; it[username] = "user"; it[passwordHash] = "hash" }
+            ArtistTable.insert { it[id] = artistId; it[name] = "Test Artist" }
+            MBArtistTable.insert { it[id] = mbId; it[name] = "Test Artist"; it[sortName] = "Test Artist" }
+            ArtistMusicBrainzTable.insert { it[this.artistId] = artistId; it[musicBrainzId] = mbId }
+            FollowedArtistTable.insert { it[this.userId] = userId; it[this.artistId] = artistId }
+            MBReleaseGroupTable.insert { it[id] = releaseId; it[title] = "Upcoming" }
+            RecentReleaseTable.insert {
+                it[RecentReleaseTable.releaseId] = releaseId
+                it[RecentReleaseTable.artistId] = artistId
+                it[RecentReleaseTable.artistName] = "Test Artist"
+                it[RecentReleaseTable.title] = "Upcoming"
+                it[RecentReleaseTable.releaseDate] = now + 10.days.inWholeMilliseconds
+                it[RecentReleaseTable.links] = "[]"
+                it[RecentReleaseTable.lastUpdate] = originalLastUpdate
+            }
+        }
+
+        coEvery { musicBrainzService.fetchReleaseGroups(mbId, priority = HttpClientPriority.LOW) } returns listOf(
+            MusicBrainzReleaseGroup(id = releaseId, title = "Upcoming", firstReleaseDate = "2099-01-01")
+        )
+        coEvery { musicBrainzService.fetchReleasesByArtist(mbId, priority = HttpClientPriority.LOW) } returns emptyList()
+
+        val spiedService = spyk(service, recordPrivateCalls = true)
+        coEvery { spiedService.fetchReleaseGroupImage(any()) } returns null
+
+        spiedService.fetchNewReleases()
+
+        coVerify(exactly = 0) { musicBrainzService.fetchReleasesByReleaseGroup(releaseId, priority = HttpClientPriority.LOW) }
+        transaction(database) {
+            val row = RecentReleaseTable.selectAll().where { RecentReleaseTable.releaseId eq releaseId }.single()
+            assertEquals(originalLastUpdate, row[RecentReleaseTable.lastUpdate])
+        }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `fetchNewReleases skips a released entry still within cooldown`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        mockkObject(MetadataService.Companion)
+        every { MetadataService.getMetadataService(IMetadataService.MetadataType.tidal, any()) } returns tidalService
+        every { MetadataService.getMetadataService(IMetadataService.MetadataType.appleMusic, any()) } returns appleMusicService
+
+        val userId = UUID.randomUUID()
+        val artistId = UUID.randomUUID()
+        val mbId = UUID.randomUUID()
+        val releaseId = UUID.randomUUID()
+        val now = Clock.System.now().toEpochMilliseconds()
+        val originalLastUpdate = now - 1.hours.inWholeMilliseconds
+
+        transaction(database) {
+            UserTable.insert { it[id] = userId; it[username] = "user"; it[passwordHash] = "hash" }
+            ArtistTable.insert { it[id] = artistId; it[name] = "Test Artist" }
+            MBArtistTable.insert { it[id] = mbId; it[name] = "Test Artist"; it[sortName] = "Test Artist" }
+            ArtistMusicBrainzTable.insert { it[this.artistId] = artistId; it[musicBrainzId] = mbId }
+            FollowedArtistTable.insert { it[this.userId] = userId; it[this.artistId] = artistId }
+            MBReleaseGroupTable.insert { it[id] = releaseId; it[title] = "Recently Refreshed" }
+            RecentReleaseTable.insert {
+                it[RecentReleaseTable.releaseId] = releaseId
+                it[RecentReleaseTable.artistId] = artistId
+                it[RecentReleaseTable.artistName] = "Test Artist"
+                it[RecentReleaseTable.title] = "Recently Refreshed"
+                it[RecentReleaseTable.releaseDate] = now - 2.days.inWholeMilliseconds
+                it[RecentReleaseTable.links] = "[]"
+                it[RecentReleaseTable.lastUpdate] = originalLastUpdate
+            }
+        }
+
+        coEvery { musicBrainzService.fetchReleaseGroups(mbId, priority = HttpClientPriority.LOW) } returns listOf(
+            MusicBrainzReleaseGroup(id = releaseId, title = "Recently Refreshed", firstReleaseDate = "2023-01-01")
+        )
+        coEvery { musicBrainzService.fetchReleasesByArtist(mbId, priority = HttpClientPriority.LOW) } returns emptyList()
+
+        val spiedService = spyk(service, recordPrivateCalls = true)
+        coEvery { spiedService.fetchReleaseGroupImage(any()) } returns null
+
+        spiedService.fetchNewReleases()
+
+        coVerify(exactly = 0) { musicBrainzService.fetchReleasesByReleaseGroup(releaseId, priority = HttpClientPriority.LOW) }
+        transaction(database) {
+            val row = RecentReleaseTable.selectAll().where { RecentReleaseTable.releaseId eq releaseId }.single()
+            assertEquals(originalLastUpdate, row[RecentReleaseTable.lastUpdate])
+        }
+    }
 }

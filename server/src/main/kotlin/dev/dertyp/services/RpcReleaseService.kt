@@ -34,4 +34,8 @@ class RpcReleaseService(
     override suspend fun getRecentReleasesByMusicBrainzId(musicBrainzId: UUID, page: Int, pageSize: Int): PaginatedResponse<RecentRelease> {
         return releaseService.getRecentReleasesByMusicBrainzId(musicBrainzId, page, pageSize)
     }
+
+    override suspend fun refreshRecentRelease(releaseId: UUID): RecentRelease? {
+        return releaseService.refreshRecentRelease(releaseId)
+    }
 }
