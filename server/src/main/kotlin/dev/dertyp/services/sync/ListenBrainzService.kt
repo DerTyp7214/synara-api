@@ -4,6 +4,7 @@ import dev.dertyp.ApiClient
 import dev.dertyp.PlatformUUID
 import dev.dertyp.core.safeQueuedGet
 import dev.dertyp.data.ListenBrainzStatus
+import dev.dertyp.data.ListenedSong
 import dev.dertyp.data.User
 import dev.dertyp.db.*
 import dev.dertyp.dbQuery
@@ -12,6 +13,7 @@ import dev.dertyp.services.IListenBrainzService
 import dev.dertyp.services.IncomingListen
 import dev.dertyp.services.ListenService
 import dev.dertyp.services.Service
+import dev.dertyp.services.SongService
 import io.ktor.client.request.*
 import io.ktor.http.*
 import kotlinx.coroutines.*
@@ -27,6 +29,7 @@ import kotlin.time.Duration.Companion.seconds
 
 class ListenBrainzService : Service() {
     private val listenService by inject<ListenService>()
+    private val songService by inject<SongService>()
 
     private val serviceScope = CoroutineScope(Dispatchers.IO)
 
@@ -118,6 +121,33 @@ class ListenBrainzService : Service() {
             }
         }
         return getStatus(userId) ?: error("No ListenBrainz link for user")
+    }
+
+    suspend fun recentListens(userId: PlatformUUID, limit: Int): List<ListenedSong> {
+        val capped = limit.coerceIn(1, 1000)
+
+        val listens = dbQuery {
+            val lbId = UserListenBrainzLinkTable
+                .select(UserListenBrainzLinkTable.listenBrainzUserId)
+                .where { UserListenBrainzLinkTable.userId eq userId }
+                .singleOrNull()?.get(UserListenBrainzLinkTable.listenBrainzUserId)?.value
+                ?: return@dbQuery emptyList()
+
+            ListenTable
+                .select(ListenTable.songId, ListenTable.listenedAt)
+                .where { (ListenTable.listenBrainzUserId eq lbId) and ListenTable.songId.isNotNull() }
+                .orderBy(ListenTable.listenedAt, SortOrder.DESC)
+                .limit(capped)
+                .map { it[ListenTable.songId]!!.value to it[ListenTable.listenedAt] }
+        }
+        if (listens.isEmpty()) return emptyList()
+
+        val songs = songService.byIds(listens.map { it.first }.distinct(), userId)
+            .associateBy { it.id }
+
+        return listens.mapNotNull { (songId, at) ->
+            songs[songId]?.let { ListenedSong(song = it, listenedAt = at) }
+        }
     }
 
     suspend fun syncAllAccounts(onProgress: suspend (Double, String) -> Unit = { _, _ -> }): Int {
@@ -347,6 +377,9 @@ class RpcListenBrainzService(
     override fun getStatusFlow(): Flow<ListenBrainzStatus?> = service.statusFlow(user.id)
 
     override suspend fun syncNow(): ListenBrainzStatus = service.syncNow(user.id)
+
+    override suspend fun recentListens(limit: Int): List<ListenedSong> =
+        service.recentListens(user.id, limit)
 }
 
 @Serializable

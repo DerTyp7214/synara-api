@@ -41,6 +41,15 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
     private val RELEASE_REFRESH_WINDOW = 14.days
     private val REFRESH_COOLDOWN = 20.hours
 
+    private val serviceScope = CoroutineScope(Dispatchers.IO)
+
+    fun refreshRecentReleaseAsync(releaseId: UUID) {
+        serviceScope.launch {
+            runCatching { refreshRecentRelease(releaseId) }
+                .onFailure { logger.error("Recent release refresh failed for $releaseId", it) }
+        }
+    }
+
     suspend fun followArtist(userId: UUID, musicBrainzId: UUID, priority: HttpClientPriority = HttpClientPriority.NORMAL): Boolean {
         val artistId = getOrCreateArtistByMbId(musicBrainzId, priority) ?: return false
         return dbQuery {
