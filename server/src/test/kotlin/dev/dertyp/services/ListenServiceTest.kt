@@ -47,7 +47,17 @@ class ListenServiceTest : KoinTest {
                 ImageTable,
                 AlbumTable,
                 ArtistTable,
+                ArtistAliasTable,
                 SongTable,
+                SongArtistTable,
+                MBArtistTable,
+                MBRecordingTable,
+                MBReleaseGroupTable,
+                MBReleaseTable,
+                MBRecordingIsrcTable,
+                SongMusicBrainzTable,
+                AlbumMusicBrainzTable,
+                ArtistMusicBrainzTable,
                 ListenBrainzUserTable,
                 UserListenBrainzLinkTable,
                 ListenTable,
@@ -78,24 +88,41 @@ class ListenServiceTest : KoinTest {
         return uid
     }
 
-    private fun insertAlbum(): UUID {
+    private fun insertAlbum(name: String = "Album"): UUID {
         val aid = UUID.randomUUID()
         AlbumTable.insert {
             it[id] = aid
-            it[name] = "Album"
+            it[AlbumTable.name] = name
         }
         return aid
     }
 
-    private fun insertSong(albumId: UUID): UUID {
+    private fun insertSong(albumId: UUID, title: String = "Song", isrc: String? = null): UUID {
         val sid = UUID.randomUUID()
         SongTable.insert {
             it[id] = sid
-            it[title] = "Song"
+            it[SongTable.title] = title
             it[SongTable.albumId] = albumId
+            it[SongTable.isrc] = isrc
             it[fileSize] = 0
         }
         return sid
+    }
+
+    private fun insertArtist(name: String): UUID {
+        val aid = UUID.randomUUID()
+        ArtistTable.insert {
+            it[id] = aid
+            it[ArtistTable.name] = name
+        }
+        return aid
+    }
+
+    private fun linkSongArtist(songId: UUID, artistId: UUID) {
+        SongArtistTable.insert {
+            it[SongArtistTable.songId] = songId
+            it[SongArtistTable.artistId] = artistId
+        }
     }
 
     private fun insertLbUser(): UUID {
@@ -114,21 +141,25 @@ class ListenServiceTest : KoinTest {
         }
     }
 
-    private fun insertLocal(userId: UUID, songId: UUID, at: Long) {
+    private fun insertLocal(userId: UUID, songId: UUID, at: Long, isrcs: String? = null, recordingMbid: UUID? = null) {
         ListenTable.insert {
             it[ListenTable.userId] = userId
             it[ListenTable.songId] = songId
             it[listenedAt] = at
             it[listenSource] = ListenSource.LOCAL
+            it[ListenTable.isrcs] = isrcs
+            it[ListenTable.recordingMbid] = recordingMbid
         }
     }
 
-    private fun insertLb(lbUserId: UUID, songId: UUID, at: Long) {
+    private fun insertLb(lbUserId: UUID, songId: UUID, at: Long, isrcs: String? = null, recordingMbid: UUID? = null) {
         ListenTable.insert {
             it[listenBrainzUserId] = lbUserId
             it[ListenTable.songId] = songId
             it[listenedAt] = at
             it[listenSource] = ListenSource.LISTENBRAINZ
+            it[ListenTable.isrcs] = isrcs
+            it[ListenTable.recordingMbid] = recordingMbid
         }
     }
 
@@ -247,6 +278,113 @@ class ListenServiceTest : KoinTest {
         }
 
         assertEquals(emptyList<UUID>(), service.recentListens(user, 10).map { it.song.id })
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `same ISRC with different songIds within the window is collapsed`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val (user, s2) = transaction(database) {
+            val u = insertUser()
+            val lb = insertLbUser()
+            link(u, lb)
+            val album = insertAlbum()
+            val s1 = insertSong(album)
+            val s2 = insertSong(album)
+            insertLb(lb, s1, 10_000, isrcs = "US1111111111")
+            insertLocal(u, s2, 10_500, isrcs = "US1111111111")
+            u to s2
+        }
+
+        val result = service.recentListens(user, 10)
+
+        assertEquals(listOf(s2), result.map { it.song.id })
+        assertEquals(10_500L, result.single().listenedAt)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `listens that share one of several ISRCs are collapsed`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val (user, s2) = transaction(database) {
+            val u = insertUser()
+            val lb = insertLbUser()
+            link(u, lb)
+            val album = insertAlbum()
+            val s1 = insertSong(album)
+            val s2 = insertSong(album)
+            insertLb(lb, s1, 10_000, isrcs = "US1111111111,US2222222222")
+            insertLocal(u, s2, 10_500, isrcs = "US2222222222")
+            u to s2
+        }
+
+        val result = service.recentListens(user, 10)
+
+        assertEquals(listOf(s2), result.map { it.song.id })
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `same recording MBID with different songIds within the window is collapsed`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val (user, s2) = transaction(database) {
+            val u = insertUser()
+            val lb = insertLbUser()
+            link(u, lb)
+            val album = insertAlbum()
+            val s1 = insertSong(album)
+            val s2 = insertSong(album)
+            val mbid = UUID.randomUUID()
+            insertLb(lb, s1, 10_000, recordingMbid = mbid)
+            insertLocal(u, s2, 10_500, recordingMbid = mbid)
+            u to s2
+        }
+
+        val result = service.recentListens(user, 10)
+
+        assertEquals(listOf(s2), result.map { it.song.id })
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `same ISRC outside the window is kept separate`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val (user, s1, s2) = transaction(database) {
+            val u = insertUser()
+            val album = insertAlbum()
+            val s1 = insertSong(album)
+            val s2 = insertSong(album)
+            insertLocal(u, s1, 10_000, isrcs = "US2222222222")
+            insertLocal(u, s2, 13_000, isrcs = "US2222222222")
+            Triple(u, s1, s2)
+        }
+
+        val result = service.recentListens(user, 10)
+
+        assertEquals(listOf(s2, s1), result.map { it.song.id })
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `ingestLocal enriches the listen with library metadata`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val (user, song) = transaction(database) {
+            val u = insertUser()
+            val album = insertAlbum("My Album")
+            val song = insertSong(album, title = "My Track", isrc = "us1234567890")
+            linkSongArtist(song, insertArtist("My Artist"))
+            u to song
+        }
+
+        service.ingestLocal(user, song, 500, 250)
+
+        transaction(database) {
+            val row = ListenTable.selectAll().where { ListenTable.songId eq song }.single()
+            assertEquals("US1234567890", row[ListenTable.isrcs])
+            assertEquals("My Track", row[ListenTable.trackName])
+            assertEquals("My Artist", row[ListenTable.artistName])
+            assertEquals("My Album", row[ListenTable.releaseName])
+        }
     }
 
     @ParameterizedTest

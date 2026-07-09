@@ -12,6 +12,7 @@ object ListenTable : UUIDTable("listen") {
     val songId = reference("songId", SongTable.id, onDelete = ReferenceOption.SET_NULL).nullable()
     val recordingMbid = javaUUID("recordingMbid").nullable()
     val releaseMbid = javaUUID("releaseMbid").nullable()
+    val isrcs = text("isrcs").nullable()
     val artistMbids = text("artistMbids").nullable()
     val trackName = text("trackName").nullable()
     val artistName = text("artistName").nullable()
@@ -28,4 +29,10 @@ object ListenTable : UUIDTable("listen") {
     }
 
     const val DEDUP_WINDOW_MS = 2000L
+
+    fun parseIsrcs(csv: String?): Set<String> =
+        csv?.split(',')?.filter { it.isNotBlank() }?.toSet() ?: emptySet()
+
+    fun joinIsrcs(isrcs: Collection<String>): String? =
+        isrcs.map { it.uppercase() }.distinct().sorted().joinToString(",").ifBlank { null }
 }

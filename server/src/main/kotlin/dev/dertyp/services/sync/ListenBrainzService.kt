@@ -282,6 +282,7 @@ class ListenBrainzService : Service() {
                 trackName = listen.trackName(),
                 artistName = listen.artistName(),
                 releaseName = listen.releaseName(),
+                isrcs = ListenTable.joinIsrcs(candidateIsrcs),
             )
         }
     }

@@ -168,13 +168,15 @@ class RecommendationService : Service() {
         var lastOwner: PlatformUUID? = null
         var lastTs = 0L
         var lastSong: String? = null
+        var lastRecordingMbid: PlatformUUID? = null
+        var lastIsrcs: Set<String> = emptySet()
 
         val link = UserListenBrainzLinkTable
         val ownerKey = Coalesce(ListenTable.userId, link.userId, ListenTable.listenBrainzUserId)
 
         ListenTable
             .join(link, JoinType.LEFT, onColumn = ListenTable.listenBrainzUserId, otherColumn = link.listenBrainzUserId)
-            .select(ListenTable.userId, link.userId, ListenTable.listenBrainzUserId, ListenTable.songId, ListenTable.listenedAt)
+            .select(ListenTable.userId, link.userId, ListenTable.listenBrainzUserId, ListenTable.songId, ListenTable.listenedAt, ListenTable.recordingMbid, ListenTable.isrcs)
             .where { ListenTable.songId.isNotNull() }
             .andWhere { ListenTable.userId.isNotNull() or ListenTable.listenBrainzUserId.isNotNull() }
             .orderBy(ownerKey to SortOrder.ASC, ListenTable.listenedAt to SortOrder.ASC)
@@ -184,18 +186,29 @@ class RecommendationService : Service() {
                     ?: row[ListenTable.listenBrainzUserId]!!.value
                 val ts = row[ListenTable.listenedAt]
                 val song = row[ListenTable.songId]!!.value.toString()
+                val recordingMbid = row[ListenTable.recordingMbid]
+                val isrcs = ListenTable.parseIsrcs(row[ListenTable.isrcs])
 
                 if (owner != lastOwner || (ts - lastTs).milliseconds > SESSION_GAP) {
                     writer.emitSequence(current.toList())
                     current.clear()
                     lastSong = null
+                    lastRecordingMbid = null
+                    lastIsrcs = emptySet()
                 }
-                if (!(song == lastSong && ts - lastTs <= ListenTable.DEDUP_WINDOW_MS)) {
-                    current.add(song)
-                }
+
+                val duplicatePlay = ts - lastTs <= ListenTable.DEDUP_WINDOW_MS && (
+                    song == lastSong ||
+                        (recordingMbid != null && recordingMbid == lastRecordingMbid) ||
+                        isrcs.any { it in lastIsrcs }
+                    )
+                if (!duplicatePlay) current.add(song)
+
                 lastOwner = owner
                 lastTs = ts
                 lastSong = song
+                lastRecordingMbid = recordingMbid
+                lastIsrcs = isrcs
             }
         writer.emitSequence(current.toList())
     }
