@@ -130,6 +130,7 @@ private fun registerAuthenticated(koin: Koin, call: ApplicationCall, user: User,
     val metadataDispatcherService = koin.get<MetadataDispatcherService>()
     val rpcMetricsService = koin.get<RpcMetricsService>()
     val listenBrainzService = koin.get<ListenBrainzService>()
+    val scrobbleService = koin.get<ScrobbleService>()
     val recommendationServingService = koin.get<RecommendationServingService>()
 
     registrar.register(IIndexer::class) { RpcIndexer(indexer, user).withAuthorization<IIndexer>(user).withLogging<IIndexer>(call) }
@@ -163,5 +164,6 @@ private fun registerAuthenticated(koin: Koin, call: ApplicationCall, user: User,
     registrar.register(IMetadataService::class) { metadataDispatcherService.withAuthorization<IMetadataService>(user).withLogging<IMetadataService>(call) }
     registrar.register(IRpcMetricsService::class) { rpcMetricsService.withAuthorization<IRpcMetricsService>(user).withLogging<IRpcMetricsService>(call) }
     registrar.register(IListenBrainzService::class) { RpcListenBrainzService(user, listenBrainzService).withAuthorization<IListenBrainzService>(user).withLogging<IListenBrainzService>(call) }
+    registrar.register(IScrobbleService::class) { RpcScrobbleService(user, scrobbleService).withAuthorization<IScrobbleService>(user).withLogging<IScrobbleService>(call) }
     registrar.register(IRecommendationService::class) { RpcRecommendationService(user, recommendationServingService).withAuthorization<IRecommendationService>(user).withLogging<IRecommendationService>(call) }
 }

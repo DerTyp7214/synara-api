@@ -13,6 +13,7 @@ import dev.dertyp.dbQuery
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.jetbrains.exposed.v1.core.*
+import org.jetbrains.exposed.v1.jdbc.andWhere
 import org.jetbrains.exposed.v1.jdbc.select
 import org.koin.core.component.inject
 import java.nio.ByteBuffer
@@ -77,16 +78,22 @@ class RecommendationServingService : Service() {
                 .where { UserListenBrainzLinkTable.userId eq userId }
                 .firstOrNull()?.get(UserListenBrainzLinkTable.listenBrainzUserId)?.value
 
-            val recent = if (account != null) {
-                ListenTable.select(ListenTable.songId)
-                    .where { (ListenTable.listenBrainzUserId eq account) and (ListenTable.listenedAt greater cutoff) and ListenTable.songId.isNotNull() }
-                    .mapNotNull { it[ListenTable.songId]?.value }
-                    .toHashSet()
-            } else emptySet()
+            val owner = if (account != null) {
+                (ListenTable.userId eq userId) or (ListenTable.listenBrainzUserId eq account)
+            } else {
+                ListenTable.userId eq userId
+            }
+            val recent = ListenTable.select(ListenTable.songId)
+                .where { owner }
+                .andWhere { ListenTable.listenedAt greater cutoff }
+                .andWhere { ListenTable.songId.isNotNull() }
+                .mapNotNull { it[ListenTable.songId]?.value }
+                .toHashSet()
 
             recent.ifEmpty {
                 UserSongTable.select(UserSongTable.songId)
-                    .where { (UserSongTable.userId eq userId) and (UserSongTable.isFavourite eq true) }
+                    .where { UserSongTable.userId eq userId }
+                    .andWhere { UserSongTable.isFavourite eq true }
                     .map { it[UserSongTable.songId].value }
                     .toHashSet()
             }

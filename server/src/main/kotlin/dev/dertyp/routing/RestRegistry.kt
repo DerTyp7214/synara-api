@@ -529,6 +529,10 @@ fun Route.registerAuthenticatedRestServices(koin: Koin) {
         val user = call.getUser() ?: throw IllegalArgumentException("No user found")
         RpcListenBrainzService(user, koin.get()).withAuthorization<IListenBrainzService>(user)
     }
+    registerRestService(IScrobbleService::class, authenticated = true) {
+        val user = call.getUser() ?: throw IllegalArgumentException("No user found")
+        RpcScrobbleService(user, koin.get()).withAuthorization<IScrobbleService>(user)
+    }
     registerRestService(IRecommendationService::class, authenticated = true) {
         val user = call.getUser() ?: throw IllegalArgumentException("No user found")
         RpcRecommendationService(user, koin.get()).withAuthorization<IRecommendationService>(user)

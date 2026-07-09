@@ -8,10 +8,8 @@ import dev.dertyp.serializers.AppJson
 import io.ktor.server.application.*
 import kotlinx.coroutines.delay
 import kotlinx.serialization.Serializable
-import org.jetbrains.exposed.v1.core.SortOrder
-import org.jetbrains.exposed.v1.core.and
-import org.jetbrains.exposed.v1.core.inList
-import org.jetbrains.exposed.v1.core.isNotNull
+import org.jetbrains.exposed.v1.core.*
+import org.jetbrains.exposed.v1.jdbc.andWhere
 import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.upsert
@@ -167,23 +165,37 @@ class RecommendationService : Service() {
 
     private fun emitListenSequences(writer: BufferedWriter) {
         val current = mutableListOf<String>()
-        var lastAccount: PlatformUUID? = null
+        var lastOwner: PlatformUUID? = null
         var lastTs = 0L
+        var lastSong: String? = null
+
+        val link = UserListenBrainzLinkTable
+        val ownerKey = Coalesce(ListenTable.userId, link.userId, ListenTable.listenBrainzUserId)
 
         ListenTable
-            .select(ListenTable.listenBrainzUserId, ListenTable.songId, ListenTable.listenedAt)
-            .where { ListenTable.listenBrainzUserId.isNotNull() and ListenTable.songId.isNotNull() }
-            .orderBy(ListenTable.listenBrainzUserId to SortOrder.ASC, ListenTable.listenedAt to SortOrder.ASC)
+            .join(link, JoinType.LEFT, onColumn = ListenTable.listenBrainzUserId, otherColumn = link.listenBrainzUserId)
+            .select(ListenTable.userId, link.userId, ListenTable.listenBrainzUserId, ListenTable.songId, ListenTable.listenedAt)
+            .where { ListenTable.songId.isNotNull() }
+            .andWhere { ListenTable.userId.isNotNull() or ListenTable.listenBrainzUserId.isNotNull() }
+            .orderBy(ownerKey to SortOrder.ASC, ListenTable.listenedAt to SortOrder.ASC)
             .forEach { row ->
-                val account = row[ListenTable.listenBrainzUserId]!!.value
+                val owner = row[ListenTable.userId]?.value
+                    ?: row.getOrNull(link.userId)?.value
+                    ?: row[ListenTable.listenBrainzUserId]!!.value
                 val ts = row[ListenTable.listenedAt]
-                if (account != lastAccount || (ts - lastTs).milliseconds > SESSION_GAP) {
+                val song = row[ListenTable.songId]!!.value.toString()
+
+                if (owner != lastOwner || (ts - lastTs).milliseconds > SESSION_GAP) {
                     writer.emitSequence(current.toList())
                     current.clear()
+                    lastSong = null
                 }
-                current.add(row[ListenTable.songId]!!.value.toString())
-                lastAccount = account
+                if (!(song == lastSong && ts - lastTs <= ListenTable.DEDUP_WINDOW_MS)) {
+                    current.add(song)
+                }
+                lastOwner = owner
                 lastTs = ts
+                lastSong = song
             }
         writer.emitSequence(current.toList())
     }

@@ -8,6 +8,7 @@ enum class ListenSource { LISTENBRAINZ, LOCAL }
 
 object ListenTable : UUIDTable("listen") {
     val listenBrainzUserId = reference("listenBrainzUserId", ListenBrainzUserTable.id, onDelete = ReferenceOption.CASCADE).nullable()
+    val userId = reference("userId", UserTable.id, onDelete = ReferenceOption.CASCADE).nullable()
     val songId = reference("songId", SongTable.id, onDelete = ReferenceOption.SET_NULL).nullable()
     val recordingMbid = javaUUID("recordingMbid").nullable()
     val releaseMbid = javaUUID("releaseMbid").nullable()
@@ -23,5 +24,8 @@ object ListenTable : UUIDTable("listen") {
         uniqueIndex(listenBrainzUserId, listenedAt)
         index(false, songId)
         index(false, recordingMbid)
+        index(false, userId)
     }
+
+    const val DEDUP_WINDOW_MS = 2000L
 }
