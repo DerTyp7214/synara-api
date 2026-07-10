@@ -37,6 +37,7 @@ class ImageAnalysisWorker : Worker("ImageAnalysisWorker") {
             ) { imageId ->
                 try {
                     imageService.analyzeImage(imageId)
+                    processedCount.incrementAndGet()
                 } catch (e: Exception) {
                     logger.error("Failed to analyze image $imageId", e)
                 }

@@ -7,4 +7,6 @@ object ImageTable : UUIDTable("image") {
     val imageHash = varchar("hash", 255)
     val origin = text("origin")
     val blurHash = text("blur_hash").nullable()
+    val lastAnalysisAttempt = long("last_analysis_attempt").nullable()
+    val analysisUnrecoverable = bool("analysis_unrecoverable").default(false)
 }

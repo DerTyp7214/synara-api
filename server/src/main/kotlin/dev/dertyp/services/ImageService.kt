@@ -1,13 +1,18 @@
 package dev.dertyp.services
 
 import com.sksamuel.scrimage.ImmutableImage
+import dev.dertyp.ApiClient
+import dev.dertyp.core.HttpClientPriority
+import dev.dertyp.core.isURL
 import dev.dertyp.core.paging
+import dev.dertyp.core.safeQueuedGet
 import dev.dertyp.core.sha256
 import dev.dertyp.data.*
 import dev.dertyp.db.*
 import dev.dertyp.dbQuery
 import dev.dertyp.plugins.ImageLibrary
 import dev.dertyp.plugins.RedisCacheProvider
+import dev.dertyp.plugins.coverImage
 import dev.dertyp.utils.ColorUtils
 import dev.dertyp.utils.ImageUtils
 import dev.dertyp.utils.LogParam
@@ -20,14 +25,19 @@ import net.coobird.thumbnailator.Thumbnails
 import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.inList
+import org.jetbrains.exposed.v1.core.isNull
+import org.jetbrains.exposed.v1.core.less
 import org.jetbrains.exposed.v1.core.like
+import org.jetbrains.exposed.v1.core.or
 import org.jetbrains.exposed.v1.jdbc.*
+import org.jaudiotagger.audio.AudioFileIO
 import redis.clients.jedis.HostAndPort
 import redis.clients.jedis.RedisClusterClient
 import java.awt.Color
 import java.awt.image.BufferedImage
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
+import java.io.File
 import java.util.*
 import javax.imageio.IIOImage
 import javax.imageio.ImageIO
@@ -37,6 +47,7 @@ import javax.imageio.event.IIOWriteProgressListener
 import javax.imageio.stream.ImageOutputStreamImpl
 import kotlin.io.path.*
 import kotlin.math.roundToInt
+import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.milliseconds
 import com.sksamuel.scrimage.pixels.Pixel as ScrPixel
 
@@ -124,6 +135,8 @@ class ImageService(
             HostAndPort(redisConfig.host, redisConfig.port)
         ) else null
     }
+
+    private val ANALYSIS_RETRY_INTERVAL = 7.days.inWholeMilliseconds
 
     fun map(resultRow: ResultRow): Image {
         val id = resultRow[ImageTable.id].value
@@ -386,18 +399,42 @@ class ImageService(
     }
 
     suspend fun getUnanalyzedImageIds(): List<UUID> = dbQuery {
-        val analyzedIds = ImageMetadataTable.selectAll().map { it[ImageMetadataTable.imageId].value }
-        val allImages = ImageTable.selectAll().map { it[ImageTable.id].value }
-        allImages - analyzedIds.toSet()
+        val cutoff = System.currentTimeMillis() - ANALYSIS_RETRY_INTERVAL
+        val analyzedIds = ImageMetadataTable.selectAll().map { it[ImageMetadataTable.imageId].value }.toSet()
+        ImageTable
+            .select(ImageTable.id)
+            .where { ImageTable.analysisUnrecoverable eq false }
+            .andWhere { ImageTable.lastAnalysisAttempt.isNull() or (ImageTable.lastAnalysisAttempt less cutoff) }
+            .map { it[ImageTable.id].value }
+            .filterNot { it in analyzedIds }
     }
 
     suspend fun analyzeImage(imageId: UUID) {
         val image = byId(imageId) ?: return
         val path = Path(image.path)
-        if (!path.exists()) return
 
-        val bytes = withContext(Dispatchers.IO) { path.readBytes() }
-        val bufferedImage = withContext(Dispatchers.IO) { ImageIO.read(ByteArrayInputStream(bytes)) } ?: return
+        val existingBytes = if (path.exists()) withContext(Dispatchers.IO) { path.readBytes() } else null
+        val existingImage =
+            existingBytes?.let { withContext(Dispatchers.IO) { ImageIO.read(ByteArrayInputStream(it)) } }
+
+        val (bytes, bufferedImage) = if (existingImage != null) {
+            existingBytes to existingImage
+        } else {
+            val recovered = recoverImageBytes(image) ?: run {
+                markAnalysisAttempt(imageId, unrecoverable = classifyOrigin(image.origin) is OriginKind.Custom)
+                return
+            }
+            val recoveredImage = withContext(Dispatchers.IO) { ImageIO.read(ByteArrayInputStream(recovered)) } ?: run {
+                markAnalysisAttempt(imageId, unrecoverable = classifyOrigin(image.origin) is OriginKind.Custom)
+                return
+            }
+            withContext(Dispatchers.IO) {
+                path.parent?.toFile()?.mkdirs()
+                path.writeBytes(recovered)
+            }
+            recovered to recoveredImage
+        }
+
         val scrImage = ImmutableImage.fromAwt(bufferedImage)
 
         val width = bufferedImage.width
@@ -464,6 +501,36 @@ class ImageService(
                 it[color4] = palette.getOrNull(3)
                 it[color5] = palette.getOrNull(4)
             }
+        }
+    }
+
+    private sealed interface OriginKind {
+        data class Url(val url: String) : OriginKind
+        data class AudioFile(val path: String) : OriginKind
+        data object Custom : OriginKind
+    }
+
+    private fun classifyOrigin(origin: String): OriginKind = when {
+        origin.isURL() -> OriginKind.Url(origin)
+        Path(origin).isAbsolute -> OriginKind.AudioFile(origin)
+        else -> OriginKind.Custom
+    }
+
+    private suspend fun recoverImageBytes(image: Image): ByteArray? =
+        when (val kind = classifyOrigin(image.origin)) {
+            is OriginKind.Url -> ApiClient.instance.safeQueuedGet<ByteArray>(kind.url, HttpClientPriority.LOW)
+            is OriginKind.AudioFile -> withContext(Dispatchers.IO) {
+                val file = File(kind.path)
+                if (!file.exists()) null
+                else runCatching { AudioFileIO.read(file).coverImage }.getOrNull()
+            }
+            OriginKind.Custom -> null
+        }
+
+    private suspend fun markAnalysisAttempt(imageId: UUID, unrecoverable: Boolean) = dbQuery {
+        ImageTable.update({ ImageTable.id eq imageId }) {
+            it[ImageTable.lastAnalysisAttempt] = System.currentTimeMillis()
+            if (unrecoverable) it[ImageTable.analysisUnrecoverable] = true
         }
     }
 

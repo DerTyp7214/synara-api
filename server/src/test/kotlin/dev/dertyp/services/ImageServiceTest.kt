@@ -170,6 +170,82 @@ class ImageServiceTest {
         assertEquals(id2, unanalyzed[0])
     }
 
+    private fun redPngBytes(): ByteArray {
+        val image = BufferedImage(4, 4, BufferedImage.TYPE_INT_RGB)
+        val g = image.createGraphics()
+        g.color = Color.RED
+        g.fillRect(0, 0, 4, 4)
+        g.dispose()
+        val baos = ByteArrayOutputStream()
+        ImageIO.write(image, "png", baos)
+        return baos.toByteArray()
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `analyzeImage marks custom-origin image with missing file as unrecoverable`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val id = service.createImage(redPngBytes(), "profile")
+        File(service.byId(id)!!.path).delete()
+
+        service.analyzeImage(id)
+
+        transaction(database) {
+            val row = ImageTable.selectAll().where { ImageTable.id eq id }.single()
+            assertTrue(row[ImageTable.analysisUnrecoverable])
+            assertNotNull(row[ImageTable.lastAnalysisAttempt])
+            assertEquals(0L, ImageMetadataTable.selectAll().where { ImageMetadataTable.imageId eq id }.count())
+        }
+        assertFalse(service.getUnanalyzedImageIds().contains(id))
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `analyzeImage marks audio-origin image with missing source as retryable not unrecoverable`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val id = service.createImage(redPngBytes(), "/nonexistent/path/song.flac")
+        File(service.byId(id)!!.path).delete()
+
+        service.analyzeImage(id)
+
+        transaction(database) {
+            val row = ImageTable.selectAll().where { ImageTable.id eq id }.single()
+            assertFalse(row[ImageTable.analysisUnrecoverable])
+            assertNotNull(row[ImageTable.lastAnalysisAttempt])
+            assertEquals(0L, ImageMetadataTable.selectAll().where { ImageMetadataTable.imageId eq id }.count())
+        }
+        assertFalse(service.getUnanalyzedImageIds().contains(id))
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `getUnanalyzedImageIds throttles recently attempted images but re-includes them after the retry interval`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val recentId = UUID.randomUUID()
+        val staleId = UUID.randomUUID()
+        val now = System.currentTimeMillis()
+        transaction(database) {
+            ImageTable.insert {
+                it[id] = recentId
+                it[path] = "recent.jpg"
+                it[imageHash] = "recent"
+                it[origin] = "https://example.com/a.jpg"
+                it[lastAnalysisAttempt] = now
+            }
+            ImageTable.insert {
+                it[id] = staleId
+                it[path] = "stale.jpg"
+                it[imageHash] = "stale"
+                it[origin] = "https://example.com/b.jpg"
+                it[lastAnalysisAttempt] = now - 8L * 24 * 60 * 60 * 1000
+            }
+        }
+
+        val result = service.getUnanalyzedImageIds()
+        assertFalse(result.contains(recentId))
+        assertTrue(result.contains(staleId))
+    }
+
     @AfterEach
     fun tearDown() {
         stopKoin()
