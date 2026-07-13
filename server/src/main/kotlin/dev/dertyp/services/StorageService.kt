@@ -51,6 +51,10 @@ class StorageService(environment: ApplicationEnvironment) : IStorageService, ISe
 
         return rootPaths.sumOf { it.getTotalSize() }
     }
+
+    suspend fun getImagesStorage(): Long = File(imagesPath).getTotalSize()
+
+    suspend fun getAnimatedImagesStorage(): Long = File(animatedImagesPath).getTotalSize()
 }
 
 class ImporterStorageService(

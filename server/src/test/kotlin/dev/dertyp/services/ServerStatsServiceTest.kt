@@ -47,6 +47,8 @@ class ServerStatsServiceTest {
         setup(dialect)
         
         coEvery { storageService.getTotalStorage() } returns 1000L
+        coEvery { storageService.getImagesStorage() } returns 500L
+        coEvery { storageService.getAnimatedImagesStorage() } returns 250L
         coEvery { musicBrainzCacheService.getStats() } returns ServerStats.MusicBrainzCacheStats(0, 0, 0, 0, 0, 0, 0, 0)
 
         transaction(database) {
@@ -79,6 +81,8 @@ class ServerStatsServiceTest {
         assertEquals(300L, stats.indexedFileSize)
         assertEquals(180L, stats.totalDuration)
         assertEquals(1000L, stats.totalFileSize)
+        assertEquals(500L, stats.imagesFileSize)
+        assertEquals(250L, stats.animatedImagesFileSize)
         assertEquals(150L, stats.averageSizePerSong)
         assertNotNull(stats.version.version)
     }

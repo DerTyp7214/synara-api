@@ -803,6 +803,8 @@ Detailed system metrics and library statistics.
 | `playlistCount` | `Int` | Total number of system playlists. |
 | `totalFileSize` | `Long` | Total file size of the media library in bytes. |
 | `indexedFileSize` | `Long` | Size of files that have been successfully indexed. |
+| `imagesFileSize` | `Long` | Total disk space consumed by stored images in bytes. |
+| `animatedImagesFileSize` | `Long` | Total disk space consumed by stored animated images in bytes. |
 | `averageSizePerSong` | `Long` | Average file size per track in bytes. |
 | `totalDuration` | `Long` | Summed duration of all tracks in milliseconds. |
 | `transcodeStats` | `List`<[TranscodeStats](#devdertypdataserverstatstranscodestats)> | Statistics about transcoded audio versions. |

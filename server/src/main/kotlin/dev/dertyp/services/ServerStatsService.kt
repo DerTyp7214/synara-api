@@ -62,6 +62,8 @@ class ServerStatsService(
             playlistCount = playlistCount,
             totalFileSize = storageService.getTotalStorage(),
             indexedFileSize = indexedFileSize,
+            imagesFileSize = storageService.getImagesStorage(),
+            animatedImagesFileSize = storageService.getAnimatedImagesStorage(),
             averageSizePerSong = if (songCount > 0) indexedFileSize / songCount else 0L,
             totalDuration = totalDuration,
             transcodeStats = transcodeStats,

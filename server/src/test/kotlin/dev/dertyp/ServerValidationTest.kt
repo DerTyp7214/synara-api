@@ -50,6 +50,8 @@ class ServerValidationTest {
             playlistCount = 0,
             totalFileSize = 0,
             indexedFileSize = 0,
+            imagesFileSize = 0,
+            animatedImagesFileSize = 0,
             averageSizePerSong = 0,
             totalDuration = 0,
             transcodeStats = emptyList(),
