@@ -352,6 +352,7 @@ class ImageService(
         referencedImages.addAll(UserTable.selectAll().mapNotNull { it[UserTable.profileImage]?.value })
         referencedImages.addAll(RecentReleaseTable.selectAll().mapNotNull { it[RecentReleaseTable.imageId]?.value })
         referencedImages.addAll(AnimatedImageTable.selectAll().mapNotNull { it[AnimatedImageTable.imageId]?.value })
+        referencedImages.addAll(CollectionTable.selectAll().mapNotNull { it[CollectionTable.imageId]?.value })
 
         val allImages = ImageTable.selectAll().map {
             it[ImageTable.id].value to it[ImageTable.path]
