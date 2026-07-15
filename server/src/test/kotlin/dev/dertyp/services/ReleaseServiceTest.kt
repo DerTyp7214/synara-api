@@ -594,12 +594,15 @@ class ReleaseServiceTest : KoinTest {
     @EnumSource(DbDialect::class)
     fun `backfillMissingRecentReleaseImages should fetch and update missing images`(dialect: DbDialect) = runBlocking {
         setup(dialect)
+        val userId = UUID.randomUUID()
         val artistId = UUID.randomUUID()
         val releaseId = UUID.randomUUID()
         val imageId = UUID.randomUUID()
 
         transaction(database) {
+            UserTable.insert { it[id] = userId; it[username] = "user"; it[passwordHash] = "hash" }
             ArtistTable.insert { it[id] = artistId; it[name] = "Artist" }
+            FollowedArtistTable.insert { it[this.userId] = userId; it[this.artistId] = artistId }
             ImageTable.insert { it[id] = imageId; it[path] = "test"; it[imageHash] = "hash"; it[origin] = "test" }
             MBReleaseGroupTable.insert { it[id] = releaseId; it[title] = "Release" }
             RecentReleaseTable.insert {
@@ -627,12 +630,15 @@ class ReleaseServiceTest : KoinTest {
     @EnumSource(DbDialect::class)
     fun `backfillMissingRecentReleaseImages should respect cooldown`(dialect: DbDialect) = runBlocking {
         setup(dialect)
+        val userId = UUID.randomUUID()
         val artistId = UUID.randomUUID()
         val releaseId = UUID.randomUUID()
         val now = Clock.System.now().toEpochMilliseconds()
 
         transaction(database) {
+            UserTable.insert { it[id] = userId; it[username] = "user"; it[passwordHash] = "hash" }
             ArtistTable.insert { it[id] = artistId; it[name] = "Artist" }
+            FollowedArtistTable.insert { it[this.userId] = userId; it[this.artistId] = artistId }
             MBReleaseGroupTable.insert { it[id] = releaseId; it[title] = "Release" }
             RecentReleaseTable.insert {
                 it[RecentReleaseTable.releaseId] = releaseId
@@ -653,6 +659,7 @@ class ReleaseServiceTest : KoinTest {
     @EnumSource(DbDialect::class)
     fun `backfillMissingRecentReleaseImages should respect progressive cooldown tiers`(dialect: DbDialect) = runBlocking {
         setup(dialect)
+        val userId = UUID.randomUUID()
         val artistId = UUID.randomUUID()
         val now = Clock.System.now().toEpochMilliseconds()
 
@@ -673,7 +680,9 @@ class ReleaseServiceTest : KoinTest {
         val last4 = now - 25.hours.inWholeMilliseconds
 
         transaction(database) {
+            UserTable.insert { it[id] = userId; it[username] = "user"; it[passwordHash] = "hash" }
             ArtistTable.insert { it[id] = artistId; it[name] = "Artist" }
+            FollowedArtistTable.insert { it[this.userId] = userId; it[this.artistId] = artistId }
             listOf(
                 rel1 to Pair(date1, last1),
                 rel2 to Pair(date2, last2),
@@ -985,5 +994,342 @@ class ReleaseServiceTest : KoinTest {
             val row = RecentReleaseTable.selectAll().where { RecentReleaseTable.releaseId eq releaseId }.single()
             assertEquals(originalLastUpdate, row[RecentReleaseTable.lastUpdate])
         }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `backfillMissingRecentReleaseImages skips releases of unfollowed artists`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val artistId = UUID.randomUUID()
+        val releaseId = UUID.randomUUID()
+
+        transaction(database) {
+            ArtistTable.insert { it[id] = artistId; it[name] = "Artist" }
+            MBReleaseGroupTable.insert { it[id] = releaseId; it[title] = "Release" }
+            RecentReleaseTable.insert {
+                it[RecentReleaseTable.releaseId] = releaseId
+                it[RecentReleaseTable.artistId] = artistId
+                it[RecentReleaseTable.title] = "Release"
+                it[RecentReleaseTable.imageId] = null
+                it[RecentReleaseTable.lastImageFetch] = null
+            }
+        }
+
+        val spiedService = spyk(service, recordPrivateCalls = true)
+        spiedService.backfillMissingRecentReleaseImages()
+
+        coVerify(exactly = 0) { spiedService.fetchReleaseGroupImage(any()) }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `backfillMissingRecentReleaseImages with artistId only backfills that artist`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val userId = UUID.randomUUID()
+        val artistA = UUID.randomUUID()
+        val artistB = UUID.randomUUID()
+        val releaseA = UUID.randomUUID()
+        val releaseB = UUID.randomUUID()
+
+        transaction(database) {
+            UserTable.insert { it[id] = userId; it[username] = "user"; it[passwordHash] = "hash" }
+            ArtistTable.insert { it[id] = artistA; it[name] = "Artist A" }
+            ArtistTable.insert { it[id] = artistB; it[name] = "Artist B" }
+            FollowedArtistTable.insert { it[this.userId] = userId; it[this.artistId] = artistA }
+            FollowedArtistTable.insert { it[this.userId] = userId; it[this.artistId] = artistB }
+            listOf(releaseA to artistA, releaseB to artistB).forEach { (relId, artId) ->
+                MBReleaseGroupTable.insert { it[id] = relId; it[title] = "Rel $relId" }
+                RecentReleaseTable.insert {
+                    it[RecentReleaseTable.releaseId] = relId
+                    it[RecentReleaseTable.artistId] = artId
+                    it[RecentReleaseTable.title] = "Rel $relId"
+                    it[RecentReleaseTable.imageId] = null
+                    it[RecentReleaseTable.lastImageFetch] = null
+                }
+            }
+        }
+
+        val spiedService = spyk(service, recordPrivateCalls = true)
+        coEvery { spiedService.fetchReleaseGroupImage(any()) } returns null
+
+        spiedService.backfillMissingRecentReleaseImages(artistA)
+
+        coVerify(exactly = 1) { spiedService.fetchReleaseGroupImage(any()) }
+        coVerify { spiedService.fetchReleaseGroupImage(releaseA) }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `followArtist triggers image backfill for the followed artist`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val userId = UUID.randomUUID()
+        val artistId = UUID.randomUUID()
+        val mbId = UUID.randomUUID()
+
+        transaction(database) {
+            UserTable.insert { it[id] = userId; it[username] = "user"; it[passwordHash] = "hash" }
+            ArtistTable.insert { it[id] = artistId; it[name] = "Artist" }
+            MBArtistTable.insert { it[id] = mbId; it[name] = "Artist"; it[sortName] = "Artist" }
+            ArtistMusicBrainzTable.insert { it[this.artistId] = artistId; it[musicBrainzId] = mbId }
+        }
+
+        val spiedService = spyk(service, recordPrivateCalls = true)
+        coEvery { spiedService.backfillMissingRecentReleaseImages(artistId) } returns Unit
+
+        assertTrue(spiedService.followArtist(userId, mbId))
+
+        coVerify(timeout = 5000) { spiedService.backfillMissingRecentReleaseImages(artistId) }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `fetchNewReleases does not fetch images for unfollowed artists`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        mockkObject(MetadataService.Companion)
+        every { MetadataService.getMetadataService(IMetadataService.MetadataType.tidal, any()) } returns tidalService
+        every { MetadataService.getMetadataService(IMetadataService.MetadataType.appleMusic, any()) } returns appleMusicService
+
+        val mbId = UUID.randomUUID()
+        val artistId = UUID.randomUUID()
+        val releaseId = UUID.randomUUID()
+
+        transaction(database) {
+            ArtistTable.insert { it[id] = artistId; it[name] = "Unfollowed Artist" }
+            MBArtistTable.insert { it[id] = mbId; it[name] = "Unfollowed Artist"; it[sortName] = "Unfollowed Artist" }
+            ArtistMusicBrainzTable.insert { it[this.artistId] = artistId; it[musicBrainzId] = mbId }
+        }
+
+        coEvery { musicBrainzService.fetchReleaseGroups(mbId, priority = HttpClientPriority.LOW) } returns listOf(
+            MusicBrainzReleaseGroup(id = releaseId, title = "New Album", firstReleaseDate = "2023-10-27")
+        )
+        coEvery { musicBrainzService.fetchReleasesByArtist(mbId, priority = HttpClientPriority.LOW) } returns emptyList()
+        coEvery { linkResolverService.batchResolve(any(), priority = HttpClientPriority.LOW) } returns emptyList()
+
+        val spiedService = spyk(service, recordPrivateCalls = true)
+        spiedService.fetchNewReleases()
+
+        coVerify(exactly = 0) { spiedService.fetchReleaseGroupImage(any()) }
+        transaction(database) {
+            val row = RecentReleaseTable.selectAll().where { RecentReleaseTable.releaseId eq releaseId }.single()
+            assertNull(row[RecentReleaseTable.imageId])
+        }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `unlinkUnfollowedRecentReleaseImages unlinks only CAA images of unfollowed artists`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val userId = UUID.randomUUID()
+        val followedArtist = UUID.randomUUID()
+        val unfollowedArtist = UUID.randomUUID()
+        val caaRelease = UUID.randomUUID()
+        val nonCaaRelease = UUID.randomUUID()
+        val followedRelease = UUID.randomUUID()
+        val caaImage = UUID.randomUUID()
+        val nonCaaImage = UUID.randomUUID()
+        val followedImage = UUID.randomUUID()
+
+        transaction(database) {
+            UserTable.insert { it[id] = userId; it[username] = "user"; it[passwordHash] = "hash" }
+            ArtistTable.insert { it[id] = followedArtist; it[name] = "Followed" }
+            ArtistTable.insert { it[id] = unfollowedArtist; it[name] = "Unfollowed" }
+            FollowedArtistTable.insert { it[this.userId] = userId; it[this.artistId] = followedArtist }
+
+            ImageTable.insert { it[id] = caaImage; it[path] = "caa"; it[imageHash] = "h1"; it[origin] = "https://coverartarchive.org/release-group/$caaRelease/front" }
+            ImageTable.insert { it[id] = nonCaaImage; it[path] = "tidal"; it[imageHash] = "h2"; it[origin] = "https://resources.tidal.com/images/cover.jpg" }
+            ImageTable.insert { it[id] = followedImage; it[path] = "caa2"; it[imageHash] = "h3"; it[origin] = "https://coverartarchive.org/release-group/$followedRelease/front" }
+
+            listOf(
+                Triple(caaRelease, unfollowedArtist, caaImage),
+                Triple(nonCaaRelease, unfollowedArtist, nonCaaImage),
+                Triple(followedRelease, followedArtist, followedImage)
+            ).forEach { (relId, artId, imgId) ->
+                MBReleaseGroupTable.insert { it[id] = relId; it[title] = "Rel $relId" }
+                RecentReleaseTable.insert {
+                    it[RecentReleaseTable.releaseId] = relId
+                    it[RecentReleaseTable.artistId] = artId
+                    it[RecentReleaseTable.title] = "Rel $relId"
+                    it[RecentReleaseTable.imageId] = EntityID(imgId, ImageTable)
+                    it[RecentReleaseTable.lastImageFetch] = 1000L
+                }
+            }
+        }
+
+        val unlinked = service.unlinkUnfollowedRecentReleaseImages()
+        assertEquals(1, unlinked)
+
+        transaction(database) {
+            val rows = RecentReleaseTable.selectAll().associate {
+                it[RecentReleaseTable.releaseId].value to (it[RecentReleaseTable.imageId]?.value to it[RecentReleaseTable.lastImageFetch])
+            }
+            assertNull(rows[caaRelease]!!.first)
+            assertNull(rows[caaRelease]!!.second)
+            assertEquals(nonCaaImage, rows[nonCaaRelease]!!.first)
+            assertEquals(1000L, rows[nonCaaRelease]!!.second)
+            assertEquals(followedImage, rows[followedRelease]!!.first)
+            assertEquals(1000L, rows[followedRelease]!!.second)
+        }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `getReleaseImage returns null for unknown release`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        assertNull(service.getReleaseImage(UUID.randomUUID(), 0))
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `getReleaseImage serves the stored image when persisted`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val artistId = UUID.randomUUID()
+        val releaseId = UUID.randomUUID()
+        val imageId = UUID.randomUUID()
+
+        transaction(database) {
+            ArtistTable.insert { it[id] = artistId; it[name] = "Artist" }
+            ImageTable.insert { it[id] = imageId; it[path] = "test"; it[imageHash] = "hash"; it[origin] = "test" }
+            MBReleaseGroupTable.insert { it[id] = releaseId; it[title] = "Release" }
+            RecentReleaseTable.insert {
+                it[RecentReleaseTable.releaseId] = releaseId
+                it[RecentReleaseTable.artistId] = artistId
+                it[RecentReleaseTable.title] = "Release"
+                it[RecentReleaseTable.imageId] = EntityID(imageId, ImageTable)
+            }
+        }
+
+        val expected = byteArrayOf(1, 2, 3)
+        coEvery { imageService.getImageData(imageId, 250) } returns expected
+
+        assertArrayEquals(expected, service.getReleaseImage(releaseId, 250))
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `getReleaseImage proxies CAA without persisting for unfollowed artists`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val artistId = UUID.randomUUID()
+        val releaseId = UUID.randomUUID()
+
+        transaction(database) {
+            ArtistTable.insert { it[id] = artistId; it[name] = "Artist" }
+            MBReleaseGroupTable.insert { it[id] = releaseId; it[title] = "Release" }
+            RecentReleaseTable.insert {
+                it[RecentReleaseTable.releaseId] = releaseId
+                it[RecentReleaseTable.artistId] = artistId
+                it[RecentReleaseTable.title] = "Release"
+            }
+        }
+
+        every { imageService.getCachedBytes(any()) } returns null
+
+        val expected = byteArrayOf(4, 5, 6)
+        val spiedService = spyk(service, recordPrivateCalls = true)
+        coEvery { spiedService.fetchCoverArtBytes(releaseId, "front") } returns expected
+
+        assertArrayEquals(expected, spiedService.getReleaseImage(releaseId, 0))
+
+        verify { imageService.setCachedBytes("releaseImage:$releaseId:0", expected, null) }
+        coVerify(exactly = 0) { spiedService.fetchReleaseGroupImage(any()) }
+        transaction(database) {
+            val row = RecentReleaseTable.selectAll().where { RecentReleaseTable.releaseId eq releaseId }.single()
+            assertNull(row[RecentReleaseTable.imageId])
+        }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `getReleaseImage caches a missing CAA image`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val artistId = UUID.randomUUID()
+        val releaseId = UUID.randomUUID()
+
+        transaction(database) {
+            ArtistTable.insert { it[id] = artistId; it[name] = "Artist" }
+            MBReleaseGroupTable.insert { it[id] = releaseId; it[title] = "Release" }
+            RecentReleaseTable.insert {
+                it[RecentReleaseTable.releaseId] = releaseId
+                it[RecentReleaseTable.artistId] = artistId
+                it[RecentReleaseTable.title] = "Release"
+            }
+        }
+
+        every { imageService.getCachedBytes(any()) } returns null
+
+        val spiedService = spyk(service, recordPrivateCalls = true)
+        coEvery { spiedService.fetchCoverArtBytes(releaseId, "front-250") } returns null
+
+        assertNull(spiedService.getReleaseImage(releaseId, 250))
+
+        verify { imageService.setCachedBytes("releaseImage:$releaseId:missing", any(), 1.hours) }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `getReleaseImage short-circuits on negative cache`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val artistId = UUID.randomUUID()
+        val releaseId = UUID.randomUUID()
+
+        transaction(database) {
+            ArtistTable.insert { it[id] = artistId; it[name] = "Artist" }
+            MBReleaseGroupTable.insert { it[id] = releaseId; it[title] = "Release" }
+            RecentReleaseTable.insert {
+                it[RecentReleaseTable.releaseId] = releaseId
+                it[RecentReleaseTable.artistId] = artistId
+                it[RecentReleaseTable.title] = "Release"
+            }
+        }
+
+        every { imageService.getCachedBytes("releaseImage:$releaseId:missing") } returns byteArrayOf(0)
+
+        val spiedService = spyk(service, recordPrivateCalls = true)
+        assertNull(spiedService.getReleaseImage(releaseId, 0))
+
+        coVerify(exactly = 0) { spiedService.fetchCoverArtBytes(any(), any()) }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `getReleaseImage lazily persists the image when the artist is followed`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val userId = UUID.randomUUID()
+        val artistId = UUID.randomUUID()
+        val releaseId = UUID.randomUUID()
+        val imageId = UUID.randomUUID()
+
+        transaction(database) {
+            UserTable.insert { it[id] = userId; it[username] = "user"; it[passwordHash] = "hash" }
+            ArtistTable.insert { it[id] = artistId; it[name] = "Artist" }
+            FollowedArtistTable.insert { it[this.userId] = userId; it[this.artistId] = artistId }
+            ImageTable.insert { it[id] = imageId; it[path] = "test"; it[imageHash] = "hash"; it[origin] = "test" }
+            MBReleaseGroupTable.insert { it[id] = releaseId; it[title] = "Release" }
+            RecentReleaseTable.insert {
+                it[RecentReleaseTable.releaseId] = releaseId
+                it[RecentReleaseTable.artistId] = artistId
+                it[RecentReleaseTable.title] = "Release"
+            }
+        }
+
+        every { imageService.getCachedBytes(any()) } returns null
+
+        val expected = byteArrayOf(7, 8, 9)
+        val spiedService = spyk(service, recordPrivateCalls = true)
+        coEvery { spiedService.fetchCoverArtBytes(releaseId, "front") } returns expected
+        coEvery { spiedService.fetchReleaseGroupImage(releaseId) } returns imageId
+
+        assertArrayEquals(expected, spiedService.getReleaseImage(releaseId, 0))
+
+        coVerify(timeout = 5000) { spiedService.fetchReleaseGroupImage(releaseId) }
+
+        var persistedImageId: UUID? = null
+        repeat(100) {
+            persistedImageId = transaction(database) {
+                RecentReleaseTable.selectAll().where { RecentReleaseTable.releaseId eq releaseId }.single()[RecentReleaseTable.imageId]?.value
+            }
+            if (persistedImageId != null) return@repeat
+            Thread.sleep(50)
+        }
+        assertEquals(imageId, persistedImageId)
     }
 }

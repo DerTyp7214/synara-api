@@ -33,6 +33,7 @@ import org.jetbrains.exposed.v1.jdbc.*
 import org.jaudiotagger.audio.AudioFileIO
 import redis.clients.jedis.HostAndPort
 import redis.clients.jedis.RedisClusterClient
+import redis.clients.jedis.params.SetParams
 import java.awt.Color
 import java.awt.image.BufferedImage
 import java.io.ByteArrayInputStream
@@ -47,6 +48,7 @@ import javax.imageio.event.IIOWriteProgressListener
 import javax.imageio.stream.ImageOutputStreamImpl
 import kotlin.io.path.*
 import kotlin.math.roundToInt
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.milliseconds
 import com.sksamuel.scrimage.pixels.Pixel as ScrPixel
@@ -341,7 +343,7 @@ class ImageService(
         return (existingImages.entries.associate { it.value to it.key }) + newlyInserted
     }
 
-    suspend fun deleteUnreferencedImages(onProgress: suspend (Double, String) -> Unit = { _, _ -> }): Int = dbQuery {
+    suspend fun collectReferencedImageIds(): Set<UUID> = dbQuery {
         val referencedImages = mutableSetOf<UUID>()
 
         referencedImages.addAll(AlbumTable.selectAll().mapNotNull { it[AlbumTable.cover]?.value })
@@ -355,31 +357,80 @@ class ImageService(
         referencedImages.addAll(CollectionTable.selectAll().mapNotNull { it[CollectionTable.imageId]?.value })
         referencedImages.addAll(RadioChannelTable.selectAll().mapNotNull { it[RadioChannelTable.imageId]?.value })
 
-        val allImages = ImageTable.selectAll().map {
-            it[ImageTable.id].value to it[ImageTable.path]
+        referencedImages
+    }
+
+    suspend fun deleteImagesByIds(
+        ids: Collection<UUID>,
+        onProgress: suspend (Double, String) -> Unit = { _, _ -> }
+    ): Int {
+        if (ids.isEmpty()) {
+            onProgress(100.0, "Deleted 0 images")
+            return 0
         }
 
-        val unreferencedImages = allImages.filter { (id, _) -> id !in referencedImages }
-        onProgress(0.0, "Found ${unreferencedImages.size} unreferenced images")
+        val images = dbQuery {
+            ids.chunked(10000).flatMap { chunk ->
+                ImageTable
+                    .select(ImageTable.id, ImageTable.path)
+                    .where { ImageTable.id inList chunk }
+                    .map { it[ImageTable.id].value to it[ImageTable.path] }
+            }
+        }
 
-        val chunks = unreferencedImages.chunked(5000)
+        val chunks = images.chunked(5000)
         chunks.forEachIndexed { index, batch ->
             val progress = (index.toDouble() / chunks.size) * 100.0
             onProgress(progress, "Deleting batch ${index + 1}/${chunks.size} (${batch.size} images)")
 
-            val idsToDelete = batch.map { it.first }
+            dbQuery {
+                batch.forEach { (_, path) ->
+                    val imagePath = Path(storageService.imagesPath, path)
+                    if (imagePath.exists()) imagePath.deleteIfExists()
+                }
 
-            batch.forEach { (_, path) ->
-                val imagePath = Path(storageService.imagesPath, path)
-                if (imagePath.exists()) imagePath.deleteIfExists()
+                ImageTable.deleteWhere { ImageTable.id inList batch.map { it.first } }
             }
-
-            ImageTable.deleteWhere { ImageTable.id inList idsToDelete }
         }
 
-        onProgress(100.0, "Deleted ${unreferencedImages.size} images")
-        logger.info("Deleted ${unreferencedImages.size} unreferenced images")
-        unreferencedImages.size
+        onProgress(100.0, "Deleted ${images.size} images")
+        logger.info("Deleted ${images.size} images")
+        return images.size
+    }
+
+    suspend fun deleteUnreferencedImages(onProgress: suspend (Double, String) -> Unit = { _, _ -> }): Int {
+        val referencedImages = collectReferencedImageIds()
+
+        val unreferencedImages = dbQuery {
+            ImageTable.select(ImageTable.id)
+                .map { it[ImageTable.id].value }
+                .filter { it !in referencedImages }
+        }
+
+        onProgress(0.0, "Found ${unreferencedImages.size} unreferenced images")
+        return deleteImagesByIds(unreferencedImages, onProgress)
+    }
+
+    fun getCachedBytes(key: String): ByteArray? = jedis?.get(key.toByteArray())
+
+    fun setCachedBytes(key: String, bytes: ByteArray, ttl: Duration? = null) {
+        val client = jedis ?: return
+        if (ttl != null) {
+            client.set(key.toByteArray(), bytes, SetParams().px(ttl.inWholeMilliseconds))
+        } else {
+            client.set(key.toByteArray(), bytes)
+        }
+    }
+
+    fun resizeImageBytes(bytes: ByteArray, size: Int): ByteArray = try {
+        val outputStream = ByteArrayOutputStream()
+        Thumbnails.of(ByteArrayInputStream(bytes))
+            .size(size, size)
+            .outputFormat("jpeg")
+            .toOutputStream(outputStream)
+        outputStream.toByteArray()
+    } catch (_: Exception) {
+        bytes
     }
 
     suspend fun moveImages(oldPath: String, newPath: String): Int = dbQuery {

@@ -514,7 +514,7 @@ fun Route.registerAuthenticatedRestServices(koin: Koin) {
         RpcScheduledTaskConfigurationService(koin.get(), koin.get()).withAuthorization<IScheduledTaskConfigurationService>(user)
     }
     registerRestService(IReleaseService::class, authenticated = true) {
-        val user = call.getUser() ?: throw IllegalArgumentException("No user found")
+        val user = call.getUser()
         RpcReleaseService(user, koin.get()).withAuthorization<IReleaseService>(user)
     }
     registerRestService(IMusicBrainzService::class, authenticated = true) {

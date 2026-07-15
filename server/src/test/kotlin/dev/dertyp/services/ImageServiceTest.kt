@@ -329,6 +329,54 @@ class ImageServiceTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
+    fun `collectReferencedImageIds should include images from all referencing tables`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+
+        val albumImage = service.createImage(byteArrayOf(20, 21), "album")
+        val releaseImage = service.createImage(byteArrayOf(22, 23), "release")
+        val unreferencedImage = service.createImage(byteArrayOf(24, 25), "unreferenced")
+
+        transaction(database) {
+            AlbumTable.insert { it[name] = "Album"; it[cover] = EntityID(albumImage, ImageTable) }
+            val aId = ArtistTable.insertAndGetId { it[name] = "Artist" }
+            val relGroupId = UUID.randomUUID()
+            MBReleaseGroupTable.insert { it[id] = relGroupId; it[title] = "Title" }
+            RecentReleaseTable.insert {
+                it[RecentReleaseTable.releaseId] = relGroupId
+                it[RecentReleaseTable.artistId] = aId
+                it[RecentReleaseTable.title] = "Title"
+                it[RecentReleaseTable.imageId] = EntityID(releaseImage, ImageTable)
+            }
+        }
+
+        val referenced = service.collectReferencedImageIds()
+        assertTrue(albumImage in referenced)
+        assertTrue(releaseImage in referenced)
+        assertFalse(unreferencedImage in referenced)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `deleteImagesByIds should delete only the given images with their files`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+
+        val toDelete = service.createImage(byteArrayOf(30, 31), "delete_me")
+        val toKeep = service.createImage(byteArrayOf(32, 33), "keep_me")
+        val deleteFile = File(service.byId(toDelete)!!.path)
+        val keepFile = File(service.byId(toKeep)!!.path)
+        assertTrue(deleteFile.exists())
+
+        val deleted = service.deleteImagesByIds(listOf(toDelete))
+
+        assertEquals(1, deleted)
+        assertNull(service.byId(toDelete))
+        assertNotNull(service.byId(toKeep))
+        assertFalse(deleteFile.exists())
+        assertTrue(keepFile.exists())
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
     fun `moveImages should handle large number of images`(dialect: DbDialect) = runBlocking {
         setup(dialect)
         val imageCount = 80000

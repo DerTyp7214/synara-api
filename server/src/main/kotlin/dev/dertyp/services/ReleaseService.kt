@@ -27,6 +27,7 @@ import org.koin.core.component.inject
 import java.time.LocalDate
 import java.time.ZoneOffset
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.hours
@@ -52,12 +53,17 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
 
     suspend fun followArtist(userId: UUID, musicBrainzId: UUID, priority: HttpClientPriority = HttpClientPriority.NORMAL): Boolean {
         val artistId = getOrCreateArtistByMbId(musicBrainzId, priority) ?: return false
-        return dbQuery {
+        val followed = dbQuery {
             FollowedArtistTable.upsert(FollowedArtistTable.userId, FollowedArtistTable.artistId) {
                 it[FollowedArtistTable.userId] = userId
                 it[FollowedArtistTable.artistId] = artistId
             }.insertedCount > 0
         }
+        serviceScope.launch {
+            runCatching { backfillMissingRecentReleaseImages(artistId) }
+                .onFailure { logger.error("Recent release image backfill after follow failed for $artistId", it) }
+        }
+        return followed
     }
 
     private suspend fun getOrCreateArtistByMbId(musicBrainzId: UUID, priority: HttpClientPriority = HttpClientPriority.NORMAL): UUID? {
@@ -396,23 +402,26 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
 
         onProgress(100.0, "Finished fetching new releases")
 
+        unlinkUnfollowedRecentReleaseImages()
         backfillMissingRecentReleaseImages()
 
         followedResults + unfollowedResults
     }
 
-    suspend fun backfillMissingRecentReleaseImages() {
+    suspend fun backfillMissingRecentReleaseImages(artistId: UUID? = null) {
         val now = Clock.System.now().toEpochMilliseconds()
         val candidates = dbQuery {
-            RecentReleaseTable.select(RecentReleaseTable.releaseId, RecentReleaseTable.releaseDate, RecentReleaseTable.lastImageFetch)
+            val query = RecentReleaseTable.select(RecentReleaseTable.releaseId, RecentReleaseTable.releaseDate, RecentReleaseTable.lastImageFetch)
                 .where { RecentReleaseTable.imageId.isNull() }
-                .map {
-                    Triple(
-                        it[RecentReleaseTable.releaseId].value,
-                        it[RecentReleaseTable.releaseDate],
-                        it[RecentReleaseTable.lastImageFetch]
-                    )
-                }
+                .andWhere { RecentReleaseTable.artistId inSubQuery FollowedArtistTable.select(FollowedArtistTable.artistId) }
+            artistId?.let { query.andWhere { RecentReleaseTable.artistId eq it } }
+            query.map {
+                Triple(
+                    it[RecentReleaseTable.releaseId].value,
+                    it[RecentReleaseTable.releaseDate],
+                    it[RecentReleaseTable.lastImageFetch]
+                )
+            }
         }
 
         val missingImages = candidates.filter { (_, releaseDate, lastFetch) ->
@@ -821,7 +830,7 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
 
         val distinctLinks = finalLinks.distinct()
 
-        val fetchedImageId = fetchReleaseGroupImage(group.id)
+        val fetchedImageId = if (artistHasFollowers(artistId)) fetchReleaseGroupImage(group.id) else null
         val nowMs = Clock.System.now().toEpochMilliseconds()
 
         dbSemaphore.withPermit {
@@ -881,7 +890,7 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
     internal suspend fun fetchReleaseGroupImage(releaseGroupId: UUID): UUID? {
         val imageUrl = "https://coverartarchive.org/release-group/$releaseGroupId/front"
         val imageBytes = ApiClient.instance.safeGet<ByteArray>(imageUrl) ?: return null
-        
+
         return imageService.createBatch(
             listOf(
                 InsertableImage(
@@ -891,5 +900,96 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
                 )
             )
         ).values.firstOrNull()
+    }
+
+    internal suspend fun artistHasFollowers(artistId: UUID): Boolean = dbQuery {
+        FollowedArtistTable.select(FollowedArtistTable.artistId)
+            .where { FollowedArtistTable.artistId eq artistId }
+            .limit(1)
+            .any()
+    }
+
+    suspend fun getReleaseImage(releaseId: UUID, size: Int = 0): ByteArray? {
+        val release = dbQuery {
+            RecentReleaseTable.select(RecentReleaseTable.imageId, RecentReleaseTable.artistId)
+                .where { RecentReleaseTable.releaseId eq releaseId }
+                .singleOrNull()
+                ?.let { it[RecentReleaseTable.imageId]?.value to it[RecentReleaseTable.artistId].value }
+        } ?: return null
+
+        val (imageId, artistId) = release
+        if (imageId != null) return imageService.getImageData(imageId, size)
+
+        if (imageService.getCachedBytes("releaseImage:$releaseId:missing") != null) return null
+        imageService.getCachedBytes("releaseImage:$releaseId:$size")?.let { return it }
+
+        val variant = when (size) {
+            in 1..250 -> "front-250"
+            in 251..500 -> "front-500"
+            in 501..1200 -> "front-1200"
+            else -> "front"
+        }
+        val bytes = fetchCoverArtBytes(releaseId, variant)
+        if (bytes == null) {
+            imageService.setCachedBytes("releaseImage:$releaseId:missing", byteArrayOf(0), 1.hours)
+            return null
+        }
+
+        val result = if (size > 0) imageService.resizeImageBytes(bytes, size) else bytes
+        imageService.setCachedBytes("releaseImage:$releaseId:$size", result)
+
+        if (artistHasFollowers(artistId)) persistReleaseImageAsync(releaseId)
+
+        return result
+    }
+
+    internal suspend fun fetchCoverArtBytes(releaseId: UUID, variant: String): ByteArray? =
+        ApiClient.instance.safeQueuedGet<ByteArray>(
+            "https://coverartarchive.org/release-group/$releaseId/$variant",
+            priority = HttpClientPriority.HIGH
+        )
+
+    private val imagePersistInFlight = ConcurrentHashMap.newKeySet<UUID>()
+
+    private fun persistReleaseImageAsync(releaseId: UUID) {
+        if (!imagePersistInFlight.add(releaseId)) return
+        serviceScope.launch {
+            try {
+                val imageId = fetchReleaseGroupImage(releaseId) ?: return@launch
+                dbQuery {
+                    RecentReleaseTable.update({ RecentReleaseTable.releaseId eq releaseId }) {
+                        it[RecentReleaseTable.imageId] = imageId
+                        it[RecentReleaseTable.lastImageFetch] = Clock.System.now().toEpochMilliseconds()
+                    }
+                }
+            } catch (e: Exception) {
+                logger.error("Failed to persist release image for $releaseId", e)
+            } finally {
+                imagePersistInFlight.remove(releaseId)
+            }
+        }
+    }
+
+    suspend fun unlinkUnfollowedRecentReleaseImages(): Int {
+        val releaseIds = dbQuery {
+            RecentReleaseTable
+                .innerJoin(ImageTable, onColumn = { RecentReleaseTable.imageId }, otherColumn = { ImageTable.id })
+                .select(RecentReleaseTable.releaseId)
+                .where { RecentReleaseTable.artistId notInSubQuery FollowedArtistTable.select(FollowedArtistTable.artistId) }
+                .andWhere { ImageTable.origin like "https://coverartarchive.org/%" }
+                .map { it[RecentReleaseTable.releaseId].value }
+        }
+        if (releaseIds.isEmpty()) return 0
+
+        dbQuery {
+            releaseIds.chunked(10000).forEach { chunk ->
+                RecentReleaseTable.update({ RecentReleaseTable.releaseId inList chunk }) {
+                    it[RecentReleaseTable.imageId] = null
+                    it[RecentReleaseTable.lastImageFetch] = null
+                }
+            }
+        }
+        logger.info("Unlinked ${releaseIds.size} recent release cover images of unfollowed artists")
+        return releaseIds.size
     }
 }
