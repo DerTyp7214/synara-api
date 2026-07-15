@@ -545,6 +545,10 @@ fun Route.registerAuthenticatedRestServices(koin: Koin) {
         val user = call.getUser() ?: throw IllegalArgumentException("No user found")
         RpcApiKeyService(user, koin.get()).withAuthorization<IApiKeyService>(user)
     }
+    registerRestService(IRadioChannelService::class, authenticated = true) {
+        val user = call.getUser() ?: throw IllegalArgumentException("No user found")
+        RpcRadioChannelService(user, koin.get(), koin.get()).withAuthorization<IRadioChannelService>(user)
+    }
 }
 
 private fun isPrimitive(type: KType): Boolean {

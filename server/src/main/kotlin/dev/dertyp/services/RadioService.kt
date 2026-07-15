@@ -18,9 +18,27 @@ import org.jetbrains.exposed.v1.jdbc.select
 import org.koin.core.component.inject
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import kotlin.collections.ArrayDeque
+import kotlin.collections.LinkedHashSet
+import kotlin.collections.List
+import kotlin.collections.Set
+import kotlin.collections.emptyList
+import kotlin.collections.emptySet
+import kotlin.collections.filter
+import kotlin.collections.firstOrNull
+import kotlin.collections.ifEmpty
+import kotlin.collections.map
+import kotlin.collections.mapNotNull
+import kotlin.collections.set
+import kotlin.collections.shuffled
+import kotlin.collections.take
+import kotlin.collections.toHashSet
+import kotlin.collections.toList
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.hours
+
+typealias RadioSongSupplier = suspend (exclude: Set<UUID>, limit: Int) -> List<UUID>
 
 class RadioService : Service() {
     private val recommendations by inject<RecommendationServingService>()
@@ -32,6 +50,8 @@ class RadioService : Service() {
         val userId: UUID,
         val type: RadioType,
         val seed: RadioSeed?,
+        val poolSource: RadioSongSupplier? = null,
+        val discovery: Boolean = false,
     ) {
         val played = LinkedHashSet<UUID>()
         val queue = ArrayDeque<UUID>()
@@ -63,6 +83,12 @@ class RadioService : Service() {
         return id
     }
 
+    fun createChannelSession(userId: UUID, discovery: Boolean, poolSource: RadioSongSupplier): UUID {
+        val id = UUID.randomUUID()
+        sessions[id] = RadioSessionState(userId, RadioType.RANDOM, seed = null, poolSource = poolSource, discovery = discovery)
+        return id
+    }
+
     fun getSession(sessionId: UUID, userId: UUID): RadioSessionState {
         val session = sessions[sessionId] ?: throw IllegalArgumentException("Unknown radio session")
         require(session.userId == userId) { "Radio session does not belong to this user" }
@@ -90,11 +116,16 @@ class RadioService : Service() {
     }
 
     private suspend fun refill(session: RadioSessionState) {
+        val source = session.poolSource
         val batch = when {
+            source != null && session.discovery -> expand(source(emptySet(), SEED_LIMIT), session.userId)
+            source != null -> source(session.played, BATCH_SIZE)
             session.seed != null -> seedBatch(session)
             session.type == RadioType.RANDOM -> emptyList()
             else -> historyBatch(session)
-        }.ifEmpty { randomIds(session.played, BATCH_SIZE) }
+        }.ifEmpty {
+            source?.invoke(emptySet(), BATCH_SIZE) ?: randomIds(session.played, BATCH_SIZE)
+        }
 
         for (id in batch) {
             if (id !in session.played && id !in session.queue) session.queue.addLast(id)

@@ -206,6 +206,7 @@ fun mainModule(application: Application, environment: ApplicationEnvironment): M
     singleOf(::RecommendationService)
     singleOf(::RecommendationServingService)
     singleOf(::RadioService)
+    singleOf(::RadioChannelService)
     singleOf(::ApiKeyService)
     singleOf(::PluginManager)
     singleOf(::JwtService)

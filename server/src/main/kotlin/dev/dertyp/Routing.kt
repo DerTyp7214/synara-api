@@ -7,6 +7,7 @@ import dev.dertyp.services.HandshakeService
 import dev.dertyp.services.JwtService
 import dev.hayden.KHealth
 import io.github.smiley4.ktoropenapi.OpenApi
+import io.github.smiley4.ktoropenapi.config.AuthKeyLocation
 import io.github.smiley4.ktoropenapi.config.AuthScheme
 import io.github.smiley4.ktoropenapi.config.AuthType
 import io.github.smiley4.ktoropenapi.config.SchemaGenerator
@@ -93,6 +94,11 @@ fun Application.configureRouting() {
                 type = AuthType.HTTP
                 scheme = AuthScheme.BEARER
                 bearerFormat = "JWT"
+            }
+            securityScheme("ApiKeyAuth") {
+                type = AuthType.API_KEY
+                location = AuthKeyLocation.QUERY
+                name = "apiKey"
             }
         }
     }

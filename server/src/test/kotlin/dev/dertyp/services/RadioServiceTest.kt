@@ -102,4 +102,21 @@ class RadioServiceTest : KoinTest {
         assertTrue(played.all { it in recommended }, "seed radio must play recommender output")
         assertEquals(10, played.toSet().size, "no duplicates")
     }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `strict channel session plays only pool members`(dialect: DbDialect) = runBlocking {
+        val library = setup(dialect)
+        val userId = UUID.randomUUID()
+        val pool = library.take(12).toList()
+
+        val radio = RadioService()
+        val sessionId = radio.createChannelSession(userId, discovery = false) { exclude, limit ->
+            pool.filterNot { it in exclude }.shuffled().take(limit)
+        }
+
+        val played = radio.take(sessionId, userId, 12)
+        assertTrue(played.all { it in pool }, "strict channel must only play configured pool members")
+        assertEquals(12, played.toSet().size, "no duplicates until the pool is exhausted")
+    }
 }

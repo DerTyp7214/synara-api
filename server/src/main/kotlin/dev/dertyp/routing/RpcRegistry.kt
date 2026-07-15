@@ -133,6 +133,7 @@ private fun registerAuthenticated(koin: Koin, call: ApplicationCall, user: User,
     val scrobbleService = koin.get<ScrobbleService>()
     val recommendationServingService = koin.get<RecommendationServingService>()
     val radioService = koin.get<RadioService>()
+    val radioChannelService = koin.get<RadioChannelService>()
     val apiKeyService = koin.get<ApiKeyService>()
 
     registrar.register(IIndexer::class) { RpcIndexer(indexer, user).withAuthorization<IIndexer>(user).withLogging<IIndexer>(call) }
@@ -170,4 +171,5 @@ private fun registerAuthenticated(koin: Koin, call: ApplicationCall, user: User,
     registrar.register(IRecommendationService::class) { RpcRecommendationService(user, recommendationServingService).withAuthorization<IRecommendationService>(user).withLogging<IRecommendationService>(call) }
     registrar.register(IRadioService::class) { RadioRpcService(user, radioService).withAuthorization<IRadioService>(user).withLogging<IRadioService>(call) }
     registrar.register(IApiKeyService::class) { RpcApiKeyService(user, apiKeyService).withAuthorization<IApiKeyService>(user).withLogging<IApiKeyService>(call) }
+    registrar.register(IRadioChannelService::class) { RpcRadioChannelService(user, radioChannelService, radioService).withAuthorization<IRadioChannelService>(user).withLogging<IRadioChannelService>(call) }
 }
