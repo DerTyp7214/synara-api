@@ -64,7 +64,8 @@ class ScheduledTaskConfigurationService : Service() {
             TaskConfiguration(TaskKeys.SEARCH_INDEX_REBUILD_WORKER, "Search Index Rebuild Worker", true, TriggerDefinition.Manual),
             TaskConfiguration(TaskKeys.LISTENBRAINZ_SYNC, "ListenBrainz Sync", true, TriggerDefinition.Cron("0 * * * *")),
             TaskConfiguration(TaskKeys.AUDIO_EMBEDDING, "Audio Embedding", true, TriggerDefinition.AfterTask(TaskKeys.AUDIO_ANALYSIS)),
-            TaskConfiguration(TaskKeys.RECOMMENDATION_TRAINING, "Recommendation Model Training", true, TriggerDefinition.Cron("0 7 * * *"))
+            TaskConfiguration(TaskKeys.RECOMMENDATION_TRAINING, "Recommendation Model Training", true, TriggerDefinition.Cron("0 7 * * *")),
+            TaskConfiguration(TaskKeys.RADIO_SESSION_CLEANUP, "Radio Session Cleanup", true, TriggerDefinition.Cron("0 * * * *"))
         )
     }
 

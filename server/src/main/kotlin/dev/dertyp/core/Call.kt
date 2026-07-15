@@ -1,13 +1,16 @@
 package dev.dertyp.core
 
 import dev.dertyp.data.User
+import dev.dertyp.services.ApiKeyService
 import dev.dertyp.services.SessionService
 import dev.dertyp.services.UserService
 import dev.dertyp.services.metadata.IMetadataService
 import dev.dertyp.services.metadata.MetadataService
+import io.ktor.http.auth.HttpAuthHeader
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.ApplicationEnvironment
 import io.ktor.server.auth.jwt.JWTPrincipal
+import io.ktor.server.auth.parseAuthorizationHeader
 import io.ktor.server.auth.principal
 import io.ktor.util.AttributeKey
 import kotlinx.coroutines.CoroutineScope
@@ -38,6 +41,17 @@ suspend fun ApplicationCall.getUser(): User? = try {
     user
 } catch (_: Throwable) {
     null
+}
+
+suspend fun ApplicationCall.apiKeyUser(): User? {
+    val bearer = (request.parseAuthorizationHeader() as? HttpAuthHeader.Single)
+        ?.takeIf { it.authScheme.equals("Bearer", ignoreCase = true) }
+        ?.blob
+    val raw = request.queryParameters["apiKey"]
+        ?: request.headers["X-API-Key"]
+        ?: bearer
+        ?: return null
+    return get<ApiKeyService>().resolveUser(raw)
 }
 
 fun ApplicationCall.getMetadataProvider(providerType: IMetadataService.MetadataType? = null): MetadataService? {

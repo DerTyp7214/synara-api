@@ -146,6 +146,8 @@ fun Application.configureRouting() {
 
         jwtService.authenticate(this)
 
+        radioRouting()
+
         mirrorRouting()
     }
 }
