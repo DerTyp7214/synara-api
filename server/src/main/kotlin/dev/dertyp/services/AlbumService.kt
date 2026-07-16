@@ -910,6 +910,21 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
             }
         }
 
+    suspend fun rankedSearchInRadioChannel(
+        channelId: UUID,
+        page: Int,
+        pageSize: Int,
+        query: String,
+        userId: UUID? = null
+    ): PaginatedResponse<Album> =
+        rankedAlbumSearch(page, pageSize, query, userId) {
+            andWhere {
+                AlbumTable.id inSubQuery RadioChannelAlbumTable
+                    .select(RadioChannelAlbumTable.albumId)
+                    .where { RadioChannelAlbumTable.channelId eq channelId }
+            }
+        }
+
     private suspend fun rankedAlbumSearch(
         page: Int,
         pageSize: Int,

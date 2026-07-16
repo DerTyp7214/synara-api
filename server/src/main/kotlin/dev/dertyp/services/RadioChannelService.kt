@@ -1,10 +1,10 @@
 package dev.dertyp.services
 
-import dev.dertyp.data.InsertableRadioChannel
-import dev.dertyp.data.RadioChannel
-import dev.dertyp.data.RadioChannelItemType
+import dev.dertyp.data.*
 import dev.dertyp.db.*
 import dev.dertyp.dbQuery
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.core.Random
 import org.jetbrains.exposed.v1.core.dao.id.EntityID
@@ -14,6 +14,9 @@ import java.util.*
 
 class RadioChannelService : Service() {
     private val imageService by inject<ImageService>()
+    private val songService by inject<SongService>()
+    private val artistService by inject<ArtistService>()
+    private val albumService by inject<AlbumService>()
 
     private fun map(row: ResultRow) = RadioChannel(
         id = row[RadioChannelTable.id].value,
@@ -105,6 +108,45 @@ class RadioChannelService : Service() {
             RadioChannelItemType.ALBUM ->
                 RadioChannelAlbumTable.deleteWhere { (channelId eq id) and (albumId eq itemId) } > 0
         }
+    }
+
+    suspend fun rankedSearch(
+        channelId: UUID,
+        query: String,
+        explicit: Boolean,
+        page: Int,
+        pageSize: Int,
+        userId: UUID,
+    ): RadioChannelSearchResults = coroutineScope {
+        val songsDeferred = async {
+            val songPage = songService.rankedSearchInRadioChannel(channelId, page, pageSize, query, explicit, userId)
+
+            val explicitIds = if (songPage.data.isEmpty()) emptySet() else dbQuery {
+                songPage.data.map { it.id }.chunked(maxBatchSize).flatMap { chunk ->
+                    RadioChannelSongTable
+                        .select(RadioChannelSongTable.songId)
+                        .where { RadioChannelSongTable.channelId eq channelId }
+                        .andWhere { RadioChannelSongTable.songId inList chunk }
+                        .map { it[RadioChannelSongTable.songId].value }
+                }.toSet()
+            }
+
+            PaginatedResponse(
+                data = songPage.data.map { RadioChannelSongMatch(it, explicitMember = it.id in explicitIds) },
+                page = songPage.page,
+                total = songPage.total,
+                pageSize = songPage.pageSize,
+                hasNextPage = songPage.hasNextPage,
+            )
+        }
+        val artistsDeferred = async { artistService.rankedSearchInRadioChannel(channelId, page, pageSize, query, userId) }
+        val albumsDeferred = async { albumService.rankedSearchInRadioChannel(channelId, page, pageSize, query, userId) }
+
+        RadioChannelSearchResults(
+            songs = songsDeferred.await(),
+            artists = artistsDeferred.await(),
+            albums = albumsDeferred.await(),
+        )
     }
 
     suspend fun randomSongs(id: UUID, exclude: Set<UUID>, limit: Int): List<UUID> = dbQuery {

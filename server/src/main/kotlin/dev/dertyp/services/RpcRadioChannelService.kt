@@ -3,6 +3,7 @@ package dev.dertyp.services
 import dev.dertyp.data.InsertableRadioChannel
 import dev.dertyp.data.RadioChannel
 import dev.dertyp.data.RadioChannelItemType
+import dev.dertyp.data.RadioChannelSearchResults
 import dev.dertyp.data.User
 import java.util.UUID
 
@@ -16,6 +17,18 @@ class RpcRadioChannelService(
 
     override suspend fun getChannel(id: UUID): RadioChannel? =
         radioChannelService.byId(id)?.takeIf { it.enabled || user.isAdmin }
+
+    override suspend fun rankedSearch(
+        channelId: UUID,
+        query: String,
+        explicit: Boolean,
+        page: Int,
+        pageSize: Int
+    ): RadioChannelSearchResults {
+        radioChannelService.byId(channelId)?.takeIf { it.enabled || user.isAdmin }
+            ?: throw IllegalArgumentException("Unknown radio channel")
+        return radioChannelService.rankedSearch(channelId, query, explicit, page, pageSize, user.id)
+    }
 
     override suspend fun startChannel(id: UUID): UUID {
         val channel = radioChannelService.byId(id)?.takeIf { it.enabled || user.isAdmin }

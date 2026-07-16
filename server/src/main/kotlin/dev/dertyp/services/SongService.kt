@@ -1272,6 +1272,34 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
             }
         }
 
+    suspend fun rankedSearchInRadioChannel(
+        channelId: UUID,
+        page: Int,
+        pageSize: Int,
+        query: String,
+        explicit: Boolean,
+        userId: UUID
+    ): PaginatedResponse<UserSong> =
+        rankedSongSearch(page, pageSize, query, explicit, userId) {
+            andWhere {
+                (SongTable.id inSubQuery RadioChannelSongTable
+                    .select(RadioChannelSongTable.songId)
+                    .where { RadioChannelSongTable.channelId eq channelId }
+                ) or (SongTable.albumId inSubQuery RadioChannelAlbumTable
+                    .select(RadioChannelAlbumTable.albumId)
+                    .where { RadioChannelAlbumTable.channelId eq channelId }
+                ) or (SongTable.id inSubQuery SongArtistTable
+                    .innerJoin(RadioChannelArtistTable, onColumn = { SongArtistTable.artistId }, otherColumn = { RadioChannelArtistTable.artistId })
+                    .select(SongArtistTable.songId)
+                    .where { RadioChannelArtistTable.channelId eq channelId }
+                ) or (SongTable.albumId inSubQuery AlbumArtistTable
+                    .innerJoin(RadioChannelArtistTable, onColumn = { AlbumArtistTable.artistId }, otherColumn = { RadioChannelArtistTable.artistId })
+                    .select(AlbumArtistTable.albumId)
+                    .where { RadioChannelArtistTable.channelId eq channelId }
+                )
+            }
+        }
+
     private suspend fun rankedSongSearch(
         page: Int,
         pageSize: Int,
