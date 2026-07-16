@@ -66,7 +66,7 @@ internal fun Route.subsonicMediaRoutes() {
         if (transcodeFormat == null) {
             call.respond(LocalFileContent(file, fileContentType(song.path)))
         } else {
-            val bitrate = if (maxBitRate > 0) maxBitRate else 160
+            val bitrate = if (maxBitRate > 0) maxBitRate else 256
             val transcoded = AudioUtils.transcodeAudio(call.application.environment, file, bitrate, false, transcodeFormat)
             call.respond(LocalFileContent(transcoded.file, transcoded.contentType))
         }
@@ -158,12 +158,12 @@ internal fun Route.subsonicMediaRoutes() {
         description = "Endless chained-Ogg/Opus stream of a Synara radio channel, used by getInternetRadioStations stream URLs."
         request {
             queryParameter<String>("id") { description = "Radio channel id (`rc-<uuid>`)."; required = true }
-            queryParameter<Int>("quality") { description = "Target Opus bitrate in kbps (default 128)." }
+            queryParameter<Int>("quality") { description = "Target Opus bitrate in kbps (default 256)." }
         }
     }) { params, user ->
         val id = SubsonicId.parse(params["id"]) as? SubsonicId.RadioChannel
             ?: return@subAuth respondNotFound(params, "Radio channel")
-        val quality = (params["quality"]?.toIntOrNull() ?: 128).coerceIn(32, 320)
+        val quality = (params["quality"]?.toIntOrNull() ?: 256).coerceIn(32, 320)
         val channel = radioChannelService.byId(id.uuid)?.takeIf { it.enabled || user.isAdmin }
             ?: return@subAuth respondNotFound(params, "Radio channel")
         if (radioChannelService.randomSongs(id.uuid, emptySet(), 1).isEmpty()) {
