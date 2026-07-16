@@ -1,14 +1,14 @@
 package dev.dertyp.services.subsonic
 
 import dev.dertyp.server.BuildConfig
-import io.ktor.http.ContentType
-import io.ktor.http.withCharset
-import io.ktor.server.application.ApplicationCall
-import io.ktor.server.response.respondText
+import io.ktor.http.*
+import io.ktor.server.application.*
+import io.ktor.server.response.*
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import nl.adaptivity.xmlutil.XmlDeclMode
+import nl.adaptivity.xmlutil.core.XmlVersion
 import nl.adaptivity.xmlutil.serialization.XML
 import nl.adaptivity.xmlutil.serialization.XmlElement
 import nl.adaptivity.xmlutil.serialization.XmlSerialName
@@ -362,9 +362,10 @@ val SubsonicJson = Json {
     encodeDefaults = true
 }
 
-val SubsonicXml = XML {
+val SubsonicXml = XML.v1 {
+    xmlVersion = XmlVersion.XML10
     xmlDeclMode = XmlDeclMode.None
-    indent = 0
+    indentString = ""
 }
 
 fun SubsonicResponse.toXmlString(): String {

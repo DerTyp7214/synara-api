@@ -5,8 +5,8 @@ import dev.dertyp.data.User
 import dev.dertyp.data.UserPlaylist
 import dev.dertyp.services.SongService
 import dev.dertyp.services.UserPlaylistService
-import io.ktor.http.Parameters
-import io.ktor.server.routing.Route
+import io.ktor.http.*
+import io.ktor.server.routing.*
 import org.koin.ktor.ext.inject
 
 internal fun Route.subsonicPlaylistRoutes() {
@@ -34,7 +34,7 @@ internal fun Route.subsonicPlaylistRoutes() {
         )
     }
 
-    fun ownedPlaylist(params: Parameters, user: User): SubsonicId.Playlist? =
+    fun ownedPlaylist(params: Parameters): SubsonicId.Playlist? =
         (SubsonicId.parse(params["id"] ?: params["playlistId"]) as? SubsonicId.Playlist)
 
     subAuth("getPlaylists", authenticator, {
@@ -57,7 +57,7 @@ internal fun Route.subsonicPlaylistRoutes() {
         summary = "Get a playlist with songs"
         request { queryParameter<String>("id") { description = "Playlist id (`pl-<uuid>`)."; required = true } }
     }) { params, user ->
-        val id = ownedPlaylist(params, user) ?: return@subAuth respondNotFound(params, "Playlist")
+        val id = ownedPlaylist(params) ?: return@subAuth respondNotFound(params, "Playlist")
         val playlist = playlistService.byId(id.uuid)?.takeIf { it.creator == user.id || user.isAdmin }
             ?: return@subAuth respondNotFound(params, "Playlist")
         call.respondSubsonic(
@@ -130,7 +130,7 @@ internal fun Route.subsonicPlaylistRoutes() {
         summary = "Delete a playlist"
         request { queryParameter<String>("id") { description = "Playlist id (`pl-<uuid>`)."; required = true } }
     }) { params, user ->
-        val id = ownedPlaylist(params, user) ?: return@subAuth respondNotFound(params, "Playlist")
+        val id = ownedPlaylist(params) ?: return@subAuth respondNotFound(params, "Playlist")
         val playlist = playlistService.byId(id.uuid)?.takeIf { it.creator == user.id || user.isAdmin }
             ?: return@subAuth respondNotFound(params, "Playlist")
         playlistService.delete(playlist.id)

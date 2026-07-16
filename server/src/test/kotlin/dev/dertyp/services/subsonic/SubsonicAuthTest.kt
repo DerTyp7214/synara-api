@@ -7,11 +7,10 @@ import dev.dertyp.db.ApiKeyTable
 import dev.dertyp.db.SubsonicCredentialTable
 import dev.dertyp.db.UserTable
 import dev.dertyp.dbQuery
-import dev.dertyp.plugins.ApiKeyScope
 import dev.dertyp.services.ApiKeyScopeRegistry
 import dev.dertyp.services.ApiKeyService
 import dev.dertyp.services.UserService
-import io.ktor.http.parametersOf
+import io.ktor.http.*
 import io.mockk.coEvery
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
@@ -22,12 +21,12 @@ import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.EnumSource
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
+import org.koin.dsl.module
 import org.koin.test.KoinTest
 import java.security.MessageDigest
-import java.util.UUID
+import java.util.*
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
-import org.koin.dsl.module
 
 class SubsonicAuthTest : KoinTest {
     private val userId = UUID.randomUUID()

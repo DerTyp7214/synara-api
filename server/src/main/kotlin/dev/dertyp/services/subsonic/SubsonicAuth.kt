@@ -1,9 +1,8 @@
 package dev.dertyp.services.subsonic
 
 import dev.dertyp.data.User
-import dev.dertyp.plugins.ApiKeyScope
 import dev.dertyp.services.ApiKeyService
-import io.ktor.http.Parameters
+import io.ktor.http.*
 import java.security.MessageDigest
 
 sealed class SubsonicAuthResult {

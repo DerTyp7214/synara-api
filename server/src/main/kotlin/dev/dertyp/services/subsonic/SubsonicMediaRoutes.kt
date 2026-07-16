@@ -6,27 +6,15 @@ import dev.dertyp.AudioUtils
 import dev.dertyp.Indexer
 import dev.dertyp.data.AudioFormat
 import dev.dertyp.routing.streamRadio
-import dev.dertyp.services.AlbumService
-import dev.dertyp.services.ArtistService
-import dev.dertyp.services.ImageService
-import dev.dertyp.services.RadioChannelService
-import dev.dertyp.services.RadioService
-import dev.dertyp.services.SongService
-import dev.dertyp.services.UserPlaylistService
-import io.ktor.http.ContentDisposition
-import io.ktor.http.ContentType
-import io.ktor.http.HttpHeaders
-import io.ktor.http.Parameters
-import io.ktor.http.encodeURLParameter
-import io.ktor.server.http.content.LocalFileContent
-import io.ktor.server.plugins.origin
-import io.ktor.server.response.header
-import io.ktor.server.response.respond
-import io.ktor.server.response.respondBytes
-import io.ktor.server.routing.Route
+import dev.dertyp.services.*
+import io.ktor.http.*
+import io.ktor.server.http.content.*
+import io.ktor.server.plugins.*
+import io.ktor.server.response.*
+import io.ktor.server.routing.*
 import org.koin.ktor.ext.inject
 import java.io.File
-import java.util.UUID
+import java.util.*
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 
 private fun fileContentType(path: String): ContentType = when (path.substringAfterLast('.', "").lowercase()) {
