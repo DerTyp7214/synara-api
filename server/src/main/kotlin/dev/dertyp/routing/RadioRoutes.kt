@@ -6,6 +6,7 @@ import dev.dertyp.core.toUUIDOrNull
 import dev.dertyp.data.AudioFormat
 import dev.dertyp.data.RadioSeed
 import dev.dertyp.data.RadioType
+import dev.dertyp.plugins.ApiKeyScope
 import dev.dertyp.services.RadioChannelService
 import dev.dertyp.services.RadioService
 import dev.dertyp.services.SongService
@@ -53,7 +54,7 @@ fun Route.radioRouting() {
                 HttpStatusCode.NotFound to { description = "Channel does not exist, is not visible, or has no songs." }
             }
         }) {
-            val user = call.apiKeyUser() ?: return@get call.respond(HttpStatusCode.Unauthorized)
+            val user = call.apiKeyUser(ApiKeyScope.Radio) ?: return@get call.respond(HttpStatusCode.Unauthorized)
             val quality = call.request.queryParameters["quality"]?.toIntOrNull()
                 ?: return@get call.respond(HttpStatusCode.BadRequest, "quality parameter required")
             val channelId = call.parameters["channelId"]?.toUUIDOrNull()
@@ -92,7 +93,7 @@ fun Route.radioRouting() {
                 HttpStatusCode.NotFound to { description = "The session does not exist or belongs to another user." }
             }
         }) {
-            val user = call.apiKeyUser() ?: return@get call.respond(HttpStatusCode.Unauthorized)
+            val user = call.apiKeyUser(ApiKeyScope.Radio) ?: return@get call.respond(HttpStatusCode.Unauthorized)
             val quality = call.request.queryParameters["quality"]?.toIntOrNull()
                 ?: return@get call.respond(HttpStatusCode.BadRequest, "quality parameter required")
             val sessionId = call.parameters["sessionId"]?.toUUIDOrNull()
@@ -130,7 +131,7 @@ fun Route.radioRouting() {
                 HttpStatusCode.BadRequest to { description = "Missing quality parameter." }
             }
         }) {
-            val user = call.apiKeyUser() ?: return@get call.respond(HttpStatusCode.Unauthorized)
+            val user = call.apiKeyUser(ApiKeyScope.Radio) ?: return@get call.respond(HttpStatusCode.Unauthorized)
             val quality = call.request.queryParameters["quality"]?.toIntOrNull()
                 ?: return@get call.respond(HttpStatusCode.BadRequest, "quality parameter required")
             val type = call.request.queryParameters["type"]?.let {
@@ -153,7 +154,7 @@ private fun parseSeed(params: Parameters): RadioSeed? {
     return if (seed.isEmpty()) null else seed
 }
 
-private suspend fun ApplicationCall.streamRadio(
+internal suspend fun ApplicationCall.streamRadio(
     radioService: RadioService,
     songService: SongService,
     session: RadioService.RadioSessionState,

@@ -18,4 +18,5 @@ interface PluginContext {
     val lrcLibService: ILrcLibService
     val scheduleService: IScheduleService
     val hooks: HookBus
+    val apiKeyScopes: ApiKeyScopeRegistrar
 }

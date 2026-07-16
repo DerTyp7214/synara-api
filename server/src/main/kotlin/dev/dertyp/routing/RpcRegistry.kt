@@ -17,6 +17,8 @@ import dev.dertyp.services.metadata.MetadataDispatcherService
 import dev.dertyp.services.schedule.RpcScheduledTaskConfigurationService
 import dev.dertyp.services.schedule.ScheduleService
 import dev.dertyp.services.schedule.ScheduledTaskConfigurationService
+import dev.dertyp.services.subsonic.RpcSubsonicCredentialService
+import dev.dertyp.services.subsonic.SubsonicCredentialService
 import dev.dertyp.services.sync.ListenBrainzService
 import dev.dertyp.services.sync.RpcListenBrainzService
 import dev.dertyp.core.principalUsername
@@ -135,6 +137,7 @@ private fun registerAuthenticated(koin: Koin, call: ApplicationCall, user: User,
     val radioService = koin.get<RadioService>()
     val radioChannelService = koin.get<RadioChannelService>()
     val apiKeyService = koin.get<ApiKeyService>()
+    val subsonicCredentialService = koin.get<SubsonicCredentialService>()
 
     registrar.register(IIndexer::class) { RpcIndexer(indexer, user).withAuthorization<IIndexer>(user).withLogging<IIndexer>(call) }
     registrar.register(IUserService::class) { RpcUserService(user, userService, imageService).withAuthorization<IUserService>(user).withLogging<IUserService>(call) }
@@ -172,4 +175,5 @@ private fun registerAuthenticated(koin: Koin, call: ApplicationCall, user: User,
     registrar.register(IRadioService::class) { RadioRpcService(user, radioService).withAuthorization<IRadioService>(user).withLogging<IRadioService>(call) }
     registrar.register(IApiKeyService::class) { RpcApiKeyService(user, apiKeyService).withAuthorization<IApiKeyService>(user).withLogging<IApiKeyService>(call) }
     registrar.register(IRadioChannelService::class) { RpcRadioChannelService(user, radioChannelService, radioService).withAuthorization<IRadioChannelService>(user).withLogging<IRadioChannelService>(call) }
+    registrar.register(ISubsonicCredentialService::class) { RpcSubsonicCredentialService(user, subsonicCredentialService).withAuthorization<ISubsonicCredentialService>(user).withLogging<ISubsonicCredentialService>(call) }
 }

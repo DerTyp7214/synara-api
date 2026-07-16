@@ -85,6 +85,7 @@ class Indexer(
         override val lrcLibService: ILrcLibService get() = getKoin().get<LrcLibService>()
         override val scheduleService: IScheduleService get() = this@Indexer.scheduleService
         override val hooks: HookBus get() = getKoin().get<HookBus>()
+        override val apiKeyScopes: ApiKeyScopeRegistrar get() = getKoin().get<ApiKeyScopeRegistry>().forPlugin("core")
     }, metadataType = null) {
         override val id: String = "core"
         override val name: String = "Core Indexer"

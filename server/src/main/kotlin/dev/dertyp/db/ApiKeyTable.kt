@@ -12,6 +12,7 @@ object ApiKeyTable : UUIDTable("apiKey") {
     val lastUsed = long("lastUsed").nullable()
     val expiresAt = long("expiresAt").nullable()
     val isRevoked = bool("isRevoked").default(false)
+    val scopes = text("scopes").default("")
 
     init {
         index(false, userId)

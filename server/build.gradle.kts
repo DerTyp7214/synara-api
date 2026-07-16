@@ -121,6 +121,7 @@ dependencies {
     implementation(libs.zstd.jni)
     implementation(libs.classgraph)
     implementation(libs.kotlinx.serialization.cbor)
+    implementation(libs.xmlutil.serialization)
 
     implementation(project(":common-rpc"))
     implementation(project(":common-proxy"))

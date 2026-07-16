@@ -7,6 +7,7 @@ import dev.dertyp.data.User
 import dev.dertyp.db.ApiKeyTable
 import dev.dertyp.db.UserTable
 import dev.dertyp.dbQuery
+import dev.dertyp.plugins.ApiKeyScope
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
@@ -44,7 +45,7 @@ class ApiKeyServiceTest : KoinTest {
         }
         coEvery { userService.findUserById(userId) } returns mockk<User> { every { id } returns userId }
 
-        startKoin { modules(module { single { userService } }) }
+        startKoin { modules(module { single { userService }; single { ApiKeyScopeRegistry() } }) }
     }
 
     @AfterEach
@@ -59,18 +60,17 @@ class ApiKeyServiceTest : KoinTest {
         setup(dialect)
         val service = ApiKeyService()
 
-        val raw = service.createKey(userId, "mpv")
+        val raw = service.createKey(userId, "mpv", listOf(ApiKeyScope.Radio.id))
         assertTrue(raw.startsWith("synara_"), "key should carry the identifying prefix")
 
-        val resolved = service.resolveUser(raw)
+        val resolved = service.resolveUser(raw, ApiKeyScope.Radio)
         assertEquals(userId, resolved?.id, "valid key resolves to the owning user")
 
-        // The raw secret must never be persisted — only its SHA-256 hash.
         val storedHash = dbQuery { ApiKeyTable.selectAll().single()[ApiKeyTable.keyHash] }
         assertNotEquals(raw, storedHash)
         assertEquals(raw.toByteArray().sha256(), storedHash)
 
-        assertNull(service.resolveUser("synara_wrongkey"), "unknown key resolves to nothing")
+        assertNull(service.resolveUser("synara_wrongkey", ApiKeyScope.Radio), "unknown key resolves to nothing")
     }
 
     @ParameterizedTest
@@ -79,11 +79,11 @@ class ApiKeyServiceTest : KoinTest {
         setup(dialect)
         val service = ApiKeyService()
 
-        val raw = service.createKey(userId, "mpv")
+        val raw = service.createKey(userId, "mpv", listOf(ApiKeyScope.Radio.id))
         val keyId = dbQuery { ApiKeyTable.selectAll().single()[ApiKeyTable.id].value }
 
         assertTrue(service.revokeKey(keyId, userId))
-        assertNull(service.resolveUser(raw), "revoked key must not authenticate")
+        assertNull(service.resolveUser(raw, ApiKeyScope.Radio), "revoked key must not authenticate")
 
         val keys = service.listKeys(userId)
         assertEquals(1, keys.size)
@@ -103,8 +103,33 @@ class ApiKeyServiceTest : KoinTest {
                 it[ApiKeyTable.userId] = this@ApiKeyServiceTest.userId
                 it[label] = "old"
                 it[expiresAt] = System.currentTimeMillis() - 1000
+                it[scopes] = ApiKeyScope.Radio.id
             }
         }
-        assertNull(service.resolveUser(raw), "expired key must not authenticate")
+        assertNull(service.resolveUser(raw, ApiKeyScope.Radio), "expired key must not authenticate")
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `keys only resolve for scopes they hold`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val service = ApiKeyService()
+
+        val raw = service.createKey(userId, "radio remote", listOf(ApiKeyScope.Radio.id))
+        assertEquals(userId, service.resolveUser(raw, ApiKeyScope.Radio)?.id)
+        assertNull(
+            service.resolveUser(raw, ApiKeyScope.Plugin("subsonic", "subsonic", "n", "d")),
+            "key must not satisfy scopes it was not granted",
+        )
+        assertEquals(listOf(ApiKeyScope.Radio.id), service.listKeys(userId).single().scopes)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `unregistered scopes are rejected at creation`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val service = ApiKeyService()
+        val error = runCatching { service.createKey(userId, "bad", listOf("does-not-exist")) }.exceptionOrNull()
+        assertTrue(error is IllegalArgumentException, "unknown scope must be rejected")
     }
 }

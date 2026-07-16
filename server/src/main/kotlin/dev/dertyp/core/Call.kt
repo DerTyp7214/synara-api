@@ -1,6 +1,7 @@
 package dev.dertyp.core
 
 import dev.dertyp.data.User
+import dev.dertyp.plugins.ApiKeyScope
 import dev.dertyp.services.ApiKeyService
 import dev.dertyp.services.SessionService
 import dev.dertyp.services.UserService
@@ -43,7 +44,7 @@ suspend fun ApplicationCall.getUser(): User? = try {
     null
 }
 
-suspend fun ApplicationCall.apiKeyUser(): User? {
+suspend fun ApplicationCall.apiKeyUser(requiredScope: ApiKeyScope): User? {
     val bearer = (request.parseAuthorizationHeader() as? HttpAuthHeader.Single)
         ?.takeIf { it.authScheme.equals("Bearer", ignoreCase = true) }
         ?.blob
@@ -51,7 +52,7 @@ suspend fun ApplicationCall.apiKeyUser(): User? {
         ?: request.headers["X-API-Key"]
         ?: bearer
         ?: return null
-    return get<ApiKeyService>().resolveUser(raw)
+    return get<ApiKeyService>().resolveUser(raw, requiredScope)
 }
 
 fun ApplicationCall.getMetadataProvider(providerType: IMetadataService.MetadataType? = null): MetadataService? {

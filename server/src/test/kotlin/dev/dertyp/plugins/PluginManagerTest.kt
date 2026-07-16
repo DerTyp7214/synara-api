@@ -1,6 +1,7 @@
 package dev.dertyp.plugins
 
 import dev.dertyp.Indexer
+import dev.dertyp.services.ApiKeyScopeRegistry
 import dev.dertyp.services.ILrcLibService
 import dev.dertyp.services.StorageService
 import dev.dertyp.services.metadata.IMetadataService
@@ -44,6 +45,7 @@ class PluginManagerTest : KoinTest {
                 single { mockk<IMetadataService>(relaxed = true) }
                 single { mockk<ILrcLibService>(relaxed = true) }
                 single { mockk<IScheduleService>(relaxed = true) }
+                single { ApiKeyScopeRegistry() }
             })
         }
         

@@ -2,8 +2,10 @@ package dev.dertyp.services
 
 import dev.dertyp.core.sha256
 import dev.dertyp.data.ApiKeyInfo
+import dev.dertyp.data.ApiKeyScopeInfo
 import dev.dertyp.data.User
 import dev.dertyp.db.ApiKeyTable
+import dev.dertyp.plugins.ApiKeyScope
 import dev.dertyp.dbQuery
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -21,6 +23,7 @@ import kotlin.io.encoding.ExperimentalEncodingApi
 @OptIn(ExperimentalEncodingApi::class)
 class ApiKeyService : Service() {
     private val userService by inject<UserService>()
+    private val scopeRegistry by inject<ApiKeyScopeRegistry>()
     private val scope = CoroutineScope(Dispatchers.IO)
 
     private fun generateRawKey(): String {
@@ -32,6 +35,9 @@ class ApiKeyService : Service() {
 
     private fun hash(rawKey: String): String = rawKey.toByteArray().sha256()
 
+    private fun splitScopes(csv: String): List<String> =
+        csv.split(',').map { it.trim() }.filter { it.isNotEmpty() }
+
     private fun map(row: ResultRow) = ApiKeyInfo(
         id = row[ApiKeyTable.id].value,
         label = row[ApiKeyTable.label],
@@ -39,9 +45,12 @@ class ApiKeyService : Service() {
         lastUsed = row[ApiKeyTable.lastUsed],
         expiresAt = row[ApiKeyTable.expiresAt],
         isRevoked = row[ApiKeyTable.isRevoked],
+        scopes = splitScopes(row[ApiKeyTable.scopes]),
     )
 
-    suspend fun createKey(userId: UUID, label: String): String {
+    suspend fun createKey(userId: UUID, label: String, scopes: List<String>): String {
+        val unknown = scopes.filterNot { scopeRegistry.contains(it) }
+        require(unknown.isEmpty()) { "Unknown API key scopes: ${unknown.joinToString()}" }
         val raw = generateRawKey()
         val keyHash = hash(raw)
         dbQuery {
@@ -49,12 +58,15 @@ class ApiKeyService : Service() {
                 it[ApiKeyTable.keyHash] = keyHash
                 it[ApiKeyTable.userId] = userId
                 it[ApiKeyTable.label] = label
+                it[ApiKeyTable.scopes] = scopes.distinct().joinToString(",")
             }
         }
         return raw
     }
 
-    suspend fun resolveUser(rawKey: String): User? {
+    fun availableScopes(): List<ApiKeyScopeInfo> = scopeRegistry.all()
+
+    suspend fun resolveUser(rawKey: String, requiredScope: ApiKeyScope): User? {
         val keyHash = hash(rawKey)
         val now = System.currentTimeMillis()
         val row = dbQuery {
@@ -66,6 +78,7 @@ class ApiKeyService : Service() {
         if (row[ApiKeyTable.isRevoked]) return null
         val expiresAt = row[ApiKeyTable.expiresAt]
         if (expiresAt != null && expiresAt <= now) return null
+        if (requiredScope.id !in splitScopes(row[ApiKeyTable.scopes])) return null
 
         val id = row[ApiKeyTable.id].value
         scope.launch {

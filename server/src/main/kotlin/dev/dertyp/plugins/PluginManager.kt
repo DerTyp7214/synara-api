@@ -12,7 +12,10 @@ import dev.dertyp.services.schedule.ScheduleService
 import dev.dertyp.services.gamdl.GamdlPlugin
 import dev.dertyp.services.recommendation.RecommendationPlugin
 import dev.dertyp.services.soundcloud.SoundcloudPlugin
+import dev.dertyp.services.subsonic.SubsonicPlugin
 import dev.dertyp.services.youtube.YoutubePlugin
+import io.ktor.server.application.Application
+import io.ktor.server.routing.routing
 import io.ktor.util.logging.KtorSimpleLogger
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
@@ -42,6 +45,8 @@ class PluginManager(
     private val storageService: StorageService,
     private val indexer: Indexer
 ) : Service() {
+    private val application by inject<Application>()
+    private val scopeRegistry by inject<ApiKeyScopeRegistry>()
     private val pluginsDir = File("plugins").apply { mkdirs() }
     private val loadedPlugins = mutableListOf<ISynaraPlugin>()
     private val importers = mutableMapOf<String, IImporter>()
@@ -60,6 +65,7 @@ class PluginManager(
         loadPlugin(GamdlPlugin())
         loadPlugin(MusicBrainzPlugin())
         loadPlugin(RecommendationPlugin())
+        loadPlugin(SubsonicPlugin())
         loadPlugins()
     }
 
@@ -88,10 +94,15 @@ class PluginManager(
 
             val pluginContext = object : PluginContext by baseContext {
                 override val storageService = baseContext.storageService.forImporter(ImportBackend(plugin.id))
+                override val apiKeyScopes = scopeRegistry.forPlugin(plugin.id)
             }
 
             plugin.init(pluginContext)
             loadedPlugins.add(plugin)
+
+            if (plugin is IRoutePlugin) {
+                application.routing { plugin.registerRoutes(this) }
+            }
 
             if (plugin is IContentSourcePlugin) {
                 plugin.getIndexers().forEach {
@@ -123,6 +134,7 @@ class PluginManager(
         override val lrcLibService: ILrcLibService by inject()
         override val scheduleService: IScheduleService by inject()
         override val hooks: HookBus by inject()
+        override val apiKeyScopes get() = scopeRegistry.forPlugin("plugin")
     }
 
     private fun loadPlugins() {

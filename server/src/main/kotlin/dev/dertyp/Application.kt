@@ -25,6 +25,7 @@ import dev.dertyp.services.import.ImporterProxy
 import dev.dertyp.services.metadata.*
 import dev.dertyp.services.schedule.ScheduleService
 import dev.dertyp.services.schedule.ScheduledTaskConfigurationService
+import dev.dertyp.services.subsonic.SubsonicCredentialService
 import dev.dertyp.services.sync.ListenBrainzService
 import dev.dertyp.services.schedule.Worker
 import dev.dertyp.services.schedule.WorkerTask
@@ -208,6 +209,8 @@ fun mainModule(application: Application, environment: ApplicationEnvironment): M
     singleOf(::RadioService)
     singleOf(::RadioChannelService)
     singleOf(::ApiKeyService)
+    singleOf(::ApiKeyScopeRegistry)
+    singleOf(::SubsonicCredentialService)
     singleOf(::PluginManager)
     singleOf(::JwtService)
     singleOf(::UserService)

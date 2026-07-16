@@ -17,6 +17,7 @@ import dev.dertyp.services.metadata.IMetadataService
 import dev.dertyp.services.metadata.IMusicBrainzService
 import dev.dertyp.services.metadata.MetadataDispatcherService
 import dev.dertyp.services.schedule.RpcScheduledTaskConfigurationService
+import dev.dertyp.services.subsonic.RpcSubsonicCredentialService
 import dev.dertyp.services.sync.RpcListenBrainzService
 import dev.dertyp.utils.withAuthorization
 import io.github.smiley4.ktoropenapi.*
@@ -548,6 +549,10 @@ fun Route.registerAuthenticatedRestServices(koin: Koin) {
     registerRestService(IRadioChannelService::class, authenticated = true) {
         val user = call.getUser() ?: throw IllegalArgumentException("No user found")
         RpcRadioChannelService(user, koin.get(), koin.get()).withAuthorization<IRadioChannelService>(user)
+    }
+    registerRestService(ISubsonicCredentialService::class, authenticated = true) {
+        val user = call.getUser() ?: throw IllegalArgumentException("No user found")
+        RpcSubsonicCredentialService(user, koin.get()).withAuthorization<ISubsonicCredentialService>(user)
     }
 }
 

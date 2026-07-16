@@ -22,6 +22,7 @@ dependencies {
     api(libs.koin.core)
     api(libs.jaudiotagger)
     api(libs.cron.utils)
+    api(libs.ktor.server.core)
     implementation(project(":common-rpc"))
 
     testImplementation(libs.junit.jupiter.api)
