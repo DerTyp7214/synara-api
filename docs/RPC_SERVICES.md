@@ -1671,7 +1671,8 @@ Manages long-lived API keys for authenticating non-interactive clients (e.g. med
 
 | Function | Parameters | Returns | Permissions | Errors | Description |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| `createApiKey` | `label` (`String`): Human-readable label describing where the key will be used.<br>`scopes` (`List`<`String`>): Identifiers of the scopes to grant to the key. Must be registered scopes. | `String` | - |  | Create a new API key and return the raw secret. The secret is shown only once and cannot be retrieved again. |
+| `createApiKey` | `label` (`String`): Human-readable label describing where the key will be used.<br>`scopes` (`List`<`String`>): Identifiers of the scopes to grant to the key. Must be registered scopes. | `String` | - |  | Create a new API key and return the raw secret. |
+| `getApiKeyString` | `id` (`PlatformUUID`): The API key unique identifier. | `String`? | - |  | Get the raw secret of one of the current user's API keys. Returns null for keys created before secrets were stored. |
 | `listAvailableScopes` | - | `List`<[ApiKeyScopeInfo](#devdertypdataapikeyscopeinfo)> | - |  | List all scopes that can be granted to API keys. |
 | `listApiKeys` | - | `List`<[ApiKeyInfo](#devdertypdataapikeyinfo)> | - |  | List metadata for all API keys belonging to the current user. Never returns the secrets. |
 | `revokeApiKey` | `id` (`PlatformUUID`): The API key unique identifier. | `Boolean` | - |  | Revoke an API key by its identifier. Returns true if a key was revoked. |

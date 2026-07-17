@@ -253,4 +253,50 @@ class AudioUtilsTest {
             }
         }
     }
+
+    @Test
+    fun `remuxToAdts produces adts framed aac from an m4a`(@TempDir tempDir: Path) {
+        runBlocking {
+            val m4a = tempDir.resolve("test.m4a").toFile()
+            val recorder = FFmpegFrameRecorder(m4a.absolutePath, 1).apply {
+                audioCodec = org.bytedeco.ffmpeg.global.avcodec.AV_CODEC_ID_AAC
+                format = "mp4"
+                sampleFormat = org.bytedeco.ffmpeg.global.avutil.AV_SAMPLE_FMT_FLTP
+                sampleRate = 48000
+                audioBitrate = 128_000
+                start()
+            }
+            val silence = java.nio.ShortBuffer.allocate(4800)
+            repeat(10) { recorder.recordSamples(48000, 1, silence.rewind()) }
+            recorder.stop()
+            recorder.release()
+            assertTrue(m4a.length() > 0)
+
+            val adts = tempDir.resolve("test.aac").toFile()
+            AudioUtils.remuxToAdts(m4a, adts)
+
+            val bytes = adts.readBytes()
+            assertTrue(bytes.size > 100)
+            assertEquals(0xFF, bytes[0].toInt() and 0xFF)
+            assertEquals(0xF0, bytes[1].toInt() and 0xF0)
+
+            val grabber = FFmpegFrameGrabber(adts.absolutePath).apply { start() }
+            assertEquals(1, grabber.audioChannels)
+            assertEquals(48000, grabber.sampleRate)
+            grabber.stop()
+            grabber.release()
+        }
+    }
+
+    @Test
+    fun `remuxToAdts deletes the output on failure`(@TempDir tempDir: Path) {
+        runBlocking {
+            val bogus = tempDir.resolve("bogus.m4a").toFile().apply { writeText("not audio") }
+            val output = tempDir.resolve("out.aac").toFile()
+            assertThrows<Exception> {
+                AudioUtils.remuxToAdts(bogus, output)
+            }
+            assertTrue(!output.exists())
+        }
+    }
 }

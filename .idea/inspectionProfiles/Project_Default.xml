@@ -10,6 +10,7 @@
       <option name="customHeaders">
         <set>
           <option value="X-API-Key" />
+          <option value="Icy-MetaData" />
         </set>
       </option>
     </inspection_tool>

@@ -6,6 +6,7 @@ import java.time.Instant
 
 object ApiKeyTable : UUIDTable("apiKey") {
     val keyHash = varchar("keyHash", 64).uniqueIndex()
+    val rawKey = text("rawKey").nullable()
     val userId = reference("userId", UserTable.id, onDelete = ReferenceOption.CASCADE)
     val label = varchar("label", 255).default("")
     val createdAt = long("createdAt").clientDefault { Instant.now().toEpochMilli() }

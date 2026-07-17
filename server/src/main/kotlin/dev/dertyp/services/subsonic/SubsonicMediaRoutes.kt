@@ -44,7 +44,7 @@ internal fun Route.subsonicMediaRoutes() {
         request {
             queryParameter<String>("id") { description = "Song id (`tr-<uuid>`)."; required = true }
             queryParameter<Int>("maxBitRate") { description = "Target bitrate in kbps; 0 or absent streams the original." }
-            queryParameter<String>("format") { description = "raw, opus or aac." }
+            queryParameter<String>("format") { description = "raw, opus or aac (default aac when only maxBitRate is set)." }
         }
     }) { params, user ->
         val id = SubsonicId.parse(params["id"]) as? SubsonicId.Song
@@ -59,7 +59,7 @@ internal fun Route.subsonicMediaRoutes() {
         val transcodeFormat = when (format) {
             "opus" -> AudioFormat.OPUS
             "aac" -> AudioFormat.AAC
-            null -> if (maxBitRate > 0) AudioFormat.OPUS else null
+            null -> if (maxBitRate > 0) AudioFormat.AAC else null
             else -> null
         }
 
@@ -144,7 +144,7 @@ internal fun Route.subsonicMediaRoutes() {
             InternetRadioStation(
                 id = it.id.rcId(),
                 name = it.name,
-                streamUrl = "$base?id=${it.id.rcId()}&quality=128&$authQuery",
+                streamUrl = "$base?id=${it.id.rcId()}&quality=256&$authQuery",
             )
         }
         call.respondSubsonic(
@@ -155,10 +155,10 @@ internal fun Route.subsonicMediaRoutes() {
 
     subAuth("radioStream", authenticator, {
         summary = "Stream a radio channel (Synara extension)"
-        description = "Endless chained-Ogg/Opus stream of a Synara radio channel, used by getInternetRadioStations stream URLs."
+        description = "Endless AAC (ADTS) stream with ICY metadata of a Synara radio channel, used by getInternetRadioStations stream URLs."
         request {
             queryParameter<String>("id") { description = "Radio channel id (`rc-<uuid>`)."; required = true }
-            queryParameter<Int>("quality") { description = "Target Opus bitrate in kbps (default 256)." }
+            queryParameter<Int>("quality") { description = "Target AAC bitrate in kbps (default 256)." }
         }
     }) { params, user ->
         val id = SubsonicId.parse(params["id"]) as? SubsonicId.RadioChannel
@@ -173,7 +173,7 @@ internal fun Route.subsonicMediaRoutes() {
             radioChannelService.randomSongs(id.uuid, exclude, limit)
         }
         val session = radioService.getSession(sessionId, user.id)
-        call.streamRadio(radioService, songService, session, quality)
+        call.streamRadio(radioService, songService, session, quality, channel.name)
     }
 
     subAuth("getScanStatus", authenticator, {

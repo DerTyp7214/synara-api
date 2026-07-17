@@ -12,6 +12,9 @@ class RpcApiKeyService(
     override suspend fun createApiKey(label: String, scopes: List<String>): String =
         apiKeyService.createKey(user.id, label, scopes)
 
+    override suspend fun getApiKeyString(id: UUID): String? =
+        apiKeyService.getKeyString(id, user.id)
+
     override suspend fun listAvailableScopes(): List<ApiKeyScopeInfo> =
         apiKeyService.availableScopes()
 

@@ -266,6 +266,33 @@ object AudioUtils {
         }
     }
 
+    suspend fun remuxToAdts(input: File, output: File): Unit = withContext(Dispatchers.IO) {
+        val grabber = FFmpegFrameGrabber(input.absolutePath)
+        try {
+            grabber.start()
+            val recorder = FFmpegFrameRecorder(output.absolutePath, grabber.audioChannels)
+            try {
+                recorder.format = "adts"
+                recorder.sampleRate = grabber.sampleRate
+                recorder.start(grabber.formatContext)
+                var packet = grabber.grabPacket()
+                while (packet != null) {
+                    recorder.recordPacket(packet)
+                    packet = grabber.grabPacket()
+                }
+                recorder.stop()
+            } finally {
+                recorder.release()
+            }
+        } catch (e: Throwable) {
+            output.delete()
+            throw e
+        } finally {
+            grabber.stop()
+            grabber.release()
+        }
+    }
+
     suspend fun getSongsWithTranscodingInfo(exclude: List<TranscodedVersion> = emptyList()) = dbQuery {
         val excludedSongIds = TranscodedSongTable
             .select(TranscodedSongTable.songId)

@@ -126,6 +126,31 @@ class ApiKeyServiceTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
+    fun `stored key string is retrievable by its owner`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val service = ApiKeyService()
+
+        val raw = service.createKey(userId, "mpv", listOf(ApiKeyScope.Radio.id))
+        val keyId = dbQuery { ApiKeyTable.selectAll().single()[ApiKeyTable.id].value }
+
+        assertEquals(raw, service.getKeyString(keyId, userId))
+        assertNull(service.getKeyString(keyId, UUID.randomUUID()), "other users must not read the secret")
+
+        val legacyId = UUID.randomUUID()
+        dbQuery {
+            ApiKeyTable.insert {
+                it[id] = legacyId
+                it[keyHash] = "legacy".toByteArray().sha256()
+                it[ApiKeyTable.userId] = this@ApiKeyServiceTest.userId
+                it[label] = "legacy"
+                it[scopes] = ApiKeyScope.Radio.id
+            }
+        }
+        assertNull(service.getKeyString(legacyId, userId), "legacy keys have no stored secret")
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
     fun `unregistered scopes are rejected at creation`(dialect: DbDialect) = runBlocking {
         setup(dialect)
         val service = ApiKeyService()

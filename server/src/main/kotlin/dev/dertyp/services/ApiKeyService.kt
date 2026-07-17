@@ -11,7 +11,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import org.jetbrains.exposed.v1.core.*
+import org.jetbrains.exposed.v1.jdbc.andWhere
 import org.jetbrains.exposed.v1.jdbc.insert
+import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.update
 import org.koin.core.component.inject
@@ -56,12 +58,21 @@ class ApiKeyService : Service() {
         dbQuery {
             ApiKeyTable.insert {
                 it[ApiKeyTable.keyHash] = keyHash
+                it[ApiKeyTable.rawKey] = raw
                 it[ApiKeyTable.userId] = userId
                 it[ApiKeyTable.label] = label
                 it[ApiKeyTable.scopes] = scopes.distinct().joinToString(",")
             }
         }
         return raw
+    }
+
+    suspend fun getKeyString(id: UUID, userId: UUID): String? = dbQuery {
+        ApiKeyTable.select(ApiKeyTable.rawKey)
+            .where { ApiKeyTable.id eq id }
+            .andWhere { ApiKeyTable.userId eq userId }
+            .singleOrNull()
+            ?.get(ApiKeyTable.rawKey)
     }
 
     fun availableScopes(): List<ApiKeyScopeInfo> = scopeRegistry.all()
