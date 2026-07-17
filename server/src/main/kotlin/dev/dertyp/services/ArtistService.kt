@@ -314,7 +314,10 @@ class ArtistService(private val searchIndexWorker: SearchIndexWorker? = null) : 
 
     suspend fun byIds(@LogParam("size") ids: List<UUID>, userId: UUID? = null): List<Artist> = queryArtists(0, Int.MAX_VALUE, userId = userId) {
         where { ArtistTable.id inList ids }
-    }.data
+    }.let { response ->
+        val artistMap = response.data.associateBy { it.id }
+        ids.mapNotNull { artistMap[it] }
+    }
 
     suspend fun rankedSearch(page: Int, pageSize: Int, query: String, userId: UUID? = null): PaginatedResponse<Artist> =
         rankedArtistSearch(page, pageSize, query, userId)

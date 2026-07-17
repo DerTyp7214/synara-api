@@ -8,9 +8,9 @@ import dev.dertyp.plugins.AlbumLibrary
 import dev.dertyp.services.ArtistService.Companion.mapArtist
 import dev.dertyp.services.import.Type
 import dev.dertyp.services.metadata.CachedMusicBrainzService
+import dev.dertyp.services.metadata.LinkResolverService
 import dev.dertyp.services.metadata.MusicBrainzCacheService
 import dev.dertyp.services.metadata.MusicBrainzService
-import dev.dertyp.services.metadata.LinkResolverService
 import dev.dertyp.utils.ColorUtils
 import dev.dertyp.utils.LogParam
 import dev.dertyp.utils.parsers.ParserFactory
@@ -24,7 +24,7 @@ import org.koin.core.component.get
 import org.koin.core.component.inject
 import java.io.File
 import java.nio.file.Paths
-import java.util.UUID
+import java.util.*
 import kotlin.io.path.absolutePathString
 import kotlin.io.path.isSymbolicLink
 import kotlin.io.path.readSymbolicLink
@@ -831,7 +831,10 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
     suspend fun byIds(@LogParam("size") ids: List<UUID>, userId: UUID? = null): List<Album> =
         queryAlbums(0, Int.MAX_VALUE, userId = userId) {
             where { AlbumTable.id inList ids }
-        }.data
+        }.let { response ->
+            val albumMap = response.data.associateBy { it.id }
+            ids.mapNotNull { albumMap[it] }
+        }
 
     suspend fun versions(id: UUID, userId: UUID? = null): List<Album> {
         val album = byId(id, userId) ?: return emptyList()

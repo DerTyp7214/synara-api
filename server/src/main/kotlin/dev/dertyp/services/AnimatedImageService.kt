@@ -82,7 +82,10 @@ class AnimatedImageService(
 
     suspend fun byIds(ids: List<UUID>): List<AnimatedImage> = queryAnimated(0, ids.size) {
         where { AnimatedImageTable.id inList ids }
-    }.data
+    }.let { response ->
+        val imageMap = response.data.associateBy { it.id }
+        ids.mapNotNull { imageMap[it] }
+    }
 
     override suspend fun byHash(hash: String): AnimatedImage? = querySingle {
         where { AnimatedImageTable.contentHash eq hash }

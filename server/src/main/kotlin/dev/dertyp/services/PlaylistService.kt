@@ -56,7 +56,10 @@ class PlaylistService : PlaylistLibrary, IPlaylistService, Service() {
 
     override suspend fun byIds(@LogParam("size") ids: List<UUID>): List<Playlist> = queryPlaylists(0, Int.MAX_VALUE) {
         where { PlaylistTable.id inList ids }
-    }.data
+    }.let { response ->
+        val playlistMap = response.data.associateBy { it.id }
+        ids.mapNotNull { playlistMap[it] }
+    }
 
     override suspend fun byIdFull(id: UUID): Pair<String, List<PlaylistEntry>>? = dbQuery {
         val rows = PlaylistTable

@@ -182,7 +182,10 @@ class ImageService(
 
     suspend fun byIds(ids: List<UUID>): List<Image> = queryImages(0, ids.size) {
         where { ImageTable.id inList ids }
-    }.data
+    }.let { response ->
+        val imageMap = response.data.associateBy { it.id }
+        ids.mapNotNull { imageMap[it] }
+    }
 
     suspend fun byHash(hash: String): Image? = querySingle {
         where { ImageTable.imageHash eq hash }

@@ -65,7 +65,10 @@ class UserPlaylistService : PlaylistLibrary, IUserPlaylistService, Service() {
 
     override suspend fun byIds(@LogParam("size") ids: List<UUID>): List<UserPlaylist> = queryPlaylists(0, Int.MAX_VALUE) {
         where { UserPlaylistTable.id inList ids }
-    }.data
+    }.let { response ->
+        val playlistMap = response.data.associateBy { it.id }
+        ids.mapNotNull { playlistMap[it] }
+    }
 
     suspend fun byName(name: String, creator: UUID): UserPlaylist? = querySingle {
         where { (UserPlaylistTable.name eq name) and (UserPlaylistTable.creator eq creator) }
