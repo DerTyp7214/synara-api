@@ -359,6 +359,7 @@ class ImageService(
         referencedImages.addAll(AnimatedImageTable.selectAll().mapNotNull { it[AnimatedImageTable.imageId]?.value })
         referencedImages.addAll(CollectionTable.selectAll().mapNotNull { it[CollectionTable.imageId]?.value })
         referencedImages.addAll(RadioChannelTable.selectAll().mapNotNull { it[RadioChannelTable.imageId]?.value })
+        referencedImages.addAll(MBReleaseGroupCoverTable.selectAll().mapNotNull { it[MBReleaseGroupCoverTable.imageId]?.value })
 
         referencedImages
     }

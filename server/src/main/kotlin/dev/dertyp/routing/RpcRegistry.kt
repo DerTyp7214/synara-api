@@ -133,6 +133,7 @@ private fun registerAuthenticated(koin: Koin, call: ApplicationCall, user: User,
     val rpcMetricsService = koin.get<RpcMetricsService>()
     val listenBrainzService = koin.get<ListenBrainzService>()
     val scrobbleService = koin.get<ScrobbleService>()
+    val listeningStatsService = koin.get<ListeningStatsService>()
     val recommendationServingService = koin.get<RecommendationServingService>()
     val radioService = koin.get<RadioService>()
     val radioChannelService = koin.get<RadioChannelService>()
@@ -171,6 +172,7 @@ private fun registerAuthenticated(koin: Koin, call: ApplicationCall, user: User,
     registrar.register(IRpcMetricsService::class) { rpcMetricsService.withAuthorization<IRpcMetricsService>(user).withLogging<IRpcMetricsService>(call) }
     registrar.register(IListenBrainzService::class) { RpcListenBrainzService(user, listenBrainzService).withAuthorization<IListenBrainzService>(user).withLogging<IListenBrainzService>(call) }
     registrar.register(IScrobbleService::class) { RpcScrobbleService(user, scrobbleService).withAuthorization<IScrobbleService>(user).withLogging<IScrobbleService>(call) }
+    registrar.register(IListeningStatsService::class) { RpcListeningStatsService(user, listeningStatsService).withAuthorization<IListeningStatsService>(user).withLogging<IListeningStatsService>(call) }
     registrar.register(IRecommendationService::class) { RpcRecommendationService(user, recommendationServingService).withAuthorization<IRecommendationService>(user).withLogging<IRecommendationService>(call) }
     registrar.register(IRadioService::class) { RadioRpcService(user, radioService).withAuthorization<IRadioService>(user).withLogging<IRadioService>(call) }
     registrar.register(IApiKeyService::class) { RpcApiKeyService(user, apiKeyService).withAuthorization<IApiKeyService>(user).withLogging<IApiKeyService>(call) }

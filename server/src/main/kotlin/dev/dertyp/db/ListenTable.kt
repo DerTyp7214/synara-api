@@ -26,6 +26,7 @@ object ListenTable : UUIDTable("listen") {
         index(false, songId)
         index(false, recordingMbid)
         index(false, userId)
+        index(false, userId, listenedAt)
     }
 
     const val DEDUP_WINDOW_MS = 2000L

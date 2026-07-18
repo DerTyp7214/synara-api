@@ -202,6 +202,7 @@ fun mainModule(application: Application, environment: ApplicationEnvironment): M
     singleOf(::HookService)
     singleOf(::ListenService)
     singleOf(::ScrobbleService)
+    singleOf(::ListeningStatsService)
     singleOf(::ListenBrainzService)
     singleOf(::AudioEmbeddingService)
     singleOf(::RecommendationService)

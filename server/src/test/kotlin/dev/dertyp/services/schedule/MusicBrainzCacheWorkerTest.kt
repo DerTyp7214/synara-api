@@ -4,11 +4,9 @@ import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
 import dev.dertyp.core.HttpClientPriority
 import dev.dertyp.data.MusicBrainzArtist
-import dev.dertyp.db.MBArtistTable
-import dev.dertyp.db.MBRecordingTable
-import dev.dertyp.db.MBReleaseGroupTable
-import dev.dertyp.db.MBReleaseTable
+import dev.dertyp.db.*
 import dev.dertyp.dbQuery
+import dev.dertyp.services.ReleaseService
 import dev.dertyp.services.metadata.MusicBrainzCacheService
 import dev.dertyp.services.metadata.MusicBrainzService
 import io.mockk.coEvery
@@ -31,7 +29,22 @@ class MusicBrainzCacheWorkerTest : KoinTest {
     private fun setup(dialect: DbDialect) = runBlocking {
         TestDatabase.connect(dialect, "mb_cache_worker_test")
         dbQuery {
-            SchemaUtils.create(MBArtistTable, MBReleaseGroupTable, MBReleaseTable, MBRecordingTable)
+            SchemaUtils.create(
+                UserTable,
+                ImageTable,
+                AnimatedImageTable,
+                AlbumTable,
+                SongTable,
+                ListenBrainzUserTable,
+                ListenTable,
+                MBArtistTable,
+                MBReleaseGroupTable,
+                MBReleaseGroupCoverTable,
+                MBReleaseTable,
+                MBRecordingTable,
+                MBRecordingArtistCreditTable,
+                MBRecordingReleaseTable,
+            )
         }
     }
 
@@ -62,6 +75,7 @@ class MusicBrainzCacheWorkerTest : KoinTest {
             modules(module {
                 single { musicBrainzService }
                 single { musicBrainzCacheService }
+                single { mockk<ReleaseService>(relaxed = true) }
             })
         }
 
