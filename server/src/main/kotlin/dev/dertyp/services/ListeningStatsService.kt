@@ -4,6 +4,8 @@ import dev.dertyp.PlatformUUID
 import dev.dertyp.data.*
 import dev.dertyp.db.*
 import dev.dertyp.dbQuery
+import dev.dertyp.services.sync.ListenBrainzService
+import org.koin.core.component.inject
 import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.jdbc.select
 import java.time.DayOfWeek
@@ -14,6 +16,24 @@ import java.time.ZonedDateTime
 import java.time.temporal.TemporalAdjusters
 
 class ListeningStatsService : Service() {
+    private val listenService by inject<ListenService>()
+    private val listenBrainzService by inject<ListenBrainzService>()
+
+    suspend fun linkUnmatched(userId: PlatformUUID, request: LinkUnmatchedTrackRequest): LinkUnmatchedTrackResult {
+        val link = listenService.linkUnmatched(userId, request.songId, request.recordingMsid, request.recordingMbid)
+
+        val songMbid = dbQuery {
+            SongMusicBrainzTable
+                .select(SongMusicBrainzTable.musicBrainzId)
+                .where { SongMusicBrainzTable.songId eq request.songId }
+                .singleOrNull()?.get(SongMusicBrainzTable.musicBrainzId)?.value
+        }
+        val submitted = if (songMbid != null && link.recordingMsids.isNotEmpty()) {
+            listenBrainzService.submitManualMapping(userId, songMbid, link.recordingMsids)
+        } else 0
+
+        return LinkUnmatchedTrackResult(linkedListens = link.linkedListens, submittedToListenBrainz = submitted)
+    }
 
     suspend fun stats(
         userId: PlatformUUID,
@@ -101,6 +121,8 @@ class ListeningStatsService : Service() {
                     albumName = display?.albumName,
                     coverId = display?.releaseMbid?.let { library.coverByReleaseMbid[it] },
                     listenCount = count,
+                    recordingMbid = (key as? SongKey.Mbid)?.mbid,
+                    recordingMsid = pass.songMsid[key],
                 )
             }
         }
@@ -209,9 +231,9 @@ class ListeningStatsService : Service() {
 
         ListenTable
             .select(
-                ListenTable.songId, ListenTable.listenedAt, ListenTable.recordingMbid, ListenTable.isrcs,
-                ListenTable.releaseMbid, ListenTable.artistMbids, ListenTable.trackName, ListenTable.artistName,
-                ListenTable.releaseName,
+                ListenTable.songId, ListenTable.listenedAt, ListenTable.recordingMbid, ListenTable.recordingMsid,
+                ListenTable.isrcs, ListenTable.releaseMbid, ListenTable.artistMbids, ListenTable.trackName,
+                ListenTable.artistName, ListenTable.releaseName,
             )
             .where { owner }
             .orderBy(ListenTable.listenedAt to SortOrder.ASC)
@@ -262,6 +284,7 @@ class ListeningStatsService : Service() {
                 if (songKey != null) {
                     result.songCounts.merge(songKey, 1L, Long::plus)
                     if (songId == null) {
+                        row[ListenTable.recordingMsid]?.let { result.songMsid.putIfAbsent(songKey, it) }
                         result.songDisplay.putIfAbsent(
                             songKey,
                             UnmatchedDisplay(
@@ -505,6 +528,7 @@ class ListeningStatsService : Service() {
         val unmatchedAlbumCounts = LinkedHashMap<AlbumKey, Long>()
         val unmatchedArtistFirstSeen = HashMap<ArtistKey, Long>()
         val songDisplay = HashMap<SongKey, UnmatchedDisplay>()
+        val songMsid = HashMap<SongKey, PlatformUUID>()
         val artistDisplay = HashMap<ArtistKey, String>()
         val albumDisplay = HashMap<AlbumKey, String>()
         val daysWithListens = HashSet<Long>()
@@ -534,4 +558,7 @@ class RpcListeningStatsService(
 ) : IListeningStatsService {
     override suspend fun getStats(range: StatsRange, timezone: String, topLimit: Int): ListeningStats =
         service.stats(user.id, range, timezone, topLimit.coerceIn(1, 100))
+
+    override suspend fun linkUnmatchedTrack(request: LinkUnmatchedTrackRequest): LinkUnmatchedTrackResult =
+        service.linkUnmatched(user.id, request)
 }

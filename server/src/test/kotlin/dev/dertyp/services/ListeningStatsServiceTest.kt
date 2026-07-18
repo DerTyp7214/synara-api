@@ -2,8 +2,12 @@ package dev.dertyp.services
 
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
+import dev.dertyp.data.LinkUnmatchedTrackRequest
 import dev.dertyp.data.StatsRange
 import dev.dertyp.db.*
+import dev.dertyp.plugins.HookBus
+import dev.dertyp.services.sync.ListenBrainzService
+import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.SchemaUtils
@@ -16,6 +20,7 @@ import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.EnumSource
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
+import org.koin.dsl.module
 import org.koin.test.KoinTest
 import java.time.ZoneOffset
 import java.time.ZonedDateTime
@@ -29,7 +34,14 @@ class ListeningStatsServiceTest : KoinTest {
     private val nowMs = nowUtc.toInstant().toEpochMilli()
 
     private fun setup(dialect: DbDialect) {
-        startKoin { modules() }
+        startKoin {
+            modules(module {
+                single<HookBus> { mockk(relaxed = true) }
+                single { mockk<SongService>() }
+                single { ListenService() }
+                single { mockk<ListenBrainzService>(relaxed = true) }
+            })
+        }
         database = TestDatabase.connect(dialect, "listening_stats_test")
         transaction(database) {
             SchemaUtils.create(
@@ -53,6 +65,7 @@ class ListeningStatsServiceTest : KoinTest {
                 ListenBrainzUserTable,
                 UserListenBrainzLinkTable,
                 ListenTable,
+                ListenLinkTable,
             )
         }
         service = ListeningStatsService()
@@ -135,6 +148,7 @@ class ListeningStatsServiceTest : KoinTest {
         lbUserId: UUID? = null,
         songId: UUID? = null,
         recordingMbid: UUID? = null,
+        recordingMsid: UUID? = null,
         releaseMbid: UUID? = null,
         isrcs: String? = null,
         artistMbids: String? = null,
@@ -147,6 +161,7 @@ class ListeningStatsServiceTest : KoinTest {
             it[listenBrainzUserId] = lbUserId
             it[ListenTable.songId] = songId
             it[ListenTable.recordingMbid] = recordingMbid
+            it[ListenTable.recordingMsid] = recordingMsid
             it[ListenTable.releaseMbid] = releaseMbid
             it[ListenTable.isrcs] = isrcs
             it[ListenTable.artistMbids] = artistMbids
@@ -502,6 +517,57 @@ class ListeningStatsServiceTest : KoinTest {
         val topAlbum = result.topAlbums.single()
         assertNull(topAlbum.albumId)
         assertEquals(imageId, topAlbum.coverId)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `unmatched entries expose their recording ids`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val mbid = UUID.randomUUID()
+        val msid = UUID.randomUUID()
+        val user = transaction(database) {
+            val u = insertUser()
+            val lb = insertLbUser()
+            link(u, lb)
+            insertListen(at(1), lbUserId = lb, trackName = "With Ids", recordingMbid = mbid, recordingMsid = msid)
+            insertListen(at(2), lbUserId = lb, trackName = "Names Only", artistName = "Someone")
+            u
+        }
+
+        val result = stats(user)
+
+        val withIds = result.topSongs.single { it.title == "With Ids" }
+        assertEquals(mbid, withIds.recordingMbid)
+        assertEquals(msid, withIds.recordingMsid)
+        val namesOnly = result.topSongs.single { it.title == "Names Only" }
+        assertNull(namesOnly.recordingMbid)
+        assertNull(namesOnly.recordingMsid)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `linking an unmatched track merges it into the library song`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val mbid = UUID.randomUUID()
+        val (user, song) = transaction(database) {
+            val u = insertUser()
+            val lb = insertLbUser()
+            link(u, lb)
+            val song = insertSong(insertAlbum(), title = "Lib Song")
+            insertListen(at(1), lbUserId = lb, trackName = "Foreign Name", recordingMbid = mbid, recordingMsid = UUID.randomUUID())
+            insertListen(at(2), lbUserId = lb, trackName = "Foreign Name", recordingMbid = mbid)
+            insertListen(at(3), userId = u, songId = song)
+            u to song
+        }
+
+        assertEquals(2, stats(user).topSongs.size)
+
+        val link = service.linkUnmatched(user, LinkUnmatchedTrackRequest(songId = song, recordingMbid = mbid))
+        assertEquals(2, link.linkedListens)
+
+        val merged = stats(user).topSongs.single()
+        assertEquals(song, merged.songId)
+        assertEquals(3L, merged.listenCount)
     }
 
     @ParameterizedTest

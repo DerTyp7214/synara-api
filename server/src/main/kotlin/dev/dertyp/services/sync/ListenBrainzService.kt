@@ -211,7 +211,7 @@ class ListenBrainzService : Service() {
             pages++
 
             val fresh = page.filter { it.listenedAt > watermark }
-            val incoming = toIncomingListens(fresh)
+            val incoming = toIncomingListens(lbUserId, fresh)
             val matched = incoming.count { it.songId != null }
             listenService.ingestListenBrainz(lbUserId, incoming)
             total += incoming.size
@@ -257,26 +257,31 @@ class ListenBrainzService : Service() {
         return null
     }
 
-    private suspend fun toIncomingListens(listens: List<LbListen>): List<IncomingListen> {
+    private suspend fun toIncomingListens(lbUserId: PlatformUUID, listens: List<LbListen>): List<IncomingListen> {
         if (listens.isEmpty()) return emptyList()
 
         val mbids = listens.mapNotNull { it.recordingMbid()?.toPlatformUuidOrNull() }.distinct()
         val directIsrcs = listens.mapNotNull { it.isrc()?.uppercase() }
         val match = dbQuery { resolveMatches(mbids, directIsrcs) }
+        val overrides = dbQuery { loadLinkOverrides(lbUserId) }
 
         return listens.map { listen ->
             val mbid = listen.recordingMbid()?.toPlatformUuidOrNull()
+            val msid = listen.recordingMsid?.toPlatformUuidOrNull()
             val candidateIsrcs = buildList {
                 listen.isrc()?.uppercase()?.let { add(it) }
                 mbid?.let { match.mbidToIsrcs[it] }?.let { addAll(it) }
             }
-            val songId = candidateIsrcs.firstNotNullOfOrNull { match.isrcToSong[it] }
+            val songId = msid?.let { overrides.byMsid[it] }
+                ?: mbid?.let { overrides.byMbid[it] }
+                ?: candidateIsrcs.firstNotNullOfOrNull { match.isrcToSong[it] }
                 ?: mbid?.let { match.mbidToSong[it] }
 
             IncomingListen(
                 listenedAtMs = listen.listenedAt * 1000,
                 songId = songId,
                 recordingMbid = mbid,
+                recordingMsid = msid,
                 releaseMbid = listen.releaseMbid()?.toPlatformUuidOrNull(),
                 artistMbids = listen.artistMbids().joinToString(",").ifBlank { null },
                 trackName = listen.trackName(),
@@ -287,7 +292,151 @@ class ListenBrainzService : Service() {
         }
     }
 
+    suspend fun backfillRecordingMsids(onProgress: suspend (Double, String) -> Unit = { _, _ -> }): Int {
+        val accounts = dbQuery {
+            ListenBrainzUserTable
+                .select(ListenBrainzUserTable.id, ListenBrainzUserTable.username, ListenBrainzUserTable.token)
+                .map { Triple(it[ListenBrainzUserTable.id].value, it[ListenBrainzUserTable.username], it[ListenBrainzUserTable.token]) }
+        }
+
+        var totalUpdated = 0
+        accounts.forEachIndexed { index, (lbUserId, username, token) ->
+            val missing = dbQuery {
+                ListenTable.selectAll()
+                    .where { ListenTable.listenBrainzUserId eq lbUserId }
+                    .andWhere { ListenTable.recordingMsid.isNull() }
+                    .count()
+            }
+            if (missing == 0L) {
+                onProgress((index + 1).toDouble() / accounts.size, "$username: no listens need MSID backfill")
+                return@forEachIndexed
+            }
+
+            var maxTs: Long? = null
+            var updated = 0
+            while (true) {
+                val page = fetchListens(username, token, maxTs)
+                if (page == null) {
+                    logger.error("[$username] listens fetch failed after retries at max_ts=$maxTs; aborting MSID backfill for this account")
+                    break
+                }
+                if (page.isEmpty()) break
+
+                val updates = page.mapNotNull { listen ->
+                    listen.recordingMsid?.toPlatformUuidOrNull()?.let { listen.listenedAt * 1000 to it }
+                }
+                dbQuery {
+                    updates.forEach { (listenedAt, msid) ->
+                        updated += ListenTable.update({
+                            (ListenTable.listenBrainzUserId eq lbUserId) and
+                                (ListenTable.listenedAt eq listenedAt) and
+                                ListenTable.recordingMsid.isNull()
+                        }) { it[ListenTable.recordingMsid] = msid }
+                    }
+                }
+
+                onProgress(
+                    (index + (updated.toDouble() / missing).coerceAtMost(1.0)) / accounts.size,
+                    "$username: backfilled $updated/$missing MSID(s)",
+                )
+                if (updated >= missing || page.size < PAGE_COUNT) break
+                maxTs = page.minOf { it.listenedAt }
+            }
+
+            logger.info("[$username] backfilled $updated recording MSID(s)")
+            totalUpdated += updated
+        }
+
+        onProgress(1.0, "Backfilled $totalUpdated recording MSID(s)")
+        if (totalUpdated > 0) signalChange()
+        return totalUpdated
+    }
+
+    suspend fun submitManualMapping(userId: PlatformUUID, recordingMbid: PlatformUUID, recordingMsids: List<PlatformUUID>): Int {
+        if (recordingMsids.isEmpty()) return 0
+
+        val token = dbQuery {
+            UserListenBrainzLinkTable
+                .join(
+                    ListenBrainzUserTable,
+                    JoinType.INNER,
+                    onColumn = UserListenBrainzLinkTable.listenBrainzUserId,
+                    otherColumn = ListenBrainzUserTable.id,
+                )
+                .select(ListenBrainzUserTable.token)
+                .where { UserListenBrainzLinkTable.userId eq userId }
+                .singleOrNull()?.get(ListenBrainzUserTable.token)
+        }
+        if (token.isNullOrBlank()) return 0
+
+        var submitted = 0
+        recordingMsids.distinct().forEach { msid ->
+            try {
+                val response = ApiClient.instance.post("$API_BASE/metadata/submit_manual_mapping") {
+                    header(HttpHeaders.Authorization, "Token $token")
+                    contentType(ContentType.Application.Json)
+                    setBody(LbManualMapping(recordingMsid = msid.toString(), recordingMbid = recordingMbid.toString()))
+                }
+                if (response.status.isSuccess()) {
+                    submitted++
+                } else {
+                    logger.warn("Manual mapping $msid -> $recordingMbid rejected with ${response.status}")
+                }
+            } catch (e: Exception) {
+                logger.error("Manual mapping $msid -> $recordingMbid failed: ${e.message}")
+            }
+        }
+        return submitted
+    }
+
+    private fun loadLinkOverrides(lbUserId: PlatformUUID): LinkOverrides {
+        val byMbid = HashMap<PlatformUUID, PlatformUUID>()
+        val byMsid = HashMap<PlatformUUID, PlatformUUID>()
+        ListenLinkTable
+            .join(
+                UserListenBrainzLinkTable,
+                JoinType.INNER,
+                onColumn = ListenLinkTable.userId,
+                otherColumn = UserListenBrainzLinkTable.userId,
+            )
+            .select(ListenLinkTable.recordingMbid, ListenLinkTable.recordingMsid, ListenLinkTable.songId, ListenLinkTable.createdAt)
+            .where { UserListenBrainzLinkTable.listenBrainzUserId eq lbUserId }
+            .orderBy(ListenLinkTable.createdAt to SortOrder.ASC)
+            .forEach { row ->
+                val songId = row[ListenLinkTable.songId].value
+                row[ListenLinkTable.recordingMbid]?.let { byMbid.putIfAbsent(it, songId) }
+                row[ListenLinkTable.recordingMsid]?.let { byMsid.putIfAbsent(it, songId) }
+            }
+        return LinkOverrides(byMbid = byMbid, byMsid = byMsid)
+    }
+
+    private data class LinkOverrides(
+        val byMbid: Map<PlatformUUID, PlatformUUID>,
+        val byMsid: Map<PlatformUUID, PlatformUUID>,
+    )
+
     suspend fun rematchUnmatched(lbUserId: PlatformUUID): Int {
+        val overrides = dbQuery { loadLinkOverrides(lbUserId) }
+        var overrideUpdated = 0
+        if (overrides.byMsid.isNotEmpty() || overrides.byMbid.isNotEmpty()) {
+            dbQuery {
+                overrides.byMsid.forEach { (msid, songId) ->
+                    overrideUpdated += ListenTable.update({
+                        (ListenTable.listenBrainzUserId eq lbUserId) and (ListenTable.recordingMsid eq msid) and ListenTable.songId.isNull()
+                    }) { it[ListenTable.songId] = songId }
+                }
+                overrides.byMbid.forEach { (mbid, songId) ->
+                    overrideUpdated += ListenTable.update({
+                        (ListenTable.listenBrainzUserId eq lbUserId) and (ListenTable.recordingMbid eq mbid) and ListenTable.songId.isNull()
+                    }) { it[ListenTable.songId] = songId }
+                }
+            }
+            if (overrideUpdated > 0) {
+                logger.info("Linked $overrideUpdated listen(s) via manual link overrides for account $lbUserId")
+                signalChange()
+            }
+        }
+
         val unmatchedMbids = dbQuery {
             ListenTable
                 .select(ListenTable.recordingMbid)
@@ -295,7 +444,7 @@ class ListenBrainzService : Service() {
                 .mapNotNull { it[ListenTable.recordingMbid] }
                 .distinct()
         }
-        if (unmatchedMbids.isEmpty()) return 0
+        if (unmatchedMbids.isEmpty()) return overrideUpdated
 
         val match = dbQuery { resolveMatches(unmatchedMbids, emptyList()) }
         val resolved = unmatchedMbids.mapNotNull { mbid ->
@@ -303,7 +452,7 @@ class ListenBrainzService : Service() {
                 ?: match.mbidToIsrcs[mbid]?.firstNotNullOfOrNull { match.isrcToSong[it] }
             if (songId != null) mbid to songId else null
         }
-        if (resolved.isEmpty()) return 0
+        if (resolved.isEmpty()) return overrideUpdated
 
         var updated = 0
         dbQuery {
@@ -317,7 +466,7 @@ class ListenBrainzService : Service() {
             logger.info("Re-matched $updated previously-unmatched listen(s) for account $lbUserId")
             signalChange()
         }
-        return updated
+        return overrideUpdated + updated
     }
 
     private fun resolveMatches(mbids: List<PlatformUUID>, directIsrcs: List<String>): Match {
@@ -395,6 +544,7 @@ private data class LbPayload(
 @Serializable
 private data class LbListen(
     @SerialName("listened_at") val listenedAt: Long = 0,
+    @SerialName("recording_msid") val recordingMsid: String? = null,
     @SerialName("track_metadata") val trackMetadata: LbTrackMetadata = LbTrackMetadata(),
 ) {
     fun recordingMbid(): String? = trackMetadata.additionalInfo?.recordingMbid ?: trackMetadata.mbidMapping?.recordingMbid
@@ -429,4 +579,10 @@ private data class LbMbidMapping(
     @SerialName("recording_mbid") val recordingMbid: String? = null,
     @SerialName("release_mbid") val releaseMbid: String? = null,
     @SerialName("artist_mbids") val artistMbids: List<String> = emptyList(),
+)
+
+@Serializable
+private data class LbManualMapping(
+    @SerialName("recording_msid") val recordingMsid: String,
+    @SerialName("recording_mbid") val recordingMbid: String,
 )

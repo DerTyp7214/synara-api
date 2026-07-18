@@ -15,10 +15,16 @@ import org.jetbrains.exposed.v1.jdbc.*
 import org.koin.core.component.inject
 import kotlin.math.abs
 
+data class LinkUnmatchedResult(
+    val linkedListens: Int,
+    val recordingMsids: List<PlatformUUID>,
+)
+
 data class IncomingListen(
     val listenedAtMs: Long,
     val songId: PlatformUUID? = null,
     val recordingMbid: PlatformUUID? = null,
+    val recordingMsid: PlatformUUID? = null,
     val releaseMbid: PlatformUUID? = null,
     val artistMbids: String? = null,
     val trackName: String? = null,
@@ -43,6 +49,7 @@ class ListenService : Service() {
                 this[ListenTable.listenBrainzUserId] = listenBrainzUserId
                 this[ListenTable.songId] = listen.songId
                 this[ListenTable.recordingMbid] = listen.recordingMbid
+                this[ListenTable.recordingMsid] = listen.recordingMsid
                 this[ListenTable.releaseMbid] = listen.releaseMbid
                 this[ListenTable.artistMbids] = listen.artistMbids
                 this[ListenTable.trackName] = listen.trackName
@@ -137,20 +144,87 @@ class ListenService : Service() {
         )
     }
 
+    suspend fun linkUnmatched(
+        userId: PlatformUUID,
+        songId: PlatformUUID,
+        recordingMsid: PlatformUUID?,
+        recordingMbid: PlatformUUID?,
+    ): LinkUnmatchedResult {
+        require(recordingMsid != null || recordingMbid != null) { "recordingMsid or recordingMbid is required" }
+
+        val result = dbQuery {
+            require(SongTable.select(SongTable.id).where { SongTable.id eq songId }.any()) { "Song $songId not found" }
+
+            val owner = ownerPredicate(userId)
+
+            val mbid = recordingMbid ?: recordingMsid?.let { msid ->
+                ListenTable
+                    .select(ListenTable.recordingMbid)
+                    .where { owner }
+                    .andWhere { ListenTable.recordingMsid eq msid }
+                    .andWhere { ListenTable.recordingMbid.isNotNull() }
+                    .limit(1)
+                    .firstOrNull()?.get(ListenTable.recordingMbid)
+            }
+
+            val identity = listOfNotNull(
+                mbid?.let { ListenTable.recordingMbid eq it },
+                recordingMsid?.let { ListenTable.recordingMsid eq it },
+            ).reduce { a, b -> a or b }
+
+            val existingOverrides = ListenLinkTable
+                .selectAll()
+                .where { ListenLinkTable.userId eq userId }
+                .andWhere {
+                    listOfNotNull(
+                        mbid?.let { ListenLinkTable.recordingMbid eq it },
+                        recordingMsid?.let { ListenLinkTable.recordingMsid eq it },
+                    ).reduce { a, b -> a or b }
+                }
+                .toList()
+            val oldSongIds = existingOverrides.map { it[ListenLinkTable.songId].value }.toSet()
+            if (existingOverrides.isNotEmpty()) {
+                ListenLinkTable.deleteWhere { ListenLinkTable.id inList existingOverrides.map { row -> row[ListenLinkTable.id].value } }
+            }
+            ListenLinkTable.insert {
+                it[ListenLinkTable.userId] = userId
+                it[ListenLinkTable.songId] = songId
+                it[ListenLinkTable.recordingMbid] = mbid
+                it[ListenLinkTable.recordingMsid] = recordingMsid
+                it[createdAt] = System.currentTimeMillis()
+            }
+
+            val relinkable = if (oldSongIds.isEmpty()) {
+                ListenTable.songId.isNull()
+            } else {
+                ListenTable.songId.isNull() or (ListenTable.songId inList oldSongIds)
+            }
+
+            val rows = ListenTable
+                .select(ListenTable.id, ListenTable.recordingMsid)
+                .where { owner }
+                .andWhere { identity }
+                .andWhere { relinkable }
+                .toList()
+
+            var updated = 0
+            rows.map { it[ListenTable.id].value }.chunked(1000).forEach { chunk ->
+                updated += ListenTable.update({ ListenTable.id inList chunk }) { it[ListenTable.songId] = songId }
+            }
+
+            val msids = (rows.mapNotNull { it[ListenTable.recordingMsid] } + listOfNotNull(recordingMsid)).distinct()
+            LinkUnmatchedResult(linkedListens = updated, recordingMsids = msids)
+        }
+
+        if (result.linkedListens > 0) _listenChanges.tryEmit(Unit)
+        return result
+    }
+
     suspend fun recentListens(userId: PlatformUUID, limit: Int): List<ListenedSong> {
         val capped = limit.coerceIn(1, 1000)
 
         val rows = dbQuery {
-            val lbId = UserListenBrainzLinkTable
-                .select(UserListenBrainzLinkTable.listenBrainzUserId)
-                .where { UserListenBrainzLinkTable.userId eq userId }
-                .singleOrNull()?.get(UserListenBrainzLinkTable.listenBrainzUserId)?.value
-
-            val owner = if (lbId != null) {
-                (ListenTable.userId eq userId) or (ListenTable.listenBrainzUserId eq lbId)
-            } else {
-                ListenTable.userId eq userId
-            }
+            val owner = ownerPredicate(userId)
 
             ListenTable
                 .select(ListenTable.songId, ListenTable.listenedAt, ListenTable.recordingMbid, ListenTable.isrcs)
@@ -177,6 +251,19 @@ class ListenService : Service() {
 
         val songs = songService.byIds(kept.map { it.songId }.distinct(), userId).associateBy { it.id }
         return kept.mapNotNull { row -> songs[row.songId]?.let { ListenedSong(song = it, listenedAt = row.listenedAt) } }
+    }
+
+    private fun ownerPredicate(userId: PlatformUUID): Op<Boolean> {
+        val lbId = UserListenBrainzLinkTable
+            .select(UserListenBrainzLinkTable.listenBrainzUserId)
+            .where { UserListenBrainzLinkTable.userId eq userId }
+            .singleOrNull()?.get(UserListenBrainzLinkTable.listenBrainzUserId)?.value
+
+        return if (lbId != null) {
+            (ListenTable.userId eq userId) or (ListenTable.listenBrainzUserId eq lbId)
+        } else {
+            ListenTable.userId eq userId
+        }
     }
 
     private data class LocalListenMetadata(

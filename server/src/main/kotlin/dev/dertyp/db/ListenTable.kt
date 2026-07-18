@@ -11,6 +11,7 @@ object ListenTable : UUIDTable("listen") {
     val userId = reference("userId", UserTable.id, onDelete = ReferenceOption.CASCADE).nullable()
     val songId = reference("songId", SongTable.id, onDelete = ReferenceOption.SET_NULL).nullable()
     val recordingMbid = javaUUID("recordingMbid").nullable()
+    val recordingMsid = javaUUID("recordingMsid").nullable()
     val releaseMbid = javaUUID("releaseMbid").nullable()
     val isrcs = text("isrcs").nullable()
     val artistMbids = text("artistMbids").nullable()

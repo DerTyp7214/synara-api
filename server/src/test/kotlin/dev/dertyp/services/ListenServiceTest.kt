@@ -16,6 +16,7 @@ import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.EnumSource
 import org.koin.core.context.startKoin
@@ -61,6 +62,7 @@ class ListenServiceTest : KoinTest {
                 ListenBrainzUserTable,
                 UserListenBrainzLinkTable,
                 ListenTable,
+                ListenLinkTable,
             )
         }
         service = ListenService()
@@ -161,6 +163,159 @@ class ListenServiceTest : KoinTest {
             it[ListenTable.isrcs] = isrcs
             it[ListenTable.recordingMbid] = recordingMbid
         }
+    }
+
+    private fun insertUnmatchedLb(
+        lbUserId: UUID,
+        at: Long,
+        recordingMbid: UUID? = null,
+        recordingMsid: UUID? = null,
+        trackName: String? = null,
+    ) {
+        ListenTable.insert {
+            it[listenBrainzUserId] = lbUserId
+            it[ListenTable.recordingMbid] = recordingMbid
+            it[ListenTable.recordingMsid] = recordingMsid
+            it[ListenTable.trackName] = trackName
+            it[listenedAt] = at
+            it[listenSource] = ListenSource.LISTENBRAINZ
+        }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `linkUnmatched by MBID links matching unmatched listens and stores an override`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val mbid = UUID.randomUUID()
+        val otherMbid = UUID.randomUUID()
+        val msid = UUID.randomUUID()
+        val (user, song) = transaction(database) {
+            val u = insertUser()
+            val lb = insertLbUser()
+            link(u, lb)
+            val song = insertSong(insertAlbum())
+            insertUnmatchedLb(lb, 100, recordingMbid = mbid, recordingMsid = msid)
+            insertUnmatchedLb(lb, 200, recordingMbid = mbid)
+            insertUnmatchedLb(lb, 300, recordingMbid = otherMbid)
+            u to song
+        }
+
+        val result = service.linkUnmatched(user, song, null, mbid)
+
+        assertEquals(2, result.linkedListens)
+        assertEquals(listOf(msid), result.recordingMsids)
+        transaction(database) {
+            val linked = ListenTable.selectAll().where { ListenTable.recordingMbid eq mbid }.map { it[ListenTable.songId]?.value }
+            assertEquals(listOf(song, song), linked)
+            val untouched = ListenTable.selectAll().where { ListenTable.recordingMbid eq otherMbid }.single()
+            assertEquals(null, untouched[ListenTable.songId])
+            val override = ListenLinkTable.selectAll().single()
+            assertEquals(user, override[ListenLinkTable.userId].value)
+            assertEquals(song, override[ListenLinkTable.songId].value)
+            assertEquals(mbid, override[ListenLinkTable.recordingMbid])
+            assertEquals(null, override[ListenLinkTable.recordingMsid])
+        }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `linkUnmatched by MSID expands to the group's MBID`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val mbid = UUID.randomUUID()
+        val msid = UUID.randomUUID()
+        val (user, song) = transaction(database) {
+            val u = insertUser()
+            val lb = insertLbUser()
+            link(u, lb)
+            val song = insertSong(insertAlbum())
+            insertUnmatchedLb(lb, 100, recordingMbid = mbid, recordingMsid = msid)
+            insertUnmatchedLb(lb, 200, recordingMbid = mbid)
+            insertUnmatchedLb(lb, 300, recordingMsid = UUID.randomUUID())
+            u to song
+        }
+
+        val result = service.linkUnmatched(user, song, msid, null)
+
+        assertEquals(2, result.linkedListens)
+        assertEquals(listOf(msid), result.recordingMsids)
+        transaction(database) {
+            val override = ListenLinkTable.selectAll().single()
+            assertEquals(mbid, override[ListenLinkTable.recordingMbid])
+            assertEquals(msid, override[ListenLinkTable.recordingMsid])
+        }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `linkUnmatched leaves other users' listens alone`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val mbid = UUID.randomUUID()
+        val (user, song, otherLb) = transaction(database) {
+            val u = insertUser()
+            val lb = insertLbUser()
+            link(u, lb)
+            val other = insertUser()
+            val otherLb = insertLbUser()
+            link(other, otherLb)
+            val song = insertSong(insertAlbum())
+            insertUnmatchedLb(lb, 100, recordingMbid = mbid)
+            insertUnmatchedLb(otherLb, 200, recordingMbid = mbid)
+            Triple(u, song, otherLb)
+        }
+
+        val result = service.linkUnmatched(user, song, null, mbid)
+
+        assertEquals(1, result.linkedListens)
+        transaction(database) {
+            val otherRow = ListenTable.selectAll().where { ListenTable.listenBrainzUserId eq otherLb }.single()
+            assertEquals(null, otherRow[ListenTable.songId])
+        }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `re-linking moves previously linked listens and replaces the override`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val mbid = UUID.randomUUID()
+        val (user, song1, song2, song3) = transaction(database) {
+            val u = insertUser()
+            val lb = insertLbUser()
+            link(u, lb)
+            val album = insertAlbum()
+            val song1 = insertSong(album)
+            val song2 = insertSong(album)
+            val song3 = insertSong(album)
+            insertUnmatchedLb(lb, 100, recordingMbid = mbid)
+            insertLb(lb, song3, 200, recordingMbid = mbid)
+            Quad(u, song1, song2, song3)
+        }
+
+        assertEquals(1, service.linkUnmatched(user, song1, null, mbid).linkedListens)
+        assertEquals(1, service.linkUnmatched(user, song2, null, mbid).linkedListens)
+
+        transaction(database) {
+            val songs = ListenTable.selectAll().where { ListenTable.recordingMbid eq mbid }
+                .orderBy(ListenTable.listenedAt).map { it[ListenTable.songId]?.value }
+            assertEquals(listOf(song2, song3), songs)
+            val override = ListenLinkTable.selectAll().single()
+            assertEquals(song2, override[ListenLinkTable.songId].value)
+        }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `linkUnmatched rejects missing identity and unknown songs`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val (user, song) = transaction(database) {
+            val u = insertUser()
+            u to insertSong(insertAlbum())
+        }
+
+        assertThrows<IllegalArgumentException> { service.linkUnmatched(user, song, null, null) }
+        assertThrows<IllegalArgumentException> {
+            service.linkUnmatched(user, UUID.randomUUID(), null, UUID.randomUUID())
+        }
+        Unit
     }
 
     @ParameterizedTest
