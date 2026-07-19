@@ -285,6 +285,7 @@ class ImageService(
         if (!imagePath.exists()) {
             imagePath.parent.toFile().mkdirs()
             imagePath.writeBytes(data)
+            storageService.invalidate(StorageCategory.IMAGES)
         }
 
         ImageTable.upsert(ImageTable.id) {
@@ -343,6 +344,8 @@ class ImageService(
             }
         } else emptyMap()
 
+        if (newImages.isNotEmpty()) storageService.invalidate(StorageCategory.IMAGES)
+
         return (existingImages.entries.associate { it.value to it.key }) + newlyInserted
     }
 
@@ -396,6 +399,8 @@ class ImageService(
                 ImageTable.deleteWhere { ImageTable.id inList batch.map { it.first } }
             }
         }
+
+        if (images.isNotEmpty()) storageService.invalidate(StorageCategory.IMAGES)
 
         onProgress(100.0, "Deleted ${images.size} images")
         logger.info("Deleted ${images.size} images")
@@ -489,6 +494,7 @@ class ImageService(
                 path.parent?.toFile()?.mkdirs()
                 path.writeBytes(recovered)
             }
+            storageService.invalidate(StorageCategory.IMAGES)
             recovered to recoveredImage
         }
 

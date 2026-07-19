@@ -91,6 +91,8 @@ class CustomAudioService(
                 }
             }
 
+            storageService.invalidate(StorageCategory.TOTAL)
+
             logger.info("Queueing file for indexing...")
             indexer.queue(
                 songPaths = listOf(targetFile.toPath()),

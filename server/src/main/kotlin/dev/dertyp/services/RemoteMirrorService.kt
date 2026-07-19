@@ -500,6 +500,7 @@ class RemoteMirrorService : Service() {
                             }
                         }
                         session.progressMutex.withLock { session.syncedSongs++ }
+                        storageService.invalidate(StorageCategory.TOTAL)
                     } else {
                         session.progressMutex.withLock { session.existingSongs++ }
                     }

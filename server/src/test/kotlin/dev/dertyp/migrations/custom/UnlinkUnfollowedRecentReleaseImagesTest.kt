@@ -8,6 +8,7 @@ import dev.dertyp.services.ImageService
 import dev.dertyp.services.ScheduledTaskLogService
 import dev.dertyp.services.StorageService
 import io.mockk.every
+import io.mockk.justRun
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.core.dao.id.EntityID
@@ -38,6 +39,7 @@ class UnlinkUnfollowedRecentReleaseImagesTest : KoinTest {
         val storageService = mockk<StorageService>()
         val redisConfig = mockk<RedisCacheProvider.Config>()
         every { storageService.imagesPath } returns tempDir.absolutePath
+        justRun { storageService.invalidate(any()) }
         every { redisConfig.host } returns "none"
 
         val logService = mockk<ScheduledTaskLogService>(relaxed = true)

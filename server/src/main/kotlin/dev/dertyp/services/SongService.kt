@@ -1524,6 +1524,8 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                 logger.info("Trying to delete parent ${file.parentFile.absolutePath} (${file.parentFile.delete()})")
         }
 
+        if (paths.isNotEmpty() || links.isNotEmpty()) get<StorageService>().invalidate(StorageCategory.TOTAL)
+
         deletedSongs == ids.size
     }
 

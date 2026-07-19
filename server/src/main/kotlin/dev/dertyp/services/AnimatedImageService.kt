@@ -167,6 +167,8 @@ class AnimatedImageService(
             AnimatedImageTable.deleteWhere { AnimatedImageTable.id inList idsToDelete }
         }
 
+        if (unreferenced.isNotEmpty()) storageService.invalidate(StorageCategory.ANIMATED_IMAGES)
+
         onProgress(100.0, "Deleted ${unreferenced.size} animated images")
         logger.info("Deleted ${unreferenced.size} unreferenced animated images")
         unreferenced.size
@@ -215,6 +217,8 @@ class AnimatedImageService(
                 }.associate { it[AnimatedImageTable.contentHash] to it[AnimatedImageTable.id].value }
             }
         } else emptyMap()
+
+        if (prepared.isNotEmpty()) storageService.invalidate(StorageCategory.ANIMATED_IMAGES)
 
         return (existing.entries.associate { it.value to it.key }) + newlyInserted
     }

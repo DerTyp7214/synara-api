@@ -188,6 +188,7 @@ class Indexer(
         }
 
         return coreIndexer.queue(mySongs, myPlaylists, "core", userId, stdout)
+            .also { deferred -> deferred.invokeOnCompletion { storageService.invalidate(StorageCategory.TOTAL) } }
     }
 
     suspend fun start(
@@ -225,5 +226,6 @@ class Indexer(
         }
 
         coreIndexer.start(mySongs, myPlaylists, userId, stdout)
+        storageService.invalidate(StorageCategory.TOTAL)
     }
 }

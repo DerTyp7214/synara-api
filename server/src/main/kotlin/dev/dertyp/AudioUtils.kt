@@ -6,6 +6,8 @@ import dev.dertyp.data.SimpleSong
 import dev.dertyp.data.TranscodedVersion
 import dev.dertyp.db.SongTable
 import dev.dertyp.db.TranscodedSongTable
+import dev.dertyp.services.StorageCategory
+import dev.dertyp.services.StorageService
 import io.ktor.http.ContentType
 import io.ktor.server.application.Application
 import io.ktor.server.application.ApplicationEnvironment
@@ -22,6 +24,7 @@ import org.bytedeco.javacv.FFmpegFrameGrabber
 import org.bytedeco.javacv.FFmpegFrameRecorder
 import org.bytedeco.javacv.FFmpegLogCallback
 import org.jetbrains.exposed.v1.core.*
+import org.koin.core.context.GlobalContext
 import org.jetbrains.exposed.v1.jdbc.insertIgnore
 import org.jetbrains.exposed.v1.jdbc.select
 import java.io.File
@@ -245,6 +248,8 @@ object AudioUtils {
                 grabber.release()
 
                 transcodingFile.copyTo(tempFile, true)
+
+                GlobalContext.getOrNull()?.get<StorageService>()?.invalidate(StorageCategory.TOTAL)
 
                 StreamInfo(
                     tempFile,

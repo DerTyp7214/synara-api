@@ -6,6 +6,7 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.just
+import io.mockk.justRun
 import io.mockk.mockk
 import io.mockk.mockkConstructor
 import io.mockk.spyk
@@ -37,6 +38,7 @@ class CustomAudioServiceTest {
         val storageService = mockk<StorageService>()
         val customPath = File(tempDir.toFile(), "custom").apply { mkdirs() }
         every { storageService.customAudioPath } returns customPath.absolutePath
+        justRun { storageService.invalidate(any()) }
 
         mockkConstructor(FFmpegFrameGrabber::class)
         every { anyConstructed<FFmpegFrameGrabber>().start() } just Runs
@@ -67,6 +69,7 @@ class CustomAudioServiceTest {
         val storageService = mockk<StorageService>()
         val customPath = File(tempDir.toFile(), "custom").apply { mkdirs() }
         every { storageService.customAudioPath } returns customPath.absolutePath
+        justRun { storageService.invalidate(any()) }
 
         val service = spyk(CustomAudioService(indexer, storageService))
 

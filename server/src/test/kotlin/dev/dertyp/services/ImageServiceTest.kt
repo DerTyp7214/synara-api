@@ -6,6 +6,7 @@ import dev.dertyp.db.*
 import dev.dertyp.plugins.RedisCacheProvider
 import dev.dertyp.utils.ColorUtils
 import io.mockk.every
+import io.mockk.justRun
 import io.mockk.mockk
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.runBlocking
@@ -45,6 +46,7 @@ class ImageServiceTest {
         redisConfig = mockk<RedisCacheProvider.Config>()
         
         every { storageService.imagesPath } returns tempDir.absolutePath
+        justRun { storageService.invalidate(any()) }
         every { redisConfig.host } returns "none"
 
         startKoin {

@@ -5,8 +5,20 @@ import dev.dertyp.plugins.IServerStorageService
 import dev.dertyp.services.import.ImportBackend
 import io.ktor.server.application.ApplicationEnvironment
 import java.io.File
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
+import kotlin.time.Duration.Companion.minutes
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
-class StorageService(environment: ApplicationEnvironment) : IStorageService, IServerStorageService {
+enum class StorageCategory { TOTAL, IMAGES, ANIMATED_IMAGES }
+
+class StorageService(environment: ApplicationEnvironment) : IStorageService, IServerStorageService, Service() {
     override val tracksPath =
         environment.config.propertyOrNull("audio.tracks")?.getString()?.removeSuffix("/")
     override val albumsPath =
@@ -27,10 +39,45 @@ class StorageService(environment: ApplicationEnvironment) : IStorageService, ISe
         emptyList()
     }
 
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    private val caches = mapOf(
+        StorageCategory.TOTAL to CachedSize(::computeTotalStorage),
+        StorageCategory.IMAGES to CachedSize(::computeImagesStorage),
+        StorageCategory.ANIMATED_IMAGES to CachedSize(::computeAnimatedImagesStorage),
+    )
+
     override fun forImporter(backend: ImportBackend): IServerStorageService =
         ImporterStorageService(this, backend)
 
-    override suspend fun getTotalStorage(): Long {
+    fun invalidate(category: StorageCategory) {
+        caches.getValue(category).markDirty()
+    }
+
+    override suspend fun getTotalStorage(): Long = caches.getValue(StorageCategory.TOTAL).get()
+
+    suspend fun getImagesStorage(): Long = caches.getValue(StorageCategory.IMAGES).get()
+
+    suspend fun getAnimatedImagesStorage(): Long = caches.getValue(StorageCategory.ANIMATED_IMAGES).get()
+
+    override suspend fun startService() {
+        caches.values.forEach { cache ->
+            try {
+                cache.recompute()
+            } catch (e: Throwable) {
+                logger.error("Failed to compute storage size", e)
+            }
+        }
+    }
+
+    suspend fun recomputeAll(): Map<StorageCategory, Long> =
+        caches.mapValues { (_, cache) -> cache.recompute() }
+
+    override suspend fun stopService() {
+        scope.cancel()
+    }
+
+    private fun computeTotalStorage(): Long {
         val pathsToMeasure = (
                 listOfNotNull(
                     tracksPath,
@@ -52,9 +99,57 @@ class StorageService(environment: ApplicationEnvironment) : IStorageService, ISe
         return rootPaths.sumOf { it.getTotalSize() }
     }
 
-    suspend fun getImagesStorage(): Long = File(imagesPath).getTotalSize()
+    private fun computeImagesStorage(): Long = File(imagesPath).getTotalSize()
 
-    suspend fun getAnimatedImagesStorage(): Long = File(animatedImagesPath).getTotalSize()
+    private fun computeAnimatedImagesStorage(): Long = File(animatedImagesPath).getTotalSize()
+
+    private inner class CachedSize(private val compute: () -> Long) {
+        private val value = AtomicLong(UNSET)
+        private val dirty = AtomicBoolean(true)
+        private val lastComputedAt = AtomicLong(0)
+        private val refreshing = AtomicBoolean(false)
+        private val computeMutex = Mutex()
+
+        fun markDirty() {
+            dirty.set(true)
+        }
+
+        suspend fun get(): Long {
+            if (value.get() == UNSET) return computeMutex.withLock {
+                if (value.get() != UNSET) value.get() else recomputeLocked()
+            }
+
+            val minIntervalElapsed =
+                System.nanoTime() - lastComputedAt.get() >= MIN_RECOMPUTE_INTERVAL.inWholeNanoseconds
+            if (dirty.get() && minIntervalElapsed && refreshing.compareAndSet(false, true)) {
+                scope.launch {
+                    try {
+                        recompute()
+                    } catch (e: Throwable) {
+                        logger.error("Failed to refresh storage size", e)
+                    } finally {
+                        refreshing.set(false)
+                    }
+                }
+            }
+            return value.get()
+        }
+
+        suspend fun recompute(): Long = computeMutex.withLock { recomputeLocked() }
+
+        private fun recomputeLocked(): Long {
+            dirty.set(false)
+            val computed = compute()
+            value.set(computed)
+            lastComputedAt.set(System.nanoTime())
+            return computed
+        }
+    }
+
+    companion object {
+        private const val UNSET = Long.MIN_VALUE
+        private val MIN_RECOMPUTE_INTERVAL = 1.minutes
+    }
 }
 
 class ImporterStorageService(
