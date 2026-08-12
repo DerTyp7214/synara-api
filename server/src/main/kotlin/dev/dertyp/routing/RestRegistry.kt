@@ -407,7 +407,7 @@ private fun KFunction<*>.getRestMethodAndName(): Pair<String, String> {
 
 fun Route.registerPublicRestServices(koin: Koin) {
     registerRestService(IServerStatsService::class) { koin.get<ServerStatsService>() }
-    registerRestService(IAuthService::class) { RpcAuthService(call, koin.get(), koin.get(), koin.get()) }
+    registerRestService(IAuthService::class) { RpcAuthService(call, koin.get(), koin.get(), koin.get(), koin.get()) }
     registerRestService(IHandshakeService::class) { HandshakeService(call) }
     registerRestService(IImageService::class, authenticated = true) {
         ImageRpcService(call.getUser(), koin.get<ImageService>())

@@ -69,9 +69,10 @@ private fun registerPublic(koin: Koin, call: ApplicationCall, registrar: Service
     val authService = koin.get<AuthService>()
     val sessionService = koin.get<SessionService>()
     val jwtService = koin.get<JwtService>()
+    val userService = koin.get<UserService>()
 
     registrar.register(IServerStatsService::class) { serverStatsService.withLogging<IServerStatsService>(call) }
-    registrar.register(IAuthService::class) { RpcAuthService(call, authService, sessionService, jwtService).withLogging<IAuthService>(call) }
+    registrar.register(IAuthService::class) { RpcAuthService(call, authService, sessionService, jwtService, userService).withLogging<IAuthService>(call) }
     registrar.register(IHandshakeService::class) { HandshakeService(call).withLogging<IHandshakeService>(call) }
 }
 
