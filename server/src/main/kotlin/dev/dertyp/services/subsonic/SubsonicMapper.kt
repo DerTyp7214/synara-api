@@ -16,6 +16,7 @@ private fun contentTypeFor(suffix: String): String? = when (suffix) {
     "ogg", "oga", "opus" -> "audio/ogg"
     "m4a", "mp4", "aac" -> "audio/mp4"
     "wav" -> "audio/wav"
+    "aiff", "aif" -> "audio/aiff"
     else -> null
 }
 

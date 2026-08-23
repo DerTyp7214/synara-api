@@ -1,5 +1,6 @@
 package dev.dertyp
 
+import dev.dertyp.audio.LosslessFormat
 import dev.dertyp.core.deleteOnExitRecursive
 import dev.dertyp.data.AudioFormat
 import dev.dertyp.data.SimpleSong
@@ -59,7 +60,7 @@ object AudioUtils {
 
     val isTranscoderActive = AtomicBoolean(false)
 
-    private val transcodeMutexes = ConcurrentHashMap<Triple<String, Int, AudioFormat>, Mutex>()
+    private val transcodeMutexes = ConcurrentHashMap<TranscodeKey, Mutex>()
 
     internal fun closestSampleRate(rate: Int): Int {
         val supported = listOf(8000, 12000, 16000, 24000, 48000)
@@ -104,7 +105,7 @@ object AudioUtils {
         audioFormat: AudioFormat = AudioFormat.OPUS,
     ): StreamInfo = withContext(Dispatchers.IO) {
         val mutex =
-            transcodeMutexes.computeIfAbsent(Triple(flacFile.absolutePath, targetKbps, audioFormat)) { Mutex() }
+            transcodeMutexes.computeIfAbsent(TranscodeKey(flacFile.absolutePath, targetKbps, audioFormat.name)) { Mutex() }
 
         mutex.withLock {
             if (!flacFile.exists()) {
@@ -269,6 +270,137 @@ object AudioUtils {
                 transcodingFile.delete()
             }
         }
+    }
+
+    internal fun sourceBitDepth(grabber: FFmpegFrameGrabber): Int {
+        when (grabber.audioCodec) {
+            avcodec.AV_CODEC_ID_PCM_U8, avcodec.AV_CODEC_ID_PCM_S8 -> return 8
+            avcodec.AV_CODEC_ID_PCM_S16LE, avcodec.AV_CODEC_ID_PCM_S16BE -> return 16
+            avcodec.AV_CODEC_ID_PCM_S24LE, avcodec.AV_CODEC_ID_PCM_S24BE -> return 24
+            avcodec.AV_CODEC_ID_PCM_S32LE, avcodec.AV_CODEC_ID_PCM_S32BE -> return 32
+        }
+        return when (grabber.sampleFormat) {
+            avutil.AV_SAMPLE_FMT_U8, avutil.AV_SAMPLE_FMT_U8P -> 8
+            avutil.AV_SAMPLE_FMT_S16, avutil.AV_SAMPLE_FMT_S16P -> 16
+            avutil.AV_SAMPLE_FMT_S32, avutil.AV_SAMPLE_FMT_S32P,
+            avutil.AV_SAMPLE_FMT_FLT, avutil.AV_SAMPLE_FMT_FLTP -> 24
+            else -> 16
+        }
+    }
+
+    internal fun losslessCodec(target: LosslessFormat, bitDepth: Int): Int {
+        val highRes = bitDepth > 16
+        return when (target) {
+            LosslessFormat.FLAC -> avcodec.AV_CODEC_ID_FLAC
+            LosslessFormat.WAV -> if (highRes) avcodec.AV_CODEC_ID_PCM_S24LE else avcodec.AV_CODEC_ID_PCM_S16LE
+            LosslessFormat.AIFF -> if (highRes) avcodec.AV_CODEC_ID_PCM_S24BE else avcodec.AV_CODEC_ID_PCM_S16BE
+        }
+    }
+
+    suspend fun convertLossless(input: File, output: File, target: LosslessFormat): Unit = withContext(Dispatchers.IO) {
+        if (!input.exists()) throw FileNotFoundException("Input file not found: ${input.absolutePath}")
+        if (input.isDirectory) throw IOException("Input file is a directory: ${input.absolutePath}")
+        if (input.length() == 0L) throw IOException("Input file is empty: ${input.absolutePath}")
+
+        avutil.av_log_set_level(avutil.AV_LOG_ERROR)
+
+        val workDir = Files.createTempDirectory("lossless_").toFile().apply { deleteOnExitRecursive() }
+        val workFile = workDir.resolve("converting_${input.nameWithoutExtension}.${target.extension}")
+
+        val grabber = FFmpegFrameGrabber(input.absolutePath)
+        try {
+            grabber.start()
+            if (grabber.audioChannels <= 0) {
+                throw IllegalStateException("Invalid audio channels: ${grabber.audioChannels} for file ${input.absolutePath}")
+            }
+
+            val bitDepth = sourceBitDepth(grabber)
+            val inputMetadata: Map<String, String> = grabber.metadata.toMap()
+
+            val recorder = FFmpegFrameRecorder(workFile.absolutePath, grabber.audioChannels)
+            try {
+                recorder.imageWidth = 0
+                recorder.imageHeight = 0
+                recorder.videoCodec = avcodec.AV_CODEC_ID_NONE
+                recorder.format = target.ffmpegFormat
+                recorder.audioCodec = losslessCodec(target, bitDepth)
+                recorder.sampleFormat = if (bitDepth > 16) avutil.AV_SAMPLE_FMT_S32 else AV_SAMPLE_FMT_S16
+                recorder.sampleRate = grabber.sampleRate
+                recorder.frameRate = 1.0
+                inputMetadata.forEach { (key, value) -> recorder.setMetadata(key.lowercase(), value) }
+                recorder.start()
+
+                var frame = grabber.grabFrame(true, false, true, false)
+                while (frame != null) {
+                    recorder.record(frame)
+                    frame = grabber.grabFrame(true, false, true, false)
+                }
+                recorder.stop()
+            } finally {
+                recorder.release()
+            }
+
+            output.parentFile?.mkdirs()
+            workFile.copyTo(output, overwrite = true)
+        } catch (e: Throwable) {
+            output.delete()
+            logger.error("Lossless conversion to $target failed for ${input.absolutePath}: ${e.message}", e)
+            throw e
+        } finally {
+            try {
+                grabber.stop()
+            } catch (_: Throwable) {
+            }
+            grabber.release()
+            workFile.delete()
+            workDir.delete()
+        }
+    }
+
+    suspend fun losslessFlacFallback(environment: ApplicationEnvironment, source: File): StreamInfo =
+        withContext(Dispatchers.IO) {
+            val mutex = transcodeMutexes.computeIfAbsent(TranscodeKey(source.absolutePath, 0, LOSSLESS_FLAC_FOLDER)) { Mutex() }
+            mutex.withLock {
+                if (!source.exists()) throw FileNotFoundException("Input file not found: ${source.absolutePath}")
+                if (source.isDirectory) throw IOException("Input file is a directory: ${source.absolutePath}")
+                if (source.length() == 0L) throw IOException("Input file is empty: ${source.absolutePath}")
+
+                val target = LosslessFormat.FLAC
+                val cacheFile = cacheFileFor(environment, source, LOSSLESS_FLAC_FOLDER, target.extension)
+                val info = { StreamInfo(cacheFile, target.contentType, cacheFile.length(), cacheFile.name) }
+
+                if (cacheFile.exists() && cacheFile.length() > 0) {
+                    if (isCacheValid(source, cacheFile)) return@withLock info()
+                    cacheFile.delete()
+                }
+
+                convertLossless(source, cacheFile, target)
+                GlobalContext.getOrNull()?.get<StorageService>()?.invalidate(StorageCategory.TOTAL)
+                info()
+            }
+        }
+
+    private const val LOSSLESS_FLAC_FOLDER = "lossless_flac"
+
+    private data class TranscodeKey(val path: String, val kbps: Int, val variant: String)
+
+    private fun cacheFileFor(environment: ApplicationEnvironment, source: File, folder: String, extension: String): File {
+        val tracksPath = environment.config.propertyOrNull("audio.tracks")?.getString()
+        val transcoderPath = environment.config.propertyOrNull("audio.transcode")?.getString() ?: ""
+        val parent = if (tracksPath != null)
+            source.absoluteFile.parentFile.absolutePath.removePrefix(tracksPath)
+        else source.absoluteFile.parentFile.name
+        return Paths.get(transcoderPath, folder, parent, "${source.nameWithoutExtension}.$extension").toFile()
+    }
+
+    private fun isCacheValid(source: File, cached: File): Boolean {
+        val sourceDuration = getDuration(source)
+        val cachedDuration = getDuration(cached)
+        if (sourceDuration != Duration.ZERO && cachedDuration != Duration.ZERO &&
+            (sourceDuration - cachedDuration).absoluteValue < 1.seconds
+        ) return true
+        logger.info("Duration mismatch for ${cached.name}: source=$sourceDuration, cached=$cachedDuration. Re-transcoding.")
+        return false
     }
 
     suspend fun remuxToAdts(input: File, output: File): Unit = withContext(Dispatchers.IO) {

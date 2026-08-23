@@ -128,6 +128,7 @@ class DiscoveryService : Service() {
                     .select(SongTable.id)
                     .filterByColor(l, a, b, range)
                     .orderByColorDistance(l, a, b)
+                    .orderBy(SongTable.title to SortOrder.ASC, SongTable.id to SortOrder.ASC)
                     .limit(limitVal)
                     .offset(offsetVal.toLong())
                     .map { it[SongTable.id].value }
@@ -184,6 +185,7 @@ class DiscoveryService : Service() {
                     .select(AlbumTable.id)
                     .filterByColor(l, a, b, range)
                     .orderByColorDistance(l, a, b)
+                    .orderBy(AlbumTable.name to SortOrder.ASC, AlbumTable.id to SortOrder.ASC)
                     .limit(limitVal)
                     .offset(offsetVal.toLong())
                     .map { it[AlbumTable.id].value }

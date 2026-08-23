@@ -1,5 +1,6 @@
 package dev.dertyp.services.gamdl
 
+import dev.dertyp.audio.AudioConfig
 import dev.dertyp.data.User
 import dev.dertyp.executeCommand
 import dev.dertyp.findInPath
@@ -60,6 +61,7 @@ class GamdlServiceTest : KoinTest {
         startKoin {
             modules(module {
                 single { environment }
+                single { AudioConfig() }
                 single { songService }
                 single { importService }
             })

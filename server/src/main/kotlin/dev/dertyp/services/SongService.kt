@@ -1,6 +1,9 @@
 package dev.dertyp.services
 
 import dev.dertyp.*
+import dev.dertyp.audio.isLossless
+import dev.dertyp.audio.LosslessFormat
+import dev.dertyp.audio.losslessFormat
 import dev.dertyp.core.*
 import dev.dertyp.data.*
 import dev.dertyp.db.*
@@ -38,24 +41,17 @@ import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.milliseconds
 
-class SongRpcService(private val user: User, private val songService: SongService) : ISongService,
+class SongRpcService(
+    private val user: User,
+    private val songService: SongService,
+    private val client: ClientInfo = ClientInfo.LEGACY,
+) : ISongService,
     RestFileProvider {
     override suspend fun getFile(methodName: String, args: List<Any?>): StreamInfo? {
         if (methodName == "streamSong") {
             val id = args[0] as? UUID ?: return null
             val song = songService.byId(id) ?: return null
-            val file = File(song.path)
-            if (!file.exists()) return null
-            return StreamInfo(
-                file = file,
-                contentType = withContext(Dispatchers.IO) {
-                    ContentType.parse(
-                        Files.probeContentType(file.toPath()) ?: "application/octet-stream"
-                    )
-                },
-                contentLength = file.length(),
-                fileName = file.name
-            )
+            return songService.resolveRawStream(song, client)
         }
         if (methodName == "downloadSong") {
             val id = args[0] as? UUID ?: return null
@@ -72,16 +68,7 @@ class SongRpcService(private val user: User, private val songService: SongServic
                 AudioUtils.insertTranscodedSong(id, transcodeInfo.file, quality, format)
                 return transcodeInfo
             }
-            return StreamInfo(
-                file = file,
-                contentType = withContext(Dispatchers.IO) {
-                    ContentType.parse(
-                        Files.probeContentType(file.toPath()) ?: "application/octet-stream"
-                    )
-                },
-                contentLength = file.length(),
-                fileName = file.name
-            )
+            return songService.resolveRawStream(song, client)
         }
         return null
     }
@@ -210,7 +197,7 @@ class SongRpcService(private val user: User, private val songService: SongServic
         songService.searchByLyrics(page, pageSize, query, explicit, user.id)
 
     override fun streamSong(id: UUID, offset: Long, chunkSize: Int): Flow<ByteArray>? =
-        songService.streamSong(id, offset, chunkSize)
+        songService.streamSong(id, offset, chunkSize, client)
 
     override fun downloadSong(
         id: UUID,
@@ -219,16 +206,16 @@ class SongRpcService(private val user: User, private val songService: SongServic
         chunkSize: Int,
         force: Boolean,
         format: AudioFormat
-    ): Flow<ByteArray>? = songService.downloadSong(id, quality, offset, chunkSize, force, format)
+    ): Flow<ByteArray>? = songService.downloadSong(id, quality, offset, chunkSize, force, format, client)
 
-    override suspend fun getStreamSize(id: UUID): Long = songService.getStreamSize(id)
+    override suspend fun getStreamSize(id: UUID): Long = songService.getStreamSize(id, client)
 
     override suspend fun getDownloadSize(
         id: UUID,
         quality: Int,
         force: Boolean,
         format: AudioFormat
-    ): Long = songService.getDownloadSize(id, quality, force, format)
+    ): Long = songService.getDownloadSize(id, quality, force, format, client)
 
     override fun allSongIds(
         explicit: Boolean,
@@ -460,7 +447,7 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
 
         return@dbQuery byId(id, userId).also {
             it?.let { song ->
-                if (!song.path.endsWith(".flac", true)) return@let
+                if (!File(song.path).isLossless) return@let
                 try {
                     val file = AudioFileIO.read(File(song.path))
 
@@ -487,7 +474,7 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
 
         return@dbQuery byId(id, userId).also {
             it?.let { song ->
-                if (!song.path.endsWith(".flac", true)) return@let
+                if (!File(song.path).isLossless) return@let
                 try {
                     val file = AudioFileIO.read(File(song.path))
 
@@ -536,7 +523,7 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
         }
 
         return byId(id, userId).also { song ->
-            if (song == null || !song.path.endsWith(".flac", true)) return@also
+            if (song == null || !File(song.path).isLossless) return@also
             try {
                 val file = AudioFileIO.read(File(song.path))
 
@@ -585,7 +572,7 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
 
         return byId(song.id, userId).also { updated ->
             updated?.let { s ->
-                if (!s.path.endsWith(".flac", true)) return@let
+                if (!File(s.path).isLossless) return@let
                 try {
                     val file = AudioFileIO.read(File(s.path))
                     file.tag.apply {
@@ -1529,12 +1516,38 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
         deletedSongs == ids.size
     }
 
-    fun streamSong(id: UUID, offset: Long, chunkSize: Int = 4096): Flow<ByteArray>? {
-        val song = runBlocking { byId(id) } ?: return null
+    fun formatOf(path: String): String {
+        val ext = path.substringAfterLast('.', "").lowercase()
+        return LosslessFormat.fromExtension(ext)?.extension ?: ext.take(8)
+    }
+
+    fun contentTypeFor(file: File): ContentType = when (file.extension.lowercase()) {
+        "flac" -> LosslessFormat.FLAC.contentType
+        "wav" -> LosslessFormat.WAV.contentType
+        "aiff", "aif" -> LosslessFormat.AIFF.contentType
+        "ogg", "oga", "opus" -> ContentType.Audio.OGG
+        "m4a", "mp4", "aac" -> ContentType.Audio.MP4
+        "mp3" -> ContentType.Audio.MPEG
+        else -> runCatching { Files.probeContentType(file.toPath())?.let(ContentType::parse) }.getOrNull()
+            ?: ContentType.Application.OctetStream
+    }
+
+    suspend fun resolveRawStream(song: Song, client: ClientInfo): StreamInfo? {
         val file = File(song.path)
         if (!file.exists()) return null
+        val format = file.losslessFormat
+        if ((format == LosslessFormat.WAV || format == LosslessFormat.AIFF) && !client.supports(ClientFeature.LOSSLESS_WAV_AIFF)) {
+            return AudioUtils.losslessFlacFallback(environment, file)
+        }
+        return StreamInfo(file, contentTypeFor(file), file.length(), file.name)
+    }
+
+    fun streamSong(id: UUID, offset: Long, chunkSize: Int = 4096, client: ClientInfo = ClientInfo.LEGACY): Flow<ByteArray>? {
+        val song = runBlocking { byId(id) } ?: return null
+        if (!File(song.path).exists()) return null
 
         return flow {
+            val file = resolveRawStream(song, client)?.file ?: return@flow
             val buffer = ByteArray(chunkSize)
             file.inputStream().use { input ->
                 input.skip(offset)
@@ -1553,7 +1566,8 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
         offset: Long = 0,
         chunkSize: Int = 4096,
         force: Boolean = true,
-        format: AudioFormat = AudioFormat.OPUS
+        format: AudioFormat = AudioFormat.OPUS,
+        client: ClientInfo = ClientInfo.LEGACY,
     ): Flow<ByteArray>? {
         val song = runBlocking { byId(id) } ?: return null
         val file = File(song.path)
@@ -1561,7 +1575,8 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
 
         return flow {
             val streamInfo =
-                AudioUtils.transcodeAudio(environment, file, quality, force, format).also {
+                if (quality <= 0) resolveRawStream(song, client) ?: return@flow
+                else AudioUtils.transcodeAudio(environment, file, quality, force, format).also {
                     AudioUtils.insertTranscodedSong(id, it.file, quality, format)
                 }
 
@@ -1584,22 +1599,22 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
         }.flowOn(Dispatchers.IO)
     }
 
-    suspend fun getStreamSize(id: UUID): Long {
+    suspend fun getStreamSize(id: UUID, client: ClientInfo = ClientInfo.LEGACY): Long {
         val song = byId(id) ?: return 0
-        val file = File(song.path)
-        if (!file.exists()) return 0
-        return file.length()
+        return resolveRawStream(song, client)?.contentLength ?: 0
     }
 
     suspend fun getDownloadSize(
         id: UUID,
         quality: Int,
         force: Boolean = true,
-        format: AudioFormat = AudioFormat.OPUS
+        format: AudioFormat = AudioFormat.OPUS,
+        client: ClientInfo = ClientInfo.LEGACY,
     ): Long {
         val song = byId(id) ?: return 0
         val file = File(song.path)
         if (!file.exists()) return 0
+        if (quality <= 0) return resolveRawStream(song, client)?.contentLength ?: 0
         val streamInfo = AudioUtils.transcodeAudio(environment, file, quality, force, format).also {
             AudioUtils.insertTranscodedSong(id, it.file, quality, format)
         }
@@ -2359,6 +2374,7 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                     this[SongTable.releaseDate] = getISOFromDate(song.releaseDate)
                     this[SongTable.lyrics] = song.lyrics
                     this[SongTable.filePath] = song.path
+                    this[SongTable.format] = formatOf(song.path)
                     this[SongTable.originalUrl] = song.originalUrl
                     this[SongTable.trackNumber] = song.trackNumber
                     this[SongTable.discNumber] = song.discNumber
@@ -2477,6 +2493,7 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
             it[releaseDate] = getISOFromDate(song.releaseDate)
             it[lyrics] = song.lyrics
             it[filePath] = song.path
+            it[format] = formatOf(song.path)
             it[originalUrl] = song.originalUrl
             it[trackNumber] = song.trackNumber
             it[discNumber] = song.discNumber

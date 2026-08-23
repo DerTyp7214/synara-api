@@ -45,6 +45,7 @@ class ScheduledTaskConfigurationService : Service() {
             TaskConfiguration(TaskKeys.MERGE_LIBRARY_DUPLICATES, "Merge Library Duplicates", true, TriggerDefinition.Cron("0 1 * * *")),
             TaskConfiguration(TaskKeys.AUDIO_ANALYSIS, "Audio Analysis", true, TriggerDefinition.Cron("0 3 * * *")),
             TaskConfiguration(TaskKeys.FLAC_ANALYSIS, "FLAC Analysis", true, TriggerDefinition.Cron("0 5 * * *")),
+            TaskConfiguration(TaskKeys.PCM_ANALYSIS, "WAV/AIFF Analysis", true, TriggerDefinition.Cron("20 5 * * *")),
             TaskConfiguration(TaskKeys.MUSICBRAINZ_WORKER, "MusicBrainz Worker", true, TriggerDefinition.Cron("0 0 * * *")),
             TaskConfiguration(TaskKeys.MUSICBRAINZ_CACHE_WORKER, "MusicBrainz Cache Worker", true, TriggerDefinition.AfterTask(TaskKeys.MUSICBRAINZ_WORKER)),
             TaskConfiguration(TaskKeys.GENRE_METADATA_WORKER, "Genre Metadata Worker", true, TriggerDefinition.AfterTask(TaskKeys.MUSICBRAINZ_WORKER)),

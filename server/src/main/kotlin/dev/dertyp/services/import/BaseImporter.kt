@@ -145,7 +145,7 @@ abstract class BaseImporter(override var indexer: IPluginIndexer, internal val s
             if (currentTry == 0) {
                 songPaths.addAll(
                     paths
-                        .filter { it.extension == indexer.audioExtension }
+                        .filter { indexer.isAudio(it) }
                         .distinctBy { it.absolutePathString() }
                 )
 

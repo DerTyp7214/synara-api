@@ -301,7 +301,7 @@ abstract class TidalBaseImporter(
             onLiveOutput("Waiting for cover art imports to finish...")
             val coverDataMap = coverDownloads.mapValues { it.value.await() }
 
-            paths.filter { it.extension == indexer.audioExtension }.forEach { path ->
+            paths.filter { indexer.isAudio(it) }.forEach { path ->
                 onLiveOutput("Post-processing: ${path.absolutePathString()}")
                 try {
                     val audioFile = AudioFileIO.read(path.toFile())

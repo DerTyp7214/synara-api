@@ -1,5 +1,6 @@
 package dev.dertyp.services.import.soundcloud
 
+import dev.dertyp.audio.AudioConfig
 import dev.dertyp.plugins.IPluginIndexer
 import dev.dertyp.plugins.IServerStorageService
 import dev.dertyp.services.LrcLibService
@@ -40,6 +41,7 @@ class SoundcloudServiceTest : KoinTest {
         startKoin {
             modules(module {
                 single { environment }
+                single { AudioConfig() }
                 single { songService }
                 single { userPlaylistService }
                 single { importService }

@@ -1,5 +1,7 @@
 package dev.dertyp.services.import.youtube
 
+import dev.dertyp.audio.AudioConfig
+import kotlin.io.path.extension
 import dev.dertyp.ApiClient
 import dev.dertyp.PlatformUUID
 import dev.dertyp.data.MusicBrainzArtistCredit
@@ -81,6 +83,7 @@ class YoutubeMetadataEnrichmentTest : KoinTest {
         startKoin {
             modules(module {
                 single { environment }
+                single { AudioConfig() }
                 single { songService }
                 single { userPlaylistService }
                 single { importService }
@@ -94,6 +97,8 @@ class YoutubeMetadataEnrichmentTest : KoinTest {
         mockkStatic(AudioFileIO::class)
         
         every { indexer.audioExtension } returns "flac"
+        every { indexer.audioExtensions } returns setOf("flac")
+        every { indexer.isAudio(any()) } answers { firstArg<Path>().extension.lowercase() == "flac" }
         every { indexer.artistDelimiter } returns ", "
     }
 

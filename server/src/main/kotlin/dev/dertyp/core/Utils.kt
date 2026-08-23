@@ -6,6 +6,7 @@ import kotlin.concurrent.atomics.AtomicBoolean
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.math.ln
 import kotlin.math.pow
+import java.util.Locale
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.TimedValue
 import kotlin.time.measureTimedValue
@@ -47,7 +48,7 @@ fun Number.toHumanReadableSize(): String {
     val size = bytes / 1024.0.pow(i.toDouble())
     val unit = units.getOrElse(i) { units.last() }
 
-    return "%.1f %s".format(size, unit)
+    return "%.1f %s".format(Locale.ROOT, size, unit)
 }
 
 fun <T> logTimeSplit(label: String, block: () -> T): T {

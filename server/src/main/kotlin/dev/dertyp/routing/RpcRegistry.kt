@@ -3,6 +3,7 @@ package dev.dertyp.routing
 import dev.dertyp.IIndexer
 import dev.dertyp.Indexer
 import dev.dertyp.RpcIndexer
+import dev.dertyp.core.clientInfo
 import dev.dertyp.core.getUser
 import dev.dertyp.data.User
 import dev.dertyp.services.*
@@ -143,7 +144,7 @@ private fun registerAuthenticated(koin: Koin, call: ApplicationCall, user: User,
 
     registrar.register(IIndexer::class) { RpcIndexer(indexer, user).withAuthorization<IIndexer>(user).withLogging<IIndexer>(call) }
     registrar.register(IUserService::class) { RpcUserService(user, userService, imageService).withAuthorization<IUserService>(user).withLogging<IUserService>(call) }
-    registrar.register(ISongService::class) { SongRpcService(songService = songService, user = user).withAuthorization<ISongService>(user).withLogging<ISongService>(call) }
+    registrar.register(ISongService::class) { SongRpcService(songService = songService, user = user, client = call.clientInfo).withAuthorization<ISongService>(user).withLogging<ISongService>(call) }
     registrar.register(IAlbumService::class) { AlbumRpcService(user, albumService).withAuthorization<IAlbumService>(user).withLogging<IAlbumService>(call) }
     registrar.register(IImageService::class) { ImageRpcService(user, imageService).withAuthorization<IImageService>(user).withLogging<IImageService>(call) }
     registrar.register(IAnimatedImageService::class) { AnimatedImageRpcService(animatedImageService).withAuthorization<IAnimatedImageService>(user).withLogging<IAnimatedImageService>(call) }

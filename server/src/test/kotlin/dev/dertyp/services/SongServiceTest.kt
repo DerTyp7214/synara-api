@@ -1,7 +1,12 @@
 package dev.dertyp.services
 
+import dev.dertyp.AudioUtils
 import dev.dertyp.DbDialect
+import dev.dertyp.StreamInfo
 import dev.dertyp.TestDatabase
+import dev.dertyp.audio.LosslessFormat
+import dev.dertyp.core.ApiVersion
+import dev.dertyp.core.ClientInfo
 import dev.dertyp.data.*
 import dev.dertyp.db.*
 import dev.dertyp.services.import.Type
@@ -13,7 +18,11 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.mockkObject
+import io.mockk.unmockkObject
 import kotlinx.coroutines.flow.toList
+import org.junit.jupiter.api.io.TempDir
+import java.nio.file.Path
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.like
@@ -111,6 +120,7 @@ class SongServiceTest : KoinTest {
     fun tearDown() {
         stopKoin()
         TestDatabase.cleanUp()
+        unmockkObject(AudioUtils)
     }
 
     @ParameterizedTest
@@ -154,6 +164,76 @@ class SongServiceTest : KoinTest {
         assertEquals("Test Album", song?.album?.name)
         assertEquals(1, song?.artists?.size)
         assertEquals("Test Artist", song?.artists?.firstOrNull()?.name)
+    }
+
+    private fun insertSongWithPath(path: String): UUID {
+        val albumId = UUID.randomUUID()
+        val songId = UUID.randomUUID()
+        transaction(database) {
+            AlbumTable.insert {
+                it[id] = albumId
+                it[name] = "Album"
+                it[songCount] = 1
+            }
+            SongTable.insert {
+                it[id] = songId
+                it[title] = "Song"
+                it[SongTable.albumId] = albumId
+                it[filePath] = path
+                it[format] = songService.formatOf(path)
+            }
+        }
+        return songId
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `resolveRawStream serves wav raw to new clients and flac to legacy clients`(dialect: DbDialect, @TempDir tempDir: Path) = runBlocking {
+        setup(dialect)
+        val wav = tempDir.resolve("song.wav").toFile().apply { writeText("wav bytes") }
+        val flacFallback = tempDir.resolve("song.flac").toFile().apply { writeText("flac bytes") }
+        val songId = insertSongWithPath(wav.absolutePath)
+        val song = songService.byId(songId)!!
+
+        mockkObject(AudioUtils)
+        coEvery { AudioUtils.losslessFlacFallback(any(), wav) } returns
+            StreamInfo(flacFallback, LosslessFormat.FLAC.contentType, flacFallback.length(), flacFallback.name)
+
+        val modern = songService.resolveRawStream(song, ClientInfo(ApiVersion.CURRENT))!!
+        assertEquals(wav, modern.file)
+        assertEquals(LosslessFormat.WAV.contentType, modern.contentType)
+
+        val legacy = songService.resolveRawStream(song, ClientInfo.LEGACY)!!
+        assertEquals(flacFallback, legacy.file)
+        assertEquals(LosslessFormat.FLAC.contentType, legacy.contentType)
+
+        assertEquals(flacFallback.length(), songService.getStreamSize(songId, ClientInfo.LEGACY))
+        assertEquals(wav.length(), songService.getStreamSize(songId, ClientInfo(ApiVersion.CURRENT)))
+
+        val legacyRpc = SongRpcService(user, songService, ClientInfo.LEGACY)
+        assertEquals(flacFallback, legacyRpc.getFile("streamSong", listOf(songId))?.file)
+        assertEquals(flacFallback, legacyRpc.getFile("downloadSong", listOf(songId, 0))?.file)
+        val modernRpc = SongRpcService(user, songService, ClientInfo(ApiVersion.CURRENT))
+        assertEquals(wav, modernRpc.getFile("streamSong", listOf(songId))?.file)
+        assertEquals("wav bytes", modernRpc.streamSong(songId, 0, 4096)!!.toList().reduce { a, b -> a + b }.decodeToString())
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `resolveRawStream never falls back for flac files`(dialect: DbDialect, @TempDir tempDir: Path) = runBlocking {
+        setup(dialect)
+        val flac = tempDir.resolve("song.flac").toFile().apply { writeText("flac bytes") }
+        val songId = insertSongWithPath(flac.absolutePath)
+        val song = songService.byId(songId)!!
+
+        mockkObject(AudioUtils)
+
+        val legacy = songService.resolveRawStream(song, ClientInfo.LEGACY)!!
+        assertEquals(flac, legacy.file)
+        assertEquals(LosslessFormat.FLAC.contentType, legacy.contentType)
+        coVerify(exactly = 0) { AudioUtils.losslessFlacFallback(any(), any()) }
+
+        assertEquals("flac", transaction(database) { SongTable.select(SongTable.format).where { SongTable.id eq songId }.single()[SongTable.format] })
     }
 
     @ParameterizedTest

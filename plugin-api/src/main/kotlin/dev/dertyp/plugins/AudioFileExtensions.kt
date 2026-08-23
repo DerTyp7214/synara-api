@@ -3,13 +3,16 @@ package dev.dertyp.plugins
 import org.jaudiotagger.audio.AudioFile
 import org.jaudiotagger.tag.FieldKey
 import org.jaudiotagger.tag.Tag
+import org.jaudiotagger.tag.aiff.AiffTag
 import org.jaudiotagger.tag.flac.FlacTag
+import org.jaudiotagger.tag.id3.AbstractID3v2Tag
 import org.jaudiotagger.tag.id3.ID3v24Frame
 import org.jaudiotagger.tag.id3.ID3v24Tag
 import org.jaudiotagger.tag.id3.framebody.FrameBodyTXXX
 import org.jaudiotagger.tag.id3.framebody.FrameBodyWXXX
 import org.jaudiotagger.tag.images.StandardArtwork
 import org.jaudiotagger.tag.vorbiscomment.VorbisCommentTag
+import org.jaudiotagger.tag.wav.WavTag
 import java.io.ByteArrayInputStream
 import javax.imageio.ImageIO
 
@@ -57,9 +60,26 @@ val AudioFile.originalUrl: String?
             is VorbisCommentTag -> t.getFirst("URL")
             is FlacTag -> t.vorbisCommentTag.getFirst("URL")
             is ID3v24Tag -> t.getCustomField("URL")
+            is WavTag, is AiffTag -> t.id3v24Tag(create = false)?.getCustomField("URL")
             else -> null
         }
     }
+
+fun Tag.id3v24Tag(create: Boolean = true): ID3v24Tag? {
+    val existing: AbstractID3v2Tag? = when (this) {
+        is WavTag -> iD3Tag
+        is AiffTag -> iD3Tag
+        else -> return this as? ID3v24Tag
+    }
+    if (existing is ID3v24Tag) return existing
+    if (existing == null && !create) return null
+    val converted = if (existing == null) ID3v24Tag() else ID3v24Tag(existing)
+    when (this) {
+        is WavTag -> iD3Tag = converted
+        is AiffTag -> iD3Tag = converted
+    }
+    return converted
+}
 
 fun ID3v24Tag.getCustomField(key: String): String? {
     val fields = getFields("WXXX")
@@ -87,6 +107,7 @@ fun AudioFile.setOriginalUrl(url: String) {
         is VorbisCommentTag -> t.setField("URL", url)
         is FlacTag -> t.vorbisCommentTag.setField("URL", url)
         is ID3v24Tag -> t.setCustomField("URL", url)
+        is WavTag, is AiffTag -> t.id3v24Tag()?.setCustomField("URL", url)
     }
 }
 
@@ -154,6 +175,7 @@ fun Tag.setCustomField(key: String, value: String) {
             frame.body = FrameBodyTXXX(0.toByte(), key, value)
             setField(frame)
         }
+        is WavTag, is AiffTag -> id3v24Tag()?.setCustomField(key, value)
     }
 }
 
@@ -172,6 +194,7 @@ fun Tag.deleteCustomField(key: String) {
                 toKeep.forEach { addField(it) }
             }
         }
+        is WavTag, is AiffTag -> id3v24Tag(create = false)?.deleteCustomField(key)
     }
 }
 

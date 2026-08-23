@@ -479,7 +479,7 @@ class RemoteMirrorService : Service() {
                     val newId = if (session.config.isImport) songService.findSongIdByMetadata(song.title, localAlbumId!!, song.trackNumber, song.discNumber, song.explicit) ?: randomPlatformUUID() else song.id
                     val localPathString = resolveLocalPath(song.path, newId.toString(), session.config.quality, session.remotePaths)
                     val base = localPathString.substringBeforeLast('.')
-                    val existing = listOf("$base.flac", "$base.ogg").map { File(it) }.firstOrNull { it.exists() && it.length() > 0 }
+                    val existing = listOf("flac", "wav", "aiff", "aif", "ogg").map { File("$base.$it") }.firstOrNull { it.exists() && it.length() > 0 }
                     val isComplete = existing != null && (existing.absolutePath != File(localPathString).absolutePath || (size > 0 && existing.length() == size))
                     val targetPath = existing?.absolutePath ?: localPathString
 

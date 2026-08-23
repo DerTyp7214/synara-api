@@ -92,6 +92,7 @@ class Indexer(
     }
 
     override val audioExtension: String get() = coreIndexer.audioExtension
+    override val audioExtensions: Set<String> get() = coreIndexer.audioExtensions
     override val playlistExtension: String get() = coreIndexer.playlistExtension
     override val artistDelimiter: String get() = ";"
 

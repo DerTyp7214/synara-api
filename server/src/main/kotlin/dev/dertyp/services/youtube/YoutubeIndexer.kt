@@ -39,7 +39,7 @@ class YoutubeIndexer(context: PluginContext) : BaseIndexer(context, IMetadataSer
             val map = ConcurrentHashMap<InsertableAlbum, MutableList<AudioFile>>()
             val images = ConcurrentHashMap<String, InsertableImage>()
 
-            files.filter { it.extension == audioExtension }.map { file ->
+            files.filter { isAudio(it) }.map { file ->
                 async(Dispatchers.IO) {
                     semaphore.withPermit {
                         try {

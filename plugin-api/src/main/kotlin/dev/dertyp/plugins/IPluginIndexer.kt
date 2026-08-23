@@ -4,6 +4,7 @@ import dev.dertyp.PlatformUUID
 import dev.dertyp.services.import.ImportBackend
 import kotlinx.coroutines.Deferred
 import java.nio.file.Path
+import kotlin.io.path.extension
 
 interface IPluginIndexer {
     val id: String
@@ -27,6 +28,8 @@ interface IPluginIndexer {
     )
 
     val audioExtension: String
+    val audioExtensions: Set<String> get() = setOf(audioExtension)
+    fun isAudio(path: Path): Boolean = path.extension.lowercase() in audioExtensions
     val playlistExtension: String
     val artistDelimiter: String get() = ";"
 }

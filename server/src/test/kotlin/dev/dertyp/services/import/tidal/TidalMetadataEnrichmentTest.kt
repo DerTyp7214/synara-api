@@ -1,5 +1,7 @@
 package dev.dertyp.services.import.tidal
 
+import dev.dertyp.audio.AudioConfig
+import kotlin.io.path.extension
 import dev.dertyp.ApiClient
 import dev.dertyp.PlatformUUID
 import dev.dertyp.data.*
@@ -98,6 +100,7 @@ class TidalMetadataEnrichmentTest : KoinTest {
         startKoin {
             modules(module {
                 single { songService }
+                single { AudioConfig() }
                 single { userPlaylistService }
                 single { imageService }
                 single { importService }
@@ -122,6 +125,8 @@ class TidalMetadataEnrichmentTest : KoinTest {
         }
         
         every { indexer.audioExtension } returns "flac"
+        every { indexer.audioExtensions } returns setOf("flac")
+        every { indexer.isAudio(any()) } answers { firstArg<Path>().extension.lowercase() == "flac" }
         every { indexer.artistDelimiter } returns ", "
     }
 

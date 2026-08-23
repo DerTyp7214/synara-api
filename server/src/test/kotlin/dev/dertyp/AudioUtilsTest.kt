@@ -1,5 +1,6 @@
 package dev.dertyp
 
+import dev.dertyp.audio.LosslessFormat
 import dev.dertyp.data.AudioFormat
 import dev.dertyp.data.TranscodedVersion
 import dev.dertyp.db.*
@@ -286,6 +287,94 @@ class AudioUtilsTest {
             grabber.stop()
             grabber.release()
         }
+    }
+
+    private fun writeSilentWav(file: File, sampleRate: Int = 44100, channels: Int = 2, seconds: Int = 1) {
+        val recorder = FFmpegFrameRecorder(file.absolutePath, channels).apply {
+            audioCodec = org.bytedeco.ffmpeg.global.avcodec.AV_CODEC_ID_PCM_S16LE
+            format = "wav"
+            sampleFormat = org.bytedeco.ffmpeg.global.avutil.AV_SAMPLE_FMT_S16
+            this.sampleRate = sampleRate
+            start()
+        }
+        val silence = java.nio.ShortBuffer.allocate(sampleRate / 10 * channels)
+        repeat(10 * seconds) { recorder.recordSamples(sampleRate, channels, silence.rewind()) }
+        recorder.stop()
+        recorder.release()
+        assertTrue(file.length() > 0)
+    }
+
+    @ParameterizedTest
+    @EnumSource(LosslessFormat::class)
+    fun `convertLossless keeps sample rate and writes the requested container`(target: LosslessFormat, @TempDir tempDir: Path) {
+        runBlocking {
+            val source = tempDir.resolve("source.wav").toFile()
+            writeSilentWav(source, sampleRate = 44100)
+
+            val output = tempDir.resolve("out.${target.extension}").toFile()
+            AudioUtils.convertLossless(source, output, target)
+
+            assertTrue(output.length() > 0)
+            val grabber = FFmpegFrameGrabber(output.absolutePath).apply { start() }
+            assertEquals(target.ffmpegFormat, grabber.format)
+            assertEquals(44100, grabber.sampleRate)
+            assertEquals(2, grabber.audioChannels)
+            val expectedCodec = when (target) {
+                LosslessFormat.FLAC -> org.bytedeco.ffmpeg.global.avcodec.AV_CODEC_ID_FLAC
+                LosslessFormat.WAV -> org.bytedeco.ffmpeg.global.avcodec.AV_CODEC_ID_PCM_S16LE
+                LosslessFormat.AIFF -> org.bytedeco.ffmpeg.global.avcodec.AV_CODEC_ID_PCM_S16BE
+            }
+            assertEquals(expectedCodec, grabber.audioCodec)
+            grabber.stop()
+            grabber.release()
+        }
+    }
+
+    @Test
+    fun `convertLossless deletes the output on failure`(@TempDir tempDir: Path) {
+        runBlocking {
+            val bogus = tempDir.resolve("bogus.wav").toFile().apply { writeText("not audio") }
+            val output = tempDir.resolve("out.flac").toFile()
+            assertThrows<Exception> { AudioUtils.convertLossless(bogus, output, LosslessFormat.FLAC) }
+            assertTrue(!output.exists())
+        }
+    }
+
+    @Test
+    fun `losslessFlacFallback caches a flac rendition under lossless_flac`(@TempDir tempDir: Path) {
+        runBlocking {
+            val tracks = tempDir.resolve("tracks/Album").toFile().apply { mkdirs() }
+            val source = tracks.resolve("song.wav")
+            writeSilentWav(source)
+
+            val environment = mockk<ApplicationEnvironment>()
+            every { environment.config } returns MapApplicationConfig(
+                "audio.tracks" to tempDir.resolve("tracks").toString(),
+                "audio.transcode" to tempDir.resolve("transcode").toString()
+            )
+
+            val first = AudioUtils.losslessFlacFallback(environment, source)
+            assertEquals("song.flac", first.fileName)
+            assertEquals(LosslessFormat.FLAC.contentType, first.contentType)
+            assertTrue(first.file.absolutePath.contains("${File.separator}lossless_flac${File.separator}"))
+            assertTrue(first.file.length() > 0)
+            assertEquals(first.file.length(), first.contentLength)
+
+            val modified = first.file.lastModified()
+            Thread.sleep(20)
+            val second = AudioUtils.losslessFlacFallback(environment, source)
+            assertEquals(first.file, second.file)
+            assertEquals(modified, second.file.lastModified())
+        }
+    }
+
+    @Test
+    fun `losslessCodec picks bit depth specific pcm codecs`() {
+        assertEquals(org.bytedeco.ffmpeg.global.avcodec.AV_CODEC_ID_PCM_S16LE, AudioUtils.losslessCodec(LosslessFormat.WAV, 16))
+        assertEquals(org.bytedeco.ffmpeg.global.avcodec.AV_CODEC_ID_PCM_S24LE, AudioUtils.losslessCodec(LosslessFormat.WAV, 24))
+        assertEquals(org.bytedeco.ffmpeg.global.avcodec.AV_CODEC_ID_PCM_S16BE, AudioUtils.losslessCodec(LosslessFormat.AIFF, 16))
+        assertEquals(org.bytedeco.ffmpeg.global.avcodec.AV_CODEC_ID_PCM_S24BE, AudioUtils.losslessCodec(LosslessFormat.AIFF, 24))
+        assertEquals(org.bytedeco.ffmpeg.global.avcodec.AV_CODEC_ID_FLAC, AudioUtils.losslessCodec(LosslessFormat.FLAC, 24))
     }
 
     @Test

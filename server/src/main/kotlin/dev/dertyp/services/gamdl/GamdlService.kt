@@ -1,6 +1,8 @@
 package dev.dertyp.services.gamdl
 
 import dev.dertyp.PlatformUUID
+import dev.dertyp.audio.AudioConfig
+import dev.dertyp.audio.LosslessFormat
 import dev.dertyp.core.*
 import dev.dertyp.data.User
 import dev.dertyp.data.UserSong
@@ -36,6 +38,7 @@ class GamdlService(
 
     private val environment by inject<ApplicationEnvironment>()
     private val songService by inject<SongService>()
+    private val audioConfig by inject<AudioConfig>()
     private val importService by inject<ImportService>()
 
     private val gamdlPath = findInPath("gamdl")
@@ -264,24 +267,32 @@ class GamdlService(
         }
 
         val tracksPath = pluginStorage.tracksPath
-        val flacPaths = mutableListOf<Path>()
+        val losslessPaths = mutableListOf<Path>()
         if (tracksPath != null) {
             val newFiles = Path(tracksPath).getModifiedSince(startTime)
             val m4aFiles = newFiles.filter { it.extension == "m4a" && it.exists() }
-            onLiveOutput("gamdl downloaded ${m4aFiles.size} file(s); transcoding to flac...")
+            val target = audioConfig.losslessFormat
+            onLiveOutput("gamdl downloaded ${m4aFiles.size} file(s); transcoding to ${target.extension}...")
             for (m4a in m4aFiles) {
-                transcodeToFlac(m4a, aliveCheck, onLiveOutput)?.let { flacPaths.add(it) }
+                transcodeToLossless(m4a, target, aliveCheck, onLiveOutput)?.let { losslessPaths.add(it) }
             }
         }
 
-        onLiveOutput("Queueing ${flacPaths.size} song(s) for indexing...")
-        indexer.queue(flacPaths.distinct(), emptyList(), indexer.id, userId, onLiveOutput).await()
+        onLiveOutput("Queueing ${losslessPaths.size} song(s) for indexing...")
+        indexer.queue(losslessPaths.distinct(), emptyList(), indexer.id, userId, onLiveOutput).await()
 
         return result
     }
 
-    private suspend fun transcodeToFlac(
+    internal fun losslessFfmpegArgs(target: LosslessFormat): List<String> = when (target) {
+        LosslessFormat.FLAC -> listOf("-map", "0:a", "-map", "0:v?", "-c:a", "flac", "-c:v", "copy")
+        LosslessFormat.WAV -> listOf("-map", "0:a", "-vn", "-c:a", "pcm_s16le", "-f", "wav")
+        LosslessFormat.AIFF -> listOf("-map", "0:a", "-vn", "-c:a", "pcm_s16be", "-f", "aiff")
+    }
+
+    private suspend fun transcodeToLossless(
         m4a: Path,
+        target: LosslessFormat,
         aliveCheck: suspend () -> Boolean,
         onLiveOutput: suspend (String) -> Unit
     ): Path? {
@@ -289,19 +300,14 @@ class GamdlService(
             onLiveOutput("ffmpeg not found on PATH; cannot transcode ${m4a.absolutePathString()}")
             return null
         }
-        val flac = m4a.resolveSibling(m4a.nameWithoutExtension + ".flac")
-        val cmd = listOf(
-            ffmpegPath, "-y",
-            "-i", m4a.absolutePathString(),
-            "-map", "0:a", "-map", "0:v?",
-            "-c:a", "flac", "-c:v", "copy",
-            "-map_metadata", "0",
-            flac.absolutePathString()
-        )
+        val output = m4a.resolveSibling(m4a.nameWithoutExtension + "." + target.extension)
+        val cmd = listOf(ffmpegPath, "-y", "-i", m4a.absolutePathString()) +
+            losslessFfmpegArgs(target) +
+            listOf("-map_metadata", "0", output.absolutePathString())
         val res = executeCommand(cmd, aliveCheck, logger, workingDirectory) { onLiveOutput(it) }
-        return if (res.exitCode == 0 && flac.exists()) {
+        return if (res.exitCode == 0 && output.exists()) {
             runCatching { m4a.deleteIfExists() }
-            flac
+            output
         } else {
             onLiveOutput("Transcode failed for ${m4a.absolutePathString()} (exit ${res.exitCode}); keeping source.")
             null

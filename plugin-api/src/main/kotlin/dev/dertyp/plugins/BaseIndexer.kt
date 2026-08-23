@@ -33,6 +33,7 @@ abstract class BaseIndexer(
 ) : IPluginIndexer {
 
     override val audioExtension = "flac"
+    override val audioExtensions = setOf("flac", "wav", "aiff", "aif")
     override val playlistExtension = "m3u"
 
     protected val pluginStorages by lazy { importBackends.map { context.storageService.forImporter(it) } }
@@ -50,7 +51,7 @@ abstract class BaseIndexer(
     )
 
     override fun canHandle(path: Path): Boolean {
-        return path.extension == audioExtension || path.extension == playlistExtension
+        return isAudio(path) || path.extension == playlistExtension
     }
 
     protected open fun buildMap(paths: List<Path>): List<Path> {
@@ -103,7 +104,7 @@ abstract class BaseIndexer(
             val map = ConcurrentHashMap<InsertableAlbum, MutableList<AudioFile>>()
             val images = ConcurrentHashMap<String, InsertableImage>()
 
-            files.filter { it.extension == audioExtension }.map { file ->
+            files.filter { isAudio(it) }.map { file ->
                 async(Dispatchers.IO) {
                     semaphore.withPermit {
                         try {

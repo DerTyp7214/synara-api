@@ -72,7 +72,7 @@ class GamdlIndexerTest {
         assertTrue(indexer.canHandle(flac))
 
         val mp3 = flacAt("123/x.mp3")
-        assertFalse(indexer.canHandle(mp3)) // audioExtension is flac
+        assertFalse(indexer.canHandle(mp3)) // mp3 is not a lossless library format
 
         val outside = Files.createTempFile("outside", ".flac")
         assertFalse(indexer.canHandle(outside)) // not under the gamdl tracks path

@@ -45,7 +45,7 @@ class GamdlIndexer(context: PluginContext) : BaseIndexer(context, IMetadataServi
             val map = ConcurrentHashMap<InsertableAlbum, MutableList<AudioFile>>()
             val images = ConcurrentHashMap<String, InsertableImage>()
 
-            val audioFilesWithTags = files.filter { it.extension == audioExtension }.map { file ->
+            val audioFilesWithTags = files.filter { isAudio(it) }.map { file ->
                 async(Dispatchers.IO) {
                     semaphore.withPermit {
                         try {

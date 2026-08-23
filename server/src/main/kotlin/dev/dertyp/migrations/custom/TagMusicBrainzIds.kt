@@ -1,5 +1,6 @@
 package dev.dertyp.migrations.custom
 
+import dev.dertyp.audio.isLossless
 import dev.dertyp.core.CustomMigration
 import dev.dertyp.core.Migration
 import dev.dertyp.services.SongService
@@ -17,10 +18,10 @@ class TagMusicBrainzIds : CustomMigration() {
         val songs = songService.allSongsFlow().toList()
         
         songs.forEach { song ->
-            if (song.musicBrainzId != null && song.path.endsWith(".flac", true)) {
+            if (song.musicBrainzId != null && File(song.path).isLossless) {
                 try {
                     val file = AudioFileIO.read(File(song.path))
-                    file.tag.setField(FieldKey.MUSICBRAINZ_TRACK_ID, song.musicBrainzId?.toString())
+                    file.tagOrCreateAndSetDefault.setField(FieldKey.MUSICBRAINZ_TRACK_ID, song.musicBrainzId?.toString())
                     file.commit()
                 } catch (e: Exception) {
                     logger.error("Failed to tag ${song.path}: ${e.message}")

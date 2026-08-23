@@ -1,5 +1,6 @@
 package dev.dertyp.services.import.youtube
 
+import dev.dertyp.audio.AudioConfig
 import dev.dertyp.Indexer
 import dev.dertyp.findInPath
 import dev.dertyp.services.LrcLibService
@@ -45,6 +46,7 @@ class YoutubeServiceTest : KoinTest {
         startKoin {
             modules(module {
                 single { environment }
+                single { AudioConfig() }
                 single { songService }
                 single { userPlaylistService }
                 single { importService }

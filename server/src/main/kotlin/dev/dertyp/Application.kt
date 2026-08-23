@@ -6,6 +6,7 @@ import com.google.gson.TypeAdapter
 import com.google.gson.stream.JsonReader
 import com.google.gson.stream.JsonToken
 import com.google.gson.stream.JsonWriter
+import dev.dertyp.audio.toAudioConfig
 import dev.dertyp.core.configureScheduledTasks
 import dev.dertyp.data.RemoteServerConfig
 import dev.dertyp.db.SongTable
@@ -49,6 +50,10 @@ import org.koin.dsl.module
 import org.koin.ktor.ext.get
 import org.koin.ktor.plugin.Koin
 import org.koin.logger.slf4jLogger
+import org.jaudiotagger.audio.wav.WavOptions
+import org.jaudiotagger.audio.wav.WavSaveOptions
+import org.jaudiotagger.tag.TagOptionSingleton
+import org.jaudiotagger.tag.reference.ID3V2Version
 import org.slf4j.bridge.SLF4JBridgeHandler
 import java.io.File
 import java.time.LocalDate
@@ -62,9 +67,18 @@ fun main(args: Array<String>) {
     EngineMain.main(args)
 }
 
+fun configureTagOptions() {
+    TagOptionSingleton.getInstance().apply {
+        iD3V2Version = ID3V2Version.ID3_V24
+        wavOptions = WavOptions.READ_ID3_UNLESS_ONLY_INFO
+        wavSaveOptions = WavSaveOptions.SAVE_BOTH
+    }
+}
+
 fun Application.module() {
     SLF4JBridgeHandler.removeHandlersForRootLogger()
     SLF4JBridgeHandler.install()
+    configureTagOptions()
 
     val osName = System.getProperty("os.name")
     val osVersion = System.getProperty("os.version")
@@ -219,6 +233,7 @@ fun mainModule(application: Application, environment: ApplicationEnvironment): M
     singleOf(::SongService)
     singleOf(::AudioAnalysisService)
     singleOf(::FlacAnalysisService)
+    singleOf(::PcmAnalysisService)
     singleOf(::ImageService)
     singleOf(::AnimatedImageService)
     singleOf(::AlbumService)
@@ -237,6 +252,7 @@ fun mainModule(application: Application, environment: ApplicationEnvironment): M
     singleOf(::ScheduledTaskConfigurationService)
     singleOf(::ServerStatsService)
     singleOf(ApplicationConfig::toMetricsConfig)
+    singleOf(ApplicationConfig::toAudioConfig)
     singleOf(::RpcMetricsCollector)
     singleOf(::RpcMetricsService)
     singleOf(::UserPlaylistService)

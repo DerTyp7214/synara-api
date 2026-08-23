@@ -1,5 +1,6 @@
 package dev.dertyp.plugins
 
+import java.util.Locale
 import kotlin.math.ln
 import kotlin.math.pow
 
@@ -12,5 +13,5 @@ fun Number.toHumanReadableSize(): String {
     val size = bytes / 1024.0.pow(i.toDouble())
     val unit = units.getOrElse(i) { units.last() }
 
-    return "%.1f %s".format(size, unit)
+    return "%.1f %s".format(Locale.ROOT, size, unit)
 }

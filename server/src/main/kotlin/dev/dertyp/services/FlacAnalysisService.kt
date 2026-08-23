@@ -19,7 +19,7 @@ class FlacAnalysisService : Service() {
             .leftJoin(FlacInfoTable)
             .select(SongTable.id)
             .where { 
-                (SongTable.filePath.lowerCase().like("%.flac")) and (FlacInfoTable.songId.isNull())
+                (SongTable.format eq "flac") and (FlacInfoTable.songId.isNull())
             }
             .map { it[SongTable.id].value }
     }

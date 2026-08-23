@@ -2,6 +2,8 @@ package dev.dertyp.services.youtube
 
 import dev.dertyp.ApiClient
 import dev.dertyp.PlatformUUID
+import dev.dertyp.audio.AudioConfig
+import dev.dertyp.audio.LosslessFormat
 import dev.dertyp.core.ApplicationScope
 import dev.dertyp.core.cleanTitle
 import dev.dertyp.core.safeQueuedGet
@@ -48,12 +50,13 @@ open class YoutubeService(
     override val enabled: Boolean get() = ytdlpPath != null
 
     private val songService by inject<SongService>()
+    private val audioConfig by inject<AudioConfig>()
     private val userPlaylistService by inject<UserPlaylistService>()
     private val importService by inject<ImportService>()
 
     override val loginCommand: MutableList<String> = mutableListOf()
     override val importCommand: MutableList<String> get() = ytdlp(
-        "-x", "--audio-format", "flac", "--no-progress", "--convert-thumbnails", "jpg",
+        "-x", "--audio-format", audioConfig.losslessFormat.extension, "--no-progress", "--convert-thumbnails", "jpg",
         "--write-auto-subs", "--write-subs", "--sub-langs", "en.*,.*", "--convert-subs", "lrc"
     )
     override val favImportCommand: MutableList<String> = mutableListOf()
@@ -379,7 +382,7 @@ open class YoutubeService(
 
             onLiveOutput("Starting import for: $url")
             val (result, _) = collectImportedFiles(cmd + url, maxRetries, 0, aliveCheck, userId, onLiveOutput) { paths ->
-                paths.filter { it.extension == "flac" }.forEach { path ->
+                paths.filter { it.extension.lowercase() in LosslessFormat.extensions }.forEach { path ->
                     onLiveOutput("Post-processing: ${path.absolutePathString()}")
                     try {
                         val audioFile = AudioFileIO.read(path.toFile())

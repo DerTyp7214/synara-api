@@ -46,6 +46,11 @@ class BaseIndexerTest {
         assertTrue(indexer.canHandle(flacFile))
         assertTrue(indexer.canHandle(m3uFile))
         assertFalse(indexer.canHandle(txtFile))
+        assertTrue(indexer.canHandle(Path.of("test.wav")))
+        assertTrue(indexer.canHandle(Path.of("test.aiff")))
+        assertTrue(indexer.canHandle(Path.of("test.aif")))
+        assertTrue(indexer.canHandle(Path.of("TEST.WAV")))
+        assertFalse(indexer.canHandle(Path.of("test.mp3")))
     }
 
     @Test

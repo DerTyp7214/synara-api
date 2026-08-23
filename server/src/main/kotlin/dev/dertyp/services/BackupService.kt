@@ -4,6 +4,7 @@ import com.github.luben.zstd.ZstdInputStream
 import com.github.luben.zstd.ZstdOutputStream
 import dev.dertyp.data.User
 import dev.dertyp.db.FlacInfoTable
+import dev.dertyp.db.PcmInfoTable
 import dev.dertyp.db.SongMusicBrainzTable
 import dev.dertyp.db.SongTable
 import dev.dertyp.plugins.PluginManager
@@ -238,11 +239,12 @@ class BackupService(
         
         val songMetadata = SongTable
             .leftJoin(FlacInfoTable, onColumn = { SongTable.id }, otherColumn = { FlacInfoTable.songId })
+            .leftJoin(PcmInfoTable, onColumn = { SongTable.id }, otherColumn = { PcmInfoTable.songId })
             .leftJoin(SongMusicBrainzTable, onColumn = { SongTable.id }, otherColumn = { SongMusicBrainzTable.songId })
             .selectAll()
             .map { row ->
                 val filePath = row[SongTable.filePath]
-                val hash = row.getOrNull(FlacInfoTable.audioMd5)
+                val hash = row.getOrNull(FlacInfoTable.audioMd5) ?: row.getOrNull(PcmInfoTable.audioMd5)?.takeIf { it.isNotBlank() }
                 val mbid = row.getOrNull(SongMusicBrainzTable.musicBrainzId)?.value?.toString()
                 filePath to (hash to mbid)
             }

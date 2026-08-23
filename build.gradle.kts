@@ -72,6 +72,7 @@ tasks.register("generateEnvDocs") {
             "AUDIO_AUTO_TRANSCODE_QUALITIES" to mapOf("desc" to "Bitrates for auto-transcoding (Opus).", "cat" to "Storage & Paths"),
             "AUDIO_AUTO_TRANSCODE_QUALITIES_AAC" to mapOf("desc" to "Bitrates for auto-transcoding (AAC).", "cat" to "Storage & Paths"),
             "AUDIO_CUSTOM_PATH" to mapOf("desc" to "Path for custom uploaded audio.", "cat" to "Storage & Paths"),
+            "AUDIO_LOSSLESS_FORMAT" to mapOf("desc" to "Lossless container for audio the server produces (custom uploads, downloader imports): FLAC, WAV or AIFF.", "cat" to "Storage & Paths"),
             "DATA_IMAGES_PATH" to mapOf("desc" to "Path for cached images/covers.", "cat" to "Storage & Paths"),
             "DATA_ANIMATED_IMAGES_PATH" to mapOf("desc" to "Path for cached animated covers.", "cat" to "Storage & Paths"),
             "AUDIO_TRACKS_SECONDARY_PATH" to mapOf("desc" to "Optional secondary audio path.", "cat" to "Storage & Paths"),

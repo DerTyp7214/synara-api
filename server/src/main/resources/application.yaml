@@ -44,6 +44,7 @@ audio:
   autoTranscode: ${AUDIO_AUTO_TRANSCODE_QUALITIES:}
   autoTranscodeAac: ${AUDIO_AUTO_TRANSCODE_QUALITIES_AAC:}
   custom: ${AUDIO_CUSTOM_PATH:music/custom}
+  losslessFormat: ${AUDIO_LOSSLESS_FORMAT:FLAC}
   secondary-tracks:
     - ${AUDIO_TRACKS_SECONDARY_PATH:}
 transcriber:

@@ -111,6 +111,7 @@ Most variables have sensible defaults and are **optional**. Only variables witho
 | `AUDIO_AUTO_TRANSCODE_QUALITIES` | Bitrates for auto-transcoding (Opus). | No | - | - |
 | `AUDIO_AUTO_TRANSCODE_QUALITIES_AAC` | Bitrates for auto-transcoding (AAC). | No | - | - |
 | `AUDIO_CUSTOM_PATH` | Path for custom uploaded audio. | No | `music/custom` | `/data/Synara/custom` |
+| `AUDIO_LOSSLESS_FORMAT` | Lossless container for audio the server produces (custom uploads, downloader imports): FLAC, WAV or AIFF. | No | `FLAC` | `FLAC` |
 | `AUDIO_PLAYLISTS_PATH` | Base path for playlists. | No | `music/playlists` | `/data/Synara/Playlists` |
 | `AUDIO_TRACKS_PATH` | Base path for audio tracks. | No | `music/tracks` | `/data/Synara/Tracks` |
 | `AUDIO_TRACKS_SECONDARY_PATH` | Optional secondary audio path. | No | - | `/data/Synara/other` |

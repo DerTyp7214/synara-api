@@ -1,14 +1,14 @@
 package dev.dertyp.services
 
+import dev.dertyp.AudioUtils
 import dev.dertyp.Indexer
+import dev.dertyp.audio.AudioConfig
+import dev.dertyp.audio.LosslessFormat
 import dev.dertyp.data.CustomMetadata
 import dev.dertyp.utils.LogParam
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import org.bytedeco.ffmpeg.global.avcodec
 import org.bytedeco.javacv.FFmpegFrameGrabber
-import org.bytedeco.javacv.FFmpegFrameRecorder
-import org.bytedeco.javacv.Frame
 import org.jaudiotagger.audio.AudioFileIO
 import org.jaudiotagger.tag.FieldKey
 import org.jaudiotagger.tag.images.ArtworkFactory
@@ -29,7 +29,8 @@ class CustomAudioRpcService(
 
 class CustomAudioService(
     private val indexer: Indexer,
-    private val storageService: StorageService
+    private val storageService: StorageService,
+    private val audioConfig: AudioConfig = AudioConfig(),
 ) : Service() {
 
     init {
@@ -48,16 +49,18 @@ class CustomAudioService(
 
         File(storageService.customAudioPath).mkdirs()
 
-        val targetFile = File(storageService.customAudioPath, "$uuid.flac")
+        val targetFormat = audioConfig.losslessFormat
+        val targetFile = File(storageService.customAudioPath, "$uuid.${targetFormat.extension}")
         logger.info("Target file path: ${targetFile.absolutePath}")
 
         try {
-            if (!isFlac(tempFile)) {
-                logger.info("File is not FLAC, converting...")
-                convert(tempFile, targetFile)
+            val sourceFormat = detectLosslessFormat(tempFile)
+            if (sourceFormat != targetFormat) {
+                logger.info("File is ${sourceFormat ?: "not lossless"}, converting to $targetFormat...")
+                AudioUtils.convertLossless(tempFile, targetFile, targetFormat)
                 logger.info("Conversion successful.")
             } else {
-                logger.info("File is FLAC, copying...")
+                logger.info("File is already $targetFormat, copying...")
                 tempFile.copyTo(targetFile, overwrite = true)
                 logger.info("Copy successful.")
             }
@@ -66,7 +69,7 @@ class CustomAudioService(
                 logger.info("Writing metadata...")
                 try {
                     val audioFile = AudioFileIO.read(targetFile)
-                    val tag = audioFile.tag
+                    val tag = audioFile.tagOrCreateAndSetDefault
 
                     metadata.title?.let { tag.setField(FieldKey.TITLE, it) }
                     metadata.artists?.let {
@@ -110,48 +113,17 @@ class CustomAudioService(
         }
     }
 
-    private fun isFlac(file: File): Boolean {
+    private fun detectLosslessFormat(file: File): LosslessFormat? {
         return try {
             val grabber = FFmpegFrameGrabber(file)
             grabber.start()
-            val isFlac = grabber.format == "flac"
+            val format = LosslessFormat.fromFfmpegFormat(grabber.format)
             grabber.stop()
             grabber.release()
-            isFlac
+            format
         } catch (e: Exception) {
-            logger.warn("Failed to check if file is FLAC: ${e.message}")
-            false
+            logger.warn("Failed to detect audio format: ${e.message}")
+            null
         }
-    }
-
-    private fun convert(inputFile: File, outputFile: File) {
-        val grabber = FFmpegFrameGrabber(inputFile)
-        grabber.start()
-
-        val inputMetadata: Map<String, String> = grabber.metadata.toMap()
-
-        val recorder = FFmpegFrameRecorder(outputFile, grabber.audioChannels)
-        recorder.format = "flac"
-        recorder.sampleRate = grabber.sampleRate
-        recorder.audioBitrate = grabber.audioBitrate
-        recorder.audioCodec = avcodec.AV_CODEC_ID_FLAC
-
-        inputMetadata.forEach { (key, value) ->
-            recorder.setMetadata(key.lowercase(), value)
-        }
-        
-        recorder.start()
-
-        var frame: Frame?
-        while (grabber.grabFrame().also { frame = it } != null) {
-            if (frame?.samples != null) {
-                recorder.record(frame)
-            }
-        }
-
-        recorder.stop()
-        recorder.release()
-        grabber.stop()
-        grabber.release()
     }
 }

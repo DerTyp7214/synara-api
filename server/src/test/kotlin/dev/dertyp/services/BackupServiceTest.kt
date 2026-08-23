@@ -44,7 +44,7 @@ class BackupServiceTest {
     fun setup(dialect: DbDialect) {
         database = TestDatabase.connect(dialect, "backup_test")
         transaction(database) {
-            SchemaUtils.create(SongTable, FlacInfoTable, SongMusicBrainzTable, MBRecordingTable, AlbumTable, ImageTable)
+            SchemaUtils.create(SongTable, FlacInfoTable, PcmInfoTable, SongMusicBrainzTable, MBRecordingTable, AlbumTable, ImageTable)
         }
 
         tempDir = Files.createTempDirectory("backup_test_root").toFile()
@@ -102,8 +102,11 @@ class BackupServiceTest {
 
         val downloaderFile = downloaderTracksDir.resolve("song.mp3")
         downloaderFile.writeText("test content")
+        val wavFile = downloaderTracksDir.resolve("song.wav")
+        wavFile.writeText("wav content")
 
         val songId = UUID.randomUUID()
+        val wavSongId = UUID.randomUUID()
         val mbId = UUID.randomUUID()
         transaction(database) {
             val albumId = UUID.randomUUID()
@@ -138,6 +141,31 @@ class BackupServiceTest {
                 it[this.songId] = songId
                 it[musicBrainzId] = mbId
             }
+            SongTable.insert {
+                it[id] = wavSongId
+                it[title] = "Wav Song"
+                it[filePath] = wavFile.absolutePath
+                it[format] = "wav"
+                it[this.albumId] = albumId
+            }
+            PcmInfoTable.insert {
+                it[this.songId] = wavSongId
+                it[container] = "wav"
+                it[sampleRate] = 48000
+                it[bitDepth] = 24
+                it[channels] = 2
+                it[duration] = 10.0
+                it[fileSize] = 2048
+                it[bitrateAvg] = 2304
+                it[codec] = "pcm_s24le"
+                it[isFloat] = false
+                it[isBigEndian] = false
+                it[dataOffset] = 44
+                it[dataSize] = 2004
+                it[hasId3] = false
+                it[hasInfoChunk] = true
+                it[audioMd5] = "pcm-hash"
+            }
         }
 
         val result = service.createBackup()
@@ -164,6 +192,9 @@ class BackupServiceTest {
                 assertNotNull(songNode)
                 assertEquals("test-hash", songNode?.hash)
                 assertEquals(mbId.toString(), songNode?.mbid)
+                val wavNode = downloaderNode.children?.find { it.name == "song.wav" }
+                assertNotNull(wavNode)
+                assertEquals("pcm-hash", wavNode?.hash)
             }
         }
 

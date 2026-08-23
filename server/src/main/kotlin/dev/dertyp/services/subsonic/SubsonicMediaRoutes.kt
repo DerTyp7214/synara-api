@@ -23,6 +23,7 @@ private fun fileContentType(path: String): ContentType = when (path.substringAft
     "ogg", "oga", "opus" -> ContentType("audio", "ogg")
     "m4a", "mp4", "aac" -> ContentType("audio", "mp4")
     "wav" -> ContentType("audio", "wav")
+    "aiff", "aif" -> ContentType("audio", "aiff")
     else -> ContentType.Application.OctetStream
 }
 
