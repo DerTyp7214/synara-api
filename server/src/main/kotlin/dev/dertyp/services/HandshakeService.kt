@@ -1,6 +1,6 @@
 package dev.dertyp.services
 
-import dev.dertyp.core.ApiVersion
+import dev.dertyp.data.ApiVersion
 import dev.dertyp.data.HandshakeResponse
 import io.ktor.server.application.ApplicationCall
 

@@ -5,7 +5,6 @@ import dev.dertyp.DbDialect
 import dev.dertyp.StreamInfo
 import dev.dertyp.TestDatabase
 import dev.dertyp.audio.LosslessFormat
-import dev.dertyp.core.ApiVersion
 import dev.dertyp.core.ClientInfo
 import dev.dertyp.data.*
 import dev.dertyp.db.*
