@@ -43,16 +43,15 @@ class PcmAnalysisService : Service() {
         } ?: return
 
         val file = File(song[SongTable.filePath])
-        val container = file.extension.let(LosslessFormat::fromExtension)
-        if (container != LosslessFormat.WAV && container != LosslessFormat.AIFF) return
-        if (!file.exists()) return
+        val container = LosslessFormat.fromExtension(file.extension) ?: return
+        if (container == LosslessFormat.FLAC || !file.exists()) return
 
         val existing = dbQuery {
             PcmInfoTable.select(PcmInfoTable.songId).where { PcmInfoTable.songId eq songId }.singleOrNull()
         }
         if (existing != null && !force) return
 
-        val info = parsePcmInfo(file, container!!) ?: return
+        val info = parsePcmInfo(file, container) ?: return
 
         dbQuery {
             PcmInfoTable.upsert(PcmInfoTable.songId) {
@@ -166,17 +165,18 @@ class PcmAnalysisService : Service() {
 
         try {
             RandomAccessFile(file, "r").use { raf ->
+                val length = raf.length()
+                if (length < 12) return ChunkLayout()
                 val header = ByteArray(12)
-                if (raf.read(header) < 12) return ChunkLayout()
+                raf.readFully(header)
                 val riff = String(header, 0, 4, Charsets.US_ASCII)
                 if (riff != "RIFF" && riff != "FORM" && riff != "RF64") return ChunkLayout()
 
                 var pos = 12L
-                val length = raf.length()
                 val chunkHeader = ByteArray(8)
                 while (pos + 8 <= length) {
                     raf.seek(pos)
-                    if (raf.read(chunkHeader) < 8) break
+                    raf.readFully(chunkHeader)
                     val id = String(chunkHeader, 0, 4, Charsets.US_ASCII)
                     val size = ByteBuffer.wrap(chunkHeader, 4, 4).order(order).int.toLong() and 0xFFFFFFFFL
                     val payload = pos + 8
@@ -187,17 +187,17 @@ class PcmAnalysisService : Service() {
                             dataSize = if (size == 0xFFFFFFFFL) length - payload else minOf(size, length - payload)
                         }
 
-                        "SSND" -> if (bigEndian) {
+                        "SSND" -> if (bigEndian && payload + 8 <= length) {
                             val ssnd = ByteArray(8)
-                            raf.read(ssnd)
+                            raf.readFully(ssnd)
                             val offset = ByteBuffer.wrap(ssnd, 0, 4).order(order).int.toLong() and 0xFFFFFFFFL
                             dataOffset = payload + 8 + offset
                             dataSize = maxOf(0L, minOf(size - 8 - offset, length - dataOffset))
                         }
 
-                        "LIST" -> if (!bigEndian) {
+                        "LIST" -> if (!bigEndian && payload + 4 <= length) {
                             val type = ByteArray(4)
-                            raf.read(type)
+                            raf.readFully(type)
                             if (String(type, Charsets.US_ASCII) == "INFO") hasInfo = true
                         }
 
