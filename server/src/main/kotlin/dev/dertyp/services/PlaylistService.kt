@@ -319,7 +319,7 @@ class PlaylistService : PlaylistLibrary, IPlaylistService, Service() {
         }.value
     }
 
-    override suspend fun addToPlaylist(id: UUID, songIds: List<Pair<Long, UUID>>): List<UUID> = dbQuery {
+    override suspend fun addToPlaylist(id: UUID, songIds: List<Pair<Long, UUID>>): Unit = dbQuery {
         val lastPosition = PlaylistSongTable
             .select(PlaylistSongTable.position)
             .where { PlaylistSongTable.playlistId eq id }
@@ -330,7 +330,7 @@ class PlaylistService : PlaylistLibrary, IPlaylistService, Service() {
             this[PlaylistSongTable.playlistId] = id
             this[PlaylistSongTable.songId] = songId
             this[PlaylistSongTable.position] = currentPosition++
-        }.map { it[PlaylistSongTable.songId].value }
+        }
     }
 
     suspend fun upsertPlaylist(playlist: Playlist) = dbQuery {

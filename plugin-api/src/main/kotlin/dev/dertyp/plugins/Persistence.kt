@@ -31,5 +31,5 @@ interface ImageLibrary {
 interface PlaylistLibrary {
     suspend fun createBatch(playlists: List<InsertablePlaylist>, userId: PlatformUUID? = null): List<PlatformUUID>
     suspend fun getOrAddPlaylist(userId: PlatformUUID, customIdentifier: String?, playlist: InsertablePlaylist): PlatformUUID
-    suspend fun addToPlaylist(id: PlatformUUID, songIds: List<Pair<Long, PlatformUUID>>): List<PlatformUUID>
+    suspend fun addToPlaylist(id: PlatformUUID, songIds: List<Pair<Long, PlatformUUID>>)
 }

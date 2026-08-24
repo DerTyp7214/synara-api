@@ -166,8 +166,8 @@ class UserPlaylistService : PlaylistLibrary, IUserPlaylistService, Service() {
         }.first()[UserPlaylistTable.id].value
     }
 
-    override suspend fun addToPlaylist(id: UUID, songIds: List<Pair<Long, UUID>>): List<UUID> {
-        val added = dbQuery {
+    override suspend fun addToPlaylist(id: UUID, songIds: List<Pair<Long, UUID>>) {
+        dbQuery {
             val existing = UserPlaylistSongTable
                 .select(UserPlaylistSongTable.playlistId, UserPlaylistSongTable.songId, UserPlaylistSongTable.addedAt)
                 .where { UserPlaylistSongTable.playlistId eq id }
@@ -178,10 +178,9 @@ class UserPlaylistService : PlaylistLibrary, IUserPlaylistService, Service() {
                 this[UserPlaylistSongTable.playlistId] = id
                 this[UserPlaylistSongTable.songId] = songId
                 this[UserPlaylistSongTable.addedAt] = addedAt
-            }.map { it[UserPlaylistSongTable.songId].value }
+            }
         }
         hooks.emit(HookEvent.PlaylistChanged(id))
-        return added
     }
 
     override suspend fun addSongsToPlaylist(id: UUID, songIds: List<UUID>) {

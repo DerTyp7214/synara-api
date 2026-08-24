@@ -27,10 +27,9 @@ import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.jdbc.update
 import org.koin.core.component.get
 import org.koin.core.component.inject
-import java.util.*
+import java.util.UUID
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.io.path.absolutePathString
-import kotlin.io.path.extension
 import kotlin.io.path.nameWithoutExtension
 
 private data class TrackMetadata(
@@ -565,11 +564,9 @@ abstract class TidalBaseImporter(
                                     songService = songService,
                                     user = user
                                 ) { songIds ->
-                                    if (playlistId != null) userPlaylistService.addToPlaylist(
-                                        playlistId,
-                                        songIds
-                                    ).let { result ->
-                                        importService.logger.info("Added ${result.size} songs to playlist $playlistId")
+                                    if (playlistId != null) {
+                                        userPlaylistService.addToPlaylist(playlistId, songIds)
+                                        importService.logger.info("Added ${songIds.size} songs to playlist $playlistId")
                                     }
                                 }
                                 .collect { trackChunk ->

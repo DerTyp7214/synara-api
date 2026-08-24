@@ -427,6 +427,7 @@ Response for the server handshake/reachability test.
 | :--- | :--- | :--- |
 | `secure` | `Boolean` | Whether the current connection is secure (HTTPS/WSS). |
 | `sslSupported` | `Boolean` | Whether the server supports secure connections (HTTPS/WSS). |
+| `apiVersion` | `Int` | Highest API version the server supports. Clients send the version they support in the X-Api-Version header; absent means 1. |
 
 ### Image <a name="devdertypdataimage"></a>
 *Full name: `dev.dertyp.data.Image`*
@@ -1848,6 +1849,7 @@ Handles user login and session security.
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | `authenticate` | `username` (`String`): The username of the user.<br>`password` (`String`): The password of the user. | [AuthenticationResponse](#devdertypdataauthenticationresponse) | - | IllegalArgumentException, IllegalStateException | Logs in a user and returns JWT token. |
 | `refreshToken` | `refreshToken` (`String`): The refresh token. | [AuthenticationResponse](#devdertypdataauthenticationresponse) | - | IllegalArgumentException, IllegalStateException | Refreshes an expired access token. |
+| `createDeviceSession` | `userAgent` (`String`): The user agent of the device the session is created for. | [AuthenticationResponse](#devdertypdataauthenticationresponse) | - | IllegalStateException | Creates a new session for another device (e.g. Apple TV) on behalf of the authenticated user. |
 
 ### IBackupService <a name="devdertypservicesibackupservice"></a>
 System-wide data persistence and disaster recovery.
@@ -2216,7 +2218,7 @@ Management of personal (user-created) playlists.
 | `byColor` | `creator` (`PlatformUUID`?): Optional creator ID to filter by.<br>`page` (`Int`): Page index.<br>`pageSize` (`Int`): Number of items per page.<br>`color` (`Int`): The target color in ARGB format.<br>`range` (`Int`): The allowed range (0-255). | [PaginatedResponse](#devdertypdatapaginatedresponse)<[UserPlaylist](#devdertypdatauserplaylist)> | - |  | Search for user playlists by color. |
 | `delete` | `id` (`PlatformUUID`): The playlist unique identifier. | `Boolean` | - |  | Delete a user playlist. |
 | `getOrAddPlaylist` | `userId` (`PlatformUUID`): The user ID who owns the playlist.<br>`customIdentifier` (`String`?): Optional unique string identifier from an external source.<br>`playlist` ([InsertablePlaylist](#devdertypdatainsertableplaylist)): The initial playlist data. | `PlatformUUID` | - |  | Create a new user playlist or retrieve an existing one by a custom identifier. |
-| `addToPlaylist` | `id` (`PlatformUUID`): The playlist unique identifier.<br>`songIds` (`List`<`Pair`<`Long`, `PlatformUUID`>>): Collection of song IDs and their added timestamps. | `List`<`PlatformUUID`> | - |  | Add songs to a user playlist. |
+| `addToPlaylist` | `id` (`PlatformUUID`): The playlist unique identifier.<br>`songIds` (`List`<`Pair`<`Long`, `PlatformUUID`>>): Collection of song IDs and their added timestamps. | `Unit` | - |  | Add songs to a user playlist. |
 | `addSongsToPlaylist` | `id` (`PlatformUUID`): The playlist unique identifier.<br>`songIds` (`List`<`PlatformUUID`>): Collection of song IDs to add. | `Unit` | - |  | Add songs to a user playlist. |
 | `addAlbumToPlaylist` | `id` (`PlatformUUID`): The playlist unique identifier.<br>`albumId` (`PlatformUUID`): The album unique identifier. | `Unit` | - |  | Add all songs of an album to a user playlist. |
 | `addPlaylistToPlaylist` | `id` (`PlatformUUID`): The target playlist unique identifier.<br>`sourcePlaylistId` (`PlatformUUID`): The source playlist unique identifier. | `Unit` | - |  | Add all songs of a playlist to a user playlist. |
