@@ -589,7 +589,7 @@ Listening statistics for a time range over the user's unified listen history, de
 | `range` | [StatsRange](#devdertypdatastatsrange) | The requested time range. |
 | `timezone` | `String` | The timezone used for range boundaries. |
 | `rangeStart` | `Long` | Start of the range (epoch milliseconds, inclusive); 0 for ALL_TIME. |
-| `rangeEnd` | `Long` | End of the range (epoch milliseconds, exclusive). |
+| `rangeEnd` | `Long` | End of the range (epoch milliseconds, exclusive); now for open-ended ranges, the period end for LAST_WEEK, LAST_MONTH and LAST_YEAR. |
 | `listenCount` | `Long` | Deduplicated listen count in the range. A play only counts when at least half of the song or at least 3 minutes were played; plays without a known played duration always count. |
 | `listenedMs` | `Long` | Total milliseconds listened in the range, including plays too short to count as a listen. Plays without a known played duration count the whole song duration. |
 | `comparison` | [RangeComparison](#devdertypdatarangecomparison)? | Comparison against the previous equivalent range, or null for ALL_TIME. |
@@ -1161,14 +1161,17 @@ Configuration for splitting an artist record into multiple artists.
 | `newArtists` | `Map`<`String`, `PlatformUUID`?> | Map of names to their new artist IDs. |
 
 ### StatsRange <a name="devdertypdatastatsrange"></a>
-A time range for listening statistics.
+A time range for listening statistics. DAY, WEEK, MONTH and YEAR run from the period start to now; LAST_WEEK, LAST_MONTH and LAST_YEAR cover the previous completed period.
 
 | Value | Description |
 | :--- | :--- |
 | `DAY` |  |
 | `WEEK` |  |
+| `LAST_WEEK` |  |
 | `MONTH` |  |
+| `LAST_MONTH` |  |
 | `YEAR` |  |
+| `LAST_YEAR` |  |
 | `ALL_TIME` |  |
 
 ### SubsonicCredentialInfo <a name="devdertypdatasubsoniccredentialinfo"></a>

@@ -80,6 +80,9 @@ class ListeningStatsServiceTest : KoinTest {
     private fun at(daysAgo: Long, hour: Int = 12, minute: Int = 0): Long =
         nowUtc.minusDays(daysAgo).withHour(hour).withMinute(minute).toInstant().toEpochMilli()
 
+    private fun epochMs(year: Int, month: Int, day: Int, hour: Int = 0): Long =
+        ZonedDateTime.of(year, month, day, hour, 0, 0, 0, ZoneOffset.UTC).toInstant().toEpochMilli()
+
     private fun insertUser(): UUID {
         val uid = UUID.randomUUID()
         UserTable.insert {
@@ -328,6 +331,84 @@ class ListeningStatsServiceTest : KoinTest {
         assertEquals(1L, result.listenCount)
         assertEquals(0L, result.comparison?.previousCount)
         assertNull(result.comparison?.percentChange)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `last week covers the previous full calendar week`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val user = transaction(database) {
+            val u = insertUser()
+            val song = insertSong(insertAlbum())
+            insertListen(at(20), userId = u, songId = song)
+            insertListen(at(14, hour = 23), userId = u, songId = song)
+            insertListen(at(13, hour = 0), userId = u, songId = song)
+            insertListen(at(10), userId = u, songId = song)
+            insertListen(at(7, hour = 23), userId = u, songId = song)
+            insertListen(at(6, hour = 0), userId = u, songId = song)
+            insertListen(at(0), userId = u, songId = song)
+            u
+        }
+
+        val result = stats(user, StatsRange.LAST_WEEK)
+
+        assertEquals(3L, result.listenCount)
+        assertEquals(2L, result.comparison?.previousCount)
+        assertEquals(50.0, result.comparison?.percentChange)
+        assertEquals(epochMs(2025, 6, 2), result.rangeStart)
+        assertEquals(epochMs(2025, 6, 9), result.rangeEnd)
+        assertEquals(epochMs(2025, 5, 26), result.comparison?.previousStart)
+        assertEquals(result.rangeStart, result.comparison?.previousEnd)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `last month covers the previous full calendar month`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val user = transaction(database) {
+            val u = insertUser()
+            val song = insertSong(insertAlbum())
+            insertListen(at(46, hour = 23), userId = u, songId = song)
+            insertListen(at(45, hour = 0), userId = u, songId = song)
+            insertListen(at(30), userId = u, songId = song)
+            insertListen(at(15, hour = 23), userId = u, songId = song)
+            insertListen(at(14, hour = 0), userId = u, songId = song)
+            insertListen(at(0), userId = u, songId = song)
+            u
+        }
+
+        val result = stats(user, StatsRange.LAST_MONTH)
+
+        assertEquals(3L, result.listenCount)
+        assertEquals(1L, result.comparison?.previousCount)
+        assertEquals(epochMs(2025, 5, 1), result.rangeStart)
+        assertEquals(epochMs(2025, 6, 1), result.rangeEnd)
+        assertEquals(epochMs(2025, 4, 1), result.comparison?.previousStart)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `last year covers the previous full calendar year`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val user = transaction(database) {
+            val u = insertUser()
+            val song = insertSong(insertAlbum())
+            insertListen(epochMs(2023, 12, 31, hour = 23), userId = u, songId = song)
+            insertListen(epochMs(2024, 1, 1), userId = u, songId = song)
+            insertListen(epochMs(2024, 7, 1), userId = u, songId = song)
+            insertListen(epochMs(2024, 12, 31, hour = 23), userId = u, songId = song)
+            insertListen(epochMs(2025, 1, 1), userId = u, songId = song)
+            insertListen(at(0), userId = u, songId = song)
+            u
+        }
+
+        val result = stats(user, StatsRange.LAST_YEAR)
+
+        assertEquals(3L, result.listenCount)
+        assertEquals(1L, result.comparison?.previousCount)
+        assertEquals(epochMs(2024, 1, 1), result.rangeStart)
+        assertEquals(epochMs(2025, 1, 1), result.rangeEnd)
+        assertEquals(epochMs(2023, 1, 1), result.comparison?.previousStart)
     }
 
     @ParameterizedTest

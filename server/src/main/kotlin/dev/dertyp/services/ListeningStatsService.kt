@@ -44,23 +44,26 @@ class ListeningStatsService : Service() {
     ): ListeningStats {
         val zone = runCatching { ZoneId.of(timezone) }.getOrElse { ZoneOffset.UTC }
         val now = ZonedDateTime.ofInstant(Instant.ofEpochMilli(nowMs), zone)
-        val rangeStartZdt = when (range) {
-            StatsRange.DAY -> now.toLocalDate().atStartOfDay(zone)
-            StatsRange.WEEK -> now.toLocalDate().with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)).atStartOfDay(zone)
-            StatsRange.MONTH -> now.toLocalDate().withDayOfMonth(1).atStartOfDay(zone)
-            StatsRange.YEAR -> now.toLocalDate().withDayOfYear(1).atStartOfDay(zone)
-            StatsRange.ALL_TIME -> null
+        val today = now.toLocalDate()
+        val dayStart = today.atStartOfDay(zone)
+        val weekStart = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)).atStartOfDay(zone)
+        val monthStart = today.withDayOfMonth(1).atStartOfDay(zone)
+        val yearStart = today.withDayOfYear(1).atStartOfDay(zone)
+        val (rangeStartZdt, rangeEndZdt, previousStartZdt) = when (range) {
+            StatsRange.DAY -> Triple(dayStart, null, dayStart.minusDays(1))
+            StatsRange.WEEK -> Triple(weekStart, null, weekStart.minusWeeks(1))
+            StatsRange.LAST_WEEK -> Triple(weekStart.minusWeeks(1), weekStart, weekStart.minusWeeks(2))
+            StatsRange.MONTH -> Triple(monthStart, null, monthStart.minusMonths(1))
+            StatsRange.LAST_MONTH -> Triple(monthStart.minusMonths(1), monthStart, monthStart.minusMonths(2))
+            StatsRange.YEAR -> Triple(yearStart, null, yearStart.minusYears(1))
+            StatsRange.LAST_YEAR -> Triple(yearStart.minusYears(1), yearStart, yearStart.minusYears(2))
+            StatsRange.ALL_TIME -> Triple(null, null, null)
         }
         val rangeStart = rangeStartZdt?.toInstant()?.toEpochMilli() ?: 0L
-        val previousStart = when (range) {
-            StatsRange.DAY -> rangeStartZdt?.minusDays(1)
-            StatsRange.WEEK -> rangeStartZdt?.minusWeeks(1)
-            StatsRange.MONTH -> rangeStartZdt?.minusMonths(1)
-            StatsRange.YEAR -> rangeStartZdt?.minusYears(1)
-            StatsRange.ALL_TIME -> null
-        }?.toInstant()?.toEpochMilli()
+        val rangeEnd = rangeEndZdt?.toInstant()?.toEpochMilli() ?: nowMs
+        val previousStart = previousStartZdt?.toInstant()?.toEpochMilli()
 
-        val pass = dbQuery { runPass(userId, rangeStart, previousStart, nowMs, zone) }
+        val pass = dbQuery { runPass(userId, rangeStart, rangeEnd, previousStart, zone) }
 
         val inRangeSongIds = (pass.songCounts.keys + pass.songPlayed.keys).filterIsInstance<SongKey.Matched>().map { it.songId }.distinct()
         val allSongIds = (pass.songFirstSeen.keys + pass.songPlayed.keys).filterIsInstance<SongKey.Matched>().map { it.songId }.distinct()
@@ -201,7 +204,7 @@ class ListeningStatsService : Service() {
             range = range,
             timezone = zone.id,
             rangeStart = rangeStart,
-            rangeEnd = nowMs,
+            rangeEnd = rangeEnd,
             listenCount = pass.listenCount,
             listenedMs = pass.listenedMs,
             comparison = comparison,
@@ -226,8 +229,8 @@ class ListeningStatsService : Service() {
     private fun runPass(
         userId: PlatformUUID,
         rangeStart: Long,
+        rangeEnd: Long,
         previousStart: Long?,
-        nowMs: Long,
         zone: ZoneId,
     ): PassResult {
         val lbId = UserListenBrainzLinkTable
@@ -302,7 +305,7 @@ class ListeningStatsService : Service() {
                     if (qualified) result.previousCount++
                     result.previousListenedMs += playedMs
                 }
-                if (ts !in rangeStart..<nowMs) return@forEach
+                if (ts !in rangeStart..<rangeEnd) return@forEach
 
                 result.listenedMs += playedMs
                 if (qualified) {
