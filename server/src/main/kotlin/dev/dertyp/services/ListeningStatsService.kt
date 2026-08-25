@@ -62,8 +62,8 @@ class ListeningStatsService : Service() {
 
         val pass = dbQuery { runPass(userId, rangeStart, previousStart, nowMs, zone) }
 
-        val inRangeSongIds = pass.songCounts.keys.filterIsInstance<SongKey.Matched>().map { it.songId }
-        val allSongIds = pass.songFirstSeen.keys.filterIsInstance<SongKey.Matched>().map { it.songId }
+        val inRangeSongIds = (pass.songCounts.keys + pass.songPlayed.keys).filterIsInstance<SongKey.Matched>().map { it.songId }.distinct()
+        val allSongIds = (pass.songFirstSeen.keys + pass.songPlayed.keys).filterIsInstance<SongKey.Matched>().map { it.songId }.distinct()
         val unmatchedArtistMbids = (pass.unmatchedArtistCounts.keys + pass.unmatchedArtistFirstSeen.keys)
             .filterIsInstance<ArtistKey.Mbid>().map { it.mbid }.distinct()
         val unmatchedReleaseMbids = (pass.unmatchedAlbumCounts.keys.filterIsInstance<AlbumKey.Mbid>().map { it.mbid } +
@@ -84,6 +84,16 @@ class ListeningStatsService : Service() {
             if (key !is SongKey.Matched) continue
             library.songArtists[key.songId]?.forEach { artistCounts.merge(ArtistKey.Matched(it), count, Long::plus) }
             library.songMeta[key.songId]?.let { albumCounts.merge(AlbumKey.Matched(it.albumId), count, Long::plus) }
+        }
+
+        val artistPlayed = HashMap<ArtistKey, Long>()
+        pass.unmatchedArtistPlayed.forEach { (key, ms) -> artistPlayed.merge(canonArtist(key), ms, Long::plus) }
+        val albumPlayed = HashMap<AlbumKey, Long>()
+        pass.unmatchedAlbumPlayed.forEach { (key, ms) -> albumPlayed.merge(canonAlbum(key), ms, Long::plus) }
+        for ((key, ms) in pass.songPlayed) {
+            if (key !is SongKey.Matched) continue
+            library.songArtists[key.songId]?.forEach { artistPlayed.merge(ArtistKey.Matched(it), ms, Long::plus) }
+            library.songMeta[key.songId]?.let { albumPlayed.merge(AlbumKey.Matched(it.albumId), ms, Long::plus) }
         }
 
         val artistFirstSeen = HashMap<ArtistKey, Long>()
@@ -109,6 +119,7 @@ class ListeningStatsService : Service() {
                     albumName = album,
                     coverId = meta?.coverId ?: meta?.let { library.albumCovers[it.albumId] },
                     listenCount = count,
+                    listenedMs = pass.songPlayed[key] ?: 0L,
                 )
             }
 
@@ -123,6 +134,7 @@ class ListeningStatsService : Service() {
                     listenCount = count,
                     recordingMbid = (key as? SongKey.Mbid)?.mbid,
                     recordingMsid = pass.songMsid[key],
+                    listenedMs = pass.songPlayed[key] ?: 0L,
                 )
             }
         }
@@ -133,6 +145,7 @@ class ListeningStatsService : Service() {
                 name = library.artistNames[key.artistId] ?: "",
                 imageId = library.artistImages[key.artistId],
                 listenCount = count,
+                listenedMs = artistPlayed[key] ?: 0L,
             )
 
             else -> TopArtistEntry(
@@ -140,6 +153,7 @@ class ListeningStatsService : Service() {
                 name = pass.artistDisplay[key] ?: "",
                 imageId = null,
                 listenCount = count,
+                listenedMs = artistPlayed[key] ?: 0L,
             )
         }
 
@@ -149,6 +163,7 @@ class ListeningStatsService : Service() {
                 name = library.albumNames[key.albumId] ?: "",
                 coverId = library.albumCovers[key.albumId],
                 listenCount = count,
+                listenedMs = albumPlayed[key] ?: 0L,
             )
 
             else -> TopAlbumEntry(
@@ -156,6 +171,7 @@ class ListeningStatsService : Service() {
                 name = pass.albumDisplay[key] ?: "",
                 coverId = (key as? AlbumKey.Mbid)?.let { library.coverByReleaseMbid[it.mbid] },
                 listenCount = count,
+                listenedMs = albumPlayed[key] ?: 0L,
             )
         }
 
@@ -177,6 +193,7 @@ class ListeningStatsService : Service() {
                 percentChange = if (pass.previousCount > 0) {
                     (pass.listenCount - pass.previousCount) * 100.0 / pass.previousCount
                 } else null,
+                previousListenedMs = pass.previousListenedMs,
             )
         }
 
@@ -186,6 +203,7 @@ class ListeningStatsService : Service() {
             rangeStart = rangeStart,
             rangeEnd = nowMs,
             listenCount = pass.listenCount,
+            listenedMs = pass.listenedMs,
             comparison = comparison,
             uniqueSongs = pass.songCounts.size,
             uniqueArtists = artistCounts.size,
@@ -230,10 +248,11 @@ class ListeningStatsService : Service() {
         var lastIsrcs: Set<String> = emptySet()
 
         ListenTable
+            .leftJoin(SongTable)
             .select(
                 ListenTable.songId, ListenTable.listenedAt, ListenTable.recordingMbid, ListenTable.recordingMsid,
                 ListenTable.isrcs, ListenTable.releaseMbid, ListenTable.artistMbids, ListenTable.trackName,
-                ListenTable.artistName, ListenTable.releaseName,
+                ListenTable.artistName, ListenTable.releaseName, ListenTable.msPlayed, SongTable.duration,
             )
             .where { owner }
             .orderBy(ListenTable.listenedAt to SortOrder.ASC)
@@ -254,8 +273,13 @@ class ListeningStatsService : Service() {
                 lastIsrcs = isrcs
                 if (duplicatePlay) return@forEach
 
+                val msPlayed = row[ListenTable.msPlayed]
+                val songDuration = row.getOrNull(SongTable.duration)
+                val qualified = ListenTable.isQualifiedPlay(msPlayed, songDuration)
+                val playedMs = ListenTable.playedMs(msPlayed, songDuration)
+
                 val zdt = Instant.ofEpochMilli(ts).atZone(zone)
-                result.daysWithListens.add(zdt.toLocalDate().toEpochDay())
+                if (qualified) result.daysWithListens.add(zdt.toLocalDate().toEpochDay())
 
                 val trackName = row[ListenTable.trackName]?.trim()?.ifBlank { null }
                 val artistName = row[ListenTable.artistName]?.trim()?.ifBlank { null }
@@ -267,22 +291,29 @@ class ListeningStatsService : Service() {
                     trackName != null -> SongKey.Named(trackName.lowercase(), artistName?.lowercase() ?: "")
                     else -> null
                 }
-                if (songKey != null) result.songFirstSeen.merge(songKey, ts, ::minOf)
+                if (qualified && songKey != null) result.songFirstSeen.merge(songKey, ts, ::minOf)
 
                 val artistKey = if (songId == null) {
                     artistKeyOf(row[ListenTable.artistMbids], artistName)
                 } else null
-                if (artistKey != null) result.unmatchedArtistFirstSeen.merge(artistKey, ts, ::minOf)
+                if (qualified && artistKey != null) result.unmatchedArtistFirstSeen.merge(artistKey, ts, ::minOf)
 
-                if (previousStart != null && ts >= previousStart && ts < rangeStart) result.previousCount++
+                if (previousStart != null && ts >= previousStart && ts < rangeStart) {
+                    if (qualified) result.previousCount++
+                    result.previousListenedMs += playedMs
+                }
                 if (ts !in rangeStart..<nowMs) return@forEach
 
-                result.listenCount++
-                result.hourBuckets[zdt.hour]++
-                result.dayBuckets[zdt.dayOfWeek.value - 1]++
+                result.listenedMs += playedMs
+                if (qualified) {
+                    result.listenCount++
+                    result.hourBuckets[zdt.hour]++
+                    result.dayBuckets[zdt.dayOfWeek.value - 1]++
+                }
 
                 if (songKey != null) {
-                    result.songCounts.merge(songKey, 1L, Long::plus)
+                    if (qualified) result.songCounts.merge(songKey, 1L, Long::plus)
+                    result.songPlayed.merge(songKey, playedMs, Long::plus)
                     if (songId == null) {
                         row[ListenTable.recordingMsid]?.let { result.songMsid.putIfAbsent(songKey, it) }
                         result.songDisplay.putIfAbsent(
@@ -299,12 +330,14 @@ class ListeningStatsService : Service() {
 
                 if (songId == null) {
                     if (artistKey != null) {
-                        result.unmatchedArtistCounts.merge(artistKey, 1L, Long::plus)
+                        if (qualified) result.unmatchedArtistCounts.merge(artistKey, 1L, Long::plus)
+                        result.unmatchedArtistPlayed.merge(artistKey, playedMs, Long::plus)
                         if (artistName != null) result.artistDisplay.putIfAbsent(artistKey, artistName)
                     }
                     val albumKey = albumKeyOf(row[ListenTable.releaseMbid], releaseName)
                     if (albumKey != null) {
-                        result.unmatchedAlbumCounts.merge(albumKey, 1L, Long::plus)
+                        if (qualified) result.unmatchedAlbumCounts.merge(albumKey, 1L, Long::plus)
+                        result.unmatchedAlbumPlayed.merge(albumKey, playedMs, Long::plus)
                         if (releaseName != null) result.albumDisplay.putIfAbsent(albumKey, releaseName)
                     }
                 }
@@ -520,12 +553,17 @@ class ListeningStatsService : Service() {
     private class PassResult {
         var listenCount = 0L
         var previousCount = 0L
+        var listenedMs = 0L
+        var previousListenedMs = 0L
         val hourBuckets = LongArray(24)
         val dayBuckets = LongArray(7)
         val songCounts = LinkedHashMap<SongKey, Long>()
+        val songPlayed = HashMap<SongKey, Long>()
         val songFirstSeen = HashMap<SongKey, Long>()
         val unmatchedArtistCounts = LinkedHashMap<ArtistKey, Long>()
         val unmatchedAlbumCounts = LinkedHashMap<AlbumKey, Long>()
+        val unmatchedArtistPlayed = HashMap<ArtistKey, Long>()
+        val unmatchedAlbumPlayed = HashMap<AlbumKey, Long>()
         val unmatchedArtistFirstSeen = HashMap<ArtistKey, Long>()
         val songDisplay = HashMap<SongKey, UnmatchedDisplay>()
         val songMsid = HashMap<SongKey, PlatformUUID>()

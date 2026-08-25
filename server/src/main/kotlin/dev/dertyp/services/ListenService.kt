@@ -67,6 +67,37 @@ class ListenService : Service() {
         return listens.size
     }
 
+    suspend fun recentSeedWeights(userId: PlatformUUID, cutoff: Long): Map<PlatformUUID, Float> = dbQuery {
+        val account = UserListenBrainzLinkTable
+            .select(UserListenBrainzLinkTable.listenBrainzUserId)
+            .where { UserListenBrainzLinkTable.userId eq userId }
+            .firstOrNull()?.get(UserListenBrainzLinkTable.listenBrainzUserId)?.value
+
+        val owner = if (account != null) {
+            (ListenTable.userId eq userId) or (ListenTable.listenBrainzUserId eq account)
+        } else {
+            ListenTable.userId eq userId
+        }
+
+        val weights = HashMap<PlatformUUID, Float>()
+        ListenTable.innerJoin(SongTable)
+            .select(ListenTable.songId, ListenTable.msPlayed, SongTable.duration)
+            .where { owner }
+            .andWhere { ListenTable.listenedAt greater cutoff }
+            .forEach { row ->
+                val songId = row[ListenTable.songId]?.value ?: return@forEach
+                val weight = ListenTable.playWeight(row[ListenTable.msPlayed], row[SongTable.duration])
+                if (weight > 0f) weights.merge(songId, weight, Float::plus)
+            }
+
+        weights.ifEmpty {
+            UserSongTable.select(UserSongTable.songId)
+                .where { UserSongTable.userId eq userId }
+                .andWhere { UserSongTable.isFavourite eq true }
+                .associate { it[UserSongTable.songId].value to 1f }
+        }
+    }
+
     suspend fun ingestLocal(userId: PlatformUUID, songId: PlatformUUID, listenedAtMs: Long, msPlayed: Long?) {
         dbQuery {
             val meta = localListenMetadata(songId)

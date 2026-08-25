@@ -5,15 +5,11 @@ import dev.dertyp.data.MoodSummary
 import dev.dertyp.data.RecommendationWindow
 import dev.dertyp.data.User
 import dev.dertyp.data.UserSong
-import dev.dertyp.db.ListenTable
 import dev.dertyp.db.SongEmbeddingTable
-import dev.dertyp.db.UserListenBrainzLinkTable
-import dev.dertyp.db.UserSongTable
 import dev.dertyp.dbQuery
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.jetbrains.exposed.v1.core.*
-import org.jetbrains.exposed.v1.jdbc.andWhere
 import org.jetbrains.exposed.v1.jdbc.select
 import org.koin.core.component.inject
 import java.nio.ByteBuffer
@@ -24,6 +20,7 @@ import kotlin.time.Duration.Companion.days
 
 class RecommendationServingService : Service() {
     private val songService by inject<SongService>()
+    private val listenService by inject<ListenService>()
 
     private class Index(
         val stamp: Long,
@@ -72,35 +69,10 @@ class RecommendationServingService : Service() {
         if (idx.ids.isEmpty()) return emptyList()
 
         val cutoff = System.currentTimeMillis() - window.duration().inWholeMilliseconds
-        val seeds = dbQuery {
-            val account = UserListenBrainzLinkTable
-                .select(UserListenBrainzLinkTable.listenBrainzUserId)
-                .where { UserListenBrainzLinkTable.userId eq userId }
-                .firstOrNull()?.get(UserListenBrainzLinkTable.listenBrainzUserId)?.value
+        val seeds = listenService.recentSeedWeights(userId, cutoff)
 
-            val owner = if (account != null) {
-                (ListenTable.userId eq userId) or (ListenTable.listenBrainzUserId eq account)
-            } else {
-                ListenTable.userId eq userId
-            }
-            val recent = ListenTable.select(ListenTable.songId)
-                .where { owner }
-                .andWhere { ListenTable.listenedAt greater cutoff }
-                .andWhere { ListenTable.songId.isNotNull() }
-                .mapNotNull { it[ListenTable.songId]?.value }
-                .toHashSet()
-
-            recent.ifEmpty {
-                UserSongTable.select(UserSongTable.songId)
-                    .where { UserSongTable.userId eq userId }
-                    .andWhere { UserSongTable.isFavourite eq true }
-                    .map { it[UserSongTable.songId].value }
-                    .toHashSet()
-            }
-        }
-
-        val query = seedVector(idx, seeds.toList()) ?: return emptyList()
-        return rank(idx, query, seeds, limit, userId)
+        val query = seedVector(idx, seeds) ?: return emptyList()
+        return rank(idx, query, seeds.keys, limit, userId)
     }
 
     suspend fun moodPlaylist(mood: String, userId: PlatformUUID, limit: Int): List<UserSong> {
@@ -124,11 +96,14 @@ class RecommendationServingService : Service() {
             .sortedByDescending { it.count }
     }
 
-    private fun seedVector(idx: Index, seedIds: List<PlatformUUID>): FloatArray? {
-        val vectors = seedIds.mapNotNull { idx.pos[it]?.let { p -> idx.vectors[p] } }
-        if (vectors.isEmpty()) return null
-        val sum = FloatArray(vectors[0].size)
-        vectors.forEach { v -> for (i in sum.indices) sum[i] += v[i] }
+    private fun seedVector(idx: Index, seedIds: List<PlatformUUID>): FloatArray? =
+        seedVector(idx, seedIds.associateWith { 1f })
+
+    private fun seedVector(idx: Index, seeds: Map<PlatformUUID, Float>): FloatArray? {
+        val weighted = seeds.entries.mapNotNull { (id, w) -> idx.pos[id]?.let { p -> idx.vectors[p] to w } }
+        if (weighted.isEmpty()) return null
+        val sum = FloatArray(weighted[0].first.size)
+        weighted.forEach { (v, w) -> for (i in sum.indices) sum[i] += v[i] * w }
         return unit(sum)
     }
 

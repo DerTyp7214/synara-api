@@ -1,6 +1,6 @@
 package dev.dertyp.db
 
-import org.jetbrains.exposed.v1.core.ReferenceOption
+import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.core.dao.id.java.UUIDTable
 import org.jetbrains.exposed.v1.core.java.javaUUID
 
@@ -31,6 +31,24 @@ object ListenTable : UUIDTable("listen") {
     }
 
     const val DEDUP_WINDOW_MS = 2000L
+    const val QUALIFIED_MIN_MS = 3 * 60 * 1000L
+
+    fun isQualifiedPlay(msPlayed: Long?, songDurationMs: Long?): Boolean =
+        msPlayed == null || msPlayed >= QUALIFIED_MIN_MS ||
+            (songDurationMs != null && songDurationMs > 0 && msPlayed * 2 >= songDurationMs)
+
+    fun playWeight(msPlayed: Long?, songDurationMs: Long?): Float = when {
+        msPlayed == null -> 1f
+        songDurationMs != null && songDurationMs > 0 -> (msPlayed.toFloat() / songDurationMs).coerceIn(0f, 1f)
+        else -> (msPlayed.toFloat() / QUALIFIED_MIN_MS).coerceIn(0f, 1f)
+    }
+
+    fun playedMs(msPlayed: Long?, songDurationMs: Long?): Long = msPlayed ?: songDurationMs ?: 0L
+
+    val qualifiedPlay: Op<Boolean>
+        get() = msPlayed.isNull() or
+            (msPlayed greaterEq QUALIFIED_MIN_MS) or
+            ((SongTable.duration greater 0L) and ((msPlayed times 2L) greaterEq SongTable.duration))
 
     fun parseIsrcs(csv: String?): Set<String> =
         csv?.split(',')?.filter { it.isNotBlank() }?.toSet() ?: emptySet()

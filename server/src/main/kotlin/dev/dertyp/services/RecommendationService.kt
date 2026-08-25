@@ -176,7 +176,8 @@ class RecommendationService : Service() {
 
         ListenTable
             .join(link, JoinType.LEFT, onColumn = ListenTable.listenBrainzUserId, otherColumn = link.listenBrainzUserId)
-            .select(ListenTable.userId, link.userId, ListenTable.listenBrainzUserId, ListenTable.songId, ListenTable.listenedAt, ListenTable.recordingMbid, ListenTable.isrcs)
+            .join(SongTable, JoinType.INNER, onColumn = ListenTable.songId, otherColumn = SongTable.id)
+            .select(ListenTable.userId, link.userId, ListenTable.listenBrainzUserId, ListenTable.songId, ListenTable.listenedAt, ListenTable.recordingMbid, ListenTable.isrcs, ListenTable.msPlayed, SongTable.duration)
             .where { ListenTable.songId.isNotNull() }
             .andWhere { ListenTable.userId.isNotNull() or ListenTable.listenBrainzUserId.isNotNull() }
             .orderBy(ownerKey to SortOrder.ASC, ListenTable.listenedAt to SortOrder.ASC)
@@ -202,7 +203,8 @@ class RecommendationService : Service() {
                         (recordingMbid != null && recordingMbid == lastRecordingMbid) ||
                         isrcs.any { it in lastIsrcs }
                     )
-                if (!duplicatePlay) current.add(song)
+                val qualified = ListenTable.isQualifiedPlay(row[ListenTable.msPlayed], row[SongTable.duration])
+                if (!duplicatePlay && qualified) current.add(song)
 
                 lastOwner = owner
                 lastTs = ts

@@ -9,10 +9,12 @@ import io.mockk.coEvery
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.selectAll
+import org.jetbrains.exposed.v1.jdbc.update
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -560,6 +562,62 @@ class ListenServiceTest : KoinTest {
             assertEquals(ListenSource.LOCAL, row[ListenTable.listenSource])
             assertEquals(500L, row[ListenTable.listenedAt])
             assertEquals(250L, row[ListenTable.msPlayed])
+        }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `recentSeedWeights weights songs by played fraction`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val (user, full, partial, skipped) = transaction(database) {
+            val u = insertUser()
+            val album = insertAlbum()
+            val full = insertSong(album)
+            val partial = insertSong(album)
+            val skipped = insertSong(album)
+            SongTable.update({ SongTable.id inList listOf(partial, skipped) }) { it[duration] = 200_000L }
+            insertLocal(u, full, 1_000_000)
+            insertLocal(u, full, 2_000_000)
+            insertLocalPlayed(u, partial, 3_000_000, 50_000)
+            insertLocalPlayed(u, partial, 4_000_000, 100_000)
+            insertLocalPlayed(u, skipped, 5_000_000, 0)
+            insertLocalPlayed(u, skipped, 100, 200_000)
+            Quad(u, full, partial, skipped)
+        }
+
+        val weights = service.recentSeedWeights(user, 500)
+
+        assertEquals(setOf(full, partial), weights.keys)
+        assertEquals(2f, weights[full])
+        assertEquals(0.75f, weights[partial])
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `recentSeedWeights falls back to favourites`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        transaction(database) { SchemaUtils.create(UserSongTable) }
+        val (user, favourite) = transaction(database) {
+            val u = insertUser()
+            val song = insertSong(insertAlbum())
+            UserSongTable.insert {
+                it[userId] = u
+                it[songId] = song
+                it[isFavourite] = true
+            }
+            u to song
+        }
+
+        assertEquals(mapOf(favourite to 1f), service.recentSeedWeights(user, 0))
+    }
+
+    private fun insertLocalPlayed(userId: UUID, songId: UUID, at: Long, playedMs: Long) {
+        ListenTable.insert {
+            it[ListenTable.userId] = userId
+            it[ListenTable.songId] = songId
+            it[listenedAt] = at
+            it[listenSource] = ListenSource.LOCAL
+            it[msPlayed] = playedMs
         }
     }
 

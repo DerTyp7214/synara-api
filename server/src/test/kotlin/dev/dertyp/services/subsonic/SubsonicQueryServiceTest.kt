@@ -4,6 +4,8 @@ import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
 import dev.dertyp.db.AlbumTable
 import dev.dertyp.db.AnimatedImageTable
+import dev.dertyp.db.ArtistTable
+import dev.dertyp.db.SongArtistTable
 import dev.dertyp.db.ImageTable
 import dev.dertyp.db.ListenBrainzUserTable
 import dev.dertyp.db.ListenSource
@@ -53,7 +55,7 @@ class SubsonicQueryServiceTest {
         }
     }
 
-    private suspend fun insertSong(albumId: UUID, insertedAt: Long): UUID {
+    private suspend fun insertSong(albumId: UUID, insertedAt: Long, durationMs: Long = 0): UUID {
         val songId = UUID.randomUUID()
         dbQuery {
             SongTable.insert {
@@ -61,12 +63,13 @@ class SubsonicQueryServiceTest {
                 it[title] = "song"
                 it[SongTable.albumId] = albumId
                 it[inserted] = insertedAt
+                it[duration] = durationMs
             }
         }
         return songId
     }
 
-    private suspend fun insertListens(songId: UUID, count: Int, lastAt: Long) {
+    private suspend fun insertListens(songId: UUID, count: Int, lastAt: Long, playedMs: Long? = null) {
         dbQuery {
             repeat(count) { index ->
                 ListenTable.insert {
@@ -74,6 +77,7 @@ class SubsonicQueryServiceTest {
                     it[ListenTable.songId] = songId
                     it[listenedAt] = lastAt - index * 60_000
                     it[listenSource] = ListenSource.LOCAL
+                    it[msPlayed] = playedMs
                 }
             }
         }
@@ -148,5 +152,51 @@ class SubsonicQueryServiceTest {
 
         service.setAlbumStar(userId, midAlbum, false)
         assertEquals(emptySet<UUID>(), service.starredAlbumStars(userId).keys)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `frequent ignores plays that are too short to count`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val skipped = insertSong(oldAlbum, 1_000, durationMs = 240_000)
+        val halfPlayed = insertSong(midAlbum, 2_000, durationMs = 240_000)
+        val longPlayed = insertSong(newAlbum, 3_000, durationMs = 600_000)
+        insertListens(skipped, 10, 10_000_000, playedMs = 30_000)
+        insertListens(halfPlayed, 2, 20_000_000, playedMs = 120_000)
+        insertListens(longPlayed, 3, 30_000_000, playedMs = 180_000)
+
+        val service = SubsonicQueryService()
+        assertEquals(
+            listOf(newAlbum, midAlbum),
+            service.albumIds(AlbumListType.FREQUENT, 10, 0, null, null, null, userId),
+        )
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `top songs for an artist ignore plays that are too short to count`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val artistId = UUID.randomUUID()
+        dbQuery {
+            SchemaUtils.create(ArtistTable, SongArtistTable)
+            ArtistTable.insert {
+                it[id] = artistId
+                it[name] = "artist"
+            }
+        }
+        val skipped = insertSong(oldAlbum, 1_000, durationMs = 240_000)
+        val played = insertSong(oldAlbum, 2_000, durationMs = 240_000)
+        dbQuery {
+            listOf(skipped, played).forEach { sid ->
+                SongArtistTable.insert {
+                    it[songId] = sid
+                    it[SongArtistTable.artistId] = artistId
+                }
+            }
+        }
+        insertListens(skipped, 10, 10_000_000, playedMs = 5_000)
+        insertListens(played, 1, 20_000_000)
+
+        assertEquals(listOf(played), SubsonicQueryService().topSongIdsForArtist(artistId, 5))
     }
 }

@@ -15,6 +15,7 @@ import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.EnumSource
 import org.koin.core.context.startKoin
@@ -22,6 +23,7 @@ import org.koin.core.context.stopKoin
 import org.koin.dsl.module
 import org.koin.test.KoinTest
 import java.util.UUID
+import kotlin.random.Random
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
@@ -118,5 +120,21 @@ class RadioServiceTest : KoinTest {
         val played = radio.take(sessionId, userId, 12)
         assertTrue(played.all { it in pool }, "strict channel must only play configured pool members")
         assertEquals(12, played.toSet().size, "no duplicates until the pool is exhausted")
+    }
+
+    @Test
+    fun `weightedSample picks distinct positive-weight entries proportionally`() {
+        val heavy = UUID.randomUUID()
+        val light = UUID.randomUUID()
+        val zero = UUID.randomUUID()
+        val weights = mapOf(heavy to 9f, light to 1f, zero to 0f)
+
+        val all = RadioService.weightedSample(weights, 10, Random(1))
+        assertEquals(setOf(heavy, light), all.toSet())
+        assertEquals(2, all.size)
+
+        val firstPicks = (1..1000).map { RadioService.weightedSample(weights, 1, Random(it)).single() }
+        assertTrue(firstPicks.count { it == heavy } > 800, "heavy seed should dominate single picks")
+        assertTrue(firstPicks.none { it == zero })
     }
 }

@@ -2,10 +2,7 @@ package dev.dertyp.services
 
 import dev.dertyp.data.RadioSeed
 import dev.dertyp.data.RadioType
-import dev.dertyp.db.ListenTable
 import dev.dertyp.db.SongTable
-import dev.dertyp.db.UserListenBrainzLinkTable
-import dev.dertyp.db.UserSongTable
 import dev.dertyp.dbQuery
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -13,27 +10,10 @@ import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.jetbrains.exposed.v1.core.*
-import org.jetbrains.exposed.v1.jdbc.andWhere
 import org.jetbrains.exposed.v1.jdbc.select
 import org.koin.core.component.inject
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
-import kotlin.collections.ArrayDeque
-import kotlin.collections.LinkedHashSet
-import kotlin.collections.List
-import kotlin.collections.Set
-import kotlin.collections.emptyList
-import kotlin.collections.emptySet
-import kotlin.collections.filter
-import kotlin.collections.firstOrNull
-import kotlin.collections.ifEmpty
-import kotlin.collections.map
-import kotlin.collections.mapNotNull
-import kotlin.collections.set
-import kotlin.collections.shuffled
-import kotlin.collections.take
-import kotlin.collections.toHashSet
-import kotlin.collections.toList
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.hours
@@ -43,6 +23,7 @@ typealias RadioSongSupplier = suspend (exclude: Set<UUID>, limit: Int) -> List<U
 class RadioService : Service() {
     private val recommendations by inject<RecommendationServingService>()
     private val songService by inject<SongService>()
+    private val listenService by inject<ListenService>()
 
     private val sessions = ConcurrentHashMap<UUID, RadioSessionState>()
 
@@ -144,11 +125,14 @@ class RadioService : Service() {
 
     private suspend fun historyBatch(session: RadioSessionState): List<UUID> {
         val cutoff = System.currentTimeMillis() - session.type.window().inWholeMilliseconds
-        return expand(historySeeds(session.userId, cutoff).toList(), session.userId)
+        val weights = listenService.recentSeedWeights(session.userId, cutoff)
+        return expandSeeds(weightedSample(weights, SEED_LIMIT), session.userId)
     }
 
-    private suspend fun expand(seedIds: List<UUID>, userId: UUID): List<UUID> {
-        val seeds = seedIds.shuffled().take(SEED_LIMIT)
+    private suspend fun expand(seedIds: List<UUID>, userId: UUID): List<UUID> =
+        expandSeeds(seedIds.shuffled().take(SEED_LIMIT), userId)
+
+    private suspend fun expandSeeds(seeds: List<UUID>, userId: UUID): List<UUID> {
         if (seeds.isEmpty()) return emptyList()
         return recommendations.similarSongs(seeds, userId, BATCH_SIZE * 3).map { it.id }.shuffled()
     }
@@ -162,33 +146,6 @@ class RadioService : Service() {
             .take(limit)
     }
 
-    private suspend fun historySeeds(userId: UUID, cutoff: Long): Set<UUID> = dbQuery {
-        val account = UserListenBrainzLinkTable
-            .select(UserListenBrainzLinkTable.listenBrainzUserId)
-            .where { UserListenBrainzLinkTable.userId eq userId }
-            .firstOrNull()?.get(UserListenBrainzLinkTable.listenBrainzUserId)?.value
-
-        val owner = if (account != null) {
-            (ListenTable.userId eq userId) or (ListenTable.listenBrainzUserId eq account)
-        } else {
-            ListenTable.userId eq userId
-        }
-        val recent = ListenTable.select(ListenTable.songId)
-            .where { owner }
-            .andWhere { ListenTable.listenedAt greater cutoff }
-            .andWhere { ListenTable.songId.isNotNull() }
-            .mapNotNull { it[ListenTable.songId]?.value }
-            .toHashSet()
-
-        recent.ifEmpty {
-            UserSongTable.select(UserSongTable.songId)
-                .where { UserSongTable.userId eq userId }
-                .andWhere { UserSongTable.isFavourite eq true }
-                .map { it[UserSongTable.songId].value }
-                .toHashSet()
-        }
-    }
-
     private fun RadioType.window(): Duration = when (this) {
         RadioType.LAST_WEEK -> 7.days
         RadioType.LAST_MONTH -> 30.days
@@ -197,6 +154,27 @@ class RadioService : Service() {
     }
 
     companion object {
+        fun <T> weightedSample(weights: Map<T, Float>, limit: Int, random: kotlin.random.Random = kotlin.random.Random): List<T> {
+            val pool = weights.entries.filter { it.value > 0f }.map { it.key to it.value }.toMutableList()
+            val picked = ArrayList<T>(minOf(limit, pool.size))
+            var total = pool.sumOf { it.second.toDouble() }
+            while (picked.size < limit && pool.isNotEmpty()) {
+                var r = random.nextDouble() * total
+                var index = pool.lastIndex
+                for (i in pool.indices) {
+                    r -= pool[i].second
+                    if (r <= 0) {
+                        index = i
+                        break
+                    }
+                }
+                val (id, weight) = pool.removeAt(index)
+                total -= weight
+                picked.add(id)
+            }
+            return picked
+        }
+
         private const val BATCH_SIZE = 100
         private const val SEED_LIMIT = 20
         private const val QUEUE_LOW_WATERMARK = 20

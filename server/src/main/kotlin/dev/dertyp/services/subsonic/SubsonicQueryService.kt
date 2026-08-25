@@ -108,6 +108,7 @@ class SubsonicQueryService : Service() {
                     .select(SongTable.albumId, listens)
                     .where { ListenTable.userId eq userId }
                     .andWhere { SongTable.albumId.isNotNull() }
+                    .andWhere { ListenTable.qualifiedPlay }
                     .groupBy(SongTable.albumId)
                     .orderBy(listens, SortOrder.DESC)
                     .limit(size).offset(offset)
@@ -225,6 +226,7 @@ class SubsonicQueryService : Service() {
             .innerJoin(SongArtistTable, { SongTable.id }, { SongArtistTable.songId })
             .select(SongTable.id, listens)
             .where { SongArtistTable.artistId eq artistId }
+            .andWhere { ListenTable.qualifiedPlay }
             .groupBy(SongTable.id)
             .orderBy(listens, SortOrder.DESC)
             .limit(limit)

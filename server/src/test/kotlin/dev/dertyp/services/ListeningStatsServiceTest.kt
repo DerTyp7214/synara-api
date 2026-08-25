@@ -99,13 +99,14 @@ class ListeningStatsServiceTest : KoinTest {
         return aid
     }
 
-    private fun insertSong(albumId: UUID, title: String = "Song"): UUID {
+    private fun insertSong(albumId: UUID, title: String = "Song", durationMs: Long = 0): UUID {
         val sid = UUID.randomUUID()
         SongTable.insert {
             it[id] = sid
             it[SongTable.title] = title
             it[SongTable.albumId] = albumId
             it[fileSize] = 0
+            it[SongTable.duration] = durationMs
         }
         return sid
     }
@@ -155,6 +156,7 @@ class ListeningStatsServiceTest : KoinTest {
         trackName: String? = null,
         artistName: String? = null,
         releaseName: String? = null,
+        playedMs: Long? = null,
     ) {
         ListenTable.insert {
             it[ListenTable.userId] = userId
@@ -170,6 +172,7 @@ class ListeningStatsServiceTest : KoinTest {
             it[ListenTable.releaseName] = releaseName
             it[listenedAt] = at
             it[listenSource] = if (lbUserId != null) ListenSource.LISTENBRAINZ else ListenSource.LOCAL
+            it[msPlayed] = playedMs
         }
     }
 
@@ -665,5 +668,100 @@ class ListeningStatsServiceTest : KoinTest {
         assertEquals(0L, result.listenCount)
         assertEquals(0, result.uniqueSongs)
         assertEquals(0, result.streaks.currentStreakDays)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `short plays are not counted as listens but their time is`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val user = transaction(database) {
+            val u = insertUser()
+            val song = insertSong(insertAlbum(), durationMs = 240_000)
+            insertListen(at(0, hour = 10), userId = u, songId = song, playedMs = 30_000)
+            u
+        }
+
+        val result = stats(user)
+
+        assertEquals(0L, result.listenCount)
+        assertEquals(30_000L, result.listenedMs)
+        assertEquals(0, result.uniqueSongs)
+        assertEquals(emptyList<Any>(), result.topSongs)
+        assertEquals(0, result.streaks.currentStreakDays)
+        assertEquals(0L, result.listenClock.hourOfDay[10])
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `plays qualify by half the song or three minutes`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val user = transaction(database) {
+            val u = insertUser()
+            val album = insertAlbum()
+            val short = insertSong(album, title = "Short", durationMs = 240_000)
+            val long = insertSong(album, title = "Long", durationMs = 600_000)
+            insertListen(at(1), userId = u, songId = short, playedMs = 120_000)
+            insertListen(at(2), userId = u, songId = long, playedMs = 180_000)
+            insertListen(at(3), userId = u, songId = long, playedMs = 179_000)
+            u
+        }
+
+        val result = stats(user)
+
+        assertEquals(2L, result.listenCount)
+        assertEquals(479_000L, result.listenedMs)
+        assertEquals(setOf("Short", "Long"), result.topSongs.map { it.title }.toSet())
+        assertEquals(359_000L, result.topSongs.first { it.title == "Long" }.listenedMs)
+        assertEquals(1L, result.topSongs.first { it.title == "Long" }.listenCount)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `plays without a played duration count the whole song`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val user = transaction(database) {
+            val u = insertUser()
+            val lb = insertLbUser()
+            link(u, lb)
+            val song = insertSong(insertAlbum(), durationMs = 240_000)
+            insertListen(at(1), userId = u, songId = song)
+            insertListen(at(2), lbUserId = lb, trackName = "Unmatched", artistName = "Nobody")
+            insertListen(at(3), lbUserId = lb, trackName = "Unmatched", artistName = "Nobody", playedMs = 30_000)
+            u
+        }
+
+        val result = stats(user)
+
+        assertEquals(2L, result.listenCount)
+        assertEquals(270_000L, result.listenedMs)
+        assertEquals(30_000L, result.topSongs.first { it.title == "Unmatched" }.listenedMs)
+        assertEquals(30_000L, result.topArtists.first { it.name == "Nobody" }.listenedMs)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `listened time fans out to artists and albums and the previous range`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val user = transaction(database) {
+            val u = insertUser()
+            val album = insertAlbum("Album X")
+            val artist = insertArtist("Artist X")
+            val song = insertSong(album, durationMs = 200_000)
+            linkSongArtist(song, artist)
+            insertListen(at(0, hour = 9), userId = u, songId = song)
+            insertListen(at(0, hour = 10), userId = u, songId = song, playedMs = 20_000)
+            insertListen(at(1), userId = u, songId = song, playedMs = 10_000)
+            insertListen(at(1, hour = 8), userId = u, songId = song)
+            u
+        }
+
+        val result = stats(user, range = StatsRange.DAY)
+
+        assertEquals(1L, result.listenCount)
+        assertEquals(220_000L, result.listenedMs)
+        assertEquals(220_000L, result.topArtists.single().listenedMs)
+        assertEquals(220_000L, result.topAlbums.single().listenedMs)
+        assertEquals(1L, result.comparison!!.previousCount)
+        assertEquals(210_000L, result.comparison!!.previousListenedMs)
     }
 }

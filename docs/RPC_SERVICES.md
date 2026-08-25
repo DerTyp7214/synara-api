@@ -590,7 +590,8 @@ Listening statistics for a time range over the user's unified listen history, de
 | `timezone` | `String` | The timezone used for range boundaries. |
 | `rangeStart` | `Long` | Start of the range (epoch milliseconds, inclusive); 0 for ALL_TIME. |
 | `rangeEnd` | `Long` | End of the range (epoch milliseconds, exclusive). |
-| `listenCount` | `Long` | Deduplicated listen count in the range. |
+| `listenCount` | `Long` | Deduplicated listen count in the range. A play only counts when at least half of the song or at least 3 minutes were played; plays without a known played duration always count. |
+| `listenedMs` | `Long` | Total milliseconds listened in the range, including plays too short to count as a listen. Plays without a known played duration count the whole song duration. |
 | `comparison` | [RangeComparison](#devdertypdatarangecomparison)? | Comparison against the previous equivalent range, or null for ALL_TIME. |
 | `uniqueSongs` | `Int` | Distinct songs listened to in the range. |
 | `uniqueArtists` | `Int` | Distinct artists listened to in the range. |
@@ -851,6 +852,7 @@ Comparison of the current range's listen count against the previous equivalent r
 | `previousEnd` | `Long` | End of the previous range (epoch milliseconds, exclusive). |
 | `previousCount` | `Long` | Deduplicated listen count in the previous range. |
 | `percentChange` | `Double`? | Percent change of the current count relative to the previous count, or null if the previous range had no listens. |
+| `previousListenedMs` | `Long` | Total milliseconds listened in the previous range. |
 
 ### RecentListens <a name="devdertypdatarecentlistens"></a>
 A user's recently listened songs together with what they are currently playing.
@@ -1226,6 +1228,7 @@ An album ranked by listen count. Fallback entries for listens not matched to a l
 | `name` | `String` | The album name. |
 | `coverId` | `PlatformUUID`? | The album's cover image, or null if none. |
 | `listenCount` | `Long` | Deduplicated listen count in the range. |
+| `listenedMs` | `Long` | Total milliseconds listened to this album in the range, including plays too short to count as a listen. |
 
 ### TopArtistEntry <a name="devdertypdatatopartistentry"></a>
 An artist ranked by listen count. Fallback entries for listens not matched to a library artist carry a null artistId.
@@ -1236,6 +1239,7 @@ An artist ranked by listen count. Fallback entries for listens not matched to a 
 | `name` | `String` | The artist name. |
 | `imageId` | `PlatformUUID`? | The artist's image, or null if none. |
 | `listenCount` | `Long` | Deduplicated listen count in the range. |
+| `listenedMs` | `Long` | Total milliseconds listened to this artist in the range, including plays too short to count as a listen. |
 
 ### TopSongEntry <a name="devdertypdatatopsongentry"></a>
 A song ranked by listen count. Fallback entries for listens not matched to a library song carry a null songId.
@@ -1250,6 +1254,7 @@ A song ranked by listen count. Fallback entries for listens not matched to a lib
 | `listenCount` | `Long` | Deduplicated listen count in the range. |
 | `recordingMbid` | `PlatformUUID`? | The MusicBrainz recording MBID of an unmatched entry, or null. |
 | `recordingMsid` | `PlatformUUID`? | A representative ListenBrainz recording MSID of an unmatched entry, or null. When recordingMbid and recordingMsid are both null the entry cannot be linked. |
+| `listenedMs` | `Long` | Total milliseconds listened to this song in the range, including plays too short to count as a listen. |
 
 ### TranscodedVersion <a name="devdertypdatatranscodedversion"></a>
 Represents a transcoded version of a song.
