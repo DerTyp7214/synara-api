@@ -20,7 +20,9 @@ import dev.dertyp.services.metadata.MetadataDispatcherService
 import dev.dertyp.services.schedule.RpcScheduledTaskConfigurationService
 import dev.dertyp.services.subsonic.RpcSubsonicCredentialService
 import dev.dertyp.services.sync.RpcListenBrainzService
+import dev.dertyp.utils.ResponseShaper
 import dev.dertyp.utils.withAuthorization
+import dev.dertyp.utils.withClientCompat
 import io.github.smiley4.ktoropenapi.*
 import io.github.smiley4.ktoropenapi.config.RouteConfig
 import io.ktor.http.*
@@ -88,7 +90,8 @@ fun Route.registerRestService(
                         }
                     }
 
-                    val service = serviceFactory()
+                    @Suppress("UNCHECKED_CAST")
+                    val service = serviceFactory().withClientCompat(serviceInterface.java as Class<Any>, ResponseShaper(call.clientInfo))
                     val argMap = mutableMapOf<KParameter, Any?>()
                     val instanceParam = func.parameters.first { it.kind == KParameter.Kind.INSTANCE }
                     argMap[instanceParam] = service

@@ -46,6 +46,7 @@ class ScheduledTaskConfigurationService : Service() {
             TaskConfiguration(TaskKeys.AUDIO_ANALYSIS, "Audio Analysis", true, TriggerDefinition.Cron("0 3 * * *")),
             TaskConfiguration(TaskKeys.FLAC_ANALYSIS, "FLAC Analysis", true, TriggerDefinition.Cron("0 5 * * *")),
             TaskConfiguration(TaskKeys.PCM_ANALYSIS, "WAV/AIFF Analysis", true, TriggerDefinition.Cron("20 5 * * *")),
+            TaskConfiguration(TaskKeys.AUDIO_START_ANALYSIS, "Audio Start Analysis", true, TriggerDefinition.Cron("40 5 * * *")),
             TaskConfiguration(TaskKeys.MUSICBRAINZ_WORKER, "MusicBrainz Worker", true, TriggerDefinition.Cron("0 0 * * *")),
             TaskConfiguration(TaskKeys.MUSICBRAINZ_CACHE_WORKER, "MusicBrainz Cache Worker", true, TriggerDefinition.AfterTask(TaskKeys.MUSICBRAINZ_WORKER)),
             TaskConfiguration(TaskKeys.GENRE_METADATA_WORKER, "Genre Metadata Worker", true, TriggerDefinition.AfterTask(TaskKeys.MUSICBRAINZ_WORKER)),

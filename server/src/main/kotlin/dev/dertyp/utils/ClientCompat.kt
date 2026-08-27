@@ -1,0 +1,79 @@
+package dev.dertyp.utils
+
+import dev.dertyp.core.ClientFeature
+import dev.dertyp.core.ClientInfo
+import dev.dertyp.data.CollectionSongMatch
+import dev.dertyp.data.ListenedSong
+import dev.dertyp.data.NowPlaying
+import dev.dertyp.data.PaginatedResponse
+import dev.dertyp.data.PlaybackState
+import dev.dertyp.data.RadioChannelSongMatch
+import dev.dertyp.data.Song
+import dev.dertyp.data.UserSong
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
+import java.lang.reflect.InvocationTargetException
+import java.lang.reflect.Proxy
+import kotlin.coroutines.Continuation
+import kotlin.coroutines.intrinsics.COROUTINE_SUSPENDED
+
+open class ResponseShaper(val client: ClientInfo) {
+    open val isNoop: Boolean get() = ClientFeature.entries.all { client.supports(it) }
+
+    @Suppress("UNCHECKED_CAST")
+    fun shape(value: Any?): Any? = when (value) {
+        is UserSong -> shapeUserSong(value)
+        is Song -> shapeSong(value)
+        is PaginatedResponse<*> -> (value as PaginatedResponse<Any?>).copy(data = value.data.map(::shape))
+        is List<*> -> value.map(::shape)
+        is Map<*, *> -> value.mapValues { shape(it.value) }
+        is Flow<*> -> value.map(::shape)
+        is NowPlaying -> value.copy(song = shapeUserSong(value.song))
+        is ListenedSong -> value.copy(song = shapeUserSong(value.song))
+        is CollectionSongMatch -> value.copy(song = shapeUserSong(value.song))
+        is RadioChannelSongMatch -> value.copy(song = shapeUserSong(value.song))
+        is PlaybackState.QueueEntry.Explicit -> value.copy(song = shapeUserSong(value.song))
+        else -> value
+    }
+
+    protected open fun shapeSong(song: Song): Song = song
+
+    protected open fun shapeUserSong(song: UserSong): UserSong = song
+}
+
+@Suppress("UNCHECKED_CAST", "PLATFORM_CLASS_MAPPED_TO_KOTLIN")
+fun <T : Any> T.withClientCompat(interfaceClass: Class<T>, shaper: ResponseShaper): T {
+    if (shaper.isNoop) return this
+    val target = this
+    val interfaces = (listOf(interfaceClass) + target.javaClass.interfaces).distinct().toTypedArray()
+
+    return Proxy.newProxyInstance(interfaceClass.classLoader, interfaces) { proxy, method, args ->
+        if (method.declaringClass == Object::class.java) {
+            return@newProxyInstance when (method.name) {
+                "toString" -> $$"$$${interfaceClass.simpleName}$ClientCompat"
+                "hashCode" -> System.identityHashCode(proxy)
+                "equals" -> proxy === args?.get(0)
+                else -> null
+            }
+        }
+
+        val lastArg = args?.lastOrNull()
+        val invokeArgs = if (lastArg is Continuation<*>) {
+            val continuation = lastArg as Continuation<Any?>
+            val shaped = object : Continuation<Any?> {
+                override val context = continuation.context
+                override fun resumeWith(result: Result<Any?>) = continuation.resumeWith(result.map(shaper::shape))
+            }
+            args.copyOf().also { it[it.size - 1] = shaped }
+        } else {
+            args ?: emptyArray()
+        }
+
+        try {
+            val res = method.invoke(target, *invokeArgs)
+            if (res === COROUTINE_SUSPENDED) res else shaper.shape(res)
+        } catch (e: InvocationTargetException) {
+            throw e.targetException
+        }
+    } as T
+}

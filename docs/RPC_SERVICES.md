@@ -1109,6 +1109,7 @@ Contains core metadata about a track that is common for all users.
 | `animatedCoverId` | `PlatformUUID`? | The animated cover unique identifier. |
 | `animatedCoverImageId` | `PlatformUUID`? | Identifier of the still Image from the animated cover's first frame. |
 | `animatedCoverBlurHash` | `String`? | BlurHash of the animated cover's first frame. |
+| `audioStartMs` | `Long`? | Offset in milliseconds of the first audible sound, or null if not yet analyzed. |
 
 ### SongAudioData <a name="devdertypdatasongaudiodata"></a>
 Additional audio analysis data for a song.
@@ -1401,6 +1402,7 @@ Extends track metadata with user-specific information like favorite status.
 | `animatedCoverId` | `PlatformUUID`? | The animated cover unique identifier. |
 | `animatedCoverImageId` | `PlatformUUID`? | Identifier of the still Image from the animated cover's first frame. |
 | `animatedCoverBlurHash` | `String`? | BlurHash of the animated cover's first frame. |
+| `audioStartMs` | `Long`? | Offset in milliseconds of the first audible sound, or null if not yet analyzed. |
 | `isFavourite` | `Boolean`? | Whether the current user has marked this song as a favorite. |
 | `userSongCreatedAt` | `PlatformDate`? | Timestamp of when the song record was created. |
 | `userSongUpdatedAt` | `PlatformDate`? | Timestamp of the last update to the song metadata. |

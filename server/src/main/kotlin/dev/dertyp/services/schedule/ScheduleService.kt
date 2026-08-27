@@ -222,6 +222,7 @@ class ScheduleService : IScheduleService, Service() {
     override fun schedulePostIndexTasks() {
         val musicBrainzWorker = get<MusicBrainzWorker>()
         val imageAnalysisWorker = get<ImageAnalysisWorker>()
+        val audioStartAnalysisWorker = get<AudioStartAnalysisWorker>()
         scheduleTask(
             trigger = ScheduleTrigger(Instant.now()),
             name = "MusicBrainzWorker-AfterIndex",
@@ -231,6 +232,11 @@ class ScheduleService : IScheduleService, Service() {
             trigger = ScheduleTrigger(Instant.now()),
             name = "ImageAnalysisWorker-AfterIndex",
             task = { imageAnalysisWorker.run { _, _ -> } }
+        )
+        scheduleTask(
+            trigger = ScheduleTrigger(Instant.now()),
+            name = "AudioStartAnalysisWorker-AfterIndex",
+            task = { audioStartAnalysisWorker.run { _, _ -> } }
         )
     }
 

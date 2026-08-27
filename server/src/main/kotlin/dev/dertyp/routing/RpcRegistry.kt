@@ -23,8 +23,10 @@ import dev.dertyp.services.subsonic.SubsonicCredentialService
 import dev.dertyp.services.sync.ListenBrainzService
 import dev.dertyp.services.sync.RpcListenBrainzService
 import dev.dertyp.core.principalUsername
+import dev.dertyp.utils.ResponseShaper
 import dev.dertyp.utils.withAuthorization
 import dev.dertyp.utils.withCaching
+import dev.dertyp.utils.withClientCompat
 import dev.dertyp.utils.withLogging
 import dev.dertyp.utils.withMetrics
 import io.ktor.server.application.ApplicationCall
@@ -38,17 +40,19 @@ private interface ServiceRegistrar {
     fun <@Rpc T : Any> register(serviceKClass: KClass<T>, serviceFactory: () -> T)
 }
 
-private fun <T : Any> T.wrap(interfaceClass: KClass<T>, username: String, collector: RpcMetricsCollector): T {
+private fun <T : Any> T.wrap(interfaceClass: KClass<T>, username: String, collector: RpcMetricsCollector, shaper: ResponseShaper): T {
     val cached = this.withCaching(interfaceClass.java)
-    return if (collector.enabled) cached.withMetrics(interfaceClass.java, username, collector) else cached
+    val metered = if (collector.enabled) cached.withMetrics(interfaceClass.java, username, collector) else cached
+    return metered.withClientCompat(interfaceClass.java, shaper)
 }
 
 fun KrpcRoute.registerPublicServices(koin: Koin) {
     val collector = koin.get<RpcMetricsCollector>()
     val username = call.principalUsername ?: ""
+    val shaper = ResponseShaper(call.clientInfo)
     val registrar = object : ServiceRegistrar {
         override fun <@Rpc T : Any> register(serviceKClass: KClass<T>, serviceFactory: () -> T) {
-            registerService(serviceKClass) { serviceFactory().wrap(serviceKClass, username, collector) }
+            registerService(serviceKClass) { serviceFactory().wrap(serviceKClass, username, collector, shaper) }
         }
     }
     registerPublic(koin, call, registrar)
@@ -57,9 +61,10 @@ fun KrpcRoute.registerPublicServices(koin: Koin) {
 fun RpcServer.registerPublicServices(koin: Koin, call: ApplicationCall) {
     val collector = koin.get<RpcMetricsCollector>()
     val username = call.principalUsername ?: ""
+    val shaper = ResponseShaper(call.clientInfo)
     val registrar = object : ServiceRegistrar {
         override fun <@Rpc T : Any> register(serviceKClass: KClass<T>, serviceFactory: () -> T) {
-            registerService(serviceKClass) { serviceFactory().wrap(serviceKClass, username, collector) }
+            registerService(serviceKClass) { serviceFactory().wrap(serviceKClass, username, collector, shaper) }
         }
     }
     registerPublic(koin, call, registrar)
@@ -81,9 +86,10 @@ suspend fun KrpcRoute.registerAuthenticatedServices(koin: Koin) {
     val user = call.getUser() ?: throw IllegalArgumentException("No user found")
     val collector = koin.get<RpcMetricsCollector>()
     val username = call.principalUsername ?: ""
+    val shaper = ResponseShaper(call.clientInfo)
     val registrar = object : ServiceRegistrar {
         override fun <@Rpc T : Any> register(serviceKClass: KClass<T>, serviceFactory: () -> T) {
-            registerService(serviceKClass) { serviceFactory().wrap(serviceKClass, username, collector) }
+            registerService(serviceKClass) { serviceFactory().wrap(serviceKClass, username, collector, shaper) }
         }
     }
     registerAuthenticated(koin, call, user, registrar)
@@ -92,9 +98,10 @@ suspend fun KrpcRoute.registerAuthenticatedServices(koin: Koin) {
 fun RpcServer.registerAuthenticatedServices(koin: Koin, call: ApplicationCall, user: User) {
     val collector = koin.get<RpcMetricsCollector>()
     val username = call.principalUsername ?: ""
+    val shaper = ResponseShaper(call.clientInfo)
     val registrar = object : ServiceRegistrar {
         override fun <@Rpc T : Any> register(serviceKClass: KClass<T>, serviceFactory: () -> T) {
-            registerService(serviceKClass) { serviceFactory().wrap(serviceKClass, username, collector) }
+            registerService(serviceKClass) { serviceFactory().wrap(serviceKClass, username, collector, shaper) }
         }
     }
     registerAuthenticated(koin, call, user, registrar)

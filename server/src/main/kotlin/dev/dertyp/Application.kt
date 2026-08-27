@@ -234,6 +234,7 @@ fun mainModule(application: Application, environment: ApplicationEnvironment): M
     singleOf(::AudioAnalysisService)
     singleOf(::FlacAnalysisService)
     singleOf(::PcmAnalysisService)
+    singleOf(::AudioStartAnalysisService)
     singleOf(::ImageService)
     singleOf(::AnimatedImageService)
     singleOf(::AlbumService)

@@ -325,6 +325,7 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                 animatedCoverId = resultRow[SongTable.animatedCover]?.value,
                 animatedCoverImageId = animatedCoverImageIdColumn?.let { resultRow.getOrNull(it) }?.value,
                 animatedCoverBlurHash = animatedCoverBlurHashColumn?.let { resultRow.getOrNull(it) },
+                audioStartMs = resultRow.getOrNull(SongTable.audioStartMs),
             )
         }
 
@@ -363,6 +364,7 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                 animatedCoverId = resultRow[SongTable.animatedCover]?.value,
                 animatedCoverImageId = animatedCoverImageIdColumn?.let { resultRow.getOrNull(it) }?.value,
                 animatedCoverBlurHash = animatedCoverBlurHashColumn?.let { resultRow.getOrNull(it) },
+                audioStartMs = resultRow.getOrNull(SongTable.audioStartMs),
                 isFavourite = resultRow.getOrNull(UserSongTable.isFavourite) ?: false,
                 userSongCreatedAt = resultRow.getOrNull(UserSongTable.createdAt).date,
                 userSongUpdatedAt = resultRow.getOrNull(UserSongTable.updatedAt).date,
@@ -2503,6 +2505,7 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
             it[bitRate] = song.bitRate
             it[fileSize] = song.fileSize
             it[cover] = song.coverId?.let { coverId -> EntityID(coverId, ImageTable) }
+            it[audioStartMs] = song.audioStartMs
         }
 
         if (song.originalUrl.isNotBlank()) {
