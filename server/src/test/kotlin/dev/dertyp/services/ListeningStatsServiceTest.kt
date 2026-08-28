@@ -4,6 +4,7 @@ import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
 import dev.dertyp.data.LinkUnmatchedTrackRequest
 import dev.dertyp.data.StatsRange
+import dev.dertyp.data.TopOrder
 import dev.dertyp.db.*
 import dev.dertyp.plugins.HookBus
 import dev.dertyp.services.sync.ListenBrainzService
@@ -184,7 +185,8 @@ class ListeningStatsServiceTest : KoinTest {
         range: StatsRange = StatsRange.ALL_TIME,
         timezone: String = "UTC",
         topLimit: Int = 10,
-    ) = service.stats(userId, range, timezone, topLimit, nowMs)
+        topOrder: TopOrder = TopOrder.LISTEN_COUNT,
+    ) = service.stats(userId, range, timezone, topLimit, topOrder, nowMs)
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
@@ -844,5 +846,77 @@ class ListeningStatsServiceTest : KoinTest {
         assertEquals(220_000L, result.topAlbums.single().listenedMs)
         assertEquals(1L, result.comparison!!.previousCount)
         assertEquals(210_000L, result.comparison!!.previousListenedMs)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `top lists rank by time listened when requested`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val user = transaction(database) {
+            val u = insertUser()
+            val albumA = insertAlbum("Album A")
+            val albumB = insertAlbum("Album B")
+            val artistA = insertArtist("Artist A")
+            val artistB = insertArtist("Artist B")
+            val songA = insertSong(albumA, title = "Many", durationMs = 240_000)
+            val songB = insertSong(albumB, title = "Long", durationMs = 1_200_000)
+            linkSongArtist(songA, artistA)
+            linkSongArtist(songB, artistB)
+            insertListen(at(1), userId = u, songId = songA, playedMs = 180_000)
+            insertListen(at(2), userId = u, songId = songA, playedMs = 180_000)
+            insertListen(at(3), userId = u, songId = songA, playedMs = 180_000)
+            insertListen(at(4), userId = u, songId = songB, playedMs = 1_200_000)
+            u
+        }
+
+        val byCount = stats(user)
+        assertEquals(listOf("Many", "Long"), byCount.topSongs.map { it.title })
+        assertEquals(listOf("Artist A", "Artist B"), byCount.topArtists.map { it.name })
+        assertEquals(listOf("Album A", "Album B"), byCount.topAlbums.map { it.name })
+        assertEquals(listOf("Many", "Long"), byCount.discoveries.songs.map { it.title })
+
+        val byTime = stats(user, topOrder = TopOrder.LISTENED_MS)
+        assertEquals(listOf("Long", "Many"), byTime.topSongs.map { it.title })
+        assertEquals(listOf("Artist B", "Artist A"), byTime.topArtists.map { it.name })
+        assertEquals(listOf("Album B", "Album A"), byTime.topAlbums.map { it.name })
+        assertEquals(listOf("Long", "Many"), byTime.discoveries.songs.map { it.title })
+        assertEquals(listOf("Artist B", "Artist A"), byTime.discoveries.artists.map { it.name })
+        assertEquals(1L, byTime.topSongs[0].listenCount)
+        assertEquals(1_200_000L, byTime.topSongs[0].listenedMs)
+        assertEquals(3L, byTime.topSongs[1].listenCount)
+        assertEquals(540_000L, byTime.topSongs[1].listenedMs)
+        assertEquals(4L, byTime.listenCount)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `time-ordered top lists include entries with only short plays`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val user = transaction(database) {
+            val u = insertUser()
+            val album = insertAlbum()
+            val artist = insertArtist("Skipper")
+            val song = insertSong(album, title = "Skipped", durationMs = 240_000)
+            linkSongArtist(song, artist)
+            insertListen(at(1), userId = u, songId = song, playedMs = 30_000)
+            insertListen(at(2), userId = u, songId = song, playedMs = 30_000)
+            insertListen(at(3), userId = u, trackName = "Unmatched", artistName = "Nobody", playedMs = 20_000)
+            u
+        }
+
+        val byCount = stats(user)
+        assertEquals(emptyList<Any>(), byCount.topSongs)
+        assertEquals(emptyList<Any>(), byCount.topArtists)
+        assertEquals(emptyList<Any>(), byCount.topAlbums)
+
+        val byTime = stats(user, topOrder = TopOrder.LISTENED_MS)
+        assertEquals(listOf("Skipped", "Unmatched"), byTime.topSongs.map { it.title })
+        assertEquals(listOf(0L, 0L), byTime.topSongs.map { it.listenCount })
+        assertEquals(listOf(60_000L, 20_000L), byTime.topSongs.map { it.listenedMs })
+        assertEquals(listOf("Skipper", "Nobody"), byTime.topArtists.map { it.name })
+        assertEquals(60_000L, byTime.topAlbums.single().listenedMs)
+        assertEquals(0L, byTime.listenCount)
+        assertEquals(0, byTime.uniqueSongs)
+        assertEquals(emptyList<Any>(), byTime.discoveries.songs)
     }
 }

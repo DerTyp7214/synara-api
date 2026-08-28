@@ -40,6 +40,7 @@ class ListeningStatsService : Service() {
         range: StatsRange,
         timezone: String,
         topLimit: Int,
+        topOrder: TopOrder = TopOrder.LISTEN_COUNT,
         nowMs: Long = System.currentTimeMillis(),
     ): ListeningStats {
         val zone = runCatching { ZoneId.of(timezone) }.getOrElse { ZoneOffset.UTC }
@@ -89,9 +90,9 @@ class ListeningStatsService : Service() {
             library.songMeta[key.songId]?.let { albumCounts.merge(AlbumKey.Matched(it.albumId), count, Long::plus) }
         }
 
-        val artistPlayed = HashMap<ArtistKey, Long>()
+        val artistPlayed = LinkedHashMap<ArtistKey, Long>()
         pass.unmatchedArtistPlayed.forEach { (key, ms) -> artistPlayed.merge(canonArtist(key), ms, Long::plus) }
-        val albumPlayed = HashMap<AlbumKey, Long>()
+        val albumPlayed = LinkedHashMap<AlbumKey, Long>()
         pass.unmatchedAlbumPlayed.forEach { (key, ms) -> albumPlayed.merge(canonAlbum(key), ms, Long::plus) }
         for ((key, ms) in pass.songPlayed) {
             if (key !is SongKey.Matched) continue
@@ -178,15 +179,17 @@ class ListeningStatsService : Service() {
             )
         }
 
-        fun <K> top(counts: Map<K, Long>, filter: (K) -> Boolean = { true }): List<Pair<K, Long>> =
-            counts.entries
+        fun <K> top(counts: Map<K, Long>, played: Map<K, Long>, filter: (K) -> Boolean = { true }): List<Pair<K, Long>> {
+            val metric = if (topOrder == TopOrder.LISTENED_MS) played else counts
+            return metric.entries
                 .filter { filter(it.key) }
                 .sortedByDescending { it.value }
                 .take(topLimit)
-                .map { it.key to it.value }
+                .map { it.key to (counts[it.key] ?: 0L) }
+        }
 
-        val discoverySongs = top(pass.songCounts) { key -> (pass.songFirstSeen[key] ?: 0L) >= rangeStart }
-        val discoveryArtists = top(artistCounts) { key -> (artistFirstSeen[key] ?: 0L) >= rangeStart }
+        val discoverySongs = top(pass.songCounts, pass.songPlayed) { key -> pass.songFirstSeen[key]?.let { it >= rangeStart } == true }
+        val discoveryArtists = top(artistCounts, artistPlayed) { key -> artistFirstSeen[key]?.let { it >= rangeStart } == true }
 
         val comparison = previousStart?.let {
             RangeComparison(
@@ -211,9 +214,9 @@ class ListeningStatsService : Service() {
             uniqueSongs = pass.songCounts.size,
             uniqueArtists = artistCounts.size,
             uniqueAlbums = albumCounts.size,
-            topSongs = top(pass.songCounts).map { (key, count) -> songEntry(key, count) },
-            topArtists = top(artistCounts).map { (key, count) -> artistEntry(key, count) },
-            topAlbums = top(albumCounts).map { (key, count) -> albumEntry(key, count) },
+            topSongs = top(pass.songCounts, pass.songPlayed).map { (key, count) -> songEntry(key, count) },
+            topArtists = top(artistCounts, artistPlayed).map { (key, count) -> artistEntry(key, count) },
+            topAlbums = top(albumCounts, albumPlayed).map { (key, count) -> albumEntry(key, count) },
             listenClock = ListenClock(
                 hourOfDay = pass.hourBuckets.toList(),
                 dayOfWeek = pass.dayBuckets.toList(),
@@ -597,8 +600,8 @@ class RpcListeningStatsService(
     private val user: User,
     private val service: ListeningStatsService,
 ) : IListeningStatsService {
-    override suspend fun getStats(range: StatsRange, timezone: String, topLimit: Int): ListeningStats =
-        service.stats(user.id, range, timezone, topLimit.coerceIn(1, 100))
+    override suspend fun getStats(range: StatsRange, timezone: String, topLimit: Int, topOrder: TopOrder): ListeningStats =
+        service.stats(user.id, range, timezone, topLimit.coerceIn(1, 100), topOrder)
 
     override suspend fun linkUnmatchedTrack(request: LinkUnmatchedTrackRequest): LinkUnmatchedTrackResult =
         service.linkUnmatched(user.id, request)
