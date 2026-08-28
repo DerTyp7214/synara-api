@@ -6,17 +6,13 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
-import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.Test
 import java.nio.file.Files
-import java.nio.file.Path
-import java.nio.file.StandardCopyOption
 import kotlin.io.path.exists
 import kotlin.io.path.writeBytes
 
 class AtmosProcessorTest {
     private val processor = AtmosProcessor(AudioConfig(LosslessFormat.FLAC))
-    private val sample = Path.of("/home/typ/Music/Synara/tiddl/Tracks/549904226/549904229.m4a")
 
     @Test
     fun `isAtmos is false for non-m4a paths and unreadable m4a files`() {
@@ -49,11 +45,10 @@ class AtmosProcessorTest {
     }
 
     @Test
-    fun `process converts a real atmos download to a 5_1 flac and keeps the atmos variant`() = runBlocking {
-        assumeTrue(sample.exists(), "sample atmos download not available")
+    fun `process converts an eac3 download to a 5_1 flac and keeps the atmos variant`() = runBlocking {
         val tempDir = Files.createTempDirectory("atmos-test")
         try {
-            val m4a = Files.copy(sample, tempDir.resolve("549904229.m4a"), StandardCopyOption.REPLACE_EXISTING)
+            val m4a = AtmosFixture.create(tempDir, "549904229.m4a")
             assertTrue(processor.isAtmos(m4a))
 
             val flac = processor.process(m4a) {}
@@ -65,9 +60,9 @@ class AtmosProcessorTest {
 
             val header = AudioFileIO.read(flac.toFile()).audioHeader
             assertEquals("6", header.channels)
-            assertEquals(48000, header.sampleRateAsNumber)
+            assertEquals(AtmosFixture.SAMPLE_RATE, header.sampleRateAsNumber)
             assertEquals(24, header.bitsPerSample)
-            assertEquals(180, header.trackLength)
+            assertEquals(AtmosFixture.SECONDS, header.trackLength)
         } finally {
             tempDir.toFile().deleteRecursively()
         }

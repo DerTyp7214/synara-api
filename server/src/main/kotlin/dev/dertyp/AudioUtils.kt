@@ -217,7 +217,7 @@ object AudioUtils {
                         }
 
                         sampleRate = closestSampleRate(grabber.sampleRate)
-                        audioBitrate = targetKbps * 1000
+                        audioBitrate = targetKbps * 1000 * bitrateChannelFactor(grabber.audioChannels)
 
                         frameRate = 1.0
 
@@ -272,6 +272,8 @@ object AudioUtils {
             }
         }
     }
+
+    internal fun bitrateChannelFactor(channels: Int): Int = maxOf(1, (channels + 1) / 2)
 
     internal fun sourceBitDepth(grabber: FFmpegFrameGrabber): Int {
         when (grabber.audioCodec) {
