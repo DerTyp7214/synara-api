@@ -36,9 +36,11 @@ open class ResponseShaper(val client: ClientInfo) {
         else -> value
     }
 
-    protected open fun shapeSong(song: Song): Song = song
+    protected open fun shapeSong(song: Song): Song =
+        if (song.atmosPath != null && !client.supports(ClientFeature.DOLBY_ATMOS)) song.copy(atmosPath = null) else song
 
-    protected open fun shapeUserSong(song: UserSong): UserSong = song
+    protected open fun shapeUserSong(song: UserSong): UserSong =
+        if (song.atmosPath != null && !client.supports(ClientFeature.DOLBY_ATMOS)) song.copy(atmosPath = null) else song
 }
 
 @Suppress("UNCHECKED_CAST", "PLATFORM_CLASS_MAPPED_TO_KOTLIN")

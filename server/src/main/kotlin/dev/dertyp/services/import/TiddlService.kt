@@ -9,7 +9,7 @@ import java.io.File
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 
 @OptIn(ExperimentalAtomicApi::class)
-class TiddlService(
+open class TiddlService(
     indexer: IPluginIndexer,
     storageService: IServerStorageService
 ) : TidalBaseImporter(indexer, storageService) {

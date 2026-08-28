@@ -14,6 +14,7 @@ threads_count = 3
 download_path = "/data/Synara/tiddl"
 singles_filter = "none"
 videos_filter = "none"
+atmos_filter = "allow"
 update_mtime = false
 rewrite_metadata = false
 

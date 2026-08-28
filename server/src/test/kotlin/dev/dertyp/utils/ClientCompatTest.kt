@@ -97,6 +97,25 @@ class ClientCompatTest {
     }
 
     @Test
+    fun `atmos path is hidden from clients below api version 3`() = runBlocking {
+        val atmosUserSong = userSong.copy(atmosPath = "atmos.m4a")
+        val atmosSong = song.copy(atmosPath = "atmos.m4a")
+        val api = object : SongApi by fake {
+            override suspend fun one() = atmosUserSong
+            override suspend fun plain() = atmosSong
+        }
+
+        val legacy = api.withClientCompat(SongApi::class.java, ResponseShaper(ClientInfo(2)))
+        assertEquals(null, legacy.one()!!.atmosPath)
+        assertEquals(null, legacy.plain().atmosPath)
+        assertEquals("Title", legacy.one()!!.title)
+
+        val current = api.withClientCompat(SongApi::class.java, ResponseShaper(ClientInfo(ApiVersion.CURRENT)))
+        assertEquals("atmos.m4a", current.one()!!.atmosPath)
+        assertEquals("atmos.m4a", current.plain().atmosPath)
+    }
+
+    @Test
     fun `default shaper is identity`() = runBlocking {
         val shaper = object : ResponseShaper(ClientInfo.LEGACY) {
             override val isNoop: Boolean get() = false

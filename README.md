@@ -6,7 +6,7 @@ Synara is a powerful, modern music server and API designed for high-fidelity aud
 
 - **High-Fidelity Audio**: Native support for `FLAC` with transcoding to `Opus` for efficient streaming and downloads.
 - **Service Integrations**:
-    - **Tidal**: Metadata fetching, favorites synchronization, and integrated downloading support.
+    - **Tidal**: Metadata fetching, favorites synchronization, and integrated downloading support. Dolby Atmos tracks are imported as a 5.1 lossless file plus a streamable Atmos (E-AC-3 JOC) variant (`streamSongAtmos`, API version 3+). Existing tiddl volumes need `atmos_filter = "allow"` under `[download]` in `config.toml`.
     - **Spotify**: Metadata resolution and artist/album matching.
     - **MusicBrainz**: Comprehensive metadata enrichment and persistent identifiers.
 - **Advanced Library Management**:

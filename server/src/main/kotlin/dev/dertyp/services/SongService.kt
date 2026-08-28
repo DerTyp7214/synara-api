@@ -53,6 +53,11 @@ class SongRpcService(
             val song = songService.byId(id) ?: return null
             return songService.resolveRawStream(song, client)
         }
+        if (methodName == "streamSongAtmos") {
+            val id = args[0] as? UUID ?: return null
+            val song = songService.byId(id) ?: return null
+            return songService.resolveAtmosStream(song, client)
+        }
         if (methodName == "downloadSong") {
             val id = args[0] as? UUID ?: return null
             val quality = args[1] as? Int ?: return null
@@ -210,6 +215,11 @@ class SongRpcService(
 
     override suspend fun getStreamSize(id: UUID): Long = songService.getStreamSize(id, client)
 
+    override fun streamSongAtmos(id: UUID, offset: Long, chunkSize: Int): Flow<ByteArray>? =
+        songService.streamSongAtmos(id, offset, chunkSize, client)
+
+    override suspend fun getAtmosStreamSize(id: UUID): Long = songService.getAtmosStreamSize(id, client)
+
     override suspend fun getDownloadSize(
         id: UUID,
         quality: Int,
@@ -326,6 +336,7 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                 animatedCoverImageId = animatedCoverImageIdColumn?.let { resultRow.getOrNull(it) }?.value,
                 animatedCoverBlurHash = animatedCoverBlurHashColumn?.let { resultRow.getOrNull(it) },
                 audioStartMs = resultRow.getOrNull(SongTable.audioStartMs),
+                atmosPath = resultRow.getOrNull(SongTable.atmosPath),
             )
         }
 
@@ -365,6 +376,7 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                 animatedCoverImageId = animatedCoverImageIdColumn?.let { resultRow.getOrNull(it) }?.value,
                 animatedCoverBlurHash = animatedCoverBlurHashColumn?.let { resultRow.getOrNull(it) },
                 audioStartMs = resultRow.getOrNull(SongTable.audioStartMs),
+                atmosPath = resultRow.getOrNull(SongTable.atmosPath),
                 isFavourite = resultRow.getOrNull(UserSongTable.isFavourite) ?: false,
                 userSongCreatedAt = resultRow.getOrNull(UserSongTable.createdAt).date,
                 userSongUpdatedAt = resultRow.getOrNull(UserSongTable.updatedAt).date,
@@ -1471,9 +1483,9 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
     @Suppress("DuplicatedCode")
     suspend fun deleteSongs(ids: List<UUID>): Boolean = dbQuery {
         val paths = SongTable
-            .select(SongTable.id, SongTable.filePath)
+            .select(SongTable.id, SongTable.filePath, SongTable.atmosPath)
             .where { SongTable.id inList ids }
-            .map { it[SongTable.filePath] }
+            .flatMap { listOfNotNull(it[SongTable.filePath], it[SongTable.atmosPath]) }
 
         logger.info("Found ${paths.size} files to delete.")
 
@@ -1604,6 +1616,35 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
     suspend fun getStreamSize(id: UUID, client: ClientInfo = ClientInfo.LEGACY): Long {
         val song = byId(id) ?: return 0
         return resolveRawStream(song, client)?.contentLength ?: 0
+    }
+
+    fun resolveAtmosStream(song: Song, client: ClientInfo): StreamInfo? {
+        if (!client.supports(ClientFeature.DOLBY_ATMOS)) return null
+        val file = song.atmosPath?.let(::File) ?: return null
+        if (!file.exists()) return null
+        return StreamInfo(file, ContentType.Audio.MP4, file.length(), file.name)
+    }
+
+    fun streamSongAtmos(id: UUID, offset: Long, chunkSize: Int = 4096, client: ClientInfo = ClientInfo.LEGACY): Flow<ByteArray>? {
+        val song = runBlocking { byId(id) } ?: return null
+        val file = resolveAtmosStream(song, client)?.file ?: return null
+
+        return flow {
+            val buffer = ByteArray(chunkSize)
+            file.inputStream().use { input ->
+                input.skip(offset)
+                var bytesRead = input.read(buffer)
+                while (bytesRead != -1) {
+                    emit(buffer.copyOf(bytesRead))
+                    bytesRead = input.read(buffer)
+                }
+            }
+        }.flowOn(Dispatchers.IO)
+    }
+
+    suspend fun getAtmosStreamSize(id: UUID, client: ClientInfo = ClientInfo.LEGACY): Long {
+        val song = byId(id) ?: return 0
+        return resolveAtmosStream(song, client)?.contentLength ?: 0
     }
 
     suspend fun getDownloadSize(
@@ -2334,6 +2375,19 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                 logBlock("Dirty song updates")
             }
 
+            val atmosSongs = existingSongMap.filter { (song, _) -> song.atmosPath != null }
+            if (atmosSongs.isNotEmpty()) {
+                dbQuery {
+                    atmosSongs.forEach { (song, data) ->
+                        val (songId, _) = data
+                        SongTable.update({ (SongTable.id eq songId) and SongTable.atmosPath.isNull() }) {
+                            it[atmosPath] = song.atmosPath
+                        }
+                    }
+                }
+                logBlock("Atmos path updates")
+            }
+
             val newSongs = songs.filter { it !in existingSongMap.keys }
 
             if (newSongs.isEmpty()) {
@@ -2385,6 +2439,7 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                     this[SongTable.bitsPerSample] = song.bitsPerSample
                     this[SongTable.bitRate] = song.bitRate
                     this[SongTable.fileSize] = song.fileSize
+                    this[SongTable.atmosPath] = song.atmosPath
                     this[SongTable.cover] = imageId
                     this[SongTable.isrc] = song.isrc
                 }
@@ -2506,6 +2561,7 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
             it[fileSize] = song.fileSize
             it[cover] = song.coverId?.let { coverId -> EntityID(coverId, ImageTable) }
             it[audioStartMs] = song.audioStartMs
+            it[atmosPath] = song.atmosPath
         }
 
         if (song.originalUrl.isNotBlank()) {

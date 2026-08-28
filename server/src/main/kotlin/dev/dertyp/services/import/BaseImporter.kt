@@ -1,6 +1,7 @@
 package dev.dertyp.services.import
 
 import dev.dertyp.PlatformUUID
+import dev.dertyp.audio.AtmosProcessor
 import dev.dertyp.core.*
 import dev.dertyp.data.User
 import dev.dertyp.data.UserSong
@@ -11,6 +12,7 @@ import dev.dertyp.plugins.SearchResult
 import dev.dertyp.services.Service
 import dev.dertyp.services.metadata.IMetadataService
 import kotlinx.coroutines.yield
+import org.koin.core.component.inject
 import java.io.File
 import java.nio.file.Path
 import java.time.Instant
@@ -30,6 +32,7 @@ abstract class BaseImporter(override var indexer: IPluginIndexer, internal val s
     override val pluginId: String get() = id
 
     protected val pluginStorage by lazy { storageService.forImporter(ImportBackend(id)) }
+    internal open val atmosProcessor: AtmosProcessor by inject()
 
     open val workingDirectory: File? get() = pluginStorage.tracksPath?.let { File(it).apply { mkdirs() } }
 
@@ -100,6 +103,13 @@ abstract class BaseImporter(override var indexer: IPluginIndexer, internal val s
             paths.addAll(pathLines.map { Path(it) }.filter { it.exists() }.toMutableList())
 
             logProxy("Found ${paths.size} valid paths.")
+
+            if (paths.any { it.extension.equals("m4a", ignoreCase = true) }) {
+                for (m4a in paths.filter { atmosProcessor.isAtmos(it) }) {
+                    val lossless = atmosProcessor.process(m4a, logProxy) ?: continue
+                    paths[paths.indexOf(m4a)] = lossless
+                }
+            }
             logProxy("Import process finished with exit code ${result.exitCode}.")
 
             val pathAlternation =

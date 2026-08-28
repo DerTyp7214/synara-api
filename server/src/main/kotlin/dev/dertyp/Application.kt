@@ -6,6 +6,7 @@ import com.google.gson.TypeAdapter
 import com.google.gson.stream.JsonReader
 import com.google.gson.stream.JsonToken
 import com.google.gson.stream.JsonWriter
+import dev.dertyp.audio.AtmosProcessor
 import dev.dertyp.audio.toAudioConfig
 import dev.dertyp.core.configureScheduledTasks
 import dev.dertyp.data.RemoteServerConfig
@@ -256,6 +257,7 @@ fun mainModule(application: Application, environment: ApplicationEnvironment): M
     singleOf(::ServerStatsService)
     singleOf(ApplicationConfig::toMetricsConfig)
     singleOf(ApplicationConfig::toAudioConfig)
+    singleOf(::AtmosProcessor)
     singleOf(::RpcMetricsCollector)
     singleOf(::RpcMetricsService)
     singleOf(::UserPlaylistService)

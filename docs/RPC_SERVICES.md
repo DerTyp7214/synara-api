@@ -541,6 +541,7 @@ Configuration for creating or updating a song record.
 | `musicBrainzId` | `PlatformUUID`? | The MusicBrainz Recording unique identifier. |
 | `isrc` | `String`? | The International Standard Recording Code. |
 | `audioData` | [SongAudioData](#devdertypdatasongaudiodata)? | Additional audio analysis data. |
+| `atmosPath` | `String`? | Internal server path to the Dolby Atmos (E-AC-3 JOC in MP4) variant, if one exists. |
 
 ### LinkUnmatchedTrackRequest <a name="devdertypdatalinkunmatchedtrackrequest"></a>
 Request to link a user's unmatched listens of a track to a library song, identified by recording MSID and/or MBID.
@@ -1148,6 +1149,7 @@ Contains core metadata about a track that is common for all users.
 | `animatedCoverImageId` | `PlatformUUID`? | Identifier of the still Image from the animated cover's first frame. |
 | `animatedCoverBlurHash` | `String`? | BlurHash of the animated cover's first frame. |
 | `audioStartMs` | `Long`? | Offset in milliseconds of the first audible sound, or null if not yet analyzed. |
+| `atmosPath` | `String`? | Internal server path to the Dolby Atmos (E-AC-3 JOC in MP4) variant, if one exists. |
 
 ### SongAudioData <a name="devdertypdatasongaudiodata"></a>
 Additional audio analysis data for a song.
@@ -1449,6 +1451,7 @@ Extends track metadata with user-specific information like favorite status.
 | `animatedCoverImageId` | `PlatformUUID`? | Identifier of the still Image from the animated cover's first frame. |
 | `animatedCoverBlurHash` | `String`? | BlurHash of the animated cover's first frame. |
 | `audioStartMs` | `Long`? | Offset in milliseconds of the first audible sound, or null if not yet analyzed. |
+| `atmosPath` | `String`? | Internal server path to the Dolby Atmos (E-AC-3 JOC in MP4) variant, if one exists. |
 | `isFavourite` | `Boolean`? | Whether the current user has marked this song as a favorite. |
 | `userSongCreatedAt` | `PlatformDate`? | Timestamp of when the song record was created. |
 | `userSongUpdatedAt` | `PlatformDate`? | Timestamp of the last update to the song metadata. |
@@ -2237,6 +2240,8 @@ The primary interface for song discovery, streaming, and metadata.
 | `streamSong` | `id` (`PlatformUUID`): The song unique identifier.<br>`offset` (`Long`): Byte offset to start streaming from.<br>`chunkSize` (`Int`): Size of each data chunk. | `Flow`<`ByteArray`>? | - |  | Stream song audio data for playback. |
 | `downloadSong` | `id` (`PlatformUUID`): The song unique identifier.<br>`quality` (`Int`): Target audio quality.<br>`offset` (`Long`): Byte offset to start from.<br>`chunkSize` (`Int`): Size of each data chunk.<br>`force` (`Boolean`): Whether to force re-transcoding and duration check.<br>`format` ([AudioFormat](#devdertypdataaudioformat)): The target audio format. | `Flow`<`ByteArray`>? | - | IOException, IllegalStateException | Download song audio in specific quality. |
 | `getStreamSize` | `id` (`PlatformUUID`): The song unique identifier. | `Long` | - |  | Get the total size of the song's audio stream. |
+| `streamSongAtmos` | `id` (`PlatformUUID`): The song unique identifier.<br>`offset` (`Long`): Byte offset to start streaming from.<br>`chunkSize` (`Int`): Size of each data chunk. | `Flow`<`ByteArray`>? | - |  | Stream the Dolby Atmos (E-AC-3 JOC in MP4) variant of a song. Returns null if the song has no Atmos variant. |
+| `getAtmosStreamSize` | `id` (`PlatformUUID`): The song unique identifier. | `Long` | - |  | Get the size of the song's Dolby Atmos stream, or 0 if the song has no Atmos variant. |
 | `getDownloadSize` | `id` (`PlatformUUID`): The song unique identifier.<br>`quality` (`Int`): The requested quality.<br>`force` (`Boolean`): Whether to force re-transcoding and duration check.<br>`format` ([AudioFormat](#devdertypdataaudioformat)): The target audio format. | `Long` | - |  | Get the size of the song audio for a specific quality. |
 | `allSongIds` | `explicit` (`Boolean`): Whether to include explicit content.<br>`tags` (`List`<[SongTag](#devdertypdatasongtag)>): Filter by specific tags.<br>`invertTags` (`Boolean`): Invert the tag filter. | `Flow`<`PlatformUUID`> | - |  | Stream all song IDs with optional filtering. |
 | `likedSongIds` | `explicit` (`Boolean`): Whether to include explicit content. | `Flow`<`PlatformUUID`> | - |  | Stream all IDs of songs liked by the current user. |

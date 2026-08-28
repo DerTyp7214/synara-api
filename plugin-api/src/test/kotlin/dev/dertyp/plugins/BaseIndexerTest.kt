@@ -120,6 +120,33 @@ class BaseIndexerTest {
     }
 
     @Test
+    fun testInsertableSongFromFileAtmosSibling() = runBlocking {
+        val tempDir = Files.createTempDirectory("indexer-atmos-test")
+        try {
+            val flac = Files.createFile(tempDir.resolve("123.flac"))
+            val audioFile = mockk<AudioFile>(relaxed = true)
+            every { audioFile.tag } returns mockk<Tag>(relaxed = true)
+            every { audioFile.audioHeader } returns mockk<AudioHeader>(relaxed = true)
+            every { audioFile.file } returns flac.toFile()
+
+            val testIndexer = object : BaseIndexer(context) {
+                override val id = "test"
+                override val name = "test"
+                suspend fun testInsertable(af: AudioFile, a: InsertableAlbum) = insertableSongFromFile(af, a)
+            }
+            val album = InsertableAlbum("Album", listOf("Artist"))
+
+            assertEquals(null, testIndexer.testInsertable(audioFile, album).atmosPath)
+
+            val atmos = Files.createFile(tempDir.resolve("123.atmos.m4a"))
+            assertEquals(atmos.toAbsolutePath().toString(), testIndexer.testInsertable(audioFile, album).atmosPath)
+            assertEquals(atmos, flac.atmosSibling)
+        } finally {
+            tempDir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
     fun `start should call syncMusicBrainzForAlbums when albums have musicBrainzId`() = runBlocking {
         val tempDir = Files.createTempDirectory("base-indexer-mb-test")
         try {

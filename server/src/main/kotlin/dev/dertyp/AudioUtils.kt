@@ -24,6 +24,7 @@ import org.bytedeco.ffmpeg.global.avutil.AV_SAMPLE_FMT_S16
 import org.bytedeco.javacv.FFmpegFrameGrabber
 import org.bytedeco.javacv.FFmpegFrameRecorder
 import org.bytedeco.javacv.FFmpegLogCallback
+import org.bytedeco.javacv.FrameGrabber
 import org.jetbrains.exposed.v1.core.*
 import org.koin.core.context.GlobalContext
 import org.jetbrains.exposed.v1.jdbc.insertIgnore
@@ -307,14 +308,20 @@ object AudioUtils {
         val workDir = Files.createTempDirectory("lossless_").toFile().apply { deleteOnExitRecursive() }
         val workFile = workDir.resolve("converting_${input.nameWithoutExtension}.${target.extension}")
 
+        val bitDepth = FFmpegFrameGrabber(input.absolutePath).use { probe ->
+            probe.sampleMode = FrameGrabber.SampleMode.RAW
+            probe.start()
+            sourceBitDepth(probe)
+        }
+
         val grabber = FFmpegFrameGrabber(input.absolutePath)
+        grabber.sampleMode = if (bitDepth > 16) FrameGrabber.SampleMode.FLOAT else FrameGrabber.SampleMode.SHORT
         try {
             grabber.start()
             if (grabber.audioChannels <= 0) {
                 throw IllegalStateException("Invalid audio channels: ${grabber.audioChannels} for file ${input.absolutePath}")
             }
 
-            val bitDepth = sourceBitDepth(grabber)
             val inputMetadata: Map<String, String> = grabber.metadata.toMap()
 
             val recorder = FFmpegFrameRecorder(workFile.absolutePath, grabber.audioChannels)

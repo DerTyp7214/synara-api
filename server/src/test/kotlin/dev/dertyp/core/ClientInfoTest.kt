@@ -31,6 +31,13 @@ class ClientInfoTest {
     }
 
     @Test
+    fun `dolby atmos requires api version 3`() {
+        assertFalse(ClientInfo.LEGACY.supports(ClientFeature.DOLBY_ATMOS))
+        assertFalse(ClientInfo(2).supports(ClientFeature.DOLBY_ATMOS))
+        assertTrue(ClientInfo(3).supports(ClientFeature.DOLBY_ATMOS))
+    }
+
+    @Test
     fun `every feature is available at the current api version`() {
         ClientFeature.entries.forEach { feature ->
             assertTrue(ClientInfo(ApiVersion.CURRENT).supports(feature), "${feature.name} must be supported at CURRENT")

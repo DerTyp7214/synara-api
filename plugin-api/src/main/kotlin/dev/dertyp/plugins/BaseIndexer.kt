@@ -409,7 +409,12 @@ abstract class BaseIndexer(
             coverHash = cover?.sha256(),
             musicBrainzId = musicBrainzId,
             isrc = isrc,
-            audioData = SongAudioData(bpm = bpm)
+            audioData = SongAudioData(bpm = bpm),
+            atmosPath = audioFile.file.toPath().atmosSibling.takeIf { it.exists() }?.absolutePathString()
         )
     }
 }
+
+const val ATMOS_SUFFIX = ".atmos.m4a"
+
+val Path.atmosSibling: Path get() = resolveSibling(nameWithoutExtension + ATMOS_SUFFIX)
