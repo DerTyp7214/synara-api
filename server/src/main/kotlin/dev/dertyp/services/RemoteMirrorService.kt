@@ -459,7 +459,7 @@ class RemoteMirrorService : Service() {
         flow.flatMapMerge(16) { song ->
             flow {
                 try {
-                    val size = if (session.config.quality == -1) song.fileSize
+                    val size = if (session.config.quality == -1) song.audio?.fileSize ?: 0L
                     else session.remoteSongService.getDownloadSize(song.id, session.config.quality)
                     emit(song to size)
                 } catch (e: Exception) {

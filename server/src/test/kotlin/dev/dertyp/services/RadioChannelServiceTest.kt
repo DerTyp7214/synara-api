@@ -47,7 +47,7 @@ class RadioChannelServiceTest : KoinTest {
         dbQuery {
             SchemaUtils.create(
                 ImageTable, AnimatedImageTable, UserTable, AlbumTable, ArtistTable, ArtistAliasTable,
-                SongTable, SongArtistTable, AlbumArtistTable,
+                SongTable, SongVariantTable, SongArtistTable, AlbumArtistTable,
                 RadioChannelTable, RadioChannelSongTable, RadioChannelArtistTable, RadioChannelAlbumTable,
             )
             UserTable.insert { it[id] = creatorId; it[username] = "admin"; it[passwordHash] = "x" }
@@ -136,7 +136,7 @@ class RadioChannelServiceTest : KoinTest {
 
     private val searchTables = arrayOf(
         UserTable, ImageTable, ImageMetadataTable, AnimatedImageTable,
-        ArtistTable, AlbumTable, SongTable, SongArtistTable, SongMusicBrainzTable, SongAudioDataTable,
+        ArtistTable, AlbumTable, SongTable, SongVariantTable, SongArtistTable, SongMusicBrainzTable, SongAudioDataTable,
         GenreTable, AlbumMusicBrainzTable, ArtistMusicBrainzTable, ArtistAliasTable, ArtistMemberTable,
         AlbumArtistTable, PlaylistTable, UserSongTable, UserPlaylistTable, SongGenreTable, ArtistGenreTable,
         AlbumGenreTable, PlaylistSongTable, UserPlaylistSongTable, SyncedLyricsTable, RecentReleaseTable,

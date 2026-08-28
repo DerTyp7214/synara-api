@@ -43,7 +43,7 @@ class ListenBrainzServiceTest : KoinTest {
                 ImageTable,
                 AnimatedImageTable,
                 AlbumTable,
-                SongTable,
+                SongTable, SongVariantTable,
                 MBRecordingTable,
                 MBRecordingIsrcTable,
                 SongMusicBrainzTable,

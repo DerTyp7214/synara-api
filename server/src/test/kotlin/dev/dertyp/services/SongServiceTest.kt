@@ -74,7 +74,7 @@ class SongServiceTest : KoinTest {
         transaction(database) {
             SchemaUtils.create(
                 UserTable,
-                SongTable,
+                SongTable, SongVariantTable,
                 AlbumTable,
                 ArtistTable,
                 ArtistMemberTable,
@@ -723,7 +723,7 @@ class SongServiceTest : KoinTest {
                 duration = 100,
                 explicit = false,
                 path = "/path/1",
-                bitRate = 128000
+                audio = AudioInfo("flac", 44100, 16, 128000, 0, 2)
             ),
             InsertableSong(
                 title = "Song 1",
@@ -732,7 +732,7 @@ class SongServiceTest : KoinTest {
                 duration = 100,
                 explicit = false,
                 path = "/path/1-high",
-                bitRate = 320000
+                audio = AudioInfo("flac", 44100, 16, 320000, 0, 2)
             ),
             InsertableSong(
                 title = "Song 2",
@@ -741,7 +741,7 @@ class SongServiceTest : KoinTest {
                 duration = 200,
                 explicit = false,
                 path = "/path/2",
-                bitRate = 256000
+                audio = AudioInfo("flac", 44100, 16, 256000, 0, 2)
             )
         )
 
@@ -753,7 +753,7 @@ class SongServiceTest : KoinTest {
         assertTrue(insertedSongs.contains("Song 2"))
         
         val song1 = rpcService.rankedSearch(0, 10, "Song 1", explicit = false, liked = false).data[0]
-        assertEquals(320000, song1.bitRate)
+        assertEquals(320000L, song1.audio?.bitRate)
     }
 
     @ParameterizedTest

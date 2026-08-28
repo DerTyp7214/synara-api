@@ -24,7 +24,7 @@ class FulfillUnknownProvidersTest {
             SchemaUtils.create(
                 ArtistTable,
                 AlbumTable,
-                SongTable,
+                SongTable, SongVariantTable,
                 MBReleaseGroupTable,
                 SongProviderTable,
                 AlbumProviderTable,

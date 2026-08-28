@@ -34,7 +34,7 @@ class MetadataFetchingServiceTest : KoinTest {
     private val environment = mockk<ApplicationEnvironment>(relaxed = true)
 
     private val allTables = arrayOf(
-        ArtistTable, AlbumTable, SongTable, SongArtistTable, 
+        ArtistTable, AlbumTable, SongTable, SongVariantTable, SongArtistTable, 
         SongMusicBrainzTable, SongAudioDataTable, ImageTable, GenreTable,
         UserTable, AlbumMusicBrainzTable, ArtistMusicBrainzTable,
         ArtistAliasTable, ArtistMemberTable, AlbumArtistTable,

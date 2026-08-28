@@ -38,7 +38,7 @@ class AudioUtilsTest {
     fun setupDb(dialect: DbDialect) {
         database = TestDatabase.connect(dialect, "audioutils_test")
         transaction(database) {
-            SchemaUtils.create(ArtistTable, AlbumTable, SongTable, TranscodedSongTable, ImageTable)
+            SchemaUtils.create(ArtistTable, AlbumTable, SongTable, SongVariantTable, TranscodedSongTable, ImageTable)
         }
     }
 

@@ -27,7 +27,7 @@ class UserPlaylistAuthorizationTest : KoinTest {
         database = TestDatabase.connect(dialect, "playlist_auth")
         transaction(database) {
             SchemaUtils.create(
-                UserTable, ImageTable, UserPlaylistTable, SongTable, 
+                UserTable, ImageTable, UserPlaylistTable, SongTable, SongVariantTable, 
                 UserPlaylistSongTable, SongMusicBrainzTable, MBReleaseTable,
                 AlbumTable, ArtistTable, SongArtistTable, AlbumArtistTable
             )

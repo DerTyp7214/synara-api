@@ -1,6 +1,7 @@
 package dev.dertyp.migrations.custom
 
 import dev.dertyp.AudioUtils
+import dev.dertyp.audio.AudioProbe
 import dev.dertyp.core.CustomMigration
 import dev.dertyp.core.Migration
 import dev.dertyp.core.logTask
@@ -10,7 +11,6 @@ import dev.dertyp.db.SongTable
 import dev.dertyp.db.TranscodedSongTable
 import dev.dertyp.dbQuery
 import io.ktor.server.application.ApplicationEnvironment
-import org.bytedeco.javacv.FFmpegFrameGrabber
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.greater
@@ -55,7 +55,7 @@ class RetranscodeMultichannelSongs : CustomMigration() {
                 val source = File(row[SongTable.filePath])
                 val channels = row.getOrNull(FlacInfoTable.channels)
                     ?: row.getOrNull(PcmInfoTable.channels)
-                    ?: channelCache.getOrPut(source.absolutePath) { probeChannels(source) }
+                    ?: channelCache.getOrPut(source.absolutePath) { AudioProbe.probeChannels(source) }
 
                 if (channels > 2 && source.exists()) {
                     val bitrate = row[TranscodedSongTable.bitrate]
@@ -85,15 +85,5 @@ class RetranscodeMultichannelSongs : CustomMigration() {
 
             mapOf("checked" to rows.size, "retranscoded" to retranscoded, "failed" to failed)
         }
-    }
-
-    private fun probeChannels(file: File): Int {
-        if (!file.exists()) return 0
-        return runCatching {
-            FFmpegFrameGrabber(file.absolutePath).use { grabber ->
-                grabber.start()
-                grabber.audioChannels
-            }
-        }.getOrDefault(0)
     }
 }

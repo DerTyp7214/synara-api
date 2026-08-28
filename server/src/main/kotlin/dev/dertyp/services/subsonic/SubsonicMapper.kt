@@ -33,13 +33,13 @@ fun BaseSong.toChild(): Child {
         year = releaseDate?.year,
         genre = genres.firstOrNull()?.name,
         coverArt = coverId?.imId(),
-        size = fileSize.takeIf { it > 0 },
+        size = audio?.fileSize?.takeIf { it > 0 },
         contentType = suffix?.let(::contentTypeFor),
         suffix = suffix,
         duration = duration / 1000,
-        bitRate = (bitRate / 1000).toInt().takeIf { it > 0 },
-        samplingRate = sampleRate.takeIf { it > 0 },
-        bitDepth = bitsPerSample.takeIf { it > 0 },
+        bitRate = audio?.bitRate?.let { (it / 1000).toInt() }?.takeIf { it > 0 },
+        samplingRate = audio?.sampleRate?.takeIf { it > 0 },
+        bitDepth = audio?.bitsPerSample?.takeIf { it > 0 },
         discNumber = discNumber,
         starred = if (userSong?.isFavourite == true) {
             userSong.userSongCreatedAt?.toInstant()?.toString() ?: EPOCH_ISO

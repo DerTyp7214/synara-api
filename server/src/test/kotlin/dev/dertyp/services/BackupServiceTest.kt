@@ -44,7 +44,7 @@ class BackupServiceTest {
     fun setup(dialect: DbDialect) {
         database = TestDatabase.connect(dialect, "backup_test")
         transaction(database) {
-            SchemaUtils.create(SongTable, FlacInfoTable, PcmInfoTable, SongMusicBrainzTable, MBRecordingTable, AlbumTable, ImageTable)
+            SchemaUtils.create(SongTable, SongVariantTable, FlacInfoTable, PcmInfoTable, SongMusicBrainzTable, MBRecordingTable, AlbumTable, ImageTable)
         }
 
         tempDir = Files.createTempDirectory("backup_test_root").toFile()

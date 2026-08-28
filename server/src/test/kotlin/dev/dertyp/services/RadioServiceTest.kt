@@ -7,6 +7,7 @@ import dev.dertyp.data.RadioType
 import dev.dertyp.data.UserSong
 import dev.dertyp.db.AlbumTable
 import dev.dertyp.db.SongTable
+import dev.dertyp.db.SongVariantTable
 import dev.dertyp.dbQuery
 import io.mockk.coEvery
 import io.mockk.every
@@ -33,7 +34,7 @@ class RadioServiceTest : KoinTest {
 
     private fun setup(dialect: DbDialect): Set<UUID> = runBlocking {
         TestDatabase.connect(dialect, "radio_test")
-        dbQuery { SchemaUtils.create(AlbumTable, SongTable) }
+        dbQuery { SchemaUtils.create(AlbumTable, SongTable, SongVariantTable) }
 
         val albumId = UUID.randomUUID()
         val songIds = (1..50).map { UUID.randomUUID() }

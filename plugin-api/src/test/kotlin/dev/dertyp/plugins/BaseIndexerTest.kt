@@ -2,6 +2,7 @@ package dev.dertyp.plugins
 
 import dev.dertyp.PlatformUUID
 import dev.dertyp.data.Album
+import dev.dertyp.data.AudioInfo
 import dev.dertyp.data.InsertableAlbum
 import dev.dertyp.data.InsertableImage
 import io.mockk.coEvery
@@ -125,9 +126,13 @@ class BaseIndexerTest {
         try {
             val flac = Files.createFile(tempDir.resolve("123.flac"))
             val audioFile = mockk<AudioFile>(relaxed = true)
+            val header = mockk<AudioHeader>(relaxed = true)
             every { audioFile.tag } returns mockk<Tag>(relaxed = true)
-            every { audioFile.audioHeader } returns mockk<AudioHeader>(relaxed = true)
+            every { audioFile.audioHeader } returns header
             every { audioFile.file } returns flac.toFile()
+            every { header.channels } returns "6"
+            every { header.sampleRateAsNumber } returns 48000
+            every { header.bitsPerSample } returns 24
 
             val testIndexer = object : BaseIndexer(context) {
                 override val id = "test"
@@ -136,7 +141,9 @@ class BaseIndexerTest {
             }
             val album = InsertableAlbum("Album", listOf("Artist"))
 
-            assertEquals(null, testIndexer.testInsertable(audioFile, album).atmosPath)
+            val plain = testIndexer.testInsertable(audioFile, album)
+            assertEquals(null, plain.atmosPath)
+            assertEquals(AudioInfo("flac", 48000, 24, 0, 0, 6), plain.audio)
 
             val atmos = Files.createFile(tempDir.resolve("123.atmos.m4a"))
             assertEquals(atmos.toAbsolutePath().toString(), testIndexer.testInsertable(audioFile, album).atmosPath)

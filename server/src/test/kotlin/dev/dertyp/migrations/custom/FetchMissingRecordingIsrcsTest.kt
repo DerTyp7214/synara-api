@@ -50,7 +50,7 @@ class FetchMissingRecordingIsrcsTest : KoinTest {
                 MBRecordingIsrcTable,
                 ImageTable,
                 AlbumTable,
-                SongTable,
+                SongTable, SongVariantTable,
                 SongMusicBrainzTable,
                 ScheduledTaskLogTable
             )

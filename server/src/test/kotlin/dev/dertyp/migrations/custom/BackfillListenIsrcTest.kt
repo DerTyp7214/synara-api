@@ -37,7 +37,7 @@ class BackfillListenIsrcTest : KoinTest {
                 ListenBrainzUserTable,
                 ImageTable,
                 AlbumTable,
-                SongTable,
+                SongTable, SongVariantTable,
                 MBRecordingTable,
                 MBRecordingIsrcTable,
                 ListenTable,

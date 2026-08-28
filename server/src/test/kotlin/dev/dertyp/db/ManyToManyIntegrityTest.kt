@@ -21,7 +21,7 @@ class ManyToManyIntegrityTest {
         database = TestDatabase.connect(dialect, "many_to_many")
         transaction(database) {
             SchemaUtils.create(
-                ArtistTable, SongTable, AlbumTable, SongArtistTable,
+                ArtistTable, SongTable, SongVariantTable, AlbumTable, SongArtistTable,
                 PlaylistTable, PlaylistSongTable, UserTable, ImageTable
             )
         }

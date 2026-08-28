@@ -67,7 +67,7 @@ object SearchBenchmark {
     )
 
     private val allTables = arrayOf(
-        UserTable, SongTable, AlbumTable, ArtistTable, SongArtistTable, AlbumArtistTable,
+        UserTable, SongTable, SongVariantTable, AlbumTable, ArtistTable, SongArtistTable, AlbumArtistTable,
         SongMusicBrainzTable, AlbumMusicBrainzTable, ArtistMusicBrainzTable, ArtistAliasTable,
         ImageTable, GenreTable, SongGenreTable, AlbumGenreTable, ArtistGenreTable,
         ArtistMemberTable, SearchIndexQueueTable, MBRecordingTable, MBReleaseTable,

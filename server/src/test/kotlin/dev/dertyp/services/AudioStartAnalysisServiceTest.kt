@@ -7,6 +7,7 @@ import dev.dertyp.db.AnimatedImageTable
 import dev.dertyp.db.ArtistTable
 import dev.dertyp.db.ImageTable
 import dev.dertyp.db.SongTable
+import dev.dertyp.db.SongVariantTable
 import kotlinx.coroutines.runBlocking
 import org.bytedeco.ffmpeg.global.avcodec
 import org.bytedeco.ffmpeg.global.avutil
@@ -79,7 +80,7 @@ class AudioStartAnalysisServiceTest {
     @Test
     fun `analyze persists the detected offset and unanalyzed query excludes it`(@TempDir tempDir: Path) = runBlocking {
         val db = TestDatabase.connect(DbDialect.SQLITE, "audio_start_test")
-        transaction(db) { SchemaUtils.create(ArtistTable, ImageTable, AnimatedImageTable, AlbumTable, SongTable) }
+        transaction(db) { SchemaUtils.create(ArtistTable, ImageTable, AnimatedImageTable, AlbumTable, SongTable, SongVariantTable) }
 
         val file = tempDir.resolve("song.wav").toFile()
         writeWav(file, silenceMs = 200, toneMs = 200)

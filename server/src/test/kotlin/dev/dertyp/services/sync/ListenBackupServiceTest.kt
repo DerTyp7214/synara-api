@@ -51,7 +51,7 @@ class ListenBackupServiceTest {
                 ImageTable,
                 AlbumTable,
                 ArtistTable,
-                SongTable,
+                SongTable, SongVariantTable,
                 ListenBrainzUserTable,
                 ListenTable,
                 ListenBackupConfigTable,

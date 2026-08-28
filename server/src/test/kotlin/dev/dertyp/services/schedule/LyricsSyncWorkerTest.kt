@@ -5,6 +5,7 @@ import dev.dertyp.TestDatabase
 import dev.dertyp.db.AlbumTable
 import dev.dertyp.db.ImageTable
 import dev.dertyp.db.SongTable
+import dev.dertyp.db.SongVariantTable
 import dev.dertyp.db.SyncedLyricsTable
 import dev.dertyp.services.LyricsService
 import dev.dertyp.services.models.SyncedLyrics
@@ -38,7 +39,7 @@ class LyricsSyncWorkerTest : KoinTest {
     private fun setup(dialect: DbDialect) {
         TestDatabase.connect(dialect, "lyrics_sync_test")
         transaction {
-            SchemaUtils.create(SongTable, AlbumTable, ImageTable, SyncedLyricsTable)
+            SchemaUtils.create(SongTable, SongVariantTable, AlbumTable, ImageTable, SyncedLyricsTable)
         }
     }
 

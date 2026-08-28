@@ -34,7 +34,7 @@ class DiscoveryServiceTest : KoinTest {
         TestDatabase.connect(dialect, "discovery_test")
         dbQuery {
             SchemaUtils.create(
-                AlbumTable, SongTable, SongAudioDataTable,
+                AlbumTable, SongTable, SongVariantTable, SongAudioDataTable,
                 PersonTable, SongComposerTable, SongLyricistTable, SongProducerTable
             )
         }

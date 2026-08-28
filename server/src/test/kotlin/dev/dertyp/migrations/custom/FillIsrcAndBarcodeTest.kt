@@ -42,7 +42,7 @@ class FillIsrcAndBarcodeTest : KoinTest {
             SchemaUtils.create(
                 ImageTable,
                 AlbumTable,
-                SongTable,
+                SongTable, SongVariantTable,
                 MBRecordingTable,
                 MBReleaseGroupTable,
                 MBReleaseTable,

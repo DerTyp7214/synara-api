@@ -34,7 +34,7 @@ class MusicBrainzCacheWorkerTest : KoinTest {
                 ImageTable,
                 AnimatedImageTable,
                 AlbumTable,
-                SongTable,
+                SongTable, SongVariantTable,
                 ListenBrainzUserTable,
                 ListenTable,
                 MBArtistTable,

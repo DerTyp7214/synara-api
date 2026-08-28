@@ -293,7 +293,7 @@ abstract class BaseIndexer(
         val insertDuration = Clock.System.now().minus(insertStart).toString(DurationUnit.SECONDS)
         log("Inserting songs took $insertDuration seconds.").await()
 
-        val totalSize = songResult.values.fold(0L) { acc, song -> acc + song.fileSize }
+        val totalSize = songResult.values.fold(0L) { acc, song -> acc + (song.audio?.fileSize ?: 0L) }
         log("Saved ${songResult.size} of ${albums.values.flatten().size} songs. (${totalSize.toHumanReadableSize()})").await()
 
         log("Found ${images.size} unique images.").await()
@@ -402,10 +402,14 @@ abstract class BaseIndexer(
             trackNumber = trackNumber,
             discNumber = discNumber,
             copyright = copyright?.joinToString(", ") ?: "",
-            sampleRate = sampleRate,
-            bitsPerSample = bitsPerSample,
-            bitRate = bitRate,
-            fileSize = audioFile.file.length(),
+            audio = AudioInfo(
+                codec = audioFile.file.extension.lowercase(),
+                sampleRate = sampleRate,
+                bitsPerSample = bitsPerSample,
+                bitRate = bitRate,
+                fileSize = audioFile.file.length(),
+                channels = header.channels?.toIntOrNull() ?: 0,
+            ),
             coverHash = cover?.sha256(),
             musicBrainzId = musicBrainzId,
             isrc = isrc,

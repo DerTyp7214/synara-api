@@ -52,7 +52,7 @@ class RebuildSearchIndexTest : KoinTest {
                 ImageTable,
                 ArtistTable,
                 AlbumTable,
-                SongTable,
+                SongTable, SongVariantTable,
                 SearchIndexQueueTable
             )
         }

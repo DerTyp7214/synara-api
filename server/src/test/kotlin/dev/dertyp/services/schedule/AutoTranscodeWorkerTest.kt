@@ -1,6 +1,7 @@
 package dev.dertyp.services.schedule
 
 import dev.dertyp.AudioUtils
+import dev.dertyp.data.AudioInfo
 import dev.dertyp.data.SimpleSong
 import dev.dertyp.data.TranscodedVersion
 import io.ktor.server.application.ApplicationEnvironment
@@ -48,10 +49,7 @@ class AutoTranscodeWorkerTest : KoinTest {
             originalUrl = "",
             trackNumber = 1,
             discNumber = 1,
-            sampleRate = 44100,
-            bitsPerSample = 16,
-            bitRate = 1000L,
-            fileSize = 1000000L,
+            audio = AudioInfo("flac", 44100, 16, 1000L, 1000000L, 2),
             coverId = null,
             transcodedTo = emptyList()
         )

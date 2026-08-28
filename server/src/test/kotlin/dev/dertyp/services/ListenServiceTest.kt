@@ -51,7 +51,7 @@ class ListenServiceTest : KoinTest {
                 AlbumTable,
                 ArtistTable,
                 ArtistAliasTable,
-                SongTable,
+                SongTable, SongVariantTable,
                 SongArtistTable,
                 MBArtistTable,
                 MBRecordingTable,

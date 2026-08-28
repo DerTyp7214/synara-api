@@ -2,6 +2,7 @@ package dev.dertyp.services
 
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
+import dev.dertyp.data.AudioInfo
 import dev.dertyp.data.InsertableAlbum
 import dev.dertyp.data.InsertableSong
 import dev.dertyp.db.*
@@ -42,7 +43,7 @@ class SongDeduplicationTest : KoinTest {
     private val pluginManager = mockk<PluginManager>(relaxed = true)
 
     private val allTables = arrayOf(
-        ArtistTable, AlbumTable, SongTable, SongArtistTable, 
+        ArtistTable, AlbumTable, SongTable, SongVariantTable, SongArtistTable, 
         SongMusicBrainzTable, SongAudioDataTable, ImageTable, GenreTable,
         UserTable, AlbumMusicBrainzTable, ArtistMusicBrainzTable,
         ArtistAliasTable, ArtistMemberTable, AlbumArtistTable,
@@ -122,10 +123,7 @@ class SongDeduplicationTest : KoinTest {
             originalUrl = "https://tidal.com/track/dedupe-123",
             duration = 3.minutes.inWholeMilliseconds,
             explicit = false,
-            fileSize = 1000,
-            bitRate = 1000,
-            sampleRate = 44100,
-            bitsPerSample = 16
+            audio = AudioInfo("flac", 44100, 16, 1000, 1000, 2)
         )
 
         val song2 = song1.copy(path = "/new/path/song.flac")
@@ -180,10 +178,7 @@ class SongDeduplicationTest : KoinTest {
             discNumber = 1,
             duration = 3.minutes.inWholeMilliseconds,
             explicit = false,
-            fileSize = 1000,
-            bitRate = 1000,
-            sampleRate = 44100,
-            bitsPerSample = 16
+            audio = AudioInfo("flac", 44100, 16, 1000, 1000, 2)
         )
 
         val song2 = song1.copy(path = "/new/path/song2.flac")
@@ -352,10 +347,7 @@ class SongDeduplicationTest : KoinTest {
             originalUrl = "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
             duration = 3.minutes.inWholeMilliseconds,
             explicit = false,
-            fileSize = 1000,
-            bitRate = 1000,
-            sampleRate = 44100,
-            bitsPerSample = 16
+            audio = AudioInfo("flac", 44100, 16, 1000, 1000, 2)
         )
 
         val song2 = song1.copy(

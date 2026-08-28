@@ -7,6 +7,7 @@ import dev.dertyp.data.Song
 import dev.dertyp.db.AlbumTable
 import dev.dertyp.db.ImageTable
 import dev.dertyp.db.SongTable
+import dev.dertyp.db.SongVariantTable
 import dev.dertyp.db.SyncedLyricsTable
 import dev.dertyp.services.LrcLibResponse
 import dev.dertyp.services.LrcLibService
@@ -36,7 +37,7 @@ class LrcLibWorkerTest : KoinTest {
     private fun setup(dialect: DbDialect) {
         TestDatabase.connect(dialect, "lrclib_worker_test")
         transaction {
-            SchemaUtils.create(SongTable, AlbumTable, ImageTable, SyncedLyricsTable)
+            SchemaUtils.create(SongTable, SongVariantTable, AlbumTable, ImageTable, SyncedLyricsTable)
         }
     }
 

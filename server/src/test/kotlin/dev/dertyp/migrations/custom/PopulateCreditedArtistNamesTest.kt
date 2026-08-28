@@ -51,7 +51,7 @@ class PopulateCreditedArtistNamesTest : KoinTest {
                 ArtistTable,
                 ArtistAliasTable,
                 AlbumTable,
-                SongTable,
+                SongTable, SongVariantTable,
                 SongArtistTable,
                 AlbumArtistTable,
                 ArtistMusicBrainzTable,

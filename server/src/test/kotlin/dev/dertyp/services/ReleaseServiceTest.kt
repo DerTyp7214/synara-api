@@ -85,7 +85,7 @@ class ReleaseServiceTest : KoinTest {
                 AlbumTable,
                 AlbumArtistTable,
                 AlbumMusicBrainzTable,
-                SongTable,
+                SongTable, SongVariantTable,
                 SongArtistTable,
                 SongMusicBrainzTable,
                 FollowedArtistTable,

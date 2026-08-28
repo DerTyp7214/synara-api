@@ -11,6 +11,7 @@ import dev.dertyp.db.ListenBrainzUserTable
 import dev.dertyp.db.ListenSource
 import dev.dertyp.db.ListenTable
 import dev.dertyp.db.SongTable
+import dev.dertyp.db.SongVariantTable
 import dev.dertyp.db.UserAlbumTable
 import dev.dertyp.db.UserTable
 import dev.dertyp.dbQuery
@@ -33,7 +34,7 @@ class SubsonicQueryServiceTest {
         TestDatabase.connect(dialect, "subsonic_query_test")
         dbQuery {
             SchemaUtils.create(
-                UserTable, ImageTable, AnimatedImageTable, AlbumTable, SongTable,
+                UserTable, ImageTable, AnimatedImageTable, AlbumTable, SongTable, SongVariantTable,
                 ListenBrainzUserTable, ListenTable, UserAlbumTable,
             )
             UserTable.insert {

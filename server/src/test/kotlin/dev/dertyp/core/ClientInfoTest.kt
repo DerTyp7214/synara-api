@@ -38,6 +38,12 @@ class ClientInfoTest {
     }
 
     @Test
+    fun `nested audio info requires api version 4`() {
+        assertFalse(ClientInfo(3).supports(ClientFeature.AUDIO_INFO))
+        assertTrue(ClientInfo(4).supports(ClientFeature.AUDIO_INFO))
+    }
+
+    @Test
     fun `every feature is available at the current api version`() {
         ClientFeature.entries.forEach { feature ->
             assertTrue(ClientInfo(ApiVersion.CURRENT).supports(feature), "${feature.name} must be supported at CURRENT")

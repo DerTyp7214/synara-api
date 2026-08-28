@@ -60,7 +60,7 @@ class ArtistServiceTest : KoinTest {
                 ArtistSplitAliasTable,
                 ImageTable,
                 ImageMetadataTable,
-                SongTable,
+                SongTable, SongVariantTable,
                 SongArtistTable,
                 AlbumTable,
                 AlbumArtistTable,

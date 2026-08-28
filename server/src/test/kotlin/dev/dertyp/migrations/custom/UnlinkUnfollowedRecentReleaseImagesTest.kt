@@ -61,7 +61,7 @@ class UnlinkUnfollowedRecentReleaseImagesTest : KoinTest {
                 ImageMetadataTable,
                 AlbumTable,
                 ArtistTable,
-                SongTable,
+                SongTable, SongVariantTable,
                 PlaylistTable,
                 UserPlaylistTable,
                 UserTable,

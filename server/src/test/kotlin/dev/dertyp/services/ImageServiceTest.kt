@@ -58,7 +58,7 @@ class ImageServiceTest {
 
         database = TestDatabase.connect(dialect, "image_test")
         transaction(database) {
-            SchemaUtils.create(ImageTable, ImageMetadataTable, AlbumTable, ArtistTable, SongTable, PlaylistTable, UserPlaylistTable, UserTable, MBReleaseGroupTable, MBReleaseGroupCoverTable, RecentReleaseTable, AnimatedImageTable, CollectionTable, RadioChannelTable)
+            SchemaUtils.create(ImageTable, ImageMetadataTable, AlbumTable, ArtistTable, SongTable, SongVariantTable, PlaylistTable, UserPlaylistTable, UserTable, MBReleaseGroupTable, MBReleaseGroupCoverTable, RecentReleaseTable, AnimatedImageTable, CollectionTable, RadioChannelTable)
         }
 
         service = ImageService(storageService, redisConfig)

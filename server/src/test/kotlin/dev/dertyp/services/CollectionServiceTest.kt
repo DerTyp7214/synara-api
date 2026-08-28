@@ -49,7 +49,7 @@ class CollectionServiceTest : KoinTest {
                 ImageTable,
                 AlbumTable,
                 ArtistTable,
-                SongTable,
+                SongTable, SongVariantTable,
                 SongArtistTable,
                 AlbumArtistTable,
                 UserPlaylistTable,
@@ -464,7 +464,7 @@ class CollectionServiceTest : KoinTest {
 
     private val searchTables = arrayOf(
         UserTable, ImageTable, ImageMetadataTable, AnimatedImageTable,
-        ArtistTable, AlbumTable, SongTable, SongArtistTable, SongMusicBrainzTable, SongAudioDataTable,
+        ArtistTable, AlbumTable, SongTable, SongVariantTable, SongArtistTable, SongMusicBrainzTable, SongAudioDataTable,
         GenreTable, AlbumMusicBrainzTable, ArtistMusicBrainzTable, ArtistAliasTable, ArtistMemberTable,
         AlbumArtistTable, PlaylistTable, UserSongTable, UserPlaylistTable, SongGenreTable, ArtistGenreTable,
         AlbumGenreTable, PlaylistSongTable, UserPlaylistSongTable, SyncedLyricsTable, RecentReleaseTable,

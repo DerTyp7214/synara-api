@@ -1,6 +1,5 @@
 package dev.dertyp.utils
 
-import dev.dertyp.core.ClientFeature
 import dev.dertyp.core.ClientInfo
 import dev.dertyp.data.CollectionSongMatch
 import dev.dertyp.data.ListenedSong
@@ -17,8 +16,12 @@ import java.lang.reflect.Proxy
 import kotlin.coroutines.Continuation
 import kotlin.coroutines.intrinsics.COROUTINE_SUSPENDED
 
-open class ResponseShaper(val client: ClientInfo) {
-    open val isNoop: Boolean get() = ClientFeature.entries.all { client.supports(it) }
+open class ResponseShaper(val client: ClientInfo, rules: List<CompatRule> = CompatRules.all) {
+    private val activeRules = rules
+        .filter { !client.supports(it.feature) }
+        .sortedByDescending { it.feature.minApiVersion }
+
+    open val isNoop: Boolean get() = activeRules.isEmpty()
 
     @Suppress("UNCHECKED_CAST")
     fun shape(value: Any?): Any? = when (value) {
@@ -36,11 +39,9 @@ open class ResponseShaper(val client: ClientInfo) {
         else -> value
     }
 
-    protected open fun shapeSong(song: Song): Song =
-        if (song.atmosPath != null && !client.supports(ClientFeature.DOLBY_ATMOS)) song.copy(atmosPath = null) else song
+    protected open fun shapeSong(song: Song): Song = activeRules.fold(song) { shaped, rule -> rule.shapeSong(shaped) }
 
-    protected open fun shapeUserSong(song: UserSong): UserSong =
-        if (song.atmosPath != null && !client.supports(ClientFeature.DOLBY_ATMOS)) song.copy(atmosPath = null) else song
+    protected open fun shapeUserSong(song: UserSong): UserSong = activeRules.fold(song) { shaped, rule -> rule.shapeUserSong(shaped) }
 }
 
 @Suppress("UNCHECKED_CAST", "PLATFORM_CLASS_MAPPED_TO_KOTLIN")

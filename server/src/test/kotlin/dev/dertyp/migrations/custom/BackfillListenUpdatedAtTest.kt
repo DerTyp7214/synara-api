@@ -37,7 +37,7 @@ class BackfillListenUpdatedAtTest : KoinTest {
                 ListenBrainzUserTable,
                 ImageTable,
                 AlbumTable,
-                SongTable,
+                SongTable, SongVariantTable,
                 ListenTable,
                 ScheduledTaskLogTable,
             )

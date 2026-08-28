@@ -3,6 +3,7 @@ package dev.dertyp
 import dev.dertyp.audio.LosslessFormat
 import dev.dertyp.core.deleteOnExitRecursive
 import dev.dertyp.data.AudioFormat
+import dev.dertyp.data.AudioInfo
 import dev.dertyp.data.SimpleSong
 import dev.dertyp.data.TranscodedVersion
 import dev.dertyp.db.SongTable
@@ -466,10 +467,14 @@ object AudioUtils {
                     originalUrl = it[SongTable.originalUrl],
                     trackNumber = it[SongTable.trackNumber],
                     discNumber = it[SongTable.discNumber],
-                    sampleRate = it[SongTable.sampleRate],
-                    bitsPerSample = it[SongTable.bitsPerSample],
-                    bitRate = it[SongTable.bitRate],
-                    fileSize = it[SongTable.fileSize],
+                    audio = AudioInfo(
+                        codec = it[SongTable.format],
+                        sampleRate = it[SongTable.sampleRate],
+                        bitsPerSample = it[SongTable.bitsPerSample],
+                        bitRate = it[SongTable.bitRate],
+                        fileSize = it[SongTable.fileSize],
+                        channels = it[SongTable.channels],
+                    ),
                     coverId = it[SongTable.cover]?.value,
                     transcodedTo = listOfNotNull(
                         if (it.getOrNull(TranscodedSongTable.bitrate) != null) {

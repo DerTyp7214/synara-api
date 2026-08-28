@@ -55,7 +55,7 @@ class LibraryMergeServiceIncorrectMergeTest : KoinTest {
         database = TestDatabase.connect(dialect, "merge_fix_test")
         transaction(database) {
             SchemaUtils.create(
-                ArtistTable, AlbumTable, SongTable, ImageTable, PlaylistTable,
+                ArtistTable, AlbumTable, SongTable, SongVariantTable, ImageTable, PlaylistTable,
                 UserTable, UserPlaylistTable, UserPlaylistSongTable, PlaylistSongTable,
                 SongArtistTable, AlbumArtistTable, AlbumMusicBrainzTable, SongMusicBrainzTable,
                 TranscodedSongTable, UserSongTable, SongProviderTable, AlbumProviderTable,

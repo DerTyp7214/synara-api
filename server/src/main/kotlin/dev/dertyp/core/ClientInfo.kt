@@ -6,6 +6,7 @@ import io.ktor.server.application.ApplicationCall
 enum class ClientFeature(val minApiVersion: Int, val maxApiVersion: Int? = null) {
     LOSSLESS_WAV_AIFF(2),
     DOLBY_ATMOS(3),
+    AUDIO_INFO(4),
 }
 
 data class ClientInfo(val apiVersion: Int) {

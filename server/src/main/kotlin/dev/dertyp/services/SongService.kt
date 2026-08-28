@@ -1,6 +1,7 @@
 package dev.dertyp.services
 
 import dev.dertyp.*
+import dev.dertyp.audio.AudioProbe
 import dev.dertyp.audio.isLossless
 import dev.dertyp.audio.LosslessFormat
 import dev.dertyp.audio.losslessFormat
@@ -323,10 +324,14 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                 trackNumber = resultRow[SongTable.trackNumber],
                 discNumber = resultRow[SongTable.discNumber],
                 copyright = resultRow[SongTable.copyright],
-                sampleRate = resultRow[SongTable.sampleRate],
-                bitsPerSample = resultRow[SongTable.bitsPerSample],
-                bitRate = resultRow[SongTable.bitRate],
-                fileSize = resultRow[SongTable.fileSize],
+                audio = AudioInfo(
+                    codec = resultRow[SongTable.format],
+                    sampleRate = resultRow[SongTable.sampleRate],
+                    bitsPerSample = resultRow[SongTable.bitsPerSample],
+                    bitRate = resultRow[SongTable.bitRate],
+                    fileSize = resultRow[SongTable.fileSize],
+                    channels = resultRow[SongTable.channels],
+                ),
                 isrc = resultRow[SongTable.isrc],
                 coverId = resultRow[SongTable.cover]?.value,
                 blurHash = resultRow.getOrNull(blurHashColumn ?: ImageTable.blurHash),
@@ -336,7 +341,6 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                 animatedCoverImageId = animatedCoverImageIdColumn?.let { resultRow.getOrNull(it) }?.value,
                 animatedCoverBlurHash = animatedCoverBlurHashColumn?.let { resultRow.getOrNull(it) },
                 audioStartMs = resultRow.getOrNull(SongTable.audioStartMs),
-                atmosPath = resultRow.getOrNull(SongTable.atmosPath),
             )
         }
 
@@ -363,10 +367,14 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                 trackNumber = resultRow[SongTable.trackNumber],
                 discNumber = resultRow[SongTable.discNumber],
                 copyright = resultRow[SongTable.copyright],
-                sampleRate = resultRow[SongTable.sampleRate],
-                bitsPerSample = resultRow[SongTable.bitsPerSample],
-                bitRate = resultRow[SongTable.bitRate],
-                fileSize = resultRow[SongTable.fileSize],
+                audio = AudioInfo(
+                    codec = resultRow[SongTable.format],
+                    sampleRate = resultRow[SongTable.sampleRate],
+                    bitsPerSample = resultRow[SongTable.bitsPerSample],
+                    bitRate = resultRow[SongTable.bitRate],
+                    fileSize = resultRow[SongTable.fileSize],
+                    channels = resultRow[SongTable.channels],
+                ),
                 isrc = resultRow[SongTable.isrc],
                 coverId = resultRow[SongTable.cover]?.value,
                 blurHash = resultRow.getOrNull(blurHashColumn ?: ImageTable.blurHash),
@@ -376,7 +384,6 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                 animatedCoverImageId = animatedCoverImageIdColumn?.let { resultRow.getOrNull(it) }?.value,
                 animatedCoverBlurHash = animatedCoverBlurHashColumn?.let { resultRow.getOrNull(it) },
                 audioStartMs = resultRow.getOrNull(SongTable.audioStartMs),
-                atmosPath = resultRow.getOrNull(SongTable.atmosPath),
                 isFavourite = resultRow.getOrNull(UserSongTable.isFavourite) ?: false,
                 userSongCreatedAt = resultRow.getOrNull(UserSongTable.createdAt).date,
                 userSongUpdatedAt = resultRow.getOrNull(UserSongTable.updatedAt).date,
@@ -1193,6 +1200,32 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
         }
     }
 
+    fun insertVariants(kind: SongVariantKind, variants: List<Triple<UUID, String, AudioInfo?>>) {
+        variants.forEach { (songId, path, given) ->
+            val info = given ?: AudioProbe.probe(File(path))
+            SongVariantTable.insertIgnore {
+                it[SongVariantTable.songId] = songId
+                it[SongVariantTable.kind] = kind
+                it[SongVariantTable.path] = path
+                it[codec] = info?.codec ?: ""
+                it[sampleRate] = info?.sampleRate ?: 0
+                it[bitsPerSample] = info?.bitsPerSample ?: 0
+                it[channels] = info?.channels ?: 0
+                it[bitRate] = info?.bitRate ?: 0
+                it[fileSize] = info?.fileSize ?: 0
+            }
+        }
+    }
+
+    fun mapVariant(row: ResultRow) = AudioInfo(
+        codec = row[SongVariantTable.codec],
+        sampleRate = row[SongVariantTable.sampleRate],
+        bitsPerSample = row[SongVariantTable.bitsPerSample],
+        bitRate = row[SongVariantTable.bitRate],
+        fileSize = row[SongVariantTable.fileSize],
+        channels = row[SongVariantTable.channels],
+    )
+
     suspend fun addProviderUrl(songId: UUID, url: String) = dbQuery {
         val parser = ParserFactory.getParser(url)
         val parsed = parser?.parse(url)
@@ -1483,9 +1516,12 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
     @Suppress("DuplicatedCode")
     suspend fun deleteSongs(ids: List<UUID>): Boolean = dbQuery {
         val paths = SongTable
-            .select(SongTable.id, SongTable.filePath, SongTable.atmosPath)
+            .select(SongTable.id, SongTable.filePath)
             .where { SongTable.id inList ids }
-            .flatMap { listOfNotNull(it[SongTable.filePath], it[SongTable.atmosPath]) }
+            .map { it[SongTable.filePath] } + SongVariantTable
+            .select(SongVariantTable.path)
+            .where { SongVariantTable.songId inList ids }
+            .map { it[SongVariantTable.path] }
 
         logger.info("Found ${paths.size} files to delete.")
 
@@ -1620,7 +1656,7 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
 
     fun resolveAtmosStream(song: Song, client: ClientInfo): StreamInfo? {
         if (!client.supports(ClientFeature.DOLBY_ATMOS)) return null
-        val file = song.atmosPath?.let(::File) ?: return null
+        val file = song.atmosVariantPath?.let(::File) ?: return null
         if (!file.exists()) return null
         return StreamInfo(file, ContentType.Audio.MP4, file.length(), file.name)
     }
@@ -2119,7 +2155,16 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
             }
         }
 
+        val variants = songMap.keys.chunked(1000).flatMap { ids ->
+            SongVariantTable
+                .selectAll()
+                .where { SongVariantTable.songId inList ids }
+                .andWhere { SongVariantTable.kind eq SongVariantKind.ATMOS }
+                .toList()
+        }.associateBy { it[SongVariantTable.songId].value }
+
         return songMap.values.map { song ->
+            val variant = variants[song.id]
             val albumArtists = albumArtistsMap[song.album?.id] ?: listOf()
             val songArtists = songArtistsMap[song.id]?.distinctBy { it.id } ?: listOf()
             val songGenres = songGenresMap[song.id]?.distinctBy { it.id } ?: listOf()
@@ -2139,14 +2184,18 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                     album = albumWithArtists,
                     artists = songArtists,
                     genres = songGenres,
-                    originalUrl = originalUrl
+                    originalUrl = originalUrl,
+                    atmos = variant?.let(::mapVariant),
+                    atmosVariantPath = variant?.get(SongVariantTable.path),
                 ) as T
 
                 is UserSong -> song.copy(
                     album = albumWithArtists,
                     artists = songArtists,
                     genres = songGenres,
-                    originalUrl = originalUrl
+                    originalUrl = originalUrl,
+                    atmos = variant?.let(::mapVariant),
+                    atmosVariantPath = variant?.get(SongVariantTable.path),
                 ) as T
 
                 else -> throw Exception("Unknown song type: $song")
@@ -2377,15 +2426,9 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
 
             val atmosSongs = existingSongMap.filter { (song, _) -> song.atmosPath != null }
             if (atmosSongs.isNotEmpty()) {
-                dbQuery {
-                    atmosSongs.forEach { (song, data) ->
-                        val (songId, _) = data
-                        SongTable.update({ (SongTable.id eq songId) and SongTable.atmosPath.isNull() }) {
-                            it[atmosPath] = song.atmosPath
-                        }
-                    }
-                }
-                logBlock("Atmos path updates")
+                val variants = atmosSongs.map { (song, data) -> Triple(data.first, song.atmosPath!!, song.atmos) }
+                dbQuery { insertVariants(SongVariantKind.ATMOS, variants) }
+                logBlock("Atmos variant updates")
             }
 
             val newSongs = songs.filter { it !in existingSongMap.keys }
@@ -2408,7 +2451,7 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                     )
                 }
                 .map { (_, songs) ->
-                    songs.maxByOrNull { it.bitRate }
+                    songs.maxByOrNull { it.audio.bitRate }
                 }
                 .filterNotNull()
 
@@ -2435,11 +2478,11 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                     this[SongTable.trackNumber] = song.trackNumber
                     this[SongTable.discNumber] = song.discNumber
                     this[SongTable.copyright] = song.copyright
-                    this[SongTable.sampleRate] = song.sampleRate
-                    this[SongTable.bitsPerSample] = song.bitsPerSample
-                    this[SongTable.bitRate] = song.bitRate
-                    this[SongTable.fileSize] = song.fileSize
-                    this[SongTable.atmosPath] = song.atmosPath
+                    this[SongTable.sampleRate] = song.audio.sampleRate
+                    this[SongTable.bitsPerSample] = song.audio.bitsPerSample
+                    this[SongTable.bitRate] = song.audio.bitRate
+                    this[SongTable.fileSize] = song.audio.fileSize
+                    this[SongTable.channels] = song.audio.channels
                     this[SongTable.cover] = imageId
                     this[SongTable.isrc] = song.isrc
                 }
@@ -2452,6 +2495,14 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                         it
                     )]
                 }
+
+            val atmosVariants = insertedSongs.mapNotNull { (songId, songData) ->
+                songData.atmosPath?.let { Triple(songId, it, songData.atmos) }
+            }
+            if (atmosVariants.isNotEmpty()) {
+                dbQuery { insertVariants(SongVariantKind.ATMOS, atmosVariants) }
+                logBlock("Atmos variant insertion")
+            }
 
             val musicBrainzBatch = insertedSongs.mapNotNull { (songId, songData) ->
                 songData.musicBrainzId?.let { mbId -> songId to mbId }
@@ -2555,13 +2606,15 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
             it[trackNumber] = song.trackNumber
             it[discNumber] = song.discNumber
             it[copyright] = song.copyright
-            it[sampleRate] = song.sampleRate
-            it[bitsPerSample] = song.bitsPerSample
-            it[bitRate] = song.bitRate
-            it[fileSize] = song.fileSize
+            song.effectiveAudio?.let { audio ->
+                it[sampleRate] = audio.sampleRate
+                it[bitsPerSample] = audio.bitsPerSample
+                it[bitRate] = audio.bitRate
+                it[fileSize] = audio.fileSize
+                it[channels] = audio.channels
+            }
             it[cover] = song.coverId?.let { coverId -> EntityID(coverId, ImageTable) }
             it[audioStartMs] = song.audioStartMs
-            it[atmosPath] = song.atmosPath
         }
 
         if (song.originalUrl.isNotBlank()) {

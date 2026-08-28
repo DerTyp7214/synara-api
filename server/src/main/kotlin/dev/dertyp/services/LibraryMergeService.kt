@@ -64,7 +64,7 @@ class LibraryMergeService : Service() {
         var totalMerged = 0
         for (duplicateGroup in perfectDuplicates) {
             val songsInGroup = SongTable
-                .select(SongTable.id, SongTable.inserted, SongTable.title, SongTable.explicit, SongTable.atmosPath)
+                .select(SongTable.id, SongTable.inserted, SongTable.title, SongTable.explicit)
                 .where {
                     (SongTable.title eq duplicateGroup[SongTable.title]) and
                             (SongTable.albumId eq duplicateGroup[SongTable.albumId]) and
@@ -89,7 +89,7 @@ class LibraryMergeService : Service() {
 
         for (duplicateGroup in pathDuplicates) {
             val songsInGroup = SongTable
-                .select(SongTable.id, SongTable.inserted, SongTable.title, SongTable.explicit, SongTable.atmosPath)
+                .select(SongTable.id, SongTable.inserted, SongTable.title, SongTable.explicit)
                 .where { SongTable.filePath eq duplicateGroup[SongTable.filePath] }
                 .orderBy(SongTable.inserted, SortOrder.ASC)
                 .toList()
@@ -115,13 +115,10 @@ class LibraryMergeService : Service() {
             .map { it[SongTable.title].replace("\uD83C\uDD74", "").trim() }
             .firstOrNull { it.isNotBlank() } ?: keptSongRow[SongTable.title]
 
-        val mergedAtmosPath = keptSongRow[SongTable.atmosPath] ?: songsToMerge.firstNotNullOfOrNull { it[SongTable.atmosPath] }
-
-        if (bestTitle != keptSongRow[SongTable.title] || anyExplicit != keptSongRow[SongTable.explicit] || mergedAtmosPath != keptSongRow[SongTable.atmosPath]) {
+        if (bestTitle != keptSongRow[SongTable.title] || anyExplicit != keptSongRow[SongTable.explicit]) {
             SongTable.update({ SongTable.id eq keptSongId }) {
                 it[title] = bestTitle
                 it[explicit] = anyExplicit
-                it[atmosPath] = mergedAtmosPath
             }
         }
 
@@ -149,8 +146,7 @@ class LibraryMergeService : Service() {
                 SongTable.discNumber,
                 SongTable.fileSize,
                 SongTable.inserted,
-                SongTable.explicit,
-                SongTable.atmosPath
+                SongTable.explicit
             )
             .toList()
 
@@ -187,13 +183,10 @@ class LibraryMergeService : Service() {
             }
             val cleanTitle = keptSongRow[SongTable.title].replace("\uD83C\uDD74", "").trim()
 
-            val mergedAtmosPath = keptSongRow[SongTable.atmosPath] ?: songsToMerge.firstNotNullOfOrNull { it[SongTable.atmosPath] }
-
-            if (cleanTitle != keptSongRow[SongTable.title] || anyExplicit != keptSongRow[SongTable.explicit] || mergedAtmosPath != keptSongRow[SongTable.atmosPath]) {
+            if (cleanTitle != keptSongRow[SongTable.title] || anyExplicit != keptSongRow[SongTable.explicit]) {
                 SongTable.update({ SongTable.id eq keptSongId }) {
                     it[title] = cleanTitle
                     it[explicit] = anyExplicit
-                    it[atmosPath] = mergedAtmosPath
                 }
             }
 
@@ -727,6 +720,16 @@ class LibraryMergeService : Service() {
             }
         }
         UserSongTable.deleteWhere { UserSongTable.songId eq oldSongId }
+
+        val variantsForKept = SongVariantTable.select(SongVariantTable.kind).where { SongVariantTable.songId eq keptSongId }.map { it[SongVariantTable.kind] }.toSet()
+        SongVariantTable.select(SongVariantTable.kind).where { SongVariantTable.songId eq oldSongId }.map { it[SongVariantTable.kind] }.forEach { variantKind ->
+            if (variantKind !in variantsForKept) {
+                SongVariantTable.update({ (SongVariantTable.songId eq oldSongId) and (SongVariantTable.kind eq variantKind) }) {
+                    it[SongVariantTable.songId] = keptSongId
+                }
+            }
+        }
+        SongVariantTable.deleteWhere { SongVariantTable.songId eq oldSongId }
 
         val transForOld = TranscodedSongTable.select(TranscodedSongTable.bitrate).where { TranscodedSongTable.songId eq oldSongId }.map { it[TranscodedSongTable.bitrate] }
         val transForKept = TranscodedSongTable.select(TranscodedSongTable.bitrate).where { TranscodedSongTable.songId eq keptSongId }.map { it[TranscodedSongTable.bitrate] }.toSet()

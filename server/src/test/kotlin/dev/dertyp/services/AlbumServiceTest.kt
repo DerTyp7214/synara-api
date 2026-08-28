@@ -74,7 +74,7 @@ class AlbumServiceTest : KoinTest {
                 ImageTable,
                 ImageMetadataTable,
                 AnimatedImageTable,
-                SongTable,
+                SongTable, SongVariantTable,
                 SongArtistTable,
                 SongMusicBrainzTable,
                 ArtistSplitAliasTable,

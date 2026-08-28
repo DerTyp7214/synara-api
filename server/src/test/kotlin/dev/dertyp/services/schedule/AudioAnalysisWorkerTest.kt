@@ -4,6 +4,7 @@ import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
 import dev.dertyp.db.SongAudioDataTable
 import dev.dertyp.db.SongTable
+import dev.dertyp.db.SongVariantTable
 import dev.dertyp.dbQuery
 import dev.dertyp.services.AudioAnalysisService
 import io.ktor.server.config.ApplicationConfig
@@ -27,7 +28,7 @@ class AudioAnalysisWorkerTest : KoinTest {
     private fun setup(dialect: DbDialect) = runBlocking {
         TestDatabase.connect(dialect, "audio_analysis_worker_test")
         dbQuery {
-            SchemaUtils.create(SongTable, SongAudioDataTable)
+            SchemaUtils.create(SongTable, SongVariantTable, SongAudioDataTable)
         }
     }
 

@@ -50,7 +50,7 @@ class UserPlaylistServiceTest : KoinTest {
                 UserTable,
                 UserPlaylistTable,
                 UserPlaylistSongTable,
-                SongTable,
+                SongTable, SongVariantTable,
                 AlbumTable,
                 ArtistTable,
                 SongArtistTable,

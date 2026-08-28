@@ -52,7 +52,7 @@ class RetranscodeMultichannelSongsTest : KoinTest {
         tempDir = Files.createTempDirectory("retranscode-test").toFile()
         database = TestDatabase.connect(dialect, "retranscode_multichannel_test")
         transaction(database) {
-            SchemaUtils.create(ImageTable, AlbumTable, SongTable, FlacInfoTable, PcmInfoTable, TranscodedSongTable, ScheduledTaskLogTable)
+            SchemaUtils.create(ImageTable, AlbumTable, SongTable, SongVariantTable, FlacInfoTable, PcmInfoTable, TranscodedSongTable, ScheduledTaskLogTable)
         }
         mockkObject(AudioUtils)
     }

@@ -30,7 +30,7 @@ class SongCreditedNameTest : KoinTest {
     private lateinit var database: Database
 
     private val allTables = arrayOf(
-        ArtistTable, AlbumTable, SongTable, SongArtistTable,
+        ArtistTable, AlbumTable, SongTable, SongVariantTable, SongArtistTable,
         SongMusicBrainzTable, SongAudioDataTable, ImageTable, GenreTable,
         UserTable, AlbumMusicBrainzTable, ArtistMusicBrainzTable,
         ArtistAliasTable, ArtistMemberTable, AlbumArtistTable,
