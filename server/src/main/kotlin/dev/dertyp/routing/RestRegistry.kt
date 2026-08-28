@@ -19,6 +19,7 @@ import dev.dertyp.services.metadata.IMusicBrainzService
 import dev.dertyp.services.metadata.MetadataDispatcherService
 import dev.dertyp.services.schedule.RpcScheduledTaskConfigurationService
 import dev.dertyp.services.subsonic.RpcSubsonicCredentialService
+import dev.dertyp.services.sync.RpcListenBackupService
 import dev.dertyp.services.sync.RpcListenBrainzService
 import dev.dertyp.utils.ResponseShaper
 import dev.dertyp.utils.withAuthorization
@@ -533,6 +534,10 @@ fun Route.registerAuthenticatedRestServices(koin: Koin) {
     registerRestService(IListenBrainzService::class, authenticated = true) {
         val user = call.getUser() ?: throw IllegalArgumentException("No user found")
         RpcListenBrainzService(user, koin.get()).withAuthorization<IListenBrainzService>(user)
+    }
+    registerRestService(IListenBackupService::class, authenticated = true) {
+        val user = call.getUser() ?: throw IllegalArgumentException("No user found")
+        RpcListenBackupService(koin.get()).withAuthorization<IListenBackupService>(user)
     }
     registerRestService(IScrobbleService::class, authenticated = true) {
         val user = call.getUser() ?: throw IllegalArgumentException("No user found")

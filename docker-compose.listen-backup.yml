@@ -1,0 +1,12 @@
+services:
+  listen-backup:
+    image: ghcr.io/dertyp7214/synara-listen-backup:latest-dev
+    ports:
+      - "8082:8082"
+    environment:
+      - PORT=8082
+      - BACKUP_KEY=${BACKUP_KEY}
+      - DB_URL=jdbc:sqlite:/data/listens.db
+    volumes:
+      - ./listen-backup-data:/data
+    restart: unless-stopped

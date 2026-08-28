@@ -1,0 +1,8 @@
+FROM amazoncorretto:25 AS runtime
+EXPOSE 8082
+RUN mkdir /app /data
+VOLUME /data
+COPY *.jar /app/listen-backup.jar
+ENV PORT=8082
+ENV DB_URL=jdbc:sqlite:/data/listens.db
+ENTRYPOINT ["java", "--enable-native-access=ALL-UNNAMED", "-jar", "/app/listen-backup.jar"]

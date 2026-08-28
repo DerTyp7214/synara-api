@@ -1,0 +1,13 @@
+ktor:
+    application:
+        modules:
+            - dev.dertyp.listenbackup.ApplicationKt.module
+    deployment:
+        port: ${PORT:8082}
+backup:
+    key: ${BACKUP_KEY:}
+storage:
+    driverClassName: ${DB_DRIVER:org.sqlite.JDBC}
+    jdbcURL: ${DB_URL:jdbc:sqlite:listens.db}
+    user: ${DB_USER:}
+    password: ${DB_PASSWORD:}

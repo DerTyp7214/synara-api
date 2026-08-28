@@ -21,6 +21,7 @@ object ListenTable : UUIDTable("listen") {
     val listenedAt = long("listenedAt")
     val listenSource = enumeration<ListenSource>("source")
     val msPlayed = long("msPlayed").nullable()
+    val updatedAt = long("updatedAt").default(0L)
 
     init {
         uniqueIndex(listenBrainzUserId, listenedAt)
@@ -28,6 +29,7 @@ object ListenTable : UUIDTable("listen") {
         index(false, recordingMbid)
         index(false, userId)
         index(false, userId, listenedAt)
+        index(false, listenSource, updatedAt)
     }
 
     const val DEDUP_WINDOW_MS = 2000L

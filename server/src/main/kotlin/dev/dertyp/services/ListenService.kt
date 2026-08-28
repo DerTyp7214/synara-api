@@ -44,6 +44,7 @@ class ListenService : Service() {
     suspend fun ingestListenBrainz(listenBrainzUserId: PlatformUUID, listens: List<IncomingListen>): Int {
         if (listens.isEmpty()) return 0
 
+        val now = System.currentTimeMillis()
         dbQuery {
             ListenTable.batchInsert(listens, ignore = true) { listen ->
                 this[ListenTable.listenBrainzUserId] = listenBrainzUserId
@@ -59,6 +60,7 @@ class ListenService : Service() {
                 this[ListenTable.listenedAt] = listen.listenedAtMs
                 this[ListenTable.listenSource] = ListenSource.LISTENBRAINZ
                 this[ListenTable.msPlayed] = listen.msPlayed
+                this[ListenTable.updatedAt] = now
             }
         }
 
@@ -114,6 +116,7 @@ class ListenService : Service() {
                 it[ListenTable.listenedAt] = listenedAtMs
                 it[ListenTable.listenSource] = ListenSource.LOCAL
                 it[ListenTable.msPlayed] = msPlayed
+                it[ListenTable.updatedAt] = System.currentTimeMillis()
             }
         }
         _listenChanges.tryEmit(Unit)
@@ -239,8 +242,12 @@ class ListenService : Service() {
                 .toList()
 
             var updated = 0
+            val now = System.currentTimeMillis()
             rows.map { it[ListenTable.id].value }.chunked(1000).forEach { chunk ->
-                updated += ListenTable.update({ ListenTable.id inList chunk }) { it[ListenTable.songId] = songId }
+                updated += ListenTable.update({ ListenTable.id inList chunk }) {
+                    it[ListenTable.songId] = songId
+                    it[ListenTable.updatedAt] = now
+                }
             }
 
             val msids = (rows.mapNotNull { it[ListenTable.recordingMsid] } + listOfNotNull(recordingMsid)).distinct()

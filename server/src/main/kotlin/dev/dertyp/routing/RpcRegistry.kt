@@ -20,7 +20,9 @@ import dev.dertyp.services.schedule.ScheduleService
 import dev.dertyp.services.schedule.ScheduledTaskConfigurationService
 import dev.dertyp.services.subsonic.RpcSubsonicCredentialService
 import dev.dertyp.services.subsonic.SubsonicCredentialService
+import dev.dertyp.services.sync.ListenBackupService
 import dev.dertyp.services.sync.ListenBrainzService
+import dev.dertyp.services.sync.RpcListenBackupService
 import dev.dertyp.services.sync.RpcListenBrainzService
 import dev.dertyp.core.principalUsername
 import dev.dertyp.utils.ResponseShaper
@@ -141,6 +143,7 @@ private fun registerAuthenticated(koin: Koin, call: ApplicationCall, user: User,
     val metadataDispatcherService = koin.get<MetadataDispatcherService>()
     val rpcMetricsService = koin.get<RpcMetricsService>()
     val listenBrainzService = koin.get<ListenBrainzService>()
+    val listenBackupService = koin.get<ListenBackupService>()
     val scrobbleService = koin.get<ScrobbleService>()
     val listeningStatsService = koin.get<ListeningStatsService>()
     val recommendationServingService = koin.get<RecommendationServingService>()
@@ -180,6 +183,7 @@ private fun registerAuthenticated(koin: Koin, call: ApplicationCall, user: User,
     registrar.register(IMetadataService::class) { metadataDispatcherService.withAuthorization<IMetadataService>(user).withLogging<IMetadataService>(call) }
     registrar.register(IRpcMetricsService::class) { rpcMetricsService.withAuthorization<IRpcMetricsService>(user).withLogging<IRpcMetricsService>(call) }
     registrar.register(IListenBrainzService::class) { RpcListenBrainzService(user, listenBrainzService).withAuthorization<IListenBrainzService>(user).withLogging<IListenBrainzService>(call) }
+    registrar.register(IListenBackupService::class) { RpcListenBackupService(listenBackupService).withAuthorization<IListenBackupService>(user).withLogging<IListenBackupService>(call) }
     registrar.register(IScrobbleService::class) { RpcScrobbleService(user, scrobbleService).withAuthorization<IScrobbleService>(user).withLogging<IScrobbleService>(call) }
     registrar.register(IListeningStatsService::class) { RpcListeningStatsService(user, listeningStatsService).withAuthorization<IListeningStatsService>(user).withLogging<IListeningStatsService>(call) }
     registrar.register(IRecommendationService::class) { RpcRecommendationService(user, recommendationServingService).withAuthorization<IRecommendationService>(user).withLogging<IRecommendationService>(call) }

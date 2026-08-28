@@ -331,7 +331,10 @@ class ListenBrainzService : Service() {
                             (ListenTable.listenBrainzUserId eq lbUserId) and
                                 (ListenTable.listenedAt eq listenedAt) and
                                 ListenTable.recordingMsid.isNull()
-                        }) { it[ListenTable.recordingMsid] = msid }
+                        }) {
+                            it[ListenTable.recordingMsid] = msid
+                            it[ListenTable.updatedAt] = System.currentTimeMillis()
+                        }
                     }
                 }
 
@@ -423,12 +426,18 @@ class ListenBrainzService : Service() {
                 overrides.byMsid.forEach { (msid, songId) ->
                     overrideUpdated += ListenTable.update({
                         (ListenTable.listenBrainzUserId eq lbUserId) and (ListenTable.recordingMsid eq msid) and ListenTable.songId.isNull()
-                    }) { it[ListenTable.songId] = songId }
+                    }) {
+                        it[ListenTable.songId] = songId
+                        it[ListenTable.updatedAt] = System.currentTimeMillis()
+                    }
                 }
                 overrides.byMbid.forEach { (mbid, songId) ->
                     overrideUpdated += ListenTable.update({
                         (ListenTable.listenBrainzUserId eq lbUserId) and (ListenTable.recordingMbid eq mbid) and ListenTable.songId.isNull()
-                    }) { it[ListenTable.songId] = songId }
+                    }) {
+                        it[ListenTable.songId] = songId
+                        it[ListenTable.updatedAt] = System.currentTimeMillis()
+                    }
                 }
             }
             if (overrideUpdated > 0) {
@@ -459,7 +468,10 @@ class ListenBrainzService : Service() {
             resolved.forEach { (mbid, songId) ->
                 updated += ListenTable.update({
                     (ListenTable.listenBrainzUserId eq lbUserId) and (ListenTable.recordingMbid eq mbid) and ListenTable.songId.isNull()
-                }) { it[ListenTable.songId] = songId }
+                }) {
+                    it[ListenTable.songId] = songId
+                    it[ListenTable.updatedAt] = System.currentTimeMillis()
+                }
             }
         }
         if (updated > 0) {
