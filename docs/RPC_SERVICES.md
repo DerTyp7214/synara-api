@@ -334,7 +334,7 @@ Physical properties of one audio file belonging to a song.
 | `codec` | `String` | Audio codec of the file, e.g. flac, wav, eac3. |
 | `sampleRate` | `Int` | Audio sample rate in Hz. |
 | `bitsPerSample` | `Int` | Number of bits per audio sample; 0 for lossy codecs. |
-| `bitRate` | `Long` | Audio bit rate in bits per second. |
+| `bitRate` | `Long` | Audio bit rate in kilobits per second. |
 | `fileSize` | `Long` | Size of the audio file in bytes. |
 | `channels` | `Int` | Number of audio channels, e.g. 2 for stereo or 6 for 5.1. |
 
@@ -1148,7 +1148,7 @@ Contains core metadata about a track that is common for all users.
 | `atmos` | [AudioInfo](#devdertypdataaudioinfo)? | Properties of the Dolby Atmos (E-AC-3 JOC in MP4) variant, if one exists. |
 | `sampleRate` | `Int`? | Audio sample rate in Hz. API version 3 and below only; see audio. |
 | `bitsPerSample` | `Int`? | Number of bits per audio sample. API version 3 and below only; see audio. |
-| `bitRate` | `Long`? | Audio bit rate in bits per second. API version 3 and below only; see audio. |
+| `bitRate` | `Long`? | Audio bit rate in kilobits per second. API version 3 and below only; see audio. |
 | `fileSize` | `Long`? | Size of the audio file in bytes. API version 3 and below only; see audio. |
 | `coverId` | `PlatformUUID`? | The song cover image unique identifier. |
 | `blurHash` | `String`? | The blur hash of the song cover image. |
@@ -1453,7 +1453,7 @@ Extends track metadata with user-specific information like favorite status.
 | `atmos` | [AudioInfo](#devdertypdataaudioinfo)? | Properties of the Dolby Atmos (E-AC-3 JOC in MP4) variant, if one exists. |
 | `sampleRate` | `Int`? | Audio sample rate in Hz. API version 3 and below only; see audio. |
 | `bitsPerSample` | `Int`? | Number of bits per audio sample. API version 3 and below only; see audio. |
-| `bitRate` | `Long`? | Audio bit rate in bits per second. API version 3 and below only; see audio. |
+| `bitRate` | `Long`? | Audio bit rate in kilobits per second. API version 3 and below only; see audio. |
 | `fileSize` | `Long`? | Size of the audio file in bytes. API version 3 and below only; see audio. |
 | `coverId` | `PlatformUUID`? | The song cover image unique identifier. |
 | `blurHash` | `String`? | The blur hash of the song cover image. |

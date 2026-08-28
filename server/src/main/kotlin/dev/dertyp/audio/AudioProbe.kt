@@ -22,7 +22,7 @@ object AudioProbe {
                     codec = codec,
                     sampleRate = grabber.sampleRate,
                     bitsPerSample = if (lossless) AudioUtils.sourceBitDepth(grabber) else 0,
-                    bitRate = grabber.audioBitrate.toLong(),
+                    bitRate = grabber.audioBitrate.toLong() / 1000,
                     fileSize = file.length(),
                     channels = grabber.audioChannels,
                 )

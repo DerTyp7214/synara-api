@@ -37,7 +37,7 @@ fun BaseSong.toChild(): Child {
         contentType = suffix?.let(::contentTypeFor),
         suffix = suffix,
         duration = duration / 1000,
-        bitRate = audio?.bitRate?.let { (it / 1000).toInt() }?.takeIf { it > 0 },
+        bitRate = audio?.bitRate?.toInt()?.takeIf { it > 0 },
         samplingRate = audio?.sampleRate?.takeIf { it > 0 },
         bitDepth = audio?.bitsPerSample?.takeIf { it > 0 },
         discNumber = discNumber,

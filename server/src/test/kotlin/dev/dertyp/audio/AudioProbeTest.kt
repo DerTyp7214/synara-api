@@ -18,7 +18,7 @@ class AudioProbeTest {
             assertEquals(AtmosFixture.CHANNELS, eac3.channels)
             assertEquals(AtmosFixture.SAMPLE_RATE, eac3.sampleRate)
             assertEquals(0, eac3.bitsPerSample)
-            assertEquals(768000L, eac3.bitRate)
+            assertEquals(768L, eac3.bitRate)
             assertEquals(m4a.toFile().length(), eac3.fileSize)
 
             val flac = AtmosProcessor(AudioConfig(LosslessFormat.FLAC)).process(m4a) {}!!
