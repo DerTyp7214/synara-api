@@ -21,6 +21,7 @@ import dev.dertyp.services.sync.SyncService
 import dev.dertyp.ui.UiAction
 import dev.dertyp.ui.UiAlign
 import dev.dertyp.ui.UiButtonStyle
+import dev.dertyp.ui.UiCardSize
 import dev.dertyp.ui.UiComponent
 import dev.dertyp.ui.UiIcon
 import dev.dertyp.ui.UiIconName
@@ -69,9 +70,31 @@ class ImporterState(
 
     fun lineOk(line: String): Boolean = line.isNotBlank() && !line.startsWith("Let us check")
 
-    fun currentLines(user: User?): List<String> {
-        if (user != null && importService.currentImport(user) == null) return emptyList()
-        return importService.currentImport?.logs?.filter(::lineOk)?.takeLast(MAX_LOG_LINES) ?: emptyList()
+    private val logBuffer = ArrayDeque<String>()
+
+    private val logCollector by lazy {
+        ApplicationScope.scope.launch {
+            importService.log.filterNotNull().filter(::lineOk).collect { line ->
+                synchronized(logBuffer) {
+                    logBuffer.addLast(line)
+                    while (logBuffer.size > MAX_LOG_LINES) logBuffer.removeFirst()
+                }
+            }
+        }
+    }
+
+    fun startLogBuffer() {
+        synchronized(logBuffer) {
+            if (logBuffer.isEmpty()) {
+                importService.currentImport?.logs?.filter(::lineOk)?.takeLast(MAX_LOG_LINES)?.let(logBuffer::addAll)
+            }
+        }
+        logCollector
+    }
+
+    fun logLines(): List<String> {
+        startLogBuffer()
+        return synchronized(logBuffer) { logBuffer.toList() }
     }
 
     suspend fun login(scope: ServerUiRenderScope, importerId: String?): UiInvokeResult {
@@ -139,6 +162,59 @@ class ImporterLibraryEntryContribution : UiContribution(
         icon = icon,
         action = UiAction.OpenPage(ImporterPageContribution.ID),
     )
+}
+
+class ImporterHomeCardContribution(private val state: ImporterState) : UiContribution(
+    id = ID,
+    kind = UiContributionKind.HOME_CARD,
+    titleKey = "importer.title",
+    descriptionKey = "importer.subtitle",
+    icon = UiIcon(UiIconName.IMPORT),
+    order = 50,
+    cardSize = UiCardSize.MEDIUM,
+    access = UiAccess(capabilities = setOf(UserCapability.IMPORT)),
+) {
+    companion object {
+        const val ID = "core.importer.card"
+    }
+
+    override suspend fun render(scope: UiRenderScope): UiComponent {
+        val account = (scope as? ServerUiRenderScope)?.account
+        val current = account?.let { state.importService.currentImport(it) }
+        val queue = account?.let { state.importService.importQueue(it) } ?: emptyList()
+        val body = mutableListOf<UiComponent>(
+            UiComponent.Row(
+                children = listOf(
+                    UiComponent.Stat(scope.t("importer.card.pending"), queue.size.toString(), icon = UiIcon(UiIconName.QUEUE)),
+                    UiComponent.Stat(scope.t("importer.queue.importing"), if (current != null) "1" else "0", icon = UiIcon(UiIconName.IMPORT)),
+                ),
+            ),
+        )
+        if (current != null) {
+            body += UiComponent.ListItem(
+                title = when (current) {
+                    is UrlImportQueueEntry -> current.urls.joinToString(", ")
+                    is FavouriteImportQueueEntry -> scope.t("importer.queue.type.favorites")
+                },
+                subtitle = scope.t("importer.queue.current"),
+                icon = UiIcon(UiIconName.DOWNLOAD),
+            )
+            body += UiComponent.Progress()
+        } else {
+            body += UiComponent.Text(scope.t("importer.queue.empty.title"), UiTextStyle.CAPTION, UiTone.MUTED)
+        }
+        return UiComponent.Card(
+            title = scope.t("importer.title"),
+            icon = icon,
+            children = body,
+            actions = listOf(
+                UiComponent.Button(scope.t("importer.card.open"), UiAction.OpenPage(ImporterPageContribution.ID), UiButtonStyle.TEXT, icon = UiIcon(UiIconName.IMPORT)),
+                UiComponent.Button(scope.t("importer.queue.title"), UiAction.OpenPage(ImporterQueuePageContribution.ID, modal = true), UiButtonStyle.TEXT, icon = UiIcon(UiIconName.QUEUE)),
+            ),
+        )
+    }
+
+    override fun changes(scope: UiRenderScope): Flow<Unit> = state.importService.queueChanges
 }
 
 class ImporterPageContribution(
@@ -216,7 +292,7 @@ class ImporterPageContribution(
             spacing = UiSpacing.SMALL,
             children = listOf(
                 UiComponent.Text(scope.t("importer.logs"), UiTextStyle.TITLE),
-                UiComponent.Live(LIVE_LOG, UiComponent.Log(state.currentLines(server?.account), ImporterState.MAX_LOG_LINES)),
+                UiComponent.Live(LIVE_LOG, UiComponent.Log(state.logLines(), ImporterState.MAX_LOG_LINES)),
             ),
         )
 
@@ -251,11 +327,8 @@ class ImporterPageContribution(
 
     override fun live(scope: UiRenderScope, key: String): Flow<UiLiveUpdate>? {
         if (key != LIVE_LOG) return null
-        val account = (scope as? ServerUiRenderScope)?.account
-        return merge(
-            importService.log.filterNotNull().filter(state::lineOk).map { UiLiveUpdate.AppendLines(listOf(it)) },
-            importService.queueChanges.map { UiLiveUpdate.Replace(UiComponent.Log(state.currentLines(account), ImporterState.MAX_LOG_LINES)) },
-        )
+        state.startLogBuffer()
+        return importService.log.filterNotNull().filter(state::lineOk).map { UiLiveUpdate.AppendLines(listOf(it)) }
     }
 
     override suspend fun invoke(scope: UiRenderScope, actionId: String, values: Map<String, UiValue>): UiInvokeResult {

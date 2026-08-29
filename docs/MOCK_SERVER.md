@@ -61,7 +61,7 @@ Currently, only `-dev` tags are available (e.g., `latest-dev`, `<version>-dev`).
 
 Services whose responses need to be coherent rather than random are implemented by hand and registered in `explicitMocks` in `Main.kt`. Currently:
 
-- **`IUiService`** (`MockUiService`): serves the server-driven UI fixtures used in [SERVER_DRIVEN_UI.md](SERVER_DRIVEN_UI.md) — a `library` slot tile, the `core.importer` page (toolbar, URL form with scanner portal, live log pane), the modal `core.importer.queue` and `core.importer.settings` pages, a sample home card with pin/unpin state kept in memory, `invoke` handlers that validate the importer form, and `dispatchHook` returning one handler for Tidal links and two for Apple Music links. `subscribe` re-emits every two seconds and `subscribeLive("core.importer", "log")` appends a log line every 500 ms (and resets the pane every 20 lines) so live rendering can be tested.
+- **`IUiService`** (`MockUiService`): serves the server-driven UI fixtures used in [SERVER_DRIVEN_UI.md](SERVER_DRIVEN_UI.md) — a `library` slot tile, the `core.importer` page (toolbar, URL form with scanner portal, live log pane), the modal `core.importer.queue` and `core.importer.settings` pages, the `core.importer.card` home card with pin/unpin state kept in memory, `invoke` handlers that validate the importer form, and `dispatchHook` returning one handler for Tidal links and two for Apple Music links. `subscribe` re-emits every two seconds and `subscribeLive("core.importer", "log")` appends a log line every 500 ms so live rendering can be tested.
 
 For explicit mocks the REST endpoints call the real implementation (string query parameters are passed through, other parameters are generated) and return the first element of `Flow` results.
 

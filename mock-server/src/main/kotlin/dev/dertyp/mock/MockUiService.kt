@@ -42,7 +42,7 @@ import kotlin.time.Duration.Companion.seconds
 
 class MockUiService : IUiService {
     private val revision = AtomicLong()
-    private val pinned = MutableStateFlow(listOf("mock.homeCard"))
+    private val pinned = MutableStateFlow(listOf("core.importer.card"))
     private val queue = MutableStateFlow(listOf("https://tidal.com/browse/album/1234"))
     private val logLines = listOf("Fetching metadata…", "Resolving https://tidal.com/browse/track/98765", "Downloading 3/12", "Tagging track 3", "Downloading 4/12")
 
@@ -51,7 +51,7 @@ class MockUiService : IUiService {
         UiContributionInfo("core.importer", "server", UiContributionKind.PAGE, null, "Importer", "Import music from streaming services", UiIcon(UiIconName.IMPORT), 0, true, requiredCapabilities = listOf(UserCapability.IMPORT), hooks = listOf(UiHookKind.SHARE_URL, UiHookKind.SHARE_TEXT)),
         UiContributionInfo("core.importer.settings", "server", UiContributionKind.PAGE, null, "Importer settings", null, UiIcon(UiIconName.SETTINGS), 0, true, requiredCapabilities = listOf(UserCapability.IMPORT)),
         UiContributionInfo("core.importer.queue", "server", UiContributionKind.PAGE, null, "Queue", null, UiIcon(UiIconName.QUEUE), 0, true, requiredCapabilities = listOf(UserCapability.IMPORT)),
-        UiContributionInfo("mock.homeCard", "server", UiContributionKind.HOME_CARD, null, "Mock card", "A pinnable home card", UiIcon(UiIconName.STATS), 10, true, UiCardSize.WIDE),
+        UiContributionInfo("core.importer.card", "server", UiContributionKind.HOME_CARD, null, "Importer", "Import music from streaming services", UiIcon(UiIconName.IMPORT), 50, true, UiCardSize.MEDIUM, requiredCapabilities = listOf(UserCapability.IMPORT)),
         UiContributionInfo("gamdl.credentials", "gamdl", UiContributionKind.SLOT, UiSlots.IMPORTER, "Apple Music credentials", null, UiIcon(UiIconName.KEY), 50, true, requiresAdmin = true),
     )
 
@@ -72,12 +72,17 @@ class MockUiService : IUiService {
         "core.importer" -> importer(context)
         "core.importer.settings" -> importerSettings()
         "core.importer.queue" -> importerQueue()
-        "mock.homeCard" -> UiComponent.Card(
-            title = "Mock card",
-            icon = UiIcon(UiIconName.STATS),
+        "core.importer.card" -> UiComponent.Card(
+            title = "Importer",
+            icon = UiIcon(UiIconName.IMPORT),
             children = listOf(
-                UiComponent.Grid(columns = 2, children = listOf(UiComponent.Stat("Songs", "12345", icon = UiIcon(UiIconName.MUSIC)), UiComponent.Stat("Albums", "987", icon = UiIcon(UiIconName.ALBUM)))),
-                UiComponent.Text("revision ${revision.get()}", UiTextStyle.CAPTION, UiTone.MUTED),
+                UiComponent.Row(children = listOf(UiComponent.Stat("Pending", queue.value.size.toString(), icon = UiIcon(UiIconName.QUEUE)), UiComponent.Stat("Importing", "1", icon = UiIcon(UiIconName.IMPORT)))),
+                UiComponent.ListItem("https://tidal.com/browse/track/98765", "Currently Importing", UiIcon(UiIconName.DOWNLOAD)),
+                UiComponent.Progress(),
+            ),
+            actions = listOf(
+                UiComponent.Button("Open importer", UiAction.OpenPage("core.importer"), UiButtonStyle.TEXT, UiIcon(UiIconName.IMPORT)),
+                UiComponent.Button("Queue", UiAction.OpenPage("core.importer.queue", modal = true), UiButtonStyle.TEXT, UiIcon(UiIconName.QUEUE)),
             ),
         )
 
@@ -196,8 +201,7 @@ class MockUiService : IUiService {
         var index = 0
         while (true) {
             index++
-            if (index % 20 == 0) emit(UiLiveUpdate.Replace(UiComponent.Log(emptyList(), 500)))
-            else emit(UiLiveUpdate.AppendLines(listOf("Downloading ${index % 12 + 1}/12")))
+            emit(UiLiveUpdate.AppendLines(listOf("Downloading ${index % 12 + 1}/12")))
             delay(500.milliseconds)
         }
     }

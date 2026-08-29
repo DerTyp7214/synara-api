@@ -38,5 +38,7 @@
   "importer.hook.importDescription": "Diesen Link zur Import-Warteschlange hinzufügen",
   "importer.hook.search": "Katalog durchsuchen",
   "importer.hook.searchDescription": "Den Streaming-Katalog nach diesem Text durchsuchen",
-  "importer.hook.importConfirm": "Den Importer mit diesem Link öffnen?"
+  "importer.hook.importConfirm": "Den Importer mit diesem Link öffnen?",
+  "importer.card.open": "Importer öffnen",
+  "importer.card.pending": "Ausstehend"
 }

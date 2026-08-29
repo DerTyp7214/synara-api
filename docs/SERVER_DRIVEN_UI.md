@@ -230,10 +230,10 @@ GET /ui/subscribeLive/core.importer?key=log        (SSE)
 ```json
 {"type": "appendLines", "lines": ["Downloading 4/12"]}
 {"type": "appendLines", "lines": ["Downloading 5/12"]}
-{"type": "replace", "child": {"type": "log", "lines": [], "maxLines": 500}}
+{"type": "appendLines", "lines": ["Tagging track 5"]}
 ```
 
-Append lines to the pane (dropping the oldest beyond 500) and replace it when a `replace` arrives (a new import started). The page subscription itself only re-emits on queue or login changes.
+Append lines to the pane (dropping the oldest beyond 500); the server keeps a rolling 500-line buffer across imports, so the pane is never cleared when an import finishes. A `replace` only arrives if a contribution deliberately swaps the subtree. The page subscription itself only re-emits on queue or login changes.
 
 ### 4. Submit the form
 
@@ -292,7 +292,7 @@ Two handlers → show a chooser; one handler → open the page directly with the
 3. Implement the `barcodeScanner` and `externalSearch` portals.
 4. Replace the hardcoded importer entry with `renderSlot("library")` and the importer, queue and settings screens with the page renderer (`subscribe("core.importer")` etc.).
 5. Route share intents through `dispatchHook`.
-6. Optionally render the `settings` and `admin.dashboard` slots and the home cards (nothing ships in them today; plugins can contribute).
+6. Render the home cards (`core.importer.card` ships: queue stats, current import, buttons into the importer and queue pages) and optionally the `settings` / `admin.dashboard` slots for plugin contributions.
 
 ## Evolving the schema
 

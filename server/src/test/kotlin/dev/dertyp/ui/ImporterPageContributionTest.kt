@@ -22,6 +22,7 @@ import dev.dertyp.services.import.ImporterProxy
 import dev.dertyp.services.import.ProcessExecutionResult
 import dev.dertyp.services.import.Type
 import dev.dertyp.services.import.UrlImportQueueEntry
+import dev.dertyp.services.ui.ImporterHomeCardContribution
 import dev.dertyp.services.ui.ImporterLibraryEntryContribution
 import dev.dertyp.services.ui.ImporterPageContribution
 import dev.dertyp.services.ui.ImporterQueuePageContribution
@@ -220,23 +221,27 @@ class ImporterPageContributionTest {
     }
 
     @Test
-    fun `live log streams filtered lines and resets on queue changes`() = runBlocking {
+    fun `live log streams filtered lines and keeps them across imports`() = runBlocking {
         assertNull(page.live(scope(), "nope"))
         val updates = mutableListOf<UiLiveUpdate>()
-        val job = launch { page.live(scope(), "log")!!.take(3).toList(updates) }
-        while (logFlow.subscriptionCount.value == 0 || queueChanges.subscriptionCount.value == 0) yield()
+        val job = launch { page.live(scope(), "log")!!.take(2).toList(updates) }
+        while (logFlow.subscriptionCount.value < 2) yield()
         logFlow.emit("Let us check the token")
         logFlow.emit("   ")
         logFlow.emit(null)
         logFlow.emit("Downloading 2/2")
         while (updates.isEmpty()) yield()
+        every { importService.currentImport } returns null
+        every { importService.currentImport(any()) } returns null
         queueChanges.emit(Unit)
-        while (updates.size < 2) yield()
         logFlow.emit("Done")
         job.join()
-        assertEquals(UiLiveUpdate.AppendLines(listOf("Downloading 2/2")), updates[0])
-        assertEquals(UiLiveUpdate.Replace(UiComponent.Log(listOf("Fetching metadata…", "Downloading 1/2"), 500)), updates[1])
-        assertEquals(UiLiveUpdate.AppendLines(listOf("Done")), updates[2])
+        assertEquals(listOf(UiLiveUpdate.AppendLines(listOf("Downloading 2/2")), UiLiveUpdate.AppendLines(listOf("Done"))), updates)
+
+        while (state.logLines().size < 4) yield()
+        assertEquals(listOf("Fetching metadata…", "Downloading 1/2", "Downloading 2/2", "Done"), state.logLines())
+        val log = ((page.render(scope()) as UiComponent.Column).children[1] as UiComponent.Column).children[1] as UiComponent.Live
+        assertEquals(listOf("Fetching metadata…", "Downloading 1/2", "Downloading 2/2", "Done"), (log.child as UiComponent.Log).lines)
     }
 
     @Test
@@ -284,6 +289,23 @@ class ImporterPageContributionTest {
         assertEquals(UiAction.OpenNative(UiPortals.EXTERNAL_SEARCH, mapOf("query" to "some song name")), search.action)
 
         assertNull(page.onHook(scope(), UiHookEvent.ShareText("   ")))
+    }
+
+    @Test
+    fun `home card shows queue stats and opens the page`() = runBlocking {
+        val card = ImporterHomeCardContribution(state)
+        assertEquals(UiContributionKind.HOME_CARD, card.kind)
+        val root = card.render(scope()) as UiComponent.Card
+        assertEquals("Importer", root.title)
+        assertEquals(listOf("Pending" to "2", "Importing" to "1"), root.flatten().filterIsInstance<UiComponent.Stat>().map { it.label to it.value })
+        assertEquals(currentEntry.urls.joinToString(", "), root.flatten().filterIsInstance<UiComponent.ListItem>().single().title)
+        assertEquals(UiAction.OpenPage(ImporterPageContribution.ID), (root.actions[0] as UiComponent.Button).action)
+
+        every { importService.currentImport(any()) } returns null
+        coEvery { importService.importQueue(any()) } returns emptyList()
+        val idle = card.render(scope()) as UiComponent.Card
+        assertTrue(idle.flatten().none { it is UiComponent.Progress })
+        assertEquals("Queue is empty", idle.flatten().filterIsInstance<UiComponent.Text>().single().text)
     }
 
     @Test

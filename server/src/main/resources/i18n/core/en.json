@@ -38,5 +38,7 @@
   "importer.hook.importDescription": "Add this link to the import queue",
   "importer.hook.search": "Search catalog",
   "importer.hook.searchDescription": "Search the streaming catalog for this text",
-  "importer.hook.importConfirm": "Open the importer with this link?"
+  "importer.hook.importConfirm": "Open the importer with this link?",
+  "importer.card.open": "Open importer",
+  "importer.card.pending": "Pending"
 }

@@ -19,6 +19,7 @@ class CoreUiContributions(
         ImporterSettingsPageContribution(importerState, uiService),
         ImporterQueuePageContribution(importerState, userService),
         ImporterLibraryEntryContribution(),
+        ImporterHomeCardContribution(importerState),
     )
 
     fun register() {
