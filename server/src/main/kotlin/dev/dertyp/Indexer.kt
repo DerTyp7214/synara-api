@@ -3,6 +3,9 @@ package dev.dertyp
 import dev.dertyp.data.User
 import dev.dertyp.plugins.*
 import dev.dertyp.services.*
+import dev.dertyp.services.ui.PluginSettingsService
+import dev.dertyp.services.ui.TranslationService
+import dev.dertyp.services.ui.UiRegistry
 import dev.dertyp.services.import.ImportBackend
 import dev.dertyp.services.import.ImportService
 import dev.dertyp.services.metadata.IMetadataService
@@ -86,6 +89,9 @@ class Indexer(
         override val scheduleService: IScheduleService get() = this@Indexer.scheduleService
         override val hooks: HookBus get() = getKoin().get<HookBus>()
         override val apiKeyScopes: ApiKeyScopeRegistrar get() = getKoin().get<ApiKeyScopeRegistry>().forPlugin("core")
+        override val ui: UiRegistrar get() = getKoin().get<UiRegistry>().forSource(UiRegistry.SERVER_SOURCE)
+        override val settings: PluginSettings get() = getKoin().get<PluginSettingsService>().forPlugin(UiRegistry.SERVER_SOURCE)
+        override val i18n: TranslationRegistrar get() = getKoin().get<TranslationService>().forSource(UiRegistry.SERVER_SOURCE)
     }, metadataType = null) {
         override val id: String = "core"
         override val name: String = "Core Indexer"
