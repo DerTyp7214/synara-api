@@ -31,6 +31,7 @@ class UiSchemaCompat(
             is UiComponent.Form -> component.copy(children = component.children.map(shape), actions = component.actions.map(shape))
             is UiComponent.Native -> component.copy(fallback = component.fallback?.let(shape))
             is UiComponent.Live -> component.copy(child = shape(component.child))
+            is UiComponent.EmptyState -> component.copy(actions = component.actions.map(shape))
             is UiComponent.TextField -> component.copy(toolbar = component.toolbar.map(shape))
             else -> component
         }

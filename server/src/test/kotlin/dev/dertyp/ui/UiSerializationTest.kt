@@ -47,6 +47,7 @@ class UiSerializationTest {
                     UiComponent.Fallback("update"),
                     UiComponent.Native(UiPortals.BARCODE_SCANNER, mapOf("target" to "input"), UiComponent.Text("no scanner")),
                     UiComponent.Live("log", UiComponent.Log(listOf("a", "b"), 100)),
+                    UiComponent.EmptyState("Nothing", "here", UiIcon(UiIconName.QUEUE), listOf(UiComponent.Button("Add", UiAction.Refresh))),
                     UiComponent.Badge("me", UiTone.MUTED, icon = UiIcon(UiIconName.USER)),
                     UiComponent.Button("Sheet", UiAction.OpenPage("core.importer.queue", modal = true)),
                 ),
@@ -123,7 +124,7 @@ class UiSerializationTest {
         assertEquals(
             setOf(
                 "column", "row", "grid", "card", "section", "form", "text", "icon", "image", "badge", "stat", "progress", "tile",
-                "button", "listItem", "table", "spacer", "divider", "fallback", "native", "log", "live", "textField", "numberField", "switch", "select",
+                "button", "listItem", "table", "spacer", "divider", "fallback", "native", "emptyState", "log", "live", "textField", "numberField", "switch", "select",
             ),
             componentNames,
         )

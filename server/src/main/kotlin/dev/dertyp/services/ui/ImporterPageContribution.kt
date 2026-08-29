@@ -19,7 +19,6 @@ import dev.dertyp.services.import.ImporterProxy
 import dev.dertyp.services.import.UrlImportQueueEntry
 import dev.dertyp.services.sync.SyncService
 import dev.dertyp.ui.UiAction
-import dev.dertyp.ui.UiAlign
 import dev.dertyp.ui.UiButtonStyle
 import dev.dertyp.ui.UiCardSize
 import dev.dertyp.ui.UiComponent
@@ -464,13 +463,10 @@ class ImporterQueuePageContribution(
         val queue = account?.let { importService.importQueue(it) } ?: emptyList()
 
         if (current == null && queue.isEmpty()) {
-            return UiComponent.Column(
-                align = UiAlign.CENTER,
-                children = listOf(
-                    UiComponent.Icon(UiIcon(UiIconName.QUEUE), UiTone.MUTED),
-                    UiComponent.Text(scope.t("importer.queue.empty.title"), UiTextStyle.TITLE),
-                    UiComponent.Text(scope.t("importer.queue.empty.description"), UiTextStyle.CAPTION, UiTone.MUTED),
-                ),
+            return UiComponent.EmptyState(
+                title = scope.t("importer.queue.empty.title"),
+                description = scope.t("importer.queue.empty.description"),
+                icon = UiIcon(UiIconName.QUEUE),
             )
         }
 

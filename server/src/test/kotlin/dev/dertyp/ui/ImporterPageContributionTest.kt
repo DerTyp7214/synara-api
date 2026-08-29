@@ -271,10 +271,10 @@ class ImporterPageContributionTest {
     fun `queue page shows the empty state`() = runBlocking {
         every { importService.currentImport(any()) } returns null
         coEvery { importService.importQueue(any()) } returns emptyList()
-        val root = queuePage.render(scope()) as UiComponent.Column
-        assertEquals(UiAlign.CENTER, root.align)
-        assertEquals(listOf("Queue is empty", "No tasks are currently importing or pending."), root.children.filterIsInstance<UiComponent.Text>().map { it.text })
-        assertFalse(root.flatten().any { it is UiComponent.Stat })
+        val root = queuePage.render(scope()) as UiComponent.EmptyState
+        assertEquals("Queue is empty", root.title)
+        assertEquals("No tasks are currently importing or pending.", root.description)
+        assertEquals(UiIcon(UiIconName.QUEUE), root.icon)
     }
 
     @Test

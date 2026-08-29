@@ -59,6 +59,7 @@ Every node is a `UiComponent`. On the wire (JSON) each node carries `"type"` wit
 | `table` | `columns`, `rows[{cells, action?}]` | |
 | `spacer` / `divider` | | |
 | `native` | `name`, `params`, `fallback?` | Portal, see below. |
+| `emptyState` | `title`, `description?`, `icon?`, `actions` | "Nothing here" placeholder: large muted icon, bold title, secondary description, all centered in the available space (iOS `ContentUnavailableView`), optional buttons below. |
 | `log` | `lines`, `maxLines` | Fixed-height (~300pt) pane of small monospaced secondary text, one entry per line, scroll anchored to the newest line; keep at most `maxLines`. |
 | `live` | `key`, `child` | Render `child`, then subscribe to `subscribeLive(contributionId, key)` and apply updates to this subtree only — see *Live values*. |
 | `fallback` | `text?` | Inserted by the server for components you don't support. Show `text` or a generic "update the app" hint. |
@@ -252,7 +253,7 @@ Show `message` as a toast and clear the editor. A `VALIDATION_ERROR` returns `fi
 
 ### 5. Queue sheet
 
-The toolbar's Queue button is `openPage` with `modal: true`: present `subscribe("core.importer.queue")` as a sheet with a close control. The tree mirrors the iOS sheet — a stat card (`Total URLs` / `Importing`, only when URLs are queued), a "Currently Importing" header with one entry card, and a "Pending Imports" header with one card per entry; each card has an icon + "URLs"/"Favorites" title row, the joined URLs as a `listItem` whose action opens a menu listing every URL, and a badge row (`TRACK`, user chip with `icon: "user"`). With nothing queued it renders the centered "Queue is empty" state. It re-emits on every queue change, so there is no polling.
+The toolbar's Queue button is `openPage` with `modal: true`: present `subscribe("core.importer.queue")` as a sheet with a close control. The tree mirrors the iOS sheet — a stat card (`Total URLs` / `Importing`, only when URLs are queued), a "Currently Importing" header with one entry card, and a "Pending Imports" header with one card per entry; each card has an icon + "URLs"/"Favorites" title row, the joined URLs as a `listItem` whose action opens a menu listing every URL, and a badge row (`TRACK`, user chip with `icon: "user"`). With nothing queued the root is an `emptyState` ("Queue is empty") — render it as a `ContentUnavailableView`. It re-emits on every queue change, so there is no polling.
 
 ### 6. Log in and importer settings
 
