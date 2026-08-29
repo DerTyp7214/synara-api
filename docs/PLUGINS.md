@@ -108,7 +108,7 @@ class MySettings : UiContribution(
 - `live(scope, key)` serves a `UiComponent.Live(key, child)` node in your tree: return a `Flow<UiLiveUpdate>` (`Replace(child)` or `AppendLines(lines)` for a `Log` child) so frequent data such as process output updates that subtree only, without re-rendering the page. Return `null` for unknown keys. Example: `UiComponent.Live("log", UiComponent.Log(currentLines))` in `render`, and `live` returning `process.output.map { UiLiveUpdate.AppendLines(listOf(it)) }`.
 - `changes` returns a `Flow<Unit>` when the contribution is live; the server re-renders subscribers on each emission. Return `null` (the default) for static content.
 - `invoke` handles `UiAction.Invoke` from the client. Throw `IllegalArgumentException` or return `VALIDATION_ERROR` with `fieldErrors` for bad input; set `refresh = true` to re-render, and `next` to make the client perform a follow-up action (e.g. `UiAction.OpenUrl` for OAuth).
-- `hooks` + `onHook` let a contribution offer to handle app events such as a shared URL. Return a `UiHookOffer` describing the action; the client lets the user choose when several plugins offer.
+- `hooks` + `onHook` let a contribution offer to handle app events such as a shared URL. Return a `UiHookOffer` describing the action (optionally with a `confirmKey` so the client asks before performing it); the client lets the user choose when several plugins offer.
 - `access` restricts who sees and may invoke the contribution (`requiresAdmin`, required `UserCapability`s). Authorization is enforced by the server.
 - Use `context.ui.invalidate(id)` to push a re-render from outside the flow.
 

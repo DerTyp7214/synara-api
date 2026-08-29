@@ -153,7 +153,7 @@ Contributions are already filtered by the user's permissions; `render`/`invoke` 
 When the app receives a shared URL or text, call `dispatchHook(UiHookEvent.ShareUrl(url))` (or `ShareText`). The result is a list of `UiHookHandler`:
 
 - empty → fall back to your native behaviour;
-- one → perform `handler.action` directly;
+- one → perform `handler.action` directly, unless `confirmText` is set — then ask first (the importer asks "Open the importer with this link?");
 - several → show a chooser with `title`/`description`/`icon`, then perform the chosen `action`.
 
 Nothing is executed on the server during dispatch, so offering never has side effects.
@@ -276,7 +276,7 @@ POST /ui/dispatchHook
 
 ```json
 [
-  {"contributionId": "core.importer", "source": "server", "title": "Import", "icon": {"type": "named", "name": "IMPORT"},
+  {"contributionId": "core.importer", "source": "server", "title": "Import", "icon": {"type": "named", "name": "IMPORT"}, "confirmText": "Open the importer with this link?",
    "action": {"type": "openPage", "pageId": "core.importer", "params": {"input": "https://music.apple.com/album/1"}}},
   {"contributionId": "gamdl.credentials", "source": "gamdl", "title": "Import with gamdl", "icon": {"type": "named", "name": "KEY"},
    "action": {"type": "openPage", "pageId": "core.importer", "params": {"input": "https://music.apple.com/album/1"}}}

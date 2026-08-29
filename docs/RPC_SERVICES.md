@@ -2378,6 +2378,7 @@ A contribution's offer to handle a hook event. The client performs the action di
 | `description` | `String`? | Localized description. |
 | `icon` | [UiIcon](#devdertypuiuiicon)? | Icon. |
 | `action` | [UiAction](#devdertypuiuiaction) | Action to perform when chosen. |
+| `confirmText` | `String`? | If set, ask the user to confirm with this text before performing the action, even when it is the only handler. |
 
 ### UiHookKind <a name="devdertypuiuihookkind"></a>
 Kinds of app-level events clients can forward to the server.

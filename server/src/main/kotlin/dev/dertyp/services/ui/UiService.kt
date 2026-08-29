@@ -196,6 +196,7 @@ class UiService(
                 description = offer.descriptionKey?.let { t.t(it) },
                 icon = offer.icon,
                 action = offer.action,
+                confirmText = offer.confirmKey?.let { t.t(it) },
             )
         }
     }

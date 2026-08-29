@@ -44,6 +44,7 @@ data class UiHookOffer(
     val action: UiAction,
     val descriptionKey: String? = null,
     val icon: UiIcon? = null,
+    val confirmKey: String? = null,
 )
 
 abstract class UiContribution(

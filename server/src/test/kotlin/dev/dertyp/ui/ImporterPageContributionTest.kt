@@ -276,6 +276,7 @@ class ImporterPageContributionTest {
     fun `share hooks offer import for resolvable urls and search otherwise`() = runBlocking {
         val import = page.onHook(scope(), UiHookEvent.ShareUrl("https://tidal.com/browse/album/1"))!!
         assertEquals("importer.hook.import", import.titleKey)
+        assertEquals("importer.hook.importConfirm", import.confirmKey)
         assertEquals(UiAction.OpenPage("core.importer", mapOf("input" to "https://tidal.com/browse/album/1")), import.action)
 
         val search = page.onHook(scope(), UiHookEvent.ShareText("some song name"))!!

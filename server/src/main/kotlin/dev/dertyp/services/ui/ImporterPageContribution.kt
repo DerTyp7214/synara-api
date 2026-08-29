@@ -292,6 +292,7 @@ class ImporterPageContribution(
                 descriptionKey = "importer.hook.importDescription",
                 icon = UiIcon(UiIconName.IMPORT),
                 action = UiAction.OpenPage(id, params = mapOf(PARAM_INPUT to text)),
+                confirmKey = "importer.hook.importConfirm",
             )
         } else {
             UiHookOffer(

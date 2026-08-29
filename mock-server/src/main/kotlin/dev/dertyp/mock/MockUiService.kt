@@ -228,7 +228,7 @@ class MockUiService : IUiService {
         }
         val handlers = mutableListOf<UiHookHandler>()
         if (text.contains("tidal.com") || text.contains("music.apple.com")) {
-            handlers += UiHookHandler("core.importer", "server", "Import", "Add this link to the import queue", UiIcon(UiIconName.IMPORT), UiAction.OpenPage("core.importer", mapOf("input" to text)))
+            handlers += UiHookHandler("core.importer", "server", "Import", "Add this link to the import queue", UiIcon(UiIconName.IMPORT), UiAction.OpenPage("core.importer", mapOf("input" to text)), confirmText = "Open the importer with this link?")
         }
         if (text.contains("music.apple.com")) {
             handlers += UiHookHandler("gamdl.credentials", "gamdl", "Import with gamdl", null, UiIcon(UiIconName.KEY), UiAction.OpenPage("core.importer", mapOf("input" to text)))
