@@ -6,6 +6,8 @@ import dev.dertyp.plugins.UiRenderScope
 import dev.dertyp.services.import.GamdlCredentials
 import dev.dertyp.ui.UiAction
 import dev.dertyp.ui.UiComponent
+import dev.dertyp.ui.UiIcon
+import dev.dertyp.ui.UiIconName
 import dev.dertyp.ui.UiContributionKind
 import dev.dertyp.ui.UiInvokeResult
 import dev.dertyp.ui.UiInvokeStatus
@@ -19,7 +21,7 @@ class GamdlCredentialsContribution(private val gamdlService: GamdlService) : UiC
     slot = UiSlots.IMPORTER,
     titleKey = "gamdl.credentials.title",
     descriptionKey = "gamdl.credentials.description",
-    icon = "key",
+    icon = UiIcon(UiIconName.KEY),
     order = 50,
     access = UiAccess(requiresAdmin = true),
 ) {

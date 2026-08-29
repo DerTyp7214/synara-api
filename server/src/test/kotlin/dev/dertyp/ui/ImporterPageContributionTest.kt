@@ -252,7 +252,7 @@ class ImporterPageContributionTest {
         assertEquals(UiAction.OpenUrl(currentEntry.urls[0]), menu.items[0].action)
         val badges = current.flatten().filterIsInstance<UiComponent.Badge>()
         assertEquals(listOf("TRACK", "Importer Ann"), badges.map { it.text })
-        assertEquals("user", badges[1].icon)
+        assertEquals(UiIcon(UiIconName.USER), badges[1].icon)
 
         assertEquals("Pending Imports", (root.children[3] as UiComponent.Text).text)
         val favorites = root.children[4] as UiComponent.Card

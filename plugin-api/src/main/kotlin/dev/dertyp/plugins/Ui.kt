@@ -9,6 +9,7 @@ import dev.dertyp.ui.UiContext
 import dev.dertyp.ui.UiContributionKind
 import dev.dertyp.ui.UiHookEvent
 import dev.dertyp.ui.UiHookKind
+import dev.dertyp.ui.UiIcon
 import dev.dertyp.ui.UiInvokeResult
 import dev.dertyp.ui.UiInvokeStatus
 import dev.dertyp.ui.UiLiveUpdate
@@ -42,7 +43,7 @@ data class UiHookOffer(
     val titleKey: String,
     val action: UiAction,
     val descriptionKey: String? = null,
-    val icon: String? = null,
+    val icon: UiIcon? = null,
 )
 
 abstract class UiContribution(
@@ -51,7 +52,7 @@ abstract class UiContribution(
     val titleKey: String,
     val slot: String? = null,
     val descriptionKey: String? = null,
-    val icon: String? = null,
+    val icon: UiIcon? = null,
     val order: Int = 0,
     val cardSize: UiCardSize = UiCardSize.MEDIUM,
     val access: UiAccess = UiAccess(),

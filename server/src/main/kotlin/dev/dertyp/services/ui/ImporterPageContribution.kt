@@ -22,6 +22,8 @@ import dev.dertyp.ui.UiAction
 import dev.dertyp.ui.UiAlign
 import dev.dertyp.ui.UiButtonStyle
 import dev.dertyp.ui.UiComponent
+import dev.dertyp.ui.UiIcon
+import dev.dertyp.ui.UiIconName
 import dev.dertyp.ui.UiContributionKind
 import dev.dertyp.ui.UiHookEvent
 import dev.dertyp.ui.UiHookKind
@@ -127,7 +129,7 @@ class ImporterLibraryEntryContribution : UiContribution(
     slot = UiSlots.LIBRARY,
     titleKey = "importer.title",
     descriptionKey = "importer.subtitle",
-    icon = "download",
+    icon = UiIcon(UiIconName.IMPORT),
     order = 100,
     access = UiAccess(capabilities = setOf(UserCapability.IMPORT)),
 ) {
@@ -147,7 +149,7 @@ class ImporterPageContribution(
     kind = UiContributionKind.PAGE,
     titleKey = "importer.title",
     descriptionKey = "importer.subtitle",
-    icon = "download",
+    icon = UiIcon(UiIconName.IMPORT),
     access = UiAccess(capabilities = setOf(UserCapability.IMPORT)),
     hooks = setOf(UiHookKind.SHARE_URL, UiHookKind.SHARE_TEXT),
 ) {
@@ -169,7 +171,7 @@ class ImporterPageContribution(
             children += UiComponent.Card(
                 title = scope.t("importer.login.title"),
                 subtitle = scope.t("importer.login.message"),
-                icon = "login",
+                icon = UiIcon(UiIconName.LOGIN),
                 tone = UiTone.WARNING,
                 children = emptyList(),
                 actions = listOf(
@@ -177,7 +179,7 @@ class ImporterPageContribution(
                         label = scope.t("importer.login.action"),
                         action = UiAction.Invoke(id, "login", params = mapOf(PARAM_IMPORTER to UiValue.of(default.id))),
                         style = UiButtonStyle.PRIMARY,
-                        icon = "login",
+                        icon = UiIcon(UiIconName.LOGIN),
                     ),
                 ),
             )
@@ -201,7 +203,7 @@ class ImporterPageContribution(
                             required = true,
                             kind = UiTextKind.MULTILINE_URLS,
                             toolbar = listOf(
-                                UiComponent.Button(scope.t("importer.done"), UiAction.DismissKeyboard, UiButtonStyle.TEXT, icon = "check"),
+                                UiComponent.Button(scope.t("importer.done"), UiAction.DismissKeyboard, UiButtonStyle.TEXT, icon = UiIcon(UiIconName.CHECK)),
                             ),
                         ),
                     ),
@@ -224,7 +226,7 @@ class ImporterPageContribution(
     override suspend fun toolbar(scope: UiRenderScope): List<UiComponent> {
         val server = scope as? ServerUiRenderScope
         val items = mutableListOf<UiComponent>(
-            UiComponent.Button(scope.t("importer.queue.title"), UiAction.OpenPage(ImporterQueuePageContribution.ID, modal = true), UiButtonStyle.TEXT, icon = "queue"),
+            UiComponent.Button(scope.t("importer.queue.title"), UiAction.OpenPage(ImporterQueuePageContribution.ID, modal = true), UiButtonStyle.TEXT, icon = UiIcon(UiIconName.QUEUE)),
         )
         if (state.tidalAvailable()) {
             val available = server?.call?.let { importService.syncFavouritesAvailable(it) } ?: true
@@ -233,14 +235,14 @@ class ImporterPageContribution(
                     label = scope.t("importer.favorites.title"),
                     action = UiAction.Invoke(id, "syncFavourites", confirmText = scope.t("importer.favorites.confirm")),
                     style = UiButtonStyle.TEXT,
-                    icon = "sync",
+                    icon = UiIcon(UiIconName.SYNC),
                 )
             }
         }
         val manageable = state.enabledImporters().any(state::canLogin) ||
             (server != null && uiService.list(server.account, server.client, slot = UiSlots.IMPORTER).isNotEmpty())
         if (manageable) {
-            items += UiComponent.Button(scope.t("importer.settings.title"), UiAction.OpenPage(ImporterSettingsPageContribution.ID, modal = true), UiButtonStyle.TEXT, icon = "settings")
+            items += UiComponent.Button(scope.t("importer.settings.title"), UiAction.OpenPage(ImporterSettingsPageContribution.ID, modal = true), UiButtonStyle.TEXT, icon = UiIcon(UiIconName.SETTINGS))
         }
         return items
     }
@@ -288,14 +290,14 @@ class ImporterPageContribution(
             UiHookOffer(
                 titleKey = "importer.hook.import",
                 descriptionKey = "importer.hook.importDescription",
-                icon = "download",
+                icon = UiIcon(UiIconName.IMPORT),
                 action = UiAction.OpenPage(id, params = mapOf(PARAM_INPUT to text)),
             )
         } else {
             UiHookOffer(
                 titleKey = "importer.hook.search",
                 descriptionKey = "importer.hook.searchDescription",
-                icon = "search",
+                icon = UiIcon(UiIconName.SEARCH),
                 action = UiAction.OpenNative(UiPortals.EXTERNAL_SEARCH, params = mapOf("query" to text)),
             )
         }
@@ -309,7 +311,7 @@ class ImporterSettingsPageContribution(
     id = ID,
     kind = UiContributionKind.PAGE,
     titleKey = "importer.settings.title",
-    icon = "settings",
+    icon = UiIcon(UiIconName.SETTINGS),
     access = UiAccess(capabilities = setOf(UserCapability.IMPORT)),
 ) {
     companion object {
@@ -330,13 +332,13 @@ class ImporterSettingsPageContribution(
                 UiComponent.Row(
                     weights = listOf(1.0, 0.0, 0.0),
                     children = listOfNotNull(
-                        UiComponent.ListItem(title = importer.name, subtitle = statusText, icon = "plug"),
+                        UiComponent.ListItem(title = importer.name, subtitle = statusText, icon = UiIcon(UiIconName.PLUG)),
                         UiComponent.Badge(statusText, if (authorized) UiTone.SUCCESS else UiTone.WARNING),
                         if (!authorized && state.canLogin(importer)) UiComponent.Button(
                             label = scope.t("importer.login.action"),
                             action = UiAction.Invoke(id, "login", params = mapOf(ImporterPageContribution.PARAM_IMPORTER to UiValue.of(importer.id))),
                             style = UiButtonStyle.PRIMARY,
-                            icon = "login",
+                            icon = UiIcon(UiIconName.LOGIN),
                         ) else null,
                     ),
                 )
@@ -371,7 +373,7 @@ class ImporterQueuePageContribution(
     id = ID,
     kind = UiContributionKind.PAGE,
     titleKey = "importer.queue.title",
-    icon = "queue",
+    icon = UiIcon(UiIconName.QUEUE),
     access = UiAccess(capabilities = setOf(UserCapability.IMPORT)),
 ) {
     companion object {
@@ -391,7 +393,7 @@ class ImporterQueuePageContribution(
             return UiComponent.Column(
                 align = UiAlign.CENTER,
                 children = listOf(
-                    UiComponent.Icon("queue", UiTone.MUTED),
+                    UiComponent.Icon(UiIcon(UiIconName.QUEUE), UiTone.MUTED),
                     UiComponent.Text(scope.t("importer.queue.empty.title"), UiTextStyle.TITLE),
                     UiComponent.Text(scope.t("importer.queue.empty.description"), UiTextStyle.CAPTION, UiTone.MUTED),
                 ),
@@ -432,24 +434,24 @@ class ImporterQueuePageContribution(
         val body: UiComponent
         when (entry) {
             is UrlImportQueueEntry -> {
-                header = UiComponent.Row(children = listOf(UiComponent.Icon("link", UiTone.PRIMARY), UiComponent.Text(scope.t("importer.queue.type.urls"), UiTextStyle.SUBTITLE)))
+                header = UiComponent.Row(children = listOf(UiComponent.Icon(UiIcon(UiIconName.LINK), UiTone.PRIMARY), UiComponent.Text(scope.t("importer.queue.type.urls"), UiTextStyle.SUBTITLE)))
                 body = UiComponent.ListItem(
                     title = entry.urls.joinToString(", "),
                     action = UiAction.OpenMenu(
                         title = scope.t("importer.queue.type.urls"),
-                        items = entry.urls.map { UiMenuItem(it, UiAction.OpenUrl(it), icon = "link") },
+                        items = entry.urls.map { UiMenuItem(it, UiAction.OpenUrl(it), icon = UiIcon(UiIconName.LINK)) },
                     ),
                 )
             }
 
             is FavouriteImportQueueEntry -> {
-                header = UiComponent.Row(children = listOf(UiComponent.Icon("heart", UiTone.PRIMARY), UiComponent.Text(scope.t("importer.queue.type.favorites"), UiTextStyle.SUBTITLE)))
+                header = UiComponent.Row(children = listOf(UiComponent.Icon(UiIcon(UiIconName.HEART), UiTone.PRIMARY), UiComponent.Text(scope.t("importer.queue.type.favorites"), UiTextStyle.SUBTITLE)))
                 body = UiComponent.Text(entry.favoriteType.name, UiTextStyle.CAPTION, UiTone.MUTED)
             }
         }
         val badges = listOfNotNull(
             entry.type?.let { UiComponent.Badge(it.value.uppercase(), UiTone.PRIMARY) },
-            user?.let { UiComponent.Badge(it.displayName ?: it.username, UiTone.MUTED, icon = "user") },
+            user?.let { UiComponent.Badge(it.displayName ?: it.username, UiTone.MUTED, icon = UiIcon(UiIconName.USER)) },
         )
         return UiComponent.Card(children = listOfNotNull(header, body, if (badges.isNotEmpty()) UiComponent.Row(children = badges) else null))
     }

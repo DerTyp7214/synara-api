@@ -159,7 +159,7 @@ class UiServiceTest {
             }
         }
         registry.register(Hooked("hook.second", 20, UiHookOffer("importer.hook.import", UiAction.OpenPage("hook.second"))), "b")
-        registry.register(Hooked("hook.first", 10, UiHookOffer("importer.hook.search", UiAction.OpenNative("externalSearch"), icon = "search")), "a")
+        registry.register(Hooked("hook.first", 10, UiHookOffer("importer.hook.search", UiAction.OpenNative("externalSearch"), icon = UiIcon(UiIconName.SEARCH))), "a")
         registry.register(Hooked("hook.declines", 5, null), "c")
         registry.register(Hooked("hook.fails", 1, UiHookOffer("x", UiAction.Refresh), fail = true), "d")
         registry.register(Hooked("hook.admin", 0, UiHookOffer("x", UiAction.Refresh), access = UiAccess(requiresAdmin = true)), "e")
@@ -167,7 +167,7 @@ class UiServiceTest {
         val handlers = service.dispatchHook(plain, client, UiHookEvent.ShareUrl("https://tidal.com/x"))
         assertEquals(listOf("hook.first", "hook.second"), handlers.map { it.contributionId })
         assertEquals("Katalog durchsuchen", handlers[0].title)
-        assertEquals("search", handlers[0].icon)
+        assertEquals(UiIcon(UiIconName.SEARCH), handlers[0].icon)
         assertEquals(UiAction.OpenPage("hook.second"), handlers[1].action)
         assertTrue(service.dispatchHook(plain, client, UiHookEvent.ShareText("hello")).isEmpty())
         assertEquals("hook.admin", service.dispatchHook(admin, client, UiHookEvent.ShareUrl("u")).first().contributionId)

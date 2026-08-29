@@ -21,15 +21,15 @@ class UiSerializationTest {
 
     private val tree: UiComponent = UiComponent.Column(
         children = listOf(
-            UiComponent.Row(listOf(UiComponent.Icon("music"), UiComponent.Badge("ok", UiTone.SUCCESS)), weights = listOf(0.0, 1.0)),
-            UiComponent.Grid(listOf(UiComponent.Stat("Songs", "1", "k", "music")), columns = 3),
+            UiComponent.Row(listOf(UiComponent.Icon(UiIcon(UiIconName.MUSIC)), UiComponent.Badge("ok", UiTone.SUCCESS)), weights = listOf(0.0, 1.0)),
+            UiComponent.Grid(listOf(UiComponent.Stat("Songs", "1", "k", UiIcon(UiIconName.MUSIC))), columns = 3),
             UiComponent.Card(
                 title = "Card",
                 subtitle = "Sub",
-                icon = "stats",
+                icon = UiIcon(UiIconName.STATS),
                 tone = UiTone.PRIMARY,
                 children = listOf(UiComponent.Text("body", UiTextStyle.CODE, UiTone.MUTED, UiEmphasis.LOW)),
-                actions = listOf(UiComponent.Button("Go", UiAction.OpenUrl("https://example.org"), UiButtonStyle.PRIMARY, "play")),
+                actions = listOf(UiComponent.Button("Go", UiAction.OpenUrl("https://example.org"), UiButtonStyle.PRIMARY, UiIcon(UiIconName.PLAY))),
             ),
             UiComponent.Section(
                 title = "Section",
@@ -39,15 +39,15 @@ class UiSerializationTest {
                     UiComponent.Image(UUID.randomUUID(), null, rounded = true),
                     UiComponent.Progress(0.5, "half"),
                     UiComponent.Progress(),
-                    UiComponent.Tile("Tile", "sub", "download", UiAction.OpenPage("core.importer", mapOf("input" to "x"))),
-                    UiComponent.ListItem("Item", "sub", "queue", "trailing", UiAction.OpenEntity(UiEntityType.ALBUM, UUID.randomUUID())),
+                    UiComponent.Tile("Tile", "sub", UiIcon(UiIconName.DOWNLOAD), UiAction.OpenPage("core.importer", mapOf("input" to "x"))),
+                    UiComponent.ListItem("Item", "sub", UiIcon(UiIconName.QUEUE), "trailing", UiAction.OpenEntity(UiEntityType.ALBUM, UUID.randomUUID())),
                     UiComponent.Table(listOf("a", "b"), listOf(UiTableRow(listOf("1", "2"), UiAction.Refresh))),
                     UiComponent.Spacer(UiSpacing.LARGE),
                     UiComponent.Divider,
                     UiComponent.Fallback("update"),
                     UiComponent.Native(UiPortals.BARCODE_SCANNER, mapOf("target" to "input"), UiComponent.Text("no scanner")),
                     UiComponent.Live("log", UiComponent.Log(listOf("a", "b"), 100)),
-                    UiComponent.Badge("me", UiTone.MUTED, icon = "user"),
+                    UiComponent.Badge("me", UiTone.MUTED, icon = UiIcon(UiIconName.USER)),
                     UiComponent.Button("Sheet", UiAction.OpenPage("core.importer.queue", modal = true)),
                 ),
             ),
@@ -60,18 +60,18 @@ class UiSerializationTest {
                 children = listOf(
                     UiComponent.TextField(
                         "t", "Text", "v", "p", secret = true, multiline = true, helper = "h", error = "e", required = true, enabled = false, kind = UiTextKind.MULTILINE_URLS,
-                        toolbar = listOf(UiComponent.Button("Done", UiAction.DismissKeyboard, icon = "check")),
+                        toolbar = listOf(UiComponent.Button("Done", UiAction.DismissKeyboard, icon = UiIcon(UiIconName.CHECK))),
                     ),
                     UiComponent.NumberField("n", "Number", 1.0, 0.0, 10.0, 1.0),
                     UiComponent.Switch("s", "Switch", true),
-                    UiComponent.Select("sel", "Select", "a", listOf(UiOption("a", "A", "icon"))),
+                    UiComponent.Select("sel", "Select", "a", listOf(UiOption("a", "A", UiIcon(UiIconName.INFO)))),
                     UiComponent.Button("Native", UiAction.OpenNative(UiPortals.EXTERNAL_SEARCH, mapOf("query" to "q"))),
                     UiComponent.Button(
                         "Menu",
                         UiAction.OpenMenu(
                             title = "More",
                             items = listOf(
-                                UiMenuItem("Refresh", UiAction.Refresh, "sync"),
+                                UiMenuItem("Refresh", UiAction.Refresh, UiIcon(UiIconName.SYNC)),
                                 UiMenuItem("Sub", UiAction.OpenMenu(listOf(UiMenuItem("Delete", UiAction.OpenUrl("x"), tone = UiTone.ERROR, enabled = false)))),
                             ),
                         ),
@@ -81,7 +81,7 @@ class UiSerializationTest {
         ),
     )
 
-    private val render = UiRender("core.importer", tree, "Importer", revision = 3, toolbar = listOf(UiComponent.Icon("search")))
+    private val render = UiRender("core.importer", tree, "Importer", revision = 3, toolbar = listOf(UiComponent.Icon(UiIcon(UiIconName.SEARCH))))
 
     @Test
     fun `cbor round trip preserves the whole tree`() {
@@ -91,7 +91,7 @@ class UiSerializationTest {
         val slot = UiSlotRender("library", listOf(render))
         assertEquals(slot, AppCbor.decodeFromByteArray<UiSlotRender>(AppCbor.encodeToByteArray(slot)))
 
-        val handlers = listOf(UiHookHandler("core.importer", "server", "Import", null, "download", UiAction.OpenPage("core.importer")))
+        val handlers = listOf(UiHookHandler("core.importer", "server", "Import", null, UiIcon(UiIconName.DOWNLOAD), UiAction.OpenPage("core.importer")))
         assertEquals(handlers, AppCbor.decodeFromByteArray<List<UiHookHandler>>(AppCbor.encodeToByteArray(handlers)))
 
         val event: UiHookEvent = UiHookEvent.ShareUrl("https://tidal.com/x", "title")

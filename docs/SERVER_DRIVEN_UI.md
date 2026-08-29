@@ -48,7 +48,7 @@ Every node is a `UiComponent`. On the wire (JSON) each node carries `"type"` wit
 | Type | Fields | Notes |
 |---|---|---|
 | `text` | `text`, `style` (`TITLE`/`SUBTITLE`/`BODY`/`CAPTION`/`CODE`), `tone`, `emphasis` | `CODE` is monospaced and preserves newlines. |
-| `icon` | `name`, `tone` | Semantic names: `settings`, `music`, `album`, `artist`, `playlist`, `image`, `storage`, `stats`, `task`, `play`, `pause`, `download`, `queue`, `plug`, `login`, `heart`, `sync`, `search`, `key`, `database`, `warning`, `user`. Unknown names render a generic icon. |
+| `icon` | `icon` (`UiIcon`), `tone` | A standalone icon, see *Icons*. |
 | `image` | `imageId?`, `url?`, `rounded` | `imageId` refers to `IImageService`. |
 | `badge` | `text`, `tone`, `icon?` | Small status chip / capsule, optional leading icon. |
 | `stat` | `label`, `value`, `unit?`, `icon?`, `tone` | Big number with a label. |
@@ -75,6 +75,18 @@ All fields have `key` (the payload key), `label`, `helper?`, `error?`, `required
 | `select` | `value?`, `options[{value,label,icon?}]` | `{"text": "<option value>"}` |
 
 `secret` fields never contain the stored value; submitting an empty value means "unchanged". `kind` hints at the keyboard: `URL`, `EMAIL`, `BARCODE` (offer a scanner), `MULTILINE_URLS` (one entry per line, a scanner appends a line). `toolbar` is the **keyboard accessory toolbar**: shown above the on-screen keyboard while the field is focused (iOS `.keyboard` toolbar placement, Android IME accessory row; on desktop render it inline under the field), items trailing-aligned — typically a single `button` with `dismissKeyboard`.
+
+### Icons
+
+Every `icon` field is a `UiIcon`, a sealed type so clients have a real mapping table instead of guessing names:
+
+| Type | Fields | Render as |
+|---|---|---|
+| `named` | `name` (`UiIconName`) | One of your icon set: `SETTINGS`, `MUSIC`, `ALBUM`, `ARTIST`, `PLAYLIST`, `IMAGE`, `STORAGE`, `STATS`, `TASK`, `PLAY`, `PAUSE`, `DOWNLOAD`, `IMPORT`, `QUEUE`, `PLUG`, `LOGIN`, `HEART`, `SYNC`, `SEARCH`, `KEY`, `DATABASE`, `WARNING`, `ERROR`, `INFO`, `USER`, `CHECK`, `CLOSE`, `LINK`, `FILE`, `MORE`, `BARCODE`. Map each to a concrete glyph (e.g. iOS `QUEUE` → `list.bullet.clipboard`, `SYNC` → `arrow.triangle.2.circlepath`, `BARCODE` → `barcode.viewfinder`, `IMPORT` → `square.and.arrow.down`). |
+| `url` | `url` | Remote image at icon size. |
+| `image` | `imageId` | Server image (`IImageService`) at icon size. |
+
+New names are only added with a UI schema version bump, so a client never meets an unknown name.
 
 Tones map to your design system: `DEFAULT`, `PRIMARY` (accent), `SUCCESS`, `WARNING`, `ERROR`, `MUTED`.
 
@@ -164,7 +176,7 @@ POST /ui/renderSlot
     "contributionId": "core.importer.entry",
     "title": "Importer",
     "root": {"type": "tile", "title": "Importer", "subtitle": "Import music from streaming services",
-             "icon": "download", "action": {"type": "openPage", "pageId": "core.importer"}}
+             "icon": {"type": "named", "name": "IMPORT"}, "action": {"type": "openPage", "pageId": "core.importer"}}
   }]
 }
 ```
@@ -179,10 +191,10 @@ Navigate to your generic page screen and `subscribe("core.importer")`. The first
 {
   "contributionId": "core.importer", "title": "Importer", "revision": 1,
   "toolbar": [
-    {"type": "button", "label": "Queue", "style": "TEXT", "icon": "queue", "action": {"type": "openPage", "pageId": "core.importer.queue", "modal": true}},
-    {"type": "button", "label": "Sync Favorites", "style": "TEXT", "icon": "sync",
+    {"type": "button", "label": "Queue", "style": "TEXT", "icon": {"type": "named", "name": "QUEUE"}, "action": {"type": "openPage", "pageId": "core.importer.queue", "modal": true}},
+    {"type": "button", "label": "Sync Favorites", "style": "TEXT", "icon": {"type": "named", "name": "SYNC"},
      "action": {"type": "invoke", "contributionId": "core.importer", "actionId": "syncFavourites", "confirmText": "Are you sure you want to synchronize your favorites?"}},
-    {"type": "button", "label": "Importer settings", "style": "TEXT", "icon": "settings", "action": {"type": "openPage", "pageId": "core.importer.settings", "modal": true}}
+    {"type": "button", "label": "Importer settings", "style": "TEXT", "icon": {"type": "named", "name": "SETTINGS"}, "action": {"type": "openPage", "pageId": "core.importer.settings", "modal": true}}
   ],
   "root": {"type": "column", "spacing": "LARGE", "children": [
     {"type": "column", "spacing": "SMALL", "children": [
@@ -193,7 +205,7 @@ Navigate to your generic page screen and `subscribe("core.importer")`. The first
        "submitLabel": "Import",
        "children": [
          {"type": "textField", "key": "input", "label": "Import URLs", "multiline": true, "required": true, "kind": "MULTILINE_URLS",
-          "toolbar": [{"type": "button", "label": "Done", "style": "TEXT", "icon": "check", "action": {"type": "dismissKeyboard"}}]}
+          "toolbar": [{"type": "button", "label": "Done", "style": "TEXT", "icon": {"type": "named", "name": "CHECK"}, "action": {"type": "dismissKeyboard"}}]}
        ],
        "actions": [{"type": "native", "name": "barcodeScanner", "params": {"target": "input"}}]}
     ]},
@@ -264,9 +276,9 @@ POST /ui/dispatchHook
 
 ```json
 [
-  {"contributionId": "core.importer", "source": "server", "title": "Import", "icon": "download",
+  {"contributionId": "core.importer", "source": "server", "title": "Import", "icon": {"type": "named", "name": "IMPORT"},
    "action": {"type": "openPage", "pageId": "core.importer", "params": {"input": "https://music.apple.com/album/1"}}},
-  {"contributionId": "gamdl.credentials", "source": "gamdl", "title": "Import with gamdl", "icon": "key",
+  {"contributionId": "gamdl.credentials", "source": "gamdl", "title": "Import with gamdl", "icon": {"type": "named", "name": "KEY"},
    "action": {"type": "openPage", "pageId": "core.importer", "params": {"input": "https://music.apple.com/album/1"}}}
 ]
 ```

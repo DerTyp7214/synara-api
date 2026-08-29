@@ -7,6 +7,8 @@ import dev.dertyp.ui.UiAlign
 import dev.dertyp.ui.UiButtonStyle
 import dev.dertyp.ui.UiCardSize
 import dev.dertyp.ui.UiComponent
+import dev.dertyp.ui.UiIcon
+import dev.dertyp.ui.UiIconName
 import dev.dertyp.ui.UiContext
 import dev.dertyp.ui.UiContributionInfo
 import dev.dertyp.ui.UiContributionKind
@@ -45,12 +47,12 @@ class MockUiService : IUiService {
     private val logLines = listOf("Fetching metadata…", "Resolving https://tidal.com/browse/track/98765", "Downloading 3/12", "Tagging track 3", "Downloading 4/12")
 
     private val contributions = listOf(
-        UiContributionInfo("core.importer.entry", "server", UiContributionKind.SLOT, UiSlots.LIBRARY, "Importer", "Import music from streaming services", "download", 100, true, requiredCapabilities = listOf(UserCapability.IMPORT)),
-        UiContributionInfo("core.importer", "server", UiContributionKind.PAGE, null, "Importer", "Import music from streaming services", "download", 0, true, requiredCapabilities = listOf(UserCapability.IMPORT), hooks = listOf(UiHookKind.SHARE_URL, UiHookKind.SHARE_TEXT)),
-        UiContributionInfo("core.importer.settings", "server", UiContributionKind.PAGE, null, "Importer settings", null, "settings", 0, true, requiredCapabilities = listOf(UserCapability.IMPORT)),
-        UiContributionInfo("core.importer.queue", "server", UiContributionKind.PAGE, null, "Queue", null, "queue", 0, true, requiredCapabilities = listOf(UserCapability.IMPORT)),
-        UiContributionInfo("mock.homeCard", "server", UiContributionKind.HOME_CARD, null, "Mock card", "A pinnable home card", "stats", 10, true, UiCardSize.WIDE),
-        UiContributionInfo("gamdl.credentials", "gamdl", UiContributionKind.SLOT, UiSlots.IMPORTER, "Apple Music credentials", null, "key", 50, true, requiresAdmin = true),
+        UiContributionInfo("core.importer.entry", "server", UiContributionKind.SLOT, UiSlots.LIBRARY, "Importer", "Import music from streaming services", UiIcon(UiIconName.IMPORT), 100, true, requiredCapabilities = listOf(UserCapability.IMPORT)),
+        UiContributionInfo("core.importer", "server", UiContributionKind.PAGE, null, "Importer", "Import music from streaming services", UiIcon(UiIconName.IMPORT), 0, true, requiredCapabilities = listOf(UserCapability.IMPORT), hooks = listOf(UiHookKind.SHARE_URL, UiHookKind.SHARE_TEXT)),
+        UiContributionInfo("core.importer.settings", "server", UiContributionKind.PAGE, null, "Importer settings", null, UiIcon(UiIconName.SETTINGS), 0, true, requiredCapabilities = listOf(UserCapability.IMPORT)),
+        UiContributionInfo("core.importer.queue", "server", UiContributionKind.PAGE, null, "Queue", null, UiIcon(UiIconName.QUEUE), 0, true, requiredCapabilities = listOf(UserCapability.IMPORT)),
+        UiContributionInfo("mock.homeCard", "server", UiContributionKind.HOME_CARD, null, "Mock card", "A pinnable home card", UiIcon(UiIconName.STATS), 10, true, UiCardSize.WIDE),
+        UiContributionInfo("gamdl.credentials", "gamdl", UiContributionKind.SLOT, UiSlots.IMPORTER, "Apple Music credentials", null, UiIcon(UiIconName.KEY), 50, true, requiresAdmin = true),
     )
 
     private fun render(id: String, root: UiComponent) = UiRender(
@@ -59,29 +61,29 @@ class MockUiService : IUiService {
         contributions.first { it.id == id }.title,
         revision = revision.incrementAndGet(),
         toolbar = if (id == "core.importer") listOf(
-            UiComponent.Button("Queue", UiAction.OpenPage("core.importer.queue", modal = true), UiButtonStyle.TEXT, "queue"),
-            UiComponent.Button("Sync Favorites", UiAction.Invoke("core.importer", "syncFavourites", confirmText = "Are you sure you want to synchronize your favorites?"), UiButtonStyle.TEXT, "sync"),
-            UiComponent.Button("Importer settings", UiAction.OpenPage("core.importer.settings", modal = true), UiButtonStyle.TEXT, "settings"),
+            UiComponent.Button("Queue", UiAction.OpenPage("core.importer.queue", modal = true), UiButtonStyle.TEXT, UiIcon(UiIconName.QUEUE)),
+            UiComponent.Button("Sync Favorites", UiAction.Invoke("core.importer", "syncFavourites", confirmText = "Are you sure you want to synchronize your favorites?"), UiButtonStyle.TEXT, UiIcon(UiIconName.SYNC)),
+            UiComponent.Button("Importer settings", UiAction.OpenPage("core.importer.settings", modal = true), UiButtonStyle.TEXT, UiIcon(UiIconName.SETTINGS)),
         ) else emptyList(),
     )
 
     private fun tree(id: String, context: UiContext): UiComponent = when (id) {
-        "core.importer.entry" -> UiComponent.Tile("Importer", "Import music from streaming services", "download", UiAction.OpenPage("core.importer"))
+        "core.importer.entry" -> UiComponent.Tile("Importer", "Import music from streaming services", UiIcon(UiIconName.IMPORT), UiAction.OpenPage("core.importer"))
         "core.importer" -> importer(context)
         "core.importer.settings" -> importerSettings()
         "core.importer.queue" -> importerQueue()
         "mock.homeCard" -> UiComponent.Card(
             title = "Mock card",
-            icon = "stats",
+            icon = UiIcon(UiIconName.STATS),
             children = listOf(
-                UiComponent.Grid(columns = 2, children = listOf(UiComponent.Stat("Songs", "12345", icon = "music"), UiComponent.Stat("Albums", "987", icon = "album"))),
+                UiComponent.Grid(columns = 2, children = listOf(UiComponent.Stat("Songs", "12345", icon = UiIcon(UiIconName.MUSIC)), UiComponent.Stat("Albums", "987", icon = UiIcon(UiIconName.ALBUM)))),
                 UiComponent.Text("revision ${revision.get()}", UiTextStyle.CAPTION, UiTone.MUTED),
             ),
         )
 
         "gamdl.credentials" -> UiComponent.Card(
             title = "Apple Music credentials",
-            icon = "key",
+            icon = UiIcon(UiIconName.KEY),
             children = listOf(
                 UiComponent.Badge("Not configured", UiTone.WARNING),
                 UiComponent.Form(
@@ -114,7 +116,7 @@ class MockUiService : IUiService {
                         children = listOf(
                             UiComponent.TextField(
                                 "input", "Import URLs", value = context.params["input"], multiline = true, required = true, kind = UiTextKind.MULTILINE_URLS,
-                                toolbar = listOf(UiComponent.Button("Done", UiAction.DismissKeyboard, UiButtonStyle.TEXT, "check")),
+                                toolbar = listOf(UiComponent.Button("Done", UiAction.DismissKeyboard, UiButtonStyle.TEXT, UiIcon(UiIconName.CHECK))),
                             ),
                         ),
                         actions = listOf(UiComponent.Native(UiPortals.BARCODE_SCANNER, mapOf("target" to "input"))),
@@ -137,13 +139,13 @@ class MockUiService : IUiService {
             UiComponent.Section(
                 title = "Importers",
                 children = listOf(
-                    UiComponent.Row(weights = listOf(1.0, 0.0), children = listOf(UiComponent.ListItem("Tidal", "Authorized", "plug"), UiComponent.Badge("Authorized", UiTone.SUCCESS))),
+                    UiComponent.Row(weights = listOf(1.0, 0.0), children = listOf(UiComponent.ListItem("Tidal", "Authorized", UiIcon(UiIconName.PLUG)), UiComponent.Badge("Authorized", UiTone.SUCCESS))),
                     UiComponent.Row(
                         weights = listOf(1.0, 0.0, 0.0),
                         children = listOf(
-                            UiComponent.ListItem("YouTube", "Login required", "plug"),
+                            UiComponent.ListItem("YouTube", "Login required", UiIcon(UiIconName.PLUG)),
                             UiComponent.Badge("Login required", UiTone.WARNING),
-                            UiComponent.Button("Login", UiAction.Invoke("core.importer.settings", "login", mapOf("importer" to UiValue.of("youtube"))), UiButtonStyle.PRIMARY, "login"),
+                            UiComponent.Button("Login", UiAction.Invoke("core.importer.settings", "login", mapOf("importer" to UiValue.of("youtube"))), UiButtonStyle.PRIMARY, UiIcon(UiIconName.LOGIN)),
                         ),
                     ),
                 ),
@@ -168,9 +170,9 @@ class MockUiService : IUiService {
 
     private fun queueEntry(urls: List<String>) = UiComponent.Card(
         children = listOf(
-            UiComponent.Row(children = listOf(UiComponent.Icon("link", UiTone.PRIMARY), UiComponent.Text("URLs", UiTextStyle.SUBTITLE))),
-            UiComponent.ListItem(urls.joinToString(", "), action = UiAction.OpenMenu(urls.map { UiMenuItem(it, UiAction.OpenUrl(it), "link") }, title = "URLs")),
-            UiComponent.Row(children = listOf(UiComponent.Badge("TRACK", UiTone.PRIMARY), UiComponent.Badge("mock", UiTone.MUTED, "user"))),
+            UiComponent.Row(children = listOf(UiComponent.Icon(UiIcon(UiIconName.LINK), UiTone.PRIMARY), UiComponent.Text("URLs", UiTextStyle.SUBTITLE))),
+            UiComponent.ListItem(urls.joinToString(", "), action = UiAction.OpenMenu(urls.map { UiMenuItem(it, UiAction.OpenUrl(it), UiIcon(UiIconName.LINK)) }, title = "URLs")),
+            UiComponent.Row(children = listOf(UiComponent.Badge("TRACK", UiTone.PRIMARY), UiComponent.Badge("mock", UiTone.MUTED, UiIcon(UiIconName.USER)))),
         ),
     )
 
@@ -226,13 +228,13 @@ class MockUiService : IUiService {
         }
         val handlers = mutableListOf<UiHookHandler>()
         if (text.contains("tidal.com") || text.contains("music.apple.com")) {
-            handlers += UiHookHandler("core.importer", "server", "Import", "Add this link to the import queue", "download", UiAction.OpenPage("core.importer", mapOf("input" to text)))
+            handlers += UiHookHandler("core.importer", "server", "Import", "Add this link to the import queue", UiIcon(UiIconName.IMPORT), UiAction.OpenPage("core.importer", mapOf("input" to text)))
         }
         if (text.contains("music.apple.com")) {
-            handlers += UiHookHandler("gamdl.credentials", "gamdl", "Import with gamdl", null, "key", UiAction.OpenPage("core.importer", mapOf("input" to text)))
+            handlers += UiHookHandler("gamdl.credentials", "gamdl", "Import with gamdl", null, UiIcon(UiIconName.KEY), UiAction.OpenPage("core.importer", mapOf("input" to text)))
         }
         if (handlers.isEmpty() && !text.contains("://")) {
-            handlers += UiHookHandler("core.importer", "server", "Search catalog", "Search the streaming catalog for this text", "search", UiAction.OpenNative(UiPortals.EXTERNAL_SEARCH, mapOf("query" to text)))
+            handlers += UiHookHandler("core.importer", "server", "Search catalog", "Search the streaming catalog for this text", UiIcon(UiIconName.SEARCH), UiAction.OpenNative(UiPortals.EXTERNAL_SEARCH, mapOf("query" to text)))
         }
         return handlers
     }
