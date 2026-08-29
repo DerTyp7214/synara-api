@@ -8,6 +8,11 @@ import dev.dertyp.rpc.getAllServiceClasses
 import dev.dertyp.rpc.initializeServiceRegistry
 import dev.dertyp.serializers.AppCbor
 import dev.dertyp.serializers.AppJson
+import dev.dertyp.services.IUiService
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
+import kotlin.reflect.KParameter
+import kotlin.reflect.full.callSuspend
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.kotlinx.json.json
@@ -39,6 +44,12 @@ fun main() {
     embeddedServer(Netty, port = port, host = "0.0.0.0", module = Application::module)
         .start(wait = true)
 }
+
+val explicitMocks: Map<KClass<*>, () -> Any> = mapOf(
+    IUiService::class to { MockUiService() },
+)
+
+fun mockFor(serviceClass: KClass<*>): Any = explicitMocks[serviceClass]?.invoke() ?: MockGenerator.createMock(serviceClass)
 
 val MockAuthPlugin = createRouteScopedPlugin("MockAuthPlugin") {
     onCall { call ->
@@ -79,7 +90,7 @@ fun Application.module() {
                     val method = KrpcRoute::class.memberFunctions.find { 
                         it.name == "registerService" && it.parameters.size == 3 
                     }
-                    method?.call(krpcRoute, serviceClass, { MockGenerator.createMock(serviceClass) })
+                    method?.call(krpcRoute, serviceClass, { mockFor(serviceClass) })
                 } catch (_: Exception) {}
             }
         }
@@ -91,7 +102,7 @@ fun Application.module() {
                     val method = KrpcRoute::class.memberFunctions.find { 
                         it.name == "registerService" && it.parameters.size == 3 
                     }
-                    method?.call(krpcRoute, serviceClass, { MockGenerator.createMock(serviceClass) })
+                    method?.call(krpcRoute, serviceClass, { mockFor(serviceClass) })
                 } catch (_: Exception) {}
             }
         }
@@ -105,7 +116,7 @@ fun Application.module() {
                         val method = KrpcRoute::class.memberFunctions.find { 
                             it.name == "registerService" && it.parameters.size == 3 
                         }
-                        method?.call(krpcRoute, serviceClass, { MockGenerator.createMock(serviceClass) })
+                        method?.call(krpcRoute, serviceClass, { mockFor(serviceClass) })
                     } catch (_: Exception) {}
                 }
             }
@@ -136,12 +147,27 @@ fun Route.registerMockRestService(serviceInterface: KClass<*>, json: Json, isPub
             val methodName = name.replaceFirstChar { it.lowercase() }
 
             val handler: suspend RoutingContext.() -> Unit = {
-                val dummy = MockGenerator.createDummy(func.returnType, func.name)
+                val explicit = explicitMocks[serviceInterface]?.invoke()
+                val dummy = if (explicit != null) {
+                    val args = func.parameters.filter { it.kind == KParameter.Kind.VALUE }.map { param ->
+                        val fromQuery = call.request.queryParameters[param.name ?: ""]
+                        when {
+                            fromQuery != null && param.type.classifier == String::class -> fromQuery
+                            param.type.isMarkedNullable -> null
+                            else -> MockGenerator.createDummy(param.type, param.name, 4)
+                        }
+                    }
+                    val result = func.callSuspend(explicit, *args.toTypedArray())
+                    if (result is Flow<*>) result.first() else result
+                } else {
+                    MockGenerator.createDummy(func.returnType, func.name)
+                }
                 if (dummy == null) {
                     call.respond(HttpStatusCode.NotFound)
                 } else {
                     try {
-                        val responseJson = json.encodeToString(serializer(func.returnType), dummy)
+                        val responseType = if (func.returnType.classifier == Flow::class) func.returnType.arguments.first().type!! else func.returnType
+                        val responseJson = json.encodeToString(serializer(responseType), dummy)
                         call.respondText(responseJson, ContentType.Application.Json)
                     } catch (_: Exception) {
                         call.respond(dummy)

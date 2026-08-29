@@ -1,0 +1,13 @@
+{
+  "gamdl.credentials.title": "Apple-Music-Zugangsdaten",
+  "gamdl.credentials.description": "Cookies und Widevine-Gerät für den gamdl-Importer",
+  "gamdl.credentials.configured": "Eingerichtet",
+  "gamdl.credentials.missing": "Nicht eingerichtet",
+  "gamdl.credentials.cookies": "cookies.txt",
+  "gamdl.credentials.cookiesHelper": "Netscape-Cookie-Export einer Apple-Music-Sitzung. Leer lassen, um die aktuelle Datei zu behalten.",
+  "gamdl.credentials.wvd": "Widevine-Gerät (.wvd, Base64)",
+  "gamdl.credentials.wvdHelper": "Optional; für manche Codecs erforderlich.",
+  "gamdl.credentials.save": "Zugangsdaten speichern",
+  "gamdl.credentials.saved": "Zugangsdaten gespeichert",
+  "gamdl.credentials.error.cookies": "cookies.txt ist erforderlich."
+}

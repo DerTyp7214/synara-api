@@ -13,6 +13,9 @@ import dev.dertyp.services.gamdl.GamdlPlugin
 import dev.dertyp.services.recommendation.RecommendationPlugin
 import dev.dertyp.services.soundcloud.SoundcloudPlugin
 import dev.dertyp.services.subsonic.SubsonicPlugin
+import dev.dertyp.services.ui.PluginSettingsService
+import dev.dertyp.services.ui.TranslationService
+import dev.dertyp.services.ui.UiRegistry
 import dev.dertyp.services.youtube.YoutubePlugin
 import io.ktor.server.application.Application
 import io.ktor.server.routing.routing
@@ -47,6 +50,9 @@ class PluginManager(
 ) : Service() {
     private val application by inject<Application>()
     private val scopeRegistry by inject<ApiKeyScopeRegistry>()
+    private val uiRegistry by inject<UiRegistry>()
+    private val translationService by inject<TranslationService>()
+    private val pluginSettingsService by inject<PluginSettingsService>()
     private val pluginsDir = File("plugins").apply { mkdirs() }
     private val loadedPlugins = mutableListOf<ISynaraPlugin>()
     private val importers = mutableMapOf<String, IImporter>()
@@ -55,7 +61,7 @@ class PluginManager(
     var defaultImporterId: String = "tiddl"
 
     companion object {
-        const val CURRENT_API_VERSION = 1
+        const val CURRENT_API_VERSION = 2
     }
 
     override suspend fun startService() {
@@ -95,10 +101,17 @@ class PluginManager(
             val pluginContext = object : PluginContext by baseContext {
                 override val storageService = baseContext.storageService.forImporter(ImportBackend(plugin.id))
                 override val apiKeyScopes = scopeRegistry.forPlugin(plugin.id)
+                override val ui = uiRegistry.forSource(plugin.id)
+                override val settings = pluginSettingsService.forPlugin(plugin.id)
+                override val i18n = translationService.forSource(plugin.id)
             }
 
             plugin.init(pluginContext)
             loadedPlugins.add(plugin)
+
+            if (plugin is IUiPlugin) {
+                plugin.getUiContributions().forEach { pluginContext.ui.register(it) }
+            }
 
             if (plugin is IRoutePlugin) {
                 application.routing { plugin.registerRoutes(this) }
@@ -135,6 +148,9 @@ class PluginManager(
         override val scheduleService: IScheduleService by inject()
         override val hooks: HookBus by inject()
         override val apiKeyScopes get() = scopeRegistry.forPlugin("plugin")
+        override val ui get() = uiRegistry.forSource(UiRegistry.SERVER_SOURCE)
+        override val settings get() = pluginSettingsService.forPlugin(UiRegistry.SERVER_SOURCE)
+        override val i18n get() = translationService.forSource(UiRegistry.SERVER_SOURCE)
     }
 
     private fun loadPlugins() {

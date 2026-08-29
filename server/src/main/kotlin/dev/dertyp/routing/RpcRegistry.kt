@@ -24,6 +24,8 @@ import dev.dertyp.services.sync.ListenBackupService
 import dev.dertyp.services.sync.ListenBrainzService
 import dev.dertyp.services.sync.RpcListenBackupService
 import dev.dertyp.services.sync.RpcListenBrainzService
+import dev.dertyp.services.ui.RpcUiService
+import dev.dertyp.services.ui.UiService
 import dev.dertyp.core.principalUsername
 import dev.dertyp.utils.ResponseShaper
 import dev.dertyp.utils.withAuthorization
@@ -151,7 +153,9 @@ private fun registerAuthenticated(koin: Koin, call: ApplicationCall, user: User,
     val radioChannelService = koin.get<RadioChannelService>()
     val apiKeyService = koin.get<ApiKeyService>()
     val subsonicCredentialService = koin.get<SubsonicCredentialService>()
+    val uiService = koin.get<UiService>()
 
+    registrar.register(IUiService::class) { RpcUiService(user, call.clientInfo, call, uiService).withAuthorization<IUiService>(user).withLogging<IUiService>(call) }
     registrar.register(IIndexer::class) { RpcIndexer(indexer, user).withAuthorization<IIndexer>(user).withLogging<IIndexer>(call) }
     registrar.register(IUserService::class) { RpcUserService(user, userService, imageService).withAuthorization<IUserService>(user).withLogging<IUserService>(call) }
     registrar.register(ISongService::class) { SongRpcService(songService = songService, user = user, client = call.clientInfo).withAuthorization<ISongService>(user).withLogging<ISongService>(call) }

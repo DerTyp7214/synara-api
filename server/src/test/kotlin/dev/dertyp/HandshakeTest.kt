@@ -1,6 +1,8 @@
 package dev.dertyp
 
+import dev.dertyp.data.ApiVersion
 import dev.dertyp.data.HandshakeResponse
+import dev.dertyp.ui.UiSchemaVersion
 import dev.dertyp.serializers.AppCbor
 import dev.dertyp.serializers.AppJson
 import dev.dertyp.services.HandshakeService
@@ -29,6 +31,7 @@ import kotlinx.rpc.withService
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.decodeFromByteArray
 import kotlinx.serialization.encodeToByteArray
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -56,6 +59,8 @@ class HandshakeTest {
         val response = client.get("/handshake").body<HandshakeResponse>()
         assertFalse(response.secure)
         assertFalse(response.sslSupported)
+        assertEquals(ApiVersion.CURRENT, response.apiVersion)
+        assertEquals(UiSchemaVersion.CURRENT, response.uiSchemaVersion)
     }
 
     @Test

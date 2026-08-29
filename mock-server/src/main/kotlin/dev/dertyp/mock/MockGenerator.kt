@@ -96,7 +96,15 @@ object MockGenerator {
             classifier.isSubclassOf(Enum::class) -> classifier.java.enumConstants?.random()
             classifier.isSealed -> {
                 if (depth > 10) return null
-                val subclass = classifier.sealedSubclasses.randomOrNull() ?: return null
+                val subclasses = classifier.sealedSubclasses
+                val leafOnly = depth > 3
+                val candidates = if (leafOnly) subclasses.filter { sub ->
+                    sub.primaryConstructor?.parameters?.none { param ->
+                        val itemType = param.type.arguments.firstOrNull()?.type?.classifier as? KClass<*>
+                        (param.type.classifier as? KClass<*>)?.isSealed == true || itemType?.isSealed == true
+                    } ?: true
+                }.ifEmpty { subclasses } else subclasses
+                val subclass = candidates.randomOrNull() ?: return null
                 createDummy(subclass.starProjectedType, name, depth + 1)
             }
             classifier.isSubclassOf(Map::class) -> {
@@ -113,7 +121,9 @@ object MockGenerator {
             classifier.isSubclassOf(Iterable::class) || classifier.isSubclassOf(Collection::class) -> {
                 val itemType = type.arguments.firstOrNull()?.type ?: return emptyList<Any>()
                 if (depth > 5) return if (classifier.isSubclassOf(Set::class)) emptySet() else emptyList<Any>()
-                val items = List(3) { createDummy(itemType, name, depth + 1) }
+                val items = List(3) { createDummy(itemType, name, depth + 1) }.let { generated ->
+                    if (itemType.isMarkedNullable) generated else generated.filterNotNull()
+                }
                 when {
                     classifier.isSubclassOf(MutableSet::class) -> items.toMutableSet()
                     classifier.isSubclassOf(Set::class) -> items.toSet()

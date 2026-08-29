@@ -3,6 +3,8 @@ package dev.dertyp
 import com.ucasoft.ktor.simpleCache.SimpleCache
 import com.ucasoft.ktor.simpleMemoryCache.memoryCache
 import dev.dertyp.core.anyHeader
+import dev.dertyp.data.ApiVersion
+import dev.dertyp.ui.UiSchemaVersion
 import dev.dertyp.plugins.RedisCacheProvider
 import dev.dertyp.plugins.redisCache
 import dev.dertyp.services.JwtService
@@ -15,6 +17,8 @@ import kotlin.time.Duration.Companion.seconds
 fun Application.configureHTTP() {
     install(CORS) {
         anyHeader(true)
+        allowHeader(ApiVersion.HEADER)
+        allowHeader(UiSchemaVersion.HEADER)
         anyMethod()
         anyHost()
     }

@@ -1,0 +1,13 @@
+{
+  "gamdl.credentials.title": "Apple Music credentials",
+  "gamdl.credentials.description": "Cookies and Widevine device for the gamdl importer",
+  "gamdl.credentials.configured": "Configured",
+  "gamdl.credentials.missing": "Not configured",
+  "gamdl.credentials.cookies": "cookies.txt",
+  "gamdl.credentials.cookiesHelper": "Netscape cookie export of an Apple Music session. Leave empty to keep the current file.",
+  "gamdl.credentials.wvd": "Widevine device (.wvd, base64)",
+  "gamdl.credentials.wvdHelper": "Optional; needed for some codecs.",
+  "gamdl.credentials.save": "Save credentials",
+  "gamdl.credentials.saved": "Credentials saved",
+  "gamdl.credentials.error.cookies": "cookies.txt is required."
+}

@@ -2,6 +2,7 @@ package dev.dertyp.services
 
 import dev.dertyp.data.ApiVersion
 import dev.dertyp.data.HandshakeResponse
+import dev.dertyp.ui.UiSchemaVersion
 import io.ktor.server.application.ApplicationCall
 
 class HandshakeService(private val call: ApplicationCall) : IHandshakeService {
@@ -21,7 +22,12 @@ class HandshakeService(private val call: ApplicationCall) : IHandshakeService {
             
             val sslSupported = secure || serverSslSupported
             
-            return HandshakeResponse(secure = secure, sslSupported = sslSupported, apiVersion = ApiVersion.CURRENT)
+            return HandshakeResponse(
+                secure = secure,
+                sslSupported = sslSupported,
+                apiVersion = ApiVersion.CURRENT,
+                uiSchemaVersion = UiSchemaVersion.CURRENT,
+            )
         }
     }
 }

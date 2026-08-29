@@ -8,6 +8,7 @@ import dev.dertyp.data.PaginatedResponse
 import dev.dertyp.data.PlaybackState
 import dev.dertyp.data.Song
 import dev.dertyp.data.UserSong
+import dev.dertyp.ui.UiSchemaVersion
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.toList
@@ -92,8 +93,9 @@ class ClientCompatTest {
 
     @Test
     fun `current clients are not proxied`() {
-        val current = fake.withClientCompat(SongApi::class.java, ResponseShaper(ClientInfo(ApiVersion.CURRENT)))
+        val current = fake.withClientCompat(SongApi::class.java, ResponseShaper(ClientInfo(ApiVersion.CURRENT, uiSchemaVersion = UiSchemaVersion.CURRENT)))
         assertSame(fake, current)
+        assertNotSame(fake, fake.withClientCompat(SongApi::class.java, ResponseShaper(ClientInfo(ApiVersion.CURRENT))))
         assertNotSame(fake, wrapped)
     }
 
@@ -135,7 +137,8 @@ class ClientCompatTest {
     fun `only rules for unsupported features are active`() {
         assertEquals(false, ResponseShaper(ClientInfo(2)).isNoop)
         assertEquals(false, ResponseShaper(ClientInfo(3)).isNoop)
-        assertEquals(true, ResponseShaper(ClientInfo(4)).isNoop)
+        assertEquals(false, ResponseShaper(ClientInfo(4)).isNoop)
+        assertEquals(true, ResponseShaper(ClientInfo(ApiVersion.CURRENT, uiSchemaVersion = UiSchemaVersion.CURRENT)).isNoop)
         assertEquals(true, ResponseShaper(ClientInfo(2), rules = emptyList()).isNoop)
         assertEquals(true, ResponseShaper(ClientInfo(3), rules = listOf(DolbyAtmosCompat)).isNoop)
         assertEquals(false, ResponseShaper(ClientInfo(2), rules = listOf(DolbyAtmosCompat)).isNoop)

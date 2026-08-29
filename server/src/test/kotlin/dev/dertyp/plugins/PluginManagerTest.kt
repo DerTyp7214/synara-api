@@ -12,6 +12,9 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
+import dev.dertyp.services.ui.PluginSettingsService
+import dev.dertyp.services.ui.TranslationService
+import dev.dertyp.services.ui.UiRegistry
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
 import org.koin.core.error.NoDefinitionFoundException
@@ -46,6 +49,9 @@ class PluginManagerTest : KoinTest {
                 single { mockk<ILrcLibService>(relaxed = true) }
                 single { mockk<IScheduleService>(relaxed = true) }
                 single { ApiKeyScopeRegistry() }
+                single { UiRegistry() }
+                single { TranslationService(get()) }
+                single { PluginSettingsService() }
             })
         }
         

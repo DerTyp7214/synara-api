@@ -19,4 +19,7 @@ interface PluginContext {
     val scheduleService: IScheduleService
     val hooks: HookBus
     val apiKeyScopes: ApiKeyScopeRegistrar
+    val ui: UiRegistrar
+    val settings: PluginSettings
+    val i18n: TranslationRegistrar
 }

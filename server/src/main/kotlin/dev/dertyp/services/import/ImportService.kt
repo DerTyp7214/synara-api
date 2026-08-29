@@ -20,6 +20,7 @@ import io.ktor.server.application.ApplicationEnvironment
 import io.ktor.server.engine.launchOnCancellation
 import io.ktor.utils.io.InternalAPI
 import kotlinx.coroutines.*
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -298,6 +299,8 @@ class ImportService(
     private val finishedImports: MutableList<FinishedImportQueueEntry> = arrayListOf()
 
     private val queueUpdateFlow: MutableSharedFlow<Unit> = MutableSharedFlow(extraBufferCapacity = 1)
+    private val queueChangeFlow: MutableSharedFlow<Unit> = MutableSharedFlow(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+    val queueChanges: Flow<Unit> = queueChangeFlow.asSharedFlow()
 
     private val active: AtomicBoolean = AtomicBoolean(false)
     private val stopped: AtomicBoolean = AtomicBoolean(true)
@@ -376,6 +379,7 @@ class ImportService(
         }
 
         queueUpdateFlow.tryEmit(Unit)
+        queueChangeFlow.tryEmit(Unit)
     }
 
     fun isActive(): Boolean {
@@ -463,6 +467,8 @@ class ImportService(
                 logs = logs
             )
 
+            queueChangeFlow.tryEmit(Unit)
+
             val logUnit: suspend (String) -> Unit = { line ->
                 internalLog.emit(line)
                 logs.add(line)
@@ -511,6 +517,7 @@ class ImportService(
 
         currentImport = null
         active.store(false)
+        queueChangeFlow.tryEmit(Unit)
     }
 
     fun getAllImportServices(): List<ImportBackend> =

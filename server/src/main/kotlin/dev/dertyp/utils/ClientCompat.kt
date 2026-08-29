@@ -9,6 +9,10 @@ import dev.dertyp.data.PlaybackState
 import dev.dertyp.data.RadioChannelSongMatch
 import dev.dertyp.data.Song
 import dev.dertyp.data.UserSong
+import dev.dertyp.ui.UiComponent
+import dev.dertyp.ui.UiLiveUpdate
+import dev.dertyp.ui.UiRender
+import dev.dertyp.ui.UiSlotRender
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import java.lang.reflect.InvocationTargetException
@@ -18,7 +22,7 @@ import kotlin.coroutines.intrinsics.COROUTINE_SUSPENDED
 
 open class ResponseShaper(val client: ClientInfo, rules: List<CompatRule> = CompatRules.all) {
     private val activeRules = rules
-        .filter { !client.supports(it.feature) }
+        .filter { it.isActive(client) }
         .sortedByDescending { it.feature.minApiVersion }
 
     open val isNoop: Boolean get() = activeRules.isEmpty()
@@ -27,6 +31,14 @@ open class ResponseShaper(val client: ClientInfo, rules: List<CompatRule> = Comp
     fun shape(value: Any?): Any? = when (value) {
         is UserSong -> shapeUserSong(value)
         is Song -> shapeSong(value)
+        is UiComponent -> shapeUiComponent(value)
+        is UiRender -> value.copy(
+            root = shapeUiComponent(value.root),
+            toolbar = value.toolbar.map(::shapeUiComponent),
+            schemaVersion = minOf(value.schemaVersion, client.uiSchemaVersion),
+        )
+        is UiSlotRender -> value.copy(items = value.items.map { shape(it) as UiRender })
+        is UiLiveUpdate.Replace -> value.copy(child = shapeUiComponent(value.child))
         is PaginatedResponse<*> -> (value as PaginatedResponse<Any?>).copy(data = value.data.map(::shape))
         is List<*> -> value.map(::shape)
         is Map<*, *> -> value.mapValues { shape(it.value) }
@@ -42,6 +54,9 @@ open class ResponseShaper(val client: ClientInfo, rules: List<CompatRule> = Comp
     protected open fun shapeSong(song: Song): Song = activeRules.fold(song) { shaped, rule -> rule.shapeSong(shaped) }
 
     protected open fun shapeUserSong(song: UserSong): UserSong = activeRules.fold(song) { shaped, rule -> rule.shapeUserSong(shaped) }
+
+    protected open fun shapeUiComponent(component: UiComponent): UiComponent =
+        activeRules.fold(component) { shaped, rule -> rule.shapeUiComponent(shaped, client) }
 }
 
 @Suppress("UNCHECKED_CAST", "PLATFORM_CLASS_MAPPED_TO_KOTLIN")

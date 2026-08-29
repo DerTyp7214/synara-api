@@ -30,6 +30,12 @@ import dev.dertyp.services.schedule.ScheduledTaskConfigurationService
 import dev.dertyp.services.subsonic.SubsonicCredentialService
 import dev.dertyp.services.sync.ListenBackupService
 import dev.dertyp.services.sync.ListenBrainzService
+import dev.dertyp.services.ui.CoreUiContributions
+import dev.dertyp.services.ui.PluginSettingsService
+import dev.dertyp.services.ui.TranslationService
+import dev.dertyp.services.ui.UiRegistry
+import dev.dertyp.services.ui.UiService
+import dev.dertyp.services.ui.UserHomeCardService
 import dev.dertyp.services.schedule.Worker
 import dev.dertyp.services.schedule.WorkerTask
 import io.github.classgraph.ClassGraph
@@ -206,6 +212,7 @@ fun Application.module() {
 
     configureHTTP()
     configureRouting()
+    get<CoreUiContributions>().register()
     configureServices()
 }
 
@@ -255,6 +262,12 @@ fun mainModule(application: Application, environment: ApplicationEnvironment): M
     singleOf(::ScheduleService)
     singleOf(::ScheduledTaskConfigurationService)
     singleOf(::ServerStatsService)
+    singleOf(::UiRegistry)
+    singleOf(::TranslationService)
+    singleOf(::PluginSettingsService)
+    singleOf(::UserHomeCardService)
+    singleOf(::UiService)
+    singleOf(::CoreUiContributions)
     singleOf(ApplicationConfig::toMetricsConfig)
     singleOf(ApplicationConfig::toAudioConfig)
     singleOf(::AtmosProcessor)

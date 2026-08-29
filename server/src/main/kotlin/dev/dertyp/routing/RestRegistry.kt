@@ -21,6 +21,7 @@ import dev.dertyp.services.schedule.RpcScheduledTaskConfigurationService
 import dev.dertyp.services.subsonic.RpcSubsonicCredentialService
 import dev.dertyp.services.sync.RpcListenBackupService
 import dev.dertyp.services.sync.RpcListenBrainzService
+import dev.dertyp.services.ui.RpcUiService
 import dev.dertyp.utils.ResponseShaper
 import dev.dertyp.utils.withAuthorization
 import dev.dertyp.utils.withClientCompat
@@ -423,6 +424,10 @@ fun Route.registerPublicRestServices(koin: Koin) {
 }
 
 fun Route.registerAuthenticatedRestServices(koin: Koin) {
+    registerRestService(IUiService::class, authenticated = true) {
+        val user = call.getUser() ?: throw IllegalArgumentException("No user found")
+        RpcUiService(user, call.clientInfo, call, koin.get()).withAuthorization<IUiService>(user)
+    }
     registerRestService(IIndexer::class, authenticated = true) {
         val user = call.getUser() ?: throw IllegalArgumentException("No user found")
         RpcIndexer(koin.get(), user).withAuthorization<IIndexer>(user)
