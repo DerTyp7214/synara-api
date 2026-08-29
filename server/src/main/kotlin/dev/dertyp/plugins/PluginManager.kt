@@ -13,6 +13,8 @@ import dev.dertyp.services.gamdl.GamdlPlugin
 import dev.dertyp.services.recommendation.RecommendationPlugin
 import dev.dertyp.services.soundcloud.SoundcloudPlugin
 import dev.dertyp.services.subsonic.SubsonicPlugin
+import dev.dertyp.services.intake.IntakeService
+import dev.dertyp.services.jobs.JobService
 import dev.dertyp.services.ui.PluginSettingsService
 import dev.dertyp.services.ui.TranslationService
 import dev.dertyp.services.ui.UiRegistry
@@ -53,6 +55,8 @@ class PluginManager(
     private val uiRegistry by inject<UiRegistry>()
     private val translationService by inject<TranslationService>()
     private val pluginSettingsService by inject<PluginSettingsService>()
+    private val intakeService by inject<IntakeService>()
+    private val jobService by inject<JobService>()
     private val pluginsDir = File("plugins").apply { mkdirs() }
     private val loadedPlugins = mutableListOf<ISynaraPlugin>()
     private val importers = mutableMapOf<String, IImporter>()
@@ -104,6 +108,8 @@ class PluginManager(
                 override val ui = uiRegistry.forSource(plugin.id)
                 override val settings = pluginSettingsService.forPlugin(plugin.id)
                 override val i18n = translationService.forSource(plugin.id)
+                override val intake = intakeService.forSource(plugin.id)
+                override val jobs = jobService.forSource(plugin.id)
             }
 
             plugin.init(pluginContext)
@@ -151,6 +157,8 @@ class PluginManager(
         override val ui get() = uiRegistry.forSource(UiRegistry.SERVER_SOURCE)
         override val settings get() = pluginSettingsService.forPlugin(UiRegistry.SERVER_SOURCE)
         override val i18n get() = translationService.forSource(UiRegistry.SERVER_SOURCE)
+        override val intake get() = intakeService.forSource(UiRegistry.SERVER_SOURCE)
+        override val jobs get() = jobService.forSource(UiRegistry.SERVER_SOURCE)
     }
 
     private fun loadPlugins() {

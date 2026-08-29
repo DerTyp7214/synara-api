@@ -145,6 +145,51 @@ The `song.menu` slot (and future `*.menu` slots) is the native context menu of a
 
 Contributions are already filtered by the user's permissions; `render`/`invoke` on something the user may not see return 403 (`UnauthorizedException`).
 
+## Intake
+
+Anything a user hands to the app — a link, a catalog code, a provider id, free text (later: a file) — is an `IntakeItem`. Instead of calling importer-specific RPCs, clients hand items to the server and plugins offer to handle them:
+
+| `IntakeItem` | Fields | Example |
+|---|---|---|
+| `url` | `url` | `https://tidal.com/browse/album/1` |
+| `code` | `kind` (`ISRC`/`UPC`), `value` | `USRC17607839` |
+| `id` | `provider`, `id`, `contentType?` | the download button in external search: `{"type":"id","provider":"tidal","id":"123","contentType":"track"}` |
+| `text` | `text` | a search query |
+| `file` | `fileId`, `name`, `mimeType?` | reserved for uploads |
+
+`IntakeItem.parse(line)` in `common-rpc` classifies a pasted line the same way the server does (URL → code → `provider:id` → text).
+
+- `intake(items, resolverId?)` → `UiIntakeResult`:
+  - `OK` — everything acceptable was submitted (`accepted` count, `message` to toast, `rejected` items nobody took, optional `next`). **No navigation needed**: the external-search download button just calls `intake([id])` and shows the toast.
+  - `NEEDS_CHOICE` — several handlers claim the same item (e.g. an Apple Music link that both Tidal and gamdl can import) or only navigational handlers exist (text → external search). Show `handlers` as a menu; each handler's `action` is `intake` with the handler preselected, so performing it calls `intake` again and yields `OK`.
+  - `UNHANDLED` — nothing accepted any item; fall back to native behaviour.
+  - `UNAUTHORIZED` / `ERROR` — show `message`.
+- `resolveIntake(items)` → the handlers only, when you always want to show a chooser.
+- `UiAction.Intake(items, resolverId?, confirmText?)` is the action form of the same call; buttons, menu entries and hook handlers use it.
+
+Example — download from external search:
+
+```http
+POST /ui/intake
+{"items": [{"type": "id", "provider": "tidal", "id": "123", "contentType": "track"}]}
+```
+
+```json
+{"status": "OK", "message": "1 items queued", "accepted": 1}
+```
+
+Example — an ambiguous link:
+
+```json
+{"status": "NEEDS_CHOICE", "handlers": [
+  {"contributionId": "import.tidal", "title": "Import with Tidal", "confirmText": "Import this link?",
+   "action": {"type": "intake", "items": [{"type": "url", "url": "https://music.apple.com/album/1"}], "resolverId": "import.tidal", "confirmText": "Import this link?"}},
+  {"contributionId": "import.gamdl", "title": "Import with gamdl (Apple Music)", "action": {"type": "intake", "…": "…", "resolverId": "import.gamdl"}}
+]}
+```
+
+Work accepted by an intake handler runs in server-side **jobs**, queued per kind (imports never block a favourites sync); the queue page shows their progress and offers Cancel.
+
 ## Home cards
 
 `getHomeCards()` / `getHomeCardsFlow()` return every `HOME_CARD` contribution with `pinned` and `position`. Render pinned cards on the home screen (each through `subscribe(card.contributionId)`), offer the unpinned ones in a picker, and persist changes with `setHomeCardPinned` / `setHomeCardOrder`.
@@ -154,10 +199,10 @@ Contributions are already filtered by the user's permissions; `render`/`invoke` 
 When the app receives a shared URL or text, call `dispatchHook(UiHookEvent.ShareUrl(url))` (or `ShareText`). The result is a list of `UiHookHandler`:
 
 - empty → fall back to your native behaviour;
-- one → perform `handler.action` directly, unless `confirmText` is set — then ask first (the importer asks "Open the importer with this link?");
+- one → perform `handler.action` directly, unless `confirmText` is set — then ask first;
 - several → show a chooser with `title`/`description`/`icon`, then perform the chosen `action`.
 
-Nothing is executed on the server during dispatch, so offering never has side effects.
+Nothing is executed on the server during dispatch, so offering never has side effects. Shared URLs and text are parsed into `IntakeItem`s, so the handlers are the intake handlers (an `intake` action per importer that can take the link — "Import with Tidal", confirm "Import this link?") plus contribution offers such as the importer page's "Open in importer" (`openPage` with the text pre-filled) and, for plain text, "Search catalog".
 
 ## Worked example: the importer screen
 
@@ -253,7 +298,7 @@ Show `message` as a toast and clear the editor. A `VALIDATION_ERROR` returns `fi
 
 ### 5. Queue sheet
 
-The toolbar's Queue button is `openPage` with `modal: true`: present `subscribe("core.importer.queue")` as a sheet with a close control. The tree mirrors the iOS sheet — a stat card (`Total URLs` / `Importing`, only when URLs are queued), a "Currently Importing" header with one entry card, and a "Pending Imports" header with one card per entry; each card has an icon + "URLs"/"Favorites" title row, the joined URLs as a `listItem` whose action opens a menu listing every URL, and a badge row (`TRACK`, user chip with `icon: "user"`). With nothing queued the root is an `emptyState` ("Queue is empty") — render it as a `ContentUnavailableView`. It re-emits on every queue change, so there is no polling.
+The toolbar's Queue button is `openPage` with `modal: true`: present `subscribe("core.importer.queue")` as a sheet with a close control. The tree mirrors the iOS sheet — a stat card (`Total URLs` / `Importing`, only when URLs are queued), a "Currently Importing" header with one entry card, and a "Pending Imports" header with one card per entry; each card has an icon + "URLs"/"Favorites" title row, the joined URLs as a `listItem` whose action opens a menu listing every URL, a `progress` while it runs (value from the job when the importer reports one, otherwise indeterminate), a badge row (`TRACK`, user chip with `icon: "user"`) and a **Cancel** button (`invoke` `cancel` with the job id) in the card's `actions`. With nothing queued the root is an `emptyState` ("Queue is empty") — render it as a `ContentUnavailableView`. It re-emits on every queue change, so there is no polling.
 
 ### 6. Log in and importer settings
 
@@ -277,14 +322,16 @@ POST /ui/dispatchHook
 
 ```json
 [
-  {"contributionId": "core.importer", "source": "server", "title": "Import", "icon": {"type": "named", "name": "IMPORT"}, "confirmText": "Open the importer with this link?",
-   "action": {"type": "openPage", "pageId": "core.importer", "params": {"input": "https://music.apple.com/album/1"}}},
-  {"contributionId": "gamdl.credentials", "source": "gamdl", "title": "Import with gamdl", "icon": {"type": "named", "name": "KEY"},
+  {"contributionId": "import.tidal", "source": "server", "title": "Import with Tidal", "icon": {"type": "named", "name": "IMPORT"}, "confirmText": "Import this link?",
+   "action": {"type": "intake", "items": [{"type": "url", "url": "https://music.apple.com/album/1"}], "resolverId": "import.tidal", "confirmText": "Import this link?"}},
+  {"contributionId": "import.gamdl", "source": "server", "title": "Import with gamdl (Apple Music)", "icon": {"type": "named", "name": "IMPORT"}, "confirmText": "Import this link?",
+   "action": {"type": "intake", "items": [{"type": "url", "url": "https://music.apple.com/album/1"}], "resolverId": "import.gamdl", "confirmText": "Import this link?"}},
+  {"contributionId": "core.importer", "source": "server", "title": "Open in importer", "icon": {"type": "named", "name": "IMPORT"},
    "action": {"type": "openPage", "pageId": "core.importer", "params": {"input": "https://music.apple.com/album/1"}}}
 ]
 ```
 
-Two handlers → show a chooser; one handler → open the page directly with the given `params` (the page pre-fills the input field from `params.input`).
+Show the chooser; picking an "Import with …" entry performs its `intake` action (confirm, then `intake(items, resolverId)` → `OK` toast) without ever opening the importer page; "Open in importer" opens the page with the input pre-filled. A Tidal link yields one `intake` handler plus "Open in importer".
 
 ### Checklist for a client
 
@@ -292,7 +339,7 @@ Two handlers → show a chooser; one handler → open the page directly with the
 2. Implement a `UiComponent` renderer for the vocabulary above, with `Fallback` handling, `live` subscriptions and modal pages.
 3. Implement the `barcodeScanner` and `externalSearch` portals.
 4. Replace the hardcoded importer entry with `renderSlot("library")` and the importer, queue and settings screens with the page renderer (`subscribe("core.importer")` etc.).
-5. Route share intents through `dispatchHook`.
+5. Route share intents through `dispatchHook`, and replace native `importIds`/`importUrls` calls (external search download button, album import, recent releases) with `intake(items)` + toast/chooser.
 6. Render the home cards (`core.importer.card` ships: queue stats, current import, buttons into the importer and queue pages) and optionally the `settings` / `admin.dashboard` slots for plugin contributions.
 
 ## Evolving the schema

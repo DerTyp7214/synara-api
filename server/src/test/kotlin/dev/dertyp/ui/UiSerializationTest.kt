@@ -98,6 +98,14 @@ class UiSerializationTest {
         val event: UiHookEvent = UiHookEvent.ShareUrl("https://tidal.com/x", "title")
         assertEquals(event, AppCbor.decodeFromByteArray<UiHookEvent>(AppCbor.encodeToByteArray(event)))
 
+        val items: List<IntakeItem> = listOf(
+            IntakeItem.Url("https://x"), IntakeItem.Code(UiIntakeCodeKind.UPC, "1"), IntakeItem.Id("tidal", "1", dev.dertyp.services.import.Type.ALBUM),
+            IntakeItem.Text("t"), IntakeItem.File(UUID.randomUUID(), "f.m3u", "audio/x-mpegurl"),
+        )
+        val intake = UiIntakeResult(UiIntakeStatus.NEEDS_CHOICE, "m", 1, items.take(1), listOf(UiHookHandler("i", "s", "T", null, null, UiAction.Intake(items, "i", "sure?"))), UiAction.Refresh)
+        assertEquals(intake, AppCbor.decodeFromByteArray<UiIntakeResult>(AppCbor.encodeToByteArray(intake)))
+        assertEquals(intake, AppJson.decodeFromString(UiIntakeResult.serializer(), AppJson.encodeToString(UiIntakeResult.serializer(), intake)))
+
         val updates: List<UiLiveUpdate> = listOf(UiLiveUpdate.AppendLines(listOf("x", "y")), UiLiveUpdate.Replace(UiComponent.Log(emptyList())))
         assertEquals(updates, AppCbor.decodeFromByteArray<List<UiLiveUpdate>>(AppCbor.encodeToByteArray(updates)))
         assertEquals(updates, AppJson.decodeFromString<List<UiLiveUpdate>>(AppJson.encodeToString(updates)))
@@ -129,7 +137,9 @@ class UiSerializationTest {
             componentNames,
         )
         val actionNames = UiAction::class.sealedSubclasses.map { it.findAnnotation<kotlinx.serialization.SerialName>()!!.value }.toSet()
-        assertEquals(setOf("openMenu", "invoke", "openEntity", "openPage", "dismissKeyboard", "openUrl", "openNative", "refresh"), actionNames)
+        assertEquals(setOf("openMenu", "invoke", "openEntity", "openPage", "intake", "dismissKeyboard", "openUrl", "openNative", "refresh"), actionNames)
+        val itemNames = IntakeItem::class.sealedSubclasses.map { it.findAnnotation<kotlinx.serialization.SerialName>()!!.value }.toSet()
+        assertEquals(setOf("url", "code", "id", "text", "file"), itemNames)
         val updateNames = UiLiveUpdate::class.sealedSubclasses.map { it.findAnnotation<kotlinx.serialization.SerialName>()!!.value }.toSet()
         assertEquals(setOf("replace", "appendLines"), updateNames)
         assertTrue(UiComponent::class.sealedSubclasses.all { it in UiSchema.introducedIn.keys }, "every component must declare the schema version it was introduced in")

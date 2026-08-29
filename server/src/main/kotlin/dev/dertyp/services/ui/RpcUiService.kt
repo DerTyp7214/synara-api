@@ -3,7 +3,9 @@ package dev.dertyp.services.ui
 import dev.dertyp.core.ClientInfo
 import dev.dertyp.data.User
 import dev.dertyp.services.IUiService
+import dev.dertyp.ui.IntakeItem
 import dev.dertyp.ui.UiContext
+import dev.dertyp.ui.UiIntakeResult
 import dev.dertyp.ui.UiContributionInfo
 import dev.dertyp.ui.UiContributionKind
 import dev.dertyp.ui.UiHomeLayout
@@ -44,6 +46,12 @@ class RpcUiService(
 
     override suspend fun dispatchHook(event: UiHookEvent): List<UiHookHandler> =
         uiService.dispatchHook(user, client, event, call)
+
+    override suspend fun intake(items: List<IntakeItem>, resolverId: String?): UiIntakeResult =
+        uiService.intake(user, client, items, resolverId)
+
+    override suspend fun resolveIntake(items: List<IntakeItem>): List<UiHookHandler> =
+        uiService.resolveIntake(user, client, items)
 
     override suspend fun getHomeCards(): UiHomeLayout = uiService.homeLayout(user, client)
 

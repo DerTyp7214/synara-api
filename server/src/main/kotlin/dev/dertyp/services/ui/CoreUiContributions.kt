@@ -4,6 +4,8 @@ import dev.dertyp.plugins.UiContribution
 import dev.dertyp.services.UserService
 import dev.dertyp.services.import.ImportService
 import dev.dertyp.services.import.ImporterProxy
+import dev.dertyp.services.intake.IntakeService
+import dev.dertyp.services.jobs.JobService
 
 class CoreUiContributions(
     private val registry: UiRegistry,
@@ -11,8 +13,10 @@ class CoreUiContributions(
     private val importService: ImportService,
     private val importerProxy: ImporterProxy,
     private val userService: UserService,
+    private val intakeService: IntakeService,
+    private val jobService: JobService,
 ) {
-    private val importerState by lazy { ImporterState(importService, importerProxy) }
+    private val importerState by lazy { ImporterState(importService, importerProxy, intakeService, jobService) }
 
     fun contributions(): List<UiContribution> = listOf(
         ImporterPageContribution(importerState, uiService),

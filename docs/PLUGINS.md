@@ -120,6 +120,42 @@ Secret fields (`TextField(secret = true)`) must never echo the stored value; tre
 
 `context.settings` (and `scope.settings`) is a per-plugin key/value store persisted in the database. Values are strings; parse them yourself. `changes()` emits the full map whenever something is written.
 
+### Intake resolvers
+
+Users hand the app links, catalog codes, ids and text (`IntakeItem`, see [SERVER_DRIVEN_UI.md](SERVER_DRIVEN_UI.md#intake)). Register an `IntakeResolver` through `context.intake` to offer handling them — the importer is one resolver per backend, plugins can add their own:
+
+```kotlin
+context.intake.register(object : IntakeResolver {
+    override val id = "myplugin.mbid"
+    override val titleKey = "myplugin.intake.title"          // "Look up on MusicBrainz"
+    override val jobKind = "myplugin"
+    override val access = UiAccess(capabilities = setOf(UserCapability.IMPORT))
+
+    override suspend fun offer(items: List<IntakeItem>, user: UserInfo): IntakeOffer? {
+        val mine = items.filterIsInstance<IntakeItem.Id>().filter { it.provider == "mbid" }
+        if (mine.isEmpty()) return null
+        return IntakeOffer(accepted = mine, confirmKey = "myplugin.intake.confirm", submit = {
+            context.jobs.enqueue(jobKind, "MusicBrainz lookup", user, mine.joinToString { it.id }) {
+                mine.forEachIndexed { index, item ->
+                    log("Resolving ${item.id}")
+                    progress((index + 1).toDouble() / mine.size)
+                    if (!isActive()) return@enqueue
+                }
+            }
+            IntakeReceipt(accepted = mine.size, messageKey = "myplugin.intake.queued")
+        })
+    }
+})
+```
+
+- `offer` returns the subset it accepts. Either `submit` (does the work, usually by enqueuing a job, and returns an `IntakeReceipt`) or `action` (navigational, e.g. open a page) — never both.
+- When several resolvers accept the same item the server does not pick: the client shows a chooser and calls back with the chosen resolver. `priority` orders the chooser; `titleArgs` fill `{placeholders}` in the title key.
+- `access` is enforced before `offer` is called.
+
+### Jobs
+
+`context.jobs` is a per-kind FIFO queue with one running job per kind (kinds run in parallel): `enqueue(kind, title, user, summary) { … }` returns the job id; inside the body use `log(line)`, `progress(value, message)` and `isActive()` (false once cancelled). `jobs(kind, user)` streams `JobInfo`s (pending/running/finished with progress), `log(jobId)` streams a job's lines, `cancel(jobId)` cancels your own source's jobs. Imports run in kind `"import"`, favourites syncs in `"favourites"`.
+
 ### Translations
 
 All text in a tree must be translated on the server. Register bundles with `context.i18n`:

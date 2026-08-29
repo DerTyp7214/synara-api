@@ -38,7 +38,18 @@
   "importer.hook.importDescription": "Add this link to the import queue",
   "importer.hook.search": "Search catalog",
   "importer.hook.searchDescription": "Search the streaming catalog for this text",
-  "importer.hook.importConfirm": "Open the importer with this link?",
+  "importer.hook.importConfirm": "Import this link?",
   "importer.card.open": "Open importer",
-  "importer.card.pending": "Pending"
+  "importer.card.pending": "Pending",
+  "intake.import.title": "Import with {name}",
+  "intake.import.description": "Add to the import queue",
+  "intake.nothingAccepted": "This handler does not accept the given items.",
+  "intake.unknownHandler": "Unknown handler.",
+  "importer.hook.open": "Open in importer",
+  "importer.hook.openDescription": "Review and edit before importing",
+  "importer.queue.cancel": "Cancel",
+  "importer.queue.cancelled": "Cancelled",
+  "importer.choose": "Import with…",
+  "importer.error.unhandled": "Nothing could handle: {items}",
+  "importer.error.unknownJob": "This job can no longer be cancelled."
 }

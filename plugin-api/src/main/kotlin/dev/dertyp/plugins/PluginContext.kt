@@ -22,4 +22,6 @@ interface PluginContext {
     val ui: UiRegistrar
     val settings: PluginSettings
     val i18n: TranslationRegistrar
+    val intake: IntakeRegistrar
+    val jobs: Jobs
 }

@@ -9,6 +9,7 @@ import dev.dertyp.plugins.UiAccess
 import dev.dertyp.plugins.UiContribution
 import dev.dertyp.plugins.UiHookOffer
 import dev.dertyp.plugins.UiRenderScope
+import dev.dertyp.services.intake.IntakeService
 import dev.dertyp.services.ui.PluginSettingsService
 import dev.dertyp.services.ui.TranslationService
 import dev.dertyp.services.ui.UiRegistry
@@ -31,7 +32,7 @@ import java.util.UUID
 class UiServiceTest {
     private val registry = UiRegistry()
     private val translations = TranslationService(registry)
-    private val service = UiService(registry, translations, PluginSettingsService(), UserHomeCardService())
+    private val service = UiService(registry, translations, PluginSettingsService(), UserHomeCardService(), IntakeService(translations))
 
     private val admin = User(UUID.randomUUID(), "admin", passwordHash = "", isAdmin = true)
     private val importer = User(UUID.randomUUID(), "importer", passwordHash = "", capabilities = listOf(UserCapability.IMPORT))

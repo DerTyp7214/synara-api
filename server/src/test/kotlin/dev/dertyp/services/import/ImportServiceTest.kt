@@ -4,6 +4,7 @@ import dev.dertyp.plugins.PluginManager
 import dev.dertyp.services.FavSyncService
 import dev.dertyp.services.ImageService
 import dev.dertyp.services.SongService
+import dev.dertyp.services.jobs.JobService
 import dev.dertyp.services.metadata.IMetadataService
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -21,7 +22,7 @@ class ImportServiceTest {
     private val pluginManager = mockk<PluginManager>()
 
     private val service = ImportService(
-        importerProxy, songService, favSyncService, imageService, pluginManager
+        importerProxy, songService, favSyncService, imageService, pluginManager, JobService()
     )
 
     @Test

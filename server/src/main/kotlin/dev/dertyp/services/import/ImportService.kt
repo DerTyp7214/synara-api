@@ -8,6 +8,10 @@ import dev.dertyp.getPrefix
 import dev.dertyp.killAll
 import dev.dertyp.plugins.IImporter
 import dev.dertyp.plugins.IPluginImportService
+import dev.dertyp.plugins.JobContext
+import dev.dertyp.plugins.JobInfo
+import dev.dertyp.plugins.JobStatus
+import dev.dertyp.services.jobs.JobService
 import dev.dertyp.plugins.PluginManager
 import dev.dertyp.services.*
 import dev.dertyp.services.metadata.IMetadataService
@@ -286,23 +290,19 @@ class ImportService(
     val favSyncService: FavSyncService,
     val imageService: ImageService,
     val pluginManager: PluginManager,
+    val jobService: JobService,
 ) : IPluginImportService, Service() {
     private val maxLogLength: Int = 1000
 
     private val syncMutex = Mutex()
-    private val queueMutex = Mutex()
     private val finishedMutex = Mutex()
 
     private val syncMap = ConcurrentHashMap<UUID, AtomicBoolean>()
 
-    private val importQueue: MutableList<ImportQueueEntry> = arrayListOf()
     private val finishedImports: MutableList<FinishedImportQueueEntry> = arrayListOf()
 
-    private val queueUpdateFlow: MutableSharedFlow<Unit> = MutableSharedFlow(extraBufferCapacity = 1)
-    private val queueChangeFlow: MutableSharedFlow<Unit> = MutableSharedFlow(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
-    val queueChanges: Flow<Unit> = queueChangeFlow.asSharedFlow()
+    val queueChanges: Flow<Unit> = jobService.changes
 
-    private val active: AtomicBoolean = AtomicBoolean(false)
     private val stopped: AtomicBoolean = AtomicBoolean(true)
 
     private val internalLog: MutableStateFlow<String?> = MutableStateFlow(null)
@@ -311,96 +311,93 @@ class ImportService(
     var currentImport: FinishedImportQueueEntry? = null
         private set
 
-    @OptIn(FlowPreview::class)
+    class ImportJob(val info: JobInfo, val entry: ImportQueueEntry)
+
+    init {
+        jobService.pause(JOB_KIND)
+    }
+
     override suspend fun startService() {
-        if (!stopped.compareAndSet(expectedValue = true, newValue = false)) return
-        logger.info("Starting service")
-
-        coroutineScope {
-            launch {
-                queueUpdateFlow
-                    .onStart { emit(Unit) }
-                    .debounce(100.milliseconds)
-                    .takeWhile { !stopped.load() }
-                    .collect {
-                        logger.info("Trying to import")
-                        import { !stopped.load() }
-                    }
-            }
-        }
-
-        logger.info("Stopping service")
-        stopped.store(true)
+        stopped.store(false)
+        jobService.resume(JOB_KIND)
     }
 
     override suspend fun stopService() {
         stopped.store(true)
+        jobService.pause(JOB_KIND)
     }
+
+    private fun importJobsRaw(): List<JobService.Job> = jobService.jobsOf(JOB_KIND)
+
+    fun importJobs(user: User? = null): List<ImportJob> = importJobsRaw()
+        .filter { user == null || user.isAdmin || it.info.user == user.id }
+        .mapNotNull { job -> (job.payload as? ImportQueueEntry)?.let { ImportJob(job.info, it) } }
+
+    private fun pendingEntries(): List<ImportQueueEntry> =
+        importJobsRaw().filter { it.info.status == JobStatus.PENDING }.mapNotNull { it.payload as? ImportQueueEntry }
 
     override suspend fun addToQueue(vararg importEntries: ImportQueueEntry) {
-        queueMutex.withLock {
-            val existingUrls = importQueue
-                .filterIsInstance<UrlImportQueueEntry>()
-                .flatMap { it.urls }
-                .toMutableList()
-            val existingTypes = importQueue
-                .filterIsInstance<FavouriteImportQueueEntry>()
-                .map { it.favoriteType }
-                .toMutableList()
+        val pending = pendingEntries()
+        val existingUrls = pending.filterIsInstance<UrlImportQueueEntry>().flatMap { it.urls }.toMutableList()
+        val existingTypes = pending.filterIsInstance<FavouriteImportQueueEntry>().map { it.favoriteType }.toMutableList()
 
-            currentImport?.let {
-                when (val entry = it.importQueueEntry) {
-                    is UrlImportQueueEntry -> existingUrls.addAll(entry.urls)
-                    is FavouriteImportQueueEntry -> existingTypes.add(entry.favoriteType)
-                }
+        currentImport?.let {
+            when (val entry = it.importQueueEntry) {
+                is UrlImportQueueEntry -> existingUrls.addAll(entry.urls)
+                is FavouriteImportQueueEntry -> existingTypes.add(entry.favoriteType)
             }
-
-            val entries = importEntries.filter {
-                when (it) {
-                    is UrlImportQueueEntry -> {
-                        it.urls.removeAll(existingUrls)
-                        it.urls.isNotEmpty()
-                    }
-
-                    is FavouriteImportQueueEntry -> !existingTypes.contains(it.favoriteType)
-                }
-            }
-
-            logger.info(
-                "Adding ${entries.size} to queue (${
-                    entries.sumOf {
-                        if (it is UrlImportQueueEntry) it.urls.size
-                        else 1
-                    }
-                } urls)"
-            )
-
-            importQueue.addAll(entries)
         }
 
-        queueUpdateFlow.tryEmit(Unit)
-        queueChangeFlow.tryEmit(Unit)
+        val entries = importEntries.filter {
+            when (it) {
+                is UrlImportQueueEntry -> {
+                    it.urls.removeAll(existingUrls)
+                    it.urls.isNotEmpty()
+                }
+
+                is FavouriteImportQueueEntry -> !existingTypes.contains(it.favoriteType)
+            }
+        }
+
+        logger.info(
+            "Adding ${entries.size} to queue (${
+                entries.sumOf {
+                    if (it is UrlImportQueueEntry) it.urls.size
+                    else 1
+                }
+            } urls)"
+        )
+
+        entries.forEach { entry ->
+            jobService.enqueue(JOB_KIND, titleOf(entry), entry.byUser, summaryOf(entry), payload = entry) { runEntry(entry, this) }
+        }
     }
 
-    fun isActive(): Boolean {
-        return active.load()
+    private fun titleOf(entry: ImportQueueEntry): String = when (entry) {
+        is UrlImportQueueEntry -> entry.urls.firstOrNull() ?: "${entry.ids.size} ${entry.type?.value ?: "items"}"
+        is FavouriteImportQueueEntry -> "Favorites (${entry.favoriteType.name})"
     }
+
+    private fun summaryOf(entry: ImportQueueEntry): String = when (entry) {
+        is UrlImportQueueEntry -> entry.urls.joinToString(", ")
+        is FavouriteImportQueueEntry -> entry.favoriteType.name
+    }
+
+    fun isActive(): Boolean = importJobsRaw().any { it.info.status == JobStatus.RUNNING }
 
     suspend fun waitForInactive() {
-        return active.waitForChange(false)
+        queueChanges.onStart { emit(Unit) }.first { !isActive() }
     }
 
     suspend fun waitForActive() {
-        return active.waitForChange(true)
+        queueChanges.onStart { emit(Unit) }.first { isActive() }
     }
 
     fun isStopped(): Boolean {
         return stopped.load()
     }
 
-    fun queueSize(): Int {
-        return importQueue.size
-    }
+    fun queueSize(): Int = pendingEntries().size
 
     fun logs(): Flow<LogLine> = flow {
         val oldLogs = currentImport?.logs ?: emptyList()
@@ -425,11 +422,8 @@ class ImportService(
         }
     }
 
-    suspend fun importQueue(user: User? = null): List<ImportQueueEntry> {
-        return queueMutex.withLock {
-            importQueue.filter { user == null || user.isAdmin || it.byUser == user.id }
-        }
-    }
+    suspend fun importQueue(user: User? = null): List<ImportQueueEntry> =
+        pendingEntries().filter { user == null || user.isAdmin || it.byUser == user.id }
 
     suspend fun finishedImports(user: User? = null): List<FinishedImportQueueEntry> {
         return finishedMutex.withLock {
@@ -453,32 +447,28 @@ class ImportService(
         clearErrors()
     }
 
-    private suspend fun import(aliveCheck: suspend () -> Boolean) {
-        if (!active.compareAndSet(expectedValue = false, newValue = true)) return
+    private suspend fun runEntry(entry: ImportQueueEntry, context: JobContext) {
+        val logs = mutableListOf<String>()
+        val running = FinishedImportQueueEntry(
+            importQueueEntry = entry,
+            result = ProcessExecutionResult.EMPTY,
+            logs = logs
+        )
+        currentImport = running
 
-        while (queueMutex.withLock { importQueue.isNotEmpty() }) {
-            val entry = queueMutex.withLock { importQueue.removeFirst() }
+        val aliveCheck: suspend () -> Boolean = { context.isActive() && !stopped.load() }
+        val logUnit: suspend (String) -> Unit = { line ->
+            internalLog.emit(line)
+            logs.add(line)
+            context.log(line)
 
-            val logs = mutableListOf<String>()
+            logger.debug(line)
 
-            currentImport = FinishedImportQueueEntry(
-                importQueueEntry = entry,
-                result = ProcessExecutionResult.EMPTY,
-                logs = logs
-            )
+            if (logs.size > maxLogLength) logs.removeFirst()
+        }
 
-            queueChangeFlow.tryEmit(Unit)
-
-            val logUnit: suspend (String) -> Unit = { line ->
-                internalLog.emit(line)
-                logs.add(line)
-
-                logger.debug(line)
-
-                if (logs.size > maxLogLength) logs.removeFirst()
-            }
-
-            val result = when (entry) {
+        val result = try {
+            when (entry) {
                 is UrlImportQueueEntry -> importerProxy.importContent(
                     urls = entry.urls,
                     maxRetries = entry.maxRetries,
@@ -498,26 +488,22 @@ class ImportService(
                     onLiveOutput = logUnit
                 )
             }
-
+        } finally {
             internalLog.emit(null)
+        }
 
-            currentImport?.let { currentImport ->
-                currentImport.result = result
-                if (result.successful()) currentImport.importQueueEntry.callback()
+        running.result = result
+        if (result.successful()) entry.callback()
 
-                finishedMutex.withLock {
-                    finishedImports.add(currentImport)
-                    if (finishedImports.count { it.result.successful() } > 100) finishedImports.removeIf {
-                        it.result.successful()
-                    }
-                }
+        finishedMutex.withLock {
+            finishedImports.add(running)
+            if (finishedImports.count { it.result.successful() } > 100) finishedImports.removeIf {
+                it.result.successful()
             }
-
         }
 
         currentImport = null
-        active.store(false)
-        queueChangeFlow.tryEmit(Unit)
+        if (result.failed()) throw IllegalStateException(result.error.ifBlank { "Import failed (exit ${result.exitCode})" })
     }
 
     fun getAllImportServices(): List<ImportBackend> =
@@ -576,7 +562,9 @@ class ImportService(
             ) throw IllegalStateException("Sync service has already been started")
         }
 
-        return ApplicationScope.scope.async {
+        val handle = Job()
+        jobService.enqueue(FAVOURITES_KIND, "Favorites sync", user.id, user.username) {
+          try {
             val latestFavSync = favSyncService.getLatestFavSync(user, ISyncService.SyncServiceType.tidal)
 
             val idMap = ConcurrentHashMap<String, ISyncService.LikedSong>()
@@ -617,13 +605,14 @@ class ImportService(
             favSyncService.insertFavSync(user, ISyncService.SyncServiceType.tidal, Date.from(Instant.now()))
 
             logger.info("[${user.username}] Sync favourite songs finished.")
-        }.launchOnCancellation {
-            syncMutex.withLock {
-                syncMap[user.id]?.store(false)
+          } finally {
+                syncMutex.withLock {
+                    syncMap[user.id]?.store(false)
+                }
+                handle.complete()
             }
-
-            logger.info("[${user.username}] Sync favourite songs cancelled.")
         }
+        return handle
     }
 
     suspend fun search(
@@ -654,5 +643,10 @@ class ImportService(
                 cover = it.images.associate { image -> image.width to image.url },
             )
         }
+    }
+
+    companion object {
+        const val JOB_KIND = "import"
+        const val FAVOURITES_KIND = "favourites"
     }
 }

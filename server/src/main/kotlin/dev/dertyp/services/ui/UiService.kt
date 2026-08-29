@@ -9,7 +9,10 @@ import dev.dertyp.plugins.UiContribution
 import dev.dertyp.plugins.UiRenderScope
 import dev.dertyp.plugins.UiTranslator
 import dev.dertyp.services.Service
+import dev.dertyp.services.intake.IntakeService
+import dev.dertyp.ui.IntakeItem
 import dev.dertyp.ui.UiContext
+import dev.dertyp.ui.UiIntakeResult
 import dev.dertyp.ui.UiContributionInfo
 import dev.dertyp.ui.UiContributionKind
 import dev.dertyp.ui.UiHomeLayout
@@ -54,7 +57,14 @@ class UiService(
     private val translations: TranslationService,
     private val pluginSettings: PluginSettingsService,
     private val homeCards: UserHomeCardService,
+    private val intakeService: IntakeService,
 ) : Service() {
+    suspend fun intake(user: User, client: ClientInfo, items: List<IntakeItem>, resolverId: String?): UiIntakeResult =
+        intakeService.submit(items, resolverId, user, client.locale)
+
+    suspend fun resolveIntake(user: User, client: ClientInfo, items: List<IntakeItem>): List<UiHookHandler> =
+        intakeService.handlers(items, user, client.locale)
+
     private val revisions = ConcurrentHashMap<String, AtomicLong>()
 
     private fun allowed(registered: RegisteredContribution, user: User): Boolean =
@@ -187,7 +197,7 @@ class UiService(
                 }
             }.mapNotNull { it.await() }
         }
-        return offers.map { (registered, offer) ->
+        val contributionHandlers = offers.map { (registered, offer) ->
             val t = translations.translator(registered.source, client.locale)
             UiHookHandler(
                 contributionId = registered.contribution.id,
@@ -199,6 +209,11 @@ class UiService(
                 confirmText = offer.confirmKey?.let { t.t(it) },
             )
         }
+        val items = when (event) {
+            is UiHookEvent.ShareUrl -> listOf(IntakeItem.parse(event.url))
+            is UiHookEvent.ShareText -> IntakeItem.parseLines(event.text)
+        }
+        return intakeService.handlers(items, user, client.locale) + contributionHandlers
     }
 
     private fun homeCardInfos(user: User, client: ClientInfo) = list(user, client, kind = UiContributionKind.HOME_CARD)

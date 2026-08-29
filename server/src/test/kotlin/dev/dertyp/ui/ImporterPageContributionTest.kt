@@ -22,6 +22,10 @@ import dev.dertyp.services.import.ImporterProxy
 import dev.dertyp.services.import.ProcessExecutionResult
 import dev.dertyp.services.import.Type
 import dev.dertyp.services.import.UrlImportQueueEntry
+import dev.dertyp.plugins.JobInfo
+import dev.dertyp.plugins.JobStatus
+import dev.dertyp.services.intake.IntakeService
+import dev.dertyp.services.jobs.JobService
 import dev.dertyp.services.ui.ImporterHomeCardContribution
 import dev.dertyp.services.ui.ImporterLibraryEntryContribution
 import dev.dertyp.services.ui.ImporterPageContribution
@@ -34,6 +38,7 @@ import dev.dertyp.services.ui.TranslationService
 import dev.dertyp.services.ui.UiRegistry
 import dev.dertyp.services.ui.UiService
 import dev.dertyp.services.ui.UserHomeCardService
+import dev.dertyp.ui.UiIntakeCodeKind
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -75,6 +80,14 @@ class ImporterPageContributionTest {
     private val currentEntry = UrlImportQueueEntry(mutableListOf("https://tidal.com/browse/track/1", "https://tidal.com/browse/track/2"), byUser = account.id, type = Type.SONG)
     private val currentFinished = FinishedImportQueueEntry(currentEntry, ProcessExecutionResult.EMPTY, mutableListOf("Let us check the token", "", "Fetching metadata…", "Downloading 1/2"))
 
+    private val pendingEntries = listOf(
+        FavouriteImportQueueEntry(ImportFavType.tracks, byUser = account.id),
+        UrlImportQueueEntry(mutableListOf("https://tidal.com/browse/album/9"), byUser = null, type = Type.ALBUM),
+    )
+    private fun job(entry: dev.dertyp.services.import.ImportQueueEntry, status: JobStatus) = ImportService.ImportJob(
+        JobInfo(UUID.randomUUID(), ImportService.JOB_KIND, "server", "t", "s", entry.byUser, status, if (status == JobStatus.RUNNING) 0.5 else null, null, 0, null, null),
+        entry,
+    )
     private val pluginManager = mockk<PluginManager> { every { getAllImporters() } returns listOf(tidal, gamdl, youtube) }
     private val importService = mockk<ImportService>(relaxed = true) {
         every { this@mockk.pluginManager } returns this@ImporterPageContributionTest.pluginManager
@@ -82,10 +95,8 @@ class ImporterPageContributionTest {
         every { queueChanges } returns this@ImporterPageContributionTest.queueChanges
         every { currentImport } returns currentFinished
         every { currentImport(any()) } returns currentEntry
-        coEvery { importQueue(any()) } returns listOf(
-            FavouriteImportQueueEntry(ImportFavType.tracks, byUser = account.id),
-            UrlImportQueueEntry(mutableListOf("https://tidal.com/browse/album/9"), byUser = null, type = Type.ALBUM),
-        )
+        coEvery { importQueue(any()) } returns pendingEntries
+        every { importJobs(any()) } answers { listOf(job(currentEntry, JobStatus.RUNNING)) + pendingEntries.map { job(it, JobStatus.PENDING) } }
     }
     private val importerProxy = mockk<ImporterProxy> {
         every { defaultService } returns ImportBackend("tidal")
@@ -95,8 +106,10 @@ class ImporterPageContributionTest {
 
     private val registry = UiRegistry()
     private val translations = TranslationService(registry)
-    private val uiService = UiService(registry, translations, PluginSettingsService(), UserHomeCardService())
-    private val state = ImporterState(importService, importerProxy)
+    private val uiService = UiService(registry, translations, PluginSettingsService(), UserHomeCardService(), IntakeService(translations))
+    private val intakeService = mockk<IntakeService>()
+    private val jobService = JobService()
+    private val state = ImporterState(importService, importerProxy, intakeService, jobService)
     private val page = ImporterPageContribution(state, uiService)
     private val settingsPage = ImporterSettingsPageContribution(state, uiService)
     private val queuePage = ImporterQueuePageContribution(state, userService)
@@ -209,15 +222,29 @@ class ImporterPageContributionTest {
     }
 
     @Test
-    fun `import validates input and needs a request context`() = runBlocking {
+    fun `import goes through the intake and maps its result`() = runBlocking {
         val empty = page.invoke(scope(), "import", mapOf("input" to UiValue.of("  \n")))
         assertEquals(UiInvokeStatus.VALIDATION_ERROR, empty.status)
         assertNotNull(empty.fieldErrors["input"])
 
-        val noCall = page.invoke(scope(), "import", mapOf("input" to UiValue.of("https://tidal.com/browse/album/1"), "importer" to UiValue.of("gamdl")))
-        assertEquals(UiInvokeStatus.ERROR, noCall.status)
+        val items = listOf(IntakeItem.Url("https://tidal.com/browse/album/1"), IntakeItem.Code(UiIntakeCodeKind.ISRC, "USRC17607839"))
+        coEvery { intakeService.submit(items, null, account, "en") } returns UiIntakeResult(UiIntakeStatus.OK, accepted = 2)
+        val ok = page.invoke(scope(), "import", mapOf("input" to UiValue.of("https://tidal.com/browse/album/1\nUSRC17607839")))
+        assertEquals(UiInvokeStatus.OK, ok.status)
+        assertEquals("2 items queued", ok.message)
+        assertTrue(ok.refresh)
+
+        val handler = UiHookHandler("import.gamdl", "server", "Import with gamdl", null, null, UiAction.Intake(items, "import.gamdl"))
+        coEvery { intakeService.submit(items, null, account, "en") } returns UiIntakeResult(UiIntakeStatus.NEEDS_CHOICE, handlers = listOf(handler))
+        val choice = page.invoke(scope(), "import", mapOf("input" to UiValue.of("https://tidal.com/browse/album/1\nUSRC17607839")))
+        assertEquals(UiInvokeStatus.OK, choice.status)
+        assertEquals(listOf(UiMenuItem("Import with gamdl", handler.action)), (choice.next as UiAction.OpenMenu).items)
+
+        coEvery { intakeService.submit(items, null, account, "en") } returns UiIntakeResult(UiIntakeStatus.UNHANDLED, rejected = items)
+        val unhandled = page.invoke(scope(), "import", mapOf("input" to UiValue.of("https://tidal.com/browse/album/1\nUSRC17607839")))
+        assertEquals(UiInvokeStatus.VALIDATION_ERROR, unhandled.status)
+        assertTrue(unhandled.fieldErrors["input"]!!.contains("USRC17607839"))
         coVerify(exactly = 0) { importService.addToQueue(*anyVararg()) }
-        coVerify(exactly = 0) { importService.importIds(any(), any(), any(), any(), any()) }
     }
 
     @Test
@@ -257,6 +284,9 @@ class ImporterPageContributionTest {
         assertEquals(UiAction.OpenUrl(currentEntry.urls[0]), menu.items[0].action)
         val badges = current.flatten().filterIsInstance<UiComponent.Badge>()
         assertEquals(listOf("TRACK", "Importer Ann"), badges.map { it.text })
+        assertEquals(0.5, current.flatten().filterIsInstance<UiComponent.Progress>().single().value)
+        val cancel = current.actions.single() as UiComponent.Button
+        assertEquals("cancel", (cancel.action as UiAction.Invoke).actionId)
         assertEquals(UiIcon(UiIconName.USER), badges[1].icon)
 
         assertEquals("Pending Imports", (root.children[3] as UiComponent.Text).text)
@@ -269,8 +299,7 @@ class ImporterPageContributionTest {
 
     @Test
     fun `queue page shows the empty state`() = runBlocking {
-        every { importService.currentImport(any()) } returns null
-        coEvery { importService.importQueue(any()) } returns emptyList()
+        every { importService.importJobs(any()) } returns emptyList()
         val root = queuePage.render(scope()) as UiComponent.EmptyState
         assertEquals("Queue is empty", root.title)
         assertEquals("No tasks are currently importing or pending.", root.description)
@@ -278,16 +307,10 @@ class ImporterPageContributionTest {
     }
 
     @Test
-    fun `share hooks offer import for resolvable urls and search otherwise`() = runBlocking {
-        val import = page.onHook(scope(), UiHookEvent.ShareUrl("https://tidal.com/browse/album/1"))!!
-        assertEquals("importer.hook.import", import.titleKey)
-        assertEquals("importer.hook.importConfirm", import.confirmKey)
-        assertEquals(UiAction.OpenPage("core.importer", mapOf("input" to "https://tidal.com/browse/album/1")), import.action)
-
-        val search = page.onHook(scope(), UiHookEvent.ShareText("some song name"))!!
-        assertEquals("importer.hook.search", search.titleKey)
-        assertEquals(UiAction.OpenNative(UiPortals.EXTERNAL_SEARCH, mapOf("query" to "some song name")), search.action)
-
+    fun `share hooks offer to open the importer with the text prefilled`() = runBlocking {
+        val offer = page.onHook(scope(), UiHookEvent.ShareUrl("https://tidal.com/browse/album/1"))!!
+        assertEquals("importer.hook.open", offer.titleKey)
+        assertEquals(UiAction.OpenPage("core.importer", mapOf("input" to "https://tidal.com/browse/album/1")), offer.action)
         assertNull(page.onHook(scope(), UiHookEvent.ShareText("   ")))
     }
 

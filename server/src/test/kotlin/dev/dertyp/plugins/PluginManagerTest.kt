@@ -12,6 +12,8 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
+import dev.dertyp.services.intake.IntakeService
+import dev.dertyp.services.jobs.JobService
 import dev.dertyp.services.ui.PluginSettingsService
 import dev.dertyp.services.ui.TranslationService
 import dev.dertyp.services.ui.UiRegistry
@@ -52,6 +54,8 @@ class PluginManagerTest : KoinTest {
                 single { UiRegistry() }
                 single { TranslationService(get()) }
                 single { PluginSettingsService() }
+                single { IntakeService(get()) }
+                single { JobService() }
             })
         }
         

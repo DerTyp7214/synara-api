@@ -12,8 +12,12 @@ import dev.dertyp.services.ISyncService
 import dev.dertyp.services.UserService
 import dev.dertyp.services.import.FavouriteImportQueueEntry
 import dev.dertyp.services.import.ImportQueueEntry
-import dev.dertyp.services.import.ImportRpcService
 import dev.dertyp.services.import.ImportService
+import dev.dertyp.services.intake.IntakeService
+import dev.dertyp.services.jobs.JobService
+import dev.dertyp.plugins.JobStatus
+import dev.dertyp.ui.IntakeItem
+import dev.dertyp.ui.UiIntakeStatus
 import dev.dertyp.services.import.ImporterCapability
 import dev.dertyp.services.import.ImporterProxy
 import dev.dertyp.services.import.UrlImportQueueEntry
@@ -55,6 +59,8 @@ import kotlin.time.Duration.Companion.seconds
 class ImporterState(
     val importService: ImportService,
     val importerProxy: ImporterProxy,
+    val intakeService: IntakeService,
+    val jobService: JobService,
 ) {
     private val authChangeFlow = MutableSharedFlow<Unit>(extraBufferCapacity = 8, onBufferOverflow = BufferOverflow.DROP_OLDEST)
     val authChanges: Flow<Unit> = authChangeFlow.asSharedFlow()
@@ -345,9 +351,37 @@ class ImporterPageContribution(
         if (lines.isEmpty()) {
             return UiInvokeResult(UiInvokeStatus.VALIDATION_ERROR, fieldErrors = mapOf(PARAM_INPUT to scope.t("importer.error.empty")))
         }
-        val call = scope.call ?: return UiInvokeResult(UiInvokeStatus.ERROR, ImporterState.NO_CALL)
-        ImportRpcService(scope.account, call, importService, state.importerProxy).importUrls(lines)
-        return UiInvokeResult(UiInvokeStatus.OK, scope.t("importer.queued", "count" to lines.size.toString()), refresh = true)
+        val items = lines.map(IntakeItem::parse)
+        val result = state.intakeService.submit(items, null, scope.account, scope.client.locale)
+        return when (result.status) {
+            UiIntakeStatus.OK -> UiInvokeResult(
+                UiInvokeStatus.OK,
+                result.message ?: scope.t("importer.queued", "count" to result.accepted.toString()),
+                refresh = true,
+                next = result.next,
+            )
+
+            UiIntakeStatus.NEEDS_CHOICE -> UiInvokeResult(
+                UiInvokeStatus.OK,
+                next = UiAction.OpenMenu(result.handlers.map { UiMenuItem(it.title, it.action, it.icon) }, title = scope.t("importer.choose")),
+            )
+
+            UiIntakeStatus.UNHANDLED -> UiInvokeResult(
+                UiInvokeStatus.VALIDATION_ERROR,
+                fieldErrors = mapOf(PARAM_INPUT to scope.t("importer.error.unhandled", "items" to result.rejected.joinToString(", ") { it.describe() })),
+            )
+
+            UiIntakeStatus.UNAUTHORIZED -> UiInvokeResult(UiInvokeStatus.UNAUTHORIZED, result.message)
+            UiIntakeStatus.ERROR -> UiInvokeResult(UiInvokeStatus.ERROR, result.message)
+        }
+    }
+
+    private fun IntakeItem.describe(): String = when (this) {
+        is IntakeItem.Url -> url
+        is IntakeItem.Code -> value
+        is IntakeItem.Id -> "$provider:$id"
+        is IntakeItem.Text -> text
+        is IntakeItem.File -> name
     }
 
     override suspend fun onHook(scope: UiRenderScope, event: UiHookEvent): UiHookOffer? {
@@ -356,24 +390,12 @@ class ImporterPageContribution(
             is UiHookEvent.ShareText -> event.text
         }.trim()
         if (text.isEmpty()) return null
-        val url = text.lines().firstOrNull { it.contains("://") }?.trim()
-        val resolved = url?.let { state.importerProxy.resolveImporter(it) }
-        return if (resolved != null) {
-            UiHookOffer(
-                titleKey = "importer.hook.import",
-                descriptionKey = "importer.hook.importDescription",
-                icon = UiIcon(UiIconName.IMPORT),
-                action = UiAction.OpenPage(id, params = mapOf(PARAM_INPUT to text)),
-                confirmKey = "importer.hook.importConfirm",
-            )
-        } else {
-            UiHookOffer(
-                titleKey = "importer.hook.search",
-                descriptionKey = "importer.hook.searchDescription",
-                icon = UiIcon(UiIconName.SEARCH),
-                action = UiAction.OpenNative(UiPortals.EXTERNAL_SEARCH, params = mapOf("query" to text)),
-            )
-        }
+        return UiHookOffer(
+            titleKey = "importer.hook.open",
+            descriptionKey = "importer.hook.openDescription",
+            icon = UiIcon(UiIconName.IMPORT),
+            action = UiAction.OpenPage(id, params = mapOf(PARAM_INPUT to text)),
+        )
     }
 }
 
@@ -459,8 +481,11 @@ class ImporterQueuePageContribution(
 
     override suspend fun render(scope: UiRenderScope): UiComponent {
         val account = (scope as? ServerUiRenderScope)?.account
-        val current = account?.let { importService.currentImport(it) }
-        val queue = account?.let { importService.importQueue(it) } ?: emptyList()
+        val jobs = account?.let { importService.importJobs(it) } ?: emptyList()
+        val running = jobs.filter { it.info.status == JobStatus.RUNNING }
+        val pending = jobs.filter { it.info.status == JobStatus.PENDING }
+        val current = running.firstOrNull()?.entry
+        val queue = pending.map { it.entry }
 
         if (current == null && queue.isEmpty()) {
             return UiComponent.EmptyState(
@@ -490,16 +515,26 @@ class ImporterQueuePageContribution(
         }
         if (current != null) {
             children += UiComponent.Text(scope.t("importer.queue.current"), UiTextStyle.SUBTITLE, UiTone.MUTED)
-            children += entryCard(current, userOf(current), scope)
+            running.forEach { children += entryCard(it, userOf(it.entry), scope) }
         }
         if (queue.isNotEmpty()) {
             children += UiComponent.Text(scope.t("importer.queue.pending"), UiTextStyle.SUBTITLE, UiTone.MUTED)
-            queue.forEach { children += entryCard(it, userOf(it), scope) }
+            pending.forEach { children += entryCard(it, userOf(it.entry), scope) }
         }
         return UiComponent.Column(children = children, spacing = UiSpacing.LARGE)
     }
 
-    private fun entryCard(entry: ImportQueueEntry, user: User?, scope: UiRenderScope): UiComponent {
+    override suspend fun invoke(scope: UiRenderScope, actionId: String, values: Map<String, UiValue>): UiInvokeResult {
+        if (actionId != "cancel") return super.invoke(scope, actionId, values)
+        val jobId = values["jobId"]?.text?.let { runCatching { java.util.UUID.fromString(it) }.getOrNull() }
+            ?: throw IllegalArgumentException("Missing job id")
+        val cancelled = state.jobService.cancel(jobId, scope.user)
+        return if (cancelled) UiInvokeResult(UiInvokeStatus.OK, scope.t("importer.queue.cancelled"), refresh = true)
+        else UiInvokeResult(UiInvokeStatus.ERROR, scope.t("importer.error.unknownJob"))
+    }
+
+    private fun entryCard(job: ImportService.ImportJob, user: User?, scope: UiRenderScope): UiComponent {
+        val entry = job.entry
         val header: UiComponent
         val body: UiComponent
         when (entry) {
@@ -523,7 +558,18 @@ class ImporterQueuePageContribution(
             entry.type?.let { UiComponent.Badge(it.value.uppercase(), UiTone.PRIMARY) },
             user?.let { UiComponent.Badge(it.displayName ?: it.username, UiTone.MUTED, icon = UiIcon(UiIconName.USER)) },
         )
-        return UiComponent.Card(children = listOfNotNull(header, body, if (badges.isNotEmpty()) UiComponent.Row(children = badges) else null))
+        val progress = if (job.info.status == JobStatus.RUNNING) UiComponent.Progress(job.info.progress, job.info.message) else null
+        return UiComponent.Card(
+            children = listOfNotNull(header, body, progress, if (badges.isNotEmpty()) UiComponent.Row(children = badges) else null),
+            actions = listOf(
+                UiComponent.Button(
+                    scope.t("importer.queue.cancel"),
+                    UiAction.Invoke(id, "cancel", params = mapOf("jobId" to UiValue.of(job.info.id.toString()))),
+                    UiButtonStyle.TEXT,
+                    icon = UiIcon(UiIconName.CLOSE),
+                ),
+            ),
+        )
     }
 
     override fun changes(scope: UiRenderScope): Flow<Unit> = importService.queueChanges

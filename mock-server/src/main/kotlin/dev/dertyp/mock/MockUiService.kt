@@ -2,7 +2,10 @@ package dev.dertyp.mock
 
 import dev.dertyp.data.UserCapability
 import dev.dertyp.services.IUiService
+import dev.dertyp.ui.IntakeItem
 import dev.dertyp.ui.UiAction
+import dev.dertyp.ui.UiIntakeResult
+import dev.dertyp.ui.UiIntakeStatus
 import dev.dertyp.ui.UiAlign
 import dev.dertyp.ui.UiButtonStyle
 import dev.dertyp.ui.UiCardSize
@@ -225,22 +228,48 @@ class MockUiService : IUiService {
         }
     }
 
-    override suspend fun dispatchHook(event: UiHookEvent): List<UiHookHandler> {
-        val text = when (event) {
-            is UiHookEvent.ShareUrl -> event.url
-            is UiHookEvent.ShareText -> event.text
-        }
+    private fun offers(items: List<IntakeItem>): List<UiHookHandler> {
         val handlers = mutableListOf<UiHookHandler>()
-        if (text.contains("tidal.com") || text.contains("music.apple.com")) {
-            handlers += UiHookHandler("core.importer", "server", "Import", "Add this link to the import queue", UiIcon(UiIconName.IMPORT), UiAction.OpenPage("core.importer", mapOf("input" to text)), confirmText = "Open the importer with this link?")
+        val tidal = items.filter { it is IntakeItem.Url && it.url.contains("tidal.com") || it is IntakeItem.Id && it.provider == "tidal" || it is IntakeItem.Code }
+        val apple = items.filter { it is IntakeItem.Url && it.url.contains("music.apple.com") }
+        val texts = items.filterIsInstance<IntakeItem.Text>()
+        if (tidal.isNotEmpty()) {
+            handlers += UiHookHandler("import.tidal", "server", "Import with Tidal", "Add to the import queue", UiIcon(UiIconName.IMPORT), UiAction.Intake(tidal, "import.tidal", "Import this link?"), confirmText = "Import this link?")
         }
-        if (text.contains("music.apple.com")) {
-            handlers += UiHookHandler("gamdl.credentials", "gamdl", "Import with gamdl", null, UiIcon(UiIconName.KEY), UiAction.OpenPage("core.importer", mapOf("input" to text)))
+        if (apple.isNotEmpty()) {
+            handlers += UiHookHandler("import.tidal", "server", "Import with Tidal", "Add to the import queue", UiIcon(UiIconName.IMPORT), UiAction.Intake(apple, "import.tidal", "Import this link?"), confirmText = "Import this link?")
+            handlers += UiHookHandler("import.gamdl", "server", "Import with gamdl (Apple Music)", "Add to the import queue", UiIcon(UiIconName.IMPORT), UiAction.Intake(apple, "import.gamdl", "Import this link?"), confirmText = "Import this link?")
         }
-        if (handlers.isEmpty() && !text.contains("://")) {
-            handlers += UiHookHandler("core.importer", "server", "Search catalog", "Search the streaming catalog for this text", UiIcon(UiIconName.SEARCH), UiAction.OpenNative(UiPortals.EXTERNAL_SEARCH, mapOf("query" to text)))
+        if (texts.isNotEmpty()) {
+            handlers += UiHookHandler("search.external", "server", "Search catalog", "Search the streaming catalog for this text", UiIcon(UiIconName.SEARCH), UiAction.OpenNative(UiPortals.EXTERNAL_SEARCH, mapOf("query" to texts.joinToString(" ") { it.text })))
         }
         return handlers
+    }
+
+    override suspend fun intake(items: List<IntakeItem>, resolverId: String?): UiIntakeResult {
+        val handlers = offers(items).filter { resolverId == null || it.contributionId == resolverId }
+        val submitting = handlers.filter { it.action is UiAction.Intake }
+        val ambiguous = resolverId == null && items.any { item -> submitting.count { item in (it.action as UiAction.Intake).items } > 1 }
+        if (ambiguous) return UiIntakeResult(UiIntakeStatus.NEEDS_CHOICE, handlers = handlers)
+        val accepted = submitting.flatMap { (it.action as UiAction.Intake).items }.distinct()
+        val rejected = items - accepted.toSet()
+        if (accepted.isEmpty()) {
+            return if (handlers.isEmpty()) UiIntakeResult(UiIntakeStatus.UNHANDLED, rejected = rejected)
+            else UiIntakeResult(UiIntakeStatus.NEEDS_CHOICE, rejected = rejected, handlers = handlers)
+        }
+        queue.value = queue.value + accepted.map { if (it is IntakeItem.Url) it.url else it.toString() }
+        return UiIntakeResult(UiIntakeStatus.OK, "${accepted.size} items queued", accepted.size, rejected, handlers.filter { it.action !is UiAction.Intake })
+    }
+
+    override suspend fun resolveIntake(items: List<IntakeItem>): List<UiHookHandler> = offers(items)
+
+    override suspend fun dispatchHook(event: UiHookEvent): List<UiHookHandler> {
+        val items = when (event) {
+            is UiHookEvent.ShareUrl -> listOf(IntakeItem.parse(event.url))
+            is UiHookEvent.ShareText -> IntakeItem.parseLines(event.text)
+        }
+        val text = items.joinToString("\n") { if (it is IntakeItem.Url) it.url else if (it is IntakeItem.Text) it.text else it.toString() }
+        return offers(items) + UiHookHandler("core.importer", "server", "Open in importer", "Review and edit before importing", UiIcon(UiIconName.IMPORT), UiAction.OpenPage("core.importer", mapOf("input" to text)))
     }
 
     private fun layout(): UiHomeLayout {
