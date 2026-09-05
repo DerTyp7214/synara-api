@@ -32,8 +32,13 @@ class ScrobbleService : Service() {
 
     private val nowPlayingChanges = MutableSharedFlow<Unit>(extraBufferCapacity = 8, onBufferOverflow = BufferOverflow.DROP_OLDEST)
 
+    internal var playingLeaseMs: Long = PLAYING_LEASE_MS
+    internal var pausedLeaseMs: Long = PAUSED_LEASE_MS
+
     suspend fun setNowPlaying(userId: PlatformUUID, songId: PlatformUUID) {
-        reportPlayback(userId, PlaybackReport(songId))
+        val previous = nowPlaying[userId]?.takeIf { it.song.id == songId }
+        val positionMs = previous?.let { it.positionMs + if (it.playing) (System.currentTimeMillis() - it.anchorAt).coerceAtLeast(0) else 0L } ?: 0L
+        reportPlayback(userId, PlaybackReport(songId, positionMs = positionMs))
     }
 
     suspend fun reportPlayback(userId: PlatformUUID, report: PlaybackReport): Long {
@@ -47,15 +52,18 @@ class ScrobbleService : Service() {
         if (previous == null) nowPlayingChanges.tryEmit(Unit)
         hooks.emit(HookEvent.NowPlayingChanged(userId, report.songId, myGen, now, positionMs, report.playing))
 
-        val remaining = song.duration - positionMs
-        if (report.playing && song.duration > 0 && remaining > 0) {
-            timers[userId] = serviceScope.launch {
-                delay(remaining.milliseconds)
-                if (generation[userId] == myGen) {
-                    nowPlaying.remove(userId)
-                    nowPlayingChanges.tryEmit(Unit)
-                    hooks.emit(HookEvent.NowPlayingChanged(userId, null, myGen, System.currentTimeMillis()))
-                }
+        val remaining = if (song.duration > 0) song.duration - positionMs else Long.MAX_VALUE
+        val lease = when {
+            !report.playing -> pausedLeaseMs
+            remaining <= 0 -> END_GRACE_MS
+            else -> minOf(remaining, playingLeaseMs)
+        }
+        timers[userId] = serviceScope.launch {
+            delay(lease.milliseconds)
+            if (generation[userId] == myGen && nowPlaying.containsKey(userId)) {
+                nowPlaying.remove(userId)
+                nowPlayingChanges.tryEmit(Unit)
+                hooks.emit(HookEvent.NowPlayingChanged(userId, null, myGen, System.currentTimeMillis()))
             }
         }
         return now
@@ -100,6 +108,9 @@ class ScrobbleService : Service() {
 
     companion object {
         const val MAX_REPORT_DELAY_MS = 2_000L
+        const val PLAYING_LEASE_MS = 180_000L
+        const val PAUSED_LEASE_MS = 1_800_000L
+        const val END_GRACE_MS = 5_000L
     }
 }
 

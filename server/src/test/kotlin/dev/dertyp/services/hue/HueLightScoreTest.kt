@@ -33,6 +33,7 @@ class HueLightScoreTest {
         val downbeats = score.keyframes.filter { it.kind != KeyframeKind.BEAT }
         assertTrue(downbeats.all { it.index % 4 == 2 }, downbeats.take(5).toString())
         assertEquals(60, downbeats.size)
+        assertEquals(2, score.downbeatPhase)
     }
 
     @Test
@@ -72,6 +73,7 @@ class HueLightScoreTest {
         assertEquals(KeyframeKind.DOWNBEAT, score.keyframes[0].kind)
         assertEquals(KeyframeKind.BEAT, score.keyframes[1].kind)
         assertEquals(KeyframeKind.DOWNBEAT, score.keyframes[4].kind)
+        assertEquals(0, score.downbeatPhase)
     }
 
     @Test
@@ -81,6 +83,14 @@ class HueLightScoreTest {
         assertTrue(score.keyframes.all { it.kind == KeyframeKind.DOWNBEAT })
         assertNull(score.beatMs)
         assertEquals(0.0, score.beatsPerSecond)
+        assertEquals(0, score.downbeatPhase)
+    }
+
+    @Test
+    fun `the fallback interval is not floored`() {
+        val score = HueLightScore.build(null, null, 300, 60)
+        assertEquals(listOf(0, 60, 120, 180, 240), score.keyframes.map { it.atMs })
+        assertEquals(64, HueLightScore.build(null, null, 0, 60).keyframes.size)
     }
 
     @Test

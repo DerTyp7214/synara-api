@@ -9,6 +9,7 @@ import dev.dertyp.data.HueUserLink
 import dev.dertyp.data.SongAudioData
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.util.UUID
@@ -103,19 +104,29 @@ class HuePaletteMapperTest {
     }
 
     @Test
-    fun `envelope factor follows loudness between the quiet and loud percentiles`() {
-        val envelope = List(100) { if (it < 50) -60f else -10f }
-        val quiet = HuePaletteMapper.envelopeFactor(envelope, 10, 0, 1000)
-        val loud = HuePaletteMapper.envelopeFactor(envelope, 10, 6000, 7000)
-        assertEquals(0.55, quiet, 0.01)
-        assertEquals(1.0, loud, 0.01)
-        assertEquals(1.0, HuePaletteMapper.envelopeFactor(emptyList(), 10, 0, 1000))
-        assertEquals(1.0, HuePaletteMapper.envelopeFactor(List(20) { -30f }, 10, 0, 500))
-        assertEquals(1.0, HuePaletteMapper.envelopeFactor(envelope, 10, 50_000, 51_000), 0.01)
+    fun `the level factor follows loudness between the quiet and loud percentiles`() {
+        val envelope = NormalizedEnvelope(List(100) { if (it < 50) -60f else -10f }, 10)
+        assertTrue(envelope.usable)
+        assertEquals(0.55, HuePaletteMapper.levelFactor(envelope.level(0, 1000)), 0.01)
+        assertEquals(1.0, HuePaletteMapper.levelFactor(envelope.level(6000, 7000)), 0.01)
+        assertEquals(1.0, HuePaletteMapper.levelFactor(envelope.level(50_000, 51_000)), 0.01)
+
+        val empty = NormalizedEnvelope(emptyList(), 10)
+        assertFalse(empty.usable)
+        assertEquals(1.0, HuePaletteMapper.levelFactor(empty.level(0, 1000)))
+        val flat = NormalizedEnvelope(List(20) { -30f }, 10)
+        assertFalse(flat.usable)
+        assertEquals(1.0, HuePaletteMapper.levelFactor(flat.level(0, 500)))
+        assertEquals(1.0, HuePaletteMapper.levelFactor(NormalizedEnvelope(List(20) { -30f }, 0).level(0, 500)))
     }
 
     @Test
-    fun `bar length derives from bpm within bounds`() {
+    fun `beat and bar lengths derive from bpm within bounds`() {
+        assertEquals(500, HuePaletteMapper.beatMs(120.0))
+        assertEquals(1000, HuePaletteMapper.beatMs(60.0))
+        assertNull(HuePaletteMapper.beatMs(null))
+        assertNull(HuePaletteMapper.beatMs(0.0))
+        assertNull(HuePaletteMapper.beatMs(-120.0))
         assertEquals(2000L, HuePaletteMapper.barMs(120.0))
         assertEquals(4000L, HuePaletteMapper.barMs(60.0))
         assertEquals(10_000L, HuePaletteMapper.barMs(10.0))

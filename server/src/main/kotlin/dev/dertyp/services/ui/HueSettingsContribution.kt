@@ -223,7 +223,7 @@ class HueSettingsContribution(private val hue: HueService) : UiContribution(
             transitionMs = values[FIELD_TRANSITION_MS]?.number?.toInt()?.coerceIn(0, 5000) ?: 400,
             onStop = enumOr(values[FIELD_ON_STOP]?.text, HueStopMode.KEEP),
             motion = enumOr(values[FIELD_MOTION]?.text, HueMotionMode.OFF),
-            latencyMs = values[FIELD_LATENCY_MS]?.number?.toInt()?.coerceIn(0, HueService.MAX_LATENCY_MS) ?: 150,
+            latencyMs = values[FIELD_LATENCY_MS]?.number?.toInt()?.coerceIn(0, HueService.MAX_LATENCY_MS) ?: HueUserLink(bridgeId).latencyMs,
         )
         hue.setLink(scope.user.id, link)
         return UiInvokeResult(UiInvokeStatus.OK, scope.t("hue.saved"), refresh = true)

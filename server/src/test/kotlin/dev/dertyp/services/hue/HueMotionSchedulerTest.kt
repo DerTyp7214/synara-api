@@ -113,4 +113,56 @@ class HueMotionSchedulerTest {
             assertTrue(emitted.all { it.second.kind == KeyframeKind.DOWNBEAT })
         }
     }
+
+    @Test
+    fun `a seek back after the end resumes`() {
+        val clock = MutableStateFlow(PlaybackClock(5_200, 0, true))
+        runScheduler(clock, 0, durationMs = 5_000) { emitted, flow ->
+            advanceTimeBy(2_000)
+            yield()
+            assertTrue(emitted.isEmpty())
+            flow.value = PlaybackClock(4_400, testScheduler.currentTime, true)
+            advanceTimeBy(200)
+            yield()
+            assertEquals(listOf(4_500), emitted.map { it.second.atMs })
+            advanceTimeBy(2_000)
+            yield()
+            assertEquals(listOf(4_500), emitted.map { it.second.atMs })
+            flow.value = PlaybackClock(1_000, testScheduler.currentTime, true)
+            advanceTimeBy(600)
+            yield()
+            assertEquals(listOf(4_500, 1_500), emitted.map { it.second.atMs })
+        }
+    }
+
+    @Test
+    fun `a clock change inside the latency window does not re-emit the frame`() {
+        val clock = MutableStateFlow(PlaybackClock(0, 0, true))
+        runScheduler(clock, 300) { emitted, flow ->
+            advanceTimeBy(250)
+            yield()
+            assertEquals(listOf(500), emitted.map { it.second.atMs })
+            flow.value = PlaybackClock(250, testScheduler.currentTime, true)
+            advanceTimeBy(500)
+            yield()
+            assertEquals(listOf(500, 1_000), emitted.map { it.second.atMs })
+        }
+    }
+
+    @Test
+    fun `the next eligible keyframe is offered as the transition target`() {
+        val clock = MutableStateFlow(PlaybackClock(0, 0, true))
+        val nextAt = ArrayList<Int?>()
+        runTest {
+            val job = backgroundScope.launch {
+                HueMotionScheduler(clock, score, 3_000, 0, { it.kind == KeyframeKind.DOWNBEAT }, now = { testScheduler.currentTime }) { _, next ->
+                    nextAt += next
+                }.run()
+            }
+            advanceTimeBy(2_100)
+            yield()
+            assertEquals(listOf<Int?>(4_000), nextAt)
+            job.cancel()
+        }
+    }
 }

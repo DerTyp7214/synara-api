@@ -17,6 +17,9 @@ object HuePaletteMapper {
 
     private data class Candidate(val argb: Int, val hue: Double, val saturation: Double, val lightness: Double)
 
+    private const val BEATS_PER_BAR = 4
+    private const val DEFAULT_BAR_MS = 6_000L
+
     val TEST_COLORS = listOf(0xFFFF3B30.toInt(), 0xFF34C759.toInt(), 0xFF007AFF.toInt(), 0xFFFFCC00.toInt(), 0xFFAF52DE.toInt())
 
     fun map(
@@ -51,16 +54,12 @@ object HuePaletteMapper {
         return assign(rotated, targets, brightness, transitionMs, gamuts)
     }
 
-    fun envelopeFactor(envelopeDb: List<Float>, envelopeHz: Int, fromMs: Long, toMs: Long): Double {
-        val envelope = NormalizedEnvelope(envelopeDb, envelopeHz)
-        if (!envelope.usable) return 1.0
-        return levelFactor(envelope.level(fromMs, toMs))
-    }
-
     fun levelFactor(level: Double): Double = 0.55 + 0.45 * level.coerceIn(0.0, 1.0)
 
+    fun beatMs(bpm: Double?): Int? = bpm?.takeIf { it > 0 }?.let { (60_000 / it).roundToInt() }?.takeIf { it > 0 }
+
     fun barMs(bpm: Double?): Long =
-        bpm?.takeIf { it > 0 }?.let { (240_000 / it).toLong().coerceIn(2_000, 10_000) } ?: 6_000
+        beatMs(bpm)?.let { (it.toLong() * BEATS_PER_BAR).coerceIn(2_000, 10_000) } ?: DEFAULT_BAR_MS
 
     fun stop(link: HueUserLink): List<HueCommand> = when (link.onStop) {
         HueStopMode.OFF -> link.targets.map { HueCommand(it, LightUpdate(on = ClipOn(false), dynamics = ClipDynamics(link.transitionMs))) }

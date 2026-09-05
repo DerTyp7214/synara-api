@@ -8,20 +8,13 @@ enum class KeyframeKind { BEAT, DOWNBEAT, SECTION }
 
 data class Keyframe(val index: Int, val atMs: Int, val kind: KeyframeKind, val level: Double)
 
-data class LightScore(val keyframes: List<Keyframe>, val beatMs: Int?) {
+data class LightScore(val keyframes: List<Keyframe>, val beatMs: Int?, val downbeatPhase: Int = 0) {
     val beatsPerSecond: Double get() = beatMs?.takeIf { it > 0 }?.let { 1000.0 / it } ?: 0.0
 
     fun nextIndexAfter(positionMs: Long, fromIndex: Int, eligible: (Keyframe) -> Boolean): Int {
-        var low = fromIndex.coerceAtLeast(0)
-        var high = keyframes.size
-        while (low < high) {
-            val mid = (low + high) ushr 1
-            if (keyframes[mid].atMs <= positionMs) low = mid + 1 else high = mid
-        }
-        for (index in low until keyframes.size) {
-            if (eligible(keyframes[index])) return index
-        }
-        return -1
+        val from = fromIndex.coerceIn(0, keyframes.size)
+        val insertion = -(keyframes.binarySearch(fromIndex = from) { if (it.atMs <= positionMs) -1 else 1 } + 1)
+        return (insertion until keyframes.size).firstOrNull { eligible(keyframes[it]) } ?: -1
     }
 }
 
@@ -61,11 +54,10 @@ object HueLightScore {
     fun build(timeline: SongAudioTimeline?, bpm: Double?, durationMs: Long, fallbackIntervalMs: Long): LightScore {
         val envelope = timeline?.let { NormalizedEnvelope(it.envelopeDb, it.envelopeHz) }
         val beats = timeline?.beatsMs?.takeIf { it.isNotEmpty() }
-            ?: bpm?.takeIf { it > 0 && durationMs > 0 }?.let { grid((60_000 / it).roundToInt(), durationMs) }
+            ?: HuePaletteMapper.beatMs(bpm)?.takeIf { durationMs > 0 }?.let { grid(it, durationMs) }
         if (beats == null) {
-            val interval = fallbackIntervalMs.coerceAtLeast(500)
-            val end = if (durationMs > 0) durationMs else interval * 64
-            return LightScore(grid(interval.toInt(), end).mapIndexed { index, at -> Keyframe(index, at, KeyframeKind.DOWNBEAT, 1.0) }, null)
+            val end = if (durationMs > 0) durationMs else fallbackIntervalMs * 64
+            return LightScore(grid(fallbackIntervalMs.toInt(), end).mapIndexed { index, at -> Keyframe(index, at, KeyframeKind.DOWNBEAT, 1.0) }, null)
         }
         val beatMs = if (beats.size > 1) ((beats.last() - beats.first()).toDouble() / (beats.size - 1)).roundToInt() else null
         val beatLevels = beats.map { envelope?.level(it - BEAT_WINDOW_MS, it + BEAT_WINDOW_MS) ?: 1.0 }
@@ -76,19 +68,11 @@ object HueLightScore {
             val nextAt = beats.getOrNull(index + 1)?.toLong() ?: (if (durationMs > at) durationMs else at + (beatMs ?: 500).toLong())
             Keyframe(index, at, kinds[index], envelope?.level(at.toLong(), nextAt) ?: 1.0)
         }
-        return LightScore(keyframes, beatMs)
+        return LightScore(keyframes, beatMs, phase)
     }
 
-    private fun grid(intervalMs: Int, endMs: Long): List<Int> {
-        val step = intervalMs.coerceAtLeast(1)
-        val result = ArrayList<Int>()
-        var at = 0L
-        while (at < endMs) {
-            result += at.toInt()
-            at += step
-        }
-        return result
-    }
+    private fun grid(intervalMs: Int, endMs: Long): List<Int> =
+        (0L until endMs step intervalMs.coerceAtLeast(1).toLong()).map { it.toInt() }
 
     private fun downbeatPhase(beatLevels: List<Double>, usable: Boolean): Int {
         if (!usable || beatLevels.size < BEATS_PER_BAR) return 0

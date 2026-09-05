@@ -229,6 +229,75 @@ class ScrobbleServiceTest : KoinTest {
     }
 
     @Test
+    fun `a paused report expires after the paused lease`() = runBlocking {
+        setup()
+        val service = ScrobbleService()
+        service.pausedLeaseMs = 200
+        val user = UUID.randomUUID()
+        val songId = UUID.randomUUID()
+        coEvery { songService.byIds(listOf(songId), user) } returns listOf(songStub(songId, 600_000))
+        val events = CopyOnWriteArrayList<HookEvent.NowPlayingChanged>()
+        hookService.on<HookEvent.NowPlayingChanged> { events.add(it) }
+
+        service.reportPlayback(user, PlaybackReport(songId, positionMs = 1_000, playing = false))
+        awaitCondition { events.size == 1 }
+        assertEquals(songId, events[0].songId)
+
+        awaitCondition { events.size == 2 }
+        assertNull(events[1].songId)
+        assertEquals(events[0].generation, events[1].generation)
+    }
+
+    @Test
+    fun `a heartbeat while playing keeps extending the lease`() = runBlocking {
+        setup()
+        val service = ScrobbleService()
+        service.playingLeaseMs = 300
+        val user = UUID.randomUUID()
+        val songId = UUID.randomUUID()
+        coEvery { songService.byIds(listOf(songId), user) } returns listOf(songStub(songId, 600_000))
+        val events = CopyOnWriteArrayList<HookEvent.NowPlayingChanged>()
+        hookService.on<HookEvent.NowPlayingChanged> { events.add(it) }
+
+        repeat(5) { beat ->
+            service.reportPlayback(user, PlaybackReport(songId, positionMs = 1_000L + beat * 150))
+            delay(150.milliseconds)
+        }
+        assertEquals(5, events.size)
+        assertTrue(events.all { it.songId == songId }, events.map { it.songId }.toString())
+
+        awaitCondition { events.size == 6 }
+        assertNull(events[5].songId)
+    }
+
+    @Test
+    fun `the legacy now-playing call resumes at the projected position`() = runBlocking {
+        setup()
+        val service = ScrobbleService()
+        val user = UUID.randomUUID()
+        val songId = UUID.randomUUID()
+        coEvery { songService.byIds(listOf(songId), user) } returns listOf(songStub(songId, 600_000))
+        val events = CopyOnWriteArrayList<HookEvent.NowPlayingChanged>()
+        hookService.on<HookEvent.NowPlayingChanged> { events.add(it) }
+
+        service.setNowPlaying(user, songId)
+        awaitCondition { events.size == 1 }
+        assertEquals(0, events[0].positionMs)
+
+        service.reportPlayback(user, PlaybackReport(songId, positionMs = 30_000, playing = false))
+        awaitCondition { events.size == 2 }
+        service.setNowPlaying(user, songId)
+        awaitCondition { events.size == 3 }
+        assertEquals(30_000, events[2].positionMs)
+        assertTrue(events[2].playing)
+
+        delay(150.milliseconds)
+        service.setNowPlaying(user, songId)
+        awaitCondition { events.size == 4 }
+        assertTrue(events[3].positionMs >= 30_100, "position ${events[3].positionMs}")
+    }
+
+    @Test
     fun `skewed or future client timestamps do not shift the position`() = runBlocking {
         setup()
         val service = ScrobbleService()

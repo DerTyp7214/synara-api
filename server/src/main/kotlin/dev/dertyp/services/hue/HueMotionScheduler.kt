@@ -20,30 +20,37 @@ class HueMotionScheduler(
     private val emit: suspend (Keyframe, Int?) -> Unit,
 ) {
     private val latencyMs = latencyMs.coerceAtLeast(0)
+    private var emitted = -1
 
     suspend fun run() {
-        var emitted = -1
         while (currentCoroutineContext().isActive) {
             val current = clock.value
-            if (!current.playing) {
-                clock.first { it != current }
-                emitted = -1
-                continue
-            }
             val position = current.positionAt(now())
-            if (durationMs > 0 && position >= durationMs) return
-            val index = score.nextIndexAfter(position, emitted + 1, cadence)
-            if (index < 0) return
-            val keyframe = score.keyframes[index]
-            if (durationMs > 0 && keyframe.atMs >= durationMs) return
-            val wait = (keyframe.atMs - position - latencyMs).coerceAtLeast(0)
-            val changed = withTimeoutOrNull(wait) { clock.first { it != current } }
-            if (changed != null) {
-                emitted = -1
+            val index = if (current.playing && !ended(position)) score.nextIndexAfter(position, emitted + 1, cadence) else -1
+            val keyframe = score.keyframes.getOrNull(index)?.takeIf { !ended(it.atMs.toLong()) }
+            if (keyframe == null) {
+                clock.first { it != current }
+                onClockChange()
                 continue
             }
-            emit(keyframe, score.keyframes.getOrNull(index + 1)?.atMs)
+            val wait = (keyframe.atMs - position - latencyMs).coerceAtLeast(0)
+            if (withTimeoutOrNull(wait) { clock.first { it != current } } != null) {
+                onClockChange()
+                continue
+            }
+            emit(keyframe, nextEligibleAtMs(keyframe, index))
             emitted = index
         }
     }
+
+    private fun nextEligibleAtMs(keyframe: Keyframe, index: Int): Int? =
+        score.keyframes.getOrNull(score.nextIndexAfter(keyframe.atMs.toLong(), index + 1, cadence))?.atMs
+
+    private fun onClockChange() {
+        val frame = score.keyframes.getOrNull(emitted)
+        val position = clock.value.positionAt(now())
+        if (frame == null || position >= frame.atMs || frame.atMs - position > latencyMs) emitted = -1
+    }
+
+    private fun ended(positionMs: Long): Boolean = durationMs > 0 && positionMs >= durationMs
 }
