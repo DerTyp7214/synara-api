@@ -3,6 +3,7 @@ package dev.dertyp.services.hue
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
 import dev.dertyp.data.HueIntensity
+import dev.dertyp.data.HueMotionMode
 import dev.dertyp.data.HuePairingState
 import dev.dertyp.data.HueStopMode
 import dev.dertyp.data.HueTarget
@@ -172,6 +173,34 @@ class HueServiceTest {
         service.onNowPlaying(HookEvent.NowPlayingChanged(userId, null, 7, 0))
         awaitSent(4)
         assertTrue(sent.drop(2).all { it.second.on?.on == false })
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `ambient motion keeps sending rotated frames until playback stops`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val bridgeId = bridge()
+        service.motionIntervalOverride = 60
+        service.setLink(userId, HueUserLink(bridgeId, true, listOf(light("l1", "Desk"), light("l2", "Shelf")), motion = HueMotionMode.SLOW))
+        val songId = UUID.randomUUID()
+        val coverId = UUID.randomUUID()
+        coEvery { songService.byIds(listOf(songId), userId) } returns listOf(song(songId, coverId))
+        coEvery { imageService.byId(coverId) } returns Image(coverId, "p", "h", "o", palette = listOf(0xFFE01020.toInt(), 0xFF1030E0.toInt()), primaryColor = 0xFFE01020.toInt())
+        coEvery { audioAnalysisService.getAudioDataBatch(listOf(songId)) } returns emptyMap()
+
+        service.onNowPlaying(HookEvent.NowPlayingChanged(userId, songId, 1, System.currentTimeMillis()))
+        awaitSent(6)
+        assertEquals(1, service.activeMotions())
+        val firstColors = sent.take(2).map { it.second.color!!.xy }
+        val laterColors = sent.drop(2).take(2).map { it.second.color!!.xy }
+        assertEquals(firstColors.reversed(), laterColors)
+
+        service.onNowPlaying(HookEvent.NowPlayingChanged(userId, null, 2, System.currentTimeMillis()))
+        delay(500)
+        assertEquals(0, service.activeMotions())
+        val count = sent.size
+        delay(300)
+        assertEquals(count, sent.size)
     }
 
     @ParameterizedTest

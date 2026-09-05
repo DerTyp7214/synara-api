@@ -4,6 +4,7 @@ import dev.dertyp.core.ApplicationScope
 import dev.dertyp.data.HueBridgeCandidate
 import dev.dertyp.data.HueBridgeInfo
 import dev.dertyp.data.HueIntensity
+import dev.dertyp.data.HueMotionMode
 import dev.dertyp.data.HuePairingState
 import dev.dertyp.data.HuePairingStatus
 import dev.dertyp.data.HueStatus
@@ -12,6 +13,7 @@ import dev.dertyp.data.HueTarget
 import dev.dertyp.data.HueTargetType
 import dev.dertyp.data.HueTransitionMode
 import dev.dertyp.data.HueUserLink
+import dev.dertyp.data.SongAudioData
 import dev.dertyp.db.HueBridgeTable
 import dev.dertyp.db.HueUserLinkTable
 import dev.dertyp.dbQuery
@@ -37,6 +39,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.transformWhile
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.serialization.builtins.ListSerializer
 import org.jetbrains.exposed.v1.core.ResultRow
@@ -52,6 +55,7 @@ import org.koin.core.component.inject
 import java.net.InetAddress
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import kotlin.math.roundToInt
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 
@@ -96,6 +100,9 @@ class HueService : Service() {
     private val lastCommandAt = ConcurrentHashMap<UUID, Long>()
     private val currentColors = ConcurrentHashMap<UUID, List<Int>>()
     private val snapshots = ConcurrentHashMap<Pair<UUID, UUID>, List<HueCommand>>()
+    private val animations = ConcurrentHashMap<Pair<UUID, UUID>, Job>()
+
+    internal var motionIntervalOverride: Long? = null
     private val targetsCache = ConcurrentHashMap<UUID, Pair<Long, List<HueTarget>>>()
     private val gamutCache = ConcurrentHashMap<UUID, Map<String, HueColor.Gamut>>()
 
@@ -107,6 +114,8 @@ class HueService : Service() {
     }
 
     override suspend fun stopService() {
+        animations.values.forEach { it.cancel() }
+        animations.clear()
         runtimes.values.forEach { it.queue.close(); it.client.close() }
         runtimes.clear()
         scope.cancel()
@@ -228,6 +237,7 @@ class HueService : Service() {
     }
 
     suspend fun removeBridge(id: UUID): Boolean {
+        animations.keys.filter { it.second == id }.forEach { key -> animations.remove(key)?.cancel() }
         runtimes.remove(id)?.let { it.queue.close(); it.client.close() }
         targetsCache.remove(id)
         val removed = dbQuery { HueBridgeTable.deleteWhere { HueBridgeTable.id eq id } > 0 }
@@ -276,18 +286,21 @@ class HueService : Service() {
                 it[bridgeId] = EntityID(link.bridgeId, HueBridgeTable)
                 it[enabled] = link.enabled
                 it[targets] = ApplicationScope.json.encodeToString(ListSerializer(HueTarget.serializer()), link.targets)
-                it[intensity] = link.intensity.name
-                it[transitionMode] = link.transitionMode.name
+                it[intensity] = link.intensity
+                it[transitionMode] = link.transitionMode
                 it[transitionMs] = link.transitionMs
-                it[onStop] = link.onStop.name
+                it[onStop] = link.onStop
+                it[motion] = link.motion
                 it[updatedAt] = now
             }
         }
+        cancelMotion(userId, link.bridgeId)
         changeFlow.tryEmit(Unit)
         return link.copy(updatedAt = now)
     }
 
     suspend fun removeLink(userId: UUID, bridgeId: UUID): Boolean {
+        cancelMotion(userId, bridgeId)
         val removed = dbQuery {
             HueUserLinkTable.deleteWhere { (HueUserLinkTable.userId eq userId) and (HueUserLinkTable.bridgeId eq bridgeId) } > 0
         }
@@ -322,10 +335,12 @@ class HueService : Service() {
         val songId = event.songId
         if (songId == null) {
             lastSong.remove(event.userId)
+            cancelMotion(event.userId)
             links.forEach { link -> stop(event.userId, link) }
             return
         }
         if (lastSong[event.userId] == songId) return
+        cancelMotion(event.userId)
 
         val song = songService.byIds(listOf(songId), event.userId).firstOrNull() ?: return
         val coverId = song.coverId ?: song.album?.coverId
@@ -340,9 +355,59 @@ class HueService : Service() {
             val result = HuePaletteMapper.map(image?.palette ?: emptyList(), image?.primaryColor, audio, link, gamutCache[link.bridgeId] ?: emptyMap())
             runtime.queue.submitAll(result.commands)
             currentColors[event.userId] = result.colors
+            if (link.motion != HueMotionMode.OFF) {
+                startMotion(event.userId, link, runtime, result.palette, audio, songId, song.duration, event.startedAt)
+            }
         }
         lastCommandAt[event.userId] = System.currentTimeMillis()
     }
+
+    private fun startMotion(
+        userId: UUID,
+        link: HueUserLink,
+        runtime: BridgeRuntime,
+        palette: List<Int>,
+        audio: SongAudioData?,
+        songId: UUID,
+        durationMs: Long,
+        startedAt: Long,
+    ) {
+        val key = userId to link.bridgeId
+        animations.remove(key)?.cancel()
+        if (palette.isEmpty()) return
+        animations[key] = scope.launch {
+            val interval = motionIntervalOverride ?: when (link.motion) {
+                HueMotionMode.SLOW -> SLOW_MOTION_INTERVAL
+                HueMotionMode.TEMPO -> HuePaletteMapper.barMs(audio?.bpm)
+                HueMotionMode.OFF -> return@launch
+            }
+            val timeline = if (link.motion == HueMotionMode.TEMPO) {
+                runCatching { audioAnalysisService.getAudioTimeline(songId) }.getOrNull()
+            } else null
+            val base = HuePaletteMapper.brightness(link.intensity, audio?.energy ?: SongAudioData.DEFAULT_ENERGY, audio?.loudness)
+            var step = 1
+            while (isActive) {
+                delay(interval)
+                val elapsed = System.currentTimeMillis() - startedAt
+                if (durationMs > 0 && elapsed >= durationMs) break
+                val factor = timeline?.let { HuePaletteMapper.envelopeFactor(it.envelopeDb, it.envelopeHz, elapsed, elapsed + interval) } ?: 1.0
+                val brightness = (base * factor).roundToInt().coerceIn(1, 100)
+                val frame = HuePaletteMapper.frame(palette, link.targets, step, brightness, interval.toInt(), gamutCache[link.bridgeId] ?: emptyMap())
+                runtime.queue.submitAll(frame.commands)
+                currentColors[userId] = frame.colors
+                lastCommandAt[userId] = System.currentTimeMillis()
+                step++
+            }
+        }
+    }
+
+    private fun cancelMotion(userId: UUID, bridgeId: UUID? = null) {
+        animations.keys.filter { it.first == userId && (bridgeId == null || it.second == bridgeId) }.forEach { key ->
+            animations.remove(key)?.cancel()
+        }
+    }
+
+    internal fun activeMotions(): Int = animations.values.count { it.isActive }
 
     private suspend fun stop(userId: UUID, link: HueUserLink) {
         val row = bridge(link.bridgeId) ?: return
@@ -422,19 +487,18 @@ class HueService : Service() {
         bridgeId = row[HueUserLinkTable.bridgeId].value,
         enabled = row[HueUserLinkTable.enabled],
         targets = runCatching { ApplicationScope.json.decodeFromString(ListSerializer(HueTarget.serializer()), row[HueUserLinkTable.targets]) }.getOrDefault(emptyList()),
-        intensity = enumOr(row[HueUserLinkTable.intensity], HueIntensity.MEDIUM),
-        transitionMode = enumOr(row[HueUserLinkTable.transitionMode], HueTransitionMode.FIXED),
+        intensity = row[HueUserLinkTable.intensity],
+        transitionMode = row[HueUserLinkTable.transitionMode],
         transitionMs = row[HueUserLinkTable.transitionMs],
-        onStop = enumOr(row[HueUserLinkTable.onStop], HueStopMode.KEEP),
+        onStop = row[HueUserLinkTable.onStop],
+        motion = row[HueUserLinkTable.motion],
         updatedAt = row[HueUserLinkTable.updatedAt],
     )
-
-    private inline fun <reified E : Enum<E>> enumOr(name: String, default: E): E =
-        enumValues<E>().firstOrNull { it.name == name } ?: default
 
     companion object {
         private val PAIRING_TIMEOUT = 30.seconds
         private val PAIRING_POLL = 2.seconds
+        private const val SLOW_MOTION_INTERVAL = 8_000L
         private val TARGETS_TTL = 5.minutes
     }
 }

@@ -51,6 +51,7 @@ class ImporterResolvers(
     inner class ImporterResolver(private val importer: IImporter) : IntakeResolver {
         override val id = "import.${importer.id}"
         override val titleKey = "intake.import.title"
+        override val titleArgs = mapOf("name" to importer.name)
         override val descriptionKey = "intake.import.description"
         override val icon = UiIcon(UiIconName.IMPORT)
         override val jobKind = ImportService.JOB_KIND
@@ -84,7 +85,7 @@ class ImporterResolvers(
             if (targets.isEmpty()) return null
             return IntakeOffer(
                 accepted = targets.map { it.first },
-                titleArgs = mapOf("name" to importer.name),
+                titleArgs = titleArgs,
                 icon = icon,
                 priority = if (isDefault(importer)) 1 else 0,
                 submit = { submit(targets.map { it.second }, user) },

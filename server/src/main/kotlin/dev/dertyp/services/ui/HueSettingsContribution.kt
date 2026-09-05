@@ -1,6 +1,7 @@
 package dev.dertyp.services.ui
 
 import dev.dertyp.data.HueIntensity
+import dev.dertyp.data.HueMotionMode
 import dev.dertyp.data.HuePairingState
 import dev.dertyp.data.HueStopMode
 import dev.dertyp.data.HueTarget
@@ -107,6 +108,7 @@ class HueSettingsContribution(private val hue: HueService) : UiContribution(
             fields += UiComponent.Select(FIELD_TRANSITION_MODE, scope.t("hue.transitionMode"), link.transitionMode.name, HueTransitionMode.entries.map { UiOption(it.name, scope.t("hue.transitionMode.${it.name}")) })
             fields += UiComponent.NumberField(FIELD_TRANSITION_MS, scope.t("hue.transitionMs"), link.transitionMs.toDouble(), min = 0.0, max = 5000.0, step = 50.0)
             fields += UiComponent.Select(FIELD_ON_STOP, scope.t("hue.onStop"), link.onStop.name, HueStopMode.entries.map { UiOption(it.name, scope.t("hue.onStop.${it.name}")) })
+            fields += UiComponent.Select(FIELD_MOTION, scope.t("hue.motion"), link.motion.name, HueMotionMode.entries.map { UiOption(it.name, scope.t("hue.motion.${it.name}")) })
 
             val bridgeParam = mapOf(FIELD_BRIDGE to UiValue.of(bridge.id.toString()))
             children += UiComponent.Form(
@@ -198,6 +200,7 @@ class HueSettingsContribution(private val hue: HueService) : UiContribution(
             transitionMode = enumOr(values[FIELD_TRANSITION_MODE]?.text, HueTransitionMode.FIXED),
             transitionMs = values[FIELD_TRANSITION_MS]?.number?.toInt()?.coerceIn(0, 5000) ?: 400,
             onStop = enumOr(values[FIELD_ON_STOP]?.text, HueStopMode.KEEP),
+            motion = enumOr(values[FIELD_MOTION]?.text, HueMotionMode.OFF),
         )
         hue.setLink(scope.user.id, link)
         return UiInvokeResult(UiInvokeStatus.OK, scope.t("hue.saved"), refresh = true)
@@ -229,6 +232,7 @@ class HueSettingsContribution(private val hue: HueService) : UiContribution(
         const val FIELD_TRANSITION_MODE = "transitionMode"
         const val FIELD_TRANSITION_MS = "transitionMs"
         const val FIELD_ON_STOP = "onStop"
+        const val FIELD_MOTION = "motion"
         const val ACTION_DISCOVER = "discover"
         const val ACTION_PAIR = "pair"
         const val ACTION_SAVE = "save"

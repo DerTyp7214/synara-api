@@ -84,7 +84,7 @@ class IntakeService(private val translations: TranslationService) {
             UiHookHandlerInfo(
                 id = resolver.id,
                 source = registered.source,
-                title = t.t(resolver.titleKey),
+                title = t.t(resolver.titleKey, *resolver.titleArgs.toList().toTypedArray()),
                 description = resolver.descriptionKey?.let { t.t(it) },
                 icon = resolver.icon,
                 kinds = UiHookKind.entries,

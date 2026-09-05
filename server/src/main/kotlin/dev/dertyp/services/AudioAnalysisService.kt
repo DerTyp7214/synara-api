@@ -7,6 +7,8 @@ import dev.dertyp.data.SongAudioData
 import dev.dertyp.data.SongAudioTimeline
 import dev.dertyp.db.PersonTable
 import dev.dertyp.db.SongAudioDataTable
+import dev.dertyp.db.AudioTimelineSource
+import dev.dertyp.db.AudioTimelineStatus
 import dev.dertyp.db.SongAudioTimelineTable
 import dev.dertyp.db.SongComposerTable
 import dev.dertyp.db.SongLyricistTable
@@ -55,9 +57,6 @@ open class AudioAnalysisService : IAudioAnalysisService, Service() {
 
     companion object {
         const val ENVELOPE_HZ = 10
-        const val TIMELINE_STATUS_OK = "ok"
-        const val TIMELINE_STATUS_PARTIAL = "partial"
-        const val TIMELINE_STATUS_FAILED = "failed"
         val TIMELINE_RETRY_INTERVAL = 7.days.inWholeMilliseconds
     }
 
@@ -132,7 +131,7 @@ open class AudioAnalysisService : IAudioAnalysisService, Service() {
             .leftJoin(SongAudioTimelineTable)
             .select(SongTable.id)
             .where { SongAudioTimelineTable.songId.isNull() }
-            .orWhere { (SongAudioTimelineTable.status eq TIMELINE_STATUS_FAILED) and (SongAudioTimelineTable.analyzedAt less cutoff) }
+            .orWhere { (SongAudioTimelineTable.status eq AudioTimelineStatus.FAILED) and (SongAudioTimelineTable.analyzedAt less cutoff) }
             .limit(limit)
             .map { it[SongTable.id].value }
     }
@@ -152,14 +151,14 @@ open class AudioAnalysisService : IAudioAnalysisService, Service() {
                 .getOrNull()
         }
         val status = when {
-            beats != null && envelope != null -> TIMELINE_STATUS_OK
-            beats == null && envelope == null -> TIMELINE_STATUS_FAILED
-            else -> TIMELINE_STATUS_PARTIAL
+            beats != null && envelope != null -> AudioTimelineStatus.OK
+            beats == null && envelope == null -> AudioTimelineStatus.FAILED
+            else -> AudioTimelineStatus.PARTIAL
         }
         val source = when {
-            beats != null -> "essentia"
-            envelope != null -> "rms"
-            else -> "none"
+            beats != null -> AudioTimelineSource.ESSENTIA
+            envelope != null -> AudioTimelineSource.RMS
+            else -> AudioTimelineSource.NONE
         }
 
         dbQuery {
@@ -198,7 +197,7 @@ open class AudioAnalysisService : IAudioAnalysisService, Service() {
             envelopeDb = row[SongAudioTimelineTable.envelope]?.let { AudioTimelineCodec.decodeEnvelope(it, minDb, maxDb).toList() } ?: emptyList(),
             loudnessRange = row[SongAudioTimelineTable.loudnessRange],
             dynamicComplexity = row[SongAudioTimelineTable.dynamicComplexity],
-            source = row[SongAudioTimelineTable.beatSource],
+            source = row[SongAudioTimelineTable.beatSource].name.lowercase(),
             version = row[SongAudioTimelineTable.version],
         )
     }

@@ -73,7 +73,7 @@ class CoverGenerationService(
                 .singleOrNull()?.let {
                     TargetRow(
                         target, it[UserPlaylistTable.name], it[UserPlaylistTable.creator].value, it[UserPlaylistTable.imageId]?.value,
-                        it[UserPlaylistTable.imageSource]?.let(ImageSource::valueOf), it[UserPlaylistTable.coverStyle]?.let(::styleOrNull), it[UserPlaylistTable.coverSeed],
+                        it[UserPlaylistTable.imageSource], it[UserPlaylistTable.coverStyle], it[UserPlaylistTable.coverSeed],
                     )
                 }
             CoverTargetType.COLLECTION -> CollectionTable
@@ -82,7 +82,7 @@ class CoverGenerationService(
                 .singleOrNull()?.let {
                     TargetRow(
                         target, it[CollectionTable.name], it[CollectionTable.creator].value, it[CollectionTable.imageId]?.value,
-                        it[CollectionTable.imageSource]?.let(ImageSource::valueOf), it[CollectionTable.coverStyle]?.let(::styleOrNull), it[CollectionTable.coverSeed],
+                        it[CollectionTable.imageSource], it[CollectionTable.coverStyle], it[CollectionTable.coverSeed],
                     )
                 }
         }
@@ -133,14 +133,14 @@ class CoverGenerationService(
             when (target.type) {
                 CoverTargetType.PLAYLIST -> UserPlaylistTable.update({ UserPlaylistTable.id eq target.id }) {
                     it[UserPlaylistTable.imageId] = EntityID(imageId, ImageTable)
-                    it[imageSource] = ImageSource.GENERATED.name
-                    it[coverStyle] = params.style.name
+                    it[imageSource] = ImageSource.GENERATED
+                    it[coverStyle] = params.style
                     it[coverSeed] = params.seed
                 }
                 CoverTargetType.COLLECTION -> CollectionTable.update({ CollectionTable.id eq target.id }) {
                     it[CollectionTable.imageId] = EntityID(imageId, ImageTable)
-                    it[imageSource] = ImageSource.GENERATED.name
-                    it[coverStyle] = params.style.name
+                    it[imageSource] = ImageSource.GENERATED
+                    it[coverStyle] = params.style
                     it[coverSeed] = params.seed
                 }
             }
@@ -234,8 +234,6 @@ class CoverGenerationService(
         runCatching { Font.createFont(Font.TRUETYPE_FONT, path.toFile()) }
             .onFailure { logger.warn("Could not read cover font $path: ${it.message}") }
             .getOrNull() ?: CoverTypography.bundledFont
-
-    private fun styleOrNull(name: String): CoverStyle? = CoverStyle.entries.firstOrNull { it.name == name }
 
     companion object {
         const val JOB_KIND = "cover"

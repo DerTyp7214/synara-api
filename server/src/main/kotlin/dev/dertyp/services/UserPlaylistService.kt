@@ -43,7 +43,7 @@ class UserPlaylistService : PlaylistLibrary, IUserPlaylistService, Service() {
             val creator = resultRow[UserPlaylistTable.creator].value
             val description = resultRow[UserPlaylistTable.description]
             val origin = resultRow[UserPlaylistTable.origin]
-            val imageSource = resultRow.getOrNull(UserPlaylistTable.imageSource)?.let { ImageSource.valueOf(it) }
+            val imageSource = resultRow.getOrNull(UserPlaylistTable.imageSource)
 
             return UserPlaylist(
                 id = id,
@@ -163,7 +163,7 @@ class UserPlaylistService : PlaylistLibrary, IUserPlaylistService, Service() {
                 this[UserPlaylistTable.description] = playlist.description
                 this[UserPlaylistTable.creator] = EntityID(userId, UserTable)
                 this[UserPlaylistTable.imageId] = coverImageId?.id?.let { EntityID(it, ImageTable) }
-                this[UserPlaylistTable.imageSource] = coverImageId?.let { ImageSource.USER.name }
+                this[UserPlaylistTable.imageSource] = coverImageId?.let { ImageSource.USER }
                 this[UserPlaylistTable.origin] = playlist.origin
             }.first()[UserPlaylistTable.id].value
         }
@@ -222,7 +222,7 @@ class UserPlaylistService : PlaylistLibrary, IUserPlaylistService, Service() {
         val updated = dbQuery {
             UserPlaylistTable.update({ UserPlaylistTable.id eq id }) {
                 it[UserPlaylistTable.imageId] = imageId
-                it[imageSource] = imageId?.let { ImageSource.USER.name }
+                it[imageSource] = imageId?.let { ImageSource.USER }
                 if (imageId == null) {
                     it[coverStyle] = null
                     it[coverSeed] = null
@@ -444,13 +444,13 @@ class UserPlaylistService : PlaylistLibrary, IUserPlaylistService, Service() {
             .firstOrNull()
         val currentImageId = current?.get(UserPlaylistTable.imageId)?.value
         val currentSource = current?.get(UserPlaylistTable.imageSource)
-        val keepGenerated = playlist.imageId == null && currentSource == ImageSource.GENERATED.name
+        val keepGenerated = playlist.imageId == null && currentSource == ImageSource.GENERATED
         val newImageId = if (keepGenerated) currentImageId else playlist.imageId
         val newSource = when {
             newImageId == null -> null
             keepGenerated -> currentSource
-            playlist.imageId != currentImageId -> ImageSource.USER.name
-            else -> currentSource ?: ImageSource.USER.name
+            playlist.imageId != currentImageId -> ImageSource.USER
+            else -> currentSource ?: ImageSource.USER
         }
 
         UserPlaylistTable.upsert(UserPlaylistTable.id) {

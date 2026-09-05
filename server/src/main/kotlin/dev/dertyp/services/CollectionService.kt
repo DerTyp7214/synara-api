@@ -39,7 +39,7 @@ class CollectionService : Service() {
             imageId = resultRow[CollectionTable.imageId]?.value,
             blurHash = resultRow.getOrNull(ImageTable.blurHash),
             creator = resultRow[CollectionTable.creator].value,
-            imageSource = resultRow.getOrNull(CollectionTable.imageSource)?.let { ImageSource.valueOf(it) },
+            imageSource = resultRow.getOrNull(CollectionTable.imageSource),
         )
     }
 
@@ -75,7 +75,7 @@ class CollectionService : Service() {
                 it[description] = collection.description
                 it[creator] = EntityID(userId, UserTable)
                 it[imageId] = collection.imageId?.let { img -> EntityID(img, ImageTable) }
-                it[imageSource] = collection.imageId?.let { ImageSource.USER.name }
+                it[imageSource] = collection.imageId?.let { ImageSource.USER }
             }.value
         }
         if (collection.imageId == null) hooks.emit(HookEvent.CollectionChanged(id))
@@ -93,8 +93,8 @@ class CollectionService : Service() {
             val currentSource = current[CollectionTable.imageSource]
             val newSource = when {
                 collection.imageId == null -> null
-                collection.imageId != currentImageId -> ImageSource.USER.name
-                else -> currentSource ?: ImageSource.USER.name
+                collection.imageId != currentImageId -> ImageSource.USER
+                else -> currentSource ?: ImageSource.USER
             }
             imageCleared = collection.imageId == null && currentImageId != null
             CollectionTable.update({ CollectionTable.id eq id }) {
@@ -116,7 +116,7 @@ class CollectionService : Service() {
         val updated = dbQuery {
             CollectionTable.update({ CollectionTable.id eq id }) {
                 it[CollectionTable.imageId] = imageId
-                it[imageSource] = imageId?.let { ImageSource.USER.name }
+                it[imageSource] = imageId?.let { ImageSource.USER }
                 if (imageId == null) {
                     it[coverStyle] = null
                     it[coverSeed] = null

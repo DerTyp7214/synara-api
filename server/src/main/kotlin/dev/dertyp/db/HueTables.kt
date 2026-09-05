@@ -1,5 +1,9 @@
 package dev.dertyp.db
 
+import dev.dertyp.data.HueIntensity
+import dev.dertyp.data.HueMotionMode
+import dev.dertyp.data.HueStopMode
+import dev.dertyp.data.HueTransitionMode
 import org.jetbrains.exposed.v1.core.ReferenceOption
 import org.jetbrains.exposed.v1.core.Table
 import org.jetbrains.exposed.v1.core.dao.id.java.UUIDTable
@@ -23,11 +27,12 @@ object HueUserLinkTable : Table("hue_user_link") {
     val bridgeId = reference("bridgeId", HueBridgeTable.id, onDelete = ReferenceOption.CASCADE)
     val enabled = bool("enabled").default(false)
     val targets = text("targets").default("[]")
-    val intensity = varchar("intensity", 16).default("MEDIUM")
-    val transitionMode = varchar("transitionMode", 16).default("FIXED")
+    val intensity = enumerationByName("intensity", 16, HueIntensity::class).default(HueIntensity.MEDIUM)
+    val transitionMode = enumerationByName("transitionMode", 16, HueTransitionMode::class).default(HueTransitionMode.FIXED)
     val transitionMs = integer("transitionMs").default(400)
-    val onStop = varchar("onStop", 16).default("KEEP")
+    val onStop = enumerationByName("onStop", 16, HueStopMode::class).default(HueStopMode.KEEP)
     val updatedAt = long("updatedAt")
+    val motion = enumerationByName("motion", 16, HueMotionMode::class).default(HueMotionMode.OFF)
 
     override val primaryKey = PrimaryKey(userId, bridgeId)
 }

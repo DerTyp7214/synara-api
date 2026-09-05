@@ -89,6 +89,41 @@ class HuePaletteMapperTest {
     }
 
     @Test
+    fun `frames rotate the palette across lights per step`() {
+        val palette = listOf(red, blue, grey)
+        val step0 = HuePaletteMapper.frame(palette, lights, 0, 50, 1000).colors
+        val step1 = HuePaletteMapper.frame(palette, lights, 1, 50, 1000).colors
+        val step3 = HuePaletteMapper.frame(palette, lights, 3, 50, 1000).colors
+        assertEquals(listOf(red, blue, grey), step0)
+        assertEquals(listOf(blue, grey, red), step1)
+        assertEquals(step0, step3)
+        assertTrue(HuePaletteMapper.frame(palette, lights, 1, 50, 1000).commands.all { it.update.dynamics?.duration == 1000 })
+        assertTrue(HuePaletteMapper.frame(emptyList(), lights, 1, 50, 1000).commands.isEmpty())
+        assertEquals(listOf(red, blue), HuePaletteMapper.map(listOf(blue), red, null, link()).palette)
+    }
+
+    @Test
+    fun `envelope factor follows loudness between the quiet and loud percentiles`() {
+        val envelope = List(100) { if (it < 50) -60f else -10f }
+        val quiet = HuePaletteMapper.envelopeFactor(envelope, 10, 0, 1000)
+        val loud = HuePaletteMapper.envelopeFactor(envelope, 10, 6000, 7000)
+        assertEquals(0.55, quiet, 0.01)
+        assertEquals(1.0, loud, 0.01)
+        assertEquals(1.0, HuePaletteMapper.envelopeFactor(emptyList(), 10, 0, 1000))
+        assertEquals(1.0, HuePaletteMapper.envelopeFactor(List(20) { -30f }, 10, 0, 500))
+        assertEquals(1.0, HuePaletteMapper.envelopeFactor(envelope, 10, 50_000, 51_000), 0.01)
+    }
+
+    @Test
+    fun `bar length derives from bpm within bounds`() {
+        assertEquals(2000L, HuePaletteMapper.barMs(120.0))
+        assertEquals(4000L, HuePaletteMapper.barMs(60.0))
+        assertEquals(10_000L, HuePaletteMapper.barMs(10.0))
+        assertEquals(2_000L, HuePaletteMapper.barMs(400.0))
+        assertEquals(6_000L, HuePaletteMapper.barMs(null))
+    }
+
+    @Test
     fun `audio data modulates brightness`() {
         val loud = HuePaletteMapper.map(listOf(red), null, SongAudioData(energy = 1.0, loudness = -5.0), link())
         val quiet = HuePaletteMapper.map(listOf(red), null, SongAudioData(energy = 0.1, loudness = -30.0), link())

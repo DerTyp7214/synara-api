@@ -158,8 +158,8 @@ class CoverGenerationServiceTest {
 
         val row = playlistRow(playlistId)
         assertEquals(imageId, row[UserPlaylistTable.imageId]?.value)
-        assertEquals(ImageSource.GENERATED.name, row[UserPlaylistTable.imageSource])
-        assertEquals(CoverStyle.AUTO.name, row[UserPlaylistTable.coverStyle])
+        assertEquals(ImageSource.GENERATED, row[UserPlaylistTable.imageSource])
+        assertEquals(CoverStyle.AUTO, row[UserPlaylistTable.coverStyle])
         assertNull(row[UserPlaylistTable.coverSeed])
         val image = imageService.byId(imageId)!!
         assertEquals("generated:playlist:$playlistId", image.origin)
@@ -173,7 +173,7 @@ class CoverGenerationServiceTest {
         val pinned = service.apply(target, CoverGenerationParams(style = CoverStyle.MOSAIC, seed = 99L))
         val pinnedRow = playlistRow(playlistId)
         assertEquals(pinned, pinnedRow[UserPlaylistTable.imageId]?.value)
-        assertEquals(CoverStyle.MOSAIC.name, pinnedRow[UserPlaylistTable.coverStyle])
+        assertEquals(CoverStyle.MOSAIC, pinnedRow[UserPlaylistTable.coverStyle])
         assertEquals(99L, pinnedRow[UserPlaylistTable.coverSeed])
     }
 
@@ -187,7 +187,7 @@ class CoverGenerationServiceTest {
         transaction(database) {
             UserPlaylistTable.update({ UserPlaylistTable.id eq playlistId }) {
                 it[imageId] = EntityID(userImage, ImageTable)
-                it[imageSource] = ImageSource.USER.name
+                it[imageSource] = ImageSource.USER
             }
         }
         assertNull(service.autoGenerate(target))
@@ -222,7 +222,7 @@ class CoverGenerationServiceTest {
         val second = service.autoGenerate(target)
         assertNotNull(second)
         assertNotEquals(first, second)
-        assertEquals(ImageSource.GENERATED.name, playlistRow(playlistId)[UserPlaylistTable.imageSource])
+        assertEquals(ImageSource.GENERATED, playlistRow(playlistId)[UserPlaylistTable.imageSource])
         val referenced = imageService.collectReferencedImageIds()
         assertTrue(second in referenced)
         assertFalse(first in referenced)
@@ -271,7 +271,7 @@ class CoverGenerationServiceTest {
         val imageId = service.apply(target, CoverGenerationParams(style = CoverStyle.GRID))
         val row = transaction(database) { CollectionTable.selectAll().where { CollectionTable.id eq collectionId }.single() }
         assertEquals(imageId, row[CollectionTable.imageId]?.value)
-        assertEquals(ImageSource.GENERATED.name, row[CollectionTable.imageSource])
+        assertEquals(ImageSource.GENERATED, row[CollectionTable.imageSource])
         assertEquals("generated:collection:$collectionId", imageService.byId(imageId)!!.origin)
     }
 

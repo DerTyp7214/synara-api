@@ -30,6 +30,7 @@ class IntakeOffer(
 interface IntakeResolver {
     val id: String
     val titleKey: String
+    val titleArgs: Map<String, String> get() = emptyMap()
     val descriptionKey: String? get() = null
     val icon: UiIcon? get() = null
     val jobKind: String

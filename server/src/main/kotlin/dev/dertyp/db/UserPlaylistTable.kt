@@ -1,5 +1,7 @@
 package dev.dertyp.db
 
+import dev.dertyp.data.CoverStyle
+import dev.dertyp.data.ImageSource
 import org.jetbrains.exposed.v1.core.dao.id.java.UUIDTable
 
 object UserPlaylistTable : UUIDTable("userPlaylist") {
@@ -9,7 +11,7 @@ object UserPlaylistTable : UUIDTable("userPlaylist") {
     val creator = reference("creator", UserTable.id)
     val imageId = reference("imageId", ImageTable.id).nullable()
     val origin = text("origin").nullable()
-    val imageSource = varchar("imageSource", 16).nullable()
-    val coverStyle = varchar("coverStyle", 32).nullable()
+    val imageSource = enumerationByName("imageSource", 16, ImageSource::class).nullable()
+    val coverStyle = enumerationByName("coverStyle", 32, CoverStyle::class).nullable()
     val coverSeed = long("coverSeed").nullable()
 }

@@ -4,6 +4,8 @@ import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
 import dev.dertyp.core.ApplicationScope
 import dev.dertyp.db.AlbumTable
+import dev.dertyp.db.AudioTimelineSource
+import dev.dertyp.db.AudioTimelineStatus
 import dev.dertyp.db.SongAudioTimelineTable
 import dev.dertyp.db.SongTable
 import dev.dertyp.db.SongVariantTable
@@ -67,16 +69,16 @@ class AudioTimelineTest {
                     it[albumId] = album
                 }
             }
-            fun timeline(id: UUID, status: String, analyzedAt: Long) = SongAudioTimelineTable.insert {
+            fun timeline(id: UUID, status: AudioTimelineStatus, analyzedAt: Long) = SongAudioTimelineTable.insert {
                 it[songId] = id
                 it[version] = 1
                 it[SongAudioTimelineTable.status] = status
-                it[beatSource] = "essentia"
+                it[beatSource] = AudioTimelineSource.ESSENTIA
                 it[SongAudioTimelineTable.analyzedAt] = analyzedAt
             }
-            timeline(songs[0], AudioAnalysisService.TIMELINE_STATUS_OK, now)
-            timeline(songs[1], AudioAnalysisService.TIMELINE_STATUS_FAILED, now)
-            timeline(songs[2], AudioAnalysisService.TIMELINE_STATUS_FAILED, now - 10 * 24 * 60 * 60 * 1000L)
+            timeline(songs[0], AudioTimelineStatus.OK, now)
+            timeline(songs[1], AudioTimelineStatus.FAILED, now)
+            timeline(songs[2], AudioTimelineStatus.FAILED, now - 10 * 24 * 60 * 60 * 1000L)
         }
         val service = AudioAnalysisService()
         val missing = service.getSongIdsMissingTimeline(100)

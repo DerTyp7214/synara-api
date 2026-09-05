@@ -13,7 +13,7 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 
 object HuePaletteMapper {
-    data class Result(val commands: List<HueCommand>, val colors: List<Int>)
+    data class Result(val commands: List<HueCommand>, val colors: List<Int>, val palette: List<Int> = emptyList())
 
     private data class Candidate(val argb: Int, val hue: Double, val saturation: Double, val lightness: Double)
 
@@ -36,6 +36,36 @@ object HuePaletteMapper {
 
     fun test(targets: List<HueTarget>, gamuts: Map<String, HueColor.Gamut> = emptyMap()): Result =
         assign(TEST_COLORS, targets, 80, 300, gamuts)
+
+    fun frame(
+        colors: List<Int>,
+        targets: List<HueTarget>,
+        step: Int,
+        brightness: Int,
+        transitionMs: Int,
+        gamuts: Map<String, HueColor.Gamut> = emptyMap(),
+    ): Result {
+        if (colors.isEmpty()) return Result(emptyList(), emptyList())
+        val offset = ((step % colors.size) + colors.size) % colors.size
+        val rotated = colors.drop(offset) + colors.take(offset)
+        return assign(rotated, targets, brightness, transitionMs, gamuts)
+    }
+
+    fun envelopeFactor(envelopeDb: List<Float>, envelopeHz: Int, fromMs: Long, toMs: Long): Double {
+        if (envelopeDb.isEmpty() || envelopeHz <= 0) return 1.0
+        val sorted = envelopeDb.sorted()
+        val low = sorted[(sorted.size * 0.1).toInt().coerceIn(0, sorted.size - 1)]
+        val high = sorted[(sorted.size * 0.95).toInt().coerceIn(0, sorted.size - 1)]
+        val start = (fromMs * envelopeHz / 1000).toInt().coerceIn(0, envelopeDb.size - 1)
+        val end = (toMs * envelopeHz / 1000).toInt().coerceIn(start + 1, envelopeDb.size)
+        val average = envelopeDb.subList(start, end).average()
+        val range = (high - low).takeIf { it > 1f } ?: return 1.0
+        val normalized = ((average - low) / range).coerceIn(0.0, 1.0)
+        return 0.55 + 0.45 * normalized
+    }
+
+    fun barMs(bpm: Double?): Long =
+        bpm?.takeIf { it > 0 }?.let { (240_000 / it).toLong().coerceIn(2_000, 10_000) } ?: 6_000
 
     fun stop(link: HueUserLink): List<HueCommand> = when (link.onStop) {
         HueStopMode.OFF -> link.targets.map { HueCommand(it, LightUpdate(on = ClipOn(false), dynamics = ClipDynamics(link.transitionMs))) }
@@ -93,7 +123,7 @@ object HuePaletteMapper {
             commands += command(target, color, brightness, transition, gamuts)
             applied += color
         }
-        return Result(commands, applied)
+        return Result(commands, applied, colors)
     }
 
     private fun command(target: HueTarget, argb: Int, brightness: Int, transition: Int, gamuts: Map<String, HueColor.Gamut>): HueCommand {
