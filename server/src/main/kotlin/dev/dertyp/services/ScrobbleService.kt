@@ -18,7 +18,13 @@ class ScrobbleService : Service() {
 
     private val serviceScope = CoroutineScope(Dispatchers.Default)
 
-    private data class NowPlayingEntry(val song: UserSong, val startedAt: Long)
+    private data class NowPlayingEntry(
+        val song: UserSong,
+        val firstStartedAt: Long,
+        val anchorAt: Long,
+        val positionMs: Long,
+        val playing: Boolean,
+    )
 
     private val nowPlaying = ConcurrentHashMap<PlatformUUID, NowPlayingEntry>()
     private val timers = ConcurrentHashMap<PlatformUUID, Job>()
@@ -27,17 +33,24 @@ class ScrobbleService : Service() {
     private val nowPlayingChanges = MutableSharedFlow<Unit>(extraBufferCapacity = 8, onBufferOverflow = BufferOverflow.DROP_OLDEST)
 
     suspend fun setNowPlaying(userId: PlatformUUID, songId: PlatformUUID) {
-        val song = songService.byIds(listOf(songId), userId).firstOrNull() ?: return
+        reportPlayback(userId, PlaybackReport(songId))
+    }
+
+    suspend fun reportPlayback(userId: PlatformUUID, report: PlaybackReport): Long {
+        val now = System.currentTimeMillis()
+        val previous = nowPlaying[userId]?.takeIf { it.song.id == report.songId }
+        val song = previous?.song ?: songService.byIds(listOf(report.songId), userId).firstOrNull() ?: return now
         val myGen = generation.merge(userId, 1L, Long::plus)!!
         timers.remove(userId)?.cancel()
-        val startedAt = System.currentTimeMillis()
-        nowPlaying[userId] = NowPlayingEntry(song, startedAt)
-        nowPlayingChanges.tryEmit(Unit)
-        hooks.emit(HookEvent.NowPlayingChanged(userId, songId, myGen, startedAt))
+        val positionMs = correctedPosition(report, now)
+        nowPlaying[userId] = NowPlayingEntry(song, previous?.firstStartedAt ?: now, now, positionMs, report.playing)
+        if (previous == null) nowPlayingChanges.tryEmit(Unit)
+        hooks.emit(HookEvent.NowPlayingChanged(userId, report.songId, myGen, now, positionMs, report.playing))
 
-        if (song.duration > 0) {
+        val remaining = song.duration - positionMs
+        if (report.playing && song.duration > 0 && remaining > 0) {
             timers[userId] = serviceScope.launch {
-                delay(song.duration.milliseconds)
+                delay(remaining.milliseconds)
                 if (generation[userId] == myGen) {
                     nowPlaying.remove(userId)
                     nowPlayingChanges.tryEmit(Unit)
@@ -45,6 +58,13 @@ class ScrobbleService : Service() {
                 }
             }
         }
+        return now
+    }
+
+    private fun correctedPosition(report: PlaybackReport, now: Long): Long {
+        val delay = report.sentAt?.let { now - it } ?: 0L
+        val corrected = if (report.playing && delay in 0..MAX_REPORT_DELAY_MS) report.positionMs + delay else report.positionMs
+        return corrected.coerceAtLeast(0)
     }
 
     suspend fun clearNowPlaying(userId: PlatformUUID) {
@@ -74,8 +94,12 @@ class ScrobbleService : Service() {
 
     private suspend fun buildRecentListens(userId: PlatformUUID, limit: Int): RecentListens {
         val recent = listenService.recentListens(userId, limit)
-        val current = nowPlaying[userId]?.let { NowPlaying(song = it.song, startedAt = it.startedAt) }
+        val current = nowPlaying[userId]?.let { NowPlaying(song = it.song, startedAt = it.firstStartedAt) }
         return RecentListens(nowPlaying = current, recent = recent)
+    }
+
+    companion object {
+        const val MAX_REPORT_DELAY_MS = 2_000L
     }
 }
 
@@ -84,6 +108,8 @@ class RpcScrobbleService(
     private val service: ScrobbleService,
 ) : IScrobbleService {
     override suspend fun nowPlaying(songId: PlatformUUID) = service.setNowPlaying(user.id, songId)
+
+    override suspend fun reportPlayback(report: PlaybackReport): Long = service.reportPlayback(user.id, report)
 
     override suspend fun clearNowPlaying() = service.clearNowPlaying(user.id)
 

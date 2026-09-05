@@ -116,6 +116,7 @@
   "hue.motion.OFF": "None, one color set per track",
   "hue.motion.SLOW": "Slow drift through the palette",
   "hue.motion.TEMPO": "Follow the tempo and loudness",
+  "hue.latencyMs": "Light latency compensation (ms)",
   "hue.save": "Save",
   "hue.saved": "Hue settings saved",
   "hue.test": "Test lights",

@@ -32,7 +32,7 @@ Additional capabilities are opt-in through marker interfaces your plugin class c
 
 Passed to `init`. Provides the logger, storage, the library APIs (`songLibrary`, `albumLibrary`, `artistLibrary`, `playlistLibrary`, `imageLibrary`), metadata and lyrics services, the `scheduleService` for scheduled tasks, the `hooks` bus, `apiKeyScopes`, and — since API version 2 — `ui`, `settings` and `i18n`.
 
-The `hooks` bus emits `HookEvent`s a plugin can subscribe to with `hooks.on<E> { }`: `ListenIngested` (listens arrived from ListenBrainz), `PlaylistChanged` and `CollectionChanged` (content of a user playlist or collection changed), and `NowPlayingChanged` (a user started or stopped playing a song; `songId` is null on stop, `generation` increases per change so stale events can be dropped).
+The `hooks` bus emits `HookEvent`s a plugin can subscribe to with `hooks.on<E> { }`: `ListenIngested` (listens arrived from ListenBrainz), `PlaylistChanged` and `CollectionChanged` (content of a user playlist or collection changed), and `NowPlayingChanged` (a user started, paused, seeked, reported progress on or stopped a song; `songId` is null on stop, `positionMs` is the playback position at `startedAt` and `playing` tells whether it advances, `generation` increases per report so stale events can be dropped).
 
 ## Creating a Plugin
 

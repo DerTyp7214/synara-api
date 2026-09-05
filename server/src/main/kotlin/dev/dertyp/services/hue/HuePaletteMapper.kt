@@ -52,17 +52,12 @@ object HuePaletteMapper {
     }
 
     fun envelopeFactor(envelopeDb: List<Float>, envelopeHz: Int, fromMs: Long, toMs: Long): Double {
-        if (envelopeDb.isEmpty() || envelopeHz <= 0) return 1.0
-        val sorted = envelopeDb.sorted()
-        val low = sorted[(sorted.size * 0.1).toInt().coerceIn(0, sorted.size - 1)]
-        val high = sorted[(sorted.size * 0.95).toInt().coerceIn(0, sorted.size - 1)]
-        val start = (fromMs * envelopeHz / 1000).toInt().coerceIn(0, envelopeDb.size - 1)
-        val end = (toMs * envelopeHz / 1000).toInt().coerceIn(start + 1, envelopeDb.size)
-        val average = envelopeDb.subList(start, end).average()
-        val range = (high - low).takeIf { it > 1f } ?: return 1.0
-        val normalized = ((average - low) / range).coerceIn(0.0, 1.0)
-        return 0.55 + 0.45 * normalized
+        val envelope = NormalizedEnvelope(envelopeDb, envelopeHz)
+        if (!envelope.usable) return 1.0
+        return levelFactor(envelope.level(fromMs, toMs))
     }
+
+    fun levelFactor(level: Double): Double = 0.55 + 0.45 * level.coerceIn(0.0, 1.0)
 
     fun barMs(bpm: Double?): Long =
         bpm?.takeIf { it > 0 }?.let { (240_000 / it).toLong().coerceIn(2_000, 10_000) } ?: 6_000

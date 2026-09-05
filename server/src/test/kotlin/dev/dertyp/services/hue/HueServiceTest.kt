@@ -12,6 +12,7 @@ import dev.dertyp.data.HueTransitionMode
 import dev.dertyp.data.HueUserLink
 import dev.dertyp.data.Image
 import dev.dertyp.data.SongAudioData
+import dev.dertyp.data.SongAudioTimeline
 import dev.dertyp.data.UserSong
 import dev.dertyp.db.HueBridgeTable
 import dev.dertyp.db.HueUserLinkTable
@@ -241,7 +242,7 @@ class HueServiceTest {
         setup(dialect)
         val bridgeId = bridge()
         service.motionIntervalOverride = 60
-        service.setLink(userId, HueUserLink(bridgeId, true, listOf(light("l1", "Desk"), light("l2", "Shelf")), motion = HueMotionMode.SLOW))
+        service.setLink(userId, HueUserLink(bridgeId, true, listOf(light("l1", "Desk"), light("l2", "Shelf")), motion = HueMotionMode.SLOW, latencyMs = 0))
         val songId = UUID.randomUUID()
         val coverId = UUID.randomUUID()
         coEvery { songService.byIds(listOf(songId), userId) } returns listOf(song(songId, coverId))
@@ -261,6 +262,43 @@ class HueServiceTest {
         val count = sent.size
         delay(300)
         assertEquals(count, sent.size)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `tempo motion follows the beat grid and playback reports`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val bridgeId = bridge()
+        service.setLink(userId, HueUserLink(bridgeId, true, listOf(light("l1", "Desk"), light("l2", "Shelf")), motion = HueMotionMode.TEMPO, latencyMs = 0))
+        val songId = UUID.randomUUID()
+        val coverId = UUID.randomUUID()
+        val song = song(songId, coverId)
+        every { song.duration } returns 60_000L
+        coEvery { songService.byIds(listOf(songId), userId) } returns listOf(song)
+        coEvery { imageService.byId(coverId) } returns Image(coverId, "p", "h", "o", palette = listOf(0xFFE01020.toInt(), 0xFF1030E0.toInt()), primaryColor = 0xFFE01020.toInt())
+        coEvery { audioAnalysisService.getAudioDataBatch(listOf(songId)) } returns emptyMap()
+        coEvery { audioAnalysisService.getAudioTimeline(songId) } returns SongAudioTimeline(songId, beatsMs = List(120) { it * 500 })
+
+        val startedAt = System.currentTimeMillis()
+        service.onNowPlaying(HookEvent.NowPlayingChanged(userId, songId, 1, startedAt))
+        awaitSent(6)
+        assertEquals(1, service.activeMotions())
+        coVerify(exactly = 1) { audioAnalysisService.getAudioTimeline(songId) }
+
+        service.onNowPlaying(HookEvent.NowPlayingChanged(userId, songId, 2, System.currentTimeMillis(), positionMs = System.currentTimeMillis() - startedAt))
+        assertEquals(1, service.activeMotions())
+        coVerify(exactly = 1) { songService.byIds(listOf(songId), userId) }
+
+        service.onNowPlaying(HookEvent.NowPlayingChanged(userId, songId, 3, System.currentTimeMillis(), positionMs = 30_000, playing = false))
+        delay(200)
+        val paused = sent.size
+        delay(700)
+        assertEquals(paused, sent.size)
+        assertEquals(1, service.activeMotions())
+
+        service.onNowPlaying(HookEvent.NowPlayingChanged(userId, songId, 4, System.currentTimeMillis(), positionMs = 30_000, playing = true))
+        awaitSent(paused + 2)
+        assertEquals(1, service.activeMotions())
     }
 
     @ParameterizedTest

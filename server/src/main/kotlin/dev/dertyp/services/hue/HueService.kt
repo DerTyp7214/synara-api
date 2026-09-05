@@ -25,6 +25,8 @@ import dev.dertyp.services.ImageService
 import dev.dertyp.services.Service
 import dev.dertyp.services.SongService
 import dev.dertyp.utils.HueColor
+import com.github.benmanes.caffeine.cache.Cache
+import com.github.benmanes.caffeine.cache.Caffeine
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -55,6 +57,7 @@ import org.koin.core.component.inject
 import java.net.InetAddress
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
@@ -102,6 +105,8 @@ class HueService : Service() {
     private val snapshots = ConcurrentHashMap<Pair<UUID, UUID>, List<HueCommand>>()
     private val animations = ConcurrentHashMap<Pair<UUID, UUID>, Job>()
     private val pendingStops = ConcurrentHashMap<UUID, Job>()
+    private val clocks = ConcurrentHashMap<UUID, MutableStateFlow<PlaybackClock>>()
+    private val scoreCache: Cache<UUID, LightScore> = Caffeine.newBuilder().maximumSize(256).build()
 
     internal var motionIntervalOverride: Long? = null
     internal var stopGraceMs: Long = STOP_GRACE.inWholeMilliseconds
@@ -120,6 +125,7 @@ class HueService : Service() {
         animations.clear()
         pendingStops.values.forEach { it.cancel() }
         pendingStops.clear()
+        clocks.clear()
         runtimes.values.forEach { it.queue.close(); it.client.close() }
         runtimes.clear()
         scope.cancel()
@@ -295,12 +301,13 @@ class HueService : Service() {
                 it[transitionMs] = link.transitionMs
                 it[onStop] = link.onStop
                 it[motion] = link.motion
+                it[latencyMs] = link.latencyMs.coerceIn(0, MAX_LATENCY_MS)
                 it[updatedAt] = now
             }
         }
         cancelMotion(userId, link.bridgeId)
         changeFlow.tryEmit(Unit)
-        return link.copy(updatedAt = now)
+        return link.copy(updatedAt = now, latencyMs = link.latencyMs.coerceIn(0, MAX_LATENCY_MS))
     }
 
     suspend fun removeLink(userId: UUID, bridgeId: UUID): Boolean {
@@ -339,6 +346,7 @@ class HueService : Service() {
         val songId = event.songId
         if (songId == null) {
             cancelMotion(event.userId)
+            clocks.remove(event.userId)
             pendingStops.remove(event.userId)?.cancel()
             pendingStops[event.userId] = scope.launch {
                 delay(stopGraceMs)
@@ -349,7 +357,11 @@ class HueService : Service() {
             return
         }
         val resumed = pendingStops.remove(event.userId)?.also { it.cancel() } != null
-        if (lastSong[event.userId] == songId && !resumed) return
+        val reported = PlaybackClock(event.positionMs, event.startedAt, event.playing)
+        if (lastSong[event.userId] == songId && !resumed) {
+            updateClock(event.userId, reported)
+            return
+        }
         cancelMotion(event.userId)
 
         val song = songService.byIds(listOf(songId), event.userId).firstOrNull() ?: return
@@ -358,6 +370,7 @@ class HueService : Service() {
         val audio = audioAnalysisService.getAudioDataBatch(listOf(songId))[songId]
 
         lastSong[event.userId] = songId
+        clocks[event.userId] = MutableStateFlow(reported)
         links.forEach { link ->
             val row = bridge(link.bridgeId) ?: return@forEach
             val runtime = runtime(row)
@@ -368,10 +381,45 @@ class HueService : Service() {
             runtime.queue.submitAll(result.commands)
             currentColors[event.userId] = result.colors
             if (link.motion != HueMotionMode.OFF) {
-                startMotion(event.userId, link, runtime, result.palette, audio, songId, song.duration, event.startedAt)
+                startMotion(event.userId, link, runtime, result.palette, audio, songId, song.duration)
             }
         }
         lastCommandAt[event.userId] = System.currentTimeMillis()
+    }
+
+    private fun updateClock(userId: UUID, reported: PlaybackClock) {
+        val flow = clocks[userId] ?: return
+        val current = flow.value
+        val now = System.currentTimeMillis()
+        val drift = abs(current.positionAt(now) - reported.positionAt(now))
+        if (current.playing == reported.playing && drift < CLOCK_TOLERANCE_MS) return
+        flow.value = reported
+    }
+
+    private suspend fun lightScore(link: HueUserLink, audio: SongAudioData?, songId: UUID, durationMs: Long): LightScore {
+        val override = motionIntervalOverride
+        if (override != null) return HueLightScore.build(null, null, durationMs, override)
+        return when (link.motion) {
+            HueMotionMode.SLOW -> HueLightScore.build(null, null, durationMs, SLOW_MOTION_INTERVAL)
+            HueMotionMode.TEMPO -> scoreCache.getIfPresent(songId) ?: run {
+                val timeline = runCatching { audioAnalysisService.getAudioTimeline(songId) }.getOrNull()
+                HueLightScore.build(timeline, audio?.bpm, durationMs, HuePaletteMapper.barMs(audio?.bpm)).also { scoreCache.put(songId, it) }
+            }
+            HueMotionMode.OFF -> LightScore(emptyList(), null)
+        }
+    }
+
+    private fun cadence(link: HueUserLink, score: LightScore): (Keyframe) -> Boolean {
+        val lights = link.targets.count { it.type == HueTargetType.LIGHT }
+        val load = lights * score.beatsPerSecond
+        val everyBeat = lights > 0 && load <= MAX_LIGHT_COMMANDS_PER_SECOND
+        val everyOtherBeat = lights > 0 && load / 2 <= MAX_LIGHT_COMMANDS_PER_SECOND
+        return { keyframe ->
+            when (keyframe.kind) {
+                KeyframeKind.DOWNBEAT, KeyframeKind.SECTION -> true
+                KeyframeKind.BEAT -> everyBeat || (everyOtherBeat && keyframe.index % 2 == 0)
+            }
+        }
     }
 
     private fun startMotion(
@@ -382,36 +430,36 @@ class HueService : Service() {
         audio: SongAudioData?,
         songId: UUID,
         durationMs: Long,
-        startedAt: Long,
     ) {
         val key = userId to link.bridgeId
         animations.remove(key)?.cancel()
-        if (palette.isEmpty()) return
+        if (palette.isEmpty() || link.motion == HueMotionMode.OFF) return
+        val clock = clocks[userId] ?: return
         animations[key] = scope.launch {
-            val interval = motionIntervalOverride ?: when (link.motion) {
-                HueMotionMode.SLOW -> SLOW_MOTION_INTERVAL
-                HueMotionMode.TEMPO -> HuePaletteMapper.barMs(audio?.bpm)
-                HueMotionMode.OFF -> return@launch
-            }
-            val timeline = if (link.motion == HueMotionMode.TEMPO) {
-                runCatching { audioAnalysisService.getAudioTimeline(songId) }.getOrNull()
-            } else null
+            val score = lightScore(link, audio, songId, durationMs)
             val base = HuePaletteMapper.brightness(link.intensity, audio?.energy ?: SongAudioData.DEFAULT_ENERGY, audio?.loudness)
-            var step = 1
-            while (isActive) {
-                delay(interval)
-                val elapsed = System.currentTimeMillis() - startedAt
-                if (durationMs > 0 && elapsed >= durationMs) break
-                val factor = timeline?.let { HuePaletteMapper.envelopeFactor(it.envelopeDb, it.envelopeHz, elapsed, elapsed + interval) } ?: 1.0
-                val brightness = (base * factor).roundToInt().coerceIn(1, 100)
-                val frame = HuePaletteMapper.frame(palette, link.targets, step, brightness, interval.toInt(), gamutCache[link.bridgeId] ?: emptyMap())
+            val gamuts = gamutCache[link.bridgeId] ?: emptyMap()
+            val groupsOnly = link.targets.none { it.type == HueTargetType.LIGHT }
+            var step = 0
+            HueMotionScheduler(clock, score, durationMs, link.latencyMs, cadence(link, score)) { keyframe, nextAtMs ->
+                step += when (keyframe.kind) {
+                    KeyframeKind.SECTION -> 2
+                    KeyframeKind.DOWNBEAT -> 1
+                    KeyframeKind.BEAT -> 0
+                }
+                if (keyframe.kind == KeyframeKind.BEAT && groupsOnly) return@HueMotionScheduler
+                val brightness = (base * HuePaletteMapper.levelFactor(keyframe.level)).roundToInt().coerceIn(1, 100)
+                val transition = ((nextAtMs ?: (keyframe.atMs + MAX_MOTION_TRANSITION_MS)) - keyframe.atMs).coerceIn(0, MAX_MOTION_TRANSITION_MS)
+                val frame = HuePaletteMapper.frame(palette, targetsFor(link, keyframe), step, brightness, transition, gamuts)
                 runtime.queue.submitAll(frame.commands)
-                currentColors[userId] = frame.colors
+                if (keyframe.kind != KeyframeKind.BEAT) currentColors[userId] = frame.colors
                 lastCommandAt[userId] = System.currentTimeMillis()
-                step++
-            }
+            }.run()
         }
     }
+
+    private fun targetsFor(link: HueUserLink, keyframe: Keyframe): List<HueTarget> =
+        if (keyframe.kind == KeyframeKind.BEAT) link.targets.filter { it.type == HueTargetType.LIGHT } else link.targets
 
     private fun cancelMotion(userId: UUID, bridgeId: UUID? = null) {
         animations.keys.filter { it.first == userId && (bridgeId == null || it.second == bridgeId) }.forEach { key ->
@@ -510,12 +558,17 @@ class HueService : Service() {
         onStop = row[HueUserLinkTable.onStop],
         motion = row[HueUserLinkTable.motion],
         updatedAt = row[HueUserLinkTable.updatedAt],
+        latencyMs = row[HueUserLinkTable.latencyMs].coerceIn(0, MAX_LATENCY_MS),
     )
 
     companion object {
         private val PAIRING_TIMEOUT = 30.seconds
         private val PAIRING_POLL = 2.seconds
         private const val SLOW_MOTION_INTERVAL = 8_000L
+        private const val CLOCK_TOLERANCE_MS = 250L
+        private const val MAX_LIGHT_COMMANDS_PER_SECOND = 8.0
+        private const val MAX_MOTION_TRANSITION_MS = 1_500
+        const val MAX_LATENCY_MS = 1_000
         private val STOP_GRACE = 3.seconds
         private val TARGETS_TTL = 5.minutes
     }

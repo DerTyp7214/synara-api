@@ -11,5 +11,7 @@ sealed interface HookEvent {
         val songId: PlatformUUID?,
         val generation: Long,
         val startedAt: Long,
+        val positionMs: Long = 0,
+        val playing: Boolean = true,
     ) : HookEvent
 }

@@ -1,5 +1,6 @@
 package dev.dertyp.services
 
+import dev.dertyp.data.PlaybackReport
 import dev.dertyp.data.RecentListens
 import dev.dertyp.data.ScrobbleRequest
 import dev.dertyp.data.UserSong
@@ -189,5 +190,64 @@ class ScrobbleServiceTest : KoinTest {
         service.listened(user, ScrobbleRequest(songId = songId))
 
         coVerify { listenService.ingestLocal(eq(user), eq(songId), any(), isNull()) }
+    }
+
+    @Test
+    fun `playback reports carry position and re-arm expiry from the remaining duration`() = runBlocking {
+        setup()
+        val service = ScrobbleService()
+        val user = UUID.randomUUID()
+        val songId = UUID.randomUUID()
+        coEvery { songService.byIds(listOf(songId), user) } returns listOf(songStub(songId, 2_000))
+        val events = CopyOnWriteArrayList<HookEvent.NowPlayingChanged>()
+        hookService.on<HookEvent.NowPlayingChanged> { events.add(it) }
+        val emissions = collect(service, user)
+
+        val before = System.currentTimeMillis()
+        val received = service.reportPlayback(user, PlaybackReport(songId, positionMs = 1_000, sentAt = before - 300))
+        assertTrue(received >= before)
+        awaitCondition { events.size == 1 }
+        assertEquals(songId, events[0].songId)
+        assertTrue(events[0].playing)
+        assertTrue(events[0].positionMs in 1_300..1_450, "position ${events[0].positionMs}")
+
+        service.reportPlayback(user, PlaybackReport(songId, positionMs = 1_500, playing = false))
+        awaitCondition { events.size == 2 }
+        assertEquals(1_500, events[1].positionMs)
+        assertTrue(!events[1].playing)
+        assertTrue(events[1].generation > events[0].generation)
+        delay(800)
+        assertEquals(2, events.size)
+
+        service.reportPlayback(user, PlaybackReport(songId, positionMs = 1_800))
+        awaitCondition { events.size == 4 }
+        assertNull(events[3].songId)
+        assertEquals(events[2].generation, events[3].generation)
+        coVerify(exactly = 1) { songService.byIds(listOf(songId), user) }
+        awaitCondition { emissions.isNotEmpty() && emissions.last().nowPlaying == null }
+        assertTrue(emissions.count { it.nowPlaying?.song?.id == songId } <= 1, "heartbeats must not re-emit now playing")
+    }
+
+    @Test
+    fun `skewed or future client timestamps do not shift the position`() = runBlocking {
+        setup()
+        val service = ScrobbleService()
+        val user = UUID.randomUUID()
+        val songId = UUID.randomUUID()
+        coEvery { songService.byIds(listOf(songId), user) } returns listOf(songStub(songId, 60_000))
+        val events = CopyOnWriteArrayList<HookEvent.NowPlayingChanged>()
+        hookService.on<HookEvent.NowPlayingChanged> { events.add(it) }
+
+        service.reportPlayback(user, PlaybackReport(songId, positionMs = 5_000, sentAt = System.currentTimeMillis() - 10_000))
+        awaitCondition { events.size == 1 }
+        assertEquals(5_000, events[0].positionMs)
+
+        service.reportPlayback(user, PlaybackReport(songId, positionMs = 6_000, sentAt = System.currentTimeMillis() + 5_000))
+        awaitCondition { events.size == 2 }
+        assertEquals(6_000, events[1].positionMs)
+
+        service.reportPlayback(user, PlaybackReport(songId, positionMs = 7_000, playing = false, sentAt = System.currentTimeMillis() - 500))
+        awaitCondition { events.size == 3 }
+        assertEquals(7_000, events[2].positionMs)
     }
 }

@@ -127,6 +127,7 @@ class HueSettingsContribution(private val hue: HueService) : UiContribution(
             fields += UiComponent.NumberField(FIELD_TRANSITION_MS, scope.t("hue.transitionMs"), link.transitionMs.toDouble(), min = 0.0, max = 5000.0, step = 50.0)
             fields += UiComponent.Select(FIELD_ON_STOP, scope.t("hue.onStop"), link.onStop.name, HueStopMode.entries.map { UiOption(it.name, scope.t("hue.onStop.${it.name}")) })
             fields += UiComponent.Select(FIELD_MOTION, scope.t("hue.motion"), link.motion.name, HueMotionMode.entries.map { UiOption(it.name, scope.t("hue.motion.${it.name}")) })
+            fields += UiComponent.NumberField(FIELD_LATENCY_MS, scope.t("hue.latencyMs"), link.latencyMs.toDouble(), min = 0.0, max = HueService.MAX_LATENCY_MS.toDouble(), step = 10.0)
             fields += UiComponent.Spacer()
 
             val bridgeParam = mapOf(FIELD_BRIDGE to UiValue.of(bridge.id.toString()))
@@ -222,6 +223,7 @@ class HueSettingsContribution(private val hue: HueService) : UiContribution(
             transitionMs = values[FIELD_TRANSITION_MS]?.number?.toInt()?.coerceIn(0, 5000) ?: 400,
             onStop = enumOr(values[FIELD_ON_STOP]?.text, HueStopMode.KEEP),
             motion = enumOr(values[FIELD_MOTION]?.text, HueMotionMode.OFF),
+            latencyMs = values[FIELD_LATENCY_MS]?.number?.toInt()?.coerceIn(0, HueService.MAX_LATENCY_MS) ?: 150,
         )
         hue.setLink(scope.user.id, link)
         return UiInvokeResult(UiInvokeStatus.OK, scope.t("hue.saved"), refresh = true)
@@ -254,6 +256,7 @@ class HueSettingsContribution(private val hue: HueService) : UiContribution(
         const val FIELD_TRANSITION_MS = "transitionMs"
         const val FIELD_ON_STOP = "onStop"
         const val FIELD_MOTION = "motion"
+        const val FIELD_LATENCY_MS = "latencyMs"
         const val ACTION_DISCOVER = "discover"
         const val ACTION_PAIR = "pair"
         const val ACTION_SAVE = "save"
