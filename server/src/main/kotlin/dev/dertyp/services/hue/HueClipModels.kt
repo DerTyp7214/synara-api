@@ -84,6 +84,14 @@ data class ClipBridge(
 )
 
 @Serializable
+data class HueBridgeConfig(
+    val name: String? = null,
+    val bridgeid: String? = null,
+    val modelid: String? = null,
+    val apiversion: String? = null,
+)
+
+@Serializable
 data class ClipColorUpdate(val xy: ClipXy)
 
 @Serializable

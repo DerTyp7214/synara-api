@@ -635,6 +635,7 @@ A Hue bridge found on the network but not necessarily paired yet.
 | `ip` | `String` | IP address of the bridge. |
 | `modelId` | `String`? | Model id, when known. |
 | `paired` | `Boolean` | Whether this bridge is already paired with the server. |
+| `name` | `String`? | Name reported by the bridge, when it answered. |
 
 ### HueBridgeInfo <a name="devdertypdatahuebridgeinfo"></a>
 A Hue bridge paired with this server.

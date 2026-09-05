@@ -24,6 +24,7 @@ class HueRateLimited : Exception("Hue bridge rate limit exceeded")
 class HueBridgeException(message: String) : Exception(message)
 
 interface HueBridgeApi {
+    suspend fun config(): HueBridgeConfig
     suspend fun pair(deviceType: String): HuePairSuccess?
     suspend fun bridge(): ClipBridge
     suspend fun lights(): List<ClipLight>
@@ -60,6 +61,12 @@ class HueBridgeClient(
             socketTimeoutMillis = 5_000
         }
         expectSuccess = false
+    }
+
+    override suspend fun config(): HueBridgeConfig {
+        val response = client.get("$base/api/0/config")
+        check(response)
+        return response.body()
     }
 
     override suspend fun pair(deviceType: String): HuePairSuccess? {

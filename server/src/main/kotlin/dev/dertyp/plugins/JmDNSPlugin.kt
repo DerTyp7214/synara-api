@@ -17,6 +17,11 @@ class JmDNSConfig {
     var properties: Map<String, String> = emptyMap()
 }
 
+object JmDNSHolder {
+    @Volatile
+    var instance: JmDNS? = null
+}
+
 val JmDNSPlugin = createApplicationPlugin(
     name = "JmDNSPlugin",
     createConfiguration = ::JmDNSConfig
@@ -48,6 +53,7 @@ val JmDNSPlugin = createApplicationPlugin(
             val localAddress = InetAddress.getLocalHost()
 
             jmDNS = JmDNS.create(localAddress, localAddress.hostName)
+            JmDNSHolder.instance = jmDNS
 
             serviceInfo = ServiceInfo.create(
                 config.serviceType,
@@ -67,6 +73,7 @@ val JmDNSPlugin = createApplicationPlugin(
     }
 
     on(MonitoringEvent(ApplicationStopped)) { application ->
+        JmDNSHolder.instance = null
         jmDNS?.let {
             it.unregisterAllServices()
             it.close()

@@ -12,6 +12,7 @@ import dev.dertyp.plugins.UiContribution
 import dev.dertyp.plugins.UiRenderScope
 import dev.dertyp.services.hue.HueService
 import dev.dertyp.ui.UiAction
+import dev.dertyp.ui.UiAlign
 import dev.dertyp.ui.UiButtonStyle
 import dev.dertyp.ui.UiComponent
 import dev.dertyp.ui.UiContributionKind
@@ -22,6 +23,7 @@ import dev.dertyp.ui.UiInvokeStatus
 import dev.dertyp.ui.UiLiveUpdate
 import dev.dertyp.ui.UiOption
 import dev.dertyp.ui.UiSlots
+import dev.dertyp.ui.UiSpacing
 import dev.dertyp.ui.UiTextStyle
 import dev.dertyp.ui.UiTone
 import dev.dertyp.ui.UiValue
@@ -29,11 +31,27 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import java.util.UUID
 
-class HueSettingsContribution(private val hue: HueService) : UiContribution(
-    id = ID,
+class HueSettingsEntryContribution : UiContribution(
+    id = "core.hue.entry",
     kind = UiContributionKind.SLOT,
     titleKey = "hue.title",
     slot = UiSlots.SETTINGS,
+    descriptionKey = "hue.description",
+    icon = UiIcon(UiIconName.PLUG),
+    order = 60,
+) {
+    override suspend fun render(scope: UiRenderScope): UiComponent = UiComponent.ListItem(
+        title = scope.t("hue.title"),
+        subtitle = scope.t("hue.description"),
+        icon = icon,
+        action = UiAction.OpenPage(HueSettingsContribution.ID),
+    )
+}
+
+class HueSettingsContribution(private val hue: HueService) : UiContribution(
+    id = ID,
+    kind = UiContributionKind.PAGE,
+    titleKey = "hue.title",
     descriptionKey = "hue.description",
     icon = UiIcon(UiIconName.PLUG),
     order = 60,
@@ -54,8 +72,8 @@ class HueSettingsContribution(private val hue: HueService) : UiContribution(
                     title = scope.t("hue.discovered"),
                     children = candidates.map { candidate ->
                         UiComponent.ListItem(
-                            title = candidate.ip,
-                            subtitle = listOfNotNull(candidate.bridgeId, candidate.modelId).joinToString(" · ").ifEmpty { null },
+                            title = candidate.name ?: candidate.ip,
+                            subtitle = listOfNotNull(candidate.name?.let { candidate.ip }, candidate.bridgeId, candidate.modelId).joinToString(" · ").ifEmpty { null },
                             icon = UiIcon(UiIconName.PLUG),
                             action = UiAction.Invoke(id, ACTION_PAIR, params = mapOf(FIELD_IP to UiValue.of(candidate.ip))),
                         )
@@ -69,7 +87,7 @@ class HueSettingsContribution(private val hue: HueService) : UiContribution(
                 submitLabel = scope.t("hue.pair"),
                 actions = listOf(UiComponent.Button(scope.t("hue.discover"), UiAction.Invoke(id, ACTION_DISCOVER), UiButtonStyle.TEXT, UiIcon(UiIconName.SEARCH))),
             )
-            return UiComponent.Card(children, title = scope.t("hue.title"), icon = icon)
+            return UiComponent.Column(children)
         }
 
         val links = hue.getLinks(scope.user.id).associateBy { it.bridgeId }
@@ -132,7 +150,9 @@ class HueSettingsContribution(private val hue: HueService) : UiContribution(
                 UiIcon(UiIconName.CLOSE),
             )
         }
-        return UiComponent.Card(children, title = scope.t("hue.title"), icon = icon, actions = actions)
+        children += UiComponent.Divider
+        children += UiComponent.Column(actions, spacing = UiSpacing.SMALL, align = UiAlign.START)
+        return UiComponent.Column(children)
     }
 
     override fun changes(scope: UiRenderScope): Flow<Unit> = hue.changes

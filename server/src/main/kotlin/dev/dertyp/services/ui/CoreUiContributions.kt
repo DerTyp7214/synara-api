@@ -30,6 +30,7 @@ class CoreUiContributions(
         ImporterHomeCardContribution(importerState),
         PlaylistCoverContribution(coverGenerationService, jobService),
         CollectionCoverContribution(coverGenerationService, jobService),
+        HueSettingsEntryContribution(),
         HueSettingsContribution(hueService),
     )
 
