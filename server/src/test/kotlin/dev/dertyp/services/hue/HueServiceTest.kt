@@ -23,6 +23,7 @@ import dev.dertyp.services.HookService
 import dev.dertyp.services.ImageService
 import dev.dertyp.services.SongService
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.delay
@@ -84,6 +85,7 @@ class HueServiceTest {
         }
         service = HueService()
         service.clientFactory = { api }
+        service.stopGraceMs = 100
     }
 
     @AfterEach
@@ -173,6 +175,64 @@ class HueServiceTest {
         service.onNowPlaying(HookEvent.NowPlayingChanged(userId, null, 7, 0))
         awaitSent(4)
         assertTrue(sent.drop(2).all { it.second.on?.on == false })
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `restore snapshots the lights once, waits out the grace period and replays the old state`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val bridgeId = bridge()
+        service.setLink(userId, HueUserLink(bridgeId, true, listOf(light("l1", "Desk"), light("l2", "Shelf")), onStop = HueStopMode.RESTORE))
+        coEvery { api.lights() } returns listOf(
+            ClipLight("l1", ClipMetadata("Desk"), on = ClipOn(true), dimming = ClipDimming(40.0), color = ClipColor(ClipXy(0.4, 0.4)), colorTemperature = ClipColorTemperature(366, true)),
+            ClipLight("l2", ClipMetadata("Shelf"), on = ClipOn(false), dimming = ClipDimming(90.0), color = ClipColor(ClipXy(0.2, 0.2))),
+        )
+        val songA = UUID.randomUUID()
+        val songB = UUID.randomUUID()
+        coEvery { songService.byIds(listOf(songA), userId) } returns listOf(song(songA, null))
+        coEvery { songService.byIds(listOf(songB), userId) } returns listOf(song(songB, null))
+        coEvery { audioAnalysisService.getAudioDataBatch(any()) } returns emptyMap<UUID, SongAudioData>()
+
+        service.onNowPlaying(HookEvent.NowPlayingChanged(userId, songA, 1, 0))
+        awaitSent(2)
+        coVerify(exactly = 1) { api.lights() }
+
+        service.onNowPlaying(HookEvent.NowPlayingChanged(userId, null, 2, 0))
+        service.onNowPlaying(HookEvent.NowPlayingChanged(userId, songB, 3, 0))
+        awaitSent(4)
+        delay(250)
+        assertEquals(4, sent.size)
+        coVerify(exactly = 1) { api.lights() }
+
+        service.onNowPlaying(HookEvent.NowPlayingChanged(userId, null, 4, 0))
+        awaitSent(6)
+        val restored = sent.drop(4).associate { it.first to it.second }
+        assertEquals(LightUpdate(on = ClipOn(true), dimming = ClipDimming(40.0), colorTemperature = ClipColorTemperatureUpdate(366), dynamics = ClipDynamics(400)), restored["l1"])
+        assertEquals(LightUpdate(on = ClipOn(false)), restored["l2"])
+
+        service.onNowPlaying(HookEvent.NowPlayingChanged(userId, songA, 5, 0))
+        awaitSent(8)
+        coVerify(exactly = 2) { api.lights() }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `a resume of the same song within the grace period re-applies the colors`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val bridgeId = bridge()
+        service.setLink(userId, HueUserLink(bridgeId, true, listOf(light("l1", "Desk")), onStop = HueStopMode.OFF))
+        val songId = UUID.randomUUID()
+        coEvery { songService.byIds(listOf(songId), userId) } returns listOf(song(songId, null))
+        coEvery { audioAnalysisService.getAudioDataBatch(any()) } returns emptyMap<UUID, SongAudioData>()
+
+        service.onNowPlaying(HookEvent.NowPlayingChanged(userId, songId, 1, 0))
+        awaitSent(1)
+        service.onNowPlaying(HookEvent.NowPlayingChanged(userId, null, 2, 0))
+        service.onNowPlaying(HookEvent.NowPlayingChanged(userId, songId, 3, 0))
+        awaitSent(2)
+        delay(250)
+        assertEquals(2, sent.size)
+        assertTrue(sent.all { it.second.on?.on == true })
     }
 
     @ParameterizedTest

@@ -101,8 +101,10 @@ class HueService : Service() {
     private val currentColors = ConcurrentHashMap<UUID, List<Int>>()
     private val snapshots = ConcurrentHashMap<Pair<UUID, UUID>, List<HueCommand>>()
     private val animations = ConcurrentHashMap<Pair<UUID, UUID>, Job>()
+    private val pendingStops = ConcurrentHashMap<UUID, Job>()
 
     internal var motionIntervalOverride: Long? = null
+    internal var stopGraceMs: Long = STOP_GRACE.inWholeMilliseconds
     private val targetsCache = ConcurrentHashMap<UUID, Pair<Long, List<HueTarget>>>()
     private val gamutCache = ConcurrentHashMap<UUID, Map<String, HueColor.Gamut>>()
 
@@ -116,6 +118,8 @@ class HueService : Service() {
     override suspend fun stopService() {
         animations.values.forEach { it.cancel() }
         animations.clear()
+        pendingStops.values.forEach { it.cancel() }
+        pendingStops.clear()
         runtimes.values.forEach { it.queue.close(); it.client.close() }
         runtimes.clear()
         scope.cancel()
@@ -334,12 +338,18 @@ class HueService : Service() {
 
         val songId = event.songId
         if (songId == null) {
-            lastSong.remove(event.userId)
             cancelMotion(event.userId)
-            links.forEach { link -> stop(event.userId, link) }
+            pendingStops.remove(event.userId)?.cancel()
+            pendingStops[event.userId] = scope.launch {
+                delay(stopGraceMs)
+                pendingStops.remove(event.userId)
+                lastSong.remove(event.userId)
+                links.forEach { link -> stop(event.userId, link) }
+            }
             return
         }
-        if (lastSong[event.userId] == songId) return
+        val resumed = pendingStops.remove(event.userId)?.also { it.cancel() } != null
+        if (lastSong[event.userId] == songId && !resumed) return
         cancelMotion(event.userId)
 
         val song = songService.byIds(listOf(songId), event.userId).firstOrNull() ?: return
@@ -347,11 +357,13 @@ class HueService : Service() {
         val image = coverId?.let { imageService.byId(it) }
         val audio = audioAnalysisService.getAudioDataBatch(listOf(songId))[songId]
 
-        val firstSong = lastSong.put(event.userId, songId) == null
+        lastSong[event.userId] = songId
         links.forEach { link ->
             val row = bridge(link.bridgeId) ?: return@forEach
             val runtime = runtime(row)
-            if (firstSong && link.onStop == HueStopMode.RESTORE) snapshot(event.userId, link, runtime.client)
+            if (link.onStop == HueStopMode.RESTORE && !snapshots.containsKey(event.userId to link.bridgeId)) {
+                snapshot(event.userId, link, runtime.client)
+            }
             val result = HuePaletteMapper.map(image?.palette ?: emptyList(), image?.primaryColor, audio, link, gamutCache[link.bridgeId] ?: emptyMap())
             runtime.queue.submitAll(result.commands)
             currentColors[event.userId] = result.colors
@@ -427,18 +439,23 @@ class HueService : Service() {
             val lights = client.lights().associateBy { it.id }
             link.targets.filter { it.type == HueTargetType.LIGHT }.mapNotNull { target ->
                 val light = lights[target.id] ?: return@mapNotNull null
-                HueCommand(
-                    target,
-                    LightUpdate(
-                        on = light.on,
-                        dimming = light.dimming,
-                        color = light.color?.xy?.let { ClipColorUpdate(it) },
-                        dynamics = ClipDynamics(link.transitionMs),
-                    ),
-                )
+                HueCommand(target, restoreUpdate(light, link.transitionMs))
             }
         }.onFailure { logger.warn("Could not snapshot Hue lights: ${it.message}") }.getOrDefault(emptyList())
         if (commands.isNotEmpty()) snapshots[userId to link.bridgeId] = commands
+    }
+
+    internal fun restoreUpdate(light: ClipLight, transitionMs: Int): LightUpdate {
+        val on = light.on?.on ?: true
+        if (!on) return LightUpdate(on = ClipOn(false))
+        val temperature = light.colorTemperature?.takeIf { it.mirekValid == true }?.mirek
+        return LightUpdate(
+            on = ClipOn(true),
+            dimming = light.dimming,
+            color = if (temperature == null) light.color?.xy?.let { ClipColorUpdate(it) } else null,
+            colorTemperature = temperature?.let { ClipColorTemperatureUpdate(it) },
+            dynamics = ClipDynamics(transitionMs),
+        )
     }
 
     private fun runtime(row: BridgeRow): BridgeRuntime = runtimes.getOrPut(row.id) {
@@ -499,6 +516,7 @@ class HueService : Service() {
         private val PAIRING_TIMEOUT = 30.seconds
         private val PAIRING_POLL = 2.seconds
         private const val SLOW_MOTION_INTERVAL = 8_000L
+        private val STOP_GRACE = 3.seconds
         private val TARGETS_TTL = 5.minutes
     }
 }

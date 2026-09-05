@@ -50,12 +50,19 @@ data class ClipDynamics(val duration: Int)
 data class ClipResourceRef(val rid: String, val rtype: String)
 
 @Serializable
+data class ClipColorTemperature(
+    val mirek: Int? = null,
+    @SerialName("mirek_valid") val mirekValid: Boolean? = null,
+)
+
+@Serializable
 data class ClipLight(
     val id: String,
     val metadata: ClipMetadata? = null,
     val on: ClipOn? = null,
     val dimming: ClipDimming? = null,
     val color: ClipColor? = null,
+    @SerialName("color_temperature") val colorTemperature: ClipColorTemperature? = null,
     val owner: ClipResourceRef? = null,
 )
 
@@ -95,9 +102,13 @@ data class HueBridgeConfig(
 data class ClipColorUpdate(val xy: ClipXy)
 
 @Serializable
+data class ClipColorTemperatureUpdate(val mirek: Int)
+
+@Serializable
 data class LightUpdate(
     val on: ClipOn? = null,
     val dimming: ClipDimming? = null,
     val color: ClipColorUpdate? = null,
+    @SerialName("color_temperature") val colorTemperature: ClipColorTemperatureUpdate? = null,
     val dynamics: ClipDynamics? = null,
 )
