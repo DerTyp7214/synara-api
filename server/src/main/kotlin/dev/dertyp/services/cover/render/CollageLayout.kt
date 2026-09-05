@@ -26,7 +26,7 @@ object CollageLayout {
 
     private fun grid(g: Graphics2D, size: Int, tiles: List<BufferedImage>, columns: Int, random: Random) {
         val cells = columns * columns
-        val ordered = if (tiles.size >= cells) tiles.take(cells) else List(cells) { tiles[it % tiles.size] }
+        val ordered = tiles.take(cells)
         val gap = if (columns == 2) size / 64 else size / 96
         val margin = size / 24
         val inner = size - 2 * margin - gap * (columns - 1)
@@ -39,7 +39,7 @@ object CollageLayout {
             val x = offsetX + col * (cell + gap)
             val y = offsetY + row * (cell + gap)
             shadow(g, x, y, cell, cell, size / 80)
-            CoverRenderer.drawCoverFit(g, tile, x, y, cell, cell, tiles.size < cells && random.nextInt(4) == 0)
+            CoverRenderer.drawCoverFit(g, tile, x, y, cell, cell, random.nextInt(4) == 0)
         }
     }
 

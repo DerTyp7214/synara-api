@@ -25,7 +25,9 @@ object CoverRenderer {
             else -> CoverStyle.MOSAIC
         }
         CoverStyle.GRADIENT -> CoverStyle.GRADIENT
-        else -> if (tileCount == 0) CoverStyle.GRADIENT else style
+        CoverStyle.MOSAIC -> if (tileCount >= 9) CoverStyle.MOSAIC else resolveStyle(CoverStyle.GRID, tileCount)
+        CoverStyle.GRID -> if (tileCount >= 4) CoverStyle.GRID else resolveStyle(CoverStyle.STACKED, tileCount)
+        CoverStyle.STACKED, CoverStyle.SINGLE -> if (tileCount == 0) CoverStyle.GRADIENT else style
     }
 
     fun render(spec: CoverRenderSpec): RenderedCover {

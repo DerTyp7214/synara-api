@@ -127,6 +127,7 @@ class HueSettingsContribution(private val hue: HueService) : UiContribution(
             fields += UiComponent.NumberField(FIELD_TRANSITION_MS, scope.t("hue.transitionMs"), link.transitionMs.toDouble(), min = 0.0, max = 5000.0, step = 50.0)
             fields += UiComponent.Select(FIELD_ON_STOP, scope.t("hue.onStop"), link.onStop.name, HueStopMode.entries.map { UiOption(it.name, scope.t("hue.onStop.${it.name}")) })
             fields += UiComponent.Select(FIELD_MOTION, scope.t("hue.motion"), link.motion.name, HueMotionMode.entries.map { UiOption(it.name, scope.t("hue.motion.${it.name}")) })
+            fields += UiComponent.Spacer()
 
             val bridgeParam = mapOf(FIELD_BRIDGE to UiValue.of(bridge.id.toString()))
             children += UiComponent.Form(

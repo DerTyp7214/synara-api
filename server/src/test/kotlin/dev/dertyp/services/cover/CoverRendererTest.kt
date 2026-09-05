@@ -57,7 +57,42 @@ class CoverRendererTest {
         assertEquals(CoverStyle.GRID, CoverRenderer.resolveStyle(CoverStyle.AUTO, 4))
         assertEquals(CoverStyle.MOSAIC, CoverRenderer.resolveStyle(CoverStyle.AUTO, 9))
         assertEquals(CoverStyle.GRADIENT, CoverRenderer.resolveStyle(CoverStyle.GRID, 0))
-        assertEquals(CoverStyle.GRID, CoverRenderer.resolveStyle(CoverStyle.GRID, 2))
+        assertEquals(CoverStyle.GRID, CoverRenderer.resolveStyle(CoverStyle.GRID, 4))
+        assertEquals(CoverStyle.MOSAIC, CoverRenderer.resolveStyle(CoverStyle.MOSAIC, 9))
+    }
+
+    @Test
+    fun `explicit grid styles fall back when tiles cannot fill every cell`() {
+        assertEquals(CoverStyle.STACKED, CoverRenderer.resolveStyle(CoverStyle.GRID, 2))
+        assertEquals(CoverStyle.STACKED, CoverRenderer.resolveStyle(CoverStyle.GRID, 1))
+        assertEquals(CoverStyle.GRID, CoverRenderer.resolveStyle(CoverStyle.MOSAIC, 5))
+        assertEquals(CoverStyle.GRID, CoverRenderer.resolveStyle(CoverStyle.MOSAIC, 8))
+        assertEquals(CoverStyle.STACKED, CoverRenderer.resolveStyle(CoverStyle.MOSAIC, 2))
+        assertEquals(CoverStyle.GRADIENT, CoverRenderer.resolveStyle(CoverStyle.MOSAIC, 0))
+        assertEquals(CoverStyle.STACKED, CoverRenderer.render(spec(CoverStyle.GRID, 2)).style)
+        assertEquals(CoverStyle.GRID, CoverRenderer.render(spec(CoverStyle.MOSAIC, 5)).style)
+    }
+
+    @Test
+    fun `grid never draws the same tile twice`() {
+        val colors = listOf(Color.RED, Color.GREEN, Color.BLUE, Color.YELLOW, Color.MAGENTA)
+        val rendered = CoverRenderer.render(
+            CoverRenderSpec(seed = 3, style = CoverStyle.MOSAIC, tiles = colors.map { tile(it) }, palette = palette, title = null),
+        )
+        assertEquals(CoverStyle.GRID, rendered.style)
+        val margin = 1024 / 24
+        val gap = 1024 / 64
+        val cell = (1024 - 2 * margin - gap) / 2
+        val centers = listOf(0, 1).flatMap { row -> listOf(0, 1).map { col -> (margin + col * (cell + gap) + cell / 2) to (margin + row * (cell + gap) + cell / 2) } }
+        val seen = centers.map { (x, y) -> nearest(Color(rendered.image.getRGB(x, y)), colors) }
+        assertEquals(seen.size, seen.toSet().size, "cells $seen")
+    }
+
+    private fun nearest(color: Color, candidates: List<Color>): Color = candidates.minBy {
+        val dr = it.red - color.red
+        val dg = it.green - color.green
+        val db = it.blue - color.blue
+        dr * dr + dg * dg + db * db
     }
 
     @Test
