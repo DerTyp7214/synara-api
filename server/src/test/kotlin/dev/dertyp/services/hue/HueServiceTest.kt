@@ -241,7 +241,7 @@ class HueServiceTest {
     fun `ambient motion keeps sending rotated frames until playback stops`(dialect: DbDialect) = runBlocking {
         setup(dialect)
         val bridgeId = bridge()
-        service.motionIntervalOverride = 60
+        service.motionIntervalOverride = 400
         service.setLink(userId, HueUserLink(bridgeId, true, listOf(light("l1", "Desk"), light("l2", "Shelf")), motion = HueMotionMode.SLOW, latencyMs = 0))
         val songId = UUID.randomUUID()
         val coverId = UUID.randomUUID()
