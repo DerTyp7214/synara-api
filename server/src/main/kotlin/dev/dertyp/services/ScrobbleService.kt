@@ -44,6 +44,10 @@ class ScrobbleService : Service() {
     suspend fun reportPlayback(userId: PlatformUUID, report: PlaybackReport): Long {
         val now = System.currentTimeMillis()
         val previous = nowPlaying[userId]?.takeIf { it.song.id == report.songId }
+        if (previous == null && !report.playing) {
+            if (nowPlaying.containsKey(userId)) clearNowPlaying(userId)
+            return now
+        }
         val song = previous?.song ?: songService.byIds(listOf(report.songId), userId).firstOrNull() ?: return now
         val myGen = generation.merge(userId, 1L, Long::plus)!!
         timers.remove(userId)?.cancel()

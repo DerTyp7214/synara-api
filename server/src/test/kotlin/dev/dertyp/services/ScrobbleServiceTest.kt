@@ -239,13 +239,16 @@ class ScrobbleServiceTest : KoinTest {
         val events = CopyOnWriteArrayList<HookEvent.NowPlayingChanged>()
         hookService.on<HookEvent.NowPlayingChanged> { events.add(it) }
 
-        service.reportPlayback(user, PlaybackReport(songId, positionMs = 1_000, playing = false))
+        service.reportPlayback(user, PlaybackReport(songId, positionMs = 1_000))
         awaitCondition { events.size == 1 }
-        assertEquals(songId, events[0].songId)
-
+        service.reportPlayback(user, PlaybackReport(songId, positionMs = 1_000, playing = false))
         awaitCondition { events.size == 2 }
-        assertNull(events[1].songId)
-        assertEquals(events[0].generation, events[1].generation)
+        assertEquals(songId, events[1].songId)
+        assertTrue(!events[1].playing)
+
+        awaitCondition { events.size == 3 }
+        assertNull(events[2].songId)
+        assertEquals(events[1].generation, events[2].generation)
     }
 
     @Test
@@ -318,5 +321,32 @@ class ScrobbleServiceTest : KoinTest {
         service.reportPlayback(user, PlaybackReport(songId, positionMs = 7_000, playing = false, sentAt = System.currentTimeMillis() - 500))
         awaitCondition { events.size == 3 }
         assertEquals(7_000, events[2].positionMs)
+    }
+
+    @Test
+    fun `a paused report for an untracked song does not start now-playing`() = runBlocking {
+        setup()
+        val service = ScrobbleService()
+        val user = UUID.randomUUID()
+        val first = UUID.randomUUID()
+        val second = UUID.randomUUID()
+        coEvery { songService.byIds(listOf(first), user) } returns listOf(songStub(first, 60_000))
+        coEvery { songService.byIds(listOf(second), user) } returns listOf(songStub(second, 60_000))
+        val events = CopyOnWriteArrayList<HookEvent.NowPlayingChanged>()
+        hookService.on<HookEvent.NowPlayingChanged> { events.add(it) }
+        val emissions = collect(service, user)
+
+        service.reportPlayback(user, PlaybackReport(second, positionMs = 1_000, playing = false))
+        delay(300)
+        assertTrue(events.isEmpty())
+        assertTrue(emissions.all { it.nowPlaying == null })
+
+        service.reportPlayback(user, PlaybackReport(first, positionMs = 0))
+        awaitCondition { events.size == 1 && events[0].songId == first }
+        service.reportPlayback(user, PlaybackReport(second, positionMs = 1_000, playing = false))
+        awaitCondition { events.size == 2 }
+        assertNull(events[1].songId)
+        awaitCondition { emissions.isNotEmpty() && emissions.last().nowPlaying == null }
+        coVerify(exactly = 0) { songService.byIds(listOf(second), user) }
     }
 }
