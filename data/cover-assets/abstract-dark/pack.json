@@ -1,0 +1,28 @@
+{
+  "id": "abstract-dark",
+  "name": "Abstract Dark",
+  "tags": [
+    "electronic",
+    "ambient",
+    "techno",
+    "house",
+    "lo-fi",
+    "mood:calm",
+    "mood:dark",
+    "mood:dreamy",
+    "energy:low",
+    "energy:mid",
+    "palette:dark",
+    "palette:cool"
+  ],
+  "nsfw": false,
+  "attribution": "Generated with Codex (OpenAI image model); textures CC0 from ambientCG (Fabric030, Marble006)",
+  "backgrounds": [
+    "backgrounds/*.jpg",
+    "backgrounds/*.png"
+  ],
+  "overlays": [
+    "overlays/*.png"
+  ],
+  "fonts": []
+}

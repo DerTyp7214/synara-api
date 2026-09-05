@@ -19,6 +19,7 @@ import dev.dertyp.ui.UiHomeCard
 import dev.dertyp.ui.UiHomeLayout
 import dev.dertyp.ui.UiHookEvent
 import dev.dertyp.ui.UiHookHandler
+import dev.dertyp.ui.UiHookHandlerInfo
 import dev.dertyp.ui.UiHookKind
 import dev.dertyp.ui.UiInvokePayload
 import dev.dertyp.ui.UiInvokeResult
@@ -262,6 +263,10 @@ class MockUiService : IUiService {
     }
 
     override suspend fun resolveIntake(items: List<IntakeItem>): List<UiHookHandler> = offers(items)
+
+    override suspend fun listHookHandlers(kind: UiHookKind?): List<UiHookHandlerInfo> = listOf(
+        UiHookHandlerInfo("core.importer", "server", "Open in importer", "Review and edit before importing", UiIcon(UiIconName.IMPORT), UiHookKind.entries),
+    ).filter { kind == null || kind in it.kinds }
 
     override suspend fun dispatchHook(event: UiHookEvent): List<UiHookHandler> {
         val items = when (event) {

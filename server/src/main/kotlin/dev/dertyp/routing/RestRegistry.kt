@@ -11,6 +11,8 @@ import dev.dertyp.core.toUUIDOrNull
 import dev.dertyp.data.PaginatedResponse
 import dev.dertyp.rpc.annotations.*
 import dev.dertyp.services.*
+import dev.dertyp.services.cover.RpcCoverGenerationService
+import dev.dertyp.services.hue.RpcHueService
 import dev.dertyp.services.import.IImportService
 import dev.dertyp.services.import.ImportRpcService
 import dev.dertyp.services.metadata.CachedMusicBrainzService
@@ -483,6 +485,14 @@ fun Route.registerAuthenticatedRestServices(koin: Koin) {
     registerRestService(ICollectionService::class, authenticated = true) {
         val user = call.getUser() ?: throw IllegalArgumentException("No user found")
         RpcCollectionService(user, koin.get()).withAuthorization<ICollectionService>(user)
+    }
+    registerRestService(ICoverGenerationService::class, authenticated = true) {
+        val user = call.getUser() ?: throw IllegalArgumentException("No user found")
+        RpcCoverGenerationService(user, koin.get()).withAuthorization<ICoverGenerationService>(user)
+    }
+    registerRestService(IHueService::class, authenticated = true) {
+        val user = call.getUser() ?: throw IllegalArgumentException("No user found")
+        RpcHueService(user, koin.get()).withAuthorization<IHueService>(user)
     }
     registerRestService(ISessionService::class, authenticated = true) {
         val user = call.getUser() ?: throw IllegalArgumentException("No user found")

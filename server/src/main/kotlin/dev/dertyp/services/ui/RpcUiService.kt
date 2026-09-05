@@ -11,6 +11,8 @@ import dev.dertyp.ui.UiContributionKind
 import dev.dertyp.ui.UiHomeLayout
 import dev.dertyp.ui.UiHookEvent
 import dev.dertyp.ui.UiHookHandler
+import dev.dertyp.ui.UiHookHandlerInfo
+import dev.dertyp.ui.UiHookKind
 import dev.dertyp.ui.UiInvokePayload
 import dev.dertyp.ui.UiInvokeResult
 import dev.dertyp.ui.UiLiveUpdate
@@ -46,6 +48,9 @@ class RpcUiService(
 
     override suspend fun dispatchHook(event: UiHookEvent): List<UiHookHandler> =
         uiService.dispatchHook(user, client, event, call)
+
+    override suspend fun listHookHandlers(kind: UiHookKind?): List<UiHookHandlerInfo> =
+        uiService.listHookHandlers(user, client, kind)
 
     override suspend fun intake(items: List<IntakeItem>, resolverId: String?): UiIntakeResult =
         uiService.intake(user, client, items, resolverId)

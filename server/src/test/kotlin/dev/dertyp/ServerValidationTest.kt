@@ -37,7 +37,9 @@ class ServerValidationTest {
         override fun isTokenExpired(): Boolean = false
         override fun isAuthenticated(): Boolean = true
         override suspend fun updateAuth(response: AuthenticationResponse) {}
-        override suspend fun handleAuthFailure() {}
+        override suspend fun handleAuthFailure(reason: Throwable?) {}
+        override val sslConfirmed: Boolean = false
+        override suspend fun setSslConfirmed(value: Boolean) {}
     }
 
     private class MockStatsService : IServerStatsService {

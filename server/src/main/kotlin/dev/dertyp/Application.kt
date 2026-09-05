@@ -8,6 +8,13 @@ import com.google.gson.stream.JsonToken
 import com.google.gson.stream.JsonWriter
 import dev.dertyp.audio.AtmosProcessor
 import dev.dertyp.audio.toAudioConfig
+import dev.dertyp.services.cover.CoverAssetPackService
+import dev.dertyp.services.cover.CoverAutoTrigger
+import dev.dertyp.services.cover.CoverGenerationService
+import dev.dertyp.services.cover.CoverSourceCollector
+import dev.dertyp.services.cover.toCoverConfig
+import dev.dertyp.services.hue.HueDiscoveryService
+import dev.dertyp.services.hue.HueService
 import dev.dertyp.core.configureScheduledTasks
 import dev.dertyp.data.RemoteServerConfig
 import dev.dertyp.db.SongTable
@@ -277,6 +284,13 @@ fun mainModule(application: Application, environment: ApplicationEnvironment): M
     singleOf(::ImporterResolvers)
     singleOf(ApplicationConfig::toMetricsConfig)
     singleOf(ApplicationConfig::toAudioConfig)
+    singleOf(ApplicationConfig::toCoverConfig)
+    singleOf(::CoverAssetPackService)
+    singleOf(::CoverSourceCollector)
+    singleOf(::CoverGenerationService)
+    singleOf(::CoverAutoTrigger)
+    singleOf(::HueDiscoveryService)
+    singleOf(::HueService)
     singleOf(::AtmosProcessor)
     singleOf(::RpcMetricsCollector)
     singleOf(::RpcMetricsService)

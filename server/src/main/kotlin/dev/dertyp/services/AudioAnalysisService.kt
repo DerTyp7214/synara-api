@@ -4,8 +4,10 @@ import dev.dertyp.PlatformUUID
 import dev.dertyp.core.ApplicationScope
 import dev.dertyp.data.AudioScale
 import dev.dertyp.data.SongAudioData
+import dev.dertyp.data.SongAudioTimeline
 import dev.dertyp.db.PersonTable
 import dev.dertyp.db.SongAudioDataTable
+import dev.dertyp.db.SongAudioTimelineTable
 import dev.dertyp.db.SongComposerTable
 import dev.dertyp.db.SongLyricistTable
 import dev.dertyp.db.SongProducerTable
@@ -14,6 +16,8 @@ import dev.dertyp.dbQuery
 import dev.dertyp.executeCommand
 import dev.dertyp.findInPath
 import dev.dertyp.services.audio.AudioAnalysisPostProcessor
+import dev.dertyp.services.audio.AudioTimelineCodec
+import dev.dertyp.services.audio.RmsEnvelopeExtractor
 import dev.dertyp.services.audio.ValencePostProcessor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -23,18 +27,23 @@ import org.jaudiotagger.tag.FieldKey
 import org.jetbrains.exposed.v1.core.Column
 import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.Table
+import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.core.innerJoin
 import org.jetbrains.exposed.v1.core.isNull
+import org.jetbrains.exposed.v1.core.less
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.insertIgnore
+import org.jetbrains.exposed.v1.jdbc.orWhere
 import org.jetbrains.exposed.v1.jdbc.select
+import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.upsert
 import java.io.File
 import java.util.UUID
+import kotlin.time.Duration.Companion.days
 
 @OptIn(ExperimentalSerializationApi::class)
 open class AudioAnalysisService : IAudioAnalysisService, Service() {
@@ -43,6 +52,14 @@ open class AudioAnalysisService : IAudioAnalysisService, Service() {
     protected open val postProcessors: List<AudioAnalysisPostProcessor> = listOf(
         ValencePostProcessor()
     )
+
+    companion object {
+        const val ENVELOPE_HZ = 10
+        const val TIMELINE_STATUS_OK = "ok"
+        const val TIMELINE_STATUS_PARTIAL = "partial"
+        const val TIMELINE_STATUS_FAILED = "failed"
+        val TIMELINE_RETRY_INTERVAL = 7.days.inWholeMilliseconds
+    }
 
     override suspend fun getAudioData(songId: PlatformUUID): SongAudioData? = dbQuery {
         val existing = SongAudioDataTable.select(SongAudioDataTable.columns)
@@ -74,9 +91,10 @@ open class AudioAnalysisService : IAudioAnalysisService, Service() {
                 .singleOrNull()?.get(SongTable.filePath)
         } ?: return
 
-        var audioData = if (essentiaExtractorPath != null) {
+        val essentiaResult = if (essentiaExtractorPath != null) {
             analyzeWithEssentia(filePath)
         } else null
+        var audioData = essentiaResult?.first
 
         if (audioData == null) {
             val tags = try {
@@ -97,6 +115,7 @@ open class AudioAnalysisService : IAudioAnalysisService, Service() {
         }
 
         saveAudioData(songId, audioData)
+        saveTimeline(songId, filePath, essentiaResult?.second)
     }
 
     suspend fun getUnanalyzedSongIds(): List<PlatformUUID> = dbQuery {
@@ -107,7 +126,84 @@ open class AudioAnalysisService : IAudioAnalysisService, Service() {
             .map { it[SongTable.id].value }
     }
 
-    private suspend fun analyzeWithEssentia(filePath: String): SongAudioData? {
+    suspend fun getSongIdsMissingTimeline(limit: Int, retryFailedAfterMs: Long = TIMELINE_RETRY_INTERVAL): List<PlatformUUID> = dbQuery {
+        val cutoff = System.currentTimeMillis() - retryFailedAfterMs
+        SongTable
+            .leftJoin(SongAudioTimelineTable)
+            .select(SongTable.id)
+            .where { SongAudioTimelineTable.songId.isNull() }
+            .orWhere { (SongAudioTimelineTable.status eq TIMELINE_STATUS_FAILED) and (SongAudioTimelineTable.analyzedAt less cutoff) }
+            .limit(limit)
+            .map { it[SongTable.id].value }
+    }
+
+    override suspend fun getAudioTimeline(songId: PlatformUUID): SongAudioTimeline? = dbQuery {
+        SongAudioTimelineTable.selectAll()
+            .where { SongAudioTimelineTable.songId eq songId }
+            .singleOrNull()
+            ?.let { mapTimeline(it) }
+    }
+
+    private suspend fun saveTimeline(songId: PlatformUUID, filePath: String, essentia: EssentiaOutput?) {
+        val beats = essentia?.rhythm?.beatsPosition?.takeIf { it.isNotEmpty() }
+        val envelope = withContext(Dispatchers.IO) {
+            runCatching { RmsEnvelopeExtractor.extract(File(filePath), ENVELOPE_HZ) }
+                .onFailure { logger.warn("Loudness envelope extraction failed for $filePath: ${it.message}") }
+                .getOrNull()
+        }
+        val status = when {
+            beats != null && envelope != null -> TIMELINE_STATUS_OK
+            beats == null && envelope == null -> TIMELINE_STATUS_FAILED
+            else -> TIMELINE_STATUS_PARTIAL
+        }
+        val source = when {
+            beats != null -> "essentia"
+            envelope != null -> "rms"
+            else -> "none"
+        }
+
+        dbQuery {
+            SongAudioTimelineTable.upsert(SongAudioTimelineTable.songId) {
+                it[SongAudioTimelineTable.songId] = songId
+                it[version] = AudioTimelineCodec.VERSION
+                it[SongAudioTimelineTable.status] = status
+                it[SongAudioTimelineTable.beatSource] = source
+                it[analyzedAt] = System.currentTimeMillis()
+                it[SongAudioTimelineTable.beats] = beats?.let { positions -> AudioTimelineCodec.encodeBeats(positions) }
+                it[beatsCount] = essentia?.rhythm?.beatsCount?.toInt() ?: beats?.size
+                it[onsetRate] = essentia?.rhythm?.onsetRate
+                it[beatsLoudnessMean] = essentia?.rhythm?.beatsLoudness?.mean
+                it[beatsLoudnessMax] = essentia?.rhythm?.beatsLoudness?.max
+                it[SongAudioTimelineTable.envelope] = envelope?.let { values ->
+                    AudioTimelineCodec.encodeEnvelope(values, RmsEnvelopeExtractor.MIN_DB, RmsEnvelopeExtractor.MAX_DB)
+                }
+                it[envelopeHz] = ENVELOPE_HZ
+                it[envelopeMinDb] = RmsEnvelopeExtractor.MIN_DB.toDouble()
+                it[envelopeMaxDb] = RmsEnvelopeExtractor.MAX_DB.toDouble()
+                it[loudnessRange] = essentia?.lowLevel?.loudnessEbu128?.loudnessRange
+                it[dynamicComplexity] = essentia?.lowLevel?.dynamicComplexity
+            }
+        }
+    }
+
+    private fun mapTimeline(row: ResultRow): SongAudioTimeline {
+        val minDb = row[SongAudioTimelineTable.envelopeMinDb].toFloat()
+        val maxDb = row[SongAudioTimelineTable.envelopeMaxDb].toFloat()
+        return SongAudioTimeline(
+            songId = row[SongAudioTimelineTable.songId].value,
+            beatsMs = row[SongAudioTimelineTable.beats]?.let { AudioTimelineCodec.decodeBeats(it).toList() } ?: emptyList(),
+            beatsCount = row[SongAudioTimelineTable.beatsCount],
+            onsetRate = row[SongAudioTimelineTable.onsetRate],
+            envelopeHz = row[SongAudioTimelineTable.envelopeHz],
+            envelopeDb = row[SongAudioTimelineTable.envelope]?.let { AudioTimelineCodec.decodeEnvelope(it, minDb, maxDb).toList() } ?: emptyList(),
+            loudnessRange = row[SongAudioTimelineTable.loudnessRange],
+            dynamicComplexity = row[SongAudioTimelineTable.dynamicComplexity],
+            source = row[SongAudioTimelineTable.beatSource],
+            version = row[SongAudioTimelineTable.version],
+        )
+    }
+
+    private suspend fun analyzeWithEssentia(filePath: String): Pair<SongAudioData, EssentiaOutput>? {
         val tempFile = withContext(Dispatchers.IO) {
             File.createTempFile("essentia_", ".json")
         }
@@ -123,7 +219,7 @@ open class AudioAnalysisService : IAudioAnalysisService, Service() {
                     audioData = it.process(essentia, audioData)
                 }
 
-                return audioData
+                return audioData to essentia
             }
         } catch (e: Exception) {
             logger.error("Essentia analysis failed: ${e.message}")

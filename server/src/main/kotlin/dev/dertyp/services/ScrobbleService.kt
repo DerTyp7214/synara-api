@@ -2,6 +2,8 @@ package dev.dertyp.services
 
 import dev.dertyp.PlatformUUID
 import dev.dertyp.data.*
+import dev.dertyp.plugins.HookBus
+import dev.dertyp.plugins.HookEvent
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.*
@@ -12,6 +14,7 @@ import kotlin.time.Duration.Companion.milliseconds
 class ScrobbleService : Service() {
     private val listenService by inject<ListenService>()
     private val songService by inject<SongService>()
+    private val hooks by inject<HookBus>()
 
     private val serviceScope = CoroutineScope(Dispatchers.Default)
 
@@ -27,8 +30,10 @@ class ScrobbleService : Service() {
         val song = songService.byIds(listOf(songId), userId).firstOrNull() ?: return
         val myGen = generation.merge(userId, 1L, Long::plus)!!
         timers.remove(userId)?.cancel()
-        nowPlaying[userId] = NowPlayingEntry(song, System.currentTimeMillis())
+        val startedAt = System.currentTimeMillis()
+        nowPlaying[userId] = NowPlayingEntry(song, startedAt)
         nowPlayingChanges.tryEmit(Unit)
+        hooks.emit(HookEvent.NowPlayingChanged(userId, songId, myGen, startedAt))
 
         if (song.duration > 0) {
             timers[userId] = serviceScope.launch {
@@ -36,16 +41,18 @@ class ScrobbleService : Service() {
                 if (generation[userId] == myGen) {
                     nowPlaying.remove(userId)
                     nowPlayingChanges.tryEmit(Unit)
+                    hooks.emit(HookEvent.NowPlayingChanged(userId, null, myGen, System.currentTimeMillis()))
                 }
             }
         }
     }
 
-    fun clearNowPlaying(userId: PlatformUUID) {
-        generation.merge(userId, 1L, Long::plus)
+    suspend fun clearNowPlaying(userId: PlatformUUID) {
+        val myGen = generation.merge(userId, 1L, Long::plus)!!
         timers.remove(userId)?.cancel()
         nowPlaying.remove(userId)
         nowPlayingChanges.tryEmit(Unit)
+        hooks.emit(HookEvent.NowPlayingChanged(userId, null, myGen, System.currentTimeMillis()))
     }
 
     suspend fun listened(userId: PlatformUUID, request: ScrobbleRequest) {

@@ -4,11 +4,14 @@ import dev.dertyp.core.*
 import dev.dertyp.data.CollectionItemType
 import dev.dertyp.data.CollectionSearchResults
 import dev.dertyp.data.CollectionSongMatch
+import dev.dertyp.data.ImageSource
 import dev.dertyp.data.MediaCollection
 import dev.dertyp.data.InsertableCollection
 import dev.dertyp.data.PaginatedResponse
 import dev.dertyp.db.*
 import dev.dertyp.dbQuery
+import dev.dertyp.plugins.HookBus
+import dev.dertyp.plugins.HookEvent
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -26,6 +29,7 @@ class CollectionService : Service() {
     private val artistService by inject<ArtistService>()
     private val albumService by inject<AlbumService>()
     private val userPlaylistService by inject<UserPlaylistService>()
+    private val hooks by inject<HookBus>()
 
     companion object {
         fun mapCollection(resultRow: ResultRow): MediaCollection = MediaCollection(
@@ -35,6 +39,7 @@ class CollectionService : Service() {
             imageId = resultRow[CollectionTable.imageId]?.value,
             blurHash = resultRow.getOrNull(ImageTable.blurHash),
             creator = resultRow[CollectionTable.creator].value,
+            imageSource = resultRow.getOrNull(CollectionTable.imageSource)?.let { ImageSource.valueOf(it) },
         )
     }
 
@@ -63,30 +68,72 @@ class CollectionService : Service() {
         return bases.map { it.withComputedStats() }
     }
 
-    suspend fun createCollection(userId: UUID, collection: InsertableCollection): UUID = dbQuery {
-        CollectionTable.insertAndGetId {
-            it[name] = collection.name
-            it[description] = collection.description
-            it[creator] = EntityID(userId, UserTable)
-            it[imageId] = collection.imageId?.let { img -> EntityID(img, ImageTable) }
-        }.value
+    suspend fun createCollection(userId: UUID, collection: InsertableCollection): UUID {
+        val id = dbQuery {
+            CollectionTable.insertAndGetId {
+                it[name] = collection.name
+                it[description] = collection.description
+                it[creator] = EntityID(userId, UserTable)
+                it[imageId] = collection.imageId?.let { img -> EntityID(img, ImageTable) }
+                it[imageSource] = collection.imageId?.let { ImageSource.USER.name }
+            }.value
+        }
+        if (collection.imageId == null) hooks.emit(HookEvent.CollectionChanged(id))
+        return id
     }
 
-    suspend fun updateCollection(id: UUID, collection: InsertableCollection): Boolean = dbQuery {
-        CollectionTable.update({ CollectionTable.id eq id }) {
-            it[name] = collection.name
-            it[description] = collection.description
-            it[imageId] = collection.imageId
-        } == 1
+    suspend fun updateCollection(id: UUID, collection: InsertableCollection): Boolean {
+        var imageCleared = false
+        val updated = dbQuery {
+            val current = CollectionTable
+                .select(CollectionTable.imageId, CollectionTable.imageSource)
+                .where { CollectionTable.id eq id }
+                .firstOrNull() ?: return@dbQuery false
+            val currentImageId = current[CollectionTable.imageId]?.value
+            val currentSource = current[CollectionTable.imageSource]
+            val newSource = when {
+                collection.imageId == null -> null
+                collection.imageId != currentImageId -> ImageSource.USER.name
+                else -> currentSource ?: ImageSource.USER.name
+            }
+            imageCleared = collection.imageId == null && currentImageId != null
+            CollectionTable.update({ CollectionTable.id eq id }) {
+                it[name] = collection.name
+                it[description] = collection.description
+                it[imageId] = collection.imageId
+                it[imageSource] = newSource
+                if (collection.imageId == null) {
+                    it[coverStyle] = null
+                    it[coverSeed] = null
+                }
+            } == 1
+        }
+        if (updated && imageCleared) hooks.emit(HookEvent.CollectionChanged(id))
+        return updated
     }
 
-    suspend fun setCollectionImage(id: UUID, imageId: UUID?): Boolean = dbQuery {
-        CollectionTable.update({ CollectionTable.id eq id }) {
-            it[CollectionTable.imageId] = imageId
-        } == 1
+    suspend fun setCollectionImage(id: UUID, imageId: UUID?): Boolean {
+        val updated = dbQuery {
+            CollectionTable.update({ CollectionTable.id eq id }) {
+                it[CollectionTable.imageId] = imageId
+                it[imageSource] = imageId?.let { ImageSource.USER.name }
+                if (imageId == null) {
+                    it[coverStyle] = null
+                    it[coverSeed] = null
+                }
+            } == 1
+        }
+        if (updated && imageId == null) hooks.emit(HookEvent.CollectionChanged(id))
+        return updated
     }
 
-    suspend fun addItem(id: UUID, itemType: CollectionItemType, itemId: UUID): Boolean = dbQuery {
+    suspend fun addItem(id: UUID, itemType: CollectionItemType, itemId: UUID): Boolean {
+        val added = insertItem(id, itemType, itemId)
+        if (added) hooks.emit(HookEvent.CollectionChanged(id))
+        return added
+    }
+
+    private suspend fun insertItem(id: UUID, itemType: CollectionItemType, itemId: UUID): Boolean = dbQuery {
         when (itemType) {
             CollectionItemType.SONG -> {
                 if (SongTable.select(SongTable.id).where { SongTable.id eq itemId }.empty()) return@dbQuery false
@@ -107,17 +154,21 @@ class CollectionService : Service() {
         }
     }
 
-    suspend fun removeItem(id: UUID, itemType: CollectionItemType, itemId: UUID): Boolean = dbQuery {
-        when (itemType) {
-            CollectionItemType.SONG ->
-                CollectionSongTable.deleteWhere { (collectionId eq id) and (songId eq itemId) } > 0
-            CollectionItemType.ALBUM ->
-                CollectionAlbumTable.deleteWhere { (collectionId eq id) and (albumId eq itemId) } > 0
-            CollectionItemType.ARTIST ->
-                CollectionArtistTable.deleteWhere { (collectionId eq id) and (artistId eq itemId) } > 0
-            CollectionItemType.PLAYLIST ->
-                CollectionPlaylistTable.deleteWhere { (collectionId eq id) and (playlistId eq itemId) } > 0
+    suspend fun removeItem(id: UUID, itemType: CollectionItemType, itemId: UUID): Boolean {
+        val removed = dbQuery {
+            when (itemType) {
+                CollectionItemType.SONG ->
+                    CollectionSongTable.deleteWhere { (collectionId eq id) and (songId eq itemId) } > 0
+                CollectionItemType.ALBUM ->
+                    CollectionAlbumTable.deleteWhere { (collectionId eq id) and (albumId eq itemId) } > 0
+                CollectionItemType.ARTIST ->
+                    CollectionArtistTable.deleteWhere { (collectionId eq id) and (artistId eq itemId) } > 0
+                CollectionItemType.PLAYLIST ->
+                    CollectionPlaylistTable.deleteWhere { (collectionId eq id) and (playlistId eq itemId) } > 0
+            }
         }
+        if (removed) hooks.emit(HookEvent.CollectionChanged(id))
+        return removed
     }
 
     suspend fun delete(id: UUID): Boolean = dbQuery {

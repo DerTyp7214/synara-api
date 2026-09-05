@@ -7,6 +7,8 @@ import dev.dertyp.core.clientInfo
 import dev.dertyp.core.getUser
 import dev.dertyp.data.User
 import dev.dertyp.services.*
+import dev.dertyp.services.cover.RpcCoverGenerationService
+import dev.dertyp.services.hue.RpcHueService
 import dev.dertyp.services.import.IImportService
 import dev.dertyp.services.import.ImportRpcService
 import dev.dertyp.services.import.ImportService
@@ -172,6 +174,8 @@ private fun registerAuthenticated(koin: Koin, call: ApplicationCall, user: User,
     registrar.register(IPlaylistService::class) { playlistService.withAuthorization<IPlaylistService>(user).withLogging<IPlaylistService>(call) }
     registrar.register(IUserPlaylistService::class) { userPlaylistService.withAuthorization<IUserPlaylistService>(user).withLogging<IUserPlaylistService>(call) }
     registrar.register(ICollectionService::class) { RpcCollectionService(user, collectionService).withAuthorization<ICollectionService>(user).withLogging<ICollectionService>(call) }
+    registrar.register(ICoverGenerationService::class) { RpcCoverGenerationService(user, koin.get()).withAuthorization<ICoverGenerationService>(user).withLogging<ICoverGenerationService>(call) }
+    registrar.register(IHueService::class) { RpcHueService(user, koin.get()).withAuthorization<IHueService>(user).withLogging<IHueService>(call) }
     registrar.register(ISessionService::class) { RpcSessionService(user, sessionService).withAuthorization<ISessionService>(user).withLogging<ISessionService>(call) }
     registrar.register(IPlaybackService::class) { RpcPlaybackService(playbackService).withAuthorization<IPlaybackService>(user).withLogging<IPlaybackService>(call) }
     registrar.register(ICustomAudioService::class) { CustomAudioRpcService(customAudioService).withAuthorization<ICustomAudioService>(user).withLogging<ICustomAudioService>(call) }

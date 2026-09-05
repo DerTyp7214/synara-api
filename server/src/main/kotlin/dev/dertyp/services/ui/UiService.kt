@@ -22,6 +22,8 @@ import dev.dertyp.ui.UiInvokePayload
 import dev.dertyp.ui.UiInvokeResult
 import dev.dertyp.ui.UiInvokeStatus
 import dev.dertyp.ui.UiLiveUpdate
+import dev.dertyp.ui.UiHookHandlerInfo
+import dev.dertyp.ui.UiHookKind
 import dev.dertyp.ui.UiRender
 import dev.dertyp.ui.UiSchemaVersion
 import dev.dertyp.ui.UiSlotRender
@@ -64,6 +66,25 @@ class UiService(
 
     suspend fun resolveIntake(user: User, client: ClientInfo, items: List<IntakeItem>): List<UiHookHandler> =
         intakeService.handlers(items, user, client.locale)
+
+    fun listHookHandlers(user: User, client: ClientInfo, kind: UiHookKind?): List<UiHookHandlerInfo> {
+        val resolvers = intakeService.handlerInfos(user, client.locale)
+            .filter { kind == null || kind in it.kinds }
+        val contributions = visible(user)
+            .filter { it.contribution.hooks.isNotEmpty() && (kind == null || kind in it.contribution.hooks) }
+            .map { registered ->
+                val t = translations.translator(registered.source, client.locale)
+                UiHookHandlerInfo(
+                    id = registered.contribution.id,
+                    source = registered.source,
+                    title = t.t(registered.contribution.titleKey),
+                    description = registered.contribution.descriptionKey?.let { t.t(it) },
+                    icon = registered.contribution.icon,
+                    kinds = registered.contribution.hooks.toList(),
+                )
+            }
+        return resolvers + contributions
+    }
 
     private val revisions = ConcurrentHashMap<String, AtomicLong>()
 

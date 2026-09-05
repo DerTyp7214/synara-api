@@ -140,6 +140,10 @@ class ImageService(
 
     private val ANALYSIS_RETRY_INTERVAL = 7.days.inWholeMilliseconds
 
+    companion object {
+        const val GENERATED_ORIGIN_PREFIX = "generated:"
+    }
+
     fun map(resultRow: ResultRow): Image {
         val id = resultRow[ImageTable.id].value
         val path = Path(storageService.imagesPath, resultRow[ImageTable.path]).absolutePathString()
@@ -567,17 +571,22 @@ class ImageService(
         }
     }
 
-    private sealed interface OriginKind {
+    internal sealed interface OriginKind {
         data class Url(val url: String) : OriginKind
         data class AudioFile(val path: String) : OriginKind
+        data class Generated(val target: String) : OriginKind
         data object Custom : OriginKind
     }
 
-    private fun classifyOrigin(origin: String): OriginKind = when {
+    internal fun classifyOrigin(origin: String): OriginKind = when {
+        origin.startsWith(GENERATED_ORIGIN_PREFIX) -> OriginKind.Generated(origin.removePrefix(GENERATED_ORIGIN_PREFIX))
         origin.isURL() -> OriginKind.Url(origin)
         Path(origin).isAbsolute -> OriginKind.AudioFile(origin)
         else -> OriginKind.Custom
     }
+
+    @Volatile
+    var generatedImageRecoverer: (suspend (String) -> ByteArray?)? = null
 
     private suspend fun recoverImageBytes(image: Image): ByteArray? =
         when (val kind = classifyOrigin(image.origin)) {
@@ -587,6 +596,7 @@ class ImageService(
                 if (!file.exists()) null
                 else runCatching { AudioFileIO.read(file).coverImage }.getOrNull()
             }
+            is OriginKind.Generated -> generatedImageRecoverer?.invoke(kind.target)
             OriginKind.Custom -> null
         }
 

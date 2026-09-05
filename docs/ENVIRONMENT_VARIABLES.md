@@ -14,6 +14,14 @@ Most variables have sensible defaults and are **optional**. Only variables witho
 2. **Docker Defaults**: If running via Docker, variables set in the `Dockerfile` override standalone defaults.
 3. **Standalone Defaults**: The default values defined in `application.yaml` are used if no other value is provided.
 
+## Covers
+
+| Variable | Description | Required | Default (Standalone) | Default (Docker) |
+|:---|:---|:---:|:---|:---|
+| `COVER_AUTO_DEBOUNCE_SECONDS` | Seconds to wait after the last content change before regenerating a cover. | No | `30` | - |
+| `COVER_AUTO_GENERATE` | Whether covers are generated automatically for playlists and collections without one. | No | `true` | - |
+| `COVER_NSFW_PACKS_ENABLED` | Whether NSFW cover asset packs may be used when a request opts in. | No | `false` | - |
+
 ## Database Configuration
 
 | Variable | Description | Required | Default (Standalone) | Default (Docker) |
@@ -117,6 +125,7 @@ Most variables have sensible defaults and are **optional**. Only variables witho
 | `AUDIO_TRACKS_SECONDARY_PATH` | Optional secondary audio path. | No | - | `/data/Synara/other` |
 | `AUDIO_TRANSCODE_PATH` | Path for transcoded files. | No | `music/transcode` | `/data/Synara/Transcode` |
 | `DATA_ANIMATED_IMAGES_PATH` | Path for cached animated covers. | No | `data/animated-images` | `/data/Synara/AnimatedImages` |
+| `DATA_COVER_ASSETS_PATH` | Path containing cover asset packs (one directory with pack.json per pack). | No | `data/cover-assets` | - |
 | `DATA_IMAGES_PATH` | Path for cached images/covers. | No | `data/images` | `/data/Synara/Images` |
 | `YTDLP_CONFIG_PATH` | Path to yt-dlp.conf for yt-dlp. | No | - | `/data/config/yt-dlp.conf` |
 

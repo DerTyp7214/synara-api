@@ -705,9 +705,13 @@ class RemoteMirrorService : Service() {
             token = response.token
         }
 
-        override suspend fun handleAuthFailure() {
+        override suspend fun handleAuthFailure(reason: Throwable?) {
             token = null
         }
+
+        override val sslConfirmed: Boolean = true
+
+        override suspend fun setSslConfirmed(value: Boolean) = Unit
 
         suspend fun ensureAuthenticated() {
             if (token != null) return

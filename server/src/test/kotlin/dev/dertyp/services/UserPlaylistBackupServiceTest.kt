@@ -92,7 +92,7 @@ class UserPlaylistBackupServiceTest {
         backupFile.parentFile.mkdirs()
         backupFile.writeText(AppJson.encodeToString(backup))
 
-        coEvery { userPlaylistService.upsertUserPlaylist(any(), any()) } returns mockk()
+        coEvery { userPlaylistService.upsertUserPlaylist(any(), any()) } returns Unit
 
         service.restoreBackup(user, backupFile.name)
 

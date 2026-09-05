@@ -9,7 +9,7 @@ This document is for client implementers. Plugin authors should read the [plugin
 | Term | Meaning |
 |---|---|
 | **Contribution** | One unit of server UI with an id like `core.importer` or `musicbrainz.settings`. Kinds: `SLOT`, `PAGE`, `HOME_CARD`. |
-| **Slot** | A named hole in a native screen that the client fills with `renderSlot(slot)`. Known slots live in `UiSlots`: `library`, `settings`, `admin.dashboard`, `home`, `importer`, `album.detail`, `artist.detail`, `song.detail`, `song.menu`, `playlist.detail`. |
+| **Slot** | A named hole in a native screen that the client fills with `renderSlot(slot)`. Known slots live in `UiSlots`: `library`, `settings`, `admin.dashboard`, `home`, `importer`, `album.detail`, `artist.detail`, `song.detail`, `song.menu`, `playlist.detail`, `collection.detail`. |
 | **Page** | A whole screen owned by a contribution, opened through `UiAction.OpenPage(pageId)`. |
 | **Home card** | A contribution the user can pin to the home screen; pin state is stored per user on the server. |
 | **Portal** | A `Native` component: a hole inside a server tree that the *client* fills with native UI (`barcodeScanner`, `externalSearch`). |

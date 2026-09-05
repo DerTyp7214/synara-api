@@ -52,7 +52,7 @@ FROM amazoncorretto:25 AS runtime
 ARG APP_USER_ID=1000
 ARG APP_GROUP_ID=1000
 
-RUN yum update -y && yum install -y python3.13 python3.13-pip libstdc++ zlib glibc shadow-utils && \
+RUN yum update -y && yum install -y python3.13 python3.13-pip libstdc++ zlib glibc shadow-utils fontconfig dejavu-sans-fonts && \
     yum clean all && rm -rf /var/cache/yum
 
 RUN ln -sf /usr/bin/python3.13 /usr/bin/python3

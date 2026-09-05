@@ -1,0 +1,28 @@
+{
+  "id": "neon",
+  "name": "Neon",
+  "tags": [
+    "hip-hop",
+    "trap",
+    "electronic",
+    "pop",
+    "house",
+    "mood:energetic",
+    "mood:happy",
+    "energy:high",
+    "tempo:fast",
+    "palette:dark",
+    "palette:cool",
+    "valence:happy"
+  ],
+  "nsfw": false,
+  "attribution": "Generated with Codex (OpenAI image model); textures CC0 from ambientCG (Chip001, Metal032)",
+  "backgrounds": [
+    "backgrounds/*.jpg",
+    "backgrounds/*.png"
+  ],
+  "overlays": [
+    "overlays/*.png"
+  ],
+  "fonts": []
+}

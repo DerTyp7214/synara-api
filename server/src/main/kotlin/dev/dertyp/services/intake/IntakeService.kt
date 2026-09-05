@@ -11,6 +11,8 @@ import dev.dertyp.services.ui.UiRegistry
 import dev.dertyp.ui.IntakeItem
 import dev.dertyp.ui.UiAction
 import dev.dertyp.ui.UiHookHandler
+import dev.dertyp.ui.UiHookHandlerInfo
+import dev.dertyp.ui.UiHookKind
 import dev.dertyp.ui.UiIntakeResult
 import dev.dertyp.ui.UiIntakeStatus
 import io.ktor.util.logging.KtorSimpleLogger
@@ -73,6 +75,22 @@ class IntakeService(private val translations: TranslationService) {
 
     suspend fun handlers(items: List<IntakeItem>, user: User, locale: String): List<UiHookHandler> =
         resolve(items, user, locale).map { it.handler }
+
+    fun handlerInfos(user: User, locale: String): List<UiHookHandlerInfo> {
+        val info = UserInfo.fromUser(user)
+        return all().filter { it.resolver.access.allows(info) }.map { registered ->
+            val resolver = registered.resolver
+            val t = translations.translator(registered.source, locale)
+            UiHookHandlerInfo(
+                id = resolver.id,
+                source = registered.source,
+                title = t.t(resolver.titleKey),
+                description = resolver.descriptionKey?.let { t.t(it) },
+                icon = resolver.icon,
+                kinds = UiHookKind.entries,
+            )
+        }
+    }
 
     private fun handler(registered: Registered, offer: IntakeOffer, locale: String): UiHookHandler {
         val resolver = registered.resolver

@@ -1,0 +1,25 @@
+{
+  "id": "grunge",
+  "name": "Grunge",
+  "tags": [
+    "rock",
+    "metal",
+    "punk",
+    "indie",
+    "mood:aggressive",
+    "mood:dark",
+    "energy:high",
+    "tempo:fast",
+    "palette:dark"
+  ],
+  "nsfw": false,
+  "attribution": "Generated with Codex (OpenAI image model); textures CC0 from ambientCG (Concrete034, Rust002, MetalPlates006)",
+  "backgrounds": [
+    "backgrounds/*.jpg",
+    "backgrounds/*.png"
+  ],
+  "overlays": [
+    "overlays/*.png"
+  ],
+  "fonts": []
+}

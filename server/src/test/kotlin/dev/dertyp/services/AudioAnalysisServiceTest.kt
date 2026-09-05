@@ -33,7 +33,7 @@ class AudioAnalysisServiceTest {
         TestDatabase.connect(dialect, "audio_analysis_test")
         dbQuery {
             SchemaUtils.create(
-                AlbumTable, SongTable, SongVariantTable, SongAudioDataTable,
+                AlbumTable, SongTable, SongVariantTable, SongAudioDataTable, SongAudioTimelineTable,
                 PersonTable, SongComposerTable, SongLyricistTable, SongProducerTable
             )
         }

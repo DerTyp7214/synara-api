@@ -9,4 +9,7 @@ object UserPlaylistTable : UUIDTable("userPlaylist") {
     val creator = reference("creator", UserTable.id)
     val imageId = reference("imageId", ImageTable.id).nullable()
     val origin = text("origin").nullable()
+    val imageSource = varchar("imageSource", 16).nullable()
+    val coverStyle = varchar("coverStyle", 32).nullable()
+    val coverSeed = long("coverSeed").nullable()
 }

@@ -53,13 +53,17 @@ data class EssentiaOutput(
         @SerialName("average_loudness")
         val averageLoudness: Double? = null,
         @SerialName("dissonance")
-        val dissonance: Statistics? = null
+        val dissonance: Statistics? = null,
+        @SerialName("dynamic_complexity")
+        val dynamicComplexity: Double? = null
     )
 
     @Serializable
     data class LoudnessEbu128(
         @SerialName("integrated")
-        val integrated: Double? = null
+        val integrated: Double? = null,
+        @SerialName("loudness_range")
+        val loudnessRange: Double? = null
     )
 
     @Serializable
@@ -67,7 +71,11 @@ data class EssentiaOutput(
         @SerialName("mean")
         val mean: Double? = null,
         @SerialName("stdev")
-        val stdev: Double? = null
+        val stdev: Double? = null,
+        @SerialName("min")
+        val min: Double? = null,
+        @SerialName("max")
+        val max: Double? = null
     )
 
     @Serializable
@@ -75,7 +83,15 @@ data class EssentiaOutput(
         @SerialName("bpm")
         val bpm: Double? = null,
         @SerialName("danceability")
-        val danceability: Double? = null
+        val danceability: Double? = null,
+        @SerialName("beats_position")
+        val beatsPosition: List<Double>? = null,
+        @SerialName("beats_count")
+        val beatsCount: Double? = null,
+        @SerialName("onset_rate")
+        val onsetRate: Double? = null,
+        @SerialName("beats_loudness")
+        val beatsLoudness: Statistics? = null
     )
 
     @Serializable

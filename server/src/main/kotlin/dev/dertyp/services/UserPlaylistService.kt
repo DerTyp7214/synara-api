@@ -43,6 +43,7 @@ class UserPlaylistService : PlaylistLibrary, IUserPlaylistService, Service() {
             val creator = resultRow[UserPlaylistTable.creator].value
             val description = resultRow[UserPlaylistTable.description]
             val origin = resultRow[UserPlaylistTable.origin]
+            val imageSource = resultRow.getOrNull(UserPlaylistTable.imageSource)?.let { ImageSource.valueOf(it) }
 
             return UserPlaylist(
                 id = id,
@@ -53,6 +54,7 @@ class UserPlaylistService : PlaylistLibrary, IUserPlaylistService, Service() {
                 creator = creator,
                 description = description,
                 origin = origin,
+                imageSource = imageSource,
             )
         }
     }
@@ -147,23 +149,26 @@ class UserPlaylistService : PlaylistLibrary, IUserPlaylistService, Service() {
         UserPlaylistTable.deleteWhere { UserPlaylistTable.id eq id } == 1
     }
 
-    override suspend fun getOrAddPlaylist(userId: UUID, customIdentifier: String?, playlist: InsertablePlaylist): UUID = dbQuery {
+    override suspend fun getOrAddPlaylist(userId: UUID, customIdentifier: String?, playlist: InsertablePlaylist): UUID {
         if (customIdentifier != null) querySingle {
             where { UserPlaylistTable.creator eq userId and (UserPlaylistTable.customIdentifier eq customIdentifier) }
-        }.let { result ->
-            if (result != null) return@dbQuery result.id
-        }
+        }?.let { return it.id }
 
         val coverImageId = playlist.imageHash?.let { imageService.byHash(it) }
 
-        UserPlaylistTable.batchInsert(listOf(playlist)) { playlist ->
-            this[UserPlaylistTable.name] = playlist.name
-            this[UserPlaylistTable.customIdentifier] = customIdentifier
-            this[UserPlaylistTable.description] = playlist.description
-            this[UserPlaylistTable.creator] = EntityID(userId, UserTable)
-            this[UserPlaylistTable.imageId] = coverImageId?.id?.let { EntityID(it, ImageTable) }
-            this[UserPlaylistTable.origin] = playlist.origin
-        }.first()[UserPlaylistTable.id].value
+        val id = dbQuery {
+            UserPlaylistTable.batchInsert(listOf(playlist)) { playlist ->
+                this[UserPlaylistTable.name] = playlist.name
+                this[UserPlaylistTable.customIdentifier] = customIdentifier
+                this[UserPlaylistTable.description] = playlist.description
+                this[UserPlaylistTable.creator] = EntityID(userId, UserTable)
+                this[UserPlaylistTable.imageId] = coverImageId?.id?.let { EntityID(it, ImageTable) }
+                this[UserPlaylistTable.imageSource] = coverImageId?.let { ImageSource.USER.name }
+                this[UserPlaylistTable.origin] = playlist.origin
+            }.first()[UserPlaylistTable.id].value
+        }
+        if (coverImageId == null) hooks.emit(HookEvent.PlaylistChanged(id))
+        return id
     }
 
     override suspend fun addToPlaylist(id: UUID, songIds: List<Pair<Long, UUID>>) {
@@ -213,10 +218,19 @@ class UserPlaylistService : PlaylistLibrary, IUserPlaylistService, Service() {
         return removed
     }
 
-    override suspend fun setPlaylistImage(id: UUID, imageId: UUID?): Boolean = dbQuery {
-        UserPlaylistTable.update({ UserPlaylistTable.id eq id }) {
-            it[UserPlaylistTable.imageId] = imageId
-        } == 1
+    override suspend fun setPlaylistImage(id: UUID, imageId: UUID?): Boolean {
+        val updated = dbQuery {
+            UserPlaylistTable.update({ UserPlaylistTable.id eq id }) {
+                it[UserPlaylistTable.imageId] = imageId
+                it[imageSource] = imageId?.let { ImageSource.USER.name }
+                if (imageId == null) {
+                    it[coverStyle] = null
+                    it[coverSeed] = null
+                }
+            } == 1
+        }
+        if (updated && imageId == null) hooks.emit(HookEvent.PlaylistChanged(id))
+        return updated
     }
 
     override suspend fun createPlaylistFromArtists(
@@ -418,11 +432,32 @@ class UserPlaylistService : PlaylistLibrary, IUserPlaylistService, Service() {
         }.sortedByDescending { it.modifiedAt }
     }
 
-    suspend fun upsertUserPlaylist(playlist: UserPlaylist, creatorOverride: UUID? = null) = dbQuery {
+    suspend fun upsertUserPlaylist(playlist: UserPlaylist, creatorOverride: UUID? = null) {
+        upsertUserPlaylistRows(playlist, creatorOverride)
+        hooks.emit(HookEvent.PlaylistChanged(playlist.id))
+    }
+
+    private suspend fun upsertUserPlaylistRows(playlist: UserPlaylist, creatorOverride: UUID?) = dbQuery {
+        val current = UserPlaylistTable
+            .select(UserPlaylistTable.imageId, UserPlaylistTable.imageSource)
+            .where { UserPlaylistTable.id eq playlist.id }
+            .firstOrNull()
+        val currentImageId = current?.get(UserPlaylistTable.imageId)?.value
+        val currentSource = current?.get(UserPlaylistTable.imageSource)
+        val keepGenerated = playlist.imageId == null && currentSource == ImageSource.GENERATED.name
+        val newImageId = if (keepGenerated) currentImageId else playlist.imageId
+        val newSource = when {
+            newImageId == null -> null
+            keepGenerated -> currentSource
+            playlist.imageId != currentImageId -> ImageSource.USER.name
+            else -> currentSource ?: ImageSource.USER.name
+        }
+
         UserPlaylistTable.upsert(UserPlaylistTable.id) {
             it[id] = playlist.id
             it[name] = playlist.name
-            it[imageId] = playlist.imageId?.let { imgId -> EntityID(imgId, ImageTable) }
+            it[imageId] = newImageId?.let { imgId -> EntityID(imgId, ImageTable) }
+            it[imageSource] = newSource
             it[creator] = EntityID(creatorOverride ?: playlist.creator, UserTable)
             it[description] = playlist.description
             it[origin] = playlist.origin

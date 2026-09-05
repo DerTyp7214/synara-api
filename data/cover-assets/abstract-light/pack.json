@@ -1,0 +1,28 @@
+{
+  "id": "abstract-light",
+  "name": "Abstract Light",
+  "tags": [
+    "pop",
+    "indie",
+    "jazz",
+    "classical",
+    "mood:happy",
+    "mood:calm",
+    "mood:dreamy",
+    "energy:low",
+    "energy:mid",
+    "palette:light",
+    "palette:warm",
+    "valence:happy"
+  ],
+  "nsfw": false,
+  "attribution": "Generated with Codex (OpenAI image model); textures CC0 from ambientCG (Paper001, Paper003)",
+  "backgrounds": [
+    "backgrounds/*.jpg",
+    "backgrounds/*.png"
+  ],
+  "overlays": [
+    "overlays/*.png"
+  ],
+  "fonts": []
+}

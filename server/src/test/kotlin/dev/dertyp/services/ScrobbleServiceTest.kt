@@ -3,6 +3,9 @@ package dev.dertyp.services
 import dev.dertyp.data.RecentListens
 import dev.dertyp.data.ScrobbleRequest
 import dev.dertyp.data.UserSong
+import dev.dertyp.plugins.HookBus
+import dev.dertyp.plugins.HookEvent
+import dev.dertyp.plugins.on
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -13,6 +16,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
@@ -33,13 +37,17 @@ class ScrobbleServiceTest : KoinTest {
         songService = mockk(relaxed = true)
         every { listenService.listenChanges } returns listenChanges
         coEvery { listenService.recentListens(any(), any()) } returns emptyList()
+        hookService = HookService()
         startKoin {
             modules(module {
                 single { listenService }
                 single { songService }
+                single<HookBus> { hookService }
             })
         }
     }
+
+    private lateinit var hookService: HookService
 
     @AfterEach
     fun tearDown() {
@@ -116,6 +124,31 @@ class ScrobbleServiceTest : KoinTest {
 
         delay(600.milliseconds)
         assertEquals(songB, emissions.last().nowPlaying?.song?.id)
+    }
+
+    @Test
+    fun `now-playing changes are emitted as hook events`() = runBlocking {
+        setup()
+        val service = ScrobbleService()
+        val user = UUID.randomUUID()
+        val songId = UUID.randomUUID()
+        coEvery { songService.byIds(listOf(songId), user) } returns listOf(songStub(songId, 200))
+        val events = CopyOnWriteArrayList<HookEvent.NowPlayingChanged>()
+        hookService.on<HookEvent.NowPlayingChanged> { events.add(it) }
+
+        service.setNowPlaying(user, songId)
+        awaitCondition { events.size == 1 }
+        assertEquals(songId, events[0].songId)
+        assertEquals(user, events[0].userId)
+
+        awaitCondition { events.size == 2 }
+        assertNull(events[1].songId)
+        assertEquals(events[0].generation, events[1].generation)
+
+        service.clearNowPlaying(user)
+        awaitCondition { events.size == 3 }
+        assertNull(events[2].songId)
+        assertTrue(events[2].generation > events[1].generation)
     }
 
     @Test

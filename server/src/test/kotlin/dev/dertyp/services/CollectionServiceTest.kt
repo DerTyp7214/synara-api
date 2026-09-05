@@ -41,7 +41,7 @@ class CollectionServiceTest : KoinTest {
     private lateinit var service: CollectionService
 
     private fun setup(dialect: DbDialect) {
-        startKoin { modules(module { }) }
+        startKoin { modules(module { single<dev.dertyp.plugins.HookBus> { HookService() } }) }
         database = TestDatabase.connect(dialect, "collection_test")
         transaction(database) {
             SchemaUtils.create(
@@ -479,6 +479,7 @@ class CollectionServiceTest : KoinTest {
         every { storageService.albumsPath } returns null
         startKoin {
             modules(module {
+                single<dev.dertyp.plugins.HookBus> { HookService() }
                 single { mockk<ApplicationEnvironment>(relaxed = true) }
                 single { mockk<MusicBrainzService>(relaxed = true) }
                 single { mockk<CachedMusicBrainzService>(relaxed = true) }

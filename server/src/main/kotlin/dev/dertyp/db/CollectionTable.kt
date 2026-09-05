@@ -7,4 +7,7 @@ object CollectionTable : UUIDTable("collection") {
     val description = text("description").nullable()
     val creator = reference("creator", UserTable.id)
     val imageId = reference("imageId", ImageTable.id).nullable()
+    val imageSource = varchar("imageSource", 16).nullable()
+    val coverStyle = varchar("coverStyle", 32).nullable()
+    val coverSeed = long("coverSeed").nullable()
 }

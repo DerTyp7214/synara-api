@@ -2,6 +2,8 @@ package dev.dertyp.services.ui
 
 import dev.dertyp.plugins.UiContribution
 import dev.dertyp.services.UserService
+import dev.dertyp.services.cover.CoverGenerationService
+import dev.dertyp.services.hue.HueService
 import dev.dertyp.services.import.ImportService
 import dev.dertyp.services.import.ImporterProxy
 import dev.dertyp.services.intake.IntakeService
@@ -15,6 +17,8 @@ class CoreUiContributions(
     private val userService: UserService,
     private val intakeService: IntakeService,
     private val jobService: JobService,
+    private val coverGenerationService: CoverGenerationService,
+    private val hueService: HueService,
 ) {
     private val importerState by lazy { ImporterState(importService, importerProxy, intakeService, jobService) }
 
@@ -24,6 +28,9 @@ class CoreUiContributions(
         ImporterQueuePageContribution(importerState, userService),
         ImporterLibraryEntryContribution(),
         ImporterHomeCardContribution(importerState),
+        PlaylistCoverContribution(coverGenerationService, jobService),
+        CollectionCoverContribution(coverGenerationService, jobService),
+        HueSettingsContribution(hueService),
     )
 
     fun register() {

@@ -14,6 +14,7 @@ import io.ktor.server.routing.routing
 import io.ktor.server.testing.testApplication
 import kotlinx.serialization.ExperimentalSerializationApi
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation as ContentNegotiationApplicationPlugin
 
@@ -32,7 +33,12 @@ class SslFallbackTest {
         override fun isTokenExpired(): Boolean = false
         override fun isAuthenticated(): Boolean = true
         override suspend fun updateAuth(response: AuthenticationResponse) {}
-        override suspend fun handleAuthFailure() {}
+        override suspend fun handleAuthFailure(reason: Throwable?) {}
+        var confirmed: Boolean = false
+        override val sslConfirmed: Boolean get() = confirmed
+        override suspend fun setSslConfirmed(value: Boolean) {
+            confirmed = value
+        }
     }
 
     @Test
@@ -55,9 +61,11 @@ class SslFallbackTest {
         }
 
         val manager = TestRpcManager(client, "https://localhost")
-        
-        manager.checkSslSupport()
-        
-        assertEquals("http://localhost", manager.url)
+
+        assertTrue(manager.checkSslSupport())
+
+        assertEquals("https://localhost", manager.url)
+        assertTrue(manager.confirmed)
+        assertEquals(false, manager.handshake.value?.secure)
     }
 }
