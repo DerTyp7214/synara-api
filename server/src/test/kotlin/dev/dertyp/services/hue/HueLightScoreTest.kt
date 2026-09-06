@@ -17,8 +17,8 @@ class HueLightScoreTest {
     private fun envelope(durationMs: Long, hz: Int = 10, level: (Long) -> Float): List<Float> =
         List((durationMs * hz / 1000).toInt()) { level(it * 1000L / hz) }
 
-    private fun timeline(beats: List<Int>, envelope: List<Float>) =
-        SongAudioTimeline(songId, beatsMs = beats, envelopeHz = 10, envelopeDb = envelope)
+    private fun timeline(beats: List<Int>, envelope: List<Float>, bass: List<Float> = emptyList()) =
+        SongAudioTimeline(songId, beatsMs = beats, envelopeHz = 10, envelopeDb = envelope, bassEnvelopeDb = bass)
 
     @Test
     fun `downbeat phase follows the loudest beat in each bar`() {
@@ -91,6 +91,56 @@ class HueLightScoreTest {
         val score = HueLightScore.build(null, null, 300, 60)
         assertEquals(listOf(0, 60, 120, 180, 240), score.keyframes.map { it.atMs })
         assertEquals(64, HueLightScore.build(null, null, 0, 60).keyframes.size)
+    }
+
+    @Test
+    fun `the bass source follows bass accents when the loudness envelope is flat`() {
+        val beats = beats(240)
+        val flat = envelope(durationMs) { -30f }
+        val bass = envelope(durationMs) { ms ->
+            val beatIndex = (ms / beatMs).toInt()
+            if (beatIndex % 4 == 1 && ms % beatMs < 100) -8f else -55f
+        }
+        val score = HueLightScore.build(timeline(beats, flat, bass), null, durationMs, 8_000, LevelSource.BASS)
+        assertEquals(1, score.downbeatPhase)
+        val downbeats = score.keyframes.filter { it.kind != KeyframeKind.BEAT }
+        assertTrue(downbeats.all { it.index % 4 == 1 }, downbeats.take(5).toString())
+        assertEquals(0, HueLightScore.build(timeline(beats, flat, bass), null, durationMs, 8_000).downbeatPhase)
+    }
+
+    @Test
+    fun `the bass source falls back to the loudness envelope when no bass band is stored`() {
+        val beats = beats(240)
+        val loud = envelope(durationMs) { ms ->
+            val beatIndex = (ms / beatMs).toInt()
+            if (beatIndex % 4 == 2 && ms % beatMs < 200) -10f else -40f
+        }
+        val loudness = HueLightScore.build(timeline(beats, loud), null, durationMs, 8_000)
+        val bass = HueLightScore.build(timeline(beats, loud), null, durationMs, 8_000, LevelSource.BASS)
+        assertEquals(loudness.keyframes, bass.keyframes)
+        assertEquals(loudness.downbeatPhase, bass.downbeatPhase)
+        assertEquals(loudness.beatMs, bass.beatMs)
+    }
+
+    @Test
+    fun `the level floor widens for the bass source`() {
+        val beats = beats(240)
+        val loud = envelope(durationMs) { -30f + (it % 400) / 10f }
+        assertEquals(0.55, HueLightScore.build(timeline(beats, loud), null, durationMs, 8_000).levelFloor)
+        assertEquals(0.30, HueLightScore.build(timeline(beats, loud), null, durationMs, 8_000, LevelSource.BASS).levelFloor)
+        assertEquals(0.30, HueLightScore.build(null, null, 30_000, 8_000, LevelSource.BASS).levelFloor)
+        assertEquals(0.55, HueLightScore.build(null, null, 30_000, 8_000).levelFloor)
+    }
+
+    @Test
+    fun `the bass level takes the peak of a short kick while loudness averages it away`() {
+        val beats = beats(240)
+        val spikes = envelope(durationMs) { ms -> if (ms % beatMs < 100) -6f else -60f }
+        val bass = HueLightScore.build(timeline(beats, spikes, spikes), null, durationMs, 8_000, LevelSource.BASS)
+        val loudness = HueLightScore.build(timeline(beats, spikes), null, durationMs, 8_000)
+        assertEquals(1.0, bass.keyframes[8].level, 0.01)
+        assertTrue(loudness.keyframes[8].level < 0.4, "loudness ${loudness.keyframes[8].level}")
+        assertTrue(bass.keyframes.all { it.level > 0.9 })
     }
 
     @Test

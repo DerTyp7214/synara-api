@@ -6,9 +6,16 @@ import kotlin.math.roundToInt
 
 enum class KeyframeKind { BEAT, DOWNBEAT, SECTION }
 
+enum class LevelSource { LOUDNESS, BASS }
+
 data class Keyframe(val index: Int, val atMs: Int, val kind: KeyframeKind, val level: Double)
 
-data class LightScore(val keyframes: List<Keyframe>, val beatMs: Int?, val downbeatPhase: Int = 0) {
+data class LightScore(
+    val keyframes: List<Keyframe>,
+    val beatMs: Int?,
+    val downbeatPhase: Int = 0,
+    val levelFloor: Double = HueLightScore.LOUDNESS_FLOOR,
+) {
     val beatsPerSecond: Double get() = beatMs?.takeIf { it > 0 }?.let { 1000.0 / it } ?: 0.0
 
     fun nextIndexAfter(positionMs: Long, fromIndex: Int, eligible: (Keyframe) -> Boolean): Int {
@@ -43,32 +50,67 @@ class NormalizedEnvelope(private val envelopeDb: List<Float>, private val hz: In
         val average = envelopeDb.subList(start, end).average()
         return ((average - low) / (high - low)).coerceIn(0.0, 1.0)
     }
+
+    fun peak(fromMs: Long, toMs: Long): Double {
+        if (!usable) return 1.0
+        val start = (fromMs * hz / 1000).toInt().coerceIn(0, envelopeDb.size - 1)
+        val end = (toMs * hz / 1000).toInt().coerceIn(start + 1, envelopeDb.size)
+        val max = envelopeDb.subList(start, end).max()
+        return ((max - low).toDouble() / (high - low)).coerceIn(0.0, 1.0)
+    }
 }
 
 object HueLightScore {
     private const val BEATS_PER_BAR = 4
     private const val BEAT_WINDOW_MS = 100L
+    private const val BASS_LEAD_MS = 50L
+    private const val BASS_TAIL_MS = 200L
     private const val SECTION_BARS = 8
     private const val SECTION_THRESHOLD = 0.15
+    const val LOUDNESS_FLOOR = 0.55
+    const val BASS_FLOOR = 0.30
 
-    fun build(timeline: SongAudioTimeline?, bpm: Double?, durationMs: Long, fallbackIntervalMs: Long): LightScore {
-        val envelope = timeline?.let { NormalizedEnvelope(it.envelopeDb, it.envelopeHz) }
+    fun build(
+        timeline: SongAudioTimeline?,
+        bpm: Double?,
+        durationMs: Long,
+        fallbackIntervalMs: Long,
+        source: LevelSource = LevelSource.LOUDNESS,
+    ): LightScore {
+        val floor = if (source == LevelSource.BASS) BASS_FLOOR else LOUDNESS_FLOOR
+        val bass = timeline?.takeIf { source == LevelSource.BASS }
+            ?.let { NormalizedEnvelope(it.bassEnvelopeDb, it.envelopeHz) }
+            ?.takeIf { it.usable }
+        val envelope = bass ?: timeline?.let { NormalizedEnvelope(it.envelopeDb, it.envelopeHz) }
         val beats = timeline?.beatsMs?.takeIf { it.isNotEmpty() }
             ?: HuePaletteMapper.beatMs(bpm)?.takeIf { durationMs > 0 }?.let { grid(it, durationMs) }
         if (beats == null) {
             val end = if (durationMs > 0) durationMs else fallbackIntervalMs * 64
-            return LightScore(grid(fallbackIntervalMs.toInt(), end).mapIndexed { index, at -> Keyframe(index, at, KeyframeKind.DOWNBEAT, 1.0) }, null)
+            val grid = grid(fallbackIntervalMs.toInt(), end).mapIndexed { index, at -> Keyframe(index, at, KeyframeKind.DOWNBEAT, 1.0) }
+            return LightScore(grid, null, levelFloor = floor)
         }
+        val peaks = bass != null
         val beatMs = if (beats.size > 1) ((beats.last() - beats.first()).toDouble() / (beats.size - 1)).roundToInt() else null
-        val beatLevels = beats.map { envelope?.level(it - BEAT_WINDOW_MS, it + BEAT_WINDOW_MS) ?: 1.0 }
+        val beatLevels = beats.map { measure(envelope, peaks, it - BEAT_WINDOW_MS, it + BEAT_WINDOW_MS) }
         val phase = downbeatPhase(beatLevels, envelope?.usable == true)
         val kinds = Array(beats.size) { index -> if ((index - phase).mod(BEATS_PER_BAR) == 0) KeyframeKind.DOWNBEAT else KeyframeKind.BEAT }
         markSections(kinds, beatLevels, envelope?.usable == true)
         val keyframes = beats.mapIndexed { index, at ->
             val nextAt = beats.getOrNull(index + 1)?.toLong() ?: (if (durationMs > at) durationMs else at + (beatMs ?: 500).toLong())
-            Keyframe(index, at, kinds[index], envelope?.level(at.toLong(), nextAt) ?: 1.0)
+            val level = if (peaks) {
+                measure(envelope, true, at - BASS_LEAD_MS, minOf(at + BASS_TAIL_MS, nextAt))
+            } else {
+                measure(envelope, false, at.toLong(), nextAt)
+            }
+            Keyframe(index, at, kinds[index], level)
         }
-        return LightScore(keyframes, beatMs, phase)
+        return LightScore(keyframes, beatMs, phase, floor)
+    }
+
+    private fun measure(envelope: NormalizedEnvelope?, peak: Boolean, fromMs: Long, toMs: Long): Double {
+        if (envelope == null) return 1.0
+        val from = fromMs.coerceAtLeast(0)
+        return if (peak) envelope.peak(from, toMs) else envelope.level(from, toMs)
     }
 
     private fun grid(intervalMs: Int, endMs: Long): List<Int> =

@@ -668,6 +668,7 @@ Ambient light movement while a song plays.
 | `OFF` | Set the colors once per track. |
 | `SLOW` | Slowly rotate the palette across the lights with long crossfades. |
 | `TEMPO` | Rotate the palette once per bar of the song's tempo and let brightness follow the loudness envelope. |
+| `BASS` | Rotate the palette once per bar of the song's tempo and let brightness follow the bass energy (kick and sub) with a wide swing. |
 
 ### HuePairingState <a name="devdertypdatahuepairingstate"></a>
 State of a pairing attempt.
@@ -1504,7 +1505,7 @@ Additional audio analysis data for a song.
 | `producers` | `List`<`String`>? | The producers of the song. |
 
 ### SongAudioTimeline <a name="devdertypdatasongaudiotimeline"></a>
-Time-based analysis data of a song: beat grid and loudness envelope, for visualisations and light sync.
+Time-based analysis data of a song: beat grid, loudness envelope and bass envelope, for visualisations and light sync.
 
 | Field | Type | Description |
 | :--- | :--- | :--- |
@@ -1514,6 +1515,7 @@ Time-based analysis data of a song: beat grid and loudness envelope, for visuali
 | `onsetRate` | `Double`? | Onsets per second. |
 | `envelopeHz` | `Int` | Sample rate of the loudness envelope in samples per second. |
 | `envelopeDb` | `List`<`Float`> | Loudness envelope in dBFS, one value per 1/envelopeHz seconds. |
+| `bassEnvelopeDb` | `List`<`Float`> | Bass band (30-150 Hz) envelope in dBFS, one value per 1/envelopeHz seconds; empty when not extracted yet. |
 | `loudnessRange` | `Double`? | Loudness range in LU. |
 | `dynamicComplexity` | `Double`? | Dynamic complexity of the loudness. |
 | `source` | `String` | Where the beat grid came from: essentia, rms or none. |

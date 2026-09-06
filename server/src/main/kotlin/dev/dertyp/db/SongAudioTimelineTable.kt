@@ -19,6 +19,7 @@ object SongAudioTimelineTable : Table("song_audio_timeline") {
     val beatsLoudnessMean = double("beatsLoudnessMean").nullable()
     val beatsLoudnessMax = double("beatsLoudnessMax").nullable()
     val envelope = binary("envelope").nullable()
+    val bassEnvelope = binary("bassEnvelope").nullable()
     val envelopeHz = integer("envelopeHz").default(10)
     val envelopeMinDb = double("envelopeMinDb").default(-70.0)
     val envelopeMaxDb = double("envelopeMaxDb").default(0.0)

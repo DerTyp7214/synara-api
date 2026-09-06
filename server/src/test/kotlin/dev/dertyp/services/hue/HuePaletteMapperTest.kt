@@ -121,6 +121,14 @@ class HuePaletteMapperTest {
     }
 
     @Test
+    fun `a lower floor widens the brightness swing`() {
+        assertEquals(0.30, HuePaletteMapper.levelFactor(0.0, 0.30), 0.0001)
+        assertEquals(1.0, HuePaletteMapper.levelFactor(1.0, 0.30), 0.0001)
+        assertEquals(0.65, HuePaletteMapper.levelFactor(0.5, 0.30), 0.0001)
+        assertEquals(0.30, HuePaletteMapper.levelFactor(-1.0, 0.30), 0.0001)
+    }
+
+    @Test
     fun `beat and bar lengths derive from bpm within bounds`() {
         assertEquals(500, HuePaletteMapper.beatMs(120.0))
         assertEquals(1000, HuePaletteMapper.beatMs(60.0))

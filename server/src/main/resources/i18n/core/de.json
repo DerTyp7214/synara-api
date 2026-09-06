@@ -116,6 +116,7 @@
   "hue.motion.OFF": "Keine, eine Farbe pro Titel",
   "hue.motion.SLOW": "Langsam durch die Palette wandern",
   "hue.motion.TEMPO": "Tempo und Lautstärke folgen",
+  "hue.motion.BASS": "Tempo und Bass folgen",
   "hue.latencyMs": "Latenzausgleich der Lampen (ms)",
   "hue.save": "Speichern",
   "hue.saved": "Hue-Einstellungen gespeichert",

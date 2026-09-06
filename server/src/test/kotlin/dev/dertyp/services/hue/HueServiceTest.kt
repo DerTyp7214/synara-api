@@ -116,6 +116,16 @@ class HueServiceTest {
         throw AssertionError("expected $count commands, got ${sent.size}")
     }
 
+    private suspend fun awaitDimmed(threshold: Double): List<Double> {
+        repeat(100) {
+            val dimmings = sent.mapNotNull { it.second.dimming?.brightness }
+            val below = dimmings.filter { it < threshold }
+            if (below.isNotEmpty()) return below
+            delay(20)
+        }
+        throw AssertionError("no command below $threshold, got ${sent.mapNotNull { it.second.dimming?.brightness }}")
+    }
+
     private fun song(id: UUID, coverId: UUID?): UserSong = mockk(relaxed = true) {
         every { this@mockk.id } returns id
         every { this@mockk.coverId } returns coverId
@@ -299,6 +309,36 @@ class HueServiceTest {
         service.onNowPlaying(HookEvent.NowPlayingChanged(userId, songId, 4, System.currentTimeMillis(), positionMs = 30_000, playing = true))
         awaitSent(paused + 2)
         assertEquals(1, service.activeMotions())
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `bass motion dims below the loudness floor on beats without a kick`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val bridgeId = bridge()
+        service.setLink(userId, HueUserLink(bridgeId, true, listOf(light("l1", "Desk"), light("l2", "Shelf")), motion = HueMotionMode.BASS, latencyMs = 0))
+        val songId = UUID.randomUUID()
+        val coverId = UUID.randomUUID()
+        val song = song(songId, coverId)
+        every { song.duration } returns 60_000L
+        coEvery { songService.byIds(listOf(songId), userId) } returns listOf(song)
+        coEvery { imageService.byId(coverId) } returns Image(coverId, "p", "h", "o", palette = listOf(0xFFE01020.toInt(), 0xFF1030E0.toInt()), primaryColor = 0xFFE01020.toInt())
+        coEvery { audioAnalysisService.getAudioDataBatch(listOf(songId)) } returns emptyMap()
+        val bass = List(600) { index ->
+            val ms = index * 100
+            if ((ms / 500) % 4 == 0 && ms % 500 < 150) -6f else -60f
+        }
+        coEvery { audioAnalysisService.getAudioTimeline(songId) } returns
+            SongAudioTimeline(songId, beatsMs = List(120) { it * 500 }, envelopeHz = 10, bassEnvelopeDb = bass)
+
+        service.onNowPlaying(HookEvent.NowPlayingChanged(userId, songId, 1, System.currentTimeMillis()))
+        awaitSent(6)
+        assertEquals(1, service.activeMotions())
+        coVerify(exactly = 1) { audioAnalysisService.getAudioTimeline(songId) }
+
+        val base = HuePaletteMapper.brightness(HueIntensity.MEDIUM, SongAudioData.DEFAULT_ENERGY, null)
+        val dimmed = awaitDimmed(base * 0.55)
+        assertTrue(dimmed.all { it >= base * 0.29 }, dimmed.toString())
     }
 
     @ParameterizedTest

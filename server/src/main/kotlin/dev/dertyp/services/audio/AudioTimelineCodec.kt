@@ -5,7 +5,7 @@ import java.nio.ByteOrder
 import kotlin.math.roundToInt
 
 object AudioTimelineCodec {
-    const val VERSION = 1
+    const val VERSION = 2
     private const val MAX_DELTA = 0xFFFF
 
     fun encodeBeats(positionsSec: List<Double>): ByteArray {

@@ -36,12 +36,15 @@ import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.core.innerJoin
 import org.jetbrains.exposed.v1.core.isNull
 import org.jetbrains.exposed.v1.core.less
+import org.jetbrains.exposed.v1.core.neq
+import org.jetbrains.exposed.v1.jdbc.andWhere
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.insertIgnore
 import org.jetbrains.exposed.v1.jdbc.orWhere
 import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.jdbc.selectAll
+import org.jetbrains.exposed.v1.jdbc.update
 import org.jetbrains.exposed.v1.jdbc.upsert
 import java.io.File
 import java.util.UUID
@@ -143,13 +146,49 @@ open class AudioAnalysisService : IAudioAnalysisService, Service() {
             ?.let { mapTimeline(it) }
     }
 
+    suspend fun getSongIdsWithStaleTimeline(limit: Int): List<PlatformUUID> = dbQuery {
+        SongAudioTimelineTable
+            .select(SongAudioTimelineTable.songId)
+            .where { SongAudioTimelineTable.status neq AudioTimelineStatus.FAILED }
+            .andWhere { SongAudioTimelineTable.version less AudioTimelineCodec.VERSION }
+            .limit(limit)
+            .map { it[SongAudioTimelineTable.songId].value }
+    }
+
+    suspend fun refreshEnvelopes(songId: PlatformUUID) {
+        val filePath = dbQuery {
+            SongTable.select(SongTable.filePath)
+                .where { SongTable.id eq songId }
+                .singleOrNull()?.get(SongTable.filePath)
+        } ?: return
+
+        val envelopes = extractEnvelopes(filePath) ?: return
+
+        dbQuery {
+            SongAudioTimelineTable.update({ SongAudioTimelineTable.songId eq songId }) {
+                it[envelope] = encodeEnvelope(envelopes.rmsDb)
+                it[bassEnvelope] = encodeEnvelope(envelopes.bassDb)
+                it[envelopeHz] = ENVELOPE_HZ
+                it[envelopeMinDb] = RmsEnvelopeExtractor.MIN_DB.toDouble()
+                it[envelopeMaxDb] = RmsEnvelopeExtractor.MAX_DB.toDouble()
+                it[version] = AudioTimelineCodec.VERSION
+                it[analyzedAt] = System.currentTimeMillis()
+            }
+        }
+    }
+
+    private suspend fun extractEnvelopes(filePath: String): RmsEnvelopeExtractor.Envelopes? = withContext(Dispatchers.IO) {
+        runCatching { RmsEnvelopeExtractor.extract(File(filePath), ENVELOPE_HZ) }
+            .onFailure { logger.warn("Loudness envelope extraction failed for $filePath: ${it.message}") }
+            .getOrNull()
+    }
+
+    private fun encodeEnvelope(values: FloatArray): ByteArray =
+        AudioTimelineCodec.encodeEnvelope(values, RmsEnvelopeExtractor.MIN_DB, RmsEnvelopeExtractor.MAX_DB)
+
     private suspend fun saveTimeline(songId: PlatformUUID, filePath: String, essentia: EssentiaOutput?) {
         val beats = essentia?.rhythm?.beatsPosition?.takeIf { it.isNotEmpty() }
-        val envelope = withContext(Dispatchers.IO) {
-            runCatching { RmsEnvelopeExtractor.extract(File(filePath), ENVELOPE_HZ) }
-                .onFailure { logger.warn("Loudness envelope extraction failed for $filePath: ${it.message}") }
-                .getOrNull()
-        }
+        val envelope = extractEnvelopes(filePath)
         val status = when {
             beats != null && envelope != null -> AudioTimelineStatus.OK
             beats == null && envelope == null -> AudioTimelineStatus.FAILED
@@ -173,9 +212,8 @@ open class AudioAnalysisService : IAudioAnalysisService, Service() {
                 it[onsetRate] = essentia?.rhythm?.onsetRate
                 it[beatsLoudnessMean] = essentia?.rhythm?.beatsLoudness?.mean
                 it[beatsLoudnessMax] = essentia?.rhythm?.beatsLoudness?.max
-                it[SongAudioTimelineTable.envelope] = envelope?.let { values ->
-                    AudioTimelineCodec.encodeEnvelope(values, RmsEnvelopeExtractor.MIN_DB, RmsEnvelopeExtractor.MAX_DB)
-                }
+                it[SongAudioTimelineTable.envelope] = envelope?.let { values -> encodeEnvelope(values.rmsDb) }
+                it[bassEnvelope] = envelope?.let { values -> encodeEnvelope(values.bassDb) }
                 it[envelopeHz] = ENVELOPE_HZ
                 it[envelopeMinDb] = RmsEnvelopeExtractor.MIN_DB.toDouble()
                 it[envelopeMaxDb] = RmsEnvelopeExtractor.MAX_DB.toDouble()
@@ -195,6 +233,7 @@ open class AudioAnalysisService : IAudioAnalysisService, Service() {
             onsetRate = row[SongAudioTimelineTable.onsetRate],
             envelopeHz = row[SongAudioTimelineTable.envelopeHz],
             envelopeDb = row[SongAudioTimelineTable.envelope]?.let { AudioTimelineCodec.decodeEnvelope(it, minDb, maxDb).toList() } ?: emptyList(),
+            bassEnvelopeDb = row[SongAudioTimelineTable.bassEnvelope]?.let { AudioTimelineCodec.decodeEnvelope(it, minDb, maxDb).toList() } ?: emptyList(),
             loudnessRange = row[SongAudioTimelineTable.loudnessRange],
             dynamicComplexity = row[SongAudioTimelineTable.dynamicComplexity],
             source = row[SongAudioTimelineTable.beatSource].name.lowercase(),

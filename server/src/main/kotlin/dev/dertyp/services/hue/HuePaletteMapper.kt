@@ -54,7 +54,7 @@ object HuePaletteMapper {
         return assign(rotated, targets, brightness, transitionMs, gamuts)
     }
 
-    fun levelFactor(level: Double): Double = 0.55 + 0.45 * level.coerceIn(0.0, 1.0)
+    fun levelFactor(level: Double, floor: Double = 0.55): Double = floor + (1 - floor) * level.coerceIn(0.0, 1.0)
 
     fun beatMs(bpm: Double?): Int? = bpm?.takeIf { it > 0 }?.let { (60_000 / it).roundToInt() }?.takeIf { it > 0 }
 

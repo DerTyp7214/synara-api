@@ -109,7 +109,7 @@ class HueService : Service() {
     private val pendingStops = ConcurrentHashMap<UUID, Job>()
     private val clocks = ConcurrentHashMap<UUID, MutableStateFlow<PlaybackClock>>()
     private val userLocks = ConcurrentHashMap<UUID, Mutex>()
-    private val scoreCache: Cache<UUID, LightScore> = Caffeine.newBuilder().maximumSize(256).build()
+    private val scoreCache: Cache<Pair<UUID, LevelSource>, LightScore> = Caffeine.newBuilder().maximumSize(256).build()
 
     internal var motionIntervalOverride: Long? = null
     internal var stopGraceMs: Long = STOP_GRACE.inWholeMilliseconds
@@ -378,9 +378,8 @@ class HueService : Service() {
         val coverId = song.coverId ?: song.album?.coverId
         val image = coverId?.let { imageService.byId(it) }
         val audio = audioAnalysisService.getAudioDataBatch(listOf(songId))[songId]
-        val tempo = if (motionIntervalOverride == null && links.any { it.motion == HueMotionMode.TEMPO }) {
-            tempoScore(songId, audio, song.duration)
-        } else null
+        val sources = if (motionIntervalOverride == null) links.mapNotNull { levelSource(it.motion) }.toSet() else emptySet()
+        val scores = if (sources.isEmpty()) emptyMap() else timelineScores(songId, audio, song.duration, sources)
 
         lastSong[event.userId] = songId
         clocks[event.userId] = MutableStateFlow(reported)
@@ -394,7 +393,7 @@ class HueService : Service() {
             runtime.queue.submitAll(result.commands)
             currentColors[event.userId] = result.colors
             if (link.motion != HueMotionMode.OFF) {
-                startMotion(event.userId, link, runtime, result.palette, audio, lightScore(link, tempo, song.duration), song.duration)
+                startMotion(event.userId, link, runtime, result.palette, audio, lightScore(link, scores, song.duration), song.duration)
             }
         }
         lastCommandAt[event.userId] = System.currentTimeMillis()
@@ -409,18 +408,34 @@ class HueService : Service() {
         flow.value = reported
     }
 
-    private suspend fun tempoScore(songId: UUID, audio: SongAudioData?, durationMs: Long): LightScore {
-        scoreCache.getIfPresent(songId)?.let { return it }
+    private suspend fun timelineScores(
+        songId: UUID,
+        audio: SongAudioData?,
+        durationMs: Long,
+        sources: Set<LevelSource>,
+    ): Map<LevelSource, LightScore> {
+        val cached = sources.mapNotNull { source -> scoreCache.getIfPresent(songId to source)?.let { source to it } }.toMap()
+        val missing = sources - cached.keys
+        if (missing.isEmpty()) return cached
         val timeline = runCatching { audioAnalysisService.getAudioTimeline(songId) }.getOrNull()
-        val score = HueLightScore.build(timeline, audio?.bpm, durationMs, HuePaletteMapper.barMs(audio?.bpm))
-        if (timeline != null) scoreCache.put(songId, score)
-        return score
+        val built = missing.associateWith { source ->
+            val score = HueLightScore.build(timeline, audio?.bpm, durationMs, HuePaletteMapper.barMs(audio?.bpm), source)
+            if (timeline != null) scoreCache.put(songId to source, score)
+            score
+        }
+        return cached + built
     }
 
-    private fun lightScore(link: HueUserLink, tempo: LightScore?, durationMs: Long): LightScore {
+    private fun levelSource(motion: HueMotionMode): LevelSource? = when (motion) {
+        HueMotionMode.TEMPO -> LevelSource.LOUDNESS
+        HueMotionMode.BASS -> LevelSource.BASS
+        HueMotionMode.OFF, HueMotionMode.SLOW -> null
+    }
+
+    private fun lightScore(link: HueUserLink, scores: Map<LevelSource, LightScore>, durationMs: Long): LightScore {
         val override = motionIntervalOverride
         if (override != null) return HueLightScore.build(null, null, durationMs, override)
-        return tempo?.takeIf { link.motion == HueMotionMode.TEMPO } ?: HueLightScore.build(null, null, durationMs, SLOW_MOTION_INTERVAL)
+        return levelSource(link.motion)?.let { scores[it] } ?: HueLightScore.build(null, null, durationMs, SLOW_MOTION_INTERVAL)
     }
 
     private fun beatDivisor(link: HueUserLink, score: LightScore): Int? {
@@ -468,7 +483,7 @@ class HueService : Service() {
                     KeyframeKind.DOWNBEAT -> 1
                     KeyframeKind.BEAT -> 0
                 }
-                val brightness = (base * HuePaletteMapper.levelFactor(keyframe.level)).roundToInt().coerceIn(1, 100)
+                val brightness = (base * HuePaletteMapper.levelFactor(keyframe.level, score.levelFloor)).roundToInt().coerceIn(1, 100)
                 val beat = keyframe.kind == KeyframeKind.BEAT
                 val cap = if (beat) MAX_BEAT_TRANSITION_MS else MAX_MOTION_TRANSITION_MS
                 val transition = ((nextAtMs ?: (keyframe.atMs + cap)) - keyframe.atMs).coerceIn(0, cap)
