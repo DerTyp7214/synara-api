@@ -234,11 +234,11 @@ class ImporterPageContributionTest {
         assertEquals("2 items queued", ok.message)
         assertTrue(ok.refresh)
 
-        val handler = UiHookHandler("import.gamdl", "server", "Import with gamdl", null, null, UiAction.Intake(items, "import.gamdl"))
+        val handler = UiHookHandler("import.gamdl", "import.gamdl", "server", "Import with gamdl", null, null, UiAction.Intake(items, "import.gamdl"))
         coEvery { intakeService.submit(items, null, account, "en") } returns UiIntakeResult(UiIntakeStatus.NEEDS_CHOICE, handlers = listOf(handler))
         val choice = page.invoke(scope(), "import", mapOf("input" to UiValue.of("https://tidal.com/browse/album/1\nUSRC17607839")))
         assertEquals(UiInvokeStatus.OK, choice.status)
-        assertEquals(listOf(UiMenuItem("Import with gamdl", handler.action)), (choice.next as UiAction.OpenMenu).items)
+        assertEquals(listOf(UiMenuItem("Import with gamdl", handler.action, id = "import.gamdl")), (choice.next as UiAction.OpenMenu).items)
 
         coEvery { intakeService.submit(items, null, account, "en") } returns UiIntakeResult(UiIntakeStatus.UNHANDLED, rejected = items)
         val unhandled = page.invoke(scope(), "import", mapOf("input" to UiValue.of("https://tidal.com/browse/album/1\nUSRC17607839")))

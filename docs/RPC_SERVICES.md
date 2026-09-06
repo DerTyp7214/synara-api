@@ -2708,7 +2708,8 @@ A contribution's offer to handle a hook event. The client performs the action di
 
 | Field | Type | Description |
 | :--- | :--- | :--- |
-| `contributionId` | `String` | Id of the offering contribution. |
+| `id` | `String` | Handler id, matches UiHookHandlerInfo.id and UiMenuItem.id; pass it as resolverId to IUiService.intake. |
+| `contributionId` | `String` | Id of the offering contribution; equals id for the built-in handlers. |
 | `source` | `String` | Origin: "server" or a plugin id. |
 | `title` | `String` | Localized title, e.g. "Import with Tidal". |
 | `description` | `String`? | Localized description. |
@@ -2721,7 +2722,7 @@ A handler that may offer to take hook events, listed without an input. Use for p
 
 | Field | Type | Description |
 | :--- | :--- | :--- |
-| `id` | `String` | Handler id, matches UiHookHandler.contributionId. |
+| `id` | `String` | Handler id, matches UiHookHandler.id. |
 | `source` | `String` | Origin: "server" or a plugin id. |
 | `title` | `String` | Localized title, e.g. "Import with Tidal". |
 | `description` | `String`? | Localized description. |
@@ -2894,6 +2895,7 @@ An entry of a menu opened by UiAction.OpenMenu.
 | `icon` | [UiIcon](#devdertypuiuiicon)? | Icon. |
 | `tone` | [UiTone](#devdertypuiuitone) | Tone, e.g. ERROR for destructive entries. |
 | `enabled` | `Boolean` | Whether the entry can be chosen. |
+| `id` | `String`? | Stable id, e.g. the handler id (UiHookHandler.id) when the menu lists hook handlers; null for plain entries. |
 
 ### UiOption <a name="devdertypuiuioption"></a>
 A selectable option of a Select field.

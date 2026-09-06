@@ -363,7 +363,7 @@ class ImporterPageContribution(
 
             UiIntakeStatus.NEEDS_CHOICE -> UiInvokeResult(
                 UiInvokeStatus.OK,
-                next = UiAction.OpenMenu(result.handlers.map { UiMenuItem(it.title, it.action, it.icon) }, title = scope.t("importer.choose")),
+                next = UiAction.OpenMenu(result.handlers.map { UiMenuItem(it.title, it.action, it.icon, id = it.id) }, title = scope.t("importer.choose")),
             )
 
             UiIntakeStatus.UNHANDLED -> UiInvokeResult(

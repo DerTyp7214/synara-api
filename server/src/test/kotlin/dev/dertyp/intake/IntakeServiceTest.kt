@@ -65,7 +65,7 @@ class IntakeServiceTest {
         assertEquals(1, result.accepted)
         assertEquals("1 items queued", result.message)
         assertEquals(listOf(text), result.rejected)
-        assertEquals(listOf("search.external"), result.handlers.map { it.contributionId })
+        assertEquals(listOf("search.external"), result.handlers.map { it.id })
         assertEquals(listOf(listOf(tidalUrl)), tidal.submitted)
     }
 
@@ -73,7 +73,7 @@ class IntakeServiceTest {
     fun `overlapping offers need a choice and the chosen handler submits`() = runBlocking {
         val choice = service.submit(listOf(appleUrl), null, user, "en")
         assertEquals(UiIntakeStatus.NEEDS_CHOICE, choice.status)
-        assertEquals(listOf("import.gamdl", "import.tidal"), choice.handlers.map { it.contributionId })
+        assertEquals(listOf("import.gamdl", "import.tidal"), choice.handlers.map { it.id })
         val action = choice.handlers[0].action as UiAction.Intake
         assertEquals(listOf(appleUrl), action.items)
         assertEquals("import.gamdl", action.resolverId)
@@ -98,9 +98,9 @@ class IntakeServiceTest {
 
     @Test
     fun `access is enforced and failing resolvers are skipped`() = runBlocking {
-        assertTrue(service.handlers(listOf(tidalUrl), plain, "en").none { it.contributionId == "admin.only" })
+        assertTrue(service.handlers(listOf(tidalUrl), plain, "en").none { it.id == "admin.only" })
         val admin = User(UUID.randomUUID(), "a", passwordHash = "", isAdmin = true)
-        assertTrue(service.handlers(listOf(tidalUrl), admin, "en").any { it.contributionId == "admin.only" })
+        assertTrue(service.handlers(listOf(tidalUrl), admin, "en").any { it.id == "admin.only" })
         val unknown = service.submit(listOf(tidalUrl), "missing", user, "en")
         assertEquals(UiIntakeStatus.ERROR, unknown.status)
     }

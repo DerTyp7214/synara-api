@@ -221,6 +221,7 @@ class UiService(
         val contributionHandlers = offers.map { (registered, offer) ->
             val t = translations.translator(registered.source, client.locale)
             UiHookHandler(
+                id = registered.contribution.id,
                 contributionId = registered.contribution.id,
                 source = registered.source,
                 title = t.t(offer.titleKey),

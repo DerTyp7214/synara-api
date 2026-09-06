@@ -166,12 +166,12 @@ class UiServiceTest {
         registry.register(Hooked("hook.admin", 0, UiHookOffer("x", UiAction.Refresh), access = UiAccess(requiresAdmin = true)), "e")
 
         val handlers = service.dispatchHook(plain, client, UiHookEvent.ShareUrl("https://tidal.com/x"))
-        assertEquals(listOf("hook.first", "hook.second"), handlers.map { it.contributionId })
+        assertEquals(listOf("hook.first", "hook.second"), handlers.map { it.id })
         assertEquals("Katalog durchsuchen", handlers[0].title)
         assertEquals(UiIcon(UiIconName.SEARCH), handlers[0].icon)
         assertEquals(UiAction.OpenPage("hook.second"), handlers[1].action)
         assertTrue(service.dispatchHook(plain, client, UiHookEvent.ShareText("hello")).isEmpty())
-        assertEquals("hook.admin", service.dispatchHook(admin, client, UiHookEvent.ShareUrl("u")).first().contributionId)
+        assertEquals("hook.admin", service.dispatchHook(admin, client, UiHookEvent.ShareUrl("u")).first().id)
     }
 
     @Test

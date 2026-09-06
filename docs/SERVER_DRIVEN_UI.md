@@ -182,9 +182,9 @@ Example — an ambiguous link:
 
 ```json
 {"status": "NEEDS_CHOICE", "handlers": [
-  {"contributionId": "import.tidal", "title": "Import with Tidal", "confirmText": "Import this link?",
+  {"id": "import.tidal", "contributionId": "import.tidal", "title": "Import with Tidal", "confirmText": "Import this link?",
    "action": {"type": "intake", "items": [{"type": "url", "url": "https://music.apple.com/album/1"}], "resolverId": "import.tidal", "confirmText": "Import this link?"}},
-  {"contributionId": "import.gamdl", "title": "Import with gamdl (Apple Music)", "action": {"type": "intake", "…": "…", "resolverId": "import.gamdl"}}
+  {"id": "import.gamdl", "contributionId": "import.gamdl", "title": "Import with gamdl (Apple Music)", "action": {"type": "intake", "…": "…", "resolverId": "import.gamdl"}}
 ]}
 ```
 
@@ -322,11 +322,11 @@ POST /ui/dispatchHook
 
 ```json
 [
-  {"contributionId": "import.tidal", "source": "server", "title": "Import with Tidal", "icon": {"type": "named", "name": "IMPORT"}, "confirmText": "Import this link?",
+  {"id": "import.tidal", "contributionId": "import.tidal", "source": "server", "title": "Import with Tidal", "icon": {"type": "named", "name": "IMPORT"}, "confirmText": "Import this link?",
    "action": {"type": "intake", "items": [{"type": "url", "url": "https://music.apple.com/album/1"}], "resolverId": "import.tidal", "confirmText": "Import this link?"}},
-  {"contributionId": "import.gamdl", "source": "server", "title": "Import with gamdl (Apple Music)", "icon": {"type": "named", "name": "IMPORT"}, "confirmText": "Import this link?",
+  {"id": "import.gamdl", "contributionId": "import.gamdl", "source": "server", "title": "Import with gamdl (Apple Music)", "icon": {"type": "named", "name": "IMPORT"}, "confirmText": "Import this link?",
    "action": {"type": "intake", "items": [{"type": "url", "url": "https://music.apple.com/album/1"}], "resolverId": "import.gamdl", "confirmText": "Import this link?"}},
-  {"contributionId": "core.importer", "source": "server", "title": "Open in importer", "icon": {"type": "named", "name": "IMPORT"},
+  {"id": "core.importer", "contributionId": "core.importer", "source": "server", "title": "Open in importer", "icon": {"type": "named", "name": "IMPORT"},
    "action": {"type": "openPage", "pageId": "core.importer", "params": {"input": "https://music.apple.com/album/1"}}}
 ]
 ```

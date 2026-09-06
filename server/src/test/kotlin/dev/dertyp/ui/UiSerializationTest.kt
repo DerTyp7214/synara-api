@@ -72,7 +72,7 @@ class UiSerializationTest {
                         UiAction.OpenMenu(
                             title = "More",
                             items = listOf(
-                                UiMenuItem("Refresh", UiAction.Refresh, UiIcon(UiIconName.SYNC)),
+                                UiMenuItem("Refresh", UiAction.Refresh, UiIcon(UiIconName.SYNC), id = "refresh"),
                                 UiMenuItem("Sub", UiAction.OpenMenu(listOf(UiMenuItem("Delete", UiAction.OpenUrl("x"), tone = UiTone.ERROR, enabled = false)))),
                             ),
                         ),
@@ -92,7 +92,7 @@ class UiSerializationTest {
         val slot = UiSlotRender("library", listOf(render))
         assertEquals(slot, AppCbor.decodeFromByteArray<UiSlotRender>(AppCbor.encodeToByteArray(slot)))
 
-        val handlers = listOf(UiHookHandler("core.importer", "server", "Import", null, UiIcon(UiIconName.DOWNLOAD), UiAction.OpenPage("core.importer")))
+        val handlers = listOf(UiHookHandler("core.importer", "core.importer", "server", "Import", null, UiIcon(UiIconName.DOWNLOAD), UiAction.OpenPage("core.importer")))
         assertEquals(handlers, AppCbor.decodeFromByteArray<List<UiHookHandler>>(AppCbor.encodeToByteArray(handlers)))
 
         val event: UiHookEvent = UiHookEvent.ShareUrl("https://tidal.com/x", "title")
@@ -102,7 +102,7 @@ class UiSerializationTest {
             IntakeItem.Url("https://x"), IntakeItem.Code(UiIntakeCodeKind.UPC, "1"), IntakeItem.Id("tidal", "1", dev.dertyp.services.import.Type.ALBUM),
             IntakeItem.Text("t"), IntakeItem.File(UUID.randomUUID(), "f.m3u", "audio/x-mpegurl"),
         )
-        val intake = UiIntakeResult(UiIntakeStatus.NEEDS_CHOICE, "m", 1, items.take(1), listOf(UiHookHandler("i", "s", "T", null, null, UiAction.Intake(items, "i", "sure?"))), UiAction.Refresh)
+        val intake = UiIntakeResult(UiIntakeStatus.NEEDS_CHOICE, "m", 1, items.take(1), listOf(UiHookHandler("i", "i", "s", "T", null, null, UiAction.Intake(items, "i", "sure?"))), UiAction.Refresh)
         assertEquals(intake, AppCbor.decodeFromByteArray<UiIntakeResult>(AppCbor.encodeToByteArray(intake)))
         assertEquals(intake, AppJson.decodeFromString(UiIntakeResult.serializer(), AppJson.encodeToString(UiIntakeResult.serializer(), intake)))
 

@@ -235,20 +235,20 @@ class MockUiService : IUiService {
         val apple = items.filter { it is IntakeItem.Url && it.url.contains("music.apple.com") }
         val texts = items.filterIsInstance<IntakeItem.Text>()
         if (tidal.isNotEmpty()) {
-            handlers += UiHookHandler("import.tidal", "server", "Import with Tidal", "Add to the import queue", UiIcon(UiIconName.IMPORT), UiAction.Intake(tidal, "import.tidal", "Import this link?"), confirmText = "Import this link?")
+            handlers += UiHookHandler("import.tidal", "import.tidal", "server", "Import with Tidal", "Add to the import queue", UiIcon(UiIconName.IMPORT), UiAction.Intake(tidal, "import.tidal", "Import this link?"), confirmText = "Import this link?")
         }
         if (apple.isNotEmpty()) {
-            handlers += UiHookHandler("import.tidal", "server", "Import with Tidal", "Add to the import queue", UiIcon(UiIconName.IMPORT), UiAction.Intake(apple, "import.tidal", "Import this link?"), confirmText = "Import this link?")
-            handlers += UiHookHandler("import.gamdl", "server", "Import with gamdl (Apple Music)", "Add to the import queue", UiIcon(UiIconName.IMPORT), UiAction.Intake(apple, "import.gamdl", "Import this link?"), confirmText = "Import this link?")
+            handlers += UiHookHandler("import.tidal", "import.tidal", "server", "Import with Tidal", "Add to the import queue", UiIcon(UiIconName.IMPORT), UiAction.Intake(apple, "import.tidal", "Import this link?"), confirmText = "Import this link?")
+            handlers += UiHookHandler("import.gamdl", "import.gamdl", "server", "Import with gamdl (Apple Music)", "Add to the import queue", UiIcon(UiIconName.IMPORT), UiAction.Intake(apple, "import.gamdl", "Import this link?"), confirmText = "Import this link?")
         }
         if (texts.isNotEmpty()) {
-            handlers += UiHookHandler("search.external", "server", "Search catalog", "Search the streaming catalog for this text", UiIcon(UiIconName.SEARCH), UiAction.OpenNative(UiPortals.EXTERNAL_SEARCH, mapOf("query" to texts.joinToString(" ") { it.text })))
+            handlers += UiHookHandler("search.external", "search.external", "server", "Search catalog", "Search the streaming catalog for this text", UiIcon(UiIconName.SEARCH), UiAction.OpenNative(UiPortals.EXTERNAL_SEARCH, mapOf("query" to texts.joinToString(" ") { it.text })))
         }
         return handlers
     }
 
     override suspend fun intake(items: List<IntakeItem>, resolverId: String?): UiIntakeResult {
-        val handlers = offers(items).filter { resolverId == null || it.contributionId == resolverId }
+        val handlers = offers(items).filter { resolverId == null || it.id == resolverId }
         val submitting = handlers.filter { it.action is UiAction.Intake }
         val ambiguous = resolverId == null && items.any { item -> submitting.count { item in (it.action as UiAction.Intake).items } > 1 }
         if (ambiguous) return UiIntakeResult(UiIntakeStatus.NEEDS_CHOICE, handlers = handlers)
@@ -274,7 +274,7 @@ class MockUiService : IUiService {
             is UiHookEvent.ShareText -> IntakeItem.parseLines(event.text)
         }
         val text = items.joinToString("\n") { if (it is IntakeItem.Url) it.url else if (it is IntakeItem.Text) it.text else it.toString() }
-        return offers(items) + UiHookHandler("core.importer", "server", "Open in importer", "Review and edit before importing", UiIcon(UiIconName.IMPORT), UiAction.OpenPage("core.importer", mapOf("input" to text)))
+        return offers(items) + UiHookHandler("core.importer", "core.importer", "server", "Open in importer", "Review and edit before importing", UiIcon(UiIconName.IMPORT), UiAction.OpenPage("core.importer", mapOf("input" to text)))
     }
 
     private fun layout(): UiHomeLayout {

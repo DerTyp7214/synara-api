@@ -98,6 +98,7 @@ class IntakeService(private val translations: TranslationService) {
         val args = offer.titleArgs.toList().toTypedArray()
         val confirmText = offer.confirmKey?.let { t.t(it, *args) }
         return UiHookHandler(
+            id = resolver.id,
             contributionId = resolver.id,
             source = registered.source,
             title = t.t(offer.titleKey ?: resolver.titleKey, *args),
