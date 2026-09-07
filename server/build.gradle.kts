@@ -31,6 +31,7 @@ tasks.withType<KotlinCompile>().configureEach {
 }
 
 tasks.shadowJar {
+    isZip64 = true
     mergeServiceFiles {
         duplicatesStrategy = DuplicatesStrategy.INCLUDE
     }
