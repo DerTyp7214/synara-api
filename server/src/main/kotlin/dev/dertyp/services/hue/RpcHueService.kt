@@ -3,6 +3,7 @@ package dev.dertyp.services.hue
 import dev.dertyp.data.HueBridgeCandidate
 import dev.dertyp.data.HueBridgeInfo
 import dev.dertyp.data.HuePairingStatus
+import dev.dertyp.data.HueScene
 import dev.dertyp.data.HueStatus
 import dev.dertyp.data.HueTarget
 import dev.dertyp.data.HueUserLink
@@ -24,6 +25,8 @@ class RpcHueService(
     override suspend fun removeBridge(bridgeId: UUID): Boolean = service.removeBridge(bridgeId)
 
     override suspend fun listTargets(bridgeId: UUID): List<HueTarget> = service.listTargets(bridgeId)
+
+    override suspend fun listScenes(bridgeId: UUID): List<HueScene> = service.listScenes(bridgeId)
 
     override suspend fun getLinks(): List<HueUserLink> = service.getLinks(user.id)
 

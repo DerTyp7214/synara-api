@@ -34,6 +34,7 @@ object HueUserLinkTable : Table("hue_user_link") {
     val updatedAt = long("updatedAt")
     val motion = enumerationByName("motion", 16, HueMotionMode::class).default(HueMotionMode.OFF)
     val latencyMs = integer("latencyMs").default(150)
+    val stopScenes = text("stopScenes").default("[]")
 
     override val primaryKey = PrimaryKey(userId, bridgeId)
 }

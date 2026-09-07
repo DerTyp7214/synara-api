@@ -3,6 +3,7 @@ package dev.dertyp.services.ui
 import dev.dertyp.data.HueIntensity
 import dev.dertyp.data.HueMotionMode
 import dev.dertyp.data.HuePairingState
+import dev.dertyp.data.HueScene
 import dev.dertyp.data.HueStopMode
 import dev.dertyp.data.HueTarget
 import dev.dertyp.data.HueTargetType
@@ -126,6 +127,23 @@ class HueSettingsContribution(private val hue: HueService) : UiContribution(
             fields += UiComponent.Select(FIELD_TRANSITION_MODE, scope.t("hue.transitionMode"), link.transitionMode.name, HueTransitionMode.entries.map { UiOption(it.name, scope.t("hue.transitionMode.${it.name}")) })
             fields += UiComponent.NumberField(FIELD_TRANSITION_MS, scope.t("hue.transitionMs"), link.transitionMs.toDouble(), min = 0.0, max = 5000.0, step = 50.0)
             fields += UiComponent.Select(FIELD_ON_STOP, scope.t("hue.onStop"), link.onStop.name, HueStopMode.entries.map { UiOption(it.name, scope.t("hue.onStop.${it.name}")) })
+            val scenes = runCatching { hue.listScenes(bridge.id) }.getOrDefault(emptyList())
+            if (scenes.isNotEmpty()) {
+                val groups = scenes.groupBy { it.groupType to it.groupId }
+                fields += UiComponent.Section(
+                    title = scope.t("hue.stopScenes"),
+                    collapsible = true,
+                    collapsed = link.onStop != HueStopMode.SCENE,
+                    children = listOf(UiComponent.Text(scope.t("hue.stopScenes.helper"), UiTextStyle.CAPTION, UiTone.MUTED)) + groups.map { (key, items) ->
+                        UiComponent.Select(
+                            key = sceneKey(key.first, key.second),
+                            label = items.first().groupName,
+                            value = link.stopScenes.firstOrNull { it.groupType == key.first && it.groupId == key.second }?.id ?: "",
+                            options = listOf(UiOption("", scope.t("hue.stopScenes.none"))) + items.map { UiOption(it.id, it.name) },
+                        )
+                    },
+                )
+            }
             fields += UiComponent.Select(FIELD_MOTION, scope.t("hue.motion"), link.motion.name, HueMotionMode.entries.map { UiOption(it.name, scope.t("hue.motion.${it.name}")) })
             fields += UiComponent.NumberField(FIELD_LATENCY_MS, scope.t("hue.latencyMs"), link.latencyMs.toDouble(), min = 0.0, max = HueService.MAX_LATENCY_MS.toDouble(), step = 10.0)
             fields += UiComponent.Spacer()
@@ -214,6 +232,11 @@ class HueSettingsContribution(private val hue: HueService) : UiContribution(
         if (enabled && targets.isEmpty()) {
             return UiInvokeResult(UiInvokeStatus.VALIDATION_ERROR, scope.t("hue.error.noTargets"), fieldErrors = mapOf(FIELD_ENABLED to scope.t("hue.error.noTargets")))
         }
+        val onStop = enumOr(values[FIELD_ON_STOP]?.text, HueStopMode.KEEP)
+        val stopScenes = selectedScenes(bridgeId, values)
+        if (enabled && onStop == HueStopMode.SCENE && stopScenes.isEmpty()) {
+            return UiInvokeResult(UiInvokeStatus.VALIDATION_ERROR, scope.t("hue.error.noScenes"), fieldErrors = mapOf(FIELD_ON_STOP to scope.t("hue.error.noScenes")))
+        }
         val link = HueUserLink(
             bridgeId = bridgeId,
             enabled = enabled,
@@ -221,7 +244,8 @@ class HueSettingsContribution(private val hue: HueService) : UiContribution(
             intensity = enumOr(values[FIELD_INTENSITY]?.text, HueIntensity.MEDIUM),
             transitionMode = enumOr(values[FIELD_TRANSITION_MODE]?.text, HueTransitionMode.FIXED),
             transitionMs = values[FIELD_TRANSITION_MS]?.number?.toInt()?.coerceIn(0, 5000) ?: 400,
-            onStop = enumOr(values[FIELD_ON_STOP]?.text, HueStopMode.KEEP),
+            onStop = onStop,
+            stopScenes = stopScenes,
             motion = enumOr(values[FIELD_MOTION]?.text, HueMotionMode.OFF),
             latencyMs = values[FIELD_LATENCY_MS]?.number?.toInt()?.coerceIn(0, HueService.MAX_LATENCY_MS) ?: HueUserLink(bridgeId).latencyMs,
         )
@@ -234,10 +258,17 @@ class HueSettingsContribution(private val hue: HueService) : UiContribution(
         return available.filter { values[targetKey(it)]?.flag == true }
     }
 
+    private suspend fun selectedScenes(bridgeId: UUID, values: Map<String, UiValue>): List<HueScene> {
+        val available = runCatching { hue.listScenes(bridgeId) }.getOrDefault(emptyList())
+        return available.filter { values[sceneKey(it.groupType, it.groupId)]?.text == it.id }
+    }
+
     private fun bridgeId(values: Map<String, UiValue>): UUID? =
         values[FIELD_BRIDGE]?.text?.let { runCatching { UUID.fromString(it) }.getOrNull() }
 
     private fun targetKey(target: HueTarget) = "$FIELD_TARGET_PREFIX${target.type.name}:${target.id}"
+
+    private fun sceneKey(type: HueTargetType, groupId: String) = "$FIELD_SCENE_PREFIX${type.name}:$groupId"
 
     private inline fun <reified E : Enum<E>> enumOr(name: String?, default: E): E =
         enumValues<E>().firstOrNull { it.name == name } ?: default
@@ -251,6 +282,7 @@ class HueSettingsContribution(private val hue: HueService) : UiContribution(
         const val FIELD_BRIDGE = "bridge"
         const val FIELD_ENABLED = "enabled"
         const val FIELD_TARGET_PREFIX = "target:"
+        const val FIELD_SCENE_PREFIX = "scene:"
         const val FIELD_INTENSITY = "intensity"
         const val FIELD_TRANSITION_MODE = "transitionMode"
         const val FIELD_TRANSITION_MS = "transitionMs"

@@ -27,7 +27,7 @@ class HueCommandQueueTest {
         val api = mockk<HueBridgeApi>(relaxed = true)
         val sentAt = CopyOnWriteArrayList<Long>()
         val queue = HueCommandQueue(api, backgroundScope, 100.milliseconds, 1.seconds, clock = { testScheduler.currentTime }, onSent = { sentAt += testScheduler.currentTime })
-        repeat(5) { queue.submit(HueCommand(light("l$it"), update(50.0))) }
+        repeat(5) { queue.submit(HueLightCommand(light("l$it"), update(50.0))) }
         advanceTimeBy(1)
         yield()
         assertEquals(1, sentAt.size)
@@ -43,10 +43,10 @@ class HueCommandQueueTest {
     fun `rapid updates to one light collapse to the latest`() = runTest {
         val api = mockk<HueBridgeApi>(relaxed = true)
         val queue = HueCommandQueue(api, backgroundScope, 100.milliseconds, 1.seconds, clock = { testScheduler.currentTime })
-        queue.submit(HueCommand(light("a"), update(10.0)))
-        queue.submit(HueCommand(light("b"), update(10.0)))
-        queue.submit(HueCommand(light("b"), update(20.0)))
-        queue.submit(HueCommand(light("b"), update(30.0)))
+        queue.submit(HueLightCommand(light("a"), update(10.0)))
+        queue.submit(HueLightCommand(light("b"), update(10.0)))
+        queue.submit(HueLightCommand(light("b"), update(20.0)))
+        queue.submit(HueLightCommand(light("b"), update(30.0)))
         advanceTimeBy(2_000)
         yield()
         coVerify(exactly = 1) { api.putLight("a", any()) }
@@ -62,25 +62,49 @@ class HueCommandQueueTest {
         val sentAt = CopyOnWriteArrayList<Long>()
         coEvery { api.putGroupedLight("g", update(1.0)) } throws HueRateLimited()
         val queue = HueCommandQueue(api, backgroundScope, 100.milliseconds, 1.seconds, 1.seconds, clock = { testScheduler.currentTime }, onSent = { sentAt += testScheduler.currentTime }, onError = { errors += it })
-        queue.submit(HueCommand(room, update(1.0)))
+        queue.submit(HueLightCommand(room, update(1.0)))
         advanceTimeBy(1)
         yield()
         assertEquals(1, errors.size)
         assertTrue(errors.single() is HueRateLimited)
-        queue.submit(HueCommand(light("x"), update(5.0)))
+        queue.submit(HueLightCommand(light("x"), update(5.0)))
         advanceTimeBy(500)
         yield()
         assertEquals(0, sentAt.size)
         advanceTimeBy(600)
         yield()
         assertEquals(1, sentAt.size)
-        queue.submit(HueCommand(room, update(2.0)))
-        queue.submit(HueCommand(room.copy(id = "r2", groupedLightId = "g2"), update(2.0)))
+        queue.submit(HueLightCommand(room, update(2.0)))
+        queue.submit(HueLightCommand(room.copy(id = "r2", groupedLightId = "g2"), update(2.0)))
         advanceTimeBy(1_500)
         yield()
         coVerify(exactly = 1) { api.putGroupedLight("g", update(2.0)) }
         coVerify(exactly = 1) { api.putGroupedLight("g2", update(2.0)) }
         assertTrue(sentAt[2] - sentAt[1] >= 1000)
+        queue.close()
+    }
+
+    @Test
+    fun `scene commands are recalled and paced at the group interval`() = runTest {
+        val api = mockk<HueBridgeApi>(relaxed = true)
+        val sentAt = CopyOnWriteArrayList<Long>()
+        val queue = HueCommandQueue(api, backgroundScope, 100.milliseconds, 1.seconds, clock = { testScheduler.currentTime }, onSent = { sentAt += testScheduler.currentTime })
+        val recall = SceneRecallUpdate(ClipSceneRecall(duration = 400))
+        queue.submit(HueSceneCommand("s1", recall))
+        advanceTimeBy(1)
+        yield()
+        coVerify(exactly = 1) { api.recallScene("s1", recall) }
+        assertEquals(1, sentAt.size)
+
+        queue.submit(HueSceneCommand("s2", recall))
+        advanceTimeBy(500)
+        yield()
+        assertEquals(1, sentAt.size)
+        advanceTimeBy(600)
+        yield()
+        assertEquals(2, sentAt.size)
+        coVerify(exactly = 1) { api.recallScene("s2", recall) }
+        assertTrue(sentAt[1] - sentAt[0] >= 1000)
         queue.close()
     }
 }

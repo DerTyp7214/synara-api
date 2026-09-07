@@ -77,6 +77,9 @@ data class ClipGroup(
 }
 
 @Serializable
+data class ClipScene(val id: String, val metadata: ClipMetadata? = null, val group: ClipResourceRef? = null)
+
+@Serializable
 data class ClipGroupedLight(
     val id: String,
     val owner: ClipResourceRef? = null,
@@ -112,3 +115,9 @@ data class LightUpdate(
     @SerialName("color_temperature") val colorTemperature: ClipColorTemperatureUpdate? = null,
     val dynamics: ClipDynamics? = null,
 )
+
+@Serializable
+data class ClipSceneRecall(val action: String = "active", val duration: Int? = null)
+
+@Serializable
+data class SceneRecallUpdate(val recall: ClipSceneRecall)

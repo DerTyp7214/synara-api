@@ -7,6 +7,7 @@ import dev.dertyp.data.HueIntensity
 import dev.dertyp.data.HueMotionMode
 import dev.dertyp.data.HuePairingState
 import dev.dertyp.data.HuePairingStatus
+import dev.dertyp.data.HueScene
 import dev.dertyp.data.HueStatus
 import dev.dertyp.data.HueStopMode
 import dev.dertyp.data.HueTarget
@@ -104,7 +105,6 @@ class HueService : Service() {
     private val lastSong = ConcurrentHashMap<UUID, UUID>()
     private val lastCommandAt = ConcurrentHashMap<UUID, Long>()
     private val currentColors = ConcurrentHashMap<UUID, List<Int>>()
-    private val snapshots = ConcurrentHashMap<Pair<UUID, UUID>, List<HueCommand>>()
     private val animations = ConcurrentHashMap<Pair<UUID, UUID>, Job>()
     private val pendingStops = ConcurrentHashMap<UUID, Job>()
     private val clocks = ConcurrentHashMap<UUID, MutableStateFlow<PlaybackClock>>()
@@ -114,6 +114,7 @@ class HueService : Service() {
     internal var motionIntervalOverride: Long? = null
     internal var stopGraceMs: Long = STOP_GRACE.inWholeMilliseconds
     private val targetsCache = ConcurrentHashMap<UUID, Pair<Long, List<HueTarget>>>()
+    private val scenesCache = ConcurrentHashMap<UUID, Pair<Long, List<HueScene>>>()
     private val gamutCache = ConcurrentHashMap<UUID, Map<String, HueColor.Gamut>>()
 
     private val changeFlow = MutableSharedFlow<Unit>(extraBufferCapacity = 16, onBufferOverflow = BufferOverflow.DROP_OLDEST)
@@ -254,6 +255,7 @@ class HueService : Service() {
         animations.keys.filter { it.second == id }.forEach { key -> animations.remove(key)?.cancel() }
         runtimes.remove(id)?.let { it.queue.close(); it.client.close() }
         targetsCache.remove(id)
+        scenesCache.remove(id)
         val removed = dbQuery { HueBridgeTable.deleteWhere { HueBridgeTable.id eq id } > 0 }
         if (removed) changeFlow.tryEmit(Unit)
         return removed
@@ -286,6 +288,33 @@ class HueService : Service() {
         return targets
     }
 
+    suspend fun listScenes(bridgeId: UUID, force: Boolean = false): List<HueScene> {
+        val now = System.currentTimeMillis()
+        scenesCache[bridgeId]?.let { (at, scenes) -> if (!force && now - at < TARGETS_TTL.inWholeMilliseconds) return scenes }
+        val row = bridge(bridgeId) ?: throw IllegalArgumentException("Unknown bridge $bridgeId")
+        val client = runtime(row).client
+        val targets = listTargets(bridgeId, force)
+        val groups = targets.filter { it.type != HueTargetType.LIGHT }.associateBy { it.id }
+        val scenes = try {
+            client.scenes().mapNotNull { scene ->
+                val ref = scene.group ?: return@mapNotNull null
+                val group = groups[ref.rid] ?: return@mapNotNull null
+                val type = when (ref.rtype) {
+                    "room" -> HueTargetType.ROOM
+                    "zone" -> HueTargetType.ZONE
+                    else -> return@mapNotNull null
+                }
+                HueScene(scene.id, scene.metadata?.name ?: "Scene", type, group.id, group.name)
+            }.sortedWith(compareBy({ it.groupName }, { it.name }))
+        } catch (e: Exception) {
+            recordError(row.id, e)
+            throw e
+        }
+        markSeen(row.id)
+        scenesCache[bridgeId] = now to scenes
+        return scenes
+    }
+
     suspend fun getLinks(userId: UUID): List<HueUserLink> = dbQuery {
         HueUserLinkTable.selectAll().where { HueUserLinkTable.userId eq userId }.map(::mapLink)
     }
@@ -293,8 +322,12 @@ class HueService : Service() {
     suspend fun setLink(userId: UUID, requested: HueUserLink): HueUserLink {
         bridge(requested.bridgeId) ?: throw IllegalArgumentException("Unknown bridge ${requested.bridgeId}")
         if (requested.enabled && requested.targets.isEmpty()) throw IllegalArgumentException("At least one target is required")
+        if (requested.enabled && requested.onStop == HueStopMode.SCENE && requested.stopScenes.isEmpty()) throw IllegalArgumentException("At least one scene is required")
         val now = System.currentTimeMillis()
-        val link = requested.copy(latencyMs = requested.latencyMs.coerceIn(0, MAX_LATENCY_MS))
+        val link = requested.copy(
+            latencyMs = requested.latencyMs.coerceIn(0, MAX_LATENCY_MS),
+            stopScenes = requested.stopScenes.distinctBy { it.groupType to it.groupId },
+        )
         dbQuery {
             HueUserLinkTable.upsert(HueUserLinkTable.userId, HueUserLinkTable.bridgeId) {
                 it[HueUserLinkTable.userId] = EntityID(userId, dev.dertyp.db.UserTable)
@@ -305,6 +338,7 @@ class HueService : Service() {
                 it[transitionMode] = link.transitionMode
                 it[transitionMs] = link.transitionMs
                 it[onStop] = link.onStop
+                it[stopScenes] = ApplicationScope.json.encodeToString(ListSerializer(HueScene.serializer()), link.stopScenes)
                 it[motion] = link.motion
                 it[latencyMs] = link.latencyMs
                 it[updatedAt] = now
@@ -386,9 +420,6 @@ class HueService : Service() {
         links.forEach { link ->
             val row = bridge(link.bridgeId) ?: return@forEach
             val runtime = runtime(row)
-            if (link.onStop == HueStopMode.RESTORE && !snapshots.containsKey(event.userId to link.bridgeId)) {
-                snapshot(event.userId, link, runtime.client)
-            }
             val result = HuePaletteMapper.map(image?.palette ?: emptyList(), image?.primaryColor, audio, link, gamutCache[link.bridgeId] ?: emptyMap())
             runtime.queue.submitAll(result.commands)
             currentColors[event.userId] = result.colors
@@ -506,38 +537,11 @@ class HueService : Service() {
     private suspend fun stop(userId: UUID, link: HueUserLink) {
         val row = bridge(link.bridgeId) ?: return
         val runtime = runtime(row)
-        val commands = when (link.onStop) {
-            HueStopMode.RESTORE -> snapshots.remove(userId to link.bridgeId) ?: emptyList()
-            else -> HuePaletteMapper.stop(link)
-        }
+        val commands = HuePaletteMapper.stop(link)
         if (commands.isNotEmpty()) {
             runtime.queue.submitAll(commands)
             lastCommandAt[userId] = System.currentTimeMillis()
         }
-    }
-
-    private suspend fun snapshot(userId: UUID, link: HueUserLink, client: HueBridgeApi) {
-        val commands = runCatching {
-            val lights = client.lights().associateBy { it.id }
-            link.targets.filter { it.type == HueTargetType.LIGHT }.mapNotNull { target ->
-                val light = lights[target.id] ?: return@mapNotNull null
-                HueCommand(target, restoreUpdate(light, link.transitionMs))
-            }
-        }.onFailure { logger.warn("Could not snapshot Hue lights: ${it.message}") }.getOrDefault(emptyList())
-        if (commands.isNotEmpty()) snapshots[userId to link.bridgeId] = commands
-    }
-
-    internal fun restoreUpdate(light: ClipLight, transitionMs: Int): LightUpdate {
-        val on = light.on?.on ?: true
-        if (!on) return LightUpdate(on = ClipOn(false))
-        val temperature = light.colorTemperature?.takeIf { it.mirekValid == true }?.mirek
-        return LightUpdate(
-            on = ClipOn(true),
-            dimming = light.dimming,
-            color = if (temperature == null) light.color?.xy?.let { ClipColorUpdate(it) } else null,
-            colorTemperature = temperature?.let { ClipColorTemperatureUpdate(it) },
-            dynamics = ClipDynamics(transitionMs),
-        )
     }
 
     private fun runtime(row: BridgeRow): BridgeRuntime = runtimes.getOrPut(row.id) {
@@ -589,10 +593,11 @@ class HueService : Service() {
         intensity = row[HueUserLinkTable.intensity],
         transitionMode = row[HueUserLinkTable.transitionMode],
         transitionMs = row[HueUserLinkTable.transitionMs],
-        onStop = row[HueUserLinkTable.onStop],
+        onStop = runCatching { row[HueUserLinkTable.onStop] }.getOrDefault(HueStopMode.KEEP),
         motion = row[HueUserLinkTable.motion],
         updatedAt = row[HueUserLinkTable.updatedAt],
         latencyMs = row[HueUserLinkTable.latencyMs],
+        stopScenes = runCatching { ApplicationScope.json.decodeFromString(ListSerializer(HueScene.serializer()), row[HueUserLinkTable.stopScenes]) }.getOrDefault(emptyList()),
     )
 
     companion object {

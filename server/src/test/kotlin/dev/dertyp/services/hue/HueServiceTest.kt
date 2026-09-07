@@ -5,6 +5,7 @@ import dev.dertyp.TestDatabase
 import dev.dertyp.data.HueIntensity
 import dev.dertyp.data.HueMotionMode
 import dev.dertyp.data.HuePairingState
+import dev.dertyp.data.HueScene
 import dev.dertyp.data.HueStopMode
 import dev.dertyp.data.HueTarget
 import dev.dertyp.data.HueTargetType
@@ -58,6 +59,7 @@ class HueServiceTest {
     private lateinit var service: HueService
     private val userId = UUID.randomUUID()
     private val sent = CopyOnWriteArrayList<Pair<String, LightUpdate>>()
+    private val recalled = CopyOnWriteArrayList<Pair<String, SceneRecallUpdate>>()
 
     private fun setup(dialect: DbDialect) {
         songService = mockk()
@@ -66,6 +68,7 @@ class HueServiceTest {
         api = mockk(relaxed = true)
         coEvery { api.putLight(any(), any()) } answers { sent += (firstArg<String>() to secondArg<LightUpdate>()) }
         coEvery { api.putGroupedLight(any(), any()) } answers { sent += (firstArg<String>() to secondArg<LightUpdate>()) }
+        coEvery { api.recallScene(any(), any()) } answers { recalled += (firstArg<String>() to secondArg<SceneRecallUpdate>()) }
         startKoin {
             modules(module {
                 single<HookBus> { HookService() }
@@ -114,6 +117,14 @@ class HueServiceTest {
             delay(20)
         }
         throw AssertionError("expected $count commands, got ${sent.size}")
+    }
+
+    private suspend fun awaitRecalled(count: Int) {
+        repeat(150) {
+            if (recalled.size >= count) return
+            delay(20)
+        }
+        throw AssertionError("expected $count scene recalls, got ${recalled.size}")
     }
 
     private suspend fun awaitDimmed(threshold: Double): List<Double> {
@@ -190,40 +201,64 @@ class HueServiceTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `restore snapshots the lights once, waits out the grace period and replays the old state`(dialect: DbDialect) = runBlocking {
+    fun `scene mode recalls the configured scenes after the grace period`(dialect: DbDialect) = runBlocking {
         setup(dialect)
         val bridgeId = bridge()
-        service.setLink(userId, HueUserLink(bridgeId, true, listOf(light("l1", "Desk"), light("l2", "Shelf")), onStop = HueStopMode.RESTORE))
-        coEvery { api.lights() } returns listOf(
-            ClipLight("l1", ClipMetadata("Desk"), on = ClipOn(true), dimming = ClipDimming(40.0), color = ClipColor(ClipXy(0.4, 0.4)), colorTemperature = ClipColorTemperature(366, true)),
-            ClipLight("l2", ClipMetadata("Shelf"), on = ClipOn(false), dimming = ClipDimming(90.0), color = ClipColor(ClipXy(0.2, 0.2))),
+        service.setLink(
+            userId,
+            HueUserLink(
+                bridgeId,
+                true,
+                listOf(HueTarget(HueTargetType.ROOM, "r1", "Living", "g1")),
+                onStop = HueStopMode.SCENE,
+                stopScenes = listOf(
+                    HueScene("s1", "Relax", HueTargetType.ROOM, "r1", "Living"),
+                    HueScene("s2", "Read", HueTargetType.ZONE, "z1", "Desk"),
+                ),
+            ),
         )
-        val songA = UUID.randomUUID()
-        val songB = UUID.randomUUID()
-        coEvery { songService.byIds(listOf(songA), userId) } returns listOf(song(songA, null))
-        coEvery { songService.byIds(listOf(songB), userId) } returns listOf(song(songB, null))
+        val songId = UUID.randomUUID()
+        coEvery { songService.byIds(listOf(songId), userId) } returns listOf(song(songId, null))
         coEvery { audioAnalysisService.getAudioDataBatch(any()) } returns emptyMap<UUID, SongAudioData>()
 
-        service.onNowPlaying(HookEvent.NowPlayingChanged(userId, songA, 1, 0))
-        awaitSent(2)
-        coVerify(exactly = 1) { api.lights() }
+        service.onNowPlaying(HookEvent.NowPlayingChanged(userId, songId, 1, 0))
+        awaitSent(1)
+        assertTrue(recalled.isEmpty())
 
         service.onNowPlaying(HookEvent.NowPlayingChanged(userId, null, 2, 0))
-        service.onNowPlaying(HookEvent.NowPlayingChanged(userId, songB, 3, 0))
-        awaitSent(4)
-        delay(250)
-        assertEquals(4, sent.size)
-        coVerify(exactly = 1) { api.lights() }
+        delay(50)
+        assertTrue(recalled.isEmpty())
 
-        service.onNowPlaying(HookEvent.NowPlayingChanged(userId, null, 4, 0))
-        awaitSent(6)
-        val restored = sent.drop(4).associate { it.first to it.second }
-        assertEquals(LightUpdate(on = ClipOn(true), dimming = ClipDimming(40.0), colorTemperature = ClipColorTemperatureUpdate(366), dynamics = ClipDynamics(400)), restored["l1"])
-        assertEquals(LightUpdate(on = ClipOn(false)), restored["l2"])
+        awaitRecalled(2)
+        assertEquals(
+            setOf("s1" to SceneRecallUpdate(ClipSceneRecall("active", 400)), "s2" to SceneRecallUpdate(ClipSceneRecall("active", 400))),
+            recalled.toSet(),
+        )
+    }
 
-        service.onNowPlaying(HookEvent.NowPlayingChanged(userId, songA, 5, 0))
-        awaitSent(8)
-        coVerify(exactly = 2) { api.lights() }
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `setLink rejects scene mode without scenes and dedupes scenes per group`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val bridgeId = bridge()
+        assertThrows(IllegalArgumentException::class.java) {
+            runBlocking { service.setLink(userId, HueUserLink(bridgeId, true, listOf(light("l1", "Desk")), onStop = HueStopMode.SCENE)) }
+        }
+        service.setLink(
+            userId,
+            HueUserLink(
+                bridgeId,
+                true,
+                listOf(HueTarget(HueTargetType.ROOM, "r1", "Living", "g1")),
+                onStop = HueStopMode.SCENE,
+                stopScenes = listOf(
+                    HueScene("s1", "Relax", HueTargetType.ROOM, "r1", "Living"),
+                    HueScene("s2", "Chill", HueTargetType.ROOM, "r1", "Living"),
+                ),
+            ),
+        )
+        val loaded = service.getLinks(userId).single()
+        assertEquals(1, loaded.stopScenes.size)
     }
 
     @ParameterizedTest
@@ -359,6 +394,33 @@ class HueServiceTest {
         assertEquals(setOf("g1", "l1"), sent.map { it.first }.toSet())
         assertNotNull(service.listBridges().single().lastSeen)
         assertFalse(service.test(userId, bridgeId, emptyList()))
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `listScenes maps scenes to their rooms and zones`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val bridgeId = bridge()
+        coEvery { api.lights() } returns emptyList()
+        coEvery { api.rooms() } returns listOf(ClipGroup("r1", ClipMetadata("Living"), services = listOf(ClipResourceRef("g1", "grouped_light"))))
+        coEvery { api.zones() } returns listOf(ClipGroup("z1", ClipMetadata("Desk"), services = listOf(ClipResourceRef("g2", "grouped_light"))))
+        coEvery { api.scenes() } returns listOf(
+            ClipScene("s1", ClipMetadata("Relax"), ClipResourceRef("r1", "room")),
+            ClipScene("s2", ClipMetadata("Read"), ClipResourceRef("z1", "zone")),
+            ClipScene("s3", ClipMetadata("Orphan"), ClipResourceRef("nope", "room")),
+            ClipScene("s4", ClipMetadata("NoGroup")),
+        )
+
+        assertEquals(
+            listOf(
+                HueScene("s2", "Read", HueTargetType.ZONE, "z1", "Desk"),
+                HueScene("s1", "Relax", HueTargetType.ROOM, "r1", "Living"),
+            ),
+            service.listScenes(bridgeId),
+        )
+        service.listScenes(bridgeId)
+        coVerify(exactly = 1) { api.scenes() }
+        assertThrows(IllegalArgumentException::class.java) { runBlocking { service.listScenes(UUID.randomUUID()) } }
     }
 
     @ParameterizedTest

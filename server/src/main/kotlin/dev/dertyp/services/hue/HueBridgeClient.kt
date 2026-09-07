@@ -31,8 +31,10 @@ interface HueBridgeApi {
     suspend fun rooms(): List<ClipGroup>
     suspend fun zones(): List<ClipGroup>
     suspend fun groupedLights(): List<ClipGroupedLight>
+    suspend fun scenes(): List<ClipScene>
     suspend fun putLight(id: String, update: LightUpdate)
     suspend fun putGroupedLight(id: String, update: LightUpdate)
+    suspend fun recallScene(id: String, update: SceneRecallUpdate)
     fun close()
 }
 
@@ -89,10 +91,13 @@ class HueBridgeClient(
     override suspend fun rooms(): List<ClipGroup> = resource("room")
     override suspend fun zones(): List<ClipGroup> = resource("zone")
     override suspend fun groupedLights(): List<ClipGroupedLight> = resource("grouped_light")
+    override suspend fun scenes(): List<ClipScene> = resource("scene")
 
     override suspend fun putLight(id: String, update: LightUpdate) = put("light", id, update)
 
     override suspend fun putGroupedLight(id: String, update: LightUpdate) = put("grouped_light", id, update)
+
+    override suspend fun recallScene(id: String, update: SceneRecallUpdate) = put("scene", id, update)
 
     override fun close() = client.close()
 
@@ -102,11 +107,11 @@ class HueBridgeClient(
         return response.body<ClipResponse<T>>().data
     }
 
-    private suspend fun put(type: String, id: String, update: LightUpdate) {
+    private suspend inline fun <reified T> put(type: String, id: String, body: T) {
         val response = client.put("$base/clip/v2/resource/$type/$id") {
             auth()
             contentType(ContentType.Application.Json)
-            setBody(update)
+            setBody(body)
         }
         check(response)
     }

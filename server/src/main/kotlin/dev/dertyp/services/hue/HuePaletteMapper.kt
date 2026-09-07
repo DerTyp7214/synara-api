@@ -62,8 +62,9 @@ object HuePaletteMapper {
         beatMs(bpm)?.let { (it.toLong() * BEATS_PER_BAR).coerceIn(2_000, 10_000) } ?: DEFAULT_BAR_MS
 
     fun stop(link: HueUserLink): List<HueCommand> = when (link.onStop) {
-        HueStopMode.OFF -> link.targets.map { HueCommand(it, LightUpdate(on = ClipOn(false), dynamics = ClipDynamics(link.transitionMs))) }
-        HueStopMode.KEEP, HueStopMode.RESTORE -> emptyList()
+        HueStopMode.OFF -> link.targets.map { HueLightCommand(it, LightUpdate(on = ClipOn(false), dynamics = ClipDynamics(link.transitionMs))) }
+        HueStopMode.SCENE -> link.stopScenes.map { HueSceneCommand(it.id, SceneRecallUpdate(ClipSceneRecall(duration = link.transitionMs))) }
+        HueStopMode.KEEP -> emptyList()
     }
 
     internal fun pickColors(candidates: List<Int>, energy: Double, valence: Double): List<Int> {
@@ -122,7 +123,7 @@ object HuePaletteMapper {
 
     private fun command(target: HueTarget, argb: Int, brightness: Int, transition: Int, gamuts: Map<String, HueColor.Gamut>): HueCommand {
         val xy = HueColor.argbToXy(argb, gamuts[target.id] ?: HueColor.GAMUT_C)
-        return HueCommand(
+        return HueLightCommand(
             target,
             LightUpdate(
                 on = ClipOn(true),

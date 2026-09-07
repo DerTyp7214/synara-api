@@ -13,10 +13,20 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
-data class HueCommand(val target: HueTarget, val update: LightUpdate) {
-    val grouped: Boolean get() = target.type != HueTargetType.LIGHT
+sealed interface HueCommand {
+    val grouped: Boolean
+    val resourceKey: String
+}
+
+data class HueLightCommand(val target: HueTarget, val update: LightUpdate) : HueCommand {
+    override val grouped: Boolean get() = target.type != HueTargetType.LIGHT
     val resourceId: String get() = if (grouped) target.groupedLightId ?: target.id else target.id
-    val resourceKey: String get() = if (grouped) "grouped_light:$resourceId" else "light:$resourceId"
+    override val resourceKey: String get() = if (grouped) "grouped_light:$resourceId" else "light:$resourceId"
+}
+
+data class HueSceneCommand(val sceneId: String, val update: SceneRecallUpdate) : HueCommand {
+    override val grouped: Boolean get() = true
+    override val resourceKey: String get() = "scene:$sceneId"
 }
 
 class HueCommandQueue(
@@ -41,8 +51,13 @@ class HueCommandQueue(
             val command = latest.remove(key) ?: continue
             pace(command.grouped)
             try {
-                if (command.grouped) api.putGroupedLight(command.resourceId, command.update)
-                else api.putLight(command.resourceId, command.update)
+                when (command) {
+                    is HueLightCommand ->
+                        if (command.grouped) api.putGroupedLight(command.resourceId, command.update)
+                        else api.putLight(command.resourceId, command.update)
+
+                    is HueSceneCommand -> api.recallScene(command.sceneId, command.update)
+                }
                 onSent(command)
             } catch (e: CancellationException) {
                 throw e

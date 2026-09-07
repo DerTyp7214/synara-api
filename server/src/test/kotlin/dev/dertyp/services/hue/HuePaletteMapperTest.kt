@@ -1,6 +1,7 @@
 package dev.dertyp.services.hue
 
 import dev.dertyp.data.HueIntensity
+import dev.dertyp.data.HueScene
 import dev.dertyp.data.HueStopMode
 import dev.dertyp.data.HueTarget
 import dev.dertyp.data.HueTargetType
@@ -55,12 +56,12 @@ class HuePaletteMapperTest {
     fun `colors rotate across lights and rooms use the first color via grouped light`() {
         val result = HuePaletteMapper.map(listOf(blue), red, null, link(lights + room))
         assertEquals(4, result.commands.size)
-        val grouped = result.commands.single { it.grouped }
+        val grouped = result.commands.single { it.grouped } as HueLightCommand
         assertEquals("g1", grouped.resourceId)
         val lightColors = result.colors.drop(1)
         assertEquals(listOf(red, blue, red), lightColors)
         assertEquals(red, result.colors.first())
-        assertTrue(result.commands.all { it.update.on?.on == true && it.update.color != null })
+        assertTrue(result.commands.all { (it as HueLightCommand).update.on?.on == true && it.update.color != null })
     }
 
     @Test
@@ -82,11 +83,22 @@ class HuePaletteMapperTest {
     }
 
     @Test
-    fun `stop mode off turns targets off and keep sends nothing`() {
+    fun `stop mode off turns targets off, scene mode recalls scenes and keep sends nothing`() {
         assertTrue(HuePaletteMapper.stop(link(onStop = HueStopMode.KEEP)).isEmpty())
         val off = HuePaletteMapper.stop(link(onStop = HueStopMode.OFF))
         assertEquals(3, off.size)
-        assertTrue(off.all { it.update.on?.on == false })
+        assertTrue(off.all { (it as HueLightCommand).update.on?.on == false })
+
+        val scenes = listOf(
+            HueScene("s1", "Relax", HueTargetType.ROOM, "r1", "Living"),
+            HueScene("s2", "Read", HueTargetType.ZONE, "z1", "Desk"),
+        )
+        val recalled = HuePaletteMapper.stop(link(onStop = HueStopMode.SCENE, ms = 700).copy(stopScenes = scenes))
+        assertEquals(2, recalled.size)
+        assertTrue(recalled.all { it is HueSceneCommand && it.update == SceneRecallUpdate(ClipSceneRecall("active", 700)) })
+        assertEquals(setOf("scene:s1", "scene:s2"), recalled.map { it.resourceKey }.toSet())
+
+        assertTrue(HuePaletteMapper.stop(link(onStop = HueStopMode.SCENE)).isEmpty())
     }
 
     @Test
@@ -98,7 +110,7 @@ class HuePaletteMapperTest {
         assertEquals(listOf(red, blue, grey), step0)
         assertEquals(listOf(blue, grey, red), step1)
         assertEquals(step0, step3)
-        assertTrue(HuePaletteMapper.frame(palette, lights, 1, 50, 1000).commands.all { it.update.dynamics?.duration == 1000 })
+        assertTrue(HuePaletteMapper.frame(palette, lights, 1, 50, 1000).commands.all { (it as HueLightCommand).update.dynamics?.duration == 1000 })
         assertTrue(HuePaletteMapper.frame(emptyList(), lights, 1, 50, 1000).commands.isEmpty())
         assertEquals(listOf(red, blue), HuePaletteMapper.map(listOf(blue), red, null, link()).palette)
     }
@@ -146,6 +158,6 @@ class HuePaletteMapperTest {
     fun `audio data modulates brightness`() {
         val loud = HuePaletteMapper.map(listOf(red), null, SongAudioData(energy = 1.0, loudness = -5.0), link())
         val quiet = HuePaletteMapper.map(listOf(red), null, SongAudioData(energy = 0.1, loudness = -30.0), link())
-        assertTrue(loud.commands.first().update.dimming!!.brightness > quiet.commands.first().update.dimming!!.brightness)
+        assertTrue((loud.commands.first() as HueLightCommand).update.dimming!!.brightness > (quiet.commands.first() as HueLightCommand).update.dimming!!.brightness)
     }
 }
