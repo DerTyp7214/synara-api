@@ -9,17 +9,21 @@ import org.jetbrains.exposed.v1.core.Table
 import org.jetbrains.exposed.v1.core.dao.id.java.UUIDTable
 
 object HueBridgeTable : UUIDTable("hue_bridge") {
-    val bridgeId = varchar("bridgeId", 32).uniqueIndex()
+    val bridgeId = varchar("bridgeId", 32)
     val ip = varchar("ip", 64)
     val name = varchar("name", 255)
     val modelId = varchar("modelId", 32).nullable()
     val applicationKey = text("applicationKey")
     val clientKey = text("clientKey").nullable()
     val certFingerprint = varchar("certFingerprint", 95).nullable()
-    val createdBy = reference("createdBy", UserTable.id, onDelete = ReferenceOption.SET_NULL).nullable()
+    val userId = reference("userId", UserTable.id, onDelete = ReferenceOption.CASCADE).nullable()
     val createdAt = long("createdAt")
     val lastSeen = long("lastSeen").nullable()
     val lastError = text("lastError").nullable()
+
+    init {
+        uniqueIndex(userId, bridgeId)
+    }
 }
 
 object HueUserLinkTable : Table("hue_user_link") {

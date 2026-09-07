@@ -83,6 +83,7 @@ RUN chown -R appuser:appgroup /home/appuser
 COPY --chown=appuser:appuser docker/tiddl/config.toml /home/appuser/.tiddl/config.toml
 COPY --chown=appuser:appuser docker/tdn-config/settings.json /home/appuser/.config/tidal_dl_ng/settings.json
 COPY --from=build --chown=appuser:appgroup /home/gradle/src/server/build/libs/*.jar /app/synara-api.jar
+COPY --from=build --chown=appuser:appgroup /home/gradle/src/data/cover-assets /app/cover-assets
 
 USER appuser
 
@@ -92,6 +93,7 @@ ENV AUDIO_PLAYLISTS_PATH="/data/Tidal/Playlists"
 ENV AUDIO_TRANSCODE_PATH="/data/Tidal/Transcode"
 ENV AUDIO_CUSTOM_PATH="/data/Synara/custom"
 ENV DATA_IMAGES_PATH="/data/Tidal/Images"
+ENV DATA_COVER_ASSETS_PATH="/app/cover-assets"
 
 ENV AUDIO_TRACKS_SECONDARY_PATH="/data/Synara"
 

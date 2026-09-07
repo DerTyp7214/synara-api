@@ -78,6 +78,7 @@ RUN python3 -m pip install --break-system-packages --no-cache-dir syncedlyrics y
 COPY --chown=appuser:appuser docker/tiddl/config.toml /home/appuser/.tiddl/config.toml
 COPY --chown=appuser:appuser docker/tdn-config/settings.json /home/appuser/.config/tidal_dl_ng/settings.json
 COPY --chown=appuser:appgroup *.jar /app/synara-api.jar
+COPY --chown=appuser:appgroup data/cover-assets /app/cover-assets
 
 USER appuser
 
@@ -89,6 +90,7 @@ ENV AUDIO_CUSTOM_PATH="/data/Synara/custom"
 ENV AUDIO_LOSSLESS_FORMAT="FLAC"
 ENV DATA_IMAGES_PATH="/data/Synara/Images"
 ENV DATA_ANIMATED_IMAGES_PATH="/data/Synara/AnimatedImages"
+ENV DATA_COVER_ASSETS_PATH="/app/cover-assets"
 ENV BACKUP_DIR="/backups"
 ENV YTDLP_CONFIG_PATH="/data/config/yt-dlp.conf"
 

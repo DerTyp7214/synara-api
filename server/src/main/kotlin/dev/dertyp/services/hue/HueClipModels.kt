@@ -56,6 +56,17 @@ data class ClipColorTemperature(
 )
 
 @Serializable
+data class ClipGradientPoint(val color: ClipColor? = null)
+
+@Serializable
+data class ClipGradient(
+    val points: List<ClipGradientPoint> = emptyList(),
+    @SerialName("points_capable") val pointsCapable: Int? = null,
+    val mode: String? = null,
+    @SerialName("mode_values") val modeValues: List<String> = emptyList(),
+)
+
+@Serializable
 data class ClipLight(
     val id: String,
     val metadata: ClipMetadata? = null,
@@ -63,6 +74,7 @@ data class ClipLight(
     val dimming: ClipDimming? = null,
     val color: ClipColor? = null,
     @SerialName("color_temperature") val colorTemperature: ClipColorTemperature? = null,
+    val gradient: ClipGradient? = null,
     val owner: ClipResourceRef? = null,
 )
 
@@ -108,11 +120,18 @@ data class ClipColorUpdate(val xy: ClipXy)
 data class ClipColorTemperatureUpdate(val mirek: Int)
 
 @Serializable
+data class ClipGradientPointUpdate(val color: ClipColorUpdate)
+
+@Serializable
+data class ClipGradientUpdate(val points: List<ClipGradientPointUpdate>)
+
+@Serializable
 data class LightUpdate(
     val on: ClipOn? = null,
     val dimming: ClipDimming? = null,
     val color: ClipColorUpdate? = null,
     @SerialName("color_temperature") val colorTemperature: ClipColorTemperatureUpdate? = null,
+    val gradient: ClipGradientUpdate? = null,
     val dynamics: ClipDynamics? = null,
 )
 
@@ -121,3 +140,40 @@ data class ClipSceneRecall(val action: String = "active", val duration: Int? = n
 
 @Serializable
 data class SceneRecallUpdate(val recall: ClipSceneRecall)
+
+@Serializable
+data class ClipPosition(val x: Double, val y: Double, val z: Double)
+
+@Serializable
+data class ClipChannelMember(val service: ClipResourceRef, val index: Int? = null)
+
+@Serializable
+data class ClipEntertainmentChannel(
+    @SerialName("channel_id") val channelId: Int,
+    val position: ClipPosition? = null,
+    val members: List<ClipChannelMember> = emptyList(),
+)
+
+@Serializable
+data class ClipEntertainmentConfiguration(
+    val id: String,
+    val metadata: ClipMetadata? = null,
+    @SerialName("configuration_type") val configurationType: String? = null,
+    val status: String? = null,
+    @SerialName("active_streamer") val activeStreamer: ClipResourceRef? = null,
+    val channels: List<ClipEntertainmentChannel> = emptyList(),
+    @SerialName("light_services") val lightServices: List<ClipResourceRef> = emptyList(),
+) {
+    val active: Boolean get() = status == "active"
+}
+
+@Serializable
+data class ClipEntertainment(val id: String, val owner: ClipResourceRef? = null)
+
+@Serializable
+data class EntertainmentActionUpdate(val action: String) {
+    companion object {
+        val START = EntertainmentActionUpdate("start")
+        val STOP = EntertainmentActionUpdate("stop")
+    }
+}

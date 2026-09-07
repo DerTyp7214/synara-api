@@ -8,6 +8,7 @@ import dev.dertyp.data.HueTargetType
 import dev.dertyp.data.HueTransitionMode
 import dev.dertyp.data.HueUserLink
 import dev.dertyp.data.SongAudioData
+import dev.dertyp.utils.HueColor
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
@@ -25,10 +26,17 @@ class HuePaletteMapperTest {
     private fun link(targets: List<HueTarget> = lights, intensity: HueIntensity = HueIntensity.MEDIUM, mode: HueTransitionMode = HueTransitionMode.FIXED, ms: Int = 400, onStop: HueStopMode = HueStopMode.KEEP) =
         HueUserLink(UUID.randomUUID(), true, targets, intensity, mode, ms, onStop)
 
+    private val strip = HueTarget(HueTargetType.LIGHT, "s1", "Aisle")
+    private val lamp = HueTarget(HueTargetType.LIGHT, "p1", "Bench")
+    private val area = HueTarget(HueTargetType.ENTERTAINMENT, "e1", "TV area")
+    private val gradientProfiles = mapOf("s1" to LightProfile(gradientPoints = 5))
+
     private val red = 0xFFE01020.toInt()
     private val blue = 0xFF1030E0.toInt()
     private val grey = 0xFF808080.toInt()
     private val nearBlack = 0xFF101010.toInt()
+
+    private fun xy(argb: Int): ClipXy = HueColor.argbToXy(argb).let { ClipXy(it.x, it.y) }
 
     @Test
     fun `vivid colors are kept, greys dropped, hues deduplicated`() {
@@ -152,6 +160,55 @@ class HuePaletteMapperTest {
         assertEquals(10_000L, HuePaletteMapper.barMs(10.0))
         assertEquals(2_000L, HuePaletteMapper.barMs(400.0))
         assertEquals(6_000L, HuePaletteMapper.barMs(null))
+    }
+
+    @Test
+    fun `a gradient light spreads the palette over its points instead of a single color`() {
+        val result = HuePaletteMapper.frame(listOf(red, blue, grey), listOf(strip), 0, 50, 1000, gradientProfiles)
+        val update = (result.commands.single() as HueLightCommand).update
+        assertNull(update.color)
+        val points = update.gradient!!.points
+        assertEquals(3, points.size)
+        assertEquals(listOf(xy(red), xy(blue), xy(grey)), points.map { it.color.xy })
+        assertEquals(listOf(red), result.colors)
+        assertEquals(xy(result.colors.single()), points.first().color.xy)
+    }
+
+    @Test
+    fun `a single color palette leaves the gradient unset`() {
+        val update = (HuePaletteMapper.frame(listOf(red), listOf(strip), 0, 50, 1000, gradientProfiles).commands.single() as HueLightCommand).update
+        assertNull(update.gradient)
+        assertEquals(xy(red), update.color!!.xy)
+    }
+
+    @Test
+    fun `a frame step shifts the gradient window`() {
+        val update = (HuePaletteMapper.frame(listOf(red, blue, grey), listOf(strip), 1, 50, 1000, gradientProfiles).commands.single() as HueLightCommand).update
+        assertEquals(listOf(xy(blue), xy(grey), xy(red)), update.gradient!!.points.map { it.color.xy })
+    }
+
+    @Test
+    fun `a gradient light and a plain light share the running index`() {
+        val result = HuePaletteMapper.frame(listOf(red, blue, grey), listOf(lamp, strip), 0, 50, 1000, gradientProfiles)
+        val commands = result.commands.map { it as HueLightCommand }
+        assertEquals(xy(red), commands.single { it.target.id == "s1" }.update.gradient!!.points.first().color.xy)
+        assertEquals(xy(blue), commands.single { it.target.id == "p1" }.update.color!!.xy)
+        assertEquals(listOf(red, blue), result.colors)
+    }
+
+    @Test
+    fun `an entertainment target never produces a command`() {
+        assertTrue(HuePaletteMapper.test(listOf(area)).commands.isEmpty())
+        assertTrue(HuePaletteMapper.frame(listOf(red, blue), listOf(area), 0, 50, 1000).commands.isEmpty())
+        assertTrue(HuePaletteMapper.stop(link(listOf(area), onStop = HueStopMode.OFF)).isEmpty())
+        assertEquals(3, HuePaletteMapper.test(listOf(area) + lights).commands.size)
+    }
+
+    @Test
+    fun `mapping uses the given targets instead of the link targets`() {
+        val result = HuePaletteMapper.map(listOf(blue), red, null, link(lights), listOf(strip))
+        assertEquals("s1", (result.commands.single() as HueLightCommand).target.id)
+        assertTrue(HuePaletteMapper.map(listOf(blue), red, null, link(lights), emptyList()).commands.isEmpty())
     }
 
     @Test

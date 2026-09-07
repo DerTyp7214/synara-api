@@ -32,6 +32,9 @@ interface HueBridgeApi {
     suspend fun zones(): List<ClipGroup>
     suspend fun groupedLights(): List<ClipGroupedLight>
     suspend fun scenes(): List<ClipScene>
+    suspend fun entertainmentConfigurations(): List<ClipEntertainmentConfiguration>
+    suspend fun entertainmentServices(): List<ClipEntertainment>
+    suspend fun setEntertainmentStreaming(id: String, start: Boolean)
     suspend fun putLight(id: String, update: LightUpdate)
     suspend fun putGroupedLight(id: String, update: LightUpdate)
     suspend fun recallScene(id: String, update: SceneRecallUpdate)
@@ -92,6 +95,11 @@ class HueBridgeClient(
     override suspend fun zones(): List<ClipGroup> = resource("zone")
     override suspend fun groupedLights(): List<ClipGroupedLight> = resource("grouped_light")
     override suspend fun scenes(): List<ClipScene> = resource("scene")
+    override suspend fun entertainmentConfigurations(): List<ClipEntertainmentConfiguration> = resource("entertainment_configuration")
+    override suspend fun entertainmentServices(): List<ClipEntertainment> = resource("entertainment")
+
+    override suspend fun setEntertainmentStreaming(id: String, start: Boolean) =
+        put("entertainment_configuration", id, if (start) EntertainmentActionUpdate.START else EntertainmentActionUpdate.STOP)
 
     override suspend fun putLight(id: String, update: LightUpdate) = put("light", id, update)
 

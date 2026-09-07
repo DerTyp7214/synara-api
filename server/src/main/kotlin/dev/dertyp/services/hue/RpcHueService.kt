@@ -16,17 +16,17 @@ class RpcHueService(
     private val user: User,
     private val service: HueService,
 ) : IHueService {
-    override suspend fun discoverBridges(): List<HueBridgeCandidate> = service.discover(force = true)
+    override suspend fun discoverBridges(): List<HueBridgeCandidate> = service.discover(user.id, force = true)
 
-    override suspend fun listBridges(): List<HueBridgeInfo> = service.listBridges()
+    override suspend fun listBridges(): List<HueBridgeInfo> = service.listBridges(user.id)
 
     override fun startPairing(ip: String): Flow<HuePairingStatus> = service.startPairing(user.id, ip)
 
-    override suspend fun removeBridge(bridgeId: UUID): Boolean = service.removeBridge(bridgeId)
+    override suspend fun removeBridge(bridgeId: UUID): Boolean = service.removeBridge(user.id, bridgeId)
 
-    override suspend fun listTargets(bridgeId: UUID): List<HueTarget> = service.listTargets(bridgeId)
+    override suspend fun listTargets(bridgeId: UUID): List<HueTarget> = service.listTargets(user.id, bridgeId)
 
-    override suspend fun listScenes(bridgeId: UUID): List<HueScene> = service.listScenes(bridgeId)
+    override suspend fun listScenes(bridgeId: UUID): List<HueScene> = service.listScenes(user.id, bridgeId)
 
     override suspend fun getLinks(): List<HueUserLink> = service.getLinks(user.id)
 

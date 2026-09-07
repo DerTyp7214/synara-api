@@ -636,7 +636,7 @@ A Hue bridge found on the network but not necessarily paired yet.
 | `bridgeId` | `String`? | Bridge hardware id (hex), when known. |
 | `ip` | `String` | IP address of the bridge. |
 | `modelId` | `String`? | Model id, when known. |
-| `paired` | `Boolean` | Whether this bridge is already paired with the server. |
+| `paired` | `Boolean` | Whether this bridge is already paired by the current user. |
 | `name` | `String`? | Name reported by the bridge, when it answered. |
 
 ### HueBridgeInfo <a name="devdertypdatahuebridgeinfo"></a>
@@ -721,23 +721,24 @@ What happens to the lights when playback stops.
 | `SCENE` | Recall the configured Hue scenes. |
 
 ### HueTarget <a name="devdertypdatahuetarget"></a>
-A light, room or zone on a bridge.
+A light, room, zone or entertainment area on a bridge.
 
 | Field | Type | Description |
 | :--- | :--- | :--- |
 | `type` | [HueTargetType](#devdertypdatahuetargettype) | Kind of target. |
-| `id` | `String` | Bridge resource id of the light, room or zone. |
+| `id` | `String` | Bridge resource id of the light, room, zone or entertainment configuration. |
 | `name` | `String` | Display name. |
 | `groupedLightId` | `String`? | Resource id of the grouped light for rooms and zones. |
 
 ### HueTargetType <a name="devdertypdatahuetargettype"></a>
-Kind of light target on a bridge.
+Kind of light target on a bridge, including entertainment areas.
 
 | Value | Description |
 | :--- | :--- |
 | `LIGHT` | A single light. |
 | `ROOM` | A room; controlled through its grouped light. |
 | `ZONE` | A zone; controlled through its grouped light. |
+| `ENTERTAINMENT` | An entertainment area; streamed over the Entertainment API at up to 25 frames per second, at most one per bridge link. |
 
 ### HueTransitionMode <a name="devdertypdatahuetransitionmode"></a>
 How the transition duration between colors is chosen.
@@ -754,7 +755,7 @@ A user's link to a bridge: which lights follow the user's playback and how.
 | :--- | :--- | :--- |
 | `bridgeId` | `PlatformUUID` | Server-side unique identifier of the bridge. |
 | `enabled` | `Boolean` | Whether the link is active. |
-| `targets` | `List`<[HueTarget](#devdertypdatahuetarget)> | Lights, rooms and zones that follow playback. |
+| `targets` | `List`<[HueTarget](#devdertypdatahuetarget)> | Lights, rooms and zones that follow playback; at most one entertainment area. |
 | `intensity` | [HueIntensity](#devdertypdatahueintensity) | Reaction strength. |
 | `transitionMode` | [HueTransitionMode](#devdertypdatahuetransitionmode) | Transition duration mode. |
 | `transitionMs` | `Int` | Transition duration in milliseconds for FIXED mode. |
@@ -3192,14 +3193,14 @@ Service for server reachability and handshake testing.
 | `handshake` | - | [HandshakeResponse](#devdertypdatahandshakeresponse) | - |  | Perform a handshake test to check server reachability and protocol support. |
 
 ### IHueService <a name="devdertypservicesihueservice"></a>
-Philips Hue bridges paired with this server and the current user's light links, driven by now-playing changes.
+Philips Hue bridges paired by the current user and their light links, driven by now-playing changes.
 
 | Function | Parameters | Returns | Permissions | Errors | Description |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| `discoverBridges` | - | `List`<[HueBridgeCandidate](#devdertypdatahuebridgecandidate)> | - |  | Discover Hue bridges on the local network via mDNS and the Hue cloud discovery endpoint. |
-| `listBridges` | - | `List`<[HueBridgeInfo](#devdertypdatahuebridgeinfo)> | - |  | Bridges already paired with this server. |
-| `startPairing` | `ip` (`String`): IP address of the bridge. | `Flow`<[HuePairingStatus](#devdertypdatahuepairingstatus)> | - |  | Pair with a bridge. Press the link button on the bridge while this flow polls for up to 30 seconds. |
-| `removeBridge` | `bridgeId` (`PlatformUUID`): Server-side bridge unique identifier. | `Boolean` | **Admin** |  | Remove a paired bridge together with every user link to it. |
+| `discoverBridges` | - | `List`<[HueBridgeCandidate](#devdertypdatahuebridgecandidate)> | - |  | Discover Hue bridges on the local network via mDNS and the Hue cloud discovery endpoint; paired is relative to the current user. |
+| `listBridges` | - | `List`<[HueBridgeInfo](#devdertypdatahuebridgeinfo)> | - |  | Bridges paired by the current user. |
+| `startPairing` | `ip` (`String`): IP address of the bridge. | `Flow`<[HuePairingStatus](#devdertypdatahuepairingstatus)> | - |  | Pair with a bridge. Press the link button on the bridge while this flow polls for up to 30 seconds. The bridge is stored for the current user; other users pair it separately. |
+| `removeBridge` | `bridgeId` (`PlatformUUID`): Server-side bridge unique identifier. | `Boolean` | - |  | Remove one of the current user's bridges together with the user's link to it. |
 | `listTargets` | `bridgeId` (`PlatformUUID`): Server-side bridge unique identifier. | `List`<[HueTarget](#devdertypdatahuetarget)> | - | IllegalArgumentException | Lights, rooms and zones exposed by a bridge. |
 | `listScenes` | `bridgeId` (`PlatformUUID`): Server-side bridge unique identifier. | `List`<[HueScene](#devdertypdatahuescene)> | - | IllegalArgumentException | Scenes exposed by a bridge, each scoped to a room or zone that the bridge reports. |
 | `getLinks` | - | `List`<[HueUserLink](#devdertypdatahueuserlink)> | - |  | The current user's light links. |

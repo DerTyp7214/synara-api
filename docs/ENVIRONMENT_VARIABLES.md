@@ -125,7 +125,7 @@ Most variables have sensible defaults and are **optional**. Only variables witho
 | `AUDIO_TRACKS_SECONDARY_PATH` | Optional secondary audio path. | No | - | `/data/Synara/other` |
 | `AUDIO_TRANSCODE_PATH` | Path for transcoded files. | No | `music/transcode` | `/data/Synara/Transcode` |
 | `DATA_ANIMATED_IMAGES_PATH` | Path for cached animated covers. | No | `data/animated-images` | `/data/Synara/AnimatedImages` |
-| `DATA_COVER_ASSETS_PATH` | Path containing cover asset packs (one directory with pack.json per pack). | No | `data/cover-assets` | - |
+| `DATA_COVER_ASSETS_PATH` | Path containing cover asset packs (one directory with pack.json per pack). | No | `data/cover-assets` | `/app/cover-assets` |
 | `DATA_IMAGES_PATH` | Path for cached images/covers. | No | `data/images` | `/data/Synara/Images` |
 | `YTDLP_CONFIG_PATH` | Path to yt-dlp.conf for yt-dlp. | No | - | `/data/config/yt-dlp.conf` |
 

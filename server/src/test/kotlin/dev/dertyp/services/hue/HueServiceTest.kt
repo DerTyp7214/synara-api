@@ -31,6 +31,7 @@ import io.mockk.mockk
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.runBlocking
+import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.insert
@@ -39,7 +40,9 @@ import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.params.ParameterizedTest
@@ -58,8 +61,29 @@ class HueServiceTest {
     private lateinit var api: HueBridgeApi
     private lateinit var service: HueService
     private val userId = UUID.randomUUID()
+    private val areaId = "0b216bc8-1d1a-4a2f-8b8c-4d5e6f708192"
     private val sent = CopyOnWriteArrayList<Pair<String, LightUpdate>>()
     private val recalled = CopyOnWriteArrayList<Pair<String, SceneRecallUpdate>>()
+    private val streaming = CopyOnWriteArrayList<Pair<String, Boolean>>()
+
+    private class FakeStream(private val failStart: Boolean = false) : HueEntertainmentStream {
+        @Volatile var started = false
+        @Volatile var closed = false
+        val frames = CopyOnWriteArrayList<ByteArray>()
+
+        override suspend fun start() {
+            if (failStart) throw HueBridgeException("handshake failed")
+            started = true
+        }
+
+        override fun send(frame: ByteArray) {
+            frames += frame
+        }
+
+        override fun close() {
+            closed = true
+        }
+    }
 
     private fun setup(dialect: DbDialect) {
         songService = mockk()
@@ -69,6 +93,9 @@ class HueServiceTest {
         coEvery { api.putLight(any(), any()) } answers { sent += (firstArg<String>() to secondArg<LightUpdate>()) }
         coEvery { api.putGroupedLight(any(), any()) } answers { sent += (firstArg<String>() to secondArg<LightUpdate>()) }
         coEvery { api.recallScene(any(), any()) } answers { recalled += (firstArg<String>() to secondArg<SceneRecallUpdate>()) }
+        coEvery { api.entertainmentConfigurations() } returns emptyList()
+        coEvery { api.entertainmentServices() } returns emptyList()
+        coEvery { api.setEntertainmentStreaming(any(), any()) } answers { streaming += (firstArg<String>() to secondArg<Boolean>()) }
         startKoin {
             modules(module {
                 single<HookBus> { HookService() }
@@ -99,17 +126,67 @@ class HueServiceTest {
         TestDatabase.cleanUp()
     }
 
-    private fun bridge(): UUID = transaction(database) {
+    private fun insertUser(name: String): UUID {
+        val newId = UUID.randomUUID()
+        transaction(database) {
+            UserTable.insert {
+                it[id] = newId
+                it[username] = name
+                it[passwordHash] = "hash"
+            }
+        }
+        return newId
+    }
+
+    private fun bridge(owner: UUID = userId, hardwareId: String = "001788fffe000001"): UUID = transaction(database) {
         HueBridgeTable.insertAndGetId {
-            it[bridgeId] = "001788fffe000001"
+            it[bridgeId] = hardwareId
             it[ip] = "192.0.2.10"
             it[name] = "Test Bridge"
             it[applicationKey] = "key"
+            it[clientKey] = "0123456789abcdef0123456789abcdef"
+            it[userId] = EntityID(owner, UserTable)
             it[createdAt] = 1L
         }.value
     }
 
     private fun light(id: String, name: String) = HueTarget(HueTargetType.LIGHT, id, name)
+
+    private fun colorLight(id: String, name: String, device: String, points: Int? = null) = ClipLight(
+        id,
+        ClipMetadata(name),
+        color = ClipColor(ClipXy(0.3, 0.3)),
+        gradient = points?.let { ClipGradient(pointsCapable = it) },
+        owner = ClipResourceRef(device, "device"),
+    )
+
+    private fun entertainmentBridge(active: Boolean = false) {
+        coEvery { api.lights() } returns listOf(
+            colorLight("l1", "Desk", "d1"),
+            colorLight("l2", "Shelf", "d2"),
+            colorLight("l3", "Lamp", "d3"),
+        )
+        coEvery { api.rooms() } returns emptyList()
+        coEvery { api.zones() } returns emptyList()
+        coEvery { api.entertainmentServices() } returns listOf(
+            ClipEntertainment("e1", ClipResourceRef("d1", "device")),
+            ClipEntertainment("e2", ClipResourceRef("d2", "device")),
+        )
+        coEvery { api.entertainmentConfigurations() } returns listOf(
+            ClipEntertainmentConfiguration(
+                id = areaId,
+                metadata = ClipMetadata("Living"),
+                status = if (active) "active" else "inactive",
+                channels = listOf(
+                    ClipEntertainmentChannel(0, ClipPosition(-0.5, 0.0, 0.0), listOf(ClipChannelMember(ClipResourceRef("e1", "entertainment"), 0))),
+                    ClipEntertainmentChannel(1, ClipPosition(0.5, 0.0, 0.0), listOf(ClipChannelMember(ClipResourceRef("e2", "entertainment"), 0))),
+                ),
+                lightServices = listOf(ClipResourceRef("l1", "light"), ClipResourceRef("l2", "light")),
+            ),
+        )
+    }
+
+    private fun area(id: String = areaId, name: String = "Living") = HueTarget(HueTargetType.ENTERTAINMENT, id, name)
 
     private suspend fun awaitSent(count: Int) {
         repeat(100) {
@@ -125,6 +202,22 @@ class HueServiceTest {
             delay(20)
         }
         throw AssertionError("expected $count scene recalls, got ${recalled.size}")
+    }
+
+    private suspend fun awaitStreaming(count: Int) {
+        repeat(150) {
+            if (streaming.size >= count) return
+            delay(20)
+        }
+        throw AssertionError("expected $count streaming actions, got $streaming")
+    }
+
+    private suspend fun awaitFrames(stream: FakeStream, count: Int) {
+        repeat(150) {
+            if (stream.frames.size >= count) return
+            delay(20)
+        }
+        throw AssertionError("expected $count frames, got ${stream.frames.size}")
     }
 
     private suspend fun awaitDimmed(threshold: Double): List<Double> {
@@ -143,6 +236,15 @@ class HueServiceTest {
         every { album } returns null
     }
 
+    private fun playingSong(songId: UUID, coverId: UUID, palette: List<Int>, duration: Long = 60_000L): UserSong {
+        val song = song(songId, coverId)
+        every { song.duration } returns duration
+        coEvery { songService.byIds(listOf(songId), userId) } returns listOf(song)
+        coEvery { imageService.byId(coverId) } returns Image(coverId, "p", "h", "o", palette = palette, primaryColor = palette.first())
+        coEvery { audioAnalysisService.getAudioDataBatch(listOf(songId)) } returns emptyMap()
+        return song
+    }
+
     @ParameterizedTest
     @EnumSource(DbDialect::class)
     fun `links round trip and validate targets`(dialect: DbDialect) = runBlocking {
@@ -158,9 +260,57 @@ class HueServiceTest {
         assertThrows(IllegalArgumentException::class.java) { runBlocking { service.setLink(userId, HueUserLink(UUID.randomUUID(), enabled = false)) } }
         assertTrue(service.removeLink(userId, bridgeId))
         assertTrue(service.getLinks(userId).isEmpty())
-        assertEquals(1, service.listBridges().size)
-        assertTrue(service.removeBridge(bridgeId))
-        assertTrue(service.listBridges().isEmpty())
+        assertEquals(1, service.listBridges(userId).size)
+        assertTrue(service.removeBridge(userId, bridgeId))
+        assertTrue(service.listBridges(userId).isEmpty())
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `a bridge belongs to the user who paired it`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val second = insertUser("second")
+        val bridgeId = bridge()
+
+        assertTrue(service.listBridges(second).isEmpty())
+        assertNull(service.bridge(second, bridgeId))
+        assertThrows(IllegalArgumentException::class.java) {
+            runBlocking { service.setLink(second, HueUserLink(bridgeId, true, listOf(light("l1", "Desk")))) }
+        }
+        assertThrows(IllegalArgumentException::class.java) { runBlocking { service.listTargets(second, bridgeId) } }
+        assertThrows(IllegalArgumentException::class.java) { runBlocking { service.test(second, bridgeId, listOf(light("l1", "Desk"))) } }
+        assertFalse(service.removeBridge(second, bridgeId))
+
+        assertEquals(1, service.listBridges(userId).size)
+        assertNotNull(service.bridge(userId, bridgeId))
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `two users pair the same bridge into separate rows`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val second = insertUser("second")
+        val pairApi = mockk<HueBridgeApi>(relaxed = true)
+        var attempts = 0
+        coEvery { pairApi.pair(any()) } answers { if (++attempts < 2) null else HuePairSuccess("app-key", "client-key") }
+        coEvery { pairApi.bridge() } returns ClipBridge("uuid", "001788FFFE0000AA")
+        service.pairingClientFactory = { _, _ -> pairApi }
+        service.authenticatedClientFactory = { _, _, _ -> pairApi }
+        service.pairingPoll = 50
+
+        val first = service.beginPairing(userId, "192.0.2.20")
+        assertEquals(1, service.activePairings(userId).size)
+        assertTrue(service.activePairings(second).isEmpty())
+        assertNotNull(service.pairingSession(userId, "192.0.2.20"))
+        assertNull(service.pairingSession(second, "192.0.2.20"))
+        first.job?.join()
+
+        assertEquals(HuePairingState.PAIRED, service.startPairing(second, "192.0.2.20").toList().last().state)
+        val mine = service.listBridges(userId).single()
+        val theirs = service.listBridges(second).single()
+        assertEquals("001788fffe0000aa", mine.bridgeId)
+        assertEquals(mine.bridgeId, theirs.bridgeId)
+        assertNotEquals(mine.id, theirs.id)
     }
 
     @ParameterizedTest
@@ -197,6 +347,59 @@ class HueServiceTest {
         service.onNowPlaying(HookEvent.NowPlayingChanged(userId, null, 7, 0))
         awaitSent(4)
         assertTrue(sent.drop(2).all { it.second.on?.on == false })
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `rooms are expanded into their color lights and switched off as a group`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val bridgeId = bridge()
+        coEvery { api.lights() } returns listOf(
+            colorLight("l1", "Desk", "d1"),
+            colorLight("l2", "Shelf", "d2"),
+            ClipLight("plug", ClipMetadata("Plug"), owner = ClipResourceRef("d3", "device")),
+        )
+        coEvery { api.rooms() } returns listOf(
+            ClipGroup(
+                "r1",
+                ClipMetadata("Living"),
+                children = listOf(ClipResourceRef("d1", "device"), ClipResourceRef("d2", "device"), ClipResourceRef("d3", "device")),
+                services = listOf(ClipResourceRef("g1", "grouped_light")),
+            ),
+        )
+        coEvery { api.zones() } returns emptyList()
+        service.setLink(userId, HueUserLink(bridgeId, true, listOf(HueTarget(HueTargetType.ROOM, "r1", "Living", "g1")), onStop = HueStopMode.OFF))
+        val songId = UUID.randomUUID()
+        playingSong(songId, UUID.randomUUID(), listOf(0xFFE01020.toInt(), 0xFF1030E0.toInt()))
+
+        service.onNowPlaying(HookEvent.NowPlayingChanged(userId, songId, 1, 0))
+        awaitSent(2)
+        delay(100)
+        assertEquals(setOf("l1", "l2"), sent.map { it.first }.toSet())
+        assertEquals(2, sent.mapNotNull { it.second.color?.xy }.distinct().size)
+
+        service.onNowPlaying(HookEvent.NowPlayingChanged(userId, null, 2, 0))
+        awaitSent(3)
+        assertEquals("g1" to false, sent.last().first to sent.last().second.on?.on)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `a gradient light receives one point per palette color`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val bridgeId = bridge()
+        coEvery { api.lights() } returns listOf(colorLight("l1", "Strip", "d1", points = 3))
+        coEvery { api.rooms() } returns emptyList()
+        coEvery { api.zones() } returns emptyList()
+        service.setLink(userId, HueUserLink(bridgeId, true, listOf(light("l1", "Strip"))))
+        val songId = UUID.randomUUID()
+        playingSong(songId, UUID.randomUUID(), listOf(0xFFE01020.toInt(), 0xFF1030E0.toInt(), 0xFF20E030.toInt()))
+
+        service.onNowPlaying(HookEvent.NowPlayingChanged(userId, songId, 1, 0))
+        awaitSent(1)
+        val update = sent.single().second
+        assertNull(update.color)
+        assertEquals(3, update.gradient?.points?.size)
     }
 
     @ParameterizedTest
@@ -259,6 +462,17 @@ class HueServiceTest {
         )
         val loaded = service.getLinks(userId).single()
         assertEquals(1, loaded.stopScenes.size)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `setLink rejects more than one entertainment area`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val bridgeId = bridge()
+        assertThrows(IllegalArgumentException::class.java) {
+            runBlocking { service.setLink(userId, HueUserLink(bridgeId, true, listOf(area(), area("0b216bc8-1d1a-4a2f-8b8c-4d5e6f708193", "Kitchen")))) }
+        }
+        assertNotNull(service.setLink(userId, HueUserLink(bridgeId, true, listOf(area(), light("l3", "Lamp")))))
     }
 
     @ParameterizedTest
@@ -378,6 +592,114 @@ class HueServiceTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
+    fun `an entertainment area streams while a song plays and stops afterwards`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val bridgeId = bridge()
+        entertainmentBridge()
+        val stream = FakeStream()
+        service.streamFactory = { _, _ -> stream }
+        service.setLink(userId, HueUserLink(bridgeId, true, listOf(area(), light("l1", "Desk"), light("l3", "Lamp")), onStop = HueStopMode.OFF))
+        val songId = UUID.randomUUID()
+        playingSong(songId, UUID.randomUUID(), listOf(0xFFE01020.toInt(), 0xFF1030E0.toInt()))
+
+        service.onNowPlaying(HookEvent.NowPlayingChanged(userId, songId, 1, System.currentTimeMillis()))
+        awaitFrames(stream, 3)
+        awaitSent(1)
+        assertTrue(stream.started)
+        assertEquals(1, service.activeStreams())
+        assertEquals(listOf(areaId to true), streaming.toList())
+        assertEquals(listOf("l3"), sent.map { it.first })
+
+        val nextSong = UUID.randomUUID()
+        playingSong(nextSong, UUID.randomUUID(), listOf(0xFF20E030.toInt(), 0xFFE0A010.toInt()))
+        service.onNowPlaying(HookEvent.NowPlayingChanged(userId, nextSong, 2, System.currentTimeMillis()))
+        awaitSent(2)
+        assertEquals(1, service.activeStreams())
+        assertFalse(stream.closed)
+        assertEquals(listOf(areaId to true), streaming.toList())
+
+        service.onNowPlaying(HookEvent.NowPlayingChanged(userId, null, 3, System.currentTimeMillis()))
+        awaitStreaming(2)
+        assertEquals(areaId to false, streaming.last())
+        assertTrue(stream.closed)
+        assertEquals(0, service.activeStreams())
+        awaitSent(5)
+        assertEquals(setOf("l1", "l2", "l3"), sent.drop(2).map { it.first }.toSet())
+        assertTrue(sent.drop(2).all { it.second.on?.on == false })
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `a foreign streamer is reported and the remaining lights keep their colors`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val bridgeId = bridge()
+        entertainmentBridge(active = true)
+        val stream = FakeStream()
+        service.streamFactory = { _, _ -> stream }
+        service.setLink(userId, HueUserLink(bridgeId, true, listOf(area())))
+        val songId = UUID.randomUUID()
+        playingSong(songId, UUID.randomUUID(), listOf(0xFFE01020.toInt(), 0xFF1030E0.toInt()))
+
+        service.onNowPlaying(HookEvent.NowPlayingChanged(userId, songId, 1, System.currentTimeMillis()))
+        delay(200)
+        assertEquals(0, service.activeStreams())
+        assertFalse(stream.started)
+        assertTrue(streaming.isEmpty())
+        assertTrue(sent.isEmpty())
+        assertTrue(service.listBridges(userId).single().lastError?.contains("already streamed") == true)
+
+        service.setLink(userId, HueUserLink(bridgeId, true, listOf(area(), light("l3", "Lamp"))))
+        val nextSong = UUID.randomUUID()
+        playingSong(nextSong, UUID.randomUUID(), listOf(0xFFE01020.toInt(), 0xFF1030E0.toInt()))
+        service.onNowPlaying(HookEvent.NowPlayingChanged(userId, nextSong, 2, System.currentTimeMillis()))
+        awaitSent(1)
+        assertEquals(listOf("l3"), sent.map { it.first })
+        assertEquals(0, service.activeStreams())
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `a failed handshake releases the entertainment area`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val bridgeId = bridge()
+        entertainmentBridge()
+        val stream = FakeStream(failStart = true)
+        service.streamFactory = { _, _ -> stream }
+        service.setLink(userId, HueUserLink(bridgeId, true, listOf(area())))
+        val songId = UUID.randomUUID()
+        playingSong(songId, UUID.randomUUID(), listOf(0xFFE01020.toInt(), 0xFF1030E0.toInt()))
+
+        service.onNowPlaying(HookEvent.NowPlayingChanged(userId, songId, 1, System.currentTimeMillis()))
+        awaitStreaming(2)
+        assertEquals(listOf(areaId to true, areaId to false), streaming.toList())
+        assertTrue(stream.closed)
+        assertFalse(stream.started)
+        assertEquals(0, service.activeStreams())
+        assertNotNull(service.listBridges(userId).single().lastError)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `tempo motion varies the streamed channel colors`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val bridgeId = bridge()
+        entertainmentBridge()
+        val stream = FakeStream()
+        service.streamFactory = { _, _ -> stream }
+        service.setLink(userId, HueUserLink(bridgeId, true, listOf(area()), motion = HueMotionMode.TEMPO, latencyMs = 0))
+        val songId = UUID.randomUUID()
+        playingSong(songId, UUID.randomUUID(), listOf(0xFFE01020.toInt(), 0xFF1030E0.toInt()))
+        coEvery { audioAnalysisService.getAudioTimeline(songId) } returns SongAudioTimeline(songId, beatsMs = List(120) { it * 500 })
+
+        service.onNowPlaying(HookEvent.NowPlayingChanged(userId, songId, 1, System.currentTimeMillis()))
+        awaitFrames(stream, 20)
+        assertEquals(1, service.activeStreams())
+        val payloads = stream.frames.map { it.drop(20) }.distinct()
+        assertTrue(payloads.size > 1, "expected varying channel data, got ${payloads.size} distinct payloads")
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
     fun `targets come from the bridge and test sends commands`(dialect: DbDialect) = runBlocking {
         setup(dialect)
         val bridgeId = bridge()
@@ -387,13 +709,24 @@ class HueServiceTest {
         )
         coEvery { api.rooms() } returns listOf(ClipGroup("r1", ClipMetadata("Living"), services = listOf(ClipResourceRef("g1", "grouped_light"))))
         coEvery { api.zones() } returns emptyList()
-        val targets = service.listTargets(bridgeId)
+        val targets = service.listTargets(userId, bridgeId)
         assertEquals(listOf(HueTarget(HueTargetType.ROOM, "r1", "Living", "g1"), HueTarget(HueTargetType.LIGHT, "l1", "Desk")), targets)
         assertTrue(service.test(userId, bridgeId, targets))
         awaitSent(2)
         assertEquals(setOf("g1", "l1"), sent.map { it.first }.toSet())
-        assertNotNull(service.listBridges().single().lastSeen)
+        assertNotNull(service.listBridges(userId).single().lastSeen)
         assertFalse(service.test(userId, bridgeId, emptyList()))
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `entertainment areas are offered as targets`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val bridgeId = bridge()
+        entertainmentBridge()
+        val targets = service.listTargets(userId, bridgeId)
+        assertEquals(area(), targets.last())
+        assertEquals(listOf("l1", "l2", "l3"), targets.filter { it.type == HueTargetType.LIGHT }.map { it.id })
     }
 
     @ParameterizedTest
@@ -416,11 +749,11 @@ class HueServiceTest {
                 HueScene("s2", "Read", HueTargetType.ZONE, "z1", "Desk"),
                 HueScene("s1", "Relax", HueTargetType.ROOM, "r1", "Living"),
             ),
-            service.listScenes(bridgeId),
+            service.listScenes(userId, bridgeId),
         )
-        service.listScenes(bridgeId)
+        service.listScenes(userId, bridgeId)
         coVerify(exactly = 1) { api.scenes() }
-        assertThrows(IllegalArgumentException::class.java) { runBlocking { service.listScenes(UUID.randomUUID()) } }
+        assertThrows(IllegalArgumentException::class.java) { runBlocking { service.listScenes(userId, UUID.randomUUID()) } }
     }
 
     @ParameterizedTest
@@ -438,10 +771,10 @@ class HueServiceTest {
         val states = service.startPairing(userId, "192.0.2.20").toList()
         assertEquals(HuePairingState.PAIRED, states.last().state)
         assertTrue(states.any { it.state == HuePairingState.WAITING_FOR_BUTTON })
-        val stored = service.listBridges().single()
+        val stored = service.listBridges(userId).single()
         assertEquals("001788fffe0000aa", stored.bridgeId)
         assertEquals("192.0.2.20", stored.ip)
         assertEquals(stored, states.last().bridge)
-        assertTrue(service.activePairings().isEmpty())
+        assertTrue(service.activePairings(userId).isEmpty())
     }
 }

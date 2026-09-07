@@ -12,6 +12,8 @@ import dev.dertyp.utils.HueColor
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
+data class LightProfile(val gamut: HueColor.Gamut? = null, val gradientPoints: Int? = null)
+
 object HuePaletteMapper {
     data class Result(val commands: List<HueCommand>, val colors: List<Int>, val palette: List<Int> = emptyList())
 
@@ -27,18 +29,19 @@ object HuePaletteMapper {
         primary: Int?,
         audio: SongAudioData?,
         link: HueUserLink,
-        gamuts: Map<String, HueColor.Gamut> = emptyMap(),
+        targets: List<HueTarget> = link.targets,
+        profiles: Map<String, LightProfile> = emptyMap(),
     ): Result {
-        if (link.targets.isEmpty()) return Result(emptyList(), emptyList())
+        if (targets.isEmpty()) return Result(emptyList(), emptyList())
         val energy = audio?.energy ?: SongAudioData.DEFAULT_ENERGY
         val colors = pickColors(listOfNotNull(primary) + palette, energy, audio?.valence ?: SongAudioData.DEFAULT_VALENCE)
         val brightness = brightness(link.intensity, energy, audio?.loudness)
         val transition = transition(link, audio?.bpm)
-        return assign(colors, link.targets, brightness, transition, gamuts)
+        return assign(colors, targets, brightness, transition, profiles)
     }
 
-    fun test(targets: List<HueTarget>, gamuts: Map<String, HueColor.Gamut> = emptyMap()): Result =
-        assign(TEST_COLORS, targets, 80, 300, gamuts)
+    fun test(targets: List<HueTarget>, profiles: Map<String, LightProfile> = emptyMap()): Result =
+        assign(TEST_COLORS, targets, 80, 300, profiles)
 
     fun frame(
         colors: List<Int>,
@@ -46,12 +49,12 @@ object HuePaletteMapper {
         step: Int,
         brightness: Int,
         transitionMs: Int,
-        gamuts: Map<String, HueColor.Gamut> = emptyMap(),
+        profiles: Map<String, LightProfile> = emptyMap(),
     ): Result {
         if (colors.isEmpty()) return Result(emptyList(), emptyList())
         val offset = ((step % colors.size) + colors.size) % colors.size
         val rotated = colors.drop(offset) + colors.take(offset)
-        return assign(rotated, targets, brightness, transitionMs, gamuts)
+        return assign(rotated, targets, brightness, transitionMs, profiles)
     }
 
     fun levelFactor(level: Double, floor: Double = 0.55): Double = floor + (1 - floor) * level.coerceIn(0.0, 1.0)
@@ -62,7 +65,9 @@ object HuePaletteMapper {
         beatMs(bpm)?.let { (it.toLong() * BEATS_PER_BAR).coerceIn(2_000, 10_000) } ?: DEFAULT_BAR_MS
 
     fun stop(link: HueUserLink): List<HueCommand> = when (link.onStop) {
-        HueStopMode.OFF -> link.targets.map { HueLightCommand(it, LightUpdate(on = ClipOn(false), dynamics = ClipDynamics(link.transitionMs))) }
+        HueStopMode.OFF -> link.targets
+            .filter { it.type == HueTargetType.LIGHT || it.type == HueTargetType.ROOM || it.type == HueTargetType.ZONE }
+            .map { HueLightCommand(it, LightUpdate(on = ClipOn(false), dynamics = ClipDynamics(link.transitionMs))) }
         HueStopMode.SCENE -> link.stopScenes.map { HueSceneCommand(it.id, SceneRecallUpdate(ClipSceneRecall(duration = link.transitionMs))) }
         HueStopMode.KEEP -> emptyList()
     }
@@ -103,35 +108,52 @@ object HuePaletteMapper {
         HueTransitionMode.BPM -> bpm?.takeIf { it > 0 }?.let { (60_000 / it).roundToInt().coerceIn(200, 1500) } ?: link.transitionMs.coerceIn(0, 10_000)
     }
 
-    private fun assign(colors: List<Int>, targets: List<HueTarget>, brightness: Int, transition: Int, gamuts: Map<String, HueColor.Gamut>): Result {
+    private fun assign(colors: List<Int>, targets: List<HueTarget>, brightness: Int, transition: Int, profiles: Map<String, LightProfile>): Result {
         if (colors.isEmpty() || targets.isEmpty()) return Result(emptyList(), emptyList())
         val lights = targets.filter { it.type == HueTargetType.LIGHT }.sortedBy { it.name }
-        val groups = targets.filter { it.type != HueTargetType.LIGHT }
+        val groups = targets.filter { it.type == HueTargetType.ROOM || it.type == HueTargetType.ZONE }
         val commands = ArrayList<HueCommand>()
         val applied = ArrayList<Int>()
         groups.forEach { target ->
-            commands += command(target, colors[0], brightness, transition, gamuts)
+            commands += command(target, colors, 0, 1, brightness, transition, profiles)
             applied += colors[0]
         }
         lights.forEachIndexed { index, target ->
-            val color = colors[index % colors.size]
-            commands += command(target, color, brightness, transition, gamuts)
-            applied += color
+            val points = profiles[target.id]?.gradientPoints?.coerceAtMost(colors.size)?.takeIf { it >= 2 } ?: 1
+            commands += command(target, colors, index, points, brightness, transition, profiles)
+            applied += colors[index % colors.size]
         }
         return Result(commands, applied, colors)
     }
 
-    private fun command(target: HueTarget, argb: Int, brightness: Int, transition: Int, gamuts: Map<String, HueColor.Gamut>): HueCommand {
-        val xy = HueColor.argbToXy(argb, gamuts[target.id] ?: HueColor.GAMUT_C)
+    private fun command(
+        target: HueTarget,
+        colors: List<Int>,
+        index: Int,
+        points: Int,
+        brightness: Int,
+        transition: Int,
+        profiles: Map<String, LightProfile>,
+    ): HueCommand {
+        val gamut = profiles[target.id]?.gamut ?: HueColor.GAMUT_C
+        val gradient = if (points < 2) null else ClipGradientUpdate(
+            List(points) { offset -> ClipGradientPointUpdate(colorUpdate(colors[(index + offset) % colors.size], gamut)) },
+        )
         return HueLightCommand(
             target,
             LightUpdate(
                 on = ClipOn(true),
                 dimming = ClipDimming(brightness.toDouble()),
-                color = ClipColorUpdate(ClipXy(xy.x, xy.y)),
+                color = if (gradient == null) colorUpdate(colors[index % colors.size], gamut) else null,
+                gradient = gradient,
                 dynamics = ClipDynamics(transition),
             ),
         )
+    }
+
+    private fun colorUpdate(argb: Int, gamut: HueColor.Gamut): ClipColorUpdate {
+        val xy = HueColor.argbToXy(argb, gamut)
+        return ClipColorUpdate(ClipXy(xy.x, xy.y))
     }
 
     private fun hueDistance(a: Double, b: Double): Double {

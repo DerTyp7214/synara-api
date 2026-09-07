@@ -40,9 +40,11 @@ class CoverAssetPackService(private val config: CoverConfig) : Service() {
                 }
                 packs += pack
             }
+        } else {
+            logger.warn("Cover asset directory ${root.toAbsolutePath()} does not exist")
         }
         loaded = packs
-        logger.info("Loaded ${packs.size - 1} cover asset pack(s) from $root")
+        logger.info("Loaded ${packs.size - 1} cover asset pack(s) from ${root.toAbsolutePath()}")
         packs
     }
 

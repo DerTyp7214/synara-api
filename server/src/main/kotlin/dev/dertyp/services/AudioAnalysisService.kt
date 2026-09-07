@@ -128,14 +128,14 @@ open class AudioAnalysisService : IAudioAnalysisService, Service() {
             .map { it[SongTable.id].value }
     }
 
-    suspend fun getSongIdsMissingTimeline(limit: Int, retryFailedAfterMs: Long = TIMELINE_RETRY_INTERVAL): List<PlatformUUID> = dbQuery {
+    suspend fun getSongIdsMissingTimeline(limit: Int? = null, retryFailedAfterMs: Long = TIMELINE_RETRY_INTERVAL): List<PlatformUUID> = dbQuery {
         val cutoff = System.currentTimeMillis() - retryFailedAfterMs
         SongTable
             .leftJoin(SongAudioTimelineTable)
             .select(SongTable.id)
             .where { SongAudioTimelineTable.songId.isNull() }
             .orWhere { (SongAudioTimelineTable.status eq AudioTimelineStatus.FAILED) and (SongAudioTimelineTable.analyzedAt less cutoff) }
-            .limit(limit)
+            .let { query -> if (limit != null) query.limit(limit) else query }
             .map { it[SongTable.id].value }
     }
 
@@ -146,12 +146,12 @@ open class AudioAnalysisService : IAudioAnalysisService, Service() {
             ?.let { mapTimeline(it) }
     }
 
-    suspend fun getSongIdsWithStaleTimeline(limit: Int): List<PlatformUUID> = dbQuery {
+    suspend fun getSongIdsWithStaleTimeline(limit: Int? = null): List<PlatformUUID> = dbQuery {
         SongAudioTimelineTable
             .select(SongAudioTimelineTable.songId)
             .where { SongAudioTimelineTable.status neq AudioTimelineStatus.FAILED }
             .andWhere { SongAudioTimelineTable.version less AudioTimelineCodec.VERSION }
-            .limit(limit)
+            .let { query -> if (limit != null) query.limit(limit) else query }
             .map { it[SongAudioTimelineTable.songId].value }
     }
 

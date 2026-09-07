@@ -58,16 +58,16 @@ class HueSettingsContribution(private val hue: HueService) : UiContribution(
     order = 60,
 ) {
     override suspend fun render(scope: UiRenderScope): UiComponent {
-        val bridges = hue.listBridges()
+        val bridges = hue.listBridges(scope.user.id)
         val children = ArrayList<UiComponent>()
 
-        hue.activePairings().forEach { session ->
+        hue.activePairings(scope.user.id).forEach { session ->
             children += UiComponent.Live("$LIVE_PAIRING_PREFIX${session.ip}", pairingComponent(scope, session.state.value.state, session.state.value.message))
         }
 
         if (bridges.isEmpty()) {
             children += UiComponent.Text(scope.t("hue.noBridges"), UiTextStyle.BODY, UiTone.MUTED)
-            val candidates = hue.cachedDiscovery().filter { !it.paired }
+            val candidates = hue.cachedDiscovery(scope.user.id).filter { !it.paired }
             if (candidates.isNotEmpty()) {
                 children += UiComponent.Section(
                     title = scope.t("hue.discovered"),
@@ -94,7 +94,7 @@ class HueSettingsContribution(private val hue: HueService) : UiContribution(
         val links = hue.getLinks(scope.user.id).associateBy { it.bridgeId }
         bridges.forEach { bridge ->
             val link = links[bridge.id] ?: HueUserLink(bridgeId = bridge.id)
-            val targets = runCatching { hue.listTargets(bridge.id) }
+            val targets = runCatching { hue.listTargets(scope.user.id, bridge.id) }
             val formId = "$FORM_LINK_PREFIX${bridge.id}"
             val fields = ArrayList<UiComponent>()
             fields += UiComponent.Row(
@@ -120,6 +120,24 @@ class HueSettingsContribution(private val hue: HueService) : UiContribution(
                 section("hue.targets.rooms", HueTargetType.ROOM)
                 section("hue.targets.zones", HueTargetType.ZONE)
                 section("hue.targets.lights", HueTargetType.LIGHT)
+                val areas = list.filter { it.type == HueTargetType.ENTERTAINMENT }
+                if (areas.isNotEmpty()) {
+                    val selectedArea = areas.firstOrNull { (it.type to it.id) in selected }
+                    fields += UiComponent.Section(
+                        title = scope.t("hue.targets.entertainment"),
+                        collapsible = true,
+                        collapsed = selectedArea == null,
+                        children = listOf(
+                            UiComponent.Text(scope.t("hue.targets.entertainment.helper"), UiTextStyle.CAPTION, UiTone.MUTED),
+                            UiComponent.Select(
+                                FIELD_ENTERTAINMENT,
+                                scope.t("hue.targets.entertainment.area"),
+                                selectedArea?.id ?: "",
+                                listOf(UiOption("", scope.t("hue.targets.entertainment.none"))) + areas.map { UiOption(it.id, it.name) },
+                            ),
+                        ),
+                    )
+                }
             }.onFailure {
                 fields += UiComponent.Text(scope.t("hue.bridge.unreachable", "reason" to (it.message ?: "")), UiTextStyle.CAPTION, UiTone.ERROR)
             }
@@ -127,7 +145,7 @@ class HueSettingsContribution(private val hue: HueService) : UiContribution(
             fields += UiComponent.Select(FIELD_TRANSITION_MODE, scope.t("hue.transitionMode"), link.transitionMode.name, HueTransitionMode.entries.map { UiOption(it.name, scope.t("hue.transitionMode.${it.name}")) })
             fields += UiComponent.NumberField(FIELD_TRANSITION_MS, scope.t("hue.transitionMs"), link.transitionMs.toDouble(), min = 0.0, max = 5000.0, step = 50.0)
             fields += UiComponent.Select(FIELD_ON_STOP, scope.t("hue.onStop"), link.onStop.name, HueStopMode.entries.map { UiOption(it.name, scope.t("hue.onStop.${it.name}")) })
-            val scenes = runCatching { hue.listScenes(bridge.id) }.getOrDefault(emptyList())
+            val scenes = runCatching { hue.listScenes(scope.user.id, bridge.id) }.getOrDefault(emptyList())
             if (scenes.isNotEmpty()) {
                 val groups = scenes.groupBy { it.groupType to it.groupId }
                 fields += UiComponent.Section(
@@ -162,7 +180,7 @@ class HueSettingsContribution(private val hue: HueService) : UiContribution(
 
         val actions = ArrayList<UiComponent>()
         actions += UiComponent.Button(scope.t("hue.discover"), UiAction.Invoke(id, ACTION_DISCOVER), UiButtonStyle.TEXT, UiIcon(UiIconName.SEARCH))
-        if (scope.user.isAdmin) bridges.forEach { bridge ->
+        bridges.forEach { bridge ->
             actions += UiComponent.Button(
                 "${scope.t("hue.bridge.remove")}: ${bridge.name}",
                 UiAction.Invoke(id, ACTION_REMOVE, params = mapOf(FIELD_BRIDGE to UiValue.of(bridge.id.toString())), confirmText = scope.t("hue.bridge.removeConfirm")),
@@ -179,7 +197,7 @@ class HueSettingsContribution(private val hue: HueService) : UiContribution(
 
     override fun live(scope: UiRenderScope, key: String): Flow<UiLiveUpdate>? {
         if (!key.startsWith(LIVE_PAIRING_PREFIX)) return null
-        val session = hue.pairingSession(key.removePrefix(LIVE_PAIRING_PREFIX)) ?: return null
+        val session = hue.pairingSession(scope.user.id, key.removePrefix(LIVE_PAIRING_PREFIX)) ?: return null
         return session.state.map { UiLiveUpdate.Replace(pairingComponent(scope, it.state, it.message ?: it.bridge?.name)) }
     }
 
@@ -193,7 +211,7 @@ class HueSettingsContribution(private val hue: HueService) : UiContribution(
 
     override suspend fun invoke(scope: UiRenderScope, actionId: String, values: Map<String, UiValue>): UiInvokeResult = when (actionId) {
         ACTION_DISCOVER -> {
-            val found = hue.discover(force = true)
+            val found = hue.discover(scope.user.id, force = true)
             UiInvokeResult(UiInvokeStatus.OK, if (found.isEmpty()) scope.t("hue.noneFound") else null, refresh = true)
         }
         ACTION_PAIR -> {
@@ -207,7 +225,7 @@ class HueSettingsContribution(private val hue: HueService) : UiContribution(
         ACTION_SAVE -> save(scope, values)
         ACTION_TEST -> {
             val bridgeId = bridgeId(values) ?: return UiInvokeResult(UiInvokeStatus.ERROR, scope.t("hue.error.noBridge"))
-            val targets = selectedTargets(bridgeId, values)
+            val targets = selectedTargets(scope.user.id, bridgeId, values)
             if (targets.isEmpty()) UiInvokeResult(UiInvokeStatus.ERROR, scope.t("hue.error.noTargets"))
             else {
                 hue.test(scope.user.id, bridgeId, targets)
@@ -216,9 +234,9 @@ class HueSettingsContribution(private val hue: HueService) : UiContribution(
         }
         ACTION_REMOVE -> {
             val bridgeId = bridgeId(values)
-            if (!scope.user.isAdmin || bridgeId == null) UiInvokeResult(UiInvokeStatus.ERROR, scope.t("hue.error.noBridge"))
+            if (bridgeId == null) UiInvokeResult(UiInvokeStatus.ERROR, scope.t("hue.error.noBridge"))
             else {
-                hue.removeBridge(bridgeId)
+                hue.removeBridge(scope.user.id, bridgeId)
                 UiInvokeResult(UiInvokeStatus.OK, scope.t("hue.bridge.removed"), refresh = true)
             }
         }
@@ -228,12 +246,15 @@ class HueSettingsContribution(private val hue: HueService) : UiContribution(
     private suspend fun save(scope: UiRenderScope, values: Map<String, UiValue>): UiInvokeResult {
         val bridgeId = bridgeId(values) ?: return UiInvokeResult(UiInvokeStatus.ERROR, scope.t("hue.error.noBridge"))
         val enabled = values[FIELD_ENABLED]?.flag ?: false
-        val targets = selectedTargets(bridgeId, values)
+        val targets = selectedTargets(scope.user.id, bridgeId, values)
         if (enabled && targets.isEmpty()) {
             return UiInvokeResult(UiInvokeStatus.VALIDATION_ERROR, scope.t("hue.error.noTargets"), fieldErrors = mapOf(FIELD_ENABLED to scope.t("hue.error.noTargets")))
         }
+        if (targets.count { it.type == HueTargetType.ENTERTAINMENT } > 1) {
+            return UiInvokeResult(UiInvokeStatus.VALIDATION_ERROR, scope.t("hue.error.tooManyAreas"))
+        }
         val onStop = enumOr(values[FIELD_ON_STOP]?.text, HueStopMode.KEEP)
-        val stopScenes = selectedScenes(bridgeId, values)
+        val stopScenes = selectedScenes(scope.user.id, bridgeId, values)
         if (enabled && onStop == HueStopMode.SCENE && stopScenes.isEmpty()) {
             return UiInvokeResult(UiInvokeStatus.VALIDATION_ERROR, scope.t("hue.error.noScenes"), fieldErrors = mapOf(FIELD_ON_STOP to scope.t("hue.error.noScenes")))
         }
@@ -253,13 +274,17 @@ class HueSettingsContribution(private val hue: HueService) : UiContribution(
         return UiInvokeResult(UiInvokeStatus.OK, scope.t("hue.saved"), refresh = true)
     }
 
-    private suspend fun selectedTargets(bridgeId: UUID, values: Map<String, UiValue>): List<HueTarget> {
-        val available = runCatching { hue.listTargets(bridgeId) }.getOrDefault(emptyList())
-        return available.filter { values[targetKey(it)]?.flag == true }
+    private suspend fun selectedTargets(userId: UUID, bridgeId: UUID, values: Map<String, UiValue>): List<HueTarget> {
+        val available = runCatching { hue.listTargets(userId, bridgeId) }.getOrDefault(emptyList())
+        val entertainmentId = values[FIELD_ENTERTAINMENT]?.text
+        return available.filter {
+            if (it.type == HueTargetType.ENTERTAINMENT) it.id == entertainmentId
+            else values[targetKey(it)]?.flag == true
+        }
     }
 
-    private suspend fun selectedScenes(bridgeId: UUID, values: Map<String, UiValue>): List<HueScene> {
-        val available = runCatching { hue.listScenes(bridgeId) }.getOrDefault(emptyList())
+    private suspend fun selectedScenes(userId: UUID, bridgeId: UUID, values: Map<String, UiValue>): List<HueScene> {
+        val available = runCatching { hue.listScenes(userId, bridgeId) }.getOrDefault(emptyList())
         return available.filter { values[sceneKey(it.groupType, it.groupId)]?.text == it.id }
     }
 
@@ -282,6 +307,7 @@ class HueSettingsContribution(private val hue: HueService) : UiContribution(
         const val FIELD_BRIDGE = "bridge"
         const val FIELD_ENABLED = "enabled"
         const val FIELD_TARGET_PREFIX = "target:"
+        const val FIELD_ENTERTAINMENT = "entertainment"
         const val FIELD_SCENE_PREFIX = "scene:"
         const val FIELD_INTENSITY = "intensity"
         const val FIELD_TRANSITION_MODE = "transitionMode"

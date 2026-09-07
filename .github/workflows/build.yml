@@ -21,6 +21,7 @@ on:
       - listen-backup/**
       - common-listen-backup/**
       - Dockerfile.nobuild
+      - data/cover-assets/**
       - build.gradle.kts
       - gradle.properties
       - settings.gradle.kts
