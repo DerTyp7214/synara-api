@@ -5,7 +5,7 @@ import java.nio.ByteOrder
 import kotlin.math.roundToInt
 
 object AudioTimelineCodec {
-    const val VERSION = 2
+    const val VERSION = 3
     private const val MAX_DELTA = 0xFFFF
 
     fun encodeBeats(positionsSec: List<Double>): ByteArray {
@@ -42,5 +42,21 @@ object AudioTimelineCodec {
     fun decodeEnvelope(bytes: ByteArray, minDb: Float, maxDb: Float): FloatArray {
         val range = maxDb - minDb
         return FloatArray(bytes.size) { i -> minDb + (bytes[i].toInt() and 0xFF) / 255f * range }
+    }
+
+    fun encodeBands(bands: List<FloatArray>, minDb: Float, maxDb: Float): ByteArray {
+        if (bands.isEmpty()) return ByteArray(0)
+        val length = bands.minOf { it.size }
+        val buffer = ByteBuffer.allocate(bands.size * length)
+        for (band in bands) buffer.put(encodeEnvelope(band.copyOf(length), minDb, maxDb))
+        return buffer.array()
+    }
+
+    fun decodeBands(bytes: ByteArray, bandCount: Int, minDb: Float, maxDb: Float): List<FloatArray> {
+        if (bandCount <= 0 || bytes.size % bandCount != 0) return emptyList()
+        val length = bytes.size / bandCount
+        return List(bandCount) { i ->
+            decodeEnvelope(bytes.copyOfRange(i * length, (i + 1) * length), minDb, maxDb)
+        }
     }
 }

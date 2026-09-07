@@ -1,24 +1,29 @@
 package dev.dertyp.services.audio
 
+import dev.dertyp.data.AudioBand
 import org.bytedeco.ffmpeg.global.avutil
 import org.bytedeco.javacv.FFmpegFrameGrabber
 import java.io.File
 import java.nio.FloatBuffer
 import kotlin.math.PI
+import kotlin.math.ceil
 import kotlin.math.cos
+import kotlin.math.floor
 import kotlin.math.log10
+import kotlin.math.pow
+import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
 object RmsEnvelopeExtractor {
     const val MIN_DB = -70f
     const val MAX_DB = 0f
-    const val BASS_LOW_HZ = 30.0
-    const val BASS_HIGH_HZ = 150.0
+    const val BAND_HZ = 50
+    const val WINDOW_SEC = 0.08
     private const val HANN_POWER_GAIN = 0.375
 
-    data class Envelopes(val rmsDb: FloatArray, val bassDb: FloatArray)
+    data class Envelopes(val rmsDb: FloatArray, val bands: List<FloatArray>, val bandHz: Int)
 
-    fun extract(file: File, hz: Int = 10): Envelopes {
+    fun extract(file: File, hz: Int = 10, bandHz: Int = BAND_HZ): Envelopes {
         val grabber = FFmpegFrameGrabber(file.absolutePath).apply {
             sampleFormat = avutil.AV_SAMPLE_FMT_FLT
             start()
@@ -28,7 +33,7 @@ object RmsEnvelopeExtractor {
             val channels = grabber.audioChannels.coerceAtLeast(1)
             val windowSize = (sampleRate.toLong() * channels / hz).toInt().coerceAtLeast(1)
             val rms = ArrayList<Float>()
-            val bass = BassAnalyzer(sampleRate, channels, (sampleRate / hz).coerceAtLeast(1))
+            val analyzer = BandAnalyzer(sampleRate, channels, bandHz)
 
             var squareSum = 0.0
             var fill = 0
@@ -47,18 +52,42 @@ object RmsEnvelopeExtractor {
                             squareSum = 0.0
                             fill = 0
                         }
-                        bass.push(sample)
+                        analyzer.push(sample)
                     }
                 }
                 frame = grabber.grabFrame(true, false, true, false)
             }
             if (fill > 0) rms.add(toDb(squareSum, fill))
-            bass.flush()
-            return Envelopes(rms.toFloatArray(), bass.values.toFloatArray())
+            analyzer.flush()
+            return Envelopes(
+                rmsDb = rms.toFloatArray(),
+                bands = analyzer.values.map { it.toFloatArray() },
+                bandHz = analyzer.bandHz
+            )
         } finally {
             grabber.stop()
             grabber.release()
         }
+    }
+
+    fun bassEnvelope(bands: List<FloatArray>, bandHz: Int, hz: Int): FloatArray {
+        if (bands.size < 2) return FloatArray(0)
+        val sub = bands[AudioBand.SUB.ordinal]
+        val kick = bands[AudioBand.KICK.ordinal]
+        val frames = minOf(sub.size, kick.size)
+        if (frames == 0) return FloatArray(0)
+        val group = (bandHz / hz.coerceAtLeast(1)).coerceAtLeast(1)
+        val result = FloatArray(ceil(frames.toDouble() / group).toInt())
+        for (i in result.indices) {
+            val start = i * group
+            val end = minOf(start + group, frames)
+            var sum = 0.0
+            for (f in start until end) {
+                sum += 10.0.pow(sub[f] / 10.0) + 10.0.pow(kick[f] / 10.0)
+            }
+            result[i] = powerToDb(sum / (end - start))
+        }
+        return result
     }
 
     private fun toDb(squareSum: Double, count: Int): Float = rmsToDb(sqrt(squareSum / count))
@@ -68,44 +97,67 @@ object RmsEnvelopeExtractor {
         return (20.0 * log10(rms)).toFloat().coerceIn(MIN_DB, MAX_DB)
     }
 
-    private class BassAnalyzer(sampleRate: Int, private val channels: Int, private val windowSize: Int) {
-        val values = ArrayList<Float>()
-        private val fftSize = Fft.nextPowerOfTwo(windowSize)
+    private fun powerToDb(power: Double): Float {
+        if (power <= 0.0) return MIN_DB
+        return (10.0 * log10(power)).toFloat().coerceIn(MIN_DB, MAX_DB)
+    }
+
+    private class BandAnalyzer(sampleRate: Int, private val channels: Int, bandHz: Int) {
+        val bandHz = bandHz.coerceAtLeast(1)
+        val values: List<ArrayList<Float>> = AudioBand.entries.map { ArrayList<Float>() }
+        private val fftSize = Fft.nextPowerOfTwo((sampleRate * WINDOW_SEC).roundToInt())
+        private val half = fftSize / 2
+        private val hop = (sampleRate / this.bandHz).coerceAtLeast(1)
+        private val ring = DoubleArray(fftSize)
         private val re = DoubleArray(fftSize)
         private val im = DoubleArray(fftSize)
-        private val hann = DoubleArray(windowSize) { 0.5 - 0.5 * cos(2 * PI * it / windowSize) }
-        private val window = DoubleArray(windowSize)
-        private val lowBin = (BASS_LOW_HZ * fftSize / sampleRate).toInt().coerceAtLeast(1)
-        private val highBin = (BASS_HIGH_HZ * fftSize / sampleRate).toInt().coerceIn(lowBin, fftSize / 2)
+        private val hann = DoubleArray(fftSize) { 0.5 - 0.5 * cos(2 * PI * it / fftSize) }
+        private val lowBins = IntArray(AudioBand.entries.size)
+        private val highBins = IntArray(AudioBand.entries.size)
         private var channelFill = 0
         private var channelSum = 0.0
-        private var fill = 0
+        private var monoCount = 0L
+
+        init {
+            for (band in AudioBand.entries) {
+                val low = ceil(band.lowHz.toDouble() * fftSize / sampleRate).toInt().coerceAtLeast(1)
+                val high = floor(band.highHz.toDouble() * fftSize / sampleRate).toInt().coerceIn(low, fftSize / 2)
+                lowBins[band.ordinal] = low
+                highBins[band.ordinal] = high
+            }
+        }
 
         fun push(sample: Double) {
             channelSum += sample
             if (++channelFill < channels) return
-            window[fill++] = channelSum / channels
+            pushMono(channelSum / channels)
             channelSum = 0.0
             channelFill = 0
-            if (fill == windowSize) analyze()
         }
 
         fun flush() {
-            if (fill > 0) analyze()
+            repeat(half) { pushMono(0.0) }
+        }
+
+        private fun pushMono(sample: Double) {
+            ring[(monoCount % fftSize).toInt()] = sample
+            monoCount++
+            if (monoCount >= half && (monoCount - half) % hop == 0L) analyze()
         }
 
         private fun analyze() {
-            val count = fill
+            val head = (monoCount % fftSize).toInt()
             for (i in 0 until fftSize) {
-                re[i] = if (i < count) window[i] * hann[i] else 0.0
+                re[i] = ring[(head + i) % fftSize] * hann[i]
                 im[i] = 0.0
             }
             Fft.transform(re, im)
-            var power = 0.0
-            for (k in lowBin..highBin) power += re[k] * re[k] + im[k] * im[k]
-            val meanSquare = 2 * power / (fftSize.toDouble() * count * HANN_POWER_GAIN)
-            values.add(rmsToDb(sqrt(meanSquare)))
-            fill = 0
+            for (band in AudioBand.entries) {
+                var power = 0.0
+                for (k in lowBins[band.ordinal]..highBins[band.ordinal]) power += re[k] * re[k] + im[k] * im[k]
+                val meanSquare = 2 * power / (fftSize.toDouble() * fftSize * HANN_POWER_GAIN)
+                values[band.ordinal].add(powerToDb(meanSquare))
+            }
         }
     }
 }

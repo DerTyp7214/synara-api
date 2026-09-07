@@ -98,6 +98,19 @@ class HueEntertainmentRendererTest {
     }
 
     @Test
+    fun `a pulse decays to the floor passed with it`() {
+        val renderer = HueEntertainmentRenderer(listOf(1), 0.5, 100)
+        renderer.setPalette(listOf(white), 0, 0, 0)
+
+        renderer.pulse(1.0, 0, 200, 0.75)
+
+        assertEquals(65_535, renderer.tick(40).single().r)
+        assertEquals(57_311, renderer.tick(140).single().r)
+        assertEquals(49_087, renderer.tick(240).single().r)
+        assertEquals(49_087, renderer.tick(5_000).single().r)
+    }
+
+    @Test
     fun `a following pulse attacks from the current factor`() {
         val renderer = HueEntertainmentRenderer(listOf(1), 0.5, 100)
         renderer.setPalette(listOf(white), 0, 0, 0)

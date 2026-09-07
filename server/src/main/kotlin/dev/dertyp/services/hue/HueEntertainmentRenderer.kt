@@ -19,6 +19,7 @@ class HueEntertainmentRenderer(
     private var pulseFrom = 1.0
     private var pulsePeak = 1.0
     private var pulseDecayMs = MIN_DECAY_MS
+    private var pulseFloor = levelFloor
 
     fun setPalette(colors: List<Int>, step: Int, nowMs: Long, fadeMs: Int) {
         if (colors.isEmpty()) return
@@ -44,9 +45,10 @@ class HueEntertainmentRenderer(
         base = percent.coerceIn(0, 100)
     }
 
-    fun pulse(level: Double, nowMs: Long, decayMs: Int) {
+    fun pulse(level: Double, nowMs: Long, decayMs: Int, floor: Double = levelFloor) {
         pulseFrom = pulseFactor(nowMs)
-        pulsePeak = HuePaletteMapper.levelFactor(level, levelFloor)
+        pulseFloor = floor.coerceIn(0.0, 1.0)
+        pulsePeak = HuePaletteMapper.levelFactor(level, pulseFloor)
         pulseDecayMs = decayMs.coerceIn(MIN_DECAY_MS, MAX_DECAY_MS)
         pulseStartMs = nowMs
         pulsed = true
@@ -81,8 +83,8 @@ class HueEntertainmentRenderer(
         if (elapsed <= 0) return pulseFrom
         if (elapsed < ATTACK_MS) return pulseFrom + (pulsePeak - pulseFrom) * (elapsed / ATTACK_MS)
         val decayed = elapsed - ATTACK_MS
-        if (decayed >= pulseDecayMs) return levelFloor
-        return pulsePeak + (levelFloor - pulsePeak) * (decayed / pulseDecayMs)
+        if (decayed >= pulseDecayMs) return pulseFloor
+        return pulsePeak + (pulseFloor - pulsePeak) * (decayed / pulseDecayMs)
     }
 
     companion object {

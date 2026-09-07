@@ -3,6 +3,7 @@ package dev.dertyp.services
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
 import dev.dertyp.core.ApplicationScope
+import dev.dertyp.data.AudioBand
 import dev.dertyp.db.AlbumTable
 import dev.dertyp.db.AudioTimelineSource
 import dev.dertyp.db.AudioTimelineStatus
@@ -10,6 +11,9 @@ import dev.dertyp.db.SongAudioTimelineTable
 import dev.dertyp.db.SongTable
 import dev.dertyp.db.SongVariantTable
 import dev.dertyp.dbQuery
+import dev.dertyp.services.audio.AudioTimelineCodec
+import dev.dertyp.services.audio.highHz
+import dev.dertyp.services.audio.lowHz
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.ExperimentalSerializationApi
 import org.jetbrains.exposed.v1.jdbc.SchemaUtils
@@ -22,6 +26,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.EnumSource
 import java.util.UUID
+import kotlin.math.abs
 
 @OptIn(ExperimentalSerializationApi::class)
 class AudioTimelineTest {
@@ -89,5 +94,120 @@ class AudioTimelineTest {
         assertNotNull(ok)
         assertEquals("essentia", ok!!.source)
         assertTrue(ok.beatsMs.isEmpty())
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `band levels round trip through the timeline row`(dialect: DbDialect) = runBlocking {
+        TestDatabase.connect(dialect, "audio_timeline_bands_test")
+        val songId = UUID.randomUUID()
+        val fiveBands = AudioBand.entries.mapIndexed { index, _ -> FloatArray(20) { -70f + (index * 4 + it) * 2f } }
+        dbQuery {
+            SchemaUtils.create(AlbumTable, SongTable, SongVariantTable, SongAudioTimelineTable)
+            val album = AlbumTable.insert {
+                it[id] = UUID.randomUUID()
+                it[name] = "Album"
+            }[AlbumTable.id]
+            SongTable.insert {
+                it[SongTable.id] = songId
+                it[title] = "Song"
+                it[albumId] = album
+            }
+            SongAudioTimelineTable.insert {
+                it[SongAudioTimelineTable.songId] = songId
+                it[version] = 3
+                it[SongAudioTimelineTable.status] = AudioTimelineStatus.OK
+                it[beatSource] = AudioTimelineSource.ESSENTIA
+                it[analyzedAt] = System.currentTimeMillis()
+                it[bands] = AudioTimelineCodec.encodeBands(fiveBands, -70f, 0f)
+                it[bandCount] = 5
+                it[bandHz] = 50
+                it[envelopeMinDb] = -70.0
+                it[envelopeMaxDb] = 0.0
+            }
+        }
+        val service = AudioAnalysisService()
+        val timeline = service.getAudioTimeline(songId)
+        assertNotNull(timeline)
+        assertEquals(50, timeline!!.bandHz)
+        assertEquals(AudioBand.entries.size, timeline.bands.size)
+        val step = 70f / 255f
+        timeline.bands.forEachIndexed { index, band ->
+            val expectedBand = AudioBand.entries[index]
+            assertEquals(expectedBand, band.band)
+            assertEquals(expectedBand.lowHz, band.lowHz)
+            assertEquals(expectedBand.highHz, band.highHz)
+            val expectedValues = fiveBands[index]
+            band.levelsDb.forEachIndexed { i, value -> assertTrue(abs(value - expectedValues[i]) <= step, "band $index index $i") }
+        }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `a row without bands returns empty bands`(dialect: DbDialect) = runBlocking {
+        TestDatabase.connect(dialect, "audio_timeline_no_bands_test")
+        val songId = UUID.randomUUID()
+        dbQuery {
+            SchemaUtils.create(AlbumTable, SongTable, SongVariantTable, SongAudioTimelineTable)
+            val album = AlbumTable.insert {
+                it[id] = UUID.randomUUID()
+                it[name] = "Album"
+            }[AlbumTable.id]
+            SongTable.insert {
+                it[SongTable.id] = songId
+                it[title] = "Song"
+                it[albumId] = album
+            }
+            SongAudioTimelineTable.insert {
+                it[SongAudioTimelineTable.songId] = songId
+                it[version] = 3
+                it[SongAudioTimelineTable.status] = AudioTimelineStatus.OK
+                it[beatSource] = AudioTimelineSource.ESSENTIA
+                it[analyzedAt] = System.currentTimeMillis()
+            }
+        }
+        val service = AudioAnalysisService()
+        val timeline = service.getAudioTimeline(songId)
+        assertNotNull(timeline)
+        assertTrue(timeline!!.bands.isEmpty())
+        assertEquals(0, timeline.bandHz)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `stale timelines are those below the codec version`(dialect: DbDialect) = runBlocking {
+        TestDatabase.connect(dialect, "audio_timeline_stale_version_test")
+        val staleSongId = UUID.randomUUID()
+        val currentSongId = UUID.randomUUID()
+        dbQuery {
+            SchemaUtils.create(AlbumTable, SongTable, SongVariantTable, SongAudioTimelineTable)
+            val album = AlbumTable.insert {
+                it[id] = UUID.randomUUID()
+                it[name] = "Album"
+            }[AlbumTable.id]
+            listOf(staleSongId, currentSongId).forEach { id ->
+                SongTable.insert {
+                    it[SongTable.id] = id
+                    it[title] = "Song $id"
+                    it[albumId] = album
+                }
+            }
+            SongAudioTimelineTable.insert {
+                it[songId] = staleSongId
+                it[version] = 2
+                it[status] = AudioTimelineStatus.OK
+                it[beatSource] = AudioTimelineSource.ESSENTIA
+                it[analyzedAt] = System.currentTimeMillis()
+            }
+            SongAudioTimelineTable.insert {
+                it[songId] = currentSongId
+                it[version] = 3
+                it[status] = AudioTimelineStatus.OK
+                it[beatSource] = AudioTimelineSource.ESSENTIA
+                it[analyzedAt] = System.currentTimeMillis()
+            }
+        }
+        val service = AudioAnalysisService()
+        assertEquals(listOf(staleSongId), service.getSongIdsWithStaleTimeline())
     }
 }

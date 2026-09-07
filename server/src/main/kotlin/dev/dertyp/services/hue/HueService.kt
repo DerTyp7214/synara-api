@@ -747,7 +747,7 @@ class HueService : Service() {
                     KeyframeKind.DOWNBEAT -> 1
                     KeyframeKind.BEAT -> 0
                 }
-                val brightness = (base * HuePaletteMapper.levelFactor(keyframe.level, score.levelFloor)).roundToInt().coerceIn(1, 100)
+                val brightness = (base * HuePaletteMapper.levelFactor(keyframe.level, keyframe.floor)).roundToInt().coerceIn(1, 100)
                 val beat = keyframe.kind == KeyframeKind.BEAT
                 val cap = if (beat) MAX_BEAT_TRANSITION_MS else MAX_MOTION_TRANSITION_MS
                 val transition = ((nextAtMs ?: (keyframe.atMs + cap)) - keyframe.atMs).coerceIn(0, cap)
@@ -762,6 +762,7 @@ class HueService : Service() {
                                 keyframe.level,
                                 now,
                                 beatMs.coerceIn(HueEntertainmentRenderer.MIN_DECAY_MS, HueEntertainmentRenderer.MAX_DECAY_MS),
+                                keyframe.floor,
                             )
                         }
                         streamColors = currentColors()

@@ -2,6 +2,7 @@ package dev.dertyp.services.hue
 
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
+import dev.dertyp.data.AudioBand
 import dev.dertyp.data.HueIntensity
 import dev.dertyp.data.HueMotionMode
 import dev.dertyp.data.HuePairingState
@@ -12,6 +13,7 @@ import dev.dertyp.data.HueTargetType
 import dev.dertyp.data.HueTransitionMode
 import dev.dertyp.data.HueUserLink
 import dev.dertyp.data.Image
+import dev.dertyp.data.SongAudioBand
 import dev.dertyp.data.SongAudioData
 import dev.dertyp.data.SongAudioTimeline
 import dev.dertyp.data.UserSong
@@ -579,6 +581,49 @@ class HueServiceTest {
         }
         coEvery { audioAnalysisService.getAudioTimeline(songId) } returns
             SongAudioTimeline(songId, beatsMs = List(120) { it * 500 }, envelopeHz = 10, bassEnvelopeDb = bass)
+
+        service.onNowPlaying(HookEvent.NowPlayingChanged(userId, songId, 1, System.currentTimeMillis()))
+        awaitSent(6)
+        assertEquals(1, service.activeMotions())
+        coVerify(exactly = 1) { audioAnalysisService.getAudioTimeline(songId) }
+
+        val base = HuePaletteMapper.brightness(HueIntensity.MEDIUM, SongAudioData.DEFAULT_ENERGY, null)
+        val dimmed = awaitDimmed(base * 0.55)
+        assertTrue(dimmed.all { it >= base * 0.29 }, dimmed.toString())
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `bass motion with band levels dims between kicks`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val bridgeId = bridge()
+        service.setLink(userId, HueUserLink(bridgeId, true, listOf(light("l1", "Desk"), light("l2", "Shelf")), motion = HueMotionMode.BASS, latencyMs = 0))
+        val songId = UUID.randomUUID()
+        val coverId = UUID.randomUUID()
+        val song = song(songId, coverId)
+        every { song.duration } returns 60_000L
+        coEvery { songService.byIds(listOf(songId), userId) } returns listOf(song)
+        coEvery { imageService.byId(coverId) } returns Image(coverId, "p", "h", "o", palette = listOf(0xFFE01020.toInt(), 0xFF1030E0.toInt()), primaryColor = 0xFFE01020.toInt())
+        coEvery { audioAnalysisService.getAudioDataBatch(listOf(songId)) } returns emptyMap()
+        val kickLevels = List(3_000) { index ->
+            val ms = index * 20
+            val beatIndex = ms / 500
+            val withinBeat = ms % 500
+            if (beatIndex % 4 == 0 && withinBeat < 60) -20f else -40f
+        }
+        val subLevels = List(3_000) { -50f }
+        val loudnessLevels = List(600) { -30f + (it % 5) * 2f }
+        coEvery { audioAnalysisService.getAudioTimeline(songId) } returns SongAudioTimeline(
+            songId,
+            beatsMs = List(120) { it * 500 },
+            envelopeHz = 10,
+            envelopeDb = loudnessLevels,
+            bandHz = 50,
+            bands = listOf(
+                SongAudioBand(AudioBand.SUB, 20, 60, subLevels),
+                SongAudioBand(AudioBand.KICK, 60, 130, kickLevels),
+            ),
+        )
 
         service.onNowPlaying(HookEvent.NowPlayingChanged(userId, songId, 1, System.currentTimeMillis()))
         awaitSent(6)

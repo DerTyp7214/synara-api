@@ -2,7 +2,9 @@ package dev.dertyp.services
 
 import dev.dertyp.PlatformUUID
 import dev.dertyp.core.ApplicationScope
+import dev.dertyp.data.AudioBand
 import dev.dertyp.data.AudioScale
+import dev.dertyp.data.SongAudioBand
 import dev.dertyp.data.SongAudioData
 import dev.dertyp.data.SongAudioTimeline
 import dev.dertyp.db.PersonTable
@@ -21,6 +23,8 @@ import dev.dertyp.services.audio.AudioAnalysisPostProcessor
 import dev.dertyp.services.audio.AudioTimelineCodec
 import dev.dertyp.services.audio.RmsEnvelopeExtractor
 import dev.dertyp.services.audio.ValencePostProcessor
+import dev.dertyp.services.audio.highHz
+import dev.dertyp.services.audio.lowHz
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.ExperimentalSerializationApi
@@ -37,6 +41,7 @@ import org.jetbrains.exposed.v1.core.innerJoin
 import org.jetbrains.exposed.v1.core.isNull
 import org.jetbrains.exposed.v1.core.less
 import org.jetbrains.exposed.v1.core.neq
+import org.jetbrains.exposed.v1.core.statements.UpdateBuilder
 import org.jetbrains.exposed.v1.jdbc.andWhere
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.insert
@@ -166,12 +171,7 @@ open class AudioAnalysisService : IAudioAnalysisService, Service() {
 
         dbQuery {
             SongAudioTimelineTable.update({ SongAudioTimelineTable.songId eq songId }) {
-                it[envelope] = encodeEnvelope(envelopes.rmsDb)
-                it[bassEnvelope] = encodeEnvelope(envelopes.bassDb)
-                it[envelopeHz] = ENVELOPE_HZ
-                it[envelopeMinDb] = RmsEnvelopeExtractor.MIN_DB.toDouble()
-                it[envelopeMaxDb] = RmsEnvelopeExtractor.MAX_DB.toDouble()
-                it[version] = AudioTimelineCodec.VERSION
+                it.writeEnvelopes(envelopes)
                 it[analyzedAt] = System.currentTimeMillis()
             }
         }
@@ -185,6 +185,22 @@ open class AudioAnalysisService : IAudioAnalysisService, Service() {
 
     private fun encodeEnvelope(values: FloatArray): ByteArray =
         AudioTimelineCodec.encodeEnvelope(values, RmsEnvelopeExtractor.MIN_DB, RmsEnvelopeExtractor.MAX_DB)
+
+    private fun UpdateBuilder<*>.writeEnvelopes(envelopes: RmsEnvelopeExtractor.Envelopes?) {
+        this[SongAudioTimelineTable.envelope] = envelopes?.let { encodeEnvelope(it.rmsDb) }
+        this[SongAudioTimelineTable.bassEnvelope] = envelopes?.let {
+            encodeEnvelope(RmsEnvelopeExtractor.bassEnvelope(it.bands, it.bandHz, ENVELOPE_HZ))
+        }
+        this[SongAudioTimelineTable.bands] = envelopes?.let {
+            AudioTimelineCodec.encodeBands(it.bands, RmsEnvelopeExtractor.MIN_DB, RmsEnvelopeExtractor.MAX_DB)
+        }
+        this[SongAudioTimelineTable.bandHz] = envelopes?.bandHz ?: 0
+        this[SongAudioTimelineTable.bandCount] = envelopes?.bands?.size ?: 0
+        this[SongAudioTimelineTable.envelopeHz] = ENVELOPE_HZ
+        this[SongAudioTimelineTable.envelopeMinDb] = RmsEnvelopeExtractor.MIN_DB.toDouble()
+        this[SongAudioTimelineTable.envelopeMaxDb] = RmsEnvelopeExtractor.MAX_DB.toDouble()
+        this[SongAudioTimelineTable.version] = AudioTimelineCodec.VERSION
+    }
 
     private suspend fun saveTimeline(songId: PlatformUUID, filePath: String, essentia: EssentiaOutput?) {
         val beats = essentia?.rhythm?.beatsPosition?.takeIf { it.isNotEmpty() }
@@ -203,7 +219,6 @@ open class AudioAnalysisService : IAudioAnalysisService, Service() {
         dbQuery {
             SongAudioTimelineTable.upsert(SongAudioTimelineTable.songId) {
                 it[SongAudioTimelineTable.songId] = songId
-                it[version] = AudioTimelineCodec.VERSION
                 it[SongAudioTimelineTable.status] = status
                 it[SongAudioTimelineTable.beatSource] = source
                 it[analyzedAt] = System.currentTimeMillis()
@@ -212,11 +227,7 @@ open class AudioAnalysisService : IAudioAnalysisService, Service() {
                 it[onsetRate] = essentia?.rhythm?.onsetRate
                 it[beatsLoudnessMean] = essentia?.rhythm?.beatsLoudness?.mean
                 it[beatsLoudnessMax] = essentia?.rhythm?.beatsLoudness?.max
-                it[SongAudioTimelineTable.envelope] = envelope?.let { values -> encodeEnvelope(values.rmsDb) }
-                it[bassEnvelope] = envelope?.let { values -> encodeEnvelope(values.bassDb) }
-                it[envelopeHz] = ENVELOPE_HZ
-                it[envelopeMinDb] = RmsEnvelopeExtractor.MIN_DB.toDouble()
-                it[envelopeMaxDb] = RmsEnvelopeExtractor.MAX_DB.toDouble()
+                it.writeEnvelopes(envelope)
                 it[loudnessRange] = essentia?.lowLevel?.loudnessEbu128?.loudnessRange
                 it[dynamicComplexity] = essentia?.lowLevel?.dynamicComplexity
             }
@@ -234,6 +245,15 @@ open class AudioAnalysisService : IAudioAnalysisService, Service() {
             envelopeHz = row[SongAudioTimelineTable.envelopeHz],
             envelopeDb = row[SongAudioTimelineTable.envelope]?.let { AudioTimelineCodec.decodeEnvelope(it, minDb, maxDb).toList() } ?: emptyList(),
             bassEnvelopeDb = row[SongAudioTimelineTable.bassEnvelope]?.let { AudioTimelineCodec.decodeEnvelope(it, minDb, maxDb).toList() } ?: emptyList(),
+            bandHz = row[SongAudioTimelineTable.bandHz],
+            bands = row[SongAudioTimelineTable.bands]
+                ?.let { AudioTimelineCodec.decodeBands(it, row[SongAudioTimelineTable.bandCount], minDb, maxDb) }
+                .orEmpty()
+                .mapIndexedNotNull { index, levels ->
+                    AudioBand.entries.getOrNull(index)?.let { band ->
+                        SongAudioBand(band, band.lowHz, band.highHz, levels.toList())
+                    }
+                },
             loudnessRange = row[SongAudioTimelineTable.loudnessRange],
             dynamicComplexity = row[SongAudioTimelineTable.dynamicComplexity],
             source = row[SongAudioTimelineTable.beatSource].name.lowercase(),
