@@ -20,6 +20,10 @@ interface ISynaraPlugin {
 }
 ```
 
+`enabled` decides whether the plugin is loaded at all — a disabled plugin registers no importers, routes or UI contributions.
+
+`IImporter` has the same `enabled` flag plus `installed`. `enabled` means "ready to import": the backend is present *and* authenticated, and it is what the import routing uses to pick a backend. `installed` means only that the backend itself is available (its binary was found). Importers that need a login report `installed` as soon as their binary exists and `enabled` only once a token is present, and their plugin bases `enabled` on `installed` — so the plugin still loads while unauthenticated and the importer settings page can offer the login.
+
 Additional capabilities are opt-in through marker interfaces your plugin class can implement as well:
 
 | Interface | Purpose |

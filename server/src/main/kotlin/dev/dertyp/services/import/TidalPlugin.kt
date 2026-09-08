@@ -200,7 +200,7 @@ class TidalIndexer(context: PluginContext) : BaseIndexer(context, IMetadataServi
 class TidalPlugin : IContentSourcePlugin, KoinComponent {
     override val id: String = "tidal"
     override val name: String = "Tidal"
-    override val enabled: Boolean get() = tiddlService.enabled || tdnService.enabled
+    override val enabled: Boolean get() = tiddlService.installed || tdnService.installed
 
     private val tiddlService: TiddlService by inject()
     private val tdnService: TdnService by inject()
@@ -240,6 +240,7 @@ class TidalProxyImporter(
         }
 
     override val enabled: Boolean get() = tiddl.enabled || tdn.enabled
+    override val installed: Boolean get() = tiddl.installed || tdn.installed
     override val metadataType get() = current().metadataType
 
     private fun current(): IImporter {

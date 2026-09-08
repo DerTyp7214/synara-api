@@ -15,7 +15,7 @@ import org.koin.dsl.module
 class GamdlPlugin : IContentSourcePlugin, IUiPlugin, KoinComponent {
     override val id: String = "gamdl"
     override val name: String = "gamdl (Apple Music)"
-    override val enabled: Boolean get() = gamdlService.enabled
+    override val enabled: Boolean get() = gamdlService.installed
 
     private val gamdlService: GamdlService by inject()
     private lateinit var indexer: GamdlIndexer

@@ -302,7 +302,7 @@ The toolbar's Queue button is `openPage` with `modal: true`: present `subscribe(
 
 ### 6. Log in and importer settings
 
-The settings gear opens `core.importer.settings` (modal): an "Importers" section listing every enabled importer with its status badge and a Login button where needed, followed by collapsed sections contributed by plugins (e.g. gamdl's Apple Music credentials form). A Login `invoke` returns
+The settings gear opens `core.importer.settings` (modal): an "Importers" section listing every *installed* importer — authenticated or not — each with a status badge ("Authorized" / "Login required"), and a Login button for the ones that log in through the server (`LOGIN` capability) and are not authorized yet. Importers that take credentials instead (`CREDENTIALS` capability, e.g. gamdl) get no Login button; their plugin contributes a credentials section rendered below. Those plugin sections follow as collapsed sections (e.g. gamdl's Apple Music credentials form). A Login `invoke` returns
 
 ```json
 {"status": "OK", "message": "Complete the login in your browser, then come back.", "refresh": true,

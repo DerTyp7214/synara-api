@@ -14,7 +14,8 @@ open class TiddlService(
     storageService: IServerStorageService
 ) : TidalBaseImporter(indexer, storageService) {
     override val id: String = ID
-    override val enabled: Boolean get() = tiddlPath != null && tokenFileExists()
+    override val installed: Boolean get() = tiddlPath != null
+    override val enabled: Boolean get() = installed && tokenFileExists()
 
     override val loginCommand: MutableList<String> = mutableListOf("tiddl", "auth", "login", "--no-browser")
     override val importCommand: MutableList<String> = mutableListOf("tiddl", "download", "url")

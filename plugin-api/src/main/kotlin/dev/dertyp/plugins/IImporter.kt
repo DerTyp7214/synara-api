@@ -25,6 +25,7 @@ interface IImporter {
     val pluginId: String
     var indexer: IPluginIndexer
     val enabled: Boolean get() = true
+    val installed: Boolean get() = true
     val metadataType: IMetadataService.MetadataType? get() = null
 
     val capabilities: Set<ImporterCapability> get() = emptySet()

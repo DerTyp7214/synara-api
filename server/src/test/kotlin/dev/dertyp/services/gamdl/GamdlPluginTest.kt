@@ -41,10 +41,10 @@ class GamdlPluginTest : KoinTest {
     }
 
     @Test
-    fun `enabled reflects the underlying service`() {
-        every { gamdlService.enabled } returns true
+    fun `enabled reflects whether the service is installed`() {
+        every { gamdlService.installed } returns true
         assertTrue(plugin.enabled)
-        every { gamdlService.enabled } returns false
+        every { gamdlService.installed } returns false
         assertFalse(plugin.enabled)
     }
 

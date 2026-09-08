@@ -34,7 +34,8 @@ class GamdlService(
 ) : BaseImporter(indexer, storageService) {
     override val id: String = ID
     override val metadataType = IMetadataService.MetadataType.appleMusic
-    override val enabled: Boolean get() = gamdlPath != null && cookiesFile().exists()
+    override val installed: Boolean get() = gamdlPath != null
+    override val enabled: Boolean get() = installed && cookiesFile().exists()
 
     private val environment by inject<ApplicationEnvironment>()
     private val songService by inject<SongService>()

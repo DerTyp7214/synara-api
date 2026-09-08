@@ -25,7 +25,8 @@ class TdnService(
     storageService: IServerStorageService
 ) : TidalBaseImporter(indexer, storageService) {
     override val id: String = ID
-    override val enabled: Boolean get() = tdnPath != null && tokenFileExists()
+    override val installed: Boolean get() = tdnPath != null
+    override val enabled: Boolean get() = installed && tokenFileExists()
 
     override val loginCommand: MutableList<String> = mutableListOf("tdn", "login")
     override val importCommand: MutableList<String> = mutableListOf("tdn", "dl")

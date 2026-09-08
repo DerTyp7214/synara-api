@@ -67,7 +67,11 @@ class ImporterState(
 
     fun enabledImporters(): List<IImporter> = importService.pluginManager.getAllImporters().filter { it.enabled }
 
-    fun defaultImporter(): IImporter? = enabledImporters().firstOrNull { it.id == importerProxy.defaultService.id } ?: enabledImporters().firstOrNull()
+    fun installedImporters(): List<IImporter> = importService.pluginManager.getAllImporters().filter { it.installed }
+
+    fun defaultImporter(): IImporter? = enabledImporters().firstOrNull { it.id == importerProxy.defaultService.id }
+        ?: enabledImporters().firstOrNull()
+        ?: installedImporters().firstOrNull()
 
     fun canLogin(importer: IImporter): Boolean = importer.capabilities.isEmpty() || ImporterCapability.LOGIN in importer.capabilities
 
@@ -103,7 +107,7 @@ class ImporterState(
     }
 
     suspend fun login(scope: ServerUiRenderScope, importerId: String?): UiInvokeResult {
-        val importer = (importerId?.let { id -> enabledImporters().firstOrNull { it.id == id } } ?: defaultImporter())
+        val importer = (importerId?.let { id -> installedImporters().firstOrNull { it.id == id } } ?: defaultImporter())
             ?: throw IllegalArgumentException(scope.t("importer.error.unknownBackend"))
         if (importer.tokenFileExists()) {
             authChangeFlow.tryEmit(Unit)
@@ -320,7 +324,7 @@ class ImporterPageContribution(
                 )
             }
         }
-        val manageable = state.enabledImporters().any(state::canLogin) ||
+        val manageable = state.installedImporters().any(state::canLogin) ||
             (server != null && uiService.list(server.account, server.client, slot = UiSlots.IMPORTER).isNotEmpty())
         if (manageable) {
             items += UiComponent.Button(scope.t("importer.settings.title"), UiAction.OpenPage(ImporterSettingsPageContribution.ID, modal = true), UiButtonStyle.TEXT, icon = UiIcon(UiIconName.SETTINGS))
@@ -415,7 +419,7 @@ class ImporterSettingsPageContribution(
 
     override suspend fun render(scope: UiRenderScope): UiComponent {
         val server = scope as? ServerUiRenderScope
-        val importers = state.enabledImporters()
+        val importers = state.installedImporters()
         val children = mutableListOf<UiComponent>()
 
         children += UiComponent.Section(

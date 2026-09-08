@@ -61,11 +61,12 @@ class ImporterPageContributionTest {
     private val account = User(UUID.randomUUID(), "imp", displayName = "Importer Ann", passwordHash = "", capabilities = listOf(UserCapability.IMPORT))
     private val client = ClientInfo(ApiVersion.CURRENT, UiSchemaVersion.CURRENT, "en")
 
-    private fun importer(id: String, name: String, authorized: Boolean, capabilities: Set<ImporterCapability> = emptySet(), tidal: Boolean = false): IImporter =
+    private fun importer(id: String, name: String, authorized: Boolean, capabilities: Set<ImporterCapability> = emptySet(), tidal: Boolean = false, installed: Boolean = true): IImporter =
         mockk(relaxed = true) {
             every { this@mockk.id } returns id
             every { this@mockk.name } returns name
             every { enabled } returns true
+            every { this@mockk.installed } returns installed
             every { tokenFileExists() } returns authorized
             every { this@mockk.capabilities } returns capabilities
             every { canHandle(any()) } returns tidal
@@ -219,6 +220,68 @@ class ImporterPageContributionTest {
         assertEquals(1, inlined.size)
         assertTrue(inlined.single().collapsible && inlined.single().collapsed)
         assertEquals("inlined", (inlined.single().children.single() as UiComponent.Badge).text)
+    }
+
+    @Test
+    fun `settings page lists installed but unauthenticated importers with a login button`() = runBlocking {
+        val tidalImporter = importer("tidal", "Tidal", authorized = false, capabilities = setOf(ImporterCapability.LOGIN))
+        every { tidalImporter.enabled } returns false
+        val gamdlImporter = importer("gamdl", "gamdl (Apple Music)", authorized = false, capabilities = setOf(ImporterCapability.IMPORT_SONG, ImporterCapability.CREDENTIALS))
+        every { gamdlImporter.enabled } returns false
+        val missingImporter = importer("missing", "Missing", authorized = false, installed = false)
+        every { pluginManager.getAllImporters() } returns listOf(tidalImporter, gamdlImporter, missingImporter)
+
+        val root = settingsPage.render(scope()) as UiComponent.Column
+        val importers = root.children[0] as UiComponent.Section
+        assertEquals("Importers", importers.title)
+        val all = importers.flatten()
+
+        val listItems = all.filterIsInstance<UiComponent.ListItem>()
+        assertTrue(listItems.any { it.title == "Tidal" })
+        assertTrue(listItems.any { it.title == "gamdl (Apple Music)" })
+        assertTrue(listItems.none { it.title == "Missing" })
+
+        val logins = all.filterIsInstance<UiComponent.Button>().filter { (it.action as? UiAction.Invoke)?.actionId == "login" }
+        assertEquals(listOf("tidal"), logins.map { (it.action as UiAction.Invoke).params["importer"]?.text })
+
+        val loginRequiredBadges = all.filterIsInstance<UiComponent.Badge>().filter { it.text == "Login required" }
+        assertEquals(2, loginRequiredBadges.size)
+        assertTrue(loginRequiredBadges.all { it.tone == UiTone.WARNING })
+    }
+
+    @Test
+    fun `login resolves an installed unauthenticated importer`() = runBlocking {
+        val tidalImporter = importer("tidal", "Tidal", authorized = false, capabilities = setOf(ImporterCapability.LOGIN))
+        every { tidalImporter.enabled } returns false
+        every { pluginManager.getAllImporters() } returns listOf(tidalImporter)
+        coEvery { tidalImporter.login(any(), any()) } coAnswers {
+            secondArg<suspend (String) -> Unit>().invoke("Login: https://link.tidal.com/ABCDE")
+            ProcessExecutionResult(0, "", "")
+        }
+        every { tidalImporter.extractLoginUrl(any()) } returns "https://link.tidal.com/ABCDE"
+
+        val result = state.login(scope(), "tidal")
+        assertEquals(UiInvokeStatus.OK, result.status)
+        assertEquals(UiAction.OpenUrl("https://link.tidal.com/ABCDE"), result.next)
+    }
+
+    @Test
+    fun `toolbar shows settings when only an installed unauthenticated importer exists`() = runBlocking {
+        val tidalImporter = importer("tidal", "Tidal", authorized = false)
+        every { tidalImporter.enabled } returns false
+        every { pluginManager.getAllImporters() } returns listOf(tidalImporter)
+
+        val toolbar = page.toolbar(scope())
+        assertEquals(listOf("Queue", "Importer settings"), toolbar.map { (it as UiComponent.Button).label })
+    }
+
+    @Test
+    fun `default importer falls back to an installed importer when nothing is enabled`() = runBlocking {
+        val tidalImporter = importer("tidal", "Tidal", authorized = false)
+        every { tidalImporter.enabled } returns false
+        every { pluginManager.getAllImporters() } returns listOf(tidalImporter)
+
+        assertEquals("tidal", state.defaultImporter()?.id)
     }
 
     @Test
