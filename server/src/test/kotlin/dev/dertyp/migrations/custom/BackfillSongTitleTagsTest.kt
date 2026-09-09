@@ -78,6 +78,7 @@ class BackfillSongTitleTagsTest : KoinTest {
         val remix = insertSong("Song (Skrillex Remix)")
         val unknown = insertSong("Song (Drift)")
         val live = insertSong("Song (Live) 🅴")
+        val markerOnly = insertSong("Song 🅴")
         val explicitOnly = insertSong("Song [Explicit]")
         val preTagged = insertSong("Song (Remix)", """[{"kind":"FEAT","label":"feat. X"}]""")
 
@@ -94,9 +95,12 @@ class BackfillSongTitleTagsTest : KoinTest {
         assertEquals("Song (Drift)", rows[unknown]!![SongTable.title])
         assertEquals("[]", rows[unknown]!![SongTable.titleTags])
 
-        assertEquals("Song", rows[live]!![SongTable.title])
+        assertEquals("Song🅴", rows[live]!![SongTable.title])
         assertEquals(listOf(TitleTag(TitleTagKind.LIVE, "Live")), decodeTitleTags(rows[live]!![SongTable.titleTags]))
         assertEquals(false, rows[live]!![SongTable.explicit])
+
+        assertEquals("Song 🅴", rows[markerOnly]!![SongTable.title])
+        assertEquals("[]", rows[markerOnly]!![SongTable.titleTags])
 
         assertEquals("Song", rows[explicitOnly]!![SongTable.title])
         assertEquals(emptyList<TitleTag>(), decodeTitleTags(rows[explicitOnly]!![SongTable.titleTags]))
@@ -115,6 +119,7 @@ class BackfillSongTitleTagsTest : KoinTest {
         insertSong("Song (Skrillex Remix)")
         insertSong("Song (Drift)")
         insertSong("Song (Live) 🅴")
+        insertSong("Song 🅴")
         insertSong("Song [Explicit]")
         insertSong("Song (Remix)", """[{"kind":"FEAT","label":"feat. X"}]""")
 

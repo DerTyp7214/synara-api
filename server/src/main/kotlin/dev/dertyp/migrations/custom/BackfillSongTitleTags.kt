@@ -33,13 +33,14 @@ class BackfillSongTitleTags : CustomMigration() {
                     for (row in chunk) {
                         val raw = row[SongTable.title]
                         val existing = row.titleTags()
+                        val marker = if (raw.contains(EXPLICIT_MARKER)) EXPLICIT_MARKER else ""
                         val stripped = raw.replace(EXPLICIT_MARKER, "").trim()
                         val split = stripped.splitTitleTags()
                         val tags = existing.mergeTitleTags(split.tags)
-                        if (split.title == raw && tags == existing) continue
+                        if (split.title == stripped && tags == existing) continue
 
                         SongTable.update({ SongTable.id eq row[SongTable.id] }) {
-                            it[title] = split.title
+                            it[title] = split.title + marker
                             it[titleTags] = encodeTitleTags(tags)
                         }
                         updated++
