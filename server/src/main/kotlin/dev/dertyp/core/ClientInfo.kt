@@ -11,6 +11,7 @@ enum class ClientFeature(val minApiVersion: Int, val maxApiVersion: Int? = null)
     DOLBY_ATMOS(3),
     AUDIO_INFO(4),
     SERVER_DRIVEN_UI(5),
+    TITLE_TAGS(6),
 }
 
 data class ClientInfo(

@@ -124,7 +124,7 @@ class ListenService : Service() {
 
     private fun localListenMetadata(songId: PlatformUUID): LocalListenMetadata {
         val song = SongTable
-            .select(SongTable.title, SongTable.albumId, SongTable.isrc)
+            .select(SongTable.title, SongTable.titleTags, SongTable.albumId, SongTable.isrc)
             .where { SongTable.id eq songId }
             .singleOrNull()
             ?: return LocalListenMetadata()
@@ -172,7 +172,7 @@ class ListenService : Service() {
             recordingMbid = recordingMbid,
             releaseMbid = releaseMbid,
             artistMbids = artistMbids,
-            trackName = song[SongTable.title].ifBlank { null },
+            trackName = song.fullSongTitle().ifBlank { null },
             artistName = artistName,
             releaseName = releaseName,
         )

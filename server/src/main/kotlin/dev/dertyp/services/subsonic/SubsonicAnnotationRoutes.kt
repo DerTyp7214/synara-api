@@ -1,5 +1,6 @@
 package dev.dertyp.services.subsonic
 
+import dev.dertyp.core.fullTitle
 import dev.dertyp.data.User
 import dev.dertyp.services.AlbumService
 import dev.dertyp.services.ArtistService
@@ -141,7 +142,7 @@ internal fun Route.subsonicAnnotationRoutes() {
             SubsonicResponse(
                 lyrics = Lyrics(
                     artist = song?.artists?.firstOrNull()?.name ?: artist.ifEmpty { null },
-                    title = song?.title ?: title.ifEmpty { null },
+                    title = song?.fullTitle ?: title.ifEmpty { null },
                     value = lyrics ?: "",
                 ),
             ),
@@ -164,7 +165,7 @@ internal fun Route.subsonicAnnotationRoutes() {
         val structured = when {
             synced != null && synced.lines.isNotEmpty() -> StructuredLyrics(
                 displayArtist = displayArtist,
-                displayTitle = song.title,
+                displayTitle = song.fullTitle,
                 synced = true,
                 line = synced.lines.map { line ->
                     LyricsLine(
@@ -176,7 +177,7 @@ internal fun Route.subsonicAnnotationRoutes() {
 
             song.lyrics.isNotBlank() -> StructuredLyrics(
                 displayArtist = displayArtist,
-                displayTitle = song.title,
+                displayTitle = song.fullTitle,
                 synced = false,
                 line = song.lyrics.lines().map { LyricsLine(value = it) },
             )

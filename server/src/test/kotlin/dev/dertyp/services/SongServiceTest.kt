@@ -871,6 +871,215 @@ class SongServiceTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
+    fun `byId decodes title tags`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val albumId = UUID.randomUUID()
+        val songId = UUID.randomUUID()
+
+        transaction(database) {
+            AlbumTable.insert {
+                it[id] = albumId
+                it[name] = "Tagged Album"
+                it[songCount] = 1
+            }
+            SongTable.insert {
+                it[id] = songId
+                it[title] = "Song"
+                it[titleTags] = """[{"kind":"REMIX","label":"Skrillex Remix"}]"""
+                it[SongTable.albumId] = albumId
+                it[filePath] = "/path/to/tagged.mp3"
+            }
+        }
+
+        val song = songService.byId(songId)
+        assertNotNull(song)
+        assertEquals("Song", song?.title)
+        assertEquals(listOf(TitleTag(TitleTagKind.REMIX, "Skrillex Remix")), song?.tags)
+
+        val userSong = songService.byId(songId, user.id)
+        assertEquals(listOf(TitleTag(TitleTagKind.REMIX, "Skrillex Remix")), userSong?.tags)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `createBatch splits title tags`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val path = "/path/to/remix.flac"
+        val album = InsertableAlbum("Tag Album", listOf("Tag Artist"))
+        val songs = listOf(
+            InsertableSong(
+                title = "Song (Skrillex Remix) (feat. X)",
+                artists = listOf("Tag Artist"),
+                album = album,
+                duration = 100,
+                explicit = false,
+                path = path
+            )
+        )
+
+        val created = songService.createBatch(songs)
+        assertEquals(1, created.size)
+        val createdSong = created.values.first()
+        assertEquals("Song", createdSong.title)
+        assertEquals(
+            listOf(TitleTag(TitleTagKind.REMIX, "Skrillex Remix"), TitleTag(TitleTagKind.FEAT, "feat. X")),
+            createdSong.tags
+        )
+
+        val row = transaction(database) {
+            SongTable.select(SongTable.title, SongTable.titleTags)
+                .where { SongTable.filePath eq path }
+                .single()
+        }
+        assertEquals("Song", row[SongTable.title])
+        assertEquals(
+            listOf(TitleTag(TitleTagKind.REMIX, "Skrillex Remix"), TitleTag(TitleTagKind.FEAT, "feat. X")),
+            decodeTitleTags(row[SongTable.titleTags])
+        )
+
+        val again = songService.createBatch(songs)
+        assertTrue(again.isEmpty(), "Should not create a second song")
+
+        val rowsAfter = transaction(database) {
+            SongTable.select(SongTable.title, SongTable.titleTags).toList()
+        }
+        assertEquals(1, rowsAfter.size)
+        assertEquals("Song", rowsAfter.single()[SongTable.title])
+        assertEquals(
+            listOf(TitleTag(TitleTagKind.REMIX, "Skrillex Remix"), TitleTag(TitleTagKind.FEAT, "feat. X")),
+            decodeTitleTags(rowsAfter.single()[SongTable.titleTags])
+        )
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `createBatch marks songs dirty when tags change`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val albumId = UUID.randomUUID()
+        val artistId = UUID.randomUUID()
+        val songId = UUID.randomUUID()
+        val path = "/path/to/live.flac"
+
+        transaction(database) {
+            ArtistTable.insert {
+                it[id] = artistId
+                it[name] = "Artist"
+            }
+            AlbumTable.insert {
+                it[id] = albumId
+                it[name] = "Album"
+            }
+            SongTable.insert {
+                it[id] = songId
+                it[title] = "Song"
+                it[SongTable.albumId] = albumId
+                it[filePath] = path
+                it[explicit] = false
+            }
+            SongArtistTable.insert {
+                it[SongArtistTable.songId] = songId
+                it[SongArtistTable.artistId] = artistId
+            }
+        }
+
+        val album = InsertableAlbum("Album", listOf("Artist"))
+        val result = songService.createBatch(
+            listOf(
+                InsertableSong(
+                    title = "Song (Live)",
+                    artists = listOf("Artist"),
+                    album = album,
+                    duration = 100,
+                    explicit = false,
+                    path = path
+                )
+            )
+        )
+        assertTrue(result.isEmpty(), "Should not create new song")
+
+        val fromDb = songService.byId(songId)
+        assertEquals("Song", fromDb?.title)
+        assertEquals(listOf(TitleTag(TitleTagKind.LIVE, "Live")), fromDb?.tags)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `createBatch keeps remix and original apart`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val album = InsertableAlbum("Split Album", listOf("Split Artist"))
+        val songs = listOf(
+            InsertableSong(
+                title = "Song",
+                artists = listOf("Split Artist"),
+                album = album,
+                duration = 100,
+                explicit = false,
+                path = "/path/original.flac",
+                trackNumber = 1,
+                discNumber = 1
+            ),
+            InsertableSong(
+                title = "Song (Remix)",
+                artists = listOf("Split Artist"),
+                album = album,
+                duration = 100,
+                explicit = false,
+                path = "/path/remix.flac",
+                trackNumber = 1,
+                discNumber = 1
+            )
+        )
+
+        val created = songService.createBatch(songs)
+        assertEquals(2, created.size)
+
+        val rows = transaction(database) {
+            SongTable.select(SongTable.filePath, SongTable.title, SongTable.titleTags).toList()
+        }
+        assertEquals(2, rows.size)
+        assertEquals(setOf("Song"), rows.map { it[SongTable.title] }.toSet())
+
+        val tagsByPath = rows.associate { it[SongTable.filePath] to decodeTitleTags(it[SongTable.titleTags]) }
+        assertEquals(emptyList<TitleTag>(), tagsByPath["/path/original.flac"])
+        assertEquals(listOf(TitleTag(TitleTagKind.REMIX, "Remix")), tagsByPath["/path/remix.flac"])
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `updateSong persists tags and splits the title`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val songId = insertSongWithPath("/x/song.mp3")
+        val song = songService.byId(songId)!!
+
+        val updated = songService.updateSong(
+            song.copy(
+                title = "Song (Radio Edit)",
+                tags = listOf(TitleTag(TitleTagKind.FEAT, "feat. X"))
+            ),
+            user.id
+        )
+
+        assertNotNull(updated)
+        assertEquals("Song", updated?.title)
+        assertEquals(
+            listOf(TitleTag(TitleTagKind.FEAT, "feat. X"), TitleTag(TitleTagKind.EDIT, "Radio Edit")),
+            updated?.tags
+        )
+
+        val row = transaction(database) {
+            SongTable.select(SongTable.title, SongTable.titleTags)
+                .where { SongTable.id eq songId }
+                .single()
+        }
+        assertEquals("Song", row[SongTable.title])
+        assertEquals(
+            listOf(TitleTag(TitleTagKind.FEAT, "feat. X"), TitleTag(TitleTagKind.EDIT, "Radio Edit")),
+            decodeTitleTags(row[SongTable.titleTags])
+        )
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
     fun `allSongIds should filter by tags`(dialect: DbDialect) = runBlocking {
         setup(dialect)
         val albumId = UUID.randomUUID()

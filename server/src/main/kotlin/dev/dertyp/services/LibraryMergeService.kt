@@ -42,6 +42,7 @@ class LibraryMergeService : Service() {
         val perfectDuplicates = SongTable
             .select(
                 SongTable.title,
+                SongTable.titleTags,
                 SongTable.albumId,
                 SongTable.duration,
                 SongTable.filePath,
@@ -51,6 +52,7 @@ class LibraryMergeService : Service() {
             )
             .groupBy(
                 SongTable.title,
+                SongTable.titleTags,
                 SongTable.albumId,
                 SongTable.duration,
                 SongTable.filePath,
@@ -64,16 +66,15 @@ class LibraryMergeService : Service() {
         var totalMerged = 0
         for (duplicateGroup in perfectDuplicates) {
             val songsInGroup = SongTable
-                .select(SongTable.id, SongTable.inserted, SongTable.title, SongTable.explicit)
-                .where {
-                    (SongTable.title eq duplicateGroup[SongTable.title]) and
-                            (SongTable.albumId eq duplicateGroup[SongTable.albumId]) and
-                            (SongTable.duration eq duplicateGroup[SongTable.duration]) and
-                            (SongTable.filePath eq duplicateGroup[SongTable.filePath]) and
-                            (SongTable.trackNumber eq duplicateGroup[SongTable.trackNumber]) and
-                            (SongTable.discNumber eq duplicateGroup[SongTable.discNumber]) and
-                            (SongTable.fileSize eq duplicateGroup[SongTable.fileSize])
-                }
+                .select(SongTable.id, SongTable.inserted, SongTable.title, SongTable.titleTags, SongTable.explicit)
+                .andWhere { SongTable.title eq duplicateGroup[SongTable.title] }
+                .andWhere { SongTable.titleTags eq duplicateGroup[SongTable.titleTags] }
+                .andWhere { SongTable.albumId eq duplicateGroup[SongTable.albumId] }
+                .andWhere { SongTable.duration eq duplicateGroup[SongTable.duration] }
+                .andWhere { SongTable.filePath eq duplicateGroup[SongTable.filePath] }
+                .andWhere { SongTable.trackNumber eq duplicateGroup[SongTable.trackNumber] }
+                .andWhere { SongTable.discNumber eq duplicateGroup[SongTable.discNumber] }
+                .andWhere { SongTable.fileSize eq duplicateGroup[SongTable.fileSize] }
                 .orderBy(SongTable.inserted, SortOrder.ASC)
                 .toList()
 
@@ -89,7 +90,7 @@ class LibraryMergeService : Service() {
 
         for (duplicateGroup in pathDuplicates) {
             val songsInGroup = SongTable
-                .select(SongTable.id, SongTable.inserted, SongTable.title, SongTable.explicit)
+                .select(SongTable.id, SongTable.inserted, SongTable.title, SongTable.titleTags, SongTable.explicit)
                 .where { SongTable.filePath eq duplicateGroup[SongTable.filePath] }
                 .orderBy(SongTable.inserted, SortOrder.ASC)
                 .toList()
@@ -111,14 +112,20 @@ class LibraryMergeService : Service() {
             it[SongTable.explicit] || it[SongTable.title].contains("\uD83C\uDD74")
         }
 
-        val bestTitle = songsInGroup
-            .map { it[SongTable.title].replace("\uD83C\uDD74", "").trim() }
-            .firstOrNull { it.isNotBlank() } ?: keptSongRow[SongTable.title]
+        val bestTitleRow = songsInGroup
+            .firstOrNull { it[SongTable.title].replace("\uD83C\uDD74", "").trim().isNotBlank() }
+        val bestTitle = bestTitleRow?.get(SongTable.title)?.replace("\uD83C\uDD74", "")?.trim()
+            ?: keptSongRow[SongTable.title]
+        val bestTags = (bestTitleRow ?: keptSongRow).titleTags()
 
-        if (bestTitle != keptSongRow[SongTable.title] || anyExplicit != keptSongRow[SongTable.explicit]) {
+        if (bestTitle != keptSongRow[SongTable.title] ||
+            anyExplicit != keptSongRow[SongTable.explicit] ||
+            bestTags != keptSongRow.titleTags()
+        ) {
             SongTable.update({ SongTable.id eq keptSongId }) {
                 it[title] = bestTitle
                 it[explicit] = anyExplicit
+                it[titleTags] = encodeTitleTags(bestTags)
             }
         }
 
@@ -142,6 +149,7 @@ class LibraryMergeService : Service() {
                 SongTable.id,
                 SongTable.albumId,
                 SongTable.title,
+                SongTable.titleTags,
                 SongTable.trackNumber,
                 SongTable.discNumber,
                 SongTable.fileSize,
@@ -151,9 +159,10 @@ class LibraryMergeService : Service() {
             .toList()
 
         val groups = allSongsInAlbums.groupBy { row ->
-            Triple(
+            listOf(
                 row[SongTable.albumId].value,
                 row[SongTable.title].replace("\uD83C\uDD74", "").trim().lowercase(),
+                row[SongTable.titleTags],
                 row[SongTable.trackNumber] to row[SongTable.discNumber]
             )
         }.filter { it.value.size > 1 }

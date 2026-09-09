@@ -166,4 +166,53 @@ class SearchIndexIntegrationTest : KoinTest {
         assertEquals(1, result.data.size, "Should find the song")
         assertEquals("Deeply Disturbed", result.data.first().title)
     }
+
+    @Test
+    fun `title tag labels are indexed for ranked search`() = runBlocking {
+        if (TestDatabase.postgresContainer == null) {
+            println("Skipping PostgreSQL integration test because Docker is not available.")
+            return@runBlocking
+        }
+
+        setup()
+
+        val userId = UUID.randomUUID()
+        val albumId = UUID.randomUUID()
+        val songId = UUID.randomUUID()
+
+        transaction(database) {
+            UserTable.insert {
+                it[id] = userId
+                it[username] = "taguser"
+                it[passwordHash] = ""
+            }
+            AlbumTable.insert {
+                it[id] = albumId
+                it[name] = "Vicious Delicious"
+            }
+            SongTable.insert {
+                it[id] = songId
+                it[title] = "Becoming Insane"
+                it[titleTags] = """[{"kind":"REMIX","label":"Infected Mushroom Remix"}]"""
+                it[this.albumId] = albumId
+            }
+        }
+
+        val worker = SearchIndexWorker()
+        assertTrue(worker.processBatch() > 0, "Worker should have processed the queued song")
+
+        transaction(database) {
+            val songRow = SongTable.selectAll().where { SongTable.id eq songId }.single()
+            assertNotNull(songRow[SongTable.searchVector], "search_vector should be populated by worker")
+            assertEquals("Becoming Insane", songRow[SongTable.title], "The stored title stays bare")
+        }
+
+        val songService = SongService(worker)
+
+        val tagMatch = songService.rankedSearch(0, 10, "infected remix", true, userId)
+        assertEquals(listOf(songId), tagMatch.data.map { it.id }, "Tag labels should be searchable")
+
+        val kindMatch = songService.rankedSearch(0, 10, "kind", true, userId)
+        assertTrue(kindMatch.data.isEmpty(), "Tag json keys must not be indexed")
+    }
 }

@@ -76,6 +76,13 @@ class ClientInfoTest {
     }
 
     @Test
+    fun `title tags require api version 6`() {
+        assertFalse(ClientInfo.LEGACY.supports(ClientFeature.TITLE_TAGS))
+        assertFalse(ClientInfo(5).supports(ClientFeature.TITLE_TAGS))
+        assertTrue(ClientInfo(6).supports(ClientFeature.TITLE_TAGS))
+    }
+
+    @Test
     fun `every feature is available at the current api version`() {
         ClientFeature.entries.forEach { feature ->
             assertTrue(ClientInfo(ApiVersion.CURRENT).supports(feature), "${feature.name} must be supported at CURRENT")

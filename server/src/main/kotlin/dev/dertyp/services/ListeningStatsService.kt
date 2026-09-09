@@ -419,11 +419,11 @@ class ListeningStatsService : Service() {
 
         inRangeSongIds.chunked(CHUNK_SIZE).forEach { chunk ->
             SongTable
-                .select(SongTable.id, SongTable.title, SongTable.albumId, SongTable.cover)
+                .select(SongTable.id, SongTable.title, SongTable.titleTags, SongTable.albumId, SongTable.cover)
                 .where { SongTable.id inList chunk }
                 .forEach {
                     library.songMeta[it[SongTable.id].value] = SongMeta(
-                        title = it[SongTable.title],
+                        title = it.fullSongTitle(),
                         albumId = it[SongTable.albumId].value,
                         coverId = it[SongTable.cover]?.value,
                     )

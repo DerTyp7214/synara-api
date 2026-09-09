@@ -8,6 +8,7 @@ import dev.dertyp.data.SimpleSong
 import dev.dertyp.data.TranscodedVersion
 import dev.dertyp.db.SongTable
 import dev.dertyp.db.TranscodedSongTable
+import dev.dertyp.db.fullSongTitle
 import dev.dertyp.services.StorageCategory
 import dev.dertyp.services.StorageService
 import io.ktor.http.ContentType
@@ -459,7 +460,7 @@ object AudioUtils {
             .map {
                 SimpleSong(
                     id = it[SongTable.id].value,
-                    title = it[SongTable.title],
+                    title = it.fullSongTitle(),
                     duration = it[SongTable.duration],
                     explicit = it[SongTable.explicit],
                     releaseDate = getDateFromISO(it[SongTable.releaseDate]),

@@ -2,6 +2,7 @@ package dev.dertyp.routing
 
 import dev.dertyp.AudioUtils
 import dev.dertyp.core.apiKeyUser
+import dev.dertyp.core.fullTitle
 import dev.dertyp.core.toUUIDOrNull
 import dev.dertyp.data.AudioFormat
 import dev.dertyp.data.RadioSeed
@@ -178,7 +179,7 @@ internal suspend fun ApplicationCall.streamRadio(
         synchronized(tempFiles) { tempFiles.add(adts) }
         AudioUtils.remuxToAdts(m4a, adts)
         val artists = song.artists.joinToString(", ") { it.creditedName ?: it.name }
-        return adts to if (artists.isEmpty()) song.title else "$artists - ${song.title}"
+        return adts to if (artists.isEmpty()) song.fullTitle else "$artists - ${song.fullTitle}"
     }
 
     response.header("icy-name", stationName)

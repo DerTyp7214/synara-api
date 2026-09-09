@@ -3,10 +3,15 @@ package dev.dertyp.utils
 import dev.dertyp.core.ClientInfo
 import dev.dertyp.data.ApiVersion
 import dev.dertyp.data.AudioInfo
+import dev.dertyp.data.ListenedSong
 import dev.dertyp.data.NowPlaying
 import dev.dertyp.data.PaginatedResponse
 import dev.dertyp.data.PlaybackState
+import dev.dertyp.data.RecentListens
+import dev.dertyp.data.RepeatMode
 import dev.dertyp.data.Song
+import dev.dertyp.data.TitleTag
+import dev.dertyp.data.TitleTagKind
 import dev.dertyp.data.UserSong
 import dev.dertyp.ui.UiSchemaVersion
 import kotlinx.coroutines.flow.Flow
@@ -31,6 +36,8 @@ class ClientCompatTest {
         suspend fun map(): Map<String, UserSong?>
         suspend fun nowPlaying(): NowPlaying
         suspend fun queueEntry(): PlaybackState.QueueEntry.Explicit
+        suspend fun recentListens(): RecentListens
+        suspend fun playbackState(): PlaybackState
         suspend fun plain(): Song
         suspend fun text(): String
         suspend fun failing(): UserSong?
@@ -48,6 +55,15 @@ class ClientCompatTest {
         override suspend fun map() = mapOf("a" to userSong, "b" to null)
         override suspend fun nowPlaying() = NowPlaying(userSong, 42)
         override suspend fun queueEntry() = PlaybackState.QueueEntry.Explicit(userSong, 7)
+        override suspend fun recentListens() = RecentListens(NowPlaying(userSong, 42), listOf(ListenedSong(userSong, 99)))
+        override suspend fun playbackState() = PlaybackState(
+            queue = listOf(PlaybackState.QueueEntry.FromSource(UUID.randomUUID(), 1), PlaybackState.QueueEntry.Explicit(userSong, 2)),
+            currentIndex = 1,
+            isPlaying = true,
+            positionMs = 500,
+            shuffleMode = false,
+            repeatMode = RepeatMode.OFF,
+        )
         override suspend fun plain() = song
         override suspend fun text() = "unchanged"
         override suspend fun failing(): UserSong? = throw IllegalStateException("boom")
@@ -80,6 +96,16 @@ class ClientCompatTest {
         val entry = wrapped.queueEntry()
         assertEquals("", entry.song.title)
         assertEquals(7, entry.queueId)
+        val recentListens = wrapped.recentListens()
+        assertEquals("", recentListens.nowPlaying!!.song.title)
+        assertEquals(42, recentListens.nowPlaying!!.startedAt)
+        assertEquals("", recentListens.recent.single().song.title)
+        assertEquals(99, recentListens.recent.single().listenedAt)
+        val playbackState = wrapped.playbackState()
+        assertEquals("", (playbackState.queue[1] as PlaybackState.QueueEntry.Explicit).song.title)
+        assertEquals(1, playbackState.queue.first().queueId)
+        assertEquals(1, playbackState.currentIndex)
+        assertEquals(500, playbackState.positionMs)
         assertEquals("", wrapped.plain().title)
         assertEquals(listOf("", ""), wrapped.flow().toList().map { it.title })
     }
@@ -138,10 +164,38 @@ class ClientCompatTest {
         assertEquals(false, ResponseShaper(ClientInfo(2)).isNoop)
         assertEquals(false, ResponseShaper(ClientInfo(3)).isNoop)
         assertEquals(false, ResponseShaper(ClientInfo(4)).isNoop)
+        assertEquals(false, ResponseShaper(ClientInfo(5, uiSchemaVersion = UiSchemaVersion.CURRENT)).isNoop)
         assertEquals(true, ResponseShaper(ClientInfo(ApiVersion.CURRENT, uiSchemaVersion = UiSchemaVersion.CURRENT)).isNoop)
         assertEquals(true, ResponseShaper(ClientInfo(2), rules = emptyList()).isNoop)
         assertEquals(true, ResponseShaper(ClientInfo(3), rules = listOf(DolbyAtmosCompat)).isNoop)
         assertEquals(false, ResponseShaper(ClientInfo(2), rules = listOf(DolbyAtmosCompat)).isNoop)
+    }
+
+    @Test
+    fun `title tags are flattened for clients below api version 6`() = runBlocking {
+        val tags = listOf(TitleTag(TitleTagKind.FEAT, "feat. X"), TitleTag(TitleTagKind.REMIX, "Skrillex Remix"))
+        val taggedUserSong = userSong.copy(title = "Song", tags = tags)
+        val taggedSong = song.copy(title = "Song", tags = tags)
+        val api = object : SongApi by fake {
+            override suspend fun one() = taggedUserSong
+            override suspend fun plain() = taggedSong
+            override suspend fun nowPlaying() = NowPlaying(taggedUserSong, 42)
+            override suspend fun recentListens() = RecentListens(NowPlaying(taggedUserSong, 42), listOf(ListenedSong(taggedUserSong, 99)))
+        }
+
+        val v5 = api.withClientCompat(SongApi::class.java, ResponseShaper(ClientInfo(5, uiSchemaVersion = UiSchemaVersion.CURRENT)))
+        assertEquals("Song (feat. X) (Skrillex Remix)", v5.one()!!.title)
+        assertEquals(emptyList<TitleTag>(), v5.one()!!.tags)
+        assertEquals("Song (feat. X) (Skrillex Remix)", v5.plain().title)
+        assertEquals(emptyList<TitleTag>(), v5.plain().tags)
+        assertEquals("Song (feat. X) (Skrillex Remix)", v5.nowPlaying().song.title)
+        assertEquals("Song (feat. X) (Skrillex Remix)", v5.recentListens().recent.single().song.title)
+
+        val current = api.withClientCompat(SongApi::class.java, ResponseShaper(ClientInfo(ApiVersion.CURRENT)))
+        assertEquals("Song", current.one()!!.title)
+        assertEquals(tags, current.one()!!.tags)
+        assertEquals("Song", current.plain().title)
+        assertEquals(tags, current.plain().tags)
     }
 
     @Test

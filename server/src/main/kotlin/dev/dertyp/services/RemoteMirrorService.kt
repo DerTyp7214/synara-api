@@ -2,6 +2,8 @@ package dev.dertyp.services
 
 import dev.dertyp.PlatformUUID
 import dev.dertyp.core.ApplicationScope
+import dev.dertyp.core.fullTitle
+import dev.dertyp.core.withSplitTitleTags
 import dev.dertyp.data.*
 import dev.dertyp.randomPlatformUUID
 import dev.dertyp.rpc.BaseRpcServiceManager
@@ -456,14 +458,15 @@ class RemoteMirrorService : Service() {
 
         val flow = if (session.isFiltered) session.mirrorService.getSongs().filter { it.id in session.requiredSongIds } else session.mirrorService.getSongs()
 
-        flow.flatMapMerge(16) { song ->
+        flow.flatMapMerge(16) { remoteSong ->
             flow {
+                val song = remoteSong.withSplitTitleTags()
                 try {
                     val size = if (session.config.quality == -1) song.audio?.fileSize ?: 0L
                     else session.remoteSongService.getDownloadSize(song.id, session.config.quality)
                     emit(song to size)
                 } catch (e: Exception) {
-                    val displayName = "${song.artists.firstOrNull()?.name} - ${song.title}"
+                    val displayName = "${song.artists.firstOrNull()?.name} - ${song.fullTitle}"
                     session.recordError(displayName, e)
                     session.progressMutex.withLock {
                         session.songCount++
@@ -473,10 +476,10 @@ class RemoteMirrorService : Service() {
             }
         }.buffer(2048).flatMapMerge(3) { (song, size) ->
             flow {
-                val displayName = "${song.artists.firstOrNull()?.name} - ${song.title}"
+                val displayName = "${song.artists.firstOrNull()?.name} - ${song.fullTitle}"
                 try {
                     val localAlbumId = song.album?.id?.let { session.albumIdMap[it] } ?: if (session.config.isImport) return@flow else song.album?.id
-                    val newId = if (session.config.isImport) songService.findSongIdByMetadata(song.title, localAlbumId!!, song.trackNumber, song.discNumber, song.explicit) ?: randomPlatformUUID() else song.id
+                    val newId = if (session.config.isImport) songService.findSongIdByMetadata(song.title, localAlbumId!!, song.trackNumber, song.discNumber, song.explicit, song.tags) ?: randomPlatformUUID() else song.id
                     val localPathString = resolveLocalPath(song.path, newId.toString(), session.config.quality, session.remotePaths)
                     val base = localPathString.substringBeforeLast('.')
                     val existing = listOf("flac", "wav", "aiff", "aif", "ogg").map { File("$base.$it") }.firstOrNull { it.exists() && it.length() > 0 }

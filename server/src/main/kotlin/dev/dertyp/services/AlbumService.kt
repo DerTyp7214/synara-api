@@ -348,6 +348,15 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
         syncSongsWithMusicBrainz(albumId, mbTracks)
     }
 
+    private data class DbSongMatch(
+        val songId: UUID,
+        val musicBrainzId: UUID?,
+        val title: String,
+        val fullTitle: String,
+        val duration: Long,
+        val isrc: String?,
+    )
+
     suspend fun syncSongsWithMusicBrainz(id: UUID, mbTracks: List<Triple<Int, Int, MusicBrainzTrack>>) = dbQuery {
         if (mbTracks.isEmpty()) return@dbQuery
 
@@ -356,6 +365,7 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
             .select(
                 SongTable.id,
                 SongTable.title,
+                SongTable.titleTags,
                 SongTable.trackNumber,
                 SongTable.discNumber,
                 SongTable.duration,
@@ -367,9 +377,10 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
                 val songId = row[SongTable.id].value
                 val smbId = row.getOrNull(SongMusicBrainzTable.musicBrainzId)?.value
                 val title = row[SongTable.title]
+                val fullTitle = row.fullSongTitle()
                 val duration = row[SongTable.duration]
                 val isrc = row[SongTable.isrc]
-                Pair(songId, smbId) to Triple(title, duration, isrc)
+                DbSongMatch(songId, smbId, title, fullTitle, duration, isrc)
             }
 
         for ((discNo, trackNo, mbTrack) in mbTracks) {
@@ -378,19 +389,21 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
             val mbDuration = mbTrack.recording?.length
             val mbIsrc = mbTrack.recording?.isrcs?.firstOrNull()
 
-            val matchedSong = dbSongs.find { it.first.second == mbRecordingId }
-                ?: dbSongs.find { mbIsrc != null && it.second.third == mbIsrc }
-                ?: dbSongs.find { mbTitle != null && it.second.first.equals(mbTitle, ignoreCase = true) }
-                ?: dbSongs.find { mbTitle != null && it.second.first.cleanTitle().equals(mbTitle.cleanTitle(), ignoreCase = true) }
-                ?: dbSongs.find { 
-                    mbTitle != null && 
-                    mbDuration != null && 
-                    abs(it.second.second - mbDuration) < 2000 &&
-                    it.second.first.cleanTitle().contains(mbTitle.cleanTitle(), ignoreCase = true) 
+            val matchedSong = dbSongs.find { it.musicBrainzId == mbRecordingId }
+                ?: dbSongs.find { mbIsrc != null && it.isrc == mbIsrc }
+                ?: dbSongs.find { mbTitle != null && it.fullTitle.equals(mbTitle, ignoreCase = true) }
+                ?: dbSongs.find { mbTitle != null && it.fullTitle.cleanTitle().equals(mbTitle.cleanTitle(), ignoreCase = true) }
+                ?: dbSongs.find { mbTitle != null && it.title.equals(mbTitle, ignoreCase = true) }
+                ?: dbSongs.find { mbTitle != null && it.title.cleanTitle().equals(mbTitle.cleanTitle(), ignoreCase = true) }
+                ?: dbSongs.find {
+                    mbTitle != null &&
+                    mbDuration != null &&
+                    abs(it.duration - mbDuration) < 2000 &&
+                    it.title.cleanTitle().contains(mbTitle.cleanTitle(), ignoreCase = true)
                 }
 
             if (matchedSong != null) {
-                SongTable.update({ SongTable.id eq matchedSong.first.first }) {
+                SongTable.update({ SongTable.id eq matchedSong.songId }) {
                     it[trackNumber] = trackNo
                     it[discNumber] = discNo
                     if (mbIsrc != null) {
@@ -402,7 +415,7 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
                     mbTrack.recording?.let { musicBrainzCacheService.updateRecordingCache(it) }
 
                     SongMusicBrainzTable.upsert(SongMusicBrainzTable.songId) {
-                        it[songId] = matchedSong.first.first
+                        it[songId] = matchedSong.songId
                         it[musicBrainzId] = EntityID(mbRecordingId, MBRecordingTable)
                         it[lastCheck] = Clock.System.now().toEpochMilliseconds()
                     }

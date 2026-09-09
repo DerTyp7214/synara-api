@@ -341,6 +341,7 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                 animatedCoverImageId = animatedCoverImageIdColumn?.let { resultRow.getOrNull(it) }?.value,
                 animatedCoverBlurHash = animatedCoverBlurHashColumn?.let { resultRow.getOrNull(it) },
                 audioStartMs = resultRow.getOrNull(SongTable.audioStartMs),
+                tags = resultRow.titleTags(),
             )
         }
 
@@ -384,6 +385,7 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                 animatedCoverImageId = animatedCoverImageIdColumn?.let { resultRow.getOrNull(it) }?.value,
                 animatedCoverBlurHash = animatedCoverBlurHashColumn?.let { resultRow.getOrNull(it) },
                 audioStartMs = resultRow.getOrNull(SongTable.audioStartMs),
+                tags = resultRow.titleTags(),
                 isFavourite = resultRow.getOrNull(UserSongTable.isFavourite) ?: false,
                 userSongCreatedAt = resultRow.getOrNull(UserSongTable.createdAt).date,
                 userSongUpdatedAt = resultRow.getOrNull(UserSongTable.updatedAt).date,
@@ -566,38 +568,40 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
     }
 
     suspend fun updateSong(song: Song, userId: UUID): UserSong? {
-        setMusicBrainzId(song.id, song.musicBrainzId, userId)
+        val normalized = song.withSplitTitleTags()
+        setMusicBrainzId(normalized.id, normalized.musicBrainzId, userId)
 
         dbQuery {
-            SongTable.update({ SongTable.id eq song.id }) {
-                it[title] = song.title
-                song.album?.id?.let { albumUuid -> it[albumId] = EntityID(albumUuid, AlbumTable) }
-                it[releaseDate] = getISOFromDate(song.releaseDate)
-                it[lyrics] = song.lyrics
-                it[trackNumber] = song.trackNumber
-                it[discNumber] = song.discNumber
+            SongTable.update({ SongTable.id eq normalized.id }) {
+                it[title] = normalized.title
+                it[titleTags] = encodeTitleTags(normalized.tags)
+                normalized.album?.id?.let { albumUuid -> it[albumId] = EntityID(albumUuid, AlbumTable) }
+                it[releaseDate] = getISOFromDate(normalized.releaseDate)
+                it[lyrics] = normalized.lyrics
+                it[trackNumber] = normalized.trackNumber
+                it[discNumber] = normalized.discNumber
             }
 
-            SongArtistTable.deleteWhere { SongArtistTable.songId eq song.id }
-            val creditedAliasIds = song.artists.associate { artist ->
+            SongArtistTable.deleteWhere { SongArtistTable.songId eq normalized.id }
+            val creditedAliasIds = normalized.artists.associate { artist ->
                 artist.id to artist.creditedName
                     ?.takeIf { it.isNotBlank() }
                     ?.let { artistService.getOrCreateAliasTx(artist.id, it) }
             }
-            SongArtistTable.batchInsert(song.artists) { artist ->
-                this[SongArtistTable.songId] = song.id
+            SongArtistTable.batchInsert(normalized.artists) { artist ->
+                this[SongArtistTable.songId] = normalized.id
                 this[SongArtistTable.artistId] = artist.id
                 this[SongArtistTable.creditedAliasId] = creditedAliasIds[artist.id]
             }
         }
 
-        return byId(song.id, userId).also { updated ->
+        return byId(normalized.id, userId).also { updated ->
             updated?.let { s ->
                 if (!File(s.path).isLossless) return@let
                 try {
                     val file = AudioFileIO.read(File(s.path))
                     file.tag.apply {
-                        setField(FieldKey.TITLE, s.title)
+                        setField(FieldKey.TITLE, s.fullTitle)
                         deleteField(FieldKey.ARTIST)
                         for (name in s.artists.map { artist -> artist.name }.sorted()) {
                             addField(FieldKey.ARTIST, name)
@@ -606,7 +610,7 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                     }
                     file.commit()
                 } catch (e: Exception) {
-                    logger.error("Failed to update song ${song.id}: ${e.message}", e)
+                    logger.error("Failed to update song ${normalized.id}: ${e.message}", e)
                 }
             }
         }
@@ -768,16 +772,16 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
         albumId: UUID,
         trackNumber: Int,
         discNumber: Int,
-        explicit: Boolean
+        explicit: Boolean,
+        tags: List<TitleTag> = emptyList()
     ): UUID? = dbQuery {
         SongTable.select(SongTable.id)
-            .where {
-                (SongTable.title eq title) and
-                        (SongTable.albumId eq albumId) and
-                        (SongTable.trackNumber eq trackNumber) and
-                        (SongTable.discNumber eq discNumber) and
-                        (SongTable.explicit eq explicit)
-            }
+            .andWhere { SongTable.title eq title }
+            .andWhere { SongTable.albumId eq albumId }
+            .andWhere { SongTable.trackNumber eq trackNumber }
+            .andWhere { SongTable.discNumber eq discNumber }
+            .andWhere { SongTable.explicit eq explicit }
+            .andWhere { SongTable.titleTags eq encodeTitleTags(tags) }
             .singleOrNull()?.get(SongTable.id)?.value
     }
 
@@ -1349,7 +1353,7 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
         }) {
             rankedSearchQuery(
                 query,
-                listOf(20, 10, 5, 5, 5, 5, 3, 3, 3, 3, 5, 5, 3, 5, 5, 3),
+                listOf(20, 10, 5, 5, 5, 5, 3, 3, 3, 3, 5, 5, 3, 5, 5, 3, 8),
                 listOf(
                     SongMusicBrainzTable.musicBrainzId.castTo<String?>(VarCharColumnType(36)),
                     SongTable.title,
@@ -1366,7 +1370,8 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                     mbReleaseSearchTable[MBReleaseTable.disambiguation],
                     mbArtistSearchTable[MBArtistTable.name],
                     mbArtistAliasSearchTable[MBArtistAliasTable.name],
-                    mbArtistSearchTable[MBArtistTable.disambiguation]
+                    mbArtistSearchTable[MBArtistTable.disambiguation],
+                    SongTable.titleTags
                 ),
                 SongTable.id,
                 searchVectorColumn = if (searchIndexWorker != null) SongTable.searchVector else null
@@ -1445,7 +1450,7 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
             val songId = row[SongTable.id].value
             val entry = songs.getOrPut(songId) {
                 CsvRow(
-                    title = row[SongTable.title],
+                    title = row.fullSongTitle(),
                     albumName = row.getOrNull(AlbumTable.name),
                     isrc = row.getOrNull(SongTable.isrc),
                     mbid = row.getOrNull(SongMusicBrainzTable.musicBrainzId)?.value,
@@ -2203,6 +2208,7 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
         }.groupBy {
             listOf(
                 it.title.removeSuffix("\uD83C\uDD74").trim(),
+                it.tags,
                 it.releaseDate,
                 it.duration,
                 it.trackNumber,
@@ -2215,7 +2221,14 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
         }
     }
 
-    private suspend fun bulkFindExistingSongs(songs: List<InsertableSong>): Map<InsertableSong, Pair<UUID, Pair<String, Boolean>>> =
+    private data class ExistingSong(
+        val id: UUID,
+        val title: String,
+        val explicit: Boolean,
+        val tags: List<TitleTag>
+    )
+
+    private suspend fun bulkFindExistingSongs(songs: List<InsertableSong>): Map<InsertableSong, ExistingSong> =
         dbQuery {
             val parsedLookups = songs.mapNotNull { song ->
                 if (song.originalUrl.isBlank()) return@mapNotNull null
@@ -2242,6 +2255,7 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                 .select(
                     SongTable.id,
                     SongTable.title,
+                    SongTable.titleTags,
                     SongTable.trackNumber,
                     SongTable.discNumber,
                     SongTable.explicit,
@@ -2276,7 +2290,7 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                 }
                 .toList()
 
-            val existingSongMap = mutableMapOf<InsertableSong, Pair<UUID, Pair<String, Boolean>>>()
+            val existingSongMap = mutableMapOf<InsertableSong, ExistingSong>()
 
             for (song in songs) {
                 rows.firstOrNull { row ->
@@ -2305,6 +2319,7 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                     val metadataMatch = legacyMatch || providerMatch || isrcMatch || (
                             song.originalUrl.isBlank() &&
                                     row[SongTable.title] == song.title &&
+                                    row.titleTags() == song.tags &&
                                     row[SongTable.trackNumber] == song.trackNumber &&
                                     row[SongTable.discNumber] == song.discNumber &&
                                     row[SongTable.explicit] == song.explicit &&
@@ -2312,8 +2327,12 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                             )
 
                     if (pathMatch || metadataMatch) {
-                        existingSongMap[song] =
-                            songId to (row[SongTable.title] to row[SongTable.explicit])
+                        existingSongMap[song] = ExistingSong(
+                            id = songId,
+                            title = row[SongTable.title],
+                            explicit = row[SongTable.explicit],
+                            tags = row.titleTags()
+                        )
                         return@firstOrNull true
                     }
                     return@firstOrNull false
@@ -2325,6 +2344,8 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
     override suspend fun createBatch(songs: List<InsertableSong>): Map<UUID, Song> =
         coroutineScope {
             if (songs.isEmpty()) return@coroutineScope emptyMap()
+
+            val songs = songs.map { it.withSplitTitleTags() }
 
             val debug = songs.size >= 5000
             val overallStart = System.currentTimeMillis()
@@ -2405,19 +2426,17 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                 .toMap()
             logBlock("Existing song lookup")
 
-            val dirtySongs = existingSongMap.filter { (song, data) ->
-                val (_, meta) = data
-                val (dbTitle, dbExplicit) = meta
-                dbTitle != song.title || dbExplicit != song.explicit
+            val dirtySongs = existingSongMap.filter { (song, existing) ->
+                existing.title != song.title || existing.explicit != song.explicit || existing.tags != song.tags
             }
 
             if (dirtySongs.isNotEmpty()) {
                 dbQuery {
-                    dirtySongs.forEach { (song, data) ->
-                        val (songId, _) = data
-                        SongTable.update({ SongTable.id eq songId }) {
+                    dirtySongs.forEach { (song, existing) ->
+                        SongTable.update({ SongTable.id eq existing.id }) {
                             it[title] = song.title
                             it[explicit] = song.explicit
+                            it[titleTags] = encodeTitleTags(song.tags)
                         }
                     }
                 }
@@ -2426,7 +2445,7 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
 
             val atmosSongs = existingSongMap.filter { (song, _) -> song.atmosPath != null }
             if (atmosSongs.isNotEmpty()) {
-                val variants = atmosSongs.map { (song, data) -> Triple(data.first, song.atmosPath!!, song.atmos) }
+                val variants = atmosSongs.map { (song, existing) -> Triple(existing.id, song.atmosPath!!, song.atmos) }
                 dbQuery { insertVariants(SongVariantKind.ATMOS, variants) }
                 logBlock("Atmos variant updates")
             }
@@ -2442,6 +2461,7 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                 .groupBy { song ->
                     listOf(
                         song.title,
+                        song.tags,
                         song.album.name,
                         song.album.originalId,
                         song.trackNumber,
@@ -2467,6 +2487,7 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                     val imageId = song.coverHash?.let { imageIdMap[it] }
 
                     this[SongTable.title] = song.title
+                    this[SongTable.titleTags] = encodeTitleTags(song.tags)
                     this[SongTable.albumId] = albumId!!
                     this[SongTable.duration] = song.duration
                     this[SongTable.explicit] = song.explicit
@@ -2590,10 +2611,13 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
             finalResult
         }
 
-    suspend fun upsertSong(song: Song) = dbQuery {
+    suspend fun upsertSong(remoteSong: Song) = dbQuery {
+        val song = remoteSong.withSplitTitleTags()
+
         SongTable.upsert(SongTable.id) {
             it[id] = song.id
             it[title] = song.title
+            it[titleTags] = encodeTitleTags(song.tags)
             it[isrc] = song.isrc
             it[albumId] = song.album?.id?.let { albumId -> EntityID(albumId, AlbumTable) }!!
             it[duration] = song.duration

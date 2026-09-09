@@ -6,6 +6,7 @@ import java.time.Instant
 
 object SongTable : UUIDTable("song") {
     val title = text("title").default("")
+    val titleTags = text("title_tags").default("[]")
     val albumId = reference("albumId", AlbumTable.id, onDelete = ReferenceOption.SET_NULL)
     val duration = long("duration").default(0L)
     val releaseDate = varchar("releaseDate", 128).nullable()

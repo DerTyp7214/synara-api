@@ -2,6 +2,7 @@ package dev.dertyp.utils
 
 import dev.dertyp.core.ClientFeature
 import dev.dertyp.core.ClientInfo
+import dev.dertyp.core.fullTitle
 import dev.dertyp.data.Song
 import dev.dertyp.data.UserSong
 import dev.dertyp.ui.UiComponent
@@ -48,6 +49,14 @@ object DolbyAtmosCompat : CompatRule {
     override fun shapeUserSong(song: UserSong): UserSong = song.copy(atmosPath = null)
 }
 
+object TitleTagsCompat : CompatRule {
+    override val feature = ClientFeature.TITLE_TAGS
+
+    override fun shapeSong(song: Song): Song = song.copy(title = song.fullTitle, tags = emptyList())
+
+    override fun shapeUserSong(song: UserSong): UserSong = song.copy(title = song.fullTitle, tags = emptyList())
+}
+
 object CompatRules {
-    val all: List<CompatRule> = listOf(AudioInfoCompat, DolbyAtmosCompat, UiSchemaCompat())
+    val all: List<CompatRule> = listOf(AudioInfoCompat, DolbyAtmosCompat, TitleTagsCompat, UiSchemaCompat())
 }

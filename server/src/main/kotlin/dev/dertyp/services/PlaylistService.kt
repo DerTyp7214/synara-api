@@ -11,6 +11,7 @@ import dev.dertyp.db.ImageTable
 import dev.dertyp.db.PlaylistSongTable
 import dev.dertyp.db.PlaylistTable
 import dev.dertyp.db.SongTable
+import dev.dertyp.db.fullSongTitle
 import dev.dertyp.dbQuery
 import dev.dertyp.plugins.PlaylistLibrary
 import dev.dertyp.utils.LogParam
@@ -77,6 +78,7 @@ class PlaylistService : PlaylistLibrary, IPlaylistService, Service() {
                 PlaylistSongTable.position,
                 PlaylistSongTable.songId,
                 SongTable.title,
+                SongTable.titleTags,
                 SongTable.duration
             )
             .where { PlaylistTable.id eq id }
@@ -217,7 +219,7 @@ class PlaylistService : PlaylistLibrary, IPlaylistService, Service() {
                     row[PlaylistSongTable.position],
                     PlaylistEntry(
                         id = songId,
-                        name = row[SongTable.title],
+                        name = row.fullSongTitle(),
                         duration = row[SongTable.duration]
                     )
                 )

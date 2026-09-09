@@ -1,5 +1,6 @@
 package dev.dertyp.services.subsonic
 
+import dev.dertyp.core.fullTitle
 import dev.dertyp.data.Album
 import dev.dertyp.data.Artist
 import dev.dertyp.data.BaseSong
@@ -26,7 +27,7 @@ fun BaseSong.toChild(): Child {
     return Child(
         id = id.trId(),
         parent = album?.id?.alId(),
-        title = title,
+        title = fullTitle,
         album = album?.name,
         artist = artists.joinToString(", ") { it.creditedName ?: it.name }.ifEmpty { null },
         track = trackNumber,
