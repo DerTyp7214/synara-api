@@ -1,10 +1,12 @@
 package dev.dertyp.services
 
 import dev.dertyp.data.Session
+import dev.dertyp.db.QueueSyncDeviceTable
 import dev.dertyp.db.RefreshTokenTable
 import dev.dertyp.db.SessionTable
 import dev.dertyp.dbQuery
 import org.jetbrains.exposed.v1.core.*
+import org.jetbrains.exposed.v1.jdbc.andWhere
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.selectAll
@@ -45,6 +47,14 @@ class SessionService : Service() {
             .map(::mapSession)
     }
 
+    suspend fun sessionBelongsTo(sessionId: UUID, userId: UUID): Boolean = dbQuery {
+        SessionTable
+            .selectAll()
+            .where { SessionTable.id eq sessionId }
+            .andWhere { SessionTable.userId eq userId }
+            .any()
+    }
+
     suspend fun isSessionActive(sessionId: UUID): Boolean = dbQuery {
         SessionTable
             .selectAll()
@@ -67,6 +77,7 @@ class SessionService : Service() {
                 val progress = (index.toDouble() / chunks.size) * 100.0
                 onProgress(progress, "Cleaning up sessions batch ${index + 1}/${chunks.size}")
                 
+                QueueSyncDeviceTable.deleteWhere { QueueSyncDeviceTable.sessionId inList chunk }
                 RefreshTokenTable.deleteWhere { sessionId inList chunk }
                 SessionTable.deleteWhere { id inList chunk }
             }

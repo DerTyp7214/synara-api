@@ -42,6 +42,7 @@ class ScheduledTaskConfigurationService : Service() {
             TaskConfiguration(TaskKeys.DATABASE_BACKUP, "Database Backup", true, TriggerDefinition.Cron("0 2 * * *")),
             TaskConfiguration(TaskKeys.USER_PLAYLIST_BACKUP, "User Playlist Backup", true, TriggerDefinition.Cron("0 2 * * *")),
             TaskConfiguration(TaskKeys.SESSION_CLEANUP, "Session Cleanup", true, TriggerDefinition.Cron("0 0 * * *")),
+            TaskConfiguration(TaskKeys.QUEUE_CLEANUP, "Queue Cleanup", true, TriggerDefinition.Cron("30 0 * * *")),
             TaskConfiguration(TaskKeys.MERGE_LIBRARY_DUPLICATES, "Merge Library Duplicates", true, TriggerDefinition.Cron("0 1 * * *")),
             TaskConfiguration(TaskKeys.AUDIO_ANALYSIS, "Audio Analysis", true, TriggerDefinition.Cron("0 3 * * *")),
             TaskConfiguration(TaskKeys.FLAC_ANALYSIS, "FLAC Analysis", true, TriggerDefinition.Cron("0 5 * * *")),

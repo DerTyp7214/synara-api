@@ -7,6 +7,7 @@ import dev.dertyp.data.ListenedSong
 import dev.dertyp.data.NowPlaying
 import dev.dertyp.data.PaginatedResponse
 import dev.dertyp.data.PlaybackState
+import dev.dertyp.data.QueueItem
 import dev.dertyp.data.RecentListens
 import dev.dertyp.data.RepeatMode
 import dev.dertyp.data.Song
@@ -36,6 +37,7 @@ class ClientCompatTest {
         suspend fun map(): Map<String, UserSong?>
         suspend fun nowPlaying(): NowPlaying
         suspend fun queueEntry(): PlaybackState.QueueEntry.Explicit
+        suspend fun queueItem(): QueueItem
         suspend fun recentListens(): RecentListens
         suspend fun playbackState(): PlaybackState
         suspend fun plain(): Song
@@ -55,6 +57,7 @@ class ClientCompatTest {
         override suspend fun map() = mapOf("a" to userSong, "b" to null)
         override suspend fun nowPlaying() = NowPlaying(userSong, 42)
         override suspend fun queueEntry() = PlaybackState.QueueEntry.Explicit(userSong, 7)
+        override suspend fun queueItem() = QueueItem(songId = userSong.id, queueId = 1, position = 0, song = userSong)
         override suspend fun recentListens() = RecentListens(NowPlaying(userSong, 42), listOf(ListenedSong(userSong, 99)))
         override suspend fun playbackState() = PlaybackState(
             queue = listOf(PlaybackState.QueueEntry.FromSource(UUID.randomUUID(), 1), PlaybackState.QueueEntry.Explicit(userSong, 2)),
@@ -108,6 +111,13 @@ class ClientCompatTest {
         assertEquals(500, playbackState.positionMs)
         assertEquals("", wrapped.plain().title)
         assertEquals(listOf("", ""), wrapped.flow().toList().map { it.title })
+    }
+
+    @Test
+    fun `shape recurses into QueueItem's song`() = runBlocking {
+        val entry = wrapped.queueItem()
+        assertEquals("", entry.song!!.title)
+        assertEquals(1L, entry.queueId)
     }
 
     @Test

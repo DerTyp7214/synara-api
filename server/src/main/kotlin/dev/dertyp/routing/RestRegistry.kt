@@ -6,6 +6,7 @@ import dev.dertyp.StreamInfo
 import dev.dertyp.core.ApplicationScope
 import dev.dertyp.core.UnauthorizedException
 import dev.dertyp.core.clientInfo
+import dev.dertyp.core.getSessionId
 import dev.dertyp.core.getUser
 import dev.dertyp.core.toUUIDOrNull
 import dev.dertyp.data.PaginatedResponse
@@ -501,6 +502,15 @@ fun Route.registerAuthenticatedRestServices(koin: Koin) {
     registerRestService(IPlaybackService::class, authenticated = true) {
         val user = call.getUser()
         RpcPlaybackService(koin.get()).withAuthorization<IPlaybackService>(user)
+    }
+    registerRestService(IQueueService::class, authenticated = true) {
+        val user = call.getUser() ?: throw IllegalArgumentException("No user found")
+        RpcQueueService(user, call.getSessionId(), koin.get(), koin.get(), koin.get()).withAuthorization<IQueueService>(user)
+    }
+    registerRestService(IClientRequestService::class, authenticated = true) {
+        val user = call.getUser() ?: throw IllegalArgumentException("No user found")
+        RpcClientRequestService(call.getSessionId() ?: throw IllegalArgumentException("No session found"), koin.get())
+            .withAuthorization<IClientRequestService>(user)
     }
     registerRestService(ICustomAudioService::class, authenticated = true) {
         val user = call.getUser()

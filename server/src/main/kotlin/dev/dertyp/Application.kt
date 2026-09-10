@@ -302,6 +302,8 @@ fun mainModule(application: Application, environment: ApplicationEnvironment): M
     singleOf(::ImporterProxy)
     singleOf(::SessionService)
     singleOf(::PlaybackService)
+    singleOf(::QueueService)
+    singleOf(::ClientRequestService)
     singleOf(::CustomAudioService)
     singleOf(::ReverseProxyService)
     singleOf(::DbManagementService)

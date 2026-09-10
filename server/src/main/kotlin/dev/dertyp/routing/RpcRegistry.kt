@@ -4,6 +4,7 @@ import dev.dertyp.IIndexer
 import dev.dertyp.Indexer
 import dev.dertyp.RpcIndexer
 import dev.dertyp.core.clientInfo
+import dev.dertyp.core.getSessionId
 import dev.dertyp.core.getUser
 import dev.dertyp.data.User
 import dev.dertyp.services.*
@@ -131,6 +132,9 @@ private fun registerAuthenticated(koin: Koin, call: ApplicationCall, user: User,
     val importerProxy = koin.get<ImporterProxy>()
     val sessionService = koin.get<SessionService>()
     val playbackService = koin.get<PlaybackService>()
+    val queueService = koin.get<QueueService>()
+    val clientRequestService = koin.get<ClientRequestService>()
+    val sessionId = call.getSessionId()
     val customAudioService = koin.get<CustomAudioService>()
     val dbManagementService = koin.get<DbManagementService>()
     val backupService = koin.get<BackupService>()
@@ -178,6 +182,8 @@ private fun registerAuthenticated(koin: Koin, call: ApplicationCall, user: User,
     registrar.register(IHueService::class) { RpcHueService(user, koin.get()).withAuthorization<IHueService>(user).withLogging<IHueService>(call) }
     registrar.register(ISessionService::class) { RpcSessionService(user, sessionService).withAuthorization<ISessionService>(user).withLogging<ISessionService>(call) }
     registrar.register(IPlaybackService::class) { RpcPlaybackService(playbackService).withAuthorization<IPlaybackService>(user).withLogging<IPlaybackService>(call) }
+    registrar.register(IQueueService::class) { RpcQueueService(user, sessionId, queueService, sessionService, clientRequestService).withAuthorization<IQueueService>(user).withLogging<IQueueService>(call) }
+    registrar.register(IClientRequestService::class) { RpcClientRequestService(sessionId ?: throw IllegalArgumentException("No session found"), clientRequestService).withAuthorization<IClientRequestService>(user).withLogging<IClientRequestService>(call) }
     registrar.register(ICustomAudioService::class) { CustomAudioRpcService(customAudioService).withAuthorization<ICustomAudioService>(user).withLogging<ICustomAudioService>(call) }
     registrar.register(IDbManagementService::class) { dbManagementService.withAuthorization<IDbManagementService>(user).withLogging<IDbManagementService>(call) }
     registrar.register(IBackupService::class) { RpcBackupService(user, backupService).withAuthorization<IBackupService>(user).withLogging<IBackupService>(call) }

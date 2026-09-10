@@ -6,6 +6,7 @@ import dev.dertyp.data.ListenedSong
 import dev.dertyp.data.NowPlaying
 import dev.dertyp.data.PaginatedResponse
 import dev.dertyp.data.PlaybackState
+import dev.dertyp.data.QueueItem
 import dev.dertyp.data.RadioChannelSongMatch
 import dev.dertyp.data.RecentListens
 import dev.dertyp.data.Song
@@ -54,6 +55,7 @@ open class ResponseShaper(val client: ClientInfo, rules: List<CompatRule> = Comp
         is RadioChannelSongMatch -> value.copy(song = shapeUserSong(value.song))
         is PlaybackState -> value.copy(queue = value.queue.map { shape(it) as PlaybackState.QueueEntry })
         is PlaybackState.QueueEntry.Explicit -> value.copy(song = shapeUserSong(value.song))
+        is QueueItem -> value.copy(song = value.song?.let(::shapeUserSong))
         else -> value
     }
 

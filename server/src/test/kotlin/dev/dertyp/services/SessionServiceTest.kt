@@ -2,6 +2,7 @@ package dev.dertyp.services
 
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
+import dev.dertyp.db.QueueSyncDeviceTable
 import dev.dertyp.db.RefreshTokenTable
 import dev.dertyp.db.SessionTable
 import dev.dertyp.db.UserTable
@@ -10,6 +11,7 @@ import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.insert
+import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.*
@@ -34,7 +36,7 @@ class SessionServiceTest : KoinTest {
 
         database = TestDatabase.connect(dialect, "session_test")
         transaction(database) {
-            SchemaUtils.create(UserTable, SessionTable, RefreshTokenTable)
+            SchemaUtils.create(UserTable, SessionTable, RefreshTokenTable, QueueSyncDeviceTable)
         }
         service = SessionService()
     }
@@ -82,7 +84,37 @@ class SessionServiceTest : KoinTest {
 
         val sessionId = service.createSession(userId, "agent", "127.0.0.1")
         service.deactivateSession(sessionId, userId)
-        
+
         assertFalse(service.isSessionActive(sessionId))
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `cleanupOldSessions removes queue sync device rows of deleted sessions`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val userId = UUID.randomUUID()
+        transaction(database) {
+            UserTable.insert {
+                it[id] = userId
+                it[username] = "user"
+                it[passwordHash] = "hash"
+            }
+        }
+
+        val sessionId = service.createSession(userId, "agent", "127.0.0.1")
+        service.deactivateSession(sessionId, userId)
+        transaction(database) {
+            QueueSyncDeviceTable.insert {
+                it[QueueSyncDeviceTable.sessionId] = sessionId
+                it[QueueSyncDeviceTable.userId] = userId
+                it[deviceName] = "device"
+            }
+        }
+
+        service.cleanupOldSessions()
+
+        transaction(database) {
+            assertEquals(0L, QueueSyncDeviceTable.selectAll().count())
+        }
     }
 }
