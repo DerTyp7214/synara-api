@@ -12,6 +12,7 @@ class ApiKeyScopeRegistry {
 
     init {
         register(ApiKeyScope.Radio, SERVER_SOURCE)
+        register(ApiKeyScope.Mcp, SERVER_SOURCE)
     }
 
     fun register(scope: ApiKeyScope, source: String) {

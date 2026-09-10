@@ -189,7 +189,7 @@ class ListenService : Service() {
         val result = dbQuery {
             require(SongTable.select(SongTable.id).where { SongTable.id eq songId }.any()) { "Song $songId not found" }
 
-            val owner = ownerPredicate(userId)
+            val owner = listenOwnerPredicate(userId)
 
             val mbid = recordingMbid ?: recordingMsid?.let { msid ->
                 ListenTable
@@ -262,7 +262,7 @@ class ListenService : Service() {
         val capped = limit.coerceIn(1, 1000)
 
         val rows = dbQuery {
-            val owner = ownerPredicate(userId)
+            val owner = listenOwnerPredicate(userId)
 
             ListenTable
                 .select(ListenTable.songId, ListenTable.listenedAt, ListenTable.recordingMbid, ListenTable.isrcs)
@@ -289,19 +289,6 @@ class ListenService : Service() {
 
         val songs = songService.byIds(kept.map { it.songId }.distinct(), userId).associateBy { it.id }
         return kept.mapNotNull { row -> songs[row.songId]?.let { ListenedSong(song = it, listenedAt = row.listenedAt) } }
-    }
-
-    private fun ownerPredicate(userId: PlatformUUID): Op<Boolean> {
-        val lbId = UserListenBrainzLinkTable
-            .select(UserListenBrainzLinkTable.listenBrainzUserId)
-            .where { UserListenBrainzLinkTable.userId eq userId }
-            .singleOrNull()?.get(UserListenBrainzLinkTable.listenBrainzUserId)?.value
-
-        return if (lbId != null) {
-            (ListenTable.userId eq userId) or (ListenTable.listenBrainzUserId eq lbId)
-        } else {
-            ListenTable.userId eq userId
-        }
     }
 
     private data class LocalListenMetadata(

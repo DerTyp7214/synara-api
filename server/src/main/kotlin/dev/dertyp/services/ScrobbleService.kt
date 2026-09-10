@@ -11,6 +11,13 @@ import org.koin.core.component.inject
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.time.Duration.Companion.milliseconds
 
+data class NowPlayingSnapshot(
+    val song: UserSong,
+    val startedAt: Long,
+    val positionMs: Long,
+    val playing: Boolean,
+)
+
 class ScrobbleService : Service() {
     private val listenService by inject<ListenService>()
     private val songService by inject<SongService>()
@@ -77,6 +84,18 @@ class ScrobbleService : Service() {
         val delay = report.sentAt?.let { now - it } ?: 0L
         val corrected = if (report.playing && delay in 0..MAX_REPORT_DELAY_MS) report.positionMs + delay else report.positionMs
         return corrected.coerceAtLeast(0)
+    }
+
+    fun currentNowPlaying(userId: PlatformUUID): NowPlayingSnapshot? {
+        val entry = nowPlaying[userId] ?: return null
+        val positionMs = entry.positionMs +
+            if (entry.playing) (System.currentTimeMillis() - entry.anchorAt).coerceAtLeast(0) else 0L
+        return NowPlayingSnapshot(
+            song = entry.song,
+            startedAt = entry.firstStartedAt,
+            positionMs = positionMs,
+            playing = entry.playing,
+        )
     }
 
     suspend fun clearNowPlaying(userId: PlatformUUID) {

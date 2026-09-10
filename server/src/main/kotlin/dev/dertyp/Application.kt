@@ -18,6 +18,8 @@ import dev.dertyp.services.hue.HueService
 import dev.dertyp.core.configureScheduledTasks
 import dev.dertyp.data.RemoteServerConfig
 import dev.dertyp.db.SongTable
+import dev.dertyp.mcp.ListenHistoryMcpServerFactory
+import dev.dertyp.mcp.ListenHistoryQueryService
 import dev.dertyp.db.UserTable
 import dev.dertyp.plugins.JmDNSPlugin
 import dev.dertyp.plugins.PluginManager
@@ -237,6 +239,8 @@ fun mainModule(application: Application, environment: ApplicationEnvironment): M
     singleOf(::ListenService)
     singleOf(::ScrobbleService)
     singleOf(::ListeningStatsService)
+    singleOf(::ListenHistoryQueryService)
+    singleOf(::ListenHistoryMcpServerFactory)
     singleOf(::ListenBrainzService)
     singleOf(::ListenBackupService)
     singleOf(::AudioEmbeddingService)

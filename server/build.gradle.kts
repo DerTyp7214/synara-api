@@ -113,6 +113,7 @@ dependencies {
     implementation(libs.ktor.server.auto.head.response)
     implementation(libs.ktor.server.sessions)
     implementation(libs.ktor.server.partial.content)
+    implementation(libs.mcp.kotlin.sdk.server)
     implementation(libs.caffeine)
     implementation(libs.jmdns)
     implementation(libs.cron.utils)

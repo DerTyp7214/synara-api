@@ -1,8 +1,10 @@
 package dev.dertyp.db
 
+import dev.dertyp.PlatformUUID
 import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.core.dao.id.java.UUIDTable
 import org.jetbrains.exposed.v1.core.java.javaUUID
+import org.jetbrains.exposed.v1.jdbc.select
 
 enum class ListenSource { LISTENBRAINZ, LOCAL }
 
@@ -57,4 +59,17 @@ object ListenTable : UUIDTable("listen") {
 
     fun joinIsrcs(isrcs: Collection<String>): String? =
         isrcs.map { it.uppercase() }.distinct().sorted().joinToString(",").ifBlank { null }
+}
+
+internal fun listenOwnerPredicate(userId: PlatformUUID): Op<Boolean> {
+    val listenBrainzUserId = UserListenBrainzLinkTable
+        .select(UserListenBrainzLinkTable.listenBrainzUserId)
+        .where { UserListenBrainzLinkTable.userId eq userId }
+        .singleOrNull()?.get(UserListenBrainzLinkTable.listenBrainzUserId)?.value
+
+    return if (listenBrainzUserId != null) {
+        (ListenTable.userId eq userId) or (ListenTable.listenBrainzUserId eq listenBrainzUserId)
+    } else {
+        ListenTable.userId eq userId
+    }
 }

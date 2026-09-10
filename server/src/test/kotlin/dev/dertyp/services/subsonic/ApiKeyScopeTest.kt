@@ -16,6 +16,13 @@ class ApiKeyScopeTest {
     }
 
     @Test
+    fun `registry contains built-in mcp scope`() {
+        val registry = ApiKeyScopeRegistry()
+        assertTrue(registry.contains(ApiKeyScope.Mcp.id))
+        assertEquals("server", registry.all().single { it.id == ApiKeyScope.Mcp.id }.source)
+    }
+
+    @Test
     fun `plugin scopes are self-namespacing`() {
         assertEquals("subsonic", ApiKeyScope.Plugin("subsonic", "subsonic", "n", "d").id)
         assertEquals("subsonic.extra", ApiKeyScope.Plugin("subsonic", "extra", "n", "d").id)

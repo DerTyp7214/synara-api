@@ -154,6 +154,8 @@ fun Application.configureRouting() {
 
         radioRouting()
 
+        mcpRouting()
+
         mirrorRouting()
     }
 }
