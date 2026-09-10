@@ -265,7 +265,7 @@ class ListenService : Service() {
             val owner = listenOwnerPredicate(userId)
 
             ListenTable
-                .select(ListenTable.songId, ListenTable.listenedAt, ListenTable.recordingMbid, ListenTable.isrcs)
+                .select(ListenTable.songId, ListenTable.listenedAt, ListenTable.recordingMbid, ListenTable.isrcs, ListenTable.listenSource)
                 .where { owner }
                 .andWhere { ListenTable.songId.isNotNull() }
                 .orderBy(ListenTable.listenedAt to SortOrder.DESC)
@@ -276,6 +276,7 @@ class ListenService : Service() {
                         listenedAt = it[ListenTable.listenedAt],
                         recordingMbid = it[ListenTable.recordingMbid],
                         isrcs = ListenTable.parseIsrcs(it[ListenTable.isrcs]),
+                        source = it[ListenTable.listenSource],
                     )
                 }
         }
@@ -283,7 +284,11 @@ class ListenService : Service() {
 
         val kept = ArrayList<ListenRow>()
         for (row in rows) {
-            if (kept.none { samePlay(it, row) }) kept.add(row)
+            val index = kept.indexOfFirst { samePlay(it, row) }
+            when {
+                index < 0 -> kept.add(row)
+                row.source == ListenSource.LOCAL && kept[index].source != ListenSource.LOCAL -> kept[index] = row
+            }
             if (kept.size >= capped) break
         }
 
@@ -306,6 +311,7 @@ class ListenService : Service() {
         val listenedAt: Long,
         val recordingMbid: PlatformUUID?,
         val isrcs: Set<String>,
+        val source: ListenSource,
     )
 
     private fun samePlay(a: ListenRow, b: ListenRow): Boolean {

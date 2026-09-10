@@ -542,6 +542,97 @@ class ListenHistoryQueryServiceTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
+    fun `an own scrobble replaces its earlier ListenBrainz copy`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val (user, localSong) = transaction(database) {
+            val u = insertUser()
+            val lb = insertLbUser()
+            link(u, lb)
+            val album = insertAlbum()
+            val lbSong = insertSong(album, title = "LB Song", durationMs = 229_133)
+            val localSong = insertSong(album, title = "Local Song", durationMs = 229_133)
+            val mbid = UUID.randomUUID()
+            val t = ms(2026, 9, 10, 13, 49, 44)
+            insertListen(t, lbUserId = lb, songId = lbSong, recordingMbid = mbid, isrcs = "US1111111111", playedMs = 229_133)
+            insertListen(t + 83, userId = u, songId = localSong, recordingMbid = mbid, isrcs = "US1111111111", playedMs = 229_000)
+            u to localSong
+        }
+
+        val summary = service.summary(user, ListenFilter(), ZoneOffset.UTC)
+        val top = service.top(user, ListenFilter(), McpTopKind.SONGS, McpTopOrder.LISTEN_COUNT, 10, 0, ZoneOffset.UTC)
+
+        assertEquals(1L, summary.listenCount)
+        assertEquals(229_000L, summary.listenedMs)
+        assertEquals(localSong.toString(), top.entries.single().id)
+        assertEquals(229_000L, top.entries.single().listenedMs)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `an own scrobble is kept over a later ListenBrainz copy`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val (user, localSong) = transaction(database) {
+            val u = insertUser()
+            val lb = insertLbUser()
+            link(u, lb)
+            val album = insertAlbum()
+            val localSong = insertSong(album, title = "Local Song", durationMs = 157_020)
+            val lbSong = insertSong(album, title = "LB Song", durationMs = 157_020)
+            val mbid = UUID.randomUUID()
+            val t = ms(2026, 9, 10, 14, 11, 11)
+            insertListen(t, userId = u, songId = localSong, recordingMbid = mbid, playedMs = 146_000)
+            insertListen(t + 1000, lbUserId = lb, songId = lbSong, recordingMbid = mbid, playedMs = 157_020)
+            u to localSong
+        }
+
+        val top = service.top(user, ListenFilter(), McpTopKind.SONGS, McpTopOrder.LISTEN_COUNT, 10, 0, ZoneOffset.UTC)
+
+        assertEquals(localSong.toString(), top.entries.single().id)
+        assertEquals(146_000L, top.entries.single().listenedMs)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `a ListenBrainz listen without an own twin is kept`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val (user, lbSong) = transaction(database) {
+            val u = insertUser()
+            val lb = insertLbUser()
+            link(u, lb)
+            val lbSong = insertSong(insertAlbum(), title = "LB Song", durationMs = 200_000)
+            insertListen(ms(2026, 9, 10, 12), lbUserId = lb, songId = lbSong, playedMs = 200_000)
+            u to lbSong
+        }
+
+        val top = service.top(user, ListenFilter(), McpTopKind.SONGS, McpTopOrder.LISTEN_COUNT, 10, 0, ZoneOffset.UTC)
+
+        assertEquals(lbSong.toString(), top.entries.single().id)
+        assertEquals(1L, top.entries.single().listenCount)
+        assertEquals(200_000L, top.entries.single().listenedMs)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `two own scrobbles of the same play keep the first`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val user = transaction(database) {
+            val u = insertUser()
+            val song = insertSong(insertAlbum(), durationMs = 240_000)
+            val t = ms(2026, 9, 10, 12)
+            insertListen(t, userId = u, songId = song, playedMs = 200_000)
+            insertListen(t + 500, userId = u, songId = song, playedMs = 190_000)
+            u
+        }
+
+        val summary = service.summary(user, ListenFilter(), ZoneOffset.UTC)
+
+        assertEquals(1L, summary.listenCount)
+        assertEquals(200_000L, summary.listenedMs)
+        assertEquals(ms(2026, 9, 10, 12), summary.firstListen?.epochMs)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
     fun `top ranks songs differently by listen count and by listened time`(dialect: DbDialect) = runBlocking {
         setup(dialect)
         val user = transaction(database) {

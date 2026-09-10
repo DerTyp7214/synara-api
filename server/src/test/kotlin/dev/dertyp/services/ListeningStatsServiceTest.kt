@@ -232,6 +232,114 @@ class ListeningStatsServiceTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
+    fun `an own scrobble replaces its earlier ListenBrainz copy`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val (user, localSong) = transaction(database) {
+            val u = insertUser()
+            val lb = insertLbUser()
+            link(u, lb)
+            val album = insertAlbum()
+            val lbSong = insertSong(album, title = "LB Song", durationMs = 229_133)
+            val localSong = insertSong(album, title = "Local Song", durationMs = 229_133)
+            val mbid = UUID.randomUUID()
+            insertListen(at(1), lbUserId = lb, songId = lbSong, recordingMbid = mbid, isrcs = "US1111111111", playedMs = 229_133)
+            insertListen(at(1) + 83, userId = u, songId = localSong, recordingMbid = mbid, isrcs = "US1111111111", playedMs = 229_000)
+            u to localSong
+        }
+
+        val result = stats(user)
+
+        assertEquals(1L, result.listenCount)
+        assertEquals(229_000L, result.listenedMs)
+        assertEquals(localSong, result.topSongs.single().songId)
+        assertEquals(229_000L, result.topSongs.single().listenedMs)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `an own scrobble is kept over a later ListenBrainz copy`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val (user, localSong) = transaction(database) {
+            val u = insertUser()
+            val lb = insertLbUser()
+            link(u, lb)
+            val album = insertAlbum()
+            val localSong = insertSong(album, title = "Local Song", durationMs = 157_020)
+            val lbSong = insertSong(album, title = "LB Song", durationMs = 157_020)
+            val mbid = UUID.randomUUID()
+            insertListen(at(1), userId = u, songId = localSong, recordingMbid = mbid, playedMs = 146_000)
+            insertListen(at(1) + 1000, lbUserId = lb, songId = lbSong, recordingMbid = mbid, playedMs = 157_020)
+            u to localSong
+        }
+
+        val result = stats(user)
+
+        assertEquals(1L, result.listenCount)
+        assertEquals(localSong, result.topSongs.single().songId)
+        assertEquals(146_000L, result.topSongs.single().listenedMs)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `a ListenBrainz listen without an own twin is kept`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val (user, lbSong) = transaction(database) {
+            val u = insertUser()
+            val lb = insertLbUser()
+            link(u, lb)
+            val lbSong = insertSong(insertAlbum(), title = "LB Song", durationMs = 200_000)
+            insertListen(at(1), lbUserId = lb, songId = lbSong, playedMs = 200_000)
+            u to lbSong
+        }
+
+        val result = stats(user)
+
+        assertEquals(1L, result.listenCount)
+        assertEquals(lbSong, result.topSongs.single().songId)
+        assertEquals(200_000L, result.topSongs.single().listenedMs)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `two own scrobbles of the same play keep the first`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val user = transaction(database) {
+            val u = insertUser()
+            val song = insertSong(insertAlbum(), durationMs = 240_000)
+            insertListen(at(1), userId = u, songId = song, playedMs = 200_000)
+            insertListen(at(1) + 500, userId = u, songId = song, playedMs = 190_000)
+            u
+        }
+
+        val result = stats(user)
+
+        assertEquals(1L, result.listenCount)
+        assertEquals(200_000L, result.listenedMs)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `the last duplicate chain is counted`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val user = transaction(database) {
+            val u = insertUser()
+            val lb = insertLbUser()
+            link(u, lb)
+            val song = insertSong(insertAlbum(), durationMs = 240_000)
+            insertListen(at(2), userId = u, songId = song, playedMs = 200_000)
+            insertListen(at(1), lbUserId = lb, songId = song, playedMs = 240_000)
+            insertListen(at(1) + 83, userId = u, songId = song, playedMs = 210_000)
+            u
+        }
+
+        val result = stats(user)
+
+        assertEquals(2L, result.listenCount)
+        assertEquals(410_000L, result.listenedMs)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
     fun `unmatched listens count and are not deduped by shared null songId`(dialect: DbDialect) = runBlocking {
         setup(dialect)
         val user = transaction(database) {

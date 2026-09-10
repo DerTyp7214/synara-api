@@ -170,6 +170,12 @@ class RecommendationService : Service() {
         var lastSong: String? = null
         var lastRecordingMbid: PlatformUUID? = null
         var lastIsrcs: Set<String> = emptySet()
+        var pending: PendingPlay? = null
+
+        fun flushPending() {
+            pending?.takeIf { it.qualified }?.let { current.add(it.song) }
+            pending = null
+        }
 
         val link = UserListenBrainzLinkTable
         val ownerKey = Coalesce(ListenTable.userId, link.userId, ListenTable.listenBrainzUserId)
@@ -177,7 +183,7 @@ class RecommendationService : Service() {
         ListenTable
             .join(link, JoinType.LEFT, onColumn = ListenTable.listenBrainzUserId, otherColumn = link.listenBrainzUserId)
             .join(SongTable, JoinType.INNER, onColumn = ListenTable.songId, otherColumn = SongTable.id)
-            .select(ListenTable.userId, link.userId, ListenTable.listenBrainzUserId, ListenTable.songId, ListenTable.listenedAt, ListenTable.recordingMbid, ListenTable.isrcs, ListenTable.msPlayed, SongTable.duration)
+            .select(ListenTable.userId, link.userId, ListenTable.listenBrainzUserId, ListenTable.songId, ListenTable.listenedAt, ListenTable.recordingMbid, ListenTable.isrcs, ListenTable.msPlayed, ListenTable.listenSource, SongTable.duration)
             .where { ListenTable.songId.isNotNull() }
             .andWhere { ListenTable.userId.isNotNull() or ListenTable.listenBrainzUserId.isNotNull() }
             .orderBy(ownerKey to SortOrder.ASC, ListenTable.listenedAt to SortOrder.ASC)
@@ -191,6 +197,7 @@ class RecommendationService : Service() {
                 val isrcs = ListenTable.parseIsrcs(row[ListenTable.isrcs])
 
                 if (owner != lastOwner || (ts - lastTs).milliseconds > SESSION_GAP) {
+                    flushPending()
                     writer.emitSequence(current.toList())
                     current.clear()
                     lastSong = null
@@ -203,8 +210,17 @@ class RecommendationService : Service() {
                         (recordingMbid != null && recordingMbid == lastRecordingMbid) ||
                         isrcs.any { it in lastIsrcs }
                     )
-                val qualified = ListenTable.isQualifiedPlay(row[ListenTable.msPlayed], row[SongTable.duration])
-                if (!duplicatePlay && qualified) current.add(song)
+                val play = PendingPlay(
+                    song = song,
+                    qualified = ListenTable.isQualifiedPlay(row[ListenTable.msPlayed], row[SongTable.duration]),
+                    local = row[ListenTable.listenSource] == ListenSource.LOCAL,
+                )
+                if (!duplicatePlay) {
+                    flushPending()
+                    pending = play
+                } else if (play.local && pending?.local == false) {
+                    pending = play
+                }
 
                 lastOwner = owner
                 lastTs = ts
@@ -212,6 +228,7 @@ class RecommendationService : Service() {
                 lastRecordingMbid = recordingMbid
                 lastIsrcs = isrcs
             }
+        flushPending()
         writer.emitSequence(current.toList())
     }
 
@@ -311,3 +328,5 @@ private data class EmbeddingLine(
 
 @Serializable
 private data class Meta(val dim: Int, val clusters: Int)
+
+private data class PendingPlay(val song: String, val qualified: Boolean, val local: Boolean)

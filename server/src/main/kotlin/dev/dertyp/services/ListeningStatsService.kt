@@ -252,13 +252,89 @@ class ListeningStatsService : Service() {
         var lastSongId: PlatformUUID? = null
         var lastRecordingMbid: PlatformUUID? = null
         var lastIsrcs: Set<String> = emptySet()
+        var pending: ResultRow? = null
+
+        fun count(row: ResultRow) {
+            val ts = row[ListenTable.listenedAt]
+            val songId = row[ListenTable.songId]?.value
+            val recordingMbid = row[ListenTable.recordingMbid]
+            val msPlayed = row[ListenTable.msPlayed]
+            val songDuration = row.getOrNull(SongTable.duration)
+            val qualified = ListenTable.isQualifiedPlay(msPlayed, songDuration)
+            val playedMs = ListenTable.playedMs(msPlayed, songDuration)
+
+            val zdt = Instant.ofEpochMilli(ts).atZone(zone)
+            if (qualified) result.daysWithListens.add(zdt.toLocalDate().toEpochDay())
+
+            val trackName = row[ListenTable.trackName]?.trim()?.ifBlank { null }
+            val artistName = row[ListenTable.artistName]?.trim()?.ifBlank { null }
+            val releaseName = row[ListenTable.releaseName]?.trim()?.ifBlank { null }
+
+            val songKey = when {
+                songId != null -> SongKey.Matched(songId)
+                recordingMbid != null -> SongKey.Mbid(recordingMbid)
+                trackName != null -> SongKey.Named(trackName.lowercase(), artistName?.lowercase() ?: "")
+                else -> null
+            }
+            if (qualified && songKey != null) result.songFirstSeen.merge(songKey, ts, ::minOf)
+
+            val artistKey = if (songId == null) {
+                artistKeyOf(row[ListenTable.artistMbids], artistName)
+            } else null
+            if (qualified && artistKey != null) result.unmatchedArtistFirstSeen.merge(artistKey, ts, ::minOf)
+
+            if (previousStart != null && ts >= previousStart && ts < rangeStart) {
+                if (qualified) result.previousCount++
+                result.previousListenedMs += playedMs
+            }
+            if (ts !in rangeStart..<rangeEnd) return
+
+            result.listenedMs += playedMs
+            if (qualified) {
+                result.listenCount++
+                result.hourBuckets[zdt.hour]++
+                result.dayBuckets[zdt.dayOfWeek.value - 1]++
+            }
+
+            if (songKey != null) {
+                if (qualified) result.songCounts.merge(songKey, 1L, Long::plus)
+                result.songPlayed.merge(songKey, playedMs, Long::plus)
+                if (songId == null) {
+                    row[ListenTable.recordingMsid]?.let { result.songMsid.putIfAbsent(songKey, it) }
+                    result.songDisplay.putIfAbsent(
+                        songKey,
+                        UnmatchedDisplay(
+                            title = trackName ?: recordingMbid?.toString() ?: "",
+                            artistName = artistName,
+                            albumName = releaseName,
+                            releaseMbid = row[ListenTable.releaseMbid],
+                        ),
+                    )
+                }
+            }
+
+            if (songId == null) {
+                if (artistKey != null) {
+                    if (qualified) result.unmatchedArtistCounts.merge(artistKey, 1L, Long::plus)
+                    result.unmatchedArtistPlayed.merge(artistKey, playedMs, Long::plus)
+                    if (artistName != null) result.artistDisplay.putIfAbsent(artistKey, artistName)
+                }
+                val albumKey = albumKeyOf(row[ListenTable.releaseMbid], releaseName)
+                if (albumKey != null) {
+                    if (qualified) result.unmatchedAlbumCounts.merge(albumKey, 1L, Long::plus)
+                    result.unmatchedAlbumPlayed.merge(albumKey, playedMs, Long::plus)
+                    if (releaseName != null) result.albumDisplay.putIfAbsent(albumKey, releaseName)
+                }
+            }
+        }
 
         ListenTable
             .leftJoin(SongTable)
             .select(
                 ListenTable.songId, ListenTable.listenedAt, ListenTable.recordingMbid, ListenTable.recordingMsid,
                 ListenTable.isrcs, ListenTable.releaseMbid, ListenTable.artistMbids, ListenTable.trackName,
-                ListenTable.artistName, ListenTable.releaseName, ListenTable.msPlayed, SongTable.duration,
+                ListenTable.artistName, ListenTable.releaseName, ListenTable.msPlayed, ListenTable.listenSource,
+                SongTable.duration,
             )
             .where { owner }
             .orderBy(ListenTable.listenedAt to SortOrder.ASC)
@@ -277,77 +353,15 @@ class ListeningStatsService : Service() {
                 lastSongId = songId
                 lastRecordingMbid = recordingMbid
                 lastIsrcs = isrcs
-                if (duplicatePlay) return@forEach
-
-                val msPlayed = row[ListenTable.msPlayed]
-                val songDuration = row.getOrNull(SongTable.duration)
-                val qualified = ListenTable.isQualifiedPlay(msPlayed, songDuration)
-                val playedMs = ListenTable.playedMs(msPlayed, songDuration)
-
-                val zdt = Instant.ofEpochMilli(ts).atZone(zone)
-                if (qualified) result.daysWithListens.add(zdt.toLocalDate().toEpochDay())
-
-                val trackName = row[ListenTable.trackName]?.trim()?.ifBlank { null }
-                val artistName = row[ListenTable.artistName]?.trim()?.ifBlank { null }
-                val releaseName = row[ListenTable.releaseName]?.trim()?.ifBlank { null }
-
-                val songKey = when {
-                    songId != null -> SongKey.Matched(songId)
-                    recordingMbid != null -> SongKey.Mbid(recordingMbid)
-                    trackName != null -> SongKey.Named(trackName.lowercase(), artistName?.lowercase() ?: "")
-                    else -> null
-                }
-                if (qualified && songKey != null) result.songFirstSeen.merge(songKey, ts, ::minOf)
-
-                val artistKey = if (songId == null) {
-                    artistKeyOf(row[ListenTable.artistMbids], artistName)
-                } else null
-                if (qualified && artistKey != null) result.unmatchedArtistFirstSeen.merge(artistKey, ts, ::minOf)
-
-                if (previousStart != null && ts >= previousStart && ts < rangeStart) {
-                    if (qualified) result.previousCount++
-                    result.previousListenedMs += playedMs
-                }
-                if (ts !in rangeStart..<rangeEnd) return@forEach
-
-                result.listenedMs += playedMs
-                if (qualified) {
-                    result.listenCount++
-                    result.hourBuckets[zdt.hour]++
-                    result.dayBuckets[zdt.dayOfWeek.value - 1]++
+                if (duplicatePlay) {
+                    if (row[ListenTable.listenSource] == ListenSource.LOCAL && pending?.get(ListenTable.listenSource) != ListenSource.LOCAL) pending = row
+                    return@forEach
                 }
 
-                if (songKey != null) {
-                    if (qualified) result.songCounts.merge(songKey, 1L, Long::plus)
-                    result.songPlayed.merge(songKey, playedMs, Long::plus)
-                    if (songId == null) {
-                        row[ListenTable.recordingMsid]?.let { result.songMsid.putIfAbsent(songKey, it) }
-                        result.songDisplay.putIfAbsent(
-                            songKey,
-                            UnmatchedDisplay(
-                                title = trackName ?: recordingMbid?.toString() ?: "",
-                                artistName = artistName,
-                                albumName = releaseName,
-                                releaseMbid = row[ListenTable.releaseMbid],
-                            ),
-                        )
-                    }
-                }
-
-                if (songId == null) {
-                    if (artistKey != null) {
-                        if (qualified) result.unmatchedArtistCounts.merge(artistKey, 1L, Long::plus)
-                        result.unmatchedArtistPlayed.merge(artistKey, playedMs, Long::plus)
-                        if (artistName != null) result.artistDisplay.putIfAbsent(artistKey, artistName)
-                    }
-                    val albumKey = albumKeyOf(row[ListenTable.releaseMbid], releaseName)
-                    if (albumKey != null) {
-                        if (qualified) result.unmatchedAlbumCounts.merge(albumKey, 1L, Long::plus)
-                        result.unmatchedAlbumPlayed.merge(albumKey, playedMs, Long::plus)
-                        if (releaseName != null) result.albumDisplay.putIfAbsent(albumKey, releaseName)
-                    }
-                }
+                pending?.let { count(it) }
+                pending = row
             }
+        pending?.let { count(it) }
 
         return result
     }

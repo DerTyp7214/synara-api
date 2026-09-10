@@ -504,6 +504,29 @@ class ListenServiceTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
+    fun `an own scrobble is kept over a later ListenBrainz copy`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val (user, s1) = transaction(database) {
+            val u = insertUser()
+            val lb = insertLbUser()
+            link(u, lb)
+            val album = insertAlbum()
+            val s1 = insertSong(album)
+            val s2 = insertSong(album)
+            val mbid = UUID.randomUUID()
+            insertLocal(u, s1, 10_000, recordingMbid = mbid)
+            insertLb(lb, s2, 10_500, recordingMbid = mbid)
+            u to s1
+        }
+
+        val result = service.recentListens(user, 10)
+
+        assertEquals(listOf(s1), result.map { it.song.id })
+        assertEquals(10_000L, result.single().listenedAt)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
     fun `same ISRC outside the window is kept separate`(dialect: DbDialect) = runBlocking {
         setup(dialect)
         val (user, s1, s2) = transaction(database) {

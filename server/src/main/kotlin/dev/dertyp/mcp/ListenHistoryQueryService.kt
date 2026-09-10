@@ -275,7 +275,10 @@ class ListenHistoryQueryService(
         for (row in rows) {
             val duplicate = previous?.let { samePlay(it, row) } == true
             previous = row
-            if (!duplicate) kept.add(row)
+            when {
+                !duplicate -> kept.add(row)
+                row.source == ListenSource.LOCAL && kept.last().source != ListenSource.LOCAL -> kept[kept.lastIndex] = row
+            }
         }
         return kept
     }
