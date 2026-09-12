@@ -308,6 +308,7 @@ fun mainModule(application: Application, environment: ApplicationEnvironment): M
     singleOf(::PlaybackService)
     singleOf(::QueueService)
     singleOf(::ClientSettingsService)
+    singleOf(::TimecodeTagService)
     singleOf(::ClientRequestService)
     singleOf(::CustomAudioService)
     singleOf(::ReverseProxyService)

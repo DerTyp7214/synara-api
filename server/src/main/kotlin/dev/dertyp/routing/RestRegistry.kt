@@ -511,6 +511,10 @@ fun Route.registerAuthenticatedRestServices(koin: Koin) {
         val user = call.getUser() ?: throw IllegalArgumentException("No user found")
         RpcClientSettingsService(user, koin.get()).withAuthorization<IClientSettingsService>(user)
     }
+    registerRestService(ITimecodeTagService::class, authenticated = true) {
+        val user = call.getUser() ?: throw IllegalArgumentException("No user found")
+        RpcTimecodeTagService(user, koin.get()).withAuthorization<ITimecodeTagService>(user)
+    }
     registerRestService(IClientRequestService::class, authenticated = true) {
         val user = call.getUser() ?: throw IllegalArgumentException("No user found")
         RpcClientRequestService(call.getSessionId() ?: throw IllegalArgumentException("No session found"), koin.get())

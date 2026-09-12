@@ -134,6 +134,7 @@ private fun registerAuthenticated(koin: Koin, call: ApplicationCall, user: User,
     val playbackService = koin.get<PlaybackService>()
     val queueService = koin.get<QueueService>()
     val clientSettingsService = koin.get<ClientSettingsService>()
+    val timecodeTagService = koin.get<TimecodeTagService>()
     val clientRequestService = koin.get<ClientRequestService>()
     val sessionId = call.getSessionId()
     val customAudioService = koin.get<CustomAudioService>()
@@ -185,6 +186,7 @@ private fun registerAuthenticated(koin: Koin, call: ApplicationCall, user: User,
     registrar.register(IPlaybackService::class) { RpcPlaybackService(playbackService).withAuthorization<IPlaybackService>(user).withLogging<IPlaybackService>(call) }
     registrar.register(IQueueService::class) { RpcQueueService(user, sessionId, queueService, sessionService, clientRequestService).withAuthorization<IQueueService>(user).withLogging<IQueueService>(call) }
     registrar.register(IClientSettingsService::class) { RpcClientSettingsService(user, clientSettingsService).withAuthorization<IClientSettingsService>(user).withLogging<IClientSettingsService>(call) }
+    registrar.register(ITimecodeTagService::class) { RpcTimecodeTagService(user, timecodeTagService).withAuthorization<ITimecodeTagService>(user).withLogging<ITimecodeTagService>(call) }
     registrar.register(IClientRequestService::class) { RpcClientRequestService(sessionId ?: throw IllegalArgumentException("No session found"), clientRequestService).withAuthorization<IClientRequestService>(user).withLogging<IClientRequestService>(call) }
     registrar.register(ICustomAudioService::class) { CustomAudioRpcService(customAudioService).withAuthorization<ICustomAudioService>(user).withLogging<ICustomAudioService>(call) }
     registrar.register(IDbManagementService::class) { dbManagementService.withAuthorization<IDbManagementService>(user).withLogging<IDbManagementService>(call) }
