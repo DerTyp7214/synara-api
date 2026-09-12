@@ -151,7 +151,7 @@ class ScheduledTaskLogService : Service() {
                     logTime = it[ScheduledTaskLogTable.logTime]
                 )
             }
-            .groupBy { it.taskName }
+            .groupBy { it.taskName }.toSortedMap(String.CASE_INSENSITIVE_ORDER)
     }
 
     suspend fun cleanupRunningLogs() = dbQuery {

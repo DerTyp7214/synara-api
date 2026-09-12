@@ -112,4 +112,16 @@ class ScheduledTaskLogServiceTest {
             assertEquals(TaskStatus.SUCCESS, logs[0][ScheduledTaskLogTable.status])
         }
     }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `getGroupedLogs returns the groups sorted by task name ignoring case`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        service.logTask("zeta-task", 0, 0, TaskStatus.SUCCESS)
+        service.logTask("Alpha-task", 1, 1, TaskStatus.SUCCESS)
+        service.logTask("beta-task", 2, 2, TaskStatus.SUCCESS)
+
+        val grouped = service.getGroupedLogs()
+        assertEquals(listOf("Alpha-task", "beta-task", "zeta-task"), grouped.keys.toList())
+    }
 }

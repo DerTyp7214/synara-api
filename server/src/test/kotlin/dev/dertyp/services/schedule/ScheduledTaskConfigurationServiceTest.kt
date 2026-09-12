@@ -110,4 +110,37 @@ class ScheduledTaskConfigurationServiceTest : KoinTest {
         assertEquals(false, configs[TaskKeys.DATABASE_BACKUP]?.enabled)
         assertEquals("Audio Analysis", configs[TaskKeys.AUDIO_ANALYSIS]?.name)
     }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `getConfigurations returns the tasks sorted by name ignoring case`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        service.updateConfiguration(
+            TaskConfiguration(
+                key = TaskKeys.DATABASE_BACKUP,
+                name = "zeta",
+                enabled = true,
+                trigger = TriggerDefinition.Cron("0 0 * * *")
+            )
+        )
+        service.updateConfiguration(
+            TaskConfiguration(
+                key = TaskKeys.AUDIO_ANALYSIS,
+                name = "Alpha",
+                enabled = true,
+                trigger = TriggerDefinition.Cron("0 0 * * *")
+            )
+        )
+        service.updateConfiguration(
+            TaskConfiguration(
+                key = TaskKeys.SESSION_CLEANUP,
+                name = "beta",
+                enabled = true,
+                trigger = TriggerDefinition.Cron("0 0 * * *")
+            )
+        )
+
+        val configs = service.getConfigurations()
+        assertEquals(listOf("Alpha", "beta", "zeta"), configs.map { it.name })
+    }
 }

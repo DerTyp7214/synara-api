@@ -43,6 +43,7 @@ class ScheduledTaskConfigurationService : Service() {
             TaskConfiguration(TaskKeys.USER_PLAYLIST_BACKUP, "User Playlist Backup", true, TriggerDefinition.Cron("0 2 * * *")),
             TaskConfiguration(TaskKeys.SESSION_CLEANUP, "Session Cleanup", true, TriggerDefinition.Cron("0 0 * * *")),
             TaskConfiguration(TaskKeys.QUEUE_CLEANUP, "Queue Cleanup", true, TriggerDefinition.Cron("30 0 * * *")),
+            TaskConfiguration(TaskKeys.CLIENT_SETTINGS_CLEANUP, "Client Settings Cleanup", true, TriggerDefinition.Cron("45 0 * * *")),
             TaskConfiguration(TaskKeys.MERGE_LIBRARY_DUPLICATES, "Merge Library Duplicates", true, TriggerDefinition.Cron("0 1 * * *")),
             TaskConfiguration(TaskKeys.AUDIO_ANALYSIS, "Audio Analysis", true, TriggerDefinition.Cron("0 3 * * *")),
             TaskConfiguration(TaskKeys.FLAC_ANALYSIS, "FLAC Analysis", true, TriggerDefinition.Cron("0 5 * * *")),
@@ -89,7 +90,7 @@ class ScheduledTaskConfigurationService : Service() {
                 enabled = it[ScheduledTaskConfigurationTable.enabled],
                 trigger = ApplicationScope.json.decodeFromString<TriggerDefinition>(it[ScheduledTaskConfigurationTable.trigger])
             )
-        }
+        }.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name })
     }
 
     suspend fun updateConfiguration(configuration: TaskConfiguration) {

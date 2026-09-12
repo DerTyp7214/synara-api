@@ -26,6 +26,7 @@ Synara is a powerful, modern music server and API designed for high-fidelity aud
 - **Configuration**: See [docs/ENVIRONMENT_VARIABLES.md](docs/ENVIRONMENT_VARIABLES.md) for a full list of configuration options and defaults.
 - **Plugins**: Learn how to extend Synara with custom [plugins](docs/PLUGINS.md).
 - **Server-Driven UI**: How clients render [server-described UI](docs/SERVER_DRIVEN_UI.md) (slots, pages, home cards, hooks), with the importer as worked example.
+- **Client Settings**: Keep client settings on the server, [synced across devices or per device](docs/CLIENT_SETTINGS.md).
 - **Mock Server**: Use the [mock server](docs/MOCK_SERVER.md) for development and testing.
 - **Listen Backup**: Keep a copy of listening history on a [remote listen-backup receiver](docs/LISTEN_BACKUP.md).
 - **MCP**: Let an AI assistant query listening history through the read-only [MCP endpoint](docs/MCP.md).
