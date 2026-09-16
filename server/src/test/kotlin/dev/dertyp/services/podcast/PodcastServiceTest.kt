@@ -398,6 +398,55 @@ class PodcastServiceTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
+    fun `getEpisodesByIds keeps the requested order, repeats duplicates and skips unknown ids`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val userId = transaction(database) { insertUser() }
+        val showA = transaction(database) { insertFeedShow("https://feed.example/byids-a") }
+        val showB = transaction(database) { insertFeedShow("https://feed.example/byids-b") }
+        val first = transaction(database) { insertEpisode(showA, "bi1", 1000L) }
+        val second = transaction(database) { insertEpisode(showB, "bi2", 2000L) }
+        val third = transaction(database) { insertEpisode(showA, "bi3", 3000L) }
+        val unknown = UUID.randomUUID()
+
+        val requested = listOf(third, unknown, first, second, first)
+        assertEquals(listOf(third, first, second, first), service.getEpisodesByIds(userId, requested).map { it.id })
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `getEpisodesByIds inlines progress only for the calling user`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val userA = transaction(database) { insertUser() }
+        val userB = transaction(database) { insertUser() }
+        val showId = transaction(database) { insertFeedShow("https://feed.example/byids-progress") }
+        val episodeId = transaction(database) { insertEpisode(showId, "bip1", 1000L, durationMs = 60000L) }
+
+        service.reportPlayback(userA, EpisodePlaybackReport(episodeId = episodeId, positionMs = 5000))
+
+        val forA = service.getEpisodesByIds(userA, listOf(episodeId)).single()
+        val forB = service.getEpisodesByIds(userB, listOf(episodeId)).single()
+
+        assertNotNull(forA.progress)
+        assertEquals(5000L, forA.progress!!.positionMs)
+        assertNull(forB.progress)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `getEpisodesByIds returns nothing for an empty list and rejects more than 500 ids`(dialect: DbDialect) = runBlocking<Unit> {
+        setup(dialect)
+        val userId = transaction(database) { insertUser() }
+
+        assertTrue(service.getEpisodesByIds(userId, emptyList()).isEmpty())
+
+        val tooMany = List(501) { UUID.randomUUID() }
+        assertThrows<IllegalArgumentException> {
+            runBlocking { service.getEpisodesByIds(userId, tooMany) }
+        }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
     fun `searchEpisodes matches episode title description and show title, blank throws`(dialect: DbDialect) = runBlocking {
         setup(dialect)
         val userId = transaction(database) { insertUser() }
@@ -451,6 +500,64 @@ class PodcastServiceTest {
 
         val inProgress = service.getInProgress(userId, 0, 50)
         assertEquals(listOf(newerStarted, olderStarted), inProgress.data.map { it.id })
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `getLastPlayed returns the most recently played episode across shows with its progress`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val userId = transaction(database) { insertUser() }
+        val showA = transaction(database) { insertFeedShow("https://feed.example/last-a") }
+        val showB = transaction(database) { insertFeedShow("https://feed.example/last-b") }
+        val older = transaction(database) { insertEpisode(showA, "lp1", 1000L, durationMs = 600000L) }
+        val newer = transaction(database) { insertEpisode(showB, "lp2", 2000L, durationMs = 600000L) }
+
+        service.reportPlayback(userId, EpisodePlaybackReport(episodeId = older, positionMs = 1000))
+        Thread.sleep(5)
+        service.reportPlayback(userId, EpisodePlaybackReport(episodeId = newer, positionMs = 2000))
+
+        val lastPlayed = service.getLastPlayed(userId, includeCompleted = true)
+        assertNotNull(lastPlayed)
+        assertEquals(newer, lastPlayed!!.id)
+        assertEquals(2000L, lastPlayed.progress!!.positionMs)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `getLastPlayed without completed skips a newer finished episode and one still at the start`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val userId = transaction(database) { insertUser() }
+        val showId = transaction(database) { insertFeedShow("https://feed.example/last-unfinished") }
+        val started = transaction(database) { insertEpisode(showId, "lu1", 1000L, durationMs = 600000L) }
+        val completed = transaction(database) { insertEpisode(showId, "lu2", 2000L, durationMs = 600000L) }
+        val atStart = transaction(database) { insertEpisode(showId, "lu3", 3000L, durationMs = 600000L) }
+
+        service.reportPlayback(userId, EpisodePlaybackReport(episodeId = started, positionMs = 1000))
+        Thread.sleep(5)
+        service.setPlayed(userId, completed, true)
+        Thread.sleep(5)
+        service.reportPlayback(userId, EpisodePlaybackReport(episodeId = atStart, positionMs = 0))
+
+        assertEquals(atStart, service.getLastPlayed(userId, includeCompleted = true)!!.id)
+        assertEquals(started, service.getLastPlayed(userId, includeCompleted = false)!!.id)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `getLastPlayed returns null without progress and never reads another user's progress`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val userA = transaction(database) { insertUser() }
+        val userB = transaction(database) { insertUser() }
+        val showId = transaction(database) { insertFeedShow("https://feed.example/last-leak") }
+        val episodeId = transaction(database) { insertEpisode(showId, "ll1", 1000L, durationMs = 600000L) }
+
+        assertNull(service.getLastPlayed(userA, includeCompleted = true))
+
+        service.reportPlayback(userA, EpisodePlaybackReport(episodeId = episodeId, positionMs = 1000))
+
+        assertEquals(episodeId, service.getLastPlayed(userA, includeCompleted = true)!!.id)
+        assertNull(service.getLastPlayed(userB, includeCompleted = true))
+        assertNull(service.getLastPlayed(userB, includeCompleted = false))
     }
 
     @ParameterizedTest

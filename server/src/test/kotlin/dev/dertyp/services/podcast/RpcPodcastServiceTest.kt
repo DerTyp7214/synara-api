@@ -113,6 +113,15 @@ class RpcPodcastServiceTest {
     }
 
     @Test
+    fun `getEpisodesByIds forwards the user id and episode ids`() = runBlocking {
+        val episodeIds = listOf(UUID.randomUUID(), UUID.randomUUID())
+
+        service.getEpisodesByIds(episodeIds)
+
+        coVerify(exactly = 1) { podcastService.getEpisodesByIds(user.id, episodeIds) }
+    }
+
+    @Test
     fun `searchEpisodes forwards the user id query page and pageSize`() = runBlocking {
         service.searchEpisodes("term", 3, 20)
 
@@ -131,6 +140,13 @@ class RpcPodcastServiceTest {
         service.getInProgress(0, 50)
 
         coVerify(exactly = 1) { podcastService.getInProgress(user.id, 0, 50) }
+    }
+
+    @Test
+    fun `getLastPlayed forwards the user id and the includeCompleted flag`() = runBlocking {
+        service.getLastPlayed(false)
+
+        coVerify(exactly = 1) { podcastService.getLastPlayed(user.id, false) }
     }
 
     @Test

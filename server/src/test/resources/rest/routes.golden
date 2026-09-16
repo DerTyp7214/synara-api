@@ -224,7 +224,9 @@ GET /podcast/browseShows IPodcastService.browseShows [q:query? q:page? q:pageSiz
 GET /podcast/episode/{episodeId} IPodcastService.getEpisode [p:episodeId] JSON
 GET /podcast/episodes IPodcastService.searchEpisodes [q:query q:page? q:pageSize?] JSON
 GET /podcast/episodes/{showId} IPodcastService.getEpisodes [p:showId q:page? q:pageSize? q:newestFirst?] JSON
+GET /podcast/episodesByIds IPodcastService.getEpisodesByIds [q:episodeIds] JSON
 GET /podcast/inProgress IPodcastService.getInProgress [q:page? q:pageSize?] JSON
+GET /podcast/lastPlayed IPodcastService.getLastPlayed [q:includeCompleted?] JSON
 GET /podcast/latestEpisodes IPodcastService.getLatestEpisodes [q:page? q:pageSize?] JSON
 GET /podcast/observeProgress IPodcastService.observeProgress [] SSE
 GET /podcast/show/{showId} IPodcastService.getShow [p:showId] JSON

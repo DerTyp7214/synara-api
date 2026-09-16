@@ -13,6 +13,7 @@ import dev.dertyp.data.PodcastTranscriptContent
 import dev.dertyp.data.User
 import dev.dertyp.routing.rest.RestFileProvider
 import dev.dertyp.services.IPodcastService
+import dev.dertyp.utils.LogParam
 import kotlinx.coroutines.flow.Flow
 import java.util.UUID
 
@@ -55,6 +56,9 @@ class RpcPodcastService(
 
     override suspend fun getEpisode(episodeId: UUID): PodcastEpisode? = podcastService.getEpisode(user.id, episodeId)
 
+    override suspend fun getEpisodesByIds(@LogParam("size") episodeIds: List<UUID>): List<PodcastEpisode> =
+        podcastService.getEpisodesByIds(user.id, episodeIds)
+
     override suspend fun searchEpisodes(query: String, page: Int, pageSize: Int): PaginatedResponse<PodcastEpisode> =
         podcastService.searchEpisodes(user.id, query, page, pageSize)
 
@@ -63,6 +67,9 @@ class RpcPodcastService(
 
     override suspend fun getInProgress(page: Int, pageSize: Int): PaginatedResponse<PodcastEpisode> =
         podcastService.getInProgress(user.id, page, pageSize)
+
+    override suspend fun getLastPlayed(includeCompleted: Boolean): PodcastEpisode? =
+        podcastService.getLastPlayed(user.id, includeCompleted)
 
     override suspend fun reportPlayback(report: EpisodePlaybackReport): PodcastEpisodeProgress =
         podcastService.reportPlayback(user.id, report)

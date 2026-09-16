@@ -217,6 +217,42 @@ class PodcastService(private val http: PodcastHttp) : Service() {
         if (row == null) null else episodesOf(listOf(row)).firstOrNull()
     }
 
+    suspend fun getEpisodesByIds(userId: UUID, episodeIds: List<UUID>): List<PodcastEpisode> {
+        require(episodeIds.size <= MAX_PAGE) { "At most $MAX_PAGE episodes can be read at once" }
+        if (episodeIds.isEmpty()) return emptyList()
+
+        return dbQuery {
+            val rows = episodeIds.distinct().chunked(LOOKUP_CHUNK).flatMap { chunk ->
+                episodeSource(userId)
+                    .selectAll()
+                    .where { PodcastEpisodeTable.id inList chunk }
+                    .toList()
+            }
+            val byId = episodesOf(rows).associateBy { it.id }
+
+            episodeIds.mapNotNull { byId[it] }
+        }
+    }
+
+    suspend fun getLastPlayed(userId: UUID, includeCompleted: Boolean): PodcastEpisode? = dbQuery {
+        val query = if (includeCompleted) {
+            episodeSource(userId)
+                .selectAll()
+                .where { PodcastEpisodeProgressTable.userId eq userId }
+        } else {
+            startedEpisodes(userId)
+        }
+        val rows = query
+            .orderBy(
+                PodcastEpisodeProgressTable.lastPlayedAt to SortOrder.DESC,
+                PodcastEpisodeTable.id to SortOrder.ASC
+            )
+            .limit(1)
+            .toList()
+
+        episodesOf(rows).firstOrNull()
+    }
+
     suspend fun searchEpisodes(userId: UUID, query: String, page: Int, pageSize: Int): PaginatedResponse<PodcastEpisode> {
         require(query.isNotBlank()) { "A podcast search needs a search term" }
 
