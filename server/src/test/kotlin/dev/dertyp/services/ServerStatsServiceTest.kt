@@ -2,6 +2,8 @@ package dev.dertyp.services
 
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
+import dev.dertyp.data.PodcastImportState
+import dev.dertyp.data.PodcastSource
 import dev.dertyp.data.ServerStats
 import dev.dertyp.db.*
 import dev.dertyp.services.metadata.MusicBrainzCacheService
@@ -17,6 +19,8 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.EnumSource
+import java.time.Instant
+import java.util.UUID
 
 class ServerStatsServiceTest {
     private lateinit var database: Database
@@ -28,12 +32,47 @@ class ServerStatsServiceTest {
     fun setup(dialect: DbDialect) {
         database = TestDatabase.connect(dialect, "stats_test")
         transaction(database) {
-            SchemaUtils.create(ArtistTable, AlbumTable, ImageTable, AnimatedImageTable, SongTable, SongVariantTable, PlaylistTable, UserTable, UserPlaylistTable, TranscodedSongTable)
+            SchemaUtils.create(
+                ArtistTable, AlbumTable, ImageTable, AnimatedImageTable, SongTable, SongVariantTable, PlaylistTable, UserTable, UserPlaylistTable, TranscodedSongTable,
+                PodcastShowTable, PodcastEpisodeTable, PodcastTranscriptTable, PodcastSubscriptionTable, PodcastEpisodeProgressTable,
+            )
         }
         storageService = mockk()
         reverseProxyService = mockk()
         musicBrainzCacheService = mockk()
         service = ServerStatsService(storageService, reverseProxyService, musicBrainzCacheService)
+    }
+
+    private fun insertFeedShow(feedUrl: String, title: String = "Show"): UUID {
+        val id = UUID.randomUUID()
+        val now = Instant.now().toEpochMilli()
+        PodcastShowTable.insert {
+            it[PodcastShowTable.id] = id
+            it[showSource] = PodcastSource.FEED
+            it[sourceKey] = "FEED:$feedUrl"
+            it[PodcastShowTable.feedUrl] = feedUrl
+            it[PodcastShowTable.title] = title
+            it[createdAt] = now
+            it[updatedAt] = now
+        }
+        return id
+    }
+
+    private fun insertEpisode(showId: UUID, guid: String, importState: PodcastImportState = PodcastImportState.NONE): UUID {
+        val id = UUID.randomUUID()
+        val now = Instant.now().toEpochMilli()
+        PodcastEpisodeTable.insert {
+            it[PodcastEpisodeTable.id] = id
+            it[PodcastEpisodeTable.showId] = showId
+            it[PodcastEpisodeTable.guid] = guid
+            it[guidKey] = guid
+            it[title] = "Episode"
+            it[publishedAt] = now
+            it[PodcastEpisodeTable.importState] = importState
+            it[createdAt] = now
+            it[updatedAt] = now
+        }
+        return id
     }
 
     @AfterEach
@@ -49,6 +88,7 @@ class ServerStatsServiceTest {
         coEvery { storageService.getTotalStorage() } returns 1000L
         coEvery { storageService.getImagesStorage() } returns 500L
         coEvery { storageService.getAnimatedImagesStorage() } returns 250L
+        coEvery { storageService.getPodcastStorage() } returns 0L
         coEvery { musicBrainzCacheService.getStats() } returns ServerStats.MusicBrainzCacheStats(0, 0, 0, 0, 0, 0, 0, 0)
 
         transaction(database) {
@@ -110,5 +150,30 @@ class ServerStatsServiceTest {
         assertEquals(8080, info?.controlPort)
         assertTrue(info?.ssl == true)
         assertEquals("my-id", info?.id)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `getStats includes podcast counts and file size`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+
+        coEvery { storageService.getTotalStorage() } returns 0L
+        coEvery { storageService.getImagesStorage() } returns 0L
+        coEvery { storageService.getAnimatedImagesStorage() } returns 0L
+        coEvery { storageService.getPodcastStorage() } returns 54321L
+        coEvery { musicBrainzCacheService.getStats() } returns ServerStats.MusicBrainzCacheStats(0, 0, 0, 0, 0, 0, 0, 0)
+
+        transaction(database) {
+            val showId = insertFeedShow("https://feed.example/stats")
+            insertEpisode(showId, "ep-1", PodcastImportState.IMPORTED)
+            insertEpisode(showId, "ep-2", PodcastImportState.NONE)
+        }
+
+        val stats = service.getStats()
+
+        assertEquals(1, stats.podcastShowCount)
+        assertEquals(2, stats.podcastEpisodeCount)
+        assertEquals(1, stats.podcastImportedEpisodeCount)
+        assertEquals(54321L, stats.podcastFileSize)
     }
 }

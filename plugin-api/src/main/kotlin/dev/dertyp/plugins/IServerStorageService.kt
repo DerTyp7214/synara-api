@@ -9,6 +9,8 @@ interface IServerStorageService {
     val customAudioPath: String
     val imagesPath: String
     val animatedImagesPath: String
+    val podcastLibraryPath: String
+    val podcastImportsPath: String
     val secondaryTracksPaths: List<String>
 
     fun forImporter(backend: ImportBackend): IServerStorageService

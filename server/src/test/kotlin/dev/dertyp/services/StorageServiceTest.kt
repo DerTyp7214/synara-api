@@ -71,6 +71,8 @@ class StorageServiceTest {
             put("audio.custom", customDir.absolutePath)
             put("data.images", imagesDir.absolutePath)
             put("data.animated-images", File(tempDir.toFile(), "animated-images").absolutePath)
+            put("podcasts.library", File(tempDir.toFile(), "podcasts/library").absolutePath)
+            put("podcasts.imports", File(tempDir.toFile(), "podcasts/imports").absolutePath)
         }
         val environment = mockk<ApplicationEnvironment>()
         every { environment.config } returns config
@@ -95,6 +97,8 @@ class StorageServiceTest {
             put("audio.custom", "/non/existent/custom")
             put("data.images", "/non/existent/images")
             put("data.animated-images", "/non/existent/animated-images")
+            put("podcasts.library", "/non/existent/podcasts/library")
+            put("podcasts.imports", "/non/existent/podcasts/imports")
         }
         val environment = mockk<ApplicationEnvironment>()
         every { environment.config } returns config
@@ -127,6 +131,8 @@ class StorageServiceTest {
             put("audio.custom", File(tempDir.toFile(), "nonexistent").absolutePath)
             put("data.images", File(tempDir.toFile(), "images").absolutePath)
             put("data.animated-images", File(tempDir.toFile(), "animated-images").absolutePath)
+            put("podcasts.library", File(tempDir.toFile(), "podcasts/library").absolutePath)
+            put("podcasts.imports", File(tempDir.toFile(), "podcasts/imports").absolutePath)
         }
         val environment = mockk<ApplicationEnvironment>()
         every { environment.config } returns config
@@ -161,6 +167,8 @@ class StorageServiceTest {
             put("audio.playlists", File(tempDir.toFile(), "nonexistent_playlists").absolutePath)
             put("data.images", File(tempDir.toFile(), "images").absolutePath)
             put("data.animated-images", File(tempDir.toFile(), "animated-images").absolutePath)
+            put("podcasts.library", File(tempDir.toFile(), "podcasts/library").absolutePath)
+            put("podcasts.imports", File(tempDir.toFile(), "podcasts/imports").absolutePath)
         }
         val environment = mockk<ApplicationEnvironment>()
         every { environment.config } returns config

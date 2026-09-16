@@ -16,7 +16,9 @@ import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.parallel.Isolated
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.EnumSource
@@ -142,5 +144,20 @@ class ScheduledTaskConfigurationServiceTest : KoinTest {
 
         val configs = service.getConfigurations()
         assertEquals(listOf("Alpha", "beta", "zeta"), configs.map { it.name })
+    }
+
+    @Test
+    fun `DEFAULTS include the podcast refresh and podcast import tasks with their cron schedules`() {
+        val byKey = ScheduledTaskConfigurationService.DEFAULTS.associateBy { it.key }
+
+        val refresh = byKey.getValue(TaskKeys.PODCAST_REFRESH)
+        assertEquals("Podcast Refresh", refresh.name)
+        assertTrue(refresh.enabled)
+        assertEquals(TriggerDefinition.Cron("15 * * * *"), refresh.trigger)
+
+        val import = byKey.getValue(TaskKeys.PODCAST_IMPORT)
+        assertEquals("Podcast Import", import.name)
+        assertTrue(import.enabled)
+        assertEquals(TriggerDefinition.Cron("*/15 * * * *"), import.trigger)
     }
 }

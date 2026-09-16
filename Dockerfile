@@ -92,6 +92,8 @@ ENV AUDIO_ALBUMS_PATH="/data/Tidal/Albums"
 ENV AUDIO_PLAYLISTS_PATH="/data/Tidal/Playlists"
 ENV AUDIO_TRANSCODE_PATH="/data/Tidal/Transcode"
 ENV AUDIO_CUSTOM_PATH="/data/Synara/custom"
+ENV PODCASTS_LIBRARY_PATH="/data/Synara/podcasts/library"
+ENV PODCASTS_IMPORTS_PATH="/data/Synara/podcasts/imports"
 ENV DATA_IMAGES_PATH="/data/Tidal/Images"
 ENV DATA_COVER_ASSETS_PATH="/app/cover-assets"
 

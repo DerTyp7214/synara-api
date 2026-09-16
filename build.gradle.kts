@@ -73,6 +73,8 @@ tasks.register("generateEnvDocs") {
             "AUDIO_AUTO_TRANSCODE_QUALITIES_AAC" to mapOf("desc" to "Bitrates for auto-transcoding (AAC).", "cat" to "Storage & Paths"),
             "AUDIO_CUSTOM_PATH" to mapOf("desc" to "Path for custom uploaded audio.", "cat" to "Storage & Paths"),
             "AUDIO_LOSSLESS_FORMAT" to mapOf("desc" to "Lossless container for audio the server produces (custom uploads, downloader imports): FLAC, WAV or AIFF.", "cat" to "Storage & Paths"),
+            "PODCASTS_LIBRARY_PATH" to mapOf("desc" to "Root folder of local podcast shows: one sub-folder per show, audio files inside become episodes.", "cat" to "Storage & Paths"),
+            "PODCASTS_IMPORTS_PATH" to mapOf("desc" to "Folder where episodes of IMPORT-mode feed subscriptions are stored (<showId>/<episodeId>.<ext>).", "cat" to "Storage & Paths"),
             "DATA_IMAGES_PATH" to mapOf("desc" to "Path for cached images/covers.", "cat" to "Storage & Paths"),
             "DATA_ANIMATED_IMAGES_PATH" to mapOf("desc" to "Path for cached animated covers.", "cat" to "Storage & Paths"),
             "DATA_COVER_ASSETS_PATH" to mapOf("desc" to "Path containing cover asset packs (one directory with pack.json per pack).", "cat" to "Storage & Paths"),

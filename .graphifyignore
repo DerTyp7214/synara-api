@@ -1,0 +1,10 @@
+data/
+yaak-workspace/
+graphify-out/
+.claude/
+docs/RPC_SERVICES.md
+docs/ENVIRONMENT_VARIABLES.md
+server/benchmark_results.md
+*.yml
+*.yaml
+requirements.txt

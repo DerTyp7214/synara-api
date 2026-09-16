@@ -20,12 +20,14 @@ import dev.dertyp.services.metadata.CachedMusicBrainzService
 import dev.dertyp.services.metadata.IMetadataService
 import dev.dertyp.services.metadata.IMusicBrainzService
 import dev.dertyp.services.metadata.MetadataDispatcherService
+import dev.dertyp.services.podcast.RpcPodcastService
 import dev.dertyp.services.schedule.RpcScheduledTaskConfigurationService
 import dev.dertyp.services.subsonic.RpcSubsonicCredentialService
 import dev.dertyp.services.sync.RpcListenBackupService
 import dev.dertyp.services.sync.RpcListenBrainzService
 import dev.dertyp.services.ui.RpcUiService
 import dev.dertyp.utils.ResponseShaper
+import dev.dertyp.utils.unwrapProxyTarget
 import dev.dertyp.utils.withAuthorization
 import dev.dertyp.utils.withClientCompat
 import io.github.smiley4.ktoropenapi.*
@@ -95,8 +97,11 @@ fun Route.registerRestService(
                         }
                     }
 
+                    val rawService = serviceFactory()
+                    val fileProvider = unwrapProxyTarget(rawService) as? RestFileProvider
+
                     @Suppress("UNCHECKED_CAST")
-                    val service = serviceFactory().withClientCompat(serviceInterface.java as Class<Any>, ResponseShaper(call.clientInfo))
+                    val service = rawService.withClientCompat(serviceInterface.java as Class<Any>, ResponseShaper(call.clientInfo))
                     val argMap = mutableMapOf<KParameter, Any?>()
                     val instanceParam = func.parameters.first { it.kind == KParameter.Kind.INSTANCE }
                     argMap[instanceParam] = service
@@ -135,10 +140,10 @@ fun Route.registerRestService(
                         }
                     }
 
-                    if (isFileResponse && service is RestFileProvider) {
+                    if (isFileResponse && fileProvider != null) {
                         val methodParams = func.parameters.filter { it.kind == KParameter.Kind.VALUE }
-                        val fileArgs = methodParams.map { argMap[it] ?: if (it.type.isMarkedNullable) null else throw IllegalArgumentException("Missing required file provider parameter: ${it.name}") }
-                        val streamInfo = service.getFile(func.name, fileArgs)
+                        val fileArgs = methodParams.map { argMap[it] ?: if (it.type.isMarkedNullable || it.isOptional) null else throw IllegalArgumentException("Missing required file provider parameter: ${it.name}") }
+                        val streamInfo = fileProvider.getFile(func.name, fileArgs)
                         if (streamInfo != null) {
                             call.response.header(HttpHeaders.AcceptRanges, "bytes")
                             if (call.request.local.method == HttpMethod.Head) {
@@ -514,6 +519,10 @@ fun Route.registerAuthenticatedRestServices(koin: Koin) {
     registerRestService(ITimecodeTagService::class, authenticated = true) {
         val user = call.getUser() ?: throw IllegalArgumentException("No user found")
         RpcTimecodeTagService(user, koin.get()).withAuthorization<ITimecodeTagService>(user)
+    }
+    registerRestService(IPodcastService::class, authenticated = true) {
+        val user = call.getUser() ?: throw IllegalArgumentException("No user found")
+        RpcPodcastService(user, koin.get(), koin.get(), koin.get(), koin.get(), koin.get()).withAuthorization<IPodcastService>(user)
     }
     registerRestService(IClientRequestService::class, authenticated = true) {
         val user = call.getUser() ?: throw IllegalArgumentException("No user found")

@@ -16,7 +16,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
-enum class StorageCategory { TOTAL, IMAGES, ANIMATED_IMAGES }
+enum class StorageCategory { TOTAL, IMAGES, ANIMATED_IMAGES, PODCASTS }
 
 class StorageService(environment: ApplicationEnvironment) : IStorageService, IServerStorageService, Service() {
     override val tracksPath =
@@ -31,6 +31,10 @@ class StorageService(environment: ApplicationEnvironment) : IStorageService, ISe
         environment.config.property("data.images").getString().removeSuffix("/")
     override val animatedImagesPath =
         environment.config.property("data.animated-images").getString().removeSuffix("/")
+    override val podcastLibraryPath =
+        environment.config.property("podcasts.library").getString().removeSuffix("/")
+    override val podcastImportsPath =
+        environment.config.property("podcasts.imports").getString().removeSuffix("/")
     override val secondaryTracksPaths = try {
         environment.config.propertyOrNull("audio.secondary-tracks")?.getList()?.map {
             it.removeSuffix("/")
@@ -45,6 +49,7 @@ class StorageService(environment: ApplicationEnvironment) : IStorageService, ISe
         StorageCategory.TOTAL to CachedSize(::computeTotalStorage),
         StorageCategory.IMAGES to CachedSize(::computeImagesStorage),
         StorageCategory.ANIMATED_IMAGES to CachedSize(::computeAnimatedImagesStorage),
+        StorageCategory.PODCASTS to CachedSize(::computePodcastStorage),
     )
 
     override fun forImporter(backend: ImportBackend): IServerStorageService =
@@ -59,6 +64,8 @@ class StorageService(environment: ApplicationEnvironment) : IStorageService, ISe
     suspend fun getImagesStorage(): Long = caches.getValue(StorageCategory.IMAGES).get()
 
     suspend fun getAnimatedImagesStorage(): Long = caches.getValue(StorageCategory.ANIMATED_IMAGES).get()
+
+    suspend fun getPodcastStorage(): Long = caches.getValue(StorageCategory.PODCASTS).get()
 
     override suspend fun startService() {
         caches.values.forEach { cache ->
@@ -85,7 +92,8 @@ class StorageService(environment: ApplicationEnvironment) : IStorageService, ISe
                     playlistsPath
                 ).map { File(it).parentFile } +
                         secondaryTracksPaths.map { File(it) } +
-                        listOf(File(customAudioPath)))
+                        listOf(File(customAudioPath)) +
+                        podcastRoots())
             .filterNotNull()
             .map { it.absoluteFile }
             .distinctBy { it.path }
@@ -102,6 +110,11 @@ class StorageService(environment: ApplicationEnvironment) : IStorageService, ISe
     private fun computeImagesStorage(): Long = File(imagesPath).getTotalSize()
 
     private fun computeAnimatedImagesStorage(): Long = File(animatedImagesPath).getTotalSize()
+
+    private fun podcastRoots(): List<File> =
+        listOf(File(podcastLibraryPath).absoluteFile, File(podcastImportsPath).absoluteFile).distinctBy { it.path }
+
+    private fun computePodcastStorage(): Long = podcastRoots().sumOf { it.getTotalSize() }
 
     private inner class CachedSize(private val compute: () -> Long) {
         private val value = AtomicLong(UNSET)
@@ -169,6 +182,8 @@ class ImporterStorageService(
     override val customAudioPath: String get() = delegate.customAudioPath
     override val imagesPath: String get() = delegate.imagesPath
     override val animatedImagesPath: String get() = delegate.animatedImagesPath
+    override val podcastLibraryPath: String get() = delegate.podcastLibraryPath
+    override val podcastImportsPath: String get() = delegate.podcastImportsPath
     override val secondaryTracksPaths: List<String> get() = delegate.secondaryTracksPaths
 
     override fun forImporter(backend: ImportBackend): IServerStorageService =

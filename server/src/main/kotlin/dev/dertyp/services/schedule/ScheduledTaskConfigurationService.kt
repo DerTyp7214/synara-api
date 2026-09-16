@@ -73,7 +73,9 @@ class ScheduledTaskConfigurationService : Service() {
             TaskConfiguration(TaskKeys.COVER_BACKFILL, "Cover Backfill", true, TriggerDefinition.AfterTask(TaskKeys.IMAGE_ANALYSIS)),
             TaskConfiguration(TaskKeys.RECOMMENDATION_TRAINING, "Recommendation Model Training", true, TriggerDefinition.Cron("0 7 * * *")),
             TaskConfiguration(TaskKeys.RADIO_SESSION_CLEANUP, "Radio Session Cleanup", true, TriggerDefinition.Cron("0 * * * *")),
-            TaskConfiguration(TaskKeys.STORAGE_SIZE_REFRESH, "Storage Size Refresh", true, TriggerDefinition.Cron("0 */6 * * *"))
+            TaskConfiguration(TaskKeys.STORAGE_SIZE_REFRESH, "Storage Size Refresh", true, TriggerDefinition.Cron("0 */6 * * *")),
+            TaskConfiguration(TaskKeys.PODCAST_REFRESH, "Podcast Refresh", true, TriggerDefinition.Cron("15 * * * *")),
+            TaskConfiguration(TaskKeys.PODCAST_IMPORT, "Podcast Import", true, TriggerDefinition.Cron("*/15 * * * *"))
         )
     }
 

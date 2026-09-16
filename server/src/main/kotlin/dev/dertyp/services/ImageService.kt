@@ -25,6 +25,7 @@ import net.coobird.thumbnailator.Thumbnails
 import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.inList
+import org.jetbrains.exposed.v1.core.isNotNull
 import org.jetbrains.exposed.v1.core.isNull
 import org.jetbrains.exposed.v1.core.less
 import org.jetbrains.exposed.v1.core.like
@@ -367,6 +368,18 @@ class ImageService(
         referencedImages.addAll(CollectionTable.selectAll().mapNotNull { it[CollectionTable.imageId]?.value })
         referencedImages.addAll(RadioChannelTable.selectAll().mapNotNull { it[RadioChannelTable.imageId]?.value })
         referencedImages.addAll(MBReleaseGroupCoverTable.selectAll().mapNotNull { it[MBReleaseGroupCoverTable.imageId]?.value })
+        referencedImages.addAll(
+            PodcastShowTable
+                .select(PodcastShowTable.imageId)
+                .where { PodcastShowTable.imageId.isNotNull() }
+                .mapNotNull { it[PodcastShowTable.imageId]?.value }
+        )
+        referencedImages.addAll(
+            PodcastEpisodeTable
+                .select(PodcastEpisodeTable.imageId)
+                .where { PodcastEpisodeTable.imageId.isNotNull() }
+                .mapNotNull { it[PodcastEpisodeTable.imageId]?.value }
+        )
 
         referencedImages
     }

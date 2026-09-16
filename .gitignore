@@ -48,3 +48,5 @@ local.properties
 /transcriber/.cache/
 
 docker-compose.server.yml
+
+graphify-out/

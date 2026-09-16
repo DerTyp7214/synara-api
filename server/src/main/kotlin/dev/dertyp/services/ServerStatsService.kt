@@ -1,5 +1,6 @@
 package dev.dertyp.services
 
+import dev.dertyp.data.PodcastImportState
 import dev.dertyp.data.ProxyInfo
 import dev.dertyp.data.ServerStats
 import dev.dertyp.db.*
@@ -7,6 +8,7 @@ import dev.dertyp.dbQuery
 import dev.dertyp.server.BuildConfig
 import dev.dertyp.services.metadata.MusicBrainzCacheService
 import org.jetbrains.exposed.v1.core.count
+import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.sum
 import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.jdbc.selectAll
@@ -26,6 +28,9 @@ class ServerStatsService(
         val indexedFileSize: Long,
         val totalDuration: Long,
         val transcodeStats: List<ServerStats.TranscodeStats>,
+        val podcastShowCount: Int,
+        val podcastEpisodeCount: Int,
+        val podcastImportedEpisodeCount: Int,
     )
 
     override suspend fun getStats(): ServerStats {
@@ -63,6 +68,14 @@ class ServerStatsService(
                     )
                 }
 
+            val podcastShowCount = PodcastShowTable.selectAll().count().toInt()
+            val podcastEpisodeCount = PodcastEpisodeTable.selectAll().count().toInt()
+            val podcastImportedEpisodeCount = PodcastEpisodeTable
+                .selectAll()
+                .where { PodcastEpisodeTable.importState eq PodcastImportState.IMPORTED }
+                .count()
+                .toInt()
+
             DbStats(
                 songCount = songCount,
                 albumCount = albumCount,
@@ -72,7 +85,10 @@ class ServerStatsService(
                 playlistCount = playlistCount,
                 indexedFileSize = indexedFileSize,
                 totalDuration = totalDuration,
-                transcodeStats = transcodeStats
+                transcodeStats = transcodeStats,
+                podcastShowCount = podcastShowCount,
+                podcastEpisodeCount = podcastEpisodeCount,
+                podcastImportedEpisodeCount = podcastImportedEpisodeCount
             )
         }
 
@@ -94,6 +110,10 @@ class ServerStatsService(
             averageSizePerSong = if (dbStats.songCount > 0) dbStats.indexedFileSize / dbStats.songCount else 0L,
             totalDuration = dbStats.totalDuration,
             transcodeStats = dbStats.transcodeStats,
+            podcastShowCount = dbStats.podcastShowCount,
+            podcastEpisodeCount = dbStats.podcastEpisodeCount,
+            podcastImportedEpisodeCount = dbStats.podcastImportedEpisodeCount,
+            podcastFileSize = storageService.getPodcastStorage(),
             musicBrainzCache = musicBrainzCacheService.getStats(),
             version = ServerStats.Version(
                 version = BuildConfig.VERSION,

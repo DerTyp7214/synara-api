@@ -34,6 +34,13 @@ import dev.dertyp.services.*
 import dev.dertyp.services.import.ImportService
 import dev.dertyp.services.import.ImporterProxy
 import dev.dertyp.services.metadata.*
+import dev.dertyp.services.podcast.PodcastFeedService
+import dev.dertyp.services.podcast.PodcastHttp
+import dev.dertyp.services.podcast.PodcastImportService
+import dev.dertyp.services.podcast.PodcastLocalScanService
+import dev.dertyp.services.podcast.PodcastMaintenanceService
+import dev.dertyp.services.podcast.PodcastService
+import dev.dertyp.services.podcast.PodcastStreamService
 import dev.dertyp.services.schedule.ScheduleService
 import dev.dertyp.services.schedule.ScheduledTaskConfigurationService
 import dev.dertyp.services.subsonic.SubsonicCredentialService
@@ -309,6 +316,13 @@ fun mainModule(application: Application, environment: ApplicationEnvironment): M
     singleOf(::QueueService)
     singleOf(::ClientSettingsService)
     singleOf(::TimecodeTagService)
+    singleOf(::PodcastHttp)
+    singleOf(::PodcastService)
+    singleOf(::PodcastFeedService)
+    singleOf(::PodcastLocalScanService)
+    singleOf(::PodcastImportService)
+    singleOf(::PodcastMaintenanceService)
+    singleOf(::PodcastStreamService)
     singleOf(::ClientRequestService)
     singleOf(::CustomAudioService)
     singleOf(::ReverseProxyService)

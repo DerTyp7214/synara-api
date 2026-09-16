@@ -127,5 +127,7 @@ Most variables have sensible defaults and are **optional**. Only variables witho
 | `DATA_ANIMATED_IMAGES_PATH` | Path for cached animated covers. | No | `data/animated-images` | `/data/Synara/AnimatedImages` |
 | `DATA_COVER_ASSETS_PATH` | Path containing cover asset packs (one directory with pack.json per pack). | No | `data/cover-assets` | `/app/cover-assets` |
 | `DATA_IMAGES_PATH` | Path for cached images/covers. | No | `data/images` | `/data/Synara/Images` |
+| `PODCASTS_IMPORTS_PATH` | Folder where episodes of IMPORT-mode feed subscriptions are stored (<showId>/<episodeId>.<ext>). | No | `podcasts/imports` | `/data/Synara/podcasts/imports` |
+| `PODCASTS_LIBRARY_PATH` | Root folder of local podcast shows: one sub-folder per show, audio files inside become episodes. | No | `podcasts/library` | `/data/Synara/podcasts/library` |
 | `YTDLP_CONFIG_PATH` | Path to yt-dlp.conf for yt-dlp. | No | - | `/data/config/yt-dlp.conf` |
 
