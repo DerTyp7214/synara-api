@@ -11,7 +11,7 @@ import dev.dertyp.data.PodcastShowSettings
 import dev.dertyp.data.PodcastTranscript
 import dev.dertyp.data.PodcastTranscriptContent
 import dev.dertyp.data.User
-import dev.dertyp.routing.RestFileProvider
+import dev.dertyp.routing.rest.RestFileProvider
 import dev.dertyp.services.IPodcastService
 import kotlinx.coroutines.flow.Flow
 import java.util.UUID

@@ -1,25 +1,22 @@
 package dev.dertyp.routing
 
 import dev.dertyp.StreamInfo
-import dev.dertyp.rpc.annotations.RestFileResponse
+import dev.dertyp.routing.rest.*
 import dev.dertyp.serializers.AppJson
+import dev.dertyp.services.ISongService
 import dev.dertyp.utils.withAuthorization
 import io.github.smiley4.ktoropenapi.OpenApi
-import io.ktor.client.request.get
-import io.ktor.client.request.head
-import io.ktor.client.request.header
-import io.ktor.client.statement.readRawBytes
-import io.ktor.http.ContentType
-import io.ktor.http.HttpHeaders
-import io.ktor.http.HttpStatusCode
-import io.ktor.serialization.kotlinx.json.json
-import io.ktor.server.application.install
-import io.ktor.server.config.MapApplicationConfig
-import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.client.request.*
+import io.ktor.client.statement.*
+import io.ktor.http.*
+import io.ktor.serialization.kotlinx.json.*
+import io.ktor.server.application.*
+import io.ktor.server.config.*
+import io.ktor.server.plugins.contentnegotiation.*
 import io.ktor.server.routing.routing
-import io.ktor.server.testing.ApplicationTestBuilder
-import io.ktor.server.testing.testApplication
-import kotlinx.coroutines.flow.Flow
+import io.ktor.server.testing.*
+import io.mockk.every
+import io.mockk.mockk
 import kotlinx.coroutines.flow.flowOf
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertArrayEquals
@@ -31,31 +28,27 @@ import java.io.File
 import java.nio.file.Files
 import java.util.UUID
 
-interface IFileProbeService {
-    @RestFileResponse
-    fun streamProbe(
-        probeId: UUID,
-        offset: Long = 0,
-        chunkSize: Int = 4096
-    ): Flow<ByteArray>?
-}
-
-private class FileProbeService(
+private class FileProbeSongService(
+    private val delegate: ISongService,
     private val file: File?,
-    private val fallback: ByteArray
-) : IFileProbeService, RestFileProvider {
-    override fun streamProbe(probeId: UUID, offset: Long, chunkSize: Int): Flow<ByteArray> = flowOf(fallback)
+    private val fallback: ByteArray,
+) : ISongService by delegate, RestFileProvider {
+    var lastArgs: List<Any?>? = null
 
     override suspend fun getFile(methodName: String, args: List<Any?>): StreamInfo? {
-        if (methodName != "streamProbe") return null
+        lastArgs = args
+        if (methodName != "streamSong") return null
         val target = file ?: return null
-        return StreamInfo(target, ContentType.Application.OctetStream, target.length(), target.name)
+        return StreamInfo(target, ContentType.Audio.MPEG, target.length(), target.name)
     }
+
+    fun fallbackBytes(): ByteArray = fallback
 }
 
 class RestFileProviderTest {
     private lateinit var directory: File
     private lateinit var file: File
+    private lateinit var service: FileProbeSongService
 
     private val fileBytes = ByteArray(1000) { (it % 251).toByte() }
     private val fallbackBytes = "fallback-payload".toByteArray()
@@ -80,15 +73,18 @@ class RestFileProviderTest {
             install(OpenApi)
             install(ContentNegotiation) { json(AppJson) }
             routing {
-                registerRestService(IFileProbeService::class, authenticated = false) {
-                    FileProbeService(if (serveFile) file else null, fallbackBytes)
-                        .withAuthorization<IFileProbeService>(null)
+                registerISongServiceRest(authenticated = false) {
+                    val delegate = mockk<ISongService>(relaxed = true)
+                    every { delegate.streamSong(any(), any(), any()) } returns flowOf(fallbackBytes)
+                    FileProbeSongService(delegate, if (serveFile) file else null, fallbackBytes)
+                        .also { service = it }
+                        .withAuthorization<ISongService>(null)
                 }
             }
         }
     }
 
-    private fun probePath() = "/fileProbe/streamProbe/${UUID.randomUUID()}?offset=0&chunkSize=4096"
+    private fun probePath(id: UUID = UUID.randomUUID()) = "/song/streamSong/$id?offset=0&chunkSize=4096"
 
     @Test
     fun `a file provider behind the authorization proxy serves the whole file`() = testApplication {
@@ -146,10 +142,13 @@ class RestFileProviderTest {
     @Test
     fun `a file response without the optional query parameters is served`() = testApplication {
         setUpProbeApplication()
+        val id = UUID.randomUUID()
 
-        val response = client.get("/fileProbe/streamProbe/${UUID.randomUUID()}")
+        val response = client.get("/song/streamSong/$id")
 
         assertEquals(HttpStatusCode.OK, response.status)
         assertArrayEquals(fileBytes, response.readRawBytes())
+        assertEquals(listOf(id, null, null), service.lastArgs)
+        assertArrayEquals(fallbackBytes, service.fallbackBytes())
     }
 }

@@ -1,0 +1,403 @@
+DELETE /album/albums IAlbumService.deleteAlbums [q:ids] JSON
+GET /album/allAlbums IAlbumService.allAlbums [q:page? q:pageSize?] JSON
+GET /album/byArtist/{artistId} IAlbumService.byArtist [q:page? q:pageSize? p:artistId q:singles?] JSON
+GET /album/byColor IAlbumService.byColor [q:page? q:pageSize? q:color q:range?] JSON
+GET /album/byId/{id} IAlbumService.byId [p:id] JSON
+GET /album/byIds IAlbumService.byIds [q:ids] JSON
+GET /album/byMusicBrainzId/{mbId} IAlbumService.byMusicBrainzId [p:mbId] JSON
+GET /album/byMusicBrainzIds IAlbumService.byMusicBrainzIds [q:mbIds] JSON
+GET /album/byName IAlbumService.byName [q:page? q:pageSize? q:name] JSON
+GET /album/byOriginalIds IAlbumService.byOriginalIds [q:ids] JSON
+GET /album/byOriginalUrls IAlbumService.byOriginalUrls [q:urls] JSON
+GET /album/extendedMetadata/{id} IAlbumService.extendedMetadata [p:id] JSON
+GET /album/search IAlbumService.rankedSearch [q:page? q:pageSize? q:query] JSON
+GET /album/versions/{id} IAlbumService.versions [p:id] JSON
+POST /album/musicBrainzId/{id} IAlbumService.fetchMusicBrainzId [p:id] JSON
+PUT /album/album IAlbumService.updateAlbum [b:album] JSON
+PUT /album/musicBrainzId/{id} IAlbumService.setMusicBrainzId [p:id q:musicBrainzId] JSON
+GET /animatedImage/byHash IAnimatedImageService.byHash [q:hash] JSON
+GET /animatedImage/byId/{id} IAnimatedImageService.byId [p:id] JSON
+GET /animatedImage/coverHashes IAnimatedImageService.getCoverHashes [q:hashes] JSON
+GET /animatedImage/imageData/{id} IAnimatedImageService.getAnimatedImageData [p:id] BYTES PUBLIC
+POST /animatedImage/animatedImage IAnimatedImageService.createAnimatedImage [b:bytes q:origin?] JSON
+POST /animatedImage/batch IAnimatedImageService.createBatch [b:images] JSON
+GET /apiKey/apiKeyString/{id} IApiKeyService.getApiKeyString [p:id] JSON
+GET /apiKey/apiKeys IApiKeyService.listApiKeys [] JSON
+GET /apiKey/availableScopes IApiKeyService.listAvailableScopes [] JSON
+POST /apiKey/apiKey IApiKeyService.createApiKey [q:label q:scopes] JSON
+POST /apiKey/revokeApiKey/{id} IApiKeyService.revokeApiKey [p:id] JSON
+DELETE /artist/alias/{artistId} IArtistService.removeAlias [p:artistId q:name] JSON
+GET /artist/aliases/{id} IArtistService.aliases [p:id] JSON
+GET /artist/allArtists IArtistService.allArtists [q:page? q:pageSize?] JSON
+GET /artist/artistIdsWithoutMusicBrainzId IArtistService.artistIdsWithoutMusicBrainzId [] SSE
+GET /artist/artistOnMusicBrainz IArtistService.searchArtistOnMusicBrainz [q:query q:page? q:pageSize?] JSON
+GET /artist/artistsWithoutMusicBrainzIdFlow IArtistService.artistsWithoutMusicBrainzIdFlow [] SSE
+GET /artist/byColor IArtistService.byColor [q:page? q:pageSize? q:color q:range?] JSON
+GET /artist/byGroup/{groupId} IArtistService.byGroup [q:page? q:pageSize? p:groupId] JSON
+GET /artist/byId/{id} IArtistService.byId [p:id] JSON
+GET /artist/byIds IArtistService.byIds [q:ids] JSON
+GET /artist/byMusicBrainzId/{mbId} IArtistService.byMusicBrainzId [p:mbId] JSON
+GET /artist/search IArtistService.rankedSearch [q:page? q:pageSize? q:query] JSON
+GET /artist/{type}/artistImages IArtistService.searchArtistImages [p:type q:query q:limit?] JSON
+POST /artist/alias/{artistId} IArtistService.addAlias [p:artistId q:name] JSON
+POST /artist/artist IArtistService.createArtist [q:name q:isGroup? q:about? q:musicBrainzId?] JSON
+POST /artist/mergeArtists IArtistService.mergeArtists [b:mergeArtists] JSON
+POST /artist/musicBrainzId/{id} IArtistService.fetchMusicBrainzId [p:id] JSON
+POST /artist/splitArtist IArtistService.splitArtist [b:splitArtist] JSON
+PUT /artist/artistImageByUrl/{id} IArtistService.setArtistImageByUrl [p:id q:url] JSON
+PUT /artist/group/{id} IArtistService.setGroup [p:id q:artistIds] JSON
+PUT /artist/musicBrainzId/{id} IArtistService.setMusicBrainzId [p:id q:musicBrainzId] JSON
+GET /audioAnalysis/audioData/{songId} IAudioAnalysisService.getAudioData [p:songId] JSON
+GET /audioAnalysis/audioTimeline/{songId} IAudioAnalysisService.getAudioTimeline [p:songId] JSON
+POST /audioAnalysis/analyzeSong/{songId} IAudioAnalysisService.analyzeSong [p:songId] UNIT
+POST /auth/authenticate IAuthService.authenticate [q:username q:password] JSON
+POST /auth/deviceSession IAuthService.createDeviceSession [q:userAgent] JSON
+POST /auth/refreshToken IAuthService.refreshToken [q:refreshToken] JSON
+DELETE /backup/backup IBackupService.deleteBackup [q:fileName] UNIT
+GET /backup/backups IBackupService.listBackups [] JSON
+POST /backup/backup IBackupService.createBackup [] JSON
+POST /backup/restoreBackup IBackupService.loadBackup [q:fileName] UNIT
+GET /clientRequest/observeRequests IClientRequestService.observeRequests [] SSE
+POST /clientRequest/complete/{requestId} IClientRequestService.complete [p:requestId q:status] UNIT
+DELETE /clientSettings/device/{deviceId} IClientSettingsService.deleteDevice [p:deviceId] UNIT
+GET /clientSettings/changes IClientSettingsService.getChanges [q:scope q:sinceVersion q:device? q:limit?] JSON
+GET /clientSettings/devices IClientSettingsService.getDevices [] JSON
+GET /clientSettings/history IClientSettingsService.getHistory [q:scope q:key q:device? q:limit?] JSON
+GET /clientSettings/observeSettings IClientSettingsService.observeSettings [] SSE
+GET /clientSettings/settings IClientSettingsService.getSettings [q:scope q:device? q:includeDeleted?] JSON
+GET /clientSettings/snapshot/{deviceId} IClientSettingsService.getSnapshot [p:deviceId] JSON
+POST /clientSettings/registerDevice/{deviceId} IClientSettingsService.registerDevice [p:deviceId q:name? q:platform?] JSON
+POST /clientSettings/restore IClientSettingsService.restore [q:scope q:key q:version q:device? q:force?] JSON
+PUT /clientSettings/settings IClientSettingsService.setSettings [b:entries q:scope q:device? q:force?] JSON
+DELETE /collection/collection/{id} ICollectionService.delete [p:id] JSON
+DELETE /collection/item/{id} ICollectionService.removeItem [p:id q:itemType q:itemId] JSON
+GET /collection/albumIds/{collectionId} ICollectionService.albumIds [p:collectionId] SSE
+GET /collection/allCollections ICollectionService.allCollections [] JSON
+GET /collection/artistIds/{collectionId} ICollectionService.artistIds [p:collectionId] SSE
+GET /collection/byId/{id} ICollectionService.byId [p:id] JSON
+GET /collection/playlistIds/{collectionId} ICollectionService.playlistIds [p:collectionId] SSE
+GET /collection/search/{collectionId} ICollectionService.rankedSearch [p:collectionId q:query q:explicit? q:page? q:pageSize?] JSON
+GET /collection/songIds/{collectionId} ICollectionService.songIds [p:collectionId] SSE
+POST /collection/collection ICollectionService.createCollection [b:collection] JSON
+POST /collection/item/{id} ICollectionService.addItem [p:id q:itemType q:itemId] JSON
+PUT /collection/collection/{id} ICollectionService.updateCollection [p:id b:collection] JSON
+PUT /collection/collectionImage/{id} ICollectionService.setCollectionImage [p:id q:imageId] JSON
+GET /coverGeneration/coverInfo ICoverGenerationService.coverInfo [q:target] JSON
+GET /coverGeneration/options ICoverGenerationService.options [] JSON
+POST /coverGeneration/applyCover ICoverGenerationService.applyCover [b:target b:params?] JSON
+POST /coverGeneration/generateMissing ICoverGenerationService.generateMissing [b:params?] JSON
+POST /coverGeneration/previewCoverImage ICoverGenerationService.previewCoverImage [b:target b:params?] BYTES
+POST /coverGeneration/resetCover ICoverGenerationService.resetCover [b:target] JSON
+POST /customAudio/uploadCustomAudio ICustomAudioService.uploadCustomAudio [b:fileData q:fileName b:metadata?] JSON
+GET /dbManagement/exportData IDbManagementService.exportData [] BYTES
+POST /dbManagement/importData IDbManagementService.importData [b:data] UNIT
+GET /discovery/similarSongs IDiscoveryService.getSimilarSongs [q:seedSongIds q:limit?] JSON
+GET /discovery/similarSongsByBpm IDiscoveryService.getSimilarSongsByBpm [q:seedSongIds q:limit?] JSON
+GET /discovery/similarSongsByEnergy IDiscoveryService.getSimilarSongsByEnergy [q:seedSongIds q:limit?] JSON
+GET /discovery/similarSongsByMood IDiscoveryService.getSimilarSongsByMood [q:seedSongIds q:limit?] JSON
+GET /discovery/similarSongsByPlaylist/{playlistId} IDiscoveryService.getSimilarSongsByPlaylist [p:playlistId q:limit?] JSON
+GET /discovery/songsBySameComposers IDiscoveryService.getSongsBySameComposers [q:seedSongIds q:limit?] JSON
+GET /discovery/songsBySameLyricists IDiscoveryService.getSongsBySameLyricists [q:seedSongIds q:limit?] JSON
+GET /discovery/songsBySameProducers IDiscoveryService.getSongsBySameProducers [q:seedSongIds q:limit?] JSON
+POST /discovery/albumMosaic IDiscoveryService.createAlbumMosaic [b:image q:width q:height q:page? q:pageSize? q:range?] JSON
+POST /discovery/songMosaic IDiscoveryService.createSongMosaic [b:image q:width q:height q:page? q:pageSize? q:range?] JSON
+GET /favSync/latestFavSync IFavSyncService.getLatestFavSync [q:service] JSON
+POST /favSync/insertFavSync IFavSyncService.insertFavSync [q:service b:syncedAt] JSON
+GET /handshake/handshake IHandshakeService.handshake [] JSON PUBLIC
+DELETE /hue/bridge/{bridgeId} IHueService.removeBridge [p:bridgeId] JSON
+DELETE /hue/link/{bridgeId} IHueService.removeLink [p:bridgeId] JSON
+GET /hue/bridges IHueService.listBridges [] JSON
+GET /hue/discoverBridges IHueService.discoverBridges [] JSON
+GET /hue/links IHueService.getLinks [] JSON
+GET /hue/scenes/{bridgeId} IHueService.listScenes [p:bridgeId] JSON
+GET /hue/status IHueService.status [] JSON
+GET /hue/targets/{bridgeId} IHueService.listTargets [p:bridgeId] JSON
+POST /hue/startPairing IHueService.startPairing [q:ip] SSE
+POST /hue/test/{bridgeId} IHueService.test [p:bridgeId b:targets] JSON
+PUT /hue/link IHueService.setLink [b:link] JSON
+GET /image/byHash IImageService.byHash [q:hash] JSON
+GET /image/byId/{id} IImageService.byId [p:id] JSON
+GET /image/coverHashes IImageService.getCoverHashes [q:hashes] JSON
+GET /image/imageData/{id} IImageService.getImageData [p:id q:size?] BYTES PUBLIC
+POST /image/batch IImageService.createBatch [b:images] JSON
+POST /image/generateMosaicImage IImageService.generateMosaicImage [b:image q:width q:height q:resultSize?] SSE
+POST /image/image IImageService.createImage [b:bytes q:origin?] JSON
+POST /image/moveImages IImageService.moveImages [q:oldPath q:newPath] JSON
+GET /import/allImportServices IImportService.getAllImportServices [] JSON
+GET /import/authUrl IImportService.getAuthUrl [] JSON
+GET /import/currentImport IImportService.currentImport [] JSON
+GET /import/existsByOriginalId/{id} IImportService.existsByOriginalId [p:id q:type?] JSON
+GET /import/finishedImports IImportService.finishedImports [] JSON
+GET /import/importAuthorized IImportService.importAuthorized [] JSON
+GET /import/importQueue IImportService.importQueue [] JSON
+GET /import/importService IImportService.getImportService [] JSON
+GET /import/importerCapabilities IImportService.getImporterCapabilities [] JSON
+GET /import/importerForUrl IImportService.getImporterForUrl [q:url] JSON
+GET /import/logs IImportService.logs [] SSE
+GET /import/syncFavouritesAvailable IImportService.syncFavouritesAvailable [] JSON
+GET /import/tidalSyncAuthorized IImportService.tidalSyncAuthorized [] JSON
+GET /import/tracks IImportService.search [q:query? q:title? q:artist? q:count?] JSON
+POST /import/importIds IImportService.importIds [q:ids q:type? b:importer?] UNIT
+POST /import/importLogin IImportService.importLogin [] SSE
+POST /import/importUrls IImportService.importUrls [q:urls] UNIT
+POST /import/killAllChildProcesses IImportService.killAllChildProcesses [] UNIT
+POST /import/syncFavourites IImportService.syncFavourites [] UNIT
+PUT /import/importCredentials IImportService.setImportCredentials [b:backend b:credentials] UNIT
+PUT /import/importService IImportService.setImportService [b:service] UNIT
+POST /indexer/start IIndexer.start [] SSE
+GET /listenBackup/state IListenBackupService.getState [] JSON
+GET /listenBackup/stateFlow IListenBackupService.getStateFlow [] SSE
+POST /listenBackup/resetCursor IListenBackupService.resetCursor [] JSON
+POST /listenBackup/syncNow IListenBackupService.syncNow [] JSON
+POST /listenBackup/testConnection IListenBackupService.testConnection [b:config?] JSON
+PUT /listenBackup/config IListenBackupService.updateConfig [b:config] JSON
+DELETE /listenBrainz/link IListenBrainzService.unlink [] UNIT
+GET /listenBrainz/recentListens IListenBrainzService.recentListens [q:limit] JSON
+GET /listenBrainz/status IListenBrainzService.getStatus [] JSON
+GET /listenBrainz/statusFlow IListenBrainzService.getStatusFlow [] SSE
+POST /listenBrainz/link IListenBrainzService.link [q:username q:token?] JSON
+POST /listenBrainz/syncNow IListenBrainzService.syncNow [] JSON
+GET /listeningStats/stats IListeningStatsService.getStats [q:range q:timezone q:topLimit q:topOrder?] JSON
+POST /listeningStats/linkUnmatchedTrack IListeningStatsService.linkUnmatchedTrack [b:request] JSON
+GET /lyrics/syncedLyrics/{songId} ILyricsService.getSyncedLyrics [p:songId] JSON
+POST /lyrics/startSyncWorker ILyricsService.startSyncWorker [] JSON
+POST /lyrics/transcribeLyrics/{songId} ILyricsService.transcribeLyrics [p:songId q:lyrics?] JSON
+GET /lyricsSearch/lyrics ILyricsSearch.searchLyrics [q:artist q:title q:syncedOnly?] JSON
+GET /metadata/allMetadataTypes IMetadataService.getAllMetadataTypes [q:features?] JSON
+GET /metadata/{type}/albumByBarcode IMetadataService.getAlbumByBarcode [p:type q:barcode] JSON
+GET /metadata/{type}/albumByMbId/{mbId} IMetadataService.getAlbumByMbId [p:type p:mbId] JSON
+GET /metadata/{type}/albumExistsById/{albumId} IMetadataService.albumExistsById [p:type p:albumId] JSON
+GET /metadata/{type}/albumIdByTrackId/{trackId} IMetadataService.getAlbumIdByTrackId [p:type p:trackId] JSON
+GET /metadata/{type}/albums IMetadataService.searchAlbums [p:type q:query q:limit? q:includeTracks?] JSON
+GET /metadata/{type}/albumsByIds IMetadataService.getAlbumsByIds [p:type q:albumIds] JSON
+GET /metadata/{type}/artistByMbId/{mbId} IMetadataService.getArtistByMbId [p:type p:mbId] JSON
+GET /metadata/{type}/artists IMetadataService.searchArtists [p:type q:query q:limit?] JSON
+GET /metadata/{type}/artistsByIds IMetadataService.getArtistsByIds [p:type q:artistIds] JSON
+GET /metadata/{type}/imageUrlByAlbumId/{albumId} IMetadataService.getImageUrlByAlbumId [p:type p:albumId] JSON
+GET /metadata/{type}/imageUrlByAlbumMbId/{mbId} IMetadataService.getImageUrlByAlbumMbId [p:type p:mbId] JSON
+GET /metadata/{type}/imageUrlByArtistMbId/{mbId} IMetadataService.getImageUrlByArtistMbId [p:type p:mbId] JSON
+GET /metadata/{type}/imageUrlByImageId/{imageId} IMetadataService.getImageUrlByImageId [p:type p:imageId] JSON
+GET /metadata/{type}/imageUrlByTrackMbId/{mbId} IMetadataService.getImageUrlByTrackMbId [p:type p:mbId] JSON
+GET /metadata/{type}/imageUrlsByAlbumIds IMetadataService.getImageUrlsByAlbumIds [p:type q:albumIds] JSON
+GET /metadata/{type}/supportedFeatures IMetadataService.getSupportedFeatures [p:type] JSON
+GET /metadata/{type}/trackById/{trackId} IMetadataService.getTrackById [p:type p:trackId] JSON
+GET /metadata/{type}/trackByIsrc IMetadataService.getTrackByIsrc [p:type q:isrc] JSON
+GET /metadata/{type}/trackByMbId/{mbId} IMetadataService.getTrackByMbId [p:type p:mbId] JSON
+GET /metadata/{type}/tracks IMetadataService.search [p:type q:query q:limit?] JSON
+GET /metadata/{type}/tracksByIds IMetadataService.getTracksByIds [p:type q:trackIds] JSON
+GET /mirror/albums IMirrorService.getAlbums [] SSE
+GET /mirror/artistAliases IMirrorService.getArtistAliases [] SSE
+GET /mirror/artistSplitAliases IMirrorService.getArtistSplitAliases [] SSE
+GET /mirror/artists IMirrorService.getArtists [] SSE
+GET /mirror/imageMetadata IMirrorService.getImageMetadata [] SSE
+GET /mirror/likedSongs/{userId} IMirrorService.getLikedSongs [p:userId] SSE
+GET /mirror/playlists IMirrorService.getPlaylists [] SSE
+GET /mirror/serverPaths IMirrorService.getServerPaths [] JSON
+GET /mirror/songData/{songId} IMirrorService.getSongData [p:songId q:quality? q:chunkSize? q:force?] BYTE_FLOW
+GET /mirror/songs IMirrorService.getSongs [] SSE
+GET /mirror/songsByPlaylist/{playlistId} IMirrorService.getSongsByPlaylist [p:playlistId] SSE
+GET /mirror/songsByUserPlaylist/{playlistId} IMirrorService.getSongsByUserPlaylist [p:playlistId] SSE
+GET /mirror/userPlaylists IMirrorService.getUserPlaylists [] SSE
+GET /mirror/users IMirrorService.getUsers [] SSE
+GET /musicBrainz/artist/{id} IMusicBrainzService.getArtist [p:id] JSON
+GET /musicBrainz/recording IMusicBrainzService.searchRecording [q:title q:artists] JSON
+GET /musicBrainz/recording/{id} IMusicBrainzService.getRecording [p:id] JSON
+GET /musicBrainz/recordingByIsrc IMusicBrainzService.getRecordingByIsrc [q:isrc] JSON
+GET /musicBrainz/release IMusicBrainzService.searchRelease [q:title q:artists] JSON
+GET /musicBrainz/release/{id} IMusicBrainzService.getRelease [p:id] JSON
+GET /musicBrainz/releaseByBarcode IMusicBrainzService.searchReleaseByBarcode [q:barcode q:artists] JSON
+GET /musicBrainz/releaseGroup/{id} IMusicBrainzService.getReleaseGroup [p:id] JSON
+GET /musicBrainz/releasesByReleaseGroup/{id} IMusicBrainzService.getReleasesByReleaseGroup [p:id] JSON
+GET /playback/observePlaybackState/{sessionId} IPlaybackService.observePlaybackState [p:sessionId] SSE
+GET /playback/playbackState/{sessionId} IPlaybackService.getPlaybackState [p:sessionId] JSON
+PUT /playback/playbackState/{sessionId} IPlaybackService.setPlaybackState [p:sessionId b:state] JSON
+DELETE /playlist/playlist/{id} IPlaylistService.delete [p:id] JSON
+GET /playlist/allPlaylists IPlaylistService.allPlaylists [q:page? q:pageSize?] JSON
+GET /playlist/byId/{id} IPlaylistService.byId [p:id] JSON
+GET /playlist/byIdFull/{id} IPlaylistService.byIdFull [p:id] JSON
+GET /playlist/byIds IPlaylistService.byIds [q:ids] JSON
+GET /playlist/byName IPlaylistService.byName [q:name] JSON
+GET /playlist/search IPlaylistService.rankedSearch [q:page? q:pageSize? q:query] JSON
+DELETE /podcast/import/{episodeId} IPodcastService.removeImport [p:episodeId] JSON
+DELETE /podcast/unsubscribe/{showId} IPodcastService.unsubscribe [p:showId] JSON
+GET /podcast/browseShows IPodcastService.browseShows [q:query? q:page? q:pageSize?] JSON
+GET /podcast/episode/{episodeId} IPodcastService.getEpisode [p:episodeId] JSON
+GET /podcast/episodes IPodcastService.searchEpisodes [q:query q:page? q:pageSize?] JSON
+GET /podcast/episodes/{showId} IPodcastService.getEpisodes [p:showId q:page? q:pageSize? q:newestFirst?] JSON
+GET /podcast/inProgress IPodcastService.getInProgress [q:page? q:pageSize?] JSON
+GET /podcast/latestEpisodes IPodcastService.getLatestEpisodes [q:page? q:pageSize?] JSON
+GET /podcast/observeProgress IPodcastService.observeProgress [] SSE
+GET /podcast/show/{showId} IPodcastService.getShow [p:showId] JSON
+GET /podcast/streamEpisode/{episodeId} IPodcastService.streamEpisode [p:episodeId q:offset? q:chunkSize?] FILE
+GET /podcast/streamSize/{episodeId} IPodcastService.getStreamSize [p:episodeId] JSON
+GET /podcast/subscriptions IPodcastService.getSubscriptions [] JSON
+GET /podcast/transcript/{transcriptId} IPodcastService.getTranscript [p:transcriptId] JSON
+GET /podcast/transcripts/{episodeId} IPodcastService.getTranscripts [p:episodeId] JSON
+HEAD /podcast/streamEpisode/{episodeId} IPodcastService.streamEpisode [p:episodeId q:offset? q:chunkSize?] FILE
+POST /podcast/importEpisode/{episodeId} IPodcastService.importEpisode [p:episodeId] JSON
+POST /podcast/refreshShow/{showId} IPodcastService.refreshShow [p:showId] JSON
+POST /podcast/reportPlayback IPodcastService.reportPlayback [b:report] JSON
+POST /podcast/scanLocal IPodcastService.scanLocal [] JSON
+POST /podcast/subscribe IPodcastService.subscribe [q:feedUrl] JSON
+POST /podcast/subscribeToShow/{showId} IPodcastService.subscribeToShow [p:showId] JSON
+PUT /podcast/played/{episodeId} IPodcastService.setPlayed [p:episodeId q:played] JSON
+PUT /podcast/showSettings/{showId} IPodcastService.updateShowSettings [p:showId b:settings] JSON
+DELETE /queue/entries IQueueService.remove [q:baseVersion q:queueIds q:force?] JSON
+GET /queue/observeQueue IQueueService.observeQueue [] SSE
+GET /queue/queue IQueueService.getQueue [q:page? q:pageSize? q:includeSongs?] JSON
+GET /queue/queueInfo IQueueService.getQueueInfo [] JSON
+GET /queue/syncDevices IQueueService.getSyncDevices [] JSON
+POST /queue/ackSynced IQueueService.ackSynced [q:version] UNIT
+POST /queue/beginUpload IQueueService.beginUpload [q:baseVersion q:force?] JSON
+POST /queue/cancelUpload/{uploadId} IQueueService.cancelUpload [p:uploadId] UNIT
+POST /queue/commitUpload/{uploadId} IQueueService.commitUpload [p:uploadId b:meta q:requestId?] JSON
+POST /queue/insert IQueueService.insert [q:baseVersion q:position b:items q:force?] JSON
+POST /queue/move/{queueId} IQueueService.move [q:baseVersion p:queueId q:toPosition q:force?] JSON
+POST /queue/requestUploadFrom/{sessionId} IQueueService.requestUploadFrom [p:sessionId] JSON
+POST /queue/uploadPage/{uploadId} IQueueService.uploadPage [p:uploadId b:items] JSON
+PUT /queue/currentIndex IQueueService.setCurrentIndex [q:baseVersion q:currentIndex q:force?] JSON
+PUT /queue/modes IQueueService.setModes [q:baseVersion q:shuffleMode q:repeatMode q:force?] JSON
+PUT /queue/syncEnabled IQueueService.setSyncEnabled [q:enabled q:deviceName] UNIT
+GET /radio/radioFlow/{sessionId} IRadioService.radioFlow [p:sessionId] SSE
+POST /radio/radioSession IRadioService.createRadioSession [q:type? b:seed?] JSON
+DELETE /radioChannel/channel/{id} IRadioChannelService.deleteChannel [p:id] JSON
+DELETE /radioChannel/{type}/channelItem/{id} IRadioChannelService.removeChannelItem [p:id p:type q:itemId] JSON
+GET /radioChannel/channel/{id} IRadioChannelService.getChannel [p:id] JSON
+GET /radioChannel/channels IRadioChannelService.listChannels [] JSON
+GET /radioChannel/search/{channelId} IRadioChannelService.rankedSearch [p:channelId q:query? q:explicit? q:page? q:pageSize?] JSON
+POST /radioChannel/channel IRadioChannelService.createChannel [b:channel] JSON
+POST /radioChannel/startChannel/{id} IRadioChannelService.startChannel [p:id] JSON
+POST /radioChannel/{type}/channelItem/{id} IRadioChannelService.addChannelItem [p:id p:type q:itemId] JSON
+PUT /radioChannel/channel/{id} IRadioChannelService.updateChannel [p:id b:channel] JSON
+PUT /radioChannel/channelImage/{id} IRadioChannelService.setChannelImage [p:id b:bytes] UNIT
+GET /recommendation/mix IRecommendationService.getMix [q:window? q:limit?] JSON
+GET /recommendation/moodPlaylist IRecommendationService.getMoodPlaylist [q:mood q:limit?] JSON
+GET /recommendation/moods IRecommendationService.getMoods [] JSON
+GET /recommendation/similarSongs IRecommendationService.getSimilarSongs [q:seedSongIds q:limit?] JSON
+DELETE /release/unfollowArtist/{artistId} IReleaseService.unfollowArtist [p:artistId] JSON
+GET /release/artistRecentReleases/{artistId} IReleaseService.getArtistRecentReleases [p:artistId q:page? q:pageSize?] JSON
+GET /release/followedArtists IReleaseService.getFollowedArtists [] JSON
+GET /release/recentReleases IReleaseService.getRecentReleases [q:page? q:pageSize?] JSON
+GET /release/recentReleasesByMusicBrainzId/{musicBrainzId} IReleaseService.getRecentReleasesByMusicBrainzId [p:musicBrainzId q:page? q:pageSize?] JSON
+GET /release/releaseImage/{releaseId} IReleaseService.getReleaseImage [p:releaseId q:size?] BYTES PUBLIC
+POST /release/followArtist/{musicBrainzId} IReleaseService.followArtist [p:musicBrainzId] JSON
+POST /release/refreshRecentRelease/{releaseId} IReleaseService.refreshRecentRelease [p:releaseId] UNIT
+GET /remoteMirror/activeMirrorProgress IRemoteMirrorService.getActiveMirrorProgress [] SSE
+POST /remoteMirror/proxyInstances IRemoteMirrorService.getProxyInstances [b:config] JSON
+POST /remoteMirror/remoteImageData/{imageId} IRemoteMirrorService.getRemoteImageData [b:config p:imageId q:size] BYTES
+POST /remoteMirror/remotePlaylists IRemoteMirrorService.getRemotePlaylists [b:config] JSON
+POST /remoteMirror/remoteStats IRemoteMirrorService.getRemoteStats [b:config] JSON
+POST /remoteMirror/remoteUserPlaylists IRemoteMirrorService.getRemoteUserPlaylists [b:config] JSON
+POST /remoteMirror/remoteUsers IRemoteMirrorService.getRemoteUsers [b:config] JSON
+POST /remoteMirror/resetMirror IRemoteMirrorService.resetMirror [] UNIT
+POST /remoteMirror/startMirror IRemoteMirrorService.startMirror [b:config] UNIT
+POST /remoteMirror/stopMirror IRemoteMirrorService.stopMirror [] UNIT
+GET /scheduledTaskConfiguration/configurations IScheduledTaskConfigurationService.getConfigurations [] JSON
+GET /scheduledTaskConfiguration/configurationsFlow IScheduledTaskConfigurationService.getConfigurationsFlow [] SSE
+POST /scheduledTaskConfiguration/triggerTask IScheduledTaskConfigurationService.triggerTask [q:key] JSON
+PUT /scheduledTaskConfiguration/configuration IScheduledTaskConfigurationService.updateConfiguration [b:configuration] UNIT
+GET /scheduledTaskLog/groupedLogs IScheduledTaskLogService.getGroupedLogs [] JSON
+GET /scheduledTaskLog/groupedLogsFlow IScheduledTaskLogService.getGroupedLogsFlow [] SSE
+GET /scrobble/recentListensFlow IScrobbleService.recentListensFlow [q:limit] SSE
+POST /scrobble/clearNowPlaying IScrobbleService.clearNowPlaying [] UNIT
+POST /scrobble/listened IScrobbleService.listened [b:request] UNIT
+POST /scrobble/nowPlaying/{songId} IScrobbleService.nowPlaying [p:songId] UNIT
+POST /scrobble/reportPlayback IScrobbleService.reportPlayback [b:report] JSON
+GET /serverStats/health IServerStatsService.health [] JSON
+GET /serverStats/proxyInfo IServerStatsService.getProxyInfo [] JSON
+GET /serverStats/stats IServerStatsService.getStats [] JSON
+DELETE /session/deactivateSession/{sessionId} ISessionService.deactivateSession [p:sessionId] UNIT
+GET /session/sessions ISessionService.getSessions [] JSON
+DELETE /song/songs ISongService.deleteSongs [q:ids] JSON
+GET /song/allSongIds ISongService.allSongIds [q:explicit q:tags? q:invertTags?] SSE
+GET /song/allSongs ISongService.allSongs [q:page? q:pageSize? q:explicit q:tags? q:invertTags?] JSON
+GET /song/atmosStreamSize/{id} ISongService.getAtmosStreamSize [p:id] JSON
+GET /song/byAlbum/{albumId} ISongService.byAlbum [q:page? q:pageSize? p:albumId] JSON
+GET /song/byArtist/{artistId} ISongService.byArtist [q:page? q:pageSize? p:artistId] JSON
+GET /song/byColor ISongService.byColor [q:page? q:pageSize? q:color q:range? q:explicit] JSON
+GET /song/byId/{id} ISongService.byId [p:id] JSON
+GET /song/byIds ISongService.byIds [q:ids] JSON
+GET /song/byLyrics ISongService.searchByLyrics [q:page? q:pageSize? q:query q:explicit] JSON
+GET /song/byMusicBrainzId/{musicBrainzId} ISongService.byMusicBrainzId [p:musicBrainzId] JSON
+GET /song/byOriginalIds ISongService.byOriginalIds [q:ids] JSON
+GET /song/byOriginalTracks ISongService.byOriginalTracks [q:tracks] JSON
+GET /song/byOriginalUrls ISongService.byOriginalUrls [q:urls] JSON
+GET /song/byPlaylist/{playlistId} ISongService.byPlaylist [q:page? q:pageSize? p:playlistId] JSON
+GET /song/byTitle ISongService.byTitle [q:page? q:pageSize? q:title] JSON
+GET /song/byUserPlaylist/{playlistId} ISongService.byUserPlaylist [q:page? q:pageSize? p:playlistId] JSON
+GET /song/downloadSize/{id} ISongService.getDownloadSize [p:id q:quality q:force? q:format?] JSON
+GET /song/downloadSong/{id} ISongService.downloadSong [p:id q:quality q:offset? q:chunkSize? q:force? q:format?] FILE
+GET /song/exportFavouritesAsCsv ISongService.exportFavouritesAsCsv [] JSON
+GET /song/extendedMetadata/{id} ISongService.extendedMetadata [p:id] JSON
+GET /song/likedByArtist/{artistId} ISongService.likedByArtist [q:page? q:pageSize? p:artistId q:explicit] JSON
+GET /song/likedSongIds ISongService.likedSongIds [q:explicit] SSE
+GET /song/likedSongs ISongService.likedSongs [q:page? q:pageSize? q:explicit] JSON
+GET /song/search ISongService.rankedSearch [q:page? q:pageSize? q:query q:explicit q:liked?] JSON
+GET /song/songIdsByAlbum/{albumId} ISongService.songIdsByAlbum [p:albumId] SSE
+GET /song/songIdsByArtist/{artistId} ISongService.songIdsByArtist [p:artistId] SSE
+GET /song/songIdsByPlaylist/{playlistId} ISongService.songIdsByPlaylist [p:playlistId] SSE
+GET /song/songIdsByUserPlaylist/{playlistId} ISongService.songIdsByUserPlaylist [p:playlistId] SSE
+GET /song/streamSize/{id} ISongService.getStreamSize [p:id] JSON
+GET /song/streamSong/{id} ISongService.streamSong [p:id q:offset? q:chunkSize?] FILE
+GET /song/streamSongAtmos/{id} ISongService.streamSongAtmos [p:id q:offset? q:chunkSize?] FILE
+HEAD /song/downloadSong/{id} ISongService.downloadSong [p:id q:quality q:offset? q:chunkSize? q:force? q:format?] FILE
+HEAD /song/streamSong/{id} ISongService.streamSong [p:id q:offset? q:chunkSize?] FILE
+HEAD /song/streamSongAtmos/{id} ISongService.streamSongAtmos [p:id q:offset? q:chunkSize?] FILE
+POST /song/moveSongs ISongService.moveSongs [q:oldPath q:newPath q:originalIdPrefix?] JSON
+POST /song/musicBrainzId/{id} ISongService.fetchMusicBrainzId [p:id] JSON
+PUT /song/artists/{id} ISongService.setArtists [p:id q:artistIds] JSON
+PUT /song/liked/{id} ISongService.setLiked [p:id q:liked q:addedAt?] JSON
+PUT /song/lyrics/{id} ISongService.setLyrics [p:id q:lyrics] JSON
+PUT /song/musicBrainzId/{id} ISongService.setMusicBrainzId [p:id q:musicBrainzId] JSON
+PUT /song/song ISongService.updateSong [b:song] JSON
+DELETE /subsonicCredential/revokeSubsonicCredential ISubsonicCredentialService.revokeSubsonicCredential [] JSON
+GET /subsonicCredential/subsonicCredential ISubsonicCredentialService.getSubsonicCredential [] JSON
+POST /subsonicCredential/regenerateSubsonicCredential ISubsonicCredentialService.regenerateSubsonicCredential [] JSON
+DELETE /timecodeTag/tag/{tagId} ITimecodeTagService.deleteTag [p:tagId] JSON
+GET /timecodeTag/tags ITimecodeTagService.listTags [q:tagType? q:page? q:pageSize?] JSON
+GET /timecodeTag/tags/{songId} ITimecodeTagService.getTags [p:songId] JSON
+POST /timecodeTag/tags/{songId} ITimecodeTagService.createTag [p:songId q:tagType q:text? q:timestampMs q:endMs?] JSON
+PUT /timecodeTag/tag/{tagId} ITimecodeTagService.updateTag [p:tagId q:tagType q:text? q:timestampMs q:endMs?] JSON
+PUT /timecodeTag/tags/{songId} ITimecodeTagService.replaceTags [p:songId b:tags] JSON
+GET /ui/contributions IUiService.listContributions [q:kind? q:slot?] JSON
+GET /ui/homeCards IUiService.getHomeCards [] JSON
+GET /ui/homeCardsFlow IUiService.getHomeCardsFlow [] SSE
+GET /ui/hookHandlers IUiService.listHookHandlers [q:kind?] JSON
+GET /ui/subscribe/{contributionId} IUiService.subscribe [p:contributionId q:entityId?] SSE
+GET /ui/subscribeLive/{contributionId} IUiService.subscribeLive [p:contributionId q:key q:entityId?] SSE
+POST /ui/dispatchHook IUiService.dispatchHook [b:event] JSON
+POST /ui/intake IUiService.intake [b:items q:resolverId?] JSON
+POST /ui/invoke/{contributionId} IUiService.invoke [p:contributionId q:actionId b:payload] JSON
+POST /ui/render/{contributionId} IUiService.render [p:contributionId b:context] JSON
+POST /ui/renderSlot IUiService.renderSlot [q:slot b:context] JSON
+POST /ui/resolveIntake IUiService.resolveIntake [b:items] JSON
+PUT /ui/homeCardOrder IUiService.setHomeCardOrder [q:contributionIds] JSON
+PUT /ui/homeCardPinned/{contributionId} IUiService.setHomeCardPinned [p:contributionId q:pinned] JSON
+GET /user/allUsers IUserService.getAllUsers [] JSON
+GET /user/me IUserService.me [] JSON
+GET /user/userById/{id} IUserService.findUserById [p:id] JSON
+GET /user/userByUsername IUserService.findUserByUsername [q:username] JSON
+POST /user/user IUserService.createUser [b:user q:isAdmin? q:capabilities?] JSON
+PUT /user/capabilities/{id} IUserService.setCapabilities [p:id q:capabilities] UNIT
+PUT /user/displayName IUserService.setDisplayName [q:name] UNIT
+PUT /user/profileImage IUserService.setProfileImage [b:bytes] UNIT
+DELETE /userPlaylist/playlist/{id} IUserPlaylistService.delete [p:id] JSON
+DELETE /userPlaylist/songs/{id} IUserPlaylistService.removeFromPlaylist [p:id q:songIds] JSON
+GET /userPlaylist/allPlaylists IUserPlaylistService.allPlaylists [q:creator q:page? q:pageSize?] JSON
+GET /userPlaylist/byColor IUserPlaylistService.byColor [q:creator q:page? q:pageSize? q:color q:range?] JSON
+GET /userPlaylist/byId/{id} IUserPlaylistService.byId [p:id] JSON
+GET /userPlaylist/byIds IUserPlaylistService.byIds [q:ids] JSON
+GET /userPlaylist/search IUserPlaylistService.rankedSearch [q:creator q:page? q:pageSize? q:query] JSON
+POST /userPlaylist/addAlbumToPlaylist/{id} IUserPlaylistService.addAlbumToPlaylist [p:id q:albumId] UNIT
+POST /userPlaylist/addPlaylistToPlaylist/{id} IUserPlaylistService.addPlaylistToPlaylist [p:id q:sourcePlaylistId] UNIT
+POST /userPlaylist/addSongsToPlaylist/{id} IUserPlaylistService.addSongsToPlaylist [p:id q:songIds] UNIT
+POST /userPlaylist/addToPlaylist/{id} IUserPlaylistService.addToPlaylist [p:id b:songIds] UNIT
+POST /userPlaylist/addUserPlaylistToPlaylist/{id} IUserPlaylistService.addUserPlaylistToPlaylist [p:id q:sourcePlaylistId] UNIT
+POST /userPlaylist/orAddPlaylist/{userId} IUserPlaylistService.getOrAddPlaylist [p:userId q:customIdentifier b:playlist] JSON
+POST /userPlaylist/playlistFromArtists/{userId} IUserPlaylistService.createPlaylistFromArtists [p:userId q:name q:artistIds q:maxSongsPerArtist? q:sortStrategy?] JSON
+PUT /userPlaylist/playlistImage/{id} IUserPlaylistService.setPlaylistImage [p:id q:imageId] JSON
+DELETE /userPlaylistBackup/backup IUserPlaylistBackupService.deleteBackup [q:fileName] UNIT
+GET /userPlaylistBackup/backupContent IUserPlaylistBackupService.getBackupContent [q:fileName] JSON
+GET /userPlaylistBackup/backups IUserPlaylistBackupService.listBackups [] JSON
+POST /userPlaylistBackup/backup IUserPlaylistBackupService.createBackup [] UNIT
+POST /userPlaylistBackup/restoreBackup IUserPlaylistBackupService.restoreBackup [q:fileName?] UNIT

@@ -9,7 +9,7 @@ import dev.dertyp.core.*
 import dev.dertyp.data.*
 import dev.dertyp.db.*
 import dev.dertyp.plugins.SongLibrary
-import dev.dertyp.routing.RestFileProvider
+import dev.dertyp.routing.rest.RestFileProvider
 import dev.dertyp.services.AlbumService.Companion.calculateAlbumStats
 import dev.dertyp.services.AlbumService.Companion.mapAlbum
 import dev.dertyp.services.ArtistService.Companion.mapArtist

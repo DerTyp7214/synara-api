@@ -1,0 +1,403 @@
+PUT /album/album IAlbumService.updateAlbum | Update album metadata. | album | UserAuth | - | body:yes
+DELETE /album/albums IAlbumService.deleteAlbums | Delete multiple albums from the library. | album | UserAuth | ids:query | body:no
+GET /album/allAlbums IAlbumService.allAlbums | Get all albums in the library. | album | UserAuth | page:query,pageSize:query | body:no
+GET /album/byArtist/{artistId} IAlbumService.byArtist | List albums by artist. | album | UserAuth | page:query,pageSize:query,artistId:path,singles:query | body:no
+GET /album/byColor IAlbumService.byColor | Search for albums by color. | album | UserAuth | page:query,pageSize:query,color:query,range:query | body:no
+GET /album/byId/{id} IAlbumService.byId | Get album by ID. | album | UserAuth | id:path | body:no
+GET /album/byIds IAlbumService.byIds | Get multiple albums by their IDs. | album | UserAuth | ids:query | body:no
+GET /album/byMusicBrainzId/{mbId} IAlbumService.byMusicBrainzId | Get album by MusicBrainz ID. | album | UserAuth | mbId:path | body:no
+GET /album/byMusicBrainzIds IAlbumService.byMusicBrainzIds | Get multiple albums by their MusicBrainz IDs. | album | UserAuth | mbIds:query | body:no
+GET /album/byName IAlbumService.byName | Search albums by name. | album | UserAuth | page:query,pageSize:query,name:query | body:no
+GET /album/byOriginalIds IAlbumService.byOriginalIds | Find albums by their original platform-specific unique identifiers. | album | UserAuth | ids:query | body:no
+GET /album/byOriginalUrls IAlbumService.byOriginalUrls | Find albums by their original platform URLs, returning a mapping. | album | UserAuth | urls:query | body:no
+GET /album/extendedMetadata/{id} IAlbumService.extendedMetadata | Get extended metadata for an album. | album | UserAuth | id:path | body:no
+POST /album/musicBrainzId/{id} IAlbumService.fetchMusicBrainzId | Fetch and link MusicBrainz ID for an album. | album | UserAuth | id:path | body:no
+PUT /album/musicBrainzId/{id} IAlbumService.setMusicBrainzId | Manually set MusicBrainz ID for an album. | album | UserAuth | id:path,musicBrainzId:query | body:no
+GET /album/search IAlbumService.rankedSearch | Ranked album search. | album | UserAuth | page:query,pageSize:query,query:query | body:no
+GET /album/versions/{id} IAlbumService.versions | List different versions of an album. | album | UserAuth | id:path | body:no
+POST /animatedImage/animatedImage IAnimatedImageService.createAnimatedImage | Store a new animated image on the server. | animatedImage | - | origin:query | body:yes
+POST /animatedImage/batch IAnimatedImageService.createBatch | Store multiple animated images on the server in a single operation. | animatedImage | - | - | body:yes
+GET /animatedImage/byHash IAnimatedImageService.byHash | Find animated image metadata by its content hash. | animatedImage | - | hash:query | body:no
+GET /animatedImage/byId/{id} IAnimatedImageService.byId | Get animated image metadata by its unique ID. | animatedImage | - | id:path | body:no
+GET /animatedImage/coverHashes IAnimatedImageService.getCoverHashes | Map a list of animated image hashes to their existing internal UUIDs. | animatedImage | - | hashes:query | body:no
+GET /animatedImage/imageData/{id} IAnimatedImageService.getAnimatedImageData | Retrieve the raw binary data of an animated image. | animatedImage | - | id:path | body:no
+POST /apiKey/apiKey IApiKeyService.createApiKey | Create a new API key and return the raw secret. | apiKey | UserAuth | label:query,scopes:query | body:no
+GET /apiKey/apiKeyString/{id} IApiKeyService.getApiKeyString | Get the raw secret of one of the current user's API keys. Returns null for keys created before secrets were stored. | apiKey | UserAuth | id:path | body:no
+GET /apiKey/apiKeys IApiKeyService.listApiKeys | List metadata for all API keys belonging to the current user. Never returns the secrets. | apiKey | UserAuth | - | body:no
+GET /apiKey/availableScopes IApiKeyService.listAvailableScopes | List all scopes that can be granted to API keys. | apiKey | UserAuth | - | body:no
+POST /apiKey/revokeApiKey/{id} IApiKeyService.revokeApiKey | Revoke an API key by its identifier. Returns true if a key was revoked. | apiKey | UserAuth | id:path | body:no
+DELETE /artist/alias/{artistId} IArtistService.removeAlias | Remove an alias from an artist. | artist | UserAuth | artistId:path,name:query | body:no
+POST /artist/alias/{artistId} IArtistService.addAlias | Add an alias to an artist. | artist | UserAuth | artistId:path,name:query | body:no
+GET /artist/aliases/{id} IArtistService.aliases | List aliases for an artist. | artist | UserAuth | id:path | body:no
+GET /artist/allArtists IArtistService.allArtists | Get all artists in the library. | artist | UserAuth | page:query,pageSize:query | body:no
+POST /artist/artist IArtistService.createArtist | Manually create an artist record. | artist | UserAuth | name:query,isGroup:query,about:query,musicBrainzId:query | body:no
+GET /artist/artistIdsWithoutMusicBrainzId IArtistService.artistIdsWithoutMusicBrainzId | Stream IDs of all artists that are missing a MusicBrainz ID. | artist | UserAuth | - | body:no
+PUT /artist/artistImageByUrl/{id} IArtistService.setArtistImageByUrl | Set an artist's image from a direct URL. | artist | UserAuth | id:path,url:query | body:no
+GET /artist/artistOnMusicBrainz IArtistService.searchArtistOnMusicBrainz | Search for an artist directly on MusicBrainz. | artist | UserAuth | query:query,page:query,pageSize:query | body:no
+GET /artist/artistsWithoutMusicBrainzIdFlow IArtistService.artistsWithoutMusicBrainzIdFlow | Stream all artists that are missing a MusicBrainz ID. | artist | UserAuth | - | body:no
+GET /artist/byColor IArtistService.byColor | Search for artists by color. | artist | UserAuth | page:query,pageSize:query,color:query,range:query | body:no
+GET /artist/byGroup/{groupId} IArtistService.byGroup | List artists in a group. | artist | UserAuth | page:query,pageSize:query,groupId:path | body:no
+GET /artist/byId/{id} IArtistService.byId | Get artist by ID. | artist | UserAuth | id:path | body:no
+GET /artist/byIds IArtistService.byIds | Get multiple artists by their IDs. | artist | UserAuth | ids:query | body:no
+GET /artist/byMusicBrainzId/{mbId} IArtistService.byMusicBrainzId | Get artist by MusicBrainz ID. | artist | UserAuth | mbId:path | body:no
+PUT /artist/group/{id} IArtistService.setGroup | Set sub-artists for a group. | artist | UserAuth | id:path,artistIds:query | body:no
+POST /artist/mergeArtists IArtistService.mergeArtists | Merge multiple artist records into one. | artist | UserAuth | - | body:yes
+POST /artist/musicBrainzId/{id} IArtistService.fetchMusicBrainzId | Fetch and link MusicBrainz ID for an artist. | artist | UserAuth | id:path | body:no
+PUT /artist/musicBrainzId/{id} IArtistService.setMusicBrainzId | Link an artist record to a MusicBrainz ID. | artist | UserAuth | id:path,musicBrainzId:query | body:no
+GET /artist/search IArtistService.rankedSearch | Ranked artist search. | artist | UserAuth | page:query,pageSize:query,query:query | body:no
+POST /artist/splitArtist IArtistService.splitArtist | Split an artist record into multiple artists. | artist | UserAuth | - | body:yes
+GET /artist/{type}/artistImages IArtistService.searchArtistImages | Search for artist images using a metadata provider. | artist | UserAuth | type:path,query:query,limit:query | body:no
+POST /audioAnalysis/analyzeSong/{songId} IAudioAnalysisService.analyzeSong | Trigger analysis for a song. | audioAnalysis | UserAuth | songId:path | body:no
+GET /audioAnalysis/audioData/{songId} IAudioAnalysisService.getAudioData | Get audio analysis data for a song. | audioAnalysis | UserAuth | songId:path | body:no
+GET /audioAnalysis/audioTimeline/{songId} IAudioAnalysisService.getAudioTimeline | Get the beat grid and loudness envelope of a song, or null when not extracted yet. Call analyzeSong to extract it. | audioAnalysis | UserAuth | songId:path | body:no
+POST /auth/authenticate IAuthService.authenticate | Logs in a user and returns JWT token. | auth | - | username:query,password:query | body:no
+POST /auth/deviceSession IAuthService.createDeviceSession | Creates a new session for another device (e.g. Apple TV) on behalf of the authenticated user. | auth | - | userAgent:query | body:no
+POST /auth/refreshToken IAuthService.refreshToken | Refreshes an expired access token. | auth | - | refreshToken:query | body:no
+DELETE /backup/backup IBackupService.deleteBackup | Delete a system backup file from the server. | backup | UserAuth | fileName:query | body:no
+POST /backup/backup IBackupService.createBackup | Trigger the creation of a full system backup. | backup | UserAuth | - | body:no
+GET /backup/backups IBackupService.listBackups | List all available system backup files. | backup | UserAuth | - | body:no
+POST /backup/restoreBackup IBackupService.loadBackup | Restore the entire server state from a backup file. | backup | UserAuth | fileName:query | body:no
+POST /clientRequest/complete/{requestId} IClientRequestService.complete | Report the outcome of a request to the waiting requester. Only COMPLETED and REJECTED are accepted; the timed out and unreachable outcomes are determined by the server. | clientRequest | UserAuth | requestId:path,status:query | body:no
+GET /clientRequest/observeRequests IClientRequestService.observeRequests | Watch for requests addressed to the calling session. A session that is not subscribed is reported as unreachable to the requester. | clientRequest | UserAuth | - | body:no
+GET /clientSettings/changes IClientSettingsService.getChanges | Read the entries a scope changed after a version the client already knows, tombstones included and ordered by the version they were written at. When more entries are available than the page holds, the client asks again with the version of the last entry it received. If tombstones the client never saw were already purged, the result asks for a full resync and the client re-reads the whole scope instead. | clientSettings | UserAuth | scope:query,sinceVersion:query,device:query,limit:query | body:no
+DELETE /clientSettings/device/{deviceId} IClientSettingsService.deleteDevice | Forget a device together with its device-scoped settings and their history. The synced scope is not touched, so the other devices of the user keep their shared settings. | clientSettings | UserAuth | deviceId:path | body:no
+GET /clientSettings/devices IClientSettingsService.getDevices | List the devices of the user that stored settings on the server, each with the current version of its device scope. | clientSettings | UserAuth | - | body:no
+GET /clientSettings/history IClientSettingsService.getHistory | Read the previous values of a single key, newest first. The server keeps a bounded number of superseded values per key, so older values are dropped as new ones are written. | clientSettings | UserAuth | scope:query,key:query,device:query,limit:query | body:no
+GET /clientSettings/observeSettings IClientSettingsService.observeSettings | Watch the settings of the user for changes. Every accepted write emits the scope it changed, the version it advanced to and the keys it touched, including writes made by other devices, so a client pulls only what it needs. | clientSettings | UserAuth | - | body:no
+POST /clientSettings/registerDevice/{deviceId} IClientSettingsService.registerDevice | Register a device or refresh the name and platform it is listed under. Calling this is optional, since reading or writing the device scope registers the device on its own, but it lets a client give its device a readable name before it stores anything. | clientSettings | UserAuth | deviceId:path,name:query,platform:query | body:no
+POST /clientSettings/restore IClientSettingsService.restore | Write a previous value of a key back as a new version. The value is taken from the history of the key and stored through the normal write path, so the scope advances by one and the value that was replaced moves into the history itself. The call fails if the requested version is not kept in the history any more. | clientSettings | UserAuth | scope:query,key:query,version:query,device:query,force:query | body:no
+GET /clientSettings/settings IClientSettingsService.getSettings | Read the entries of a scope. Tombstones of deleted keys are left out unless they are asked for explicitly. Reading the device scope registers the device or refreshes its last seen time. | clientSettings | UserAuth | scope:query,device:query,includeDeleted:query | body:no
+PUT /clientSettings/settings IClientSettingsService.setSettings | Write a batch of entries into a scope. The batch is all-or-nothing: an entry is accepted only if its base version matches the version the stored entry was last written at, or is 0 for a key that does not exist or is only a tombstone, and as soon as one key conflicts nothing is written at all. Forcing the write skips that check. An entry with a null value deletes its key and leaves a tombstone behind so other devices learn about the deletion. Writing the device scope registers the device or refreshes its last seen time, while the device of a synced write is optional and only recorded as the writer. | clientSettings | UserAuth | scope:query,device:query,force:query | body:yes
+GET /clientSettings/snapshot/{deviceId} IClientSettingsService.getSnapshot | Read the complete settings of a device in one call: the live entries of the synced scope and of the device scope with the current version of each. Reading a snapshot registers the device or refreshes its last seen time, so this is what a client calls right after it starts. | clientSettings | UserAuth | deviceId:path | body:no
+GET /collection/albumIds/{collectionId} ICollectionService.albumIds | Stream the IDs of albums explicitly added to a collection. | collection | UserAuth | collectionId:path | body:no
+GET /collection/allCollections ICollectionService.allCollections | Get all collections owned by the current user. | collection | UserAuth | - | body:no
+GET /collection/artistIds/{collectionId} ICollectionService.artistIds | Stream the IDs of artists explicitly added to a collection. | collection | UserAuth | collectionId:path | body:no
+GET /collection/byId/{id} ICollectionService.byId | Get a collection by ID. | collection | UserAuth | id:path | body:no
+POST /collection/collection ICollectionService.createCollection | Create a new collection owned by the current user. | collection | UserAuth | - | body:yes
+DELETE /collection/collection/{id} ICollectionService.delete | Delete a collection. | collection | UserAuth | id:path | body:no
+PUT /collection/collection/{id} ICollectionService.updateCollection | Update a collection's metadata (name, description, image). | collection | UserAuth | id:path | body:yes
+PUT /collection/collectionImage/{id} ICollectionService.setCollectionImage | Set the cover image of a collection. | collection | UserAuth | id:path,imageId:query | body:no
+DELETE /collection/item/{id} ICollectionService.removeItem | Remove an item from a collection. | collection | UserAuth | id:path,itemType:query,itemId:query | body:no
+POST /collection/item/{id} ICollectionService.addItem | Add an item (song, album, artist or playlist) to a collection. | collection | UserAuth | id:path,itemType:query,itemId:query | body:no
+GET /collection/playlistIds/{collectionId} ICollectionService.playlistIds | Stream the IDs of playlists explicitly added to a collection. | collection | UserAuth | collectionId:path | body:no
+GET /collection/search/{collectionId} ICollectionService.rankedSearch | Ranked search within a single collection across songs, artists, albums and playlists. | collection | UserAuth | collectionId:path,query:query,explicit:query,page:query,pageSize:query | body:no
+GET /collection/songIds/{collectionId} ICollectionService.songIds | Stream the IDs of songs explicitly added to a collection. | collection | UserAuth | collectionId:path | body:no
+POST /coverGeneration/applyCover ICoverGenerationService.applyCover | Render, persist and set the cover, marking it as generated. Returns the new image id. Only the owner or an admin may call this. | coverGeneration | UserAuth | - | body:yes
+GET /coverGeneration/coverInfo ICoverGenerationService.coverInfo | The current cover state of a playlist or collection. | coverGeneration | UserAuth | target:query | body:no
+POST /coverGeneration/generateMissing ICoverGenerationService.generateMissing | Queue generation for every playlist and collection of the current user without a cover. Returns the job id. | coverGeneration | UserAuth | - | body:yes
+GET /coverGeneration/options ICoverGenerationService.options | Styles and asset packs available to the current user. | coverGeneration | UserAuth | - | body:no
+POST /coverGeneration/previewCoverImage ICoverGenerationService.previewCoverImage | Render a 1024x1024 JPEG preview without persisting it. Only the owner or an admin may call this. | coverGeneration | UserAuth | - | body:yes
+POST /coverGeneration/resetCover ICoverGenerationService.resetCover | Clear a user-set cover so automatic generation may replace it. Returns false when there was nothing to reset. | coverGeneration | UserAuth | - | body:yes
+POST /customAudio/uploadCustomAudio ICustomAudioService.uploadCustomAudio | Upload a custom audio file and its metadata. | customAudio | UserAuth | fileName:query | body:yes
+GET /dbManagement/exportData IDbManagementService.exportData | Export the entire system database as a binary blob. | dbManagement | UserAuth | - | body:no
+POST /dbManagement/importData IDbManagementService.importData | Import a previously exported database blob to overwrite the current state. | dbManagement | UserAuth | - | body:yes
+POST /discovery/albumMosaic IDiscoveryService.createAlbumMosaic | Create a mosaic of albums matching the colors of an image. | discovery | UserAuth | width:query,height:query,page:query,pageSize:query,range:query | body:yes
+GET /discovery/similarSongs IDiscoveryService.getSimilarSongs | Get songs similar to the provided seed tracks. | discovery | UserAuth | seedSongIds:query,limit:query | body:no
+GET /discovery/similarSongsByBpm IDiscoveryService.getSimilarSongsByBpm | Get songs with similar BPM to the provided seed tracks. | discovery | UserAuth | seedSongIds:query,limit:query | body:no
+GET /discovery/similarSongsByEnergy IDiscoveryService.getSimilarSongsByEnergy | Get songs with similar energy to the provided seed tracks. | discovery | UserAuth | seedSongIds:query,limit:query | body:no
+GET /discovery/similarSongsByMood IDiscoveryService.getSimilarSongsByMood | Get songs with similar mood (valence) to the provided seed tracks. | discovery | UserAuth | seedSongIds:query,limit:query | body:no
+GET /discovery/similarSongsByPlaylist/{playlistId} IDiscoveryService.getSimilarSongsByPlaylist | Get songs similar to the songs in the provided user playlist. | discovery | UserAuth | playlistId:path,limit:query | body:no
+POST /discovery/songMosaic IDiscoveryService.createSongMosaic | Create a mosaic of songs matching the colors of an image. | discovery | UserAuth | width:query,height:query,page:query,pageSize:query,range:query | body:yes
+GET /discovery/songsBySameComposers IDiscoveryService.getSongsBySameComposers | Get songs by the same composers as the provided seed tracks. | discovery | UserAuth | seedSongIds:query,limit:query | body:no
+GET /discovery/songsBySameLyricists IDiscoveryService.getSongsBySameLyricists | Get songs by the same lyricists as the provided seed tracks. | discovery | UserAuth | seedSongIds:query,limit:query | body:no
+GET /discovery/songsBySameProducers IDiscoveryService.getSongsBySameProducers | Get songs by the same producers as the provided seed tracks. | discovery | UserAuth | seedSongIds:query,limit:query | body:no
+POST /favSync/insertFavSync IFavSyncService.insertFavSync | Record a new successful synchronization timestamp. | favSync | UserAuth | service:query | body:yes
+GET /favSync/latestFavSync IFavSyncService.getLatestFavSync | Get the timestamp of the last successful synchronization for a specific service. | favSync | UserAuth | service:query | body:no
+GET /handshake/handshake IHandshakeService.handshake | Perform a handshake test to check server reachability and protocol support. | handshake | - | - | body:no
+DELETE /hue/bridge/{bridgeId} IHueService.removeBridge | Remove one of the current user's bridges together with the user's link to it. | hue | UserAuth | bridgeId:path | body:no
+GET /hue/bridges IHueService.listBridges | Bridges paired by the current user. | hue | UserAuth | - | body:no
+GET /hue/discoverBridges IHueService.discoverBridges | Discover Hue bridges on the local network via mDNS and the Hue cloud discovery endpoint; paired is relative to the current user. | hue | UserAuth | - | body:no
+PUT /hue/link IHueService.setLink | Create or update the current user's link to a bridge. | hue | UserAuth | - | body:yes
+DELETE /hue/link/{bridgeId} IHueService.removeLink | Remove the current user's link to a bridge. | hue | UserAuth | bridgeId:path | body:no
+GET /hue/links IHueService.getLinks | The current user's light links. | hue | UserAuth | - | body:no
+GET /hue/scenes/{bridgeId} IHueService.listScenes | Scenes exposed by a bridge, each scoped to a room or zone that the bridge reports. | hue | UserAuth | bridgeId:path | body:no
+POST /hue/startPairing IHueService.startPairing | Pair with a bridge. Press the link button on the bridge while this flow polls for up to 30 seconds. The bridge is stored for the current user; other users pair it separately. | hue | UserAuth | ip:query | body:no
+GET /hue/status IHueService.status | Last command time, last error and current colors for the current user's links. | hue | UserAuth | - | body:no
+GET /hue/targets/{bridgeId} IHueService.listTargets | Lights, rooms and zones exposed by a bridge. | hue | UserAuth | bridgeId:path | body:no
+POST /hue/test/{bridgeId} IHueService.test | Flash the given targets with a test palette. | hue | UserAuth | bridgeId:path | body:yes
+POST /image/batch IImageService.createBatch | Store multiple images on the server in a single operation. | image | - | - | body:yes
+GET /image/byHash IImageService.byHash | Find image metadata by its content hash. | image | - | hash:query | body:no
+GET /image/byId/{id} IImageService.byId | Get image metadata by its unique ID. | image | - | id:path | body:no
+GET /image/coverHashes IImageService.getCoverHashes | Map a list of image hashes to their existing internal UUIDs. | image | - | hashes:query | body:no
+POST /image/generateMosaicImage IImageService.generateMosaicImage | Generate a mosaic image from a source image where each pixel is replaced by a matching cover. | image | - | width:query,height:query,resultSize:query | body:yes
+POST /image/image IImageService.createImage | Store a new image on the server. | image | - | origin:query | body:yes
+GET /image/imageData/{id} IImageService.getImageData | Retrieve the raw binary data of an image. | image | - | id:path,size:query | body:no
+POST /image/moveImages IImageService.moveImages | Batch update image file paths. | image | - | oldPath:query,newPath:query | body:no
+GET /import/allImportServices IImportService.getAllImportServices | Get all available importer backends. | import | UserAuth | - | body:no
+GET /import/authUrl IImportService.getAuthUrl | Get the Tidal OAuth authorization URL. | import | UserAuth | - | body:no
+GET /import/currentImport IImportService.currentImport | Get the currently active import task. | import | UserAuth | - | body:no
+GET /import/existsByOriginalId/{id} IImportService.existsByOriginalId | Check if content with a specific original ID is already present in the library. | import | UserAuth | id:path,type:query | body:no
+GET /import/finishedImports IImportService.finishedImports | Get a list of recently completed or failed import tasks. | import | UserAuth | - | body:no
+GET /import/importAuthorized IImportService.importAuthorized | Check if the importer is authorized. | import | UserAuth | - | body:no
+PUT /import/importCredentials IImportService.setImportCredentials | Provide credentials to an importer backend that supports credential injection. | import | UserAuth | - | body:yes
+POST /import/importIds IImportService.importIds | Queue content for import by its IDs. | import | UserAuth | ids:query,type:query | body:yes
+POST /import/importLogin IImportService.importLogin | Trigger the OAuth login flow and stream the login URL. | import | UserAuth | - | body:no
+GET /import/importQueue IImportService.importQueue | Get the list of pending import tasks in the queue. | import | UserAuth | - | body:no
+GET /import/importService IImportService.getImportService | Get the currently active importer backend. | import | UserAuth | - | body:no
+PUT /import/importService IImportService.setImportService | Set the preferred importer backend. | import | UserAuth | - | body:yes
+POST /import/importUrls IImportService.importUrls | Queue content for import. Each entry may be a URL, an ISRC (track), or a UPC (album barcode); codes are resolved to a supported importer (preferring the default). | import | UserAuth | urls:query | body:no
+GET /import/importerCapabilities IImportService.getImporterCapabilities | Get the capabilities supported by each importer backend, keyed by backend id. | import | UserAuth | - | body:no
+GET /import/importerForUrl IImportService.getImporterForUrl | Get the appropriate importer backend for a given URL. | import | UserAuth | url:query | body:no
+POST /import/killAllChildProcesses IImportService.killAllChildProcesses | Immediately stop all active importer processes. | import | UserAuth | - | body:no
+GET /import/logs IImportService.logs | Stream real-time import logs from active processes. | import | UserAuth | - | body:no
+POST /import/syncFavourites IImportService.syncFavourites | Synchronize favorites with the local library. | import | UserAuth | - | body:no
+GET /import/syncFavouritesAvailable IImportService.syncFavouritesAvailable | Check if favorite synchronization is available. | import | UserAuth | - | body:no
+GET /import/tidalSyncAuthorized IImportService.tidalSyncAuthorized | Check if Tidal favorite synchronization is authorized. | import | UserAuth | - | body:no
+GET /import/tracks IImportService.search | Search for tracks directly. | import | UserAuth | query:query,title:query,artist:query,count:query | body:no
+POST /indexer/start IIndexer.start | Start indexing files in the media library and stream progress updates. | indexer | UserAuth | - | body:no
+PUT /listenBackup/config IListenBackupService.updateConfig | Update the backup configuration. | listenBackup | UserAuth | - | body:yes
+POST /listenBackup/resetCursor IListenBackupService.resetCursor | Reset the sync cursor so the next run re-pushes every local listen. | listenBackup | UserAuth | - | body:no
+GET /listenBackup/state IListenBackupService.getState | Get the current backup configuration and sync state. | listenBackup | UserAuth | - | body:no
+GET /listenBackup/stateFlow IListenBackupService.getStateFlow | Stream the backup state, re-emitting whenever the configuration or sync progress changes. | listenBackup | UserAuth | - | body:no
+POST /listenBackup/syncNow IListenBackupService.syncNow | Run a backup sync now and return the resulting state. | listenBackup | UserAuth | - | body:no
+POST /listenBackup/testConnection IListenBackupService.testConnection | Probe a receiver. Uses the stored configuration when no config is given. | listenBackup | UserAuth | - | body:yes
+DELETE /listenBrainz/link IListenBrainzService.unlink | Remove the current user's ListenBrainz link. | listenBrainz | UserAuth | - | body:no
+POST /listenBrainz/link IListenBrainzService.link | Link the current user to a ListenBrainz account and trigger an initial sync. | listenBrainz | UserAuth | username:query,token:query | body:no
+GET /listenBrainz/recentListens IListenBrainzService.recentListens | Return the current user's most recent listened songs (newest first), capped at 1000. | listenBrainz | UserAuth | limit:query | body:no
+GET /listenBrainz/status IListenBrainzService.getStatus | Get the current user's ListenBrainz connection status, or null if not linked. | listenBrainz | UserAuth | - | body:no
+GET /listenBrainz/statusFlow IListenBrainzService.getStatusFlow | Stream the current user's ListenBrainz status, re-emitting whenever it changes (e.g. during a sync). | listenBrainz | UserAuth | - | body:no
+POST /listenBrainz/syncNow IListenBrainzService.syncNow | Trigger an incremental sync of the current user's ListenBrainz listens now. | listenBrainz | UserAuth | - | body:no
+POST /listeningStats/linkUnmatchedTrack IListeningStatsService.linkUnmatchedTrack | Link the current user's unmatched listens of a track to a library song, identified by recording MSID and/or MBID. The link persists, applies to future synced listens, and is submitted to ListenBrainz as a manual mapping when the song has a recording MBID. | listeningStats | UserAuth | - | body:yes
+GET /listeningStats/stats IListeningStatsService.getStats | Compute listen count, previous-range comparison, top songs/artists/albums, listen clock, streaks, unique counts and new discoveries for a time range. | listeningStats | UserAuth | range:query,timezone:query,topLimit:query,topOrder:query | body:no
+POST /lyrics/startSyncWorker ILyricsService.startSyncWorker | Start the background lyrics synchronization worker. | lyrics | UserAuth | - | body:no
+GET /lyrics/syncedLyrics/{songId} ILyricsService.getSyncedLyrics | Get time-synced lyrics for a song if they exist. | lyrics | UserAuth | songId:path | body:no
+POST /lyrics/transcribeLyrics/{songId} ILyricsService.transcribeLyrics | Trigger AI-based transcription or manual alignment of lyrics. | lyrics | UserAuth | songId:path,lyrics:query | body:no
+GET /lyricsSearch/lyrics ILyricsSearch.searchLyrics | Search for lyrics text on external services. | lyricsSearch | UserAuth | artist:query,title:query,syncedOnly:query | body:no
+GET /metadata/allMetadataTypes IMetadataService.getAllMetadataTypes | Get all registered metadata providers, optionally filtered by supported features. | metadata | UserAuth | features:query | body:no
+GET /metadata/{type}/albumByBarcode IMetadataService.getAlbumByBarcode | Get an album by its barcode. | metadata | UserAuth | type:path,barcode:query | body:no
+GET /metadata/{type}/albumByMbId/{mbId} IMetadataService.getAlbumByMbId | Get an album by its MusicBrainz ID. | metadata | UserAuth | type:path,mbId:path | body:no
+GET /metadata/{type}/albumExistsById/{albumId} IMetadataService.albumExistsById | Check if an album exists by its external ID. | metadata | UserAuth | type:path,albumId:path | body:no
+GET /metadata/{type}/albumIdByTrackId/{trackId} IMetadataService.getAlbumIdByTrackId | Get the album ID for a given track ID. | metadata | UserAuth | type:path,trackId:path | body:no
+GET /metadata/{type}/albums IMetadataService.searchAlbums | Search for albums on the specified metadata provider. | metadata | UserAuth | type:path,query:query,limit:query,includeTracks:query | body:no
+GET /metadata/{type}/albumsByIds IMetadataService.getAlbumsByIds | Get multiple albums by their external IDs. | metadata | UserAuth | type:path,albumIds:query | body:no
+GET /metadata/{type}/artistByMbId/{mbId} IMetadataService.getArtistByMbId | Get an artist by their MusicBrainz ID. | metadata | UserAuth | type:path,mbId:path | body:no
+GET /metadata/{type}/artists IMetadataService.searchArtists | Search for artists on the specified metadata provider. | metadata | UserAuth | type:path,query:query,limit:query | body:no
+GET /metadata/{type}/artistsByIds IMetadataService.getArtistsByIds | Get multiple artists by their external IDs. | metadata | UserAuth | type:path,artistIds:query | body:no
+GET /metadata/{type}/imageUrlByAlbumId/{albumId} IMetadataService.getImageUrlByAlbumId | Get image URLs for a given album ID. | metadata | UserAuth | type:path,albumId:path | body:no
+GET /metadata/{type}/imageUrlByAlbumMbId/{mbId} IMetadataService.getImageUrlByAlbumMbId | Get image URLs for an album by its MusicBrainz ID. | metadata | UserAuth | type:path,mbId:path | body:no
+GET /metadata/{type}/imageUrlByArtistMbId/{mbId} IMetadataService.getImageUrlByArtistMbId | Get image URLs for an artist by their MusicBrainz ID. | metadata | UserAuth | type:path,mbId:path | body:no
+GET /metadata/{type}/imageUrlByImageId/{imageId} IMetadataService.getImageUrlByImageId | Get the URL for a cached image by its ID. | metadata | UserAuth | type:path,imageId:path | body:no
+GET /metadata/{type}/imageUrlByTrackMbId/{mbId} IMetadataService.getImageUrlByTrackMbId | Get image URLs for a track by its MusicBrainz ID. | metadata | UserAuth | type:path,mbId:path | body:no
+GET /metadata/{type}/imageUrlsByAlbumIds IMetadataService.getImageUrlsByAlbumIds | Get image URLs for multiple album IDs. | metadata | UserAuth | type:path,albumIds:query | body:no
+GET /metadata/{type}/supportedFeatures IMetadataService.getSupportedFeatures | Get the list of features supported by the specified metadata provider. | metadata | UserAuth | type:path | body:no
+GET /metadata/{type}/trackById/{trackId} IMetadataService.getTrackById | Get a track by its external ID. | metadata | UserAuth | type:path,trackId:path | body:no
+GET /metadata/{type}/trackByIsrc IMetadataService.getTrackByIsrc | Get a track by its ISRC. | metadata | UserAuth | type:path,isrc:query | body:no
+GET /metadata/{type}/trackByMbId/{mbId} IMetadataService.getTrackByMbId | Get a track by its MusicBrainz ID. | metadata | UserAuth | type:path,mbId:path | body:no
+GET /metadata/{type}/tracks IMetadataService.search | Search for tracks on the specified metadata provider. | metadata | UserAuth | type:path,query:query,limit:query | body:no
+GET /metadata/{type}/tracksByIds IMetadataService.getTracksByIds | Get multiple tracks by their external IDs. | metadata | UserAuth | type:path,trackIds:query | body:no
+GET /mirror/albums IMirrorService.getAlbums | Stream all local albums for mirroring. | mirror | UserAuth | - | body:no
+GET /mirror/artistAliases IMirrorService.getArtistAliases | Stream all artist name aliases for mirroring. | mirror | UserAuth | - | body:no
+GET /mirror/artistSplitAliases IMirrorService.getArtistSplitAliases | Stream all artist split-name mappings for mirroring. | mirror | UserAuth | - | body:no
+GET /mirror/artists IMirrorService.getArtists | Stream all local artists for mirroring. | mirror | UserAuth | - | body:no
+GET /mirror/imageMetadata IMirrorService.getImageMetadata | Stream all image metadata for mirroring. | mirror | UserAuth | - | body:no
+GET /mirror/likedSongs/{userId} IMirrorService.getLikedSongs | Stream all songs liked by a specific user for mirroring. | mirror | UserAuth | userId:path | body:no
+GET /mirror/playlists IMirrorService.getPlaylists | Stream all local system playlists for mirroring. | mirror | UserAuth | - | body:no
+GET /mirror/serverPaths IMirrorService.getServerPaths | Expose the local file system paths where media files are stored. | mirror | UserAuth | - | body:no
+GET /mirror/songData/{songId} IMirrorService.getSongData | Stream raw audio data for a song. | mirror | UserAuth | songId:path,quality:query,chunkSize:query,force:query | body:no
+GET /mirror/songs IMirrorService.getSongs | Stream all local songs with metadata for mirroring. | mirror | UserAuth | - | body:no
+GET /mirror/songsByPlaylist/{playlistId} IMirrorService.getSongsByPlaylist | Stream all songs belonging to a specific system playlist for mirroring. | mirror | UserAuth | playlistId:path | body:no
+GET /mirror/songsByUserPlaylist/{playlistId} IMirrorService.getSongsByUserPlaylist | Stream all songs belonging to a specific user playlist for mirroring. | mirror | UserAuth | playlistId:path | body:no
+GET /mirror/userPlaylists IMirrorService.getUserPlaylists | Stream all local user playlists for mirroring. | mirror | UserAuth | - | body:no
+GET /mirror/users IMirrorService.getUsers | Stream all local user accounts (profiles) for mirroring. | mirror | UserAuth | - | body:no
+GET /musicBrainz/artist/{id} IMusicBrainzService.getArtist | Retrieve a MusicBrainz Artist record. | musicBrainz | UserAuth | id:path | body:no
+GET /musicBrainz/recording IMusicBrainzService.searchRecording | Search for a recording on MusicBrainz. | musicBrainz | UserAuth | title:query,artists:query | body:no
+GET /musicBrainz/recording/{id} IMusicBrainzService.getRecording | Retrieve a MusicBrainz Recording record by its MusicBrainz Recording UUID. | musicBrainz | UserAuth | id:path | body:no
+GET /musicBrainz/recordingByIsrc IMusicBrainzService.getRecordingByIsrc | Retrieve a MusicBrainz Recording record by its ISRC. | musicBrainz | UserAuth | isrc:query | body:no
+GET /musicBrainz/release IMusicBrainzService.searchRelease | Search for a release (album) on MusicBrainz. | musicBrainz | UserAuth | title:query,artists:query | body:no
+GET /musicBrainz/release/{id} IMusicBrainzService.getRelease | Retrieve a MusicBrainz Release record. | musicBrainz | UserAuth | id:path | body:no
+GET /musicBrainz/releaseByBarcode IMusicBrainzService.searchReleaseByBarcode | Search for a release by barcode on MusicBrainz. | musicBrainz | UserAuth | barcode:query,artists:query | body:no
+GET /musicBrainz/releaseGroup/{id} IMusicBrainzService.getReleaseGroup | Retrieve a MusicBrainz Release Group record. | musicBrainz | UserAuth | id:path | body:no
+GET /musicBrainz/releasesByReleaseGroup/{id} IMusicBrainzService.getReleasesByReleaseGroup | Retrieve all releases in a MusicBrainz Release Group. | musicBrainz | UserAuth | id:path | body:no
+GET /playback/observePlaybackState/{sessionId} IPlaybackService.observePlaybackState | Watch real-time playback state changes for a session. | playback | UserAuth | sessionId:path | body:no
+GET /playback/playbackState/{sessionId} IPlaybackService.getPlaybackState | Retrieve the current playback state for a specific session. | playback | UserAuth | sessionId:path | body:no
+PUT /playback/playbackState/{sessionId} IPlaybackService.setPlaybackState | Update the playback state for a specific session. | playback | UserAuth | sessionId:path | body:yes
+GET /playlist/allPlaylists IPlaylistService.allPlaylists | Get all system playlists. | playlist | UserAuth | page:query,pageSize:query | body:no
+GET /playlist/byId/{id} IPlaylistService.byId | Get system playlist by ID. | playlist | UserAuth | id:path | body:no
+GET /playlist/byIdFull/{id} IPlaylistService.byIdFull | Get system playlist with all track entries. | playlist | UserAuth | id:path | body:no
+GET /playlist/byIds IPlaylistService.byIds | Get multiple system playlists by their IDs. | playlist | UserAuth | ids:query | body:no
+GET /playlist/byName IPlaylistService.byName | Get system playlist by name. | playlist | UserAuth | name:query | body:no
+DELETE /playlist/playlist/{id} IPlaylistService.delete | Delete a system playlist. | playlist | UserAuth | id:path | body:no
+GET /playlist/search IPlaylistService.rankedSearch | Search system playlists. | playlist | UserAuth | page:query,pageSize:query,query:query | body:no
+GET /podcast/browseShows IPodcastService.browseShows | Browse every show on the server, both feed shows and shows of the local podcast library, optionally narrowed down by a search term. | podcast | UserAuth | query:query,page:query,pageSize:query | body:no
+GET /podcast/episode/{episodeId} IPodcastService.getEpisode | Read a single episode together with the listening position of the user. Returns null if the episode does not exist. | podcast | UserAuth | episodeId:path | body:no
+GET /podcast/episodes IPodcastService.searchEpisodes | Search episodes of every show on the server by their title, their description and the title of their show. | podcast | UserAuth | query:query,page:query,pageSize:query | body:no
+GET /podcast/episodes/{showId} IPodcastService.getEpisodes | Read a page of episodes of a show, together with the listening position of the user for each of them. | podcast | UserAuth | showId:path,page:query,pageSize:query,newestFirst:query | body:no
+DELETE /podcast/import/{episodeId} IPodcastService.removeImport | Delete the stored audio of an episode of a feed show. The episode itself stays and is played from its origin afterwards. Episodes of the local podcast library cannot be removed this way, as that would delete the file of the user. | podcast | UserAuth | episodeId:path | body:no
+POST /podcast/importEpisode/{episodeId} IPodcastService.importEpisode | Queue a single episode to be stored on the server. The transfer itself runs in the background, so the returned episode usually reports that its import is queued. | podcast | UserAuth | episodeId:path | body:no
+GET /podcast/inProgress IPodcastService.getInProgress | Read the episodes the user started but did not finish, the most recently played one first. | podcast | UserAuth | page:query,pageSize:query | body:no
+GET /podcast/latestEpisodes IPodcastService.getLatestEpisodes | Read the newest episodes across the shows the user is subscribed to, newest first. | podcast | UserAuth | page:query,pageSize:query | body:no
+GET /podcast/observeProgress IPodcastService.observeProgress | Watch the listening positions of the user for changes, so other devices follow along while an episode is played somewhere else. | podcast | UserAuth | - | body:no
+PUT /podcast/played/{episodeId} IPodcastService.setPlayed | Mark an episode as listened or as unlistened. Marking it as listened moves the position to the end of the episode, marking it as unlistened resets the position to the beginning. | podcast | UserAuth | episodeId:path,played:query | body:no
+POST /podcast/refreshShow/{showId} IPodcastService.refreshShow | Fetch the feed of a show right now and store what changed. The call runs to completion before it returns and is skipped when the feed was already fetched less than 60 seconds ago. | podcast | UserAuth | showId:path | body:no
+POST /podcast/reportPlayback IPodcastService.reportPlayback | Store the listening position of the user for an episode. A client reports on play, on pause, after a seek and every 10 to 15 seconds while playing, the same way song playback is reported. The last report wins, and the server marks an episode as completed on its own once the remaining time is under 30 seconds or under 5 percent of its length. | podcast | UserAuth | - | body:yes
+POST /podcast/scanLocal IPodcastService.scanLocal | Scan the local podcast library for new, changed and vanished shows and episodes. The call runs to completion before it returns. | podcast | UserAuth | - | body:no
+GET /podcast/show/{showId} IPodcastService.getShow | Read a single show. Returns null if the show does not exist. | podcast | UserAuth | showId:path | body:no
+PUT /podcast/showSettings/{showId} IPodcastService.updateShowSettings | Change how the server keeps the episodes of a show. Switching a show to import makes the server store new episodes on disk, and the number of episodes to keep must be at least 1 when it is given. | podcast | UserAuth | showId:path | body:yes
+GET /podcast/streamEpisode/{episodeId} IPodcastService.streamEpisode | Stream the audio of an episode. This is the only way a client plays an episode: the server serves the file when the episode is stored on it or belongs to the local podcast library, and relays the audio from its origin otherwise. Returns null if the episode has no audio at all. | podcast | UserAuth | episodeId:path,offset:query,chunkSize:query | body:no
+HEAD /podcast/streamEpisode/{episodeId} IPodcastService.streamEpisode | Stream the audio of an episode. This is the only way a client plays an episode: the server serves the file when the episode is stored on it or belongs to the local podcast library, and relays the audio from its origin otherwise. Returns null if the episode has no audio at all. | podcast | UserAuth | episodeId:path,offset:query,chunkSize:query | body:no
+GET /podcast/streamSize/{episodeId} IPodcastService.getStreamSize | Get the total size of the audio of an episode in bytes, or 0 if the size cannot be determined. | podcast | UserAuth | episodeId:path | body:no
+POST /podcast/subscribe IPodcastService.subscribe | Subscribe to an RSS feed. The feed is fetched and parsed while the call runs when the server does not know it yet, so the call fails if the feed cannot be reached or is not a podcast feed. Subscribing again to a known feed is cheap and does not fetch anything. | podcast | UserAuth | feedUrl:query | body:no
+POST /podcast/subscribeToShow/{showId} IPodcastService.subscribeToShow | Subscribe to a show the server already knows, for example one found through browseShows. | podcast | UserAuth | showId:path | body:no
+GET /podcast/subscriptions IPodcastService.getSubscriptions | Read the shows the user is subscribed to, ordered by title. | podcast | UserAuth | - | body:no
+GET /podcast/transcript/{transcriptId} IPodcastService.getTranscript | Read a single transcript together with its text. A transcript that only exists as a remote address is fetched once on first read and kept afterwards. Returns null if the transcript does not exist or its text cannot be obtained. | podcast | UserAuth | transcriptId:path | body:no
+GET /podcast/transcripts/{episodeId} IPodcastService.getTranscripts | Read the transcripts known for an episode without their text. | podcast | UserAuth | episodeId:path | body:no
+DELETE /podcast/unsubscribe/{showId} IPodcastService.unsubscribe | End the subscription of the user to a show. Returns false if the user was not subscribed. The show itself and its episodes stay on the server for a while after the last subscriber leaves. | podcast | UserAuth | showId:path | body:no
+POST /queue/ackSynced IQueueService.ackSynced | Record that the calling session pulled the queue up to a version, so it can tell later whether the server state is newer than its own. | queue | UserAuth | version:query | body:no
+POST /queue/beginUpload IQueueService.beginUpload | Start a chunked upload that replaces the whole queue. Entries are staged in memory with uploadPage and become visible only on commitUpload. Starting an upload discards any previous staged upload of the user, and a staged upload expires after a while if it is not committed. | queue | UserAuth | baseVersion:query,force:query | body:no
+POST /queue/cancelUpload/{uploadId} IQueueService.cancelUpload | Discard a staged upload without touching the stored queue. | queue | UserAuth | uploadId:path | body:no
+POST /queue/commitUpload/{uploadId} IQueueService.commitUpload | Replace the queue with the staged entries and store the supplied playback metadata. Entries referring to unknown songs are dropped and both orders are renumbered. When the upload answers a queue request of another device, its request identifier is passed so the requester is notified. | queue | UserAuth | uploadId:path,requestId:query | body:yes
+PUT /queue/currentIndex IQueueService.setCurrentIndex | Set the entry that is currently playing, addressed by its index in the active order. The index is clamped to the size of the queue. | queue | UserAuth | baseVersion:query,currentIndex:query,force:query | body:no
+DELETE /queue/entries IQueueService.remove | Remove entries from the queue by their queue identifiers. Unknown identifiers are ignored and the current index is adjusted to stay on the playing entry. | queue | UserAuth | baseVersion:query,queueIds:query,force:query | body:no
+POST /queue/insert IQueueService.insert | Insert entries into the queue at a position of the active order (the shuffled order while shuffle is on, otherwise the original order). With shuffle on the entries are spliced into the shuffled order and appended to the end of the original order. | queue | UserAuth | baseVersion:query,position:query,force:query | body:yes
+PUT /queue/modes IQueueService.setModes | Set shuffle and repeat mode. Enabling shuffle makes the server generate a shuffled order that starts with the entry that is currently playing, so the current index becomes 0; disabling it drops the shuffled order and puts the current index back on the original position of that entry. A player that shuffled on its own uploads its order instead. | queue | UserAuth | baseVersion:query,shuffleMode:query,repeatMode:query,force:query | body:no
+POST /queue/move/{queueId} IQueueService.move | Move a single entry to another position of the active order (the shuffled order while shuffle is on, otherwise the original order). | queue | UserAuth | baseVersion:query,queueId:path,toPosition:query,force:query | body:no
+GET /queue/observeQueue IQueueService.observeQueue | Watch the queue of the user for changes. A new metadata snapshot is emitted after every successful write, including writes made by other devices. | queue | UserAuth | - | body:no
+GET /queue/queue IQueueService.getQueue | Read a page of queue entries, ordered by their position in the original order. Each entry also carries its shuffled position, and its song metadata only when the entries are requested with the songs resolved. | queue | UserAuth | page:query,pageSize:query,includeSongs:query | body:no
+GET /queue/queueInfo IQueueService.getQueueInfo | Get the metadata of the queue without its entries. A user without a stored queue is reported at version 0 with no entries. | queue | UserAuth | - | body:no
+POST /queue/requestUploadFrom/{sessionId} IQueueService.requestUploadFrom | Ask another device of the same user to upload its current queue and wait for the outcome. The request is delivered over the client request channel; sessions that are not listening are reported as unreachable and sessions that stay silent as timed out. | queue | UserAuth | sessionId:path | body:no
+GET /queue/syncDevices IQueueService.getSyncDevices | List the devices of the user that take part in queue synchronization, including which entry is the calling session. | queue | UserAuth | - | body:no
+PUT /queue/syncEnabled IQueueService.setSyncEnabled | Opt the calling session in or out of queue synchronization and record the name it is listed under on other devices. | queue | UserAuth | enabled:query,deviceName:query | body:no
+POST /queue/uploadPage/{uploadId} IQueueService.uploadPage | Stage another page of entries for a started upload. Returns the total number of entries staged so far. | queue | UserAuth | uploadId:path | body:yes
+GET /radio/radioFlow/{sessionId} IRadioService.radioFlow | Infinite stream of song identifiers for a radio session. Re-collecting the same session continues without repeating songs. | radio | UserAuth | sessionId:path | body:no
+POST /radio/radioSession IRadioService.createRadioSession | Create a radio session and return its identifier. The same identifier can be reused to resume the station where it left off. | radio | UserAuth | type:query | body:yes
+POST /radioChannel/channel IRadioChannelService.createChannel | Create a new radio channel. | radioChannel | UserAuth | - | body:yes
+DELETE /radioChannel/channel/{id} IRadioChannelService.deleteChannel | Delete a radio channel. | radioChannel | UserAuth | id:path | body:no
+GET /radioChannel/channel/{id} IRadioChannelService.getChannel | Get a radio channel by ID. Returns null for a draft channel when the caller is not an admin. | radioChannel | UserAuth | id:path | body:no
+PUT /radioChannel/channel/{id} IRadioChannelService.updateChannel | Update a channel's metadata (name, description, enabled, position, discovery). | radioChannel | UserAuth | id:path | body:yes
+PUT /radioChannel/channelImage/{id} IRadioChannelService.setChannelImage | Set the channel's cover image from raw bytes. | radioChannel | UserAuth | id:path | body:yes
+GET /radioChannel/channels IRadioChannelService.listChannels | List radio channels. Non-admin users only see published channels. | radioChannel | UserAuth | - | body:no
+GET /radioChannel/search/{channelId} IRadioChannelService.rankedSearch | Ranked search across the songs, artists and albums configured on a channel. An empty query lists all configured content. | radioChannel | UserAuth | channelId:path,query:query,explicit:query,page:query,pageSize:query | body:no
+POST /radioChannel/startChannel/{id} IRadioChannelService.startChannel | Start playing a channel. Returns a radio session id to feed into IRadioService.radioFlow. | radioChannel | UserAuth | id:path | body:no
+DELETE /radioChannel/{type}/channelItem/{id} IRadioChannelService.removeChannelItem | Remove a song, artist or album from a channel's configured content. | radioChannel | UserAuth | id:path,type:path,itemId:query | body:no
+POST /radioChannel/{type}/channelItem/{id} IRadioChannelService.addChannelItem | Add a song, artist or album to a channel's configured content. | radioChannel | UserAuth | id:path,type:path,itemId:query | body:no
+GET /recommendation/mix IRecommendationService.getMix | A personalized mix seeded from the user's recent listens over a time window. | recommendation | UserAuth | window:query,limit:query | body:no
+GET /recommendation/moodPlaylist IRecommendationService.getMoodPlaylist | Songs belonging to a given mood cluster. | recommendation | UserAuth | mood:query,limit:query | body:no
+GET /recommendation/moods IRecommendationService.getMoods | Available mood labels with their song counts. | recommendation | UserAuth | - | body:no
+GET /recommendation/similarSongs IRecommendationService.getSimilarSongs | Songs most similar to the given seed songs in the learned embedding space. | recommendation | UserAuth | seedSongIds:query,limit:query | body:no
+GET /release/artistRecentReleases/{artistId} IReleaseService.getArtistRecentReleases | Retrieve recent music releases for a specific artist. | release | UserAuth | artistId:path,page:query,pageSize:query | body:no
+POST /release/followArtist/{musicBrainzId} IReleaseService.followArtist | Follow an artist by their MusicBrainz ID to track their releases. | release | UserAuth | musicBrainzId:path | body:no
+GET /release/followedArtists IReleaseService.getFollowedArtists | Get a list of all artists the current user is following. | release | UserAuth | - | body:no
+GET /release/recentReleases IReleaseService.getRecentReleases | Retrieve a feed of recent music releases from followed artists. | release | UserAuth | page:query,pageSize:query | body:no
+GET /release/recentReleasesByMusicBrainzId/{musicBrainzId} IReleaseService.getRecentReleasesByMusicBrainzId | Retrieve recent music releases for an artist by their MusicBrainz ID. | release | UserAuth | musicBrainzId:path,page:query,pageSize:query | body:no
+POST /release/refreshRecentRelease/{releaseId} IReleaseService.refreshRecentRelease | Kick off a background refresh of the cached metadata, provider links and cover image for a single recent release, returning immediately. | release | UserAuth | releaseId:path | body:no
+GET /release/releaseImage/{releaseId} IReleaseService.getReleaseImage | Retrieve the cover image for a recent release, served from local storage when persisted or proxied from the Cover Art Archive on demand. | release | UserAuth | releaseId:path,size:query | body:no
+DELETE /release/unfollowArtist/{artistId} IReleaseService.unfollowArtist | Unfollow an artist and stop tracking their releases. | release | UserAuth | artistId:path | body:no
+GET /remoteMirror/activeMirrorProgress IRemoteMirrorService.getActiveMirrorProgress | Stream real-time progress updates for the active mirroring task. | remoteMirror | UserAuth | - | body:no
+POST /remoteMirror/proxyInstances IRemoteMirrorService.getProxyInstances | List available proxy instances on a remote Synara instance. | remoteMirror | UserAuth | - | body:yes
+POST /remoteMirror/remoteImageData/{imageId} IRemoteMirrorService.getRemoteImageData | Fetch raw image binary data from a remote Synara instance. | remoteMirror | UserAuth | imageId:path,size:query | body:yes
+POST /remoteMirror/remotePlaylists IRemoteMirrorService.getRemotePlaylists | List all system playlists on a remote Synara instance. | remoteMirror | UserAuth | - | body:yes
+POST /remoteMirror/remoteStats IRemoteMirrorService.getRemoteStats | Get statistics from a remote Synara instance. | remoteMirror | UserAuth | - | body:yes
+POST /remoteMirror/remoteUserPlaylists IRemoteMirrorService.getRemoteUserPlaylists | List all user playlists on a remote Synara instance. | remoteMirror | UserAuth | - | body:yes
+POST /remoteMirror/remoteUsers IRemoteMirrorService.getRemoteUsers | List all user accounts on a remote Synara instance. | remoteMirror | UserAuth | - | body:yes
+POST /remoteMirror/resetMirror IRemoteMirrorService.resetMirror | Reset the internal mirroring state. | remoteMirror | UserAuth | - | body:no
+POST /remoteMirror/startMirror IRemoteMirrorService.startMirror | Start mirroring content from another Synara instance. | remoteMirror | UserAuth | - | body:yes
+POST /remoteMirror/stopMirror IRemoteMirrorService.stopMirror | Stop the active mirroring process. | remoteMirror | UserAuth | - | body:no
+PUT /scheduledTaskConfiguration/configuration IScheduledTaskConfigurationService.updateConfiguration | Update a task configuration. | scheduledTaskConfiguration | UserAuth | - | body:yes
+GET /scheduledTaskConfiguration/configurations IScheduledTaskConfigurationService.getConfigurations | Retrieve all background task configurations. | scheduledTaskConfiguration | UserAuth | - | body:no
+GET /scheduledTaskConfiguration/configurationsFlow IScheduledTaskConfigurationService.getConfigurationsFlow | Stream real-time updates for all background task configurations. | scheduledTaskConfiguration | UserAuth | - | body:no
+POST /scheduledTaskConfiguration/triggerTask IScheduledTaskConfigurationService.triggerTask | Manually trigger a background task by its unique key. | scheduledTaskConfiguration | UserAuth | key:query | body:no
+GET /scheduledTaskLog/groupedLogs IScheduledTaskLogService.getGroupedLogs | Retrieve a snapshot of the most recent background task logs grouped by task name. | scheduledTaskLog | UserAuth | - | body:no
+GET /scheduledTaskLog/groupedLogsFlow IScheduledTaskLogService.getGroupedLogsFlow | Stream real-time updates for all background task progress and completion. | scheduledTaskLog | UserAuth | - | body:no
+POST /scrobble/clearNowPlaying IScrobbleService.clearNowPlaying | Clear the current user's now-playing state, e.g. when playback stops. | scrobble | UserAuth | - | body:no
+POST /scrobble/listened IScrobbleService.listened | Record that the current user finished listening to a library song. | scrobble | UserAuth | - | body:yes
+POST /scrobble/nowPlaying/{songId} IScrobbleService.nowPlaying | Report the library song the current user is now playing. Auto-clears after the song's duration unless reported again. | scrobble | UserAuth | songId:path | body:no
+GET /scrobble/recentListensFlow IScrobbleService.recentListensFlow | Stream the current user's recently listened songs and current now-playing, re-emitting on changes (debounced 100ms). | scrobble | UserAuth | limit:query | body:no
+POST /scrobble/reportPlayback IScrobbleService.reportPlayback | Report playback progress for the current user: call on play, pause, resume, seek and every 10-15 seconds while playing. Returns the server's epoch milliseconds at receipt so clients can align their clocks. | scrobble | UserAuth | - | body:yes
+GET /serverStats/health IServerStatsService.health | Simple connectivity check to verify the server is responding. | serverStats | - | - | body:no
+GET /serverStats/proxyInfo IServerStatsService.getProxyInfo | Retrieve information about the reverse proxy status and configuration. | serverStats | - | - | body:no
+GET /serverStats/stats IServerStatsService.getStats | Retrieve detailed system performance metrics and library statistics. | serverStats | - | - | body:no
+DELETE /session/deactivateSession/{sessionId} ISessionService.deactivateSession | Terminate a specific user session. | session | UserAuth | sessionId:path | body:no
+GET /session/sessions ISessionService.getSessions | List all sessions for the current user. | session | UserAuth | - | body:no
+GET /song/allSongIds ISongService.allSongIds | Stream all song IDs with optional filtering. | song | UserAuth | explicit:query,tags:query,invertTags:query | body:no
+GET /song/allSongs ISongService.allSongs | Get all songs with optional filtering. | song | UserAuth | page:query,pageSize:query,explicit:query,tags:query,invertTags:query | body:no
+PUT /song/artists/{id} ISongService.setArtists | Update song artists. | song | UserAuth | id:path,artistIds:query | body:no
+GET /song/atmosStreamSize/{id} ISongService.getAtmosStreamSize | Get the size of the song's Dolby Atmos stream, or 0 if the song has no Atmos variant. | song | UserAuth | id:path | body:no
+GET /song/byAlbum/{albumId} ISongService.byAlbum | List songs in an album. | song | UserAuth | page:query,pageSize:query,albumId:path | body:no
+GET /song/byArtist/{artistId} ISongService.byArtist | List songs by a specific artist. | song | UserAuth | page:query,pageSize:query,artistId:path | body:no
+GET /song/byColor ISongService.byColor | Search for songs by color. | song | UserAuth | page:query,pageSize:query,color:query,range:query,explicit:query | body:no
+GET /song/byId/{id} ISongService.byId | Get song by its unique identifier. | song | UserAuth | id:path | body:no
+GET /song/byIds ISongService.byIds | Get multiple songs by their unique identifiers. | song | UserAuth | ids:query | body:no
+GET /song/byLyrics ISongService.searchByLyrics | Search for songs by their lyrics. | song | UserAuth | page:query,pageSize:query,query:query,explicit:query | body:no
+GET /song/byMusicBrainzId/{musicBrainzId} ISongService.byMusicBrainzId | Find songs by their MusicBrainz Recording ID. | song | UserAuth | musicBrainzId:path | body:no
+GET /song/byOriginalIds ISongService.byOriginalIds | Find songs by their original platform-specific unique identifiers. | song | UserAuth | ids:query | body:no
+GET /song/byOriginalTracks ISongService.byOriginalTracks | Find songs matching external metadata records. | song | UserAuth | tracks:query | body:no
+GET /song/byOriginalUrls ISongService.byOriginalUrls | Find songs by their original platform URLs, returning a mapping. | song | UserAuth | urls:query | body:no
+GET /song/byPlaylist/{playlistId} ISongService.byPlaylist | List songs in a system playlist. | song | UserAuth | page:query,pageSize:query,playlistId:path | body:no
+GET /song/byTitle ISongService.byTitle | Search for songs by title. | song | UserAuth | page:query,pageSize:query,title:query | body:no
+GET /song/byUserPlaylist/{playlistId} ISongService.byUserPlaylist | List songs in a user playlist. | song | UserAuth | page:query,pageSize:query,playlistId:path | body:no
+GET /song/downloadSize/{id} ISongService.getDownloadSize | Get the size of the song audio for a specific quality. | song | UserAuth | id:path,quality:query,force:query,format:query | body:no
+GET /song/downloadSong/{id} ISongService.downloadSong | Download song audio in specific quality. | song | UserAuth | id:path,quality:query,offset:query,chunkSize:query,force:query,format:query | body:no
+HEAD /song/downloadSong/{id} ISongService.downloadSong | Download song audio in specific quality. | song | UserAuth | id:path,quality:query,offset:query,chunkSize:query,force:query,format:query | body:no
+GET /song/exportFavouritesAsCsv ISongService.exportFavouritesAsCsv | Export all favorited songs as a CSV string. | song | UserAuth | - | body:no
+GET /song/extendedMetadata/{id} ISongService.extendedMetadata | Get extended metadata for a song. | song | UserAuth | id:path | body:no
+PUT /song/liked/{id} ISongService.setLiked | Toggle favorite status. | song | UserAuth | id:path,liked:query,addedAt:query | body:no
+GET /song/likedByArtist/{artistId} ISongService.likedByArtist | List songs liked by the user for a specific artist. | song | UserAuth | page:query,pageSize:query,artistId:path,explicit:query | body:no
+GET /song/likedSongIds ISongService.likedSongIds | Stream all IDs of songs liked by the current user. | song | UserAuth | explicit:query | body:no
+GET /song/likedSongs ISongService.likedSongs | Get all songs liked by the current user. | song | UserAuth | page:query,pageSize:query,explicit:query | body:no
+PUT /song/lyrics/{id} ISongService.setLyrics | Manually set song lyrics. | song | UserAuth | id:path,lyrics:query | body:no
+POST /song/moveSongs ISongService.moveSongs | Batch update song file paths. | song | UserAuth | oldPath:query,newPath:query,originalIdPrefix:query | body:no
+POST /song/musicBrainzId/{id} ISongService.fetchMusicBrainzId | Trigger automatic MusicBrainz ID matching for a song. | song | UserAuth | id:path | body:no
+PUT /song/musicBrainzId/{id} ISongService.setMusicBrainzId | Link a song to its MusicBrainz Recording record. | song | UserAuth | id:path,musicBrainzId:query | body:no
+GET /song/search ISongService.rankedSearch | Perform a ranked search for songs. | song | UserAuth | page:query,pageSize:query,query:query,explicit:query,liked:query | body:no
+PUT /song/song ISongService.updateSong | Update a song's editable metadata (title, artists and their credited names, MusicBrainz link, album, lyrics, release date, track and disc number). | song | UserAuth | - | body:yes
+GET /song/songIdsByAlbum/{albumId} ISongService.songIdsByAlbum | Stream song IDs belonging to an album. | song | UserAuth | albumId:path | body:no
+GET /song/songIdsByArtist/{artistId} ISongService.songIdsByArtist | Stream song IDs belonging to an artist. | song | UserAuth | artistId:path | body:no
+GET /song/songIdsByPlaylist/{playlistId} ISongService.songIdsByPlaylist | Stream song IDs belonging to a system playlist. | song | UserAuth | playlistId:path | body:no
+GET /song/songIdsByUserPlaylist/{playlistId} ISongService.songIdsByUserPlaylist | Stream song IDs belonging to a user playlist. | song | UserAuth | playlistId:path | body:no
+DELETE /song/songs ISongService.deleteSongs | Delete multiple songs from the library. | song | UserAuth | ids:query | body:no
+GET /song/streamSize/{id} ISongService.getStreamSize | Get the total size of the song's audio stream. | song | UserAuth | id:path | body:no
+GET /song/streamSong/{id} ISongService.streamSong | Stream song audio data for playback. | song | UserAuth | id:path,offset:query,chunkSize:query | body:no
+HEAD /song/streamSong/{id} ISongService.streamSong | Stream song audio data for playback. | song | UserAuth | id:path,offset:query,chunkSize:query | body:no
+GET /song/streamSongAtmos/{id} ISongService.streamSongAtmos | Stream the Dolby Atmos (E-AC-3 JOC in MP4) variant of a song. Returns null if the song has no Atmos variant. | song | UserAuth | id:path,offset:query,chunkSize:query | body:no
+HEAD /song/streamSongAtmos/{id} ISongService.streamSongAtmos | Stream the Dolby Atmos (E-AC-3 JOC in MP4) variant of a song. Returns null if the song has no Atmos variant. | song | UserAuth | id:path,offset:query,chunkSize:query | body:no
+POST /subsonicCredential/regenerateSubsonicCredential ISubsonicCredentialService.regenerateSubsonicCredential | Generate a new Subsonic credential for the current user, replacing any existing one. | subsonicCredential | UserAuth | - | body:no
+DELETE /subsonicCredential/revokeSubsonicCredential ISubsonicCredentialService.revokeSubsonicCredential | Delete the current user's Subsonic credential. Returns true if a credential was deleted. | subsonicCredential | UserAuth | - | body:no
+GET /subsonicCredential/subsonicCredential ISubsonicCredentialService.getSubsonicCredential | Get the current user's Subsonic credential, or null if none exists. | subsonicCredential | UserAuth | - | body:no
+DELETE /timecodeTag/tag/{tagId} ITimecodeTagService.deleteTag | Delete a single tag of the user. Returns false if the tag does not exist or belongs to another user. | timecodeTag | UserAuth | tagId:path | body:no
+PUT /timecodeTag/tag/{tagId} ITimecodeTagService.updateTag | Overwrite a single tag of the user with new values. The call fails if the tag does not exist or belongs to another user. | timecodeTag | UserAuth | tagId:path,tagType:query,text:query,timestampMs:query,endMs:query | body:no
+GET /timecodeTag/tags ITimecodeTagService.listTags | Read the tags of the user across all songs, newest first, optionally narrowed down to a single kind of tag. | timecodeTag | UserAuth | tagType:query,page:query,pageSize:query | body:no
+GET /timecodeTag/tags/{songId} ITimecodeTagService.getTags | Read the tags the user attached to a song, ordered by the position they start at. | timecodeTag | UserAuth | songId:path | body:no
+POST /timecodeTag/tags/{songId} ITimecodeTagService.createTag | Create a single tag on a song. The position must not be negative and an end position, if one is given, must not lie before the position the tag starts at. | timecodeTag | UserAuth | songId:path,tagType:query,text:query,timestampMs:query,endMs:query | body:no
+PUT /timecodeTag/tags/{songId} ITimecodeTagService.replaceTags | Replace every tag the user has on a song with the supplied ones. The write is all-or-nothing, so either all tags are stored or none of them are, and an empty list clears the tags of the song. | timecodeTag | UserAuth | songId:path | body:yes
+GET /ui/contributions IUiService.listContributions | List UI contributions visible to the current user. | ui | UserAuth | kind:query,slot:query | body:no
+POST /ui/dispatchHook IUiService.dispatchHook | Forward an app-level event (e.g. a shared URL). Returns every contribution offering to handle it; perform the single action directly or let the user choose. An empty list means no server-side handler; fall back to native behaviour. | ui | UserAuth | - | body:yes
+PUT /ui/homeCardOrder IUiService.setHomeCardOrder | Persist the order of the current user's pinned home cards. | ui | UserAuth | contributionIds:query | body:no
+PUT /ui/homeCardPinned/{contributionId} IUiService.setHomeCardPinned | Pin or unpin a home card for the current user. | ui | UserAuth | contributionId:path,pinned:query | body:no
+GET /ui/homeCards IUiService.getHomeCards | Home-card layout of the current user, including cards available for pinning. | ui | UserAuth | - | body:no
+GET /ui/homeCardsFlow IUiService.getHomeCardsFlow | Stream the current user's home-card layout. | ui | UserAuth | - | body:no
+GET /ui/hookHandlers IUiService.listHookHandlers | List every handler that may offer to take hook events for the current user, without an input. Intake resolvers serve every kind; contributions list the kinds they declare. Whether a handler accepts a specific event is only known from dispatchHook. | ui | UserAuth | kind:query | body:no
+POST /ui/intake IUiService.intake | Hand items (links, codes, ids, text) to the server. Unambiguous items are submitted immediately; when several handlers offer, NEEDS_CHOICE returns them and the client calls intake again with the chosen handler's action. Items nobody accepts are returned as rejected. | ui | UserAuth | resolverId:query | body:yes
+POST /ui/invoke/{contributionId} IUiService.invoke | Dispatch an action declared by a contribution, with form values and/or action parameters. | ui | UserAuth | contributionId:path,actionId:query | body:yes
+POST /ui/render/{contributionId} IUiService.render | Render a single contribution. | ui | UserAuth | contributionId:path | body:yes
+POST /ui/renderSlot IUiService.renderSlot | Render all contributions registered for a slot that the current user may see, in display order. | ui | UserAuth | slot:query | body:yes
+POST /ui/resolveIntake IUiService.resolveIntake | List the handlers offering to take the items without submitting anything. | ui | UserAuth | - | body:yes
+GET /ui/subscribe/{contributionId} IUiService.subscribe | Stream re-renders of a contribution. Emits the current render immediately, then on every change. | ui | UserAuth | contributionId:path,entityId:query | body:no
+GET /ui/subscribeLive/{contributionId} IUiService.subscribeLive | Stream updates for a Live node of a contribution. Subscribe once per Live node while it is on screen. | ui | UserAuth | contributionId:path,key:query,entityId:query | body:no
+GET /user/allUsers IUserService.getAllUsers | List all users on the server. | user | UserAuth | - | body:no
+PUT /user/capabilities/{id} IUserService.setCapabilities | Update the capabilities for a specific user. | user | UserAuth | id:path,capabilities:query | body:no
+PUT /user/displayName IUserService.setDisplayName | Update the current user's display name. | user | UserAuth | name:query | body:no
+GET /user/me IUserService.me | Get the profile of the current authenticated user. | user | UserAuth | - | body:no
+PUT /user/profileImage IUserService.setProfileImage | Update the current user's avatar. | user | UserAuth | - | body:yes
+POST /user/user IUserService.createUser | Create a new user. | user | UserAuth | isAdmin:query,capabilities:query | body:yes
+GET /user/userById/{id} IUserService.findUserById | Look up a user by their unique ID. | user | UserAuth | id:path | body:no
+GET /user/userByUsername IUserService.findUserByUsername | Look up a user by their username. | user | UserAuth | username:query | body:no
+POST /userPlaylist/addAlbumToPlaylist/{id} IUserPlaylistService.addAlbumToPlaylist | Add all songs of an album to a user playlist. | userPlaylist | UserAuth | id:path,albumId:query | body:no
+POST /userPlaylist/addPlaylistToPlaylist/{id} IUserPlaylistService.addPlaylistToPlaylist | Add all songs of a playlist to a user playlist. | userPlaylist | UserAuth | id:path,sourcePlaylistId:query | body:no
+POST /userPlaylist/addSongsToPlaylist/{id} IUserPlaylistService.addSongsToPlaylist | Add songs to a user playlist. | userPlaylist | UserAuth | id:path,songIds:query | body:no
+POST /userPlaylist/addToPlaylist/{id} IUserPlaylistService.addToPlaylist | Add songs to a user playlist. | userPlaylist | UserAuth | id:path | body:yes
+POST /userPlaylist/addUserPlaylistToPlaylist/{id} IUserPlaylistService.addUserPlaylistToPlaylist | Add all songs of a user playlist to a user playlist. | userPlaylist | UserAuth | id:path,sourcePlaylistId:query | body:no
+GET /userPlaylist/allPlaylists IUserPlaylistService.allPlaylists | Get all user playlists. | userPlaylist | UserAuth | creator:query,page:query,pageSize:query | body:no
+GET /userPlaylist/byColor IUserPlaylistService.byColor | Search for user playlists by color. | userPlaylist | UserAuth | creator:query,page:query,pageSize:query,color:query,range:query | body:no
+GET /userPlaylist/byId/{id} IUserPlaylistService.byId | Get user playlist by ID. | userPlaylist | UserAuth | id:path | body:no
+GET /userPlaylist/byIds IUserPlaylistService.byIds | Get multiple user playlists by their IDs. | userPlaylist | UserAuth | ids:query | body:no
+POST /userPlaylist/orAddPlaylist/{userId} IUserPlaylistService.getOrAddPlaylist | Create a new user playlist or retrieve an existing one by a custom identifier. | userPlaylist | UserAuth | userId:path,customIdentifier:query | body:yes
+DELETE /userPlaylist/playlist/{id} IUserPlaylistService.delete | Delete a user playlist. | userPlaylist | UserAuth | id:path | body:no
+POST /userPlaylist/playlistFromArtists/{userId} IUserPlaylistService.createPlaylistFromArtists | Create a smart playlist based on artists. | userPlaylist | UserAuth | userId:path,name:query,artistIds:query,maxSongsPerArtist:query,sortStrategy:query | body:no
+PUT /userPlaylist/playlistImage/{id} IUserPlaylistService.setPlaylistImage | Set the cover image for a user playlist. | userPlaylist | UserAuth | id:path,imageId:query | body:no
+GET /userPlaylist/search IUserPlaylistService.rankedSearch | Search user playlists. | userPlaylist | UserAuth | creator:query,page:query,pageSize:query,query:query | body:no
+DELETE /userPlaylist/songs/{id} IUserPlaylistService.removeFromPlaylist | Remove songs from a user playlist. | userPlaylist | UserAuth | id:path,songIds:query | body:no
+DELETE /userPlaylistBackup/backup IUserPlaylistBackupService.deleteBackup | Delete a personal playlist backup file. | userPlaylistBackup | UserAuth | fileName:query | body:no
+POST /userPlaylistBackup/backup IUserPlaylistBackupService.createBackup | Create a backup of all playlists owned by the current user. | userPlaylistBackup | UserAuth | - | body:no
+GET /userPlaylistBackup/backupContent IUserPlaylistBackupService.getBackupContent | Peek into the contents of a specific user playlist backup. | userPlaylistBackup | UserAuth | fileName:query | body:no
+GET /userPlaylistBackup/backups IUserPlaylistBackupService.listBackups | List all available playlist backup files for the current user. | userPlaylistBackup | UserAuth | - | body:no
+POST /userPlaylistBackup/restoreBackup IUserPlaylistBackupService.restoreBackup | Restore user playlists from a backup file. | userPlaylistBackup | UserAuth | fileName:query | body:no

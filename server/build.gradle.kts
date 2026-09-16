@@ -47,8 +47,14 @@ tasks.register<JavaExec>("runSearchBenchmark") {
     standardOutput = System.out
 }
 
+ksp {
+    arg("rest.packages", "dev.dertyp,dev.dertyp.services,dev.dertyp.services.import,dev.dertyp.services.metadata")
+    arg("rest.package", "dev.dertyp.routing.rest")
+}
+
 dependencies {
     add("ksp", project(":common-rpc:doc-compiler"))
+    add("ksp", project(":common-rpc:rest-compiler"))
 
     implementation(libs.ktor.client.core)
     implementation(libs.ktor.client.cio)
@@ -149,6 +155,7 @@ dependencies {
 tasks.test {
     useJUnitPlatform()
     systemProperty("net.bytebuddy.experimental", "true")
+    systemProperty("updateRestGolden", project.findProperty("updateRestGolden") ?: "false")
     maxHeapSize = "2g"
 }
 
