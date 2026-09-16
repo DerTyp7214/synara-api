@@ -234,6 +234,49 @@ class PodcastService(private val http: PodcastHttp) : Service() {
         }
     }
 
+    suspend fun getEpisodeWindow(userId: UUID, episodeId: UUID, older: Int, newer: Int): List<PodcastEpisode> = dbQuery {
+        val anchor = episodeRow(episodeId) ?: return@dbQuery emptyList()
+        val olderCount = older.coerceIn(0, MAX_PAGE)
+        val newerCount = newer.coerceIn(0, MAX_PAGE)
+
+        val olderRows = if (olderCount == 0) {
+            emptyList()
+        } else {
+            episodeSource(userId)
+                .selectAll()
+                .where { PodcastEpisodeTable.showId eq anchor.showId }
+                .andWhere {
+                    (PodcastEpisodeTable.publishedAt less anchor.publishedAt) or
+                        ((PodcastEpisodeTable.publishedAt eq anchor.publishedAt) and (PodcastEpisodeTable.id less anchor.id))
+                }
+                .orderBy(PodcastEpisodeTable.publishedAt to SortOrder.DESC, PodcastEpisodeTable.id to SortOrder.DESC)
+                .limit(olderCount)
+                .toList()
+        }
+
+        val newerRows = if (newerCount == 0) {
+            emptyList()
+        } else {
+            episodeSource(userId)
+                .selectAll()
+                .where { PodcastEpisodeTable.showId eq anchor.showId }
+                .andWhere {
+                    (PodcastEpisodeTable.publishedAt greater anchor.publishedAt) or
+                        ((PodcastEpisodeTable.publishedAt eq anchor.publishedAt) and (PodcastEpisodeTable.id greater anchor.id))
+                }
+                .orderBy(PodcastEpisodeTable.publishedAt to SortOrder.ASC, PodcastEpisodeTable.id to SortOrder.ASC)
+                .limit(newerCount)
+                .toList()
+        }
+
+        val anchorRow = episodeSource(userId)
+            .selectAll()
+            .where { PodcastEpisodeTable.id eq episodeId }
+            .single()
+
+        episodesOf(olderRows.reversed()) + episodesOf(listOf(anchorRow)) + episodesOf(newerRows)
+    }
+
     suspend fun getLastPlayed(userId: UUID, includeCompleted: Boolean): PodcastEpisode? = dbQuery {
         val query = if (includeCompleted) {
             episodeSource(userId)

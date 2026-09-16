@@ -122,6 +122,15 @@ class RpcPodcastServiceTest {
     }
 
     @Test
+    fun `getEpisodeWindow forwards the user id episode id and both counts`() = runBlocking {
+        val episodeId = UUID.randomUUID()
+
+        service.getEpisodeWindow(episodeId, 3, 7)
+
+        coVerify(exactly = 1) { podcastService.getEpisodeWindow(user.id, episodeId, 3, 7) }
+    }
+
+    @Test
     fun `searchEpisodes forwards the user id query page and pageSize`() = runBlocking {
         service.searchEpisodes("term", 3, 20)
 

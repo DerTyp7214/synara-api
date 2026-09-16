@@ -447,6 +447,97 @@ class PodcastServiceTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
+    fun `getEpisodeWindow returns the anchor with the requested neighbours in chronological order`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val userId = transaction(database) { insertUser() }
+        val showId = transaction(database) { insertFeedShow("https://feed.example/window") }
+        val episodes = transaction(database) { (1..7).map { insertEpisode(showId, "w$it", it * 1000L) } }
+
+        val window = service.getEpisodeWindow(userId, episodes[3], older = 2, newer = 2)
+
+        assertEquals(episodes.subList(1, 6), window.map { it.id })
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `getEpisodeWindow with zero counts returns only the anchor and larger counts return every episode`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val userId = transaction(database) { insertUser() }
+        val showId = transaction(database) { insertFeedShow("https://feed.example/window-bounds") }
+        val episodes = transaction(database) { (1..7).map { insertEpisode(showId, "wb$it", it * 1000L) } }
+
+        assertEquals(listOf(episodes[3]), service.getEpisodeWindow(userId, episodes[3], older = 0, newer = 0).map { it.id })
+        assertEquals(episodes.subList(0, 4), service.getEpisodeWindow(userId, episodes[3], older = 50, newer = 0).map { it.id })
+        assertEquals(episodes.subList(3, 7), service.getEpisodeWindow(userId, episodes[3], older = 0, newer = 50).map { it.id })
+        assertEquals(episodes, service.getEpisodeWindow(userId, episodes[3], older = 50, newer = 50).map { it.id })
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `getEpisodeWindow treats negative counts as zero`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val userId = transaction(database) { insertUser() }
+        val showId = transaction(database) { insertFeedShow("https://feed.example/window-negative") }
+        val episodes = transaction(database) { (1..5).map { insertEpisode(showId, "wn$it", it * 1000L) } }
+
+        assertEquals(listOf(episodes[2]), service.getEpisodeWindow(userId, episodes[2], older = -3, newer = -1).map { it.id })
+        assertEquals(episodes.subList(2, 4), service.getEpisodeWindow(userId, episodes[2], older = -3, newer = 1).map { it.id })
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `getEpisodeWindow never crosses into another show and returns nothing for an unknown episode`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val userId = transaction(database) { insertUser() }
+        val showA = transaction(database) { insertFeedShow("https://feed.example/window-a") }
+        val showB = transaction(database) { insertFeedShow("https://feed.example/window-b") }
+        val mine = transaction(database) { (1..3).map { insertEpisode(showA, "wa$it", it * 1000L) } }
+        transaction(database) { (1..5).map { insertEpisode(showB, "wbb$it", it * 500L) } }
+
+        assertEquals(mine, service.getEpisodeWindow(userId, mine[1], older = 10, newer = 10).map { it.id })
+        assertTrue(service.getEpisodeWindow(userId, UUID.randomUUID(), older = 5, newer = 5).isEmpty())
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `getEpisodeWindow inlines progress only for the calling user`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val userA = transaction(database) { insertUser() }
+        val userB = transaction(database) { insertUser() }
+        val showId = transaction(database) { insertFeedShow("https://feed.example/window-progress") }
+        val older = transaction(database) { insertEpisode(showId, "wp1", 1000L, durationMs = 600000L) }
+        val anchor = transaction(database) { insertEpisode(showId, "wp2", 2000L, durationMs = 600000L) }
+
+        service.reportPlayback(userA, EpisodePlaybackReport(episodeId = anchor, positionMs = 5000))
+        service.reportPlayback(userA, EpisodePlaybackReport(episodeId = older, positionMs = 3000))
+
+        val forA = service.getEpisodeWindow(userA, anchor, older = 5, newer = 5).associateBy { it.id }
+        val forB = service.getEpisodeWindow(userB, anchor, older = 5, newer = 5).associateBy { it.id }
+
+        assertEquals(3000L, forA.getValue(older).progress!!.positionMs)
+        assertEquals(5000L, forA.getValue(anchor).progress!!.positionMs)
+        assertNull(forB.getValue(older).progress)
+        assertNull(forB.getValue(anchor).progress)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `getEpisodeWindow breaks ties on the same publishedAt by id`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val userId = transaction(database) { insertUser() }
+        val showId = transaction(database) { insertFeedShow("https://feed.example/window-ties") }
+        val tied = transaction(database) { (1..4).map { insertEpisode(showId, "wt$it", 1000L) } }
+        val ordered = service.getEpisodes(userId, showId, 0, 50, newestFirst = false).data.map { it.id }
+        val anchor = ordered[2]
+
+        assertEquals(tied.toSet(), ordered.toSet())
+        assertEquals(ordered, service.getEpisodeWindow(userId, anchor, older = 10, newer = 10).map { it.id })
+        assertEquals(ordered.subList(1, 4), service.getEpisodeWindow(userId, anchor, older = 1, newer = 10).map { it.id })
+        assertEquals(ordered.subList(2, 3), service.getEpisodeWindow(userId, anchor, older = 0, newer = 0).map { it.id })
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
     fun `searchEpisodes matches episode title description and show title, blank throws`(dialect: DbDialect) = runBlocking {
         setup(dialect)
         val userId = transaction(database) { insertUser() }

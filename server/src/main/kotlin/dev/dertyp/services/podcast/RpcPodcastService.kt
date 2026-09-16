@@ -59,6 +59,9 @@ class RpcPodcastService(
     override suspend fun getEpisodesByIds(@LogParam("size") episodeIds: List<UUID>): List<PodcastEpisode> =
         podcastService.getEpisodesByIds(user.id, episodeIds)
 
+    override suspend fun getEpisodeWindow(episodeId: UUID, older: Int, newer: Int): List<PodcastEpisode> =
+        podcastService.getEpisodeWindow(user.id, episodeId, older, newer)
+
     override suspend fun searchEpisodes(query: String, page: Int, pageSize: Int): PaginatedResponse<PodcastEpisode> =
         podcastService.searchEpisodes(user.id, query, page, pageSize)
 

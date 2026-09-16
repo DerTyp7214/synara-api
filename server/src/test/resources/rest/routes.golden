@@ -222,6 +222,7 @@ DELETE /podcast/import/{episodeId} IPodcastService.removeImport [p:episodeId] JS
 DELETE /podcast/unsubscribe/{showId} IPodcastService.unsubscribe [p:showId] JSON
 GET /podcast/browseShows IPodcastService.browseShows [q:query? q:page? q:pageSize?] JSON
 GET /podcast/episode/{episodeId} IPodcastService.getEpisode [p:episodeId] JSON
+GET /podcast/episodeWindow/{episodeId} IPodcastService.getEpisodeWindow [p:episodeId q:older? q:newer?] JSON
 GET /podcast/episodes IPodcastService.searchEpisodes [q:query q:page? q:pageSize?] JSON
 GET /podcast/episodes/{showId} IPodcastService.getEpisodes [p:showId q:page? q:pageSize? q:newestFirst?] JSON
 GET /podcast/episodesByIds IPodcastService.getEpisodesByIds [q:episodeIds] JSON
