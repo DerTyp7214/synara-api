@@ -73,6 +73,8 @@ class UnlinkUnfollowedRecentReleaseImagesTest : KoinTest {
                 CollectionTable,
                 RadioChannelTable,
                 ScheduledTaskLogTable,
+                PodcastShowTable,
+                PodcastEpisodeTable,
             )
         }
 

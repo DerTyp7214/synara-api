@@ -70,6 +70,7 @@ class CoverGenerationServiceTest {
                 SongEmbeddingTable, SongAudioDataTable, CollectionTable, CollectionSongTable, CollectionAlbumTable,
                 CollectionArtistTable, CollectionPlaylistTable, PlaylistTable, MBReleaseGroupTable, MBReleaseGroupCoverTable,
                 RecentReleaseTable, AnimatedImageTable, RadioChannelTable,
+                PodcastShowTable, PodcastEpisodeTable,
             )
             UserTable.insert {
                 it[id] = userId
