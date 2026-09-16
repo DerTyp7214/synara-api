@@ -6,6 +6,7 @@ import dev.dertyp.data.EpisodePlaybackReport
 import dev.dertyp.data.PodcastDeliveryMode
 import dev.dertyp.data.PodcastEpisodeProgress
 import dev.dertyp.data.PodcastImportState
+import dev.dertyp.data.PodcastRetention
 import dev.dertyp.data.PodcastShowSettings
 import dev.dertyp.data.PodcastSource
 import dev.dertyp.db.ImageTable
@@ -109,6 +110,7 @@ class PodcastServiceTest {
         imageId: UUID? = null,
         deliveryMode: PodcastDeliveryMode = PodcastDeliveryMode.STREAM,
         keepEpisodes: Int? = null,
+        retention: PodcastRetention = PodcastRetention.NEWEST,
     ): UUID {
         val id = UUID.randomUUID()
         val now = Instant.now().toEpochMilli()
@@ -123,6 +125,7 @@ class PodcastServiceTest {
             it[PodcastShowTable.imageId] = imageId
             it[PodcastShowTable.deliveryMode] = deliveryMode
             it[PodcastShowTable.keepEpisodes] = keepEpisodes
+            it[PodcastShowTable.retention] = retention
             it[createdAt] = now
             it[updatedAt] = now
         }
@@ -823,6 +826,38 @@ class PodcastServiceTest {
         assertThrows<IllegalArgumentException> {
             runBlocking { service.updateShowSettings(UUID.randomUUID(), PodcastShowSettings(PodcastDeliveryMode.STREAM), userId) }
         }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `updateShowSettings stores unlistened retention only for import delivery and getShow exposes it`(dialect: DbDialect) = runBlocking<Unit> {
+        setup(dialect)
+        val userId = transaction(database) { insertUser() }
+        val showId = transaction(database) { insertFeedShow("https://feed.example/retention") }
+
+        assertEquals(PodcastRetention.NEWEST, service.getShow(userId, showId)!!.retention)
+
+        assertThrows<IllegalArgumentException> {
+            runBlocking {
+                service.updateShowSettings(
+                    showId,
+                    PodcastShowSettings(PodcastDeliveryMode.STREAM, retention = PodcastRetention.UNLISTENED),
+                    userId
+                )
+            }
+        }
+
+        val updated = service.updateShowSettings(
+            showId,
+            PodcastShowSettings(PodcastDeliveryMode.IMPORT, keepEpisodes = 3, retention = PodcastRetention.UNLISTENED),
+            userId
+        )
+        assertEquals(PodcastRetention.UNLISTENED, updated.retention)
+        assertEquals(PodcastRetention.UNLISTENED, service.getShow(userId, showId)!!.retention)
+        assertEquals(PodcastRetention.UNLISTENED, service.showById(showId)!!.retention)
+
+        val reverted = service.updateShowSettings(showId, PodcastShowSettings(PodcastDeliveryMode.STREAM), userId)
+        assertEquals(PodcastRetention.NEWEST, reverted.retention)
     }
 
     @ParameterizedTest

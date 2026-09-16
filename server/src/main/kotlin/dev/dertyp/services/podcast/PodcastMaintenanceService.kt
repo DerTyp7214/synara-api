@@ -2,6 +2,7 @@ package dev.dertyp.services.podcast
 
 import dev.dertyp.data.PodcastDeliveryMode
 import dev.dertyp.data.PodcastImportState
+import dev.dertyp.data.PodcastRetention
 import dev.dertyp.services.Service
 
 class PodcastMaintenanceService(
@@ -15,8 +16,20 @@ class PodcastMaintenanceService(
         podcastService.feedShowsWithSubscribers()
             .filter { it.deliveryMode == PodcastDeliveryMode.IMPORT }
             .forEach { show ->
-                val keep = show.keepEpisodes ?: DEFAULT_KEEP
-                val candidates = podcastService.importCandidates(show.id, keep, PodcastImportService.MAX_ATTEMPTS)
+                val candidates = when (show.retention) {
+                    PodcastRetention.NEWEST -> {
+                        val keep = show.keepEpisodes ?: DEFAULT_KEEP
+                        podcastService.importCandidates(show.id, keep, PodcastImportService.MAX_ATTEMPTS)
+                    }
+
+                    PodcastRetention.UNLISTENED -> {
+                        val unlistened = podcastService.unlistenedImportCandidates(show.id, PodcastImportService.MAX_ATTEMPTS)
+                        val room = show.keepEpisodes
+                            ?.let { it - podcastService.importedOrPendingCount(show.id) }
+                            ?.coerceAtLeast(0)
+                        if (room == null) unlistened else unlistened.take(room)
+                    }
+                }
 
                 candidates.forEach { episode ->
                     podcastService.markImportState(episode.id, PodcastImportState.QUEUED)
@@ -31,10 +44,18 @@ class PodcastMaintenanceService(
         var deleted = 0
 
         podcastService.feedShowsWithSubscribers()
-            .filter { it.deliveryMode == PodcastDeliveryMode.IMPORT && it.keepEpisodes != null }
+            .filter { it.deliveryMode == PodcastDeliveryMode.IMPORT }
             .forEach { show ->
-                val keep = show.keepEpisodes ?: return@forEach
-                podcastService.importedBeyond(show.id, keep).forEach { episode ->
+                val stale = when (show.retention) {
+                    PodcastRetention.NEWEST -> {
+                        val keep = show.keepEpisodes ?: return@forEach
+                        podcastService.importedBeyond(show.id, keep)
+                    }
+
+                    PodcastRetention.UNLISTENED -> podcastService.finishedImportedEpisodes(show.id)
+                }
+
+                stale.forEach { episode ->
                     importService.deleteFile(episode)
                     deleted++
                 }

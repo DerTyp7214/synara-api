@@ -3,6 +3,7 @@ package dev.dertyp.db
 import dev.dertyp.data.PodcastDeliveryMode
 import dev.dertyp.data.PodcastEpisodeType
 import dev.dertyp.data.PodcastImportState
+import dev.dertyp.data.PodcastRetention
 import dev.dertyp.data.PodcastSource
 import org.jetbrains.exposed.v1.core.ReferenceOption
 import org.jetbrains.exposed.v1.core.Table
@@ -25,6 +26,8 @@ object PodcastShowTable : UUIDTable("podcastShow") {
     val deliveryMode = enumerationByName("deliveryMode", 16, PodcastDeliveryMode::class)
         .default(PodcastDeliveryMode.STREAM)
     val keepEpisodes = integer("keepEpisodes").nullable()
+    val retention = enumerationByName("retention", 16, PodcastRetention::class)
+        .default(PodcastRetention.NEWEST)
     val etag = varchar("etag", 255).nullable()
     val lastModified = varchar("lastModified", 64).nullable()
     val lastFetchedAt = long("lastFetchedAt").nullable()

@@ -3,9 +3,11 @@ package dev.dertyp.services.podcast
 import dev.dertyp.core.paging
 import dev.dertyp.data.EpisodePlaybackReport
 import dev.dertyp.data.PaginatedResponse
+import dev.dertyp.data.PodcastDeliveryMode
 import dev.dertyp.data.PodcastEpisode
 import dev.dertyp.data.PodcastEpisodeProgress
 import dev.dertyp.data.PodcastImportState
+import dev.dertyp.data.PodcastRetention
 import dev.dertyp.data.PodcastShow
 import dev.dertyp.data.PodcastShowSettings
 import dev.dertyp.data.PodcastSource
@@ -345,11 +347,15 @@ class PodcastService(private val http: PodcastHttp) : Service() {
     suspend fun updateShowSettings(showId: UUID, settings: PodcastShowSettings, userId: UUID): PodcastShow {
         val keep = settings.keepEpisodes
         require(keep == null || keep >= 1) { "A show keeps at least one episode on disk" }
+        require(settings.retention == PodcastRetention.NEWEST || settings.deliveryMode == PodcastDeliveryMode.IMPORT) {
+            "Unlistened retention needs import delivery"
+        }
 
         dbQuery {
             val updated = PodcastShowTable.update({ PodcastShowTable.id eq showId }) {
                 it[deliveryMode] = settings.deliveryMode
                 it[keepEpisodes] = keep
+                it[retention] = settings.retention
                 it[updatedAt] = Instant.now().toEpochMilli()
             }
             require(updated == 1) { "Podcast show $showId does not exist" }
@@ -781,6 +787,68 @@ class PodcastService(private val http: PodcastHttp) : Service() {
             .drop(max(keep, 0))
     }
 
+    suspend fun unlistenedImportCandidates(showId: UUID, maxAttempts: Int): List<PodcastEpisodeRow> = dbQuery {
+        val finished = finishedEpisodeIds(showId)
+
+        PodcastEpisodeTable
+            .selectAll()
+            .where { PodcastEpisodeTable.showId eq showId }
+            .andWhere { PodcastEpisodeTable.enclosureUrl.isNotNull() }
+            .andWhere { PodcastEpisodeTable.importState inList listOf(PodcastImportState.NONE, PodcastImportState.FAILED) }
+            .andWhere { PodcastEpisodeTable.importAttempts less maxAttempts }
+            .orderBy(PodcastEpisodeTable.publishedAt to SortOrder.DESC, PodcastEpisodeTable.id to SortOrder.ASC)
+            .map(::mapEpisodeRow)
+            .filterNot { it.id in finished }
+    }
+
+    suspend fun finishedImportedEpisodes(showId: UUID): List<PodcastEpisodeRow> = dbQuery {
+        val finished = finishedEpisodeIds(showId)
+
+        if (finished.isEmpty()) {
+            emptyList()
+        } else {
+            PodcastEpisodeTable
+                .selectAll()
+                .where { PodcastEpisodeTable.showId eq showId }
+                .andWhere { PodcastEpisodeTable.importState eq PodcastImportState.IMPORTED }
+                .andWhere { PodcastEpisodeTable.filePath.isNotNull() }
+                .orderBy(PodcastEpisodeTable.publishedAt to SortOrder.DESC, PodcastEpisodeTable.id to SortOrder.ASC)
+                .map(::mapEpisodeRow)
+                .filter { it.id in finished }
+        }
+    }
+
+    suspend fun importedOrPendingCount(showId: UUID): Int = dbQuery {
+        val states = listOf(PodcastImportState.IMPORTED, PodcastImportState.QUEUED, PodcastImportState.IMPORTING)
+
+        PodcastEpisodeTable
+            .selectAll()
+            .where { PodcastEpisodeTable.showId eq showId }
+            .andWhere { PodcastEpisodeTable.importState inList states }
+            .count()
+            .toInt()
+    }
+
+    private fun finishedEpisodeIds(showId: UUID): Set<UUID> {
+        val subscribers = PodcastSubscriptionTable
+            .select(PodcastSubscriptionTable.userId)
+            .where { PodcastSubscriptionTable.showId eq showId }
+            .map { it[PodcastSubscriptionTable.userId].value }
+            .toSet()
+
+        if (subscribers.isEmpty()) return emptySet()
+
+        return (PodcastEpisodeProgressTable innerJoin PodcastEpisodeTable)
+            .select(PodcastEpisodeProgressTable.episodeId, PodcastEpisodeProgressTable.userId)
+            .where { PodcastEpisodeTable.showId eq showId }
+            .andWhere { PodcastEpisodeProgressTable.completed eq true }
+            .map { it[PodcastEpisodeProgressTable.episodeId].value to it[PodcastEpisodeProgressTable.userId].value }
+            .filter { (_, userId) -> userId in subscribers }
+            .groupBy({ it.first }, { it.second })
+            .filterValues { it.toSet().size == subscribers.size }
+            .keys
+    }
+
     suspend fun markImportState(
         episodeId: UUID,
         state: PodcastImportState,
@@ -1183,6 +1251,7 @@ class PodcastService(private val http: PodcastHttp) : Service() {
             explicit = row[PodcastShowTable.explicit],
             deliveryMode = row[PodcastShowTable.deliveryMode],
             keepEpisodes = row[PodcastShowTable.keepEpisodes],
+            retention = row[PodcastShowTable.retention],
             lastFetchedAt = row[PodcastShowTable.lastFetchedAt],
             lastFetchError = row[PodcastShowTable.lastFetchError],
             episodeCount = episodes[id] ?: 0,
@@ -1269,6 +1338,7 @@ class PodcastService(private val http: PodcastHttp) : Service() {
         explicit = row[PodcastShowTable.explicit],
         deliveryMode = row[PodcastShowTable.deliveryMode],
         keepEpisodes = row[PodcastShowTable.keepEpisodes],
+        retention = row[PodcastShowTable.retention],
         etag = row[PodcastShowTable.etag],
         lastModified = row[PodcastShowTable.lastModified],
         lastFetchedAt = row[PodcastShowTable.lastFetchedAt],

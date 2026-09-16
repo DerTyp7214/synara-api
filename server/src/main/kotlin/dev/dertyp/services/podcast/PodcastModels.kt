@@ -3,6 +3,7 @@ package dev.dertyp.services.podcast
 import dev.dertyp.data.PodcastDeliveryMode
 import dev.dertyp.data.PodcastEpisodeType
 import dev.dertyp.data.PodcastImportState
+import dev.dertyp.data.PodcastRetention
 import dev.dertyp.data.PodcastSource
 import java.security.MessageDigest
 import java.util.UUID
@@ -23,6 +24,7 @@ data class PodcastShowRow(
     val explicit: Boolean = false,
     val deliveryMode: PodcastDeliveryMode = PodcastDeliveryMode.STREAM,
     val keepEpisodes: Int? = null,
+    val retention: PodcastRetention = PodcastRetention.NEWEST,
     val etag: String? = null,
     val lastModified: String? = null,
     val lastFetchedAt: Long? = null,
