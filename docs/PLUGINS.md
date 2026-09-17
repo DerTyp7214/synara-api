@@ -70,22 +70,36 @@ class MyPlugin : ISynaraPlugin, IUiPlugin {
         context.i18n.registerBundlesFromResources(javaClass.classLoader, "i18n/myplugin", listOf("en", "de"))
     }
 
-    override fun getUiContributions() = listOf(MySettings())
+    override fun getUiContributions() = listOf(MySettingsEntry(), MySettings())
 }
 
-class MySettings : UiContribution(
-    id = "myplugin.settings",          // [a-z0-9._-]+
+class MySettingsEntry : UiContribution(
+    id = "myplugin.settings.entry",     // [a-z0-9._-]+
     kind = UiContributionKind.SLOT,     // SLOT, PAGE or HOME_CARD
     slot = UiSlots.SETTINGS,
     titleKey = "myplugin.settings.title",
     icon = "settings",
     access = UiAccess(requiresAdmin = true),
 ) {
+    override suspend fun render(scope: UiRenderScope): UiComponent = UiComponent.ListItem(
+        title = scope.t("myplugin.settings.title"),
+        subtitle = scope.t("myplugin.settings.description"),
+        icon = icon,
+        action = UiAction.OpenPage("myplugin.settings"),
+    )
+}
+
+class MySettings : UiContribution(
+    id = "myplugin.settings",
+    kind = UiContributionKind.PAGE,
+    titleKey = "myplugin.settings.title",
+    icon = "settings",
+    access = UiAccess(requiresAdmin = true),
+) {
     override suspend fun render(scope: UiRenderScope): UiComponent {
         val current = scope.settings.get("apiKey")
-        return UiComponent.Card(
-            title = scope.t("myplugin.settings.title"),
-            children = listOf(
+        return UiComponent.Column(
+            listOf(
                 UiComponent.Form(
                     id = "settings",
                     submit = UiAction.Invoke(id, "save", formId = "settings"),
@@ -109,6 +123,7 @@ class MySettings : UiContribution(
 }
 ```
 
+- A slot item is an entry, not a screen: in the list slots (`settings`, `library`) render a `ListItem` or `Tile` that opens a `PAGE` contribution, and put the forms and cards on that page. Only `importer` and the `*.detail` slots render inline sections — a `Card` placed into the host screen.
 - `render` is called with a `UiRenderScope` carrying the user (`scope.user`), the host `context` (entity or page params), a translator (`scope.t`), the plugin's `settings`, and the client's schema version.
 - `toolbar` (pages only) returns components for the native app bar — buttons with icons, portals — so the page body holds content only.
 - `live(scope, key)` serves a `UiComponent.Live(key, child)` node in your tree: return a `Flow<UiLiveUpdate>` (`Replace(child)` or `AppendLines(lines)` for a `Log` child) so frequent data such as process output updates that subtree only, without re-rendering the page. Return `null` for unknown keys. Example: `UiComponent.Live("log", UiComponent.Log(currentLines))` in `render`, and `live` returning `process.output.map { UiLiveUpdate.AppendLines(listOf(it)) }`.
@@ -166,7 +181,7 @@ context.intake.register(object : IntakeResolver {
 
 An `IPodcastIndex` is a searchable external podcast directory. `id` must be unique and stable — clients pass it to `searchIndex` — and `name` is shown to users. `isConfigured()` says whether the index can be searched right now (for example credentials are present); unconfigured indexes are skipped. `search(query, limit)` returns up to `limit` `PodcastIndexEntry` values with at least `feedUrl` and `title`; it may throw, in which case the server logs the failure and treats the index as empty for that call, and applies a 10 second timeout per index. The server normalizes and deduplicates results by feed URL across indexes and leaves out feeds it already follows.
 
-The built-in `podcastindex` plugin (Podcast Index, credentials via `PODCAST_INDEX_API_KEY`/`PODCAST_INDEX_API_SECRET` or the admin settings card) is the reference implementation.
+The built-in `podcastindex` plugin (Podcast Index, credentials via `PODCAST_INDEX_API_KEY`/`PODCAST_INDEX_API_SECRET` or the admin settings page) is the reference implementation.
 
 ### Translations
 

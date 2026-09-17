@@ -29,5 +29,8 @@ class PodcastIndexPlugin : IContentSourcePlugin, IUiPlugin, KoinComponent {
 
     override fun getPodcastIndexes(): List<IPodcastIndex> = listOf(index)
 
-    override fun getUiContributions(): List<UiContribution> = listOf(PodcastIndexCredentialsContribution(credentials, settings))
+    override fun getUiContributions(): List<UiContribution> = listOf(
+        PodcastIndexCredentialsEntryContribution(credentials, settings),
+        PodcastIndexCredentialsContribution(credentials, settings),
+    )
 }

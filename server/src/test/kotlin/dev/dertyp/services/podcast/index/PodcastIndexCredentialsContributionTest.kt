@@ -9,6 +9,7 @@ import dev.dertyp.services.ui.UiRegistry
 import dev.dertyp.ui.UiAction
 import dev.dertyp.ui.UiComponent
 import dev.dertyp.ui.UiContext
+import dev.dertyp.ui.UiContributionKind
 import dev.dertyp.ui.UiInvokeStatus
 import dev.dertyp.ui.UiSchemaVersion
 import dev.dertyp.ui.UiSlots
@@ -37,11 +38,17 @@ class PodcastIndexCredentialsContributionTest {
         translations.forSource(SOURCE).registerBundlesFromResources(javaClass.classLoader, "i18n/podcastindex", listOf("en", "de"))
     }
 
-    private fun contribution(env: Map<String, String> = emptyMap()): PodcastIndexCredentialsContribution {
+    private fun source(env: Map<String, String>): PodcastIndexCredentialSource {
         val config = MapApplicationConfig()
         env.forEach { (key, value) -> config.put(key, value) }
-        return PodcastIndexCredentialsContribution(PodcastIndexCredentialSource(settings, config), settings)
+        return PodcastIndexCredentialSource(settings, config)
     }
+
+    private fun contribution(env: Map<String, String> = emptyMap()): PodcastIndexCredentialsContribution =
+        PodcastIndexCredentialsContribution(source(env), settings)
+
+    private fun entry(env: Map<String, String> = emptyMap()): PodcastIndexCredentialsEntryContribution =
+        PodcastIndexCredentialsEntryContribution(source(env), settings)
 
     private fun scope() = UiRenderScope(
         user = UserInfo.fromUser(admin),
@@ -51,14 +58,38 @@ class PodcastIndexCredentialsContributionTest {
         clientSchemaVersion = UiSchemaVersion.CURRENT,
     )
 
-    private fun UiComponent.Card.fields(): List<UiComponent.TextField> =
+    private fun UiComponent.Column.fields(): List<UiComponent.TextField> =
         children.filterIsInstance<UiComponent.Form>().single().children.filterIsInstance<UiComponent.TextField>()
 
+    private fun UiComponent.Column.buttons(): List<UiComponent.Button> =
+        children.filterIsInstance<UiComponent.Column>().flatMap { it.children }.filterIsInstance<UiComponent.Button>()
+
     @Test
-    fun `is an admin settings slot item`() {
+    fun `the settings entry is an admin list item opening the page`() = runBlocking {
+        coEvery { settings.getAll() } returns emptyMap()
+        val entry = entry()
+        assertEquals("podcastindex.credentials.entry", entry.id)
+        assertEquals(UiContributionKind.SLOT, entry.kind)
+        assertEquals(UiSlots.SETTINGS, entry.slot)
+        assertEquals(70, entry.order)
+        assertTrue(entry.access.requiresAdmin)
+
+        val item = entry.render(scope()) as UiComponent.ListItem
+        assertEquals("Podcast Index credentials", item.title)
+        assertEquals(UiAction.OpenPage("podcastindex.credentials"), item.action)
+        assertEquals("Not configured", item.trailing)
+
+        val configured = entry(mapOf("podcastIndex.apiKey" to "envKey", "podcastIndex.apiSecret" to "envSecret"))
+            .render(scope()) as UiComponent.ListItem
+        assertEquals("Configured", configured.trailing)
+    }
+
+    @Test
+    fun `the page is an admin page without a slot`() {
         val contribution = contribution()
         assertEquals("podcastindex.credentials", contribution.id)
-        assertEquals(UiSlots.SETTINGS, contribution.slot)
+        assertEquals(UiContributionKind.PAGE, contribution.kind)
+        assertNull(contribution.slot)
         assertEquals(70, contribution.order)
         assertTrue(contribution.access.requiresAdmin)
     }
@@ -67,21 +98,21 @@ class PodcastIndexCredentialsContributionTest {
     fun `renders the missing badge and required fields when unconfigured`() = runBlocking {
         coEvery { settings.getAll() } returns emptyMap()
 
-        val card = contribution().render(scope()) as UiComponent.Card
-        assertEquals("Podcast Index credentials", card.title)
-        val badge = card.children.filterIsInstance<UiComponent.Badge>().single()
+        val page = contribution().render(scope()) as UiComponent.Column
+        val badge = page.children.filterIsInstance<UiComponent.Badge>().single()
         assertEquals("Not configured", badge.text)
         assertEquals(UiTone.WARNING, badge.tone)
-        val hint = card.children.filterIsInstance<UiComponent.Text>().single()
+        val hint = page.children.filterIsInstance<UiComponent.Text>().single()
         assertTrue(hint.text.startsWith("Create a free API key"))
 
-        val fields = card.fields()
+        val fields = page.fields()
         assertEquals(listOf("apiKey", "apiSecret"), fields.map { it.key })
         assertTrue(fields.all { it.secret && it.required })
         assertTrue(fields.all { it.value == null })
-        assertTrue(card.actions.isEmpty())
+        assertTrue(page.children.none { it is UiComponent.Divider })
+        assertTrue(page.buttons().isEmpty())
 
-        val form = card.children.filterIsInstance<UiComponent.Form>().single()
+        val form = page.children.filterIsInstance<UiComponent.Form>().single()
         assertEquals(UiAction.Invoke("podcastindex.credentials", "save", formId = "podcastindex"), form.submit)
     }
 
@@ -89,25 +120,28 @@ class PodcastIndexCredentialsContributionTest {
     fun `renders the configured badge and the environment hint when only the environment is set`() = runBlocking {
         coEvery { settings.getAll() } returns emptyMap()
 
-        val card = contribution(mapOf("podcastIndex.apiKey" to "envKey", "podcastIndex.apiSecret" to "envSecret"))
-            .render(scope()) as UiComponent.Card
-        val badge = card.children.filterIsInstance<UiComponent.Badge>().single()
+        val page = contribution(mapOf("podcastIndex.apiKey" to "envKey", "podcastIndex.apiSecret" to "envSecret"))
+            .render(scope()) as UiComponent.Column
+        val badge = page.children.filterIsInstance<UiComponent.Badge>().single()
         assertEquals("Configured", badge.text)
         assertEquals(UiTone.SUCCESS, badge.tone)
-        assertTrue(card.children.filterIsInstance<UiComponent.Text>().single().text.startsWith("Using the credentials from the server environment"))
-        assertTrue(card.fields().all { it.required })
-        assertTrue(card.actions.isEmpty())
+        assertTrue(page.children.filterIsInstance<UiComponent.Text>().single().text.startsWith("Using the credentials from the server environment"))
+        assertTrue(page.fields().all { it.required })
+        assertTrue(page.children.none { it is UiComponent.Divider })
+        assertTrue(page.buttons().isEmpty())
     }
 
     @Test
     fun `renders the stored hint, optional fields and a clear action once stored`() = runBlocking {
         coEvery { settings.getAll() } returns mapOf("apiKey" to "storedKey", "apiSecret" to "storedSecret")
 
-        val card = contribution().render(scope()) as UiComponent.Card
-        assertEquals("Using the credentials stored here.", card.children.filterIsInstance<UiComponent.Text>().single().text)
-        assertTrue(card.fields().none { it.required })
-        assertTrue(card.fields().all { it.value == null })
-        val clear = card.actions.single() as UiComponent.Button
+        val page = contribution().render(scope()) as UiComponent.Column
+        assertEquals("Using the credentials stored here.", page.children.filterIsInstance<UiComponent.Text>().single().text)
+        assertTrue(page.fields().none { it.required })
+        assertTrue(page.fields().all { it.value == null })
+        assertTrue(page.children.any { it is UiComponent.Divider })
+        assertTrue(page.children.indexOfFirst { it is UiComponent.Divider } < page.children.indexOfLast { it is UiComponent.Column })
+        val clear = page.buttons().single()
         assertEquals("Remove stored credentials", clear.label)
         assertEquals(UiAction.Invoke("podcastindex.credentials", "clear"), clear.action)
     }

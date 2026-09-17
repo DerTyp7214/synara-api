@@ -7,6 +7,7 @@ import dev.dertyp.plugins.UiRenderScope
 import dev.dertyp.services.podcast.index.PodcastIndexCredentialSource.Companion.KEY_API_KEY
 import dev.dertyp.services.podcast.index.PodcastIndexCredentialSource.Companion.KEY_API_SECRET
 import dev.dertyp.ui.UiAction
+import dev.dertyp.ui.UiAlign
 import dev.dertyp.ui.UiButtonStyle
 import dev.dertyp.ui.UiComponent
 import dev.dertyp.ui.UiContributionKind
@@ -16,19 +17,46 @@ import dev.dertyp.ui.UiIconName
 import dev.dertyp.ui.UiInvokeResult
 import dev.dertyp.ui.UiInvokeStatus
 import dev.dertyp.ui.UiSlots
+import dev.dertyp.ui.UiSpacing
 import dev.dertyp.ui.UiTextStyle
 import dev.dertyp.ui.UiTone
 import dev.dertyp.ui.UiValue
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
+class PodcastIndexCredentialsEntryContribution(
+    private val credentials: PodcastIndexCredentialSource,
+    private val settings: PluginSettings,
+) : UiContribution(
+    id = "podcastindex.credentials.entry",
+    kind = UiContributionKind.SLOT,
+    slot = UiSlots.SETTINGS,
+    titleKey = "podcastindex.credentials.title",
+    descriptionKey = "podcastindex.credentials.description",
+    icon = UiIcon(UiIconName.KEY),
+    order = 70,
+    access = UiAccess(requiresAdmin = true),
+) {
+    override fun changes(scope: UiRenderScope): Flow<Unit> = settings.changes().map { }
+
+    override suspend fun render(scope: UiRenderScope): UiComponent {
+        val configured = credentials.current() != null
+        return UiComponent.ListItem(
+            title = scope.t("podcastindex.credentials.title"),
+            subtitle = scope.t("podcastindex.credentials.description"),
+            icon = icon,
+            trailing = if (configured) scope.t("podcastindex.credentials.configured") else scope.t("podcastindex.credentials.missing"),
+            action = UiAction.OpenPage(PodcastIndexCredentialsContribution.ID),
+        )
+    }
+}
+
 class PodcastIndexCredentialsContribution(
     private val credentials: PodcastIndexCredentialSource,
     private val settings: PluginSettings,
 ) : UiContribution(
-    id = "podcastindex.credentials",
-    kind = UiContributionKind.SLOT,
-    slot = UiSlots.SETTINGS,
+    id = ID,
+    kind = UiContributionKind.PAGE,
     titleKey = "podcastindex.credentials.title",
     descriptionKey = "podcastindex.credentials.description",
     icon = UiIcon(UiIconName.KEY),
@@ -46,49 +74,48 @@ class PodcastIndexCredentialsContribution(
             fromEnvironment != null -> scope.t("$PREFIX.envHint")
             else -> scope.t("$PREFIX.noneHint")
         }
-        return UiComponent.Card(
-            title = scope.t("$PREFIX.title"),
-            subtitle = scope.t("$PREFIX.description"),
-            icon = icon,
-            children = listOf(
-                UiComponent.Badge(
-                    if (configured) scope.t("$PREFIX.configured") else scope.t("$PREFIX.missing"),
-                    if (configured) UiTone.SUCCESS else UiTone.WARNING,
-                ),
-                UiComponent.Text(hint, style = UiTextStyle.CAPTION, emphasis = UiEmphasis.LOW),
-                UiComponent.Form(
-                    id = FORM_ID,
-                    submit = UiAction.Invoke(id, "save", formId = FORM_ID),
-                    submitLabel = scope.t("$PREFIX.save"),
-                    children = listOf(
-                        UiComponent.TextField(
-                            key = KEY_API_KEY,
-                            label = scope.t("$PREFIX.apiKey"),
-                            helper = scope.t("$PREFIX.apiKeyHelper"),
-                            secret = true,
-                            required = !stored,
-                        ),
-                        UiComponent.TextField(
-                            key = KEY_API_SECRET,
-                            label = scope.t("$PREFIX.apiSecret"),
-                            secret = true,
-                            required = !stored,
-                        ),
+        val children = mutableListOf<UiComponent>(
+            UiComponent.Badge(
+                if (configured) scope.t("$PREFIX.configured") else scope.t("$PREFIX.missing"),
+                if (configured) UiTone.SUCCESS else UiTone.WARNING,
+            ),
+            UiComponent.Text(hint, style = UiTextStyle.CAPTION, emphasis = UiEmphasis.LOW),
+            UiComponent.Form(
+                id = FORM_ID,
+                submit = UiAction.Invoke(id, "save", formId = FORM_ID),
+                submitLabel = scope.t("$PREFIX.save"),
+                children = listOf(
+                    UiComponent.TextField(
+                        key = KEY_API_KEY,
+                        label = scope.t("$PREFIX.apiKey"),
+                        helper = scope.t("$PREFIX.apiKeyHelper"),
+                        secret = true,
+                        required = !stored,
+                    ),
+                    UiComponent.TextField(
+                        key = KEY_API_SECRET,
+                        label = scope.t("$PREFIX.apiSecret"),
+                        secret = true,
+                        required = !stored,
                     ),
                 ),
             ),
-            actions = if (stored) {
+        )
+        if (stored) {
+            children += UiComponent.Divider
+            children += UiComponent.Column(
                 listOf(
                     UiComponent.Button(
                         label = scope.t("$PREFIX.clear"),
                         action = UiAction.Invoke(id, "clear"),
                         style = UiButtonStyle.DESTRUCTIVE,
-                    )
-                )
-            } else {
-                emptyList()
-            },
-        )
+                    ),
+                ),
+                spacing = UiSpacing.SMALL,
+                align = UiAlign.START,
+            )
+        }
+        return UiComponent.Column(children)
     }
 
     override suspend fun invoke(scope: UiRenderScope, actionId: String, values: Map<String, UiValue>): UiInvokeResult = when (actionId) {
