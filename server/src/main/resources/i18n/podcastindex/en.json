@@ -1,0 +1,18 @@
+{
+  "podcastindex.credentials.title": "Podcast Index credentials",
+  "podcastindex.credentials.description": "API key and secret for searching podcastindex.org",
+  "podcastindex.credentials.configured": "Configured",
+  "podcastindex.credentials.missing": "Not configured",
+  "podcastindex.credentials.storedHint": "Using the credentials stored here.",
+  "podcastindex.credentials.envHint": "Using the credentials from the server environment. Values stored here override them.",
+  "podcastindex.credentials.noneHint": "Create a free API key at api.podcastindex.org and store it here, or set PODCAST_INDEX_API_KEY and PODCAST_INDEX_API_SECRET on the server.",
+  "podcastindex.credentials.apiKey": "API key",
+  "podcastindex.credentials.apiKeyHelper": "The API key shown after signing up at api.podcastindex.org.",
+  "podcastindex.credentials.apiSecret": "API secret",
+  "podcastindex.credentials.save": "Save credentials",
+  "podcastindex.credentials.saved": "Credentials saved",
+  "podcastindex.credentials.clear": "Remove stored credentials",
+  "podcastindex.credentials.cleared": "Stored credentials removed",
+  "podcastindex.credentials.error.apiKey": "The API key is required.",
+  "podcastindex.credentials.error.apiSecret": "The API secret is required."
+}

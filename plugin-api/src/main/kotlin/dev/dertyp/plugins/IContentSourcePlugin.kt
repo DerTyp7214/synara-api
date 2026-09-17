@@ -7,5 +7,6 @@ interface IContentSourcePlugin : ISynaraPlugin {
     fun getImporters(): List<IImporter> = getImporter()?.let { listOf(it) } ?: emptyList()
     fun getIndexer(): IPluginIndexer? = null
     fun getIndexers(): List<IPluginIndexer> = getIndexer()?.let { listOf(it) } ?: emptyList()
+    fun getPodcastIndexes(): List<IPodcastIndex> = emptyList()
     fun getMetadataService(type: IMetadataService.MetadataType): IMetadataService? = null
 }

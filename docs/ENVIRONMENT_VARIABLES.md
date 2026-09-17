@@ -49,6 +49,8 @@ Most variables have sensible defaults and are **optional**. Only variables witho
 | `IMAGE_CACHE_TOKEN` | Image Cache auth token. | No | - | - |
 | `IMAGE_CACHE_URL` | Image Cache service URL. | No | - | - |
 | `LINKRESOLVER_API_KEY` | API key for the self-hosted LinkResolver service (linkresolver.synara.audio). | No | - | - |
+| `PODCAST_INDEX_API_KEY` | Podcast Index (podcastindex.org) API key used to search podcast directories. Can also be stored through the admin settings card, which takes precedence. | No | - | - |
+| `PODCAST_INDEX_API_SECRET` | Podcast Index API secret belonging to PODCAST_INDEX_API_KEY. | No | - | - |
 | `SPOTIFY_CLIENT_ID` | Spotify API Client ID. | No | - | - |
 | `SPOTIFY_CLIENT_SECRET` | Spotify API Client Secret. | No | - | - |
 | `TIDAL_CLIENT_ID` | Tidal API Client ID. | No | - | - |

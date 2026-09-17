@@ -28,7 +28,7 @@ Additional capabilities are opt-in through marker interfaces your plugin class c
 
 | Interface | Purpose |
 |---|---|
-| `IContentSourcePlugin` | Provide `IImporter`s, `IPluginIndexer`s and metadata services. |
+| `IContentSourcePlugin` | Provide `IImporter`s, `IPluginIndexer`s, `IPodcastIndex`es and metadata services. |
 | `IRoutePlugin` | Register raw Ktor routes. |
 | `IUiPlugin` | Contribute server-driven UI (see below). |
 
@@ -161,6 +161,12 @@ context.intake.register(object : IntakeResolver {
 ### Jobs
 
 `context.jobs` is a per-kind FIFO queue with one running job per kind (kinds run in parallel): `enqueue(kind, title, user, summary) { … }` returns the job id; inside the body use `log(line)`, `progress(value, message)` and `isActive()` (false once cancelled). `jobs(kind, user)` streams `JobInfo`s (pending/running/finished with progress), `log(jobId)` streams a job's lines, `cancel(jobId)` cancels your own source's jobs. Imports run in kind `"import"`, favourites syncs in `"favourites"`.
+
+### Podcast indexes
+
+An `IPodcastIndex` is a searchable external podcast directory. `id` must be unique and stable — clients pass it to `searchIndex` — and `name` is shown to users. `isConfigured()` says whether the index can be searched right now (for example credentials are present); unconfigured indexes are skipped. `search(query, limit)` returns up to `limit` `PodcastIndexEntry` values with at least `feedUrl` and `title`; it may throw, in which case the server logs the failure and treats the index as empty for that call, and applies a 10 second timeout per index. The server normalizes and deduplicates results by feed URL across indexes and leaves out feeds it already follows.
+
+The built-in `podcastindex` plugin (Podcast Index, credentials via `PODCAST_INDEX_API_KEY`/`PODCAST_INDEX_API_SECRET` or the admin settings card) is the reference implementation.
 
 ### Translations
 

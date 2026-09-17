@@ -17,6 +17,7 @@ import dev.dertyp.db.UserCapabilityTable
 import dev.dertyp.db.UserTable
 import dev.dertyp.services.podcast.PodcastFeedService
 import dev.dertyp.services.podcast.PodcastImportService
+import dev.dertyp.services.podcast.PodcastIndexService
 import dev.dertyp.services.podcast.PodcastLocalScanService
 import dev.dertyp.services.podcast.PodcastService
 import dev.dertyp.services.podcast.PodcastStreamService
@@ -160,7 +161,15 @@ class CapabilityAuthorizationTest : KoinTest {
         )
         coEvery { localScanService.scan(any()) } returns PodcastScanResult(0, 0, 0, 0, 0)
 
-        return RpcPodcastService(user, podcastService, feedService, localScanService, importService, streamService)
+        return RpcPodcastService(
+            user,
+            podcastService,
+            feedService,
+            localScanService,
+            importService,
+            streamService,
+            mockk<PodcastIndexService>(relaxed = true)
+        )
     }
 
     @ParameterizedTest

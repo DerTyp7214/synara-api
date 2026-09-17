@@ -5,6 +5,8 @@ import dev.dertyp.data.EpisodePlaybackReport
 import dev.dertyp.data.PaginatedResponse
 import dev.dertyp.data.PodcastEpisode
 import dev.dertyp.data.PodcastEpisodeProgress
+import dev.dertyp.data.PodcastIndexInfo
+import dev.dertyp.data.PodcastIndexResult
 import dev.dertyp.data.PodcastScanResult
 import dev.dertyp.data.PodcastShow
 import dev.dertyp.data.PodcastShowSettings
@@ -23,7 +25,8 @@ class RpcPodcastService(
     private val feedService: PodcastFeedService,
     private val localScanService: PodcastLocalScanService,
     private val importService: PodcastImportService,
-    private val streamService: PodcastStreamService
+    private val streamService: PodcastStreamService,
+    private val indexService: PodcastIndexService
 ) : IPodcastService,
     RestFileProvider {
     override suspend fun getFile(methodName: String, args: List<Any?>): StreamInfo? {
@@ -44,6 +47,11 @@ class RpcPodcastService(
 
     override suspend fun browseShows(query: String, page: Int, pageSize: Int): PaginatedResponse<PodcastShow> =
         podcastService.browseShows(user.id, query, page, pageSize)
+
+    override suspend fun searchIndex(query: String, limit: Int, indexes: List<String>): List<PodcastIndexResult> =
+        indexService.search(query, limit, indexes)
+
+    override suspend fun getIndexes(): List<PodcastIndexInfo> = indexService.indexes()
 
     override suspend fun getShow(showId: UUID): PodcastShow? = podcastService.getShow(user.id, showId)
 

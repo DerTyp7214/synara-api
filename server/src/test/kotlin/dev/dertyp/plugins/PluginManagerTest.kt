@@ -147,4 +147,32 @@ class PluginManagerTest : KoinTest {
         assert(externalPlugin.initCalled)
         assertEquals(1337, getKoin().get<Int>())
     }
+
+    @Test
+    fun `registers podcast indexes of content source plugins`() {
+        val fakeIndex = object : IPodcastIndex {
+            override val id: String = "fake"
+            override val name: String = "Fake"
+
+            override suspend fun isConfigured(): Boolean = true
+
+            override suspend fun search(query: String, limit: Int): List<PodcastIndexEntry> = emptyList()
+        }
+
+        val contentSourcePlugin = object : IContentSourcePlugin {
+            override val id: String = "fake-source"
+            override val name: String = "Fake Source"
+
+            override fun init(context: PluginContext) {}
+
+            override fun getPodcastIndexes(): List<IPodcastIndex> = listOf(fakeIndex)
+        }
+
+        val loadPluginMethod = pluginManager.javaClass.getDeclaredMethod("loadPlugin", ISynaraPlugin::class.java)
+        loadPluginMethod.isAccessible = true
+
+        loadPluginMethod.invoke(pluginManager, contentSourcePlugin)
+
+        assertEquals(listOf("fake"), pluginManager.getPodcastIndexes().map { it.id })
+    }
 }

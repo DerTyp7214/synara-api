@@ -8,6 +8,7 @@ import dev.dertyp.services.import.MusicBrainzPlugin
 import dev.dertyp.services.import.TidalPlugin
 import dev.dertyp.services.metadata.IMetadataService
 import dev.dertyp.services.metadata.MetadataDispatcherService
+import dev.dertyp.services.podcast.index.PodcastIndexPlugin
 import dev.dertyp.services.schedule.ScheduleService
 import dev.dertyp.services.gamdl.GamdlPlugin
 import dev.dertyp.services.recommendation.RecommendationPlugin
@@ -61,6 +62,7 @@ class PluginManager(
     private val loadedPlugins = mutableListOf<ISynaraPlugin>()
     private val importers = mutableMapOf<String, IImporter>()
     private val indexers = mutableSetOf<IPluginIndexer>()
+    private val podcastIndexes = mutableMapOf<String, IPodcastIndex>()
 
     var defaultImporterId: String = "tiddl"
 
@@ -76,6 +78,7 @@ class PluginManager(
         loadPlugin(MusicBrainzPlugin())
         loadPlugin(RecommendationPlugin())
         loadPlugin(SubsonicPlugin())
+        loadPlugin(PodcastIndexPlugin())
         loadPlugins()
     }
 
@@ -132,6 +135,11 @@ class PluginManager(
                 plugin.getImporters().forEach {
                     registerImporter(it)
                 }
+
+                plugin.getPodcastIndexes().forEach {
+                    podcastIndexes[it.id] = it
+                    logger.info("Registered podcast index: ${it.name} (${it.id})")
+                }
             }
             logger.info("Loaded plugin: ${plugin.name} (${plugin.id})")
         } catch (e: Exception) {
@@ -177,6 +185,7 @@ class PluginManager(
     fun getImporter(id: String = defaultImporterId): IImporter? = importers[id]
     fun getAllImporters(): Collection<IImporter> = importers.values
     fun getAllIndexers(): Collection<IPluginIndexer> = indexers
+    fun getPodcastIndexes(): List<IPodcastIndex> = podcastIndexes.values.toList()
 
     fun getMetadataService(type: IMetadataService.MetadataType): IMetadataService? {
         return loadedPlugins.filterIsInstance<IContentSourcePlugin>()

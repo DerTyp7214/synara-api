@@ -35,6 +35,7 @@ import dev.dertyp.services.import.ImportService
 import dev.dertyp.services.import.ImporterProxy
 import dev.dertyp.services.metadata.*
 import dev.dertyp.services.podcast.PodcastFeedService
+import dev.dertyp.services.podcast.PodcastIndexService
 import dev.dertyp.services.podcast.PodcastHttp
 import dev.dertyp.services.podcast.PodcastImportService
 import dev.dertyp.services.podcast.PodcastLocalScanService
@@ -323,6 +324,7 @@ fun mainModule(application: Application, environment: ApplicationEnvironment): M
     singleOf(::PodcastImportService)
     singleOf(::PodcastMaintenanceService)
     singleOf(::PodcastStreamService)
+    singleOf(::PodcastIndexService)
     singleOf(::ClientRequestService)
     singleOf(::CustomAudioService)
     singleOf(::ReverseProxyService)

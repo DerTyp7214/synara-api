@@ -461,6 +461,28 @@ class GeneratedRestRoutesSmokeTest {
     }
 
     @Test
+    fun `a repeated query list parameter is bound`() = testApplication {
+        setUpApplication()
+        coEvery { podcast.searchIndex("x", 25, listOf("a", "b")) } returns emptyList()
+
+        val response = client.get("/podcast/index?query=x&indexes=a&indexes=b")
+
+        assertEquals(HttpStatusCode.OK, response.status)
+        coVerify { podcast.searchIndex("x", 25, listOf("a", "b")) }
+    }
+
+    @Test
+    fun `the podcast indexes are listed`() = testApplication {
+        setUpApplication()
+        coEvery { podcast.getIndexes() } returns emptyList()
+
+        val response = client.get("/podcast/indexes")
+
+        assertEquals(HttpStatusCode.OK, response.status)
+        coVerify { podcast.getIndexes() }
+    }
+
+    @Test
     fun `the documented paths are exactly the routed paths`() = testApplication {
         setUpApplication()
 

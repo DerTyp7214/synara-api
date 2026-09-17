@@ -333,6 +333,34 @@ class PodcastServiceTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
+    fun `knownSourceKeys returns only the keys of existing shows`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val feedUrlOne = "https://feed.example/known-1"
+        val feedUrlTwo = "https://feed.example/known-2"
+        transaction(database) {
+            insertFeedShow(feedUrlOne)
+            insertFeedShow(feedUrlTwo)
+        }
+        val keyOne = PodcastKeys.feedSourceKey(feedUrlOne)
+        val keyTwo = PodcastKeys.feedSourceKey(feedUrlTwo)
+
+        val result = service.knownSourceKeys(listOf(keyOne, keyTwo, "FEED:missing"))
+
+        assertEquals(setOf(keyOne, keyTwo), result)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `knownSourceKeys returns an empty set for no keys`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+
+        val result = service.knownSourceKeys(emptyList())
+
+        assertTrue(result.isEmpty())
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
     fun `getEpisodes orders newest or oldest first`(dialect: DbDialect) = runBlocking {
         setup(dialect)
         val userId = transaction(database) { insertUser() }

@@ -5,6 +5,8 @@ import dev.dertyp.data.EpisodePlaybackReport
 import io.ktor.http.ContentType
 import dev.dertyp.data.PodcastDeliveryMode
 import dev.dertyp.data.PodcastEpisode
+import dev.dertyp.data.PodcastIndexInfo
+import dev.dertyp.data.PodcastIndexResult
 import dev.dertyp.data.PodcastShow
 import dev.dertyp.data.PodcastShowSettings
 import dev.dertyp.data.PodcastSource
@@ -27,8 +29,10 @@ class RpcPodcastServiceTest {
     private val localScanService = mockk<PodcastLocalScanService>(relaxed = true)
     private val importService = mockk<PodcastImportService>(relaxed = true)
     private val streamService = mockk<PodcastStreamService>(relaxed = true)
+    private val indexService = mockk<PodcastIndexService>(relaxed = true)
     private val user = User(UUID.randomUUID(), "user", passwordHash = "hash")
-    private val service = RpcPodcastService(user, podcastService, feedService, localScanService, importService, streamService)
+    private val service =
+        RpcPodcastService(user, podcastService, feedService, localScanService, importService, streamService, indexService)
 
     private fun show() = PodcastShow(id = UUID.randomUUID(), source = PodcastSource.FEED, title = "Show", createdAt = 0, updatedAt = 0)
 
@@ -83,6 +87,26 @@ class RpcPodcastServiceTest {
         service.browseShows("term", 2, 25)
 
         coVerify(exactly = 1) { podcastService.browseShows(user.id, "term", 2, 25) }
+    }
+
+    @Test
+    fun `searchIndex forwards query limit and indexes`() = runBlocking {
+        val results = listOf(PodcastIndexResult(indexId = "a", indexName = "A", feedUrl = "https://feed.example/x.xml", title = "Show"))
+        coEvery { indexService.search("q", 10, listOf("a")) } returns results
+
+        assertEquals(results, service.searchIndex("q", 10, listOf("a")))
+
+        coVerify(exactly = 1) { indexService.search("q", 10, listOf("a")) }
+    }
+
+    @Test
+    fun `getIndexes forwards to the index service`() = runBlocking {
+        val infos = listOf(PodcastIndexInfo("a", "A", true))
+        coEvery { indexService.indexes() } returns infos
+
+        assertEquals(infos, service.getIndexes())
+
+        coVerify(exactly = 1) { indexService.indexes() }
     }
 
     @Test

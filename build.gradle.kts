@@ -86,6 +86,8 @@ tasks.register("generateEnvDocs") {
             "GAMDL_COOKIES_PATH" to mapOf("desc" to "Path to the Netscape cookies.txt for Apple Music (gamdl importer).", "cat" to "External Services"),
             "GAMDL_WVD_PATH" to mapOf("desc" to "Optional path to a Widevine .wvd device for higher-quality gamdl codecs.", "cat" to "External Services"),
             "GAMDL_CODEC_SONG" to mapOf("desc" to "Optional gamdl song codec override (empty = gamdl default, e.g. aac-web). Advanced/version-sensitive.", "cat" to "External Services"),
+            "PODCAST_INDEX_API_KEY" to mapOf("desc" to "Podcast Index (podcastindex.org) API key used to search podcast directories. Can also be stored through the admin settings card, which takes precedence.", "cat" to "External Services"),
+            "PODCAST_INDEX_API_SECRET" to mapOf("desc" to "Podcast Index API secret belonging to PODCAST_INDEX_API_KEY.", "cat" to "External Services"),
             "PROXY_HOSTNAME" to mapOf("desc" to "Public hostname of the proxy.", "cat" to "Proxy Configuration"),
             "PROXY_CONTROL_PORT" to mapOf("desc" to "Port for the proxy control interface.", "cat" to "Proxy Configuration"),
             "PROXY_SSL" to mapOf("desc" to "Whether to use SSL (true/false).", "cat" to "Proxy Configuration"),

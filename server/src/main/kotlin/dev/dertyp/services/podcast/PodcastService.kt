@@ -494,6 +494,17 @@ class PodcastService(private val http: PodcastHttp) : Service() {
             ?.let(::mapShowRow)
     }
 
+    suspend fun knownSourceKeys(sourceKeys: Collection<String>): Set<String> {
+        if (sourceKeys.isEmpty()) return emptySet()
+        return dbQuery {
+            PodcastShowTable
+                .select(PodcastShowTable.sourceKey)
+                .where { PodcastShowTable.sourceKey inList sourceKeys }
+                .map { it[PodcastShowTable.sourceKey] }
+                .toSet()
+        }
+    }
+
     suspend fun showById(showId: UUID): PodcastShowRow? = dbQuery { showRow(showId) }
 
     suspend fun feedShowsWithSubscribers(): List<PodcastShowRow> = dbQuery {

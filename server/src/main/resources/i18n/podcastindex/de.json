@@ -1,0 +1,18 @@
+{
+  "podcastindex.credentials.title": "Podcast-Index-Zugangsdaten",
+  "podcastindex.credentials.description": "API-Schlüssel und Secret für die Suche auf podcastindex.org",
+  "podcastindex.credentials.configured": "Eingerichtet",
+  "podcastindex.credentials.missing": "Nicht eingerichtet",
+  "podcastindex.credentials.storedHint": "Es werden die hier gespeicherten Zugangsdaten verwendet.",
+  "podcastindex.credentials.envHint": "Es werden die Zugangsdaten aus der Serverumgebung verwendet. Hier gespeicherte Werte haben Vorrang.",
+  "podcastindex.credentials.noneHint": "Erstelle einen kostenlosen API-Schlüssel auf api.podcastindex.org und hinterlege ihn hier, oder setze PODCAST_INDEX_API_KEY und PODCAST_INDEX_API_SECRET auf dem Server.",
+  "podcastindex.credentials.apiKey": "API-Schlüssel",
+  "podcastindex.credentials.apiKeyHelper": "Der API-Schlüssel, der nach der Registrierung auf api.podcastindex.org angezeigt wird.",
+  "podcastindex.credentials.apiSecret": "API-Secret",
+  "podcastindex.credentials.save": "Zugangsdaten speichern",
+  "podcastindex.credentials.saved": "Zugangsdaten gespeichert",
+  "podcastindex.credentials.clear": "Gespeicherte Zugangsdaten entfernen",
+  "podcastindex.credentials.cleared": "Gespeicherte Zugangsdaten entfernt",
+  "podcastindex.credentials.error.apiKey": "Der API-Schlüssel ist erforderlich.",
+  "podcastindex.credentials.error.apiSecret": "Das API-Secret ist erforderlich."
+}
