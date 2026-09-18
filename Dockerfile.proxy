@@ -1,4 +1,4 @@
-FROM amazoncorretto:25 AS runtime
+FROM amazoncorretto:26 AS runtime
 EXPOSE 8081
 RUN mkdir /app
 COPY *.jar /app/proxy.jar
