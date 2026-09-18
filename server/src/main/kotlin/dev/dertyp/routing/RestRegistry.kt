@@ -128,7 +128,7 @@ fun Route.registerAuthenticatedRestServices(koin: Koin) {
     }
     registerIPodcastServiceRest(authenticated = true) {
         val user = call.getUser() ?: throw IllegalArgumentException("No user found")
-        RpcPodcastService(user, koin.get(), koin.get(), koin.get(), koin.get(), koin.get(), koin.get()).withAuthorization<IPodcastService>(user)
+        RpcPodcastService(user, koin.get(), koin.get(), koin.get(), koin.get(), koin.get(), koin.get(), koin.get()).withAuthorization<IPodcastService>(user)
     }
     registerIClientRequestServiceRest(authenticated = true) {
         val user = call.getUser() ?: throw IllegalArgumentException("No user found")

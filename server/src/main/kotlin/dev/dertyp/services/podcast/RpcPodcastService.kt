@@ -26,7 +26,8 @@ class RpcPodcastService(
     private val localScanService: PodcastLocalScanService,
     private val importService: PodcastImportService,
     private val streamService: PodcastStreamService,
-    private val indexService: PodcastIndexService
+    private val indexService: PodcastIndexService,
+    private val maintenanceService: PodcastMaintenanceService
 ) : IPodcastService,
     RestFileProvider {
     override suspend fun getFile(methodName: String, args: List<Any?>): StreamInfo? {
@@ -107,6 +108,8 @@ class RpcPodcastService(
         importService.removeImport(episodeId)
         return requireNotNull(podcastService.getEpisode(user.id, episodeId)) { "Podcast episode $episodeId does not exist" }
     }
+
+    override suspend fun deleteShow(showId: UUID): Boolean = maintenanceService.deleteShow(showId)
 
     override suspend fun scanLocal(): PodcastScanResult = localScanService.scan()
 

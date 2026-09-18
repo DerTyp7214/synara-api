@@ -30,9 +30,19 @@ class RpcPodcastServiceTest {
     private val importService = mockk<PodcastImportService>(relaxed = true)
     private val streamService = mockk<PodcastStreamService>(relaxed = true)
     private val indexService = mockk<PodcastIndexService>(relaxed = true)
+    private val maintenanceService = mockk<PodcastMaintenanceService>(relaxed = true)
     private val user = User(UUID.randomUUID(), "user", passwordHash = "hash")
     private val service =
-        RpcPodcastService(user, podcastService, feedService, localScanService, importService, streamService, indexService)
+        RpcPodcastService(
+            user,
+            podcastService,
+            feedService,
+            localScanService,
+            importService,
+            streamService,
+            indexService,
+            maintenanceService,
+        )
 
     private fun show() = PodcastShow(id = UUID.randomUUID(), source = PodcastSource.FEED, title = "Show", createdAt = 0, updatedAt = 0)
 
@@ -297,6 +307,16 @@ class RpcPodcastServiceTest {
         service.getTranscript(transcriptId)
 
         coVerify(exactly = 1) { podcastService.getTranscript(user.id, transcriptId) }
+    }
+
+    @Test
+    fun `deleteShow forwards the show id to the maintenance service`() = runBlocking {
+        val showId = UUID.randomUUID()
+        coEvery { maintenanceService.deleteShow(showId) } returns true
+
+        assertEquals(true, service.deleteShow(showId))
+
+        coVerify(exactly = 1) { maintenanceService.deleteShow(showId) }
     }
 
     @Test

@@ -188,7 +188,7 @@ private fun registerAuthenticated(koin: Koin, call: ApplicationCall, user: User,
     registrar.register(IQueueService::class) { RpcQueueService(user, sessionId, queueService, sessionService, clientRequestService).withAuthorization<IQueueService>(user).withLogging<IQueueService>(call) }
     registrar.register(IClientSettingsService::class) { RpcClientSettingsService(user, clientSettingsService).withAuthorization<IClientSettingsService>(user).withLogging<IClientSettingsService>(call) }
     registrar.register(ITimecodeTagService::class) { RpcTimecodeTagService(user, timecodeTagService).withAuthorization<ITimecodeTagService>(user).withLogging<ITimecodeTagService>(call) }
-    registrar.register(IPodcastService::class) { RpcPodcastService(user, koin.get(), koin.get(), koin.get(), koin.get(), koin.get(), koin.get()).withAuthorization<IPodcastService>(user).withLogging<IPodcastService>(call) }
+    registrar.register(IPodcastService::class) { RpcPodcastService(user, koin.get(), koin.get(), koin.get(), koin.get(), koin.get(), koin.get(), koin.get()).withAuthorization<IPodcastService>(user).withLogging<IPodcastService>(call) }
     registrar.register(IClientRequestService::class) { RpcClientRequestService(sessionId ?: throw IllegalArgumentException("No session found"), clientRequestService).withAuthorization<IClientRequestService>(user).withLogging<IClientRequestService>(call) }
     registrar.register(ICustomAudioService::class) { CustomAudioRpcService(customAudioService).withAuthorization<ICustomAudioService>(user).withLogging<ICustomAudioService>(call) }
     registrar.register(IDbManagementService::class) { dbManagementService.withAuthorization<IDbManagementService>(user).withLogging<IDbManagementService>(call) }

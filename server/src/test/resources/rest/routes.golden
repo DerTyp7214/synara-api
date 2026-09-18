@@ -219,6 +219,7 @@ GET /playlist/byIds IPlaylistService.byIds [q:ids] JSON
 GET /playlist/byName IPlaylistService.byName [q:name] JSON
 GET /playlist/search IPlaylistService.rankedSearch [q:page? q:pageSize? q:query] JSON
 DELETE /podcast/import/{episodeId} IPodcastService.removeImport [p:episodeId] JSON
+DELETE /podcast/show/{showId} IPodcastService.deleteShow [p:showId] JSON
 DELETE /podcast/unsubscribe/{showId} IPodcastService.unsubscribe [p:showId] JSON
 GET /podcast/browseShows IPodcastService.browseShows [q:query? q:page? q:pageSize?] JSON
 GET /podcast/episode/{episodeId} IPodcastService.getEpisode [p:episodeId] JSON

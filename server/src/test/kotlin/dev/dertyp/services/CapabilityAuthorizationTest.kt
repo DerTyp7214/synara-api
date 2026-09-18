@@ -19,6 +19,7 @@ import dev.dertyp.services.podcast.PodcastFeedService
 import dev.dertyp.services.podcast.PodcastImportService
 import dev.dertyp.services.podcast.PodcastIndexService
 import dev.dertyp.services.podcast.PodcastLocalScanService
+import dev.dertyp.services.podcast.PodcastMaintenanceService
 import dev.dertyp.services.podcast.PodcastService
 import dev.dertyp.services.podcast.PodcastStreamService
 import dev.dertyp.services.podcast.RpcPodcastService
@@ -168,7 +169,8 @@ class CapabilityAuthorizationTest : KoinTest {
             localScanService,
             importService,
             streamService,
-            mockk<PodcastIndexService>(relaxed = true)
+            mockk<PodcastIndexService>(relaxed = true),
+            mockk<PodcastMaintenanceService>(relaxed = true)
         )
     }
 
@@ -250,6 +252,32 @@ class CapabilityAuthorizationTest : KoinTest {
 
         authorizedService.subscribe("https://feed.example/show.xml")
         authorizedService.reportPlayback(EpisodePlaybackReport(episodeId = UUID.randomUUID(), positionMs = 0))
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `podcast deleteShow requires admin`(dialect: DbDialect): Unit = runBlocking {
+        setup(dialect)
+        val userWithoutAdmin = User(id = UUID.randomUUID(), username = "podcast-nonadmin", passwordHash = "", isAdmin = false, capabilities = emptyList())
+        val authorizedService = podcastRpcService(userWithoutAdmin).withAuthorization<IPodcastService>(userWithoutAdmin)
+
+        assertFailsWith<UnauthorizedException> {
+            try {
+                authorizedService.deleteShow(UUID.randomUUID())
+            } catch (e: UndeclaredThrowableException) {
+                throw e.undeclaredThrowable
+            }
+        }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `podcast deleteShow is allowed for an admin`(dialect: DbDialect): Unit = runBlocking {
+        setup(dialect)
+        val adminUser = User(id = UUID.randomUUID(), username = "podcast-delete-admin", passwordHash = "", isAdmin = true, capabilities = emptyList())
+        val authorizedService = podcastRpcService(adminUser).withAuthorization<IPodcastService>(adminUser)
+
+        authorizedService.deleteShow(UUID.randomUUID())
     }
 
     @Test

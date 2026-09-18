@@ -36,6 +36,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.EnumSource
 import org.koin.core.context.startKoin
@@ -241,6 +242,21 @@ class PodcastMaintenanceServiceTest : KoinTest {
 
     private fun subscriptionCount(): Int = transaction(database) {
         PodcastSubscriptionTable.selectAll().count().toInt()
+    }
+
+    private fun insertTranscript(episodeId: UUID): UUID = transaction(database) {
+        val id = UUID.randomUUID()
+        PodcastTranscriptTable.insert {
+            it[PodcastTranscriptTable.id] = id
+            it[PodcastTranscriptTable.episodeId] = episodeId
+            it[sourceKey] = "source"
+            it[type] = "text/plain"
+        }
+        id
+    }
+
+    private fun transcriptCount(): Int = transaction(database) {
+        PodcastTranscriptTable.selectAll().count().toInt()
     }
 
     @ParameterizedTest
@@ -456,6 +472,51 @@ class PodcastMaintenanceServiceTest : KoinTest {
 
         assertEquals(1, maintenanceService.purgeOrphanedShows(olderThanMs = DAY_MS))
         assertEquals(0, showCount())
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `deleteShow removes a feed show its episodes transcripts progress and subscriptions and deletes the imported file`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val showId = insertShow(subscribed = true)
+            val (episodeId, file) = importedEpisode(showId, published = 1000L)
+            insertProgress(episodeId)
+            insertTranscript(episodeId)
+
+            assertTrue(maintenanceService.deleteShow(showId))
+
+            assertFalse(file.exists(), "expected the imported file to be deleted")
+            assertEquals(0, showCount())
+            assertEquals(0, episodeCount(showId))
+            assertEquals(0, progressCount())
+            assertEquals(0, subscriptionCount())
+            assertEquals(0, transcriptCount())
+        }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `deleteShow returns false for an unknown show id`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+
+        assertFalse(maintenanceService.deleteShow(UUID.randomUUID()))
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `deleteShow throws for a local show and leaves it in place`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val showId = insertShow(source = PodcastSource.LOCAL, subscribed = false)
+        val (episodeId, file) = importedEpisode(showId, published = 1000L)
+
+        assertThrows<IllegalArgumentException> {
+            runBlocking { maintenanceService.deleteShow(showId) }
+        }
+
+        assertEquals(1, showCount())
+        assertEquals(1, episodeCount(showId))
+        assertTrue(file.exists())
+        assertEquals(PodcastImportState.IMPORTED, podcastService.episodeById(episodeId)!!.importState)
     }
 
     companion object {
