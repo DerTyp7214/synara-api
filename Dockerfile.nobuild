@@ -1,5 +1,5 @@
 FROM python:3.13-slim-bookworm AS python-base
-FROM mwader/static-ffmpeg:8.0.1 AS ffmpeg-builder
+FROM mwader/static-ffmpeg:8.1.2 AS ffmpeg-builder
 FROM mtgupf/essentia:latest AS essentia-source
 
 FROM mtgupf/essentia:latest AS essentia-libs
