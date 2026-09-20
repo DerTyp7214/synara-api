@@ -2,11 +2,15 @@ package dev.dertyp.services.metadata
 
 import dev.dertyp.ApiClient
 import dev.dertyp.core.ApplicationScope
+import dev.dertyp.core.HttpClientQueueService
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
+import io.ktor.client.engine.mock.MockRequestHandleScope
+import io.ktor.client.engine.mock.MockRequestHandler
 import io.ktor.client.engine.mock.respond
 import io.ktor.client.engine.mock.respondError
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.client.request.HttpResponseData
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
@@ -19,6 +23,8 @@ import io.mockk.unmockkAll
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
@@ -31,6 +37,7 @@ class AppleMusicServiceTest : KoinTest {
     private lateinit var environment: ApplicationEnvironment
     private lateinit var appleMusicService: AppleMusicService
     private lateinit var mockEngine: MockEngine
+    private var queueService: HttpClientQueueService? = null
 
     @BeforeEach
     fun setup() {
@@ -121,7 +128,359 @@ class AppleMusicServiceTest : KoinTest {
 
     @AfterEach
     fun tearDown() {
+        runBlocking { queueService?.stopService() }
+        queueService = null
         unmockkAll()
+    }
+
+    private fun enableCatalog(storefront: String? = null) {
+        every { environment.config.propertyOrNull("appleMusic.teamId") } returns mockk { every { getString() } returns "TEAM1" }
+        every { environment.config.propertyOrNull("appleMusic.keyId") } returns mockk { every { getString() } returns "KEY1" }
+        every { environment.config.propertyOrNull("appleMusic.p8Path") } returns mockk { every { getString() } returns "/tmp/apple.p8" }
+        every { environment.config.propertyOrNull("appleMusic.storefront") } returns
+                storefront?.let { value -> mockk { every { getString() } returns value } }
+
+        val tokenField = appleMusicService.javaClass.getDeclaredField("appleMusicToken")
+        tokenField.isAccessible = true
+        tokenField.set(appleMusicService, "mock-token")
+        val expirationField = appleMusicService.javaClass.getDeclaredField("tokenExpiration")
+        expirationField.isAccessible = true
+        expirationField.set(appleMusicService, System.currentTimeMillis() + 100000)
+    }
+
+    private fun disableCatalog() {
+        every { environment.config.propertyOrNull("appleMusic.teamId") } returns null
+        every { environment.config.propertyOrNull("appleMusic.keyId") } returns null
+        every { environment.config.propertyOrNull("appleMusic.p8Path") } returns null
+    }
+
+    private suspend fun useEngine(handler: MockRequestHandler) {
+        mockEngine = MockEngine(handler)
+        every { ApiClient.instance } returns HttpClient(mockEngine) {
+            install(ContentNegotiation) { json(ApplicationScope.json) }
+        }
+        val queue = HttpClientQueueService()
+        queue.startService()
+        queueService = queue
+        every { ApiClient.queueInstance } returns queue
+    }
+
+    private fun MockRequestHandleScope.respondJson(content: String): HttpResponseData = respond(
+        content = content,
+        status = HttpStatusCode.OK,
+        headers = headersOf(HttpHeaders.ContentType, "application/json")
+    )
+
+    private fun albumJson(
+        id: String = "1440857781",
+        releaseDate: String = "2024-05-17",
+        isSingle: Boolean = false,
+        isComplete: Boolean = true,
+        isCompilation: Boolean = false,
+        artistIds: List<String> = listOf("111"),
+        withArtwork: Boolean = true
+    ): String {
+        val artwork = if (withArtwork) {
+            """, "artwork": {"url": "https://example.com/aa/{w}x{h}bb.jpg", "width": 1200, "height": 1200}"""
+        } else ""
+        val relationships = if (artistIds.isEmpty()) "" else """,
+                  "relationships": {
+                    "artists": {"data": [${artistIds.joinToString(",") { """{"id": "$it", "type": "artists"}""" }}]}
+                  }"""
+        return """
+            {
+              "id": "$id",
+              "type": "albums",
+              "attributes": {
+                "name": "Test Album",
+                "artistName": "Test Artist",
+                "releaseDate": "$releaseDate",
+                "isSingle": $isSingle,
+                "isComplete": $isComplete,
+                "isCompilation": $isCompilation,
+                "upc": "00602445790234",
+                "url": "https://music.apple.com/us/album/test-album/$id",
+                "trackCount": 12$artwork
+              }$relationships
+            }
+        """.trimIndent()
+    }
+
+    @Test
+    fun `catalogEnabled is false when the credentials are unset`() {
+        disableCatalog()
+
+        assertFalse(appleMusicService.catalogEnabled)
+    }
+
+    @Test
+    fun `catalogEnabled is false when the configuration yields blank values`() {
+        assertFalse(appleMusicService.catalogEnabled)
+    }
+
+    @Test
+    fun `catalogEnabled is true when team, key and p8 path are configured`() {
+        enableCatalog()
+
+        assertTrue(appleMusicService.catalogEnabled)
+    }
+
+    @Test
+    fun `getArtistCatalogAlbums uses the configured storefront`() = runBlocking {
+        enableCatalog(storefront = "de")
+        val paths = mutableListOf<String>()
+        useEngine { request ->
+            paths += request.url.encodedPath
+            respondJson("""{"data": []}""")
+        }
+
+        appleMusicService.getArtistCatalogAlbums("111")
+
+        assertEquals(listOf("/v1/catalog/de/artists/111/albums"), paths)
+    }
+
+    @Test
+    fun `getArtistCatalogAlbums pages via next and maps every field`() = runBlocking {
+        enableCatalog()
+        val paths = mutableListOf<String>()
+        useEngine { request ->
+            paths += request.url.toString()
+            if (request.url.parameters["offset"] == "100") {
+                respondJson("""{"data": [${albumJson(id = "222", releaseDate = "2023-01-02")}]}""")
+            } else {
+                respondJson(
+                    """
+                        {
+                          "data": [${albumJson()}],
+                          "next": "/v1/catalog/us/artists/111/albums?offset=100"
+                        }
+                    """.trimIndent()
+                )
+            }
+        }
+
+        val albums = appleMusicService.getArtistCatalogAlbums("111")
+        assertNotNull(albums)
+        val mapped = albums.orEmpty()
+
+        assertEquals(2, paths.size)
+        assertEquals(2, mapped.size)
+        val first = mapped[0]
+        assertEquals("1440857781", first.id)
+        assertEquals("Test Album", first.title)
+        assertEquals("Test Artist", first.artistName)
+        assertEquals(listOf("111"), first.artistIds)
+        assertEquals(LocalDate.of(2024, 5, 17), first.releaseDate)
+        assertFalse(first.isSingle)
+        assertTrue(first.isComplete)
+        assertFalse(first.isCompilation)
+        assertEquals("00602445790234", first.upc)
+        assertEquals("https://music.apple.com/us/album/test-album/1440857781", first.url)
+        assertEquals(12, first.trackCount)
+        assertEquals("https://example.com/aa/10000x0w-999.jpg", first.image?.url)
+        assertEquals("222", mapped[1].id)
+    }
+
+    @Test
+    fun `getArtistCatalogAlbums keeps future dated pre-releases`() = runBlocking {
+        enableCatalog()
+        useEngine {
+            respondJson("""{"data": [${albumJson(releaseDate = "2099-12-24", isComplete = false, isSingle = true)}]}""")
+        }
+
+        val albums = appleMusicService.getArtistCatalogAlbums("111").orEmpty()
+
+        assertEquals(1, albums.size)
+        assertEquals(LocalDate.of(2099, 12, 24), albums.first().releaseDate)
+        assertFalse(albums.first().isComplete)
+        assertTrue(albums.first().isSingle)
+    }
+
+    @Test
+    fun `getArtistCatalogAlbums accepts a year only release date`() = runBlocking {
+        enableCatalog()
+        useEngine { respondJson("""{"data": [${albumJson(releaseDate = "2019")}]}""") }
+
+        val albums = appleMusicService.getArtistCatalogAlbums("111")
+
+        assertEquals(LocalDate.of(2019, 1, 1), albums?.first()?.releaseDate)
+    }
+
+    @Test
+    fun `getArtistCatalogAlbums maps a missing artwork to a null image`() = runBlocking {
+        enableCatalog()
+        useEngine { respondJson("""{"data": [${albumJson(withArtwork = false)}]}""") }
+
+        val albums = appleMusicService.getArtistCatalogAlbums("111")
+
+        assertNull(albums?.first()?.image)
+    }
+
+    @Test
+    fun `getArtistCatalogAlbums maps missing relationships to empty artist ids`() = runBlocking {
+        enableCatalog()
+        useEngine { respondJson("""{"data": [${albumJson(artistIds = emptyList())}]}""") }
+
+        val albums = appleMusicService.getArtistCatalogAlbums("111")
+
+        assertEquals(emptyList<String>(), albums?.first()?.artistIds)
+    }
+
+    @Test
+    fun `getArtistCatalogAlbums returns null when the request fails`() = runBlocking {
+        enableCatalog()
+        useEngine { respondError(HttpStatusCode.NotFound) }
+
+        assertNull(appleMusicService.getArtistCatalogAlbums("111"))
+    }
+
+    @Test
+    fun `getArtistCatalogAlbums returns an empty list when the artist has no albums`() = runBlocking {
+        enableCatalog()
+        useEngine { respondJson("""{"data": []}""") }
+
+        assertEquals(emptyList<AppleMusicService.CatalogAlbum>(), appleMusicService.getArtistCatalogAlbums("111"))
+    }
+
+    @Test
+    fun `getArtistCatalogAlbums does not call the catalog when it is disabled`() = runBlocking {
+        disableCatalog()
+        useEngine { respondJson("""{"data": []}""") }
+
+        assertNull(appleMusicService.getArtistCatalogAlbums("111"))
+        assertEquals(0, mockEngine.requestHistory.size)
+    }
+
+    @Test
+    fun `getCatalogAlbumsByUpc passes the upc filter`() = runBlocking {
+        enableCatalog()
+        var upcParameter: String? = null
+        useEngine { request ->
+            upcParameter = request.url.parameters["filter[upc]"]
+            respondJson("""{"data": [${albumJson()}]}""")
+        }
+
+        val albums = appleMusicService.getCatalogAlbumsByUpc("00602445790234")
+
+        assertEquals("00602445790234", upcParameter)
+        assertEquals("/v1/catalog/us/albums", mockEngine.requestHistory.first().url.encodedPath)
+        assertEquals(1, albums.size)
+        assertEquals("1440857781", albums.first().id)
+    }
+
+    @Test
+    fun `getCatalogAlbumsByIds chunks the ids at one hundred per request`() = runBlocking {
+        enableCatalog()
+        val chunkSizes = mutableListOf<Int>()
+        useEngine { request ->
+            chunkSizes += request.url.parameters["ids"]!!.split(",").size
+            respondJson("""{"data": []}""")
+        }
+
+        appleMusicService.getCatalogAlbumsByIds((1..150).map { it.toString() })
+
+        assertEquals(listOf(100, 50), chunkSizes)
+    }
+
+    @Test
+    fun `getCatalogSongsByIsrc returns the song references`() = runBlocking {
+        enableCatalog()
+        var isrcParameter: String? = null
+        useEngine { request ->
+            isrcParameter = request.url.parameters["filter[isrc]"]
+            respondJson(
+                """
+                    {
+                      "data": [
+                        {
+                          "id": "555",
+                          "type": "songs",
+                          "relationships": {
+                            "artists": {"data": [{"id": "111", "type": "artists"}]},
+                            "albums": {"data": [{"id": "999", "type": "albums"}]}
+                          }
+                        }
+                      ]
+                    }
+                """.trimIndent()
+            )
+        }
+
+        val songs = appleMusicService.getCatalogSongsByIsrc("USUM71900764")
+
+        assertEquals("USUM71900764", isrcParameter)
+        assertEquals("/v1/catalog/us/songs", mockEngine.requestHistory.first().url.encodedPath)
+        assertEquals(1, songs.size)
+        assertEquals("555", songs.first().id)
+        assertEquals(listOf("111"), songs.first().artistIds)
+        assertEquals(listOf("999"), songs.first().albumIds)
+    }
+
+    @Test
+    fun `getCatalogSongsByIds chunks the ids at one hundred per request`() = runBlocking {
+        enableCatalog()
+        val chunkSizes = mutableListOf<Int>()
+        useEngine { request ->
+            chunkSizes += request.url.parameters["ids"]!!.split(",").size
+            respondJson("""{"data": []}""")
+        }
+
+        appleMusicService.getCatalogSongsByIds((1..150).map { it.toString() })
+
+        assertEquals(listOf(100, 50), chunkSizes)
+    }
+
+    @Test
+    fun `getCatalogArtistNames returns the names by id`() = runBlocking {
+        enableCatalog()
+        useEngine {
+            respondJson(
+                """
+                    {
+                      "data": [
+                        {"id": "111", "type": "artists", "attributes": {"name": "Test Artist"}},
+                        {"id": "222", "type": "artists", "attributes": {"name": "Other Artist"}},
+                        {"id": "333", "type": "albums", "attributes": {"name": "Not An Artist"}}
+                      ]
+                    }
+                """.trimIndent()
+            )
+        }
+
+        val names = appleMusicService.getCatalogArtistNames(listOf("111", "222", "333"))
+
+        assertEquals(mapOf("111" to "Test Artist", "222" to "Other Artist"), names)
+    }
+
+    @Test
+    fun `catalog lookups return empty results and issue no request when disabled`() = runBlocking {
+        disableCatalog()
+        useEngine { respondJson("""{"data": []}""") }
+
+        assertEquals(emptyList<AppleMusicService.CatalogAlbum>(), appleMusicService.getCatalogAlbumsByUpc("123"))
+        assertEquals(emptyList<AppleMusicService.CatalogAlbum>(), appleMusicService.getCatalogAlbumsByIds(listOf("1")))
+        assertEquals(emptyList<AppleMusicService.CatalogSongRef>(), appleMusicService.getCatalogSongsByIsrc("ISRC"))
+        assertEquals(emptyList<AppleMusicService.CatalogSongRef>(), appleMusicService.getCatalogSongsByIds(listOf("1")))
+        assertEquals(emptyMap<String, String>(), appleMusicService.getCatalogArtistNames(listOf("1")))
+        assertEquals(0, mockEngine.requestHistory.size)
+    }
+
+    @Test
+    fun `artworkUrlForSize rewrites the size tail and falls back to the native maximum`() {
+        val base = "https://is1-ssl.mzstatic.com/image/thumb/Music/v4/aa/bb/cc/xyz"
+
+        assertEquals("$base/512x512bb.jpg", AppleMusicService.artworkUrlForSize("$base/{w}x{h}bb.jpg", 512))
+        assertEquals("$base/512x512bb.jpg", AppleMusicService.artworkUrlForSize("$base/1200x630bb.jpg", 512))
+        assertEquals("$base/10000x0w-999.jpg", AppleMusicService.artworkUrlForSize("$base/{w}x{h}bb.jpg", 0))
+        assertEquals("$base/10000x0w-999.jpg", AppleMusicService.artworkUrlForSize("$base/{w}x{h}bb.jpg", -1))
+    }
+
+    @Test
+    fun `parseReleaseDate accepts year and year-month values`() {
+        assertEquals(LocalDate.of(2019, 1, 1), AppleMusicService.parseReleaseDate("2019"))
+        assertEquals(LocalDate.of(2019, 6, 1), AppleMusicService.parseReleaseDate("2019-06"))
+        assertNull(AppleMusicService.parseReleaseDate("20xx"))
+        assertNull(AppleMusicService.parseReleaseDate("2019-99"))
     }
 
     @Test

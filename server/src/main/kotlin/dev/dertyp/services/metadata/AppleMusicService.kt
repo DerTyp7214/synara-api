@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
@@ -43,13 +44,19 @@ class AppleMusicService(
     private val teamId by lazy { environment.config.propertyOrNull("appleMusic.teamId")?.getString() }
     private val keyId by lazy { environment.config.propertyOrNull("appleMusic.keyId")?.getString() }
     private val p8Path by lazy { environment.config.propertyOrNull("appleMusic.p8Path")?.getString() }
+    private val storefront by lazy {
+        environment.config.propertyOrNull("appleMusic.storefront")?.getString()?.takeUnless { it.isBlank() } ?: "us"
+    }
+
+    val catalogEnabled: Boolean
+        get() = !teamId.isNullOrBlank() && !keyId.isNullOrBlank() && !p8Path.isNullOrBlank()
 
     private var appleMusicToken: String? = null
     private var tokenExpiration: Long = 0
 
     private fun getAppleMusicToken(): String? {
-        if (teamId == null || keyId == null || p8Path == null) return null
         if (appleMusicToken != null && System.currentTimeMillis() < tokenExpiration) return appleMusicToken
+        if (!catalogEnabled) return null
 
         val file = File(p8Path!!)
         if (!file.exists()) {
@@ -122,7 +129,6 @@ class AppleMusicService(
     ): IMetadataService.Track? {
         val token = getAppleMusicToken()
         if (token != null) {
-            val storefront = "us"
             val response = try {
                 ApiClient.queueInstance.enqueue("https://api.music.apple.com/v1/catalog/$storefront/songs", priority) {
                     header(HttpHeaders.Authorization, "Bearer $token")
@@ -307,8 +313,6 @@ class AppleMusicService(
         return ApplicationScope.json.decodeFromString<ITunesSearchResponse<ITunesAlbum>>(body.trim()).results
     }
 
-    private val storefront = "us"
-
     companion object {
         // Request a huge size so mzstatic returns the native maximum: for the "w" format it clamps
         // to the source resolution (it does not upscale), and "-999" forces max quality. Technique
@@ -323,22 +327,40 @@ class AppleMusicService(
         // ".../{w}x{h}bb.jpg") and iTunes thumbnails (".../100x100bb.jpg").
         private val ARTWORK_SIZE_TAIL = Regex("""/(?:\{w}|\d+)x(?:\{h}|\d+)[^/]*$""")
 
+        private const val CATALOG_ID_CHUNK = 100
+
+        private const val CATALOG_MAX_PAGES = 20
+
         /** Rewrite a catalog artwork template or iTunes thumbnail URL to request the native-max image. */
         internal fun maxArtworkUrl(templateOrThumb: String): String =
             templateOrThumb.replace(ARTWORK_SIZE_TAIL, "/$ARTWORK_MAX_TAIL")
 
+        internal fun artworkUrlForSize(templateOrUrl: String, size: Int): String =
+            if (size <= 0) maxArtworkUrl(templateOrUrl)
+            else templateOrUrl.replace(ARTWORK_SIZE_TAIL, "/${size}x${size}bb.jpg")
+
         internal fun parseReleaseDate(value: String?): LocalDate? = value?.let {
             runCatching { LocalDate.parse(it) }.getOrNull()
                 ?: runCatching { OffsetDateTime.parse(it).toLocalDate() }.getOrNull()
+                ?: when (it.length) {
+                    7 -> runCatching { LocalDate.parse("$it-01") }.getOrNull()
+                    4 -> runCatching { LocalDate.parse("$it-01-01") }.getOrNull()
+                    else -> null
+                }
         }
     }
 
-    private suspend fun catalogGet(pathOrUrl: String, priority: HttpClientPriority): JsonObject? {
+    private suspend fun catalogGet(
+        pathOrUrl: String,
+        priority: HttpClientPriority,
+        block: suspend HttpRequestBuilder.() -> Unit = {}
+    ): JsonObject? {
         val token = getAppleMusicToken() ?: return null
         val url = if (pathOrUrl.startsWith("http")) pathOrUrl else "https://api.music.apple.com$pathOrUrl"
         val response = try {
             ApiClient.queueInstance.enqueue(url, priority) {
                 header(HttpHeaders.Authorization, "Bearer $token")
+                block()
             }
         } catch (e: Exception) {
             logger.error("Failed to call Apple Music Catalog API: $url", e)
@@ -379,6 +401,145 @@ class AppleMusicService(
                 isrc = attr?.get("isrc")?.jsonPrimitive?.contentOrNull
             )
         } ?: emptyList()
+
+    private fun relationshipIds(relationships: JsonObject?, name: String): List<String> =
+        relationships?.get(name)?.jsonObject?.get("data")?.jsonArray
+            ?.mapNotNull { it.jsonObject["id"]?.jsonPrimitive?.contentOrNull }
+            ?: emptyList()
+
+    private fun catalogAlbumFrom(element: JsonElement): CatalogAlbum? {
+        val obj = element.jsonObject
+        if (obj["type"]?.jsonPrimitive?.contentOrNull != "albums") return null
+        val id = obj["id"]?.jsonPrimitive?.contentOrNull ?: return null
+        val attr = obj["attributes"]?.jsonObject
+        return CatalogAlbum(
+            id = id,
+            title = attr?.get("name")?.jsonPrimitive?.contentOrNull ?: "",
+            artistName = attr?.get("artistName")?.jsonPrimitive?.contentOrNull ?: "",
+            artistIds = relationshipIds(obj["relationships"]?.jsonObject, "artists"),
+            releaseDate = parseReleaseDate(attr?.get("releaseDate")?.jsonPrimitive?.contentOrNull),
+            isSingle = attr?.get("isSingle")?.jsonPrimitive?.contentOrNull?.toBoolean() == true,
+            isComplete = attr?.get("isComplete")?.jsonPrimitive?.contentOrNull?.toBoolean() ?: true,
+            isCompilation = attr?.get("isCompilation")?.jsonPrimitive?.contentOrNull?.toBoolean() == true,
+            upc = attr?.get("upc")?.jsonPrimitive?.contentOrNull,
+            url = attr?.get("url")?.jsonPrimitive?.contentOrNull,
+            trackCount = attr?.get("trackCount")?.jsonPrimitive?.contentOrNull?.toIntOrNull() ?: 0,
+            image = catalogArtwork(attr)
+        )
+    }
+
+    private fun catalogSongRefsFrom(json: JsonObject): List<CatalogSongRef> =
+        json["data"]?.jsonArray?.mapNotNull { el ->
+            val obj = el.jsonObject
+            if (obj["type"]?.jsonPrimitive?.contentOrNull != "songs") return@mapNotNull null
+            val id = obj["id"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+            val relationships = obj["relationships"]?.jsonObject
+            CatalogSongRef(
+                id = id,
+                artistIds = relationshipIds(relationships, "artists"),
+                albumIds = relationshipIds(relationships, "albums")
+            )
+        } ?: emptyList()
+
+    private fun catalogAlbumsFrom(json: JsonObject): List<CatalogAlbum> =
+        json["data"]?.jsonArray?.mapNotNull { catalogAlbumFrom(it) } ?: emptyList()
+
+    suspend fun getArtistCatalogAlbums(
+        appleArtistId: String,
+        priority: HttpClientPriority = HttpClientPriority.LOW
+    ): List<CatalogAlbum>? {
+        if (!catalogEnabled) return null
+        val id = appleArtistId.removePrefix("appleMusic:")
+        val albums = mutableListOf<CatalogAlbum>()
+        var next: String? = "/v1/catalog/$storefront/artists/$id/albums?limit=100"
+        var pages = 0
+        while (next != null && pages < CATALOG_MAX_PAGES) {
+            val json = catalogGet(next, priority) ?: return null
+            albums.addAll(catalogAlbumsFrom(json))
+            next = json["next"]?.jsonPrimitive?.contentOrNull
+            pages++
+        }
+        return albums
+    }
+
+    suspend fun getCatalogAlbumsByUpc(
+        upc: String,
+        priority: HttpClientPriority = HttpClientPriority.LOW
+    ): List<CatalogAlbum> {
+        if (!catalogEnabled || upc.isBlank()) return emptyList()
+        val json = catalogGet("/v1/catalog/$storefront/albums", priority) {
+            parameter("filter[upc]", upc)
+        } ?: return emptyList()
+        return catalogAlbumsFrom(json)
+    }
+
+    suspend fun getCatalogAlbumsByIds(
+        ids: List<String>,
+        priority: HttpClientPriority = HttpClientPriority.LOW
+    ): List<CatalogAlbum> {
+        if (!catalogEnabled) return emptyList()
+        val cleaned = ids.map { it.removePrefix("appleMusic:") }.filter { it.isNotBlank() }.distinct()
+        if (cleaned.isEmpty()) return emptyList()
+        val albums = mutableListOf<CatalogAlbum>()
+        cleaned.chunked(CATALOG_ID_CHUNK).forEach { chunk ->
+            val json = catalogGet("/v1/catalog/$storefront/albums", priority) {
+                parameter("ids", chunk.joinToString(","))
+            } ?: return@forEach
+            albums.addAll(catalogAlbumsFrom(json))
+        }
+        return albums
+    }
+
+    suspend fun getCatalogSongsByIsrc(
+        isrc: String,
+        priority: HttpClientPriority = HttpClientPriority.LOW
+    ): List<CatalogSongRef> {
+        if (!catalogEnabled || isrc.isBlank()) return emptyList()
+        val json = catalogGet("/v1/catalog/$storefront/songs", priority) {
+            parameter("filter[isrc]", isrc)
+        } ?: return emptyList()
+        return catalogSongRefsFrom(json)
+    }
+
+    suspend fun getCatalogSongsByIds(
+        ids: List<String>,
+        priority: HttpClientPriority = HttpClientPriority.LOW
+    ): List<CatalogSongRef> {
+        if (!catalogEnabled) return emptyList()
+        val cleaned = ids.map { it.removePrefix("appleMusic:") }.filter { it.isNotBlank() }.distinct()
+        if (cleaned.isEmpty()) return emptyList()
+        val songs = mutableListOf<CatalogSongRef>()
+        cleaned.chunked(CATALOG_ID_CHUNK).forEach { chunk ->
+            val json = catalogGet("/v1/catalog/$storefront/songs", priority) {
+                parameter("ids", chunk.joinToString(","))
+            } ?: return@forEach
+            songs.addAll(catalogSongRefsFrom(json))
+        }
+        return songs
+    }
+
+    suspend fun getCatalogArtistNames(
+        ids: List<String>,
+        priority: HttpClientPriority = HttpClientPriority.LOW
+    ): Map<String, String> {
+        if (!catalogEnabled) return emptyMap()
+        val cleaned = ids.map { it.removePrefix("appleMusic:") }.filter { it.isNotBlank() }.distinct()
+        if (cleaned.isEmpty()) return emptyMap()
+        val names = mutableMapOf<String, String>()
+        cleaned.chunked(CATALOG_ID_CHUNK).forEach { chunk ->
+            val json = catalogGet("/v1/catalog/$storefront/artists", priority) {
+                parameter("ids", chunk.joinToString(","))
+            } ?: return@forEach
+            json["data"]?.jsonArray?.forEach inner@{ el ->
+                val obj = el.jsonObject
+                if (obj["type"]?.jsonPrimitive?.contentOrNull != "artists") return@inner
+                val id = obj["id"]?.jsonPrimitive?.contentOrNull ?: return@inner
+                val name = obj["attributes"]?.jsonObject?.get("name")?.jsonPrimitive?.contentOrNull ?: return@inner
+                names[id] = name
+            }
+        }
+        return names
+    }
 
     override fun getAlbumTracks(albumId: String, priority: HttpClientPriority): Flow<IMetadataService.Track> = flow {
         val id = albumId.removePrefix("appleMusic:")
@@ -448,6 +609,27 @@ class AppleMusicService(
             )
         }
     }
+
+    data class CatalogAlbum(
+        val id: String,
+        val title: String,
+        val artistName: String,
+        val artistIds: List<String>,
+        val releaseDate: LocalDate?,
+        val isSingle: Boolean,
+        val isComplete: Boolean,
+        val isCompilation: Boolean,
+        val upc: String?,
+        val url: String?,
+        val trackCount: Int,
+        val image: IMetadataService.Image?
+    )
+
+    data class CatalogSongRef(
+        val id: String,
+        val artistIds: List<String>,
+        val albumIds: List<String>
+    )
 
     @Serializable
     data class ITunesSearchResponse<T>(

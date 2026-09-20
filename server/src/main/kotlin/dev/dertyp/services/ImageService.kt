@@ -364,6 +364,7 @@ class ImageService(
         referencedImages.addAll(UserPlaylistTable.selectAll().mapNotNull { it[UserPlaylistTable.imageId]?.value })
         referencedImages.addAll(UserTable.selectAll().mapNotNull { it[UserTable.profileImage]?.value })
         referencedImages.addAll(RecentReleaseTable.selectAll().mapNotNull { it[RecentReleaseTable.imageId]?.value })
+        referencedImages.addAll(ProviderReleaseTable.selectAll().mapNotNull { it[ProviderReleaseTable.imageId]?.value })
         referencedImages.addAll(AnimatedImageTable.selectAll().mapNotNull { it[AnimatedImageTable.imageId]?.value })
         referencedImages.addAll(CollectionTable.selectAll().mapNotNull { it[CollectionTable.imageId]?.value })
         referencedImages.addAll(RadioChannelTable.selectAll().mapNotNull { it[RadioChannelTable.imageId]?.value })

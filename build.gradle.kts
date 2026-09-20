@@ -65,6 +65,7 @@ tasks.register("generateEnvDocs") {
             "APPLE_MUSIC_TEAM_ID" to mapOf("desc" to "Apple Music Team ID.", "cat" to "External Services"),
             "APPLE_MUSIC_KEY_ID" to mapOf("desc" to "Apple Music Key ID.", "cat" to "External Services"),
             "APPLE_MUSIC_P8_PATH" to mapOf("desc" to "Path to the Apple Music .p8 private key file.", "cat" to "External Services"),
+            "APPLE_MUSIC_STOREFRONT" to mapOf("desc" to "Apple Music storefront (country code) used for catalog requests.", "cat" to "External Services"),
             "AUDIO_TRACKS_PATH" to mapOf("desc" to "Base path for audio tracks.", "cat" to "Storage & Paths"),
             "AUDIO_ALBUMS_PATH" to mapOf("desc" to "Base path for albums.", "cat" to "Storage & Paths"),
             "AUDIO_PLAYLISTS_PATH" to mapOf("desc" to "Base path for playlists.", "cat" to "Storage & Paths"),

@@ -8,6 +8,7 @@ import dev.dertyp.data.*
 import dev.dertyp.db.*
 import dev.dertyp.plugins.RedisCacheProvider
 import dev.dertyp.services.metadata.*
+import dev.dertyp.services.release.AppleMusicReleaseService
 import io.ktor.server.application.ApplicationEnvironment
 import io.mockk.*
 import kotlinx.coroutines.runBlocking
@@ -46,6 +47,7 @@ class ReleaseServiceTest : KoinTest {
     private lateinit var appleMusicService: AppleMusicService
     private lateinit var spotifyService: SpotifyService
     private lateinit var linkResolverService: LinkResolverService
+    private lateinit var appleMusicReleaseService: AppleMusicReleaseService
 
     fun setup(dialect: DbDialect) {
         startKoin {
@@ -62,6 +64,7 @@ class ReleaseServiceTest : KoinTest {
                 single { mockk<ApplicationEnvironment>(relaxed = true) }
                 single { mockk<TidalService>(relaxed = true) }
                 single { mockk<LinkResolverService>(relaxed = true) }
+                single { mockk<AppleMusicReleaseService>(relaxed = true) }
             })
         }
 
@@ -73,6 +76,7 @@ class ReleaseServiceTest : KoinTest {
         spotifyService = get()
         appleMusicService = get()
         linkResolverService = get()
+        appleMusicReleaseService = get()
 
         database = TestDatabase.connect(dialect, "release_test")
         transaction(database) {
@@ -91,6 +95,8 @@ class ReleaseServiceTest : KoinTest {
                 FollowedArtistTable,
                 RecentReleaseTable,
                 RecentReleaseProviderTable,
+                ArtistProviderTable,
+                ProviderReleaseTable,
                 *allMusicBrainzTables
             )
         }
@@ -1331,5 +1337,331 @@ class ReleaseServiceTest : KoinTest {
             Thread.sleep(50)
         }
         assertEquals(imageId, persistedImageId)
+    }
+
+    private fun insertProviderRelease(
+        rowId: UUID,
+        owner: UUID,
+        rowTitle: String,
+        rowDate: Long?,
+        rowUrl: String = "https://music.apple.com/album/$rowId",
+        rowImageId: UUID? = null,
+        rowArtworkUrl: String? = null,
+        rowReleaseGroupId: UUID? = null,
+        rowAlbumId: UUID? = null,
+        rowSongId: UUID? = null,
+        rowType: ReleaseType = ReleaseType.Album
+    ) {
+        transaction(database) {
+            ProviderReleaseTable.insert {
+                it[ProviderReleaseTable.id] = rowId
+                it[ProviderReleaseTable.provider] = "apple"
+                it[ProviderReleaseTable.externalId] = rowId.toString()
+                it[ProviderReleaseTable.artistId] = owner
+                it[ProviderReleaseTable.artistName] = "Artist"
+                it[ProviderReleaseTable.title] = rowTitle
+                it[ProviderReleaseTable.releaseDate] = rowDate
+                it[ProviderReleaseTable.type] = rowType
+                it[ProviderReleaseTable.url] = rowUrl
+                it[ProviderReleaseTable.artworkUrl] = rowArtworkUrl
+                it[ProviderReleaseTable.imageId] = rowImageId?.let { value -> EntityID(value, ImageTable) }
+                it[ProviderReleaseTable.releaseGroupId] = rowReleaseGroupId?.let { value -> EntityID(value, MBReleaseGroupTable) }
+                it[ProviderReleaseTable.albumId] = rowAlbumId?.let { value -> EntityID(value, AlbumTable) }
+                it[ProviderReleaseTable.songId] = rowSongId?.let { value -> EntityID(value, SongTable) }
+            }
+        }
+    }
+
+    private fun seedFollowedArtist(userId: UUID, artistId: UUID) {
+        transaction(database) {
+            UserTable.insert { it[id] = userId; it[username] = "user"; it[passwordHash] = "hash" }
+            ArtistTable.insert { it[id] = artistId; it[name] = "Artist" }
+            FollowedArtistTable.insert { it[this.userId] = userId; it[this.artistId] = artistId }
+        }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `getRecentReleases merges both sources in date order`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val userId = UUID.randomUUID()
+        val artistId = UUID.randomUUID()
+        val mbRelease = UUID.randomUUID()
+        val newestProviderRelease = UUID.randomUUID()
+        val oldestProviderRelease = UUID.randomUUID()
+
+        seedFollowedArtist(userId, artistId)
+        transaction(database) {
+            MBReleaseGroupTable.insert { it[id] = mbRelease; it[title] = "MB Release" }
+            RecentReleaseTable.insert {
+                it[releaseId] = mbRelease
+                it[this.artistId] = artistId
+                it[artistName] = "Artist"
+                it[title] = "MB Release"
+                it[releaseDate] = 2000L
+            }
+        }
+        insertProviderRelease(newestProviderRelease, artistId, "Newest Apple Release", 3000L)
+        insertProviderRelease(oldestProviderRelease, artistId, "Oldest Apple Release", 1000L)
+
+        val result = service.getRecentReleases(userId)
+
+        assertEquals(3, result.total)
+        assertEquals(
+            listOf("Newest Apple Release", "MB Release", "Oldest Apple Release"),
+            result.data.map { it.title }
+        )
+        assertEquals(ReleaseSource.Apple, result.data[0].source)
+        assertEquals(ReleaseSource.MusicBrainz, result.data[1].source)
+        assertEquals(listOf("https://music.apple.com/album/$newestProviderRelease"), result.data[0].links)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `getRecentReleases paginates across both sources`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val userId = UUID.randomUUID()
+        val artistId = UUID.randomUUID()
+
+        seedFollowedArtist(userId, artistId)
+        transaction(database) {
+            for (i in 1..5) {
+                val relId = UUID.randomUUID()
+                MBReleaseGroupTable.insert { it[id] = relId; it[title] = "MB $i" }
+                RecentReleaseTable.insert {
+                    it[releaseId] = relId
+                    it[this.artistId] = artistId
+                    it[artistName] = "Artist"
+                    it[title] = "MB $i"
+                    it[releaseDate] = (i * 2).toLong()
+                }
+            }
+        }
+        for (i in 1..5) {
+            insertProviderRelease(UUID.randomUUID(), artistId, "Apple $i", (i * 2 - 1).toLong())
+        }
+
+        val page0 = service.getRecentReleases(userId, page = 0, pageSize = 3)
+        assertEquals(10, page0.total)
+        assertTrue(page0.hasNextPage)
+        assertEquals(listOf("MB 5", "Apple 5", "MB 4"), page0.data.map { it.title })
+
+        val page1 = service.getRecentReleases(userId, page = 1, pageSize = 3)
+        assertEquals(listOf("Apple 4", "MB 3", "Apple 3"), page1.data.map { it.title })
+
+        val page3 = service.getRecentReleases(userId, page = 3, pageSize = 3)
+        assertEquals(listOf("Apple 1"), page3.data.map { it.title })
+        assertFalse(page3.hasNextPage)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `getRecentReleases marks future releases as upcoming`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val userId = UUID.randomUUID()
+        val artistId = UUID.randomUUID()
+        val mbRelease = UUID.randomUUID()
+        val futureProviderRelease = UUID.randomUUID()
+        val pastProviderRelease = UUID.randomUUID()
+        val now = Clock.System.now().toEpochMilliseconds()
+
+        seedFollowedArtist(userId, artistId)
+        transaction(database) {
+            MBReleaseGroupTable.insert { it[id] = mbRelease; it[title] = "MB Upcoming" }
+            RecentReleaseTable.insert {
+                it[releaseId] = mbRelease
+                it[this.artistId] = artistId
+                it[artistName] = "Artist"
+                it[title] = "MB Upcoming"
+                it[releaseDate] = now + 20.days.inWholeMilliseconds
+            }
+        }
+        insertProviderRelease(futureProviderRelease, artistId, "Apple Upcoming", now + 10.days.inWholeMilliseconds)
+        insertProviderRelease(pastProviderRelease, artistId, "Apple Released", now - 10.days.inWholeMilliseconds)
+
+        val byTitle = service.getRecentReleases(userId).data.associateBy { it.title }
+
+        assertTrue(byTitle.getValue("MB Upcoming").upcoming)
+        assertEquals(ReleaseSource.MusicBrainz, byTitle.getValue("MB Upcoming").source)
+        assertTrue(byTitle.getValue("Apple Upcoming").upcoming)
+        assertFalse(byTitle.getValue("Apple Released").upcoming)
+        assertEquals(ReleaseSource.Apple, byTitle.getValue("Apple Released").source)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `getRecentReleases hides provider rows that are matched or in the library`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val userId = UUID.randomUUID()
+        val artistId = UUID.randomUUID()
+        val groupId = UUID.randomUUID()
+
+        seedFollowedArtist(userId, artistId)
+        var libraryAlbumId: UUID? = null
+        var librarySongId: UUID? = null
+        transaction(database) {
+            MBReleaseGroupTable.insert { it[id] = groupId; it[title] = "Matched Group" }
+            val albumEntity = AlbumTable.insert { it[name] = "Owned Album" }[AlbumTable.id]
+            libraryAlbumId = albumEntity.value
+            librarySongId = SongTable.insert {
+                it[title] = "Owned Song"
+                it[albumId] = albumEntity
+            }[SongTable.id].value
+        }
+
+        insertProviderRelease(UUID.randomUUID(), artistId, "Visible", 5000L)
+        insertProviderRelease(UUID.randomUUID(), artistId, "Matched", 4000L, rowReleaseGroupId = groupId)
+        insertProviderRelease(UUID.randomUUID(), artistId, "Owned Album", 3000L, rowAlbumId = libraryAlbumId)
+        insertProviderRelease(UUID.randomUUID(), artistId, "Owned Song", 2000L, rowSongId = librarySongId)
+        insertProviderRelease(UUID.randomUUID(), artistId, "Undated", null)
+
+        val result = service.getRecentReleases(userId)
+
+        assertEquals(1, result.total)
+        assertEquals(listOf("Visible"), result.data.map { it.title })
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `getArtistRecentReleases returns provider rows for an artist without a MusicBrainz id`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val artistId = UUID.randomUUID()
+        val groupId = UUID.randomUUID()
+
+        transaction(database) {
+            ArtistTable.insert { it[id] = artistId; it[name] = "Artist" }
+            MBReleaseGroupTable.insert { it[id] = groupId; it[title] = "Matched Group" }
+        }
+
+        var libraryAlbumId: UUID? = null
+        transaction(database) {
+            libraryAlbumId = AlbumTable.insert { it[name] = "Owned Album" }[AlbumTable.id].value
+        }
+
+        insertProviderRelease(UUID.randomUUID(), artistId, "Apple Discography", 3000L)
+        insertProviderRelease(UUID.randomUUID(), artistId, "Owned Album", 2000L, rowAlbumId = libraryAlbumId)
+        insertProviderRelease(UUID.randomUUID(), artistId, "Matched", 1000L, rowReleaseGroupId = groupId)
+
+        val result = service.getArtistRecentReleases(artistId)
+
+        assertEquals(2, result.total)
+        assertEquals(listOf("Apple Discography", "Owned Album"), result.data.map { it.title })
+        assertEquals(libraryAlbumId, result.data[1].albumId)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `getReleaseImage serves the stored provider release image`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val artistId = UUID.randomUUID()
+        val releaseId = UUID.randomUUID()
+        val imageId = UUID.randomUUID()
+
+        transaction(database) {
+            ArtistTable.insert { it[id] = artistId; it[name] = "Artist" }
+            ImageTable.insert { it[id] = imageId; it[path] = "test"; it[imageHash] = "hash"; it[origin] = "test" }
+        }
+        insertProviderRelease(releaseId, artistId, "Apple Release", 1000L, rowImageId = imageId)
+
+        val expected = byteArrayOf(1, 2, 3)
+        coEvery { imageService.getImageData(imageId, 250) } returns expected
+
+        assertArrayEquals(expected, service.getReleaseImage(releaseId, 250))
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `getReleaseImage proxies and caches the provider artwork`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val artistId = UUID.randomUUID()
+        val releaseId = UUID.randomUUID()
+        val artworkUrl = "https://is1-ssl.mzstatic.com/image/thumb/cover/1200x1200bb.jpg"
+
+        transaction(database) {
+            ArtistTable.insert { it[id] = artistId; it[name] = "Artist" }
+        }
+        insertProviderRelease(releaseId, artistId, "Apple Release", 1000L, rowArtworkUrl = artworkUrl)
+
+        every { imageService.getCachedBytes(any()) } returns null
+
+        val expected = byteArrayOf(4, 5, 6)
+        val spiedService = spyk(service, recordPrivateCalls = true)
+        coEvery { spiedService.fetchProviderArtworkBytes(any()) } returns expected
+
+        assertArrayEquals(expected, spiedService.getReleaseImage(releaseId, 0))
+
+        verify { imageService.setCachedBytes("releaseImage:$releaseId:0", expected, null) }
+        coVerify(exactly = 0) { spiedService.fetchCoverArtBytes(any(), any()) }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `getReleaseImage caches a missing provider artwork`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val artistId = UUID.randomUUID()
+        val releaseId = UUID.randomUUID()
+
+        transaction(database) {
+            ArtistTable.insert { it[id] = artistId; it[name] = "Artist" }
+        }
+        insertProviderRelease(
+            releaseId,
+            artistId,
+            "Apple Release",
+            1000L,
+            rowArtworkUrl = "https://is1-ssl.mzstatic.com/image/thumb/cover/1200x1200bb.jpg"
+        )
+
+        every { imageService.getCachedBytes(any()) } returns null
+
+        val spiedService = spyk(service, recordPrivateCalls = true)
+        coEvery { spiedService.fetchProviderArtworkBytes(any()) } returns null
+
+        assertNull(spiedService.getReleaseImage(releaseId, 250))
+
+        verify { imageService.setCachedBytes("releaseImage:$releaseId:missing", any(), 1.hours) }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `refreshRecentRelease refreshes a provider release through the Apple Music service`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val artistId = UUID.randomUUID()
+        val releaseId = UUID.randomUUID()
+
+        transaction(database) {
+            ArtistTable.insert { it[id] = artistId; it[name] = "Artist" }
+        }
+        insertProviderRelease(releaseId, artistId, "Apple Only", 1000L)
+
+        coEvery { appleMusicReleaseService.fetchArtistReleases(artistId) } returns 1
+
+        val result = service.refreshRecentRelease(releaseId)
+
+        assertNotNull(result)
+        assertEquals("Apple Only", result!!.title)
+        assertEquals(ReleaseSource.Apple, result.source)
+        coVerify { appleMusicReleaseService.fetchArtistReleases(artistId) }
+        coVerify(exactly = 0) { musicBrainzService.fetchReleasesByReleaseGroup(any(), any()) }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `followArtist triggers the Apple Music release fetch`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val userId = UUID.randomUUID()
+        val artistId = UUID.randomUUID()
+        val mbId = UUID.randomUUID()
+
+        transaction(database) {
+            UserTable.insert { it[id] = userId; it[username] = "user"; it[passwordHash] = "hash" }
+            ArtistTable.insert { it[id] = artistId; it[name] = "Artist" }
+            MBArtistTable.insert { it[id] = mbId; it[name] = "Artist"; it[sortName] = "Artist" }
+            ArtistMusicBrainzTable.insert { it[this.artistId] = artistId; it[musicBrainzId] = mbId }
+        }
+
+        assertTrue(service.followArtist(userId, mbId))
+
+        verify(timeout = 5000) { appleMusicReleaseService.fetchArtistReleasesAsync(artistId) }
     }
 }

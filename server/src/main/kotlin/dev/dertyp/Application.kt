@@ -42,6 +42,7 @@ import dev.dertyp.services.podcast.PodcastLocalScanService
 import dev.dertyp.services.podcast.PodcastMaintenanceService
 import dev.dertyp.services.podcast.PodcastService
 import dev.dertyp.services.podcast.PodcastStreamService
+import dev.dertyp.services.release.AppleMusicReleaseService
 import dev.dertyp.services.schedule.ScheduleService
 import dev.dertyp.services.schedule.ScheduledTaskConfigurationService
 import dev.dertyp.services.subsonic.SubsonicCredentialService
@@ -340,6 +341,8 @@ fun mainModule(application: Application, environment: ApplicationEnvironment): M
     singleOf(::CachedMusicBrainzService)
     singleOf(::LinkResolverService)
     singleOf(::ReleaseService)
+    singleOf(::AppleMusicReleaseService)
+    singleOf(::AppleMusicArtistResolver)
     singleOf(::SearchIndexWorker)
     singleOf(::RedisSearchService)
 

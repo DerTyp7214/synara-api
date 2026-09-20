@@ -42,6 +42,7 @@ Most variables have sensible defaults and are **optional**. Only variables witho
 |:---|:---|:---:|:---|:---|
 | `APPLE_MUSIC_KEY_ID` | Apple Music Key ID. | No | - | - |
 | `APPLE_MUSIC_P8_PATH` | Path to the Apple Music .p8 private key file. | No | - | - |
+| `APPLE_MUSIC_STOREFRONT` | Apple Music storefront (country code) used for catalog requests. | No | `us` | - |
 | `APPLE_MUSIC_TEAM_ID` | Apple Music Team ID. | No | - | - |
 | `GAMDL_CODEC_SONG` | Optional gamdl song codec override (empty = gamdl default, e.g. aac-web). Advanced/version-sensitive. | No | - | - |
 | `GAMDL_COOKIES_PATH` | Path to the Netscape cookies.txt for Apple Music (gamdl importer). | No | `cookies.txt` | - |

@@ -69,7 +69,7 @@ class CoverGenerationServiceTest {
                 UserPlaylistTable, UserPlaylistSongTable, GenreTable, SongGenreTable, AlbumGenreTable, ArtistGenreTable,
                 SongEmbeddingTable, SongAudioDataTable, CollectionTable, CollectionSongTable, CollectionAlbumTable,
                 CollectionArtistTable, CollectionPlaylistTable, PlaylistTable, MBReleaseGroupTable, MBReleaseGroupCoverTable,
-                RecentReleaseTable, AnimatedImageTable, RadioChannelTable,
+                RecentReleaseTable, ProviderReleaseTable, AnimatedImageTable, RadioChannelTable,
                 PodcastShowTable, PodcastEpisodeTable,
             )
             UserTable.insert {

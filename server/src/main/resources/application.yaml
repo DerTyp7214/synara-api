@@ -74,6 +74,7 @@ appleMusic:
   teamId: ${APPLE_MUSIC_TEAM_ID:}
   keyId: ${APPLE_MUSIC_KEY_ID:}
   p8Path: ${APPLE_MUSIC_P8_PATH:}
+  storefront: ${APPLE_MUSIC_STOREFRONT:us}
 proxy:
   hostname: ${PROXY_HOSTNAME:}
   controlPort: ${PROXY_CONTROL_PORT:8081}

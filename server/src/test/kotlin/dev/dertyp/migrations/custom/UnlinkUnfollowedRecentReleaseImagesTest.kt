@@ -69,6 +69,7 @@ class UnlinkUnfollowedRecentReleaseImagesTest : KoinTest {
                 MBReleaseGroupCoverTable,
                 FollowedArtistTable,
                 RecentReleaseTable,
+                ProviderReleaseTable,
                 AnimatedImageTable,
                 CollectionTable,
                 RadioChannelTable,

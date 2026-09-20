@@ -58,6 +58,7 @@ class ScheduledTaskConfigurationService : Service() {
             TaskConfiguration(TaskKeys.LYRICS_SYNC_WORKER, "Lyrics Sync Worker", false, TriggerDefinition.Cron("0 4 * * *")),
             TaskConfiguration(TaskKeys.LRCLIB_WORKER, "LrcLib Worker", true, TriggerDefinition.Cron("30 4 * * *")),
             TaskConfiguration(TaskKeys.RECENT_RELEASE_WORKER, "Recent Release Worker", true, TriggerDefinition.Cron("0 1 * * *")),
+            TaskConfiguration(TaskKeys.APPLE_MUSIC_RELEASE_WORKER, "Apple Music Release Worker", true, TriggerDefinition.Cron("0 6 * * *")),
             TaskConfiguration(TaskKeys.PROVIDER_ENRICHMENT_WORKER, "Provider Enrichment Worker", true, TriggerDefinition.AfterTask(TaskKeys.RECENT_RELEASE_WORKER)),
             TaskConfiguration(TaskKeys.ISRC_PROVIDER_ENRICHMENT_WORKER, "ISRC/Barcode Provider Enrichment Worker", true, TriggerDefinition.AfterTask(TaskKeys.MUSICBRAINZ_CACHE_WORKER)),
             TaskConfiguration(TaskKeys.DELETE_EMPTY_ALBUMS, "Delete Empty Albums", true, TriggerDefinition.Cron("0 0 * * *")),

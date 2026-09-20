@@ -160,4 +160,15 @@ class ScheduledTaskConfigurationServiceTest : KoinTest {
         assertTrue(import.enabled)
         assertEquals(TriggerDefinition.Cron("*/15 * * * *"), import.trigger)
     }
+
+    @Test
+    fun `DEFAULTS include the Apple Music release task with its daily cron schedule`() {
+        val task = ScheduledTaskConfigurationService.DEFAULTS
+            .associateBy { it.key }
+            .getValue(TaskKeys.APPLE_MUSIC_RELEASE_WORKER)
+
+        assertEquals("Apple Music Release Worker", task.name)
+        assertTrue(task.enabled)
+        assertEquals(TriggerDefinition.Cron("0 6 * * *"), task.trigger)
+    }
 }

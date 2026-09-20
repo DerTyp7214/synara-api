@@ -7,6 +7,7 @@ import dev.dertyp.data.InsertableImage
 import dev.dertyp.data.MusicBrainzRelease
 import dev.dertyp.data.MusicBrainzReleaseGroup
 import dev.dertyp.data.PaginatedResponse
+import dev.dertyp.data.ReleaseSource
 import dev.dertyp.data.ReleaseType
 import dev.dertyp.db.*
 import dev.dertyp.dbQuery
@@ -14,6 +15,7 @@ import dev.dertyp.platformDateFromEpochMilliseconds
 import dev.dertyp.services.metadata.*
 import dev.dertyp.services.models.FollowedArtist
 import dev.dertyp.services.models.RecentRelease
+import dev.dertyp.services.release.AppleMusicReleaseService
 import dev.dertyp.utils.parsers.ParserFactory
 import io.ktor.server.application.ApplicationEnvironment
 import kotlinx.coroutines.*
@@ -38,6 +40,7 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
     private val artistService by inject<ArtistService>()
     private val imageService by inject<ImageService>()
     private val linkResolverService by inject<LinkResolverService>()
+    private val appleMusicReleaseService by inject<AppleMusicReleaseService>()
 
     private val RELEASE_REFRESH_WINDOW = 14.days
     private val REFRESH_COOLDOWN = 20.hours
@@ -63,6 +66,7 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
             runCatching { backfillMissingRecentReleaseImages(artistId) }
                 .onFailure { logger.error("Recent release image backfill after follow failed for $artistId", it) }
         }
+        appleMusicReleaseService.fetchArtistReleasesAsync(artistId)
         return followed
     }
 
@@ -113,54 +117,69 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
             .where { FollowedArtistTable.userId eq userId }
             .map { it[FollowedArtistTable.artistId].value }
 
-        val total = RecentReleaseTable
-            .leftJoin(ImageTable, onColumn = { RecentReleaseTable.imageId }, otherColumn = { ImageTable.id })
-            .selectAll()
-            .where { (RecentReleaseTable.artistId inList followedArtistIds) and (RecentReleaseTable.albumId.isNull()) and (RecentReleaseTable.songId.isNull()) and (RecentReleaseTable.releaseDate.isNotNull()) }
-            .count()
+        val nowMs = Clock.System.now().toEpochMilliseconds()
+        val topN = (page + 1) * pageSize
 
-        val releasesRows = RecentReleaseTable
+        val musicBrainzQuery = RecentReleaseTable
             .leftJoin(ImageTable, onColumn = { RecentReleaseTable.imageId }, otherColumn = { ImageTable.id })
             .selectAll()
-            .where { (RecentReleaseTable.artistId inList followedArtistIds) and (RecentReleaseTable.albumId.isNull()) and (RecentReleaseTable.songId.isNull()) and (RecentReleaseTable.releaseDate.isNotNull()) }
+            .where { RecentReleaseTable.artistId inList followedArtistIds }
+            .andWhere { RecentReleaseTable.albumId.isNull() }
+            .andWhere { RecentReleaseTable.songId.isNull() }
+            .andWhere { RecentReleaseTable.releaseDate.isNotNull() }
+
+        val musicBrainzTotal = musicBrainzQuery.count()
+
+        val musicBrainzRows = musicBrainzQuery
             .orderBy(
-                RecentReleaseTable.releaseDate to SortOrder.DESC,
+                RecentReleaseTable.releaseDate to SortOrder.DESC_NULLS_LAST,
                 RecentReleaseTable.releaseId to SortOrder.DESC,
             )
-            .limit(pageSize)
-            .offset((page * pageSize).toLong())
+            .limit(topN)
             .toList()
 
-        val releaseIds = releasesRows.map { it[RecentReleaseTable.releaseId].value }
+        val providerQuery = ProviderReleaseTable
+            .leftJoin(ImageTable, onColumn = { ProviderReleaseTable.imageId }, otherColumn = { ImageTable.id })
+            .selectAll()
+            .where { ProviderReleaseTable.artistId inList followedArtistIds }
+            .andWhere { ProviderReleaseTable.releaseGroupId.isNull() }
+            .andWhere { ProviderReleaseTable.albumId.isNull() }
+            .andWhere { ProviderReleaseTable.songId.isNull() }
+            .andWhere { ProviderReleaseTable.releaseDate.isNotNull() }
 
-        val providersMap = releaseIds.chunked(10000).flatMap { chunk ->
-            RecentReleaseProviderTable.selectAll()
-                .where { RecentReleaseProviderTable.releaseId inList chunk }
-                .orderBy(
-                    RecentReleaseProviderTable.provider to SortOrder.ASC,
-                    RecentReleaseProviderTable.externalId to SortOrder.ASC,
-                )
-                .map { it[RecentReleaseProviderTable.releaseId].value to it[RecentReleaseProviderTable.rawUrl] }
-        }.groupBy({ it.first }, { it.second })
+        val providerTotal = providerQuery.count()
 
-        val data = releasesRows.map {
-            val groupId = it[RecentReleaseTable.releaseId].value
-            RecentRelease(
-                releaseId = groupId,
-                artistId = it[RecentReleaseTable.artistId].value,
-                artistName = it[RecentReleaseTable.artistName],
-                title = it[RecentReleaseTable.title],
-                releaseDate = it[RecentReleaseTable.releaseDate]?.let { ms -> platformDateFromEpochMilliseconds(ms) },
-                type = it[RecentReleaseTable.type],
-                imageId = it[RecentReleaseTable.imageId]?.value,
-                blurHash = it.getOrNull(ImageTable.blurHash),
-                links = providersMap[groupId] ?: emptyList(),
-                albumId = it[RecentReleaseTable.albumId]?.value,
-                songId = it[RecentReleaseTable.songId]?.value
+        val providerRows = providerQuery
+            .orderBy(
+                ProviderReleaseTable.releaseDate to SortOrder.DESC_NULLS_LAST,
+                ProviderReleaseTable.id to SortOrder.DESC,
             )
-        }
+            .limit(topN)
+            .toList()
 
-        PaginatedResponse(
+        val providersMap = recentReleaseLinks(musicBrainzRows.map { it[RecentReleaseTable.releaseId].value })
+
+        val feed = musicBrainzRows.map { musicBrainzFeedRow(it, providersMap, nowMs) } +
+                providerRows.map { providerFeedRow(it, nowMs) }
+
+        mergeFeed(feed, page, pageSize, musicBrainzTotal + providerTotal)
+    }
+
+    private data class FeedRow(val sortDate: Long?, val id: UUID, val release: RecentRelease)
+
+    private fun mergeFeed(
+        rows: List<FeedRow>,
+        page: Int,
+        pageSize: Int,
+        total: Long
+    ): PaginatedResponse<RecentRelease> {
+        val data = rows
+            .sortedWith(compareByDescending<FeedRow> { it.sortDate ?: Long.MIN_VALUE }.thenByDescending { it.id })
+            .drop(page * pageSize)
+            .take(pageSize)
+            .map { it.release }
+
+        return PaginatedResponse(
             data = data,
             total = total.toInt(),
             page = page,
@@ -169,36 +188,8 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
         )
     }
 
-    suspend fun getArtistRecentReleases(
-        artistId: UUID,
-        page: Int = 0,
-        pageSize: Int = 150
-    ): PaginatedResponse<RecentRelease> = dbQuery {
-        val hasMbId = ArtistMusicBrainzTable.selectAll()
-            .where { (ArtistMusicBrainzTable.artistId eq artistId) and ArtistMusicBrainzTable.musicBrainzId.isNotNull() }
-            .any()
-
-        if (!hasMbId) return@dbQuery PaginatedResponse(emptyList(), 0, page, pageSize, false)
-
-        val query = RecentReleaseTable
-            .leftJoin(ImageTable, onColumn = { RecentReleaseTable.imageId }, otherColumn = { ImageTable.id })
-            .selectAll()
-            .where { RecentReleaseTable.artistId eq artistId }
-
-        val total = query.count()
-
-        val releasesRows = query
-            .orderBy(
-                RecentReleaseTable.releaseDate to SortOrder.DESC,
-                RecentReleaseTable.releaseId to SortOrder.DESC,
-            )
-            .limit(pageSize)
-            .offset((page * pageSize).toLong())
-            .toList()
-
-        val releaseIds = releasesRows.map { it[RecentReleaseTable.releaseId].value }
-
-        val providersMap = releaseIds.chunked(10000).flatMap { chunk ->
+    private fun recentReleaseLinks(releaseIds: List<UUID>): Map<UUID, List<String>> =
+        releaseIds.chunked(10000).flatMap { chunk ->
             RecentReleaseProviderTable.selectAll()
                 .where { RecentReleaseProviderTable.releaseId inList chunk }
                 .orderBy(
@@ -208,30 +199,99 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
                 .map { it[RecentReleaseProviderTable.releaseId].value to it[RecentReleaseProviderTable.rawUrl] }
         }.groupBy({ it.first }, { it.second })
 
-        val data = releasesRows.map {
-            val groupId = it[RecentReleaseTable.releaseId].value
-            RecentRelease(
+    private fun musicBrainzFeedRow(row: ResultRow, providersMap: Map<UUID, List<String>>, nowMs: Long): FeedRow {
+        val groupId = row[RecentReleaseTable.releaseId].value
+        val date = row[RecentReleaseTable.releaseDate]
+        return FeedRow(
+            sortDate = date,
+            id = groupId,
+            release = RecentRelease(
                 releaseId = groupId,
-                artistId = it[RecentReleaseTable.artistId].value,
-                artistName = it[RecentReleaseTable.artistName],
-                title = it[RecentReleaseTable.title],
-                releaseDate = it[RecentReleaseTable.releaseDate]?.let { ms -> platformDateFromEpochMilliseconds(ms) },
-                type = it[RecentReleaseTable.type],
-                imageId = it[RecentReleaseTable.imageId]?.value,
-                blurHash = it.getOrNull(ImageTable.blurHash),
+                artistId = row[RecentReleaseTable.artistId].value,
+                artistName = row[RecentReleaseTable.artistName],
+                title = row[RecentReleaseTable.title],
+                releaseDate = date?.let { platformDateFromEpochMilliseconds(it) },
+                type = row[RecentReleaseTable.type],
+                imageId = row[RecentReleaseTable.imageId]?.value,
+                blurHash = row.getOrNull(ImageTable.blurHash),
                 links = providersMap[groupId] ?: emptyList(),
-                albumId = it[RecentReleaseTable.albumId]?.value,
-                songId = it[RecentReleaseTable.songId]?.value
+                albumId = row[RecentReleaseTable.albumId]?.value,
+                songId = row[RecentReleaseTable.songId]?.value,
+                source = ReleaseSource.MusicBrainz,
+                upcoming = date != null && date > nowMs
             )
-        }
-
-        PaginatedResponse(
-            data = data,
-            total = total.toInt(),
-            page = page,
-            pageSize = pageSize,
-            hasNextPage = (page + 1).toLong() * pageSize < total
         )
+    }
+
+    private fun providerFeedRow(row: ResultRow, nowMs: Long): FeedRow {
+        val providerReleaseId = row[ProviderReleaseTable.id].value
+        val date = row[ProviderReleaseTable.releaseDate]
+        return FeedRow(
+            sortDate = date,
+            id = providerReleaseId,
+            release = RecentRelease(
+                releaseId = providerReleaseId,
+                artistId = row[ProviderReleaseTable.artistId].value,
+                artistName = row[ProviderReleaseTable.artistName],
+                title = row[ProviderReleaseTable.title],
+                releaseDate = date?.let { platformDateFromEpochMilliseconds(it) },
+                type = row[ProviderReleaseTable.type],
+                imageId = row[ProviderReleaseTable.imageId]?.value,
+                blurHash = row.getOrNull(ImageTable.blurHash),
+                links = listOfNotNull(row[ProviderReleaseTable.url].takeIf { it.isNotBlank() }),
+                albumId = row[ProviderReleaseTable.albumId]?.value,
+                songId = row[ProviderReleaseTable.songId]?.value,
+                source = ReleaseSource.Apple,
+                upcoming = date != null && date > nowMs
+            )
+        )
+    }
+
+    suspend fun getArtistRecentReleases(
+        artistId: UUID,
+        page: Int = 0,
+        pageSize: Int = 150
+    ): PaginatedResponse<RecentRelease> = dbQuery {
+        val nowMs = Clock.System.now().toEpochMilliseconds()
+        val topN = (page + 1) * pageSize
+
+        val musicBrainzQuery = RecentReleaseTable
+            .leftJoin(ImageTable, onColumn = { RecentReleaseTable.imageId }, otherColumn = { ImageTable.id })
+            .selectAll()
+            .where { RecentReleaseTable.artistId eq artistId }
+
+        val musicBrainzTotal = musicBrainzQuery.count()
+
+        val musicBrainzRows = musicBrainzQuery
+            .orderBy(
+                RecentReleaseTable.releaseDate to SortOrder.DESC_NULLS_LAST,
+                RecentReleaseTable.releaseId to SortOrder.DESC,
+            )
+            .limit(topN)
+            .toList()
+
+        val providerQuery = ProviderReleaseTable
+            .leftJoin(ImageTable, onColumn = { ProviderReleaseTable.imageId }, otherColumn = { ImageTable.id })
+            .selectAll()
+            .where { ProviderReleaseTable.artistId eq artistId }
+            .andWhere { ProviderReleaseTable.releaseGroupId.isNull() }
+
+        val providerTotal = providerQuery.count()
+
+        val providerRows = providerQuery
+            .orderBy(
+                ProviderReleaseTable.releaseDate to SortOrder.DESC_NULLS_LAST,
+                ProviderReleaseTable.id to SortOrder.DESC,
+            )
+            .limit(topN)
+            .toList()
+
+        val providersMap = recentReleaseLinks(musicBrainzRows.map { it[RecentReleaseTable.releaseId].value })
+
+        val feed = musicBrainzRows.map { musicBrainzFeedRow(it, providersMap, nowMs) } +
+                providerRows.map { providerFeedRow(it, nowMs) }
+
+        mergeFeed(feed, page, pageSize, musicBrainzTotal + providerTotal)
     }
 
     suspend fun getRecentReleasesByMusicBrainzId(
@@ -248,6 +308,18 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
             RecentReleaseTable.select(RecentReleaseTable.artistId)
                 .where { RecentReleaseTable.releaseId eq releaseId }
                 .singleOrNull()?.get(RecentReleaseTable.artistId)?.value
+        }
+
+        if (cachedArtistId == null) {
+            val providerArtistId = dbQuery {
+                ProviderReleaseTable.select(ProviderReleaseTable.artistId)
+                    .where { ProviderReleaseTable.id eq releaseId }
+                    .singleOrNull()?.get(ProviderReleaseTable.artistId)?.value
+            }
+            if (providerArtistId != null) {
+                appleMusicReleaseService.fetchArtistReleases(providerArtistId)
+                return getProviderReleaseById(releaseId)
+            }
         }
 
         val artistId: UUID
@@ -338,6 +410,16 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
         return getRecentReleaseById(releaseId)
     }
 
+    private suspend fun getProviderReleaseById(releaseId: UUID): RecentRelease? = dbQuery {
+        val row = ProviderReleaseTable
+            .leftJoin(ImageTable, onColumn = { ProviderReleaseTable.imageId }, otherColumn = { ImageTable.id })
+            .selectAll()
+            .where { ProviderReleaseTable.id eq releaseId }
+            .singleOrNull() ?: return@dbQuery null
+
+        providerFeedRow(row, Clock.System.now().toEpochMilliseconds()).release
+    }
+
     private suspend fun getRecentReleaseById(releaseId: UUID): RecentRelease? = dbQuery {
         val row = RecentReleaseTable
             .leftJoin(ImageTable, onColumn = { RecentReleaseTable.imageId }, otherColumn = { ImageTable.id })
@@ -353,18 +435,22 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
             )
             .map { it[RecentReleaseProviderTable.rawUrl] }
 
+        val date = row[RecentReleaseTable.releaseDate]
+
         RecentRelease(
             releaseId = row[RecentReleaseTable.releaseId].value,
             artistId = row[RecentReleaseTable.artistId].value,
             artistName = row[RecentReleaseTable.artistName],
             title = row[RecentReleaseTable.title],
-            releaseDate = row[RecentReleaseTable.releaseDate]?.let { platformDateFromEpochMilliseconds(it) },
+            releaseDate = date?.let { platformDateFromEpochMilliseconds(it) },
             type = row[RecentReleaseTable.type],
             imageId = row[RecentReleaseTable.imageId]?.value,
             blurHash = row.getOrNull(ImageTable.blurHash),
             links = links,
             albumId = row[RecentReleaseTable.albumId]?.value,
-            songId = row[RecentReleaseTable.songId]?.value
+            songId = row[RecentReleaseTable.songId]?.value,
+            source = ReleaseSource.MusicBrainz,
+            upcoming = date != null && date > Clock.System.now().toEpochMilliseconds()
         )
     }
 
@@ -915,7 +1001,7 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
                 .where { RecentReleaseTable.releaseId eq releaseId }
                 .singleOrNull()
                 ?.let { it[RecentReleaseTable.imageId]?.value to it[RecentReleaseTable.artistId].value }
-        } ?: return null
+        } ?: return getProviderReleaseImage(releaseId, size)
 
         val (imageId, artistId) = release
         if (imageId != null) return imageService.getImageData(imageId, size)
@@ -941,6 +1027,76 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
         if (artistHasFollowers(artistId)) persistReleaseImageAsync(releaseId)
 
         return result
+    }
+
+    private suspend fun getProviderReleaseImage(releaseId: UUID, size: Int): ByteArray? {
+        val release = dbQuery {
+            ProviderReleaseTable
+                .select(ProviderReleaseTable.imageId, ProviderReleaseTable.artistId, ProviderReleaseTable.artworkUrl)
+                .where { ProviderReleaseTable.id eq releaseId }
+                .singleOrNull()
+                ?.let {
+                    Triple(
+                        it[ProviderReleaseTable.imageId]?.value,
+                        it[ProviderReleaseTable.artistId].value,
+                        it[ProviderReleaseTable.artworkUrl]
+                    )
+                }
+        } ?: return null
+
+        val (imageId, artistId, artworkUrl) = release
+        if (imageId != null) return imageService.getImageData(imageId, size)
+        if (artworkUrl.isNullOrBlank()) return null
+
+        if (imageService.getCachedBytes("releaseImage:$releaseId:missing") != null) return null
+        imageService.getCachedBytes("releaseImage:$releaseId:$size")?.let { return it }
+
+        val sizedUrl = AppleMusicService.artworkUrlForSize(artworkUrl, size)
+        val bytes = fetchProviderArtworkBytes(sizedUrl)
+        if (bytes == null) {
+            imageService.setCachedBytes("releaseImage:$releaseId:missing", byteArrayOf(0), 1.hours)
+            return null
+        }
+
+        val result = if (size > 0 && sizedUrl == artworkUrl) imageService.resizeImageBytes(bytes, size) else bytes
+        imageService.setCachedBytes("releaseImage:$releaseId:$size", result)
+
+        if (artistHasFollowers(artistId)) persistProviderReleaseImageAsync(releaseId, artworkUrl)
+
+        return result
+    }
+
+    internal suspend fun fetchProviderArtworkBytes(url: String): ByteArray? =
+        ApiClient.instance.safeQueuedGet<ByteArray>(url, priority = HttpClientPriority.HIGH)
+
+    private val providerImagePersistInFlight = ConcurrentHashMap.newKeySet<UUID>()
+
+    private fun persistProviderReleaseImageAsync(releaseId: UUID, artworkUrl: String) {
+        if (!providerImagePersistInFlight.add(releaseId)) return
+        serviceScope.launch {
+            try {
+                val bytes = fetchProviderArtworkBytes(AppleMusicService.artworkUrlForSize(artworkUrl, 0)) ?: return@launch
+                val persistedImageId = imageService.createBatch(
+                    listOf(
+                        InsertableImage(
+                            data = bytes,
+                            imageHash = bytes.sha256(),
+                            origin = artworkUrl
+                        )
+                    )
+                ).values.firstOrNull() ?: return@launch
+                dbQuery {
+                    ProviderReleaseTable.update({ ProviderReleaseTable.id eq releaseId }) {
+                        it[ProviderReleaseTable.imageId] = persistedImageId
+                        it[ProviderReleaseTable.lastImageFetch] = Clock.System.now().toEpochMilliseconds()
+                    }
+                }
+            } catch (e: Exception) {
+                logger.error("Failed to persist provider release image for $releaseId", e)
+            } finally {
+                providerImagePersistInFlight.remove(releaseId)
+            }
+        }
     }
 
     internal suspend fun fetchCoverArtBytes(releaseId: UUID, variant: String): ByteArray? =
