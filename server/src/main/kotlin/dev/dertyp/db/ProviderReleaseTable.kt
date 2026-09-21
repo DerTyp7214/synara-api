@@ -24,6 +24,7 @@ object ProviderReleaseTable : UUIDTable("provider_release") {
     val releaseGroupId = reference("releaseGroupId", MBReleaseGroupTable.id, onDelete = ReferenceOption.SET_NULL).nullable()
     val albumId = reference("albumId", AlbumTable.id, onDelete = ReferenceOption.SET_NULL).nullable()
     val songId = reference("songId", SongTable.id, onDelete = ReferenceOption.SET_NULL).nullable()
+    val linksResolvedAt = long("links_resolved_at").nullable()
     val lastImageFetch = long("last_image_fetch").nullable()
     val lastUpdate = long("last_update").nullable()
     val addedAt = long("addedAt").clientDefault { Instant.now().toEpochMilli() }

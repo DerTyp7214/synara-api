@@ -518,29 +518,6 @@ class AppleMusicService(
         return songs
     }
 
-    suspend fun getCatalogArtistNames(
-        ids: List<String>,
-        priority: HttpClientPriority = HttpClientPriority.LOW
-    ): Map<String, String> {
-        if (!catalogEnabled) return emptyMap()
-        val cleaned = ids.map { it.removePrefix("appleMusic:") }.filter { it.isNotBlank() }.distinct()
-        if (cleaned.isEmpty()) return emptyMap()
-        val names = mutableMapOf<String, String>()
-        cleaned.chunked(CATALOG_ID_CHUNK).forEach { chunk ->
-            val json = catalogGet("/v1/catalog/$storefront/artists", priority) {
-                parameter("ids", chunk.joinToString(","))
-            } ?: return@forEach
-            json["data"]?.jsonArray?.forEach inner@{ el ->
-                val obj = el.jsonObject
-                if (obj["type"]?.jsonPrimitive?.contentOrNull != "artists") return@inner
-                val id = obj["id"]?.jsonPrimitive?.contentOrNull ?: return@inner
-                val name = obj["attributes"]?.jsonObject?.get("name")?.jsonPrimitive?.contentOrNull ?: return@inner
-                names[id] = name
-            }
-        }
-        return names
-    }
-
     override fun getAlbumTracks(albumId: String, priority: HttpClientPriority): Flow<IMetadataService.Track> = flow {
         val id = albumId.removePrefix("appleMusic:")
         if (getAppleMusicToken() != null) {

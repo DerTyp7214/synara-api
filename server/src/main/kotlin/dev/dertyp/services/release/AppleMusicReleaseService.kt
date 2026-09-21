@@ -13,10 +13,7 @@ import dev.dertyp.services.metadata.*
 import dev.dertyp.utils.parsers.ParserFactory
 import io.ktor.server.application.ApplicationEnvironment
 import kotlinx.coroutines.*
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.Semaphore
-import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.sync.*
 import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.jdbc.*
 import org.koin.core.component.inject
@@ -28,6 +25,10 @@ import kotlin.time.Duration.Companion.days
 class AppleMusicReleaseService(private val environment: ApplicationEnvironment) : Service() {
     private val imageService by inject<ImageService>()
     private val artistResolver by inject<AppleMusicArtistResolver>()
+    private val providerLinkService by inject<ProviderLinkService>()
+    private val linkResolverService by inject<LinkResolverService>()
+    private val musicBrainzService by inject<MusicBrainzService>()
+    private val musicBrainzCacheService by inject<MusicBrainzCacheService>()
 
     private val serviceScope = CoroutineScope(Dispatchers.IO)
 
@@ -39,12 +40,22 @@ class AppleMusicReleaseService(private val environment: ApplicationEnvironment) 
 
     private data class ProcessResult(val stored: Int = 0, val upcoming: Int = 0, val matched: Int = 0)
 
+    private data class StoredRelease(
+        val imageId: UUID?,
+        val lastImageFetch: Long?,
+        val linksResolvedAt: Long?,
+        val releaseGroupId: UUID?
+    )
+
+    private data class UnlinkedRelease(val id: UUID, val externalId: String, val upc: String?)
+
     companion object {
         const val PROVIDER = "apple"
 
         private val LOOKBACK = 180.days
         private val UPCOMING_HORIZON = 365.days
         private val IMAGE_RETRY = 7.days
+        private val LINK_RESOLVE_RETRY = 7.days
 
         fun providerReleaseId(provider: String, externalId: String): UUID =
             UUID.nameUUIDFromBytes("provider_release:$provider:$externalId".toByteArray())
@@ -136,6 +147,101 @@ class AppleMusicReleaseService(private val environment: ApplicationEnvironment) 
         }
     }
 
+    suspend fun linkedReleaseUrls(releaseGroupId: UUID): List<String> {
+        val rows = dbQuery {
+            ProviderReleaseTable
+                .select(ProviderReleaseTable.id, ProviderReleaseTable.url)
+                .where { ProviderReleaseTable.provider eq PROVIDER }
+                .andWhere { ProviderReleaseTable.releaseGroupId eq releaseGroupId }
+                .map { it[ProviderReleaseTable.id].value to it[ProviderReleaseTable.url] }
+        }
+        if (rows.isEmpty()) return emptyList()
+
+        val attached = providerLinkService.providerReleaseUrls(rows.map { it.first })
+        val direct = rows.mapNotNull { it.second.takeIf { url -> url.isNotBlank() } }
+        return (direct + rows.flatMap { attached[it.first].orEmpty() }).distinct()
+    }
+
+    suspend fun findUnlinkedAppleRelease(
+        artistId: UUID,
+        appleAlbumIds: Set<String>,
+        barcodes: Set<String>,
+        linkKeys: Set<Pair<String, String>>
+    ): UUID? {
+        if (appleAlbumIds.isEmpty() && barcodes.isEmpty() && linkKeys.isEmpty()) return null
+
+        val candidates = dbQuery {
+            ProviderReleaseTable
+                .select(ProviderReleaseTable.id, ProviderReleaseTable.externalId, ProviderReleaseTable.upc)
+                .where { ProviderReleaseTable.provider eq PROVIDER }
+                .andWhere { ProviderReleaseTable.artistId eq artistId }
+                .andWhere { ProviderReleaseTable.releaseGroupId.isNull() }
+                .map {
+                    UnlinkedRelease(
+                        id = it[ProviderReleaseTable.id].value,
+                        externalId = it[ProviderReleaseTable.externalId],
+                        upc = it[ProviderReleaseTable.upc]
+                    )
+                }
+        }
+        if (candidates.isEmpty()) return null
+
+        candidates.firstOrNull { it.externalId in appleAlbumIds }?.let { return it.id }
+        candidates.firstOrNull { candidate ->
+            val upc = candidate.upc
+            upc != null && upc in barcodes
+        }?.let { return it.id }
+
+        if (linkKeys.isEmpty()) return null
+
+        val keys = providerLinkService.providerReleaseLinkKeys(candidates.map { it.id })
+        return candidates.firstOrNull { candidate ->
+            keys[candidate.id].orEmpty().any { it in linkKeys }
+        }?.id
+    }
+
+    suspend fun mergeIntoReleaseGroup(providerReleaseId: UUID, releaseGroupId: UUID) {
+        dbQuery {
+            val row = ProviderReleaseTable
+                .select(
+                    ProviderReleaseTable.imageId,
+                    ProviderReleaseTable.releaseDate,
+                    ProviderReleaseTable.releaseGroupId
+                )
+                .where { ProviderReleaseTable.id eq providerReleaseId }
+                .singleOrNull() ?: return@dbQuery
+
+            if (row[ProviderReleaseTable.releaseGroupId]?.value != releaseGroupId) {
+                ProviderReleaseTable.update({ ProviderReleaseTable.id eq providerReleaseId }) {
+                    it[ProviderReleaseTable.releaseGroupId] = releaseGroupId
+                }
+            }
+
+            val linkIds = ProviderReleaseLinkTable
+                .select(ProviderReleaseLinkTable.linkId)
+                .where { ProviderReleaseLinkTable.providerReleaseId eq providerReleaseId }
+                .map { it[ProviderReleaseLinkTable.linkId].value }
+            providerLinkService.attachRecentReleaseTx(releaseGroupId, linkIds)
+
+            val recent = RecentReleaseTable
+                .select(RecentReleaseTable.imageId, RecentReleaseTable.releaseDate)
+                .where { RecentReleaseTable.releaseId eq releaseGroupId }
+                .singleOrNull() ?: return@dbQuery
+
+            val imageToSet = row[ProviderReleaseTable.imageId]?.value
+                ?.takeIf { recent[RecentReleaseTable.imageId] == null }
+            val dateToSet = row[ProviderReleaseTable.releaseDate]
+                ?.takeIf { recent[RecentReleaseTable.releaseDate] == null }
+
+            if (imageToSet != null || dateToSet != null) {
+                RecentReleaseTable.update({ RecentReleaseTable.releaseId eq releaseGroupId }) { statement ->
+                    imageToSet?.let { statement[RecentReleaseTable.imageId] = it }
+                    dateToSet?.let { statement[RecentReleaseTable.releaseDate] = it }
+                }
+            }
+        }
+    }
+
     private suspend fun processArtist(
         artistId: UUID,
         artistName: String,
@@ -162,26 +268,60 @@ class AppleMusicReleaseService(private val environment: ApplicationEnvironment) 
 
         val barcodes = candidates.mapNotNull { it.first.upc }.filter { it.isNotBlank() }.distinct()
 
-        val providerLinks = dbSemaphore.withPermit {
+        val artistGroupIds = dbSemaphore.withPermit {
             dbQuery {
                 RecentReleaseTable
-                    .innerJoin(
-                        RecentReleaseProviderTable,
-                        { RecentReleaseTable.releaseId },
-                        { RecentReleaseProviderTable.releaseId })
-                    .select(RecentReleaseProviderTable.externalId, RecentReleaseTable.releaseId)
+                    .select(RecentReleaseTable.releaseId)
                     .where { RecentReleaseTable.artistId eq artistId }
-                    .andWhere { RecentReleaseProviderTable.provider eq PROVIDER }
-                    .associate { it[RecentReleaseProviderTable.externalId] to it[RecentReleaseTable.releaseId].value }
+                    .map { it[RecentReleaseTable.releaseId].value }
+                    .distinct()
             }
         }
 
-        val titleGroups = dbSemaphore.withPermit {
+        val groupLinks = if (artistGroupIds.isEmpty()) emptyMap<Pair<String, String>, UUID>() else dbSemaphore.withPermit {
             dbQuery {
-                RecentReleaseTable
-                    .select(RecentReleaseTable.title, RecentReleaseTable.releaseId)
-                    .where { RecentReleaseTable.artistId eq artistId }
-                    .associate { normalizeTitle(it[RecentReleaseTable.title]) to it[RecentReleaseTable.releaseId].value }
+                RecentReleaseLinkTable
+                    .innerJoin(ProviderLinkTable, { RecentReleaseLinkTable.linkId }, { ProviderLinkTable.id })
+                    .select(
+                        ProviderLinkTable.provider,
+                        ProviderLinkTable.externalId,
+                        RecentReleaseLinkTable.releaseId
+                    )
+                    .where { RecentReleaseLinkTable.releaseId inList artistGroupIds }
+                    .associate {
+                        (it[ProviderLinkTable.provider] to it[ProviderLinkTable.externalId]) to
+                                it[RecentReleaseLinkTable.releaseId].value
+                    }
+            }
+        }
+
+        val relationLinks = if (artistGroupIds.isEmpty()) emptyMap<Pair<String, String>, UUID>() else dbSemaphore.withPermit {
+            dbQuery {
+                val releaseGroups = MBReleaseTable
+                    .select(MBReleaseTable.id, MBReleaseTable.releaseGroupId)
+                    .where { MBReleaseTable.releaseGroupId inList artistGroupIds }
+                    .mapNotNull { row ->
+                        val group = row[MBReleaseTable.releaseGroupId]?.value ?: return@mapNotNull null
+                        row[MBReleaseTable.id].value to group
+                    }
+                    .toMap()
+
+                val owners = artistGroupIds + releaseGroups.keys
+                val groupOwners = artistGroupIds.toSet()
+
+                MBRelationProviderTable
+                    .select(
+                        MBRelationProviderTable.ownerId,
+                        MBRelationProviderTable.provider,
+                        MBRelationProviderTable.externalId
+                    )
+                    .where { MBRelationProviderTable.ownerId inList owners }
+                    .mapNotNull { row ->
+                        val owner = row[MBRelationProviderTable.ownerId]
+                        val group = if (owner in groupOwners) owner else (releaseGroups[owner] ?: return@mapNotNull null)
+                        (row[MBRelationProviderTable.provider] to row[MBRelationProviderTable.externalId]) to group
+                    }
+                    .toMap()
             }
         }
 
@@ -241,10 +381,7 @@ class AppleMusicReleaseService(private val environment: ApplicationEnvironment) 
 
         for ((album, date) in candidates) {
             val rowId = providerReleaseId(PROVIDER, album.id)
-            val existingLink = providerLinks[album.id]
-            val matchedGroupId = existingLink
-                ?: album.upc?.let { barcodeGroups[it] }
-                ?: titleGroups[normalizeTitle(album.title)]
+            val upc = album.upc?.takeIf { it.isNotBlank() }
             val matchedAlbumId = libraryAlbums[album.id]
             val matchedSongId = if (matchedAlbumId == null && album.isSingle) librarySongs[album.id] else null
             val releaseType = when {
@@ -261,12 +398,67 @@ class AppleMusicReleaseService(private val environment: ApplicationEnvironment) 
             val existing = dbSemaphore.withPermit {
                 dbQuery {
                     ProviderReleaseTable
-                        .select(ProviderReleaseTable.imageId, ProviderReleaseTable.lastImageFetch)
+                        .select(
+                            ProviderReleaseTable.imageId,
+                            ProviderReleaseTable.lastImageFetch,
+                            ProviderReleaseTable.linksResolvedAt,
+                            ProviderReleaseTable.releaseGroupId
+                        )
                         .where { ProviderReleaseTable.id eq rowId }
                         .singleOrNull()
-                        ?.let { it[ProviderReleaseTable.imageId]?.value to it[ProviderReleaseTable.lastImageFetch] }
+                        ?.let {
+                            StoredRelease(
+                                imageId = it[ProviderReleaseTable.imageId]?.value,
+                                lastImageFetch = it[ProviderReleaseTable.lastImageFetch],
+                                linksResolvedAt = it[ProviderReleaseTable.linksResolvedAt],
+                                releaseGroupId = it[ProviderReleaseTable.releaseGroupId]?.value
+                            )
+                        }
                 }
             }
+
+            val directMatch = existing?.releaseGroupId
+                ?: groupLinks[PROVIDER to album.id]
+                ?: upc?.let { barcodeGroups[it] }
+
+            val lastResolve = existing?.linksResolvedAt
+            val resolveDue = directMatch == null &&
+                    (lastResolve == null || nowMs - lastResolve >= LINK_RESOLVE_RETRY.inWholeMilliseconds)
+
+            var barcodeMatch: UUID? = null
+            var resolvedMatch: UUID? = null
+            var resolvedUrls = emptyList<String>()
+
+            if (resolveDue) {
+                if (upc != null) {
+                    val releases = musicBrainzService.fetchReleasesByBarcode(upc, priority)
+                    releases.forEach { release ->
+                        musicBrainzCacheService.updateReleaseCache(release)
+                        val groupId = release.releaseGroup?.id
+                        if (barcodeMatch == null && groupId != null && groupId in artistGroupIds) {
+                            barcodeMatch = groupId
+                        }
+                    }
+                }
+
+                resolvedUrls = linkResolverService.batchResolve(
+                    listOfNotNull(albumUrl.takeIf { it.isNotBlank() }),
+                    upc = upc,
+                    priority = priority
+                )
+
+                if (barcodeMatch == null) {
+                    resolvedMatch = resolvedUrls.firstNotNullOfOrNull { url ->
+                        val key = linkKey(url)
+                        groupLinks[key] ?: relationLinks[key]
+                    }
+                }
+            }
+
+            val matchedGroupId = directMatch ?: barcodeMatch ?: resolvedMatch
+            val linkUrls = (listOfNotNull(albumUrl.takeIf { it.isNotBlank() }) + resolvedUrls)
+                .filter { it.isNotBlank() }
+                .distinct()
 
             dbSemaphore.withPermit {
                 dbQuery {
@@ -275,6 +467,7 @@ class AppleMusicReleaseService(private val environment: ApplicationEnvironment) 
                         onUpdateExclude = listOf(
                             ProviderReleaseTable.imageId,
                             ProviderReleaseTable.lastImageFetch,
+                            ProviderReleaseTable.linksResolvedAt,
                             ProviderReleaseTable.addedAt
                         )
                     ) {
@@ -299,17 +492,12 @@ class AppleMusicReleaseService(private val environment: ApplicationEnvironment) 
                         it[ProviderReleaseTable.lastUpdate] = nowMs
                     }
 
-                    if (matchedGroupId != null && existingLink == null && albumUrl.isNotBlank()) {
-                        RecentReleaseProviderTable.upsert(
-                            RecentReleaseProviderTable.releaseId,
-                            RecentReleaseProviderTable.provider,
-                            RecentReleaseProviderTable.externalId
-                        ) {
-                            it[RecentReleaseProviderTable.releaseId] = matchedGroupId
-                            it[RecentReleaseProviderTable.provider] = PROVIDER
-                            it[RecentReleaseProviderTable.externalId] = album.id
-                            it[RecentReleaseProviderTable.type] = Type.ALBUM.value
-                            it[RecentReleaseProviderTable.rawUrl] = albumUrl
+                    val linkIds = providerLinkService.linkIdsTx(linkUrls)
+                    providerLinkService.attachProviderReleaseTx(rowId, linkIds)
+
+                    if (resolveDue) {
+                        ProviderReleaseTable.update({ ProviderReleaseTable.id eq rowId }) {
+                            it[ProviderReleaseTable.linksResolvedAt] = nowMs
                         }
                     }
                 }
@@ -319,8 +507,8 @@ class AppleMusicReleaseService(private val environment: ApplicationEnvironment) 
             if (date > nowMs) upcoming++
             if (matchedGroupId != null) matched++
 
-            val storedImageId = existing?.first
-            val lastImageFetch = existing?.second
+            val storedImageId = existing?.imageId
+            val lastImageFetch = existing?.lastImageFetch
             val imageDue = storedImageId == null &&
                     (lastImageFetch == null || nowMs - lastImageFetch >= IMAGE_RETRY.inWholeMilliseconds)
 
@@ -338,9 +526,17 @@ class AppleMusicReleaseService(private val environment: ApplicationEnvironment) 
                     }
                 }
             }
+
+            if (matchedGroupId != null) dbSemaphore.withPermit { mergeIntoReleaseGroup(rowId, matchedGroupId) }
         }
 
         return ProcessResult(stored, upcoming, matched)
+    }
+
+    private suspend fun linkKey(url: String): Pair<String, String> {
+        val parser = ParserFactory.getParser(url)
+        val parsed = parser?.parse(url)
+        return (parser?.name ?: "unknown") to (parsed?.first ?: url)
     }
 
     private suspend fun persistArtwork(artworkUrl: String): UUID? {
@@ -379,13 +575,5 @@ class AppleMusicReleaseService(private val environment: ApplicationEnvironment) 
         }
         logger.info("Unlinked ${releaseIds.size} provider release cover images of unfollowed artists")
         return releaseIds.size
-    }
-
-    private fun normalizeTitle(title: String): String {
-        var value = title.cleanTitle().trim()
-        listOf("- Single", "- EP").forEach { suffix ->
-            if (value.endsWith(suffix, ignoreCase = true)) value = value.dropLast(suffix.length).trim()
-        }
-        return value.lowercase()
     }
 }

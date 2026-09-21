@@ -431,28 +431,6 @@ class AppleMusicServiceTest : KoinTest {
     }
 
     @Test
-    fun `getCatalogArtistNames returns the names by id`() = runBlocking {
-        enableCatalog()
-        useEngine {
-            respondJson(
-                """
-                    {
-                      "data": [
-                        {"id": "111", "type": "artists", "attributes": {"name": "Test Artist"}},
-                        {"id": "222", "type": "artists", "attributes": {"name": "Other Artist"}},
-                        {"id": "333", "type": "albums", "attributes": {"name": "Not An Artist"}}
-                      ]
-                    }
-                """.trimIndent()
-            )
-        }
-
-        val names = appleMusicService.getCatalogArtistNames(listOf("111", "222", "333"))
-
-        assertEquals(mapOf("111" to "Test Artist", "222" to "Other Artist"), names)
-    }
-
-    @Test
     fun `catalog lookups return empty results and issue no request when disabled`() = runBlocking {
         disableCatalog()
         useEngine { respondJson("""{"data": []}""") }
@@ -461,7 +439,6 @@ class AppleMusicServiceTest : KoinTest {
         assertEquals(emptyList<AppleMusicService.CatalogAlbum>(), appleMusicService.getCatalogAlbumsByIds(listOf("1")))
         assertEquals(emptyList<AppleMusicService.CatalogSongRef>(), appleMusicService.getCatalogSongsByIsrc("ISRC"))
         assertEquals(emptyList<AppleMusicService.CatalogSongRef>(), appleMusicService.getCatalogSongsByIds(listOf("1")))
-        assertEquals(emptyMap<String, String>(), appleMusicService.getCatalogArtistNames(listOf("1")))
         assertEquals(0, mockEngine.requestHistory.size)
     }
 

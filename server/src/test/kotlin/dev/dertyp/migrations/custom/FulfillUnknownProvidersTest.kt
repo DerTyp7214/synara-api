@@ -25,11 +25,8 @@ class FulfillUnknownProvidersTest {
                 ArtistTable,
                 AlbumTable,
                 SongTable, SongVariantTable,
-                MBReleaseGroupTable,
                 SongProviderTable,
-                AlbumProviderTable,
-                RecentReleaseTable,
-                RecentReleaseProviderTable
+                AlbumProviderTable
             )
         }
     }
@@ -41,7 +38,6 @@ class FulfillUnknownProvidersTest {
         val artistId = UUID.randomUUID()
         val albumId = UUID.randomUUID()
         val songId = UUID.randomUUID()
-        val releaseId = UUID.randomUUID()
 
         transaction(database) {
             ArtistTable.insert {
@@ -57,11 +53,6 @@ class FulfillUnknownProvidersTest {
                 it[title] = "Song"
                 it[this.albumId] = albumId
             }
-            MBReleaseGroupTable.insert {
-                it[id] = releaseId
-                it[title] = "Release"
-            }
-
             SongProviderTable.insert {
                 it[this.songId] = songId
                 it[provider] = "unknown"
@@ -73,12 +64,6 @@ class FulfillUnknownProvidersTest {
                 it[provider] = "unknown"
                 it[externalId] = "https://thekali.bandcamp.com/album/nirvana"
                 it[rawUrl] = "https://thekali.bandcamp.com/album/nirvana"
-            }
-            RecentReleaseProviderTable.insert {
-                it[this.releaseId] = releaseId
-                it[provider] = "unknown"
-                it[externalId] = "https://www.allmusic.com/album/mw0003563247"
-                it[rawUrl] = "https://www.allmusic.com/album/mw0003563247"
             }
         }
 
@@ -95,11 +80,6 @@ class FulfillUnknownProvidersTest {
             assertEquals(1, albumProviders.size)
             assertEquals("bandcamp", albumProviders[0][AlbumProviderTable.provider])
             assertEquals("thekali/album/nirvana", albumProviders[0][AlbumProviderTable.externalId])
-
-            val releaseProviders = RecentReleaseProviderTable.selectAll().where { RecentReleaseProviderTable.releaseId eq releaseId }.toList()
-            assertEquals(1, releaseProviders.size)
-            assertEquals("allmusic", releaseProviders[0][RecentReleaseProviderTable.provider])
-            assertEquals("mw0003563247", releaseProviders[0][RecentReleaseProviderTable.externalId])
         }
     }
 }

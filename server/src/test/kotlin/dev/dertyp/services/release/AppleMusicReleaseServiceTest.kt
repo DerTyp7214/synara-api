@@ -3,21 +3,21 @@ package dev.dertyp.services.release
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
 import dev.dertyp.core.HttpClientPriority
+import dev.dertyp.data.MusicBrainzRelease
+import dev.dertyp.data.MusicBrainzReleaseGroup
 import dev.dertyp.data.ReleaseType
 import dev.dertyp.db.*
 import dev.dertyp.plugins.RedisCacheProvider
 import dev.dertyp.services.ImageService
 import dev.dertyp.services.StorageService
+import dev.dertyp.services.import.Type
 import dev.dertyp.services.metadata.*
 import io.ktor.server.application.ApplicationEnvironment
 import io.mockk.*
 import kotlinx.coroutines.runBlocking
+import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.core.dao.id.EntityID
-import org.jetbrains.exposed.v1.core.eq
-import org.jetbrains.exposed.v1.jdbc.Database
-import org.jetbrains.exposed.v1.jdbc.SchemaUtils
-import org.jetbrains.exposed.v1.jdbc.insert
-import org.jetbrains.exposed.v1.jdbc.selectAll
+import org.jetbrains.exposed.v1.jdbc.*
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.*
@@ -37,6 +37,9 @@ class AppleMusicReleaseServiceTest : KoinTest {
 
     private lateinit var imageService: ImageService
     private lateinit var artistResolver: AppleMusicArtistResolver
+    private lateinit var linkResolverService: LinkResolverService
+    private lateinit var musicBrainzService: MusicBrainzService
+    private lateinit var musicBrainzCacheService: MusicBrainzCacheService
     private lateinit var environment: ApplicationEnvironment
     private lateinit var appleMusicService: AppleMusicService
 
@@ -51,13 +54,23 @@ class AppleMusicReleaseServiceTest : KoinTest {
                 single<RedisCacheProvider.Config> { mockk(relaxed = true) }
                 single { mockk<ImageService>(relaxed = true) }
                 single { mockk<AppleMusicArtistResolver>(relaxed = true) }
+                single { mockk<LinkResolverService>(relaxed = true) }
+                single { mockk<MusicBrainzService>(relaxed = true) }
+                single { mockk<MusicBrainzCacheService>(relaxed = true) }
                 single { mockk<ApplicationEnvironment>(relaxed = true) }
+                single { ProviderLinkService() }
             })
         }
 
         imageService = get()
         artistResolver = get()
+        linkResolverService = get()
+        musicBrainzService = get()
+        musicBrainzCacheService = get()
         environment = get()
+
+        coEvery { linkResolverService.batchResolve(any(), any(), any(), any()) } returns emptyList()
+        coEvery { musicBrainzService.fetchReleasesByBarcode(any(), any()) } returns emptyList()
 
         appleMusicService = mockk(relaxed = true)
         mockkObject(MetadataService.Companion)
@@ -87,8 +100,10 @@ class AppleMusicReleaseServiceTest : KoinTest {
                 SongProviderTable,
                 FollowedArtistTable,
                 RecentReleaseTable,
-                RecentReleaseProviderTable,
                 ProviderReleaseTable,
+                ProviderLinkTable,
+                RecentReleaseLinkTable,
+                ProviderReleaseLinkTable,
                 *allMusicBrainzTables
             )
         }
@@ -145,6 +160,64 @@ class AppleMusicReleaseServiceTest : KoinTest {
         ProviderReleaseTable.selectAll().map { row ->
             row[ProviderReleaseTable.externalId] to row
         }.toMap()
+    }
+
+    private fun seedRecentRelease(releaseGroupId: UUID, groupTitle: String) {
+        transaction(database) {
+            MBReleaseGroupTable.insert { it[id] = releaseGroupId; it[title] = groupTitle }
+            RecentReleaseTable.insert {
+                it[RecentReleaseTable.releaseId] = releaseGroupId
+                it[RecentReleaseTable.artistId] = testArtistId
+                it[RecentReleaseTable.title] = groupTitle
+            }
+        }
+    }
+
+    private fun insertProviderLink(
+        providerName: String,
+        external: String,
+        linkUrl: String,
+        linkType: String? = Type.ALBUM.value
+    ): UUID {
+        val linkId = UUID.randomUUID()
+        transaction(database) {
+            ProviderLinkTable.insert {
+                it[ProviderLinkTable.id] = linkId
+                it[ProviderLinkTable.provider] = providerName
+                it[ProviderLinkTable.externalId] = external
+                it[ProviderLinkTable.type] = linkType
+                it[ProviderLinkTable.rawUrl] = linkUrl
+            }
+        }
+        return linkId
+    }
+
+    private fun seedGroupLink(releaseGroupId: UUID, providerName: String, external: String, linkUrl: String) {
+        val linkRowId = insertProviderLink(providerName, external, linkUrl)
+        transaction(database) {
+            RecentReleaseLinkTable.insert {
+                it[RecentReleaseLinkTable.releaseId] = releaseGroupId
+                it[RecentReleaseLinkTable.linkId] = linkRowId
+            }
+        }
+    }
+
+    private fun groupLinkKeys(releaseGroupId: UUID): Map<String, String> = transaction(database) {
+        RecentReleaseLinkTable
+            .innerJoin(ProviderLinkTable, { RecentReleaseLinkTable.linkId }, { ProviderLinkTable.id })
+            .select(ProviderLinkTable.provider, ProviderLinkTable.externalId)
+            .where { RecentReleaseLinkTable.releaseId eq releaseGroupId }
+            .associate { it[ProviderLinkTable.provider] to it[ProviderLinkTable.externalId] }
+    }
+
+    private fun releaseLinkUrls(externalId: String): List<String> = transaction(database) {
+        val rowId = AppleMusicReleaseService.providerReleaseId("apple", externalId)
+        ProviderReleaseLinkTable
+            .innerJoin(ProviderLinkTable, { ProviderReleaseLinkTable.linkId }, { ProviderLinkTable.id })
+            .select(ProviderLinkTable.rawUrl, ProviderLinkTable.provider)
+            .where { ProviderReleaseLinkTable.providerReleaseId eq rowId }
+            .orderBy(ProviderLinkTable.provider to SortOrder.ASC)
+            .map { it[ProviderLinkTable.rawUrl] }
     }
 
     @ParameterizedTest
@@ -212,25 +285,13 @@ class AppleMusicReleaseServiceTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `matches the release group through an existing provider link`(dialect: DbDialect) = runBlocking {
+    fun `matches the release group through an existing apple mapping`(dialect: DbDialect) = runBlocking {
         setup(dialect)
         seedFollowedArtist()
 
         val releaseGroupId = UUID.randomUUID()
-        transaction(database) {
-            MBReleaseGroupTable.insert { it[id] = releaseGroupId; it[title] = "Linked Album" }
-            RecentReleaseTable.insert {
-                it[RecentReleaseTable.releaseId] = releaseGroupId
-                it[RecentReleaseTable.artistId] = testArtistId
-                it[RecentReleaseTable.title] = "Linked Album"
-            }
-            RecentReleaseProviderTable.insert {
-                it[RecentReleaseProviderTable.releaseId] = releaseGroupId
-                it[RecentReleaseProviderTable.provider] = "apple"
-                it[RecentReleaseProviderTable.externalId] = "1"
-                it[RecentReleaseProviderTable.rawUrl] = "https://music.apple.com/album/1"
-            }
-        }
+        seedRecentRelease(releaseGroupId, "Linked Album")
+        seedGroupLink(releaseGroupId, "apple", "1", "https://music.apple.com/album/1")
 
         coEvery { appleMusicService.getArtistCatalogAlbums(appleArtistId, any()) } returns listOf(
             catalogAlbum("1", "Totally Different Title", LocalDate.now().minusDays(5))
@@ -240,75 +301,472 @@ class AppleMusicReleaseServiceTest : KoinTest {
 
         assertEquals(1, result["matched"])
         assertEquals(releaseGroupId, providerRows().getValue("1")[ProviderReleaseTable.releaseGroupId]?.value)
+        coVerify(exactly = 0) { linkResolverService.batchResolve(any(), any(), any(), any()) }
     }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `matches the release group through the UPC and links the MusicBrainz release`(dialect: DbDialect) = runBlocking {
+    fun `matches the release group through the cached UPC and attaches the apple link`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            seedFollowedArtist()
+
+            val mbGroupId = UUID.randomUUID()
+            val mbReleaseId = UUID.randomUUID()
+            transaction(database) {
+                MBReleaseGroupTable.insert { it[id] = mbGroupId; it[title] = "Barcoded Album" }
+                MBReleaseTable.insert {
+                    it[id] = mbReleaseId
+                    it[title] = "Barcoded Album"
+                    it[barcode] = "00602445790000"
+                    it[MBReleaseTable.releaseGroupId] = mbGroupId
+                }
+            }
+
+            coEvery { appleMusicService.getArtistCatalogAlbums(appleArtistId, any()) } returns listOf(
+                catalogAlbum(
+                    "1",
+                    "Barcoded Album",
+                    LocalDate.now().minusDays(5),
+                    upc = "00602445790000",
+                    url = "https://music.apple.com/album/1"
+                )
+            )
+
+            service.fetchFollowedArtistReleases()
+
+            assertEquals(mbGroupId, providerRows().getValue("1")[ProviderReleaseTable.releaseGroupId]?.value)
+            assertEquals("1", groupLinkKeys(mbGroupId)["apple"])
+            assertEquals(listOf("https://music.apple.com/album/1"), releaseLinkUrls("1"))
+        }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `matches the release group through the MusicBrainz barcode lookup`(dialect: DbDialect) = runBlocking {
         setup(dialect)
         seedFollowedArtist()
 
-        val mbGroupId = UUID.randomUUID()
-        val mbReleaseId = UUID.randomUUID()
-        transaction(database) {
-            MBReleaseGroupTable.insert { it[id] = mbGroupId; it[title] = "Barcoded Album" }
-            MBReleaseTable.insert {
-                it[id] = mbReleaseId
-                it[title] = "Barcoded Album"
-                it[barcode] = "00602445790000"
-                it[MBReleaseTable.releaseGroupId] = mbGroupId
-            }
-        }
+        val releaseGroupId = UUID.randomUUID()
+        seedRecentRelease(releaseGroupId, "Radar Album")
+
+        val mbRelease = MusicBrainzRelease(
+            id = UUID.randomUUID(),
+            title = "Radar Album",
+            barcode = "00602445790000",
+            releaseGroup = MusicBrainzReleaseGroup(id = releaseGroupId, title = "Radar Album")
+        )
+        coEvery { musicBrainzService.fetchReleasesByBarcode(any(), any()) } returns listOf(mbRelease)
 
         coEvery { appleMusicService.getArtistCatalogAlbums(appleArtistId, any()) } returns listOf(
             catalogAlbum(
                 "1",
-                "Barcoded Album",
+                "Apple Only Title",
                 LocalDate.now().minusDays(5),
                 upc = "00602445790000",
                 url = "https://music.apple.com/album/1"
             )
         )
 
+        val result = service.fetchFollowedArtistReleases()
+
+        assertEquals(1, result["matched"])
+        assertEquals(releaseGroupId, providerRows().getValue("1")[ProviderReleaseTable.releaseGroupId]?.value)
+        coVerify(exactly = 1) { musicBrainzCacheService.updateReleaseCache(mbRelease) }
+        assertEquals("1", groupLinkKeys(releaseGroupId)["apple"])
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `keeps the row unmatched when the barcode release group is not on the radar`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            seedFollowedArtist()
+
+            val radarGroupId = UUID.randomUUID()
+            seedRecentRelease(radarGroupId, "Radar Album")
+
+            val mbRelease = MusicBrainzRelease(
+                id = UUID.randomUUID(),
+                title = "Unknown Album",
+                barcode = "00602445790000",
+                releaseGroup = MusicBrainzReleaseGroup(id = UUID.randomUUID(), title = "Unknown Album")
+            )
+            coEvery { musicBrainzService.fetchReleasesByBarcode(any(), any()) } returns listOf(mbRelease)
+
+            coEvery { appleMusicService.getArtistCatalogAlbums(appleArtistId, any()) } returns listOf(
+                catalogAlbum(
+                    "1",
+                    "Apple Only Title",
+                    LocalDate.now().minusDays(5),
+                    upc = "00602445790000",
+                    url = "https://music.apple.com/album/1"
+                )
+            )
+
+            val result = service.fetchFollowedArtistReleases()
+
+            assertEquals(0, result["matched"])
+            assertNull(providerRows().getValue("1")[ProviderReleaseTable.releaseGroupId])
+            coVerify(exactly = 1) { musicBrainzCacheService.updateReleaseCache(mbRelease) }
+            assertTrue(groupLinkKeys(radarGroupId).isEmpty())
+        }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `matches the release group through a resolved provider link`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        seedFollowedArtist()
+
+        val releaseGroupId = UUID.randomUUID()
+        seedRecentRelease(releaseGroupId, "Radar Album")
+        seedGroupLink(releaseGroupId, "tidal", "456", "https://tidal.com/album/456")
+
+        coEvery { appleMusicService.getArtistCatalogAlbums(appleArtistId, any()) } returns listOf(
+            catalogAlbum(
+                "1",
+                "Apple Only Title",
+                LocalDate.now().minusDays(5),
+                upc = "00602445790000",
+                url = "https://music.apple.com/album/1"
+            )
+        )
+        coEvery { linkResolverService.batchResolve(any(), any(), any(), any()) } returns
+                listOf("https://tidal.com/album/456")
+
+        val result = service.fetchFollowedArtistReleases()
+
+        assertEquals(1, result["matched"])
+        assertEquals(releaseGroupId, providerRows().getValue("1")[ProviderReleaseTable.releaseGroupId]?.value)
+        coVerify(exactly = 1) {
+            linkResolverService.batchResolve(
+                listOf("https://music.apple.com/album/1"),
+                any(),
+                "00602445790000",
+                any()
+            )
+        }
+
+        val links = groupLinkKeys(releaseGroupId)
+        assertEquals("1", links["apple"])
+        assertEquals("456", links["tidal"])
+        assertEquals(
+            listOf("https://music.apple.com/album/1", "https://tidal.com/album/456"),
+            releaseLinkUrls("1")
+        )
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `matches the release group through a MusicBrainz relation of one of its releases`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            seedFollowedArtist()
+
+            val releaseGroupId = UUID.randomUUID()
+            val mbReleaseId = UUID.randomUUID()
+            seedRecentRelease(releaseGroupId, "Radar Album")
+            transaction(database) {
+                MBReleaseTable.insert {
+                    it[id] = mbReleaseId
+                    it[title] = "Radar Album"
+                    it[MBReleaseTable.releaseGroupId] = releaseGroupId
+                }
+                MBRelationProviderTable.insert {
+                    it[MBRelationProviderTable.ownerId] = mbReleaseId
+                    it[MBRelationProviderTable.provider] = "tidal"
+                    it[MBRelationProviderTable.externalId] = "789"
+                    it[MBRelationProviderTable.rawUrl] = "https://tidal.com/album/789"
+                }
+            }
+
+            coEvery { appleMusicService.getArtistCatalogAlbums(appleArtistId, any()) } returns listOf(
+                catalogAlbum(
+                    "1",
+                    "Apple Only Title",
+                    LocalDate.now().minusDays(5),
+                    url = "https://music.apple.com/album/1"
+                )
+            )
+            coEvery { linkResolverService.batchResolve(any(), any(), any(), any()) } returns
+                    listOf("https://tidal.com/album/789")
+
+            service.fetchFollowedArtistReleases()
+
+            assertEquals(releaseGroupId, providerRows().getValue("1")[ProviderReleaseTable.releaseGroupId]?.value)
+
+            val links = groupLinkKeys(releaseGroupId)
+            assertEquals("1", links["apple"])
+            assertEquals("789", links["tidal"])
+        }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `stores the mappings and the resolve time of an unmatched release`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        seedFollowedArtist()
+
+        coEvery { appleMusicService.getArtistCatalogAlbums(appleArtistId, any()) } returns listOf(
+            catalogAlbum(
+                "1",
+                "Lonely Album",
+                LocalDate.now().minusDays(5),
+                url = "https://music.apple.com/album/1"
+            )
+        )
+        coEvery { linkResolverService.batchResolve(any(), any(), any(), any()) } returns
+                listOf("https://open.spotify.com/album/abc")
+
         service.fetchFollowedArtistReleases()
 
-        assertEquals(mbGroupId, providerRows().getValue("1")[ProviderReleaseTable.releaseGroupId]?.value)
-
+        val row = providerRows().getValue("1")
+        assertNull(row[ProviderReleaseTable.releaseGroupId])
+        assertNotNull(row[ProviderReleaseTable.linksResolvedAt])
+        assertEquals(
+            listOf("https://music.apple.com/album/1", "https://open.spotify.com/album/abc"),
+            releaseLinkUrls("1")
+        )
         transaction(database) {
-            val link = RecentReleaseProviderTable.selectAll()
-                .where { RecentReleaseProviderTable.releaseId eq mbGroupId }
-                .single()
-            assertEquals("apple", link[RecentReleaseProviderTable.provider])
-            assertEquals("1", link[RecentReleaseProviderTable.externalId])
-            assertEquals("https://music.apple.com/album/1", link[RecentReleaseProviderTable.rawUrl])
+            assertEquals(0, RecentReleaseLinkTable.selectAll().count().toInt())
         }
     }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `matches the release group through the normalized title`(dialect: DbDialect) = runBlocking {
+    fun `does not resolve the links again within the retry window`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        seedFollowedArtist()
+
+        coEvery { appleMusicService.getArtistCatalogAlbums(appleArtistId, any()) } returns listOf(
+            catalogAlbum(
+                "1",
+                "Lonely Album",
+                LocalDate.now().minusDays(5),
+                upc = "00602445790000",
+                url = "https://music.apple.com/album/1"
+            )
+        )
+        coEvery { linkResolverService.batchResolve(any(), any(), any(), any()) } returns
+                listOf("https://open.spotify.com/album/abc")
+
+        service.fetchFollowedArtistReleases()
+        service.fetchFollowedArtistReleases()
+
+        coVerify(exactly = 1) { linkResolverService.batchResolve(any(), any(), any(), any()) }
+        coVerify(exactly = 1) { musicBrainzService.fetchReleasesByBarcode(any(), any()) }
+        assertEquals(
+            listOf("https://music.apple.com/album/1", "https://open.spotify.com/album/abc"),
+            releaseLinkUrls("1")
+        )
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `never resolves the links of an already matched release`(dialect: DbDialect) = runBlocking {
         setup(dialect)
         seedFollowedArtist()
 
         val releaseGroupId = UUID.randomUUID()
-        transaction(database) {
-            MBReleaseGroupTable.insert { it[id] = releaseGroupId; it[title] = "Night Drive" }
-            RecentReleaseTable.insert {
-                it[RecentReleaseTable.releaseId] = releaseGroupId
-                it[RecentReleaseTable.artistId] = testArtistId
-                it[RecentReleaseTable.title] = "Night Drive"
-            }
-        }
+        seedRecentRelease(releaseGroupId, "Night Drive")
+        seedGroupLink(releaseGroupId, "apple", "1", "https://music.apple.com/album/1")
 
         coEvery { appleMusicService.getArtistCatalogAlbums(appleArtistId, any()) } returns listOf(
-            catalogAlbum("1", "Night Drive - Single", LocalDate.now().minusDays(5), isSingle = true)
+            catalogAlbum("1", "Night Drive", LocalDate.now().minusDays(5), upc = "00602445790000")
         )
 
         service.fetchFollowedArtistReleases()
 
-        val row = providerRows().getValue("1")
-        assertEquals(releaseGroupId, row[ProviderReleaseTable.releaseGroupId]?.value)
-        assertEquals(ReleaseType.Single, row[ProviderReleaseTable.type])
+        coVerify(exactly = 0) { linkResolverService.batchResolve(any(), any(), any(), any()) }
+        coVerify(exactly = 0) { musicBrainzService.fetchReleasesByBarcode(any(), any()) }
+        assertNull(providerRows().getValue("1")[ProviderReleaseTable.linksResolvedAt])
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `keeps a release with the same title but different identifiers separate`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        seedFollowedArtist()
+
+        val releaseGroupId = UUID.randomUUID()
+        seedRecentRelease(releaseGroupId, "Night Drive")
+        seedGroupLink(releaseGroupId, "tidal", "111", "https://tidal.com/album/111")
+
+        coEvery { appleMusicService.getArtistCatalogAlbums(appleArtistId, any()) } returns listOf(
+            catalogAlbum(
+                "1",
+                "Night Drive",
+                LocalDate.now().minusDays(5),
+                upc = "00602445790000",
+                url = "https://music.apple.com/album/1"
+            )
+        )
+        coEvery { linkResolverService.batchResolve(any(), any(), any(), any()) } returns
+                listOf("https://tidal.com/album/222")
+
+        val result = service.fetchFollowedArtistReleases()
+
+        assertEquals(0, result["matched"])
+        assertNull(providerRows().getValue("1")[ProviderReleaseTable.releaseGroupId])
+        assertEquals(mapOf("tidal" to "111"), groupLinkKeys(releaseGroupId))
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `merging fills the missing cover and release date only`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        seedFollowedArtist()
+
+        val emptyGroupId = UUID.randomUUID()
+        val filledGroupId = UUID.randomUUID()
+        val providerImageId = UUID.randomUUID()
+        val groupImageId = UUID.randomUUID()
+        val emptyRowId = AppleMusicReleaseService.providerReleaseId("apple", "10")
+        val filledRowId = AppleMusicReleaseService.providerReleaseId("apple", "11")
+
+        transaction(database) {
+            ImageTable.insert { it[id] = providerImageId; it[path] = "a"; it[imageHash] = "h1"; it[origin] = "a" }
+            ImageTable.insert { it[id] = groupImageId; it[path] = "b"; it[imageHash] = "h2"; it[origin] = "b" }
+            listOf(emptyRowId to "10", filledRowId to "11").forEach { (rowId, external) ->
+                ProviderReleaseTable.insert {
+                    it[id] = rowId
+                    it[provider] = "apple"
+                    it[externalId] = external
+                    it[ProviderReleaseTable.artistId] = testArtistId
+                    it[title] = "Merged Release $external"
+                    it[imageId] = EntityID(providerImageId, ImageTable)
+                    it[releaseDate] = 4000L
+                }
+            }
+        }
+
+        seedRecentRelease(emptyGroupId, "Empty Group")
+        seedRecentRelease(filledGroupId, "Filled Group")
+        transaction(database) {
+            RecentReleaseTable.update({ RecentReleaseTable.releaseId eq filledGroupId }) {
+                it[RecentReleaseTable.imageId] = EntityID(groupImageId, ImageTable)
+                it[RecentReleaseTable.releaseDate] = 9000L
+            }
+        }
+
+        val appleLink = insertProviderLink("apple", "10", "https://music.apple.com/album/10")
+        transaction(database) {
+            ProviderReleaseLinkTable.insert {
+                it[ProviderReleaseLinkTable.providerReleaseId] = emptyRowId
+                it[ProviderReleaseLinkTable.linkId] = appleLink
+            }
+        }
+
+        service.mergeIntoReleaseGroup(emptyRowId, emptyGroupId)
+        service.mergeIntoReleaseGroup(emptyRowId, emptyGroupId)
+        service.mergeIntoReleaseGroup(filledRowId, filledGroupId)
+
+        transaction(database) {
+            val empty = RecentReleaseTable.selectAll()
+                .where { RecentReleaseTable.releaseId eq emptyGroupId }
+                .single()
+            assertEquals(providerImageId, empty[RecentReleaseTable.imageId]?.value)
+            assertEquals(4000L, empty[RecentReleaseTable.releaseDate])
+
+            val filled = RecentReleaseTable.selectAll()
+                .where { RecentReleaseTable.releaseId eq filledGroupId }
+                .single()
+            assertEquals(groupImageId, filled[RecentReleaseTable.imageId]?.value)
+            assertEquals(9000L, filled[RecentReleaseTable.releaseDate])
+        }
+
+        assertEquals(emptyGroupId, providerRows().getValue("10")[ProviderReleaseTable.releaseGroupId]?.value)
+        assertEquals(mapOf("apple" to "10"), groupLinkKeys(emptyGroupId))
+        assertTrue(groupLinkKeys(filledGroupId).isEmpty())
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `linkedReleaseUrls returns the apple url and the attached links`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        seedFollowedArtist()
+
+        val releaseGroupId = UUID.randomUUID()
+        seedRecentRelease(releaseGroupId, "Merged Group")
+
+        val rowId = AppleMusicReleaseService.providerReleaseId("apple", "10")
+        transaction(database) {
+            ProviderReleaseTable.insert {
+                it[id] = rowId
+                it[provider] = "apple"
+                it[externalId] = "10"
+                it[ProviderReleaseTable.artistId] = testArtistId
+                it[title] = "Merged Release"
+                it[url] = "https://music.apple.com/album/10"
+                it[ProviderReleaseTable.releaseGroupId] = releaseGroupId
+            }
+        }
+        val tidalLink = insertProviderLink("tidal", "99", "https://tidal.com/album/99")
+        transaction(database) {
+            ProviderReleaseLinkTable.insert {
+                it[ProviderReleaseLinkTable.providerReleaseId] = rowId
+                it[ProviderReleaseLinkTable.linkId] = tidalLink
+            }
+        }
+
+        assertEquals(
+            listOf("https://music.apple.com/album/10", "https://tidal.com/album/99"),
+            service.linkedReleaseUrls(releaseGroupId)
+        )
+        assertTrue(service.linkedReleaseUrls(UUID.randomUUID()).isEmpty())
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `findUnlinkedAppleRelease matches by album id, barcode and link key`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        seedFollowedArtist()
+
+        val byIdRow = AppleMusicReleaseService.providerReleaseId("apple", "10")
+        val byBarcodeRow = AppleMusicReleaseService.providerReleaseId("apple", "11")
+        val byLinkRow = AppleMusicReleaseService.providerReleaseId("apple", "12")
+        val linkedRow = AppleMusicReleaseService.providerReleaseId("apple", "13")
+        val releaseGroupId = UUID.randomUUID()
+        seedRecentRelease(releaseGroupId, "Taken Group")
+
+        transaction(database) {
+            listOf(
+                Triple(byIdRow, "10", null),
+                Triple(byBarcodeRow, "11", "00602445790000"),
+                Triple(byLinkRow, "12", null),
+                Triple(linkedRow, "13", null)
+            ).forEach { (rowId, external, barcode) ->
+                ProviderReleaseTable.insert {
+                    it[id] = rowId
+                    it[provider] = "apple"
+                    it[externalId] = external
+                    it[ProviderReleaseTable.artistId] = testArtistId
+                    it[title] = "Release $external"
+                    it[upc] = barcode
+                    if (rowId == linkedRow) it[ProviderReleaseTable.releaseGroupId] = releaseGroupId
+                }
+            }
+        }
+        val tidalLink = insertProviderLink("tidal", "99", "https://tidal.com/album/99")
+        transaction(database) {
+            ProviderReleaseLinkTable.insert {
+                it[ProviderReleaseLinkTable.providerReleaseId] = byLinkRow
+                it[ProviderReleaseLinkTable.linkId] = tidalLink
+            }
+        }
+
+        assertEquals(
+            byIdRow,
+            service.findUnlinkedAppleRelease(testArtistId, setOf("10"), emptySet(), emptySet())
+        )
+        assertEquals(
+            byBarcodeRow,
+            service.findUnlinkedAppleRelease(testArtistId, emptySet(), setOf("00602445790000"), emptySet())
+        )
+        assertEquals(
+            byLinkRow,
+            service.findUnlinkedAppleRelease(testArtistId, emptySet(), emptySet(), setOf("tidal" to "99"))
+        )
+        assertNull(service.findUnlinkedAppleRelease(testArtistId, setOf("13"), emptySet(), emptySet()))
+        assertNull(service.findUnlinkedAppleRelease(UUID.randomUUID(), setOf("10"), emptySet(), emptySet()))
     }
 
     @ParameterizedTest
@@ -567,7 +1025,7 @@ class AppleMusicReleaseServiceTest : KoinTest {
         seedFollowedArtist()
 
         coEvery { appleMusicService.getArtistCatalogAlbums(appleArtistId, any()) } returns listOf(
-            catalogAlbum("1", "Stable Album", LocalDate.now().minusDays(5))
+            catalogAlbum("1", "Stable Album", LocalDate.now().minusDays(5), url = "https://music.apple.com/album/1")
         )
 
         service.fetchFollowedArtistReleases()
@@ -579,5 +1037,10 @@ class AppleMusicReleaseServiceTest : KoinTest {
         assertEquals(1, rows.size)
         assertEquals(firstAddedAt, rows.getValue("1")[ProviderReleaseTable.addedAt])
         assertNotNull(rows.getValue("1")[ProviderReleaseTable.lastUpdate])
+        assertEquals(listOf("https://music.apple.com/album/1"), releaseLinkUrls("1"))
+        transaction(database) {
+            assertEquals(1, ProviderLinkTable.selectAll().count().toInt())
+            assertEquals(1, ProviderReleaseLinkTable.selectAll().count().toInt())
+        }
     }
 }

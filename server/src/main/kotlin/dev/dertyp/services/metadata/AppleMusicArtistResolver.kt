@@ -20,6 +20,12 @@ class AppleMusicArtistResolver(private val environment: ApplicationEnvironment) 
         ) as AppleMusicService
     }
 
+    private data class Candidate(val itemId: UUID, val identifier: String, val localCredits: Int)
+
+    private data class Evidence(val itemId: UUID, val localCredits: Int, val appleArtistIds: Set<String>) {
+        val creditConsistent: Boolean = appleArtistIds.isNotEmpty() && appleArtistIds.size >= localCredits
+    }
+
     private class CallBudget(private var remaining: Int) {
         fun take(): Boolean {
             if (remaining <= 0) return false
@@ -47,66 +53,74 @@ class AppleMusicArtistResolver(private val environment: ApplicationEnvironment) 
         }
 
         val budget = CallBudget(MAX_CATALOG_CALLS)
+        val evidence = mutableListOf<Evidence>()
 
-        val albumIds = linkedAlbumIds(artistId)
-        if (albumIds.isNotEmpty() && budget.take()) {
-            apple.getCatalogAlbumsByIds(albumIds, priority).forEach { album ->
-                pickArtistId(album.artistIds, artistName, apple, budget, priority)?.let {
-                    persist(artistId, it)
-                    return it
-                }
-            }
-        }
-
-        val songIds = linkedSongIds(artistId)
-        if (songIds.isNotEmpty() && budget.take()) {
-            apple.getCatalogSongsByIds(songIds, priority).forEach { song ->
-                pickArtistId(song.artistIds, artistName, apple, budget, priority)?.let {
-                    persist(artistId, it)
-                    return it
-                }
-            }
-        }
-
-        for (upc in albumBarcodes(artistId)) {
+        for (candidate in isrcCandidates(artistId)) {
             if (!budget.take()) break
-            apple.getCatalogAlbumsByUpc(upc, priority).forEach { album ->
-                pickArtistId(album.artistIds, artistName, apple, budget, priority)?.let {
+            for (song in apple.getCatalogSongsByIsrc(candidate.identifier, priority)) {
+                add(evidence, candidate, song.artistIds)?.let {
                     persist(artistId, it)
                     return it
                 }
             }
         }
 
-        for (isrc in songIsrcs(artistId)) {
+        for (candidate in barcodeCandidates(artistId)) {
             if (!budget.take()) break
-            apple.getCatalogSongsByIsrc(isrc, priority).forEach { song ->
-                pickArtistId(song.artistIds, artistName, apple, budget, priority)?.let {
+            for (album in apple.getCatalogAlbumsByUpc(candidate.identifier, priority)) {
+                add(evidence, candidate, album.artistIds)?.let {
                     persist(artistId, it)
                     return it
                 }
             }
         }
 
-        logger.info("No Apple Music artist id resolved for $artistName ($artistId)")
+        val downloaded = gamdlCandidates(artistId)
+        if (downloaded.isNotEmpty() && budget.take()) {
+            val byAppleId = downloaded.associateBy { it.identifier }
+            for (album in apple.getCatalogAlbumsByIds(downloaded.map { it.identifier }, priority)) {
+                val candidate = byAppleId[album.id.removePrefix(ORIGINAL_ID_PREFIX).trim()] ?: continue
+                add(evidence, candidate, album.artistIds)?.let {
+                    persist(artistId, it)
+                    return it
+                }
+            }
+        }
+
+        logger.info(
+            "No Apple Music artist id resolved for $artistName ($artistId) from ${evidence.size} catalog resources " +
+                    "(${evidence.count { it.creditConsistent }} credit-consistent): " +
+                    evidence.joinToString { "${it.localCredits}->${it.appleArtistIds.joinToString("/")}" }
+        )
         return null
     }
 
-    private suspend fun pickArtistId(
-        ids: List<String>,
-        artistName: String,
-        apple: AppleMusicService,
-        budget: CallBudget,
-        priority: HttpClientPriority
-    ): String? {
-        val candidates = ids.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
-        if (candidates.isEmpty()) return null
-        if (candidates.size == 1) return candidates.first()
-        if (!budget.take()) return null
+    private fun add(evidence: MutableList<Evidence>, candidate: Candidate, appleArtistIds: List<String>): String? {
+        val ids = appleArtistIds
+            .map { it.trim().removePrefix(ORIGINAL_ID_PREFIX) }
+            .filter { it.isNotEmpty() }
+            .toSet()
+        if (ids.isEmpty()) return null
 
-        val names = apple.getCatalogArtistNames(candidates.take(CANDIDATE_LIMIT), priority)
-        val matches = names.entries.filter { it.value.equals(artistName, ignoreCase = true) }
-        return matches.singleOrNull()?.key
+        val entry = Evidence(candidate.itemId, candidate.localCredits, ids)
+        evidence.add(entry)
+        return decide(evidence, entry)
+    }
+
+    private fun decide(evidence: List<Evidence>, added: Evidence): String? {
+        if (added.creditConsistent && added.localCredits == 1 && added.appleArtistIds.size == 1) {
+            return added.appleArtistIds.first()
+        }
+
+        val consistent = evidence.filter { it.creditConsistent }
+        if (consistent.distinctBy { it.itemId }.size < 2) return null
+
+        val shared = consistent.map { it.appleArtistIds }.reduce { acc, ids -> acc intersect ids }
+        val candidate = shared.singleOrNull() ?: return null
+        val soleIdOfInconsistent = evidence.any {
+            !it.creditConsistent && it.appleArtistIds.singleOrNull() == candidate
+        }
+        return candidate.takeIf { !soleIdOfInconsistent }
     }
 
     private suspend fun storedAppleId(artistId: UUID): String? = dbQuery {
@@ -136,78 +150,86 @@ class AppleMusicArtistResolver(private val environment: ApplicationEnvironment) 
             .firstOrNull()
     }
 
-    private suspend fun linkedAlbumIds(artistId: UUID): List<String> = dbQuery {
-        val fromProviders = AlbumProviderTable.innerJoin(
-            AlbumArtistTable,
-            onColumn = { AlbumProviderTable.albumId },
-            otherColumn = { AlbumArtistTable.albumId }
-        ).selectAll()
-            .where { AlbumArtistTable.artistId eq artistId }
-            .andWhere { AlbumProviderTable.provider eq PROVIDER }
-            .andWhere { (AlbumProviderTable.type eq Type.ALBUM.value) or AlbumProviderTable.type.isNull() }
-            .orderBy(AlbumProviderTable.addedAt, SortOrder.DESC)
-            .map { it[AlbumProviderTable.externalId] }
-
-        val fromOriginalIds = AlbumTable.innerJoin(
-            AlbumArtistTable,
-            onColumn = { AlbumTable.id },
-            otherColumn = { AlbumArtistTable.albumId }
-        ).selectAll()
-            .where { AlbumArtistTable.artistId eq artistId }
-            .andWhere { AlbumTable.originalId like "$ORIGINAL_ID_PREFIX%" }
-            .mapNotNull { it[AlbumTable.originalId]?.removePrefix(ORIGINAL_ID_PREFIX) }
-
-        digitIds(fromProviders + fromOriginalIds)
-    }
-
-    private suspend fun linkedSongIds(artistId: UUID): List<String> = dbQuery {
-        val ids = SongProviderTable.innerJoin(
-            SongArtistTable,
-            onColumn = { SongProviderTable.songId },
-            otherColumn = { SongArtistTable.songId }
-        ).selectAll()
-            .where { SongArtistTable.artistId eq artistId }
-            .andWhere { SongProviderTable.provider eq PROVIDER }
-            .andWhere { (SongProviderTable.type eq Type.SONG.value) or SongProviderTable.type.isNull() }
-            .orderBy(SongProviderTable.addedAt, SortOrder.DESC)
-            .map { it[SongProviderTable.externalId] }
-
-        digitIds(ids)
-    }
-
-    private suspend fun albumBarcodes(artistId: UUID): List<String> = dbQuery {
-        AlbumTable.innerJoin(
-            AlbumArtistTable,
-            onColumn = { AlbumTable.id },
-            otherColumn = { AlbumArtistTable.albumId }
-        ).selectAll()
-            .where { AlbumArtistTable.artistId eq artistId }
-            .andWhere { AlbumTable.barcode.isNotNull() }
-            .orderBy(AlbumTable.releaseDate, SortOrder.DESC_NULLS_LAST)
-            .mapNotNull { row -> row[AlbumTable.barcode]?.trim()?.takeIf { it.isNotEmpty() } }
-            .distinct()
-            .take(CANDIDATE_LIMIT)
-    }
-
-    private suspend fun songIsrcs(artistId: UUID): List<String> = dbQuery {
-        SongTable.innerJoin(
+    private suspend fun isrcCandidates(artistId: UUID): List<Candidate> = dbQuery {
+        val rows = SongTable.innerJoin(
             SongArtistTable,
             onColumn = { SongTable.id },
             otherColumn = { SongArtistTable.songId }
-        ).selectAll()
+        ).select(SongTable.id, SongTable.isrc, SongTable.inserted)
             .where { SongArtistTable.artistId eq artistId }
             .andWhere { SongTable.isrc.isNotNull() }
             .orderBy(SongTable.inserted, SortOrder.DESC)
-            .mapNotNull { row -> row[SongTable.isrc]?.trim()?.takeIf { it.isNotEmpty() } }
-            .distinct()
-            .take(CANDIDATE_LIMIT)
+            .limit(CANDIDATE_POOL)
+            .mapNotNull { row ->
+                val code = row[SongTable.isrc]?.trim()?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+                Triple(row[SongTable.id].value, code, row[SongTable.inserted])
+            }
+        if (rows.isEmpty()) return@dbQuery emptyList<Candidate>()
+
+        val credits = SongArtistTable
+            .select(SongArtistTable.songId, SongArtistTable.artistId.count())
+            .where { SongArtistTable.songId inList rows.map { it.first } }
+            .groupBy(SongArtistTable.songId)
+            .associate { it[SongArtistTable.songId].value to it[SongArtistTable.artistId.count()].toInt() }
+
+        pickCandidates(rows, credits)
     }
 
-    private fun digitIds(values: List<String>): List<String> = values
-        .map { it.trim() }
-        .filter { it.isNotEmpty() && it.all(Char::isDigit) }
-        .distinct()
+    private suspend fun barcodeCandidates(artistId: UUID): List<Candidate> = dbQuery {
+        val rows = AlbumTable.innerJoin(
+            AlbumArtistTable,
+            onColumn = { AlbumTable.id },
+            otherColumn = { AlbumArtistTable.albumId }
+        ).select(AlbumTable.id, AlbumTable.barcode, AlbumTable.releaseDate)
+            .where { AlbumArtistTable.artistId eq artistId }
+            .andWhere { AlbumTable.barcode.isNotNull() }
+            .orderBy(AlbumTable.releaseDate, SortOrder.DESC_NULLS_LAST)
+            .limit(CANDIDATE_POOL)
+            .mapNotNull { row ->
+                val code = row[AlbumTable.barcode]?.trim()?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+                Triple(row[AlbumTable.id].value, code, row[AlbumTable.releaseDate] ?: "")
+            }
+        pickCandidates(rows, albumCredits(rows.map { it.first }))
+    }
+
+    private suspend fun gamdlCandidates(artistId: UUID): List<Candidate> = dbQuery {
+        val rows = AlbumTable.innerJoin(
+            AlbumArtistTable,
+            onColumn = { AlbumTable.id },
+            otherColumn = { AlbumArtistTable.albumId }
+        ).select(AlbumTable.id, AlbumTable.originalId, AlbumTable.releaseDate)
+            .where { AlbumArtistTable.artistId eq artistId }
+            .andWhere { AlbumTable.originalId like "$ORIGINAL_ID_PREFIX%" }
+            .orderBy(AlbumTable.releaseDate, SortOrder.DESC_NULLS_LAST)
+            .limit(CANDIDATE_POOL)
+            .mapNotNull { row ->
+                val external = row[AlbumTable.originalId]
+                    ?.removePrefix(ORIGINAL_ID_PREFIX)
+                    ?.trim()
+                    ?.takeIf { it.isNotEmpty() && it.all(Char::isDigit) }
+                    ?: return@mapNotNull null
+                Triple(row[AlbumTable.id].value, external, row[AlbumTable.releaseDate] ?: "")
+            }
+        pickCandidates(rows, albumCredits(rows.map { it.first }))
+    }
+
+    private fun albumCredits(albumIds: List<UUID>): Map<UUID, Int> {
+        if (albumIds.isEmpty()) return emptyMap()
+        return AlbumArtistTable
+            .select(AlbumArtistTable.albumId, AlbumArtistTable.artistId.count())
+            .where { AlbumArtistTable.albumId inList albumIds }
+            .groupBy(AlbumArtistTable.albumId)
+            .associate { it[AlbumArtistTable.albumId].value to it[AlbumArtistTable.artistId.count()].toInt() }
+    }
+
+    private fun <R : Comparable<R>> pickCandidates(
+        rows: List<Triple<UUID, String, R>>,
+        credits: Map<UUID, Int>
+    ): List<Candidate> = rows
+        .sortedWith(compareBy<Triple<UUID, String, R>> { credits[it.first] ?: 1 }.thenByDescending { it.third })
+        .distinctBy { it.second }
         .take(CANDIDATE_LIMIT)
+        .map { Candidate(it.first, it.second, credits[it.first] ?: 1) }
 
     private suspend fun persist(artistId: UUID, externalId: String) {
         dbQuery {
@@ -228,7 +250,8 @@ class AppleMusicArtistResolver(private val environment: ApplicationEnvironment) 
     companion object {
         private const val PROVIDER = "apple"
         private const val ORIGINAL_ID_PREFIX = "appleMusic:"
-        private const val CANDIDATE_LIMIT = 5
+        private const val CANDIDATE_LIMIT = 8
+        private const val CANDIDATE_POOL = 200
         private const val MAX_CATALOG_CALLS = 12
     }
 }

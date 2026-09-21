@@ -264,6 +264,27 @@ class MusicBrainzService : Service() {
         }
     }
 
+    suspend fun fetchReleasesByBarcode(
+        barcode: String,
+        priority: HttpClientPriority = HttpClientPriority.NORMAL
+    ): List<MusicBrainzRelease> {
+        if (barcode.length < 8 || barcode.uppercase() == "BARCODE") return emptyList()
+
+        return try {
+            val response = retryableGet<MusicBrainzReleaseSearchResponse>("$mbBaseUrl/release", priority) {
+                parameter("query", "barcode:$barcode")
+                parameter("fmt", "json")
+                parameter("inc", "artist-credits+recordings+isrcs+release-groups+tags+genres+media")
+                header("User-Agent", "Synara/${BuildConfig.VERSION} ( https://github.com/dertyp7214/synara )")
+            }
+
+            response?.releases ?: emptyList()
+        } catch (e: Exception) {
+            logger.error("Failed to search MusicBrainz for barcode $barcode", e)
+            emptyList()
+        }
+    }
+
     suspend fun searchArtistMb(artist: Artist, priority: HttpClientPriority = HttpClientPriority.NORMAL): MusicBrainzArtist? {
         val queryParts = mutableListOf<String>()
         queryParts.add("artist:\"${artist.name}\"")

@@ -3,7 +3,6 @@ package dev.dertyp.migrations.custom
 import dev.dertyp.core.CustomMigration
 import dev.dertyp.core.Migration
 import dev.dertyp.db.AlbumProviderTable
-import dev.dertyp.db.RecentReleaseProviderTable
 import dev.dertyp.db.SongProviderTable
 import dev.dertyp.dbQuery
 import dev.dertyp.utils.parsers.ParserFactory
@@ -18,7 +17,6 @@ class FulfillUnknownProviders : CustomMigration() {
     override suspend fun migrate() {
         processSongs()
         processAlbums()
-        processRecentReleases()
     }
 
     private suspend fun processSongs() {
@@ -99,48 +97,6 @@ class FulfillUnknownProviders : CustomMigration() {
                         it[AlbumProviderTable.externalId] = externalId
                         it[AlbumProviderTable.type] = parsed?.second?.value
                         it[AlbumProviderTable.rawUrl] = url
-                    }
-                }
-            }
-        }
-    }
-
-    private suspend fun processRecentReleases() {
-        val unknowns = dbQuery {
-            RecentReleaseProviderTable.selectAll()
-                .where { RecentReleaseProviderTable.provider eq "unknown" }
-                .map {
-                    Triple(
-                        it[RecentReleaseProviderTable.releaseId].value,
-                        it[RecentReleaseProviderTable.rawUrl],
-                        it[RecentReleaseProviderTable.externalId]
-                    )
-                }
-        }
-
-        unknowns.forEach { (id, url, oldExtId) ->
-            val parser = ParserFactory.getParser(url)
-            val parsed = parser?.parse(url)
-            val provider = parser?.name ?: "unknown"
-            val externalId = parsed?.first ?: url
-
-            if (provider != "unknown") {
-                dbQuery {
-                    RecentReleaseProviderTable.deleteWhere {
-                        (RecentReleaseProviderTable.releaseId eq id) and
-                                (RecentReleaseProviderTable.provider eq "unknown") and
-                                (RecentReleaseProviderTable.externalId eq oldExtId)
-                    }
-                    RecentReleaseProviderTable.upsert(
-                        RecentReleaseProviderTable.releaseId,
-                        RecentReleaseProviderTable.provider,
-                        RecentReleaseProviderTable.externalId
-                    ) {
-                        it[RecentReleaseProviderTable.releaseId] = id
-                        it[RecentReleaseProviderTable.provider] = provider
-                        it[RecentReleaseProviderTable.externalId] = externalId
-                        it[RecentReleaseProviderTable.type] = parsed?.second?.value
-                        it[RecentReleaseProviderTable.rawUrl] = url
                     }
                 }
             }

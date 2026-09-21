@@ -16,6 +16,7 @@ import dev.dertyp.services.metadata.*
 import dev.dertyp.services.models.FollowedArtist
 import dev.dertyp.services.models.RecentRelease
 import dev.dertyp.services.release.AppleMusicReleaseService
+import dev.dertyp.services.release.ProviderLinkService
 import dev.dertyp.utils.parsers.ParserFactory
 import io.ktor.server.application.ApplicationEnvironment
 import kotlinx.coroutines.*
@@ -41,6 +42,7 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
     private val imageService by inject<ImageService>()
     private val linkResolverService by inject<LinkResolverService>()
     private val appleMusicReleaseService by inject<AppleMusicReleaseService>()
+    private val providerLinkService by inject<ProviderLinkService>()
 
     private val RELEASE_REFRESH_WINDOW = 14.days
     private val REFRESH_COOLDOWN = 20.hours
@@ -157,10 +159,11 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
             .limit(topN)
             .toList()
 
-        val providersMap = recentReleaseLinks(musicBrainzRows.map { it[RecentReleaseTable.releaseId].value })
+        val providersMap = providerLinkService.recentReleaseUrls(musicBrainzRows.map { it[RecentReleaseTable.releaseId].value })
+        val providerLinksMap = providerLinkService.providerReleaseUrls(providerRows.map { it[ProviderReleaseTable.id].value })
 
         val feed = musicBrainzRows.map { musicBrainzFeedRow(it, providersMap, nowMs) } +
-                providerRows.map { providerFeedRow(it, nowMs) }
+                providerRows.map { providerFeedRow(it, providerLinksMap, nowMs) }
 
         mergeFeed(feed, page, pageSize, musicBrainzTotal + providerTotal)
     }
@@ -188,17 +191,6 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
         )
     }
 
-    private fun recentReleaseLinks(releaseIds: List<UUID>): Map<UUID, List<String>> =
-        releaseIds.chunked(10000).flatMap { chunk ->
-            RecentReleaseProviderTable.selectAll()
-                .where { RecentReleaseProviderTable.releaseId inList chunk }
-                .orderBy(
-                    RecentReleaseProviderTable.provider to SortOrder.ASC,
-                    RecentReleaseProviderTable.externalId to SortOrder.ASC,
-                )
-                .map { it[RecentReleaseProviderTable.releaseId].value to it[RecentReleaseProviderTable.rawUrl] }
-        }.groupBy({ it.first }, { it.second })
-
     private fun musicBrainzFeedRow(row: ResultRow, providersMap: Map<UUID, List<String>>, nowMs: Long): FeedRow {
         val groupId = row[RecentReleaseTable.releaseId].value
         val date = row[RecentReleaseTable.releaseDate]
@@ -223,9 +215,13 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
         )
     }
 
-    private fun providerFeedRow(row: ResultRow, nowMs: Long): FeedRow {
+    private fun providerFeedRow(row: ResultRow, linksMap: Map<UUID, List<String>>, nowMs: Long): FeedRow {
         val providerReleaseId = row[ProviderReleaseTable.id].value
         val date = row[ProviderReleaseTable.releaseDate]
+        val url = row[ProviderReleaseTable.url]
+        val links = (listOf(url) + (linksMap[providerReleaseId] ?: emptyList()))
+            .filter { it.isNotBlank() }
+            .distinct()
         return FeedRow(
             sortDate = date,
             id = providerReleaseId,
@@ -238,7 +234,7 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
                 type = row[ProviderReleaseTable.type],
                 imageId = row[ProviderReleaseTable.imageId]?.value,
                 blurHash = row.getOrNull(ImageTable.blurHash),
-                links = listOfNotNull(row[ProviderReleaseTable.url].takeIf { it.isNotBlank() }),
+                links = links,
                 albumId = row[ProviderReleaseTable.albumId]?.value,
                 songId = row[ProviderReleaseTable.songId]?.value,
                 source = ReleaseSource.Apple,
@@ -286,10 +282,11 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
             .limit(topN)
             .toList()
 
-        val providersMap = recentReleaseLinks(musicBrainzRows.map { it[RecentReleaseTable.releaseId].value })
+        val providersMap = providerLinkService.recentReleaseUrls(musicBrainzRows.map { it[RecentReleaseTable.releaseId].value })
+        val providerLinksMap = providerLinkService.providerReleaseUrls(providerRows.map { it[ProviderReleaseTable.id].value })
 
         val feed = musicBrainzRows.map { musicBrainzFeedRow(it, providersMap, nowMs) } +
-                providerRows.map { providerFeedRow(it, nowMs) }
+                providerRows.map { providerFeedRow(it, providerLinksMap, nowMs) }
 
         mergeFeed(feed, page, pageSize, musicBrainzTotal + providerTotal)
     }
@@ -417,7 +414,9 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
             .where { ProviderReleaseTable.id eq releaseId }
             .singleOrNull() ?: return@dbQuery null
 
-        providerFeedRow(row, Clock.System.now().toEpochMilliseconds()).release
+        val linksMap = providerLinkService.providerReleaseUrls(listOf(releaseId))
+
+        providerFeedRow(row, linksMap, Clock.System.now().toEpochMilliseconds()).release
     }
 
     private suspend fun getRecentReleaseById(releaseId: UUID): RecentRelease? = dbQuery {
@@ -427,13 +426,7 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
             .where { RecentReleaseTable.releaseId eq releaseId }
             .singleOrNull() ?: return@dbQuery null
 
-        val links = RecentReleaseProviderTable.selectAll()
-            .where { RecentReleaseProviderTable.releaseId eq releaseId }
-            .orderBy(
-                RecentReleaseProviderTable.provider to SortOrder.ASC,
-                RecentReleaseProviderTable.externalId to SortOrder.ASC,
-            )
-            .map { it[RecentReleaseProviderTable.rawUrl] }
+        val links = providerLinkService.recentReleaseUrls(listOf(releaseId))[releaseId] ?: emptyList()
 
         val date = row[RecentReleaseTable.releaseDate]
 
@@ -823,7 +816,35 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
             (recordingAlbums + relationAlbums).distinct()
         } else emptyList()
 
-        if (finalLinks.none { it.contains("apple.com") || it.contains("itunes.apple.com") }) {
+        finalLinks.addAll(appleMusicReleaseService.linkedReleaseUrls(groupId))
+
+        val barcodes = (groupReleases + mbReleasesForGroup)
+            .mapNotNull { it.barcode }
+            .filter { it.isNotBlank() }
+            .toSet()
+        val linkKeys = linkKeysOf(finalLinks)
+        val appleAlbumIds = linkKeys
+            .filter { it.first == AppleMusicReleaseService.PROVIDER }
+            .map { it.second }
+            .toSet()
+
+        val mergeProviderReleaseId = appleMusicReleaseService.findUnlinkedAppleRelease(
+            artistId = artistId,
+            appleAlbumIds = appleAlbumIds,
+            barcodes = barcodes,
+            linkKeys = linkKeys
+        )
+        if (mergeProviderReleaseId != null) {
+            finalLinks.addAll(
+                providerLinkService.providerReleaseUrls(listOf(mergeProviderReleaseId))[mergeProviderReleaseId]
+                    ?: emptyList()
+            )
+        }
+
+        var matchedAppleAlbum: IMetadataService.Album? = null
+        if (mergeProviderReleaseId == null &&
+            finalLinks.none { it.contains("apple.com") || it.contains("itunes.apple.com") }
+        ) {
             val searchQueries = mutableListOf("$artistName ${group.title.cleanTitle()}")
             if (isSingle) {
                 albumNames.forEach { searchQueries.add("$artistName $it") }
@@ -861,6 +882,7 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
             }
 
             if (matchedAlbum != null) {
+                matchedAppleAlbum = matchedAlbum
                 val appleUrl = "https://music.apple.com/album/${matchedAlbum.id}"
                 finalLinks.add(appleUrl)
                 finalLinks.addAll(
@@ -947,31 +969,33 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
                 }
 
                 if (isRefresh) {
-                    RecentReleaseProviderTable.deleteWhere { RecentReleaseProviderTable.releaseId eq groupId }
+                    providerLinkService.detachRecentReleaseTx(groupId)
                 }
 
-                distinctLinks.forEach { url ->
-                    val parser = ParserFactory.getParser(url)
-                    val parsed = parser?.parse(url)
-                    val provider = parser?.name ?: "unknown"
-                    val externalId = parsed?.first ?: url
+                providerLinkService.attachRecentReleaseTx(groupId, providerLinkService.linkIdsTx(distinctLinks))
+            }
 
-                    RecentReleaseProviderTable.upsert(
-                        RecentReleaseProviderTable.releaseId,
-                        RecentReleaseProviderTable.provider,
-                        RecentReleaseProviderTable.externalId
-                    ) {
-                        it[RecentReleaseProviderTable.releaseId] = groupId
-                        it[RecentReleaseProviderTable.provider] = provider
-                        it[RecentReleaseProviderTable.externalId] = externalId
-                        it[RecentReleaseProviderTable.type] = parsed?.second?.value
-                        it[RecentReleaseProviderTable.rawUrl] = url
-                    }
-                }
+            if (mergeProviderReleaseId != null) {
+                appleMusicReleaseService.mergeIntoReleaseGroup(mergeProviderReleaseId, groupId)
+            }
+
+            matchedAppleAlbum?.let { album ->
+                appleMusicReleaseService.findUnlinkedAppleRelease(
+                    artistId = artistId,
+                    appleAlbumIds = setOf(album.id),
+                    barcodes = emptySet(),
+                    linkKeys = emptySet()
+                )?.let { appleMusicReleaseService.mergeIntoReleaseGroup(it, groupId) }
             }
         }
         return true
     }
+
+    private suspend fun linkKeysOf(urls: Collection<String>): Set<Pair<String, String>> =
+        urls.filter { it.isNotBlank() }.distinct().map { url ->
+            val parser = ParserFactory.getParser(url)
+            (parser?.name ?: "unknown") to (parser?.parse(url)?.first ?: url)
+        }.toSet()
 
     internal suspend fun fetchReleaseGroupImage(releaseGroupId: UUID): UUID? {
         val imageUrl = "https://coverartarchive.org/release-group/$releaseGroupId/front"
@@ -1132,7 +1156,10 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
                 .innerJoin(ImageTable, onColumn = { RecentReleaseTable.imageId }, otherColumn = { ImageTable.id })
                 .select(RecentReleaseTable.releaseId)
                 .where { RecentReleaseTable.artistId notInSubQuery FollowedArtistTable.select(FollowedArtistTable.artistId) }
-                .andWhere { ImageTable.origin like "https://coverartarchive.org/%" }
+                .andWhere {
+                    (ImageTable.origin like "https://coverartarchive.org/%") or
+                            (ImageTable.origin like "https://%.mzstatic.com/%")
+                }
                 .map { it[RecentReleaseTable.releaseId].value }
         }
         if (releaseIds.isEmpty()) return 0

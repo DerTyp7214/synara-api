@@ -85,7 +85,7 @@ class AppleMusicArtistResolverTest : KoinTest {
     }
 
     private fun insertAlbum(
-        artist: UUID,
+        artists: List<UUID>,
         barcode: String? = null,
         original: String? = null,
         released: String? = null
@@ -98,24 +98,29 @@ class AppleMusicArtistResolverTest : KoinTest {
             it[AlbumTable.originalId] = original
             it[AlbumTable.releaseDate] = released
         }
-        AlbumArtistTable.insert {
-            it[AlbumArtistTable.albumId] = id
-            it[AlbumArtistTable.artistId] = artist
+        artists.forEach { artist ->
+            AlbumArtistTable.insert {
+                it[AlbumArtistTable.albumId] = id
+                it[AlbumArtistTable.artistId] = artist
+            }
         }
         return id
     }
 
-    private fun insertSong(album: UUID, artist: UUID, code: String? = null): UUID {
+    private fun insertSong(album: UUID, artists: List<UUID>, code: String? = null, at: Long = 1_000L): UUID {
         val id = UUID.randomUUID()
         SongTable.insert {
             it[SongTable.id] = id
             it[SongTable.title] = "Song"
             it[SongTable.albumId] = album
             it[SongTable.isrc] = code
+            it[SongTable.inserted] = at
         }
-        SongArtistTable.insert {
-            it[SongArtistTable.songId] = id
-            it[SongArtistTable.artistId] = artist
+        artists.forEach { artist ->
+            SongArtistTable.insert {
+                it[SongArtistTable.songId] = id
+                it[SongArtistTable.artistId] = artist
+            }
         }
         return id
     }
@@ -257,64 +262,34 @@ class AppleMusicArtistResolverTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `resolve matches an apple album provider link and reuses it afterwards`(dialect: DbDialect) = runBlocking {
+    fun `resolve accepts the single apple artist of a sole credited song and reuses it afterwards`(
+        dialect: DbDialect
+    ) = runBlocking {
         setup(dialect)
         val artistId = transaction(database) {
             val id = insertArtist()
-            val albumId = insertAlbum(id)
-            linkAlbumProvider(albumId, "777")
+            val albumId = insertAlbum(listOf(id))
+            insertSong(albumId, listOf(id), code = "USUM71900764")
             id
         }
-        coEvery { appleMusicService.getCatalogAlbumsByIds(listOf("777"), any()) } returns
-                listOf(catalogAlbum(listOf("111")))
+        coEvery { appleMusicService.getCatalogSongsByIsrc("USUM71900764", any()) } returns
+                listOf(catalogSong(listOf("111")))
 
         assertEquals("111", resolver.resolve(artistId))
         assertEquals("111", storedRow(artistId)?.get(ArtistProviderTable.externalId))
 
         assertEquals("111", resolver.resolve(artistId))
-        coVerify(exactly = 1) { appleMusicService.getCatalogAlbumsByIds(any(), any()) }
+        coVerify(exactly = 1) { appleMusicService.getCatalogSongsByIsrc(any(), any()) }
+        coVerify(exactly = 0) { appleMusicService.getCatalogAlbumsByUpc(any(), any()) }
     }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `resolve matches an album imported by gamdl through its originalId`(dialect: DbDialect) = runBlocking {
+    fun `resolve accepts the single apple artist of a sole credited album barcode`(dialect: DbDialect) = runBlocking {
         setup(dialect)
         val artistId = transaction(database) {
             val id = insertArtist()
-            insertAlbum(id, original = "appleMusic:12345")
-            id
-        }
-        coEvery { appleMusicService.getCatalogAlbumsByIds(listOf("12345"), any()) } returns
-                listOf(catalogAlbum(listOf("111")))
-
-        assertEquals("111", resolver.resolve(artistId))
-    }
-
-    @ParameterizedTest
-    @EnumSource(DbDialect::class)
-    fun `resolve matches an apple song provider link`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        val artistId = transaction(database) {
-            val id = insertArtist()
-            val albumId = insertAlbum(id)
-            val songId = insertSong(albumId, id)
-            linkSongProvider(songId, "654")
-            id
-        }
-        coEvery { appleMusicService.getCatalogSongsByIds(listOf("654"), any()) } returns
-                listOf(catalogSong(listOf("111")))
-
-        assertEquals("111", resolver.resolve(artistId))
-        coVerify(exactly = 0) { appleMusicService.getCatalogAlbumsByIds(any(), any()) }
-    }
-
-    @ParameterizedTest
-    @EnumSource(DbDialect::class)
-    fun `resolve matches the album barcode via a upc lookup`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        val artistId = transaction(database) {
-            val id = insertArtist()
-            insertAlbum(id, barcode = "00602445790234")
+            insertAlbum(listOf(id), barcode = "00602445790234")
             id
         }
         coEvery { appleMusicService.getCatalogAlbumsByUpc("00602445790234", any()) } returns
@@ -326,52 +301,16 @@ class AppleMusicArtistResolverTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `resolve matches the song isrc via an isrc lookup`(dialect: DbDialect) = runBlocking {
+    fun `resolve rejects a compilation whose apple credits are fewer than ours`(dialect: DbDialect) = runBlocking {
         setup(dialect)
         val artistId = transaction(database) {
             val id = insertArtist()
-            val albumId = insertAlbum(id)
-            insertSong(albumId, id, code = "USUM71900764")
+            val others = (1..4).map { insertArtist("Other $it") }
+            insertAlbum(listOf(id) + others, barcode = "00602445790234")
             id
         }
-        coEvery { appleMusicService.getCatalogSongsByIsrc("USUM71900764", any()) } returns
-                listOf(catalogSong(listOf("111")))
-
-        assertEquals("111", resolver.resolve(artistId))
-    }
-
-    @ParameterizedTest
-    @EnumSource(DbDialect::class)
-    fun `resolve picks the candidate whose catalog name matches the local artist`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        val artistId = transaction(database) {
-            val id = insertArtist()
-            val albumId = insertAlbum(id)
-            linkAlbumProvider(albumId, "777")
-            id
-        }
-        coEvery { appleMusicService.getCatalogAlbumsByIds(listOf("777"), any()) } returns
-                listOf(catalogAlbum(listOf("111", "222")))
-        coEvery { appleMusicService.getCatalogArtistNames(listOf("111", "222"), any()) } returns
-                mapOf("111" to "Another Artist", "222" to "test artist")
-
-        assertEquals("222", resolver.resolve(artistId))
-    }
-
-    @ParameterizedTest
-    @EnumSource(DbDialect::class)
-    fun `resolve skips ambiguous candidates and persists nothing`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        val artistId = transaction(database) {
-            val id = insertArtist()
-            val albumId = insertAlbum(id)
-            linkAlbumProvider(albumId, "777")
-            id
-        }
-        coEvery { appleMusicService.getCatalogAlbumsByIds(listOf("777"), any()) } returns
-                listOf(catalogAlbum(listOf("111", "222")))
-        coEvery { appleMusicService.getCatalogArtistNames(listOf("111", "222"), any()) } returns
-                mapOf("111" to "Another Artist", "222" to "Third Artist")
+        coEvery { appleMusicService.getCatalogAlbumsByUpc("00602445790234", any()) } returns
+                listOf(catalogAlbum(listOf("999")))
 
         assertNull(resolver.resolve(artistId))
         assertNull(storedRow(artistId))
@@ -379,12 +318,128 @@ class AppleMusicArtistResolverTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `resolve persists nothing when no candidate matches`(dialect: DbDialect) = runBlocking {
+    fun `resolve accepts the artist shared by two credit consistent songs`(dialect: DbDialect) = runBlocking {
         setup(dialect)
         val artistId = transaction(database) {
             val id = insertArtist()
-            val albumId = insertAlbum(id, barcode = "00602445790234")
-            insertSong(albumId, id, code = "USUM71900764")
+            val first = insertArtist("First Partner")
+            val second = insertArtist("Second Partner")
+            val albumId = insertAlbum(listOf(id))
+            insertSong(albumId, listOf(id, first), code = "USUM71900001", at = 2_000L)
+            insertSong(albumId, listOf(id, second), code = "USUM71900002", at = 1_000L)
+            id
+        }
+        coEvery { appleMusicService.getCatalogSongsByIsrc("USUM71900001", any()) } returns
+                listOf(catalogSong(listOf("111", "999")))
+        coEvery { appleMusicService.getCatalogSongsByIsrc("USUM71900002", any()) } returns
+                listOf(catalogSong(listOf("222", "999")))
+
+        assertEquals("999", resolver.resolve(artistId))
+        assertEquals("999", storedRow(artistId)?.get(ArtistProviderTable.externalId))
+        coVerify(exactly = 2) { appleMusicService.getCatalogSongsByIsrc(any(), any()) }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `resolve rejects songs where apple lists only the primary artist`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val artistId = transaction(database) {
+            val id = insertArtist()
+            val first = insertArtist("First Partner")
+            val second = insertArtist("Second Partner")
+            val albumId = insertAlbum(listOf(id))
+            insertSong(albumId, listOf(id, first), code = "USUM71900001", at = 2_000L)
+            insertSong(albumId, listOf(id, second), code = "USUM71900002", at = 1_000L)
+            id
+        }
+        coEvery { appleMusicService.getCatalogSongsByIsrc("USUM71900001", any()) } returns
+                listOf(catalogSong(listOf("111")))
+        coEvery { appleMusicService.getCatalogSongsByIsrc("USUM71900002", any()) } returns
+                listOf(catalogSong(listOf("222")))
+
+        assertNull(resolver.resolve(artistId))
+        assertNull(storedRow(artistId))
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `resolve rejects a single two artist song because one resource is not enough`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val artistId = transaction(database) {
+                val id = insertArtist()
+                val partner = insertArtist("Partner")
+                val albumId = insertAlbum(listOf(id))
+                insertSong(albumId, listOf(id, partner), code = "USUM71900001")
+                id
+            }
+            coEvery { appleMusicService.getCatalogSongsByIsrc("USUM71900001", any()) } returns
+                    listOf(catalogSong(listOf("111", "999")))
+
+            assertNull(resolver.resolve(artistId))
+            assertNull(storedRow(artistId))
+        }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `resolve accepts a sole credited album imported by gamdl through its originalId`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val artistId = transaction(database) {
+                val id = insertArtist()
+                insertAlbum(listOf(id), original = "appleMusic:12345")
+                id
+            }
+            coEvery { appleMusicService.getCatalogAlbumsByIds(listOf("12345"), any()) } returns
+                    listOf(catalogAlbum(listOf("111"), id = "12345"))
+
+            assertEquals("111", resolver.resolve(artistId))
+            assertEquals("111", storedRow(artistId)?.get(ArtistProviderTable.externalId))
+        }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `resolve rejects a gamdl album credited to more than one artist`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val artistId = transaction(database) {
+            val id = insertArtist()
+            val partner = insertArtist("Partner")
+            insertAlbum(listOf(id, partner), original = "appleMusic:12345")
+            id
+        }
+        coEvery { appleMusicService.getCatalogAlbumsByIds(listOf("12345"), any()) } returns
+                listOf(catalogAlbum(listOf("111", "999"), id = "12345"))
+
+        assertNull(resolver.resolve(artistId))
+        assertNull(storedRow(artistId))
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `resolve ignores album and song provider links entirely`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val artistId = transaction(database) {
+            val id = insertArtist()
+            val albumId = insertAlbum(listOf(id))
+            val songId = insertSong(albumId, listOf(id))
+            linkAlbumProvider(albumId, "777")
+            linkSongProvider(songId, "654")
+            id
+        }
+
+        assertNull(resolver.resolve(artistId))
+        assertNull(storedRow(artistId))
+        verifyNoCatalogLookups()
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `resolve persists nothing when the catalog returns no resource`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val artistId = transaction(database) {
+            val id = insertArtist()
+            val albumId = insertAlbum(listOf(id), barcode = "00602445790234")
+            insertSong(albumId, listOf(id), code = "USUM71900764")
             id
         }
         coEvery { appleMusicService.getCatalogAlbumsByUpc(any(), any()) } returns emptyList()
@@ -396,19 +451,26 @@ class AppleMusicArtistResolverTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `resolve caps the barcode candidates at five lookups`(dialect: DbDialect) = runBlocking {
+    fun `resolve stops after the catalog call budget is spent`(dialect: DbDialect) = runBlocking {
         setup(dialect)
         val artistId = transaction(database) {
             val id = insertArtist()
-            (1..7).forEach { index ->
-                insertAlbum(id, barcode = "barcode$index", released = "20%02d-01-01".format(index))
+            val albumId = insertAlbum(listOf(id))
+            (1..10).forEach { index ->
+                insertSong(albumId, listOf(id), code = "isrc$index", at = index.toLong())
+            }
+            (1..8).forEach { index ->
+                insertAlbum(listOf(id), barcode = "barcode$index", released = "20%02d-01-01".format(index))
             }
             id
         }
+        coEvery { appleMusicService.getCatalogSongsByIsrc(any(), any()) } returns emptyList()
         coEvery { appleMusicService.getCatalogAlbumsByUpc(any(), any()) } returns emptyList()
 
         assertNull(resolver.resolve(artistId))
-        coVerify(exactly = 5) { appleMusicService.getCatalogAlbumsByUpc(any(), any()) }
+        coVerify(exactly = 8) { appleMusicService.getCatalogSongsByIsrc(any(), any()) }
+        coVerify(exactly = 4) { appleMusicService.getCatalogAlbumsByUpc(any(), any()) }
+        coVerify(exactly = 0) { appleMusicService.getCatalogAlbumsByIds(any(), any()) }
     }
 
     @ParameterizedTest
@@ -417,8 +479,7 @@ class AppleMusicArtistResolverTest : KoinTest {
         setup(dialect, catalogEnabled = false)
         val artistId = transaction(database) {
             val id = insertArtist()
-            val albumId = insertAlbum(id, barcode = "00602445790234")
-            linkAlbumProvider(albumId, "777")
+            insertAlbum(listOf(id), barcode = "00602445790234")
             id
         }
 
