@@ -7,6 +7,8 @@ import dev.dertyp.data.MusicBrainzArtist
 import dev.dertyp.data.SplitArtist
 import dev.dertyp.db.*
 import dev.dertyp.services.metadata.CachedMusicBrainzService
+import dev.dertyp.services.release.ArtistSourceRuleKind
+import dev.dertyp.services.release.ArtistSourceRulePolarity
 import dev.dertyp.services.metadata.MusicBrainzCacheService
 import dev.dertyp.services.metadata.MusicBrainzService
 import io.mockk.coEvery
@@ -72,7 +74,10 @@ class ArtistServiceTest : KoinTest {
                 CollectionTable,
                 CollectionArtistTable,
                 *allMusicBrainzTables,
-                RecentReleaseTable
+                RecentReleaseTable,
+                ProviderReleaseTable,
+                HiddenReleaseTable,
+                ArtistSourceRuleTable
             )
         }
         
@@ -818,6 +823,82 @@ class ArtistServiceTest : KoinTest {
 
         assertEquals(merged!!.id, release[RecentReleaseTable.artistId].value)
         assertEquals("Merged", release[RecentReleaseTable.artistName])
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `mergeArtists repoints hidden releases and source rules to the merged artist`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val artistId1 = UUID.randomUUID()
+        val artistId2 = UUID.randomUUID()
+        val hiddenReleaseId = UUID.randomUUID()
+
+        transaction(database) {
+            ArtistTable.insert { it[id] = artistId1; it[name] = "Artist A" }
+            ArtistTable.insert { it[id] = artistId2; it[name] = "Artist B" }
+            MBReleaseGroupTable.insert { it[id] = hiddenReleaseId; it[title] = "Hidden RG" }
+            HiddenReleaseTable.insert {
+                it[HiddenReleaseTable.releaseGroupId] = hiddenReleaseId
+                it[HiddenReleaseTable.artistId] = artistId1
+            }
+            ArtistSourceRuleTable.insert {
+                it[artistId] = artistId1
+                it[provider] = "apple"
+                it[kind] = ArtistSourceRuleKind.LABEL
+                it[value] = "Shared Label"
+                it[rule] = ArtistSourceRulePolarity.TRUST
+                it[createdAt] = 1_000L
+            }
+            ArtistSourceRuleTable.insert {
+                it[artistId] = artistId2
+                it[provider] = "apple"
+                it[kind] = ArtistSourceRuleKind.LABEL
+                it[value] = "Shared Label"
+                it[rule] = ArtistSourceRulePolarity.BLOCK
+                it[createdAt] = 2_000L
+            }
+            ArtistSourceRuleTable.insert {
+                it[artistId] = artistId2
+                it[provider] = "apple"
+                it[kind] = ArtistSourceRuleKind.COPYRIGHT_HOLDER
+                it[value] = "Other Holder"
+                it[rule] = ArtistSourceRulePolarity.BLOCK
+                it[createdAt] = 3_000L
+            }
+        }
+
+        val merged = service.mergeArtists(MergeArtists(name = "Merged", artistIds = listOf(artistId1, artistId2)))
+        assertNotNull(merged)
+
+        val mergedId = merged!!.id
+
+        val hidden = transaction(database) { HiddenReleaseTable.selectAll().toList() }
+        assertEquals(1, hidden.size)
+        assertEquals(mergedId, hidden.single()[HiddenReleaseTable.artistId].value)
+        assertEquals(hiddenReleaseId, hidden.single()[HiddenReleaseTable.releaseGroupId]?.value)
+        assertNull(hidden.single()[HiddenReleaseTable.providerReleaseId])
+
+        val mergedRules = transaction(database) {
+            ArtistSourceRuleTable
+                .selectAll()
+                .where { ArtistSourceRuleTable.artistId eq mergedId }
+                .map {
+                    Triple(
+                        it[ArtistSourceRuleTable.kind],
+                        it[ArtistSourceRuleTable.value],
+                        it[ArtistSourceRuleTable.rule]
+                    )
+                }
+        }
+
+        assertEquals(
+            setOf(
+                Triple(ArtistSourceRuleKind.LABEL, "Shared Label", ArtistSourceRulePolarity.TRUST),
+                Triple(ArtistSourceRuleKind.COPYRIGHT_HOLDER, "Other Holder", ArtistSourceRulePolarity.BLOCK)
+            ),
+            mergedRules.toSet()
+        )
+        assertEquals(2, mergedRules.size)
     }
 
     @ParameterizedTest

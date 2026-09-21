@@ -27,11 +27,18 @@ object ProviderReleaseTable : UUIDTable("provider_release") {
     val linksResolvedAt = long("links_resolved_at").nullable()
     val lastImageFetch = long("last_image_fetch").nullable()
     val lastUpdate = long("last_update").nullable()
+    val recordLabel = text("recordLabel").nullable()
+    val copyright = text("copyright").nullable()
+    val copyrightHolder = varchar("copyrightHolder", 255).nullable()
+    val isrcRegistrants = text("isrcRegistrants").nullable()
+    val suspect = bool("suspect").default(false)
+    val suspectReason = text("suspectReason").nullable()
     val addedAt = long("addedAt").clientDefault { Instant.now().toEpochMilli() }
 
     init {
         uniqueIndex(provider, externalId)
         index(false, artistId, releaseDate)
         index(false, releaseGroupId)
+        index(false, artistId, copyrightHolder)
     }
 }

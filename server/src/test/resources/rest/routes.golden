@@ -281,13 +281,15 @@ GET /recommendation/moodPlaylist IRecommendationService.getMoodPlaylist [q:mood 
 GET /recommendation/moods IRecommendationService.getMoods [] JSON
 GET /recommendation/similarSongs IRecommendationService.getSimilarSongs [q:seedSongIds q:limit?] JSON
 DELETE /release/unfollowArtist/{artistId} IReleaseService.unfollowArtist [p:artistId] JSON
-GET /release/artistRecentReleases/{artistId} IReleaseService.getArtistRecentReleases [p:artistId q:page? q:pageSize?] JSON
+GET /release/artistRecentReleases/{artistId} IReleaseService.getArtistRecentReleases [p:artistId q:page? q:pageSize? q:includeHidden?] JSON
 GET /release/followedArtists IReleaseService.getFollowedArtists [] JSON
 GET /release/recentReleases IReleaseService.getRecentReleases [q:page? q:pageSize?] JSON
 GET /release/recentReleasesByMusicBrainzId/{musicBrainzId} IReleaseService.getRecentReleasesByMusicBrainzId [p:musicBrainzId q:page? q:pageSize?] JSON
 GET /release/releaseImage/{releaseId} IReleaseService.getReleaseImage [p:releaseId q:size?] BYTES PUBLIC
+POST /release/confirmRelease/{releaseId} IReleaseService.confirmRelease [p:releaseId] JSON
 POST /release/followArtist/{musicBrainzId} IReleaseService.followArtist [p:musicBrainzId] JSON
 POST /release/refreshRecentRelease/{releaseId} IReleaseService.refreshRecentRelease [p:releaseId] UNIT
+PUT /release/releaseHidden/{releaseId} IReleaseService.setReleaseHidden [p:releaseId q:hidden q:includeRelated?] JSON
 GET /remoteMirror/activeMirrorProgress IRemoteMirrorService.getActiveMirrorProgress [] SSE
 POST /remoteMirror/proxyInstances IRemoteMirrorService.getProxyInstances [b:config] JSON
 POST /remoteMirror/remoteImageData/{imageId} IRemoteMirrorService.getRemoteImageData [b:config p:imageId q:size] BYTES

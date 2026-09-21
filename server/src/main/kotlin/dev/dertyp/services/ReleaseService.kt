@@ -15,8 +15,7 @@ import dev.dertyp.platformDateFromEpochMilliseconds
 import dev.dertyp.services.metadata.*
 import dev.dertyp.services.models.FollowedArtist
 import dev.dertyp.services.models.RecentRelease
-import dev.dertyp.services.release.AppleMusicReleaseService
-import dev.dertyp.services.release.ProviderLinkService
+import dev.dertyp.services.release.*
 import dev.dertyp.utils.parsers.ParserFactory
 import io.ktor.server.application.ApplicationEnvironment
 import kotlinx.coroutines.*
@@ -129,6 +128,11 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
             .andWhere { RecentReleaseTable.albumId.isNull() }
             .andWhere { RecentReleaseTable.songId.isNull() }
             .andWhere { RecentReleaseTable.releaseDate.isNotNull() }
+            .andWhere {
+                RecentReleaseTable.releaseId notInSubQuery HiddenReleaseTable
+                    .select(HiddenReleaseTable.releaseGroupId)
+                    .where { HiddenReleaseTable.releaseGroupId.isNotNull() }
+            }
 
         val musicBrainzTotal = musicBrainzQuery.count()
 
@@ -148,6 +152,11 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
             .andWhere { ProviderReleaseTable.albumId.isNull() }
             .andWhere { ProviderReleaseTable.songId.isNull() }
             .andWhere { ProviderReleaseTable.releaseDate.isNotNull() }
+            .andWhere {
+                ProviderReleaseTable.id notInSubQuery HiddenReleaseTable
+                    .select(HiddenReleaseTable.providerReleaseId)
+                    .where { HiddenReleaseTable.providerReleaseId.isNotNull() }
+            }
 
         val providerTotal = providerQuery.count()
 
@@ -210,7 +219,8 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
                 albumId = row[RecentReleaseTable.albumId]?.value,
                 songId = row[RecentReleaseTable.songId]?.value,
                 source = ReleaseSource.MusicBrainz,
-                upcoming = date != null && date > nowMs
+                upcoming = date != null && date > nowMs,
+                hidden = row.getOrNull(HiddenReleaseTable.releaseGroupId) != null
             )
         )
     }
@@ -238,7 +248,12 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
                 albumId = row[ProviderReleaseTable.albumId]?.value,
                 songId = row[ProviderReleaseTable.songId]?.value,
                 source = ReleaseSource.Apple,
-                upcoming = date != null && date > nowMs
+                upcoming = date != null && date > nowMs,
+                hidden = row.getOrNull(HiddenReleaseTable.providerReleaseId) != null,
+                suspect = row[ProviderReleaseTable.suspect],
+                suspectReason = row[ProviderReleaseTable.suspectReason],
+                recordLabel = row[ProviderReleaseTable.recordLabel],
+                copyright = row[ProviderReleaseTable.copyright]
             )
         )
     }
@@ -246,15 +261,19 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
     suspend fun getArtistRecentReleases(
         artistId: UUID,
         page: Int = 0,
-        pageSize: Int = 150
+        pageSize: Int = 150,
+        includeHidden: Boolean = false
     ): PaginatedResponse<RecentRelease> = dbQuery {
         val nowMs = Clock.System.now().toEpochMilliseconds()
         val topN = (page + 1) * pageSize
 
         val musicBrainzQuery = RecentReleaseTable
             .leftJoin(ImageTable, onColumn = { RecentReleaseTable.imageId }, otherColumn = { ImageTable.id })
+            .leftJoin(HiddenReleaseTable, onColumn = { RecentReleaseTable.releaseId }, otherColumn = { HiddenReleaseTable.releaseGroupId })
             .selectAll()
             .where { RecentReleaseTable.artistId eq artistId }
+
+        if (!includeHidden) musicBrainzQuery.andWhere { HiddenReleaseTable.releaseGroupId.isNull() }
 
         val musicBrainzTotal = musicBrainzQuery.count()
 
@@ -268,9 +287,12 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
 
         val providerQuery = ProviderReleaseTable
             .leftJoin(ImageTable, onColumn = { ProviderReleaseTable.imageId }, otherColumn = { ImageTable.id })
+            .leftJoin(HiddenReleaseTable, onColumn = { ProviderReleaseTable.id }, otherColumn = { HiddenReleaseTable.providerReleaseId })
             .selectAll()
             .where { ProviderReleaseTable.artistId eq artistId }
             .andWhere { ProviderReleaseTable.releaseGroupId.isNull() }
+
+        if (!includeHidden) providerQuery.andWhere { HiddenReleaseTable.providerReleaseId.isNull() }
 
         val providerTotal = providerQuery.count()
 
@@ -296,8 +318,159 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
         page: Int = 0,
         pageSize: Int = 150
     ): PaginatedResponse<RecentRelease> {
-        val artistId = getOrCreateArtistByMbId(musicBrainzId) ?: return PaginatedResponse(emptyList(), 0, page, pageSize, false)
+        val artistId = getOrCreateArtistByMbId(musicBrainzId) ?: return PaginatedResponse(
+            data = emptyList(),
+            page = page,
+            total = 0,
+            pageSize = pageSize,
+            hasNextPage = false
+        )
         return getArtistRecentReleases(artistId, page, pageSize)
+    }
+
+    suspend fun setReleaseHidden(
+        userId: UUID,
+        releaseId: UUID,
+        hidden: Boolean,
+        includeRelated: Boolean = false
+    ): Int = dbQuery {
+        val targetId = releaseId
+
+        val providerRow = ProviderReleaseTable.selectAll()
+            .where { ProviderReleaseTable.id eq targetId }
+            .singleOrNull()
+
+        val recentRow = if (providerRow == null) {
+            RecentReleaseTable.selectAll()
+                .where { RecentReleaseTable.releaseId eq targetId }
+                .singleOrNull()
+        } else null
+
+        val targetArtistId = providerRow?.get(ProviderReleaseTable.artistId)?.value
+            ?: recentRow?.get(RecentReleaseTable.artistId)?.value
+            ?: throw IllegalArgumentException("Unknown release $releaseId")
+
+        val targetProvider = providerRow?.get(ProviderReleaseTable.provider)
+        val relatedKey = providerRow?.let {
+            ArtistIdentityEvidence.relatedKey(
+                it[ProviderReleaseTable.copyrightHolder],
+                it[ProviderReleaseTable.recordLabel]
+            )
+        }
+
+        fun relatedReleaseIds(ruleProvider: String, ruleKind: ArtistSourceRuleKind, ruleValue: String): List<UUID> =
+            ProviderReleaseTable.select(ProviderReleaseTable.id)
+                .where { ProviderReleaseTable.artistId eq targetArtistId }
+                .andWhere { ProviderReleaseTable.provider eq ruleProvider }
+                .andWhere { ProviderReleaseTable.releaseGroupId.isNull() }
+                .andWhere { ProviderReleaseTable.id neq targetId }
+                .andWhere {
+                    if (ruleKind == ArtistSourceRuleKind.COPYRIGHT_HOLDER) {
+                        ProviderReleaseTable.copyrightHolder eq ruleValue
+                    } else {
+                        ProviderReleaseTable.recordLabel eq ruleValue
+                    }
+                }
+                .map { it[ProviderReleaseTable.id].value }
+
+        fun hide(hiddenId: UUID): Int = HiddenReleaseTable.insertIgnore {
+            it[HiddenReleaseTable.providerReleaseId] = hiddenId
+            it[HiddenReleaseTable.artistId] = targetArtistId
+            it[HiddenReleaseTable.hiddenBy] = userId
+        }.insertedCount
+
+        fun hideTarget(): Int = HiddenReleaseTable.insertIgnore {
+            if (providerRow != null) {
+                it[HiddenReleaseTable.providerReleaseId] = targetId
+            } else {
+                it[HiddenReleaseTable.releaseGroupId] = targetId
+            }
+            it[HiddenReleaseTable.artistId] = targetArtistId
+            it[HiddenReleaseTable.hiddenBy] = userId
+        }.insertedCount
+
+        var changed: Int
+        if (hidden) {
+            changed = hideTarget()
+            if (includeRelated && relatedKey != null && targetProvider != null) {
+                val (ruleKind, ruleValue) = relatedKey
+                ArtistSourceRuleTable.upsert(
+                    ArtistSourceRuleTable.artistId,
+                    ArtistSourceRuleTable.provider,
+                    ArtistSourceRuleTable.kind,
+                    ArtistSourceRuleTable.value
+                ) {
+                    it[ArtistSourceRuleTable.artistId] = targetArtistId
+                    it[ArtistSourceRuleTable.provider] = targetProvider
+                    it[ArtistSourceRuleTable.kind] = ruleKind
+                    it[ArtistSourceRuleTable.value] = ruleValue
+                    it[ArtistSourceRuleTable.rule] = ArtistSourceRulePolarity.BLOCK
+                    it[ArtistSourceRuleTable.createdBy] = userId
+                }
+                changed += relatedReleaseIds(targetProvider, ruleKind, ruleValue).sumOf { hide(it) }
+            }
+        } else {
+            changed = if (providerRow != null) {
+                HiddenReleaseTable.deleteWhere { HiddenReleaseTable.providerReleaseId eq targetId }
+            } else {
+                HiddenReleaseTable.deleteWhere { HiddenReleaseTable.releaseGroupId eq targetId }
+            }
+            if (includeRelated && relatedKey != null && targetProvider != null) {
+                val (ruleKind, ruleValue) = relatedKey
+                ArtistSourceRuleTable.deleteWhere {
+                    (ArtistSourceRuleTable.artistId eq targetArtistId) and
+                            (ArtistSourceRuleTable.provider eq targetProvider) and
+                            (ArtistSourceRuleTable.kind eq ruleKind) and
+                            (ArtistSourceRuleTable.value eq ruleValue) and
+                            (ArtistSourceRuleTable.rule eq ArtistSourceRulePolarity.BLOCK)
+                }
+                val siblings = relatedReleaseIds(targetProvider, ruleKind, ruleValue)
+                if (siblings.isNotEmpty()) {
+                    changed += HiddenReleaseTable.deleteWhere { HiddenReleaseTable.providerReleaseId inList siblings }
+                }
+            }
+        }
+        changed
+    }
+
+    suspend fun confirmRelease(userId: UUID, releaseId: UUID): RecentRelease {
+        val targetId = releaseId
+        dbQuery {
+            val row = ProviderReleaseTable.selectAll()
+                .where { ProviderReleaseTable.id eq targetId }
+                .singleOrNull() ?: throw IllegalArgumentException("Unknown provider release $releaseId")
+
+            val targetArtistId = row[ProviderReleaseTable.artistId].value
+            val targetProvider = row[ProviderReleaseTable.provider]
+            val evidence = ArtistIdentityEvidence.evidence(
+                row[ProviderReleaseTable.copyrightHolder],
+                row[ProviderReleaseTable.recordLabel],
+                row[ProviderReleaseTable.isrcRegistrants]
+            )
+
+            ProviderReleaseTable.update({ ProviderReleaseTable.id eq targetId }) {
+                it[ProviderReleaseTable.suspect] = false
+                it[ProviderReleaseTable.suspectReason] = null
+            }
+
+            evidence.forEach { (ruleKind, ruleValue) ->
+                ArtistSourceRuleTable.upsert(
+                    ArtistSourceRuleTable.artistId,
+                    ArtistSourceRuleTable.provider,
+                    ArtistSourceRuleTable.kind,
+                    ArtistSourceRuleTable.value
+                ) {
+                    it[ArtistSourceRuleTable.artistId] = targetArtistId
+                    it[ArtistSourceRuleTable.provider] = targetProvider
+                    it[ArtistSourceRuleTable.kind] = ruleKind
+                    it[ArtistSourceRuleTable.value] = ruleValue
+                    it[ArtistSourceRuleTable.rule] = ArtistSourceRulePolarity.TRUST
+                    it[ArtistSourceRuleTable.createdBy] = userId
+                }
+            }
+        }
+
+        return getProviderReleaseById(releaseId) ?: throw IllegalArgumentException("Unknown provider release $releaseId")
     }
 
     suspend fun refreshRecentRelease(releaseId: UUID): RecentRelease? {
@@ -410,6 +583,7 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
     private suspend fun getProviderReleaseById(releaseId: UUID): RecentRelease? = dbQuery {
         val row = ProviderReleaseTable
             .leftJoin(ImageTable, onColumn = { ProviderReleaseTable.imageId }, otherColumn = { ImageTable.id })
+            .leftJoin(HiddenReleaseTable, onColumn = { ProviderReleaseTable.id }, otherColumn = { HiddenReleaseTable.providerReleaseId })
             .selectAll()
             .where { ProviderReleaseTable.id eq releaseId }
             .singleOrNull() ?: return@dbQuery null
@@ -422,29 +596,14 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
     private suspend fun getRecentReleaseById(releaseId: UUID): RecentRelease? = dbQuery {
         val row = RecentReleaseTable
             .leftJoin(ImageTable, onColumn = { RecentReleaseTable.imageId }, otherColumn = { ImageTable.id })
+            .leftJoin(HiddenReleaseTable, onColumn = { RecentReleaseTable.releaseId }, otherColumn = { HiddenReleaseTable.releaseGroupId })
             .selectAll()
             .where { RecentReleaseTable.releaseId eq releaseId }
             .singleOrNull() ?: return@dbQuery null
 
         val links = providerLinkService.recentReleaseUrls(listOf(releaseId))[releaseId] ?: emptyList()
 
-        val date = row[RecentReleaseTable.releaseDate]
-
-        RecentRelease(
-            releaseId = row[RecentReleaseTable.releaseId].value,
-            artistId = row[RecentReleaseTable.artistId].value,
-            artistName = row[RecentReleaseTable.artistName],
-            title = row[RecentReleaseTable.title],
-            releaseDate = date?.let { platformDateFromEpochMilliseconds(it) },
-            type = row[RecentReleaseTable.type],
-            imageId = row[RecentReleaseTable.imageId]?.value,
-            blurHash = row.getOrNull(ImageTable.blurHash),
-            links = links,
-            albumId = row[RecentReleaseTable.albumId]?.value,
-            songId = row[RecentReleaseTable.songId]?.value,
-            source = ReleaseSource.MusicBrainz,
-            upcoming = date != null && date > Clock.System.now().toEpochMilliseconds()
-        )
+        musicBrainzFeedRow(row, mapOf(releaseId to links), Clock.System.now().toEpochMilliseconds()).release
     }
 
     suspend fun fetchNewReleases(onProgress: suspend (Double, String) -> Unit = { _, _ -> }): Map<String, Int> = coroutineScope {

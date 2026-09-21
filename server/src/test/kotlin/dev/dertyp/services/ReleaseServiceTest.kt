@@ -10,8 +10,7 @@ import dev.dertyp.data.*
 import dev.dertyp.db.*
 import dev.dertyp.plugins.RedisCacheProvider
 import dev.dertyp.services.metadata.*
-import dev.dertyp.services.release.AppleMusicReleaseService
-import dev.dertyp.services.release.ProviderLinkService
+import dev.dertyp.services.release.*
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
@@ -42,6 +41,7 @@ import org.koin.test.KoinTest
 import org.koin.test.get
 import java.time.LocalDate
 import java.util.UUID
+import kotlin.test.assertFailsWith
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.hours
@@ -115,6 +115,8 @@ class ReleaseServiceTest : KoinTest {
                 ProviderLinkTable,
                 RecentReleaseLinkTable,
                 ProviderReleaseLinkTable,
+                HiddenReleaseTable,
+                ArtistSourceRuleTable,
                 *allMusicBrainzTables
             )
         }
@@ -1364,7 +1366,13 @@ class ReleaseServiceTest : KoinTest {
         rowReleaseGroupId: UUID? = null,
         rowAlbumId: UUID? = null,
         rowSongId: UUID? = null,
-        rowType: ReleaseType = ReleaseType.Album
+        rowType: ReleaseType = ReleaseType.Album,
+        rowCopyrightHolder: String? = null,
+        rowRecordLabel: String? = null,
+        rowCopyright: String? = null,
+        rowIsrcRegistrants: String? = null,
+        rowSuspect: Boolean = false,
+        rowSuspectReason: String? = null
     ) {
         transaction(database) {
             ProviderReleaseTable.insert {
@@ -1382,9 +1390,59 @@ class ReleaseServiceTest : KoinTest {
                 it[ProviderReleaseTable.releaseGroupId] = rowReleaseGroupId?.let { value -> EntityID(value, MBReleaseGroupTable) }
                 it[ProviderReleaseTable.albumId] = rowAlbumId?.let { value -> EntityID(value, AlbumTable) }
                 it[ProviderReleaseTable.songId] = rowSongId?.let { value -> EntityID(value, SongTable) }
+                it[ProviderReleaseTable.copyrightHolder] = rowCopyrightHolder
+                it[ProviderReleaseTable.recordLabel] = rowRecordLabel
+                it[ProviderReleaseTable.copyright] = rowCopyright
+                it[ProviderReleaseTable.isrcRegistrants] = rowIsrcRegistrants
+                it[ProviderReleaseTable.suspect] = rowSuspect
+                it[ProviderReleaseTable.suspectReason] = rowSuspectReason
             }
         }
     }
+
+    private fun insertRecentRelease(rowId: UUID, owner: UUID, rowTitle: String, rowDate: Long?) {
+        transaction(database) {
+            MBReleaseGroupTable.insert { it[id] = rowId; it[title] = rowTitle }
+            RecentReleaseTable.insert {
+                it[releaseId] = rowId
+                it[artistId] = owner
+                it[artistName] = "Artist"
+                it[title] = rowTitle
+                it[releaseDate] = rowDate
+            }
+        }
+    }
+
+    private fun hiddenReleaseIds(): Set<UUID> = transaction(database) {
+        HiddenReleaseTable.selectAll()
+            .flatMap {
+                listOfNotNull(
+                    it[HiddenReleaseTable.releaseGroupId]?.value,
+                    it[HiddenReleaseTable.providerReleaseId]?.value
+                )
+            }
+            .toSet()
+    }
+
+    private fun sourceRules(): List<SourceRule> = transaction(database) {
+        ArtistSourceRuleTable.selectAll().map {
+            SourceRule(
+                artistId = it[ArtistSourceRuleTable.artistId].toString(),
+                provider = it[ArtistSourceRuleTable.provider],
+                kind = it[ArtistSourceRuleTable.kind],
+                value = it[ArtistSourceRuleTable.value],
+                rule = it[ArtistSourceRuleTable.rule]
+            )
+        }
+    }
+
+    private data class SourceRule(
+        val artistId: String,
+        val provider: String,
+        val kind: ArtistSourceRuleKind,
+        val value: String,
+        val rule: ArtistSourceRulePolarity
+    )
 
     private fun insertLink(linkProvider: String, linkExternalId: String, linkUrl: String): UUID =
         transaction(database) {
@@ -2089,5 +2147,314 @@ class ReleaseServiceTest : KoinTest {
 
         assertNull(result)
         coVerify(exactly = 0) { imageService.createBatch(any()) }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `setReleaseHidden hides a MusicBrainz entry from the feed and the artist feed shows it only with includeHidden`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val userId = UUID.randomUUID()
+        val artistId = UUID.randomUUID()
+        val releaseId = UUID.randomUUID()
+
+        seedFollowedArtist(userId, artistId)
+        insertRecentRelease(releaseId, artistId, "MB Release", 2000L)
+
+        assertEquals(1, service.setReleaseHidden(userId, releaseId, true))
+
+        val feed = service.getRecentReleases(userId)
+        assertEquals(0, feed.total)
+        assertTrue(feed.data.isEmpty())
+
+        val artistFeed = service.getArtistRecentReleases(artistId)
+        assertEquals(0, artistFeed.total)
+        assertTrue(artistFeed.data.isEmpty())
+
+        val withHidden = service.getArtistRecentReleases(artistId, includeHidden = true)
+        assertEquals(1, withHidden.total)
+        assertEquals("MB Release", withHidden.data.single().title)
+        assertTrue(withHidden.data.single().hidden)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `setReleaseHidden returns the number of changed entries and is idempotent`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val userId = UUID.randomUUID()
+        val artistId = UUID.randomUUID()
+        val releaseId = UUID.randomUUID()
+
+        seedFollowedArtist(userId, artistId)
+        insertProviderRelease(releaseId, artistId, "Apple Release", 1000L)
+
+        assertEquals(1, service.setReleaseHidden(userId, releaseId, true))
+        assertEquals(0, service.setReleaseHidden(userId, releaseId, true))
+        assertEquals(1, service.setReleaseHidden(userId, releaseId, false))
+        assertEquals(0, service.setReleaseHidden(userId, releaseId, false))
+        assertTrue(hiddenReleaseIds().isEmpty())
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `setReleaseHidden with includeRelated hides the siblings sharing the copyright holder and records a block`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val userId = UUID.randomUUID()
+        val artistId = UUID.randomUUID()
+        val groupId = UUID.randomUUID()
+        val releaseA = UUID.randomUUID()
+        val releaseB = UUID.randomUUID()
+        val releaseC = UUID.randomUUID()
+        val releaseD = UUID.randomUUID()
+
+        seedFollowedArtist(userId, artistId)
+        transaction(database) {
+            MBReleaseGroupTable.insert { it[id] = groupId; it[title] = "Matched Group" }
+        }
+        insertProviderRelease(releaseA, artistId, "A", 4000L, rowCopyrightHolder = "X")
+        insertProviderRelease(releaseB, artistId, "B", 3000L, rowCopyrightHolder = "X")
+        insertProviderRelease(releaseC, artistId, "C", 2000L, rowCopyrightHolder = "Y")
+        insertProviderRelease(releaseD, artistId, "D", 1000L, rowReleaseGroupId = groupId, rowCopyrightHolder = "X")
+
+        assertEquals(2, service.setReleaseHidden(userId, releaseA, true, includeRelated = true))
+
+        val feed = service.getRecentReleases(userId)
+        assertEquals(listOf("C"), feed.data.map { it.title })
+        assertEquals(setOf(releaseA, releaseB), hiddenReleaseIds())
+
+        val rule = sourceRules().single()
+        assertEquals(artistId.toString(), rule.artistId)
+        assertEquals("apple", rule.provider)
+        assertEquals(ArtistSourceRuleKind.COPYRIGHT_HOLDER, rule.kind)
+        assertEquals("X", rule.value)
+        assertEquals(ArtistSourceRulePolarity.BLOCK, rule.rule)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `setReleaseHidden with includeRelated falls back to the record label when no holder is known`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val userId = UUID.randomUUID()
+        val artistId = UUID.randomUUID()
+        val releaseA = UUID.randomUUID()
+        val releaseB = UUID.randomUUID()
+        val releaseC = UUID.randomUUID()
+
+        seedFollowedArtist(userId, artistId)
+        insertProviderRelease(releaseA, artistId, "A", 3000L, rowRecordLabel = "Label One")
+        insertProviderRelease(releaseB, artistId, "B", 2000L, rowRecordLabel = "Label One")
+        insertProviderRelease(releaseC, artistId, "C", 1000L, rowRecordLabel = "Label Two")
+
+        assertEquals(2, service.setReleaseHidden(userId, releaseA, true, includeRelated = true))
+
+        assertEquals(setOf(releaseA, releaseB), hiddenReleaseIds())
+        assertEquals(listOf("C"), service.getRecentReleases(userId).data.map { it.title })
+
+        val rule = sourceRules().single()
+        assertEquals(ArtistSourceRuleKind.LABEL, rule.kind)
+        assertEquals("Label One", rule.value)
+        assertEquals(ArtistSourceRulePolarity.BLOCK, rule.rule)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `setReleaseHidden with includeRelated on a MusicBrainz entry hides only that entry`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val userId = UUID.randomUUID()
+        val artistId = UUID.randomUUID()
+        val releaseId = UUID.randomUUID()
+        val otherReleaseId = UUID.randomUUID()
+
+        seedFollowedArtist(userId, artistId)
+        insertRecentRelease(releaseId, artistId, "MB One", 2000L)
+        insertRecentRelease(otherReleaseId, artistId, "MB Two", 1000L)
+
+        assertEquals(1, service.setReleaseHidden(userId, releaseId, true, includeRelated = true))
+
+        assertEquals(setOf(releaseId), hiddenReleaseIds())
+        assertTrue(sourceRules().isEmpty())
+        assertEquals(listOf("MB Two"), service.getRecentReleases(userId).data.map { it.title })
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `setReleaseHidden unhide with includeRelated removes the block and shows the siblings again`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val userId = UUID.randomUUID()
+        val artistId = UUID.randomUUID()
+        val releaseA = UUID.randomUUID()
+        val releaseB = UUID.randomUUID()
+
+        seedFollowedArtist(userId, artistId)
+        insertProviderRelease(releaseA, artistId, "A", 2000L, rowCopyrightHolder = "X")
+        insertProviderRelease(releaseB, artistId, "B", 1000L, rowCopyrightHolder = "X")
+
+        assertEquals(2, service.setReleaseHidden(userId, releaseA, true, includeRelated = true))
+        assertEquals(2, service.setReleaseHidden(userId, releaseA, false, includeRelated = true))
+
+        assertTrue(hiddenReleaseIds().isEmpty())
+        assertTrue(sourceRules().isEmpty())
+        assertEquals(listOf("A", "B"), service.getRecentReleases(userId).data.map { it.title })
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `setReleaseHidden throws for an unknown release id`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val userId = UUID.randomUUID()
+        val artistId = UUID.randomUUID()
+
+        seedFollowedArtist(userId, artistId)
+
+        assertFailsWith<IllegalArgumentException> { service.setReleaseHidden(userId, UUID.randomUUID(), true) }
+        Unit
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `confirmRelease clears the suspect flag and records trust rules`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val userId = UUID.randomUUID()
+        val artistId = UUID.randomUUID()
+        val releaseId = UUID.randomUUID()
+
+        seedFollowedArtist(userId, artistId)
+        insertProviderRelease(
+            releaseId,
+            artistId,
+            "Suspect Release",
+            1000L,
+            rowCopyrightHolder = "h",
+            rowRecordLabel = "L",
+            rowIsrcRegistrants = "ABC12,XYZ99",
+            rowSuspect = true,
+            rowSuspectReason = "unknown label"
+        )
+
+        val confirmed = service.confirmRelease(userId, releaseId)
+
+        assertFalse(confirmed.suspect)
+        assertNull(confirmed.suspectReason)
+        assertEquals("L", confirmed.recordLabel)
+
+        val rules = sourceRules()
+        assertEquals(4, rules.size)
+        assertTrue(rules.all { it.rule == ArtistSourceRulePolarity.TRUST })
+        assertTrue(rules.all { it.artistId == artistId.toString() && it.provider == "apple" })
+        assertEquals(
+            setOf(
+                ArtistSourceRuleKind.COPYRIGHT_HOLDER to "h",
+                ArtistSourceRuleKind.LABEL to "L",
+                ArtistSourceRuleKind.ISRC_REGISTRANT to "ABC12",
+                ArtistSourceRuleKind.ISRC_REGISTRANT to "XYZ99"
+            ),
+            rules.map { it.kind to it.value }.toSet()
+        )
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `confirmRelease turns a block for the same value into a trust rule`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val userId = UUID.randomUUID()
+        val artistId = UUID.randomUUID()
+        val blockedId = UUID.randomUUID()
+        val confirmedId = UUID.randomUUID()
+
+        seedFollowedArtist(userId, artistId)
+        insertProviderRelease(blockedId, artistId, "Blocked", 2000L, rowCopyrightHolder = "X")
+        insertProviderRelease(confirmedId, artistId, "Confirmed", 1000L, rowCopyrightHolder = "X")
+
+        assertEquals(2, service.setReleaseHidden(userId, blockedId, true, includeRelated = true))
+        assertEquals(ArtistSourceRulePolarity.BLOCK, sourceRules().single().rule)
+
+        service.confirmRelease(userId, confirmedId)
+
+        val rule = sourceRules().single()
+        assertEquals(ArtistSourceRuleKind.COPYRIGHT_HOLDER, rule.kind)
+        assertEquals("X", rule.value)
+        assertEquals(ArtistSourceRulePolarity.TRUST, rule.rule)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `confirmRelease throws for a MusicBrainz or unknown id`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val userId = UUID.randomUUID()
+        val artistId = UUID.randomUUID()
+        val releaseId = UUID.randomUUID()
+
+        seedFollowedArtist(userId, artistId)
+        insertRecentRelease(releaseId, artistId, "MB Release", 1000L)
+
+        assertFailsWith<IllegalArgumentException> { service.confirmRelease(userId, releaseId) }
+        assertFailsWith<IllegalArgumentException> { service.confirmRelease(userId, UUID.randomUUID()) }
+        Unit
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `getArtistRecentReleases exposes suspect, suspectReason, recordLabel and copyright of provider rows`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val artistId = UUID.randomUUID()
+        val providerId = UUID.randomUUID()
+        val mbId = UUID.randomUUID()
+
+        transaction(database) {
+            ArtistTable.insert { it[id] = artistId; it[name] = "Artist" }
+        }
+        insertProviderRelease(
+            providerId,
+            artistId,
+            "Apple Release",
+            2000L,
+            rowCopyrightHolder = "h",
+            rowRecordLabel = "Label One",
+            rowCopyright = "2024 Label One",
+            rowSuspect = true,
+            rowSuspectReason = "unknown label"
+        )
+        insertRecentRelease(mbId, artistId, "MB Release", 1000L)
+
+        val byTitle = service.getArtistRecentReleases(artistId).data.associateBy { it.title }
+
+        val apple = byTitle.getValue("Apple Release")
+        assertTrue(apple.suspect)
+        assertEquals("unknown label", apple.suspectReason)
+        assertEquals("Label One", apple.recordLabel)
+        assertEquals("2024 Label One", apple.copyright)
+        assertFalse(apple.hidden)
+
+        val musicBrainz = byTitle.getValue("MB Release")
+        assertFalse(musicBrainz.suspect)
+        assertNull(musicBrainz.suspectReason)
+        assertNull(musicBrainz.recordLabel)
+        assertNull(musicBrainz.copyright)
+        assertFalse(musicBrainz.hidden)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `getRecentReleases pagination excludes hidden entries from the total`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val userId = UUID.randomUUID()
+        val artistId = UUID.randomUUID()
+
+        seedFollowedArtist(userId, artistId)
+        val releaseIds = (1..5).map { UUID.randomUUID() }
+        releaseIds.forEachIndexed { index, releaseId ->
+            insertRecentRelease(releaseId, artistId, "MB ${index + 1}", (index + 1) * 1000L)
+        }
+
+        assertEquals(1, service.setReleaseHidden(userId, releaseIds[0], true))
+        assertEquals(1, service.setReleaseHidden(userId, releaseIds[1], true))
+
+        val page0 = service.getRecentReleases(userId, page = 0, pageSize = 2)
+        assertEquals(3, page0.total)
+        assertTrue(page0.hasNextPage)
+        assertEquals(listOf("MB 5", "MB 4"), page0.data.map { it.title })
+
+        val page1 = service.getRecentReleases(userId, page = 1, pageSize = 2)
+        assertEquals(listOf("MB 3"), page1.data.map { it.title })
+        assertFalse(page1.hasNextPage)
     }
 }

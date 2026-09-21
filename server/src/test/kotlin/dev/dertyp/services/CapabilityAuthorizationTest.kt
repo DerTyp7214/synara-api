@@ -11,10 +11,12 @@ import dev.dertyp.data.PodcastScanResult
 import dev.dertyp.data.PodcastShow
 import dev.dertyp.data.PodcastShowSettings
 import dev.dertyp.data.PodcastSource
+import dev.dertyp.data.ReleaseType
 import dev.dertyp.data.User
 import dev.dertyp.data.UserCapability
 import dev.dertyp.db.UserCapabilityTable
 import dev.dertyp.db.UserTable
+import dev.dertyp.services.models.RecentRelease
 import dev.dertyp.services.podcast.PodcastFeedService
 import dev.dertyp.services.podcast.PodcastImportService
 import dev.dertyp.services.podcast.PodcastIndexService
@@ -278,6 +280,67 @@ class CapabilityAuthorizationTest : KoinTest {
         val authorizedService = podcastRpcService(adminUser).withAuthorization<IPodcastService>(adminUser)
 
         authorizedService.deleteShow(UUID.randomUUID())
+    }
+
+    private fun releaseFixture() = RecentRelease(
+        releaseId = UUID.randomUUID(),
+        artistId = UUID.randomUUID(),
+        artistName = "Artist",
+        title = "Title",
+        releaseDate = null,
+        type = ReleaseType.Album
+    )
+
+    private fun releaseRpcService(user: User): RpcReleaseService {
+        val releaseService = mockk<ReleaseService>(relaxed = true)
+        coEvery { releaseService.confirmRelease(any(), any()) } returns releaseFixture()
+
+        return RpcReleaseService(user, releaseService)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `release setReleaseHidden and confirmRelease require EDIT`(dialect: DbDialect): Unit = runBlocking {
+        setup(dialect)
+        val userWithoutEdit = User(id = UUID.randomUUID(), username = "release-noedit", passwordHash = "", isAdmin = false, capabilities = emptyList())
+        val authorizedService = releaseRpcService(userWithoutEdit).withAuthorization<IReleaseService>(userWithoutEdit)
+
+        assertFailsWith<UnauthorizedException> {
+            try {
+                authorizedService.setReleaseHidden(UUID.randomUUID(), true)
+            } catch (e: UndeclaredThrowableException) {
+                throw e.undeclaredThrowable
+            }
+        }
+        assertFailsWith<UnauthorizedException> {
+            try {
+                authorizedService.confirmRelease(UUID.randomUUID())
+            } catch (e: UndeclaredThrowableException) {
+                throw e.undeclaredThrowable
+            }
+        }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `release setReleaseHidden and confirmRelease are allowed with EDIT`(dialect: DbDialect): Unit = runBlocking {
+        setup(dialect)
+        val userWithEdit = User(id = UUID.randomUUID(), username = "release-withedit", passwordHash = "", isAdmin = false, capabilities = listOf(UserCapability.EDIT))
+        val authorizedService = releaseRpcService(userWithEdit).withAuthorization<IReleaseService>(userWithEdit)
+
+        authorizedService.setReleaseHidden(UUID.randomUUID(), true)
+        authorizedService.confirmRelease(UUID.randomUUID())
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `release setReleaseHidden and confirmRelease are allowed for an admin`(dialect: DbDialect): Unit = runBlocking {
+        setup(dialect)
+        val adminUser = User(id = UUID.randomUUID(), username = "release-admin", passwordHash = "", isAdmin = true, capabilities = emptyList())
+        val authorizedService = releaseRpcService(adminUser).withAuthorization<IReleaseService>(adminUser)
+
+        authorizedService.setReleaseHidden(UUID.randomUUID(), true)
+        authorizedService.confirmRelease(UUID.randomUUID())
     }
 
     @Test

@@ -104,6 +104,8 @@ class AppleMusicReleaseServiceTest : KoinTest {
                 ProviderLinkTable,
                 RecentReleaseLinkTable,
                 ProviderReleaseLinkTable,
+                HiddenReleaseTable,
+                ArtistSourceRuleTable,
                 *allMusicBrainzTables
             )
         }
@@ -140,12 +142,16 @@ class AppleMusicReleaseServiceTest : KoinTest {
         url: String? = null,
         trackCount: Int = 10,
         image: IMetadataService.Image? = null,
-        artistName: String = "Test Artist"
+        artistName: String = "Test Artist",
+        recordLabel: String? = null,
+        copyright: String? = null,
+        genreNames: List<String> = emptyList(),
+        artistIds: List<String> = listOf(appleArtistId)
     ) = AppleMusicService.CatalogAlbum(
         id = id,
         title = title,
         artistName = artistName,
-        artistIds = listOf(appleArtistId),
+        artistIds = artistIds,
         releaseDate = releaseDate,
         isSingle = isSingle,
         isComplete = isComplete,
@@ -153,8 +159,62 @@ class AppleMusicReleaseServiceTest : KoinTest {
         upc = upc,
         url = url,
         trackCount = trackCount,
-        image = image
+        image = image,
+        recordLabel = recordLabel,
+        copyright = copyright,
+        genreNames = genreNames
     )
+
+    private fun seedLibrarySong(artistId: UUID, copyright: String, isrc: String?) {
+        val libraryAlbumId = UUID.randomUUID()
+        val librarySongId = UUID.randomUUID()
+        transaction(database) {
+            AlbumTable.insert { it[id] = libraryAlbumId; it[name] = "Library Album $librarySongId" }
+            SongTable.insert {
+                it[id] = librarySongId
+                it[title] = "Library Song"
+                it[SongTable.albumId] = libraryAlbumId
+                it[SongTable.copyright] = copyright
+                it[SongTable.isrc] = isrc
+            }
+            SongArtistTable.insert {
+                it[SongArtistTable.songId] = librarySongId
+                it[SongArtistTable.artistId] = artistId
+            }
+        }
+    }
+
+    private fun hiddenProviderRow(providerReleaseId: UUID) = transaction(database) {
+        HiddenReleaseTable.selectAll()
+            .where { HiddenReleaseTable.providerReleaseId eq providerReleaseId }
+            .singleOrNull()
+    }
+
+    private fun hiddenGroupRow(releaseGroupId: UUID) = transaction(database) {
+        HiddenReleaseTable.selectAll()
+            .where { HiddenReleaseTable.releaseGroupId eq releaseGroupId }
+            .singleOrNull()
+    }
+
+    private fun hiddenCount() = transaction(database) {
+        HiddenReleaseTable.selectAll().count().toInt()
+    }
+
+    private fun seedSourceRule(
+        kind: ArtistSourceRuleKind,
+        value: String,
+        polarity: ArtistSourceRulePolarity
+    ) {
+        transaction(database) {
+            ArtistSourceRuleTable.insert {
+                it[ArtistSourceRuleTable.artistId] = testArtistId
+                it[ArtistSourceRuleTable.provider] = "apple"
+                it[ArtistSourceRuleTable.kind] = kind
+                it[ArtistSourceRuleTable.value] = value
+                it[ArtistSourceRuleTable.rule] = polarity
+            }
+        }
+    }
 
     private fun providerRows() = transaction(database) {
         ProviderReleaseTable.selectAll().map { row ->
@@ -1042,5 +1102,336 @@ class AppleMusicReleaseServiceTest : KoinTest {
             assertEquals(1, ProviderLinkTable.selectAll().count().toInt())
             assertEquals(1, ProviderReleaseLinkTable.selectAll().count().toInt())
         }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `flags a release whose copyright holder and ISRC registrant are unknown for the artist`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            seedFollowedArtist()
+            seedLibrarySong(testArtistId, "℗ 2024 Division Recordings", "DEUM72400123")
+
+            coEvery { appleMusicService.getArtistCatalogAlbums(appleArtistId, any()) } returns listOf(
+                catalogAlbum(
+                    "1",
+                    "Home Album",
+                    LocalDate.now().minusDays(5),
+                    recordLabel = "Division",
+                    copyright = "℗ 2026 DIVISION / RCA & GOLD LEAGUE distributed by Sony Music Entertainment",
+                    genreNames = listOf("Hip-Hop/Rap")
+                ),
+                catalogAlbum(
+                    "2",
+                    "Foreign Single",
+                    LocalDate.now().minusDays(4),
+                    isSingle = true,
+                    recordLabel = "13652890 Records DK",
+                    copyright = "℗ 2026 13652890 Records DK",
+                    genreNames = listOf("Pop")
+                ),
+                catalogAlbum(
+                    "3",
+                    "Another Home Album",
+                    LocalDate.now().minusDays(3),
+                    recordLabel = "Division",
+                    copyright = "℗ 2026 DIVISION / RCA & GOLD LEAGUE distributed by Sony Music Entertainment",
+                    genreNames = listOf("Hip-Hop/Rap")
+                )
+            )
+            coEvery { appleMusicService.getAlbumIsrcs("1", any()) } returns listOf("DEUM72600042")
+            coEvery { appleMusicService.getAlbumIsrcs("2", any()) } returns listOf("QZK6P2600001")
+
+            val result = service.fetchFollowedArtistReleases()
+
+            val rows = providerRows()
+            assertFalse(rows.getValue("1")[ProviderReleaseTable.suspect])
+            assertNull(rows.getValue("1")[ProviderReleaseTable.suspectReason])
+
+            val flagged = rows.getValue("2")
+            assertTrue(flagged[ProviderReleaseTable.suspect])
+            assertEquals(
+                "copyright holder \"13652890 records dk\", label \"13652890 Records DK\" " +
+                        "and ISRC registrant \"QZK6P\" never seen for this artist " +
+                        "(genre Pop, artist mostly Hip-Hop/Rap)",
+                flagged[ProviderReleaseTable.suspectReason]
+            )
+            assertEquals("QZK6P", flagged[ProviderReleaseTable.isrcRegistrants])
+            assertEquals("13652890 records dk", flagged[ProviderReleaseTable.copyrightHolder])
+            assertEquals("13652890 Records DK", flagged[ProviderReleaseTable.recordLabel])
+            assertEquals("℗ 2026 13652890 Records DK", flagged[ProviderReleaseTable.copyright])
+            assertFalse(rows.getValue("3")[ProviderReleaseTable.suspect])
+            assertEquals(1, result["suspect"])
+        }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `does not flag when the artist has no evidence`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        seedFollowedArtist()
+
+        coEvery { appleMusicService.getArtistCatalogAlbums(appleArtistId, any()) } returns listOf(
+            catalogAlbum(
+                "2",
+                "Foreign Single",
+                LocalDate.now().minusDays(4),
+                isSingle = true,
+                recordLabel = "13652890 Records DK",
+                copyright = "℗ 2026 13652890 Records DK",
+                genreNames = listOf("Pop")
+            )
+        )
+        coEvery { appleMusicService.getAlbumIsrcs("2", any()) } returns listOf("QZK6P2600001")
+
+        val result = service.fetchFollowedArtistReleases()
+
+        val row = providerRows().getValue("2")
+        assertFalse(row[ProviderReleaseTable.suspect])
+        assertNull(row[ProviderReleaseTable.suspectReason])
+        assertEquals(0, result["suspect"])
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `never flags a matched release and fetches no ISRCs for it`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        seedFollowedArtist()
+        seedLibrarySong(testArtistId, "℗ 2024 Division Recordings", "DEUM72400123")
+
+        val releaseGroupId = UUID.randomUUID()
+        seedRecentRelease(releaseGroupId, "Matched Album")
+        seedGroupLink(releaseGroupId, "apple", "1", "https://music.apple.com/album/1")
+
+        coEvery { appleMusicService.getArtistCatalogAlbums(appleArtistId, any()) } returns listOf(
+            catalogAlbum(
+                "1",
+                "Matched Album",
+                LocalDate.now().minusDays(5),
+                recordLabel = "13652890 Records DK",
+                copyright = "℗ 2026 13652890 Records DK"
+            )
+        )
+
+        val result = service.fetchFollowedArtistReleases()
+
+        val row = providerRows().getValue("1")
+        assertFalse(row[ProviderReleaseTable.suspect])
+        assertNull(row[ProviderReleaseTable.suspectReason])
+        assertNull(row[ProviderReleaseTable.isrcRegistrants])
+        assertEquals(0, result["suspect"])
+        coVerify(exactly = 0) { appleMusicService.getAlbumIsrcs(any(), any()) }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `fetches the ISRCs of an unmatched release only once`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        seedFollowedArtist()
+
+        coEvery { appleMusicService.getArtistCatalogAlbums(appleArtistId, any()) } returns listOf(
+            catalogAlbum("1", "Lonely Album", LocalDate.now().minusDays(5), recordLabel = "Division")
+        )
+
+        service.fetchFollowedArtistReleases()
+        service.fetchFollowedArtistReleases()
+
+        coVerify(exactly = 1) { appleMusicService.getAlbumIsrcs("1", any()) }
+        assertEquals("", providerRows().getValue("1")[ProviderReleaseTable.isrcRegistrants])
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `retries the ISRC fetch after a failure`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        seedFollowedArtist()
+
+        coEvery { appleMusicService.getArtistCatalogAlbums(appleArtistId, any()) } returns listOf(
+            catalogAlbum("1", "Lonely Album", LocalDate.now().minusDays(5), recordLabel = "Division")
+        )
+        coEvery { appleMusicService.getAlbumIsrcs("1", any()) } returns null
+
+        service.fetchFollowedArtistReleases()
+        assertNull(providerRows().getValue("1")[ProviderReleaseTable.isrcRegistrants])
+
+        coEvery { appleMusicService.getAlbumIsrcs("1", any()) } returns listOf("QZK6P2600001")
+        service.fetchFollowedArtistReleases()
+
+        assertEquals("QZK6P", providerRows().getValue("1")[ProviderReleaseTable.isrcRegistrants])
+        coVerify(exactly = 2) { appleMusicService.getAlbumIsrcs("1", any()) }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `matched releases of the current run count as evidence`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        seedFollowedArtist()
+
+        val releaseGroupId = UUID.randomUUID()
+        seedRecentRelease(releaseGroupId, "Matched Album")
+        seedGroupLink(releaseGroupId, "apple", "1", "https://music.apple.com/album/1")
+
+        coEvery { appleMusicService.getArtistCatalogAlbums(appleArtistId, any()) } returns listOf(
+            catalogAlbum("1", "Matched Album", LocalDate.now().minusDays(5), recordLabel = "Division"),
+            catalogAlbum("2", "Sibling Album", LocalDate.now().minusDays(4), recordLabel = "Division Recordings"),
+            catalogAlbum("3", "Stranger Album", LocalDate.now().minusDays(3), recordLabel = "Other Label")
+        )
+
+        val result = service.fetchFollowedArtistReleases()
+
+        val rows = providerRows()
+        assertFalse(rows.getValue("1")[ProviderReleaseTable.suspect])
+        assertFalse(rows.getValue("2")[ProviderReleaseTable.suspect])
+        assertTrue(rows.getValue("3")[ProviderReleaseTable.suspect])
+        assertEquals(
+            "label \"Other Label\" never seen for this artist",
+            rows.getValue("3")[ProviderReleaseTable.suspectReason]
+        )
+        assertEquals(1, result["suspect"])
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `a TRUST rule clears the flag`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        seedFollowedArtist()
+        seedLibrarySong(testArtistId, "℗ 2024 Division Recordings", "DEUM72400123")
+        seedSourceRule(ArtistSourceRuleKind.LABEL, "13652890 records dk", ArtistSourceRulePolarity.TRUST)
+
+        coEvery { appleMusicService.getArtistCatalogAlbums(appleArtistId, any()) } returns listOf(
+            catalogAlbum(
+                "2",
+                "Foreign Single",
+                LocalDate.now().minusDays(4),
+                isSingle = true,
+                recordLabel = "13652890 Records DK",
+                copyright = "℗ 2026 13652890 Records DK"
+            )
+        )
+        coEvery { appleMusicService.getAlbumIsrcs("2", any()) } returns listOf("QZK6P2600001")
+
+        val result = service.fetchFollowedArtistReleases()
+
+        val row = providerRows().getValue("2")
+        assertFalse(row[ProviderReleaseTable.suspect])
+        assertNull(row[ProviderReleaseTable.suspectReason])
+        assertEquals(0, result["suspect"])
+        assertEquals(0, hiddenCount())
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `a BLOCK rule flags and hides a release`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        seedFollowedArtist()
+        seedSourceRule(
+            ArtistSourceRuleKind.COPYRIGHT_HOLDER,
+            "13652890 records dk",
+            ArtistSourceRulePolarity.BLOCK
+        )
+
+        coEvery { appleMusicService.getArtistCatalogAlbums(appleArtistId, any()) } returns listOf(
+            catalogAlbum(
+                "2",
+                "Foreign Single",
+                LocalDate.now().minusDays(4),
+                isSingle = true,
+                recordLabel = "13652890 Records DK",
+                copyright = "℗ 2026 13652890 Records DK"
+            )
+        )
+
+        val result = service.fetchFollowedArtistReleases()
+
+        val row = providerRows().getValue("2")
+        assertTrue(row[ProviderReleaseTable.suspect])
+        assertTrue(
+            row[ProviderReleaseTable.suspectReason].orEmpty().startsWith("blocked copyright holder")
+        )
+        assertEquals(1, result["suspect"])
+
+        val blockedRowId = AppleMusicReleaseService.providerReleaseId("apple", "2")
+        val hidden = hiddenProviderRow(blockedRowId)
+        assertNotNull(hidden)
+        val hiddenRelease = hidden!!
+        assertEquals(testArtistId, hiddenRelease[HiddenReleaseTable.artistId].value)
+        assertEquals(blockedRowId, hiddenRelease[HiddenReleaseTable.providerReleaseId]?.value)
+        assertNull(hiddenRelease[HiddenReleaseTable.releaseGroupId])
+        assertNull(hiddenRelease[HiddenReleaseTable.hiddenBy])
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `clears a stale flag once the release is matched`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        seedFollowedArtist()
+
+        val rowId = AppleMusicReleaseService.providerReleaseId("apple", "1")
+        transaction(database) {
+            ProviderReleaseTable.insert {
+                it[id] = rowId
+                it[provider] = "apple"
+                it[externalId] = "1"
+                it[ProviderReleaseTable.artistId] = testArtistId
+                it[title] = "Stale Album"
+                it[suspect] = true
+                it[suspectReason] = "label \"other label\" never seen for this artist"
+            }
+        }
+
+        val releaseGroupId = UUID.randomUUID()
+        seedRecentRelease(releaseGroupId, "Stale Album")
+        seedGroupLink(releaseGroupId, "apple", "1", "https://music.apple.com/album/1")
+
+        coEvery { appleMusicService.getArtistCatalogAlbums(appleArtistId, any()) } returns listOf(
+            catalogAlbum("1", "Stale Album", LocalDate.now().minusDays(5), recordLabel = "Other Label")
+        )
+
+        val result = service.fetchFollowedArtistReleases()
+
+        val row = providerRows().getValue("1")
+        assertFalse(row[ProviderReleaseTable.suspect])
+        assertNull(row[ProviderReleaseTable.suspectReason])
+        assertEquals(0, result["suspect"])
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `mergeIntoReleaseGroup copies the hidden state to the release group`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        seedFollowedArtist()
+
+        val rowId = AppleMusicReleaseService.providerReleaseId("apple", "1")
+        val releaseGroupId = UUID.randomUUID()
+        seedRecentRelease(releaseGroupId, "Hidden Album")
+        seedGroupLink(releaseGroupId, "apple", "1", "https://music.apple.com/album/1")
+        transaction(database) {
+            ProviderReleaseTable.insert {
+                it[id] = rowId
+                it[provider] = "apple"
+                it[externalId] = "1"
+                it[ProviderReleaseTable.artistId] = testArtistId
+                it[title] = "Hidden Album"
+            }
+            HiddenReleaseTable.insert {
+                it[HiddenReleaseTable.providerReleaseId] = rowId
+                it[HiddenReleaseTable.artistId] = testArtistId
+            }
+        }
+
+        coEvery { appleMusicService.getArtistCatalogAlbums(appleArtistId, any()) } returns listOf(
+            catalogAlbum("1", "Hidden Album", LocalDate.now().minusDays(5))
+        )
+
+        service.fetchFollowedArtistReleases()
+
+        val hidden = hiddenGroupRow(releaseGroupId)
+        assertNotNull(hidden)
+        val hiddenGroup = hidden!!
+        assertEquals(releaseGroupId, hiddenGroup[HiddenReleaseTable.releaseGroupId]?.value)
+        assertNull(hiddenGroup[HiddenReleaseTable.providerReleaseId])
+        assertEquals(testArtistId, hiddenGroup[HiddenReleaseTable.artistId].value)
+        assertNull(hiddenGroup[HiddenReleaseTable.hiddenBy])
+        assertNotNull(hiddenProviderRow(rowId))
+        assertEquals(2, hiddenCount())
     }
 }

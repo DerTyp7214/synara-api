@@ -7,6 +7,15 @@ import dev.dertyp.data.ReleaseType
 import dev.dertyp.db.*
 import dev.dertyp.dbQuery
 import dev.dertyp.services.ImageService
+import dev.dertyp.services.release.ArtistIdentityEvidence.KnownEvidence
+import dev.dertyp.services.release.ArtistIdentityEvidence.Signals
+import dev.dertyp.services.release.ArtistIdentityEvidence.TaughtRule
+import dev.dertyp.services.release.ArtistIdentityEvidence.TaughtRules
+import dev.dertyp.services.release.ArtistIdentityEvidence.Verdict
+import dev.dertyp.services.release.ArtistIdentityEvidence.evaluate
+import dev.dertyp.services.release.ArtistIdentityEvidence.isrcRegistrant
+import dev.dertyp.services.release.ArtistIdentityEvidence.normalizeCopyrightHolder
+import dev.dertyp.services.release.ArtistIdentityEvidence.normalizeLabel
 import dev.dertyp.services.Service
 import dev.dertyp.services.import.Type
 import dev.dertyp.services.metadata.*
@@ -38,19 +47,34 @@ class AppleMusicReleaseService(private val environment: ApplicationEnvironment) 
             environment
         ) as AppleMusicService
 
-    private data class ProcessResult(val stored: Int = 0, val upcoming: Int = 0, val matched: Int = 0)
+    private data class ProcessResult(
+        val stored: Int = 0,
+        val upcoming: Int = 0,
+        val matched: Int = 0,
+        val suspect: Int = 0
+    )
 
     private data class StoredRelease(
         val imageId: UUID?,
         val lastImageFetch: Long?,
         val linksResolvedAt: Long?,
-        val releaseGroupId: UUID?
+        val releaseGroupId: UUID?,
+        val isrcRegistrants: String?
+    )
+
+    private data class Outcome(
+        val album: AppleMusicService.CatalogAlbum,
+        val rowId: UUID,
+        val matched: Boolean,
+        val storedRegistrants: String?
     )
 
     private data class UnlinkedRelease(val id: UUID, val externalId: String, val upc: String?)
 
     companion object {
         const val PROVIDER = "apple"
+
+        private const val EVIDENCE_POOL = 500
 
         private val LOOKBACK = 180.days
         private val UPCOMING_HORIZON = 365.days
@@ -86,6 +110,7 @@ class AppleMusicReleaseService(private val environment: ApplicationEnvironment) 
                 "stored" to 0,
                 "upcoming" to 0,
                 "matched" to 0,
+                "suspect" to 0,
                 "skipped" to false
             )
         }
@@ -108,7 +133,8 @@ class AppleMusicReleaseService(private val environment: ApplicationEnvironment) 
 
                     progressMutex.withLock {
                         processed++
-                        onProgress(processed * 100.0 / totalArtists, "Checked $artistName")
+                        val suffix = if (result.suspect > 0) " (${result.suspect} suspect)" else ""
+                        onProgress(processed * 100.0 / totalArtists, "Checked $artistName$suffix")
                     }
                     result
                 }
@@ -123,6 +149,7 @@ class AppleMusicReleaseService(private val environment: ApplicationEnvironment) 
             "stored" to results.sumOf { it.stored },
             "upcoming" to results.sumOf { it.upcoming },
             "matched" to results.sumOf { it.matched },
+            "suspect" to results.sumOf { it.suspect },
             "skipped" to false
         )
     }
@@ -206,7 +233,8 @@ class AppleMusicReleaseService(private val environment: ApplicationEnvironment) 
                 .select(
                     ProviderReleaseTable.imageId,
                     ProviderReleaseTable.releaseDate,
-                    ProviderReleaseTable.releaseGroupId
+                    ProviderReleaseTable.releaseGroupId,
+                    ProviderReleaseTable.artistId
                 )
                 .where { ProviderReleaseTable.id eq providerReleaseId }
                 .singleOrNull() ?: return@dbQuery
@@ -216,6 +244,18 @@ class AppleMusicReleaseService(private val environment: ApplicationEnvironment) 
                     it[ProviderReleaseTable.releaseGroupId] = releaseGroupId
                 }
             }
+
+            HiddenReleaseTable
+                .select(HiddenReleaseTable.hiddenBy)
+                .where { HiddenReleaseTable.providerReleaseId eq providerReleaseId }
+                .singleOrNull()
+                ?.let { hidden ->
+                    HiddenReleaseTable.insertIgnore { statement ->
+                        statement[HiddenReleaseTable.releaseGroupId] = releaseGroupId
+                        statement[HiddenReleaseTable.artistId] = row[ProviderReleaseTable.artistId]
+                        statement[HiddenReleaseTable.hiddenBy] = hidden[HiddenReleaseTable.hiddenBy]
+                    }
+                }
 
             val linkIds = ProviderReleaseLinkTable
                 .select(ProviderReleaseLinkTable.linkId)
@@ -378,6 +418,7 @@ class AppleMusicReleaseService(private val environment: ApplicationEnvironment) 
         var stored = 0
         var upcoming = 0
         var matched = 0
+        val outcomes = mutableListOf<Outcome>()
 
         for ((album, date) in candidates) {
             val rowId = providerReleaseId(PROVIDER, album.id)
@@ -402,7 +443,8 @@ class AppleMusicReleaseService(private val environment: ApplicationEnvironment) 
                             ProviderReleaseTable.imageId,
                             ProviderReleaseTable.lastImageFetch,
                             ProviderReleaseTable.linksResolvedAt,
-                            ProviderReleaseTable.releaseGroupId
+                            ProviderReleaseTable.releaseGroupId,
+                            ProviderReleaseTable.isrcRegistrants
                         )
                         .where { ProviderReleaseTable.id eq rowId }
                         .singleOrNull()
@@ -411,7 +453,8 @@ class AppleMusicReleaseService(private val environment: ApplicationEnvironment) 
                                 imageId = it[ProviderReleaseTable.imageId]?.value,
                                 lastImageFetch = it[ProviderReleaseTable.lastImageFetch],
                                 linksResolvedAt = it[ProviderReleaseTable.linksResolvedAt],
-                                releaseGroupId = it[ProviderReleaseTable.releaseGroupId]?.value
+                                releaseGroupId = it[ProviderReleaseTable.releaseGroupId]?.value,
+                                isrcRegistrants = it[ProviderReleaseTable.isrcRegistrants]
                             )
                         }
                 }
@@ -468,7 +511,10 @@ class AppleMusicReleaseService(private val environment: ApplicationEnvironment) 
                             ProviderReleaseTable.imageId,
                             ProviderReleaseTable.lastImageFetch,
                             ProviderReleaseTable.linksResolvedAt,
-                            ProviderReleaseTable.addedAt
+                            ProviderReleaseTable.addedAt,
+                            ProviderReleaseTable.isrcRegistrants,
+                            ProviderReleaseTable.suspect,
+                            ProviderReleaseTable.suspectReason
                         )
                     ) {
                         it[ProviderReleaseTable.id] = rowId
@@ -486,6 +532,9 @@ class AppleMusicReleaseService(private val environment: ApplicationEnvironment) 
                         it[ProviderReleaseTable.upc] = album.upc
                         it[ProviderReleaseTable.url] = albumUrl
                         it[ProviderReleaseTable.artworkUrl] = albumArtworkUrl
+                        it[ProviderReleaseTable.recordLabel] = album.recordLabel
+                        it[ProviderReleaseTable.copyright] = album.copyright
+                        it[ProviderReleaseTable.copyrightHolder] = normalizeCopyrightHolder(album.copyright)
                         it[ProviderReleaseTable.releaseGroupId] = matchedGroupId
                         it[ProviderReleaseTable.albumId] = matchedAlbumId
                         it[ProviderReleaseTable.songId] = matchedSongId
@@ -506,6 +555,13 @@ class AppleMusicReleaseService(private val environment: ApplicationEnvironment) 
             stored++
             if (date > nowMs) upcoming++
             if (matchedGroupId != null) matched++
+
+            outcomes += Outcome(
+                album = album,
+                rowId = rowId,
+                matched = matchedGroupId != null || matchedAlbumId != null || matchedSongId != null,
+                storedRegistrants = existing?.isrcRegistrants
+            )
 
             val storedImageId = existing?.imageId
             val lastImageFetch = existing?.lastImageFetch
@@ -530,7 +586,156 @@ class AppleMusicReleaseService(private val environment: ApplicationEnvironment) 
             if (matchedGroupId != null) dbSemaphore.withPermit { mergeIntoReleaseGroup(rowId, matchedGroupId) }
         }
 
-        return ProcessResult(stored, upcoming, matched)
+        val suspects = flagSuspects(artistId, artistName, appleArtistId, apple, outcomes, dbSemaphore, priority)
+
+        return ProcessResult(stored, upcoming, matched, suspects)
+    }
+
+    private suspend fun flagSuspects(
+        artistId: UUID,
+        artistName: String,
+        appleArtistId: String,
+        apple: AppleMusicService,
+        outcomes: List<Outcome>,
+        dbSemaphore: Semaphore,
+        priority: HttpClientPriority
+    ): Int {
+        if (outcomes.isEmpty()) return 0
+
+        val resolvedId = appleArtistId.removePrefix("appleMusic:")
+        val majorityGenre = outcomes
+            .mapNotNull { it.album.genreNames.firstOrNull() }
+            .groupingBy { it }
+            .eachCount()
+            .maxByOrNull { it.value }
+            ?.key
+
+        val fetched = outcomes
+            .filter { !it.matched && it.storedRegistrants == null }
+            .associate { it.rowId to apple.getAlbumIsrcs(it.album.id, priority) }
+
+        var flagged = 0
+
+        dbSemaphore.withPermit {
+            dbQuery {
+                val known = knownEvidenceTx(artistId)
+                val rules = taughtRulesTx(artistId)
+
+                outcomes.forEach { outcome ->
+                    val album = outcome.album
+                    val isrcs = fetched[outcome.rowId]
+                    val registrantsText = if (isrcs != null) {
+                        isrcs.mapNotNull { isrcRegistrant(it) }.distinct().sorted().joinToString(",")
+                    } else {
+                        outcome.storedRegistrants
+                    }
+
+                    val verdict = if (outcome.matched) Verdict.CLEAR else evaluate(
+                        Signals(
+                            holder = normalizeCopyrightHolder(album.copyright),
+                            label = album.recordLabel?.trim()?.takeIf { it.isNotEmpty() },
+                            registrants = registrantsText?.split(',')
+                                ?.filter { it.isNotBlank() }
+                                ?.toSet()
+                                .orEmpty(),
+                            foreignArtistIds = album.artistIds
+                                .map { it.removePrefix("appleMusic:") }
+                                .takeIf { it.isNotEmpty() && resolvedId !in it }
+                                .orEmpty(),
+                            compilation = album.isCompilation,
+                            genreHint = album.genreNames.firstOrNull()
+                                ?.takeIf { majorityGenre != null && it != majorityGenre }
+                                ?.let { "genre $it, artist mostly $majorityGenre" }
+                        ),
+                        known,
+                        rules
+                    )
+
+                    ProviderReleaseTable.update({ ProviderReleaseTable.id eq outcome.rowId }) {
+                        if (isrcs != null) it[ProviderReleaseTable.isrcRegistrants] = registrantsText
+                        it[ProviderReleaseTable.suspect] = verdict.suspect
+                        it[ProviderReleaseTable.suspectReason] = verdict.reason
+                    }
+
+                    if (verdict.blocked) {
+                        HiddenReleaseTable.insertIgnore {
+                            it[HiddenReleaseTable.providerReleaseId] = outcome.rowId
+                            it[HiddenReleaseTable.artistId] = artistId
+                            it[HiddenReleaseTable.hiddenBy] = null
+                        }
+                    }
+
+                    if (verdict.suspect) {
+                        flagged++
+                        logger.info(
+                            "Flagged Apple release \"${album.title}\" of $artistName as suspect: ${verdict.reason}"
+                        )
+                    }
+                }
+            }
+        }
+
+        return flagged
+    }
+
+    private fun knownEvidenceTx(artistId: UUID): KnownEvidence {
+        val names = mutableSetOf<String>()
+        val registrants = mutableSetOf<String>()
+
+        SongTable
+            .innerJoin(SongArtistTable, { SongTable.id }, { SongArtistTable.songId })
+            .select(SongTable.copyright, SongTable.isrc)
+            .where { SongArtistTable.artistId eq artistId }
+            .andWhere { (SongTable.isrc.isNotNull()) or (SongTable.copyright neq "") }
+            .orderBy(SongTable.inserted to SortOrder.DESC)
+            .limit(EVIDENCE_POOL)
+            .forEach { row ->
+                normalizeCopyrightHolder(row[SongTable.copyright])?.let { names += it }
+                isrcRegistrant(row[SongTable.isrc])?.let { registrants += it }
+            }
+
+        ProviderReleaseTable
+            .select(
+                ProviderReleaseTable.copyrightHolder,
+                ProviderReleaseTable.recordLabel,
+                ProviderReleaseTable.isrcRegistrants
+            )
+            .where { ProviderReleaseTable.artistId eq artistId }
+            .andWhere { ProviderReleaseTable.provider eq PROVIDER }
+            .andWhere {
+                ProviderReleaseTable.releaseGroupId.isNotNull() or
+                        ProviderReleaseTable.albumId.isNotNull() or
+                        ProviderReleaseTable.songId.isNotNull()
+            }
+            .forEach { row ->
+                row[ProviderReleaseTable.copyrightHolder]?.takeIf { it.isNotBlank() }?.let { names += it }
+                normalizeLabel(row[ProviderReleaseTable.recordLabel])?.let { names += it }
+                row[ProviderReleaseTable.isrcRegistrants]
+                    ?.split(',')
+                    ?.filter { it.isNotBlank() }
+                    ?.forEach { registrants += it }
+            }
+
+        return KnownEvidence(names, registrants)
+    }
+
+    private fun taughtRulesTx(artistId: UUID): TaughtRules {
+        val rules = ArtistSourceRuleTable
+            .select(
+                ArtistSourceRuleTable.kind,
+                ArtistSourceRuleTable.value,
+                ArtistSourceRuleTable.rule
+            )
+            .where { ArtistSourceRuleTable.artistId eq artistId }
+            .andWhere { ArtistSourceRuleTable.provider eq PROVIDER }
+            .map {
+                TaughtRule(
+                    kind = it[ArtistSourceRuleTable.kind],
+                    value = it[ArtistSourceRuleTable.value],
+                    polarity = it[ArtistSourceRuleTable.rule]
+                )
+            }
+        return TaughtRules.from(rules)
     }
 
     private suspend fun linkKey(url: String): Pair<String, String> {

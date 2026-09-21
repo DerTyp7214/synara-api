@@ -178,7 +178,10 @@ class AppleMusicServiceTest : KoinTest {
         isComplete: Boolean = true,
         isCompilation: Boolean = false,
         artistIds: List<String> = listOf("111"),
-        withArtwork: Boolean = true
+        withArtwork: Boolean = true,
+        recordLabel: String? = "Division Recordings",
+        copyright: String? = "℗ 2024 Division Recordings",
+        genreNames: List<String>? = listOf("Hip-Hop/Rap", "Music")
     ): String {
         val artwork = if (withArtwork) {
             """, "artwork": {"url": "https://example.com/aa/{w}x{h}bb.jpg", "width": 1200, "height": 1200}"""
@@ -187,6 +190,11 @@ class AppleMusicServiceTest : KoinTest {
                   "relationships": {
                     "artists": {"data": [${artistIds.joinToString(",") { """{"id": "$it", "type": "artists"}""" }}]}
                   }"""
+        val recordLabelJson = recordLabel?.let { ""","recordLabel": "$it"""" } ?: ""
+        val copyrightJson = copyright?.let { ""","copyright": "$it"""" } ?: ""
+        val genreNamesJson = genreNames?.let { names ->
+            ""","genreNames": [${names.joinToString(",") { "\"$it\"" }}]"""
+        } ?: ""
         return """
             {
               "id": "$id",
@@ -200,7 +208,7 @@ class AppleMusicServiceTest : KoinTest {
                 "isCompilation": $isCompilation,
                 "upc": "00602445790234",
                 "url": "https://music.apple.com/us/album/test-album/$id",
-                "trackCount": 12$artwork
+                "trackCount": 12$artwork$recordLabelJson$copyrightJson$genreNamesJson
               }$relationships
             }
         """.trimIndent()
@@ -278,7 +286,29 @@ class AppleMusicServiceTest : KoinTest {
         assertEquals("https://music.apple.com/us/album/test-album/1440857781", first.url)
         assertEquals(12, first.trackCount)
         assertEquals("https://example.com/aa/10000x0w-999.jpg", first.image?.url)
+        assertEquals("Division Recordings", first.recordLabel)
+        assertEquals("℗ 2024 Division Recordings", first.copyright)
+        assertEquals(listOf("Hip-Hop/Rap", "Music"), first.genreNames)
         assertEquals("222", mapped[1].id)
+    }
+
+    @Test
+    fun `catalogAlbumFrom tolerates missing label, copyright and genres`() = runBlocking {
+        enableCatalog()
+        useEngine {
+            respondJson(
+                """{"data": [${
+                    albumJson(recordLabel = null, copyright = null, genreNames = null)
+                }]}"""
+            )
+        }
+
+        val albums = appleMusicService.getArtistCatalogAlbums("111")
+
+        val first = albums.orEmpty().first()
+        assertNull(first.recordLabel)
+        assertNull(first.copyright)
+        assertEquals(emptyList<String>(), first.genreNames)
     }
 
     @Test
@@ -348,6 +378,96 @@ class AppleMusicServiceTest : KoinTest {
         useEngine { respondJson("""{"data": []}""") }
 
         assertNull(appleMusicService.getArtistCatalogAlbums("111"))
+        assertEquals(0, mockEngine.requestHistory.size)
+    }
+
+    @Test
+    fun `getAlbumIsrcs pages via next, trims and dedupes codes`() = runBlocking {
+        enableCatalog()
+        val paths = mutableListOf<String>()
+        useEngine { request ->
+            paths += request.url.toString()
+            if (request.url.parameters["offset"] == "100") {
+                respondJson(
+                    """
+                        {
+                          "data": [
+                            {"id": "3", "type": "songs", "attributes": {"name": "C", "artistName": "X", "durationInMillis": 1000, "trackNumber": 1, "discNumber": 1, "isrc": "QZK6P2600001"}},
+                            {"id": "4", "type": "songs", "attributes": {"name": "D", "artistName": "X", "durationInMillis": 1000, "trackNumber": 2, "discNumber": 1, "isrc": "DEUM72400123"}}
+                          ]
+                        }
+                    """.trimIndent()
+                )
+            } else {
+                respondJson(
+                    """
+                        {
+                          "data": [
+                            {"id": "1", "type": "songs", "attributes": {"name": "A", "artistName": "X", "durationInMillis": 1000, "trackNumber": 1, "discNumber": 1, "isrc": " QZK6P2600001 "}},
+                            {"id": "2", "type": "songs", "attributes": {"name": "B", "artistName": "X", "durationInMillis": 1000, "trackNumber": 2, "discNumber": 1}}
+                          ],
+                          "next": "/v1/catalog/us/albums/1440857781/tracks?offset=100"
+                        }
+                    """.trimIndent()
+                )
+            }
+        }
+
+        val isrcs = appleMusicService.getAlbumIsrcs("1440857781")
+
+        assertEquals(2, paths.size)
+        assertEquals(listOf("QZK6P2600001", "DEUM72400123"), isrcs)
+    }
+
+    @Test
+    fun `getAlbumIsrcs returns null when a page fails`() = runBlocking {
+        enableCatalog()
+        var calls = 0
+        useEngine {
+            calls++
+            if (calls == 1) {
+                respondJson(
+                    """
+                        {
+                          "data": [
+                            {"id": "1", "type": "songs", "attributes": {"name": "A", "artistName": "X", "durationInMillis": 1000, "trackNumber": 1, "discNumber": 1, "isrc": "QZK6P2600001"}}
+                          ],
+                          "next": "/v1/catalog/us/albums/1440857781/tracks?offset=100"
+                        }
+                    """.trimIndent()
+                )
+            } else {
+                respondError(HttpStatusCode.InternalServerError)
+            }
+        }
+
+        assertNull(appleMusicService.getAlbumIsrcs("1440857781"))
+    }
+
+    @Test
+    fun `getAlbumIsrcs returns an empty list when no track carries an isrc`() = runBlocking {
+        enableCatalog()
+        useEngine {
+            respondJson(
+                """
+                    {
+                      "data": [
+                        {"id": "1", "type": "songs", "attributes": {"name": "A", "artistName": "X", "durationInMillis": 1000, "trackNumber": 1, "discNumber": 1}}
+                      ]
+                    }
+                """.trimIndent()
+            )
+        }
+
+        assertEquals(emptyList<String>(), appleMusicService.getAlbumIsrcs("1440857781"))
+    }
+
+    @Test
+    fun `getAlbumIsrcs returns null when the catalog is disabled`() = runBlocking {
+        disableCatalog()
+        useEngine { respondJson("""{"data": []}""") }
+
+        assertNull(appleMusicService.getAlbumIsrcs("1440857781"))
         assertEquals(0, mockEngine.requestHistory.size)
     }
 

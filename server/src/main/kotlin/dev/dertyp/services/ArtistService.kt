@@ -529,6 +529,28 @@ class ArtistService(private val searchIndexWorker: SearchIndexWorker? = null) : 
             it[RecentReleaseTable.artistName] = mergeArtists.name
         }
 
+        HiddenReleaseTable.update({ HiddenReleaseTable.artistId inList currentArtistIds }) {
+            it[HiddenReleaseTable.artistId] = newArtist
+        }
+
+        val loserSourceRules = ArtistSourceRuleTable
+            .selectAll()
+            .where { ArtistSourceRuleTable.artistId inList currentArtistIds }
+            .orderBy(ArtistSourceRuleTable.createdAt)
+            .toList()
+
+        loserSourceRules.forEach { sourceRule ->
+            ArtistSourceRuleTable.insertIgnore {
+                it[ArtistSourceRuleTable.artistId] = newArtist
+                it[ArtistSourceRuleTable.provider] = sourceRule[ArtistSourceRuleTable.provider]
+                it[ArtistSourceRuleTable.kind] = sourceRule[ArtistSourceRuleTable.kind]
+                it[ArtistSourceRuleTable.value] = sourceRule[ArtistSourceRuleTable.value]
+                it[ArtistSourceRuleTable.rule] = sourceRule[ArtistSourceRuleTable.rule]
+                it[ArtistSourceRuleTable.createdBy] = sourceRule[ArtistSourceRuleTable.createdBy]
+                it[ArtistSourceRuleTable.createdAt] = sourceRule[ArtistSourceRuleTable.createdAt]
+            }
+        }
+
         val existingMbIds = ArtistMusicBrainzTable
             .select(ArtistMusicBrainzTable.musicBrainzId)
             .where { ArtistMusicBrainzTable.artistId inList currentArtistIds }

@@ -30,8 +30,8 @@ class RpcReleaseService(
         return releaseService.getRecentReleases(requireUser().id, page, pageSize)
     }
 
-    override suspend fun getArtistRecentReleases(artistId: UUID, page: Int, pageSize: Int): PaginatedResponse<RecentRelease> {
-        return releaseService.getArtistRecentReleases(artistId, page, pageSize)
+    override suspend fun getArtistRecentReleases(artistId: UUID, page: Int, pageSize: Int, includeHidden: Boolean): PaginatedResponse<RecentRelease> {
+        return releaseService.getArtistRecentReleases(artistId, page, pageSize, includeHidden)
     }
 
     override suspend fun getRecentReleasesByMusicBrainzId(musicBrainzId: UUID, page: Int, pageSize: Int): PaginatedResponse<RecentRelease> {
@@ -45,4 +45,10 @@ class RpcReleaseService(
     override suspend fun refreshRecentRelease(releaseId: UUID) {
         releaseService.refreshRecentReleaseAsync(releaseId)
     }
+
+    override suspend fun setReleaseHidden(releaseId: UUID, hidden: Boolean, includeRelated: Boolean): Int =
+        releaseService.setReleaseHidden(requireUser().id, releaseId, hidden, includeRelated)
+
+    override suspend fun confirmRelease(releaseId: UUID): RecentRelease =
+        releaseService.confirmRelease(requireUser().id, releaseId)
 }

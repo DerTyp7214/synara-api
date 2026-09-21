@@ -424,7 +424,10 @@ class AppleMusicService(
             upc = attr?.get("upc")?.jsonPrimitive?.contentOrNull,
             url = attr?.get("url")?.jsonPrimitive?.contentOrNull,
             trackCount = attr?.get("trackCount")?.jsonPrimitive?.contentOrNull?.toIntOrNull() ?: 0,
-            image = catalogArtwork(attr)
+            image = catalogArtwork(attr),
+            recordLabel = attr?.get("recordLabel")?.jsonPrimitive?.contentOrNull,
+            copyright = attr?.get("copyright")?.jsonPrimitive?.contentOrNull,
+            genreNames = attr?.get("genreNames")?.jsonArray?.mapNotNull { it.jsonPrimitive.contentOrNull } ?: emptyList()
         )
     }
 
@@ -460,6 +463,27 @@ class AppleMusicService(
             pages++
         }
         return albums
+    }
+
+    suspend fun getAlbumIsrcs(
+        albumId: String,
+        priority: HttpClientPriority = HttpClientPriority.LOW
+    ): List<String>? {
+        if (!catalogEnabled) return null
+        val id = albumId.removePrefix("appleMusic:")
+        val isrcs = mutableListOf<String>()
+        var next: String? = "/v1/catalog/$storefront/albums/$id/tracks?limit=100"
+        var pages = 0
+        while (next != null && pages < CATALOG_MAX_PAGES) {
+            val json = catalogGet(next, priority) ?: return null
+            catalogTracksFrom(json).forEach { track ->
+                val isrc = track.isrc?.trim()
+                if (!isrc.isNullOrEmpty()) isrcs.add(isrc)
+            }
+            next = json["next"]?.jsonPrimitive?.contentOrNull
+            pages++
+        }
+        return isrcs.distinct()
     }
 
     suspend fun getCatalogAlbumsByUpc(
@@ -599,7 +623,10 @@ class AppleMusicService(
         val upc: String?,
         val url: String?,
         val trackCount: Int,
-        val image: IMetadataService.Image?
+        val image: IMetadataService.Image?,
+        val recordLabel: String? = null,
+        val copyright: String? = null,
+        val genreNames: List<String> = emptyList()
     )
 
     data class CatalogSongRef(
