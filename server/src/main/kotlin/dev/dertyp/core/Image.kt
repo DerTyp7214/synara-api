@@ -11,6 +11,8 @@ import kotlin.io.path.Path
 import kotlin.io.path.extension
 import kotlin.io.path.readBytes
 
+fun ByteArray.isImage(): Boolean = sniffMediaType(this)?.contentType.equals("image", ignoreCase = true)
+
 fun Image.bytes(): ByteArray = Path(path).readBytes()
 
 fun Image.sized(size: Int): ByteArray {

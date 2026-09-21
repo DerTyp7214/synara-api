@@ -1,4 +1,4 @@
-package dev.dertyp.routing.rest
+package dev.dertyp.core
 
 import io.ktor.http.ContentType
 

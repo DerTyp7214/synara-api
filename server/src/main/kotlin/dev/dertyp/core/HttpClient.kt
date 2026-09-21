@@ -27,10 +27,14 @@ enum class HttpClientPriority {
 }
 
 suspend inline fun <reified T> HttpClient.safeGet(url: String) = try {
-    get(url).body<T>()
+    val response = get(url)
+    if (response.status.isSuccess()) response.body<T>() else null
 } catch (_: Throwable) {
     null
 }
+
+suspend fun HttpClient.safeGetImage(url: String): ByteArray? =
+    safeGet<ByteArray>(url)?.takeIf { it.isImage() }
 
 suspend inline fun <reified T> HttpClient.queuedGet(
     urlString: String,
@@ -48,6 +52,12 @@ suspend inline fun <reified T> HttpClient.safeQueuedGet(
 } catch (_: Throwable) {
     null
 }
+
+suspend fun HttpClient.safeQueuedGetImage(
+    urlString: String,
+    priority: HttpClientPriority = HttpClientPriority.NORMAL,
+    block: suspend HttpRequestBuilder.() -> Unit = {}
+): ByteArray? = safeQueuedGet<ByteArray>(urlString, priority, block)?.takeIf { it.isImage() }
 
 @OptIn(ExperimentalAtomicApi::class, ExperimentalTime::class)
 class HttpClientQueueService : Service() {

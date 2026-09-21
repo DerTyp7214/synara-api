@@ -252,7 +252,7 @@ abstract class TidalBaseImporter(
                             if (finalCoverUrl != tidalTrack.images.largest.url) {
                                 onLiveOutput("Fetching enriched cover art for: $finalTitle")
                             }
-                            ApiClient.instance.safeQueuedGet<ByteArray>(finalCoverUrl)
+                            ApiClient.instance.safeQueuedGetImage(finalCoverUrl)
                         } catch (_: Exception) {
                             null
                         }
@@ -528,7 +528,7 @@ abstract class TidalBaseImporter(
                     val playlistId = idGroup.metadata?.let { playlist ->
                         if (playlist is IMetadataService.FlowPlaylist) {
                             val image = playlist.images.largest
-                            val imageBytes = ApiClient.instance.safeGet<ByteArray>(image.url)
+                            val imageBytes = ApiClient.instance.safeGetImage(image.url)
 
                             val imageHash = imageBytes?.let { bytes ->
                                 val hash = bytes.sha256()

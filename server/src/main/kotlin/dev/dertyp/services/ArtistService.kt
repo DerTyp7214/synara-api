@@ -426,7 +426,7 @@ class ArtistService(private val searchIndexWorker: SearchIndexWorker? = null) : 
                 it.isURL() -> {
                     val imageService by inject<ImageService>()
 
-                    val imageData = ApiClient.instance.safeGet<ByteArray>(it) ?: return@let null
+                    val imageData = ApiClient.instance.safeGetImage(it) ?: return@let null
                     imageService.createBatch(
                         listOf(
                             InsertableImage(
@@ -770,7 +770,7 @@ class ArtistService(private val searchIndexWorker: SearchIndexWorker? = null) : 
     suspend fun setArtistImageByUrl(id: UUID, url: String, userId: UUID? = null): Artist? {
         val imageService by inject<ImageService>()
 
-        val imageBytes = ApiClient.instance.safeQueuedGet<ByteArray>(url, HttpClientPriority.HIGH) ?: return null
+        val imageBytes = ApiClient.instance.safeQueuedGetImage(url, HttpClientPriority.HIGH) ?: return null
         val imageId = imageService.createBatch(
             listOf(
                 InsertableImage(

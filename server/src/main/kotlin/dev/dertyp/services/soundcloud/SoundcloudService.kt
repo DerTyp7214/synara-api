@@ -6,7 +6,7 @@ import dev.dertyp.audio.AudioConfig
 import dev.dertyp.audio.LosslessFormat
 import dev.dertyp.core.ApplicationScope
 import dev.dertyp.core.cleanTitle
-import dev.dertyp.core.safeQueuedGet
+import dev.dertyp.core.safeQueuedGetImage
 import dev.dertyp.core.waitForChange
 import dev.dertyp.data.InsertablePlaylist
 import dev.dertyp.data.User
@@ -327,7 +327,7 @@ class SoundcloudService(
 
             if (finalCoverUrl != null) {
                 coverData = try {
-                    ApiClient.instance.safeQueuedGet<ByteArray>(finalCoverUrl)
+                    ApiClient.instance.safeQueuedGetImage(finalCoverUrl)
                 } catch (_: Exception) {
                     null
                 }

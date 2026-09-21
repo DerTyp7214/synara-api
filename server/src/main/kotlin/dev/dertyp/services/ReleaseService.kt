@@ -999,7 +999,7 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
 
     internal suspend fun fetchReleaseGroupImage(releaseGroupId: UUID): UUID? {
         val imageUrl = "https://coverartarchive.org/release-group/$releaseGroupId/front"
-        val imageBytes = ApiClient.instance.safeGet<ByteArray>(imageUrl) ?: return null
+        val imageBytes = ApiClient.instance.safeGetImage(imageUrl) ?: return null
 
         return imageService.createBatch(
             listOf(
@@ -1091,7 +1091,7 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
     }
 
     internal suspend fun fetchProviderArtworkBytes(url: String): ByteArray? =
-        ApiClient.instance.safeQueuedGet<ByteArray>(url, priority = HttpClientPriority.HIGH)
+        ApiClient.instance.safeQueuedGetImage(url, priority = HttpClientPriority.HIGH)
 
     private val providerImagePersistInFlight = ConcurrentHashMap.newKeySet<UUID>()
 
@@ -1124,7 +1124,7 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
     }
 
     internal suspend fun fetchCoverArtBytes(releaseId: UUID, variant: String): ByteArray? =
-        ApiClient.instance.safeQueuedGet<ByteArray>(
+        ApiClient.instance.safeQueuedGetImage(
             "https://coverartarchive.org/release-group/$releaseId/$variant",
             priority = HttpClientPriority.HIGH
         )

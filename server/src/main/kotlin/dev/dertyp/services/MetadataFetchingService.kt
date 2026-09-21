@@ -441,7 +441,7 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
                                 continue
                             }
 
-                            val imageBytes = ApiClient.instance.safeGet<ByteArray>(image.url)
+                            val imageBytes = ApiClient.instance.safeGetImage(image.url)
                             if (imageBytes == null) {
                                 onProgress(progress, "Failed to import image for \"$name\"")
                                 if (updateOnFailure) updateLastCheck(id)
@@ -580,7 +580,7 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
                         val images = artist.images
                         val image = images.maxByOrNull { it.width }
                         if (image != null) {
-                            val imageBytes = ApiClient.instance.safeGet<ByteArray>(image.url)
+                            val imageBytes = ApiClient.instance.safeGetImage(image.url)
                             if (imageBytes != null) {
                                 val imageId = imageService.createBatch(
                                     listOf(
@@ -692,7 +692,7 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
                                 continue
                             }
 
-                            val imageBytes = ApiClient.instance.safeGet<ByteArray>(image.url)
+                            val imageBytes = ApiClient.instance.safeGetImage(image.url)
                             if (imageBytes == null) {
                                 onProgress(progress, "Failed to import image for \"$name\"")
                                 continue
@@ -817,7 +817,7 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
                         val images = albumMetadata.images
                         val image = images.maxByOrNull { it.width }
                         if (image != null) {
-                            val imageBytes = ApiClient.instance.safeGet<ByteArray>(image.url)
+                            val imageBytes = ApiClient.instance.safeGetImage(image.url)
                             if (imageBytes != null) {
                                 val imageId = imageService.createBatch(
                                     listOf(
@@ -1014,7 +1014,7 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
         val images = artist.images
         val image = images.maxByOrNull { it.width }
         if (image != null) {
-            val imageBytes = ApiClient.instance.safeQueuedGet<ByteArray>(
+            val imageBytes = ApiClient.instance.safeQueuedGetImage(
                 urlString = image.url,
                 priority = HttpClientPriority.HIGH
             )

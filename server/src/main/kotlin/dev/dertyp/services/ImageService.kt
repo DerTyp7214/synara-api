@@ -3,7 +3,9 @@ package dev.dertyp.services
 import com.sksamuel.scrimage.ImmutableImage
 import dev.dertyp.ApiClient
 import dev.dertyp.core.HttpClientPriority
+import dev.dertyp.core.isImage
 import dev.dertyp.core.isURL
+import dev.dertyp.core.likeAny
 import dev.dertyp.core.paging
 import dev.dertyp.core.safeQueuedGet
 import dev.dertyp.core.sha256
@@ -40,6 +42,8 @@ import java.awt.image.BufferedImage
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.IOException
+import java.nio.file.Path
 import java.util.*
 import javax.imageio.IIOImage
 import javax.imageio.ImageIO
@@ -102,6 +106,8 @@ private class ChunkedImageOutputStream(
         }
     }
 }
+
+data class NonImagePurgeResult(val scanned: Int, val bogus: Int, val unlinked: Int, val deleted: Int)
 
 class ImageRpcService(private val user: User?, private val imageService: ImageService) : IImageService {
     override suspend fun byId(id: UUID): Image? = imageService.byId(id)
@@ -199,37 +205,39 @@ class ImageService(
     suspend fun getImageData(id: UUID, size: Int): ByteArray? {
         val cacheKey = "image:$id:$size".toByteArray()
         val cached = jedis?.get(cacheKey)
-        if (cached != null) return cached
+        if (cached != null) {
+            if (cached.isImage()) return cached
+            jedis?.del(cacheKey)
+        }
 
         val image = byId(id) ?: return null
 
         val path = Path(image.path)
         if (!path.exists()) return null
 
-        val bytes = if (size > 0) {
-            try {
-                val outputStream = ByteArrayOutputStream()
-                Thumbnails.of(path.toFile())
-                    .size(size, size)
-                    .outputFormat(
-                        when (path.extension) {
-                            "jpg" -> "jpeg"
-                            "jpeg" -> "jpeg"
-                            "png" -> "png"
-                            else -> "jpeg"
-                        }
-                    )
-                    .toOutputStream(outputStream)
-                outputStream.toByteArray()
-            } catch (_: Exception) {
-                path.readBytes()
-            }
-        } else {
-            path.readBytes()
-        }
+        val bytes = (if (size > 0) thumbnailOrNull(path, size) else null) ?: path.readBytes()
+        if (!bytes.isImage()) return null
 
         jedis?.set(cacheKey, bytes)
         return bytes
+    }
+
+    private fun thumbnailOrNull(path: Path, size: Int): ByteArray? = try {
+        val outputStream = ByteArrayOutputStream()
+        Thumbnails.of(path.toFile())
+            .size(size, size)
+            .outputFormat(
+                when (path.extension) {
+                    "jpg" -> "jpeg"
+                    "jpeg" -> "jpeg"
+                    "png" -> "png"
+                    else -> "jpeg"
+                }
+            )
+            .toOutputStream(outputStream)
+        outputStream.toByteArray()
+    } catch (_: Exception) {
+        null
     }
 
     suspend fun createImage(@LogParam("size") bytes: ByteArray, origin: String): UUID {
@@ -436,6 +444,90 @@ class ImageService(
 
         onProgress(0.0, "Found ${unreferencedImages.size} unreferenced images")
         return deleteImagesByIds(unreferencedImages, onProgress)
+    }
+
+    suspend fun purgeNonImageFiles(
+        originPrefixes: Collection<String>,
+        onProgress: suspend (Double, String) -> Unit = { _, _ -> }
+    ): NonImagePurgeResult {
+        if (originPrefixes.isEmpty()) return NonImagePurgeResult(0, 0, 0, 0)
+
+        val candidates = dbQuery {
+            ImageTable
+                .select(ImageTable.id, ImageTable.path)
+                .where { ImageTable.origin likeAny originPrefixes.map { "$it%" } }
+                .map { it[ImageTable.id].value to it[ImageTable.path] }
+        }
+
+        onProgress(0.0, "Checking ${candidates.size} images for non-image content")
+        if (candidates.isEmpty()) return NonImagePurgeResult(0, 0, 0, 0)
+
+        val bogusIds = withContext(Dispatchers.IO) {
+            candidates.mapIndexedNotNull { index, (id, relativePath) ->
+                if (index % 1000 == 0) {
+                    onProgress(
+                        index.toDouble() / candidates.size * 40.0,
+                        "Checked $index/${candidates.size} images"
+                    )
+                }
+
+                val path = Path(storageService.imagesPath, relativePath)
+                if (!path.exists()) return@mapIndexedNotNull null
+
+                val header = try {
+                    path.inputStream().use { it.readNBytes(16) }
+                } catch (_: IOException) {
+                    return@mapIndexedNotNull null
+                }
+
+                if (header.isImage()) null else id
+            }
+        }
+
+        onProgress(40.0, "Found ${bogusIds.size} non-image files")
+        if (bogusIds.isEmpty()) {
+            onProgress(100.0, "No non-image files found")
+            return NonImagePurgeResult(candidates.size, 0, 0, 0)
+        }
+
+        val unlinked = dbQuery {
+            var total = 0
+            bogusIds.chunked(10000).forEach { chunk ->
+                total += RecentReleaseTable.update({ RecentReleaseTable.imageId inList chunk }) {
+                    it[imageId] = null
+                    it[lastImageFetch] = null
+                }
+                total += ProviderReleaseTable.update({ ProviderReleaseTable.imageId inList chunk }) {
+                    it[imageId] = null
+                    it[lastImageFetch] = null
+                }
+                total += MBReleaseGroupCoverTable.update({ MBReleaseGroupCoverTable.imageId inList chunk }) {
+                    it[imageId] = null
+                    it[lastFetch] = 0L
+                }
+                total += AlbumTable.update({ AlbumTable.cover inList chunk }) { it[cover] = null }
+                total += ArtistTable.update({ ArtistTable.image inList chunk }) { it[image] = null }
+                total += SongTable.update({ SongTable.cover inList chunk }) { it[cover] = null }
+                total += PlaylistTable.update({ PlaylistTable.imageId inList chunk }) { it[imageId] = null }
+                total += UserPlaylistTable.update({ UserPlaylistTable.imageId inList chunk }) { it[imageId] = null }
+                total += CollectionTable.update({ CollectionTable.imageId inList chunk }) { it[imageId] = null }
+            }
+            total
+        }
+
+        onProgress(60.0, "Unlinked $unlinked references")
+
+        val deletable = bogusIds - collectReferencedImageIds()
+        if (deletable.size < bogusIds.size) {
+            logger.warn("${bogusIds.size - deletable.size} non-image files are still referenced and are kept")
+        }
+
+        val deleted = deleteImagesByIds(deletable) { progress, message -> onProgress(60.0 + progress * 0.4, message) }
+
+        logger.info(
+            "Purged non-image files: scanned ${candidates.size}, bogus ${bogusIds.size}, unlinked $unlinked, deleted $deleted"
+        )
+        return NonImagePurgeResult(candidates.size, bogusIds.size, unlinked, deleted)
     }
 
     fun getCachedBytes(key: String): ByteArray? = jedis?.get(key.toByteArray())

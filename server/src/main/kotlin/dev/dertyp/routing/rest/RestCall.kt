@@ -3,6 +3,7 @@ package dev.dertyp.routing.rest
 import dev.dertyp.core.UnauthorizedException
 import dev.dertyp.core.clientInfo
 import dev.dertyp.core.getUser
+import dev.dertyp.core.sniffMediaType
 import dev.dertyp.serializers.AppJson
 import dev.dertyp.utils.ResponseShaper
 import dev.dertyp.utils.unwrapProxyTarget

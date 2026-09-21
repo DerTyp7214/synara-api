@@ -1,15 +1,25 @@
 package dev.dertyp.services
 
+import dev.dertyp.ApiClient
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
 import dev.dertyp.core.ApplicationScope
 import dev.dertyp.core.HttpClientPriority
+import dev.dertyp.core.sha256
 import dev.dertyp.data.*
 import dev.dertyp.db.*
 import dev.dertyp.plugins.RedisCacheProvider
 import dev.dertyp.services.metadata.*
 import dev.dertyp.services.release.AppleMusicReleaseService
 import dev.dertyp.services.release.ProviderLinkService
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.mock.MockEngine
+import io.ktor.client.engine.mock.respond
+import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.http.ContentType
+import io.ktor.http.HttpStatusCode
+import io.ktor.http.headersOf
+import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.ApplicationEnvironment
 import io.mockk.*
 import kotlinx.coroutines.runBlocking
@@ -1992,5 +2002,92 @@ class ReleaseServiceTest : KoinTest {
             assertNull(row[RecentReleaseTable.imageId])
             assertNull(row[RecentReleaseTable.lastImageFetch])
         }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `fetchReleaseGroupImage returns null and stores nothing for a Cover Art Archive 404 page`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val releaseGroupId = UUID.randomUUID()
+        val notFoundPage = "<!doctype html><html lang=en><title>404 Not Found</title><h1>Not Found</h1><p>No cover art found for release group $releaseGroupId</p>"
+
+        val mockHttpClient = HttpClient(MockEngine { _ ->
+            respond(
+                content = notFoundPage,
+                status = HttpStatusCode.NotFound,
+                headers = headersOf("Content-Type", ContentType.Text.Html.toString())
+            )
+        }) {
+            install(ContentNegotiation) { json(ApplicationScope.json) }
+        }
+        mockkObject(ApiClient)
+        every { ApiClient.instance } returns mockHttpClient
+
+        val result = service.fetchReleaseGroupImage(releaseGroupId)
+
+        assertNull(result)
+        coVerify(exactly = 0) { imageService.createBatch(any()) }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `fetchReleaseGroupImage persists a real image`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val releaseGroupId = UUID.randomUUID()
+        val expectedId = UUID.randomUUID()
+        val jpeg = byteArrayOf(
+            0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 0xE0.toByte(),
+            0x00, 0x10, 0x4A, 0x46, 0x49, 0x46, 0x00
+        )
+
+        val mockHttpClient = HttpClient(MockEngine { _ ->
+            respond(
+                content = jpeg,
+                status = HttpStatusCode.OK,
+                headers = headersOf("Content-Type", ContentType.Image.JPEG.toString())
+            )
+        }) {
+            install(ContentNegotiation) { json(ApplicationScope.json) }
+        }
+        mockkObject(ApiClient)
+        every { ApiClient.instance } returns mockHttpClient
+
+        coEvery { imageService.createBatch(any()) } returns mapOf(jpeg.sha256() to expectedId)
+
+        val result = service.fetchReleaseGroupImage(releaseGroupId)
+
+        assertEquals(expectedId, result)
+        coVerify {
+            imageService.createBatch(match {
+                it.size == 1 &&
+                    it.single().data.contentEquals(jpeg) &&
+                    it.single().origin == "https://coverartarchive.org/release-group/$releaseGroupId/front"
+            })
+        }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `fetchReleaseGroupImage returns null and stores nothing for a non-image 200 response`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val releaseGroupId = UUID.randomUUID()
+        val notFoundPage = "<!doctype html><html lang=en><title>404 Not Found</title><h1>Not Found</h1><p>No cover art found for release group $releaseGroupId</p>"
+
+        val mockHttpClient = HttpClient(MockEngine { _ ->
+            respond(
+                content = notFoundPage,
+                status = HttpStatusCode.OK,
+                headers = headersOf("Content-Type", ContentType.Text.Html.toString())
+            )
+        }) {
+            install(ContentNegotiation) { json(ApplicationScope.json) }
+        }
+        mockkObject(ApiClient)
+        every { ApiClient.instance } returns mockHttpClient
+
+        val result = service.fetchReleaseGroupImage(releaseGroupId)
+
+        assertNull(result)
+        coVerify(exactly = 0) { imageService.createBatch(any()) }
     }
 }

@@ -553,7 +553,7 @@ class AppleMusicReleaseService(private val environment: ApplicationEnvironment) 
     }
 
     internal suspend fun fetchArtworkBytes(url: String): ByteArray? =
-        ApiClient.instance.safeGet<ByteArray>(url)
+        ApiClient.instance.safeGetImage(url)
 
     suspend fun unlinkUnfollowedProviderReleaseImages(): Int {
         val releaseIds = dbQuery {
