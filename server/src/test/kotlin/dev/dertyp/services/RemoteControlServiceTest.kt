@@ -139,6 +139,33 @@ class RemoteControlServiceTest {
     }
 
     @Test
+    fun `sendCommand delivers a PlayQueueItem with its queue id and version`() = runTest {
+        val userId = UUID.randomUUID()
+        val targetSessionId = UUID.randomUUID()
+        val requesterSessionId = UUID.randomUUID()
+        val received = Channel<ClientRequest>(Channel.UNLIMITED)
+        val target = connect(userId, targetSessionId, "Desk", setOf(ClientCapability.REMOTE_CONTROL), received)
+        val requester = connect(userId, requesterSessionId, "Phone", setOf(ClientCapability.REMOTE_CONTROL))
+
+        val statusDeferred = async {
+            service.sendCommand(
+                userId,
+                requesterSessionId,
+                targetSessionId,
+                PlaybackCommand.PlayQueueItem(queueId = 42, queueVersion = 7),
+            )
+        }
+        val request = received.receive() as ClientRequest.ControlPlayback
+
+        assertEquals(PlaybackCommand.PlayQueueItem(queueId = 42, queueVersion = 7), request.command)
+        assertTrue(clientRequestService.complete(targetSessionId, request.id, ClientRequestStatus.COMPLETED))
+        assertEquals(ClientRequestStatus.COMPLETED, statusDeferred.await())
+
+        target.cancel()
+        requester.cancel()
+    }
+
+    @Test
     fun `sendCommand times out when the target does not answer`() = runTest {
         val userId = UUID.randomUUID()
         val targetSessionId = UUID.randomUUID()

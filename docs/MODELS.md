@@ -99,6 +99,7 @@ Services: [RPC_SERVICES.md](RPC_SERVICES.md) · REST routes: [REST_API.md](REST_
 - [Next](#devdertypdataplaybackcommandnext)
 - [Pause](#devdertypdataplaybackcommandpause)
 - [Play](#devdertypdataplaybackcommandplay)
+- [PlayQueueItem](#devdertypdataplaybackcommandplayqueueitem)
 - [Previous](#devdertypdataplaybackcommandprevious)
 - [SeekTo](#devdertypdataplaybackcommandseekto)
 - [SetRepeat](#devdertypdataplaybackcommandsetrepeat)
@@ -1315,6 +1316,14 @@ Start or resume playback on the device.
 | Field | Type | Description |
 | :--- | :--- | :--- |
 
+### PlayQueueItem <a name="devdertypdataplaybackcommandplayqueueitem"></a>
+Select and play the entry with this queue id of the shared queue of the user. The device first applies at least the given queue version of the shared queue, pulling it when it has not seen it yet, and rejects the command when the entry is not in its queue afterwards, which is how a controller loads a new queue and then plays a song in it without a race.
+
+| Field | Type | Description |
+| :--- | :--- | :--- |
+| `queueId` | `Long` | The queue id of the entry within the shared queue. |
+| `queueVersion` | `Long` | The shared queue version that contains the entry, as returned to the controller by its queue write. |
+
 ### Previous <a name="devdertypdataplaybackcommandprevious"></a>
 Go back to the previous entry of the queue of the device, or restart the current one, as the device decides.
 
@@ -1869,6 +1878,8 @@ What a remote-controllable device is playing, as it last reported it. A controll
 | `shuffleMode` | `Boolean` | Whether the device plays its queue in shuffled order. |
 | `repeatMode` | [RepeatMode](#devdertypdatarepeatmode) | The repetition mode of the device. |
 | `volume` | `Float`? | Playback volume between 0 and 1, or null on a device that does not expose its volume. |
+| `currentQueueId` | `Long`? | Queue id of the shared queue entry the device is playing, or null when the device is not playing its shared queue. |
+| `queueVersion` | `Long`? | The version of the shared queue the device has applied, or null when it does not take part in queue sync. |
 | `reportedAt` | `Long` | Unix timestamp in milliseconds at which the server received the report. Ignored on report and filled in by the server. |
 
 ### RemoteServerConfig <a name="devdertypdataremoteserverconfig"></a>
