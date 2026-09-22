@@ -61,6 +61,17 @@ class WorkerTest : KoinTest {
         fun getThreadsFlow(): MutableStateFlow<Int> = grantedThreads
     }
 
+    class FailingWorker(name: String) : Worker(name) {
+        var shouldFail = true
+        var executions = 0
+
+        override suspend fun execute(onProgress: suspend (Double, String) -> Unit): Map<String, Any?> {
+            executions++
+            if (shouldFail) throw IllegalStateException("boom")
+            return emptyMap()
+        }
+    }
+
     private suspend fun awaitSettlement(expectedTotal: Int, vararg workers: TestWorker) {
         withTimeout(60.seconds) {
             while (isActive) {
@@ -73,6 +84,30 @@ class WorkerTest : KoinTest {
                 delay(200.milliseconds)
             }
         }
+    }
+
+    @Test
+    @Timeout(value = 1, unit = TimeUnit.MINUTES)
+    fun `run should rethrow execute failures and stay runnable`() = runBlocking(Dispatchers.Default) {
+        setupKoin()
+        val worker = FailingWorker("FailingWorker")
+
+        var thrown: Throwable? = null
+        try {
+            worker.run()
+        } catch (e: Throwable) {
+            thrown = e
+        }
+
+        assertTrue(thrown is IllegalStateException)
+        assertEquals("boom", thrown?.message)
+        assertEquals(1, worker.executions)
+        assertEquals(false, worker.active)
+
+        worker.shouldFail = false
+        worker.run()
+
+        assertEquals(2, worker.executions)
     }
 
     @Test

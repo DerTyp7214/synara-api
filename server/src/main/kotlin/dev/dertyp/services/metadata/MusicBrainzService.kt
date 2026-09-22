@@ -10,6 +10,7 @@ import dev.dertyp.data.*
 import dev.dertyp.server.BuildConfig
 import dev.dertyp.services.Service
 import dev.dertyp.toPlatformUUID
+import dev.dertyp.utils.Barcodes
 import io.ktor.client.call.body
 import io.ktor.client.request.HttpRequestBuilder
 import io.ktor.client.request.header
@@ -59,6 +60,10 @@ data class MusicBrainzReleaseResponse(
 
 class MusicBrainzService : Service() {
     private val mbBaseUrl = "https://musicbrainz.org/ws/2"
+
+    companion object {
+        private const val MAX_URL_LOOKUP_RELEASES = 5
+    }
 
     private suspend inline fun <reified T> retryableGet(
         urlString: String,
@@ -267,21 +272,56 @@ class MusicBrainzService : Service() {
     suspend fun fetchReleasesByBarcode(
         barcode: String,
         priority: HttpClientPriority = HttpClientPriority.NORMAL
-    ): List<MusicBrainzRelease> {
-        if (barcode.length < 8 || barcode.uppercase() == "BARCODE") return emptyList()
+    ): List<MusicBrainzRelease>? {
+        val variants = Barcodes.variants(barcode)
+        if (variants.isEmpty() || barcode.uppercase() == "BARCODE") return emptyList()
 
         return try {
             val response = retryableGet<MusicBrainzReleaseSearchResponse>("$mbBaseUrl/release", priority) {
-                parameter("query", "barcode:$barcode")
+                parameter("query", "barcode:(${variants.joinToString(" OR ")})")
                 parameter("fmt", "json")
                 parameter("inc", "artist-credits+recordings+isrcs+release-groups+tags+genres+media")
                 header("User-Agent", "Synara/${BuildConfig.VERSION} ( https://github.com/dertyp7214/synara )")
-            }
+            } ?: return null
 
-            response?.releases ?: emptyList()
+            response.releases ?: emptyList()
         } catch (e: Exception) {
             logger.error("Failed to search MusicBrainz for barcode $barcode", e)
-            emptyList()
+            null
+        }
+    }
+
+    suspend fun fetchReleasesByUrls(
+        urls: Collection<String>,
+        priority: HttpClientPriority = HttpClientPriority.NORMAL
+    ): List<MusicBrainzRelease>? {
+        val resources = urls.filter { it.isNotBlank() }.distinct()
+        if (resources.isEmpty()) return emptyList()
+
+        return try {
+            val response = retryableGet<JsonObject>("$mbBaseUrl/url", priority) {
+                resources.forEach { parameter("resource", it) }
+                parameter("inc", "release-rels")
+                parameter("fmt", "json")
+                header("User-Agent", "Synara/${BuildConfig.VERSION} ( https://github.com/dertyp7214/synara )")
+            } ?: return null
+
+            val entries = (response["urls"] as? JsonArray)?.mapNotNull { it as? JsonObject }
+                ?: listOfNotNull(response.takeIf { it.containsKey("relations") })
+
+            val releaseIds = entries
+                .flatMap { entry -> (entry["relations"] as? JsonArray).orEmpty().mapNotNull { it as? JsonObject } }
+                .mapNotNull { relation ->
+                    (relation["release"] as? JsonObject)?.get("id")?.jsonPrimitive?.contentOrNull
+                }
+                .distinct()
+                .take(MAX_URL_LOOKUP_RELEASES)
+                .mapNotNull { id -> runCatching { UUID.fromString(id) }.getOrNull() }
+
+            releaseIds.mapNotNull { fetchReleaseById(it, priority) }
+        } catch (e: Exception) {
+            logger.error("Failed to look up MusicBrainz urls ${resources.joinToString()}", e)
+            null
         }
     }
 

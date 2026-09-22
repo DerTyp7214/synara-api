@@ -22,8 +22,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.EnumSource
-import java.io.ByteArrayInputStream
-import java.io.File
+import java.io.*
 import java.nio.file.Files
 import java.util.UUID
 import java.util.zip.ZipFile
@@ -91,7 +90,7 @@ class BackupServiceTest {
         setup(dialect)
         val service = BackupService(dbManagementService, storageService, pluginManager, environment)
         val dummyDbData = byteArrayOf(1, 2, 3)
-        coEvery { dbManagementService.exportData() } returns dummyDbData
+        coEvery { dbManagementService.exportData(any<OutputStream>()) } answers { firstArg<OutputStream>().write(dummyDbData) }
 
         val imgHash = "abcdef1234567890"
         val imgSubPath = "ab/cd/ef/12"
@@ -208,8 +207,9 @@ class BackupServiceTest {
         setup(dialect)
         val service = BackupService(dbManagementService, storageService, pluginManager, environment)
         val dummyDbData = byteArrayOf(1, 2, 3)
-        coEvery { dbManagementService.exportData() } returns dummyDbData
-        coEvery { dbManagementService.importData(any()) } just Runs
+        var capturedDbData: ByteArray? = null
+        coEvery { dbManagementService.exportData(any<OutputStream>()) } answers { firstArg<OutputStream>().write(dummyDbData) }
+        coEvery { dbManagementService.importData(any<InputStream>()) } answers { capturedDbData = firstArg<InputStream>().readBytes() }
 
         val imgSubPath = "ab/cd/ef/12"
         val imgFileDir = imagesDir.resolve(imgSubPath)
@@ -226,7 +226,8 @@ class BackupServiceTest {
 
         service.loadBackup(backupResult.fileName)
 
-        coVerify { dbManagementService.importData(any()) }
+        coVerify { dbManagementService.importData(any<InputStream>()) }
+        assertArrayEquals(dummyDbData, capturedDbData)
         assertTrue(imgFile.exists(), "Image file should have been restored")
         assertArrayEquals(imgData, imgFile.readBytes())
     }
@@ -237,8 +238,9 @@ class BackupServiceTest {
         setup(dialect)
         val service = BackupService(dbManagementService, storageService, pluginManager, environment)
         val dummyDbData = byteArrayOf(1, 2, 3)
-        coEvery { dbManagementService.exportData() } returns dummyDbData
-        coEvery { dbManagementService.importData(any()) } just Runs
+        var capturedDbData: ByteArray? = null
+        coEvery { dbManagementService.exportData(any<OutputStream>()) } answers { firstArg<OutputStream>().write(dummyDbData) }
+        coEvery { dbManagementService.importData(any<InputStream>()) } answers { capturedDbData = firstArg<InputStream>().readBytes() }
 
         val imgSubPath = "ab/cd/ef/12"
         val imgFileDir = imagesDir.resolve(imgSubPath)
@@ -256,9 +258,31 @@ class BackupServiceTest {
 
         service.loadBackup(backupFile)
 
-        coVerify { dbManagementService.importData(any()) }
+        coVerify { dbManagementService.importData(any<InputStream>()) }
+        assertArrayEquals(dummyDbData, capturedDbData)
         assertTrue(imgFile.exists(), "Image file should have been restored")
         assertArrayEquals(imgData, imgFile.readBytes())
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `createBackup should remove the partial zip when the export fails`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val service = BackupService(dbManagementService, storageService, pluginManager, environment)
+        coEvery { dbManagementService.exportData(any<OutputStream>()) } throws IllegalStateException("export failed")
+
+        var thrown: Throwable? = null
+        try {
+            service.createBackup()
+        } catch (e: Throwable) {
+            thrown = e
+        }
+
+        assertTrue(thrown is IllegalStateException, "Export failure should propagate")
+        assertEquals("export failed", thrown?.message)
+
+        val leftovers = backupDir.listFiles { it.extension == "zip" }
+        assertEquals(0, leftovers?.size ?: 0, "No partial backup zip should remain")
     }
 
     @ParameterizedTest
@@ -266,7 +290,7 @@ class BackupServiceTest {
     fun `rotateBackups should delete old backups and unreferenced blobs`(dialect: DbDialect) = runBlocking {
         setup(dialect)
         val service = BackupService(dbManagementService, storageService, pluginManager, environment)
-        coEvery { dbManagementService.exportData() } returns byteArrayOf(0)
+        coEvery { dbManagementService.exportData(any<OutputStream>()) } answers { firstArg<OutputStream>().write(byteArrayOf(0)) }
 
         repeat(11) { i ->
             imagesDir.deleteRecursively()

@@ -2,8 +2,7 @@ package dev.dertyp.services.release
 
 import dev.dertyp.ApiClient
 import dev.dertyp.core.*
-import dev.dertyp.data.InsertableImage
-import dev.dertyp.data.ReleaseType
+import dev.dertyp.data.*
 import dev.dertyp.db.*
 import dev.dertyp.dbQuery
 import dev.dertyp.services.ImageService
@@ -19,6 +18,8 @@ import dev.dertyp.services.release.ArtistIdentityEvidence.normalizeLabel
 import dev.dertyp.services.Service
 import dev.dertyp.services.import.Type
 import dev.dertyp.services.metadata.*
+import dev.dertyp.services.ReleaseService
+import dev.dertyp.utils.Barcodes
 import dev.dertyp.utils.parsers.ParserFactory
 import io.ktor.server.application.ApplicationEnvironment
 import kotlinx.coroutines.*
@@ -38,6 +39,8 @@ class AppleMusicReleaseService(private val environment: ApplicationEnvironment) 
     private val linkResolverService by inject<LinkResolverService>()
     private val musicBrainzService by inject<MusicBrainzService>()
     private val musicBrainzCacheService by inject<MusicBrainzCacheService>()
+    private val releaseService by inject<ReleaseService>()
+    private val releaseArtistService by inject<ReleaseArtistService>()
 
     private val serviceScope = CoroutineScope(Dispatchers.IO)
 
@@ -75,6 +78,8 @@ class AppleMusicReleaseService(private val environment: ApplicationEnvironment) 
         const val PROVIDER = "apple"
 
         private const val EVIDENCE_POOL = 500
+
+        private val FALLBACK_STOREFRONTS = listOf("us", "gb", "de", "fr")
 
         private val LOOKBACK = 180.days
         private val UPCOMING_HORIZON = 365.days
@@ -190,7 +195,6 @@ class AppleMusicReleaseService(private val environment: ApplicationEnvironment) 
     }
 
     suspend fun findUnlinkedAppleRelease(
-        artistId: UUID,
         appleAlbumIds: Set<String>,
         barcodes: Set<String>,
         linkKeys: Set<Pair<String, String>>
@@ -201,7 +205,6 @@ class AppleMusicReleaseService(private val environment: ApplicationEnvironment) 
             ProviderReleaseTable
                 .select(ProviderReleaseTable.id, ProviderReleaseTable.externalId, ProviderReleaseTable.upc)
                 .where { ProviderReleaseTable.provider eq PROVIDER }
-                .andWhere { ProviderReleaseTable.artistId eq artistId }
                 .andWhere { ProviderReleaseTable.releaseGroupId.isNull() }
                 .map {
                     UnlinkedRelease(
@@ -214,9 +217,11 @@ class AppleMusicReleaseService(private val environment: ApplicationEnvironment) 
         if (candidates.isEmpty()) return null
 
         candidates.firstOrNull { it.externalId in appleAlbumIds }?.let { return it.id }
+
+        val normalizedBarcodes = barcodes.mapNotNull { Barcodes.normalize(it) }.toSet()
         candidates.firstOrNull { candidate ->
-            val upc = candidate.upc
-            upc != null && upc in barcodes
+            val upc = Barcodes.normalize(candidate.upc)
+            upc != null && upc in normalizedBarcodes
         }?.let { return it.id }
 
         if (linkKeys.isEmpty()) return null
@@ -268,6 +273,14 @@ class AppleMusicReleaseService(private val environment: ApplicationEnvironment) 
                 .where { RecentReleaseTable.releaseId eq releaseGroupId }
                 .singleOrNull() ?: return@dbQuery
 
+            val linkedArtists = releaseArtistService
+                .providerReleaseArtistIdsTx(listOf(providerReleaseId))[providerReleaseId]
+                .orEmpty()
+            releaseArtistService.linkGroupTx(
+                releaseGroupId,
+                linkedArtists + row[ProviderReleaseTable.artistId].value
+            )
+
             val imageToSet = row[ProviderReleaseTable.imageId]?.value
                 ?.takeIf { recent[RecentReleaseTable.imageId] == null }
             val dateToSet = row[ProviderReleaseTable.releaseDate]
@@ -306,15 +319,26 @@ class AppleMusicReleaseService(private val environment: ApplicationEnvironment) 
         }
         if (candidates.isEmpty()) return ProcessResult()
 
-        val barcodes = candidates.mapNotNull { it.first.upc }.filter { it.isNotBlank() }.distinct()
+        val barcodes = candidates.flatMap { Barcodes.variants(it.first.upc) }.distinct()
+
+        val artistMbId = dbSemaphore.withPermit {
+            dbQuery {
+                ArtistMusicBrainzTable
+                    .select(ArtistMusicBrainzTable.musicBrainzId)
+                    .where { ArtistMusicBrainzTable.artistId eq artistId }
+                    .andWhere { ArtistMusicBrainzTable.musicBrainzId.isNotNull() }
+                    .firstOrNull()?.get(ArtistMusicBrainzTable.musicBrainzId)?.value
+            }
+        }
 
         val artistGroupIds = dbSemaphore.withPermit {
             dbQuery {
-                RecentReleaseTable
+                val owned = RecentReleaseTable
                     .select(RecentReleaseTable.releaseId)
                     .where { RecentReleaseTable.artistId eq artistId }
                     .map { it[RecentReleaseTable.releaseId].value }
-                    .distinct()
+
+                (owned + releaseArtistService.groupIdsForArtistTx(artistId)).distinct()
             }
         }
 
@@ -372,7 +396,7 @@ class AppleMusicReleaseService(private val environment: ApplicationEnvironment) 
                     .where { MBReleaseTable.barcode inList barcodes }
                     .andWhere { MBReleaseTable.releaseGroupId.isNotNull() }
                     .mapNotNull { row ->
-                        val barcode = row[MBReleaseTable.barcode] ?: return@mapNotNull null
+                        val barcode = Barcodes.normalize(row[MBReleaseTable.barcode]) ?: return@mapNotNull null
                         val group = row[MBReleaseTable.releaseGroupId]?.value ?: return@mapNotNull null
                         barcode to group
                     }
@@ -462,25 +486,26 @@ class AppleMusicReleaseService(private val environment: ApplicationEnvironment) 
 
             val directMatch = existing?.releaseGroupId
                 ?: groupLinks[PROVIDER to album.id]
-                ?: upc?.let { barcodeGroups[it] }
+                ?: Barcodes.normalize(upc)?.let { barcodeGroups[it] }
 
             val lastResolve = existing?.linksResolvedAt
             val resolveDue = directMatch == null &&
                     (lastResolve == null || nowMs - lastResolve >= LINK_RESOLVE_RETRY.inWholeMilliseconds)
 
-            var barcodeMatch: UUID? = null
+            var lookupMatch: UUID? = null
+            var untrackedGroupId: UUID? = null
             var resolvedMatch: UUID? = null
             var resolvedUrls = emptyList<String>()
+            var lookupSucceeded = false
 
             if (resolveDue) {
+                val lookedUp = mutableListOf<MusicBrainzRelease>()
+
                 if (upc != null) {
                     val releases = musicBrainzService.fetchReleasesByBarcode(upc, priority)
-                    releases.forEach { release ->
-                        musicBrainzCacheService.updateReleaseCache(release)
-                        val groupId = release.releaseGroup?.id
-                        if (barcodeMatch == null && groupId != null && groupId in artistGroupIds) {
-                            barcodeMatch = groupId
-                        }
+                    if (releases != null) {
+                        lookupSucceeded = true
+                        lookedUp += releases
                     }
                 }
 
@@ -490,7 +515,41 @@ class AppleMusicReleaseService(private val environment: ApplicationEnvironment) 
                     priority = priority
                 )
 
-                if (barcodeMatch == null) {
+                val byUrl = musicBrainzService.fetchReleasesByUrls(
+                    musicBrainzUrlCandidates(album.id, apple.storefront, resolvedUrls),
+                    priority
+                )
+                if (byUrl != null) {
+                    lookupSucceeded = true
+                    lookedUp += byUrl
+                }
+
+                val distinctReleases = lookedUp.distinctBy { it.id }
+                distinctReleases.forEach { musicBrainzCacheService.updateReleaseCache(it) }
+
+                val candidateGroupIds = distinctReleases.mapNotNull { it.releaseGroup?.id }.distinct()
+                val trackedGroupIds = if (candidateGroupIds.isEmpty()) emptySet() else dbSemaphore.withPermit {
+                    dbQuery {
+                        RecentReleaseTable
+                            .select(RecentReleaseTable.releaseId)
+                            .where { RecentReleaseTable.releaseId inList candidateGroupIds }
+                            .map { it[RecentReleaseTable.releaseId].value }
+                            .toSet()
+                    }
+                }
+
+                distinctReleases.forEach { release ->
+                    val groupId = release.releaseGroup?.id ?: return@forEach
+                    if (groupId in trackedGroupIds || groupId in artistGroupIds) {
+                        if (lookupMatch == null) lookupMatch = groupId
+                    } else if (untrackedGroupId == null && artistMbId != null &&
+                        release.artistCredit?.any { it.artist?.id == artistMbId } == true
+                    ) {
+                        untrackedGroupId = groupId
+                    }
+                }
+
+                if (lookupMatch == null) {
                     resolvedMatch = resolvedUrls.firstNotNullOfOrNull { url ->
                         val key = linkKey(url)
                         groupLinks[key] ?: relationLinks[key]
@@ -498,7 +557,7 @@ class AppleMusicReleaseService(private val environment: ApplicationEnvironment) 
                 }
             }
 
-            val matchedGroupId = directMatch ?: barcodeMatch ?: resolvedMatch
+            val matchedGroupId = directMatch ?: lookupMatch ?: resolvedMatch
             val linkUrls = (listOfNotNull(albumUrl.takeIf { it.isNotBlank() }) + resolvedUrls)
                 .filter { it.isNotBlank() }
                 .distinct()
@@ -508,6 +567,8 @@ class AppleMusicReleaseService(private val environment: ApplicationEnvironment) 
                     ProviderReleaseTable.upsert(
                         ProviderReleaseTable.id,
                         onUpdateExclude = listOf(
+                            ProviderReleaseTable.artistId,
+                            ProviderReleaseTable.artistName,
                             ProviderReleaseTable.imageId,
                             ProviderReleaseTable.lastImageFetch,
                             ProviderReleaseTable.linksResolvedAt,
@@ -541,10 +602,12 @@ class AppleMusicReleaseService(private val environment: ApplicationEnvironment) 
                         it[ProviderReleaseTable.lastUpdate] = nowMs
                     }
 
+                    releaseArtistService.linkProviderReleaseTx(rowId, listOf(artistId))
+
                     val linkIds = providerLinkService.linkIdsTx(linkUrls)
                     providerLinkService.attachProviderReleaseTx(rowId, linkIds)
 
-                    if (resolveDue) {
+                    if (resolveDue && lookupSucceeded) {
                         ProviderReleaseTable.update({ ProviderReleaseTable.id eq rowId }) {
                             it[ProviderReleaseTable.linksResolvedAt] = nowMs
                         }
@@ -552,14 +615,23 @@ class AppleMusicReleaseService(private val environment: ApplicationEnvironment) 
                 }
             }
 
+            var finalGroupId = matchedGroupId
+            val trackableGroupId = untrackedGroupId
+            if (finalGroupId == null && trackableGroupId != null) {
+                val tracked = runCatching { releaseService.trackReleaseGroup(trackableGroupId, artistId, priority) }
+                    .onFailure { logger.error("Failed to track release group $trackableGroupId for artist $artistId", it) }
+                    .getOrDefault(false)
+                if (tracked) finalGroupId = trackableGroupId
+            }
+
             stored++
             if (date > nowMs) upcoming++
-            if (matchedGroupId != null) matched++
+            if (finalGroupId != null) matched++
 
             outcomes += Outcome(
                 album = album,
                 rowId = rowId,
-                matched = matchedGroupId != null || matchedAlbumId != null || matchedSongId != null,
+                matched = finalGroupId != null || matchedAlbumId != null || matchedSongId != null,
                 storedRegistrants = existing?.isrcRegistrants
             )
 
@@ -583,7 +655,7 @@ class AppleMusicReleaseService(private val environment: ApplicationEnvironment) 
                 }
             }
 
-            if (matchedGroupId != null) dbSemaphore.withPermit { mergeIntoReleaseGroup(rowId, matchedGroupId) }
+            finalGroupId?.let { groupId -> dbSemaphore.withPermit { mergeIntoReleaseGroup(rowId, groupId) } }
         }
 
         val suspects = flagSuspects(artistId, artistName, appleArtistId, apple, outcomes, dbSemaphore, priority)
@@ -738,6 +810,24 @@ class AppleMusicReleaseService(private val environment: ApplicationEnvironment) 
         return TaughtRules.from(rules)
     }
 
+    private suspend fun musicBrainzUrlCandidates(
+        albumId: String,
+        storefront: String,
+        resolvedUrls: List<String>
+    ): List<String> {
+        val storefronts = (listOf(storefront) + FALLBACK_STOREFRONTS)
+            .filter { it.isNotBlank() }
+            .distinct()
+
+        val canonical = resolvedUrls.mapNotNull { url ->
+            val parser = ParserFactory.getParser(url) ?: return@mapNotNull null
+            val parsed = parser.parse(url) ?: return@mapNotNull null
+            ParserFactory.toUrl(parser.name, parsed.first, Type.ALBUM)
+        }
+
+        return (storefronts.map { "https://music.apple.com/$it/album/$albumId" } + canonical).distinct()
+    }
+
     private suspend fun linkKey(url: String): Pair<String, String> {
         val parser = ParserFactory.getParser(url)
         val parsed = parser?.parse(url)
@@ -766,6 +856,15 @@ class AppleMusicReleaseService(private val environment: ApplicationEnvironment) 
                 .select(ProviderReleaseTable.id)
                 .where { ProviderReleaseTable.imageId.isNotNull() }
                 .andWhere { ProviderReleaseTable.artistId notInSubQuery FollowedArtistTable.select(FollowedArtistTable.artistId) }
+                .andWhere {
+                    ProviderReleaseTable.id notInSubQuery ReleaseArtistTable
+                        .select(ReleaseArtistTable.providerReleaseId)
+                        .where { ReleaseArtistTable.providerReleaseId.isNotNull() }
+                        .andWhere {
+                            ReleaseArtistTable.artistId inSubQuery
+                                    FollowedArtistTable.select(FollowedArtistTable.artistId)
+                        }
+                }
                 .map { it[ProviderReleaseTable.id].value }
         }
         if (releaseIds.isEmpty()) return 0

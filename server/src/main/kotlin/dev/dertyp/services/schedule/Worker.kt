@@ -157,7 +157,7 @@ abstract class Worker(val name: String) : KoinComponent {
             result
         } catch (e: Exception) {
             logger.error("Error in $name", e)
-            mapOf("error" to 1)
+            throw e
         } finally {
             isRunning.store(false)
         }

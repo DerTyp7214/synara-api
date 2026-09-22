@@ -9,12 +9,14 @@ import dev.dertyp.db.*
 import dev.dertyp.services.metadata.CachedMusicBrainzService
 import dev.dertyp.services.release.ArtistSourceRuleKind
 import dev.dertyp.services.release.ArtistSourceRulePolarity
+import dev.dertyp.services.release.ReleaseArtistService
 import dev.dertyp.services.metadata.MusicBrainzCacheService
 import dev.dertyp.services.metadata.MusicBrainzService
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
+import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.SchemaUtils
@@ -48,6 +50,7 @@ class ArtistServiceTest : KoinTest {
                 single { SongService() }
                 single { AlbumService() }
                 single { GenreService() }
+                single { ReleaseArtistService() }
             })
         }
 
@@ -77,7 +80,8 @@ class ArtistServiceTest : KoinTest {
                 RecentReleaseTable,
                 ProviderReleaseTable,
                 HiddenReleaseTable,
-                ArtistSourceRuleTable
+                ArtistSourceRuleTable,
+                ReleaseArtistTable
             )
         }
         
@@ -803,6 +807,7 @@ class ArtistServiceTest : KoinTest {
         val artistId1 = UUID.randomUUID()
         val artistId2 = UUID.randomUUID()
         val releaseGroupId = UUID.randomUUID()
+        val providerReleaseId = UUID.randomUUID()
 
         transaction(database) {
             ArtistTable.insert { it[id] = artistId1; it[name] = "Artist A" }
@@ -814,6 +819,24 @@ class ArtistServiceTest : KoinTest {
                 it[artistName] = "Artist A"
                 it[title] = "New Release"
             }
+            ProviderReleaseTable.insert {
+                it[id] = providerReleaseId
+                it[provider] = "apple"
+                it[externalId] = providerReleaseId.toString()
+                it[artistId] = artistId2
+                it[artistName] = "Artist B"
+                it[title] = "Apple Release"
+            }
+            listOf(artistId1, artistId2).forEach { linked ->
+                ReleaseArtistTable.insert {
+                    it[ReleaseArtistTable.releaseGroupId] = EntityID(releaseGroupId, MBReleaseGroupTable)
+                    it[artistId] = linked
+                }
+                ReleaseArtistTable.insert {
+                    it[ReleaseArtistTable.providerReleaseId] = providerReleaseId
+                    it[artistId] = linked
+                }
+            }
         }
 
         val merged = service.mergeArtists(MergeArtists(name = "Merged", artistIds = listOf(artistId1, artistId2)))
@@ -823,6 +846,31 @@ class ArtistServiceTest : KoinTest {
 
         assertEquals(merged!!.id, release[RecentReleaseTable.artistId].value)
         assertEquals("Merged", release[RecentReleaseTable.artistName])
+
+        val providerRelease = transaction(database) { ProviderReleaseTable.selectAll().single() }
+
+        assertEquals(providerReleaseId, providerRelease[ProviderReleaseTable.id].value)
+        assertEquals(merged.id, providerRelease[ProviderReleaseTable.artistId].value)
+        assertEquals("Merged", providerRelease[ProviderReleaseTable.artistName])
+
+        val links = transaction(database) {
+            ReleaseArtistTable.selectAll().map {
+                Triple(
+                    it[ReleaseArtistTable.releaseGroupId]?.value,
+                    it[ReleaseArtistTable.providerReleaseId]?.value,
+                    it[ReleaseArtistTable.artistId].value
+                )
+            }
+        }
+
+        assertEquals(
+            setOf(
+                Triple(releaseGroupId, null, merged.id),
+                Triple(null, providerReleaseId, merged.id)
+            ),
+            links.toSet()
+        )
+        assertEquals(2, links.size)
     }
 
     @ParameterizedTest

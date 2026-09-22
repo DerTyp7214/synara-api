@@ -4,18 +4,15 @@ import com.github.luben.zstd.ZstdInputStream
 import com.github.luben.zstd.ZstdOutputStream
 import io.github.classgraph.ClassGraph
 import kotlinx.serialization.*
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.builtins.MapSerializer
+import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.cbor.Cbor
-import org.jetbrains.exposed.v1.core.Column
-import org.jetbrains.exposed.v1.core.Table
+import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.core.dao.id.EntityID
-import org.jetbrains.exposed.v1.jdbc.deleteAll
-import org.jetbrains.exposed.v1.jdbc.insert
-import org.jetbrains.exposed.v1.jdbc.selectAll
+import org.jetbrains.exposed.v1.jdbc.*
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
-import java.io.ByteArrayInputStream
-import java.io.ByteArrayOutputStream
-import java.io.DataInputStream
-import java.io.DataOutputStream
+import java.io.*
 import java.util.UUID
 
 @Serializable
@@ -51,6 +48,8 @@ data class TableData(
 )
 
 class DbManagementService : IDbManagementService {
+    private val rowSerializer = MapSerializer(String.serializer(), DbValue.serializer())
+
     private val tables: List<Table> by lazy {
         ClassGraph()
             .enableClassInfo()
@@ -73,62 +72,107 @@ class DbManagementService : IDbManagementService {
             }
     }
 
-    @OptIn(ExperimentalSerializationApi::class)
     override suspend fun exportData(): ByteArray {
         val baos = ByteArrayOutputStream()
-        ZstdOutputStream(baos).use { zstd ->
+        exportData(baos)
+        return baos.toByteArray()
+    }
+
+    override suspend fun importData(data: ByteArray) = importData(ByteArrayInputStream(data))
+
+    @OptIn(ExperimentalSerializationApi::class)
+    suspend fun exportData(output: OutputStream) {
+        ZstdOutputStream(ShieldedOutputStream(output)).use { zstd ->
             DataOutputStream(zstd).use { dos ->
                 transaction {
+                    dos.writeInt(FORMAT_V2_MARKER)
                     dos.writeInt(tables.size)
                     tables.forEach { table ->
-                        val rows = table.selectAll().map { row ->
+                        dos.writeUTF(table.tableName)
+                        table.selectAll().fetchSize(FETCH_SIZE).forEach { row ->
                             val map = mutableMapOf<String, DbValue>()
                             table.columns.forEach { column ->
-                                val value = row[column]
-                                map[column.name] = convertToDbValue(value)
+                                map[column.name] = convertToDbValue(row[column])
                             }
-                            map
+                            val bytes = Cbor.encodeToByteArray(rowSerializer, map)
+                            dos.writeInt(bytes.size)
+                            dos.write(bytes)
                         }
-                        val tableData = TableData(table.tableName, rows)
-                        val cborBytes = Cbor.encodeToByteArray(tableData)
-                        
-                        dos.writeUTF(table.tableName)
-                        dos.writeInt(cborBytes.size)
-                        dos.write(cborBytes)
+                        dos.writeInt(ROW_TERMINATOR)
                     }
                 }
             }
         }
-        return baos.toByteArray()
+    }
+
+    suspend fun importData(input: InputStream) {
+        ZstdInputStream(ShieldedInputStream(input)).use { zstd ->
+            DataInputStream(zstd).use { dis ->
+                val header = dis.readInt()
+                if (header < 0) {
+                    importV2(dis)
+                } else {
+                    importV1(dis, header)
+                }
+            }
+        }
     }
 
     @OptIn(ExperimentalSerializationApi::class)
-    override suspend fun importData(data: ByteArray) {
-        ZstdInputStream(ByteArrayInputStream(data)).use { zstd ->
-            DataInputStream(zstd).use { dis ->
-                val tableCount = dis.readInt()
-                for (i in 0 until tableCount) {
-                    val tableName = dis.readUTF()
-                    val dataSize = dis.readInt()
-                    val cborBytes = ByteArray(dataSize)
-                    dis.readFully(cborBytes)
-                    
-                    val table = tables.find { it.tableName == tableName }
-                    if (table != null) {
-                        val tableData = Cbor.decodeFromByteArray<TableData>(cborBytes)
-                        
-                        transaction {
-                            table.deleteAll()
-                            tableData.rows.forEach { rowMap ->
-                                table.insert { iTable ->
-                                    table.columns.forEach { column ->
-                                        val dbValue = rowMap[column.name]
-                                        if (dbValue != null) {
-                                            val value = convertFromDbValue(dbValue)
-                                            @Suppress("UNCHECKED_CAST")
-                                            iTable[column as Column<Any?>] = value?.let { column.columnType.valueFromDB(it) }
-                                        }
-                                    }
+    private fun importV2(dis: DataInputStream) {
+        val tableCount = dis.readInt()
+        repeat(tableCount) {
+            val tableName = dis.readUTF()
+            val table = tables.find { it.tableName == tableName }
+            if (table == null) {
+                while (true) {
+                    val size = dis.readInt()
+                    if (size == ROW_TERMINATOR) break
+                    dis.readFully(ByteArray(size))
+                }
+            } else {
+                transaction {
+                    table.deleteAll()
+                    val chunk = mutableListOf<Map<String, DbValue>>()
+                    while (true) {
+                        val size = dis.readInt()
+                        if (size == ROW_TERMINATOR) break
+                        val bytes = ByteArray(size)
+                        dis.readFully(bytes)
+                        chunk.add(Cbor.decodeFromByteArray(rowSerializer, bytes))
+                        if (chunk.size >= CHUNK_SIZE) {
+                            insertChunk(table, chunk)
+                            chunk.clear()
+                        }
+                    }
+                    if (chunk.isNotEmpty()) insertChunk(table, chunk)
+                }
+            }
+        }
+    }
+
+    @OptIn(ExperimentalSerializationApi::class)
+    private fun importV1(dis: DataInputStream, tableCount: Int) {
+        for (i in 0 until tableCount) {
+            val tableName = dis.readUTF()
+            val dataSize = dis.readInt()
+            val cborBytes = ByteArray(dataSize)
+            dis.readFully(cborBytes)
+
+            val table = tables.find { it.tableName == tableName }
+            if (table != null) {
+                val tableData = Cbor.decodeFromByteArray<TableData>(cborBytes)
+
+                transaction {
+                    table.deleteAll()
+                    tableData.rows.forEach { rowMap ->
+                        table.insert { iTable ->
+                            table.columns.forEach { column ->
+                                val dbValue = rowMap[column.name]
+                                if (dbValue != null) {
+                                    val value = convertFromDbValue(dbValue)
+                                    @Suppress("UNCHECKED_CAST")
+                                    iTable[column as Column<Any?>] = value?.let { column.columnType.valueFromDB(it) }
                                 }
                             }
                         }
@@ -136,6 +180,29 @@ class DbManagementService : IDbManagementService {
                 }
             }
         }
+    }
+
+    private fun insertChunk(table: Table, rows: List<Map<String, DbValue>>) {
+        table.batchInsert(rows) { rowMap ->
+            table.columns.forEach { column ->
+                val dbValue = rowMap[column.name]
+                if (dbValue != null) {
+                    val value = convertFromDbValue(dbValue)
+                    @Suppress("UNCHECKED_CAST")
+                    this[column as Column<Any?>] = value?.let { column.columnType.valueFromDB(it) }
+                }
+            }
+        }
+    }
+
+    private class ShieldedOutputStream(output: OutputStream) : FilterOutputStream(output) {
+        override fun write(b: ByteArray, off: Int, len: Int) = out.write(b, off, len)
+
+        override fun close() = flush()
+    }
+
+    private class ShieldedInputStream(input: InputStream) : FilterInputStream(input) {
+        override fun close() {}
     }
 
     private fun convertToDbValue(value: Any?): DbValue {
@@ -166,5 +233,12 @@ class DbManagementService : IDbManagementService {
             is DbValue.DbUuid -> UUID.fromString(dbValue.value)
             is DbValue.DbBytes -> dbValue.value
         }
+    }
+
+    companion object {
+        const val FORMAT_V2_MARKER = -2
+        private const val ROW_TERMINATOR = -1
+        private const val FETCH_SIZE = 1000
+        private const val CHUNK_SIZE = 500
     }
 }

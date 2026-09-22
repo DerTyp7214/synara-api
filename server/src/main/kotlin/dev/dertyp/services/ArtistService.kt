@@ -8,6 +8,7 @@ import dev.dertyp.db.*
 import dev.dertyp.dbQuery
 import dev.dertyp.plugins.ArtistLibrary
 import dev.dertyp.services.metadata.*
+import dev.dertyp.services.release.ReleaseArtistService
 import dev.dertyp.utils.ColorUtils
 import dev.dertyp.utils.LogParam
 import io.ktor.server.application.*
@@ -87,6 +88,7 @@ class ArtistService(private val searchIndexWorker: SearchIndexWorker? = null) : 
     private val songService by inject<SongService>()
     private val albumService by inject<AlbumService>()
     private val genreService by inject<GenreService>()
+    private val releaseArtistService by inject<ReleaseArtistService>()
     val artistGroupAlias = ArtistTable.alias("artistGroup")
     val artistMemberAlias = ArtistTable.alias("artistMember")
     val artistGroupJoinAlias = ArtistMemberTable.alias("artistGroupJoin")
@@ -529,8 +531,37 @@ class ArtistService(private val searchIndexWorker: SearchIndexWorker? = null) : 
             it[RecentReleaseTable.artistName] = mergeArtists.name
         }
 
+        ProviderReleaseTable.update({ ProviderReleaseTable.artistId inList currentArtistIds }) {
+            it[ProviderReleaseTable.artistId] = newArtist
+            it[ProviderReleaseTable.artistName] = mergeArtists.name
+        }
+
         HiddenReleaseTable.update({ HiddenReleaseTable.artistId inList currentArtistIds }) {
             it[HiddenReleaseTable.artistId] = newArtist
+        }
+
+        val loserGroupIds = ReleaseArtistTable
+            .select(ReleaseArtistTable.releaseGroupId)
+            .where { ReleaseArtistTable.artistId inList currentArtistIds }
+            .andWhere { ReleaseArtistTable.releaseGroupId.isNotNull() }
+            .map { it[ReleaseArtistTable.releaseGroupId]!!.value }
+            .distinct()
+
+        val loserProviderReleaseIds = ReleaseArtistTable
+            .select(ReleaseArtistTable.providerReleaseId)
+            .where { ReleaseArtistTable.artistId inList currentArtistIds }
+            .andWhere { ReleaseArtistTable.providerReleaseId.isNotNull() }
+            .map { it[ReleaseArtistTable.providerReleaseId]!!.value }
+            .distinct()
+
+        ReleaseArtistTable.deleteWhere { ReleaseArtistTable.artistId inList currentArtistIds }
+
+        loserGroupIds.forEach { releaseGroupId ->
+            releaseArtistService.linkGroupTx(releaseGroupId, listOf(newArtist))
+        }
+
+        loserProviderReleaseIds.forEach { providerReleaseId ->
+            releaseArtistService.linkProviderReleaseTx(providerReleaseId, listOf(newArtist))
         }
 
         val loserSourceRules = ArtistSourceRuleTable

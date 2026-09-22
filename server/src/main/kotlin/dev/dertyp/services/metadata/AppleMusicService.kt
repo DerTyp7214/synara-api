@@ -44,7 +44,7 @@ class AppleMusicService(
     private val teamId by lazy { environment.config.propertyOrNull("appleMusic.teamId")?.getString() }
     private val keyId by lazy { environment.config.propertyOrNull("appleMusic.keyId")?.getString() }
     private val p8Path by lazy { environment.config.propertyOrNull("appleMusic.p8Path")?.getString() }
-    private val storefront by lazy {
+    val storefront: String by lazy {
         environment.config.propertyOrNull("appleMusic.storefront")?.getString()?.takeUnless { it.isBlank() } ?: "us"
     }
 

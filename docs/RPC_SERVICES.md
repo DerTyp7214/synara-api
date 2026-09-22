@@ -2750,6 +2750,7 @@ Metadata for a recently released album or single from a followed artist.
 | `releaseId` | `PlatformUUID` | The MusicBrainz release-group UUID, or the provider release id for non-MusicBrainz sources. |
 | `artistId` | `PlatformUUID` | The internal artist unique identifier. |
 | `artistName` | `String` | The name of the artist. |
+| `artistIds` | `List`<`PlatformUUID`> | Every internal artist the release is linked to, the primary artist first. |
 | `title` | `String` | The title of the release. |
 | `releaseDate` | `PlatformDate`? | The date the content was released. |
 | `type` | [ReleaseType](#devdertypdatareleasetype) | The type of release (Album, Single, etc.). |

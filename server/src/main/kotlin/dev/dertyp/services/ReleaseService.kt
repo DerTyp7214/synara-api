@@ -42,6 +42,7 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
     private val linkResolverService by inject<LinkResolverService>()
     private val appleMusicReleaseService by inject<AppleMusicReleaseService>()
     private val providerLinkService by inject<ProviderLinkService>()
+    private val releaseArtistService by inject<ReleaseArtistService>()
 
     private val RELEASE_REFRESH_WINDOW = 14.days
     private val REFRESH_COOLDOWN = 20.hours
@@ -124,7 +125,13 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
         val musicBrainzQuery = RecentReleaseTable
             .leftJoin(ImageTable, onColumn = { RecentReleaseTable.imageId }, otherColumn = { ImageTable.id })
             .selectAll()
-            .where { RecentReleaseTable.artistId inList followedArtistIds }
+            .where {
+                (RecentReleaseTable.artistId inList followedArtistIds) or
+                        (RecentReleaseTable.releaseId inSubQuery ReleaseArtistTable
+                            .select(ReleaseArtistTable.releaseGroupId)
+                            .where { ReleaseArtistTable.artistId inList followedArtistIds }
+                            .andWhere { ReleaseArtistTable.releaseGroupId.isNotNull() })
+            }
             .andWhere { RecentReleaseTable.albumId.isNull() }
             .andWhere { RecentReleaseTable.songId.isNull() }
             .andWhere { RecentReleaseTable.releaseDate.isNotNull() }
@@ -147,7 +154,13 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
         val providerQuery = ProviderReleaseTable
             .leftJoin(ImageTable, onColumn = { ProviderReleaseTable.imageId }, otherColumn = { ImageTable.id })
             .selectAll()
-            .where { ProviderReleaseTable.artistId inList followedArtistIds }
+            .where {
+                (ProviderReleaseTable.artistId inList followedArtistIds) or
+                        (ProviderReleaseTable.id inSubQuery ReleaseArtistTable
+                            .select(ReleaseArtistTable.providerReleaseId)
+                            .where { ReleaseArtistTable.artistId inList followedArtistIds }
+                            .andWhere { ReleaseArtistTable.providerReleaseId.isNotNull() })
+            }
             .andWhere { ProviderReleaseTable.releaseGroupId.isNull() }
             .andWhere { ProviderReleaseTable.albumId.isNull() }
             .andWhere { ProviderReleaseTable.songId.isNull() }
@@ -170,9 +183,11 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
 
         val providersMap = providerLinkService.recentReleaseUrls(musicBrainzRows.map { it[RecentReleaseTable.releaseId].value })
         val providerLinksMap = providerLinkService.providerReleaseUrls(providerRows.map { it[ProviderReleaseTable.id].value })
+        val groupArtistsMap = releaseArtistService.groupArtistIdsTx(musicBrainzRows.map { it[RecentReleaseTable.releaseId].value })
+        val providerArtistsMap = releaseArtistService.providerReleaseArtistIdsTx(providerRows.map { it[ProviderReleaseTable.id].value })
 
-        val feed = musicBrainzRows.map { musicBrainzFeedRow(it, providersMap, nowMs) } +
-                providerRows.map { providerFeedRow(it, providerLinksMap, nowMs) }
+        val feed = musicBrainzRows.map { musicBrainzFeedRow(it, providersMap, groupArtistsMap, nowMs) } +
+                providerRows.map { providerFeedRow(it, providerLinksMap, providerArtistsMap, nowMs) }
 
         mergeFeed(feed, page, pageSize, musicBrainzTotal + providerTotal)
     }
@@ -200,16 +215,23 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
         )
     }
 
-    private fun musicBrainzFeedRow(row: ResultRow, providersMap: Map<UUID, List<String>>, nowMs: Long): FeedRow {
+    private fun musicBrainzFeedRow(
+        row: ResultRow,
+        providersMap: Map<UUID, List<String>>,
+        artistsMap: Map<UUID, List<UUID>>,
+        nowMs: Long
+    ): FeedRow {
         val groupId = row[RecentReleaseTable.releaseId].value
         val date = row[RecentReleaseTable.releaseDate]
+        val ownerArtistId = row[RecentReleaseTable.artistId].value
         return FeedRow(
             sortDate = date,
             id = groupId,
             release = RecentRelease(
                 releaseId = groupId,
-                artistId = row[RecentReleaseTable.artistId].value,
+                artistId = ownerArtistId,
                 artistName = row[RecentReleaseTable.artistName],
+                artistIds = (listOf(ownerArtistId) + (artistsMap[groupId] ?: emptyList())).distinct(),
                 title = row[RecentReleaseTable.title],
                 releaseDate = date?.let { platformDateFromEpochMilliseconds(it) },
                 type = row[RecentReleaseTable.type],
@@ -225,10 +247,16 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
         )
     }
 
-    private fun providerFeedRow(row: ResultRow, linksMap: Map<UUID, List<String>>, nowMs: Long): FeedRow {
+    private fun providerFeedRow(
+        row: ResultRow,
+        linksMap: Map<UUID, List<String>>,
+        artistsMap: Map<UUID, List<UUID>>,
+        nowMs: Long
+    ): FeedRow {
         val providerReleaseId = row[ProviderReleaseTable.id].value
         val date = row[ProviderReleaseTable.releaseDate]
         val url = row[ProviderReleaseTable.url]
+        val ownerArtistId = row[ProviderReleaseTable.artistId].value
         val links = (listOf(url) + (linksMap[providerReleaseId] ?: emptyList()))
             .filter { it.isNotBlank() }
             .distinct()
@@ -237,8 +265,9 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
             id = providerReleaseId,
             release = RecentRelease(
                 releaseId = providerReleaseId,
-                artistId = row[ProviderReleaseTable.artistId].value,
+                artistId = ownerArtistId,
                 artistName = row[ProviderReleaseTable.artistName],
+                artistIds = (listOf(ownerArtistId) + (artistsMap[providerReleaseId] ?: emptyList())).distinct(),
                 title = row[ProviderReleaseTable.title],
                 releaseDate = date?.let { platformDateFromEpochMilliseconds(it) },
                 type = row[ProviderReleaseTable.type],
@@ -271,7 +300,13 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
             .leftJoin(ImageTable, onColumn = { RecentReleaseTable.imageId }, otherColumn = { ImageTable.id })
             .leftJoin(HiddenReleaseTable, onColumn = { RecentReleaseTable.releaseId }, otherColumn = { HiddenReleaseTable.releaseGroupId })
             .selectAll()
-            .where { RecentReleaseTable.artistId eq artistId }
+            .where {
+                (RecentReleaseTable.artistId eq artistId) or
+                        (RecentReleaseTable.releaseId inSubQuery ReleaseArtistTable
+                            .select(ReleaseArtistTable.releaseGroupId)
+                            .where { ReleaseArtistTable.artistId eq artistId }
+                            .andWhere { ReleaseArtistTable.releaseGroupId.isNotNull() })
+            }
 
         if (!includeHidden) musicBrainzQuery.andWhere { HiddenReleaseTable.releaseGroupId.isNull() }
 
@@ -289,7 +324,13 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
             .leftJoin(ImageTable, onColumn = { ProviderReleaseTable.imageId }, otherColumn = { ImageTable.id })
             .leftJoin(HiddenReleaseTable, onColumn = { ProviderReleaseTable.id }, otherColumn = { HiddenReleaseTable.providerReleaseId })
             .selectAll()
-            .where { ProviderReleaseTable.artistId eq artistId }
+            .where {
+                (ProviderReleaseTable.artistId eq artistId) or
+                        (ProviderReleaseTable.id inSubQuery ReleaseArtistTable
+                            .select(ReleaseArtistTable.providerReleaseId)
+                            .where { ReleaseArtistTable.artistId eq artistId }
+                            .andWhere { ReleaseArtistTable.providerReleaseId.isNotNull() })
+            }
             .andWhere { ProviderReleaseTable.releaseGroupId.isNull() }
 
         if (!includeHidden) providerQuery.andWhere { HiddenReleaseTable.providerReleaseId.isNull() }
@@ -306,9 +347,11 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
 
         val providersMap = providerLinkService.recentReleaseUrls(musicBrainzRows.map { it[RecentReleaseTable.releaseId].value })
         val providerLinksMap = providerLinkService.providerReleaseUrls(providerRows.map { it[ProviderReleaseTable.id].value })
+        val groupArtistsMap = releaseArtistService.groupArtistIdsTx(musicBrainzRows.map { it[RecentReleaseTable.releaseId].value })
+        val providerArtistsMap = releaseArtistService.providerReleaseArtistIdsTx(providerRows.map { it[ProviderReleaseTable.id].value })
 
-        val feed = musicBrainzRows.map { musicBrainzFeedRow(it, providersMap, nowMs) } +
-                providerRows.map { providerFeedRow(it, providerLinksMap, nowMs) }
+        val feed = musicBrainzRows.map { musicBrainzFeedRow(it, providersMap, groupArtistsMap, nowMs) } +
+                providerRows.map { providerFeedRow(it, providerLinksMap, providerArtistsMap, nowMs) }
 
         mergeFeed(feed, page, pageSize, musicBrainzTotal + providerTotal)
     }
@@ -512,6 +555,74 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
             mbId = artistMbId
         }
 
+        val context = artistReleaseContext(artistId, mbId, HttpClientPriority.HIGH) ?: return null
+
+        val group = musicBrainzService.fetchReleaseGroupById(releaseId, priority = HttpClientPriority.HIGH)
+            ?: musicBrainzCacheService.getReleaseGroup(releaseId)
+            ?: return null
+
+        processReleaseGroup(
+            group = group,
+            artistId = artistId,
+            artistName = context.artistName,
+            mbReleases = context.mbReleases,
+            albumMappings = context.albumMappings,
+            songMappings = context.songMappings,
+            tidalService = context.tidalService,
+            appleMusicService = context.appleMusicService,
+            dbSemaphore = Semaphore(1),
+            forceRefresh = true
+        )
+
+        return getRecentReleaseById(releaseId)
+    }
+
+    suspend fun trackReleaseGroup(
+        groupId: UUID,
+        artistId: UUID,
+        priority: HttpClientPriority = HttpClientPriority.LOW
+    ): Boolean {
+        val mbId = dbQuery {
+            ArtistMusicBrainzTable.select(ArtistMusicBrainzTable.musicBrainzId)
+                .where { ArtistMusicBrainzTable.artistId eq artistId }
+                .andWhere { ArtistMusicBrainzTable.musicBrainzId.isNotNull() }
+                .firstOrNull()?.get(ArtistMusicBrainzTable.musicBrainzId)?.value
+        } ?: return false
+
+        val context = artistReleaseContext(artistId, mbId, priority) ?: return false
+
+        val group = musicBrainzService.fetchReleaseGroupById(groupId, priority)
+            ?: musicBrainzCacheService.getReleaseGroup(groupId)
+            ?: return false
+
+        return processReleaseGroup(
+            group = group,
+            artistId = artistId,
+            artistName = context.artistName,
+            mbReleases = context.mbReleases,
+            albumMappings = context.albumMappings,
+            songMappings = context.songMappings,
+            tidalService = context.tidalService,
+            appleMusicService = context.appleMusicService,
+            dbSemaphore = Semaphore(1),
+            forceRefresh = false
+        )
+    }
+
+    private data class ArtistReleaseContext(
+        val artistName: String,
+        val mbReleases: List<MusicBrainzRelease>,
+        val albumMappings: Map<UUID, UUID>,
+        val songMappings: Map<UUID, UUID>,
+        val tidalService: TidalService,
+        val appleMusicService: AppleMusicService
+    )
+
+    private suspend fun artistReleaseContext(
+        artistId: UUID,
+        mbId: UUID,
+        priority: HttpClientPriority
+    ): ArtistReleaseContext? {
         val artistName = dbQuery {
             ArtistTable.select(ArtistTable.name)
                 .where { ArtistTable.id eq artistId }
@@ -528,7 +639,7 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
             environment
         ) as AppleMusicService
 
-        val mbReleases = musicBrainzService.fetchReleasesByArtist(mbId, priority = HttpClientPriority.HIGH)
+        val mbReleases = musicBrainzService.fetchReleasesByArtist(mbId, priority = priority)
 
         val albumMappings = dbQuery {
             AlbumMusicBrainzTable.innerJoin(
@@ -560,24 +671,14 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
                 .toMap()
         }
 
-        val group = musicBrainzService.fetchReleaseGroupById(releaseId, priority = HttpClientPriority.HIGH)
-            ?: musicBrainzCacheService.getReleaseGroup(releaseId)
-            ?: return null
-
-        processReleaseGroup(
-            group = group,
-            artistId = artistId,
+        return ArtistReleaseContext(
             artistName = artistName,
             mbReleases = mbReleases,
             albumMappings = albumMappings,
             songMappings = songMappings,
             tidalService = tidalService,
-            appleMusicService = appleMusicService,
-            dbSemaphore = Semaphore(1),
-            forceRefresh = true
+            appleMusicService = appleMusicService
         )
-
-        return getRecentReleaseById(releaseId)
     }
 
     private suspend fun getProviderReleaseById(releaseId: UUID): RecentRelease? = dbQuery {
@@ -589,8 +690,9 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
             .singleOrNull() ?: return@dbQuery null
 
         val linksMap = providerLinkService.providerReleaseUrls(listOf(releaseId))
+        val artistsMap = releaseArtistService.providerReleaseArtistIdsTx(listOf(releaseId))
 
-        providerFeedRow(row, linksMap, Clock.System.now().toEpochMilliseconds()).release
+        providerFeedRow(row, linksMap, artistsMap, Clock.System.now().toEpochMilliseconds()).release
     }
 
     private suspend fun getRecentReleaseById(releaseId: UUID): RecentRelease? = dbQuery {
@@ -602,8 +704,9 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
             .singleOrNull() ?: return@dbQuery null
 
         val links = providerLinkService.recentReleaseUrls(listOf(releaseId))[releaseId] ?: emptyList()
+        val artistsMap = releaseArtistService.groupArtistIdsTx(listOf(releaseId))
 
-        musicBrainzFeedRow(row, mapOf(releaseId to links), Clock.System.now().toEpochMilliseconds()).release
+        musicBrainzFeedRow(row, mapOf(releaseId to links), artistsMap, Clock.System.now().toEpochMilliseconds()).release
     }
 
     suspend fun fetchNewReleases(onProgress: suspend (Double, String) -> Unit = { _, _ -> }): Map<String, Int> = coroutineScope {
@@ -651,7 +754,15 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
         val candidates = dbQuery {
             val query = RecentReleaseTable.select(RecentReleaseTable.releaseId, RecentReleaseTable.releaseDate, RecentReleaseTable.lastImageFetch)
                 .where { RecentReleaseTable.imageId.isNull() }
-                .andWhere { RecentReleaseTable.artistId inSubQuery FollowedArtistTable.select(FollowedArtistTable.artistId) }
+                .andWhere {
+                    (RecentReleaseTable.artistId inSubQuery FollowedArtistTable.select(FollowedArtistTable.artistId)) or
+                            (RecentReleaseTable.releaseId inSubQuery ReleaseArtistTable
+                                .select(ReleaseArtistTable.releaseGroupId)
+                                .where {
+                                    ReleaseArtistTable.artistId inSubQuery FollowedArtistTable.select(FollowedArtistTable.artistId)
+                                }
+                                .andWhere { ReleaseArtistTable.releaseGroupId.isNotNull() })
+                }
             artistId?.let { query.andWhere { RecentReleaseTable.artistId eq it } }
             query.map {
                 Triple(
@@ -892,6 +1003,7 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
         forceRefresh: Boolean = false
     ): Boolean {
         val groupId = group.id
+        val groupReleases = mbReleases.filter { it.releaseGroup?.id == group.id }
 
         val existing = dbSemaphore.withPermit {
             dbQuery {
@@ -910,11 +1022,17 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
                     nowMs < storedReleaseDate + RELEASE_REFRESH_WINDOW.inWholeMilliseconds
             val cooldownPassed = lastUpdate == null ||
                     (nowMs - lastUpdate) >= REFRESH_COOLDOWN.inWholeMilliseconds
-            if (!(withinRefreshWindow && cooldownPassed)) return false
+            if (!(withinRefreshWindow && cooldownPassed)) {
+                dbSemaphore.withPermit {
+                    dbQuery {
+                        releaseArtistService.linkGroupTx(groupId, creditedArtistIdsTx(groupReleases, artistId))
+                    }
+                }
+                return false
+            }
         }
         val isRefresh = existing != null
 
-        val groupReleases = mbReleases.filter { it.releaseGroup?.id == group.id }
         val groupReleaseIds = (groupReleases.map { it.id } + group.id).toSet()
 
         logger.info("Processing release for $artistName: ${group.title}")
@@ -933,6 +1051,7 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
 
         val mbReleasesForGroup =
             musicBrainzService.fetchReleasesByReleaseGroup(groupId, priority = HttpClientPriority.LOW)
+        dbSemaphore.withPermit { mbReleasesForGroup.forEach { musicBrainzCacheService.updateReleaseCache(it) } }
         val allRelations =
             (group.relations ?: emptyList()) + mbReleasesForGroup.flatMap { it.relations ?: emptyList() }
         val relations = allRelations.mapNotNull { it.url?.resource }.distinct()
@@ -988,7 +1107,6 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
             .toSet()
 
         val mergeProviderReleaseId = appleMusicReleaseService.findUnlinkedAppleRelease(
-            artistId = artistId,
             appleAlbumIds = appleAlbumIds,
             barcodes = barcodes,
             linkKeys = linkKeys
@@ -1097,7 +1215,7 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
 
         val distinctLinks = finalLinks.distinct()
 
-        val fetchedImageId = if (artistHasFollowers(artistId)) fetchReleaseGroupImage(group.id) else null
+        val fetchedImageId = if (releaseHasFollowers(groupId, artistId)) fetchReleaseGroupImage(group.id) else null
         val nowMs = Clock.System.now().toEpochMilliseconds()
 
         dbSemaphore.withPermit {
@@ -1132,6 +1250,11 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
                 }
 
                 providerLinkService.attachRecentReleaseTx(groupId, providerLinkService.linkIdsTx(distinctLinks))
+
+                releaseArtistService.linkGroupTx(
+                    groupId,
+                    creditedArtistIdsTx(groupReleases + mbReleasesForGroup, artistId)
+                )
             }
 
             if (mergeProviderReleaseId != null) {
@@ -1140,7 +1263,6 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
 
             matchedAppleAlbum?.let { album ->
                 appleMusicReleaseService.findUnlinkedAppleRelease(
-                    artistId = artistId,
                     appleAlbumIds = setOf(album.id),
                     barcodes = emptySet(),
                     linkKeys = emptySet()
@@ -1148,6 +1270,21 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
             }
         }
         return true
+    }
+
+    private fun creditedArtistIdsTx(releases: List<MusicBrainzRelease>, artistId: UUID): List<UUID> {
+        val creditedMusicBrainzIds = releases
+            .flatMap { it.artistCredit ?: emptyList() }
+            .mapNotNull { it.artist?.id }
+            .distinct()
+        if (creditedMusicBrainzIds.isEmpty()) return listOf(artistId)
+
+        val localArtistIds = ArtistMusicBrainzTable
+            .select(ArtistMusicBrainzTable.artistId)
+            .where { ArtistMusicBrainzTable.musicBrainzId inList creditedMusicBrainzIds }
+            .map { it[ArtistMusicBrainzTable.artistId].value }
+
+        return (listOf(artistId) + localArtistIds).distinct()
     }
 
     private suspend fun linkKeysOf(urls: Collection<String>): Set<Pair<String, String>> =
@@ -1174,6 +1311,20 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
     internal suspend fun artistHasFollowers(artistId: UUID): Boolean = dbQuery {
         FollowedArtistTable.select(FollowedArtistTable.artistId)
             .where { FollowedArtistTable.artistId eq artistId }
+            .limit(1)
+            .any()
+    }
+
+    internal suspend fun releaseHasFollowers(releaseGroupId: UUID, ownerArtistId: UUID): Boolean = dbQuery {
+        val ownerFollowed = FollowedArtistTable.select(FollowedArtistTable.artistId)
+            .where { FollowedArtistTable.artistId eq ownerArtistId }
+            .limit(1)
+            .any()
+
+        ownerFollowed || ReleaseArtistTable
+            .select(ReleaseArtistTable.artistId)
+            .where { ReleaseArtistTable.releaseGroupId eq releaseGroupId }
+            .andWhere { ReleaseArtistTable.artistId inSubQuery FollowedArtistTable.select(FollowedArtistTable.artistId) }
             .limit(1)
             .any()
     }
@@ -1207,7 +1358,7 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
         val result = if (size > 0) imageService.resizeImageBytes(bytes, size) else bytes
         imageService.setCachedBytes("releaseImage:$releaseId:$size", result)
 
-        if (artistHasFollowers(artistId)) persistReleaseImageAsync(releaseId)
+        if (releaseHasFollowers(releaseId, artistId)) persistReleaseImageAsync(releaseId)
 
         return result
     }
@@ -1315,6 +1466,14 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
                 .innerJoin(ImageTable, onColumn = { RecentReleaseTable.imageId }, otherColumn = { ImageTable.id })
                 .select(RecentReleaseTable.releaseId)
                 .where { RecentReleaseTable.artistId notInSubQuery FollowedArtistTable.select(FollowedArtistTable.artistId) }
+                .andWhere {
+                    RecentReleaseTable.releaseId notInSubQuery ReleaseArtistTable
+                        .select(ReleaseArtistTable.releaseGroupId)
+                        .where {
+                            ReleaseArtistTable.artistId inSubQuery FollowedArtistTable.select(FollowedArtistTable.artistId)
+                        }
+                        .andWhere { ReleaseArtistTable.releaseGroupId.isNotNull() }
+                }
                 .andWhere {
                     (ImageTable.origin like "https://coverartarchive.org/%") or
                             (ImageTable.origin like "https://%.mzstatic.com/%")

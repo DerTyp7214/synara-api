@@ -146,69 +146,74 @@ class BackupService(
     suspend fun createBackup(onProgress: suspend (Double, String) -> Unit): BackupResult = withContext(Dispatchers.IO) {
         logger.info("Starting backup creation")
         onProgress(0.0, "Starting backup creation")
-        
-        val dbData = dbManagementService.exportData()
-        logger.info("Database exported")
-        onProgress(10.0, "Database exported")
-
-        onProgress(15.0, "Fetching song metadata...")
-        val metadataMap = fetchSongMetadata()
-
-        val allAudioPaths = getAllAudioPaths()
-        val totalPaths = allAudioPaths.size
-        var currentPathIndex = 0
-        val fileTrees = allAudioPaths.mapValues { (name, path) ->
-            currentPathIndex++
-            logger.debug("Generating file tree for {} ({})", name, path)
-            onProgress(20.0 + (currentPathIndex.toDouble() / totalPaths) * 20.0, "Generating file tree for $name")
-            generateFileTree(path, metadataMap)
-        }
-        val fileTreeBytes = compressZstd(Cbor.encodeToByteArray(fileTrees))
-        logger.debug("File tree compressed")
-        onProgress(45.0, "File tree compressed")
-
-        val imageIndex = if (imagePath != null && imagePath.exists()) {
-            logger.info("Backing up images from $imagePath")
-            onProgress(50.0, "Backing up images...")
-            backupImages(imagePath)
-        } else {
-            logger.debug("No images path specified or exists")
-            emptyList()
-        }
-        val imageIndexBytes = compressZstd(Cbor.encodeToByteArray(imageIndex))
-        logger.debug("Image index compressed")
-        onProgress(75.0, "Image index compressed")
 
         val timestamp = LocalDateTime.now()
             .format(DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss"))
         val backupFile = backupDir.resolve("backup-$timestamp.zip")
 
-        logger.info("Writing backup to $backupFile")
-        onProgress(80.0, "Writing backup to zip...")
-        ZipOutputStream(backupFile.outputStream()).use { zip ->
-            zip.putNextEntry(ZipEntry("database.cbor.zst"))
-            zip.write(dbData)
-            zip.closeEntry()
+        try {
+            logger.info("Writing backup to $backupFile")
+            val imageIndex = ZipOutputStream(backupFile.outputStream()).use { zip ->
+                zip.putNextEntry(ZipEntry("database.cbor.zst"))
+                dbManagementService.exportData(zip)
+                zip.closeEntry()
+                logger.info("Database exported")
+                onProgress(10.0, "Database exported")
 
-            zip.putNextEntry(ZipEntry("files.tree.cbor.zst"))
-            zip.write(fileTreeBytes)
-            zip.closeEntry()
+                onProgress(15.0, "Fetching song metadata...")
+                val metadataMap = fetchSongMetadata()
 
-            zip.putNextEntry(ZipEntry("images.index.cbor.zst"))
-            zip.write(imageIndexBytes)
-            zip.closeEntry()
+                val allAudioPaths = getAllAudioPaths()
+                val totalPaths = allAudioPaths.size
+                var currentPathIndex = 0
+                val fileTrees = allAudioPaths.mapValues { (name, path) ->
+                    currentPathIndex++
+                    logger.debug("Generating file tree for {} ({})", name, path)
+                    onProgress(20.0 + (currentPathIndex.toDouble() / totalPaths) * 20.0, "Generating file tree for $name")
+                    generateFileTree(path, metadataMap)
+                }
+                val fileTreeBytes = compressZstd(Cbor.encodeToByteArray(fileTrees))
+                logger.debug("File tree compressed")
+                onProgress(45.0, "File tree compressed")
+
+                val imageIndex = if (imagePath != null && imagePath.exists()) {
+                    logger.info("Backing up images from $imagePath")
+                    onProgress(50.0, "Backing up images...")
+                    backupImages(imagePath)
+                } else {
+                    logger.debug("No images path specified or exists")
+                    emptyList()
+                }
+                val imageIndexBytes = compressZstd(Cbor.encodeToByteArray(imageIndex))
+                logger.debug("Image index compressed")
+                onProgress(75.0, "Image index compressed")
+
+                onProgress(80.0, "Writing backup to zip...")
+                zip.putNextEntry(ZipEntry("files.tree.cbor.zst"))
+                zip.write(fileTreeBytes)
+                zip.closeEntry()
+
+                zip.putNextEntry(ZipEntry("images.index.cbor.zst"))
+                zip.write(imageIndexBytes)
+                zip.closeEntry()
+
+                imageIndex
+            }
+
+            logger.info("Backup created: ${backupFile.name}")
+            onProgress(95.0, "Rotating old backups...")
+            rotateBackups()
+
+            onProgress(100.0, "Backup created: ${backupFile.name}")
+            BackupResult(
+                fileName = backupFile.name,
+                size = backupFile.length(),
+                imageCount = imageIndex.size
+            )
+        } catch (e: Exception) {
+            backupFile.delete()
+            throw e
         }
-
-        logger.info("Backup created: ${backupFile.name}")
-        onProgress(95.0, "Rotating old backups...")
-        rotateBackups()
-
-        onProgress(100.0, "Backup created: ${backupFile.name}")
-        BackupResult(
-            fileName = backupFile.name,
-            size = backupFile.length(),
-            imageCount = imageIndex.size
-        )
     }
 
     private fun generateFileTree(path: Path, metadataMap: Map<String, Pair<String?, String?>>): FileNode? {
@@ -333,8 +338,7 @@ class BackupService(
                     when (entry.name) {
                         "database.cbor.zst" -> {
                             logger.info("Restoring database from ${backupFile.name}")
-                            val dbData = zip.readBytes()
-                            dbManagementService.importData(dbData)
+                            dbManagementService.importData(zip)
                         }
 
                         "images.index.cbor.zst" -> {
