@@ -147,7 +147,7 @@ sequenceDiagram
 
     C->>A: authenticate(username, password)
     A-->>C: token, refreshToken, expiresAt
-    Note over C: store all three; session created server-side
+    Note over C: store all three, session created server-side
 
     C->>S: connect with Bearer token
     S-->>C: ok, calls flow
