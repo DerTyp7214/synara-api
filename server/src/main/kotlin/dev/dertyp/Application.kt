@@ -329,6 +329,7 @@ fun mainModule(application: Application, environment: ApplicationEnvironment): M
     singleOf(::PodcastStreamService)
     singleOf(::PodcastIndexService)
     singleOf(::ClientRequestService)
+    singleOf(::RemoteControlService)
     singleOf(::CustomAudioService)
     singleOf(::ReverseProxyService)
     singleOf(::DbManagementService)

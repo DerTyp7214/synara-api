@@ -105,6 +105,7 @@ Nothing on this page is written by hand: every route below is derived from one f
 - [/radio (IRadioService)](#devdertypservicesiradioservice)
 - [/recommendation (IRecommendationService)](#devdertypservicesirecommendationservice)
 - [/release (IReleaseService)](#devdertypservicesireleaseservice)
+- [/remoteControl (IRemoteControlService)](#devdertypservicesiremotecontrolservice)
 - [/remoteMirror (IRemoteMirrorService)](#devdertypservicesiremotemirrorservice)
 - [/rpcMetrics (IRpcMetricsService)](#devdertypservicesirpcmetricsservice)
 - [/scheduledTaskConfiguration (IScheduledTaskConfigurationService)](#devdertypservicesischeduledtaskconfigurationservice)
@@ -258,14 +259,16 @@ RPC reference: [IBackupService](RPC_SERVICES.md#devdertypservicesibackupservice)
 
 ### /clientRequest — IClientRequestService <a name="devdertypservicesiclientrequestservice"></a>
 
-Channel for tasks the server asks the calling client to perform. A client subscribes once, performs the tasks it receives through the regular RPC services and reports the outcome back, which unblocks the device that asked for it.
+The connection a client keeps open to the server for the lifetime of the app. It carries the tasks the server asks the calling client to perform, which the client performs through the regular RPC services and reports back so the device that asked for it is unblocked, and it doubles as the presence of the client: a session that connects with a description is listed as an online device of the user, with the cross-device features it offers, for exactly as long as it keeps the stream open.
 
 RPC reference: [IClientRequestService](RPC_SERVICES.md#devdertypservicesiclientrequestservice)
 
 | Method | Path | Parameters | Response | Auth | Description |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | POST | `/clientRequest/complete/{requestId}` | `requestId` (path, `PlatformUUID`): The identifier of the request that was handled.<br>`status` (query, [ClientRequestStatus](MODELS.md#devdertypdataclientrequeststatus)): Whether the request was performed or declined. | - | JWT | Report the outcome of a request to the waiting requester. Only COMPLETED and REJECTED are accepted; the timed out and unreachable outcomes are determined by the server. ([complete](RPC_SERVICES.md#devdertypservicesiclientrequestservice)) |
-| GET | `/clientRequest/observeRequests` | - | SSE [ClientRequest](MODELS.md#devdertypdataclientrequest) | JWT | Watch for requests addressed to the calling session. A session that is not subscribed is reported as unreachable to the requester. ([observeRequests](RPC_SERVICES.md#devdertypservicesiclientrequestservice)) |
+| GET | `/clientRequest/connect` | `description` (query, JSON, [ClientDescription](MODELS.md#devdertypdataclientdescription)): How this client is listed on the other devices of the user and what it can do. | SSE [ClientRequest](MODELS.md#devdertypdataclientrequest) | JWT | Watch for requests addressed to the calling session and be listed as an online device of the user while the stream is open. The description is kept only for the duration of the stream, so a client that changes its name or its capabilities subscribes again. Requests that need a capability are only delivered to sessions that connected offering it. ([connect](RPC_SERVICES.md#devdertypservicesiclientrequestservice)) |
+| GET | `/clientRequest/observeRequests` | - | SSE [ClientRequest](MODELS.md#devdertypdataclientrequest) | JWT | Watch for requests addressed to the calling session without announcing the device. A session that is not subscribed is reported as unreachable to the requester. ([observeRequests](RPC_SERVICES.md#devdertypservicesiclientrequestservice)) |
+| GET | `/clientRequest/onlineDevices` | - | JSON `List`&lt;[OnlineDevice](MODELS.md#devdertypdataonlinedevice)&gt; | JWT | List the devices of the user that are connected right now, newest connection first. Sessions that only observe requests without a description are not listed. ([getOnlineDevices](RPC_SERVICES.md#devdertypservicesiclientrequestservice)) |
 
 ### /clientSettings — IClientSettingsService <a name="devdertypservicesiclientsettingsservice"></a>
 
@@ -659,6 +662,19 @@ RPC reference: [IReleaseService](RPC_SERVICES.md#devdertypservicesireleaseservic
 | PUT | `/release/releaseHidden/{releaseId}` | `releaseId` (path, `PlatformUUID`): The MusicBrainz release-group UUID of the recent release, or the provider release id for non-MusicBrainz sources.<br>`hidden` (query, `Boolean`): true to hide the entry, false to show it again.<br>`includeRelated` (query, `Boolean`, optional): Also apply the change to the artist's Apple Music entries sharing the copyright holder or record label and record or clear the block. Ignored for MusicBrainz entries. | JSON `Int` | JWT + EDIT | Hide an entry of the release feed for every user, or show it again. With includeRelated the other Apple Music entries of the same artist sharing the entry's copyright holder (or record label when no holder is known) are hidden or shown as well, and the holder or label is recorded as blocked (or unblocked) for the artist so future catalog runs hide matching entries automatically. Returns the number of entries whose visibility changed. ([setReleaseHidden](RPC_SERVICES.md#devdertypservicesireleaseservice)) |
 | GET | `/release/releaseImage/{releaseId}` | `releaseId` (path, `PlatformUUID`): The MusicBrainz release-group UUID of the recent release, or the provider release id for non-MusicBrainz sources.<br>`size` (query, `Int`, optional): Requested image size (width/height). 0 for original size. | BYTES | public | Retrieve the cover image for a recent release, served from local storage when persisted or proxied from the Cover Art Archive on demand. ([getReleaseImage](RPC_SERVICES.md#devdertypservicesireleaseservice)) |
 | DELETE | `/release/unfollowArtist/{artistId}` | `artistId` (path, `PlatformUUID`): The artist unique identifier. | JSON `Boolean` | JWT | Unfollow an artist and stop tracking their releases. ([unfollowArtist](RPC_SERVICES.md#devdertypservicesireleaseservice)) |
+
+### /remoteControl — IRemoteControlService <a name="devdertypservicesiremotecontrolservice"></a>
+
+Controls playback on another device of the same user and watches what it is doing. Only devices that are connected to the request channel offering the remote control capability can be reported on or addressed, and a device is always addressed by its session. Nothing here is stored: a status lives as long as the device stays connected.
+
+RPC reference: [IRemoteControlService](RPC_SERVICES.md#devdertypservicesiremotecontrolservice)
+
+| Method | Path | Parameters | Response | Auth | Description |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| GET | `/remoteControl/observeStatus/{sessionId}` | `sessionId` (path, `PlatformUUID`): The session unique identifier of the device to watch. | SSE [RemotePlaybackStatus](MODELS.md#devdertypdataremoteplaybackstatus) | JWT | Watch what another device of the user is playing. The last reported status is replayed immediately, followed by every later report. ([observeStatus](RPC_SERVICES.md#devdertypservicesiremotecontrolservice)) |
+| POST | `/remoteControl/reportStatus` | `status` (body, [RemotePlaybackStatus](MODELS.md#devdertypdataremoteplaybackstatus)): What this device is playing right now. The report timestamp is filled in by the server. | - | JWT | Publish what the calling session is playing, which every device watching it receives. A client reports after every change and every few seconds while it is playing, so watchers can follow the position. The calling session must be connected offering remote control. ([reportStatus](RPC_SERVICES.md#devdertypservicesiremotecontrolservice)) |
+| POST | `/remoteControl/sendCommand/{sessionId}` | `sessionId` (path, `PlatformUUID`): The session unique identifier of the device to control.<br>`command` (body, [PlaybackCommand](MODELS.md#devdertypdataplaybackcommand)): The transport command to apply on that device. | JSON [ClientRequestStatus](MODELS.md#devdertypdataclientrequeststatus) | JWT | Send a transport command to another device of the user and wait for it to answer. The device must be connected offering remote control, and a volume command additionally requires the remote volume capability and a volume between 0 and 1. A device that stays silent is reported as timed out after ten seconds. ([sendCommand](RPC_SERVICES.md#devdertypservicesiremotecontrolservice)) |
+| GET | `/remoteControl/status/{sessionId}` | `sessionId` (path, `PlatformUUID`): The session unique identifier of the device to read. | JSON [RemotePlaybackStatus](MODELS.md#devdertypdataremoteplaybackstatus)? | JWT | Read the last status another device of the user reported, or null when it has not reported anything since it connected. ([getStatus](RPC_SERVICES.md#devdertypservicesiremotecontrolservice)) |
 
 ### /remoteMirror — IRemoteMirrorService <a name="devdertypservicesiremotemirrorservice"></a>
 

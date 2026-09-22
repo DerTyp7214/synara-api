@@ -22,8 +22,11 @@ Services: [RPC_SERVICES.md](RPC_SERVICES.md) · REST routes: [REST_API.md](REST_
 - [AuthenticationRequest](#devdertypdataauthenticationrequest)
 - [AuthenticationResponse](#devdertypdataauthenticationresponse)
 - [BackupImage](#devdertypdatabackupimage)
+- [ClientCapability](#devdertypdataclientcapability)
+- [ClientDescription](#devdertypdataclientdescription)
 - [ClientDevice](#devdertypdataclientdevice)
 - [ClientRequest](#devdertypdataclientrequest)
+- [ControlPlayback](#devdertypdataclientrequestcontrolplayback)
 - [UploadQueue](#devdertypdataclientrequestuploadqueue)
 - [ClientRequestStatus](#devdertypdataclientrequeststatus)
 - [ClientSetting](#devdertypdataclientsetting)
@@ -90,7 +93,18 @@ Services: [RPC_SERVICES.md](RPC_SERVICES.md) · REST routes: [REST_API.md](REST_
 - [MoodSummary](#devdertypdatamoodsummary)
 - [MosaicGenerationResponse](#devdertypdatamosaicgenerationresponse)
 - [NowPlaying](#devdertypdatanowplaying)
+- [OnlineDevice](#devdertypdataonlinedevice)
 - [PaginatedResponse](#devdertypdatapaginatedresponse)
+- [PlaybackCommand](#devdertypdataplaybackcommand)
+- [Next](#devdertypdataplaybackcommandnext)
+- [Pause](#devdertypdataplaybackcommandpause)
+- [Play](#devdertypdataplaybackcommandplay)
+- [Previous](#devdertypdataplaybackcommandprevious)
+- [SeekTo](#devdertypdataplaybackcommandseekto)
+- [SetRepeat](#devdertypdataplaybackcommandsetrepeat)
+- [SetShuffle](#devdertypdataplaybackcommandsetshuffle)
+- [SetVolume](#devdertypdataplaybackcommandsetvolume)
+- [TogglePlayPause](#devdertypdataplaybackcommandtoggleplaypause)
 - [PlaybackReport](#devdertypdataplaybackreport)
 - [PlaybackState](#devdertypdataplaybackstate)
 - [QueueEntry](#devdertypdataplaybackstatequeueentry)
@@ -137,6 +151,7 @@ Services: [RPC_SERVICES.md](RPC_SERVICES.md) · REST routes: [REST_API.md](REST_
 - [RefreshTokenRequest](#devdertypdatarefreshtokenrequest)
 - [ReleaseSource](#devdertypdatareleasesource)
 - [ReleaseType](#devdertypdatareleasetype)
+- [RemotePlaybackStatus](#devdertypdataremoteplaybackstatus)
 - [RemoteServerConfig](#devdertypdataremoteserverconfig)
 - [RemoteServerPaths](#devdertypdataremoteserverpaths)
 - [RepeatMode](#devdertypdatarepeatmode)
@@ -495,6 +510,25 @@ Contains raw binary data for a cover image in a backup.
 | `image` | [Image](#devdertypdataimage) | Metadata for the image. |
 | `data` | `ByteArray` | The raw binary data of the image. |
 
+### ClientCapability <a name="devdertypdataclientcapability"></a>
+A cross-device feature a client offers for as long as it keeps its request subscription open.
+
+| Value | Description |
+| :--- | :--- |
+| `QUEUE_SYNC` | The client keeps the shared play queue in sync and can be asked to upload its own queue. |
+| `REMOTE_CONTROL` | The client accepts transport commands from other devices of the user and reports what it is playing. |
+| `REMOTE_VOLUME` | The client can change its playback volume on request, which is not possible on every platform. |
+
+### ClientDescription <a name="devdertypdataclientdescription"></a>
+How a client describes itself when it connects to the request channel. The description is kept only while the connection is open, so a client resubscribes to change it.
+
+| Field | Type | Description |
+| :--- | :--- | :--- |
+| `deviceName` | `String` | Human readable name the device is listed under on the other devices of the user. |
+| `platform` | `String` | Free-form platform label of the device, for example Android, iOS or Desktop. |
+| `deviceId` | `String`? | The settings synchronization device identifier of the client, when it has one, so other devices can correlate the connection with stored settings. |
+| `capabilities` | `Set`<[ClientCapability](#devdertypdataclientcapability)> | The cross-device features this client offers while the connection is open. |
+
 ### ClientDevice <a name="devdertypdataclientdevice"></a>
 A device of the user that stores settings on the server. Devices are identified by a stable identifier the client generates and persists itself.
 
@@ -514,6 +548,17 @@ A task the server asks a specific client session to perform. Clients observe the
 | :--- | :--- | :--- |
 | `id` | `PlatformUUID` | Identifier of this request, reported back when the client completes it. |
 | `requestedAt` | `Long` | Unix timestamp in milliseconds at which the request was issued. |
+
+### ControlPlayback <a name="devdertypdataclientrequestcontrolplayback"></a>
+Another device of the same user asks this client to change its playback. The client applies the command, publishes its new status through the remote control service and answers with complete, reporting the request as rejected when it does not apply the command. This request is only sent to sessions that connected with the remote control capability.
+
+| Field | Type | Description |
+| :--- | :--- | :--- |
+| `id` | `PlatformUUID` | Identifier of this request, passed to complete. |
+| `requestedAt` | `Long` | Unix timestamp in milliseconds at which the request was issued. |
+| `requestedBySessionId` | `PlatformUUID` | The session of the same user that asked for the change. |
+| `requestedByDeviceName` | `String`? | Name of the device that asked for the change, if known. |
+| `command` | [PlaybackCommand](#devdertypdataplaybackcommand) | The transport command to apply. |
 
 ### UploadQueue <a name="devdertypdataclientrequestuploadqueue"></a>
 Another device asks this client for its current play queue. The client fulfils the request by calling beginUpload with force set to true, staging its entries with uploadPage and finishing with commitUpload passing this request ID, since the requester explicitly wants the queue of this device and therefore expects it to win over the server state. If the client refuses, it reports the request as rejected instead.
@@ -1222,6 +1267,19 @@ The song a user is currently playing.
 | `song` | [UserSong](#devdertypdatausersong) | The song being played, with full metadata. |
 | `startedAt` | `Long` | When playback started (epoch milliseconds). |
 
+### OnlineDevice <a name="devdertypdataonlinedevice"></a>
+A device of the calling user that is connected to the request channel right now. Presence is not stored, so an entry exists exactly while that device keeps its connection open.
+
+| Field | Type | Description |
+| :--- | :--- | :--- |
+| `sessionId` | `PlatformUUID` | The session unique identifier of the connected device, used to address it for remote control. |
+| `deviceName` | `String` | Human readable name the device reported for itself. |
+| `platform` | `String` | Free-form platform label the device reported for itself. |
+| `deviceId` | `String`? | The settings synchronization device identifier the device reported, if any. |
+| `capabilities` | `Set`<[ClientCapability](#devdertypdataclientcapability)> | The cross-device features the device offers on this connection. |
+| `isCurrent` | `Boolean` | Whether this entry describes the calling session. |
+| `connectedAt` | `Long` | Unix timestamp in milliseconds at which the device connected. |
+
 ### PaginatedResponse <a name="devdertypdatapaginatedresponse"></a>
 A generic wrapper for paginated data collections.
 
@@ -1232,6 +1290,70 @@ A generic wrapper for paginated data collections.
 | `total` | `Int` | The total number of items across all pages. |
 | `pageSize` | `Int` | The number of items per page. |
 | `hasNextPage` | `Boolean` | Whether there are more pages available. |
+
+### PlaybackCommand <a name="devdertypdataplaybackcommand"></a>
+A transport command sent to a remote-controllable device of the same user.
+
+| Field | Type | Description |
+| :--- | :--- | :--- |
+
+### Next <a name="devdertypdataplaybackcommandnext"></a>
+Skip to the next entry of the queue of the device.
+
+| Field | Type | Description |
+| :--- | :--- | :--- |
+
+### Pause <a name="devdertypdataplaybackcommandpause"></a>
+Pause playback on the device.
+
+| Field | Type | Description |
+| :--- | :--- | :--- |
+
+### Play <a name="devdertypdataplaybackcommandplay"></a>
+Start or resume playback on the device.
+
+| Field | Type | Description |
+| :--- | :--- | :--- |
+
+### Previous <a name="devdertypdataplaybackcommandprevious"></a>
+Go back to the previous entry of the queue of the device, or restart the current one, as the device decides.
+
+| Field | Type | Description |
+| :--- | :--- | :--- |
+
+### SeekTo <a name="devdertypdataplaybackcommandseekto"></a>
+Jump to a position within the song the device is playing.
+
+| Field | Type | Description |
+| :--- | :--- | :--- |
+| `positionMs` | `Long` | Target position within the song in milliseconds. |
+
+### SetRepeat <a name="devdertypdataplaybackcommandsetrepeat"></a>
+Set the repetition mode of the device.
+
+| Field | Type | Description |
+| :--- | :--- | :--- |
+| `mode` | [RepeatMode](#devdertypdatarepeatmode) | The repetition mode to apply. |
+
+### SetShuffle <a name="devdertypdataplaybackcommandsetshuffle"></a>
+Turn shuffled playback of the device on or off.
+
+| Field | Type | Description |
+| :--- | :--- | :--- |
+| `enabled` | `Boolean` | Whether the device plays its queue in shuffled order. |
+
+### SetVolume <a name="devdertypdataplaybackcommandsetvolume"></a>
+Set the playback volume of the device. Only accepted by devices that also offer the remote volume capability.
+
+| Field | Type | Description |
+| :--- | :--- | :--- |
+| `volume` | `Float` | The volume to apply, between 0 and 1. |
+
+### TogglePlayPause <a name="devdertypdataplaybackcommandtoggleplaypause"></a>
+Pause the device while it plays and resume it while it is paused.
+
+| Field | Type | Description |
+| :--- | :--- | :--- |
 
 ### PlaybackReport <a name="devdertypdataplaybackreport"></a>
 A playback progress report for the song the user is playing.
@@ -1734,6 +1856,20 @@ The classification of a music release.
 | `Broadcast` |  |
 | `Other` |  |
 | `Unknown` |  |
+
+### RemotePlaybackStatus <a name="devdertypdataremoteplaybackstatus"></a>
+What a remote-controllable device is playing, as it last reported it. A controlling device projects the current position from the position and the report timestamp while the device is playing, instead of expecting a report for every second.
+
+| Field | Type | Description |
+| :--- | :--- | :--- |
+| `songId` | `PlatformUUID`? | The song the device is playing, or null when it is not playing anything. |
+| `isPlaying` | `Boolean` | Whether the device is playing right now rather than paused or stopped. |
+| `positionMs` | `Long` | Playback position within the song in milliseconds at the time of the report. |
+| `durationMs` | `Long`? | Length of the song in milliseconds, when the device knows it. |
+| `shuffleMode` | `Boolean` | Whether the device plays its queue in shuffled order. |
+| `repeatMode` | [RepeatMode](#devdertypdatarepeatmode) | The repetition mode of the device. |
+| `volume` | `Float`? | Playback volume between 0 and 1, or null on a device that does not expose its volume. |
+| `reportedAt` | `Long` | Unix timestamp in milliseconds at which the server received the report. Ignored on report and filled in by the server. |
 
 ### RemoteServerConfig <a name="devdertypdataremoteserverconfig"></a>
 Configuration for connecting and mirroring data from another Synara server.

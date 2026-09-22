@@ -57,7 +57,9 @@ DELETE /backup/backup IBackupService.deleteBackup [q:fileName] UNIT
 GET /backup/backups IBackupService.listBackups [] JSON
 POST /backup/backup IBackupService.createBackup [] JSON
 POST /backup/restoreBackup IBackupService.loadBackup [q:fileName] UNIT
+GET /clientRequest/connect IClientRequestService.connect [q:description] SSE
 GET /clientRequest/observeRequests IClientRequestService.observeRequests [] SSE
+GET /clientRequest/onlineDevices IClientRequestService.getOnlineDevices [] JSON
 POST /clientRequest/complete/{requestId} IClientRequestService.complete [p:requestId q:status] UNIT
 DELETE /clientSettings/device/{deviceId} IClientSettingsService.deleteDevice [p:deviceId] UNIT
 GET /clientSettings/changes IClientSettingsService.getChanges [q:scope q:sinceVersion q:device? q:limit?] JSON
@@ -290,6 +292,10 @@ POST /release/confirmRelease/{releaseId} IReleaseService.confirmRelease [p:relea
 POST /release/followArtist/{musicBrainzId} IReleaseService.followArtist [p:musicBrainzId] JSON
 POST /release/refreshRecentRelease/{releaseId} IReleaseService.refreshRecentRelease [p:releaseId] UNIT
 PUT /release/releaseHidden/{releaseId} IReleaseService.setReleaseHidden [p:releaseId q:hidden q:includeRelated?] JSON
+GET /remoteControl/observeStatus/{sessionId} IRemoteControlService.observeStatus [p:sessionId] SSE
+GET /remoteControl/status/{sessionId} IRemoteControlService.getStatus [p:sessionId] JSON
+POST /remoteControl/reportStatus IRemoteControlService.reportStatus [b:status] UNIT
+POST /remoteControl/sendCommand/{sessionId} IRemoteControlService.sendCommand [p:sessionId b:command] JSON
 GET /remoteMirror/activeMirrorProgress IRemoteMirrorService.getActiveMirrorProgress [] SSE
 POST /remoteMirror/proxyInstances IRemoteMirrorService.getProxyInstances [b:config] JSON
 POST /remoteMirror/remoteImageData/{imageId} IRemoteMirrorService.getRemoteImageData [b:config p:imageId q:size] BYTES

@@ -111,8 +111,8 @@ fun Route.registerAuthenticatedRestServices(koin: Koin) {
         RpcSessionService(user, koin.get()).withAuthorization<ISessionService>(user)
     }
     registerIPlaybackServiceRest(authenticated = true) {
-        val user = call.getUser()
-        RpcPlaybackService(koin.get()).withAuthorization<IPlaybackService>(user)
+        val user = call.getUser() ?: throw IllegalArgumentException("No user found")
+        RpcPlaybackService(user, koin.get(), koin.get()).withAuthorization<IPlaybackService>(user)
     }
     registerIQueueServiceRest(authenticated = true) {
         val user = call.getUser() ?: throw IllegalArgumentException("No user found")
@@ -132,8 +132,12 @@ fun Route.registerAuthenticatedRestServices(koin: Koin) {
     }
     registerIClientRequestServiceRest(authenticated = true) {
         val user = call.getUser() ?: throw IllegalArgumentException("No user found")
-        RpcClientRequestService(call.getSessionId() ?: throw IllegalArgumentException("No session found"), koin.get())
+        RpcClientRequestService(user, call.getSessionId() ?: throw IllegalArgumentException("No session found"), koin.get())
             .withAuthorization<IClientRequestService>(user)
+    }
+    registerIRemoteControlServiceRest(authenticated = true) {
+        val user = call.getUser() ?: throw IllegalArgumentException("No user found")
+        RpcRemoteControlService(user, call.getSessionId(), koin.get()).withAuthorization<IRemoteControlService>(user)
     }
     registerICustomAudioServiceRest(authenticated = true) {
         val user = call.getUser()

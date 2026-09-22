@@ -5,12 +5,14 @@ import dev.dertyp.core.UnauthorizedException
 import dev.dertyp.data.*
 import dev.dertyp.serializers.AppJson
 import dev.dertyp.services.IArtistService
+import dev.dertyp.services.IClientRequestService
 import dev.dertyp.services.ICollectionService
 import dev.dertyp.services.ICoverGenerationService
 import dev.dertyp.services.IHueService
 import dev.dertyp.services.IImageService
 import dev.dertyp.services.IPodcastService
 import dev.dertyp.services.IQueueService
+import dev.dertyp.services.IRemoteControlService
 import dev.dertyp.services.IRemoteMirrorService
 import dev.dertyp.services.`import`.GamdlCredentials
 import dev.dertyp.services.`import`.IImportService
@@ -66,6 +68,8 @@ class GeneratedRestRoutesSmokeTest {
     private val collection = mockk<ICollectionService>()
     private val remoteMirror = mockk<IRemoteMirrorService>()
     private val hue = mockk<IHueService>()
+    private val clientRequest = mockk<IClientRequestService>()
+    private val remoteControl = mockk<IRemoteControlService>()
 
     private lateinit var directory: File
     private lateinit var episodeFile: File
@@ -109,6 +113,8 @@ class GeneratedRestRoutesSmokeTest {
                 registerICollectionServiceRest { collection }
                 registerIRemoteMirrorServiceRest { remoteMirror }
                 registerIHueServiceRest { hue }
+                registerIClientRequestServiceRest { clientRequest }
+                registerIRemoteControlServiceRest { remoteControl }
             }
             tree = RestGoldenSupport.collectLeaves(plugin(RoutingRoot))
         }
@@ -245,6 +251,68 @@ class GeneratedRestRoutesSmokeTest {
         assertTrue(frames.all { it.startsWith("data: {") })
         assertTrue(body.contains("\"positionMs\":1"))
         assertTrue(body.contains("\"positionMs\":2"))
+    }
+
+    @Test
+    fun `the connect route binds its description from a json query parameter and streams requests`() = testApplication {
+        setUpApplication()
+        val description = ClientDescription(
+            deviceName = "Desk",
+            platform = "Desktop",
+            deviceId = "desk-1",
+            capabilities = setOf(ClientCapability.REMOTE_CONTROL, ClientCapability.REMOTE_VOLUME),
+        )
+        val request = ClientRequest.ControlPlayback(
+            id = UUID.fromString("99999999-9999-9999-9999-999999999999"),
+            requestedAt = 11,
+            requestedBySessionId = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+            requestedByDeviceName = "Phone",
+            command = PlaybackCommand.Pause,
+        )
+        every { clientRequest.connect(description) } returns flowOf(request)
+
+        val response = client.get("/clientRequest/connect") {
+            parameter("description", AppJson.encodeToString(ClientDescription.serializer(), description))
+        }
+
+        assertEquals(HttpStatusCode.OK, response.status)
+        assertEquals(ContentType.Text.EventStream, response.contentType()?.withoutParameters())
+        assertEquals("no-cache", response.headers[HttpHeaders.CacheControl])
+        val body = response.bodyAsText()
+        val frames = body.split("\r\n\r\n").filter { it.isNotEmpty() }
+        assertEquals(1, frames.size)
+        assertTrue(frames.single().startsWith("data: {"))
+        assertTrue(body.contains("\"requestedByDeviceName\":\"Phone\""))
+        verify { clientRequest.connect(description) }
+    }
+
+    @Test
+    fun `the remote control status route streams the reported status of a session`() = testApplication {
+        setUpApplication()
+        val sessionId = UUID.fromString("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
+        val status = RemotePlaybackStatus(
+            songId = UUID.fromString("cccccccc-cccc-cccc-cccc-cccccccccccc"),
+            isPlaying = true,
+            positionMs = 4321,
+            durationMs = 60000,
+            shuffleMode = false,
+            repeatMode = RepeatMode.ONE,
+            volume = 0.5f,
+            reportedAt = 12,
+        )
+        every { remoteControl.observeStatus(sessionId) } returns flowOf(status)
+
+        val response = client.get("/remoteControl/observeStatus/$sessionId")
+
+        assertEquals(HttpStatusCode.OK, response.status)
+        assertEquals(ContentType.Text.EventStream, response.contentType()?.withoutParameters())
+        assertEquals("no-cache", response.headers[HttpHeaders.CacheControl])
+        val body = response.bodyAsText()
+        val frames = body.split("\r\n\r\n").filter { it.isNotEmpty() }
+        assertEquals(1, frames.size)
+        assertTrue(frames.single().startsWith("data: {"))
+        assertTrue(body.contains("\"positionMs\":4321"))
+        verify { remoteControl.observeStatus(sessionId) }
     }
 
     @Test

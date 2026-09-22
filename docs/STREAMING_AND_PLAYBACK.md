@@ -130,7 +130,37 @@ Playback state is stored **per session**, so devices can watch each other:
 | `PUT /playback/playbackState/{sessionId}` | write your own (body: the state object) |
 | `GET /playback/observePlaybackState/{sessionId}` | SSE of that device's state |
 
-`PlaybackState` carries its own `queue`, `currentIndex`, `isPlaying`, `positionMs`, `shuffleMode`, `repeatMode` and `sourceId`. It is a snapshot for remote display and control surfaces; the shared, paged, conflict-checked list below is the queue a client should keep in sync.
+`PlaybackState` carries its own `queue`, `currentIndex`, `isPlaying`, `positionMs`, `shuffleMode`, `repeatMode` and `sourceId`. It is a snapshot used to transfer a queue to another device — write your own state so that device can pick it up — not a way to watch or steer one live; live control of another device goes through the remote control channel described below. The shared, paged, conflict-checked list further down is the queue a client should keep in sync.
+
+## Online devices and capabilities
+
+A client that wants to be discoverable by the user's other devices — for queue sync, remote control, or whatever comes next — describes itself when it opens the request channel: `connect(description)` over RPC, or `GET /clientRequest/connect?description=<json>` as SSE. The [`ClientDescription`](MODELS.md#devdertypdataclientdescription) carries `deviceName`, an optional `platform` and `deviceId` (the settings-sync device id, for correlation only) and a set of [`ClientCapability`](MODELS.md#devdertypdataclientcapability): `QUEUE_SYNC`, `REMOTE_CONTROL`, `REMOTE_VOLUME`.
+
+Presence lasts exactly as long as that stream: a session appears in `getOnlineDevices` for as long as its `connect` request is open, and disappears the moment the connection closes. There is no announce call and nothing to prune. Changing capabilities means resubscribing with a new description — the newer one wins.
+
+`observeRequests` is still there as the anonymous form of the same stream: a client that never describes itself stays reachable for requests such as `UploadQueue`, but is not listed as an online device. `GET /queue/syncDevices` is unrelated and unaffected — it stays the persisted list of queue-sync participants, independent of who is connected right now.
+
+| Route | Purpose |
+|---|---|
+| `GET /clientRequest/connect?description=` (SSE) | subscribe to the request channel and be listed as online with this description |
+| `GET /clientRequest/onlineDevices` | the user's currently connected sessions, newest first |
+
+## Remote control
+
+A device that connected with `REMOTE_CONTROL` (and `REMOTE_VOLUME` if it can act on volume) receives `ControlPlayback` requests on its request stream, each carrying a [`PlaybackCommand`](MODELS.md#devdertypdataplaybackcommand): `Play`, `Pause`, `TogglePlayPause`, `Next`, `Previous`, `SeekTo{positionMs}`, `SetShuffle{enabled}`, `SetRepeat{mode}` or `SetVolume{volume}` (`0..1`). The device executes it, reports its resulting state with `POST /remoteControl/reportStatus`, and acknowledges the request the same way as any other: `POST /clientRequest/complete/{requestId}?status=COMPLETED` (or `REJECTED`).
+
+A controller picks a device from `getOnlineDevices`, then sends `POST /remoteControl/sendCommand/{sessionId}` with the command as the JSON body — sealed, so it carries a `type` discriminator, e.g. `{"type":"SeekTo","positionMs":30000}` — and gets back a `ClientRequestStatus`: `COMPLETED`, `REJECTED`, `TIMED_OUT` after 10 seconds, or `UNREACHABLE`. To read the target's current state instead of commanding it, `GET /remoteControl/status/{sessionId}` returns the last report and `GET /remoteControl/observeStatus/{sessionId}` follows it as SSE, replaying the last status immediately on subscribe.
+
+[`RemotePlaybackStatus`](MODELS.md#devdertypdataremoteplaybackstatus) carries `songId`, `isPlaying`, `positionMs`, `durationMs`, `shuffleMode`, `repeatMode`, `volume` and `reportedAt` (server epoch ms, stamped on receipt). A controlled device reports on every change and, while playing, every 10 to 15 seconds — the same rhythm as playback reporting above — and a controller should project the position forward instead of waiting for the next report: `positionMs + (now - reportedAt)` while playing.
+
+| Route | Purpose |
+|---|---|
+| `POST /remoteControl/reportStatus` | the controlled device publishes its status |
+| `GET /remoteControl/status/{sessionId}` | last reported status of one of the user's online devices |
+| `GET /remoteControl/observeStatus/{sessionId}` (SSE) | follow that status, replaying the last one immediately |
+| `POST /remoteControl/sendCommand/{sessionId}` | deliver a `PlaybackCommand` and wait for the ack |
+
+A session belonging to another user answers `403`. A target that is not online, lacks `REMOTE_CONTROL`, or a `SetVolume` outside `0..1` or sent to a device without `REMOTE_VOLUME`, all answer `400`. As with queue observation, presence and pending requests live in the memory of a single server instance — there is no cross-instance fan-out.
 
 ## The shared queue
 
@@ -171,7 +201,7 @@ Device participation:
 - `GET /queue/syncDevices` lists participating devices with `lastSyncedVersion`, `lastActive` and `isCurrent`.
 - `POST /queue/requestUploadFrom/{sessionId}` asks another device for its live queue and returns `COMPLETED`, `REJECTED`, `TIMED_OUT` or `UNREACHABLE`.
 
-The other side of that request arrives on `GET /clientRequest/observeRequests` (SSE) as `{"type": "UploadQueue", "id": …, "requestedBySessionId": …}`. A client that supports it subscribes once and answers by uploading its queue with `force=true` and passing the request id to `commitUpload` — the requester explicitly wants *this* device's queue, so it is expected to win — or reports `POST /clientRequest/complete/{requestId}?status=REJECTED`.
+The other side of that request arrives on the request channel as `{"type": "UploadQueue", "id": …, "requestedBySessionId": …}`. `connect` (see *Online devices and capabilities* above) is the preferred way to subscribe to it, since it also makes the device discoverable; `GET /clientRequest/observeRequests` (SSE) remains the anonymous subscription for clients that do not describe themselves. Either way, a client that supports it subscribes once and answers by uploading its queue with `force=true` and passing the request id to `commitUpload` — the requester explicitly wants *this* device's queue, so it is expected to win — or reports `POST /clientRequest/complete/{requestId}?status=REJECTED`.
 
 ## Platform notes
 
@@ -192,6 +222,8 @@ Media elements and `EventSource` cannot set an `Authorization` header, and the s
 6. Show covers from the public image routes at the size you render, with the blur hash as the placeholder.
 7. If you sync the queue: read `queueInfo` once, then subscribe to `observeQueue` (it stays silent until the first write), always send `baseVersion`, handle `Conflict` by re-reading or forcing deliberately, and answer `UploadQueue` requests.
 8. Write your own `PlaybackState` per session if you want other devices to see and control you.
+9. Connect with `connect(description)` (not the anonymous `observeRequests`) if you want to be listed as an online device, and resubscribe whenever your capabilities change.
+10. If the user enabled remote control: handle `ControlPlayback` on your request stream, report your status on every change and every 10–15 s while playing, and always acknowledge with `complete`.
 
 ## Next
 

@@ -105,11 +105,17 @@ Error bodies are **plain text**, not JSON. Treat a `404` as "no such thing" rath
 
 Any method returning `Flow<T>` (other than `Flow<ByteArray>`) is an SSE endpoint: `Content-Type: text/event-stream`, `Cache-Control: no-cache`, one JSON object per `data:` line, no event names and no ids. The stream stays open until you close it or the server shuts down; `null` items are skipped. Reconnect yourself — there is no `Last-Event-ID` handling.
 
-Whether the first event arrives immediately depends on the stream. `GET /scrobble/recentListensFlow?limit=5` emits the current state right away; `GET /queue/observeQueue` emits only after a write, so a fresh subscription stays silent until something actually changes — read `GET /queue/queueInfo` once for the initial state.
+Whether the first event arrives immediately depends on the stream. `GET /scrobble/recentListensFlow?limit=5` emits the current state right away; `GET /queue/observeQueue` emits only after a write, so a fresh subscription stays silent until something actually changes — read `GET /queue/queueInfo` once for the initial state. `GET /clientRequest/connect?description=` and `GET /remoteControl/observeStatus/{sessionId}` (see [STREAMING_AND_PLAYBACK.md](STREAMING_AND_PLAYBACK.md)) behave like the latter, except `observeStatus` replays the last known status immediately.
 
 ```bash
 curl -N -H "Authorization: Bearer $TOKEN" -H 'X-Api-Version: 6' \
   'http://localhost:8080/scrobble/recentListensFlow?limit=5'
+```
+
+```bash
+curl -N -H "Authorization: Bearer $TOKEN" -H 'X-Api-Version: 6' -G \
+  'http://localhost:8080/clientRequest/connect' \
+  --data-urlencode 'description={"deviceName":"Desk","capabilities":["REMOTE_CONTROL","REMOTE_VOLUME"]}'
 ```
 
 ```ts
