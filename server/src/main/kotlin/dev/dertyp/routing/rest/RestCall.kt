@@ -29,16 +29,24 @@ import io.ktor.sse.ServerSentEvent
 import io.ktor.util.AttributeKey
 import io.ktor.utils.io.writeFully
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.serializer
 import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.UndeclaredThrowableException
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 
 private val RestBodyTextKey = AttributeKey<String>("RestBodyText")
 private val RestBodyObjectKey = AttributeKey<JsonObject>("RestBodyObject")
 private const val BodyMustBeObject = "Request body must be a JSON object with the fields of the request"
+
+const val SseKeepAliveComment: String = "keep-alive"
+val SseKeepAlivePeriod: Duration = 5.seconds
 
 class RestCall<S : Any>(
     val call: ApplicationCall,
@@ -223,9 +231,22 @@ class RestCall<S : Any>(
         val itemSerializer = AppJson.serializersModule.serializer<T>()
         call.response.cacheControl(CacheControl.NoCache(null))
         call.respond(SSEServerContent(call, handle = {
-            flow.collect { item ->
-                if (item != null) {
-                    send(ServerSentEvent(data = AppJson.encodeToString(itemSerializer, item)))
+            send(ServerSentEvent(comments = SseKeepAliveComment))
+            coroutineScope {
+                val keepAlive = launch {
+                    while (true) {
+                        delay(SseKeepAlivePeriod)
+                        send(ServerSentEvent(comments = SseKeepAliveComment))
+                    }
+                }
+                try {
+                    flow.collect { item ->
+                        if (item != null) {
+                            send(ServerSentEvent(data = AppJson.encodeToString(itemSerializer, item)))
+                        }
+                    }
+                } finally {
+                    keepAlive.cancel()
                 }
             }
         }))

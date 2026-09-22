@@ -327,7 +327,10 @@ class RestCallTest {
         assertEquals(HttpStatusCode.OK, response.status)
         assertEquals("no-cache", response.headers[HttpHeaders.CacheControl])
         assertEquals(ContentType.Text.EventStream, response.contentType()?.withoutParameters())
-        assertEquals("data: {\"name\":\"a\",\"count\":1}\r\n\r\ndata: {\"name\":\"b\",\"count\":2}\r\n\r\n", response.text())
+        assertEquals(
+            ": $SseKeepAliveComment\r\n\r\ndata: {\"name\":\"a\",\"count\":1}\r\n\r\ndata: {\"name\":\"b\",\"count\":2}\r\n\r\n",
+            response.text(),
+        )
     }
 
     @Test

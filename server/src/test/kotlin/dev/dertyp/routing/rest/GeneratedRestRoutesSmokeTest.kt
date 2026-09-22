@@ -34,9 +34,13 @@ import io.ktor.server.routing.route
 import io.ktor.server.routing.routing
 import io.ktor.server.sse.*
 import io.ktor.server.testing.*
+import io.ktor.utils.io.*
 import io.mockk.*
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.*
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -46,6 +50,7 @@ import org.junit.jupiter.api.Test
 import java.io.File
 import java.nio.file.Files
 import java.util.UUID
+import kotlin.time.Duration.Companion.seconds
 
 private class StreamingPodcastService(
     private val delegate: IPodcastService,
@@ -247,10 +252,30 @@ class GeneratedRestRoutesSmokeTest {
         assertEquals("no-cache", response.headers[HttpHeaders.CacheControl])
         val body = response.bodyAsText()
         val frames = body.split("\r\n\r\n").filter { it.isNotEmpty() }
-        assertEquals(2, frames.size)
-        assertTrue(frames.all { it.startsWith("data: {") })
+        assertTrue(frames.first().startsWith(":"))
+        assertEquals(2, frames.count { it.startsWith("data: {") })
         assertTrue(body.contains("\"positionMs\":1"))
         assertTrue(body.contains("\"positionMs\":2"))
+    }
+
+    @Test
+    fun `a server sent event stream opens with a keep alive comment before any data`() = testApplication {
+        setUpApplication()
+
+        @Suppress("UNCHECKED_CAST")
+        every { podcast.observeProgress() } returns flow<PodcastEpisodeProgress?> {
+            awaitCancellation()
+        } as Flow<PodcastEpisodeProgress>
+
+        client.prepareGet("/podcast/observeProgress").execute { response ->
+            assertEquals(HttpStatusCode.OK, response.status)
+            assertEquals(ContentType.Text.EventStream, response.contentType()?.withoutParameters())
+            assertEquals("no-cache", response.headers[HttpHeaders.CacheControl])
+            val channel = response.bodyAsChannel()
+            val first = withTimeout(2.seconds) { channel.readUTF8Line() }
+            assertEquals(": $SseKeepAliveComment", first)
+            channel.cancel()
+        }
     }
 
     @Test
@@ -280,8 +305,8 @@ class GeneratedRestRoutesSmokeTest {
         assertEquals("no-cache", response.headers[HttpHeaders.CacheControl])
         val body = response.bodyAsText()
         val frames = body.split("\r\n\r\n").filter { it.isNotEmpty() }
-        assertEquals(1, frames.size)
-        assertTrue(frames.single().startsWith("data: {"))
+        assertTrue(frames.first().startsWith(":"))
+        assertEquals(1, frames.count { it.startsWith("data: {") })
         assertTrue(body.contains("\"requestedByDeviceName\":\"Phone\""))
         verify { clientRequest.connect(description) }
     }
@@ -309,8 +334,8 @@ class GeneratedRestRoutesSmokeTest {
         assertEquals("no-cache", response.headers[HttpHeaders.CacheControl])
         val body = response.bodyAsText()
         val frames = body.split("\r\n\r\n").filter { it.isNotEmpty() }
-        assertEquals(1, frames.size)
-        assertTrue(frames.single().startsWith("data: {"))
+        assertTrue(frames.first().startsWith(":"))
+        assertEquals(1, frames.count { it.startsWith("data: {") })
         assertTrue(body.contains("\"positionMs\":4321"))
         verify { remoteControl.observeStatus(sessionId) }
     }
