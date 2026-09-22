@@ -14,6 +14,18 @@ subprojects {
     version = "0.0.1"
 }
 
+tasks.register("generateDocs") {
+    group = "documentation"
+    description = "Regenerates every generated file under docs/ plus example.env"
+
+    dependsOn(
+        ":common-rpc:kspCommonMainKotlinMetadata",
+        ":server:kspKotlin",
+        ":server:generateApiConstantsDocs",
+        "generateEnvDocs",
+    )
+}
+
 tasks.register("generateEnvDocs") {
     group = "documentation"
     description = "Generates example.env and docs/ENVIRONMENT_VARIABLES.md from application.yaml files"

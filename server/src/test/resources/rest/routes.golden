@@ -300,6 +300,9 @@ POST /remoteMirror/remoteUsers IRemoteMirrorService.getRemoteUsers [b:config] JS
 POST /remoteMirror/resetMirror IRemoteMirrorService.resetMirror [] UNIT
 POST /remoteMirror/startMirror IRemoteMirrorService.startMirror [b:config] UNIT
 POST /remoteMirror/stopMirror IRemoteMirrorService.stopMirror [] UNIT
+POST /rpcMetrics/lifetimeTotals IRpcMetricsService.lifetimeTotals [q:limit? q:username?] JSON
+POST /rpcMetrics/recentEvents IRpcMetricsService.recentEvents [q:limit?] JSON
+POST /rpcMetrics/timeSeries IRpcMetricsService.timeSeries [q:service q:method q:sinceMillis] JSON
 GET /scheduledTaskConfiguration/configurations IScheduledTaskConfigurationService.getConfigurations [] JSON
 GET /scheduledTaskConfiguration/configurationsFlow IScheduledTaskConfigurationService.getConfigurationsFlow [] SSE
 POST /scheduledTaskConfiguration/triggerTask IScheduledTaskConfigurationService.triggerTask [q:key] JSON
@@ -358,6 +361,7 @@ PUT /song/liked/{id} ISongService.setLiked [p:id q:liked q:addedAt?] JSON
 PUT /song/lyrics/{id} ISongService.setLyrics [p:id q:lyrics] JSON
 PUT /song/musicBrainzId/{id} ISongService.setMusicBrainzId [p:id q:musicBrainzId] JSON
 PUT /song/song ISongService.updateSong [b:song] JSON
+GET /storage/totalStorage IStorageService.getTotalStorage [] JSON
 DELETE /subsonicCredential/revokeSubsonicCredential ISubsonicCredentialService.revokeSubsonicCredential [] JSON
 GET /subsonicCredential/subsonicCredential ISubsonicCredentialService.getSubsonicCredential [] JSON
 POST /subsonicCredential/regenerateSubsonicCredential ISubsonicCredentialService.regenerateSubsonicCredential [] JSON

@@ -46,7 +46,7 @@ class JwtService(
     val jwtRealm = environment.config.property("jwt.realm").getString()
     val jwtSecret = environment.config.property("jwt.secret").getString()
 
-    fun authenticated(route: Route, routeBuilder: Route.() -> Unit) = route.authenticate("synara-auth") {
+    fun authenticated(route: Route, routeBuilder: Route.() -> Unit) = route.authenticate(AUTH_PROVIDER) {
         route({
             securitySchemeNames("UserAuth")
         }) { routeBuilder() }
@@ -54,7 +54,7 @@ class JwtService(
 
     fun authenticate(application: Application) =
         application.authentication {
-            jwt("synara-auth") {
+            jwt(AUTH_PROVIDER) {
                 realm = jwtRealm
                 verifier(
                     JWT
@@ -64,7 +64,7 @@ class JwtService(
                         .build()
                 )
                 authHeader { call ->
-                    val token = call.request.cookies["synara-auth"]
+                    val token = call.request.cookies[AUTH_COOKIE]
                     if (token != null) return@authHeader HttpAuthHeader.Single("Bearer", token)
                     call.request.parseAuthorizationHeader()
                 }
@@ -83,7 +83,7 @@ class JwtService(
     suspend fun validateToken(payload: com.auth0.jwt.interfaces.Payload): JWTPrincipal? {
         if (payload.audience.contains(jwtAudience)) {
             val sessionId = payload
-                .getClaim("ses").asString()
+                .getClaim(CLAIM_SESSION).asString()
                 ?.let { UUID.fromString(it) } ?: return null
 
             val isActive = sessionService.isSessionActive(sessionId)
@@ -265,15 +265,15 @@ class JwtService(
     }
 
     suspend fun generateToken(user: User, sessionId: UUID?): AuthenticationResponse? {
-        val expiresAt = Instant.now().toEpochMilli().date + 24.hours
+        val expiresAt = Instant.now().toEpochMilli().date + ACCESS_TOKEN_LIFETIME
 
         val token = JWT.create()
             .withAudience(jwtAudience)
             .withIssuer(jwtIssuer)
-            .withClaim("usr", user.username)
+            .withClaim(CLAIM_USERNAME, user.username)
             .apply {
                 if (sessionId != null) {
-                    withClaim("ses", sessionId.toString())
+                    withClaim(CLAIM_SESSION, sessionId.toString())
                 }
             }
             .withExpiresAt(expiresAt)
@@ -281,7 +281,7 @@ class JwtService(
 
         val refreshToken = generateRefreshToken()
 
-        if (refreshTokenService.createToken(user.id, 30.days, refreshToken, sessionId) == null)
+        if (refreshTokenService.createToken(user.id, REFRESH_TOKEN_LIFETIME, refreshToken, sessionId) == null)
             return null
 
         return AuthenticationResponse(
@@ -296,5 +296,15 @@ class JwtService(
         val bytes = ByteArray(192)
         random.nextBytes(bytes)
         return Base64.UrlSafe.encode(bytes).take(255)
+    }
+
+    companion object {
+        val ACCESS_TOKEN_LIFETIME = 24.hours
+        val REFRESH_TOKEN_LIFETIME = 30.days
+
+        const val AUTH_PROVIDER = "synara-auth"
+        const val AUTH_COOKIE = "synara-auth"
+        const val CLAIM_USERNAME = "usr"
+        const val CLAIM_SESSION = "ses"
     }
 }

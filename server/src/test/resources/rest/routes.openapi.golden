@@ -300,6 +300,9 @@ POST /remoteMirror/remoteUsers IRemoteMirrorService.getRemoteUsers | List all us
 POST /remoteMirror/resetMirror IRemoteMirrorService.resetMirror | Reset the internal mirroring state. | remoteMirror | UserAuth | - | body:no
 POST /remoteMirror/startMirror IRemoteMirrorService.startMirror | Start mirroring content from another Synara instance. | remoteMirror | UserAuth | - | body:yes
 POST /remoteMirror/stopMirror IRemoteMirrorService.stopMirror | Stop the active mirroring process. | remoteMirror | UserAuth | - | body:no
+POST /rpcMetrics/lifetimeTotals IRpcMetricsService.lifetimeTotals | Lifetime invocation totals per call, ordered by count descending. These counters are never pruned. | rpcMetrics | UserAuth | limit:query,username:query | body:no
+POST /rpcMetrics/recentEvents IRpcMetricsService.recentEvents | The most recent recorded invocations from the capped event log, newest first. | rpcMetrics | UserAuth | limit:query | body:no
+POST /rpcMetrics/timeSeries IRpcMetricsService.timeSeries | Hourly time-series of invocation counts for a specific call, oldest first. | rpcMetrics | UserAuth | service:query,method:query,sinceMillis:query | body:no
 PUT /scheduledTaskConfiguration/configuration IScheduledTaskConfigurationService.updateConfiguration | Update a task configuration. | scheduledTaskConfiguration | UserAuth | - | body:yes
 GET /scheduledTaskConfiguration/configurations IScheduledTaskConfigurationService.getConfigurations | Retrieve all background task configurations. | scheduledTaskConfiguration | UserAuth | - | body:no
 GET /scheduledTaskConfiguration/configurationsFlow IScheduledTaskConfigurationService.getConfigurationsFlow | Stream real-time updates for all background task configurations. | scheduledTaskConfiguration | UserAuth | - | body:no
@@ -358,6 +361,7 @@ GET /song/streamSong/{id} ISongService.streamSong | Stream song audio data for p
 HEAD /song/streamSong/{id} ISongService.streamSong | Stream song audio data for playback. | song | UserAuth | id:path,offset:query,chunkSize:query | body:no
 GET /song/streamSongAtmos/{id} ISongService.streamSongAtmos | Stream the Dolby Atmos (E-AC-3 JOC in MP4) variant of a song. Returns null if the song has no Atmos variant. | song | UserAuth | id:path,offset:query,chunkSize:query | body:no
 HEAD /song/streamSongAtmos/{id} ISongService.streamSongAtmos | Stream the Dolby Atmos (E-AC-3 JOC in MP4) variant of a song. Returns null if the song has no Atmos variant. | song | UserAuth | id:path,offset:query,chunkSize:query | body:no
+GET /storage/totalStorage IStorageService.getTotalStorage | Calculate and return the total storage space consumed by the music library in bytes. | storage | UserAuth | - | body:no
 POST /subsonicCredential/regenerateSubsonicCredential ISubsonicCredentialService.regenerateSubsonicCredential | Generate a new Subsonic credential for the current user, replacing any existing one. | subsonicCredential | UserAuth | - | body:no
 DELETE /subsonicCredential/revokeSubsonicCredential ISubsonicCredentialService.revokeSubsonicCredential | Delete the current user's Subsonic credential. Returns true if a credential was deleted. | subsonicCredential | UserAuth | - | body:no
 GET /subsonicCredential/subsonicCredential ISubsonicCredentialService.getSubsonicCredential | Get the current user's Subsonic credential, or null if none exists. | subsonicCredential | UserAuth | - | body:no

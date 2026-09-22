@@ -73,3 +73,5 @@ The server keeps the last 20 superseded values per key. `getHistory(scope, key, 
 ## REST
 
 `IClientSettingsService` is also exposed as REST under `/clientSettings`. Reads (`getSettings`, `getSnapshot`, `getChanges`, `getHistory`, `getDevices`) are `GET`; `setSettings` is a `PUT` with the entries in the request body; `observeSettings` is a Server-Sent Events stream. All routes require authentication.
+
+See [CLIENT_REST.md](CLIENT_REST.md) for how these routes are derived in general and [AUTHENTICATION.md](AUTHENTICATION.md) for how to authenticate them.

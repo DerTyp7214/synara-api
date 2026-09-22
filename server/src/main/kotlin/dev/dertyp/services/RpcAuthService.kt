@@ -55,13 +55,13 @@ class RpcAuthService(
     // IAuthService is registered on the public routes, so the JWT principal is not populated by
     // the auth plugin and the token has to be resolved from the request directly.
     private suspend fun resolveUserFromRawToken(): User? {
-        val rawToken = call.request.cookies["synara-auth"]
+        val rawToken = call.request.cookies[JwtService.AUTH_COOKIE]
             ?: (call.request.parseAuthorizationHeader() as? HttpAuthHeader.Single)
                 ?.takeIf { it.authScheme.equals("Bearer", ignoreCase = true) }
                 ?.blob
             ?: return null
         val principal = jwtService.validateToken(rawToken) ?: return null
-        val username = principal.payload.getClaim("usr").asString() ?: return null
+        val username = principal.payload.getClaim(JwtService.CLAIM_USERNAME).asString() ?: return null
         return userService.findUserByUsername(username)
     }
 }

@@ -1,5 +1,6 @@
 package dev.dertyp
 
+import dev.dertyp.core.API_KEY_QUERY
 import dev.dertyp.routing.*
 import dev.dertyp.serializers.AppCbor
 import dev.dertyp.serializers.AppJson
@@ -18,6 +19,7 @@ import io.ktor.serialization.kotlinx.json.json
 import io.ktor.serialization.kotlinx.protobuf.protobuf
 import io.ktor.server.application.Application
 import io.ktor.server.application.install
+import io.ktor.server.auth.authenticate
 import io.ktor.server.http.content.staticResources
 import io.ktor.server.plugins.compression.Compression
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
@@ -98,7 +100,7 @@ fun Application.configureRouting() {
             securityScheme("ApiKeyAuth") {
                 type = AuthType.API_KEY
                 location = AuthKeyLocation.QUERY
-                name = "apiKey"
+                name = API_KEY_QUERY
             }
         }
     }
@@ -133,7 +135,9 @@ fun Application.configureRouting() {
             registerPublicServices(koin)
         }
 
-        registerPublicRestServices(koin)
+        authenticate(JwtService.AUTH_PROVIDER, optional = true) {
+            registerPublicRestServices(koin)
+        }
 
         webSocket("/handshake") {
             val response = HandshakeService.determineHandshakeResponse(call)

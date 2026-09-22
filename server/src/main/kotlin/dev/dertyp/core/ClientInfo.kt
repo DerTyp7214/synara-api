@@ -6,11 +6,42 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.parseHeaderValue
 import io.ktor.server.application.ApplicationCall
 
+@Target(AnnotationTarget.FIELD)
+@Retention(AnnotationRetention.RUNTIME)
+annotation class FeatureDoc(
+    val introduces: String,
+    val fallback: String
+)
+
 enum class ClientFeature(val minApiVersion: Int, val maxApiVersion: Int? = null) {
+    @FeatureDoc(
+        introduces = "Streaming WAV and AIFF source files as they are.",
+        fallback = "The server transcodes the file to FLAC before streaming it.",
+    )
     LOSSLESS_WAV_AIFF(2),
+
+    @FeatureDoc(
+        introduces = "The Dolby Atmos variant of a song (E-AC-3 JOC in MP4) and the `streamSongAtmos` endpoint.",
+        fallback = "The Atmos stream resolves to nothing — there is no Atmos playback, and `atmosPath` is stripped from every song.",
+    )
     DOLBY_ATMOS(3),
+
+    @FeatureDoc(
+        introduces = "File properties nested in `audio` and `atmos` as [`AudioInfo`](MODELS.md#devdertypdataaudioinfo) — `codec`, `sampleRate`, `bitsPerSample`, `bitRate`, `fileSize`, `channels`.",
+        fallback = "`audio` and `atmos` are cleared and their values flattened back into the deprecated top-level `sampleRate`, `bitsPerSample`, `bitRate`, `fileSize` and `atmosPath` fields.",
+    )
     AUDIO_INFO(4),
+
+    @FeatureDoc(
+        introduces = "Component trees from the server, rendered natively by the client.",
+        fallback = "Nothing to render; the companion `X-Ui-Schema-Version` header controls the detail.",
+    )
     SERVER_DRIVEN_UI(5),
+
+    @FeatureDoc(
+        introduces = "`tags`: version markers such as *Radio Edit*, *feat. Drake* or *Live at Wembley*, split off the title into [`TitleTag`](MODELS.md#devdertypdatatitletag) entries, so `title` is clean.",
+        fallback = "`title` is put back together into the full original title and `tags` is emptied.",
+    )
     TITLE_TAGS(6),
 }
 

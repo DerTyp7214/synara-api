@@ -5,6 +5,7 @@ import dev.dertyp.core.ApplicationScope
 import dev.dertyp.core.getUser
 import dev.dertyp.core.toUUIDOrNull
 import dev.dertyp.data.RemoteServerConfig
+import dev.dertyp.services.JwtService
 import dev.dertyp.services.RemoteMirrorService
 import dev.dertyp.services.UserService
 import io.ktor.http.ContentType
@@ -641,7 +642,7 @@ fun Route.mirrorRouting() {
             }
         }
 
-        authenticate("synara-auth") {
+        authenticate(JwtService.AUTH_PROVIDER) {
             post("/start") {
                 val user = call.getUser() ?: return@post call.respond(HttpStatusCode.Unauthorized)
                 if (!user.isAdmin) return@post call.respond(HttpStatusCode.Forbidden)

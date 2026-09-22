@@ -21,12 +21,14 @@ Send two headers on every request, including the websocket upgrade for `/rpc`:
 
 | Header | Value | Purpose |
 |---|---|---|
-| `X-Ui-Schema-Version` | `UiSchemaVersion.CURRENT` of the `common-rpc` you compiled against (currently `1`) | The server replaces components your build doesn't know with `Fallback`. Omit it and **every** component becomes `Fallback`. |
+| `X-Ui-Schema-Version` | `UiSchemaVersion.CURRENT` of the `common-rpc` you compiled against (see [API_CONSTANTS.md#ui-schema-version](API_CONSTANTS.md#ui-schema-version)) | The server replaces components your build doesn't know with `Fallback`. Omit it and **every** component becomes `Fallback`. |
 | `Accept-Language` | e.g. `de-AT, de;q=0.9, en;q=0.5` | All text in the tree arrives translated (highest-quality language wins, fallback `en`). Changing the app language means reconnecting the RPC websocket, because headers are read at upgrade time. |
 
 Kotlin clients using `BaseRpcServiceManager` can call `uiHeaders(locale)` next to `apiVersionHeader()`.
 
 `IHandshakeService.handshake()` returns `uiSchemaVersion`; `0` means the server has no server-driven UI.
+
+`X-Ui-Schema-Version` is one of several compatibility headers described in [API_VERSIONING.md](API_VERSIONING.md); see [CLIENT_KOTLIN_RPC.md](CLIENT_KOTLIN_RPC.md) for `BaseRpcServiceManager` and connecting to `/rpc/services`.
 
 ## The vocabulary
 

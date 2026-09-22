@@ -3,6 +3,7 @@ package dev.dertyp.core
 import dev.dertyp.data.User
 import dev.dertyp.plugins.ApiKeyScope
 import dev.dertyp.services.ApiKeyService
+import dev.dertyp.services.JwtService
 import dev.dertyp.services.SessionService
 import dev.dertyp.services.UserService
 import dev.dertyp.services.metadata.IMetadataService
@@ -21,12 +22,16 @@ import org.koin.ktor.ext.get
 import org.koin.ktor.ext.inject
 import java.util.UUID
 
+const val API_KEY_QUERY = "apiKey"
+const val API_KEY_HEADER = "X-API-Key"
+
 val ProxiedKey = AttributeKey<Boolean>("Proxied")
 val ApplicationCall.isProxied: Boolean get() = attributes.getOrNull(ProxiedKey) ?: false
-val ApplicationCall.principalUsername: String? get() = principal<JWTPrincipal>()?.get("usr")
+val ApplicationCall.principalUsername: String? get() = principal<JWTPrincipal>()?.get(JwtService.CLAIM_USERNAME)
 
 fun ApplicationCall.getUsername(): String = principalUsername!!
-fun ApplicationCall.getSessionId(): UUID? = principal<JWTPrincipal>()?.get("ses")?.let { UUID.fromString(it) }
+fun ApplicationCall.getSessionId(): UUID? =
+    principal<JWTPrincipal>()?.get(JwtService.CLAIM_SESSION)?.let { UUID.fromString(it) }
 
 suspend fun ApplicationCall.getUser(): User? = try {
     val user = get<UserService>().findUserByUsername(getUsername())
@@ -48,8 +53,8 @@ suspend fun ApplicationCall.apiKeyUser(requiredScope: ApiKeyScope): User? {
     val bearer = (request.parseAuthorizationHeader() as? HttpAuthHeader.Single)
         ?.takeIf { it.authScheme.equals("Bearer", ignoreCase = true) }
         ?.blob
-    val raw = request.queryParameters["apiKey"]
-        ?: request.headers["X-API-Key"]
+    val raw = request.queryParameters[API_KEY_QUERY]
+        ?: request.headers[API_KEY_HEADER]
         ?: bearer
         ?: return null
     return get<ApiKeyService>().resolveUser(raw, requiredScope)

@@ -6,7 +6,7 @@ Synara is a powerful, modern music server and API designed for high-fidelity aud
 
 - **High-Fidelity Audio**: Native support for `FLAC` with transcoding to `Opus` for efficient streaming and downloads.
 - **Service Integrations**:
-    - **Tidal**: Metadata fetching, favorites synchronization, and integrated downloading support. Dolby Atmos tracks are imported as a 5.1 lossless file plus a streamable Atmos (E-AC-3 JOC) variant (`streamSongAtmos`, API version 3+). From API version 4, file properties are nested in `audio` / `atmos` (`AudioInfo`: codec, sampleRate, bitsPerSample, bitRate, fileSize, channels). Existing tiddl volumes need `atmos_filter = "allow"` under `[download]` in `config.toml`.
+    - **Tidal**: Metadata fetching, favorites synchronization, integrated downloading, and Dolby Atmos import; see [docs/API_VERSIONING.md](docs/API_VERSIONING.md) for how clients opt into Atmos streaming and newer response shapes.
     - **Spotify**: Metadata resolution and artist/album matching.
     - **MusicBrainz**: Comprehensive metadata enrichment and persistent identifiers.
 - **Advanced Library Management**:
@@ -21,22 +21,25 @@ Synara is a powerful, modern music server and API designed for high-fidelity aud
 
 ## Documentation
 
-- **API Reference**: Swagger documentation is available at `/swagger` when the server is running.
-- **RPC Services**: Detailed breakdown of available RPC interfaces can be found in [docs/RPC_SERVICES.md](docs/RPC_SERVICES.md).
-- **Configuration**: See [docs/ENVIRONMENT_VARIABLES.md](docs/ENVIRONMENT_VARIABLES.md) for a full list of configuration options and defaults.
-- **Plugins**: Learn how to extend Synara with custom [plugins](docs/PLUGINS.md).
-- **Server-Driven UI**: How clients render [server-described UI](docs/SERVER_DRIVEN_UI.md) (slots, pages, home cards, hooks), with the importer as worked example.
-- **Client Settings**: Keep client settings on the server, [synced across devices or per device](docs/CLIENT_SETTINGS.md).
-- **Mock Server**: Use the [mock server](docs/MOCK_SERVER.md) for development and testing.
-- **Listen Backup**: Keep a copy of listening history on a [remote listen-backup receiver](docs/LISTEN_BACKUP.md).
-- **MCP**: Let an AI assistant query listening history through the read-only [MCP endpoint](docs/MCP.md).
-- **Development Instructions**: Detailed developer guide in [docs/INSTRUCTIONS.md](docs/INSTRUCTIONS.md).
+The full index is at [docs/README.md](docs/README.md); Swagger/OpenAPI documentation is also available at `/swagger` when the server is running.
+
+**Build a client**: [Getting Started](docs/CLIENT_GETTING_STARTED.md) · [Kotlin RPC](docs/CLIENT_KOTLIN_RPC.md) · [REST](docs/CLIENT_REST.md) · [Authentication](docs/AUTHENTICATION.md) · [Streaming & Playback](docs/STREAMING_AND_PLAYBACK.md) · [API Versioning](docs/API_VERSIONING.md) · [Server-Driven UI](docs/SERVER_DRIVEN_UI.md) · [Client Settings](docs/CLIENT_SETTINGS.md) · [Mock Server](docs/MOCK_SERVER.md)
+
+**Reference (generated, do not edit — `./gradlew generateDocs` regenerates all of these)**: [RPC Services](docs/RPC_SERVICES.md) (`:common-rpc:kspCommonMainKotlinMetadata`) · [Models](docs/MODELS.md) (`:common-rpc:kspCommonMainKotlinMetadata`) · [Permissions](docs/PERMISSIONS.md) (`:common-rpc:kspCommonMainKotlinMetadata`) · [REST API](docs/REST_API.md) (`:server:kspKotlin`) · [API Constants](docs/API_CONSTANTS.md) (`:server:generateApiConstantsDocs`) · [Environment Variables](docs/ENVIRONMENT_VARIABLES.md) (`generateEnvDocs`)
+
+**Extend the server**: [Plugins](docs/PLUGINS.md) · [MCP](docs/MCP.md) · [Listen Backup](docs/LISTEN_BACKUP.md)
+
+**Work on the server**: [Architecture](docs/ARCHITECTURE.md) · [Development](docs/DEVELOPMENT.md)
+
+## Writing a client
+
+Pick a transport first: Kotlin/KMP apps use the typed RPC SDK ([docs/CLIENT_KOTLIN_RPC.md](docs/CLIENT_KOTLIN_RPC.md)), everything else talks plain HTTP/JSON ([docs/CLIENT_REST.md](docs/CLIENT_REST.md)) — both surfaces share the same services, models and conventions, so [docs/CLIENT_GETTING_STARTED.md](docs/CLIENT_GETTING_STARTED.md) is the right place to start either way. Point your client at a real server, or run [docs/MOCK_SERVER.md](docs/MOCK_SERVER.md) locally to develop against realistic dummy data without touching a music library.
 
 ## Getting Started
 
 ### Prerequisites
 
-- Java 21 or higher (Amazon Corretto 25 recommended for production).
+- Java 25 (see [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)).
 - (Optional) Docker and Docker Compose.
 
 ### Running the Server
@@ -48,7 +51,7 @@ Synara is a powerful, modern music server and API designed for high-fidelity aud
 
 ### Development Setup
 
-A helper script `dev.sh` is provided to quickly build and run both the server and the proxy components in a development environment.
+See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for the full developer workflow: cloning with submodules, configuration, tests, and the `common-rpc` submodule. As a quick start, `./dev.sh` builds and runs both the server and the proxy components together:
 
 ```bash
 ./dev.sh

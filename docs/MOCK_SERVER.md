@@ -94,6 +94,8 @@ REST endpoints are generated following the pattern: `/{serviceName}/{methodName}
 To call `IArtistService.byId(id: PlatformUUID)`, the REST endpoint would be:
 `GET http://localhost:8081/artist/byId?id=...`
 
+See [CLIENT_REST.md](CLIENT_REST.md) for the full derivation rules and [REST_API.md](REST_API.md) for the real server's generated route list.
+
 ## Configuration
 
 The mock server can be configured using environment variables:

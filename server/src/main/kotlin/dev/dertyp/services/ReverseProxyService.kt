@@ -204,7 +204,7 @@ class ReverseProxyService(
             server.registerPublicServices(getKoin(), call)
         } else if (path == "/rpc/services") {
             val user = principal?.let { 
-                get<UserService>().findUserByUsername(it.payload.getClaim("usr").asString())
+                get<UserService>().findUserByUsername(it.payload.getClaim(JwtService.CLAIM_USERNAME).asString())
             }
             if (user != null) {
                 server.registerAuthenticatedServices(getKoin(), call, user)

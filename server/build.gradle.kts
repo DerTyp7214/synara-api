@@ -47,9 +47,19 @@ tasks.register<JavaExec>("runSearchBenchmark") {
     standardOutput = System.out
 }
 
+tasks.register<JavaExec>("generateApiConstantsDocs") {
+    group = "documentation"
+    description = "Generates docs/API_CONSTANTS.md from the version, feature and authentication constants in the server sources."
+    mainClass.set("dev.dertyp.docs.ApiConstantsDocsKt")
+    classpath = sourceSets["main"].runtimeClasspath
+    workingDir = rootProject.projectDir
+    args("docs/API_CONSTANTS.md")
+}
+
 ksp {
     arg("rest.packages", "dev.dertyp,dev.dertyp.services,dev.dertyp.services.import,dev.dertyp.services.metadata")
     arg("rest.package", "dev.dertyp.routing.rest")
+    arg("rest.doc.publicServices", "serverStats,auth,handshake")
 }
 
 dependencies {

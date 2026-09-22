@@ -215,4 +215,12 @@ fun Route.registerAuthenticatedRestServices(koin: Koin) {
         val user = call.getUser() ?: throw IllegalArgumentException("No user found")
         RpcSubsonicCredentialService(user, koin.get()).withAuthorization<ISubsonicCredentialService>(user)
     }
+    registerIRpcMetricsServiceRest(authenticated = true) {
+        val user = call.getUser() ?: throw IllegalArgumentException("No user found")
+        koin.get<RpcMetricsService>().withAuthorization<IRpcMetricsService>(user)
+    }
+    registerIStorageServiceRest(authenticated = true) {
+        val user = call.getUser() ?: throw IllegalArgumentException("No user found")
+        koin.get<StorageService>().withAuthorization<IStorageService>(user)
+    }
 }
