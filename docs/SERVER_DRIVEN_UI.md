@@ -190,6 +190,8 @@ Example — an ambiguous link:
 ]}
 ```
 
+An Apple Music album link or a MusicBrainz release / release-group link can point at a release that is not out yet (its release date is in the future, or Apple still marks the album incomplete). Tidal has no album for it, so nothing would normally resolve — but when Tidal is the default importer its handler offers anyway, with a description and a confirm text saying that only the tracks already released are imported now. On submit the server takes the album's track list from the platform the link came from, prefers a matching MusicBrainz release for titles, positions and ids, looks every ISRC up on Tidal and queues the tracks it finds, tagged as the album (title, track and disc numbers, cover); the receipt reports `intake.import.upcomingQueued`. Tracks that are not on Tidal yet are skipped and listed in the import log — import the album again on release day: the tracks already in the library for that release (same ISRC and barcode) are skipped and the rest is added.
+
 Work accepted by an intake handler runs in server-side **jobs**, queued per kind (imports never block a favourites sync); the queue page shows their progress and offers Cancel.
 
 ## Home cards

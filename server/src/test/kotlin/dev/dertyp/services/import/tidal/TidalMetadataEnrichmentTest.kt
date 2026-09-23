@@ -4,6 +4,7 @@ import dev.dertyp.audio.AudioConfig
 import kotlin.io.path.extension
 import dev.dertyp.ApiClient
 import dev.dertyp.PlatformUUID
+import dev.dertyp.core.HttpClientPriority
 import dev.dertyp.data.*
 import dev.dertyp.plugins.IPluginIndexer
 import dev.dertyp.plugins.IServerStorageService
@@ -11,9 +12,7 @@ import dev.dertyp.services.ILrcLibService
 import dev.dertyp.services.ImageService
 import dev.dertyp.services.SongService
 import dev.dertyp.services.UserPlaylistService
-import dev.dertyp.services.import.ImportService
-import dev.dertyp.services.import.ProcessExecutionResult
-import dev.dertyp.services.import.TidalBaseImporter
+import dev.dertyp.services.import.*
 import dev.dertyp.services.metadata.IMetadataService
 import dev.dertyp.services.metadata.IMusicBrainzService
 import dev.dertyp.services.metadata.MetadataService
@@ -22,11 +21,13 @@ import io.ktor.client.statement.HttpResponse
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationEnvironment
 import io.mockk.*
+import kotlinx.coroutines.flow.asFlow
 import kotlinx.coroutines.runBlocking
 import org.jaudiotagger.audio.AudioFile
 import org.jaudiotagger.audio.AudioFileIO
 import org.jaudiotagger.tag.FieldKey
 import org.jaudiotagger.tag.Tag
+import org.jaudiotagger.tag.images.Artwork
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -38,7 +39,9 @@ import org.koin.test.KoinTest
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.Path
+import java.time.LocalDate
 import java.util.UUID
+import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.minutes
 
 class TidalMetadataEnrichmentTest : KoinTest {
@@ -90,7 +93,10 @@ class TidalMetadataEnrichmentTest : KoinTest {
             return Pair(ProcessExecutionResult(0, "Success", ""), mockFiles)
         }
 
-        suspend fun testDownloadContent(urls: List<String>) = importContent(urls, 1, { true }, null) {
+        suspend fun testDownloadContent(
+            urls: List<String>,
+            metadata: IMetadataService.BaseMetadata? = null
+        ) = importContent(urls, 1, { true }, null, metadata) {
             println("LIVE OUTPUT: $it")
         }
     }
@@ -197,5 +203,262 @@ class TidalMetadataEnrichmentTest : KoinTest {
         verify { mockTag.setField(FieldKey.ALBUM, "Random Access Memories") }
         verify { mockTag.setField(FieldKey.YEAR, "2013-05-17") }
         verify { mockAudioFile.commit() }
+    }
+
+    @Test
+    fun `provided album metadata overrides single tags and replaces cover`() = runBlocking {
+        val isrc = "USQX91300108"
+        val mbReleaseId = UUID.randomUUID()
+        val mbRecordingId = UUID.randomUUID()
+
+        val tidalTrack = IMetadataService.Track(
+            id = "777",
+            title = "Get Lucky",
+            artists = listOf("Daft Punk"),
+            duration = 4.minutes,
+            images = listOf(IMetadataService.Image("tidal-url", 500, 500)),
+            albumId = "single-1",
+            albumTitle = "Get Lucky",
+            isrc = isrc
+        )
+
+        val providedAlbum = IMetadataService.Album(
+            id = mbReleaseId.toString(),
+            title = "Upcoming Album",
+            artists = listOf("Daft Punk"),
+            tracks = listOf(
+                IMetadataService.Track(
+                    id = "777",
+                    title = "Get Lucky",
+                    artists = listOf("Daft Punk"),
+                    duration = 4.minutes,
+                    trackNumber = 3,
+                    discNumber = 1,
+                    images = emptyList(),
+                    isrc = isrc
+                )
+            ).asFlow(),
+            trackCount = 12,
+            barcode = "0123456789012",
+            releaseDate = LocalDate.of(2030, 5, 17),
+            images = listOf(IMetadataService.Image("apple-url", 3000, 3000))
+        )
+
+        val mockTidalService = mockk<MetadataService>(relaxed = true)
+        every { MetadataService.getMetadataService(IMetadataService.MetadataType.tidal, any()) } returns mockTidalService
+        coEvery { mockTidalService.getTrackById("777", any()) } returns tidalTrack
+
+        val mbRelease = MusicBrainzRelease(
+            id = mbReleaseId,
+            title = "Upcoming Album",
+            date = "2030-05-17",
+            artistCredit = listOf(MusicBrainzArtistCredit(name = "Daft Punk")),
+            media = listOf(
+                MusicBrainzMedia(
+                    tracks = listOf(
+                        MusicBrainzTrack(
+                            id = UUID.randomUUID(),
+                            title = "Get Lucky",
+                            recording = MusicBrainzRecording(
+                                id = mbRecordingId,
+                                title = "Get Lucky",
+                                artistCredit = listOf(MusicBrainzArtistCredit(name = "Daft Punk")),
+                                isrcs = listOf(isrc)
+                            )
+                        )
+                    )
+                )
+            )
+        )
+        coEvery { musicBrainzService.getRelease(mbReleaseId) } returns mbRelease
+
+        val imageResponse = mockk<HttpResponse>(relaxed = true)
+        every { imageResponse.status } returns HttpStatusCode.OK
+        coEvery { imageResponse.body<ByteArray>() } returns JpegBytes
+        coEvery { ApiClient.queueInstance.enqueue("apple-url", any(), any()) } returns imageResponse
+
+        val mockAudioFile = mockk<AudioFile>(relaxed = true)
+        val mockTag = mockk<Tag>(relaxed = true)
+        val existingArtwork = mockk<Artwork>(relaxed = true)
+        every { existingArtwork.binaryData } returns byteArrayOf(1, 2, 3)
+        every { mockTag.firstArtwork } returns existingArtwork
+        every { mockAudioFile.tag } returns mockTag
+        every { mockTag.getFirst(FieldKey.TITLE) } returns "Get Lucky"
+
+        val file = tempDir.resolve("777.flac")
+        Files.createFile(file)
+        every { AudioFileIO.read(file.toFile()) } returns mockAudioFile
+
+        downloader = TestTidalImporter(indexer, storageService, listOf(file))
+
+        downloader.testDownloadContent(listOf("https://tidal.com/track/777"), providedAlbum)
+
+        coVerify(exactly = 0) { mockTidalService.getAlbumsByIds(any<List<String>>(), any<HttpClientPriority>()) }
+        coVerify(exactly = 0) { musicBrainzService.searchRelease(any(), any()) }
+        coVerify(exactly = 0) { musicBrainzService.searchRecording(any(), any()) }
+
+        verify { mockTag.setField(FieldKey.ALBUM, "Upcoming Album") }
+        verify { mockTag.setField(FieldKey.TRACK, "3") }
+        verify { mockTag.setField(FieldKey.DISC_NO, "1") }
+        verify { mockTag.setField(FieldKey.TRACK_TOTAL, "12") }
+        verify { mockTag.setField(FieldKey.ALBUM_ARTIST, "Daft Punk") }
+        verify { mockTag.setField(FieldKey.BARCODE, "0123456789012") }
+        verify { mockTag.setField(FieldKey.MUSICBRAINZ_RELEASEID, mbReleaseId.toString()) }
+        verify { mockTag.deleteArtworkField() }
+        verify { mockAudioFile.commit() }
+    }
+
+    @Test
+    fun `provided album without MusicBrainz id uses provided values`() = runBlocking {
+        val tidalTrack = IMetadataService.Track(
+            id = "777",
+            title = "Get Lucky",
+            artists = listOf("Daft Punk"),
+            duration = 4.minutes,
+            images = listOf(IMetadataService.Image("tidal-url", 500, 500)),
+            albumId = "single-1",
+            albumTitle = "Get Lucky",
+            isrc = "USQX91300108"
+        )
+
+        val providedAlbum = IMetadataService.Album(
+            id = "appleMusic:1",
+            title = "Upcoming Album",
+            artists = listOf("Daft Punk"),
+            tracks = listOf(
+                IMetadataService.Track(
+                    id = "777",
+                    title = "Get Lucky",
+                    artists = listOf("Daft Punk"),
+                    duration = 4.minutes,
+                    trackNumber = 3,
+                    discNumber = 1,
+                    images = emptyList(),
+                    isrc = "USQX91300108"
+                )
+            ).asFlow(),
+            trackCount = 12,
+            barcode = "0123456789012",
+            releaseDate = LocalDate.of(2030, 5, 17),
+            images = listOf(IMetadataService.Image("apple-url", 3000, 3000))
+        )
+
+        val mockTidalService = mockk<MetadataService>(relaxed = true)
+        every { MetadataService.getMetadataService(IMetadataService.MetadataType.tidal, any()) } returns mockTidalService
+        coEvery { mockTidalService.getTrackById("777", any()) } returns tidalTrack
+
+        val mockAudioFile = mockk<AudioFile>(relaxed = true)
+        val mockTag = mockk<Tag>(relaxed = true)
+        every { mockAudioFile.tag } returns mockTag
+        every { mockTag.getFirst(FieldKey.TITLE) } returns "Get Lucky"
+
+        val file = tempDir.resolve("777.flac")
+        Files.createFile(file)
+        every { AudioFileIO.read(file.toFile()) } returns mockAudioFile
+
+        downloader = TestTidalImporter(indexer, storageService, listOf(file))
+
+        downloader.testDownloadContent(listOf("https://tidal.com/track/777"), providedAlbum)
+
+        coVerify(exactly = 0) { musicBrainzService.getRelease(any()) }
+        coVerify(exactly = 0) { musicBrainzService.searchRelease(any(), any()) }
+        coVerify(exactly = 0) { musicBrainzService.searchRecording(any(), any()) }
+
+        verify { mockTag.setField(FieldKey.ALBUM, "Upcoming Album") }
+        verify { mockTag.setField(FieldKey.TRACK, "3") }
+        verify { mockTag.setField(FieldKey.DISC_NO, "1") }
+        verify { mockTag.setField(FieldKey.TRACK_TOTAL, "12") }
+        verify { mockTag.setField(FieldKey.YEAR, "2030-05-17") }
+        verify { mockTag.setField(FieldKey.ALBUM_ARTIST, "Daft Punk") }
+        verify { mockTag.setField(FieldKey.BARCODE, "0123456789012") }
+        verify(exactly = 0) { mockTag.setField(FieldKey.MUSICBRAINZ_RELEASEID, any<String>()) }
+        verify { mockAudioFile.commit() }
+    }
+
+    @Test
+    fun `album import skips a track whose ISRC already exists on the same release`() = runBlocking {
+        val user = User(UUID.randomUUID(), "test", passwordHash = "hash")
+        prepareAlbumImport(libraryBarcode = "123456789012")
+
+        downloader = TestTidalImporter(indexer, storageService, emptyList())
+        downloader.importIds(listOf("album-999"), Type.ALBUM, user) {}
+
+        coVerify(exactly = 0) { importService.addToQueue(*anyVararg()) }
+    }
+
+    @Test
+    fun `album import keeps a track whose ISRC only exists on another release`() = runBlocking {
+        val user = User(UUID.randomUUID(), "test", passwordHash = "hash")
+        prepareAlbumImport(libraryBarcode = "9999999999999")
+
+        val entries = mutableListOf<ImportQueueEntry>()
+        coEvery { importService.addToQueue(*anyVararg()) } answers {
+            call.invocation.args.forEach { arg ->
+                when (arg) {
+                    is Array<*> -> arg.filterIsInstance<ImportQueueEntry>().forEach { entries += it }
+                    is ImportQueueEntry -> entries += arg
+                    else -> Unit
+                }
+            }
+        }
+
+        downloader = TestTidalImporter(indexer, storageService, emptyList())
+        downloader.importIds(listOf("album-999"), Type.ALBUM, user) {}
+
+        coVerify(exactly = 1) { importService.addToQueue(*anyVararg()) }
+        val entry = entries.filterIsInstance<UrlImportQueueEntry>().single()
+        assertTrue(entry.ids.contains("track-1"), "expected the track to be queued, got ${entry.ids}")
+    }
+
+    private fun prepareAlbumImport(libraryBarcode: String?) {
+        val isrc = "USQX91300108"
+        val mockTidalService = mockk<MetadataService>(relaxed = true)
+        every { MetadataService.getMetadataService(IMetadataService.MetadataType.tidal, any()) } returns mockTidalService
+
+        coEvery { mockTidalService.getAlbumsByIds(listOf("album-999"), any<HttpClientPriority>()) } returns listOf(
+            IMetadataService.Album(
+                id = "album-999",
+                title = "Upcoming Album",
+                barcode = "0123456789012"
+            )
+        )
+        every { mockTidalService.getAlbumTracks("album-999", any()) } returns listOf(
+            IMetadataService.Track(
+                id = "track-1",
+                title = "Get Lucky",
+                artists = listOf("Daft Punk"),
+                duration = 4.minutes,
+                images = emptyList(),
+                albumId = "album-999",
+                albumTitle = "Upcoming Album",
+                isrc = isrc
+            )
+        ).asFlow()
+
+        coEvery { songService.byOriginalIds(any<Collection<String>>(), any()) } returns emptyList()
+        coEvery { songService.byOriginalTracks(any(), any()) } returns listOf(
+            UserSong(
+                id = UUID.randomUUID(),
+                title = "Get Lucky",
+                artists = emptyList(),
+                album = Album(
+                    id = UUID.randomUUID(),
+                    name = "Library Album",
+                    artists = emptyList(),
+                    releaseDate = null,
+                    totalDuration = 0,
+                    barcode = libraryBarcode
+                ),
+                duration = 0L,
+                explicit = false,
+                path = "",
+                originalUrl = "https://tidal.com/track/existing",
+                isrc = isrc
+            )
+        )
+    }
+
+    private companion object {
+        val JpegBytes = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 0x00)
     }
 }

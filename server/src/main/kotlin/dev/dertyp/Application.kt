@@ -33,6 +33,7 @@ import dev.dertyp.server.BuildConfig
 import dev.dertyp.services.*
 import dev.dertyp.services.import.ImportService
 import dev.dertyp.services.import.ImporterProxy
+import dev.dertyp.services.import.UpcomingReleaseImportService
 import dev.dertyp.services.metadata.*
 import dev.dertyp.services.podcast.PodcastFeedService
 import dev.dertyp.services.podcast.PodcastIndexService
@@ -315,6 +316,7 @@ fun mainModule(application: Application, environment: ApplicationEnvironment): M
     singleOf(::ScheduledTaskLogService)
     singleOf(::DiscoveryService)
     singleOf(::ImporterProxy)
+    singleOf(::UpcomingReleaseImportService)
     singleOf(::SessionService)
     singleOf(::PlaybackService)
     singleOf(::QueueService)

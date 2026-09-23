@@ -13,6 +13,7 @@ import dev.dertyp.services.import.ImportBackend
 import dev.dertyp.services.import.ImportService
 import dev.dertyp.services.import.ImporterProxy
 import dev.dertyp.services.import.Type
+import dev.dertyp.services.import.UpcomingReleaseImportService
 import dev.dertyp.services.import.UrlImportQueueEntry
 import dev.dertyp.services.metadata.LinkResolverService
 import dev.dertyp.services.metadata.MetadataService
@@ -29,6 +30,7 @@ import kotlinx.coroutines.flow.asFlow
 private sealed interface Target {
     data class Url(val url: String) : Target
     data class Ids(val ids: List<String>, val type: Type) : Target
+    data class Upcoming(val release: UpcomingReleaseImportService.UpcomingRelease) : Target
 }
 
 class ImporterResolvers(
@@ -38,6 +40,7 @@ class ImporterResolvers(
     private val linkResolver: LinkResolverService,
     private val userService: UserService,
     private val environment: ApplicationEnvironment,
+    private val upcomingReleases: UpcomingReleaseImportService,
 ) {
     fun register(intakeService: IntakeService) {
         intakeService.registerProvider(UiRegistry.SERVER_SOURCE) { resolvers() }
@@ -59,6 +62,7 @@ class ImporterResolvers(
 
         private suspend fun target(item: IntakeItem): Target? = when (item) {
             is IntakeItem.Url -> importerProxy.resolveImporter(item.url)?.takeIf { it.first.id == importer.id }?.let { Target.Url(it.second) }
+                ?: if (isDefault(importer)) upcomingReleases.detect(item.url, importer)?.let { Target.Upcoming(it) } else null
             is IntakeItem.Id -> if (item.provider == importer.id || (item.provider.isBlank() && isDefault(importer))) Target.Ids(listOf(item.id), item.contentType ?: Type.SONG) else null
             is IntakeItem.Code -> code(item)
             is IntakeItem.Text, is IntakeItem.File -> null
@@ -83,10 +87,13 @@ class ImporterResolvers(
         override suspend fun offer(items: List<IntakeItem>, user: UserInfo): IntakeOffer? {
             val targets = items.mapNotNull { item -> target(item)?.let { item to it } }
             if (targets.isEmpty()) return null
+            val upcoming = targets.any { it.second is Target.Upcoming }
             return IntakeOffer(
                 accepted = targets.map { it.first },
                 titleArgs = titleArgs,
                 icon = icon,
+                descriptionKey = if (upcoming) "intake.import.upcomingDescription" else null,
+                confirmKey = if (upcoming) "intake.import.upcomingConfirm" else null,
                 priority = if (isDefault(importer)) 1 else 0,
                 submit = { submit(targets.map { it.second }, user) },
             )
@@ -96,6 +103,7 @@ class ImporterResolvers(
             val account = userService.findUserById(user.id) ?: throw IllegalStateException("Unknown user ${user.id}")
             val urls = mutableListOf<String>()
             val ids = mutableMapOf<Type, MutableList<String>>()
+            var queued = 0
             targets.forEach { target ->
                 when (target) {
                     is Target.Ids -> ids.getOrPut(target.type) { mutableListOf() }.addAll(target.ids)
@@ -104,11 +112,19 @@ class ImporterResolvers(
                         if (parsed != null) ids.getOrPut(parsed.second ?: Type.SONG) { mutableListOf() }.add(parsed.first)
                         else urls += target.url
                     }
+
+                    is Target.Upcoming -> {
+                        val plan = upcomingReleases.resolve(target.release)
+                        queued += upcomingReleases.submit(plan, importer, account)
+                    }
                 }
             }
             ids.forEach { (type, list) -> importService.importIds(list.asFlow(), type, account, importer.id) }
             if (urls.isNotEmpty()) {
                 importService.addToQueue(UrlImportQueueEntry(urls = urls, byUser = account.id, importer = ImportBackend(importer.id)))
+            }
+            if (targets.all { it is Target.Upcoming }) {
+                return IntakeReceipt(accepted = queued, messageKey = "intake.import.upcomingQueued")
             }
             return IntakeReceipt(accepted = targets.size, messageKey = "importer.queued")
         }

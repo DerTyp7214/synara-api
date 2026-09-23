@@ -46,6 +46,7 @@ class ImportRpcService(
 ) : IImportService, KoinComponent {
     private val applicationEnvironment by inject<ApplicationEnvironment>()
     private val linkResolver by inject<LinkResolverService>()
+    private val upcomingReleases by inject<UpcomingReleaseImportService>()
     private val syncService by lazy {
         SyncService.getInstance(
             user,
@@ -121,13 +122,29 @@ class ImportRpcService(
 
         groups.forEach { (importer, groupUrls) ->
             if (importer == null) {
-                importService.logger.warn("No specific importer found for ${groupUrls.size} URLs, using default queue")
-                importService.addToQueue(
-                    UrlImportQueueEntry(
-                        urls = groupUrls.toMutableList(),
-                        byUser = user.id
+                val defaultImporter = importerProxy.getImporter(importerProxy.defaultService)
+                val remaining = mutableListOf<String>()
+                groupUrls.forEach { url ->
+                    val upcoming = upcomingReleases.detect(url, defaultImporter)
+                    if (upcoming == null) {
+                        remaining += url
+                        return@forEach
+                    }
+                    val plan = upcomingReleases.resolve(upcoming)
+                    val queued = upcomingReleases.submit(plan, defaultImporter, user)
+                    importService.logger.info(
+                        "Queued $queued already released tracks of upcoming release '${upcoming.title}' for ${defaultImporter.id}"
                     )
-                )
+                }
+                if (remaining.isNotEmpty()) {
+                    importService.logger.warn("No specific importer found for ${remaining.size} URLs, using default queue")
+                    importService.addToQueue(
+                        UrlImportQueueEntry(
+                            urls = remaining,
+                            byUser = user.id
+                        )
+                    )
+                }
             } else {
                 importService.logger.info("Routing ${groupUrls.size} URLs to importer: ${importer.id}")
                 val parsed = groupUrls.map { it to importer.parseUrl(it) }

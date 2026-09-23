@@ -194,6 +194,16 @@ class AppleMusicReleaseService(private val environment: ApplicationEnvironment) 
         return (direct + rows.flatMap { attached[it.first].orEmpty() }).distinct()
     }
 
+    suspend fun releaseGroupIdFor(appleAlbumId: String): UUID? = dbQuery {
+        ProviderReleaseTable
+            .select(ProviderReleaseTable.releaseGroupId)
+            .where { ProviderReleaseTable.provider eq PROVIDER }
+            .andWhere { ProviderReleaseTable.externalId eq appleAlbumId.removePrefix("appleMusic:") }
+            .firstOrNull()
+            ?.get(ProviderReleaseTable.releaseGroupId)
+            ?.value
+    }
+
     suspend fun findUnlinkedAppleRelease(
         appleAlbumIds: Set<String>,
         barcodes: Set<String>,

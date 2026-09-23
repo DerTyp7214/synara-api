@@ -47,6 +47,12 @@ private data class TrackMetadata(
     val originalArtists: List<String>,
     val animatedCoverUrl: String? = null,
     val tidalAlbumId: String? = null,
+    val trackNumber: Int? = null,
+    val discNumber: Int? = null,
+    val trackTotal: Int? = null,
+    val albumArtist: String? = null,
+    val barcode: String? = null,
+    val replaceCover: Boolean = false,
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
@@ -69,6 +75,12 @@ private data class TrackMetadata(
         } else if (other.coverData != null) return false
         if (originalTitle != other.originalTitle) return false
         if (originalArtists != other.originalArtists) return false
+        if (trackNumber != other.trackNumber) return false
+        if (discNumber != other.discNumber) return false
+        if (trackTotal != other.trackTotal) return false
+        if (albumArtist != other.albumArtist) return false
+        if (barcode != other.barcode) return false
+        if (replaceCover != other.replaceCover) return false
 
         return true
     }
@@ -86,6 +98,12 @@ private data class TrackMetadata(
         result = 31 * result + (coverData?.contentHashCode() ?: 0)
         result = 31 * result + originalTitle.hashCode()
         result = 31 * result + originalArtists.hashCode()
+        result = 31 * result + (trackNumber ?: 0)
+        result = 31 * result + (discNumber ?: 0)
+        result = 31 * result + (trackTotal ?: 0)
+        result = 31 * result + (albumArtist?.hashCode() ?: 0)
+        result = 31 * result + (barcode?.hashCode() ?: 0)
+        result = 31 * result + replaceCover.hashCode()
         return result
     }
 }
@@ -117,6 +135,16 @@ abstract class TidalBaseImporter(
 
         val metadataService = MetadataService.getMetadataService(IMetadataService.MetadataType.tidal, get())
 
+        val providedTracks = (metadata as? IMetadataService.Album)?.tracks?.toList().orEmpty().associateBy { it.id }
+        val providedAlbum = (metadata as? IMetadataService.Album)?.takeIf { providedTracks.isNotEmpty() }
+        val providedRelease = providedAlbum?.id
+            ?.let { runCatching { UUID.fromString(it) }.getOrNull() }
+            ?.let { musicBrainzService.getRelease(it) }
+
+        if (providedAlbum != null) {
+            onLiveOutput("Using provided album metadata: ${providedAlbum.title} (${providedTracks.size} tracks)")
+        }
+
         onLiveOutput("Fetching metadata for ${urls.size} tracks...")
 
         val tidalTracks = urls.map { url ->
@@ -143,7 +171,11 @@ abstract class TidalBaseImporter(
 
             var mbRelease: MusicBrainzRelease? = null
 
-            if (albumId != "unknown") {
+            if (providedAlbum != null) {
+                mbRelease = providedRelease
+            }
+
+            if (providedAlbum == null && albumId != "unknown") {
                 try {
                     val tidalAlbum = metadataService.getAlbumsByIds(listOf(albumId)).firstOrNull()
                     val barcode = tidalAlbum?.barcode
@@ -161,7 +193,7 @@ abstract class TidalBaseImporter(
                 }
             }
 
-            if (mbRelease == null && metadata is IMetadataService.Album) {
+            if (providedAlbum == null && mbRelease == null && metadata is IMetadataService.Album) {
                 val mbid = try { UUID.fromString(metadata.id) } catch (_: Exception) { null }
                 if (mbid != null) {
                     onLiveOutput("Using provided MusicBrainz metadata for album: ${metadata.title}")
@@ -169,7 +201,7 @@ abstract class TidalBaseImporter(
                 }
             }
             
-            if (mbRelease == null && !albumTitle.isNullOrBlank()) {
+            if (providedAlbum == null && mbRelease == null && !albumTitle.isNullOrBlank()) {
                 onLiveOutput("Searching MusicBrainz for album: $albumTitle")
                 mbRelease = musicBrainzService.searchRelease(albumTitle, albumArtists)
                 if (mbRelease != null) {
@@ -186,13 +218,18 @@ abstract class TidalBaseImporter(
 
                 onLiveOutput("Resolving metadata for: ${tidalTrack.title}")
 
-                var finalTitle = tidalTrack.title
-                var finalArtist = tidalTrack.artists.joinToString(indexer.artistDelimiter)
-                var finalAlbum = tidalTrack.albumTitle
-                var finalDate: String? = null
+                val provided = providedTracks[tidalTrack.id].takeIf { providedAlbum != null }
+                val tidalCoverUrl = tidalTrack.images.takeIf { it.isNotEmpty() }?.largest?.url
+
+                var finalTitle = provided?.title ?: tidalTrack.title
+                var finalArtist = provided?.artists?.takeIf { it.isNotEmpty() }?.joinToString(indexer.artistDelimiter)
+                    ?: tidalTrack.artists.joinToString(indexer.artistDelimiter)
+                var finalAlbum = providedAlbum?.title ?: tidalTrack.albumTitle
+                var finalDate: String? = providedAlbum?.releaseDate?.toString()
                 var finalMbId: String? = null
                 var finalMbReleaseId: String? = null
-                var finalCoverUrl = tidalTrack.images.largest.url
+                var finalTrackNumber = provided?.trackNumber
+                var finalDiscNumber = provided?.discNumber
 
                 if (metadata is IMetadataService.Track) {
                     val mbid = try { UUID.fromString(metadata.id) } catch (_: Exception) { null }
@@ -206,9 +243,14 @@ abstract class TidalBaseImporter(
                     }
                 }
 
-                val mbTrack = mbRelease?.media?.flatMap { it.tracks ?: emptyList() }?.find {
-                    (it.recording?.isrcs?.contains(tidalTrack.isrc) == true) ||
-                            it.title?.cleanTitle()?.equals(tidalTrack.title.cleanTitle(), true) == true
+                val matchIsrcs = listOfNotNull(tidalTrack.isrc, provided?.isrc)
+                val matchTitles = listOfNotNull(tidalTrack.title, provided?.title)
+
+                val mbTrack = mbRelease?.media?.flatMap { it.tracks ?: emptyList() }?.find { track ->
+                    track.recording?.isrcs?.any { it in matchIsrcs } == true ||
+                            matchTitles.any { title ->
+                                track.title?.cleanTitle()?.equals(title.cleanTitle(), true) == true
+                            }
                 }
 
                 if (mbTrack != null) {
@@ -216,10 +258,15 @@ abstract class TidalBaseImporter(
                     finalTitle = mbTrack.title ?: finalTitle
                     finalArtist = mbTrack.recording?.artistCredit?.joinToString(indexer.artistDelimiter) { it.name ?: it.artist?.name ?: "" } ?: finalArtist
                     finalAlbum = mbRelease.title ?: finalAlbum
-                    finalDate = mbRelease.date
+                    finalDate = mbRelease.date ?: finalDate
                     finalMbId = mbTrack.recording?.id?.toString()
                     finalMbReleaseId = mbRelease.id.toString()
-                } else if (finalMbId == null) {
+                    finalTrackNumber = mbTrack.position ?: finalTrackNumber
+                    val mediumIndex = mbRelease.media?.indexOfFirst { medium ->
+                        medium.tracks?.any { it.id == mbTrack.id } == true
+                    } ?: -1
+                    if (mediumIndex >= 0) finalDiscNumber = mediumIndex + 1
+                } else if (finalMbId == null && providedAlbum == null) {
                     if (mbRelease != null) {
                         onLiveOutput("Track '${tidalTrack.title}' not found in album '${mbRelease.title}'. Falling back to recording search.")
                     }
@@ -241,20 +288,22 @@ abstract class TidalBaseImporter(
                     }
                 }
 
-                if (finalMbReleaseId != null) {
-                    finalCoverUrl = "https://coverartarchive.org/release/$finalMbReleaseId/front"
-                }
+                val finalCoverUrl = providedAlbum?.images?.takeIf { it.isNotEmpty() }?.largest?.url
+                    ?: finalMbReleaseId?.let { "https://coverartarchive.org/release/$it/front" }
+                    ?: tidalCoverUrl
 
-                @Suppress("UnusedVariable", "unused")
-                val coverDeferred = coverDownloads.getOrPut(finalCoverUrl) {
-                    async {
-                        try {
-                            if (finalCoverUrl != tidalTrack.images.largest.url) {
-                                onLiveOutput("Fetching enriched cover art for: $finalTitle")
+                if (finalCoverUrl != null) {
+                    @Suppress("UnusedVariable", "unused")
+                    val coverDeferred = coverDownloads.getOrPut(finalCoverUrl) {
+                        async {
+                            try {
+                                if (finalCoverUrl != tidalCoverUrl) {
+                                    onLiveOutput("Fetching enriched cover art for: $finalTitle")
+                                }
+                                ApiClient.instance.safeQueuedGetImage(finalCoverUrl)
+                            } catch (_: Exception) {
+                                null
                             }
-                            ApiClient.instance.safeQueuedGetImage(finalCoverUrl)
-                        } catch (_: Exception) {
-                            null
                         }
                     }
                 }
@@ -289,6 +338,18 @@ abstract class TidalBaseImporter(
                     originalArtists = tidalTrack.artists,
                     animatedCoverUrl = animatedCoverUrl,
                     tidalAlbumId = tidalTrack.albumId,
+                    trackNumber = finalTrackNumber,
+                    discNumber = finalDiscNumber,
+                    trackTotal = providedAlbum?.trackCount?.takeIf { it > 0 },
+                    albumArtist = providedAlbum?.let {
+                        val names = mbRelease?.artistCredit
+                            ?.mapNotNull { credit -> credit.name ?: credit.artist?.name }
+                            ?.takeIf { credits -> credits.isNotEmpty() }
+                            ?: it.artists
+                        names.joinToString(indexer.artistDelimiter).takeIf { joined -> joined.isNotBlank() }
+                    },
+                    barcode = providedAlbum?.let { it.barcode ?: mbRelease?.barcode },
+                    replaceCover = providedAlbum != null,
                 )
             }
         }
@@ -319,17 +380,28 @@ abstract class TidalBaseImporter(
                     }
 
                     if (metadata != null) {
-                        onLiveOutput("Tagged: ${metadata.title} - ${metadata.artist}")
+                        if (providedAlbum != null) {
+                            val position = metadata.trackNumber?.toString() ?: "?"
+                            val total = metadata.trackTotal?.toString() ?: "?"
+                            onLiveOutput("Tagged: ${metadata.title} - ${metadata.artist} (track $position/$total of ${metadata.album ?: providedAlbum.title})")
+                        } else {
+                            onLiveOutput("Tagged: ${metadata.title} - ${metadata.artist}")
+                        }
                         tag.setField(FieldKey.TITLE, metadata.title)
                         tag.setField(FieldKey.ARTIST, metadata.artist)
                         metadata.album?.let { tag.setField(FieldKey.ALBUM, it) }
                         metadata.date?.let { tag.setField(FieldKey.YEAR, it) }
-                        if (tag.getFirst(FieldKey.MUSICBRAINZ_TRACK_ID).isNullOrBlank()) {
+                        if (providedAlbum != null || tag.getFirst(FieldKey.MUSICBRAINZ_TRACK_ID).isNullOrBlank()) {
                             metadata.mbId?.let { tag.setField(FieldKey.MUSICBRAINZ_TRACK_ID, it) }
                         }
-                        if (tag.getFirst(FieldKey.MUSICBRAINZ_RELEASEID).isNullOrBlank()) {
+                        if (providedAlbum != null || tag.getFirst(FieldKey.MUSICBRAINZ_RELEASEID).isNullOrBlank()) {
                             metadata.mbReleaseId?.let { tag.setField(FieldKey.MUSICBRAINZ_RELEASEID, it) }
                         }
+                        metadata.trackNumber?.let { tag.setField(FieldKey.TRACK, it.toString()) }
+                        metadata.discNumber?.let { tag.setField(FieldKey.DISC_NO, it.toString()) }
+                        metadata.trackTotal?.let { tag.setField(FieldKey.TRACK_TOTAL, it.toString()) }
+                        metadata.albumArtist?.let { tag.setField(FieldKey.ALBUM_ARTIST, it) }
+                        metadata.barcode?.let { tag.setField(FieldKey.BARCODE, it) }
                         audioFile.setOriginalUrl(metadata.url)
 
                         if (tag.getFirst(FieldKey.LYRICS).isNullOrBlank()) {
@@ -342,7 +414,7 @@ abstract class TidalBaseImporter(
                             }
                         }
 
-                        if (audioFile.coverImage == null) {
+                        if (audioFile.coverImage == null || metadata.replaceCover) {
                             val coverData = metadata.coverUrl?.let { coverDataMap[it] }
                             coverData?.let { data ->
                                 audioFile.setCoverImage(data, imageUrl = metadata.coverUrl)
@@ -442,12 +514,19 @@ abstract class TidalBaseImporter(
 
             Type.ALBUM -> {
                 val groups = ids.asFlow().map { id ->
+                    val tidalAlbum = try {
+                        metadataService.getAlbumsByIds(listOf(id), HttpClientPriority.HIGH).firstOrNull()
+                    } catch (e: Exception) {
+                        logger.warn("Failed to load Tidal album $id", e)
+                        null
+                    }
                     IdsGroup(
                         id,
                         emptyFlow(),
                         IMetadataService.Album(
                             id = id,
-                            title = "",
+                            title = tidalAlbum?.title ?: "",
+                            barcode = tidalAlbum?.barcode,
                             tracks = metadataService.getAlbumTracks(id, priority = HttpClientPriority.HIGH),
                         )
                     )
@@ -609,6 +688,7 @@ abstract class TidalBaseImporter(
             Type.ALBUM -> {
                 wrapper.idGroups.buffer(2).collect { idGroup ->
                     idGroup.metadata?.let { metadata ->
+                        val barcode = (metadata as? IMetadataService.Album)?.barcode
                         when (metadata) {
                             is IMetadataService.Album -> metadata.tracks
                             else -> emptyFlow()
@@ -618,7 +698,8 @@ abstract class TidalBaseImporter(
                                 songService = songService,
                                 user = user,
                                 chunkSize = 100,
-                                deduplicateByIsrc = false
+                                deduplicateByIsrc = barcode != null,
+                                isrcAlbumBarcode = barcode
                             ).collect { trackChunk ->
                                 importService.addToQueue(
                                     UrlImportQueueEntry(
