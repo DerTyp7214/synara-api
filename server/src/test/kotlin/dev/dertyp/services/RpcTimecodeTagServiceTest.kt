@@ -1,5 +1,6 @@
 package dev.dertyp.services
 
+import dev.dertyp.data.TimecodeTagAction
 import dev.dertyp.data.TimecodeTagInput
 import dev.dertyp.data.TimecodeTagType
 import dev.dertyp.data.User
@@ -15,12 +16,25 @@ class RpcTimecodeTagServiceTest {
     private val service = RpcTimecodeTagService(user, timecodeTagService)
 
     @Test
-    fun `createTag forwards the user id song id type text timestamp and endMs`() = runBlocking {
+    fun `createTag forwards the user id song id type text timestamp endMs action and fade`() = runBlocking {
         val songId = UUID.randomUUID()
 
-        service.createTag(songId, TimecodeTagType.CHAPTER, "Intro", 1000L, 2000L)
+        service.createTag(songId, TimecodeTagType.CHAPTER, "Intro", 1000L, 2000L, TimecodeTagAction.SKIP, true)
 
-        coVerify(exactly = 1) { timecodeTagService.createTag(user.id, songId, TimecodeTagType.CHAPTER, "Intro", 1000L, 2000L) }
+        coVerify(exactly = 1) {
+            timecodeTagService.createTag(user.id, songId, TimecodeTagType.CHAPTER, "Intro", 1000L, 2000L, TimecodeTagAction.SKIP, true)
+        }
+    }
+
+    @Test
+    fun `createTag defaults to no action and no fade`() = runBlocking {
+        val songId = UUID.randomUUID()
+
+        service.createTag(songId, TimecodeTagType.MARKER, "Drop", 1000L)
+
+        coVerify(exactly = 1) {
+            timecodeTagService.createTag(user.id, songId, TimecodeTagType.MARKER, "Drop", 1000L, null, TimecodeTagAction.NONE, false)
+        }
     }
 
     @Test
@@ -33,12 +47,23 @@ class RpcTimecodeTagServiceTest {
     }
 
     @Test
-    fun `updateTag forwards the user id tag id type text timestamp and endMs`() = runBlocking {
+    fun `updateTag forwards the user id tag id type text timestamp endMs action and fade`() = runBlocking {
+        val tagId = UUID.randomUUID()
+
+        service.updateTag(tagId, TimecodeTagType.MARKER, "Chorus", 5000L, null, TimecodeTagAction.PLAY_UNTIL, true)
+
+        coVerify(exactly = 1) {
+            timecodeTagService.updateTag(user.id, tagId, TimecodeTagType.MARKER, "Chorus", 5000L, null, TimecodeTagAction.PLAY_UNTIL, true)
+        }
+    }
+
+    @Test
+    fun `updateTag forwards missing action and fade as null`() = runBlocking {
         val tagId = UUID.randomUUID()
 
         service.updateTag(tagId, TimecodeTagType.MARKER, "Chorus", 5000L, null)
 
-        coVerify(exactly = 1) { timecodeTagService.updateTag(user.id, tagId, TimecodeTagType.MARKER, "Chorus", 5000L, null) }
+        coVerify(exactly = 1) { timecodeTagService.updateTag(user.id, tagId, TimecodeTagType.MARKER, "Chorus", 5000L, null, null, null) }
     }
 
     @Test
@@ -53,7 +78,10 @@ class RpcTimecodeTagServiceTest {
     @Test
     fun `replaceTags forwards the user id song id and tags`() = runBlocking {
         val songId = UUID.randomUUID()
-        val tags = listOf(TimecodeTagInput(type = TimecodeTagType.NOTE, text = "note", timestampMs = 100L, endMs = null))
+        val tags = listOf(
+            TimecodeTagInput(type = TimecodeTagType.NOTE, text = "note", timestampMs = 100L, endMs = null),
+            TimecodeTagInput(type = TimecodeTagType.CHAPTER, timestampMs = 200L, endMs = 900L, action = TimecodeTagAction.SKIP, fade = true)
+        )
 
         service.replaceTags(songId, tags)
 

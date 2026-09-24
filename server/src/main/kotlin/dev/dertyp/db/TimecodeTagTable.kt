@@ -1,5 +1,6 @@
 package dev.dertyp.db
 
+import dev.dertyp.data.TimecodeTagAction
 import dev.dertyp.data.TimecodeTagType
 import org.jetbrains.exposed.v1.core.ReferenceOption
 import org.jetbrains.exposed.v1.core.dao.id.java.UUIDTable
@@ -14,6 +15,8 @@ object TimecodeTagTable : UUIDTable("timecodeTag") {
     val endMs = long("endMs").nullable()
     val createdAt = long("createdAt").clientDefault { Instant.now().toEpochMilli() }
     val updatedAt = long("updatedAt").clientDefault { Instant.now().toEpochMilli() }
+    val action = enumerationByName("action", 16, TimecodeTagAction::class).default(TimecodeTagAction.NONE)
+    val fade = bool("fade").default(false)
 
     init {
         index(false, userId, songId, timestampMs)

@@ -374,8 +374,8 @@ POST /subsonicCredential/regenerateSubsonicCredential ISubsonicCredentialService
 DELETE /timecodeTag/tag/{tagId} ITimecodeTagService.deleteTag [p:tagId] JSON
 GET /timecodeTag/tags ITimecodeTagService.listTags [q:tagType? q:page? q:pageSize?] JSON
 GET /timecodeTag/tags/{songId} ITimecodeTagService.getTags [p:songId] JSON
-POST /timecodeTag/tags/{songId} ITimecodeTagService.createTag [p:songId q:tagType q:text? q:timestampMs q:endMs?] JSON
-PUT /timecodeTag/tag/{tagId} ITimecodeTagService.updateTag [p:tagId q:tagType q:text? q:timestampMs q:endMs?] JSON
+POST /timecodeTag/tags/{songId} ITimecodeTagService.createTag [p:songId q:tagType q:text? q:timestampMs q:endMs? q:action? q:fade?] JSON
+PUT /timecodeTag/tag/{tagId} ITimecodeTagService.updateTag [p:tagId q:tagType q:text? q:timestampMs q:endMs? q:action? q:fade?] JSON
 PUT /timecodeTag/tags/{songId} ITimecodeTagService.replaceTags [p:songId b:tags] JSON
 GET /ui/contributions IUiService.listContributions [q:kind? q:slot?] JSON
 GET /ui/homeCards IUiService.getHomeCards [] JSON

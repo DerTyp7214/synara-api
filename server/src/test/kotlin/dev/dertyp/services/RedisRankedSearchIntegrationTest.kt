@@ -42,7 +42,7 @@ class RedisRankedSearchIntegrationTest : KoinTest {
         SongMusicBrainzTable, SongAudioDataTable, ImageTable, GenreTable,
         UserTable, AlbumMusicBrainzTable, ArtistMusicBrainzTable,
         ArtistAliasTable, ArtistMemberTable, AlbumArtistTable,
-        PlaylistTable, UserSongTable, UserPlaylistTable,
+        PlaylistTable, UserSongTable, TimecodeTagTable, UserPlaylistTable,
         SongGenreTable, ArtistGenreTable, AlbumGenreTable,
         PlaylistSongTable, UserPlaylistSongTable,
         SyncedLyricsTable, ImageMetadataTable, RecentReleaseTable,

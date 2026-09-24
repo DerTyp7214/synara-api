@@ -2,6 +2,7 @@ package dev.dertyp.services
 
 import dev.dertyp.data.PaginatedResponse
 import dev.dertyp.data.TimecodeTag
+import dev.dertyp.data.TimecodeTagAction
 import dev.dertyp.data.TimecodeTagInput
 import dev.dertyp.data.TimecodeTagType
 import dev.dertyp.data.User
@@ -17,8 +18,10 @@ class RpcTimecodeTagService(
         tagType: TimecodeTagType,
         text: String,
         timestampMs: Long,
-        endMs: Long?
-    ): TimecodeTag = timecodeTagService.createTag(user.id, songId, tagType, text, timestampMs, endMs)
+        endMs: Long?,
+        action: TimecodeTagAction,
+        fade: Boolean
+    ): TimecodeTag = timecodeTagService.createTag(user.id, songId, tagType, text, timestampMs, endMs, action, fade)
 
     override suspend fun getTags(songId: UUID): List<TimecodeTag> = timecodeTagService.getTags(user.id, songId)
 
@@ -27,8 +30,10 @@ class RpcTimecodeTagService(
         tagType: TimecodeTagType,
         text: String,
         timestampMs: Long,
-        endMs: Long?
-    ): TimecodeTag = timecodeTagService.updateTag(user.id, tagId, tagType, text, timestampMs, endMs)
+        endMs: Long?,
+        action: TimecodeTagAction?,
+        fade: Boolean?
+    ): TimecodeTag = timecodeTagService.updateTag(user.id, tagId, tagType, text, timestampMs, endMs, action, fade)
 
     override suspend fun deleteTag(tagId: UUID): Boolean = timecodeTagService.deleteTag(user.id, tagId)
 

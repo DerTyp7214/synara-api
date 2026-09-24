@@ -100,6 +100,7 @@ class SongServiceTest : KoinTest {
                 SongProviderTable,
                 AlbumProviderTable,
                 SongAudioDataTable,
+                TimecodeTagTable,
                 *allMusicBrainzTables
             )
             
@@ -1076,6 +1077,38 @@ class SongServiceTest : KoinTest {
             listOf(TitleTag(TitleTagKind.FEAT, "feat. X"), TitleTag(TitleTagKind.EDIT, "Radio Edit")),
             decodeTitleTags(row[SongTable.titleTags])
         )
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `user songs carry only the requesting user's tags with an action and song edits leave them untouched`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val songId = insertSongWithPath("/x/tagged.mp3")
+        val otherUserId = UUID.randomUUID()
+        transaction(database) {
+            UserTable.insert {
+                it[id] = otherUserId
+                it[username] = "other"
+                it[passwordHash] = "hash"
+            }
+        }
+        val tagService = TimecodeTagService()
+        tagService.createTag(user.id, songId, TimecodeTagType.NOTE, "passive", 500L, null)
+        val skipTo = tagService.createTag(user.id, songId, TimecodeTagType.MARKER, "start", 9000L, null, TimecodeTagAction.SKIP_TO)
+        val skip = tagService.createTag(user.id, songId, TimecodeTagType.CHAPTER, "intro", 1000L, 4000L, TimecodeTagAction.SKIP, true)
+        tagService.createTag(otherUserId, songId, TimecodeTagType.CHAPTER, "foreign", 0L, 2000L, TimecodeTagAction.SKIP)
+
+        val song = songService.byId(songId, user.id)!!
+        assertEquals(listOf(skip, skipTo), song.playbackTags)
+        assertEquals(listOf(skip, skipTo), songService.byIds(listOf(songId), user.id).single().playbackTags)
+        assertEquals(listOf("foreign"), songService.byId(songId, otherUserId)!!.playbackTags.map { it.text })
+
+        val updated = songService.updateSong(songService.byId(songId)!!.copy(title = "Renamed"), user.id)
+
+        assertEquals("Renamed", updated?.title)
+        assertEquals(listOf(skip, skipTo), updated?.playbackTags)
+        assertEquals(4, transaction(database) { TimecodeTagTable.selectAll().count() })
+        assertEquals(3, tagService.getTags(user.id, songId).size)
     }
 
     @ParameterizedTest

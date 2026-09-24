@@ -138,7 +138,7 @@ class RadioChannelServiceTest : KoinTest {
         UserTable, ImageTable, ImageMetadataTable, AnimatedImageTable,
         ArtistTable, AlbumTable, SongTable, SongVariantTable, SongArtistTable, SongMusicBrainzTable, SongAudioDataTable,
         GenreTable, AlbumMusicBrainzTable, ArtistMusicBrainzTable, ArtistAliasTable, ArtistMemberTable,
-        AlbumArtistTable, PlaylistTable, UserSongTable, UserPlaylistTable, SongGenreTable, ArtistGenreTable,
+        AlbumArtistTable, PlaylistTable, UserSongTable, TimecodeTagTable, UserPlaylistTable, SongGenreTable, ArtistGenreTable,
         AlbumGenreTable, PlaylistSongTable, UserPlaylistSongTable, SyncedLyricsTable, RecentReleaseTable,
         FollowedArtistTable, TranscodedSongTable, CustomMigrationTable, ScheduledTaskLogTable,
         ArtistSplitAliasTable, SyncServiceTable, SongProviderTable, AlbumProviderTable,

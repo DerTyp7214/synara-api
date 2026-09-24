@@ -2048,6 +2048,7 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
 
         val unsortedData = mapEagerly<T>(
             rows = rows,
+            userId = userId,
             albumArtistAlias = albumArtistAlias,
             albumStats = statsByAlbumId,
             explicit = explicit,
@@ -2074,6 +2075,7 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
 
     private inline fun <reified T : BaseSong> mapEagerly(
         rows: List<ResultRow>,
+        userId: UUID?,
         albumArtistAlias: Alias<ArtistTable>,
         albumStats: Map<UUID, Pair<Long, Long>>,
         explicit: Boolean = false,
@@ -2168,6 +2170,12 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                 .toList()
         }.associateBy { it[SongVariantTable.songId].value }
 
+        val playbackTags = if (T::class == UserSong::class && userId != null) {
+            TimecodeTagService.playbackTags(userId, songMap.keys)
+        } else {
+            emptyMap()
+        }
+
         return songMap.values.map { song ->
             val variant = variants[song.id]
             val albumArtists = albumArtistsMap[song.album?.id] ?: listOf()
@@ -2201,6 +2209,7 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                     originalUrl = originalUrl,
                     atmos = variant?.let(::mapVariant),
                     atmosVariantPath = variant?.get(SongVariantTable.path),
+                    playbackTags = playbackTags[song.id] ?: emptyList(),
                 ) as T
 
                 else -> throw Exception("Unknown song type: $song")

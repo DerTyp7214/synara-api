@@ -3,6 +3,7 @@ package dev.dertyp.services
 import dev.dertyp.core.paging
 import dev.dertyp.data.PaginatedResponse
 import dev.dertyp.data.TimecodeTag
+import dev.dertyp.data.TimecodeTagAction
 import dev.dertyp.data.TimecodeTagInput
 import dev.dertyp.data.TimecodeTagType
 import dev.dertyp.db.SongTable
@@ -14,6 +15,8 @@ import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.SortOrder
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.inList
+import org.jetbrains.exposed.v1.core.neq
 import org.jetbrains.exposed.v1.jdbc.Query
 import org.jetbrains.exposed.v1.jdbc.andWhere
 import org.jetbrains.exposed.v1.jdbc.batchInsert
@@ -31,6 +34,38 @@ class TimecodeTagService : Service() {
         const val MAX_TEXT_LENGTH = 1000
         const val MAX_TAGS_PER_SONG = 500
         const val MAX_PAGE = 500
+
+        fun playbackTags(userId: UUID, songIds: Collection<UUID>): Map<UUID, List<TimecodeTag>> = songIds
+            .distinct()
+            .chunked(1000)
+            .flatMap { ids ->
+                TimecodeTagTable
+                    .selectAll()
+                    .where { TimecodeTagTable.userId eq userId }
+                    .andWhere { TimecodeTagTable.songId inList ids }
+                    .andWhere { TimecodeTagTable.action neq TimecodeTagAction.NONE }
+                    .orderBy(
+                        TimecodeTagTable.timestampMs to SortOrder.ASC,
+                        TimecodeTagTable.createdAt to SortOrder.ASC,
+                        TimecodeTagTable.id to SortOrder.ASC
+                    )
+                    .map(::mapRow)
+            }
+            .groupBy { it.songId }
+
+        private fun mapRow(row: ResultRow): TimecodeTag = TimecodeTag(
+            id = row[TimecodeTagTable.id].value,
+            userId = row[TimecodeTagTable.userId].value,
+            songId = row[TimecodeTagTable.songId].value,
+            type = row[TimecodeTagTable.type],
+            text = row[TimecodeTagTable.text],
+            timestampMs = row[TimecodeTagTable.timestampMs],
+            endMs = row[TimecodeTagTable.endMs],
+            createdAt = row[TimecodeTagTable.createdAt],
+            updatedAt = row[TimecodeTagTable.updatedAt],
+            action = row[TimecodeTagTable.action],
+            fade = row[TimecodeTagTable.fade]
+        )
     }
 
     private val locks = ConcurrentHashMap<UUID, Mutex>()
@@ -41,9 +76,12 @@ class TimecodeTagService : Service() {
         type: TimecodeTagType,
         text: String,
         timestampMs: Long,
-        endMs: Long?
+        endMs: Long?,
+        action: TimecodeTagAction = TimecodeTagAction.NONE,
+        fade: Boolean = false
     ): TimecodeTag {
         validate(text, timestampMs, endMs)
+        validateAction(type, endMs, action)
 
         return lock(userId).withLock {
             dbQuery {
@@ -53,7 +91,7 @@ class TimecodeTagService : Service() {
                 }
 
                 val now = Instant.now().toEpochMilli()
-                val id = insertTag(userId, songId, type, text, timestampMs, endMs, now)
+                val id = insertTag(userId, songId, type, text, timestampMs, endMs, action, fade, now)
 
                 TimecodeTag(
                     id = id,
@@ -64,7 +102,9 @@ class TimecodeTagService : Service() {
                     timestampMs = timestampMs,
                     endMs = endMs,
                     createdAt = now,
-                    updatedAt = now
+                    updatedAt = now,
+                    action = action,
+                    fade = fade
                 )
             }
         }
@@ -80,12 +120,27 @@ class TimecodeTagService : Service() {
         type: TimecodeTagType,
         text: String,
         timestampMs: Long,
-        endMs: Long?
+        endMs: Long?,
+        action: TimecodeTagAction? = null,
+        fade: Boolean? = null
     ): TimecodeTag {
         validate(text, timestampMs, endMs)
 
         return dbQuery {
-            val updated = writeTag(userId, tagId, type, text, timestampMs, endMs, Instant.now().toEpochMilli())
+            val stored = TimecodeTagTable
+                .select(TimecodeTagTable.action, TimecodeTagTable.fade)
+                .where { TimecodeTagTable.id eq tagId }
+                .andWhere { TimecodeTagTable.userId eq userId }
+                .singleOrNull()
+            require(stored != null) { "Timecode tag $tagId not found" }
+
+            val effectiveAction = action ?: stored[TimecodeTagTable.action]
+            val effectiveFade = fade ?: stored[TimecodeTagTable.fade]
+            validateAction(type, endMs, effectiveAction)
+
+            val updated = writeTag(
+                userId, tagId, type, text, timestampMs, endMs, effectiveAction, effectiveFade, Instant.now().toEpochMilli()
+            )
             require(updated == 1) { "Timecode tag $tagId not found" }
 
             TimecodeTagTable
@@ -100,7 +155,10 @@ class TimecodeTagService : Service() {
 
     suspend fun replaceTags(userId: UUID, songId: UUID, tags: List<TimecodeTagInput>): List<TimecodeTag> {
         require(tags.size <= MAX_TAGS_PER_SONG) { "A song holds at most $MAX_TAGS_PER_SONG tags" }
-        tags.forEach { tag -> validate(tag.text, tag.timestampMs, tag.endMs) }
+        tags.forEach { tag ->
+            validate(tag.text, tag.timestampMs, tag.endMs)
+            validateAction(tag.type, tag.endMs, tag.action)
+        }
 
         return lock(userId).withLock {
             dbQuery {
@@ -115,6 +173,8 @@ class TimecodeTagService : Service() {
                     this[TimecodeTagTable.text] = tag.text
                     this[TimecodeTagTable.timestampMs] = tag.timestampMs
                     this[TimecodeTagTable.endMs] = tag.endMs
+                    this[TimecodeTagTable.action] = tag.action
+                    this[TimecodeTagTable.fade] = tag.fade
                     this[TimecodeTagTable.createdAt] = now
                     this[TimecodeTagTable.updatedAt] = now
                 }
@@ -152,6 +212,20 @@ class TimecodeTagService : Service() {
         require(timestampMs >= 0) { "A timecode tag position must not be negative" }
         require(endMs == null || endMs >= timestampMs) { "A timecode tag must not end before it starts" }
         require(text.length <= MAX_TEXT_LENGTH) { "The text of a timecode tag is at most $MAX_TEXT_LENGTH characters long" }
+    }
+
+    private fun validateAction(type: TimecodeTagType, endMs: Long?, action: TimecodeTagAction) {
+        when (action) {
+            TimecodeTagAction.NONE -> Unit
+            TimecodeTagAction.PLAY_ONLY, TimecodeTagAction.SKIP -> {
+                require(type == TimecodeTagType.CHAPTER) { "The action $action is only available on chapters" }
+                require(endMs != null) { "The action $action needs a chapter with an end position" }
+            }
+            TimecodeTagAction.SKIP_TO, TimecodeTagAction.PLAY_UNTIL -> {
+                require(type == TimecodeTagType.MARKER) { "The action $action is only available on markers" }
+                require(endMs == null) { "The action $action needs a marker without an end position" }
+            }
+        }
     }
 
     private fun requireSong(songId: UUID) {
@@ -196,6 +270,8 @@ class TimecodeTagService : Service() {
         content: String,
         start: Long,
         end: Long?,
+        tagAction: TimecodeTagAction,
+        tagFade: Boolean,
         at: Long
     ): UUID = TimecodeTagTable.insertAndGetId {
         it[TimecodeTagTable.userId] = owner
@@ -204,6 +280,8 @@ class TimecodeTagService : Service() {
         it[text] = content
         it[timestampMs] = start
         it[endMs] = end
+        it[action] = tagAction
+        it[fade] = tagFade
         it[createdAt] = at
         it[updatedAt] = at
     }.value
@@ -215,6 +293,8 @@ class TimecodeTagService : Service() {
         content: String,
         start: Long,
         end: Long?,
+        tagAction: TimecodeTagAction,
+        tagFade: Boolean,
         at: Long
     ): Int = TimecodeTagTable.update({
         (TimecodeTagTable.id eq tag) and (TimecodeTagTable.userId eq owner)
@@ -223,6 +303,8 @@ class TimecodeTagService : Service() {
         it[text] = content
         it[timestampMs] = start
         it[endMs] = end
+        it[action] = tagAction
+        it[fade] = tagFade
         it[updatedAt] = at
     }
 
@@ -233,16 +315,4 @@ class TimecodeTagService : Service() {
     private fun clearTags(owner: UUID, song: UUID): Int = TimecodeTagTable.deleteWhere {
         (TimecodeTagTable.userId eq owner) and (TimecodeTagTable.songId eq song)
     }
-
-    private fun mapRow(row: ResultRow): TimecodeTag = TimecodeTag(
-        id = row[TimecodeTagTable.id].value,
-        userId = row[TimecodeTagTable.userId].value,
-        songId = row[TimecodeTagTable.songId].value,
-        type = row[TimecodeTagTable.type],
-        text = row[TimecodeTagTable.text],
-        timestampMs = row[TimecodeTagTable.timestampMs],
-        endMs = row[TimecodeTagTable.endMs],
-        createdAt = row[TimecodeTagTable.createdAt],
-        updatedAt = row[TimecodeTagTable.updatedAt]
-    )
 }

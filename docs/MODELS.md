@@ -180,6 +180,7 @@ Services: [RPC_SERVICES.md](RPC_SERVICES.md) · REST routes: [REST_API.md](REST_
 - [TaskConfiguration](#devdertypdatataskconfiguration)
 - [TaskStatus](#devdertypdatataskstatus)
 - [TimecodeTag](#devdertypdatatimecodetag)
+- [TimecodeTagAction](#devdertypdatatimecodetagaction)
 - [TimecodeTagInput](#devdertypdatatimecodetaginput)
 - [TimecodeTagType](#devdertypdatatimecodetagtype)
 - [TitleTag](#devdertypdatatitletag)
@@ -2263,6 +2264,19 @@ A tag a user attached to a song at a position in milliseconds. Tags are private 
 | `endMs` | `Long`? | Position in the song in milliseconds at which the tag ends, or null for a tag that marks a single point. |
 | `createdAt` | `Long` | Unix timestamp in milliseconds at which the tag was created. |
 | `updatedAt` | `Long` | Unix timestamp in milliseconds of the last change to the tag. |
+| `action` | [TimecodeTagAction](#devdertypdatatimecodetagaction) | What the playing client does when playback reaches the tag. |
+| `fade` | `Boolean` | When set, the client fades in from the tag and fades out towards the tag around the action. |
+
+### TimecodeTagAction <a name="devdertypdatatimecodetagaction"></a>
+What the client that plays the song does when playback reaches a timecode tag. The playing client executes the action itself, a client that only controls another device does nothing. Chapter actions need a tag with an end position, marker actions a tag without one, and a note always uses NONE.
+
+| Value | Description |
+| :--- | :--- |
+| `NONE` | The tag is passive and does not change playback. |
+| `PLAY_ONLY` | Chapters only. Playback covers only the PLAY_ONLY chapters of the song and moves on to the next track after the last one. |
+| `SKIP` | Chapters only. Playback jumps over the chapter. |
+| `SKIP_TO` | Markers only. The song starts at the marker. |
+| `PLAY_UNTIL` | Markers only. Playback moves on to the next track when it reaches the marker. |
 
 ### TimecodeTagInput <a name="devdertypdatatimecodetaginput"></a>
 A tag to store for a song, without the fields the server assigns itself. Used to write a whole set of tags of a song at once.
@@ -2273,6 +2287,8 @@ A tag to store for a song, without the fields the server assigns itself. Used to
 | `text` | `String` | The text of the tag, for example the name of a chapter or the remark of a note. May be blank. |
 | `timestampMs` | `Long` | Position in the song in milliseconds at which the tag starts. |
 | `endMs` | `Long`? | Position in the song in milliseconds at which the tag ends, or null for a tag that marks a single point. |
+| `action` | [TimecodeTagAction](#devdertypdatatimecodetagaction) | What the playing client does when playback reaches the tag. |
+| `fade` | `Boolean` | When set, the client fades in from the tag and fades out towards the tag around the action. |
 
 ### TimecodeTagType <a name="devdertypdatatimecodetagtype"></a>
 Determines how a timecode tag is meant to be read by a client, so a player can render sections, cue points and remarks differently.
@@ -2507,6 +2523,7 @@ Extends track metadata with user-specific information like favorite status.
 | `isFavourite` | `Boolean`? | Whether the current user has marked this song as a favorite. |
 | `userSongCreatedAt` | `PlatformDate`? | Timestamp of when the song record was created. |
 | `userSongUpdatedAt` | `PlatformDate`? | Timestamp of the last update to the song metadata. |
+| `playbackTags` | `List`<[TimecodeTag](#devdertypdatatimecodetag)> | The requesting user's timecode tags on this song whose action is not NONE, ordered by position. Read-only. Tags are changed through ITimecodeTagService, and the full list including passive tags comes from ITimecodeTagService.getTags. |
 
 ### BackupInfo <a name="devdertypservicesbackupinfo"></a>
 Metadata for a specific system backup file.

@@ -3,6 +3,7 @@ package dev.dertyp.services
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
 import dev.dertyp.data.TimecodeTag
+import dev.dertyp.data.TimecodeTagAction
 import dev.dertyp.data.TimecodeTagInput
 import dev.dertyp.data.TimecodeTagType
 import dev.dertyp.db.AlbumTable
@@ -25,6 +26,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Assumptions.assumeTrue
+import org.junit.jupiter.api.assertDoesNotThrow
 import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.EnumSource
@@ -90,8 +92,115 @@ class TimecodeTagServiceTest : KoinTest {
         return id
     }
 
-    private fun input(type: TimecodeTagType, timestampMs: Long, text: String = "", endMs: Long? = null) =
-        TimecodeTagInput(type = type, text = text, timestampMs = timestampMs, endMs = endMs)
+    private fun input(
+        type: TimecodeTagType,
+        timestampMs: Long,
+        text: String = "",
+        endMs: Long? = null,
+        action: TimecodeTagAction = TimecodeTagAction.NONE,
+        fade: Boolean = false
+    ) = TimecodeTagInput(type = type, text = text, timestampMs = timestampMs, endMs = endMs, action = action, fade = fade)
+
+    private fun actionAllowed(type: TimecodeTagType, endMs: Long?, action: TimecodeTagAction): Boolean = when (action) {
+        TimecodeTagAction.NONE -> true
+        TimecodeTagAction.PLAY_ONLY, TimecodeTagAction.SKIP -> type == TimecodeTagType.CHAPTER && endMs != null
+        TimecodeTagAction.SKIP_TO, TimecodeTagAction.PLAY_UNTIL -> type == TimecodeTagType.MARKER && endMs == null
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `action validation accepts only matching type and end combinations`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val userId = transaction(database) { insertUser() }
+        val albumId = transaction(database) { insertAlbum() }
+        val songId = transaction(database) { insertSong(albumId) }
+
+        var accepted = 0
+        for (type in TimecodeTagType.entries) {
+            for (endMs in listOf(null, 2000L)) {
+                for (action in TimecodeTagAction.entries) {
+                    if (actionAllowed(type, endMs, action)) {
+                        val created = assertDoesNotThrow {
+                            runBlocking { service.createTag(userId, songId, type, "", 1000L, endMs, action, true) }
+                        }
+                        assertEquals(action, created.action)
+                        accepted++
+                    } else {
+                        assertThrows<IllegalArgumentException>("$type $endMs $action") {
+                            runBlocking { service.createTag(userId, songId, type, "", 1000L, endMs, action) }
+                        }
+                        assertThrows<IllegalArgumentException>("$type $endMs $action") {
+                            runBlocking { service.replaceTags(userId, songId, listOf(input(type, 1000L, endMs = endMs, action = action))) }
+                        }
+                    }
+                }
+            }
+        }
+
+        assertEquals(10, accepted)
+        assertEquals(accepted, service.getTags(userId, songId).size)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `action and fade survive create update and replace`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val userId = transaction(database) { insertUser() }
+        val albumId = transaction(database) { insertAlbum() }
+        val songId = transaction(database) { insertSong(albumId) }
+
+        val created = service.createTag(userId, songId, TimecodeTagType.CHAPTER, "Intro", 0L, 5000L, TimecodeTagAction.SKIP, true)
+        assertEquals(TimecodeTagAction.SKIP, created.action)
+        assertTrue(created.fade)
+        assertEquals(listOf(created), service.getTags(userId, songId))
+
+        val updated = service.updateTag(userId, created.id, TimecodeTagType.MARKER, "Drop", 3000L, null, TimecodeTagAction.SKIP_TO, false)
+        assertEquals(TimecodeTagAction.SKIP_TO, updated.action)
+        assertFalse(updated.fade)
+        assertEquals(listOf(updated), service.getTags(userId, songId))
+
+        val replaced = service.replaceTags(
+            userId, songId,
+            listOf(
+                input(TimecodeTagType.CHAPTER, 1000L, endMs = 2000L, action = TimecodeTagAction.PLAY_ONLY, fade = true),
+                input(TimecodeTagType.MARKER, 4000L, action = TimecodeTagAction.PLAY_UNTIL),
+                input(TimecodeTagType.NOTE, 5000L)
+            )
+        )
+        assertEquals(
+            listOf(TimecodeTagAction.PLAY_ONLY to true, TimecodeTagAction.PLAY_UNTIL to false, TimecodeTagAction.NONE to false),
+            replaced.map { it.action to it.fade }
+        )
+        assertEquals(replaced, service.getTags(userId, songId))
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `updateTag without action and fade keeps the stored values`(dialect: DbDialect) = runBlocking<Unit> {
+        setup(dialect)
+        val userId = transaction(database) { insertUser() }
+        val albumId = transaction(database) { insertAlbum() }
+        val songId = transaction(database) { insertSong(albumId) }
+        val created = service.createTag(userId, songId, TimecodeTagType.CHAPTER, "Intro", 0L, 5000L, TimecodeTagAction.SKIP, true)
+
+        val renamed = service.updateTag(userId, created.id, TimecodeTagType.CHAPTER, "Opening", 100L, 6000L)
+        assertEquals("Opening", renamed.text)
+        assertEquals(TimecodeTagAction.SKIP, renamed.action)
+        assertTrue(renamed.fade)
+
+        val unfaded = service.updateTag(userId, created.id, TimecodeTagType.CHAPTER, "Opening", 100L, 6000L, fade = false)
+        assertEquals(TimecodeTagAction.SKIP, unfaded.action)
+        assertFalse(unfaded.fade)
+
+        assertThrows<IllegalArgumentException> {
+            runBlocking { service.updateTag(userId, created.id, TimecodeTagType.MARKER, "Opening", 100L, null) }
+        }
+        assertEquals(listOf(unfaded), service.getTags(userId, songId))
+
+        val cleared = service.updateTag(userId, created.id, TimecodeTagType.NOTE, "Opening", 100L, null, TimecodeTagAction.NONE)
+        assertEquals(TimecodeTagAction.NONE, cleared.action)
+        assertFalse(cleared.fade)
+    }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
