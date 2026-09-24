@@ -56,7 +56,10 @@ RUN yum update -y && yum install -y python3.13 python3.13-pip libstdc++ zlib gli
     yum clean all && rm -rf /var/cache/yum
 
 RUN ln -sf /usr/bin/python3.13 /usr/bin/python3
-RUN python3 -m pip install --break-system-packages --no-cache-dir tidal-dl-ng syncedlyrics tiddl
+# tiddl from ssupt/tiddl feat/single-auth-capability-sessions: hot patch so downloads reach max quality.
+# Check regularly whether upstream tiddl has merged or fixed this, then switch back to the PyPI package.
+# Last checked: 2026-09-24
+RUN python3 -m pip install --break-system-packages --no-cache-dir tidal-dl-ng syncedlyrics https://github.com/ssupt/tiddl/archive/refs/heads/feat/single-auth-capability-sessions.zip
 
 COPY --from=ffmpeg-builder /usr/local/lib/libav*.so* /usr/lib/
 COPY --from=ffmpeg-builder /usr/local/lib/libsw*.so* /usr/lib/

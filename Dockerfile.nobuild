@@ -72,7 +72,10 @@ RUN chown -R appuser:appgroup /home/appuser
 
 ARG DAY_MONTH_YEAR=unknown
 
-RUN python3 -m pip install --break-system-packages --no-cache-dir syncedlyrics yt-dlp tiddl && \
+# tiddl from ssupt/tiddl feat/single-auth-capability-sessions: hot patch so downloads reach max quality.
+# Check regularly whether upstream tiddl has merged or fixed this, then switch back to the PyPI package.
+# Last checked: 2026-09-24
+RUN python3 -m pip install --break-system-packages --no-cache-dir syncedlyrics yt-dlp https://github.com/ssupt/tiddl/archive/refs/heads/feat/single-auth-capability-sessions.zip && \
     find /usr/local/lib/python3.*/site-packages/tiddl -name "__pycache__" -type d -exec rm -rf {} +
 
 COPY --chown=appuser:appuser docker/tiddl/config.toml /home/appuser/.tiddl/config.toml
