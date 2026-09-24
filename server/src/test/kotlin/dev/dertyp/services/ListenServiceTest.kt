@@ -5,7 +5,13 @@ import dev.dertyp.TestDatabase
 import dev.dertyp.data.UserSong
 import dev.dertyp.db.*
 import dev.dertyp.plugins.HookBus
+import dev.dertyp.services.metadata.CachedMusicBrainzService
+import dev.dertyp.services.metadata.LinkResolverService
+import dev.dertyp.services.metadata.MusicBrainzCacheService
+import dev.dertyp.services.metadata.MusicBrainzService
+import io.ktor.server.application.ApplicationEnvironment
 import io.mockk.coEvery
+import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.core.eq
@@ -18,6 +24,7 @@ import org.jetbrains.exposed.v1.jdbc.update
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.EnumSource
@@ -74,6 +81,45 @@ class ListenServiceTest : KoinTest {
     fun tearDown() {
         stopKoin()
         TestDatabase.cleanUp()
+    }
+
+    private val libraryTables = arrayOf(
+        UserTable, ImageTable, ImageMetadataTable, AnimatedImageTable,
+        ArtistTable, AlbumTable, SongTable, SongVariantTable, SongArtistTable, SongMusicBrainzTable, SongAudioDataTable,
+        GenreTable, AlbumMusicBrainzTable, ArtistMusicBrainzTable, ArtistAliasTable, ArtistMemberTable,
+        AlbumArtistTable, PlaylistTable, UserSongTable, TimecodeTagTable, UserPlaylistTable, SongGenreTable, ArtistGenreTable,
+        AlbumGenreTable, PlaylistSongTable, UserPlaylistSongTable, SyncedLyricsTable, RecentReleaseTable,
+        FollowedArtistTable, TranscodedSongTable, CustomMigrationTable, ScheduledTaskLogTable,
+        ArtistSplitAliasTable, SyncServiceTable, SongProviderTable, AlbumProviderTable,
+        CollectionTable, CollectionSongTable, CollectionAlbumTable, CollectionArtistTable, CollectionPlaylistTable,
+        ListenBrainzUserTable, UserListenBrainzLinkTable, ListenTable, ListenLinkTable,
+        *allMusicBrainzTables,
+    )
+
+    private fun setupWithLibrary(dialect: DbDialect) {
+        val storageService = mockk<StorageService>(relaxed = true)
+        every { storageService.albumsPath } returns null
+        startKoin {
+            modules(module {
+                single<HookBus> { HookService() }
+                single { mockk<ApplicationEnvironment>(relaxed = true) }
+                single { mockk<MusicBrainzService>(relaxed = true) }
+                single { mockk<CachedMusicBrainzService>(relaxed = true) }
+                single { mockk<MusicBrainzCacheService>(relaxed = true) }
+                single { mockk<MetadataFetchingService>(relaxed = true) }
+                single { mockk<GenreService>(relaxed = true) }
+                single { mockk<ImageService>(relaxed = true) }
+                single { mockk<LibraryMergeService>(relaxed = true) }
+                single { mockk<LinkResolverService>(relaxed = true) }
+                single { storageService }
+                single { SongService() }
+                single { ArtistService() }
+                single { AlbumService() }
+            })
+        }
+        database = TestDatabase.connect(dialect, "listen_library_test")
+        transaction(database) { SchemaUtils.create(*libraryTables) }
+        service = ListenService()
     }
 
     private fun songStub(id: UUID): UserSong {
@@ -632,6 +678,144 @@ class ListenServiceTest : KoinTest {
         }
 
         assertEquals(mapOf(favourite to 1f), service.recentSeedWeights(user, 0))
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `recentArtists returns distinct artists ordered by their latest listen`(dialect: DbDialect) = runBlocking {
+        setupWithLibrary(dialect)
+        val (user, artistOld, artistNew) = transaction(database) {
+            val u = insertUser()
+            val album = insertAlbum()
+            val songOld = insertSong(album)
+            val songNew = insertSong(album)
+            val artistOld = insertArtist("Old Artist")
+            val artistNew = insertArtist("New Artist")
+            linkSongArtist(songOld, artistOld)
+            linkSongArtist(songNew, artistNew)
+            insertLocal(u, songOld, 1_000)
+            insertLocal(u, songOld, 2_000)
+            insertLocal(u, songNew, 5_000)
+            Triple(u, artistOld, artistNew)
+        }
+
+        val result = service.recentArtists(user, 10)
+
+        assertEquals(listOf(artistNew, artistOld), result.map { it.artist.id })
+        assertEquals(listOf(5_000L, 2_000L), result.map { it.lastListenedAt })
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `recentArtists respects the limit`(dialect: DbDialect) = runBlocking {
+        setupWithLibrary(dialect)
+        val (user, top, mid) = transaction(database) {
+            val u = insertUser()
+            val album = insertAlbum()
+            val songs = (1..3).map { insertSong(album) }
+            val artists = (1..3).map { insertArtist("Artist $it") }
+            songs.zip(artists).forEach { (s, a) -> linkSongArtist(s, a) }
+            insertLocal(u, songs[0], 1_000)
+            insertLocal(u, songs[1], 2_000)
+            insertLocal(u, songs[2], 3_000)
+            Triple(u, artists[2], artists[1])
+        }
+
+        val result = service.recentArtists(user, 2)
+
+        assertEquals(listOf(top, mid), result.map { it.artist.id })
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `recentArtists excludes other users' listens`(dialect: DbDialect) = runBlocking {
+        setupWithLibrary(dialect)
+        val user = transaction(database) {
+            val u = insertUser()
+            val other = insertUser()
+            val song = insertSong(insertAlbum())
+            val artist = insertArtist("Artist")
+            linkSongArtist(song, artist)
+            insertLocal(other, song, 1_000)
+            u
+        }
+
+        assertEquals(emptyList<UUID>(), service.recentArtists(user, 10).map { it.artist.id })
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `a song with two artists counts as a listen for both artists`(dialect: DbDialect) = runBlocking {
+        setupWithLibrary(dialect)
+        val (user, artistA, artistB) = transaction(database) {
+            val u = insertUser()
+            val song = insertSong(insertAlbum())
+            val artistA = insertArtist("Artist A")
+            val artistB = insertArtist("Artist B")
+            linkSongArtist(song, artistA)
+            linkSongArtist(song, artistB)
+            insertLocal(u, song, 5_000)
+            Triple(u, artistA, artistB)
+        }
+
+        val result = service.recentArtists(user, 10)
+
+        assertEquals(setOf(artistA, artistB), result.map { it.artist.id }.toSet())
+        assertTrue(result.all { it.lastListenedAt == 5_000L })
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `recentAlbums returns distinct albums ordered by their latest listen`(dialect: DbDialect) = runBlocking {
+        setupWithLibrary(dialect)
+        val (user, albumOld, albumNew) = transaction(database) {
+            val u = insertUser()
+            val albumOld = insertAlbum("Old Album")
+            val albumNew = insertAlbum("New Album")
+            val songOld1 = insertSong(albumOld)
+            val songOld2 = insertSong(albumOld)
+            val songNew = insertSong(albumNew)
+            insertLocal(u, songOld1, 1_000)
+            insertLocal(u, songOld2, 2_000)
+            insertLocal(u, songNew, 5_000)
+            Triple(u, albumOld, albumNew)
+        }
+
+        val result = service.recentAlbums(user, 10)
+
+        assertEquals(listOf(albumNew, albumOld), result.map { it.album.id })
+        assertEquals(listOf(5_000L, 2_000L), result.map { it.lastListenedAt })
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `recentAlbums respects the limit`(dialect: DbDialect) = runBlocking {
+        setupWithLibrary(dialect)
+        val (user, top, mid) = transaction(database) {
+            val u = insertUser()
+            val albums = (1..3).map { insertAlbum("Album $it") }
+            albums.forEachIndexed { i, a -> insertLocal(u, insertSong(a), 1_000L * (i + 1)) }
+            Triple(u, albums[2], albums[1])
+        }
+
+        val result = service.recentAlbums(user, 2)
+
+        assertEquals(listOf(top, mid), result.map { it.album.id })
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `recentAlbums excludes other users' listens`(dialect: DbDialect) = runBlocking {
+        setupWithLibrary(dialect)
+        val user = transaction(database) {
+            val u = insertUser()
+            val other = insertUser()
+            val song = insertSong(insertAlbum())
+            insertLocal(other, song, 1_000)
+            u
+        }
+
+        assertEquals(emptyList<UUID>(), service.recentAlbums(user, 10).map { it.album.id })
     }
 
     private fun insertLocalPlayed(userId: UUID, songId: UUID, at: Long, playedMs: Long) {

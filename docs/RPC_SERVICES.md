@@ -553,7 +553,7 @@ Monitoring and tracking of background scheduled tasks.
 | `getGroupedLogsFlow` | - | `Flow`<`Map`<`String`, `List`<[ScheduledTaskLog](MODELS.md#devdertypdatascheduledtasklog)>>> | **Admin** | SecurityException | Stream real-time updates for all background task progress and completion. |
 
 ### IScrobbleService <a name="devdertypservicesiscrobbleservice"></a>
-Submit playback scrobbles and observe the current user's recently listened songs.
+Submit playback scrobbles and observe the current user's recently listened songs, artists and albums.
 
 | Function | Parameters | Returns | Permissions | Errors | Description |
 | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -561,7 +561,12 @@ Submit playback scrobbles and observe the current user's recently listened songs
 | `reportPlayback` | `report` ([PlaybackReport](MODELS.md#devdertypdataplaybackreport)): The current playback state. | `Long` | - |  | Report playback progress for the current user: call on play, pause, resume, seek and every 10-15 seconds while playing. Returns the server's epoch milliseconds at receipt so clients can align their clocks. |
 | `clearNowPlaying` | - | `Unit` | - |  | Clear the current user's now-playing state, e.g. when playback stops. |
 | `listened` | `request` ([ScrobbleRequest](MODELS.md#devdertypdatascrobblerequest)): The completed listen. | `Unit` | - |  | Record that the current user finished listening to a library song. |
-| `recentListensFlow` | `limit` (`Int`): Maximum number of recent songs to return; clamped to 1..1000. | `Flow`<[RecentListens](MODELS.md#devdertypdatarecentlistens)> | - |  | Stream the current user's recently listened songs and current now-playing, re-emitting on changes (debounced 100ms). |
+| `recentListens` | `limit` (`Int`): Maximum number of recent songs to return. Clamped to 1..1000. | [RecentListens](MODELS.md#devdertypdatarecentlistens) | - |  | Get the current user's recently listened songs and current now-playing once. |
+| `recentListensFlow` | `limit` (`Int`): Maximum number of recent songs to return. Clamped to 1..1000. | `Flow`<[RecentListens](MODELS.md#devdertypdatarecentlistens)> | - |  | Stream the current user's recently listened songs and current now-playing, re-emitting on changes (debounced 100ms). |
+| `recentArtists` | `limit` (`Int`): Maximum number of artists to return. Clamped to 1..1000. | `List`<[ListenedArtist](MODELS.md#devdertypdatalistenedartist)> | - |  | Get the current user's recently listened artists, most recently played first. |
+| `recentArtistsFlow` | `limit` (`Int`): Maximum number of artists to return. Clamped to 1..1000. | `Flow`<`List`<[ListenedArtist](MODELS.md#devdertypdatalistenedartist)>> | - |  | Stream the current user's recently listened artists, most recently played first, re-emitting on changes (debounced 100ms). |
+| `recentAlbums` | `limit` (`Int`): Maximum number of albums to return. Clamped to 1..1000. | `List`<[ListenedAlbum](MODELS.md#devdertypdatalistenedalbum)> | - |  | Get the current user's recently listened albums, most recently played first. |
+| `recentAlbumsFlow` | `limit` (`Int`): Maximum number of albums to return. Clamped to 1..1000. | `Flow`<`List`<[ListenedAlbum](MODELS.md#devdertypdatalistenedalbum)>> | - |  | Stream the current user's recently listened albums, most recently played first, re-emitting on changes (debounced 100ms). |
 
 ### IServerStatsService <a name="devdertypservicesiserverstatsservice"></a>
 Basic server health and performance monitoring.

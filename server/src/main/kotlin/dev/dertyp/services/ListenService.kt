@@ -1,6 +1,8 @@
 package dev.dertyp.services
 
 import dev.dertyp.PlatformUUID
+import dev.dertyp.data.ListenedAlbum
+import dev.dertyp.data.ListenedArtist
 import dev.dertyp.data.ListenedSong
 import dev.dertyp.db.*
 import dev.dertyp.dbQuery
@@ -37,6 +39,8 @@ data class IncomingListen(
 class ListenService : Service() {
     private val hooks by inject<HookBus>()
     private val songService by inject<SongService>()
+    private val albumService by inject<AlbumService>()
+    private val artistService by inject<ArtistService>()
 
     private val _listenChanges = MutableSharedFlow<Unit>(extraBufferCapacity = 8, onBufferOverflow = BufferOverflow.DROP_OLDEST)
     val listenChanges: SharedFlow<Unit> = _listenChanges.asSharedFlow()
@@ -294,6 +298,47 @@ class ListenService : Service() {
 
         val songs = songService.byIds(kept.map { it.songId }.distinct(), userId).associateBy { it.id }
         return kept.mapNotNull { row -> songs[row.songId]?.let { ListenedSong(song = it, listenedAt = row.listenedAt) } }
+    }
+
+    suspend fun recentArtists(userId: PlatformUUID, limit: Int): List<ListenedArtist> {
+        val capped = limit.coerceIn(1, 1000)
+
+        val lastListened = dbQuery {
+            val lastListen = ListenTable.listenedAt.max().alias("lastListen")
+            ListenTable
+                .join(SongArtistTable, JoinType.INNER, onColumn = ListenTable.songId, otherColumn = SongArtistTable.songId)
+                .select(SongArtistTable.artistId, lastListen)
+                .where { listenOwnerPredicate(userId) }
+                .andWhere { ListenTable.songId.isNotNull() }
+                .groupBy(SongArtistTable.artistId)
+                .orderBy(lastListen, SortOrder.DESC)
+                .limit(capped)
+                .associate { it[SongArtistTable.artistId].value to it[lastListen]!! }
+        }
+        if (lastListened.isEmpty()) return emptyList()
+
+        return artistService.byIds(lastListened.keys.toList(), userId)
+            .map { ListenedArtist(artist = it, lastListenedAt = lastListened.getValue(it.id)) }
+    }
+
+    suspend fun recentAlbums(userId: PlatformUUID, limit: Int): List<ListenedAlbum> {
+        val capped = limit.coerceIn(1, 1000)
+
+        val lastListened = dbQuery {
+            val lastListen = ListenTable.listenedAt.max().alias("lastListen")
+            ListenTable.innerJoin(SongTable)
+                .select(SongTable.albumId, lastListen)
+                .where { listenOwnerPredicate(userId) }
+                .andWhere { ListenTable.songId.isNotNull() }
+                .groupBy(SongTable.albumId)
+                .orderBy(lastListen, SortOrder.DESC)
+                .limit(capped)
+                .associate { it[SongTable.albumId].value to it[lastListen]!! }
+        }
+        if (lastListened.isEmpty()) return emptyList()
+
+        return albumService.byIds(lastListened.keys.toList(), userId)
+            .map { ListenedAlbum(album = it, lastListenedAt = lastListened.getValue(it.id)) }
     }
 
     private data class LocalListenMetadata(

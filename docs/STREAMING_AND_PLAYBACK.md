@@ -114,7 +114,7 @@ Reporting is what makes now-playing, listening statistics and ListenBrainz work.
 2. **On every playback event and while playing** — `POST /scrobble/reportPlayback` with [`PlaybackReport`](MODELS.md#devdertypdataplaybackreport): `{"songId": …, "positionMs": 12345, "playing": true, "sentAt": <client epoch ms>}`. Send it on play, pause, resume and seek, and every 10 to 15 seconds while playing. The response is the server's epoch milliseconds at receipt, so you can measure the offset between client and server clocks; `sentAt` lets the server compensate transport delay.
 3. **On finish** — `POST /scrobble/listened` with [`ScrobbleRequest`](MODELS.md#devdertypdatascrobblerequest): `{"songId": …, "listenedAt": <epoch ms>, "msPlayed": …}`. `listenedAt` defaults to the server's current time.
 4. **On stop** — `POST /scrobble/clearNowPlaying`.
-5. **To follow along** — `GET /scrobble/recentListensFlow?limit=20` is an SSE stream of [`RecentListens`](MODELS.md#devdertypdatarecentlistens) (`nowPlaying` plus the recent list), debounced by 100 ms; `limit` is clamped to 1…1000.
+5. **To follow along** — `GET /scrobble/recentListensFlow?limit=20` is an SSE stream of [`RecentListens`](MODELS.md#devdertypdatarecentlistens) (`nowPlaying` plus the recent list), debounced by 100 ms; `limit` is clamped to 1…1000. `GET /scrobble/recentListens?limit=20` returns the same once. `GET /scrobble/recentArtists` and `GET /scrobble/recentAlbums` (plus their `Flow` variants) list the recently listened artists and albums with the time each was last played, most recent first.
 
 All five take a JWT; none of them accept an episode id — podcasts have their own reporting, described above.
 

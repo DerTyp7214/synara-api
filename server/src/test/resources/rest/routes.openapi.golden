@@ -318,6 +318,11 @@ GET /scheduledTaskLog/groupedLogsFlow IScheduledTaskLogService.getGroupedLogsFlo
 POST /scrobble/clearNowPlaying IScrobbleService.clearNowPlaying | Clear the current user's now-playing state, e.g. when playback stops. | scrobble | UserAuth | - | body:no
 POST /scrobble/listened IScrobbleService.listened | Record that the current user finished listening to a library song. | scrobble | UserAuth | - | body:yes
 POST /scrobble/nowPlaying/{songId} IScrobbleService.nowPlaying | Report the library song the current user is now playing. Auto-clears after the song's duration unless reported again. | scrobble | UserAuth | songId:path | body:no
+GET /scrobble/recentAlbums IScrobbleService.recentAlbums | Get the current user's recently listened albums, most recently played first. | scrobble | UserAuth | limit:query | body:no
+GET /scrobble/recentAlbumsFlow IScrobbleService.recentAlbumsFlow | Stream the current user's recently listened albums, most recently played first, re-emitting on changes (debounced 100ms). | scrobble | UserAuth | limit:query | body:no
+GET /scrobble/recentArtists IScrobbleService.recentArtists | Get the current user's recently listened artists, most recently played first. | scrobble | UserAuth | limit:query | body:no
+GET /scrobble/recentArtistsFlow IScrobbleService.recentArtistsFlow | Stream the current user's recently listened artists, most recently played first, re-emitting on changes (debounced 100ms). | scrobble | UserAuth | limit:query | body:no
+GET /scrobble/recentListens IScrobbleService.recentListens | Get the current user's recently listened songs and current now-playing once. | scrobble | UserAuth | limit:query | body:no
 GET /scrobble/recentListensFlow IScrobbleService.recentListensFlow | Stream the current user's recently listened songs and current now-playing, re-emitting on changes (debounced 100ms). | scrobble | UserAuth | limit:query | body:no
 POST /scrobble/reportPlayback IScrobbleService.reportPlayback | Report playback progress for the current user: call on play, pause, resume, seek and every 10-15 seconds while playing. Returns the server's epoch milliseconds at receipt so clients can align their clocks. | scrobble | UserAuth | - | body:yes
 GET /serverStats/health IServerStatsService.health | Simple connectivity check to verify the server is responding. | serverStats | - | - | body:no

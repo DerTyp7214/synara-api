@@ -84,6 +84,8 @@ Services: [RPC_SERVICES.md](RPC_SERVICES.md) · REST routes: [REST_API.md](REST_
 - [ListenBackupState](#devdertypdatalistenbackupstate)
 - [ListenBrainzStatus](#devdertypdatalistenbrainzstatus)
 - [ListenClock](#devdertypdatalistenclock)
+- [ListenedAlbum](#devdertypdatalistenedalbum)
+- [ListenedArtist](#devdertypdatalistenedartist)
 - [ListenedSong](#devdertypdatalistenedsong)
 - [ListeningStats](#devdertypdatalisteningstats)
 - [ListeningStreaks](#devdertypdatalisteningstreaks)
@@ -1159,6 +1161,22 @@ Distribution of listens over the hours of the day and days of the week, in the r
 | :--- | :--- | :--- |
 | `hourOfDay` | `List`<`Long`> | Listen counts per hour of day; 24 entries, index 0 = 00:00-00:59. |
 | `dayOfWeek` | `List`<`Long`> | Listen counts per day of week; 7 entries, index 0 = Monday. |
+
+### ListenedAlbum <a name="devdertypdatalistenedalbum"></a>
+An album from the user's listen history, with when one of its songs was last played.
+
+| Field | Type | Description |
+| :--- | :--- | :--- |
+| `album` | [Album](#devdertypdataalbum) | The listened album. |
+| `lastListenedAt` | `Long` | When a song of the album was last played (epoch milliseconds). |
+
+### ListenedArtist <a name="devdertypdatalistenedartist"></a>
+An artist from the user's listen history, with when one of their songs was last played.
+
+| Field | Type | Description |
+| :--- | :--- | :--- |
+| `artist` | [Artist](#devdertypdataartist) | The listened artist. |
+| `lastListenedAt` | `Long` | When a song of the artist was last played (epoch milliseconds). |
 
 ### ListenedSong <a name="devdertypdatalistenedsong"></a>
 A song from the user's listen history, with when it was played.

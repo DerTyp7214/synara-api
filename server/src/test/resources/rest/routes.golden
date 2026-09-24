@@ -315,6 +315,11 @@ POST /scheduledTaskConfiguration/triggerTask IScheduledTaskConfigurationService.
 PUT /scheduledTaskConfiguration/configuration IScheduledTaskConfigurationService.updateConfiguration [b:configuration] UNIT
 GET /scheduledTaskLog/groupedLogs IScheduledTaskLogService.getGroupedLogs [] JSON
 GET /scheduledTaskLog/groupedLogsFlow IScheduledTaskLogService.getGroupedLogsFlow [] SSE
+GET /scrobble/recentAlbums IScrobbleService.recentAlbums [q:limit] JSON
+GET /scrobble/recentAlbumsFlow IScrobbleService.recentAlbumsFlow [q:limit] SSE
+GET /scrobble/recentArtists IScrobbleService.recentArtists [q:limit] JSON
+GET /scrobble/recentArtistsFlow IScrobbleService.recentArtistsFlow [q:limit] SSE
+GET /scrobble/recentListens IScrobbleService.recentListens [q:limit] JSON
 GET /scrobble/recentListensFlow IScrobbleService.recentListensFlow [q:limit] SSE
 POST /scrobble/clearNowPlaying IScrobbleService.clearNowPlaying [] UNIT
 POST /scrobble/listened IScrobbleService.listened [b:request] UNIT

@@ -733,7 +733,7 @@ RPC reference: [IScheduledTaskLogService](RPC_SERVICES.md#devdertypservicesische
 
 ### /scrobble — IScrobbleService <a name="devdertypservicesiscrobbleservice"></a>
 
-Submit playback scrobbles and observe the current user's recently listened songs.
+Submit playback scrobbles and observe the current user's recently listened songs, artists and albums.
 
 RPC reference: [IScrobbleService](RPC_SERVICES.md#devdertypservicesiscrobbleservice)
 
@@ -742,7 +742,12 @@ RPC reference: [IScrobbleService](RPC_SERVICES.md#devdertypservicesiscrobbleserv
 | POST | `/scrobble/clearNowPlaying` | - | - | JWT | Clear the current user's now-playing state, e.g. when playback stops. ([clearNowPlaying](RPC_SERVICES.md#devdertypservicesiscrobbleservice)) |
 | POST | `/scrobble/listened` | `request` (body, [ScrobbleRequest](MODELS.md#devdertypdatascrobblerequest)): The completed listen. | - | JWT | Record that the current user finished listening to a library song. ([listened](RPC_SERVICES.md#devdertypservicesiscrobbleservice)) |
 | POST | `/scrobble/nowPlaying/{songId}` | `songId` (path, `PlatformUUID`): The library song now playing. | - | JWT | Report the library song the current user is now playing. Auto-clears after the song's duration unless reported again. ([nowPlaying](RPC_SERVICES.md#devdertypservicesiscrobbleservice)) |
-| GET | `/scrobble/recentListensFlow` | `limit` (query, `Int`): Maximum number of recent songs to return; clamped to 1..1000. | SSE [RecentListens](MODELS.md#devdertypdatarecentlistens) | JWT | Stream the current user's recently listened songs and current now-playing, re-emitting on changes (debounced 100ms). ([recentListensFlow](RPC_SERVICES.md#devdertypservicesiscrobbleservice)) |
+| GET | `/scrobble/recentAlbums` | `limit` (query, `Int`): Maximum number of albums to return. Clamped to 1..1000. | JSON `List`&lt;[ListenedAlbum](MODELS.md#devdertypdatalistenedalbum)&gt; | JWT | Get the current user's recently listened albums, most recently played first. ([recentAlbums](RPC_SERVICES.md#devdertypservicesiscrobbleservice)) |
+| GET | `/scrobble/recentAlbumsFlow` | `limit` (query, `Int`): Maximum number of albums to return. Clamped to 1..1000. | SSE `List`&lt;[ListenedAlbum](MODELS.md#devdertypdatalistenedalbum)&gt; | JWT | Stream the current user's recently listened albums, most recently played first, re-emitting on changes (debounced 100ms). ([recentAlbumsFlow](RPC_SERVICES.md#devdertypservicesiscrobbleservice)) |
+| GET | `/scrobble/recentArtists` | `limit` (query, `Int`): Maximum number of artists to return. Clamped to 1..1000. | JSON `List`&lt;[ListenedArtist](MODELS.md#devdertypdatalistenedartist)&gt; | JWT | Get the current user's recently listened artists, most recently played first. ([recentArtists](RPC_SERVICES.md#devdertypservicesiscrobbleservice)) |
+| GET | `/scrobble/recentArtistsFlow` | `limit` (query, `Int`): Maximum number of artists to return. Clamped to 1..1000. | SSE `List`&lt;[ListenedArtist](MODELS.md#devdertypdatalistenedartist)&gt; | JWT | Stream the current user's recently listened artists, most recently played first, re-emitting on changes (debounced 100ms). ([recentArtistsFlow](RPC_SERVICES.md#devdertypservicesiscrobbleservice)) |
+| GET | `/scrobble/recentListens` | `limit` (query, `Int`): Maximum number of recent songs to return. Clamped to 1..1000. | JSON [RecentListens](MODELS.md#devdertypdatarecentlistens) | JWT | Get the current user's recently listened songs and current now-playing once. ([recentListens](RPC_SERVICES.md#devdertypservicesiscrobbleservice)) |
+| GET | `/scrobble/recentListensFlow` | `limit` (query, `Int`): Maximum number of recent songs to return. Clamped to 1..1000. | SSE [RecentListens](MODELS.md#devdertypdatarecentlistens) | JWT | Stream the current user's recently listened songs and current now-playing, re-emitting on changes (debounced 100ms). ([recentListensFlow](RPC_SERVICES.md#devdertypservicesiscrobbleservice)) |
 | POST | `/scrobble/reportPlayback` | `report` (body, [PlaybackReport](MODELS.md#devdertypdataplaybackreport)): The current playback state. | JSON `Long` | JWT | Report playback progress for the current user: call on play, pause, resume, seek and every 10-15 seconds while playing. Returns the server's epoch milliseconds at receipt so clients can align their clocks. ([reportPlayback](RPC_SERVICES.md#devdertypservicesiscrobbleservice)) |
 
 ### /serverStats — IServerStatsService <a name="devdertypservicesiserverstatsservice"></a>

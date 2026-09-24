@@ -120,10 +120,30 @@ class ScrobbleService : Service() {
         merge(listenService.listenChanges, nowPlayingChanges)
             .onStart { emit(Unit) }
             .debounce(100.milliseconds)
-            .map { buildRecentListens(userId, limit) }
+            .map { recentListens(userId, limit) }
             .distinctUntilChanged()
 
-    private suspend fun buildRecentListens(userId: PlatformUUID, limit: Int): RecentListens {
+    suspend fun recentArtists(userId: PlatformUUID, limit: Int): List<ListenedArtist> = listenService.recentArtists(userId, limit)
+
+    suspend fun recentAlbums(userId: PlatformUUID, limit: Int): List<ListenedAlbum> = listenService.recentAlbums(userId, limit)
+
+    @OptIn(FlowPreview::class)
+    fun recentArtistsFlow(userId: PlatformUUID, limit: Int): Flow<List<ListenedArtist>> =
+        listenService.listenChanges
+            .onStart { emit(Unit) }
+            .debounce(100.milliseconds)
+            .map { listenService.recentArtists(userId, limit) }
+            .distinctUntilChanged()
+
+    @OptIn(FlowPreview::class)
+    fun recentAlbumsFlow(userId: PlatformUUID, limit: Int): Flow<List<ListenedAlbum>> =
+        listenService.listenChanges
+            .onStart { emit(Unit) }
+            .debounce(100.milliseconds)
+            .map { listenService.recentAlbums(userId, limit) }
+            .distinctUntilChanged()
+
+    suspend fun recentListens(userId: PlatformUUID, limit: Int): RecentListens {
         val recent = listenService.recentListens(userId, limit)
         val current = nowPlaying[userId]?.let { NowPlaying(song = it.song, startedAt = it.firstStartedAt) }
         return RecentListens(nowPlaying = current, recent = recent)
@@ -149,5 +169,15 @@ class RpcScrobbleService(
 
     override suspend fun listened(request: ScrobbleRequest) = service.listened(user.id, request)
 
+    override suspend fun recentListens(limit: Int): RecentListens = service.recentListens(user.id, limit)
+
     override fun recentListensFlow(limit: Int): Flow<RecentListens> = service.recentListensFlow(user.id, limit)
+
+    override suspend fun recentArtists(limit: Int): List<ListenedArtist> = service.recentArtists(user.id, limit)
+
+    override fun recentArtistsFlow(limit: Int): Flow<List<ListenedArtist>> = service.recentArtistsFlow(user.id, limit)
+
+    override suspend fun recentAlbums(limit: Int): List<ListenedAlbum> = service.recentAlbums(user.id, limit)
+
+    override fun recentAlbumsFlow(limit: Int): Flow<List<ListenedAlbum>> = service.recentAlbumsFlow(user.id, limit)
 }
