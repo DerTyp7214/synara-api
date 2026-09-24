@@ -2862,6 +2862,7 @@ Metadata for a recently released album or single from a followed artist.
 | `suspectReason` | `String`? | Human-readable explanation of why the entry is suspect. |
 | `recordLabel` | `String`? | The record label reported by the provider, when known. |
 | `copyright` | `String`? | The copyright line reported by the provider, when known. |
+| `versions` | `List`<[RecentRelease](#devdertypservicesmodelsrecentrelease)> | Other editions of the same release folded under this entry: explicit, clean, deluxe or remastered variants, or the same release listed by another catalog. Each keeps its own identifiers, links and cover; their own versions lists are always empty. |
 
 ### SyncedLyrics <a name="devdertypservicesmodelssyncedlyrics"></a>
 A collection of time-synced lyrics for a song.

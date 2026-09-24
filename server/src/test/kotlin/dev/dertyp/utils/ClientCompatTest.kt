@@ -9,11 +9,13 @@ import dev.dertyp.data.PaginatedResponse
 import dev.dertyp.data.PlaybackState
 import dev.dertyp.data.QueueItem
 import dev.dertyp.data.RecentListens
+import dev.dertyp.data.ReleaseType
 import dev.dertyp.data.RepeatMode
 import dev.dertyp.data.Song
 import dev.dertyp.data.TitleTag
 import dev.dertyp.data.TitleTagKind
 import dev.dertyp.data.UserSong
+import dev.dertyp.services.models.RecentRelease
 import dev.dertyp.ui.UiSchemaVersion
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
@@ -23,6 +25,7 @@ import kotlinx.coroutines.yield
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotSame
 import org.junit.jupiter.api.Assertions.assertSame
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import java.util.UUID
@@ -206,6 +209,35 @@ class ClientCompatTest {
         assertEquals(tags, current.one()!!.tags)
         assertEquals("Song", current.plain().title)
         assertEquals(tags, current.plain().tags)
+    }
+
+    private fun recentRelease(title: String) = RecentRelease(
+        releaseId = UUID.randomUUID(),
+        artistId = UUID.randomUUID(),
+        artistName = "Artist",
+        title = title,
+        releaseDate = null,
+        type = ReleaseType.Album
+    )
+
+    private val foldedReleases = PaginatedResponse(
+        listOf(recentRelease("Album").copy(versions = listOf(recentRelease("Album (Explicit)"), recentRelease("Album (Deluxe)")))),
+        total = 1,
+    )
+
+    @Test
+    @Suppress("UNCHECKED_CAST")
+    fun `legacy clients get one entry per edition of a release`() {
+        val shaped = ResponseShaper(ClientInfo(6)).shape(foldedReleases) as PaginatedResponse<RecentRelease>
+
+        assertEquals(listOf("Album", "Album (Explicit)", "Album (Deluxe)"), shaped.data.map { it.title })
+        assertTrue(shaped.data.all { it.versions.isEmpty() })
+        assertEquals(3, shaped.total)
+    }
+
+    @Test
+    fun `current clients keep the folded editions`() {
+        assertEquals(foldedReleases, ResponseShaper(ClientInfo(ApiVersion.CURRENT)).shape(foldedReleases))
     }
 
     @Test

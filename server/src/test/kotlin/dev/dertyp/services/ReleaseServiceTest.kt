@@ -1402,7 +1402,13 @@ class ReleaseServiceTest : KoinTest {
         }
     }
 
-    private fun insertRecentRelease(rowId: UUID, owner: UUID, rowTitle: String, rowDate: Long?) {
+    private fun insertRecentRelease(
+        rowId: UUID,
+        owner: UUID,
+        rowTitle: String,
+        rowDate: Long?,
+        rowType: ReleaseType = ReleaseType.Unknown
+    ) {
         transaction(database) {
             MBReleaseGroupTable.insert { it[id] = rowId; it[title] = rowTitle }
             RecentReleaseTable.insert {
@@ -1411,6 +1417,16 @@ class ReleaseServiceTest : KoinTest {
                 it[artistName] = "Artist"
                 it[title] = rowTitle
                 it[releaseDate] = rowDate
+                it[type] = rowType
+            }
+        }
+    }
+
+    private fun markHidden(rowId: UUID, owner: UUID) {
+        transaction(database) {
+            HiddenReleaseTable.insert {
+                it[HiddenReleaseTable.providerReleaseId] = rowId
+                it[HiddenReleaseTable.artistId] = owner
             }
         }
     }
@@ -1560,21 +1576,11 @@ class ReleaseServiceTest : KoinTest {
         val artistId = UUID.randomUUID()
 
         seedFollowedArtist(userId, artistId)
-        transaction(database) {
-            for (i in 1..5) {
-                val relId = UUID.randomUUID()
-                MBReleaseGroupTable.insert { it[id] = relId; it[title] = "MB $i" }
-                RecentReleaseTable.insert {
-                    it[releaseId] = relId
-                    it[this.artistId] = artistId
-                    it[artistName] = "Artist"
-                    it[title] = "MB $i"
-                    it[releaseDate] = (i * 2).toLong()
-                }
-            }
+        for (i in 1..5) {
+            insertRecentRelease(UUID.randomUUID(), artistId, "MB $i", (i * 2).toLong(), rowType = ReleaseType.Album)
         }
         for (i in 1..5) {
-            insertProviderRelease(UUID.randomUUID(), artistId, "Apple $i", (i * 2 - 1).toLong())
+            insertProviderRelease(UUID.randomUUID(), artistId, "Apple $i", (i * 2 - 1).toLong(), rowType = ReleaseType.Album)
         }
 
         val page0 = service.getRecentReleases(userId, page = 0, pageSize = 3)
@@ -1655,6 +1661,265 @@ class ReleaseServiceTest : KoinTest {
 
         assertEquals(1, result.total)
         assertEquals(listOf("Visible"), result.data.map { it.title })
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `getRecentReleases groups Apple explicit and deluxe editions under the plain title`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val userId = UUID.randomUUID()
+        val artistId = UUID.randomUUID()
+        val plainId = UUID(0L, 1L)
+        val explicitId = UUID(0L, 2L)
+        val deluxeId = UUID(0L, 3L)
+        val date = Clock.System.now().toEpochMilliseconds() - 10.days.inWholeMilliseconds
+
+        seedFollowedArtist(userId, artistId)
+        insertProviderRelease(plainId, artistId, "Album", date)
+        insertProviderRelease(explicitId, artistId, "Album (Explicit)", date)
+        insertProviderRelease(deluxeId, artistId, "Album (Deluxe Edition)", date)
+        attachProviderLink(explicitId, "tidal", "explicit-1", "https://tidal.com/album/explicit-1")
+
+        val result = service.getRecentReleases(userId)
+
+        assertEquals(1, result.total)
+        assertFalse(result.hasNextPage)
+        val entry = result.data.single()
+        assertEquals("Album", entry.title)
+        assertEquals(plainId, entry.releaseId)
+        assertEquals(2, entry.versions.size)
+        assertEquals(setOf(explicitId, deluxeId), entry.versions.map { it.releaseId }.toSet())
+        assertFalse(entry.links.contains("https://tidal.com/album/explicit-1"))
+        val explicit = entry.versions.single { it.releaseId == explicitId }
+        assertTrue(explicit.links.contains("https://tidal.com/album/explicit-1"))
+        assertTrue(explicit.links.contains("https://music.apple.com/album/$explicitId"))
+        assertTrue(entry.versions.all { it.versions.isEmpty() })
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `getRecentReleases folds an Apple deluxe edition into the MusicBrainz entry`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val userId = UUID.randomUUID()
+        val artistId = UUID.randomUUID()
+        val mbAlbum = UUID.randomUUID()
+        val appleDeluxe = UUID.randomUUID()
+        val mbOther = UUID.randomUUID()
+        val date = Clock.System.now().toEpochMilliseconds() - 60.days.inWholeMilliseconds
+
+        seedFollowedArtist(userId, artistId)
+        insertRecentRelease(mbAlbum, artistId, "Album", date, rowType = ReleaseType.Album)
+        insertProviderRelease(appleDeluxe, artistId, "Album (Deluxe)", date + 30.days.inWholeMilliseconds)
+        insertRecentRelease(mbOther, artistId, "Other", date + 10.days.inWholeMilliseconds, rowType = ReleaseType.Album)
+
+        val result = service.getRecentReleases(userId)
+
+        assertEquals(2, result.total)
+        assertEquals(listOf("Album", "Other"), result.data.map { it.title })
+        val album = result.data.first()
+        assertEquals(ReleaseSource.MusicBrainz, album.source)
+        assertEquals(mbAlbum, album.releaseId)
+        assertEquals(listOf(appleDeluxe), album.versions.map { it.releaseId })
+        assertEquals(ReleaseSource.Apple, album.versions.single().source)
+        assertTrue(result.data[1].versions.isEmpty())
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `getRecentReleases keeps the same title apart across release types`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val userId = UUID.randomUUID()
+        val artistId = UUID.randomUUID()
+        val date = Clock.System.now().toEpochMilliseconds() - 10.days.inWholeMilliseconds
+
+        seedFollowedArtist(userId, artistId)
+        insertProviderRelease(UUID.randomUUID(), artistId, "Song - Single", date, rowType = ReleaseType.Single)
+        insertRecentRelease(UUID.randomUUID(), artistId, "Song", date, rowType = ReleaseType.Album)
+
+        val result = service.getRecentReleases(userId)
+
+        assertEquals(2, result.total)
+        assertEquals(2, result.data.size)
+        assertTrue(result.data.all { it.versions.isEmpty() })
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `getRecentReleases keeps editions outside the version window apart`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val userId = UUID.randomUUID()
+        val artistId = UUID.randomUUID()
+        val date = Clock.System.now().toEpochMilliseconds() - 200.days.inWholeMilliseconds
+
+        seedFollowedArtist(userId, artistId)
+        insertProviderRelease(UUID.randomUUID(), artistId, "Album", date)
+        insertProviderRelease(UUID.randomUUID(), artistId, "Album (Deluxe Edition)", date + 120.days.inWholeMilliseconds)
+
+        val result = service.getRecentReleases(userId)
+
+        assertEquals(2, result.total)
+        assertEquals(listOf("Album (Deluxe Edition)", "Album"), result.data.map { it.title })
+        assertTrue(result.data.all { it.versions.isEmpty() })
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `getRecentReleases never picks a suspect entry as the primary of a group`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val userId = UUID.randomUUID()
+        val artistId = UUID.randomUUID()
+        val suspectId = UUID.randomUUID()
+        val deluxeId = UUID.randomUUID()
+        val date = Clock.System.now().toEpochMilliseconds() - 10.days.inWholeMilliseconds
+
+        seedFollowedArtist(userId, artistId)
+        insertProviderRelease(suspectId, artistId, "Album", date, rowSuspect = true, rowSuspectReason = "unknown label")
+        insertProviderRelease(deluxeId, artistId, "Album (Deluxe)", date)
+
+        val entry = service.getRecentReleases(userId).data.single()
+
+        assertEquals(deluxeId, entry.releaseId)
+        assertFalse(entry.suspect)
+        assertEquals(listOf(suspectId), entry.versions.map { it.releaseId })
+        assertTrue(entry.versions.single().suspect)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `getArtistRecentReleases with includeHidden keeps hidden editions in their own group`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val userId = UUID.randomUUID()
+        val artistId = UUID.randomUUID()
+        val plainId = UUID.randomUUID()
+        val explicitId = UUID.randomUUID()
+        val cleanId = UUID.randomUUID()
+        val date = Clock.System.now().toEpochMilliseconds() - 10.days.inWholeMilliseconds
+
+        seedFollowedArtist(userId, artistId)
+        insertProviderRelease(plainId, artistId, "Album", date)
+        insertProviderRelease(explicitId, artistId, "Album (Explicit)", date)
+        insertProviderRelease(cleanId, artistId, "Album (Clean)", date)
+        markHidden(explicitId, artistId)
+        markHidden(cleanId, artistId)
+
+        val result = service.getArtistRecentReleases(artistId, includeHidden = true)
+
+        assertEquals(2, result.total)
+        val visible = result.data.single { !it.hidden }
+        assertEquals(plainId, visible.releaseId)
+        assertTrue(visible.versions.isEmpty())
+        val hiddenGroup = result.data.single { it.hidden }
+        assertEquals(setOf(explicitId, cleanId), (listOf(hiddenGroup) + hiddenGroup.versions).map { it.releaseId }.toSet())
+        assertEquals(1, hiddenGroup.versions.size)
+        assertTrue(hiddenGroup.versions.single().hidden)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `getRecentReleases folds versions into the total and hasNextPage`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val userId = UUID.randomUUID()
+        val artistId = UUID.randomUUID()
+        val now = Clock.System.now().toEpochMilliseconds()
+
+        seedFollowedArtist(userId, artistId)
+        for (i in 1..5) {
+            insertRecentRelease(UUID.randomUUID(), artistId, "MB $i", now - (6 - i) * 20.days.inWholeMilliseconds, rowType = ReleaseType.Album)
+        }
+        val newest = now - 20.days.inWholeMilliseconds
+        insertProviderRelease(UUID.randomUUID(), artistId, "MB 5 (Explicit)", newest, rowType = ReleaseType.Album)
+        insertProviderRelease(UUID.randomUUID(), artistId, "MB 5 (Deluxe Edition)", newest, rowType = ReleaseType.Album)
+
+        val page0 = service.getRecentReleases(userId, page = 0, pageSize = 3)
+        assertEquals(5, page0.total)
+        assertTrue(page0.hasNextPage)
+        assertEquals(listOf("MB 5", "MB 4", "MB 3"), page0.data.map { it.title })
+        assertEquals(2, page0.data.first().versions.size)
+
+        val page1 = service.getRecentReleases(userId, page = 1, pageSize = 3)
+        assertEquals(5, page1.total)
+        assertFalse(page1.hasNextPage)
+        assertEquals(listOf("MB 2", "MB 1"), page1.data.map { it.title })
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `getRecentReleases caps every release type separately`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val userId = UUID.randomUUID()
+        val artistId = UUID.randomUUID()
+        val now = Clock.System.now().toEpochMilliseconds()
+
+        seedFollowedArtist(userId, artistId)
+        for (i in 1..60) {
+            insertProviderRelease(UUID.randomUUID(), artistId, "Album $i", now - i * 1.days.inWholeMilliseconds, rowType = ReleaseType.Album)
+        }
+        for (i in 1..5) {
+            insertProviderRelease(UUID.randomUUID(), artistId, "Single $i", now - i * 1.days.inWholeMilliseconds, rowType = ReleaseType.Single)
+        }
+
+        val page0 = service.getRecentReleases(userId, page = 0, pageSize = 50)
+        assertEquals(55, page0.data.size)
+        assertEquals(50, page0.data.count { it.type == ReleaseType.Album })
+        assertEquals(5, page0.data.count { it.type == ReleaseType.Single })
+        assertEquals(65, page0.total)
+        assertTrue(page0.hasNextPage)
+
+        val page1 = service.getRecentReleases(userId, page = 1, pageSize = 50)
+        assertEquals(10, page1.data.size)
+        assertTrue(page1.data.all { it.type == ReleaseType.Album })
+        assertEquals((51..60).map { "Album $it" }, page1.data.map { it.title })
+        assertFalse(page1.hasNextPage)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `getRecentReleases counts a folded group once against the per-type cap`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val userId = UUID.randomUUID()
+        val artistId = UUID.randomUUID()
+        val now = Clock.System.now().toEpochMilliseconds()
+
+        seedFollowedArtist(userId, artistId)
+        for (i in 1..51) {
+            val date = now - i * 100.days.inWholeMilliseconds
+            insertProviderRelease(UUID.randomUUID(), artistId, "Album $i", date, rowType = ReleaseType.Album)
+            if (i <= 50) {
+                insertProviderRelease(UUID.randomUUID(), artistId, "Album $i (Explicit)", date, rowType = ReleaseType.Album)
+            }
+        }
+
+        val page0 = service.getRecentReleases(userId, page = 0, pageSize = 50)
+        assertEquals(50, page0.data.size)
+        assertTrue(page0.data.all { it.versions.size == 1 })
+        assertEquals((1..50).map { "Album $it" }, page0.data.map { it.title })
+        assertEquals(51, page0.total)
+        assertTrue(page0.hasNextPage)
+
+        val page1 = service.getRecentReleases(userId, page = 1, pageSize = 50)
+        assertEquals(listOf("Album 51"), page1.data.map { it.title })
+        assertTrue(page1.data.single().versions.isEmpty())
+        assertFalse(page1.hasNextPage)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `getRecentReleases sorts the per-type slices into one list by date`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val userId = UUID.randomUUID()
+        val artistId = UUID.randomUUID()
+        val date = Clock.System.now().toEpochMilliseconds() - 10.days.inWholeMilliseconds
+
+        seedFollowedArtist(userId, artistId)
+        insertProviderRelease(UUID.randomUUID(), artistId, "Album", date, rowType = ReleaseType.Album)
+        insertProviderRelease(UUID.randomUUID(), artistId, "Single", date + 1.days.inWholeMilliseconds, rowType = ReleaseType.Single)
+        insertProviderRelease(UUID.randomUUID(), artistId, "EP", date - 1.days.inWholeMilliseconds, rowType = ReleaseType.EP)
+
+        val result = service.getRecentReleases(userId)
+
+        assertEquals(listOf("Single", "Album", "EP"), result.data.map { it.title })
+        assertEquals(3, result.total)
+        assertFalse(result.hasNextPage)
     }
 
     @ParameterizedTest
@@ -2489,6 +2754,59 @@ class ReleaseServiceTest : KoinTest {
 
         assertFailsWith<IllegalArgumentException> { service.setReleaseHidden(userId, UUID.randomUUID(), true) }
         Unit
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `setReleaseHidden hides and shows every edition of the group`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val userId = UUID.randomUUID()
+        val artistId = UUID.randomUUID()
+        val mbAlbum = UUID.randomUUID()
+        val explicitId = UUID.randomUUID()
+        val liveId = UUID.randomUUID()
+        val date = Clock.System.now().toEpochMilliseconds() - 10.days.inWholeMilliseconds
+
+        seedFollowedArtist(userId, artistId)
+        insertRecentRelease(mbAlbum, artistId, "Album", date, rowType = ReleaseType.Album)
+        insertProviderRelease(explicitId, artistId, "Album (Explicit)", date)
+        insertProviderRelease(liveId, artistId, "Album (Live)", date)
+
+        assertEquals(2, service.setReleaseHidden(userId, mbAlbum, true))
+        assertEquals(setOf(mbAlbum, explicitId), hiddenReleaseIds())
+        assertEquals(listOf("Album (Live)"), service.getRecentReleases(userId).data.map { it.title })
+
+        assertEquals(2, service.setReleaseHidden(userId, mbAlbum, false))
+        assertTrue(hiddenReleaseIds().isEmpty())
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `setReleaseHidden with includeRelated still records the block and hides the group`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val userId = UUID.randomUUID()
+        val artistId = UUID.randomUUID()
+        val plainId = UUID.randomUUID()
+        val explicitId = UUID.randomUUID()
+        val unrelatedId = UUID.randomUUID()
+        val date = Clock.System.now().toEpochMilliseconds() - 10.days.inWholeMilliseconds
+
+        seedFollowedArtist(userId, artistId)
+        insertProviderRelease(plainId, artistId, "Album", date, rowCopyrightHolder = "X")
+        insertProviderRelease(explicitId, artistId, "Album (Explicit)", date, rowCopyrightHolder = "X")
+        insertProviderRelease(unrelatedId, artistId, "Unrelated", date - 200.days.inWholeMilliseconds, rowCopyrightHolder = "X")
+
+        assertEquals(3, service.setReleaseHidden(userId, plainId, true, includeRelated = true))
+
+        assertEquals(setOf(plainId, explicitId, unrelatedId), hiddenReleaseIds())
+        assertTrue(service.getRecentReleases(userId).data.isEmpty())
+
+        val rule = sourceRules().single()
+        assertEquals(artistId.toString(), rule.artistId)
+        assertEquals("apple", rule.provider)
+        assertEquals(ArtistSourceRuleKind.COPYRIGHT_HOLDER, rule.kind)
+        assertEquals("X", rule.value)
+        assertEquals(ArtistSourceRulePolarity.BLOCK, rule.rule)
     }
 
     @ParameterizedTest

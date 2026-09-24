@@ -43,6 +43,12 @@ enum class ClientFeature(val minApiVersion: Int, val maxApiVersion: Int? = null)
         fallback = "`title` is put back together into the full original title and `tags` is emptied.",
     )
     TITLE_TAGS(6),
+
+    @FeatureDoc(
+        introduces = "`versions` on [`RecentRelease`](MODELS.md#devdertypservicesmodelsrecentrelease): the editions of one release (explicit, deluxe, remastered, or the same release from another catalog) are folded under a single feed entry.",
+        fallback = "Every edition is its own feed entry, following the entry it was folded into, and `versions` is empty.",
+    )
+    RELEASE_VERSIONS(7),
 }
 
 data class ClientInfo(

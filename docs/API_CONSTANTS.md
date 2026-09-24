@@ -10,7 +10,7 @@ Guides: [API_VERSIONING.md](API_VERSIONING.md) · [AUTHENTICATION.md](AUTHENTICA
 |---|---|
 | `ApiVersion.HEADER` | `X-Api-Version` |
 | `ApiVersion.LEGACY` | `1` |
-| `ApiVersion.CURRENT` | `6` |
+| `ApiVersion.CURRENT` | `7` |
 
 ## Features
 
@@ -21,6 +21,7 @@ Guides: [API_VERSIONING.md](API_VERSIONING.md) · [AUTHENTICATION.md](AUTHENTICA
 | 4 | `AUDIO_INFO` | File properties nested in `audio` and `atmos` as [`AudioInfo`](MODELS.md#devdertypdataaudioinfo) — `codec`, `sampleRate`, `bitsPerSample`, `bitRate`, `fileSize`, `channels`. | `audio` and `atmos` are cleared and their values flattened back into the deprecated top-level `sampleRate`, `bitsPerSample`, `bitRate`, `fileSize` and `atmosPath` fields. | - |
 | 5 | `SERVER_DRIVEN_UI` | Component trees from the server, rendered natively by the client. | Nothing to render; the companion `X-Ui-Schema-Version` header controls the detail. | - |
 | 6 | `TITLE_TAGS` | `tags`: version markers such as *Radio Edit*, *feat. Drake* or *Live at Wembley*, split off the title into [`TitleTag`](MODELS.md#devdertypdatatitletag) entries, so `title` is clean. | `title` is put back together into the full original title and `tags` is emptied. | - |
+| 7 | `RELEASE_VERSIONS` | `versions` on [`RecentRelease`](MODELS.md#devdertypservicesmodelsrecentrelease): the editions of one release (explicit, deluxe, remastered, or the same release from another catalog) are folded under a single feed entry. | Every edition is its own feed entry, following the entry it was folded into, and `versions` is empty. | - |
 
 ## UI schema version
 

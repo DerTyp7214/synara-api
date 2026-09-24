@@ -77,7 +77,7 @@ List routes take `page` (0-based) and `pageSize` as query parameters and answer 
 {"data": [], "page": 0, "total": 1042, "pageSize": 50, "hasNextPage": true}
 ```
 
-Page through until `hasNextPage` is false. The default page size is whatever the interface declares — 50 on most library queries, 200 on the queue, 150 on release feeds — so send `pageSize` explicitly if it matters to you.
+Page through until `hasNextPage` is false. The default page size is whatever the interface declares — 50 on most library queries, 200 on the queue, 150 on the artist release feeds, while `getRecentReleases` returns up to 50 entries per release type per page (folded editions counting once) — so send `pageSize` explicitly if it matters to you.
 
 ## Responses and status codes
 

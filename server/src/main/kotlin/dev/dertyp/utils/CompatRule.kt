@@ -5,6 +5,7 @@ import dev.dertyp.core.ClientInfo
 import dev.dertyp.core.fullTitle
 import dev.dertyp.data.Song
 import dev.dertyp.data.UserSong
+import dev.dertyp.services.models.RecentRelease
 import dev.dertyp.ui.UiComponent
 
 interface CompatRule {
@@ -13,6 +14,7 @@ interface CompatRule {
     fun shapeSong(song: Song): Song = song
     fun shapeUserSong(song: UserSong): UserSong = song
     fun shapeUiComponent(component: UiComponent, client: ClientInfo): UiComponent = component
+    fun shapeRecentReleases(releases: List<RecentRelease>): List<RecentRelease> = releases
 }
 
 @Suppress("DEPRECATION")
@@ -57,6 +59,13 @@ object TitleTagsCompat : CompatRule {
     override fun shapeUserSong(song: UserSong): UserSong = song.copy(title = song.fullTitle, tags = emptyList())
 }
 
+object ReleaseVersionsCompat : CompatRule {
+    override val feature = ClientFeature.RELEASE_VERSIONS
+
+    override fun shapeRecentReleases(releases: List<RecentRelease>): List<RecentRelease> =
+        releases.flatMap { release -> listOf(release.copy(versions = emptyList())) + release.versions.map { it.copy(versions = emptyList()) } }
+}
+
 object CompatRules {
-    val all: List<CompatRule> = listOf(AudioInfoCompat, DolbyAtmosCompat, TitleTagsCompat, UiSchemaCompat())
+    val all: List<CompatRule> = listOf(AudioInfoCompat, DolbyAtmosCompat, TitleTagsCompat, ReleaseVersionsCompat, UiSchemaCompat())
 }

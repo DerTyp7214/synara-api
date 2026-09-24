@@ -83,6 +83,13 @@ class ClientInfoTest {
     }
 
     @Test
+    fun `release versions require api version 7`() {
+        assertFalse(ClientInfo.LEGACY.supports(ClientFeature.RELEASE_VERSIONS))
+        assertFalse(ClientInfo(6).supports(ClientFeature.RELEASE_VERSIONS))
+        assertTrue(ClientInfo(7).supports(ClientFeature.RELEASE_VERSIONS))
+    }
+
+    @Test
     fun `every feature is available at the current api version`() {
         ClientFeature.entries.forEach { feature ->
             assertTrue(ClientInfo(ApiVersion.CURRENT).supports(feature), "${feature.name} must be supported at CURRENT")

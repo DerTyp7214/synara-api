@@ -34,6 +34,8 @@ import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.hours
 
+private const val EDITION_FETCH_FACTOR = 4
+
 class ReleaseService(private val environment: ApplicationEnvironment) : Service() {
     private val musicBrainzService by inject<MusicBrainzService>()
     private val musicBrainzCacheService by inject<MusicBrainzCacheService>()
@@ -113,86 +115,160 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
     suspend fun getRecentReleases(
         userId: UUID,
         page: Int = 0,
-        pageSize: Int = 150
+        pageSize: Int = 50
     ): PaginatedResponse<RecentRelease> = dbQuery {
         val followedArtistIds = FollowedArtistTable.selectAll()
             .where { FollowedArtistTable.userId eq userId }
             .map { it[FollowedArtistTable.artistId].value }
 
         val nowMs = Clock.System.now().toEpochMilliseconds()
-        val topN = (page + 1) * pageSize
+        val fetchLimit = (page + 1) * pageSize * EDITION_FETCH_FACTOR
 
-        val musicBrainzQuery = RecentReleaseTable
-            .leftJoin(ImageTable, onColumn = { RecentReleaseTable.imageId }, otherColumn = { ImageTable.id })
-            .selectAll()
-            .where {
-                (RecentReleaseTable.artistId inList followedArtistIds) or
-                        (RecentReleaseTable.releaseId inSubQuery ReleaseArtistTable
-                            .select(ReleaseArtistTable.releaseGroupId)
-                            .where { ReleaseArtistTable.artistId inList followedArtistIds }
-                            .andWhere { ReleaseArtistTable.releaseGroupId.isNotNull() })
-            }
-            .andWhere { RecentReleaseTable.albumId.isNull() }
-            .andWhere { RecentReleaseTable.songId.isNull() }
-            .andWhere { RecentReleaseTable.releaseDate.isNotNull() }
-            .andWhere {
-                RecentReleaseTable.releaseId notInSubQuery HiddenReleaseTable
-                    .select(HiddenReleaseTable.releaseGroupId)
-                    .where { HiddenReleaseTable.releaseGroupId.isNotNull() }
-            }
+        val musicBrainzTypeCount = RecentReleaseTable.type.count()
+        val musicBrainzCounts = RecentReleaseTable
+            .select(RecentReleaseTable.type, musicBrainzTypeCount)
+            .feedMusicBrainzFilters(followedArtistIds)
+            .groupBy(RecentReleaseTable.type)
+            .associate { it[RecentReleaseTable.type] to it[musicBrainzTypeCount] }
 
-        val musicBrainzTotal = musicBrainzQuery.count()
+        val providerTypeCount = ProviderReleaseTable.type.count()
+        val providerCounts = ProviderReleaseTable
+            .select(ProviderReleaseTable.type, providerTypeCount)
+            .feedProviderFilters(followedArtistIds)
+            .groupBy(ProviderReleaseTable.type)
+            .associate { it[ProviderReleaseTable.type] to it[providerTypeCount] }
 
-        val musicBrainzRows = musicBrainzQuery
-            .orderBy(
-                RecentReleaseTable.releaseDate to SortOrder.DESC_NULLS_LAST,
-                RecentReleaseTable.releaseId to SortOrder.DESC,
-            )
-            .limit(topN)
-            .toList()
+        val typeTotals = (musicBrainzCounts.keys + providerCounts.keys)
+            .associateWith { (musicBrainzCounts[it] ?: 0L) + (providerCounts[it] ?: 0L) }
+            .filterValues { it > 0L }
 
-        val providerQuery = ProviderReleaseTable
-            .leftJoin(ImageTable, onColumn = { ProviderReleaseTable.imageId }, otherColumn = { ImageTable.id })
-            .selectAll()
-            .where {
-                (ProviderReleaseTable.artistId inList followedArtistIds) or
-                        (ProviderReleaseTable.id inSubQuery ReleaseArtistTable
-                            .select(ReleaseArtistTable.providerReleaseId)
-                            .where { ReleaseArtistTable.artistId inList followedArtistIds }
-                            .andWhere { ReleaseArtistTable.providerReleaseId.isNotNull() })
-            }
-            .andWhere { ProviderReleaseTable.releaseGroupId.isNull() }
-            .andWhere { ProviderReleaseTable.albumId.isNull() }
-            .andWhere { ProviderReleaseTable.songId.isNull() }
-            .andWhere { ProviderReleaseTable.releaseDate.isNotNull() }
-            .andWhere {
-                ProviderReleaseTable.id notInSubQuery HiddenReleaseTable
-                    .select(HiddenReleaseTable.providerReleaseId)
-                    .where { HiddenReleaseTable.providerReleaseId.isNotNull() }
+        val musicBrainzRows = typeTotals.keys
+            .filter { (musicBrainzCounts[it] ?: 0L) > 0L }
+            .flatMap { type ->
+                RecentReleaseTable
+                    .leftJoin(ImageTable, onColumn = { RecentReleaseTable.imageId }, otherColumn = { ImageTable.id })
+                    .selectAll()
+                    .feedMusicBrainzFilters(followedArtistIds)
+                    .andWhere { RecentReleaseTable.type eq type }
+                    .orderBy(
+                        RecentReleaseTable.releaseDate to SortOrder.DESC_NULLS_LAST,
+                        RecentReleaseTable.releaseId to SortOrder.DESC,
+                    )
+                    .limit(fetchLimit)
+                    .toList()
             }
 
-        val providerTotal = providerQuery.count()
-
-        val providerRows = providerQuery
-            .orderBy(
-                ProviderReleaseTable.releaseDate to SortOrder.DESC_NULLS_LAST,
-                ProviderReleaseTable.id to SortOrder.DESC,
-            )
-            .limit(topN)
-            .toList()
+        val providerRows = typeTotals.keys
+            .filter { (providerCounts[it] ?: 0L) > 0L }
+            .flatMap { type ->
+                ProviderReleaseTable
+                    .leftJoin(ImageTable, onColumn = { ProviderReleaseTable.imageId }, otherColumn = { ImageTable.id })
+                    .selectAll()
+                    .feedProviderFilters(followedArtistIds)
+                    .andWhere { ProviderReleaseTable.type eq type }
+                    .orderBy(
+                        ProviderReleaseTable.releaseDate to SortOrder.DESC_NULLS_LAST,
+                        ProviderReleaseTable.id to SortOrder.DESC,
+                    )
+                    .limit(fetchLimit)
+                    .toList()
+            }
 
         val providersMap = providerLinkService.recentReleaseUrls(musicBrainzRows.map { it[RecentReleaseTable.releaseId].value })
         val providerLinksMap = providerLinkService.providerReleaseUrls(providerRows.map { it[ProviderReleaseTable.id].value })
         val groupArtistsMap = releaseArtistService.groupArtistIdsTx(musicBrainzRows.map { it[RecentReleaseTable.releaseId].value })
         val providerArtistsMap = releaseArtistService.providerReleaseArtistIdsTx(providerRows.map { it[ProviderReleaseTable.id].value })
 
-        val feed = musicBrainzRows.map { musicBrainzFeedRow(it, providersMap, groupArtistsMap, nowMs) } +
-                providerRows.map { providerFeedRow(it, providerLinksMap, providerArtistsMap, nowMs) }
+        val feedByType = (musicBrainzRows.map { musicBrainzFeedRow(it, providersMap, groupArtistsMap, nowMs) } +
+                providerRows.map { providerFeedRow(it, providerLinksMap, providerArtistsMap, nowMs) })
+            .groupBy { it.release.type }
 
-        mergeFeed(feed, page, pageSize, musicBrainzTotal + providerTotal)
+        var total = 0L
+        var hasNextPage = false
+        val slices = typeTotals.flatMap { (type, rawTotal) ->
+            val (grouped, folded) = groupFeedRows(feedByType[type] ?: emptyList())
+            val typeTotal = rawTotal - folded
+            total += typeTotal
+            if ((page + 1).toLong() * pageSize < typeTotal) hasNextPage = true
+            grouped.drop(page * pageSize).take(pageSize)
+        }
+
+        PaginatedResponse(
+            data = slices.sortedWith(feedRowOrder).map { it.release },
+            total = total.toInt(),
+            page = page,
+            pageSize = pageSize,
+            hasNextPage = hasNextPage
+        )
     }
 
+    private fun Query.feedMusicBrainzFilters(followedArtistIds: List<UUID>): Query = this
+        .where {
+            (RecentReleaseTable.artistId inList followedArtistIds) or
+                    (RecentReleaseTable.releaseId inSubQuery ReleaseArtistTable
+                        .select(ReleaseArtistTable.releaseGroupId)
+                        .where { ReleaseArtistTable.artistId inList followedArtistIds }
+                        .andWhere { ReleaseArtistTable.releaseGroupId.isNotNull() })
+        }
+        .andWhere { RecentReleaseTable.albumId.isNull() }
+        .andWhere { RecentReleaseTable.songId.isNull() }
+        .andWhere { RecentReleaseTable.releaseDate.isNotNull() }
+        .andWhere {
+            RecentReleaseTable.releaseId notInSubQuery HiddenReleaseTable
+                .select(HiddenReleaseTable.releaseGroupId)
+                .where { HiddenReleaseTable.releaseGroupId.isNotNull() }
+        }
+
+    private fun Query.feedProviderFilters(followedArtistIds: List<UUID>): Query = this
+        .where {
+            (ProviderReleaseTable.artistId inList followedArtistIds) or
+                    (ProviderReleaseTable.id inSubQuery ReleaseArtistTable
+                        .select(ReleaseArtistTable.providerReleaseId)
+                        .where { ReleaseArtistTable.artistId inList followedArtistIds }
+                        .andWhere { ReleaseArtistTable.providerReleaseId.isNotNull() })
+        }
+        .andWhere { ProviderReleaseTable.releaseGroupId.isNull() }
+        .andWhere { ProviderReleaseTable.albumId.isNull() }
+        .andWhere { ProviderReleaseTable.songId.isNull() }
+        .andWhere { ProviderReleaseTable.releaseDate.isNotNull() }
+        .andWhere {
+            ProviderReleaseTable.id notInSubQuery HiddenReleaseTable
+                .select(HiddenReleaseTable.providerReleaseId)
+                .where { HiddenReleaseTable.providerReleaseId.isNotNull() }
+        }
+
     private data class FeedRow(val sortDate: Long?, val id: UUID, val release: RecentRelease)
+
+    private val feedRowOrder = compareByDescending<FeedRow> { it.sortDate ?: Long.MIN_VALUE }.thenByDescending { it.id }
+
+    private fun FeedRow.facet() = ReleaseVersions.Facet(
+        artistId = release.artistId,
+        type = release.type,
+        key = ReleaseVersions.versionKey(release.title),
+        date = sortDate,
+        id = id,
+        source = release.source,
+        suspect = release.suspect,
+        hidden = release.hidden
+    )
+
+    private fun groupFeedRows(rows: List<FeedRow>): Pair<List<FeedRow>, Int> {
+        val groups = ReleaseVersions.cluster(rows) { it.facet() }
+        val grouped = groups.map { members ->
+            val primary = ReleaseVersions.primary(members)
+            val versions = members
+                .filter { it !== primary }
+                .map { it.item }
+                .sortedWith(feedRowOrder)
+            FeedRow(
+                sortDate = members.maxOf { it.facet.date ?: Long.MIN_VALUE }
+                    .takeIf { members.any { it.facet.date != null } },
+                id = primary.item.id,
+                release = primary.item.release.copy(versions = versions.map { it.release })
+            )
+        }
+        return grouped.sortedWith(feedRowOrder) to rows.size - groups.size
+    }
 
     private fun mergeFeed(
         rows: List<FeedRow>,
@@ -200,18 +276,20 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
         pageSize: Int,
         total: Long
     ): PaginatedResponse<RecentRelease> {
-        val data = rows
-            .sortedWith(compareByDescending<FeedRow> { it.sortDate ?: Long.MIN_VALUE }.thenByDescending { it.id })
+        val (grouped, folded) = groupFeedRows(rows)
+        val adjustedTotal = total - folded
+
+        val data = grouped
             .drop(page * pageSize)
             .take(pageSize)
             .map { it.release }
 
         return PaginatedResponse(
             data = data,
-            total = total.toInt(),
+            total = adjustedTotal.toInt(),
             page = page,
             pageSize = pageSize,
-            hasNextPage = (page + 1).toLong() * pageSize < total
+            hasNextPage = (page + 1).toLong() * pageSize < adjustedTotal
         )
     }
 
@@ -416,25 +494,37 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
                 }
                 .map { it[ProviderReleaseTable.id].value }
 
-        fun hide(hiddenId: UUID): Int = HiddenReleaseTable.insertIgnore {
-            it[HiddenReleaseTable.providerReleaseId] = hiddenId
-            it[HiddenReleaseTable.artistId] = targetArtistId
-            it[HiddenReleaseTable.hiddenBy] = userId
-        }.insertedCount
-
-        fun hideTarget(): Int = HiddenReleaseTable.insertIgnore {
-            if (providerRow != null) {
-                it[HiddenReleaseTable.providerReleaseId] = targetId
+        fun hide(target: HiddenTarget): Int = HiddenReleaseTable.insertIgnore {
+            if (target.isProvider) {
+                it[HiddenReleaseTable.providerReleaseId] = target.id
             } else {
-                it[HiddenReleaseTable.releaseGroupId] = targetId
+                it[HiddenReleaseTable.releaseGroupId] = target.id
             }
             it[HiddenReleaseTable.artistId] = targetArtistId
             it[HiddenReleaseTable.hiddenBy] = userId
         }.insertedCount
 
+        val members = if (providerRow != null) {
+            versionGroupMembers(
+                targetId,
+                targetArtistId,
+                providerRow[ProviderReleaseTable.type],
+                providerRow[ProviderReleaseTable.title],
+                providerRow[ProviderReleaseTable.releaseDate]
+            )
+        } else {
+            versionGroupMembers(
+                targetId,
+                targetArtistId,
+                recentRow!![RecentReleaseTable.type],
+                recentRow[RecentReleaseTable.title],
+                recentRow[RecentReleaseTable.releaseDate]
+            )
+        }
+
         var changed: Int
         if (hidden) {
-            changed = hideTarget()
+            changed = hide(HiddenTarget(targetId, providerRow != null)) + members.sumOf { hide(it) }
             if (includeRelated && relatedKey != null && targetProvider != null) {
                 val (ruleKind, ruleValue) = relatedKey
                 ArtistSourceRuleTable.upsert(
@@ -450,13 +540,21 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
                     it[ArtistSourceRuleTable.rule] = ArtistSourceRulePolarity.BLOCK
                     it[ArtistSourceRuleTable.createdBy] = userId
                 }
-                changed += relatedReleaseIds(targetProvider, ruleKind, ruleValue).sumOf { hide(it) }
+                changed += relatedReleaseIds(targetProvider, ruleKind, ruleValue).sumOf { hide(HiddenTarget(it, true)) }
             }
         } else {
             changed = if (providerRow != null) {
                 HiddenReleaseTable.deleteWhere { HiddenReleaseTable.providerReleaseId eq targetId }
             } else {
                 HiddenReleaseTable.deleteWhere { HiddenReleaseTable.releaseGroupId eq targetId }
+            }
+            val providerIds = members.filter { it.isProvider }.map { it.id }
+            val groupIds = members.filterNot { it.isProvider }.map { it.id }
+            if (providerIds.isNotEmpty()) {
+                changed += HiddenReleaseTable.deleteWhere { HiddenReleaseTable.providerReleaseId inList providerIds }
+            }
+            if (groupIds.isNotEmpty()) {
+                changed += HiddenReleaseTable.deleteWhere { HiddenReleaseTable.releaseGroupId inList groupIds }
             }
             if (includeRelated && relatedKey != null && targetProvider != null) {
                 val (ruleKind, ruleValue) = relatedKey
@@ -474,6 +572,64 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
             }
         }
         changed
+    }
+
+    private data class HiddenTarget(val id: UUID, val isProvider: Boolean)
+
+    private fun versionGroupMembers(
+        targetId: UUID,
+        artistId: UUID,
+        type: ReleaseType,
+        title: String,
+        date: Long?
+    ): List<HiddenTarget> {
+        if (date == null) return emptyList()
+        val from = date - ReleaseVersions.GROUP_WINDOW_MS
+        val to = date + ReleaseVersions.GROUP_WINDOW_MS
+
+        val groupFacets = RecentReleaseTable
+            .select(RecentReleaseTable.releaseId, RecentReleaseTable.title, RecentReleaseTable.releaseDate)
+            .where { RecentReleaseTable.artistId eq artistId }
+            .andWhere { RecentReleaseTable.type eq type }
+            .andWhere { RecentReleaseTable.releaseDate.between(from, to) }
+            .map {
+                HiddenTarget(it[RecentReleaseTable.releaseId].value, false) to ReleaseVersions.Facet(
+                    artistId = artistId,
+                    type = type,
+                    key = ReleaseVersions.versionKey(it[RecentReleaseTable.title]),
+                    date = it[RecentReleaseTable.releaseDate],
+                    id = it[RecentReleaseTable.releaseId].value,
+                    source = ReleaseSource.MusicBrainz,
+                    suspect = false,
+                    hidden = false
+                )
+            }
+
+        val providerFacets = ProviderReleaseTable
+            .select(ProviderReleaseTable.id, ProviderReleaseTable.title, ProviderReleaseTable.releaseDate, ProviderReleaseTable.suspect)
+            .where { ProviderReleaseTable.artistId eq artistId }
+            .andWhere { ProviderReleaseTable.type eq type }
+            .andWhere { ProviderReleaseTable.releaseDate.between(from, to) }
+            .andWhere { ProviderReleaseTable.releaseGroupId.isNull() }
+            .map {
+                HiddenTarget(it[ProviderReleaseTable.id].value, true) to ReleaseVersions.Facet(
+                    artistId = artistId,
+                    type = type,
+                    key = ReleaseVersions.versionKey(it[ProviderReleaseTable.title]),
+                    date = it[ProviderReleaseTable.releaseDate],
+                    id = it[ProviderReleaseTable.id].value,
+                    source = ReleaseSource.Apple,
+                    suspect = it[ProviderReleaseTable.suspect],
+                    hidden = false
+                )
+            }
+
+        val targetKey = ReleaseVersions.versionKey(title).value
+        return ReleaseVersions.cluster(groupFacets + providerFacets) { it.second }
+            .firstOrNull { group -> group.any { it.facet.id == targetId && it.facet.key.value == targetKey } }
+            ?.filter { it.facet.id != targetId }
+            ?.map { it.item.first }
+            ?: emptyList()
     }
 
     suspend fun confirmRelease(userId: UUID, releaseId: UUID): RecentRelease {

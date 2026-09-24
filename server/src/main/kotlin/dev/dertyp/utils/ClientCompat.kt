@@ -11,6 +11,7 @@ import dev.dertyp.data.RadioChannelSongMatch
 import dev.dertyp.data.RecentListens
 import dev.dertyp.data.Song
 import dev.dertyp.data.UserSong
+import dev.dertyp.services.models.RecentRelease
 import dev.dertyp.ui.UiComponent
 import dev.dertyp.ui.UiLiveUpdate
 import dev.dertyp.ui.UiRender
@@ -41,8 +42,9 @@ open class ResponseShaper(val client: ClientInfo, rules: List<CompatRule> = Comp
         )
         is UiSlotRender -> value.copy(items = value.items.map { shape(it) as UiRender })
         is UiLiveUpdate.Replace -> value.copy(child = shapeUiComponent(value.child))
-        is PaginatedResponse<*> -> (value as PaginatedResponse<Any?>).copy(data = value.data.map(::shape))
-        is List<*> -> value.map(::shape)
+        is RecentRelease -> shapeRecentReleases(listOf(value)).first()
+        is PaginatedResponse<*> -> shapePaginated(value as PaginatedResponse<Any?>)
+        is List<*> -> shapeList(value)
         is Map<*, *> -> value.mapValues { shape(it.value) }
         is Flow<*> -> value.map(::shape)
         is NowPlaying -> value.copy(song = shapeUserSong(value.song))
@@ -58,6 +60,18 @@ open class ResponseShaper(val client: ClientInfo, rules: List<CompatRule> = Comp
         is QueueItem -> value.copy(song = value.song?.let(::shapeUserSong))
         else -> value
     }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun shapeList(list: List<*>): List<Any?> =
+        if (list.isNotEmpty() && list.all { it is RecentRelease }) shapeRecentReleases(list as List<RecentRelease>) else list.map(::shape)
+
+    private fun shapePaginated(response: PaginatedResponse<Any?>): PaginatedResponse<Any?> {
+        val data = shapeList(response.data)
+        return response.copy(data = data, total = response.total + (data.size - response.data.size))
+    }
+
+    protected open fun shapeRecentReleases(releases: List<RecentRelease>): List<RecentRelease> =
+        activeRules.fold(releases) { shaped, rule -> rule.shapeRecentReleases(shaped) }
 
     protected open fun shapeSong(song: Song): Song = activeRules.fold(song) { shaped, rule -> rule.shapeSong(shaped) }
 
