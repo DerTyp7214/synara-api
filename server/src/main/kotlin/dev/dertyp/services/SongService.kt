@@ -85,6 +85,9 @@ class SongRpcService(
         addedAt: Instant?
     ): UserSong? = songService.setLikedReturning(id, user.id, liked, addedAt)
 
+    override suspend fun setLikeLevel(id: UUID, level: LikeLevel): UserSong? =
+        songService.setLikeLevelReturning(id, user.id, level)
+
     override suspend fun setLyrics(id: UUID, @LogParam("size") lyrics: List<String>): UserSong? =
         songService.setLyrics(id, user.id, lyrics)
 
@@ -160,6 +163,12 @@ class SongRpcService(
         pageSize: Int,
         explicit: Boolean
     ): PaginatedResponse<UserSong> = songService.likedSongs(page, pageSize, explicit, user.id)
+
+    override suspend fun superLikedSongs(
+        page: Int,
+        pageSize: Int,
+        explicit: Boolean
+    ): PaginatedResponse<UserSong> = songService.superLikedSongs(page, pageSize, explicit, user.id)
 
     override suspend fun exportFavouritesAsCsv(): String =
         songService.exportFavouritesAsCsv(user.id)
@@ -237,6 +246,9 @@ class SongRpcService(
 
     override fun likedSongIds(explicit: Boolean): Flow<UUID> =
         songService.likedSongIds(explicit, user.id)
+
+    override fun superLikedSongIds(explicit: Boolean): Flow<UUID> =
+        songService.superLikedSongIds(explicit, user.id)
 
     override fun songIdsByArtist(artistId: UUID): Flow<UUID> = songService.songIdsByArtist(artistId)
 
@@ -353,6 +365,8 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
             animatedCoverBlurHashColumn: Expression<String?>? = null,
         ): UserSong {
             val id = resultRow[SongTable.id].value
+            val isFavourite = resultRow.getOrNull(UserSongTable.isFavourite) ?: false
+            val superLikedAt = resultRow.getOrNull(UserSongTable.superLikedAt)
 
             return UserSong(
                 id = id,
@@ -386,10 +400,18 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                 animatedCoverBlurHash = animatedCoverBlurHashColumn?.let { resultRow.getOrNull(it) },
                 audioStartMs = resultRow.getOrNull(SongTable.audioStartMs),
                 tags = resultRow.titleTags(),
-                isFavourite = resultRow.getOrNull(UserSongTable.isFavourite) ?: false,
+                isFavourite = isFavourite,
                 userSongCreatedAt = resultRow.getOrNull(UserSongTable.createdAt).date,
                 userSongUpdatedAt = resultRow.getOrNull(UserSongTable.updatedAt).date,
+                likeLevel = likeLevel(isFavourite, superLikedAt),
+                superLikedAt = superLikedAt.date,
             )
+        }
+
+        fun likeLevel(isFavourite: Boolean, superLikedAt: Long?): LikeLevel = when {
+            superLikedAt != null -> LikeLevel.SUPER
+            isFavourite -> LikeLevel.LIKE
+            else -> LikeLevel.NONE
         }
     }
 
@@ -453,7 +475,42 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                     UserSongTable.userId eq userId and (UserSongTable.songId eq songId)
                 }) {
                     it[UserSongTable.isFavourite] = liked
+                    if (!liked) it[UserSongTable.superLikedAt] = null
                     it[UserSongTable.updatedAt] = (addedAt ?: Instant.now()).toEpochMilli()
+                }
+            }
+        }
+
+        return byId(songId, userId)
+    }
+
+    suspend fun setLikeLevelReturning(songId: UUID, userId: UUID, level: LikeLevel): UserSong? {
+        dbQuery {
+            val now = Instant.now().toEpochMilli()
+            val liked = level != LikeLevel.NONE
+            val condition = UserSongTable.userId eq userId and (UserSongTable.songId eq songId)
+            fun current() = UserSongTable
+                .select(UserSongTable.isFavourite, UserSongTable.superLikedAt)
+                .where { condition }
+                .singleOrNull()
+
+            val existing = current()
+            val inserted = existing == null && UserSongTable.insertIgnore {
+                it[UserSongTable.songId] = songId
+                it[UserSongTable.userId] = userId
+                it[UserSongTable.isFavourite] = liked
+                if (level == LikeLevel.SUPER) it[UserSongTable.superLikedAt] = now
+            }.insertedCount == 1
+
+            if (!inserted) {
+                val row = existing ?: current() ?: return@dbQuery
+                val wasLiked = row[UserSongTable.isFavourite]
+                val previousSuperLikedAt = row[UserSongTable.superLikedAt]
+                UserSongTable.update({ condition }) {
+                    it[UserSongTable.isFavourite] = liked
+                    it[UserSongTable.superLikedAt] =
+                        if (level == LikeLevel.SUPER) previousSuperLikedAt ?: now else null
+                    if (wasLiked != liked) it[UserSongTable.updatedAt] = now
                 }
             }
         }
@@ -1415,6 +1472,19 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
             orderBy(UserSongTable.updatedAt to SortOrder.DESC)
         }
 
+    suspend fun superLikedSongs(
+        page: Int,
+        pageSize: Int,
+        explicit: Boolean,
+        userId: UUID
+    ): PaginatedResponse<UserSong> =
+        querySongs(
+            page, pageSize, explicit, userId
+        ) {
+            where { UserSongTable.superLikedAt.isNotNull() }
+            orderBy(UserSongTable.superLikedAt to SortOrder.DESC)
+        }
+
     suspend fun exportFavouritesAsCsv(userId: UUID): String = dbQuery {
         fun csvEscape(value: String): String =
             if (value.contains(',') || value.contains('"') || value.contains('\n'))
@@ -1765,6 +1835,27 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                 else it
             }
             .orderBy(UserSongTable.updatedAt, SortOrder.DESC)
+            .fetchBatchedResults(1000) { batch ->
+                batch.forEach {
+                    emit(it[SongTable.id].value)
+                }
+            }
+    }
+
+    fun superLikedSongIds(explicit: Boolean, userId: UUID): Flow<UUID> = flow {
+        SongTable
+            .leftJoin(
+                UserSongTable,
+                onColumn = { SongTable.id },
+                otherColumn = { UserSongTable.songId })
+            .select(SongTable.id)
+            .where { UserSongTable.userId eq userId }
+            .andWhere { UserSongTable.superLikedAt.isNotNull() }
+            .let {
+                if (!explicit) it.andWhere { SongTable.explicit eq false }
+                else it
+            }
+            .orderBy(UserSongTable.superLikedAt, SortOrder.DESC)
             .fetchBatchedResults(1000) { batch ->
                 batch.forEach {
                     emit(it[SongTable.id].value)

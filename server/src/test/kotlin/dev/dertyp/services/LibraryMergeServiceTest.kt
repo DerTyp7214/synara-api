@@ -9,6 +9,7 @@ import dev.dertyp.services.metadata.TidalService
 import io.ktor.server.application.ApplicationEnvironment
 import io.mockk.*
 import kotlinx.coroutines.runBlocking
+import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.SchemaUtils
@@ -359,6 +360,82 @@ class LibraryMergeServiceTest : KoinTest {
             
             assertEquals(1, PlaylistSongTable.selectAll().count())
             assertEquals(remainingSongId, PlaylistSongTable.selectAll().single()[PlaylistSongTable.songId].value)
+        }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `mergeSongReferences keeps the earliest superLikedAt and marks the merged row a favourite`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+
+        data class Ids(val song1: UUID, val song2: UUID, val userLikedOnly: UUID, val userBothSuper: UUID)
+
+        val (song1, song2, userLikedOnly, userBothSuper) = transaction(database) {
+            val albumId = AlbumTable.insert { it[name] = "Album" }[AlbumTable.id]
+            val userLikedOnly = UserTable.insert { it[username] = "likedOnly"; it[passwordHash] = "pass" }[UserTable.id].value
+            val userBothSuper = UserTable.insert { it[username] = "bothSuper"; it[passwordHash] = "pass" }[UserTable.id].value
+
+            val song1 = SongTable.insert {
+                it[title] = "S1"
+                it[this.albumId] = albumId
+                it[fileSize] = 100L
+                it[inserted] = 1000L
+                it[filePath] = "p-super"
+            }[SongTable.id].value
+
+            val song2 = SongTable.insert {
+                it[title] = "S1"
+                it[this.albumId] = albumId
+                it[fileSize] = 100L
+                it[inserted] = 2000L
+                it[filePath] = "p-super"
+            }[SongTable.id].value
+
+            UserSongTable.insert {
+                it[songId] = song1
+                it[this.userId] = userLikedOnly
+                it[isFavourite] = true
+            }
+            UserSongTable.insert {
+                it[songId] = song2
+                it[this.userId] = userLikedOnly
+                it[isFavourite] = true
+                it[superLikedAt] = 9000L
+            }
+
+            UserSongTable.insert {
+                it[songId] = song1
+                it[this.userId] = userBothSuper
+                it[isFavourite] = true
+                it[superLikedAt] = 5000L
+            }
+            UserSongTable.insert {
+                it[songId] = song2
+                it[this.userId] = userBothSuper
+                it[isFavourite] = true
+                it[superLikedAt] = 10000L
+            }
+
+            Ids(song1, song2, userLikedOnly, userBothSuper)
+        }
+
+        service.mergeDuplicates()
+
+        transaction(database) {
+            val remainingSongId = SongTable.selectAll().single()[SongTable.id].value
+            assertEquals(song1, remainingSongId)
+
+            val likedOnlyRow = UserSongTable.selectAll()
+                .where { (UserSongTable.songId eq remainingSongId) and (UserSongTable.userId eq userLikedOnly) }
+                .single()
+            assertEquals(true, likedOnlyRow[UserSongTable.isFavourite])
+            assertEquals(9000L, likedOnlyRow[UserSongTable.superLikedAt])
+
+            val bothSuperRow = UserSongTable.selectAll()
+                .where { (UserSongTable.songId eq remainingSongId) and (UserSongTable.userId eq userBothSuper) }
+                .single()
+            assertEquals(true, bothSuperRow[UserSongTable.isFavourite])
+            assertEquals(5000L, bothSuperRow[UserSongTable.superLikedAt])
         }
     }
 

@@ -307,6 +307,202 @@ class SongServiceTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
+    fun `setLikeLevel from NONE to SUPER sets favourite, level SUPER and superLikedAt`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val songId = insertSongWithPath("/none-to-super.mp3")
+
+        val updated = rpcService.setLikeLevel(songId, LikeLevel.SUPER)
+
+        assertNotNull(updated)
+        assertEquals(true, updated?.isFavourite)
+        assertEquals(LikeLevel.SUPER, updated?.likeLevel)
+        assertNotNull(updated?.superLikedAt)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `setLikeLevel from SUPER to SUPER keeps the original superLikedAt`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val songId = insertSongWithPath("/super-to-super.mp3")
+
+        val first = rpcService.setLikeLevel(songId, LikeLevel.SUPER)
+        assertNotNull(first?.superLikedAt)
+
+        val second = rpcService.setLikeLevel(songId, LikeLevel.SUPER)
+
+        assertEquals(LikeLevel.SUPER, second?.likeLevel)
+        assertEquals(first?.superLikedAt, second?.superLikedAt)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `setLikeLevel from SUPER to LIKE clears superLikedAt, stays liked and leaves updatedAt unchanged`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val songId = insertSongWithPath("/super-to-like.mp3")
+        rpcService.setLikeLevel(songId, LikeLevel.SUPER)
+        val updatedAtAfterSuper = transaction(database) {
+            UserSongTable.selectAll().where { UserSongTable.songId eq songId }.single()[UserSongTable.updatedAt]
+        }
+
+        val updated = rpcService.setLikeLevel(songId, LikeLevel.LIKE)
+
+        assertEquals(LikeLevel.LIKE, updated?.likeLevel)
+        assertEquals(true, updated?.isFavourite)
+        assertNull(updated?.superLikedAt)
+        val updatedAtAfterLike = transaction(database) {
+            UserSongTable.selectAll().where { UserSongTable.songId eq songId }.single()[UserSongTable.updatedAt]
+        }
+        assertEquals(updatedAtAfterSuper, updatedAtAfterLike)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `setLikeLevel from LIKE to SUPER does not change updatedAt`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val songId = insertSongWithPath("/like-to-super.mp3")
+        rpcService.setLikeLevel(songId, LikeLevel.LIKE)
+        val updatedAtAfterLike = transaction(database) {
+            UserSongTable.selectAll().where { UserSongTable.songId eq songId }.single()[UserSongTable.updatedAt]
+        }
+
+        val updated = rpcService.setLikeLevel(songId, LikeLevel.SUPER)
+
+        assertEquals(LikeLevel.SUPER, updated?.likeLevel)
+        assertNotNull(updated?.superLikedAt)
+        val updatedAtAfterSuper = transaction(database) {
+            UserSongTable.selectAll().where { UserSongTable.songId eq songId }.single()[UserSongTable.updatedAt]
+        }
+        assertEquals(updatedAtAfterLike, updatedAtAfterSuper)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `setLikeLevel from SUPER to NONE clears favourite and superLikedAt`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val songId = insertSongWithPath("/super-to-none.mp3")
+        rpcService.setLikeLevel(songId, LikeLevel.SUPER)
+
+        val updated = rpcService.setLikeLevel(songId, LikeLevel.NONE)
+
+        assertEquals(LikeLevel.NONE, updated?.likeLevel)
+        assertEquals(false, updated?.isFavourite)
+        assertNull(updated?.superLikedAt)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `setLiked keeps SUPER level when liking an already super liked song and clears superLikedAt when unliking`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val songId = insertSongWithPath("/setliked-super.mp3")
+        rpcService.setLikeLevel(songId, LikeLevel.SUPER)
+
+        val stillSuper = rpcService.setLiked(songId, true, null)
+        assertEquals(LikeLevel.SUPER, stillSuper?.likeLevel)
+        assertNotNull(stillSuper?.superLikedAt)
+
+        val unliked = rpcService.setLiked(songId, false, null)
+        assertEquals(LikeLevel.NONE, unliked?.likeLevel)
+        assertEquals(false, unliked?.isFavourite)
+        assertNull(unliked?.superLikedAt)
+    }
+
+    private fun insertDistinctSong(title: String): UUID {
+        val albumId = UUID.randomUUID()
+        val songId = UUID.randomUUID()
+        transaction(database) {
+            AlbumTable.insert {
+                it[id] = albumId
+                it[name] = title
+                it[songCount] = 1
+            }
+            SongTable.insert {
+                it[id] = songId
+                it[SongTable.title] = title
+                it[SongTable.albumId] = albumId
+                it[filePath] = "/$title.mp3"
+            }
+        }
+        return songId
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `superLikedSongs returns only the user's super liked songs, newest first, and never another user's`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val otherUserId = UUID.randomUUID()
+        transaction(database) {
+            UserTable.insert {
+                it[id] = otherUserId
+                it[username] = "otheruser"
+                it[passwordHash] = "hash"
+            }
+        }
+
+        val liked = insertDistinctSong("Liked Song")
+        val superOld = insertDistinctSong("Super Old")
+        val superNew = insertDistinctSong("Super New")
+        val otherUsersSuper = insertDistinctSong("Others Super")
+
+        songService.setLikeLevelReturning(liked, user.id, LikeLevel.LIKE)
+        songService.setLikeLevelReturning(superOld, user.id, LikeLevel.SUPER)
+        songService.setLikeLevelReturning(superNew, user.id, LikeLevel.SUPER)
+        songService.setLikeLevelReturning(otherUsersSuper, otherUserId, LikeLevel.SUPER)
+
+        transaction(database) {
+            UserSongTable.update({ UserSongTable.songId eq superOld }) { it[UserSongTable.superLikedAt] = 1_000L }
+            UserSongTable.update({ UserSongTable.songId eq superNew }) { it[UserSongTable.superLikedAt] = 2_000L }
+        }
+
+        val result = songService.superLikedSongs(0, 50, explicit = true, userId = user.id)
+        assertEquals(listOf(superNew, superOld), result.data.map { it.id })
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `superLikedSongIds returns ids in the same order and filter as superLikedSongs`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val explicitSuper = insertSongWithPath("/ids-explicit-super.mp3")
+        transaction(database) {
+            SongTable.update({ SongTable.id eq explicitSuper }) { it[explicit] = true }
+        }
+        val superOld = insertSongWithPath("/ids-super-old.mp3")
+        val superNew = insertSongWithPath("/ids-super-new.mp3")
+        val liked = insertSongWithPath("/ids-liked.mp3")
+
+        songService.setLikeLevelReturning(explicitSuper, user.id, LikeLevel.SUPER)
+        songService.setLikeLevelReturning(superOld, user.id, LikeLevel.SUPER)
+        songService.setLikeLevelReturning(superNew, user.id, LikeLevel.SUPER)
+        songService.setLikeLevelReturning(liked, user.id, LikeLevel.LIKE)
+
+        transaction(database) {
+            UserSongTable.update({ UserSongTable.songId eq superOld }) { it[UserSongTable.superLikedAt] = 1_000L }
+            UserSongTable.update({ UserSongTable.songId eq explicitSuper }) { it[UserSongTable.superLikedAt] = 2_000L }
+            UserSongTable.update({ UserSongTable.songId eq superNew }) { it[UserSongTable.superLikedAt] = 3_000L }
+        }
+
+        assertEquals(listOf(superNew, explicitSuper, superOld), songService.superLikedSongIds(true, user.id).toList())
+        assertEquals(listOf(superNew, superOld), songService.superLikedSongIds(false, user.id).toList())
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `likeLevel is NONE without a userSong row and LIKE for a plain like`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val untouched = insertSongWithPath("/untouched.mp3")
+        val liked = insertSongWithPath("/plain-like.mp3")
+        rpcService.setLiked(liked, true, null)
+
+        val untouchedSong = rpcService.byId(untouched)
+        val likedSong = rpcService.byId(liked)
+
+        assertEquals(LikeLevel.NONE, untouchedSong?.likeLevel)
+        assertNull(untouchedSong?.superLikedAt)
+        assertEquals(LikeLevel.LIKE, likedSong?.likeLevel)
+        assertNull(likedSong?.superLikedAt)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
     fun `rankedSearch should return matching songs by title`(dialect: DbDialect) = runBlocking {
         setup(dialect)
         val albumId = UUID.randomUUID()

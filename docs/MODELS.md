@@ -77,6 +77,7 @@ Services: [RPC_SERVICES.md](RPC_SERVICES.md) · REST routes: [REST_API.md](REST_
 - [InsertablePlaylist](#devdertypdatainsertableplaylist)
 - [InsertableRadioChannel](#devdertypdatainsertableradiochannel)
 - [InsertableSong](#devdertypdatainsertablesong)
+- [LikeLevel](#devdertypdatalikelevel)
 - [LinkUnmatchedTrackRequest](#devdertypdatalinkunmatchedtrackrequest)
 - [LinkUnmatchedTrackResult](#devdertypdatalinkunmatchedtrackresult)
 - [ListenBackupConfig](#devdertypdatalistenbackupconfig)
@@ -1092,6 +1093,15 @@ Configuration for creating or updating a song record.
 | `atmosPath` | `String`? | Internal server path to the Dolby Atmos (E-AC-3 JOC in MP4) variant, if one exists. |
 | `atmos` | [AudioInfo](#devdertypdataaudioinfo)? | Properties of the Dolby Atmos variant; probed by the server when null and atmosPath is set. |
 | `tags` | `List`<[TitleTag](#devdertypdatatitletag)> | Version markers; when empty the server splits them off the title. |
+
+### LikeLevel <a name="devdertypdatalikelevel"></a>
+How strongly a user likes a song. A super like also counts as a like everywhere likes are used.
+
+| Value | Description |
+| :--- | :--- |
+| `NONE` | The song is not liked. |
+| `LIKE` | The song is liked. |
+| `SUPER` | The song is super liked. It is also a liked song. |
 
 ### LinkUnmatchedTrackRequest <a name="devdertypdatalinkunmatchedtrackrequest"></a>
 Request to link a user's unmatched listens of a track to a library song, identified by recording MSID and/or MBID.
@@ -2541,6 +2551,8 @@ Extends track metadata with user-specific information like favorite status.
 | `isFavourite` | `Boolean`? | Whether the current user has marked this song as a favorite. |
 | `userSongCreatedAt` | `PlatformDate`? | Timestamp of when the song record was created. |
 | `userSongUpdatedAt` | `PlatformDate`? | Timestamp of the last update to the song metadata. |
+| `likeLevel` | [LikeLevel](#devdertypdatalikelevel)? | The current user's like level of this song. isFavourite is true for both LIKE and SUPER. |
+| `superLikedAt` | `PlatformDate`? | Timestamp of when the current user super liked this song, or null if it is not super liked. |
 | `playbackTags` | `List`<[TimecodeTag](#devdertypdatatimecodetag)> | The requesting user's timecode tags on this song whose action is not NONE, ordered by position. Read-only. Tags are changed through ITimecodeTagService, and the full list including passive tags comes from ITimecodeTagService.getTags. |
 
 ### BackupInfo <a name="devdertypservicesbackupinfo"></a>

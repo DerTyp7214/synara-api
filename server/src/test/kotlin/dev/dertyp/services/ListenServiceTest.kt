@@ -60,6 +60,7 @@ class ListenServiceTest : KoinTest {
                 ArtistAliasTable,
                 SongTable, SongVariantTable,
                 SongArtistTable,
+                UserSongTable,
                 MBArtistTable,
                 MBRecordingTable,
                 MBReleaseGroupTable,
@@ -678,6 +679,73 @@ class ListenServiceTest : KoinTest {
         }
 
         assertEquals(mapOf(favourite to 1f), service.recentSeedWeights(user, 0))
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `recentSeedWeights without listens adds the super like bonus to a super liked favourite`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        transaction(database) { SchemaUtils.create(UserSongTable) }
+        val (user, favourite, superLiked) = transaction(database) {
+            val u = insertUser()
+            val album = insertAlbum()
+            val favourite = insertSong(album)
+            val superLiked = insertSong(album)
+            UserSongTable.insert {
+                it[userId] = u
+                it[songId] = favourite
+                it[isFavourite] = true
+            }
+            UserSongTable.insert {
+                it[userId] = u
+                it[songId] = superLiked
+                it[isFavourite] = true
+                it[superLikedAt] = 1_000L
+            }
+            Triple(u, favourite, superLiked)
+        }
+
+        val weights = service.recentSeedWeights(user, 0)
+
+        assertEquals(setOf(favourite, superLiked), weights.keys)
+        assertEquals(1f, weights[favourite])
+        assertEquals(1f + ListenService.SUPER_LIKE_SEED_BONUS, weights[superLiked])
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `recentSeedWeights adds the super like bonus on top of listen weights`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        transaction(database) { SchemaUtils.create(UserSongTable) }
+        val (user, listened, superLikedOnly, superLikedAndListened) = transaction(database) {
+            val u = insertUser()
+            val album = insertAlbum()
+            val listened = insertSong(album)
+            val superLikedOnly = insertSong(album)
+            val superLikedAndListened = insertSong(album)
+            insertLocal(u, listened, 1_000_000)
+            insertLocal(u, superLikedAndListened, 1_000_000)
+            UserSongTable.insert {
+                it[userId] = u
+                it[songId] = superLikedOnly
+                it[isFavourite] = true
+                it[superLikedAt] = 1_000L
+            }
+            UserSongTable.insert {
+                it[userId] = u
+                it[songId] = superLikedAndListened
+                it[isFavourite] = true
+                it[superLikedAt] = 2_000L
+            }
+            Quad(u, listened, superLikedOnly, superLikedAndListened)
+        }
+
+        val weights = service.recentSeedWeights(user, 500)
+
+        assertEquals(setOf(listened, superLikedOnly, superLikedAndListened), weights.keys)
+        assertEquals(1f, weights[listened])
+        assertEquals(ListenService.SUPER_LIKE_SEED_BONUS, weights[superLikedOnly])
+        assertEquals(1f + ListenService.SUPER_LIKE_SEED_BONUS, weights[superLikedAndListened])
     }
 
     @ParameterizedTest

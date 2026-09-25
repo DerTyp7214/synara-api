@@ -362,12 +362,15 @@ GET /song/songIdsByUserPlaylist/{playlistId} ISongService.songIdsByUserPlaylist 
 GET /song/streamSize/{id} ISongService.getStreamSize [p:id] JSON
 GET /song/streamSong/{id} ISongService.streamSong [p:id q:offset? q:chunkSize?] FILE
 GET /song/streamSongAtmos/{id} ISongService.streamSongAtmos [p:id q:offset? q:chunkSize?] FILE
+GET /song/superLikedSongIds ISongService.superLikedSongIds [q:explicit] SSE
+GET /song/superLikedSongs ISongService.superLikedSongs [q:page? q:pageSize? q:explicit] JSON
 HEAD /song/downloadSong/{id} ISongService.downloadSong [p:id q:quality q:offset? q:chunkSize? q:force? q:format?] FILE
 HEAD /song/streamSong/{id} ISongService.streamSong [p:id q:offset? q:chunkSize?] FILE
 HEAD /song/streamSongAtmos/{id} ISongService.streamSongAtmos [p:id q:offset? q:chunkSize?] FILE
 POST /song/moveSongs ISongService.moveSongs [q:oldPath q:newPath q:originalIdPrefix?] JSON
 POST /song/musicBrainzId/{id} ISongService.fetchMusicBrainzId [p:id] JSON
 PUT /song/artists/{id} ISongService.setArtists [p:id q:artistIds] JSON
+PUT /song/likeLevel/{id} ISongService.setLikeLevel [p:id q:level] JSON
 PUT /song/liked/{id} ISongService.setLiked [p:id q:liked q:addedAt?] JSON
 PUT /song/lyrics/{id} ISongService.setLyrics [p:id q:lyrics] JSON
 PUT /song/musicBrainzId/{id} ISongService.setMusicBrainzId [p:id q:musicBrainzId] JSON

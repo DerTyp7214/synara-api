@@ -709,21 +709,28 @@ class LibraryMergeService : Service() {
             it[UserPlaylistSongTable.songId] = keptSongId
         }
 
-        val usersForOld = UserSongTable.select(UserSongTable.userId, UserSongTable.isFavourite).where { UserSongTable.songId eq oldSongId }.toList()
-        val usersForKept = UserSongTable.select(UserSongTable.userId, UserSongTable.isFavourite).where { UserSongTable.songId eq keptSongId }.associate { it[UserSongTable.userId].value to it[UserSongTable.isFavourite] }
+        val usersForOld = UserSongTable.select(UserSongTable.userId, UserSongTable.isFavourite, UserSongTable.superLikedAt).where { UserSongTable.songId eq oldSongId }.toList()
+        val usersForKept = UserSongTable.select(UserSongTable.userId, UserSongTable.isFavourite, UserSongTable.superLikedAt).where { UserSongTable.songId eq keptSongId }.associateBy { it[UserSongTable.userId].value }
 
         for (row in usersForOld) {
             val userId = row[UserSongTable.userId].value
             val isFav = row[UserSongTable.isFavourite]
+            val superLikedAt = row[UserSongTable.superLikedAt]
+            val kept = usersForKept[userId]
 
-            if (userId !in usersForKept) {
+            if (kept == null) {
                 UserSongTable.update({ (UserSongTable.songId eq oldSongId) and (UserSongTable.userId eq userId) }) {
                     it[UserSongTable.songId] = keptSongId
                 }
             } else {
-                if (isFav && !usersForKept[userId]!!) {
+                val keptFav = kept[UserSongTable.isFavourite]
+                val keptSuperLikedAt = kept[UserSongTable.superLikedAt]
+                val mergedSuperLikedAt = listOfNotNull(superLikedAt, keptSuperLikedAt).minOrNull()
+                val mergedFav = isFav || keptFav || mergedSuperLikedAt != null
+                if (mergedFav != keptFav || mergedSuperLikedAt != keptSuperLikedAt) {
                     UserSongTable.update({ (UserSongTable.songId eq keptSongId) and (UserSongTable.userId eq userId) }) {
-                        it[UserSongTable.isFavourite] = true
+                        it[UserSongTable.isFavourite] = mergedFav
+                        it[UserSongTable.superLikedAt] = mergedSuperLikedAt
                     }
                 }
             }

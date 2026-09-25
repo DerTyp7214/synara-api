@@ -352,6 +352,7 @@ GET /song/downloadSong/{id} ISongService.downloadSong | Download song audio in s
 HEAD /song/downloadSong/{id} ISongService.downloadSong | Download song audio in specific quality. | song | UserAuth | id:path,quality:query,offset:query,chunkSize:query,force:query,format:query | body:no
 GET /song/exportFavouritesAsCsv ISongService.exportFavouritesAsCsv | Export all favorited songs as a CSV string. | song | UserAuth | - | body:no
 GET /song/extendedMetadata/{id} ISongService.extendedMetadata | Get extended metadata for a song. | song | UserAuth | id:path | body:no
+PUT /song/likeLevel/{id} ISongService.setLikeLevel | Set the like level of a song. A super like also counts as a like. Changing between LIKE and SUPER keeps the song's position among the liked songs. | song | UserAuth | id:path,level:query | body:no
 PUT /song/liked/{id} ISongService.setLiked | Toggle favorite status. | song | UserAuth | id:path,liked:query,addedAt:query | body:no
 GET /song/likedByArtist/{artistId} ISongService.likedByArtist | List songs liked by the user for a specific artist. | song | UserAuth | page:query,pageSize:query,artistId:path,explicit:query | body:no
 GET /song/likedSongIds ISongService.likedSongIds | Stream all IDs of songs liked by the current user. | song | UserAuth | explicit:query | body:no
@@ -372,6 +373,8 @@ GET /song/streamSong/{id} ISongService.streamSong | Stream song audio data for p
 HEAD /song/streamSong/{id} ISongService.streamSong | Stream song audio data for playback. | song | UserAuth | id:path,offset:query,chunkSize:query | body:no
 GET /song/streamSongAtmos/{id} ISongService.streamSongAtmos | Stream the Dolby Atmos (E-AC-3 JOC in MP4) variant of a song. Returns null if the song has no Atmos variant. | song | UserAuth | id:path,offset:query,chunkSize:query | body:no
 HEAD /song/streamSongAtmos/{id} ISongService.streamSongAtmos | Stream the Dolby Atmos (E-AC-3 JOC in MP4) variant of a song. Returns null if the song has no Atmos variant. | song | UserAuth | id:path,offset:query,chunkSize:query | body:no
+GET /song/superLikedSongIds ISongService.superLikedSongIds | Stream all IDs of songs super liked by the current user, most recently super liked first. | song | UserAuth | explicit:query | body:no
+GET /song/superLikedSongs ISongService.superLikedSongs | Get all songs super liked by the current user, most recently super liked first. | song | UserAuth | page:query,pageSize:query,explicit:query | body:no
 GET /storage/totalStorage IStorageService.getTotalStorage | Calculate and return the total storage space consumed by the music library in bytes. | storage | UserAuth | - | body:no
 POST /subsonicCredential/regenerateSubsonicCredential ISubsonicCredentialService.regenerateSubsonicCredential | Generate a new Subsonic credential for the current user, replacing any existing one. | subsonicCredential | UserAuth | - | body:no
 DELETE /subsonicCredential/revokeSubsonicCredential ISubsonicCredentialService.revokeSubsonicCredential | Delete the current user's Subsonic credential. Returns true if a credential was deleted. | subsonicCredential | UserAuth | - | body:no

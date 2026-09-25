@@ -9,6 +9,7 @@ object UserSongTable : Table("userSong") {
     val songId = reference("songId", SongTable.id, onDelete = ReferenceOption.CASCADE)
 
     val isFavourite = bool("favourite").default(false)
+    val superLikedAt = long("superLikedAt").nullable()
 
     val createdAt = long("createdAt").clientDefault { Instant.now().toEpochMilli() }
     val updatedAt = long("updatedAt").clientDefault { Instant.now().toEpochMilli() }

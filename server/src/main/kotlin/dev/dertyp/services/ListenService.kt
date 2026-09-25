@@ -37,6 +37,10 @@ data class IncomingListen(
 )
 
 class ListenService : Service() {
+    companion object {
+        const val SUPER_LIKE_SEED_BONUS = 2f
+    }
+
     private val hooks by inject<HookBus>()
     private val songService by inject<SongService>()
     private val albumService by inject<AlbumService>()
@@ -96,11 +100,20 @@ class ListenService : Service() {
                 if (weight > 0f) weights.merge(songId, weight, Float::plus)
             }
 
-        weights.ifEmpty {
+        if (weights.isNotEmpty()) {
             UserSongTable.select(UserSongTable.songId)
                 .where { UserSongTable.userId eq userId }
+                .andWhere { UserSongTable.superLikedAt.isNotNull() }
+                .forEach { weights.merge(it[UserSongTable.songId].value, SUPER_LIKE_SEED_BONUS, Float::plus) }
+            weights
+        } else {
+            UserSongTable.select(UserSongTable.songId, UserSongTable.superLikedAt)
+                .where { UserSongTable.userId eq userId }
                 .andWhere { UserSongTable.isFavourite eq true }
-                .associate { it[UserSongTable.songId].value to 1f }
+                .associate {
+                    val bonus = if (it[UserSongTable.superLikedAt] != null) SUPER_LIKE_SEED_BONUS else 0f
+                    it[UserSongTable.songId].value to 1f + bonus
+                }
         }
     }
 
