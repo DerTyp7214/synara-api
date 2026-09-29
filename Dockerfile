@@ -46,7 +46,20 @@ RUN ./configure \
 
 RUN make -j$(nproc) && make install
 
-# Stage 4: Create the Runtime Image
+# Stage 4: fpcalc-Builder (yum has no chromaprint package)
+FROM debian:bullseye-slim AS fpcalc-builder
+
+ENV CHROMAPRINT_VERSION 1.5.1
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends wget ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /src
+RUN wget https://github.com/acoustid/chromaprint/releases/download/v${CHROMAPRINT_VERSION}/chromaprint-fpcalc-${CHROMAPRINT_VERSION}-linux-x86_64.tar.gz && \
+    tar xf chromaprint-fpcalc-${CHROMAPRINT_VERSION}-linux-x86_64.tar.gz
+
+# Stage 5: Create the Runtime Image
 FROM amazoncorretto:25 AS runtime
 
 ARG APP_USER_ID=1000
@@ -66,6 +79,8 @@ COPY --from=ffmpeg-builder /usr/local/lib/libsw*.so* /usr/lib/
 
 COPY --from=ffmpeg-builder /usr/local/bin/ffmpeg /usr/bin/
 COPY --from=ffmpeg-builder /usr/local/bin/ffprobe /usr/bin/
+
+COPY --from=fpcalc-builder /src/chromaprint-fpcalc-1.5.1-linux-x86_64/fpcalc /usr/local/bin/fpcalc
 
 ENV LD_LIBRARY_PATH="/usr/lib:/usr/local/lib:$LD_LIBRARY_PATH"
 
@@ -99,6 +114,7 @@ ENV PODCASTS_LIBRARY_PATH="/data/Synara/podcasts/library"
 ENV PODCASTS_IMPORTS_PATH="/data/Synara/podcasts/imports"
 ENV DATA_IMAGES_PATH="/data/Tidal/Images"
 ENV DATA_COVER_ASSETS_PATH="/app/cover-assets"
+ENV ACOUSTID_API_KEY="Y2A24vXli6"
 
 ENV AUDIO_TRACKS_SECONDARY_PATH="/data/Synara"
 

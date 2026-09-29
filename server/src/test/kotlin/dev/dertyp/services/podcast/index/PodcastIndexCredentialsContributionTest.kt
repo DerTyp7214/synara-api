@@ -4,6 +4,7 @@ import dev.dertyp.data.User
 import dev.dertyp.data.UserInfo
 import dev.dertyp.plugins.PluginSettings
 import dev.dertyp.plugins.UiRenderScope
+import dev.dertyp.services.credentials.CredentialCipher
 import dev.dertyp.services.ui.TranslationService
 import dev.dertyp.services.ui.UiRegistry
 import dev.dertyp.ui.UiAction
@@ -16,9 +17,12 @@ import dev.dertyp.ui.UiSlots
 import dev.dertyp.ui.UiTone
 import dev.dertyp.ui.UiValue
 import io.ktor.server.config.MapApplicationConfig
+import io.mockk.Runs
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.just
 import io.mockk.mockk
+import io.mockk.slot
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -32,16 +36,19 @@ class PodcastIndexCredentialsContributionTest {
     private val registry = UiRegistry()
     private val translations = TranslationService(registry)
     private val settings = mockk<PluginSettings>(relaxed = true)
+    private val cipher = CredentialCipher(MapApplicationConfig("credentials.encryptionKey" to "test-key"))
     private val admin = User(UUID.randomUUID(), "root", displayName = "Root", passwordHash = "", isAdmin = true)
 
     init {
         translations.forSource(SOURCE).registerBundlesFromResources(javaClass.classLoader, "i18n/podcastindex", listOf("en", "de"))
     }
 
-    private fun source(env: Map<String, String>): PodcastIndexCredentialSource {
+    private fun sealed(settingKey: String, value: String) = cipher.encrypt(settingKey, value)
+
+    private fun source(env: Map<String, String> = emptyMap()): PodcastIndexCredentialSource {
         val config = MapApplicationConfig()
         env.forEach { (key, value) -> config.put(key, value) }
-        return PodcastIndexCredentialSource(settings, config)
+        return PodcastIndexCredentialSource(settings, config, cipher)
     }
 
     private fun contribution(env: Map<String, String> = emptyMap()): PodcastIndexCredentialsContribution =
@@ -101,7 +108,7 @@ class PodcastIndexCredentialsContributionTest {
         val page = contribution().render(scope()) as UiComponent.Column
         val badge = page.children.filterIsInstance<UiComponent.Badge>().single()
         assertEquals("Not configured", badge.text)
-        assertEquals(UiTone.WARNING, badge.tone)
+        assertEquals(UiTone.MUTED, badge.tone)
         val hint = page.children.filterIsInstance<UiComponent.Text>().single()
         assertTrue(hint.text.startsWith("Create a free API key"))
 
@@ -133,9 +140,15 @@ class PodcastIndexCredentialsContributionTest {
 
     @Test
     fun `renders the stored hint, optional fields and a clear action once stored`() = runBlocking {
-        coEvery { settings.getAll() } returns mapOf("apiKey" to "storedKey", "apiSecret" to "storedSecret")
+        coEvery { settings.getAll() } returns mapOf(
+            "apiKey" to sealed("apiKey", "storedKey"),
+            "apiSecret" to sealed("apiSecret", "storedSecret"),
+        )
 
         val page = contribution().render(scope()) as UiComponent.Column
+        val badge = page.children.filterIsInstance<UiComponent.Badge>().single()
+        assertEquals("Configured", badge.text)
+        assertEquals(UiTone.SUCCESS, badge.tone)
         assertEquals("Using the credentials stored here.", page.children.filterIsInstance<UiComponent.Text>().single().text)
         assertTrue(page.fields().none { it.required })
         assertTrue(page.fields().all { it.value == null })
@@ -147,8 +160,42 @@ class PodcastIndexCredentialsContributionTest {
     }
 
     @Test
-    fun `save stores both values and refreshes`() = runBlocking {
+    fun `renders the unreadable badge and hint without an environment fallback`() = runBlocking {
+        coEvery { settings.getAll() } returns mapOf("apiKey" to "plainKey", "apiSecret" to "plainSecret")
+
+        val page = contribution().render(scope()) as UiComponent.Column
+        val badge = page.children.filterIsInstance<UiComponent.Badge>().single()
+        assertEquals("Unreadable", badge.text)
+        assertEquals(UiTone.WARNING, badge.tone)
+        val hint = page.children.filterIsInstance<UiComponent.Text>().single().text
+        assertTrue(hint.startsWith("The stored credentials can't be decrypted."))
+        assertFalse(hint.contains("server environment"))
+        assertTrue(page.fields().all { it.required })
+        assertTrue(page.children.any { it is UiComponent.Divider })
+        val clear = page.buttons().single()
+        assertEquals("Remove stored credentials", clear.label)
+    }
+
+    @Test
+    fun `renders the unreadable badge and hint with an environment fallback`() = runBlocking {
+        coEvery { settings.getAll() } returns mapOf("apiKey" to "plainKey", "apiSecret" to "plainSecret")
+
+        val page = contribution(mapOf("podcastIndex.apiKey" to "envKey", "podcastIndex.apiSecret" to "envSecret"))
+            .render(scope()) as UiComponent.Column
+        val badge = page.children.filterIsInstance<UiComponent.Badge>().single()
+        assertEquals("Unreadable", badge.text)
+        assertEquals(UiTone.WARNING, badge.tone)
+        val hint = page.children.filterIsInstance<UiComponent.Text>().single().text
+        assertTrue(hint.startsWith("The stored credentials can't be decrypted."))
+        assertTrue(hint.contains("The credentials from the server environment are used meanwhile."))
+        assertTrue(page.children.any { it is UiComponent.Divider })
+    }
+
+    @Test
+    fun `save stores both values encrypted and refreshes`() = runBlocking {
         coEvery { settings.getAll() } returns emptyMap()
+        val captured = slot<Map<String, String?>>()
+        coEvery { settings.setAll(capture(captured)) } just Runs
 
         val result = contribution().invoke(
             scope(),
@@ -159,7 +206,12 @@ class PodcastIndexCredentialsContributionTest {
         assertEquals(UiInvokeStatus.OK, result.status)
         assertEquals("Credentials saved", result.message)
         assertTrue(result.refresh)
-        coVerify { settings.setAll(mapOf("apiKey" to "key123", "apiSecret" to "secret456")) }
+        val stored = captured.captured
+        assertEquals(setOf("apiKey", "apiSecret"), stored.keys)
+        assertTrue(stored.getValue("apiKey")!!.startsWith(CredentialCipher.PREFIX))
+        assertTrue(stored.getValue("apiSecret")!!.startsWith(CredentialCipher.PREFIX))
+        assertEquals("key123", cipher.decrypt("apiKey", stored.getValue("apiKey")!!))
+        assertEquals("secret456", cipher.decrypt("apiSecret", stored.getValue("apiSecret")!!))
     }
 
     @Test
@@ -181,16 +233,25 @@ class PodcastIndexCredentialsContributionTest {
 
     @Test
     fun `save accepts a single value once a pair is stored`() = runBlocking {
-        coEvery { settings.getAll() } returns mapOf("apiKey" to "storedKey", "apiSecret" to "storedSecret")
+        coEvery { settings.getAll() } returns mapOf(
+            "apiKey" to sealed("apiKey", "storedKey"),
+            "apiSecret" to sealed("apiSecret", "storedSecret"),
+        )
+        val captured = slot<Map<String, String?>>()
+        coEvery { settings.setAll(capture(captured)) } just Runs
 
         val result = contribution().invoke(scope(), "save", mapOf("apiSecret" to UiValue.of("newSecret")))
         assertEquals(UiInvokeStatus.OK, result.status)
-        coVerify { settings.setAll(mapOf("apiSecret" to "newSecret")) }
+        assertEquals(setOf("apiSecret"), captured.captured.keys)
+        assertEquals("newSecret", cipher.decrypt("apiSecret", captured.captured.getValue("apiSecret")!!))
     }
 
     @Test
     fun `clear removes the stored values`() = runBlocking {
-        coEvery { settings.getAll() } returns mapOf("apiKey" to "storedKey", "apiSecret" to "storedSecret")
+        coEvery { settings.getAll() } returns mapOf(
+            "apiKey" to sealed("apiKey", "storedKey"),
+            "apiSecret" to sealed("apiSecret", "storedSecret"),
+        )
 
         val result = contribution().invoke(scope(), "clear", emptyMap())
         assertEquals(UiInvokeStatus.OK, result.status)

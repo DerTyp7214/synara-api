@@ -31,6 +31,9 @@ jwt:
   audience: ${JWT_AUDIENCE:synara-api}
   realm: ${JWT_REALM:Access to 'Synara-API'}
   secret: ${JWT_SECRET:changeme}
+credentials:
+  encryptionKey: ${CREDENTIALS_ENCRYPTION_KEY:}
+  keyFile: ${CREDENTIALS_KEY_FILE:}
 storage:
   driverClassName: ${DB_DRIVER:org.sqlite.JDBC}
   jdbcURL: ${DB_URL:jdbc:sqlite:data.db}
@@ -95,6 +98,8 @@ gamdl:
 podcastIndex:
   apiKey: ${PODCAST_INDEX_API_KEY:}
   apiSecret: ${PODCAST_INDEX_API_SECRET:}
+acoustid:
+  apiKey: ${ACOUSTID_API_KEY:}
 workers:
   threadMultiplier: ${WORKER_THREAD_MULTIPLIER:1.0}
 metrics:

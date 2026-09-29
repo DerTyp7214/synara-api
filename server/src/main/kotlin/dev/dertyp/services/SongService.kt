@@ -279,6 +279,7 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
     private val musicBrainzService by inject<MusicBrainzService>()
     private val cachedMusicBrainzService by inject<CachedMusicBrainzService>()
     private val musicBrainzCacheService by inject<MusicBrainzCacheService>()
+    private val acoustIdService by inject<AcoustIdService>()
     private val artistService by inject<ArtistService>()
     private val genreService by inject<GenreService>()
     private val linkResolverService by inject<LinkResolverService>()
@@ -683,7 +684,8 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
         val mbRecording = if (song.musicBrainzId != null) {
             cachedMusicBrainzService.getRecording(song.musicBrainzId!!, priority)
         } else {
-            musicBrainzService.searchMb(song, priority)
+            acoustIdService.matchRecording(song, priority)?.let { cachedMusicBrainzService.getRecording(it, priority) }
+                ?: musicBrainzService.searchMb(song, priority)
         }
 
         if (mbRecording != null) {

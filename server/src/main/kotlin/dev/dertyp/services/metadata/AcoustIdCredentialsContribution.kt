@@ -1,12 +1,12 @@
-package dev.dertyp.services.podcast.index
+package dev.dertyp.services.metadata
 
 import dev.dertyp.plugins.PluginSettings
 import dev.dertyp.plugins.UiAccess
 import dev.dertyp.plugins.UiContribution
 import dev.dertyp.plugins.UiRenderScope
 import dev.dertyp.services.credentials.CredentialOrigin
-import dev.dertyp.services.podcast.index.PodcastIndexCredentialSource.Companion.KEY_API_KEY
-import dev.dertyp.services.podcast.index.PodcastIndexCredentialSource.Companion.KEY_API_SECRET
+import dev.dertyp.services.ui.PluginSettingsService
+import dev.dertyp.services.ui.UiRegistry
 import dev.dertyp.ui.UiAction
 import dev.dertyp.ui.UiAlign
 import dev.dertyp.ui.UiButtonStyle
@@ -25,69 +25,85 @@ import dev.dertyp.ui.UiValue
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
-class PodcastIndexCredentialsEntryContribution(
-    private val credentials: PodcastIndexCredentialSource,
-    private val settings: PluginSettings,
+const val ACOUSTID_UI_SOURCE = "acoustid"
+
+class AcoustIdCredentialsEntryContribution(
+    private val credentials: AcoustIdCredentialSource,
+    settingsService: PluginSettingsService,
 ) : UiContribution(
-    id = "podcastindex.credentials.entry",
+    id = "acoustid.credentials.entry",
     kind = UiContributionKind.SLOT,
     slot = UiSlots.SETTINGS,
-    titleKey = "podcastindex.credentials.title",
-    descriptionKey = "podcastindex.credentials.description",
+    titleKey = "acoustid.credentials.title",
+    descriptionKey = "acoustid.credentials.description",
     icon = UiIcon(UiIconName.KEY),
-    order = 70,
+    order = 71,
     access = UiAccess(requiresAdmin = true),
 ) {
+    private val settings: PluginSettings = settingsService.forPlugin(UiRegistry.SERVER_SOURCE)
+
     override fun changes(scope: UiRenderScope): Flow<Unit> = settings.changes().map { }
 
     override suspend fun render(scope: UiRenderScope): UiComponent {
-        val configured = credentials.current() != null
+        val trailing = when (credentials.origin()) {
+            CredentialOrigin.STORED -> scope.t("$PREFIX.stored")
+            CredentialOrigin.ENVIRONMENT -> scope.t("$PREFIX.fromEnvironment")
+            CredentialOrigin.UNREADABLE -> scope.t("$PREFIX.unreadable")
+            CredentialOrigin.NONE -> scope.t("$PREFIX.none")
+        }
         return UiComponent.ListItem(
-            title = scope.t("podcastindex.credentials.title"),
-            subtitle = scope.t("podcastindex.credentials.description"),
+            title = scope.t("acoustid.credentials.title"),
+            subtitle = scope.t("acoustid.credentials.description"),
             icon = icon,
-            trailing = if (configured) scope.t("podcastindex.credentials.configured") else scope.t("podcastindex.credentials.missing"),
-            action = UiAction.OpenPage(PodcastIndexCredentialsContribution.ID),
+            trailing = trailing,
+            action = UiAction.OpenPage(AcoustIdCredentialsContribution.ID),
         )
+    }
+
+    companion object {
+        private const val PREFIX = "acoustid.credentials"
     }
 }
 
-class PodcastIndexCredentialsContribution(
-    private val credentials: PodcastIndexCredentialSource,
-    private val settings: PluginSettings,
+class AcoustIdCredentialsContribution(
+    private val credentials: AcoustIdCredentialSource,
+    settingsService: PluginSettingsService,
 ) : UiContribution(
     id = ID,
     kind = UiContributionKind.PAGE,
-    titleKey = "podcastindex.credentials.title",
-    descriptionKey = "podcastindex.credentials.description",
+    titleKey = "acoustid.credentials.title",
+    descriptionKey = "acoustid.credentials.description",
     icon = UiIcon(UiIconName.KEY),
-    order = 70,
+    order = 71,
     access = UiAccess(requiresAdmin = true),
 ) {
+    private val settings: PluginSettings = settingsService.forPlugin(UiRegistry.SERVER_SOURCE)
+
     override fun changes(scope: UiRenderScope): Flow<Unit> = settings.changes().map { }
 
     override suspend fun render(scope: UiRenderScope): UiComponent {
-        val origin = credentials.origin()
+        val source = credentials.origin()
         val fromEnvironment = credentials.fromEnvironment()
-        val stored = origin == CredentialOrigin.STORED
-        val hasStoredRows = stored || origin == CredentialOrigin.UNREADABLE
-        val hint = when (origin) {
+        val hint = when (source) {
             CredentialOrigin.STORED -> scope.t("$PREFIX.storedHint")
             CredentialOrigin.ENVIRONMENT -> scope.t("$PREFIX.envHint")
             CredentialOrigin.UNREADABLE ->
                 if (fromEnvironment != null) scope.t("$PREFIX.unreadableHintEnv") else scope.t("$PREFIX.unreadableHint")
             CredentialOrigin.NONE -> scope.t("$PREFIX.noneHint")
         }
-        val badgeText = when (origin) {
-            CredentialOrigin.STORED, CredentialOrigin.ENVIRONMENT -> scope.t("$PREFIX.configured")
+        val badgeText = when (source) {
+            CredentialOrigin.STORED -> scope.t("$PREFIX.stored")
+            CredentialOrigin.ENVIRONMENT -> scope.t("$PREFIX.fromEnvironment")
             CredentialOrigin.UNREADABLE -> scope.t("$PREFIX.unreadable")
-            CredentialOrigin.NONE -> scope.t("$PREFIX.missing")
+            CredentialOrigin.NONE -> scope.t("$PREFIX.none")
         }
-        val badgeTone = when (origin) {
+        val badgeTone = when (source) {
             CredentialOrigin.STORED, CredentialOrigin.ENVIRONMENT -> UiTone.SUCCESS
             CredentialOrigin.UNREADABLE -> UiTone.WARNING
             CredentialOrigin.NONE -> UiTone.MUTED
         }
+        val stored = source == CredentialOrigin.STORED
+        val hasStoredRows = stored || source == CredentialOrigin.UNREADABLE
         val children = mutableListOf<UiComponent>(
             UiComponent.Badge(badgeText, badgeTone),
             UiComponent.Text(hint, style = UiTextStyle.CAPTION, emphasis = UiEmphasis.LOW),
@@ -101,13 +117,7 @@ class PodcastIndexCredentialsContribution(
                         label = scope.t("$PREFIX.apiKey"),
                         helper = scope.t("$PREFIX.apiKeyHelper"),
                         secret = true,
-                        required = !stored,
-                    ),
-                    UiComponent.TextField(
-                        key = KEY_API_SECRET,
-                        label = scope.t("$PREFIX.apiSecret"),
-                        secret = true,
-                        required = !stored,
+                        required = false,
                     ),
                 ),
             ),
@@ -137,23 +147,11 @@ class PodcastIndexCredentialsContribution(
 
     private suspend fun save(scope: UiRenderScope, values: Map<String, UiValue>): UiInvokeResult {
         val apiKey = values[KEY_API_KEY]?.text?.trim().orEmpty()
-        val apiSecret = values[KEY_API_SECRET]?.text?.trim().orEmpty()
-        if (apiKey.isEmpty() && apiSecret.isEmpty()) {
-            return UiInvokeResult(UiInvokeStatus.VALIDATION_ERROR, fieldErrors = mapOf(KEY_API_KEY to scope.t("$PREFIX.error.apiKey")))
+        if (apiKey.isEmpty()) {
+            credentials.clear()
+            return UiInvokeResult(UiInvokeStatus.OK, scope.t("$PREFIX.cleared"), refresh = true)
         }
-        if (credentials.origin() != CredentialOrigin.STORED) {
-            if (apiKey.isEmpty()) {
-                return UiInvokeResult(UiInvokeStatus.VALIDATION_ERROR, fieldErrors = mapOf(KEY_API_KEY to scope.t("$PREFIX.error.apiKey")))
-            }
-            if (apiSecret.isEmpty()) {
-                return UiInvokeResult(UiInvokeStatus.VALIDATION_ERROR, fieldErrors = mapOf(KEY_API_SECRET to scope.t("$PREFIX.error.apiSecret")))
-            }
-        }
-        val updates = buildMap<String, String?> {
-            if (apiKey.isNotEmpty()) put(KEY_API_KEY, apiKey)
-            if (apiSecret.isNotEmpty()) put(KEY_API_SECRET, apiSecret)
-        }
-        credentials.store(updates)
+        credentials.store(mapOf(KEY_API_KEY to apiKey))
         return UiInvokeResult(UiInvokeStatus.OK, scope.t("$PREFIX.saved"), refresh = true)
     }
 
@@ -163,9 +161,10 @@ class PodcastIndexCredentialsContribution(
     }
 
     companion object {
-        const val ID = "podcastindex.credentials"
+        const val ID = "acoustid.credentials"
+        const val KEY_API_KEY = ACOUSTID_API_KEY_SETTING
 
-        private const val PREFIX = "podcastindex.credentials"
-        private const val FORM_ID = "podcastindex"
+        private const val PREFIX = "acoustid.credentials"
+        private const val FORM_ID = "acoustid"
     }
 }

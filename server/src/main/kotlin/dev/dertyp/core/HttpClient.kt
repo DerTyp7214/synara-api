@@ -175,6 +175,7 @@ class HttpClientQueueService : Service() {
                     host.contains("deezer.com") -> 100.milliseconds
                     host.contains("spotify.com") -> 100.milliseconds
                     host.contains("apple.com") -> 100.milliseconds
+                    host.contains("api.acoustid.org") -> 340.milliseconds
                     else -> 250.milliseconds
                 }
 

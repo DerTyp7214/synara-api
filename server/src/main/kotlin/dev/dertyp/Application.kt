@@ -13,6 +13,7 @@ import dev.dertyp.services.cover.CoverAutoTrigger
 import dev.dertyp.services.cover.CoverGenerationService
 import dev.dertyp.services.cover.CoverSourceCollector
 import dev.dertyp.services.cover.toCoverConfig
+import dev.dertyp.services.credentials.CredentialCipher
 import dev.dertyp.services.hue.HueDiscoveryService
 import dev.dertyp.services.hue.HueService
 import dev.dertyp.core.configureScheduledTasks
@@ -342,6 +343,10 @@ fun mainModule(application: Application, environment: ApplicationEnvironment): M
     singleOf(::MirrorService)
     singleOf(::RemoteMirrorService)
     singleOf(::MusicBrainzService)
+    singleOf(::AcoustIdFingerprintService)
+    singleOf(::CredentialCipher)
+    singleOf(::AcoustIdCredentialSource)
+    singleOf(::AcoustIdService)
     singleOf(::MusicBrainzCacheService)
     singleOf(::CachedMusicBrainzService)
     singleOf(::LinkResolverService)

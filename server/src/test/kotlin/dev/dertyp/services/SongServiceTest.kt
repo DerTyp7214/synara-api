@@ -1,17 +1,27 @@
 package dev.dertyp.services
 
+import dev.dertyp.ApiClient
 import dev.dertyp.AudioUtils
 import dev.dertyp.DbDialect
 import dev.dertyp.StreamInfo
 import dev.dertyp.TestDatabase
 import dev.dertyp.audio.LosslessFormat
+import dev.dertyp.core.ApplicationScope
 import dev.dertyp.core.ClientInfo
+import dev.dertyp.core.HttpClientQueueService
 import dev.dertyp.data.*
 import dev.dertyp.db.*
 import dev.dertyp.services.import.Type
-import dev.dertyp.services.metadata.CachedMusicBrainzService
-import dev.dertyp.services.metadata.MusicBrainzCacheService
-import dev.dertyp.services.metadata.MusicBrainzService
+import dev.dertyp.services.metadata.*
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.mock.MockEngine
+import io.ktor.client.engine.mock.respond
+import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpStatusCode
+import io.ktor.http.Url
+import io.ktor.http.headersOf
+import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.ApplicationEnvironment
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -45,6 +55,10 @@ class SongServiceTest : KoinTest {
     private val musicBrainzService = mockk<MusicBrainzService>(relaxed = true)
     private val environment = mockk<ApplicationEnvironment>()
     private val storageService = mockk<StorageService>(relaxed = true)
+    private val fingerprintService = mockk<AcoustIdFingerprintService>()
+    private val acoustIdCredentials = mockk<AcoustIdCredentialSource>()
+    private var acoustIdQueue: HttpClientQueueService? = null
+    private val acoustIdRequests = mutableListOf<Url>()
     
     private val user = User(
         id = UUID.randomUUID(),
@@ -60,6 +74,7 @@ class SongServiceTest : KoinTest {
                 single { musicBrainzService }
                 single { MusicBrainzCacheService() }
                 single { CachedMusicBrainzService(get(), get()) }
+                single { AcoustIdService(fingerprintService, acoustIdCredentials) }
                 single { mockk<ImageService>(relaxed = true) }
                 single { storageService }
                 single { mockk<MetadataFetchingService>(relaxed = true) }
@@ -81,6 +96,7 @@ class SongServiceTest : KoinTest {
                 SongArtistTable,
                 AlbumArtistTable,
                 SongMusicBrainzTable,
+                SongAcoustIdTable,
                 AlbumMusicBrainzTable,
                 ArtistMusicBrainzTable,
                 UserSongTable,
@@ -112,6 +128,9 @@ class SongServiceTest : KoinTest {
             }
         }
 
+        coEvery { fingerprintService.fingerprint(any()) } returns null
+        coEvery { acoustIdCredentials.current() } returns "testKey"
+
         songService = SongService()
         rpcService = SongRpcService(user, songService)
     }
@@ -121,6 +140,12 @@ class SongServiceTest : KoinTest {
         stopKoin()
         TestDatabase.cleanUp()
         unmockkObject(AudioUtils)
+        acoustIdQueue?.let {
+            runBlocking { it.stopService() }
+            unmockkObject(ApiClient)
+        }
+        acoustIdQueue = null
+        acoustIdRequests.clear()
     }
 
     @ParameterizedTest
@@ -2155,5 +2180,181 @@ class SongServiceTest : KoinTest {
         assertEquals("C", metadata.audioData?.key)
         assertEquals(AudioScale.Major, metadata.audioData?.scale)
         assertEquals(1000L, metadata.insertedAt)
+    }
+
+    private suspend fun useAcoustIdResponse(body: String) {
+        mockkObject(ApiClient)
+        val engine = MockEngine { request ->
+            acoustIdRequests += request.url
+            respond(body, HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, "application/json"))
+        }
+        every { ApiClient.instance } returns HttpClient(engine) {
+            install(ContentNegotiation) { json(ApplicationScope.json) }
+        }
+        val queue = HttpClientQueueService()
+        queue.startService()
+        acoustIdQueue = queue
+        every { ApiClient.queueInstance } returns queue
+    }
+
+    private fun insertUntaggedSong(): UUID {
+        val songId = UUID.randomUUID()
+        transaction(database) {
+            val albumId = UUID.randomUUID()
+            AlbumTable.insert {
+                it[id] = albumId
+                it[name] = "Album"
+            }
+            SongTable.insert {
+                it[id] = songId
+                it[title] = "Untagged"
+                it[SongTable.albumId] = albumId
+                it[filePath] = "/music/untagged.mp3"
+                it[duration] = 200_000
+            }
+        }
+        return songId
+    }
+
+    private fun acoustIdHit(recordingId: UUID) = """
+        {"status": "ok", "results": [{"id": "${UUID.randomUUID()}", "score": 0.96,
+          "recordings": [{"id": "$recordingId", "title": "Real Title", "duration": 200}]}]}
+    """.trimIndent()
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `fetchMusicBrainzId takes the AcoustID recording and never searches by name`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val songId = insertUntaggedSong()
+        val mbId = UUID.randomUUID()
+        coEvery { fingerprintService.fingerprint("/music/untagged.mp3") } returns Fingerprint(200, "AQADtEmU")
+        useAcoustIdResponse(acoustIdHit(mbId))
+        coEvery { musicBrainzService.fetchRecordingById(mbId, any()) } returns MusicBrainzRecording(
+            id = mbId,
+            title = "Real Title",
+            artistCredit = emptyList()
+        )
+
+        val updated = songService.fetchMusicBrainzId(songId, user.id)
+
+        assertEquals(mbId, updated?.musicBrainzId)
+        coVerify(exactly = 0) { musicBrainzService.searchMb(any(), any()) }
+        assertEquals("testKey", acoustIdRequests.single().parameters["client"])
+        val row = transaction(database) {
+            SongAcoustIdTable.selectAll().where { SongAcoustIdTable.songId eq songId }.single()
+        }
+        assertEquals("AQADtEmU", row[SongAcoustIdTable.fingerprint])
+        assertEquals(200, row[SongAcoustIdTable.duration])
+        assertNotNull(row[SongAcoustIdTable.acoustId])
+        assertEquals(0.96, row[SongAcoustIdTable.score])
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `fetchMusicBrainzId falls back to the name search when AcoustID finds nothing`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val songId = insertUntaggedSong()
+        val mbId = UUID.randomUUID()
+        coEvery { fingerprintService.fingerprint(any()) } returns Fingerprint(200, "AQADtEmU")
+        useAcoustIdResponse("""{"status": "ok", "results": []}""")
+        val recording = MusicBrainzRecording(id = mbId, title = "Untagged", artistCredit = emptyList())
+        coEvery { musicBrainzService.searchMb(any(), any()) } returns recording
+        coEvery { musicBrainzService.fetchRecordingById(mbId, any()) } returns recording
+
+        val updated = songService.fetchMusicBrainzId(songId, user.id)
+
+        assertEquals(mbId, updated?.musicBrainzId)
+        coVerify(exactly = 1) { musicBrainzService.searchMb(any(), any()) }
+        val row = transaction(database) {
+            SongAcoustIdTable.selectAll().where { SongAcoustIdTable.songId eq songId }.single()
+        }
+        assertNull(row[SongAcoustIdTable.acoustId])
+        assertTrue(row[SongAcoustIdTable.lastCheck] > 0)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `fetchMusicBrainzId never fingerprints a song that already has a MusicBrainz id`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val songId = insertUntaggedSong()
+        val mbId = UUID.randomUUID()
+        transaction(database) {
+            MBRecordingTable.insert {
+                it[id] = mbId
+                it[title] = "Known"
+            }
+            SongMusicBrainzTable.insert {
+                it[SongMusicBrainzTable.songId] = songId
+                it[musicBrainzId] = mbId
+                it[lastCheck] = 0
+            }
+        }
+        coEvery { musicBrainzService.fetchRecordingById(mbId, any()) } returns MusicBrainzRecording(
+            id = mbId,
+            title = "Known",
+            artistCredit = emptyList()
+        )
+
+        songService.fetchMusicBrainzId(songId, user.id)
+
+        coVerify(exactly = 0) { fingerprintService.fingerprint(any()) }
+        coVerify(exactly = 0) { musicBrainzService.searchMb(any(), any()) }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `fetchMusicBrainzId skips fingerprint and lookup for a recent negative AcoustID result`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val songId = insertUntaggedSong()
+        transaction(database) {
+            SongAcoustIdTable.insert {
+                it[SongAcoustIdTable.songId] = songId
+                it[fingerprint] = "AQADtEmU"
+                it[duration] = 200
+                it[acoustId] = null
+                it[score] = null
+                it[lastCheck] = System.currentTimeMillis() - 5L * 24 * 60 * 60 * 1000
+            }
+        }
+        useAcoustIdResponse("""{"status": "ok", "results": []}""")
+        coEvery { musicBrainzService.searchMb(any(), any()) } returns null
+
+        songService.fetchMusicBrainzId(songId, user.id)
+
+        coVerify(exactly = 0) { fingerprintService.fingerprint(any()) }
+        assertTrue(acoustIdRequests.isEmpty())
+        coVerify(exactly = 1) { musicBrainzService.searchMb(any(), any()) }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `fetchMusicBrainzId reuses the cached fingerprint once a negative result is stale`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val songId = insertUntaggedSong()
+        val mbId = UUID.randomUUID()
+        transaction(database) {
+            SongAcoustIdTable.insert {
+                it[SongAcoustIdTable.songId] = songId
+                it[fingerprint] = "AQADcached"
+                it[duration] = 199
+                it[acoustId] = null
+                it[score] = null
+                it[lastCheck] = System.currentTimeMillis() - 31L * 24 * 60 * 60 * 1000
+            }
+        }
+        useAcoustIdResponse(acoustIdHit(mbId))
+        coEvery { musicBrainzService.fetchRecordingById(mbId, any()) } returns MusicBrainzRecording(
+            id = mbId,
+            title = "Real Title",
+            artistCredit = emptyList()
+        )
+
+        val updated = songService.fetchMusicBrainzId(songId, user.id)
+
+        assertEquals(mbId, updated?.musicBrainzId)
+        coVerify(exactly = 0) { fingerprintService.fingerprint(any()) }
+        val request = acoustIdRequests.single()
+        assertEquals("AQADcached", request.parameters["fingerprint"])
+        assertEquals("199", request.parameters["duration"])
     }
 }

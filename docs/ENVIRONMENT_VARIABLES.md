@@ -40,6 +40,7 @@ Most variables have sensible defaults and are **optional**. Only variables witho
 
 | Variable | Description | Required | Default (Standalone) | Default (Docker) |
 |:---|:---|:---:|:---|:---|
+| `ACOUSTID_API_KEY` | An AcoustID client API key used to identify songs without a MusicBrainz id by audio fingerprint. The Docker images set a default Synara key. Without a key, fingerprint matching is skipped. Overridable in the admin settings. | No | - | `Y2A24vXli6` |
 | `APPLE_MUSIC_KEY_ID` | Apple Music Key ID. | No | - | - |
 | `APPLE_MUSIC_P8_PATH` | Path to the Apple Music .p8 private key file. | No | - | - |
 | `APPLE_MUSIC_STOREFRONT` | Apple Music storefront (country code) used for catalog requests. | No | `us` | - |
@@ -64,6 +65,8 @@ Most variables have sensible defaults and are **optional**. Only variables witho
 |:---|:---|:---:|:---|:---|
 | `CLIENT_ID` | Initial admin username (only on first run). | No | - | - |
 | `CLIENT_SECRET` | Initial admin password (only on first run). | No | - | - |
+| `CREDENTIALS_ENCRYPTION_KEY` | Key that encrypts credentials stored through the admin settings, for example the Podcast Index and AcoustID keys. Generate one with `openssl rand -base64 32`. When unset, a random key is generated once into CREDENTIALS_KEY_FILE. Keep this value, or the key file, to read stored credentials after restoring a backup on another host. | No | - | - |
+| `CREDENTIALS_KEY_FILE` | Key file used when CREDENTIALS_ENCRYPTION_KEY is unset. Defaults to `~/.config/synara/credentials.key` and is created on first start. | No | - | - |
 | `JWT_AUDIENCE` | The audience claim for JWT tokens. | No | `synara-api` | - |
 | `JWT_ISSUER` | The issuer claim for JWT tokens. | No | `synara` | - |
 | `JWT_REALM` | The realm for JWT authentication. | No | `Access to 'Synara-API'` | - |

@@ -1,23 +1,26 @@
 package dev.dertyp.services.podcast.index
 
 import dev.dertyp.plugins.PluginSettings
+import dev.dertyp.services.credentials.CredentialCipher
+import dev.dertyp.services.credentials.CredentialOrigin
 import io.ktor.server.config.MapApplicationConfig
 import io.mockk.coEvery
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
-import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
 class PodcastIndexCredentialSourceTest {
     private val settings = mockk<PluginSettings>()
+    private val cipher = CredentialCipher(MapApplicationConfig("credentials.encryptionKey" to "test-key"))
+
+    private fun sealed(settingKey: String, value: String) = cipher.encrypt(settingKey, value)
 
     private fun source(env: Map<String, String> = emptyMap()): PodcastIndexCredentialSource {
         val config = MapApplicationConfig()
         env.forEach { (key, value) -> config.put(key, value) }
-        return PodcastIndexCredentialSource(settings, config)
+        return PodcastIndexCredentialSource(settings, config, cipher)
     }
 
     private val environment = mapOf(
@@ -27,10 +30,10 @@ class PodcastIndexCredentialSourceTest {
 
     @Test
     fun `stored credentials win over the environment`() = runBlocking {
-        coEvery { settings.getAll() } returns mapOf("apiKey" to " storedKey ", "apiSecret" to "storedSecret")
+        coEvery { settings.getAll() } returns mapOf("apiKey" to sealed("apiKey", " storedKey "), "apiSecret" to sealed("apiSecret", "storedSecret"))
         val source = source(environment)
         assertEquals(PodcastIndexCredentials("storedKey", "storedSecret"), source.current())
-        assertTrue(source.stored())
+        assertEquals(CredentialOrigin.STORED, source.origin())
     }
 
     @Test
@@ -38,15 +41,24 @@ class PodcastIndexCredentialSourceTest {
         coEvery { settings.getAll() } returns emptyMap()
         val source = source(environment)
         assertEquals(PodcastIndexCredentials("envKey", "envSecret"), source.current())
-        assertFalse(source.stored())
+        assertEquals(CredentialOrigin.ENVIRONMENT, source.origin())
     }
 
     @Test
     fun `a partial stored pair falls back to the environment`() = runBlocking {
-        coEvery { settings.getAll() } returns mapOf("apiKey" to "storedKey", "apiSecret" to "   ")
+        coEvery { settings.getAll() } returns mapOf("apiKey" to sealed("apiKey", "storedKey"), "apiSecret" to "   ")
         val source = source(environment)
         assertEquals(PodcastIndexCredentials("envKey", "envSecret"), source.current())
-        assertFalse(source.stored())
+        assertEquals(CredentialOrigin.ENVIRONMENT, source.origin())
+    }
+
+    @Test
+    fun `plain text stored values are never read`() = runBlocking {
+        coEvery { settings.getAll() } returns mapOf("apiKey" to "storedKey", "apiSecret" to "storedSecret")
+        val source = source(environment)
+        assertNull(source.stored())
+        assertEquals(PodcastIndexCredentials("envKey", "envSecret"), source.current())
+        assertEquals(CredentialOrigin.UNREADABLE, source.origin())
     }
 
     @Test
@@ -63,6 +75,7 @@ class PodcastIndexCredentialSourceTest {
         val source = source()
         assertNull(source.current())
         assertNull(source.fromEnvironment())
-        assertFalse(source.stored())
+        assertNull(source.stored())
+        assertEquals(CredentialOrigin.NONE, source.origin())
     }
 }

@@ -34,6 +34,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libreadline8 \
     libncursesw6 \
     flac \
+    libchromaprint-tools \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 COPY --from=python-base /usr/local /usr/local
@@ -98,6 +99,7 @@ ENV DATA_ANIMATED_IMAGES_PATH="/data/Synara/AnimatedImages"
 ENV DATA_COVER_ASSETS_PATH="/app/cover-assets"
 ENV BACKUP_DIR="/backups"
 ENV YTDLP_CONFIG_PATH="/data/config/yt-dlp.conf"
+ENV ACOUSTID_API_KEY="Y2A24vXli6"
 
 ENV AUDIO_TRACKS_SECONDARY_PATH="/data/Synara/other"
 

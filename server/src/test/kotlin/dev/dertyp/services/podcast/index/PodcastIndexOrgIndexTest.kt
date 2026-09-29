@@ -1,6 +1,7 @@
 package dev.dertyp.services.podcast.index
 
 import dev.dertyp.plugins.PluginSettings
+import dev.dertyp.services.credentials.CredentialCipher
 import dev.dertyp.services.podcast.PodcastHttp
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.MockRequestHandler
@@ -30,6 +31,7 @@ class PodcastIndexOrgIndexTest {
 
     private val settings = mockk<PluginSettings>()
     private val config = MapApplicationConfig()
+    private val cipher = CredentialCipher(MapApplicationConfig("credentials.encryptionKey" to "test-key"))
     private val clock = Clock.fixed(Instant.ofEpochSecond(1_700_000_000), ZoneOffset.UTC)
 
     private fun index(): PodcastIndexOrgIndex {
@@ -38,7 +40,7 @@ class PodcastIndexOrgIndexTest {
             respondTo(this, request)
         }
         return PodcastIndexOrgIndex(
-            credentials = PodcastIndexCredentialSource(settings, config),
+            credentials = PodcastIndexCredentialSource(settings, config, cipher),
             client = podcastIndexHttpClient(engine),
             clock = clock,
             baseUrl = "https://index.test/api/1.0",
@@ -51,8 +53,8 @@ class PodcastIndexOrgIndexTest {
 
     private fun configured() {
         coEvery { settings.getAll() } returns mapOf(
-            PodcastIndexCredentialSource.KEY_API_KEY to "key123",
-            PodcastIndexCredentialSource.KEY_API_SECRET to "secret456",
+            PodcastIndexCredentialSource.KEY_API_KEY to cipher.encrypt(PodcastIndexCredentialSource.KEY_API_KEY, "key123"),
+            PodcastIndexCredentialSource.KEY_API_SECRET to cipher.encrypt(PodcastIndexCredentialSource.KEY_API_SECRET, "secret456"),
         )
     }
 

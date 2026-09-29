@@ -1,0 +1,19 @@
+{
+  "acoustid.credentials.title": "AcoustID-Zugangsdaten",
+  "acoustid.credentials.description": "API-Schlüssel zur Identifizierung von Songs anhand des Audio-Fingerabdrucks",
+  "acoustid.credentials.stored": "Gespeicherter Schlüssel",
+  "acoustid.credentials.fromEnvironment": "Umgebungsschlüssel",
+  "acoustid.credentials.unreadable": "Nicht lesbarer Schlüssel",
+  "acoustid.credentials.none": "Kein Schlüssel eingerichtet",
+  "acoustid.credentials.storedHint": "Es wird der hier gespeicherte Schlüssel verwendet.",
+  "acoustid.credentials.envHint": "Es wird der Schlüssel aus der Serverumgebung verwendet. Ein hier gespeicherter Wert würde ihn überschreiben.",
+  "acoustid.credentials.unreadableHint": "Der gespeicherte Schlüssel kann nicht entschlüsselt werden. Das kann passieren, wenn sich der Verschlüsselungsschlüssel geändert hat oder ein Backup auf einem anderen Host wiederhergestellt wurde. Gib ihn unten erneut ein.",
+  "acoustid.credentials.unreadableHintEnv": "Der gespeicherte Schlüssel kann nicht entschlüsselt werden. Das kann passieren, wenn sich der Verschlüsselungsschlüssel geändert hat oder ein Backup auf einem anderen Host wiederhergestellt wurde. Gib ihn unten erneut ein. In der Zwischenzeit wird der Schlüssel aus der Serverumgebung verwendet.",
+  "acoustid.credentials.noneHint": "Es ist kein AcoustID-Schlüssel eingerichtet, daher wird der AcoustID-Abgleich übersprungen. Die Docker-Images liefern einen Schlüssel über ACOUSTID_API_KEY mit, daher tritt das normalerweise nur außerhalb von Docker auf. Erstelle einen kostenlosen API-Schlüssel auf acoustid.org und hinterlege ihn hier, oder setze ACOUSTID_API_KEY auf dem Server.",
+  "acoustid.credentials.apiKey": "API-Schlüssel",
+  "acoustid.credentials.apiKeyHelper": "Erstelle einen kostenlosen API-Schlüssel auf acoustid.org und hinterlege ihn hier. Leer lassen und speichern entfernt einen gespeicherten Schlüssel.",
+  "acoustid.credentials.save": "Schlüssel speichern",
+  "acoustid.credentials.saved": "API-Schlüssel gespeichert",
+  "acoustid.credentials.clear": "Gespeicherten Schlüssel entfernen",
+  "acoustid.credentials.cleared": "Gespeicherter Schlüssel entfernt"
+}
