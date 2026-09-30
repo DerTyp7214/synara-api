@@ -3,6 +3,7 @@ package dev.dertyp.routing
 import dev.dertyp.IIndexer
 import dev.dertyp.Indexer
 import dev.dertyp.RpcIndexer
+import dev.dertyp.core.ChangeNotifier
 import dev.dertyp.core.clientInfo
 import dev.dertyp.core.getSessionId
 import dev.dertyp.core.getUser
@@ -164,6 +165,7 @@ private fun registerAuthenticated(koin: Koin, call: ApplicationCall, user: User,
     val apiKeyService = koin.get<ApiKeyService>()
     val subsonicCredentialService = koin.get<SubsonicCredentialService>()
     val uiService = koin.get<UiService>()
+    val changeNotifier = koin.get<ChangeNotifier>()
 
     registrar.register(IUiService::class) { RpcUiService(user, call.clientInfo, call, uiService).withAuthorization<IUiService>(user).withLogging<IUiService>(call) }
     registrar.register(IIndexer::class) { RpcIndexer(indexer, user).withAuthorization<IIndexer>(user).withLogging<IIndexer>(call) }
@@ -213,4 +215,5 @@ private fun registerAuthenticated(koin: Koin, call: ApplicationCall, user: User,
     registrar.register(IApiKeyService::class) { RpcApiKeyService(user, apiKeyService).withAuthorization<IApiKeyService>(user).withLogging<IApiKeyService>(call) }
     registrar.register(IRadioChannelService::class) { RpcRadioChannelService(user, radioChannelService, radioService).withAuthorization<IRadioChannelService>(user).withLogging<IRadioChannelService>(call) }
     registrar.register(ISubsonicCredentialService::class) { RpcSubsonicCredentialService(user, subsonicCredentialService).withAuthorization<ISubsonicCredentialService>(user).withLogging<ISubsonicCredentialService>(call) }
+    registrar.register(IChangeService::class) { RpcChangeService(user, changeNotifier).withAuthorization<IChangeService>(user).withLogging<IChangeService>(call) }
 }

@@ -2,8 +2,10 @@ package dev.dertyp.services.sync
 
 import dev.dertyp.ApiClient
 import dev.dertyp.PlatformUUID
+import dev.dertyp.core.ChangeNotifier
 import dev.dertyp.core.runCatchingCancellable
 import dev.dertyp.core.safeQueuedGet
+import dev.dertyp.data.ChangeTopic
 import dev.dertyp.data.ListenBrainzStatus
 import dev.dertyp.data.ListenedSong
 import dev.dertyp.data.User
@@ -31,12 +33,25 @@ import kotlin.time.Duration.Companion.seconds
 class ListenBrainzService : Service() {
     private val listenService by inject<ListenService>()
     private val songService by inject<SongService>()
-
+    private val changeNotifier by inject<ChangeNotifier>()
 
     private val changes = MutableSharedFlow<Unit>(extraBufferCapacity = 8, onBufferOverflow = BufferOverflow.DROP_OLDEST)
 
-    private fun signalChange() {
+    private fun signalChange(userIds: Collection<PlatformUUID>) {
         changes.tryEmit(Unit)
+        userIds.forEach { changeNotifier.notify(it, ChangeTopic.LISTENBRAINZ_STATUS) }
+    }
+
+    private suspend fun signalAccountChange(lbUserIds: List<PlatformUUID>) {
+        signalChange(linkedUserIds(lbUserIds))
+    }
+
+    private suspend fun linkedUserIds(lbUserIds: List<PlatformUUID>): List<PlatformUUID> = dbQuery {
+        UserListenBrainzLinkTable
+            .select(UserListenBrainzLinkTable.userId)
+            .where { UserListenBrainzLinkTable.listenBrainzUserId inList lbUserIds }
+            .map { it[UserListenBrainzLinkTable.userId].value }
+            .distinct()
     }
 
     @OptIn(FlowPreview::class)
@@ -74,7 +89,7 @@ class ListenBrainzService : Service() {
             id
         }
 
-        signalChange()
+        signalChange(listOf(userId))
         scope.launch {
             runCatchingCancellable { syncAccount(lbUserId) }
                 .onFailure { logger.error("Initial ListenBrainz backfill failed for account $lbUserId", it) }
@@ -84,7 +99,7 @@ class ListenBrainzService : Service() {
 
     suspend fun unlink(userId: PlatformUUID) {
         dbQuery { UserListenBrainzLinkTable.deleteWhere { UserListenBrainzLinkTable.userId eq userId } }
-        signalChange()
+        signalChange(listOf(userId))
     }
 
     suspend fun getStatus(userId: PlatformUUID): ListenBrainzStatus? = dbQuery {
@@ -218,7 +233,7 @@ class ListenBrainzService : Service() {
             matchedTotal += matched
             logger.info("[$username] page $pages: fetched ${page.size}, stored ${incoming.size}, matched $matched (total $total, matched $matchedTotal)")
             onProgress("$username: $total listen(s) synced")
-            if (incoming.isNotEmpty()) signalChange()
+            if (incoming.isNotEmpty()) signalAccountChange(listOf(lbUserId))
 
             newestSeen = maxOf(newestSeen, page.maxOf { it.listenedAt })
             if (page.any { it.listenedAt <= watermark } || page.size < PAGE_COUNT) {
@@ -235,7 +250,7 @@ class ListenBrainzService : Service() {
             }
         }
         logger.info("[$username] sync ${if (completed) "complete" else "interrupted"}: $total stored, $matchedTotal matched over $pages page(s)")
-        signalChange()
+        signalAccountChange(listOf(lbUserId))
         return total
     }
 
@@ -300,6 +315,7 @@ class ListenBrainzService : Service() {
         }
 
         var totalUpdated = 0
+        val updatedAccounts = mutableListOf<PlatformUUID>()
         accounts.forEachIndexed { index, (lbUserId, username, token) ->
             val missing = dbQuery {
                 ListenTable.selectAll()
@@ -348,10 +364,11 @@ class ListenBrainzService : Service() {
 
             logger.info("[$username] backfilled $updated recording MSID(s)")
             totalUpdated += updated
+            if (updated > 0) updatedAccounts += lbUserId
         }
 
         onProgress(1.0, "Backfilled $totalUpdated recording MSID(s)")
-        if (totalUpdated > 0) signalChange()
+        if (totalUpdated > 0) signalAccountChange(updatedAccounts)
         return totalUpdated
     }
 
@@ -444,7 +461,7 @@ class ListenBrainzService : Service() {
             }
             if (overrideUpdated > 0) {
                 logger.info("Linked $overrideUpdated listen(s) via manual link overrides for account $lbUserId")
-                signalChange()
+                signalAccountChange(listOf(lbUserId))
             }
         }
 
@@ -478,7 +495,7 @@ class ListenBrainzService : Service() {
         }
         if (updated > 0) {
             logger.info("Re-matched $updated previously-unmatched listen(s) for account $lbUserId")
-            signalChange()
+            signalAccountChange(listOf(lbUserId))
         }
         return overrideUpdated + updated
     }

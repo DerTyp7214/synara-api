@@ -1,5 +1,7 @@
 package dev.dertyp.services
 
+import dev.dertyp.core.ChangeNotifier
+import dev.dertyp.data.ChangeTopic
 import dev.dertyp.data.ClientCapability
 import dev.dertyp.data.ClientDescription
 import dev.dertyp.data.ClientRequest
@@ -13,6 +15,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.withTimeoutOrNull
+import org.koin.core.component.inject
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
@@ -39,6 +42,7 @@ class ClientRequestService : Service() {
     private val pending = ConcurrentHashMap<UUID, Pending>()
     private val connections = ConcurrentHashMap<UUID, Connection>()
     private val onDisconnected = CopyOnWriteArrayList<(UUID) -> Unit>()
+    private val changeNotifier by inject<ChangeNotifier>()
 
     private fun flowOf(sessionId: UUID): MutableSharedFlow<ClientRequest> =
         sessions.computeIfAbsent(sessionId) {
@@ -115,28 +119,38 @@ class ClientRequestService : Service() {
     }
 
     private fun register(userId: UUID, sessionId: UUID, description: ClientDescription) {
+        var changed = false
+        var replacedUserId: UUID? = null
         connections.compute(sessionId) { _, existing ->
             val connection = if (existing != null && existing.userId == userId) {
+                changed = existing.description != description
                 existing.description = description
                 existing
             } else {
+                changed = true
+                replacedUserId = existing?.userId
                 Connection(userId, description, System.currentTimeMillis())
             }
             connection.count.incrementAndGet()
             connection
         }
+        replacedUserId?.let { changeNotifier.notify(it, ChangeTopic.ONLINE_DEVICES) }
+        if (changed) changeNotifier.notify(userId, ChangeTopic.ONLINE_DEVICES)
     }
 
     private fun unregister(sessionId: UUID) {
-        var removed = false
+        var removed: Connection? = null
         connections.computeIfPresent(sessionId) { _, connection ->
             if (connection.count.decrementAndGet() > 0) {
                 connection
             } else {
-                removed = true
+                removed = connection
                 null
             }
         }
-        if (removed) onDisconnected.forEach { it(sessionId) }
+        removed?.let { connection ->
+            changeNotifier.notify(connection.userId, ChangeTopic.ONLINE_DEVICES)
+            onDisconnected.forEach { it(sessionId) }
+        }
     }
 }

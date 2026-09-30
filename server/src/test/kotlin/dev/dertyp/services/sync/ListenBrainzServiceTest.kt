@@ -2,11 +2,15 @@ package dev.dertyp.services.sync
 
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
+import dev.dertyp.core.ChangeNotifier
+import dev.dertyp.data.ChangeTopic
 import dev.dertyp.db.*
 import dev.dertyp.plugins.HookBus
 import dev.dertyp.services.ListenService
 import dev.dertyp.services.SongService
+import dev.dertyp.testing.*
 import io.mockk.mockk
+import io.mockk.verify
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.Database
@@ -27,6 +31,7 @@ import java.util.*
 class ListenBrainzServiceTest : KoinTest {
     private lateinit var database: Database
     private lateinit var service: ListenBrainzService
+    private val changeNotifier = mockk<ChangeNotifier>(relaxed = true)
 
     private fun setup(dialect: DbDialect) {
         startKoin {
@@ -34,6 +39,7 @@ class ListenBrainzServiceTest : KoinTest {
                 single<HookBus> { mockk(relaxed = true) }
                 single { mockk<SongService>() }
                 single { ListenService() }
+                single { changeNotifier }
             })
         }
         database = TestDatabase.connect(dialect, "listenbrainz_test")
@@ -141,5 +147,43 @@ class ListenBrainzServiceTest : KoinTest {
             val unrelated = ListenTable.selectAll().where { ListenTable.listenedAt eq 300L }.single()
             assertEquals(null, unrelated[ListenTable.songId])
         }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `unlinking and re-matching announce the ListenBrainz status of the linked users`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val mbid = UUID.randomUUID()
+        val (user, linkedUser, otherUser, lb) = transaction(database) {
+            val u = insertUser()
+            val linked = insertUser()
+            val other = insertUser()
+            val lb = insertLbUser()
+            linkListenBrainzUser(u, lb)
+            linkListenBrainzUser(linked, lb)
+            val song = insertSong(insertAlbum())
+            ListenLinkTable.insert {
+                it[ListenLinkTable.userId] = u
+                it[songId] = song
+                it[recordingMbid] = mbid
+                it[createdAt] = 1
+            }
+            ListenTable.insert {
+                it[listenBrainzUserId] = lb
+                it[recordingMbid] = mbid
+                it[listenedAt] = 100
+                it[listenSource] = ListenSource.LISTENBRAINZ
+            }
+            listOf(u, linked, other, lb)
+        }
+
+        assertEquals(1, service.rematchUnmatched(lb))
+        verify(exactly = 1) { changeNotifier.notify(user, ChangeTopic.LISTENBRAINZ_STATUS) }
+        verify(exactly = 1) { changeNotifier.notify(linkedUser, ChangeTopic.LISTENBRAINZ_STATUS) }
+
+        service.unlink(user)
+        verify(exactly = 2) { changeNotifier.notify(user, ChangeTopic.LISTENBRAINZ_STATUS) }
+        verify(exactly = 1) { changeNotifier.notify(linkedUser, ChangeTopic.LISTENBRAINZ_STATUS) }
+        verify(exactly = 0) { changeNotifier.notify(otherUser, any()) }
     }
 }

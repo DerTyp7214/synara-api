@@ -1,6 +1,8 @@
 package dev.dertyp.services
 
 import dev.dertyp.PlatformUUID
+import dev.dertyp.core.ChangeNotifier
+import dev.dertyp.data.ChangeTopic
 import dev.dertyp.data.ListenedAlbum
 import dev.dertyp.data.ListenedArtist
 import dev.dertyp.data.ListenedSong
@@ -46,14 +48,21 @@ class ListenService : Service() {
     private val albumService by inject<AlbumService>()
     private val artistService by inject<ArtistService>()
 
+    private val changeNotifier by inject<ChangeNotifier>()
+
     private val _listenChanges = MutableSharedFlow<Unit>(extraBufferCapacity = 8, onBufferOverflow = BufferOverflow.DROP_OLDEST)
     val listenChanges: SharedFlow<Unit> = _listenChanges.asSharedFlow()
+
+    private fun listensChanged(userIds: Collection<PlatformUUID>) {
+        _listenChanges.tryEmit(Unit)
+        userIds.forEach { changeNotifier.notify(it, ChangeTopic.LISTENS) }
+    }
 
     suspend fun ingestListenBrainz(listenBrainzUserId: PlatformUUID, listens: List<IncomingListen>): Int {
         if (listens.isEmpty()) return 0
 
         val now = System.currentTimeMillis()
-        dbQuery {
+        val linkedUserIds = dbQuery {
             ListenTable.batchInsert(listens, ignore = true) { listen ->
                 this[ListenTable.listenBrainzUserId] = listenBrainzUserId
                 this[ListenTable.songId] = listen.songId
@@ -70,9 +79,13 @@ class ListenService : Service() {
                 this[ListenTable.msPlayed] = listen.msPlayed
                 this[ListenTable.updatedAt] = now
             }
+            UserListenBrainzLinkTable
+                .select(UserListenBrainzLinkTable.userId)
+                .where { UserListenBrainzLinkTable.listenBrainzUserId eq listenBrainzUserId }
+                .map { it[UserListenBrainzLinkTable.userId].value }
         }
 
-        _listenChanges.tryEmit(Unit)
+        listensChanged(linkedUserIds)
         hooks.emit(HookEvent.ListenIngested(listenBrainzUserId, listens.size))
         return listens.size
     }
@@ -136,7 +149,7 @@ class ListenService : Service() {
                 it[ListenTable.updatedAt] = System.currentTimeMillis()
             }
         }
-        _listenChanges.tryEmit(Unit)
+        listensChanged(listOf(userId))
     }
 
     private fun localListenMetadata(songId: PlatformUUID): LocalListenMetadata {
@@ -271,7 +284,7 @@ class ListenService : Service() {
             LinkUnmatchedResult(linkedListens = updated, recordingMsids = msids)
         }
 
-        if (result.linkedListens > 0) _listenChanges.tryEmit(Unit)
+        if (result.linkedListens > 0) listensChanged(listOf(userId))
         return result
     }
 

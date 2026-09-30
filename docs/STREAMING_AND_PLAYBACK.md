@@ -140,10 +140,13 @@ Presence lasts exactly as long as that stream: a session appears in `getOnlineDe
 
 `observeRequests` is still there as the anonymous form of the same stream: a client that never describes itself stays reachable for requests such as `UploadQueue`, but is not listed as an online device. `GET /queue/syncDevices` is unrelated and unaffected — it stays the persisted list of queue-sync participants, independent of who is connected right now.
 
+The device list itself is read with `getOnlineDevices`, not polled: a client keeps `observeChanges` open and reads the list again whenever a [`Change`](MODELS.md#devdertypdatachange) with topic `ONLINE_DEVICES` arrives, plus once after every (re)subscribe.
+
 | Route | Purpose |
 |---|---|
 | `GET /clientRequest/connect?description=` (SSE) | subscribe to the request channel and be listed as online with this description |
 | `GET /clientRequest/onlineDevices` | the user's currently connected sessions, newest first |
+| `GET /change/observeChanges` (SSE) | be told which topic changed, so the affected list is read again instead of polled |
 
 ## Remote control
 

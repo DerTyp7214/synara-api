@@ -1,6 +1,8 @@
 package dev.dertyp.services
 
+import dev.dertyp.core.ChangeNotifier
 import dev.dertyp.data.Album
+import dev.dertyp.data.ChangeTopic
 import dev.dertyp.data.Artist
 import dev.dertyp.data.ListenedAlbum
 import dev.dertyp.data.ListenedArtist
@@ -18,6 +20,7 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkStatic
 import io.mockk.unmockkStatic
+import io.mockk.verify
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.Flow
@@ -38,6 +41,7 @@ import kotlin.time.Duration.Companion.milliseconds
 class ScrobbleServiceTest : KoinTest {
     private lateinit var listenService: ListenService
     private lateinit var songService: SongService
+    private val changeNotifier = mockk<ChangeNotifier>(relaxed = true)
     private val listenChanges = MutableSharedFlow<Unit>(extraBufferCapacity = 8, onBufferOverflow = BufferOverflow.DROP_OLDEST)
     private val collectorScope = CoroutineScope(Dispatchers.Default)
 
@@ -53,6 +57,7 @@ class ScrobbleServiceTest : KoinTest {
                 single { listenService }
                 single { songService }
                 single<HookBus> { hookService }
+                single { changeNotifier }
             })
         }
     }
@@ -443,5 +448,23 @@ class ScrobbleServiceTest : KoinTest {
         coEvery { listenService.recentAlbums(user, 10) } returns listOf(albumB)
         listenChanges.emit(Unit)
         awaitCondition { emissions.last() == listOf(albumB) }
+    }
+
+    @Test
+    fun `starting and clearing now-playing announce the listens of the user`() = runBlocking {
+        setup()
+        val service = ScrobbleService()
+        val user = UUID.randomUUID()
+        val songId = UUID.randomUUID()
+        coEvery { songService.byIds(listOf(songId), user) } returns listOf(songStub(songId, 600_000))
+
+        service.setNowPlaying(user, songId)
+        verify(exactly = 1) { changeNotifier.notify(user, ChangeTopic.LISTENS) }
+
+        service.setNowPlaying(user, songId)
+        verify(exactly = 1) { changeNotifier.notify(user, ChangeTopic.LISTENS) }
+
+        service.clearNowPlaying(user)
+        verify(exactly = 2) { changeNotifier.notify(user, ChangeTopic.LISTENS) }
     }
 }

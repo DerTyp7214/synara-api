@@ -57,6 +57,7 @@ DELETE /backup/backup IBackupService.deleteBackup [q:fileName] UNIT
 GET /backup/backups IBackupService.listBackups [] JSON
 POST /backup/backup IBackupService.createBackup [] JSON
 POST /backup/restoreBackup IBackupService.loadBackup [q:fileName] UNIT
+GET /change/observeChanges IChangeService.observeChanges [] SSE
 GET /clientRequest/connect IClientRequestService.connect [q:description] SSE
 GET /clientRequest/observeRequests IClientRequestService.observeRequests [] SSE
 GET /clientRequest/onlineDevices IClientRequestService.getOnlineDevices [] JSON

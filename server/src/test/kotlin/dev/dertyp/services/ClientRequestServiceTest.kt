@@ -1,9 +1,13 @@
 package dev.dertyp.services
 
+import dev.dertyp.core.ChangeNotifier
+import dev.dertyp.data.ChangeTopic
 import dev.dertyp.data.ClientCapability
 import dev.dertyp.data.ClientDescription
 import dev.dertyp.data.ClientRequest
 import dev.dertyp.data.ClientRequestStatus
+import io.mockk.mockk
+import io.mockk.verify
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
@@ -13,19 +17,40 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
+import org.koin.core.context.startKoin
+import org.koin.core.context.stopKoin
+import org.koin.dsl.module
+import org.koin.test.KoinTest
 import java.util.UUID
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 @OptIn(ExperimentalCoroutinesApi::class)
-class ClientRequestServiceTest {
+class ClientRequestServiceTest : KoinTest {
+    private val changeNotifier = mockk<ChangeNotifier>(relaxed = true)
     private val service = ClientRequestService()
+
+    @BeforeEach
+    fun setUp() {
+        startKoin { modules(module { single { changeNotifier } }) }
+    }
+
+    @AfterEach
+    fun tearDown() {
+        stopKoin()
+    }
+
+    private fun assertOnlineDeviceChanges(userId: UUID, expected: Int) {
+        verify(exactly = expected) { changeNotifier.notify(userId, ChangeTopic.ONLINE_DEVICES) }
+    }
 
     private fun buildUploadQueue(id: UUID, requestedAt: Long): ClientRequest =
         ClientRequest.UploadQueue(id, requestedAt, UUID.randomUUID())
@@ -246,5 +271,56 @@ class ClientRequestServiceTest {
 
         second.cancelAndJoin()
         assertEquals(listOf(sessionId), disconnected)
+    }
+
+    @Test
+    fun `online devices change when a session connects and when it disconnects`() = runTest {
+        val userId = UUID.randomUUID()
+        val sessionId = UUID.randomUUID()
+
+        val job = connect(userId, sessionId, description("Desk"))
+        assertOnlineDeviceChanges(userId, 1)
+
+        job.cancelAndJoin()
+        assertOnlineDeviceChanges(userId, 2)
+    }
+
+    @Test
+    fun `an overlapping connect announces a new description and only the last disconnect is announced`() = runTest {
+        val userId = UUID.randomUUID()
+        val sessionId = UUID.randomUUID()
+        val first = connect(userId, sessionId, description("Old"))
+        val second = connect(userId, sessionId, description("New"))
+        assertOnlineDeviceChanges(userId, 2)
+
+        first.cancelAndJoin()
+        assertOnlineDeviceChanges(userId, 2)
+
+        second.cancelAndJoin()
+        assertOnlineDeviceChanges(userId, 3)
+    }
+
+    @Test
+    fun `an overlapping connect with the same description is not announced`() = runTest {
+        val userId = UUID.randomUUID()
+        val sessionId = UUID.randomUUID()
+        val first = connect(userId, sessionId, description("Desk"))
+        val second = connect(userId, sessionId, description("Desk"))
+        assertOnlineDeviceChanges(userId, 1)
+
+        first.cancelAndJoin()
+        second.cancelAndJoin()
+        assertOnlineDeviceChanges(userId, 2)
+    }
+
+    @Test
+    fun `observing requests without a description does not change the online devices`() = runTest {
+        val sessionId = UUID.randomUUID()
+        val job = launch(UnconfinedTestDispatcher(testScheduler)) {
+            service.observeRequests(sessionId).collect { }
+        }
+        job.cancelAndJoin()
+
+        verify(exactly = 0) { changeNotifier.notify(any(), any()) }
     }
 }

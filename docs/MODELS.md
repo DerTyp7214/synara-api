@@ -22,6 +22,8 @@ Services: [RPC_SERVICES.md](RPC_SERVICES.md) · REST routes: [REST_API.md](REST_
 - [AuthenticationRequest](#devdertypdataauthenticationrequest)
 - [AuthenticationResponse](#devdertypdataauthenticationresponse)
 - [BackupImage](#devdertypdatabackupimage)
+- [Change](#devdertypdatachange)
+- [ChangeTopic](#devdertypdatachangetopic)
 - [ClientCapability](#devdertypdataclientcapability)
 - [ClientDescription](#devdertypdataclientdescription)
 - [ClientDevice](#devdertypdataclientdevice)
@@ -515,6 +517,24 @@ Contains raw binary data for a cover image in a backup.
 | :--- | :--- | :--- |
 | `image` | [Image](#devdertypdataimage) | Metadata for the image. |
 | `data` | `ByteArray` | The raw binary data of the image. |
+
+### Change <a name="devdertypdatachange"></a>
+A notification that a piece of the user's state changed. It carries no data, so the client reads the new state with the getter the [ChangeTopic](#devdertypdatachangetopic) names.
+
+| Field | Type | Description |
+| :--- | :--- | :--- |
+| `topic` | [ChangeTopic](#devdertypdatachangetopic) | What changed. Topics a client does not know are decoded as UNKNOWN. |
+
+### ChangeTopic <a name="devdertypdatachangetopic"></a>
+The kind of state a change notification is about. Each topic names the getter a client calls again to read the new state.
+
+| Value | Description |
+| :--- | :--- |
+| `UNKNOWN` | A topic this client does not know yet. Clients ignore it. |
+| `ONLINE_DEVICES` | The connected devices of the user changed. Read them again with [IClientRequestService.getOnlineDevices](RPC_SERVICES.md#devdertypservicesiclientrequestservice-getonlinedevices). |
+| `HOME_CARDS` | The pinned home cards or their layout changed. Read them again with [IUiService.getHomeCards](RPC_SERVICES.md#devdertypservicesiuiservice-gethomecards). |
+| `LISTENS` | The listen history or the song playing right now changed. Read it again with [IScrobbleService.recentListens](RPC_SERVICES.md#devdertypservicesiscrobbleservice-recentlistens), [IScrobbleService.recentArtists](RPC_SERVICES.md#devdertypservicesiscrobbleservice-recentartists) or [IScrobbleService.recentAlbums](RPC_SERVICES.md#devdertypservicesiscrobbleservice-recentalbums). |
+| `LISTENBRAINZ_STATUS` | The ListenBrainz link or its sync status changed. Read it again with [IListenBrainzService.getStatus](RPC_SERVICES.md#devdertypservicesilistenbrainzservice-getstatus). |
 
 ### ClientCapability <a name="devdertypdataclientcapability"></a>
 A cross-device feature a client offers for as long as it keeps its request subscription open.

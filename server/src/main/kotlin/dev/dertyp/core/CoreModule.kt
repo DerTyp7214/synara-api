@@ -27,6 +27,7 @@ fun coreModule(application: Application, environment: ApplicationEnvironment): M
     single { environment.config }
 
     singleOf(::HttpClientFactory)
+    singleOf(::ChangeNotifier)
     singleOf(::HttpClientQueueService)
 
     single<Gson> {

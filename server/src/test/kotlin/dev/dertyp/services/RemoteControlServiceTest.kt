@@ -1,5 +1,6 @@
 package dev.dertyp.services
 
+import dev.dertyp.core.ChangeNotifier
 import dev.dertyp.core.UnauthorizedException
 import dev.dertyp.data.ClientCapability
 import dev.dertyp.data.ClientDescription
@@ -8,6 +9,7 @@ import dev.dertyp.data.ClientRequestStatus
 import dev.dertyp.data.PlaybackCommand
 import dev.dertyp.data.RemotePlaybackStatus
 import dev.dertyp.data.RepeatMode
+import io.mockk.mockk
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
@@ -19,19 +21,35 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
+import org.koin.core.context.startKoin
+import org.koin.core.context.stopKoin
+import org.koin.dsl.module
+import org.koin.test.KoinTest
 import java.util.UUID
 import kotlin.time.Duration.Companion.milliseconds
 
 @OptIn(ExperimentalCoroutinesApi::class)
-class RemoteControlServiceTest {
+class RemoteControlServiceTest : KoinTest {
     private val clientRequestService = ClientRequestService()
     private val service = RemoteControlService(clientRequestService)
+
+    @BeforeEach
+    fun setUp() {
+        startKoin { modules(module { single { mockk<ChangeNotifier>(relaxed = true) } }) }
+    }
+
+    @AfterEach
+    fun tearDown() {
+        stopKoin()
+    }
 
     private fun TestScope.connect(
         userId: UUID,

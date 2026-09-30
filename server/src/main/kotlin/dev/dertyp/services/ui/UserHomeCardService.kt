@@ -1,5 +1,7 @@
 package dev.dertyp.services.ui
 
+import dev.dertyp.core.ChangeNotifier
+import dev.dertyp.data.ChangeTopic
 import dev.dertyp.db.UserHomeCardTable
 import dev.dertyp.core.db.dbQuery
 import dev.dertyp.ui.UiContributionInfo
@@ -16,12 +18,20 @@ import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.upsert
+import org.koin.core.component.KoinComponent
+import org.koin.core.component.inject
 import java.util.UUID
 
-class UserHomeCardService {
+class UserHomeCardService : KoinComponent {
     private data class Row(val contributionId: String, val pinned: Boolean, val position: Int)
 
     private val changes = MutableSharedFlow<UUID>(extraBufferCapacity = 64, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+    private val changeNotifier by inject<ChangeNotifier>()
+
+    private fun changed(userId: UUID) {
+        changes.tryEmit(userId)
+        changeNotifier.notify(userId, ChangeTopic.HOME_CARDS)
+    }
 
     private suspend fun rows(userId: UUID): List<Row> = dbQuery {
         UserHomeCardTable.selectAll()
@@ -53,7 +63,7 @@ class UserHomeCardService {
                 if (pinned) it[UserHomeCardTable.position] = position
             }
         }
-        changes.tryEmit(userId)
+        changed(userId)
     }
 
     suspend fun setOrder(userId: UUID, contributionIds: List<String>) {
@@ -67,14 +77,14 @@ class UserHomeCardService {
                 }
             }
         }
-        changes.tryEmit(userId)
+        changed(userId)
     }
 
     suspend fun forget(userId: UUID, contributionId: String) {
         dbQuery {
             UserHomeCardTable.deleteWhere { (UserHomeCardTable.userId eq userId) and (UserHomeCardTable.contributionId eq contributionId) }
         }
-        changes.tryEmit(userId)
+        changed(userId)
     }
 
     fun layoutFlow(userId: UUID, available: suspend () -> List<UiContributionInfo>): Flow<UiHomeLayout> =

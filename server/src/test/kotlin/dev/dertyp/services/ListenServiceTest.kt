@@ -2,6 +2,8 @@ package dev.dertyp.services
 
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
+import dev.dertyp.core.ChangeNotifier
+import dev.dertyp.data.ChangeTopic
 import dev.dertyp.data.UserSong
 import dev.dertyp.db.*
 import dev.dertyp.plugins.HookBus
@@ -14,6 +16,7 @@ import io.ktor.server.application.ApplicationEnvironment
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.inList
@@ -39,6 +42,7 @@ class ListenServiceTest : KoinTest {
     private lateinit var database: Database
     private lateinit var service: ListenService
     private lateinit var songService: SongService
+    private val changeNotifier = mockk<ChangeNotifier>(relaxed = true)
 
     private fun setup(dialect: DbDialect) {
         songService = mockk()
@@ -49,6 +53,7 @@ class ListenServiceTest : KoinTest {
             modules(module {
                 single<HookBus> { mockk(relaxed = true) }
                 single { songService }
+                single { changeNotifier }
             })
         }
         database = TestDatabase.connect(dialect, "listen_test")
@@ -104,6 +109,7 @@ class ListenServiceTest : KoinTest {
         startKoin {
             modules(module {
                 single<HookBus> { HookService() }
+                single { changeNotifier }
                 single { mockk<ApplicationEnvironment>(relaxed = true) }
                 single { mockk<MusicBrainzService>(relaxed = true) }
                 single { mockk<CachedMusicBrainzService>(relaxed = true) }
@@ -835,4 +841,33 @@ class ListenServiceTest : KoinTest {
     }
 
     private data class Quad(val a: UUID, val b: UUID, val c: UUID, val d: UUID)
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `ingesting and linking listens announce the listens of the affected users`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val mbid = UUID.randomUUID()
+        val (user, linkedUser, otherUser, lb, song) = transaction(database) {
+            val u = insertUser()
+            val linked = insertUser()
+            val other = insertUser()
+            val lb = insertLbUser()
+            linkListenBrainzUser(u, lb)
+            linkListenBrainzUser(linked, lb)
+            val song = insertSong(insertAlbum())
+            listOf(u, linked, other, lb, song)
+        }
+
+        service.ingestLocal(user, song, 500, 250)
+        verify(exactly = 1) { changeNotifier.notify(user, ChangeTopic.LISTENS) }
+
+        service.ingestListenBrainz(lb, listOf(IncomingListen(listenedAtMs = 600, recordingMbid = mbid)))
+        verify(exactly = 2) { changeNotifier.notify(user, ChangeTopic.LISTENS) }
+        verify(exactly = 1) { changeNotifier.notify(linkedUser, ChangeTopic.LISTENS) }
+
+        service.linkUnmatched(user, song, null, mbid)
+        verify(exactly = 3) { changeNotifier.notify(user, ChangeTopic.LISTENS) }
+        verify(exactly = 1) { changeNotifier.notify(linkedUser, ChangeTopic.LISTENS) }
+        verify(exactly = 0) { changeNotifier.notify(otherUser, any()) }
+    }
 }

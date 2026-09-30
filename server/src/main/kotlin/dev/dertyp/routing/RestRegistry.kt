@@ -135,6 +135,10 @@ fun Route.registerAuthenticatedRestServices(koin: Koin) {
         RpcClientRequestService(user, call.getSessionId() ?: throw IllegalArgumentException("No session found"), koin.get())
             .withAuthorization<IClientRequestService>(user)
     }
+    registerIChangeServiceRest(authenticated = true) {
+        val user = call.getUser() ?: throw IllegalArgumentException("No user found")
+        RpcChangeService(user, koin.get()).withAuthorization<IChangeService>(user)
+    }
     registerIRemoteControlServiceRest(authenticated = true) {
         val user = call.getUser() ?: throw IllegalArgumentException("No user found")
         RpcRemoteControlService(user, call.getSessionId(), koin.get()).withAuthorization<IRemoteControlService>(user)

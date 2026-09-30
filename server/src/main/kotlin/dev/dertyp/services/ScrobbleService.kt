@@ -1,6 +1,7 @@
 package dev.dertyp.services
 
 import dev.dertyp.PlatformUUID
+import dev.dertyp.core.ChangeNotifier
 import dev.dertyp.data.*
 import dev.dertyp.plugins.HookBus
 import dev.dertyp.plugins.HookEvent
@@ -22,6 +23,7 @@ class ScrobbleService : Service() {
     private val listenService by inject<ListenService>()
     private val songService by inject<SongService>()
     private val hooks by inject<HookBus>()
+    private val changeNotifier by inject<ChangeNotifier>()
 
     override val scopeDispatcher: CoroutineDispatcher get() = Dispatchers.Default
 
@@ -38,6 +40,11 @@ class ScrobbleService : Service() {
     private val generation = ConcurrentHashMap<PlatformUUID, Long>()
 
     private val nowPlayingChanges = MutableSharedFlow<Unit>(extraBufferCapacity = 8, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+
+    private fun nowPlayingChanged(userId: PlatformUUID) {
+        nowPlayingChanges.tryEmit(Unit)
+        changeNotifier.notify(userId, ChangeTopic.LISTENS)
+    }
 
     suspend fun setNowPlaying(userId: PlatformUUID, songId: PlatformUUID) {
         val previous = nowPlaying[userId]?.takeIf { it.song.id == songId }
@@ -57,7 +64,7 @@ class ScrobbleService : Service() {
         timers.remove(userId)?.cancel()
         val positionMs = correctedPosition(report, now)
         nowPlaying[userId] = NowPlayingEntry(song, previous?.firstStartedAt ?: now, now, positionMs, report.playing)
-        if (previous == null) nowPlayingChanges.tryEmit(Unit)
+        if (previous == null) nowPlayingChanged(userId)
         hooks.emit(HookEvent.NowPlayingChanged(userId, report.songId, myGen, now, positionMs, report.playing))
 
         val remaining = if (song.duration > 0) song.duration - positionMs else Long.MAX_VALUE
@@ -70,7 +77,7 @@ class ScrobbleService : Service() {
             delay(lease.milliseconds)
             if (generation[userId] == myGen && nowPlaying.containsKey(userId)) {
                 nowPlaying.remove(userId)
-                nowPlayingChanges.tryEmit(Unit)
+                nowPlayingChanged(userId)
                 hooks.emit(HookEvent.NowPlayingChanged(userId, null, myGen, System.currentTimeMillis()))
             }
         }
@@ -99,7 +106,7 @@ class ScrobbleService : Service() {
         val myGen = generation.merge(userId, 1L, Long::plus)!!
         timers.remove(userId)?.cancel()
         nowPlaying.remove(userId)
-        nowPlayingChanges.tryEmit(Unit)
+        nowPlayingChanged(userId)
         hooks.emit(HookEvent.NowPlayingChanged(userId, null, myGen, System.currentTimeMillis()))
     }
 

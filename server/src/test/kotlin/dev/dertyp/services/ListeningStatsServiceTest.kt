@@ -2,6 +2,7 @@ package dev.dertyp.services
 
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
+import dev.dertyp.core.ChangeNotifier
 import dev.dertyp.data.LinkUnmatchedTrackRequest
 import dev.dertyp.data.StatsRange
 import dev.dertyp.data.TopOrder
@@ -41,6 +42,7 @@ class ListeningStatsServiceTest : KoinTest {
                 single<HookBus> { mockk(relaxed = true) }
                 single { mockk<SongService>() }
                 single { ListenService() }
+                single { mockk<ChangeNotifier>(relaxed = true) }
                 single { mockk<ListenBrainzService>(relaxed = true) }
             })
         }

@@ -2,11 +2,15 @@ package dev.dertyp.ui
 
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
+import dev.dertyp.core.ChangeNotifier
+import dev.dertyp.data.ChangeTopic
 import dev.dertyp.db.ImageTable
 import dev.dertyp.db.UserHomeCardTable
 import dev.dertyp.db.UserTable
 import dev.dertyp.core.db.dbQuery
 import dev.dertyp.services.ui.UserHomeCardService
+import io.mockk.mockk
+import io.mockk.verify
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.launch
@@ -17,10 +21,14 @@ import org.jetbrains.exposed.v1.jdbc.insert
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.EnumSource
+import org.koin.core.context.startKoin
+import org.koin.core.context.stopKoin
+import org.koin.dsl.module
 import java.util.UUID
 import kotlin.test.assertEquals
 
 class UserHomeCardServiceTest {
+    private val changeNotifier = mockk<ChangeNotifier>(relaxed = true)
     private val service = UserHomeCardService()
     private val accountId = UUID.randomUUID()
     private val otherAccountId = UUID.randomUUID()
@@ -30,6 +38,7 @@ class UserHomeCardServiceTest {
     }
 
     private fun setup(dialect: DbDialect) = runBlocking {
+        startKoin { modules(module { single { changeNotifier } }) }
         TestDatabase.connect(dialect, "home_card_test")
         dbQuery {
             SchemaUtils.create(ImageTable, UserTable, UserHomeCardTable)
@@ -47,7 +56,10 @@ class UserHomeCardServiceTest {
     }
 
     @AfterEach
-    fun tearDown() = TestDatabase.cleanUp()
+    fun tearDown() {
+        stopKoin()
+        TestDatabase.cleanUp()
+    }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
@@ -88,5 +100,21 @@ class UserHomeCardServiceTest {
         job.join()
         assertEquals(2, emissions.size)
         assertEquals("core.b", emissions.last().cards.first().contributionId)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `pinning, ordering and forgetting announce the home cards of the user`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+
+        service.setPinned(accountId, "core.a", true)
+        verify(exactly = 1) { changeNotifier.notify(accountId, ChangeTopic.HOME_CARDS) }
+
+        service.setOrder(accountId, listOf("core.a"))
+        verify(exactly = 2) { changeNotifier.notify(accountId, ChangeTopic.HOME_CARDS) }
+
+        service.forget(accountId, "core.a")
+        verify(exactly = 3) { changeNotifier.notify(accountId, ChangeTopic.HOME_CARDS) }
+        verify(exactly = 0) { changeNotifier.notify(otherAccountId, any()) }
     }
 }
