@@ -1,14 +1,14 @@
 package dev.dertyp.services.metadata
 
 import dev.dertyp.ApiClient
+import dev.dertyp.config.ServerConfig
 import dev.dertyp.core.HttpClientPriority
 import dev.dertyp.services.Service
 import io.ktor.client.call.body
 import io.ktor.client.request.header
 import io.ktor.client.request.parameter
 import io.ktor.http.Url
-import io.ktor.server.application.ApplicationEnvironment
-import io.ktor.server.config.tryGetString
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.Serializable
@@ -17,9 +17,9 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Instant
 
-class LinkResolverService(environment: ApplicationEnvironment) : Service() {
+class LinkResolverService(config: ServerConfig) : Service() {
     private val baseUrl = "https://linkresolver.synara.audio"
-    private val apiKey = environment.config.tryGetString("linkresolver.apiKey") ?: ""
+    private val apiKey = config.providers.linkResolver.apiKey
 
     val enabled: Boolean get() = apiKey.isNotBlank()
 
@@ -44,6 +44,8 @@ class LinkResolverService(environment: ApplicationEnvironment) : Service() {
                     supportedFetchedAt = Clock.System.now()
                     logger.info("Refreshed LinkResolver supported hosts: ${supportedHosts.size}")
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 logger.warn("Failed to refresh LinkResolver supported inputs, keeping ${supportedHosts.size} cached host(s)", e)
             }
@@ -123,6 +125,8 @@ class LinkResolverService(environment: ApplicationEnvironment) : Service() {
             if (response.status.value in 200..299) {
                 response.body<LinkResolverResponse>().links.values.toList()
             } else emptyList()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             val id = url ?: isrc ?: upc
             logger.error("Error resolving platform links via LinkResolver for $id", e)

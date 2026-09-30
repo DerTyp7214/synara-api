@@ -15,8 +15,8 @@ import java.time.Instant
 import kotlin.time.Duration as KDuration
 
 interface TaskContext {
-    fun updateProgress(progress: Double, vararg logs: String)
-    fun log(line: String)
+    suspend fun updateProgress(progress: Double, vararg logs: String)
+    suspend fun log(line: String)
 }
 
 suspend fun KoinComponent.logTask(name: String, block: suspend TaskContext.() -> Map<String, Any?>) {
@@ -29,7 +29,7 @@ suspend fun KoinComponent.logTask(name: String, block: suspend TaskContext.() ->
         var currentProgress = 0.0
         val currentLogs = mutableListOf<String>()
 
-        override fun updateProgress(progress: Double, vararg logs: String) {
+        override suspend fun updateProgress(progress: Double, vararg logs: String) {
             currentProgress = progress
             val logsSnapshot = synchronized(currentLogs) {
                 if (logs.isNotEmpty()) {
@@ -41,7 +41,7 @@ suspend fun KoinComponent.logTask(name: String, block: suspend TaskContext.() ->
             logService.updateProgress(runningId, currentProgress, logsSnapshot)
         }
 
-        override fun log(line: String) {
+        override suspend fun log(line: String) {
             val logsSnapshot = synchronized(currentLogs) {
                 currentLogs.add(line)
                 while (currentLogs.size > 5) {

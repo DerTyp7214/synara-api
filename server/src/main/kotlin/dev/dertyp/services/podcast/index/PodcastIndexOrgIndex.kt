@@ -1,57 +1,53 @@
 package dev.dertyp.services.podcast.index
 
+import dev.dertyp.core.HttpClientFactory
+import dev.dertyp.core.gzipEncoding
+import dev.dertyp.core.jsonContent
+import dev.dertyp.core.timeouts
 import dev.dertyp.plugins.IPodcastIndex
 import dev.dertyp.plugins.PodcastIndexEntry
 import dev.dertyp.services.podcast.PodcastHttp
 import io.ktor.client.HttpClient
+import io.ktor.client.HttpClientConfig
 import io.ktor.client.call.body
-import io.ktor.client.engine.HttpClientEngine
 import io.ktor.client.engine.okhttp.OkHttp
-import io.ktor.client.plugins.HttpTimeout
-import io.ktor.client.plugins.compression.ContentEncoding
-import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.plugins.defaultRequest
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.parameter
 import io.ktor.http.HttpHeaders
 import io.ktor.http.isSuccess
-import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
+import org.koin.core.component.KoinComponent
+import org.koin.core.component.inject
 import java.security.MessageDigest
-import java.time.Clock
+import kotlin.time.Clock
 import kotlin.time.Duration.Companion.seconds
 
-fun podcastIndexHttpClient(engine: HttpClientEngine = OkHttp.create()): HttpClient = HttpClient(engine) {
-    install(ContentNegotiation) {
-        json(
-            Json {
-                ignoreUnknownKeys = true
-                isLenient = true
-            }
-        )
-    }
-    install(HttpTimeout) {
-        requestTimeoutMillis = 15.seconds.inWholeMilliseconds
-        connectTimeoutMillis = 10.seconds.inWholeMilliseconds
-        socketTimeoutMillis = 15.seconds.inWholeMilliseconds
-    }
-    install(ContentEncoding) {
-        gzip()
-    }
+fun HttpClientConfig<*>.podcastIndexConfig() {
+    jsonContent(
+        Json {
+            ignoreUnknownKeys = true
+            isLenient = true
+        }
+    )
+    timeouts(request = 15.seconds, connect = 10.seconds, socket = 15.seconds)
+    gzipEncoding()
     defaultRequest {
         header(HttpHeaders.UserAgent, PodcastHttp.USER_AGENT)
     }
 }
 
+fun HttpClientFactory.podcastIndexClient(): HttpClient =
+    shared(HttpClientFactory.PODCAST_INDEX, OkHttp) { podcastIndexConfig() }
+
 class PodcastIndexException(message: String, val status: Int? = null) : RuntimeException(message)
 
 class PodcastIndexOrgIndex(
     private val credentials: PodcastIndexCredentialSource,
-    private val client: HttpClient = podcastIndexHttpClient(),
-    private val clock: Clock = Clock.systemUTC(),
-    private val baseUrl: String = BASE_URL,
-) : IPodcastIndex {
+) : IPodcastIndex, KoinComponent {
+    private val httpClientFactory by inject<HttpClientFactory>()
+
     override val id: String = ID
     override val name: String = "Podcast Index"
 
@@ -59,8 +55,8 @@ class PodcastIndexOrgIndex(
 
     override suspend fun search(query: String, limit: Int): List<PodcastIndexEntry> {
         val creds = credentials.current() ?: return emptyList()
-        val date = clock.instant().epochSecond
-        val response = client.get("$baseUrl/search/byterm") {
+        val date = Clock.System.now().epochSeconds
+        val response = httpClientFactory.podcastIndexClient().get("$BASE_URL/search/byterm") {
             parameter("q", query)
             parameter("max", limit)
             parameter("fulltext", "")

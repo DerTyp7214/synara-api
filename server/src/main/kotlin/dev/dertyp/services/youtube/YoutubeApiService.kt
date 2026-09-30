@@ -1,6 +1,7 @@
 package dev.dertyp.services.youtube
 
 import dev.dertyp.ApiClient
+import dev.dertyp.config.ServerConfig
 import dev.dertyp.core.HttpClientPriority
 import dev.dertyp.services.Service
 import io.ktor.client.call.body
@@ -8,7 +9,7 @@ import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.isSuccess
-import io.ktor.server.application.ApplicationEnvironment
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.serialization.Serializable
 import kotlin.time.Duration.Companion.seconds
@@ -84,9 +85,9 @@ data class YoutubePlaylist(
 )
 
 class YoutubeApiService(
-    environment: ApplicationEnvironment
+    config: ServerConfig
 ) : Service() {
-    private val apiKey = environment.config.propertyOrNull("youtube.apiKey")?.getString()
+    private val apiKey = config.providers.youtube.apiKey
     private val baseUrl = "https://www.googleapis.com/youtube/v3"
 
     val enabled: Boolean get() = !apiKey.isNullOrBlank()
@@ -107,6 +108,8 @@ class YoutubeApiService(
                     continue
                 }
                 return if (response.status.isSuccess()) response.body<T>() else null
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 if (retries < maxRetries - 1) {
                     logger.warn("Error during YouTube request ($url): ${e.message}, retrying... ($retries/$maxRetries)")
@@ -128,6 +131,8 @@ class YoutubeApiService(
             val html = response.bodyAsText()
             val regex = Regex("""<meta property="og:image" content="([^"]+)">""")
             regex.find(html)?.groupValues?.get(1)?.replace("=w120-h90-p", "=w1200-h1200")
+        } catch (e: CancellationException) {
+            throw e
         } catch (_: Exception) {
             null
         }
@@ -166,6 +171,8 @@ class YoutubeApiService(
             }
             
             map
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             logger.error("Failed to fetch youtube video metadata", e)
             null

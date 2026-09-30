@@ -2,6 +2,7 @@ package dev.dertyp.services.metadata
 
 import dev.dertyp.ApiClient
 import dev.dertyp.core.ApplicationScope
+import dev.dertyp.core.HttpClientQueueService
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
@@ -23,6 +24,9 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.koin.core.context.startKoin
+import org.koin.core.context.stopKoin
+import org.koin.dsl.module
 import org.koin.test.KoinTest
 
 class SpotifyServiceTest : KoinTest {
@@ -33,6 +37,7 @@ class SpotifyServiceTest : KoinTest {
 
     @BeforeEach
     fun setup() {
+        startKoin { modules(module { single { HttpClientQueueService() } }) }
         environment = mockk()
         val config = mockk<ApplicationConfig>()
         every { environment.config } returns config
@@ -129,6 +134,7 @@ class SpotifyServiceTest : KoinTest {
 
     @AfterEach
     fun tearDown() {
+        stopKoin()
         unmockkAll()
     }
 

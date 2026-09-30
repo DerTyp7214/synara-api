@@ -7,18 +7,15 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlin.coroutines.CoroutineContext
+import kotlin.time.Clock
 
 class HueEntertainmentSession(
     val area: HueEntertainmentArea,
     private val stream: HueEntertainmentStream,
     val renderer: HueEntertainmentRenderer,
-    private val encoder: HueStreamEncoder = HueStreamEncoder(area.id),
-    private val frameIntervalMs: Long = FRAME_INTERVAL_MS,
-    private val now: () -> Long = System::currentTimeMillis,
-    private val onError: (Throwable) -> Unit = {},
-    private val context: CoroutineContext = Dispatchers.IO,
+    private val onError: (Throwable) -> Unit,
 ) {
+    private val encoder = HueStreamEncoder(area.id)
     private val lock = Any()
     private var job: Job? = null
     private var closed = false
@@ -26,7 +23,7 @@ class HueEntertainmentSession(
     val isActive: Boolean get() = job?.isActive == true
 
     fun launch(scope: CoroutineScope): Job {
-        val started = scope.launch(context) {
+        val started = scope.launch(Dispatchers.IO) {
             var nextFrameMs = now()
             while (this.isActive) {
                 val frame = update { tick(now()) }
@@ -38,7 +35,7 @@ class HueEntertainmentSession(
                     onError(e)
                     break
                 }
-                nextFrameMs += frameIntervalMs
+                nextFrameMs += FRAME_INTERVAL_MS
                 val wait = nextFrameMs - now()
                 if (wait > 0) delay(wait) else nextFrameMs = now()
             }
@@ -46,6 +43,8 @@ class HueEntertainmentSession(
         synchronized(lock) { job = started }
         return started
     }
+
+    private fun now(): Long = Clock.System.now().toEpochMilliseconds()
 
     fun <T> update(block: HueEntertainmentRenderer.() -> T): T = synchronized(renderer) { renderer.block() }
 

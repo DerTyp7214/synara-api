@@ -1,5 +1,6 @@
 package dev.dertyp.services
 
+import dev.dertyp.core.KeyedMutex
 import dev.dertyp.core.paging
 import dev.dertyp.data.PaginatedResponse
 import dev.dertyp.data.TimecodeTag
@@ -8,9 +9,7 @@ import dev.dertyp.data.TimecodeTagInput
 import dev.dertyp.data.TimecodeTagType
 import dev.dertyp.db.SongTable
 import dev.dertyp.db.TimecodeTagTable
-import dev.dertyp.dbQuery
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
+import dev.dertyp.core.db.dbQuery
 import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.SortOrder
 import org.jetbrains.exposed.v1.core.and
@@ -27,7 +26,6 @@ import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.update
 import java.time.Instant
 import java.util.UUID
-import java.util.concurrent.ConcurrentHashMap
 
 class TimecodeTagService : Service() {
     companion object {
@@ -68,7 +66,7 @@ class TimecodeTagService : Service() {
         )
     }
 
-    private val locks = ConcurrentHashMap<UUID, Mutex>()
+    private val locks = KeyedMutex<UUID>()
 
     suspend fun createTag(
         userId: UUID,
@@ -83,7 +81,7 @@ class TimecodeTagService : Service() {
         validate(text, timestampMs, endMs)
         validateAction(type, endMs, action)
 
-        return lock(userId).withLock {
+        return locks.withLock(userId) {
             dbQuery {
                 requireSong(songId)
                 require(ownTags(userId, songId).count() < MAX_TAGS_PER_SONG) {
@@ -160,7 +158,7 @@ class TimecodeTagService : Service() {
             validateAction(tag.type, tag.endMs, tag.action)
         }
 
-        return lock(userId).withLock {
+        return locks.withLock(userId) {
             dbQuery {
                 requireSong(songId)
                 clearTags(userId, songId)
@@ -237,8 +235,6 @@ class TimecodeTagService : Service() {
 
         require(exists) { "Song $songId does not exist" }
     }
-
-    private fun lock(userId: UUID): Mutex = locks.computeIfAbsent(userId) { Mutex() }
 
     private fun ownTags(owner: UUID, song: UUID): Query = TimecodeTagTable
         .selectAll()

@@ -1,5 +1,6 @@
 package dev.dertyp.services
 
+import dev.dertyp.core.PerUserChannels
 import dev.dertyp.core.paging
 import dev.dertyp.data.PaginatedResponse
 import dev.dertyp.data.QueueInfo
@@ -14,13 +15,10 @@ import dev.dertyp.db.SessionTable
 import dev.dertyp.db.SongTable
 import dev.dertyp.db.UserQueueEntryTable
 import dev.dertyp.db.UserQueueTable
-import dev.dertyp.dbQuery
+import dev.dertyp.core.db.dbQuery
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.asSharedFlow
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.SortOrder
 import org.jetbrains.exposed.v1.core.and
@@ -41,6 +39,7 @@ import java.time.Instant
 import java.util.Collections
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.minutes
 
@@ -48,6 +47,7 @@ class QueueService : Service() {
     companion object {
         const val MAX_PAGE = 1000
         val STALE_QUEUE_MS = 30.days.inWholeMilliseconds
+        val UPLOAD_TTL_MS = 10.minutes.inWholeMilliseconds
 
         private const val LOOKUP_CHUNK = 1000
     }
@@ -83,10 +83,9 @@ class QueueService : Service() {
         val items: MutableList<QueueItem> = Collections.synchronizedList(mutableListOf())
     }
 
-    internal var uploadTtlMs: Long = 10.minutes.inWholeMilliseconds
-
-    private val locks = ConcurrentHashMap<UUID, Mutex>()
-    private val changes = ConcurrentHashMap<UUID, MutableSharedFlow<QueueInfo>>()
+    private val channels = PerUserChannels<UUID, QueueInfo> {
+        MutableSharedFlow(extraBufferCapacity = 8, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+    }
     private val uploads = ConcurrentHashMap<UUID, Staging>()
     private val activeUploads = ConcurrentHashMap<UUID, UUID>()
 
@@ -130,7 +129,7 @@ class QueueService : Service() {
         )
     }
 
-    fun observe(userId: UUID): Flow<QueueInfo> = changeFlow(userId).asSharedFlow()
+    fun observe(userId: UUID): Flow<QueueInfo> = channels.observe(userId)
 
     suspend fun beginUpload(userId: UUID, sessionId: UUID?, baseVersion: Long, force: Boolean): QueueUploadStart {
         purgeExpired()
@@ -139,7 +138,7 @@ class QueueService : Service() {
         if (!force && baseVersion != current.version) return QueueUploadStart.Conflict(current)
 
         val uploadId = UUID.randomUUID()
-        val expiresAt = Instant.now().toEpochMilli() + uploadTtlMs
+        val expiresAt = Clock.System.now().toEpochMilliseconds() + UPLOAD_TTL_MS
         uploads[uploadId] = Staging(userId, sessionId, baseVersion, force, expiresAt)
         activeUploads.put(userId, uploadId)?.let(uploads::remove)
 
@@ -327,7 +326,7 @@ class QueueService : Service() {
     }
 
     suspend fun setSyncEnabled(userId: UUID, sessionId: UUID, enabled: Boolean, deviceName: String) {
-        lock(userId).withLock {
+        channels.withLock(userId) {
             dbQuery {
                 val updated = QueueSyncDeviceTable.update({ QueueSyncDeviceTable.sessionId eq sessionId }) {
                     it[QueueSyncDeviceTable.userId] = userId
@@ -402,7 +401,7 @@ class QueueService : Service() {
         stale.forEachIndexed { index, userId ->
             onProgress((index.toDouble() / stale.size) * 100.0, "Clearing queue ${index + 1}/${stale.size}")
 
-            val cleared = lock(userId).withLock {
+            val cleared = channels.withLock(userId) {
                 dbQuery {
                     val current = loadMeta(userId)
                     UserQueueEntryTable.deleteWhere { UserQueueEntryTable.userId eq userId }
@@ -427,7 +426,7 @@ class QueueService : Service() {
                 }
             }
 
-            changes[userId]?.tryEmit(cleared)
+            channels.tryEmit(userId, cleared)
         }
 
         onProgress(100.0, "Cleared ${stale.size} stale queues")
@@ -441,7 +440,7 @@ class QueueService : Service() {
         force: Boolean,
         block: (Meta, MutableList<Row>) -> Meta
     ): QueueWriteResult {
-        val result = lock(userId).withLock {
+        val result = channels.withLock(userId) {
             dbQuery {
                 val current = loadMeta(userId)
                 if (!force && baseVersion != current.version) {
@@ -471,7 +470,7 @@ class QueueService : Service() {
             }
         }
 
-        if (result is QueueWriteResult.Ok) changes[userId]?.tryEmit(result.info)
+        if (result is QueueWriteResult.Ok) channels.tryEmit(userId, result.info)
         return result
     }
 
@@ -547,15 +546,9 @@ class QueueService : Service() {
     }
 
     private fun purgeExpired() {
-        val now = Instant.now().toEpochMilli()
+        val now = Clock.System.now().toEpochMilliseconds()
         uploads.entries.removeIf { it.value.expiresAt <= now }
         activeUploads.entries.removeIf { !uploads.containsKey(it.value) }
-    }
-
-    private fun lock(userId: UUID): Mutex = locks.computeIfAbsent(userId) { Mutex() }
-
-    private fun changeFlow(userId: UUID): MutableSharedFlow<QueueInfo> = changes.computeIfAbsent(userId) {
-        MutableSharedFlow(extraBufferCapacity = 8, onBufferOverflow = BufferOverflow.DROP_OLDEST)
     }
 
     private fun loadMeta(userId: UUID): Meta = UserQueueTable
@@ -566,7 +559,7 @@ class QueueService : Service() {
             Meta(
                 version = row[UserQueueTable.version],
                 modifiedAt = row[UserQueueTable.modifiedAt],
-                modifiedBySessionId = row[UserQueueTable.modifiedBySessionId],
+                modifiedBySessionId = row[UserQueueTable.modifiedBySessionId]?.value,
                 modifiedByDeviceName = row[UserQueueTable.modifiedByDeviceName],
                 currentIndex = row[UserQueueTable.currentIndex],
                 shuffleMode = row[UserQueueTable.shuffleMode],

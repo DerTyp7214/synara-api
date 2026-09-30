@@ -2,8 +2,8 @@
 
 package dev.dertyp.services.subsonic
 
-import dev.dertyp.AudioUtils
 import dev.dertyp.Indexer
+import dev.dertyp.audio.Transcoder
 import dev.dertyp.data.AudioFormat
 import dev.dertyp.routing.streamRadio
 import dev.dertyp.services.*
@@ -38,6 +38,7 @@ internal fun Route.subsonicMediaRoutes() {
     val radioService by inject<RadioService>()
     val radioChannelService by inject<RadioChannelService>()
     val indexer by inject<Indexer>()
+    val transcoder by inject<Transcoder>()
 
     subAuth("stream", authenticator, {
         summary = "Stream a song"
@@ -68,7 +69,7 @@ internal fun Route.subsonicMediaRoutes() {
             call.respond(LocalFileContent(file, fileContentType(song.path)))
         } else {
             val bitrate = if (maxBitRate > 0) maxBitRate else 256
-            val transcoded = AudioUtils.transcodeAudio(call.application.environment, file, bitrate, false, transcodeFormat)
+            val transcoded = transcoder.transcodeAudio(call.application.environment, file, bitrate, false, transcodeFormat)
             call.respond(LocalFileContent(transcoded.file, transcoded.contentType))
         }
     }
@@ -174,7 +175,7 @@ internal fun Route.subsonicMediaRoutes() {
             radioChannelService.randomSongs(id.uuid, exclude, limit)
         }
         val session = radioService.getSession(sessionId, user.id)
-        call.streamRadio(radioService, songService, session, quality, channel.name)
+        call.streamRadio(radioService, songService, transcoder, session, quality, channel.name)
     }
 
     subAuth("getScanStatus", authenticator, {

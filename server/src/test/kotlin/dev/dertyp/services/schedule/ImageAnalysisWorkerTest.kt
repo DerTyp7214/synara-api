@@ -2,9 +2,10 @@ package dev.dertyp.services.schedule
 
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
+import dev.dertyp.config.ServerConfig
 import dev.dertyp.db.ImageMetadataTable
 import dev.dertyp.db.ImageTable
-import dev.dertyp.dbQuery
+import dev.dertyp.core.db.dbQuery
 import dev.dertyp.services.ImageService
 import io.ktor.server.config.ApplicationConfig
 import io.ktor.server.config.MapApplicationConfig
@@ -51,6 +52,7 @@ class ImageAnalysisWorkerTest : KoinTest {
             modules(module {
                 single { imageService }
                 single<ApplicationConfig> { MapApplicationConfig() }
+                single { ServerConfig(get()) }
             })
         }
 

@@ -4,7 +4,7 @@ import dev.dertyp.PlatformUUID
 import dev.dertyp.core.CustomMigration
 import dev.dertyp.core.Migration
 import dev.dertyp.db.SongAudioDataTable
-import dev.dertyp.dbQuery
+import dev.dertyp.core.db.dbQuery
 import dev.dertyp.services.AudioAnalysisService
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
@@ -45,8 +45,10 @@ class ReAnalyzeMissingValence : CustomMigration() {
                             if (currentCount % 10 == 0) {
                                 logger.info("Progress: $currentCount / ${songIds.size}")
                             }
+                        } catch (e: CancellationException) {
+                            throw e
                         } catch (e: Exception) {
-                            if (e !is CancellationException) logger.error("Failed to re-analyze song $songId: ${e.message}")
+                            logger.error("Failed to re-analyze song $songId: ${e.message}")
                         }
                     }
                 }

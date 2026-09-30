@@ -1,13 +1,18 @@
 package dev.dertyp.services.sync
 
 import dev.dertyp.PlatformUUID
+import dev.dertyp.core.HttpClientFactory
+import dev.dertyp.core.jsonContent
+import dev.dertyp.core.runCatchingCancellable
+import dev.dertyp.core.timeouts
+import dev.dertyp.core.userAgent
 import dev.dertyp.data.ListenBackupConfig
 import dev.dertyp.data.ListenBackupConnectionTest
 import dev.dertyp.data.ListenBackupState
 import dev.dertyp.db.ListenBackupConfigTable
 import dev.dertyp.db.ListenSource
 import dev.dertyp.db.ListenTable
-import dev.dertyp.dbQuery
+import dev.dertyp.core.db.dbQuery
 import dev.dertyp.listenbackup.BackupListen
 import dev.dertyp.listenbackup.ListenBackupBatch
 import dev.dertyp.listenbackup.ListenBackupBatchResult
@@ -20,9 +25,6 @@ import dev.dertyp.services.Service
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.engine.cio.CIO
-import io.ktor.client.plugins.HttpTimeout
-import io.ktor.client.plugins.UserAgent
-import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.parameter
@@ -32,7 +34,7 @@ import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
-import io.ktor.serialization.kotlinx.json.json
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.onStart
@@ -49,6 +51,8 @@ import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.update
+import org.koin.core.component.inject
+import kotlin.time.Duration.Companion.seconds
 
 class RpcListenBackupService(private val service: ListenBackupService) : IListenBackupService {
     override suspend fun getState(): ListenBackupState = service.getState()
@@ -67,17 +71,14 @@ class ListenBackupService : Service() {
         const val MAX_BATCH_SIZE = 10000
     }
 
-    internal var httpClient: HttpClient = HttpClient(CIO) {
-        install(UserAgent) { agent = "Synara/ListenBackup" }
-        install(HttpTimeout) {
-            requestTimeoutMillis = 120_000
-            connectTimeoutMillis = 20_000
-            socketTimeoutMillis = 120_000
+    private val httpClientFactory by inject<HttpClientFactory>()
+
+    private val httpClient: HttpClient
+        get() = httpClientFactory.shared(HttpClientFactory.LISTEN_BACKUP, CIO) {
+            userAgent("Synara/ListenBackup")
+            timeouts(request = 120.seconds, connect = 20.seconds, socket = 120.seconds)
+            jsonContent(Json { ignoreUnknownKeys = true })
         }
-        install(ContentNegotiation) {
-            json(Json { ignoreUnknownKeys = true })
-        }
-    }
 
     private val syncMutex = Mutex()
     private val _stateFlow = MutableSharedFlow<ListenBackupState>(replay = 1)
@@ -194,6 +195,8 @@ class ListenBackupService : Service() {
                 parameter(ListenBackupProtocol.SERVER_ID_PARAM, target.serverId.toString())
             }.checked().body<ListenBackupStatus>()
             ListenBackupConnectionTest(true, remoteListenCount = status.listenCount)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             logger.warn("Listen backup connection test failed: ${e.message}")
             ListenBackupConnectionTest(false, e.message ?: e::class.simpleName)
@@ -307,7 +310,7 @@ class ListenBackupService : Service() {
 
     private suspend fun HttpResponse.checked(): HttpResponse {
         if (status.value !in 200..299) {
-            val body = runCatching { bodyAsText() }.getOrDefault("").take(200)
+            val body = runCatchingCancellable { bodyAsText() }.getOrDefault("").take(200)
             throw IllegalStateException("Receiver responded ${status.value}${if (body.isNotBlank()) ": $body" else ""}")
         }
         return this

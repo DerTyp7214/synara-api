@@ -1,5 +1,6 @@
 package dev.dertyp
 
+import dev.dertyp.core.ApplicationScope
 import dev.dertyp.data.User
 import dev.dertyp.plugins.*
 import dev.dertyp.services.*
@@ -158,7 +159,7 @@ class Indexer(
         if (type != null && type != this.id && type != "core") {
             val indexer = otherIndexers.find { it.id == type }
             if (indexer != null) {
-                return CoroutineScope(Dispatchers.IO).async { indexer.queue(songPaths, playlistPaths, type, userId, stdout).await() }
+                return ApplicationScope.scope.async(Dispatchers.IO) { indexer.queue(songPaths, playlistPaths, type, userId, stdout).await() }
             }
         }
 
@@ -176,7 +177,7 @@ class Indexer(
 
             songGroups.forEach { (indexer, paths) ->
                 if (indexer != null) {
-                    delegatedTasks.add(CoroutineScope(Dispatchers.IO).async { indexer.queue(paths, emptyList(), null, userId, stdout).await() })
+                    delegatedTasks.add(ApplicationScope.scope.async(Dispatchers.IO) { indexer.queue(paths, emptyList(), null, userId, stdout).await() })
                 } else {
                     mySongs.addAll(paths)
                 }
@@ -184,7 +185,7 @@ class Indexer(
 
             playlistGroups.forEach { (indexer, paths) ->
                 if (indexer != null) {
-                    delegatedTasks.add(CoroutineScope(Dispatchers.IO).async { indexer.queue(emptyList(), paths, null, userId, stdout).await() })
+                    delegatedTasks.add(ApplicationScope.scope.async(Dispatchers.IO) { indexer.queue(emptyList(), paths, null, userId, stdout).await() })
                 } else {
                     myPlaylists.addAll(paths)
                 }
@@ -195,7 +196,7 @@ class Indexer(
         }
 
         if (mySongs.isEmpty() && myPlaylists.isEmpty()) {
-            return CoroutineScope(Dispatchers.IO).async { delegatedTasks.awaitAll() }
+            return ApplicationScope.scope.async(Dispatchers.IO) { delegatedTasks.awaitAll() }
         }
 
         return coreIndexer.queue(mySongs, myPlaylists, "core", userId, stdout)

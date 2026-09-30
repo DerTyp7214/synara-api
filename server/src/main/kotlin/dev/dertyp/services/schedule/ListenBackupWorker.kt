@@ -4,7 +4,7 @@ import dev.dertyp.data.TaskKeys
 import dev.dertyp.services.sync.ListenBackupService
 import org.koin.core.component.inject
 
-@WorkerTask(TaskKeys.LISTEN_BACKUP, "Listen Backup")
+@WorkerTask(TaskKeys.LISTEN_BACKUP, "Listen Backup", cron = "30 * * * *")
 class ListenBackupWorker : Worker("ListenBackupWorker") {
     private val listenBackupService by inject<ListenBackupService>()
 

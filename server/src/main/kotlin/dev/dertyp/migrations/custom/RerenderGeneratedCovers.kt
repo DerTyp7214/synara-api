@@ -3,6 +3,7 @@ package dev.dertyp.migrations.custom
 import dev.dertyp.core.CustomMigration
 import dev.dertyp.core.Migration
 import dev.dertyp.core.logTask
+import dev.dertyp.core.runCatchingCancellable
 import dev.dertyp.data.CoverGenerationParams
 import dev.dertyp.data.CoverStyle
 import dev.dertyp.data.CoverTarget
@@ -10,7 +11,7 @@ import dev.dertyp.data.CoverTargetType
 import dev.dertyp.data.ImageSource
 import dev.dertyp.db.CollectionTable
 import dev.dertyp.db.UserPlaylistTable
-import dev.dertyp.dbQuery
+import dev.dertyp.core.db.dbQuery
 import dev.dertyp.services.cover.CoverGenerationService
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.select
@@ -39,7 +40,7 @@ class RerenderGeneratedCovers : CustomMigration() {
             var rendered = 0
             var failed = 0
             targets.forEachIndexed { index, (target, style, seed) ->
-                runCatching { coverGenerationService.apply(target, CoverGenerationParams(style = style ?: CoverStyle.AUTO, seed = seed)) }
+                runCatchingCancellable { coverGenerationService.apply(target, CoverGenerationParams(style = style ?: CoverStyle.AUTO, seed = seed)) }
                     .onSuccess { rendered++ }
                     .onFailure {
                         failed++

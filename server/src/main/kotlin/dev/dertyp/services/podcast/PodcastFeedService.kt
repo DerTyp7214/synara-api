@@ -1,5 +1,6 @@
 package dev.dertyp.services.podcast
 
+import dev.dertyp.core.runCatchingCancellable
 import dev.dertyp.data.PodcastShow
 import dev.dertyp.data.PodcastSource
 import dev.dertyp.services.ImageService
@@ -13,6 +14,7 @@ import io.ktor.client.statement.bodyAsChannel
 import io.ktor.http.isSuccess
 import io.ktor.utils.io.ByteReadChannel
 import io.ktor.utils.io.readAvailable
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.io.ByteArrayInputStream
@@ -87,6 +89,8 @@ class PodcastFeedService(
             if (bytes.isEmpty()) return null
 
             imageService.createImage(bytes, origin)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             logger.debug("Podcast artwork could not be fetched from $url: ${e.message}")
             null
@@ -144,10 +148,12 @@ class PodcastFeedService(
                         RefreshOutcome(true, inserted, updated, null)
                     }
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 val message = e.message ?: e::class.simpleName ?: "Feed refresh failed"
                 logger.warn("Podcast feed refresh failed for $feedUrl: $message")
-                runCatching { podcastService.recordFetchResult(showId, row.etag, row.lastModified, message) }
+                runCatchingCancellable { podcastService.recordFetchResult(showId, row.etag, row.lastModified, message) }
                 RefreshOutcome(false, 0, 0, message)
             }
         }
@@ -197,7 +203,7 @@ class PodcastFeedService(
 
         val builder = try {
             URLBuilder(trimmed)
-        } catch (e: Throwable) {
+        } catch (e: Exception) {
             throw IllegalArgumentException("Not a valid feed URL: $trimmed", e)
         }
 

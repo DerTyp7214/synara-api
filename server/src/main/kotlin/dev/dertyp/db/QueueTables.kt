@@ -3,14 +3,13 @@ package dev.dertyp.db
 import dev.dertyp.data.RepeatMode
 import org.jetbrains.exposed.v1.core.ReferenceOption
 import org.jetbrains.exposed.v1.core.Table
-import org.jetbrains.exposed.v1.core.java.javaUUID
 import java.time.Instant
 
 object UserQueueTable : Table("userQueue") {
     val userId = reference("userId", UserTable.id, onDelete = ReferenceOption.CASCADE)
     val version = long("version").default(0)
     val modifiedAt = long("modifiedAt").clientDefault { Instant.now().toEpochMilli() }
-    val modifiedBySessionId = javaUUID("modifiedBySessionId").nullable()
+    val modifiedBySessionId = reference("modifiedBySessionId", SessionTable.id, onDelete = ReferenceOption.SET_NULL).nullable()
     val modifiedByDeviceName = text("modifiedByDeviceName").nullable()
     val currentIndex = integer("currentIndex").default(0)
     val shuffleMode = bool("shuffleMode").default(false)

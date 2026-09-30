@@ -8,9 +8,10 @@ import dev.dertyp.db.MBMediaTable
 import dev.dertyp.db.MBRecordingArtistCreditTable
 import dev.dertyp.db.MBRecordingTable
 import dev.dertyp.db.MBReleaseTable
-import dev.dertyp.dbQuery
+import dev.dertyp.core.db.dbQuery
 import dev.dertyp.services.metadata.MusicBrainzCacheService
 import dev.dertyp.services.metadata.MusicBrainzService
+import kotlinx.coroutines.CancellationException
 import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.jdbc.select
 import org.koin.core.component.inject
@@ -60,6 +61,8 @@ class FulfillIncompleteMusicBrainzCache : CustomMigration() {
                         musicBrainzCacheService.updateReleaseCache(it)
                         releasesUpdated++
                     }
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     logger.error("Failed to fulfill release $id: ${e.message}")
                 }
@@ -96,6 +99,8 @@ class FulfillIncompleteMusicBrainzCache : CustomMigration() {
                         musicBrainzCacheService.updateRecordingCache(it)
                         recordingsUpdated++
                     }
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     logger.error("Failed to fulfill recording $id: ${e.message}")
                 }

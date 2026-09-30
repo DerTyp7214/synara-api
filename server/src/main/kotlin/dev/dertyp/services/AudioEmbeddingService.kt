@@ -2,9 +2,10 @@ package dev.dertyp.services
 
 import dev.dertyp.ApiClient
 import dev.dertyp.PlatformUUID
+import dev.dertyp.config.ServerConfig
 import dev.dertyp.db.SongAudioEmbeddingTable
 import dev.dertyp.db.SongTable
-import dev.dertyp.dbQuery
+import dev.dertyp.core.db.dbQuery
 import io.ktor.client.call.body
 import io.ktor.client.plugins.timeout
 import io.ktor.client.request.post
@@ -12,7 +13,6 @@ import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
-import io.ktor.server.application.ApplicationEnvironment
 import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.v1.core.neq
 import org.jetbrains.exposed.v1.jdbc.select
@@ -27,10 +27,10 @@ import kotlin.time.Duration.Companion.seconds
 data class SongFileRef(val id: PlatformUUID, val path: String)
 
 class AudioEmbeddingService : Service() {
-    private val environment by inject<ApplicationEnvironment>()
+    private val config by inject<ServerConfig>()
 
     private val url: String?
-        get() = environment.config.propertyOrNull("audioEmbed.url")?.getString()?.takeIf { it.isNotBlank() }
+        get() = config.analysis.audioEmbedding.url
 
     fun isConfigured(): Boolean = url != null
 

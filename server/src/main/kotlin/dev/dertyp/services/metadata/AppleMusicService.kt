@@ -3,8 +3,14 @@ package dev.dertyp.services.metadata
 import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
 import dev.dertyp.ApiClient
+import dev.dertyp.config.ProviderCredentialKeys
+import dev.dertyp.config.appleMusicStorefront
+import dev.dertyp.config.toAppleMusicKeyConfig
 import dev.dertyp.core.ApplicationScope
 import dev.dertyp.core.HttpClientPriority
+import dev.dertyp.core.RetryOnError
+import dev.dertyp.core.RetryPolicy
+import dev.dertyp.core.retryingGet
 import dev.dertyp.core.safeQueuedGet
 import io.ktor.client.request.HttpRequestBuilder
 import io.ktor.client.request.header
@@ -38,18 +44,16 @@ class AppleMusicService(
     environment: ApplicationEnvironment
 ) : MetadataService("Apple Music", IMetadataService.MetadataType.appleMusic, environment) {
     override val tokenUrl = ""
-    override val clientIdConfigPath = ""
-    override val clientSecretConfigPath = ""
+    override val credentialKeys = ProviderCredentialKeys.NONE
 
-    private val teamId by lazy { environment.config.propertyOrNull("appleMusic.teamId")?.getString() }
-    private val keyId by lazy { environment.config.propertyOrNull("appleMusic.keyId")?.getString() }
-    private val p8Path by lazy { environment.config.propertyOrNull("appleMusic.p8Path")?.getString() }
-    val storefront: String by lazy {
-        environment.config.propertyOrNull("appleMusic.storefront")?.getString()?.takeUnless { it.isBlank() } ?: "us"
-    }
+    private val signingKey by lazy { environment.config.toAppleMusicKeyConfig() }
+    private val teamId: String? get() = signingKey.teamId
+    private val keyId: String? get() = signingKey.keyId
+    private val p8Path: String? get() = signingKey.p8Path
+    val storefront: String by lazy { environment.config.appleMusicStorefront() }
 
     val catalogEnabled: Boolean
-        get() = !teamId.isNullOrBlank() && !keyId.isNullOrBlank() && !p8Path.isNullOrBlank()
+        get() = signingKey.complete
 
     private var appleMusicToken: String? = null
     private var tokenExpiration: Long = 0
@@ -98,7 +102,7 @@ class AppleMusicService(
         limit: Int,
         priority: HttpClientPriority
     ): List<IMetadataService.Track> {
-        val body = ApiClient.instance.safeQueuedGet<String>("https://itunes.apple.com/search", priority) {
+        val body = ApiClient.queueInstance.safeQueuedGet<String>("https://itunes.apple.com/search", priority) {
             parameter("term", query)
             parameter("entity", "song")
             parameter("limit", limit)
@@ -129,17 +133,22 @@ class AppleMusicService(
     ): IMetadataService.Track? {
         val token = getAppleMusicToken()
         if (token != null) {
-            val response = try {
-                ApiClient.queueInstance.enqueue("https://api.music.apple.com/v1/catalog/$storefront/songs", priority) {
-                    header(HttpHeaders.Authorization, "Bearer $token")
-                    parameter("filter[isrc]", isrc)
-                }
-            } catch (e: Exception) {
-                logger.error("Failed to call Apple Music Catalog API", e)
-                null
-            }
+            val response = retryingGet(
+                policy = CATALOG_RETRY_POLICY,
+                label = "Apple Music Catalog API",
+                logger = logger,
+                request = {
+                    ApiClient.queueInstance.enqueue("https://api.music.apple.com/v1/catalog/$storefront/songs", priority) {
+                        header(HttpHeaders.Authorization, "Bearer $token")
+                        parameter("filter[isrc]", isrc)
+                    }
+                },
+                onGiveUp = { rejected, _ ->
+                    logger.warn("Apple Music Catalog API failed with status ${rejected.status}: ${rejected.bodyAsText()}")
+                },
+            ) { it }
 
-            if (response?.status == HttpStatusCode.OK) {
+            if (response != null) {
                 val body = response.bodyAsText()
                 val json = ApplicationScope.json.parseToJsonElement(body).jsonObject
                 val data = json["data"]?.jsonArray
@@ -168,12 +177,10 @@ class AppleMusicService(
                         isrc = isrc
                     )
                 }
-            } else if (response != null) {
-                logger.warn("Apple Music Catalog API failed with status ${response.status}: ${response.bodyAsText()}")
             }
         }
 
-        val body = ApiClient.instance.safeQueuedGet<String>("https://itunes.apple.com/lookup", priority) {
+        val body = ApiClient.queueInstance.safeQueuedGet<String>("https://itunes.apple.com/lookup", priority) {
             parameter("isrc", isrc)
         } ?: return null
 
@@ -200,7 +207,7 @@ class AppleMusicService(
         barcode: String,
         priority: HttpClientPriority
     ): IMetadataService.Album? {
-        val body = ApiClient.instance.safeQueuedGet<String>("https://itunes.apple.com/lookup", priority) {
+        val body = ApiClient.queueInstance.safeQueuedGet<String>("https://itunes.apple.com/lookup", priority) {
             parameter("upc", barcode)
         } ?: return null
 
@@ -228,7 +235,7 @@ class AppleMusicService(
         limit: Int,
         priority: HttpClientPriority
     ): List<IMetadataService.Artist> {
-        val body = ApiClient.instance.safeQueuedGet<String>("https://itunes.apple.com/search", priority) {
+        val body = ApiClient.queueInstance.safeQueuedGet<String>("https://itunes.apple.com/search", priority) {
             parameter("term", query)
             parameter("entity", "musicArtist")
             parameter("limit", limit)
@@ -252,7 +259,7 @@ class AppleMusicService(
         includeTracks: Boolean,
         priority: HttpClientPriority
     ): List<IMetadataService.Album> {
-        val body = ApiClient.instance.safeQueuedGet<String>("https://itunes.apple.com/search", priority) {
+        val body = ApiClient.queueInstance.safeQueuedGet<String>("https://itunes.apple.com/search", priority) {
             parameter("term", query)
             parameter("entity", if (includeTracks) "album,song" else "album")
             parameter("limit", limit)
@@ -305,7 +312,7 @@ class AppleMusicService(
     )
 
     private suspend fun lookup(id: String, entity: String, priority: HttpClientPriority): List<ITunesAlbum> {
-        val body = ApiClient.instance.safeQueuedGet<String>("https://itunes.apple.com/lookup", priority) {
+        val body = ApiClient.queueInstance.safeQueuedGet<String>("https://itunes.apple.com/lookup", priority) {
             parameter("id", id)
             parameter("entity", entity)
             parameter("limit", 200)
@@ -330,6 +337,12 @@ class AppleMusicService(
         private const val CATALOG_ID_CHUNK = 100
 
         private const val CATALOG_MAX_PAGES = 20
+
+        val CATALOG_RETRY_POLICY = RetryPolicy(
+            maxAttempts = 1,
+            isSuccess = { it == HttpStatusCode.OK },
+            onError = RetryOnError.GIVE_UP,
+        )
 
         /** Rewrite a catalog artwork template or iTunes thumbnail URL to request the native-max image. */
         internal fun maxArtworkUrl(templateOrThumb: String): String =
@@ -357,20 +370,19 @@ class AppleMusicService(
     ): JsonObject? {
         val token = getAppleMusicToken() ?: return null
         val url = if (pathOrUrl.startsWith("http")) pathOrUrl else "https://api.music.apple.com$pathOrUrl"
-        val response = try {
-            ApiClient.queueInstance.enqueue(url, priority) {
-                header(HttpHeaders.Authorization, "Bearer $token")
-                block()
-            }
-        } catch (e: Exception) {
-            logger.error("Failed to call Apple Music Catalog API: $url", e)
-            return null
-        }
-        if (response.status == HttpStatusCode.OK) {
-            return ApplicationScope.json.parseToJsonElement(response.bodyAsText()).jsonObject
-        }
-        logger.warn("Apple Music Catalog API failed with status ${response.status}")
-        return null
+        val response = retryingGet(
+            policy = CATALOG_RETRY_POLICY,
+            label = "Apple Music Catalog API ($url)",
+            logger = logger,
+            request = {
+                ApiClient.queueInstance.enqueue(url, priority) {
+                    header(HttpHeaders.Authorization, "Bearer $token")
+                    block()
+                }
+            },
+            onGiveUp = { rejected, _ -> logger.warn("Apple Music Catalog API failed with status ${rejected.status}") },
+        ) { it } ?: return null
+        return ApplicationScope.json.parseToJsonElement(response.bodyAsText()).jsonObject
     }
 
     private fun catalogArtwork(attributes: JsonObject?): IMetadataService.Image? {

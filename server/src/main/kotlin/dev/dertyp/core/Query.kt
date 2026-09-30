@@ -1,27 +1,17 @@
 package dev.dertyp.core
 
 import dev.dertyp.db.*
-import dev.dertyp.dbQuery
+import dev.dertyp.core.db.Dialect
+import dev.dertyp.core.db.dbQuery
 import dev.dertyp.services.RedisSearchService
 import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.core.Function
 import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import org.jetbrains.exposed.v1.core.dao.id.IdTable
-import org.jetbrains.exposed.v1.core.vendors.PostgreSQLDialect
-import org.jetbrains.exposed.v1.core.vendors.currentDialect
 import org.jetbrains.exposed.v1.jdbc.Query
-import org.koin.core.context.GlobalContext
 import java.util.UUID
 
-object SearchContext {
-    private val total = ThreadLocal<Long?>()
-
-    var redisTotal: Long?
-        get() = total.get()
-        set(value) = total.set(value)
-
-    fun clear() = total.remove()
-}
+data class RankedSearch(val query: Query, val redisTotal: Long? = null)
 
 val mbArtistSearchTable = MBArtistTable.alias("mbArtistSearch")
 val mbArtistAliasSearchTable = MBArtistAliasTable.alias("mbArtistAliasSearch")
@@ -56,6 +46,13 @@ fun Query.paging(page: Int, pageSize: Int, offset: Int = 0) = apply {
     limit(pageSize + offset)
 }
 
+fun utf8SortKey(text: Expression<String>): Expression<String> =
+    if (Dialect.current() == Dialect.POSTGRES) {
+        CustomFunction("encode", TextColumnType(), CustomFunction("convert_to", TextColumnType(), text, stringLiteral("UTF8")), stringLiteral("hex"))
+    } else {
+        CustomFunction("hex", TextColumnType(), text)
+    }
+
 fun toTsVector(column: Expression<*>): Function<String> =
     CustomFunction("to_tsvector", VarCharColumnType(), stringLiteral("simple"), column)
 
@@ -87,19 +84,15 @@ class FloatMathOp(val operator: String, val expr1: Expression<*>, val expr2: Exp
 }
 
 fun Query.rankedSearchQuery(
+    redisSearchService: RedisSearchService,
     queryString: String,
     weights: List<Int>,
     columns: Collection<Expression<out String?>>,
     sortFallback: Column<*>? = null,
     searchVectorColumn: Column<*>? = null
-): Query {
-    val redisSearchService = try {
-        GlobalContext.get().get<RedisSearchService>()
-    } catch (_: Exception) {
-        null
-    }
-
-    if (redisSearchService?.isEnabled() == true) {
+): RankedSearch {
+    var redisTotal: Long? = null
+    if (redisSearchService.isEnabled()) {
         val tableName = columns.firstNotNullOfOrNull {
             if (it is Column<*>) {
                 val table = it.table
@@ -120,7 +113,7 @@ fun Query.rankedSearchQuery(
             val result = redisSearchService.search(index, queryString, redisOffset, redisLimit)
             val ids = result.ids
             if (ids.isNotEmpty()) {
-                SearchContext.redisTotal = result.total
+                redisTotal = result.total
                 val idColumn = columns.firstNotNullOfOrNull { expression ->
                     if (expression is Column<*>) {
                         val table = expression.table
@@ -162,13 +155,23 @@ fun Query.rankedSearchQuery(
                         acc.When(entityIdColumn eq eid, intLiteral(idx + 1))
                     }
                     orderBy(orderCase.Else(intLiteral(ids.size)), SortOrder.ASC)
-                    return this
+                    return RankedSearch(this, redisTotal)
                 }
             }
         }
     }
 
-    val normalizedQuery = if (currentDialect is PostgreSQLDialect) {
+    return RankedSearch(databaseRankedSearch(queryString, weights, columns, sortFallback, searchVectorColumn), redisTotal)
+}
+
+private fun Query.databaseRankedSearch(
+    queryString: String,
+    weights: List<Int>,
+    columns: Collection<Expression<out String?>>,
+    sortFallback: Column<*>?,
+    searchVectorColumn: Column<*>?
+): Query {
+    val normalizedQuery = if (Dialect.current() == Dialect.POSTGRES) {
         queryString.replace(Regex("[&|!()\\\\:*'\"]"), " ")
     } else {
         queryString
@@ -180,7 +183,7 @@ fun Query.rankedSearchQuery(
 
     if (tokens.isEmpty()) return this
 
-    if (currentDialect is PostgreSQLDialect) {
+    if (Dialect.current() == Dialect.POSTGRES) {
         val positiveTokens = tokens.filter { !it.startsWith("-") }
         val negativeTokens = tokens.filter { it.startsWith("-") && it.length > 1 }
 
@@ -397,6 +400,44 @@ suspend inline fun <T : Any> Query.fetchBatchedResultsByIdKeyset(
         if (results.isNotEmpty()) {
             body(results)
             lastId = results.last()[idColumn]
+            if (results.size < batchSize) hasMore = false
+        } else {
+            hasMore = false
+        }
+    }
+}
+
+suspend inline fun <A : Any, B : Any> Query.fetchBatchedResultsByKeyset(
+    firstColumn: Column<A>,
+    secondColumn: Column<B>,
+    batchSize: Int,
+    crossinline body: suspend (List<ResultRow>) -> Unit
+) {
+    var last: Pair<A, B>? = null
+    var hasMore = true
+
+    while (hasMore) {
+        val after = last
+        val results = dbQuery {
+            val query = this.copy()
+            if (after != null) {
+                query.adjustWhere {
+                    val firstParam = QueryParameter(after.first, firstColumn.columnType)
+                    val newOp = GreaterOp(firstColumn, firstParam) or
+                            (EqOp(firstColumn, firstParam) and GreaterOp(secondColumn, QueryParameter(after.second, secondColumn.columnType)))
+                    if (this != null) this and newOp
+                    else newOp
+                }
+            }
+            query.orderBy(firstColumn to SortOrder.ASC, secondColumn to SortOrder.ASC)
+            query.limit(batchSize)
+            query.toList()
+        }
+
+        if (results.isNotEmpty()) {
+            body(results)
+            val lastRow = results.last()
+            last = lastRow[firstColumn] to lastRow[secondColumn]
             if (results.size < batchSize) hasMore = false
         } else {
             hasMore = false

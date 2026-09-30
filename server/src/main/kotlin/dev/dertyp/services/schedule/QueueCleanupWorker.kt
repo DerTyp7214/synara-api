@@ -4,7 +4,7 @@ import dev.dertyp.data.TaskKeys
 import dev.dertyp.services.QueueService
 import org.koin.core.component.inject
 
-@WorkerTask(TaskKeys.QUEUE_CLEANUP, "Queue Cleanup")
+@WorkerTask(TaskKeys.QUEUE_CLEANUP, "Queue Cleanup", cron = "30 0 * * *")
 class QueueCleanupWorker : Worker("QueueCleanupWorker") {
     private val queueService by inject<QueueService>()
 

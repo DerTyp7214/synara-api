@@ -3,17 +3,19 @@ package dev.dertyp.services.metadata
 import dev.dertyp.ApiClient
 import dev.dertyp.PlatformUUID
 import dev.dertyp.core.HttpClientPriority
+import dev.dertyp.core.RetryOnError
+import dev.dertyp.core.RetryPolicy
 import dev.dertyp.core.cleanTitle
+import dev.dertyp.core.retryingGet
 import dev.dertyp.data.BaseSong
 import dev.dertyp.db.SongAcoustIdTable
-import dev.dertyp.dbQuery
+import dev.dertyp.core.db.dbQuery
 import dev.dertyp.server.BuildConfig
 import dev.dertyp.services.Service
 import dev.dertyp.toPlatformUUID
 import io.ktor.client.call.body
 import io.ktor.client.request.header
 import io.ktor.client.request.parameter
-import io.ktor.http.isSuccess
 import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.jdbc.selectAll
@@ -69,6 +71,7 @@ class AcoustIdService(
         const val MIN_SCORE = 0.85
         const val DURATION_TOLERANCE_SECONDS = 3.0
         val NEGATIVE_RECHECK = 30.days
+        val RETRY_POLICY = RetryPolicy(maxAttempts = 1, onError = RetryOnError.GIVE_UP)
 
         fun selectRecording(song: BaseSong, results: List<AcoustIdResult>): AcoustIdMatch? {
             val candidates = results
@@ -168,28 +171,26 @@ class AcoustIdService(
             }
             return null
         }
-        return try {
-            val response = ApiClient.queueInstance.enqueue(LOOKUP_URL, priority) {
-                parameter("client", apiKey)
-                parameter("meta", "recordings releasegroups")
-                parameter("duration", fingerprint.duration)
-                parameter("fingerprint", fingerprint.fingerprint)
-                header("User-Agent", "Synara/${BuildConfig.VERSION} ( https://github.com/dertyp7214/synara )")
-            }
-            if (!response.status.isSuccess()) {
-                logger.warn("AcoustID lookup failed with HTTP ${response.status.value}")
-                return null
-            }
-            val body = response.body<AcoustIdLookupResponse>()
-            if (body.status != "ok") {
-                logger.warn("AcoustID lookup returned ${body.status}: ${body.error?.message}")
-                return null
-            }
-            body
-        } catch (e: Exception) {
-            logger.error("AcoustID lookup failed: ${e.message}", e)
-            null
+        val body = retryingGet(
+            policy = RETRY_POLICY,
+            label = "AcoustID lookup",
+            logger = logger,
+            request = {
+                ApiClient.queueInstance.enqueue(LOOKUP_URL, priority) {
+                    parameter("client", apiKey)
+                    parameter("meta", "recordings releasegroups")
+                    parameter("duration", fingerprint.duration)
+                    parameter("fingerprint", fingerprint.fingerprint)
+                    header("User-Agent", "Synara/${BuildConfig.VERSION} ( https://github.com/dertyp7214/synara )")
+                }
+            },
+            onGiveUp = { response, _ -> logger.warn("AcoustID lookup failed with HTTP ${response.status.value}") },
+        ) { it.body<AcoustIdLookupResponse>() } ?: return null
+        if (body.status != "ok") {
+            logger.warn("AcoustID lookup returned ${body.status}: ${body.error?.message}")
+            return null
         }
+        return body
     }
 
     private suspend fun store(songId: PlatformUUID, fingerprint: Fingerprint, match: AcoustIdMatch?, now: Long) = dbQuery {

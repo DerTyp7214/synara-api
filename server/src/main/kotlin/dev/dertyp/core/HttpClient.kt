@@ -26,34 +26,38 @@ enum class HttpClientPriority {
     HIGH, NORMAL, LOW
 }
 
-suspend inline fun <reified T> HttpClient.safeGet(url: String) = try {
+suspend inline fun <reified T> HttpClient.safeGet(url: String): T? = try {
     val response = get(url)
     if (response.status.isSuccess()) response.body<T>() else null
-} catch (_: Throwable) {
+} catch (e: CancellationException) {
+    throw e
+} catch (_: Exception) {
     null
 }
 
 suspend fun HttpClient.safeGetImage(url: String): ByteArray? =
     safeGet<ByteArray>(url)?.takeIf { it.isImage() }
 
-suspend inline fun <reified T> HttpClient.queuedGet(
+suspend inline fun <reified T> HttpClientQueueService.queuedGet(
     urlString: String,
     priority: HttpClientPriority = HttpClientPriority.NORMAL,
     noinline block: suspend HttpRequestBuilder.() -> Unit = {}
-) = ApiClient.queueInstance.enqueue(urlString, priority, block).body<T>()
+): T = enqueue(urlString, priority, block).body<T>()
 
-suspend inline fun <reified T> HttpClient.safeQueuedGet(
+suspend inline fun <reified T> HttpClientQueueService.safeQueuedGet(
     urlString: String,
     priority: HttpClientPriority = HttpClientPriority.NORMAL,
     noinline block: suspend HttpRequestBuilder.() -> Unit = {}
-) = try {
-    val response = ApiClient.queueInstance.enqueue(urlString, priority, block)
+): T? = try {
+    val response = enqueue(urlString, priority, block)
     if (response.status.isSuccess()) response.body<T>() else null
-} catch (_: Throwable) {
+} catch (e: CancellationException) {
+    throw e
+} catch (_: Exception) {
     null
 }
 
-suspend fun HttpClient.safeQueuedGetImage(
+suspend fun HttpClientQueueService.safeQueuedGetImage(
     urlString: String,
     priority: HttpClientPriority = HttpClientPriority.NORMAL,
     block: suspend HttpRequestBuilder.() -> Unit = {}
@@ -74,7 +78,7 @@ class HttpClientQueueService : Service() {
 
     private val hostRateLimits = ConcurrentHashMap<String, RateLimitState>()
 
-    private val stopped = AtomicBoolean(true)
+    private val stopped = AtomicBoolean(false)
 
     private fun updateRateLimit(host: String, response: HttpResponse) {
         val limit = response.headers["X-RateLimit-Limit"]?.toIntOrNull()
@@ -113,20 +117,15 @@ class HttpClientQueueService : Service() {
         }
     }
 
-    init {
-        CoroutineScope(Dispatchers.IO).launch {
-            startService()
-        }
-    }
-
     override suspend fun startService() {
-        if (!stopped.compareAndSet(expectedValue = true, newValue = false)) return
+        stopped.store(false)
         logger.info("Starting service")
     }
 
     override suspend fun stopService() {
         stopped.store(true)
         logger.info("Stopping service")
+        super.stopService()
     }
 
     suspend fun enqueue(
@@ -152,8 +151,8 @@ class HttpClientQueueService : Service() {
             lock.withLock {
                 if (stopped.load()) {
                     val next = queue.poll()
-                    next?.deferred?.completeWith(Result.failure(CancellationException("Service is stopped")))
-                    throw CancellationException("Service is stopped")
+                    next?.deferred?.completeWith(Result.failure(IllegalStateException(STOPPED_MESSAGE)))
+                    throw IllegalStateException(STOPPED_MESSAGE)
                 }
 
                 val next = queue.poll() ?: return@withLock
@@ -200,7 +199,8 @@ class HttpClientQueueService : Service() {
                 }
 
                 try {
-                    var response = ApiClient.instance.get(next.urlString) {
+                    val client = ApiClient.instance
+                    var response = client.get(next.urlString) {
                         next.block(this)
                     }
                     updateRateLimit(host, response)
@@ -210,7 +210,7 @@ class HttpClientQueueService : Service() {
                         val retryAfter = response.headers["Retry-After"]?.toIntOrNull()?.seconds ?: (delayTime + 500.milliseconds)
                         logger.warn("Rate limit exceeded for $host (attempt $attempts), waiting $retryAfter before retry")
                         delay(retryAfter)
-                        response = ApiClient.instance.get(next.urlString) {
+                        response = client.get(next.urlString) {
                             next.block(this)
                         }
                         updateRateLimit(host, response)
@@ -218,6 +218,9 @@ class HttpClientQueueService : Service() {
                     }
 
                     next.deferred.complete(response)
+                } catch (e: CancellationException) {
+                    next.deferred.completeWith(Result.failure(e))
+                    throw e
                 } catch (e: Exception) {
                     logger.error("Error executing queued request for $host", e)
                     next.deferred.completeWith(Result.failure(e))
@@ -225,11 +228,15 @@ class HttpClientQueueService : Service() {
                     hostLastRequest[host] = Clock.System.now()
                 }
             }
-        } catch (e: CancellationException) {
+        } catch (e: Exception) {
             queue.remove(request)
             throw e
         }
 
         return request.deferred.await()
+    }
+
+    companion object {
+        private const val STOPPED_MESSAGE = "HTTP queue stopped"
     }
 }

@@ -5,7 +5,7 @@ import dev.dertyp.TestDatabase
 import dev.dertyp.data.InsertableRadioChannel
 import dev.dertyp.data.RadioChannelItemType
 import dev.dertyp.db.*
-import dev.dertyp.dbQuery
+import dev.dertyp.core.db.dbQuery
 import dev.dertyp.services.metadata.CachedMusicBrainzService
 import dev.dertyp.services.metadata.LinkResolverService
 import dev.dertyp.services.metadata.MusicBrainzCacheService
@@ -160,6 +160,7 @@ class RadioChannelServiceTest : KoinTest {
                 single { mockk<ImageService>(relaxed = true) }
                 single { mockk<LibraryMergeService>(relaxed = true) }
                 single { mockk<LinkResolverService>(relaxed = true) }
+                single { mockk<RedisSearchService>(relaxed = true) }
                 single { storageService }
                 single { SongService() }
                 single { ArtistService() }

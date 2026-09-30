@@ -9,17 +9,23 @@ import dev.dertyp.services.metadata.CachedMusicBrainzService
 import dev.dertyp.services.metadata.LinkResolverService
 import dev.dertyp.services.metadata.MusicBrainzCacheService
 import dev.dertyp.services.metadata.MusicBrainzService
+import dev.dertyp.testing.insertAlbum
+import dev.dertyp.testing.insertArtist
+import dev.dertyp.testing.linkSongArtist
 import io.ktor.server.application.ApplicationEnvironment
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.runBlocking
+import org.jetbrains.exposed.v1.core.SortOrder
 import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.SchemaUtils
+import org.jetbrains.exposed.v1.jdbc.batchInsert
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.insert
+import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assumptions.assumeTrue
@@ -80,15 +86,6 @@ class CollectionServiceTest : KoinTest {
         return uid
     }
 
-    private fun insertAlbum(name: String = "Album"): UUID {
-        val aid = UUID.randomUUID()
-        AlbumTable.insert {
-            it[id] = aid
-            it[AlbumTable.name] = name
-        }
-        return aid
-    }
-
     private fun insertSong(albumId: UUID, fileSize: Long): UUID {
         val sid = UUID.randomUUID()
         SongTable.insert {
@@ -98,22 +95,6 @@ class CollectionServiceTest : KoinTest {
             it[SongTable.fileSize] = fileSize
         }
         return sid
-    }
-
-    private fun insertArtist(name: String = "Artist"): UUID {
-        val aid = UUID.randomUUID()
-        ArtistTable.insert {
-            it[id] = aid
-            it[ArtistTable.name] = name
-        }
-        return aid
-    }
-
-    private fun linkSongArtist(songId: UUID, artistId: UUID) {
-        SongArtistTable.insert {
-            it[SongArtistTable.songId] = songId
-            it[SongArtistTable.artistId] = artistId
-        }
     }
 
     private fun linkAlbumArtist(albumId: UUID, artistId: UUID) {
@@ -462,6 +443,36 @@ class CollectionServiceTest : KoinTest {
         assertEquals(0, service.byId(id)!!.songItemCount)
     }
 
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `songIds over items added at the same time across page breaks returns each once in id order`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val userId = transaction(database) { insertUser() }
+        val collectionId = service.createCollection(userId, InsertableCollection("C"))
+        val expected = transaction(database) {
+            val albumId = insertAlbum()
+            val songIds = (1..2500).map { UUID.randomUUID() }
+            SongTable.batchInsert(songIds) { songId ->
+                this[SongTable.id] = songId
+                this[SongTable.title] = "Song"
+                this[SongTable.albumId] = albumId
+            }
+            CollectionSongTable.batchInsert(songIds) { songId ->
+                this[CollectionSongTable.collectionId] = collectionId
+                this[CollectionSongTable.songId] = songId
+                this[CollectionSongTable.addedAt] = 1000L
+            }
+            CollectionSongTable
+                .select(CollectionSongTable.songId)
+                .where { CollectionSongTable.collectionId eq collectionId }
+                .orderBy(CollectionSongTable.songId, SortOrder.ASC)
+                .map { it[CollectionSongTable.songId].value }
+        }
+
+        assertEquals(2500, expected.distinct().size)
+        assertEquals(expected, service.songIds(collectionId).toList())
+    }
+
     private val searchTables = arrayOf(
         UserTable, ImageTable, ImageMetadataTable, AnimatedImageTable,
         ArtistTable, AlbumTable, SongTable, SongVariantTable, SongArtistTable, SongMusicBrainzTable, SongAudioDataTable,
@@ -489,6 +500,7 @@ class CollectionServiceTest : KoinTest {
                 single { mockk<ImageService>(relaxed = true) }
                 single { mockk<LibraryMergeService>(relaxed = true) }
                 single { mockk<LinkResolverService>(relaxed = true) }
+                single { mockk<RedisSearchService>(relaxed = true) }
                 single { storageService }
                 single { SongService() }
                 single { ArtistService() }

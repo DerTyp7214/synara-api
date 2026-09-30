@@ -1,7 +1,7 @@
 package dev.dertyp.services.ui
 
 import dev.dertyp.db.UserHomeCardTable
-import dev.dertyp.dbQuery
+import dev.dertyp.core.db.dbQuery
 import dev.dertyp.ui.UiContributionInfo
 import dev.dertyp.ui.UiHomeCard
 import dev.dertyp.ui.UiHomeLayout

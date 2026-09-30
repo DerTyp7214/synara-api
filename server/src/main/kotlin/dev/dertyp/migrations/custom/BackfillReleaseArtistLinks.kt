@@ -4,7 +4,7 @@ import dev.dertyp.core.CustomMigration
 import dev.dertyp.core.Migration
 import dev.dertyp.core.logTask
 import dev.dertyp.db.*
-import dev.dertyp.dbQuery
+import dev.dertyp.core.db.dbQuery
 import dev.dertyp.services.release.ReleaseArtistService
 import org.jetbrains.exposed.v1.jdbc.*
 import org.koin.core.component.inject

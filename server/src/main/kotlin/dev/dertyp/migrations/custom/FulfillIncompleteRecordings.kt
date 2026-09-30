@@ -6,9 +6,10 @@ import dev.dertyp.core.Migration
 import dev.dertyp.core.logTask
 import dev.dertyp.db.MBRecordingArtistCreditTable
 import dev.dertyp.db.MBRecordingTable
-import dev.dertyp.dbQuery
+import dev.dertyp.core.db.dbQuery
 import dev.dertyp.services.metadata.MusicBrainzCacheService
 import dev.dertyp.services.metadata.MusicBrainzService
+import kotlinx.coroutines.CancellationException
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.isNull
 import org.jetbrains.exposed.v1.core.leftJoin
@@ -47,6 +48,8 @@ class FulfillIncompleteRecordings : CustomMigration() {
                         musicBrainzCacheService.updateRecordingCache(it)
                         updated++
                     }
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     logger.error("Failed to fulfill recording $id: ${e.message}")
                 }

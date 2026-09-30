@@ -33,7 +33,7 @@ class ScheduledTaskLogServiceTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `startLog should create a running entry`(dialect: DbDialect) {
+    fun `startLog should create a running entry`(dialect: DbDialect) = runBlocking {
         setup(dialect)
         val taskName = "test-task"
         val startTime = System.currentTimeMillis()

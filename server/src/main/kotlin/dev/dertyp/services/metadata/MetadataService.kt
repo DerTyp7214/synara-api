@@ -1,6 +1,9 @@
 package dev.dertyp.services.metadata
 
 import dev.dertyp.ApiClient
+import dev.dertyp.config.ClientCredentials
+import dev.dertyp.config.ProviderCredentialKeys
+import dev.dertyp.config.toClientCredentials
 import dev.dertyp.core.HttpClientPriority
 import dev.dertyp.data.User
 import dev.dertyp.plugins.PluginManager
@@ -31,12 +34,12 @@ abstract class MetadataService(
     metadataType: MetadataType,
     protected val environment: ApplicationEnvironment
 ) : IMetadataService, Service() {
-    protected abstract val clientIdConfigPath: String
-    protected abstract val clientSecretConfigPath: String
+    protected abstract val credentialKeys: ProviderCredentialKeys
     protected abstract val tokenUrl: String
 
-    private val clientId by lazy { environment.config.propertyOrNull(clientIdConfigPath)?.getString() }
-    private val clientSecret by lazy { environment.config.propertyOrNull(clientSecretConfigPath)?.getString() }
+    protected val credentials: ClientCredentials by lazy { environment.config.toClientCredentials(credentialKeys) }
+    private val clientId: String? get() = credentials.clientId
+    private val clientSecret: String? get() = credentials.clientSecret
 
     protected abstract fun HttpRequestBuilder.getAccessTokenHeader(clientId: String, clientSecret: String)
 
@@ -340,13 +343,13 @@ abstract class MetadataService(
     }
 
     open fun supported(): Boolean {
-        if (clientIdConfigPath.isNotEmpty() && environment.config.propertyOrNull(clientIdConfigPath)?.getString().isNullOrBlank()) return false
-        if (clientSecretConfigPath.isNotEmpty() && environment.config.propertyOrNull(clientSecretConfigPath)?.getString().isNullOrBlank()) return false
+        if (credentialKeys.idKey.isNotEmpty() && clientId.isNullOrBlank()) return false
+        if (credentialKeys.secretKey.isNotEmpty() && clientSecret.isNullOrBlank()) return false
         return true
     }
 
     protected open suspend fun getAccessToken(): IMetadataService.AccessTokenResponse {
-        if (clientId == null || clientSecret == null) throw NullPointerException("$providerName credentials are null. ($clientIdConfigPath & $clientSecretConfigPath)")
+        if (clientId == null || clientSecret == null) throw NullPointerException("$providerName credentials are null. (${credentialKeys.idKey} & ${credentialKeys.secretKey})")
 
         if ((accessToken?.second ?: 0) > System.currentTimeMillis()) return accessToken!!.first
 

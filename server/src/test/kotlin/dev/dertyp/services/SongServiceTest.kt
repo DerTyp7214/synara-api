@@ -1,14 +1,16 @@
 package dev.dertyp.services
 
 import dev.dertyp.ApiClient
-import dev.dertyp.AudioUtils
 import dev.dertyp.DbDialect
 import dev.dertyp.StreamInfo
 import dev.dertyp.TestDatabase
 import dev.dertyp.audio.LosslessFormat
+import dev.dertyp.audio.Transcoder
 import dev.dertyp.core.ApplicationScope
 import dev.dertyp.core.ClientInfo
 import dev.dertyp.core.HttpClientQueueService
+import dev.dertyp.core.date
+import dev.dertyp.core.date.getDateFromISO
 import dev.dertyp.data.*
 import dev.dertyp.db.*
 import dev.dertyp.services.import.Type
@@ -33,8 +35,12 @@ import kotlinx.coroutines.flow.toList
 import org.junit.jupiter.api.io.TempDir
 import java.nio.file.Path
 import kotlinx.coroutines.runBlocking
+import org.jetbrains.exposed.v1.core.SortOrder
 import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.inList
+import org.jetbrains.exposed.v1.core.leftJoin
 import org.jetbrains.exposed.v1.core.like
+import org.jetbrains.exposed.v1.core.or
 import org.jetbrains.exposed.v1.jdbc.*
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.jupiter.api.AfterEach
@@ -54,6 +60,7 @@ class SongServiceTest : KoinTest {
     
     private val musicBrainzService = mockk<MusicBrainzService>(relaxed = true)
     private val environment = mockk<ApplicationEnvironment>()
+    private val transcoder = mockk<Transcoder>()
     private val storageService = mockk<StorageService>(relaxed = true)
     private val fingerprintService = mockk<AcoustIdFingerprintService>()
     private val acoustIdCredentials = mockk<AcoustIdCredentialSource>()
@@ -71,6 +78,7 @@ class SongServiceTest : KoinTest {
         startKoin {
             modules(module {
                 single { environment }
+                single { transcoder }
                 single { musicBrainzService }
                 single { MusicBrainzCacheService() }
                 single { CachedMusicBrainzService(get(), get()) }
@@ -82,6 +90,8 @@ class SongServiceTest : KoinTest {
                 single { ArtistService() }
                 single { GenreService() }
                 single { LibraryMergeService() }
+                single { LibraryFileDeleter() }
+                single { mockk<RedisSearchService>(relaxed = true) }
             })
         }
 
@@ -139,7 +149,6 @@ class SongServiceTest : KoinTest {
     fun tearDown() {
         stopKoin()
         TestDatabase.cleanUp()
-        unmockkObject(AudioUtils)
         acoustIdQueue?.let {
             runBlocking { it.stopService() }
             unmockkObject(ApiClient)
@@ -220,8 +229,7 @@ class SongServiceTest : KoinTest {
         val songId = insertSongWithPath(wav.absolutePath)
         val song = songService.byId(songId)!!
 
-        mockkObject(AudioUtils)
-        coEvery { AudioUtils.losslessFlacFallback(any(), wav) } returns
+        coEvery { transcoder.losslessFlacFallback(any(), wav) } returns
             StreamInfo(flacFallback, LosslessFormat.FLAC.contentType, flacFallback.length(), flacFallback.name)
 
         val modern = songService.resolveRawStream(song, ClientInfo(ApiVersion.CURRENT))!!
@@ -251,12 +259,10 @@ class SongServiceTest : KoinTest {
         val songId = insertSongWithPath(flac.absolutePath)
         val song = songService.byId(songId)!!
 
-        mockkObject(AudioUtils)
-
         val legacy = songService.resolveRawStream(song, ClientInfo.LEGACY)!!
         assertEquals(flac, legacy.file)
         assertEquals(LosslessFormat.FLAC.contentType, legacy.contentType)
-        coVerify(exactly = 0) { AudioUtils.losslessFlacFallback(any(), any()) }
+        coVerify(exactly = 0) { transcoder.losslessFlacFallback(any(), any()) }
 
         assertEquals("flac", transaction(database) { SongTable.select(SongTable.format).where { SongTable.id eq songId }.single()[SongTable.format] })
     }
@@ -976,6 +982,60 @@ class SongServiceTest : KoinTest {
         
         val song1 = rpcService.rankedSearch(0, 10, "Song 1", explicit = false, liked = false).data[0]
         assertEquals(320000L, song1.audio?.bitRate)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `createBatch orders artists by the musicbrainz credit of the imported recording and release`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val mainId = UUID.randomUUID()
+        val guestId = UUID.randomUUID()
+        val mainMbId = UUID.randomUUID()
+        val guestMbId = UUID.randomUUID()
+        val recordingId = UUID.randomUUID()
+        val releaseId = UUID.randomUUID()
+
+        transaction(database) {
+            ArtistTable.insert { it[id] = mainId; it[name] = "Main" }
+            ArtistTable.insert { it[id] = guestId; it[name] = "Guest" }
+            ArtistTable.insert { it[id] = UUID.fromString("ffffffff-0000-0000-0000-000000000001"); it[name] = "Late" }
+            ArtistTable.insert { it[id] = UUID.fromString("00000000-0000-0000-0000-000000000001"); it[name] = "Early" }
+            MBArtistTable.insert { it[id] = mainMbId; it[name] = "Main"; it[sortName] = "Main" }
+            MBArtistTable.insert { it[id] = guestMbId; it[name] = "Guest"; it[sortName] = "Guest" }
+            ArtistMusicBrainzTable.insert { it[artistId] = mainId; it[musicBrainzId] = mainMbId }
+            ArtistMusicBrainzTable.insert { it[artistId] = guestId; it[musicBrainzId] = guestMbId }
+        }
+
+        val credits = listOf(
+            MusicBrainzArtistCredit(name = "Main", joinphrase = " feat. ", artist = MusicBrainzArtist(id = mainMbId, name = "Main", sortName = "Main")),
+            MusicBrainzArtistCredit(name = "Guest", joinphrase = "", artist = MusicBrainzArtist(id = guestMbId, name = "Guest", sortName = "Guest")),
+        )
+        coEvery { musicBrainzService.fetchRecordingById(recordingId, any()) } returns
+            MusicBrainzRecording(id = recordingId, title = "Duet", artistCredit = credits)
+        coEvery { musicBrainzService.fetchReleaseById(releaseId, any()) } returns
+            MusicBrainzRelease(id = releaseId, title = "Duets", artistCredit = credits)
+
+        val tagArtists = listOf("Extra", "Guest", "Late", "Main", "Early")
+        val album = InsertableAlbum("Duets", tagArtists, musicBrainzId = releaseId)
+        val result = songService.createBatch(
+            listOf(
+                InsertableSong(
+                    title = "Duet",
+                    artists = tagArtists,
+                    album = album,
+                    duration = 100,
+                    explicit = false,
+                    path = "/path/duet",
+                    musicBrainzId = recordingId,
+                )
+            )
+        )
+
+        val song = songService.byId(result.keys.single())!!
+        assertEquals(listOf("Main", "Guest", "Extra", "Late", "Early"), song.artists.map { it.name })
+        assertEquals(listOf(" feat. ", "", null, null, null), song.artists.map { it.joinPhrase })
+        assertEquals(listOf("Main", "Guest", "Extra", "Late", "Early"), song.album!!.artists.map { it.name })
+        assertEquals(listOf(" feat. ", "", null, null, null), song.album!!.artists.map { it.joinPhrase })
     }
 
     @ParameterizedTest
@@ -2106,6 +2166,117 @@ class SongServiceTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
+    fun `byOriginalUrls picks the exact url match first, then the oldest song, then the lowest id`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val albumId = UUID.randomUUID()
+        val exactNewer = UUID.fromString("00000000-0000-0000-0000-00000000000a")
+        val providerOlder = UUID.fromString("00000000-0000-0000-0000-000000000001")
+        val sameUrlNewer = UUID.fromString("00000000-0000-0000-0000-000000000002")
+        val sameUrlOlder = UUID.fromString("00000000-0000-0000-0000-00000000000b")
+        val tieHigh = UUID.fromString("00000000-0000-0000-0000-00000000000f")
+        val tieLow = UUID.fromString("00000000-0000-0000-0000-00000000000c")
+
+        val exactUrl = "https://example.com/track/exact"
+        val sharedUrl = "https://example.com/track/shared"
+        val providerUrl = "https://example.com/track/provider"
+
+        transaction(database) {
+            AlbumTable.insert {
+                it[id] = albumId
+                it[name] = "Album"
+            }
+            fun song(songId: UUID, songTitle: String, url: String, insertedAt: Long) = SongTable.insert {
+                it[id] = songId
+                it[title] = songTitle
+                it[SongTable.albumId] = albumId
+                it[originalUrl] = url
+                it[inserted] = insertedAt
+            }
+            song(exactNewer, "Exact newer", exactUrl, 2000)
+            song(providerOlder, "Provider older", "", 1000)
+            song(sameUrlNewer, "Same url newer", sharedUrl, 2000)
+            song(sameUrlOlder, "Same url older", sharedUrl, 1000)
+            song(tieHigh, "Tie high", "", 1000)
+            song(tieLow, "Tie low", "", 1000)
+            SongProviderTable.insert {
+                it[SongProviderTable.songId] = providerOlder
+                it[provider] = "example"
+                it[externalId] = "exact"
+                it[type] = Type.SONG.value
+                it[rawUrl] = exactUrl
+            }
+            listOf(tieHigh, tieLow).forEach { songId ->
+                SongProviderTable.insert {
+                    it[SongProviderTable.songId] = songId
+                    it[provider] = "example"
+                    it[externalId] = songId.toString()
+                    it[type] = Type.SONG.value
+                    it[rawUrl] = providerUrl
+                }
+            }
+        }
+
+        val result = rpcService.byOriginalUrls(listOf(exactUrl, sharedUrl, providerUrl))
+
+        assertEquals(exactNewer, result[exactUrl]?.id)
+        assertEquals(sameUrlOlder, result[sharedUrl]?.id)
+        assertEquals(tieLow, result[providerUrl]?.id)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `byOriginalUrls resolves more urls than one lookup chunk the same as a small list`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val albumId = UUID.randomUUID()
+        val older = UUID.fromString("00000000-0000-0000-0000-000000000005")
+        val newer = UUID.fromString("00000000-0000-0000-0000-000000000004")
+        val providerSong = UUID.randomUUID()
+        val lateSong = UUID.randomUUID()
+
+        val sharedUrl = "https://example.com/track/shared"
+        val providerUrl = "https://example.com/track/provider"
+        val lateUrl = "https://example.com/track/late"
+        val fillers = (0 until 6000).map { "https://example.com/missing/$it" }
+
+        transaction(database) {
+            AlbumTable.insert {
+                it[id] = albumId
+                it[name] = "Album"
+            }
+            fun song(songId: UUID, songTitle: String, url: String, insertedAt: Long) = SongTable.insert {
+                it[id] = songId
+                it[title] = songTitle
+                it[SongTable.albumId] = albumId
+                it[originalUrl] = url
+                it[inserted] = insertedAt
+            }
+            song(older, "Older", sharedUrl, 1000)
+            song(newer, "Newer", sharedUrl, 2000)
+            song(providerSong, "Provider", "", 1000)
+            song(lateSong, "Late", lateUrl, 1000)
+            SongProviderTable.insert {
+                it[SongProviderTable.songId] = providerSong
+                it[provider] = "example"
+                it[externalId] = "provider"
+                it[type] = Type.SONG.value
+                it[rawUrl] = providerUrl
+            }
+        }
+
+        val smallUrls = listOf(sharedUrl, providerUrl, lateUrl)
+        val small = rpcService.byOriginalUrls(smallUrls)
+        val large = rpcService.byOriginalUrls(listOf(sharedUrl) + fillers.take(5500) + providerUrl + fillers.drop(5500) + lateUrl)
+
+        assertEquals(6003, large.size)
+        assertEquals(older, small[sharedUrl]?.id)
+        assertEquals(providerSong, small[providerUrl]?.id)
+        assertEquals(lateSong, small[lateUrl]?.id)
+        assertEquals(small.mapValues { it.value?.id }, smallUrls.associateWith { large[it]?.id })
+        assertTrue(fillers.all { it in large && large[it] == null })
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
     fun `createBatch should populate SongProviderTable`(dialect: DbDialect) {
         runBlocking {
             setup(dialect)
@@ -2356,5 +2527,326 @@ class SongServiceTest : KoinTest {
         val request = acoustIdRequests.single()
         assertEquals("AQADcached", request.parameters["fingerprint"])
         assertEquals("199", request.parameters["duration"])
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `createBatch links songs whose albums differ only in cover hash to one album`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val base = InsertableAlbum("Cover Album", listOf("Cover Artist"), songCount = 2)
+        val songs = listOf(
+            InsertableSong(
+                title = "Cover Song 1",
+                artists = listOf("Cover Artist"),
+                album = base.copy(coverHash = "cover-hash-1"),
+                duration = 100,
+                explicit = false,
+                path = "/path/cover/1",
+                trackNumber = 1,
+            ),
+            InsertableSong(
+                title = "Cover Song 2",
+                artists = listOf("Cover Artist"),
+                album = base.copy(coverHash = "cover-hash-2"),
+                duration = 200,
+                explicit = false,
+                path = "/path/cover/2",
+                trackNumber = 2,
+            ),
+        )
+
+        val created = songService.createBatch(songs)
+
+        assertEquals(setOf("Cover Song 1", "Cover Song 2"), created.values.map { it.title }.toSet())
+        val albumIds = transaction(database) {
+            SongTable.selectAll().map { it[SongTable.albumId].value }.toSet()
+        }
+        assertEquals(1, albumIds.size)
+        assertEquals(1L, transaction(database) { AlbumTable.selectAll().count() })
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `createBatch links songs whose albums differ only in barcode to one album`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val base = InsertableAlbum("Barcode Album", listOf("Barcode Artist"), songCount = 2)
+        val songs = listOf(
+            InsertableSong(
+                title = "Barcode Song 1",
+                artists = listOf("Barcode Artist"),
+                album = base,
+                duration = 100,
+                explicit = false,
+                path = "/path/barcode/1",
+                trackNumber = 1,
+            ),
+            InsertableSong(
+                title = "Barcode Song 2",
+                artists = listOf("Barcode Artist"),
+                album = base.copy(barcode = "123456789012"),
+                duration = 200,
+                explicit = false,
+                path = "/path/barcode/2",
+                trackNumber = 2,
+            ),
+        )
+
+        val created = songService.createBatch(songs)
+
+        assertEquals(setOf("Barcode Song 1", "Barcode Song 2"), created.values.map { it.title }.toSet())
+        val albumIds = transaction(database) {
+            SongTable.selectAll().map { it[SongTable.albumId].value }.toSet()
+        }
+        assertEquals(1, albumIds.size)
+        assertEquals(1L, transaction(database) { AlbumTable.selectAll().count() })
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `mapUserSong maps every song and user field like the full row mapping`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val songId = UUID.randomUUID()
+        val albumId = UUID.randomUUID()
+        val imageId = UUID.randomUUID()
+        val mbId = UUID.randomUUID()
+
+        transaction(database) {
+            AlbumTable.insert {
+                it[id] = albumId
+                it[name] = "Mapping Album"
+            }
+            ImageTable.insert {
+                it[id] = imageId
+                it[path] = "cover.jpg"
+                it[imageHash] = "hash"
+                it[origin] = "test"
+                it[blurHash] = "song_blurhash"
+            }
+            MBRecordingTable.insert {
+                it[id] = mbId
+                it[title] = "MB Mapping Song"
+            }
+            SongTable.insert {
+                it[id] = songId
+                it[title] = "Mapping Song 🅴"
+                it[titleTags] = encodeTitleTags(listOf(TitleTag(TitleTagKind.REMIX, "Club Mix")))
+                it[SongTable.albumId] = albumId
+                it[duration] = 123456
+                it[explicit] = true
+                it[releaseDate] = "2024-03-01"
+                it[lyrics] = "la la"
+                it[filePath] = "/music/mapping.flac"
+                it[originalUrl] = "https://tidal.com/track/42"
+                it[trackNumber] = 3
+                it[discNumber] = 2
+                it[copyright] = "(c) Test"
+                it[format] = "flac"
+                it[sampleRate] = 96000
+                it[bitsPerSample] = 24
+                it[bitRate] = 2304000
+                it[fileSize] = 55555
+                it[channels] = 2
+                it[isrc] = "USAT20300184"
+                it[cover] = imageId
+                it[audioStartMs] = 120
+            }
+            SongMusicBrainzTable.insert {
+                it[SongMusicBrainzTable.songId] = songId
+                it[musicBrainzId] = mbId
+            }
+            UserSongTable.insert {
+                it[userId] = user.id
+                it[UserSongTable.songId] = songId
+                it[isFavourite] = true
+                it[superLikedAt] = 3000L
+                it[createdAt] = 1000L
+                it[updatedAt] = 2000L
+            }
+        }
+
+        val row = transaction(database) {
+            SongTable
+                .leftJoin(UserSongTable)
+                .leftJoin(SongMusicBrainzTable)
+                .leftJoin(ImageTable, onColumn = { SongTable.cover }, otherColumn = { ImageTable.id })
+                .selectAll()
+                .where { SongTable.id eq songId }
+                .single()
+        }
+        val genres = listOf(Genre(UUID.randomUUID(), "pop"))
+
+        val expected = UserSong(
+            id = songId,
+            title = row[SongTable.title].removeSuffix("🅴").trimEnd(),
+            artists = listOf(),
+            album = null,
+            duration = row[SongTable.duration],
+            explicit = row[SongTable.explicit],
+            releaseDate = getDateFromISO(row[SongTable.releaseDate]),
+            lyrics = row[SongTable.lyrics],
+            path = row[SongTable.filePath],
+            originalUrl = row[SongTable.originalUrl],
+            trackNumber = row[SongTable.trackNumber],
+            discNumber = row[SongTable.discNumber],
+            copyright = row[SongTable.copyright],
+            audio = AudioInfo(
+                codec = row[SongTable.format],
+                sampleRate = row[SongTable.sampleRate],
+                bitsPerSample = row[SongTable.bitsPerSample],
+                bitRate = row[SongTable.bitRate],
+                fileSize = row[SongTable.fileSize],
+                channels = row[SongTable.channels],
+            ),
+            isrc = row[SongTable.isrc],
+            coverId = row[SongTable.cover]?.value,
+            blurHash = row.getOrNull(ImageTable.blurHash),
+            musicBrainzId = row.getOrNull(SongMusicBrainzTable.musicBrainzId)?.value,
+            genres = genres,
+            animatedCoverId = row[SongTable.animatedCover]?.value,
+            animatedCoverImageId = null,
+            animatedCoverBlurHash = null,
+            audioStartMs = row.getOrNull(SongTable.audioStartMs),
+            tags = row.titleTags(),
+            isFavourite = true,
+            userSongCreatedAt = 1000L.date,
+            userSongUpdatedAt = 2000L.date,
+            likeLevel = LikeLevel.SUPER,
+            superLikedAt = 3000L.date,
+        )
+
+        val mapped = SongService.mapUserSong(row, genres)
+
+        assertEquals(expected, mapped)
+        assertEquals("Mapping Song", mapped.title)
+        assertEquals("song_blurhash", mapped.blurHash)
+        assertEquals(mbId, mapped.musicBrainzId)
+        assertEquals(listOf(TitleTag(TitleTagKind.REMIX, "Club Mix")), mapped.tags)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `batched id flows over rows tied across page breaks return every song once in id order`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val artistId = UUID.randomUUID()
+        val albumId = UUID.randomUUID()
+        val expected = transaction(database) {
+            ArtistTable.insert {
+                it[id] = artistId
+                it[name] = "Artist"
+            }
+            AlbumTable.insert {
+                it[id] = albumId
+                it[name] = "Album"
+            }
+            AlbumArtistTable.insert {
+                it[AlbumArtistTable.albumId] = albumId
+                it[AlbumArtistTable.artistId] = artistId
+            }
+            val songIds = (1..2500).map { UUID.randomUUID() }
+            SongTable.batchInsert(songIds) { songId ->
+                this[SongTable.id] = songId
+                this[SongTable.title] = "Song"
+                this[SongTable.albumId] = albumId
+                this[SongTable.inserted] = 1000L
+            }
+            UserSongTable.batchInsert(songIds) { songId ->
+                this[UserSongTable.userId] = user.id
+                this[UserSongTable.songId] = songId
+                this[UserSongTable.isFavourite] = true
+                this[UserSongTable.superLikedAt] = 3000L
+                this[UserSongTable.updatedAt] = 2000L
+            }
+            SongTable.select(SongTable.id).orderBy(SongTable.id, SortOrder.ASC).map { it[SongTable.id].value }
+        }
+
+        assertEquals(2500, expected.distinct().size)
+        assertEquals(expected, songService.songIdsByAlbum(albumId).toList())
+        assertEquals(expected, songService.songIdsByArtist(artistId).toList())
+        assertEquals(expected, songService.songIdsWithoutMusicBrainzId().toList())
+        assertEquals(expected, songService.songIdsForProviderEnrichment().toList())
+        assertEquals(expected, songService.likedSongIds(true, user.id).toList())
+        assertEquals(expected, songService.superLikedSongIds(true, user.id).toList())
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `songIdsByArtist through subqueries matches the id list query`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val artistId = UUID.randomUUID()
+        val otherArtistId = UUID.randomUUID()
+        val unlinkedArtistId = UUID.randomUUID()
+        val artistAlbumId = UUID.randomUUID()
+        val otherAlbumId = UUID.randomUUID()
+
+        transaction(database) {
+            listOf(artistId, otherArtistId, unlinkedArtistId).forEach { id ->
+                ArtistTable.insert {
+                    it[ArtistTable.id] = id
+                    it[name] = "Artist $id"
+                }
+            }
+            listOf(artistAlbumId, otherAlbumId).forEach { id ->
+                AlbumTable.insert {
+                    it[AlbumTable.id] = id
+                    it[name] = "Album $id"
+                }
+            }
+            AlbumArtistTable.insert {
+                it[AlbumArtistTable.albumId] = artistAlbumId
+                it[AlbumArtistTable.artistId] = artistId
+            }
+            AlbumArtistTable.insert {
+                it[AlbumArtistTable.albumId] = otherAlbumId
+                it[AlbumArtistTable.artistId] = otherArtistId
+            }
+            val songs = listOf(
+                Triple(artistAlbumId, "2020-01-01", 1),
+                Triple(artistAlbumId, "2020-01-01", 2),
+                Triple(artistAlbumId, "2020-01-01", 2),
+                Triple(artistAlbumId, null, 3),
+                Triple(otherAlbumId, "2021-05-05", 1),
+                Triple(otherAlbumId, "2021-05-05", 1),
+                Triple(otherAlbumId, "2019-03-03", 4),
+            )
+            songs.forEachIndexed { index, (songAlbumId, songReleaseDate, track) ->
+                val songId = UUID.randomUUID()
+                SongTable.insert {
+                    it[id] = songId
+                    it[title] = "Song $index"
+                    it[albumId] = songAlbumId
+                    it[releaseDate] = songReleaseDate
+                    it[trackNumber] = track
+                }
+                if (index == 1 || index == 4 || index == 6) {
+                    SongArtistTable.insert {
+                        it[SongArtistTable.songId] = songId
+                        it[SongArtistTable.artistId] = artistId
+                    }
+                }
+            }
+        }
+
+        val expected = transaction(database) {
+            val songIds = SongArtistTable
+                .select(SongArtistTable.songId)
+                .where { SongArtistTable.artistId eq artistId }
+                .map { it[SongArtistTable.songId].value }
+            val albumIds = AlbumArtistTable
+                .select(AlbumArtistTable.albumId)
+                .where { AlbumArtistTable.artistId eq artistId }
+                .map { it[AlbumArtistTable.albumId].value }
+            SongTable
+                .select(SongTable.id)
+                .where { (SongTable.id inList songIds) or (SongTable.albumId inList albumIds) }
+                .orderBy(SongTable.releaseDate, SortOrder.DESC)
+                .orderBy(SongTable.trackNumber, SortOrder.ASC)
+                .orderBy(SongTable.id, SortOrder.ASC)
+                .map { it[SongTable.id].value }
+        }
+
+        val result = songService.songIdsByArtist(artistId).toList()
+        assertEquals(6, expected.size)
+        assertEquals(expected, result)
+        assertEquals(emptyList<UUID>(), songService.songIdsByArtist(unlinkedArtistId).toList())
     }
 }

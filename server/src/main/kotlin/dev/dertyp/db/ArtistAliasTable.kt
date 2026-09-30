@@ -6,4 +6,8 @@ import org.jetbrains.exposed.v1.core.dao.id.java.UUIDTable
 object ArtistAliasTable : UUIDTable("artistAlias") {
     val artistId = reference("artistId", ArtistTable.id, onDelete = ReferenceOption.CASCADE)
     val name = text("name")
+
+    init {
+        index(false, artistId)
+    }
 }

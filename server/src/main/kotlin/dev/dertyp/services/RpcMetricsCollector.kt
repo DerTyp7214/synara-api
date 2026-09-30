@@ -3,8 +3,9 @@ package dev.dertyp.services
 import dev.dertyp.db.RpcCallEventTable
 import dev.dertyp.db.RpcCallStatsTable
 import dev.dertyp.db.RpcCallTotalsTable
-import dev.dertyp.dbQuery
+import dev.dertyp.core.db.dbQuery
 import io.ktor.server.config.*
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import org.jetbrains.exposed.v1.core.less
 import org.jetbrains.exposed.v1.core.plus
@@ -142,6 +143,8 @@ class RpcMetricsCollector(private val config: MetricsConfig) : Service() {
             delay(config.flushIntervalSeconds.seconds)
             try {
                 flush()
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 logger.error("RPC metrics flush failed", e)
             }

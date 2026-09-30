@@ -1,15 +1,13 @@
 package dev.dertyp.db.migrations
 
-import dev.dertyp.core.foreignKeyOn
+import dev.dertyp.core.db.Dialect
 import org.flywaydb.core.api.migration.BaseJavaMigration
 import org.flywaydb.core.api.migration.Context
 
 @Suppress("unused", "ClassName", "SqlSourceToSinkFlow")
 class V1_37__AddRecentReleaseProviderTable : BaseJavaMigration() {
     override fun migrate(context: Context) {
-        foreignKeyOn(context.connection)
-
-        val uuidType = if (context.connection.metaData.driverName.contains("sqlite", ignoreCase = true)) {
+        val uuidType = if (Dialect.of(context.connection) == Dialect.SQLITE) {
             "BINARY(16)"
         } else "uuid"
 

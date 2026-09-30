@@ -1,12 +1,13 @@
 package dev.dertyp.db.migrations
 
+import dev.dertyp.core.db.Dialect
 import org.flywaydb.core.api.migration.BaseJavaMigration
 import org.flywaydb.core.api.migration.Context
 
 @Suppress("unused", "ClassName")
 class V1_46__AddFTSIndices : BaseJavaMigration() {
     override fun migrate(context: Context) {
-        val isPostgres = context.connection.metaData.databaseProductName.lowercase().contains("postgresql")
+        val isPostgres = Dialect.of(context.connection) == Dialect.POSTGRES
         if (!isPostgres) return
 
         val statements = listOf(

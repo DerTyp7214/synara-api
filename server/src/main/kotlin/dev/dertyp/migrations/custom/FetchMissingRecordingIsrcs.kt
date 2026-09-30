@@ -8,9 +8,10 @@ import dev.dertyp.db.MBRecordingIsrcTable
 import dev.dertyp.db.MBRecordingTable
 import dev.dertyp.db.SongMusicBrainzTable
 import dev.dertyp.db.SongTable
-import dev.dertyp.dbQuery
+import dev.dertyp.core.db.dbQuery
 import dev.dertyp.services.metadata.MusicBrainzCacheService
 import dev.dertyp.services.metadata.MusicBrainzService
+import kotlinx.coroutines.CancellationException
 import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.jdbc.update
@@ -65,6 +66,8 @@ class FetchMissingRecordingIsrcs : CustomMigration() {
                             recordingsUpdated++
                         }
                     }
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     logger.error("Failed to fetch recordings batch ${batchIndex + 1}: ${e.message}")
                 }

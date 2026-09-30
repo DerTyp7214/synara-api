@@ -1,5 +1,6 @@
 package dev.dertyp.services.cover
 
+import dev.dertyp.core.runCatchingCancellable
 import dev.dertyp.data.CoverGenerationOptions
 import dev.dertyp.data.CoverGenerationParams
 import dev.dertyp.data.CoverInfo
@@ -10,7 +11,7 @@ import dev.dertyp.data.ImageSource
 import dev.dertyp.db.CollectionTable
 import dev.dertyp.db.ImageTable
 import dev.dertyp.db.UserPlaylistTable
-import dev.dertyp.dbQuery
+import dev.dertyp.core.db.dbQuery
 import dev.dertyp.plugins.JobStatus
 import dev.dertyp.services.ImageService
 import dev.dertyp.services.Service
@@ -101,7 +102,7 @@ class CoverGenerationService(
 
         val tiles = ArrayList<BufferedImage>()
         for (imageId in context.coverImageIds.take(CoverSourceCollector.MAX_TILES)) {
-            val bytes = runCatching { imageService.getImageData(imageId, TILE_SIZE) }.getOrNull() ?: continue
+            val bytes = runCatchingCancellable { imageService.getImageData(imageId, TILE_SIZE) }.getOrNull() ?: continue
             decode(bytes)?.let(tiles::add)
         }
 
@@ -196,7 +197,7 @@ class CoverGenerationService(
             targets.forEachIndexed { index, target ->
                 if (!isActive()) return@enqueue
                 progress(index.toDouble() / targets.size, "${index + 1}/${targets.size}")
-                runCatching { apply(target, params.copy(allowNsfw = params.allowNsfw)) }
+                runCatchingCancellable { apply(target, params.copy(allowNsfw = params.allowNsfw)) }
                     .onFailure { log("Failed ${target.type.name.lowercase()} ${target.id}: ${it.message}") }
             }
             progress(1.0, "done")
@@ -217,7 +218,7 @@ class CoverGenerationService(
     private suspend fun recover(origin: String): ByteArray? {
         val target = parseOrigin(origin) ?: return null
         val row = row(target) ?: return null
-        return runCatching {
+        return runCatchingCancellable {
             render(target, CoverGenerationParams(style = row.coverStyle ?: CoverStyle.AUTO, seed = row.coverSeed)).bytes
         }.onFailure { logger.warn("Could not regenerate cover for $origin: ${it.message}") }.getOrNull()
     }

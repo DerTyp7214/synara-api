@@ -3,7 +3,7 @@ package dev.dertyp.services.subsonic
 import dev.dertyp.data.SubsonicCredentialInfo
 import dev.dertyp.data.User
 import dev.dertyp.db.SubsonicCredentialTable
-import dev.dertyp.dbQuery
+import dev.dertyp.core.db.dbQuery
 import dev.dertyp.services.Service
 import dev.dertyp.services.UserService
 import org.jetbrains.exposed.v1.core.eq

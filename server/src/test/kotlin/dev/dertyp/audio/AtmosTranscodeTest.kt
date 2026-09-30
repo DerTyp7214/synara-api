@@ -1,7 +1,7 @@
 package dev.dertyp.audio
 
-import dev.dertyp.AudioUtils
 import dev.dertyp.data.AudioFormat
+import dev.dertyp.services.StorageService
 import io.ktor.server.application.ApplicationEnvironment
 import io.ktor.server.config.MapApplicationConfig
 import io.mockk.every
@@ -10,22 +10,38 @@ import kotlinx.coroutines.runBlocking
 import org.bytedeco.javacv.FFmpegFrameGrabber
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
+import org.koin.core.context.startKoin
+import org.koin.core.context.stopKoin
+import org.koin.dsl.module
 import java.io.File
 import java.nio.file.Files
 
 class AtmosTranscodeTest {
+    private val transcoder = Transcoder(mockk<StorageService>(relaxed = true))
+
+    @AfterEach
+    fun tearDown() {
+        stopKoin()
+    }
+
     @Test
     fun `bitrate channel factor scales with channel pairs`() {
-        assertEquals(1, AudioUtils.bitrateChannelFactor(1))
-        assertEquals(1, AudioUtils.bitrateChannelFactor(2))
-        assertEquals(2, AudioUtils.bitrateChannelFactor(3))
-        assertEquals(3, AudioUtils.bitrateChannelFactor(6))
-        assertEquals(4, AudioUtils.bitrateChannelFactor(8))
+        assertEquals(1, Transcoder.bitrateChannelFactor(1))
+        assertEquals(1, Transcoder.bitrateChannelFactor(2))
+        assertEquals(2, Transcoder.bitrateChannelFactor(3))
+        assertEquals(3, Transcoder.bitrateChannelFactor(6))
+        assertEquals(4, Transcoder.bitrateChannelFactor(8))
     }
 
     @Test
     fun `aac and opus transcodes of a 5_1 source keep six channels`() = runBlocking {
+        startKoin {
+            modules(module {
+                single { transcoder }
+            })
+        }
         val tempDir = Files.createTempDirectory("atmos-transcode-test")
         try {
             val m4a = AtmosFixture.create(tempDir)
@@ -37,8 +53,8 @@ class AtmosTranscodeTest {
                 "audio.transcode" to tempDir.resolve("transcode").toString()
             )
 
-            val aac = AudioUtils.transcodeAudio(environment, flac, 128, audioFormat = AudioFormat.AAC).file
-            val opus = AudioUtils.transcodeAudio(environment, flac, 128, audioFormat = AudioFormat.OPUS).file
+            val aac = transcoder.transcodeAudio(environment, flac, 128, audioFormat = AudioFormat.AAC).file
+            val opus = transcoder.transcodeAudio(environment, flac, 128, audioFormat = AudioFormat.OPUS).file
 
             assertEquals(Probe(6, "aac", 48000), probe(aac))
             assertEquals(Probe(6, "opus", 48000), probe(opus))

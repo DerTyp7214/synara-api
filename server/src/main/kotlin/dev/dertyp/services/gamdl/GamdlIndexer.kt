@@ -4,11 +4,12 @@ import dev.dertyp.core.sha256
 import dev.dertyp.data.InsertableAlbum
 import dev.dertyp.data.InsertableImage
 import dev.dertyp.data.InsertableSong
-import dev.dertyp.getDateFromISO
+import dev.dertyp.core.date.getDateFromISO
 import dev.dertyp.plugins.*
 import dev.dertyp.services.import.ImportBackend
 import dev.dertyp.services.import.Gamdl
 import dev.dertyp.services.metadata.IMetadataService
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -76,6 +77,8 @@ class GamdlIndexer(context: PluginContext) : BaseIndexer(context, IMetadataServi
                 isrcsToResolve.mapNotNull { isrc ->
                     try {
                         context.metadataService.getTrackByIsrc(IMetadataService.MetadataType.musicBrainz, isrc)
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (_: Exception) {
                         null
                     }
@@ -86,6 +89,8 @@ class GamdlIndexer(context: PluginContext) : BaseIndexer(context, IMetadataServi
             val resolvedMbAlbums = if (mbAlbumIds.isNotEmpty()) {
                 try {
                     context.metadataService.getAlbumsByIds(IMetadataService.MetadataType.musicBrainz, mbAlbumIds).associateBy { it.id }
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     context.logger.warn("Failed to fetch MusicBrainz metadata for albums", e)
                     emptyMap()
@@ -141,6 +146,8 @@ class GamdlIndexer(context: PluginContext) : BaseIndexer(context, IMetadataServi
                 if (albumsToUpdate.isNotEmpty()) {
                     try {
                         context.metadataService.getAlbumsByIds(metadataType!!, albumsToUpdate).associateBy { it.id }
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (e: Exception) {
                         context.logger.warn("Failed to fetch album metadata for update", e)
                         emptyMap()
@@ -183,6 +190,8 @@ class GamdlIndexer(context: PluginContext) : BaseIndexer(context, IMetadataServi
             val recording = context.metadataService.getTrackByIsrc(IMetadataService.MetadataType.musicBrainz, isrc)
             val mbId = recording?.id?.let { try { UUID.fromString(it) } catch (_: Exception) { null } }
             if (mbId != null) base.copy(musicBrainzId = mbId) else base
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             context.logger.warn("Failed to resolve MusicBrainz by ISRC for ${audioFile.file.name}", e)
             base

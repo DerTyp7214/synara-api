@@ -4,8 +4,9 @@ import dev.dertyp.core.CustomMigration
 import dev.dertyp.core.Migration
 import dev.dertyp.db.AlbumMusicBrainzTable
 import dev.dertyp.db.AlbumTable
-import dev.dertyp.dbQuery
+import dev.dertyp.core.db.dbQuery
 import dev.dertyp.services.metadata.CachedMusicBrainzService
+import kotlinx.coroutines.CancellationException
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.isNotNull
 import org.jetbrains.exposed.v1.jdbc.select
@@ -41,6 +42,8 @@ class UpdateAlbumSongCounts : CustomMigration() {
                         }
                     }
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 logger.error("Failed to update song count for album $albumId ($mbId)", e)
             }

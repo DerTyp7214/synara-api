@@ -1,14 +1,15 @@
 package dev.dertyp.services.import.youtube
 
 import dev.dertyp.audio.AudioConfig
+import dev.dertyp.config.ServerConfig
 import kotlin.io.path.extension
 import dev.dertyp.ApiClient
 import dev.dertyp.PlatformUUID
 import dev.dertyp.data.MusicBrainzArtistCredit
 import dev.dertyp.data.MusicBrainzRecording
 import dev.dertyp.data.MusicBrainzRelease
-import dev.dertyp.executeCommand
-import dev.dertyp.findInPath
+import dev.dertyp.core.process.executeCommand
+import dev.dertyp.core.process.findInPath
 import dev.dertyp.plugins.IPluginIndexer
 import dev.dertyp.plugins.IServerStorageService
 import dev.dertyp.services.LrcLibService
@@ -83,6 +84,7 @@ class YoutubeMetadataEnrichmentTest : KoinTest {
         startKoin {
             modules(module {
                 single { environment }
+                single { ServerConfig(environment.config) }
                 single { AudioConfig() }
                 single { songService }
                 single { userPlaylistService }
@@ -90,7 +92,7 @@ class YoutubeMetadataEnrichmentTest : KoinTest {
             })
         }
 
-        mockkStatic("dev.dertyp.UtilsKt")
+        mockkStatic("dev.dertyp.core.process.CommandKt")
         every { findInPath("yt-dlp") } returns "/usr/bin/yt-dlp"
 
         mockkObject(ApiClient)

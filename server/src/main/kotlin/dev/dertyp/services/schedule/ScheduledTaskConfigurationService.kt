@@ -2,10 +2,9 @@ package dev.dertyp.services.schedule
 
 import dev.dertyp.core.ApplicationScope
 import dev.dertyp.data.TaskConfiguration
-import dev.dertyp.data.TaskKeys
 import dev.dertyp.data.TriggerDefinition
 import dev.dertyp.db.ScheduledTaskConfigurationTable
-import dev.dertyp.dbQuery
+import dev.dertyp.core.db.dbQuery
 import dev.dertyp.services.IScheduledTaskConfigurationService
 import dev.dertyp.services.Service
 import kotlinx.coroutines.flow.Flow
@@ -37,47 +36,8 @@ class RpcScheduledTaskConfigurationService(
 
 class ScheduledTaskConfigurationService : Service() {
     companion object {
-        val DEFAULTS = listOf(
-            TaskConfiguration(TaskKeys.REVERSE_PROXY_HEALTH_CHECK, "Reverse Proxy Health Check", true, TriggerDefinition.Cron("0 * * * *")),
-            TaskConfiguration(TaskKeys.DATABASE_BACKUP, "Database Backup", true, TriggerDefinition.Cron("0 2 * * *")),
-            TaskConfiguration(TaskKeys.USER_PLAYLIST_BACKUP, "User Playlist Backup", true, TriggerDefinition.Cron("0 2 * * *")),
-            TaskConfiguration(TaskKeys.SESSION_CLEANUP, "Session Cleanup", true, TriggerDefinition.Cron("0 0 * * *")),
-            TaskConfiguration(TaskKeys.QUEUE_CLEANUP, "Queue Cleanup", true, TriggerDefinition.Cron("30 0 * * *")),
-            TaskConfiguration(TaskKeys.CLIENT_SETTINGS_CLEANUP, "Client Settings Cleanup", true, TriggerDefinition.Cron("45 0 * * *")),
-            TaskConfiguration(TaskKeys.MERGE_LIBRARY_DUPLICATES, "Merge Library Duplicates", true, TriggerDefinition.Cron("0 1 * * *")),
-            TaskConfiguration(TaskKeys.AUDIO_ANALYSIS, "Audio Analysis", true, TriggerDefinition.Cron("0 3 * * *")),
-            TaskConfiguration(TaskKeys.FLAC_ANALYSIS, "FLAC Analysis", true, TriggerDefinition.Cron("0 5 * * *")),
-            TaskConfiguration(TaskKeys.PCM_ANALYSIS, "WAV/AIFF Analysis", true, TriggerDefinition.Cron("20 5 * * *")),
-            TaskConfiguration(TaskKeys.AUDIO_START_ANALYSIS, "Audio Start Analysis", true, TriggerDefinition.Cron("40 5 * * *")),
-            TaskConfiguration(TaskKeys.MUSICBRAINZ_WORKER, "MusicBrainz Worker", true, TriggerDefinition.Cron("0 0 * * *")),
-            TaskConfiguration(TaskKeys.MUSICBRAINZ_CACHE_WORKER, "MusicBrainz Cache Worker", true, TriggerDefinition.AfterTask(TaskKeys.MUSICBRAINZ_WORKER)),
-            TaskConfiguration(TaskKeys.GENRE_METADATA_WORKER, "Genre Metadata Worker", true, TriggerDefinition.AfterTask(TaskKeys.MUSICBRAINZ_WORKER)),
-            TaskConfiguration(TaskKeys.ARTIST_IMAGE_WORKER, "Artist Image Worker", true, TriggerDefinition.AfterTask(TaskKeys.GENRE_METADATA_WORKER)),
-            TaskConfiguration(TaskKeys.FETCH_METADATA_THEAUDIODB, "Fetch Metadata (TheAudioDB)", true, TriggerDefinition.AfterTask(TaskKeys.ARTIST_IMAGE_WORKER)),
-            TaskConfiguration(TaskKeys.AUTO_TRANSCODING, "Auto Transcoding", true, TriggerDefinition.Cron("0 3 * * *")),
-            TaskConfiguration(TaskKeys.LYRICS_SYNC_WORKER, "Lyrics Sync Worker", false, TriggerDefinition.Cron("0 4 * * *")),
-            TaskConfiguration(TaskKeys.LRCLIB_WORKER, "LrcLib Worker", true, TriggerDefinition.Cron("30 4 * * *")),
-            TaskConfiguration(TaskKeys.RECENT_RELEASE_WORKER, "Recent Release Worker", true, TriggerDefinition.Cron("0 1 * * *")),
-            TaskConfiguration(TaskKeys.APPLE_MUSIC_RELEASE_WORKER, "Apple Music Release Worker", true, TriggerDefinition.Cron("0 6 * * *")),
-            TaskConfiguration(TaskKeys.PROVIDER_ENRICHMENT_WORKER, "Provider Enrichment Worker", true, TriggerDefinition.AfterTask(TaskKeys.RECENT_RELEASE_WORKER)),
-            TaskConfiguration(TaskKeys.ISRC_PROVIDER_ENRICHMENT_WORKER, "ISRC/Barcode Provider Enrichment Worker", true, TriggerDefinition.AfterTask(TaskKeys.MUSICBRAINZ_CACHE_WORKER)),
-            TaskConfiguration(TaskKeys.DELETE_EMPTY_ALBUMS, "Delete Empty Albums", true, TriggerDefinition.Cron("0 0 * * *")),
-            TaskConfiguration(TaskKeys.DELETE_UNREFERENCED_ARTISTS, "Delete Unreferenced Artists", true, TriggerDefinition.AfterTask(TaskKeys.DELETE_EMPTY_ALBUMS)),
-            TaskConfiguration(TaskKeys.DELETE_UNREFERENCED_IMAGES, "Delete Unreferenced Images", true, TriggerDefinition.AfterTask(TaskKeys.DELETE_UNREFERENCED_ARTISTS)),
-            TaskConfiguration(TaskKeys.IMAGE_ANALYSIS, "Image Analysis", true, TriggerDefinition.AfterTask(TaskKeys.DELETE_UNREFERENCED_IMAGES)),
-            TaskConfiguration(TaskKeys.LOG_CLEANUP_WORKER, "Log Cleanup Worker", true, TriggerDefinition.Cron("0 0 * * *")),
-            TaskConfiguration(TaskKeys.SEARCH_INDEX_REBUILD_WORKER, "Search Index Rebuild Worker", true, TriggerDefinition.Manual),
-            TaskConfiguration(TaskKeys.LISTENBRAINZ_SYNC, "ListenBrainz Sync", true, TriggerDefinition.Cron("0 * * * *")),
-            TaskConfiguration(TaskKeys.LISTEN_BACKUP, "Listen Backup", true, TriggerDefinition.Cron("30 * * * *")),
-            TaskConfiguration(TaskKeys.AUDIO_EMBEDDING, "Audio Embedding", true, TriggerDefinition.AfterTask(TaskKeys.AUDIO_ANALYSIS)),
-            TaskConfiguration(TaskKeys.AUDIO_TIMELINE_BACKFILL, "Audio Timeline Backfill", true, TriggerDefinition.AfterTask(TaskKeys.AUDIO_ANALYSIS)),
-            TaskConfiguration(TaskKeys.COVER_BACKFILL, "Cover Backfill", true, TriggerDefinition.AfterTask(TaskKeys.IMAGE_ANALYSIS)),
-            TaskConfiguration(TaskKeys.RECOMMENDATION_TRAINING, "Recommendation Model Training", true, TriggerDefinition.Cron("0 7 * * *")),
-            TaskConfiguration(TaskKeys.RADIO_SESSION_CLEANUP, "Radio Session Cleanup", true, TriggerDefinition.Cron("0 * * * *")),
-            TaskConfiguration(TaskKeys.STORAGE_SIZE_REFRESH, "Storage Size Refresh", true, TriggerDefinition.Cron("0 */6 * * *")),
-            TaskConfiguration(TaskKeys.PODCAST_REFRESH, "Podcast Refresh", true, TriggerDefinition.Cron("15 * * * *")),
-            TaskConfiguration(TaskKeys.PODCAST_IMPORT, "Podcast Import", true, TriggerDefinition.Cron("*/15 * * * *"))
-        )
+        val DEFAULTS: List<TaskConfiguration>
+            get() = WorkerTasks.defaults
     }
 
     private val _configurationsFlow = MutableSharedFlow<List<TaskConfiguration>>(replay = 1)

@@ -4,7 +4,7 @@ import dev.dertyp.data.TaskKeys
 import dev.dertyp.services.BackupService
 import org.koin.core.component.inject
 
-@WorkerTask(TaskKeys.DATABASE_BACKUP, "Database Backup")
+@WorkerTask(TaskKeys.DATABASE_BACKUP, "Database Backup", cron = "0 2 * * *")
 class DatabaseBackupWorker : Worker("DatabaseBackupWorker") {
     private val backupService by inject<BackupService>()
 

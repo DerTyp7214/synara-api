@@ -1,22 +1,19 @@
 package dev.dertyp.migrations.custom
 
-import dev.dertyp.AudioUtils
 import dev.dertyp.DbDialect
 import dev.dertyp.StreamInfo
 import dev.dertyp.TestDatabase
+import dev.dertyp.audio.Transcoder
 import dev.dertyp.data.AudioFormat
 import dev.dertyp.db.*
-import dev.dertyp.services.ScheduledTaskLogService
+import dev.dertyp.testing.relaxedTaskLogService
 import io.ktor.http.ContentType
 import io.ktor.server.application.ApplicationEnvironment
 import io.mockk.coEvery
 import io.mockk.coVerify
-import io.mockk.every
+import io.mockk.coEvery
 import io.mockk.mockk
-import io.mockk.mockkObject
-import io.mockk.unmockkObject
 import kotlinx.coroutines.runBlocking
-import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.*
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
@@ -37,15 +34,16 @@ import java.util.UUID
 class RetranscodeMultichannelSongsTest : KoinTest {
     private lateinit var database: Database
     private lateinit var tempDir: File
+    private val transcoder = mockk<Transcoder>()
 
     fun setup(dialect: DbDialect) {
-        val logService = mockk<ScheduledTaskLogService>(relaxed = true)
-        every { logService.startLog(any(), any()) } returns EntityID(UUID.randomUUID(), ScheduledTaskLogTable)
+        val logService = relaxedTaskLogService()
 
         startKoin {
             modules(module {
                 single { logService }
                 single { mockk<ApplicationEnvironment>(relaxed = true) }
+                single { transcoder }
             })
         }
 
@@ -54,12 +52,10 @@ class RetranscodeMultichannelSongsTest : KoinTest {
         transaction(database) {
             SchemaUtils.create(ImageTable, AlbumTable, SongTable, SongVariantTable, FlacInfoTable, PcmInfoTable, TranscodedSongTable, ScheduledTaskLogTable)
         }
-        mockkObject(AudioUtils)
     }
 
     @AfterEach
     fun tearDown() {
-        unmockkObject(AudioUtils)
         stopKoin()
         TestDatabase.cleanUp()
         tempDir.deleteRecursively()
@@ -112,12 +108,12 @@ class RetranscodeMultichannelSongsTest : KoinTest {
         val (unknownId, unknownCached) = insertSong("unknown", null, AudioFormat.OPUS)
 
         val newFile = File(tempDir, "surround.new.m4a").apply { writeText("new transcode") }
-        coEvery { AudioUtils.transcodeAudio(any(), any(), any(), any(), any()) } returns
+        coEvery { transcoder.transcodeAudio(any(), any(), any(), any(), any()) } returns
                 StreamInfo(newFile, ContentType.Audio.MP4, newFile.length(), newFile.name)
 
         RetranscodeMultichannelSongs().migrate()
 
-        coVerify(exactly = 1) { AudioUtils.transcodeAudio(any(), match { it.name == "surround.flac" }, 128, true, AudioFormat.AAC) }
+        coVerify(exactly = 1) { transcoder.transcodeAudio(any(), match { it.name == "surround.flac" }, 128, true, AudioFormat.AAC) }
         assertFalse(surroundCached.exists())
         assertTrue(stereoCached.exists())
         assertTrue(unknownCached.exists())

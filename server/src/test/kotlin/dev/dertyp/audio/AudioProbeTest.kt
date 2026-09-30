@@ -1,13 +1,36 @@
 package dev.dertyp.audio
 
+import dev.dertyp.services.StorageService
+import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.koin.core.context.startKoin
+import org.koin.core.context.stopKoin
+import org.koin.core.module.dsl.singleOf
+import org.koin.dsl.module
 import java.nio.file.Files
 import kotlin.io.path.writeBytes
 
 class AudioProbeTest {
+    @BeforeEach
+    fun setup() {
+        startKoin {
+            modules(module {
+                single { mockk<StorageService>(relaxed = true) }
+                singleOf(::Transcoder)
+            })
+        }
+    }
+
+    @AfterEach
+    fun tearDown() {
+        stopKoin()
+    }
+
     @Test
     fun `probes an eac3 file and its flac conversion`() = runBlocking {
         val tempDir = Files.createTempDirectory("audio-probe-test")

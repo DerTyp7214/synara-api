@@ -3,7 +3,7 @@ package dev.dertyp.ui
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
 import dev.dertyp.db.PluginSettingTable
-import dev.dertyp.dbQuery
+import dev.dertyp.core.db.dbQuery
 import dev.dertyp.services.ui.PluginSettingsService
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.take

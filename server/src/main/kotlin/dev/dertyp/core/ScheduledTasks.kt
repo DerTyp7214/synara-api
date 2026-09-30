@@ -18,14 +18,10 @@ object ScheduledTasksRegistrar : KoinComponent {
         workers.forEach { worker ->
             val taskAnnotation = worker::class.findAnnotation<WorkerTask>() ?: return@forEach
 
-            scheduleService.registerManagedTask(
+            scheduleService.registerManagedWorker(
                 key = taskAnnotation.key,
                 name = taskAnnotation.name,
-                task = {
-                    scheduleService.logTask(taskAnnotation.name) {
-                        worker.run { p, l -> updateProgress(p, l) }
-                    }
-                }
+                worker = worker
             )
         }
     }

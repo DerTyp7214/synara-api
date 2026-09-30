@@ -4,9 +4,8 @@ import dev.dertyp.PlatformUUID
 import dev.dertyp.audio.LosslessFormat
 import dev.dertyp.db.PcmInfoTable
 import dev.dertyp.db.SongTable
-import dev.dertyp.dbQuery
-import dev.dertyp.executeCommand
-import dev.dertyp.findInPath
+import dev.dertyp.core.db.dbQuery
+import dev.dertyp.core.process.ExternalTool
 import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.jdbc.upsert
@@ -17,8 +16,8 @@ import java.nio.ByteOrder
 import java.time.Instant
 
 class PcmAnalysisService : Service() {
-    private val ffprobePath = findInPath("ffprobe")
-    private val ffmpegPath = findInPath("ffmpeg")
+    private val ffprobe = ExternalTool("ffprobe")
+    private val ffmpeg = ExternalTool("ffmpeg")
 
     private val pcmFormats = listOf(LosslessFormat.WAV.extension, LosslessFormat.AIFF.extension)
 
@@ -31,7 +30,7 @@ class PcmAnalysisService : Service() {
     }
 
     suspend fun analyze(songId: PlatformUUID, force: Boolean = false) {
-        if (ffprobePath == null || ffmpegPath == null) {
+        if (!ffprobe.installed || !ffmpeg.installed) {
             logger.error("ffprobe/ffmpeg not found in PATH. PCM analysis skipped.")
             return
         }
@@ -77,17 +76,15 @@ class PcmAnalysisService : Service() {
     }
 
     internal suspend fun parsePcmInfo(file: File, container: LosslessFormat): PcmInfo? {
-        val probe = ffprobePath ?: return null
-        val result = executeCommand(
-            command = listOf(
-                probe, "-v", "error", "-select_streams", "a:0",
+        val result = ffprobe.run(
+            args = listOf(
+                "-v", "error", "-select_streams", "a:0",
                 "-show_entries", "stream=codec_name,sample_rate,channels,bits_per_sample,bits_per_raw_sample,sample_fmt:format=duration",
                 "-of", "default=noprint_wrappers=1", file.absolutePath
             ),
-            aliveCheck = { true },
             logger = logger,
             logCommand = false,
-        )
+        ) ?: return null
         if (result.exitCode != 0) return null
 
         val probeInfo = parseProbeOutput(result.fullOutput) ?: return null
@@ -141,13 +138,11 @@ class PcmAnalysisService : Service() {
     }
 
     private suspend fun computeAudioMd5(file: File): String {
-        val ffmpeg = ffmpegPath ?: return ""
-        val result = executeCommand(
-            command = listOf(ffmpeg, "-v", "error", "-i", file.absolutePath, "-map", "0:a:0", "-f", "md5", "-"),
-            aliveCheck = { true },
+        val result = ffmpeg.run(
+            args = listOf("-v", "error", "-i", file.absolutePath, "-map", "0:a:0", "-f", "md5", "-"),
             logger = logger,
             logCommand = false,
-        )
+        ) ?: return ""
         if (result.exitCode != 0) return ""
         return result.fullOutput.lines()
             .firstOrNull { it.startsWith("MD5=") }

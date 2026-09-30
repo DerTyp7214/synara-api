@@ -1,5 +1,6 @@
 package dev.dertyp.services
 
+import dev.dertyp.config.ServerConfig
 import dev.dertyp.data.User
 import io.ktor.server.application.ApplicationEnvironment
 import io.ktor.server.config.ApplicationConfig
@@ -31,7 +32,7 @@ class JwtServiceTest {
         every { config.property("jwt.realm").getString() } returns "test-realm"
         every { config.property("jwt.secret").getString() } returns "test-secret"
         
-        jwtService = JwtService(environment, userService, refreshTokenService, sessionService)
+        jwtService = JwtService(ServerConfig(environment.config), userService, refreshTokenService, sessionService)
     }
 
     @AfterEach

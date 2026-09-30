@@ -12,25 +12,22 @@ import dev.dertyp.db.PlaylistSongTable
 import dev.dertyp.db.PlaylistTable
 import dev.dertyp.db.SongTable
 import dev.dertyp.db.fullSongTitle
-import dev.dertyp.dbQuery
+import dev.dertyp.core.db.dbQuery
 import dev.dertyp.plugins.PlaylistLibrary
 import dev.dertyp.utils.LogParam
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
-import kotlinx.coroutines.runBlocking
-import org.jetbrains.exposed.v1.core.ResultRow
+import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.core.dao.id.EntityID
-import org.jetbrains.exposed.v1.core.eq
-import org.jetbrains.exposed.v1.core.inList
-import org.jetbrains.exposed.v1.core.leftJoin
 import org.jetbrains.exposed.v1.jdbc.*
 import org.koin.core.component.inject
 import java.util.UUID
 
 class PlaylistService : PlaylistLibrary, IPlaylistService, Service() {
     private val imageService by inject<ImageService>()
+    private val redisSearchService by inject<RedisSearchService>()
 
     companion object {
         fun mapPlaylist(resultRow: ResultRow): Playlist {
@@ -96,11 +93,12 @@ class PlaylistService : PlaylistLibrary, IPlaylistService, Service() {
     override suspend fun rankedSearch(page: Int, pageSize: Int, query: String): PaginatedResponse<Playlist> =
         queryPlaylists(page, pageSize) {
             rankedSearchQuery(
+                redisSearchService,
                 query,
                 listOf(10),
                 listOf(PlaylistTable.name),
                 PlaylistTable.id
-            )
+            ).query
         }
 
     override suspend fun allPlaylists(page: Int, pageSize: Int): PaginatedResponse<Playlist> =
@@ -126,16 +124,21 @@ class PlaylistService : PlaylistLibrary, IPlaylistService, Service() {
     private suspend fun queryPlaylists(page: Int, pageSize: Int, query: Query.() -> Query = { this }) =
         dbQuery {
             val offset = if (pageSize == Int.MAX_VALUE) 0 else 1
-            val mainPlaylistRows = PlaylistTable
+            val mainQuery = PlaylistTable
                 .leftJoin(ImageTable, onColumn = { PlaylistTable.imageId }, otherColumn = { ImageTable.id })
                 .selectAll()
                 .query()
+            val countExpression = PlaylistTable.id.countDistinct()
+            val total = if (pageSize == Int.MAX_VALUE) null else Query(Slice(mainQuery.set.source, listOf(countExpression)), mainQuery.where)
+                .first()[countExpression]
+                .toInt()
+            val mainPlaylistRows = mainQuery
                 .paging(page, pageSize, offset)
                 .toList()
 
             if (mainPlaylistRows.isEmpty()) return@dbQuery PaginatedResponse(
                 data = listOf(),
-                total = 0,
+                total = total ?: 0,
                 page = page,
                 pageSize = pageSize
             )
@@ -158,11 +161,11 @@ class PlaylistService : PlaylistLibrary, IPlaylistService, Service() {
             val data = mapEagerly(mainPlaylistRows, songLinkRows, songDurationsById)
 
             PaginatedResponse(
-                data = data.drop(page * pageSize).take(pageSize),
-                total = data.size,
+                data = data.take(pageSize),
+                total = total ?: data.size,
                 page = page,
                 pageSize = pageSize,
-                hasNextPage = data.drop(page * pageSize).size >= pageSize + offset,
+                hasNextPage = data.size >= pageSize + offset,
             )
         }
 
@@ -305,20 +308,21 @@ class PlaylistService : PlaylistLibrary, IPlaylistService, Service() {
         insertedPlaylistIds
     }
 
-    override suspend fun getOrAddPlaylist(userId: PlatformUUID, customIdentifier: String?, playlist: InsertablePlaylist): UUID = dbQuery {
-        val existingId = PlaylistTable
-            .select(PlaylistTable.id)
-            .where { PlaylistTable.name eq playlist.name }
-            .singleOrNull()?.get(PlaylistTable.id)?.value
+    override suspend fun getOrAddPlaylist(userId: PlatformUUID, customIdentifier: String?, playlist: InsertablePlaylist): UUID {
+        val image = playlist.imageHash?.let { hash -> imageService.byHash(hash)?.id }
+        return dbQuery {
+            val existingId = PlaylistTable
+                .select(PlaylistTable.id)
+                .where { PlaylistTable.name eq playlist.name }
+                .singleOrNull()?.get(PlaylistTable.id)?.value
 
-        if (existingId != null) return@dbQuery existingId
+            if (existingId != null) return@dbQuery existingId
 
-        PlaylistTable.insertAndGetId {
-            it[name] = playlist.name
-            it[imageId] = playlist.imageHash?.let { hash ->
-                runBlocking { imageService.byHash(hash)?.id }
-            }
-        }.value
+            PlaylistTable.insertAndGetId {
+                it[name] = playlist.name
+                it[imageId] = image
+            }.value
+        }
     }
 
     override suspend fun addToPlaylist(id: UUID, songIds: List<Pair<Long, UUID>>): Unit = dbQuery {

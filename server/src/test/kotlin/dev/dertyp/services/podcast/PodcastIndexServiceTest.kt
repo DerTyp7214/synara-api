@@ -18,6 +18,7 @@ import io.mockk.mockk
 import io.mockk.spyk
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.runTest
 import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
@@ -33,7 +34,6 @@ import org.koin.core.context.stopKoin
 import org.koin.dsl.module
 import org.koin.test.KoinTest
 import java.util.concurrent.CopyOnWriteArrayList
-import kotlin.time.Duration.Companion.milliseconds
 
 class PodcastIndexServiceTest : KoinTest {
     private lateinit var database: Database
@@ -92,7 +92,6 @@ class PodcastIndexServiceTest : KoinTest {
         every { pluginManager.getPodcastIndexes() } returns registered
 
         service = PodcastIndexService(pluginManager, podcastService, feedService)
-        service.providerTimeout = 300.milliseconds
     }
 
     @AfterEach
@@ -170,8 +169,8 @@ class PodcastIndexServiceTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `a provider that exceeds the timeout is dropped`(dialect: DbDialect): Unit = runBlocking {
-        val slow = FakeIndex("a", "A", entries = listOf(entry("https://example.com/a.xml")), answerAfterMs = 2000)
+    fun `a provider that exceeds the timeout is dropped`(dialect: DbDialect): Unit = runTest {
+        val slow = FakeIndex("a", "A", entries = listOf(entry("https://example.com/a.xml")), answerAfterMs = 20_000)
         val fast = FakeIndex("b", "B", entries = listOf(entry("https://example.com/b.xml")))
         setup(dialect, listOf(slow, fast))
 

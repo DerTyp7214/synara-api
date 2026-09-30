@@ -10,7 +10,7 @@ import dev.dertyp.db.AudioTimelineStatus
 import dev.dertyp.db.SongAudioTimelineTable
 import dev.dertyp.db.SongTable
 import dev.dertyp.db.SongVariantTable
-import dev.dertyp.dbQuery
+import dev.dertyp.core.db.dbQuery
 import dev.dertyp.services.audio.AudioTimelineCodec
 import dev.dertyp.services.audio.highHz
 import dev.dertyp.services.audio.lowHz

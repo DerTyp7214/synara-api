@@ -1,6 +1,6 @@
 package dev.dertyp.db.migrations
 
-import dev.dertyp.core.foreignKeyOn
+import dev.dertyp.core.db.Dialect
 import dev.dertyp.core.tempConnection
 import dev.dertyp.db.TranscodedSongTable
 import org.flywaydb.core.api.migration.BaseJavaMigration
@@ -10,14 +10,12 @@ import org.jetbrains.exposed.v1.migration.jdbc.MigrationUtils
 @Suppress("unused", "ClassName", "SqlSourceToSinkFlow")
 class V1_44__AddFormatToTranscodedSongs : BaseJavaMigration() {
     override fun migrate(context: Context) {
-        foreignKeyOn(context.connection)
-
         val alterStatements = tempConnection {
             MigrationUtils.statementsRequiredForDatabaseMigration(TranscodedSongTable)
         }
 
         context.connection.createStatement().use { statement ->
-            if (context.connection.metaData.databaseProductName.contains("PostgreSQL", ignoreCase = true)) {
+            if (Dialect.of(context.connection) == Dialect.POSTGRES) {
                 val schema = try { context.connection.schema } catch (e: Exception) { null }
                 val pkInfo = listOf("transcodedSong", "transcodedsong").firstNotNullOfOrNull { tableName ->
                     context.connection.metaData.getPrimaryKeys(null, schema, tableName).use { rs ->

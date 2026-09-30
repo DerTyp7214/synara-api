@@ -5,7 +5,7 @@ import dev.dertyp.data.ListenedAlbum
 import dev.dertyp.data.ListenedArtist
 import dev.dertyp.data.ListenedSong
 import dev.dertyp.db.*
-import dev.dertyp.dbQuery
+import dev.dertyp.core.db.dbQuery
 import dev.dertyp.plugins.HookBus
 import dev.dertyp.plugins.HookEvent
 import kotlinx.coroutines.channels.BufferOverflow
@@ -168,7 +168,7 @@ class ListenService : Service() {
             .join(ArtistMusicBrainzTable, JoinType.LEFT, onColumn = SongArtistTable.artistId, otherColumn = ArtistMusicBrainzTable.artistId)
             .select(ArtistTable.name, ArtistMusicBrainzTable.musicBrainzId)
             .where { SongArtistTable.songId eq songId }
-            .orderBy(SongArtistTable.artistId)
+            .orderBy(SongArtistTable.position to SortOrder.ASC, SongArtistTable.artistId to SortOrder.ASC)
             .toList()
 
         val artistName = artistRows.joinToString(", ") { it[ArtistTable.name] }.ifBlank { null }

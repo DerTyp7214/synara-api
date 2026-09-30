@@ -4,7 +4,7 @@ import dev.dertyp.data.TaskKeys
 import dev.dertyp.services.MetadataFetchingService
 import org.koin.core.component.inject
 
-@WorkerTask(TaskKeys.GENRE_METADATA_WORKER, "Genre Metadata Worker")
+@WorkerTask(TaskKeys.GENRE_METADATA_WORKER, "Genre Metadata Worker", afterTask = TaskKeys.MUSICBRAINZ_WORKER)
 class GenreMetadataWorker : Worker("GenreMetadataWorker") {
     private val metadataFetchingService by inject<MetadataFetchingService>()
 

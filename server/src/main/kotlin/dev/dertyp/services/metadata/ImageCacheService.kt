@@ -1,6 +1,8 @@
 package dev.dertyp.services.metadata
 
 import dev.dertyp.ApiClient
+import dev.dertyp.config.ProviderCredentialKeys
+import dev.dertyp.config.toImageCacheConfig
 import dev.dertyp.core.HttpClientPriority
 import dev.dertyp.core.bytes
 import dev.dertyp.services.ImageService
@@ -18,15 +20,16 @@ class ImageCacheService(
     environment: ApplicationEnvironment
 ) : MetadataService("ImageCache", IMetadataService.MetadataType.imageCache, environment) {
     override val tokenUrl = ""
-    override val clientIdConfigPath: String = ""
-    override val clientSecretConfigPath: String = ""
+    override val credentialKeys = ProviderCredentialKeys.NONE
+
+    private val imageCacheConfig by lazy { environment.config.toImageCacheConfig() }
 
     override fun HttpRequestBuilder.getAccessTokenHeader(clientId: String, clientSecret: String) {
     }
 
     private fun getUrl(path: String? = null, block: URLBuilder.() -> Unit = {}): String {
         return url {
-            takeFrom(environment.config.property("imageCache.url").getString())
+            takeFrom(checkNotNull(imageCacheConfig.url))
             if (!path.isNullOrBlank()) appendPathSegments(path)
             block()
         }
@@ -42,7 +45,7 @@ class ImageCacheService(
         }
 
         val url = getUrl(image.imageHash)
-        val token = environment.config.propertyOrNull("imageCache.token")?.getString()
+        val token = imageCacheConfig.token
         if (token.isNullOrBlank()) {
             logger.error("No token found")
             return null
@@ -69,6 +72,6 @@ class ImageCacheService(
     }
 
     override fun supported(): Boolean {
-        return !environment.config.propertyOrNull("imageCache.url")?.getString().isNullOrBlank()
+        return !imageCacheConfig.url.isNullOrBlank()
     }
 }

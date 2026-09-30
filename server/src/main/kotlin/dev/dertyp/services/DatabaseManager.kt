@@ -3,8 +3,9 @@ package dev.dertyp.services
 import at.favre.lib.crypto.bcrypt.BCrypt
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
+import dev.dertyp.config.ServerConfig
+import dev.dertyp.core.db.Dialect
 import dev.dertyp.db.UserTable
-import io.ktor.server.application.ApplicationEnvironment
 import org.flywaydb.core.Flyway
 import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.JdbcTransaction
@@ -12,14 +13,14 @@ import org.jetbrains.exposed.v1.jdbc.insertIgnore
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import java.io.Closeable
 
-class DatabaseManager(private val environment: ApplicationEnvironment) : Closeable {
+class DatabaseManager(private val config: ServerConfig) : Closeable {
     private var mainDataSource: HikariDataSource? = null
 
     fun init() {
         val database = setupDatabase()
 
-        val clientId = environment.config.propertyOrNull("client.id")?.getString()
-        val clientSecret = environment.config.propertyOrNull("client.secret")?.getString()
+        val clientId = config.adminClient.id
+        val clientSecret = config.adminClient.secret
 
         transaction(database) {
             if (clientId != null && clientSecret != null) {
@@ -43,27 +44,32 @@ class DatabaseManager(private val environment: ApplicationEnvironment) : Closeab
     }
 
     private fun getDataSource(): HikariDataSource {
-        val dbDriver = environment.config.property("storage.driverClassName").getString()
-        val dbUrl = environment.config.property("storage.jdbcURL").getString()
-        val dbUser = environment.config.property("storage.user").getString()
-        val dbPassword = environment.config.property("storage.password").getString()
+        val database = config.database
+        val dbDriver = database.driverClassName
+        val dbUrl = database.jdbcUrl
+        val dbUser = database.user
+        val dbPassword = database.password
 
-        val config = HikariConfig().apply {
+        val hikariConfig = HikariConfig().apply {
             jdbcUrl = dbUrl
             driverClassName = dbDriver
             
-            if (dbDriver == "org.sqlite.JDBC") {
+            if (Dialect.ofDriver(dbDriver) == Dialect.SQLITE) {
                 maximumPoolSize = 1
                 addDataSourceProperty("journal_mode", "WAL")
                 addDataSourceProperty("busy_timeout", "5000")
+                addDataSourceProperty("foreign_keys", "true")
             } else {
                 maximumPoolSize = 100
                 username = dbUser
                 password = dbPassword
+                if (Dialect.ofDriver(dbDriver) == Dialect.POSTGRES) {
+                    addDataSourceProperty("options", "-c jit=off")
+                }
             }
         }
 
-        return HikariDataSource(config)
+        return HikariDataSource(hikariConfig)
     }
 
     private fun setupDatabase(): Database {

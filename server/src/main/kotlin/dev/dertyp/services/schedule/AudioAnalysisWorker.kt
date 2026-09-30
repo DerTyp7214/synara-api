@@ -2,43 +2,30 @@ package dev.dertyp.services.schedule
 
 import dev.dertyp.data.TaskKeys
 import dev.dertyp.services.AudioAnalysisService
-import kotlinx.coroutines.withTimeoutOrNull
 import org.koin.core.component.inject
-import java.util.concurrent.atomic.AtomicInteger
+import java.util.UUID
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.hours
 
-@WorkerTask(TaskKeys.AUDIO_ANALYSIS, "Audio Analysis")
-class AudioAnalysisWorker : Worker("AudioAnalysisWorker") {
+@WorkerTask(TaskKeys.AUDIO_ANALYSIS, "Audio Analysis", cron = "0 3 * * *")
+class AudioAnalysisWorker : ItemWorker<UUID>("AudioAnalysisWorker") {
     private val audioAnalysisService by inject<AudioAnalysisService>()
 
-    override suspend fun execute(onProgress: suspend (Double, String) -> Unit): Map<String, Any?> {
-        val unanalyzedIds = audioAnalysisService.getUnanalyzedSongIds()
-        if (unanalyzedIds.isEmpty()) {
-            logger.info("No songs to analyze")
-            return mapOf("analyzedCount" to 0)
-        }
+    override val baseThreads: Int
+        get() = Runtime.getRuntime().availableProcessors() / 4
+    override val resultKey = "analyzedCount"
+    override val emptyMessage = "No songs to analyze"
+    override val logEvery = 10
+    override val timeout: Duration = 6.hours
 
-        val baseThreads = Runtime.getRuntime().availableProcessors() / 4
-        logger.info("Found ${unanalyzedIds.size} unanalyzed songs. Starting parallel analysis (max 6 hours)")
-        val processedCount = AtomicInteger(0)
+    override suspend fun loadItems(): List<UUID> = audioAnalysisService.getUnanalyzedSongIds()
 
-        withTimeoutOrNull(6.hours) {
-            runParallel(
-                items = unanalyzedIds,
-                baseThreadCount = baseThreads,
-                onItemProcessed = { currentCount ->
-                    val progress = (currentCount.toDouble() / unanalyzedIds.size) * 100.0
-                    onProgress(progress, "Analyzed $currentCount/${unanalyzedIds.size} songs")
-
-                    if (currentCount % 10 == 0) {
-                        logger.info("Analyzed $currentCount/${unanalyzedIds.size} songs")
-                    }
-                }
-            ) { songId ->
-                audioAnalysisService.analyzeSong(songId)
-            }
-        }
-
-        return mapOf("analyzedCount" to processedCount.get())
+    override suspend fun process(item: UUID): ItemOutcome {
+        audioAnalysisService.analyzeSong(item)
+        return ItemOutcome.SUCCEEDED
     }
+
+    override fun startMessage(total: Int) = "Found $total unanalyzed songs. Starting parallel analysis (max 6 hours)"
+
+    override fun progressMessage(current: Int, total: Int) = "Analyzed $current/$total songs"
 }

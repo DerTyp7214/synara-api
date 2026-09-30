@@ -19,9 +19,13 @@ import dev.dertyp.db.SongVariantTable
 import dev.dertyp.db.UserQueueEntryTable
 import dev.dertyp.db.UserQueueTable
 import dev.dertyp.db.UserTable
+import dev.dertyp.testing.*
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.every
 import io.mockk.mockk
+import io.mockk.mockkObject
+import io.mockk.unmockkObject
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -31,7 +35,6 @@ import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
-import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -47,6 +50,9 @@ import org.koin.core.context.stopKoin
 import org.koin.dsl.module
 import org.koin.test.KoinTest
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicLong
+import kotlin.time.Clock
+import kotlin.time.Instant
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class QueueServiceTest : KoinTest {
@@ -83,37 +89,9 @@ class QueueServiceTest : KoinTest {
 
     @AfterEach
     fun tearDown() {
+        unmockkObject(Clock.System)
         stopKoin()
         TestDatabase.cleanUp()
-    }
-
-    private fun insertUser(): UUID {
-        val id = UUID.randomUUID()
-        UserTable.insert {
-            it[UserTable.id] = id
-            it[username] = "user_$id"
-            it[passwordHash] = "hash"
-        }
-        return id
-    }
-
-    private fun insertAlbum(): UUID {
-        val id = UUID.randomUUID()
-        AlbumTable.insert {
-            it[AlbumTable.id] = id
-            it[name] = "Album"
-        }
-        return id
-    }
-
-    private fun insertSong(albumId: UUID): UUID {
-        val id = UUID.randomUUID()
-        SongTable.insert {
-            it[SongTable.id] = id
-            it[title] = "Song"
-            it[SongTable.albumId] = albumId
-        }
-        return id
     }
 
     private fun item(songId: UUID, queueId: Long, position: Int, shuffledPosition: Int? = null) =
@@ -240,7 +218,9 @@ class QueueServiceTest : KoinTest {
         setup(dialect)
         val userId = transaction(database) { insertUser() }
         val sessionId = newSession(userId)
-        service.uploadTtlMs = -1
+        val virtualNow = AtomicLong(System.currentTimeMillis())
+        mockkObject(Clock.System)
+        every { Clock.System.now() } answers { Instant.fromEpochMilliseconds(virtualNow.getAndAdd(QueueService.UPLOAD_TTL_MS + 1)) }
 
         val start = service.beginUpload(userId, sessionId, 0, false)
         check(start is QueueUploadStart.Started)

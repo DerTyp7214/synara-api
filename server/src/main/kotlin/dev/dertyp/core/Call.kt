@@ -15,7 +15,7 @@ import io.ktor.server.auth.jwt.JWTPrincipal
 import io.ktor.server.auth.parseAuthorizationHeader
 import io.ktor.server.auth.principal
 import io.ktor.util.AttributeKey
-import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import org.koin.ktor.ext.get
@@ -39,12 +39,14 @@ suspend fun ApplicationCall.getUser(): User? = try {
 
     if (user != null && sessionId != null) {
         val sessionService = get<SessionService>()
-        CoroutineScope(Dispatchers.IO).launch {
+        ApplicationScope.scope.launch(Dispatchers.IO) {
             sessionService.updateSessionActivity(sessionId, user.id)
         }
     }
 
     user
+} catch (e: CancellationException) {
+    throw e
 } catch (_: Throwable) {
     null
 }

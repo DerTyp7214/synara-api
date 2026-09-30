@@ -3,7 +3,7 @@ package dev.dertyp.services
 import dev.dertyp.PlatformUUID
 import dev.dertyp.data.*
 import dev.dertyp.db.*
-import dev.dertyp.dbQuery
+import dev.dertyp.core.db.dbQuery
 import dev.dertyp.services.sync.ListenBrainzService
 import org.koin.core.component.inject
 import org.jetbrains.exposed.v1.core.*
@@ -424,7 +424,7 @@ class ListeningStatsService : Service() {
             SongArtistTable
                 .select(SongArtistTable.songId, SongArtistTable.artistId)
                 .where { SongArtistTable.songId inList chunk }
-                .orderBy(SongArtistTable.artistId)
+                .orderBy(SongArtistTable.position to SortOrder.ASC, SongArtistTable.artistId to SortOrder.ASC)
                 .forEach {
                     library.songArtists.getOrPut(it[SongArtistTable.songId].value) { mutableListOf() }
                         .add(it[SongArtistTable.artistId].value)

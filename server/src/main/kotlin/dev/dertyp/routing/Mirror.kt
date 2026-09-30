@@ -11,22 +11,59 @@ import dev.dertyp.services.UserService
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.Parameters
+import io.ktor.http.auth.HttpAuthHeader
+import io.ktor.server.application.*
 import io.ktor.server.auth.authenticate
+import io.ktor.server.auth.parseAuthorizationHeader
 import io.ktor.server.html.respondHtml
 import io.ktor.server.request.receiveParameters
 import io.ktor.server.response.respond
 import io.ktor.server.response.respondBytes
 import io.ktor.server.routing.Route
+import io.ktor.server.routing.RoutingPipelineCall
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.route
 import io.ktor.server.sse.sse
 import io.ktor.sse.ServerSentEvent
+import io.ktor.util.pipeline.PipelinePhase
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.conflate
 import kotlinx.html.*
 import org.koin.ktor.ext.inject
 import kotlin.time.Duration.Companion.days
+
+private object BeforeCacheLookup : Hook<suspend (ApplicationCall) -> HttpStatusCode?> {
+    private val phase = PipelinePhase("AdminOnlyBeforeCache")
+
+    override fun install(pipeline: ApplicationCallPipeline, handler: suspend (ApplicationCall) -> HttpStatusCode?) {
+        pipeline.insertPhaseBefore(ApplicationCallPipeline.Setup, phase)
+        pipeline.intercept(phase) {
+            val rejection = handler(call) ?: return@intercept
+            val applicationCall = (call as? RoutingPipelineCall)?.engineCall ?: call
+            applicationCall.respond(rejection)
+            finish()
+        }
+    }
+}
+
+private val AdminOnlyBeforeCache = createRouteScopedPlugin("AdminOnlyBeforeCache") {
+    val jwtService by application.inject<JwtService>()
+    val userService by application.inject<UserService>()
+
+    on(BeforeCacheLookup) { call ->
+        val header = runCatching { call.request.parseAuthorizationHeader() }.getOrNull() as? HttpAuthHeader.Single
+        val token = call.request.cookies[JwtService.AUTH_COOKIE]
+            ?: header?.takeIf { it.authScheme.equals("Bearer", ignoreCase = true) }?.blob
+            ?: return@on HttpStatusCode.Unauthorized
+        val principal = jwtService.validateToken(token) ?: return@on HttpStatusCode.Unauthorized
+        val username = principal.payload.getClaim(JwtService.CLAIM_USERNAME).asString()
+            ?: return@on HttpStatusCode.Unauthorized
+        val user = userService.findUserByUsername(username) ?: return@on HttpStatusCode.Unauthorized
+        if (user.isAdmin) null else HttpStatusCode.Forbidden
+    }
+}
 
 @OptIn(FlowPreview::class)
 fun Route.mirrorRouting() {
@@ -618,31 +655,39 @@ fun Route.mirrorRouting() {
             }
         }
 
-        cacheOutput(invalidateAt = 14.days) {
-            get("/remote-image/{imageId}") {
-                val imageId = call.parameters["imageId"]?.toUUIDOrNull() ?: return@get call.respond(
-                    HttpStatusCode.BadRequest
-                )
-                val size = call.request.queryParameters["size"]?.toIntOrNull() ?: 0
-                val config = call.request.queryParameters.toMirrorConfig()
+        authenticate(JwtService.AUTH_PROVIDER) {
+            route("/remote-image/{imageId}") {
+                install(AdminOnlyBeforeCache)
+                cacheOutput(invalidateAt = 14.days) {
+                    get {
+                        val user = call.getUser() ?: return@get call.respond(HttpStatusCode.Unauthorized)
+                        if (!user.isAdmin) return@get call.respond(HttpStatusCode.Forbidden)
 
-                try {
-                    val imageData = remoteMirrorService.getRemoteImageData(config, imageId, size)
-                    if (imageData != null) {
-                        call.respondBytes(imageData, ContentType.Image.Any)
-                    } else {
-                        call.respond(HttpStatusCode.NotFound)
+                        val imageId = call.parameters["imageId"]?.toUUIDOrNull() ?: return@get call.respond(
+                            HttpStatusCode.BadRequest
+                        )
+                        val size = call.request.queryParameters["size"]?.toIntOrNull() ?: 0
+                        val config = call.request.queryParameters.toMirrorConfig()
+
+                        try {
+                            val imageData = remoteMirrorService.getRemoteImageData(config, imageId, size)
+                            if (imageData != null) {
+                                call.respondBytes(imageData, ContentType.Image.Any)
+                            } else {
+                                call.respond(HttpStatusCode.NotFound)
+                            }
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            call.respond(
+                                HttpStatusCode.BadRequest,
+                                e.message ?: "Failed to fetch remote image"
+                            )
+                        }
                     }
-                } catch (e: Exception) {
-                    call.respond(
-                        HttpStatusCode.BadRequest,
-                        e.message ?: "Failed to fetch remote image"
-                    )
                 }
             }
-        }
 
-        authenticate(JwtService.AUTH_PROVIDER) {
             post("/start") {
                 val user = call.getUser() ?: return@post call.respond(HttpStatusCode.Unauthorized)
                 if (!user.isAdmin) return@post call.respond(HttpStatusCode.Forbidden)
@@ -667,6 +712,8 @@ fun Route.mirrorRouting() {
                 try {
                     remoteMirrorService.resetMirror()
                     call.respond(HttpStatusCode.OK)
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     call.respond(HttpStatusCode.BadRequest, e.message ?: "Reset failed")
                 }
@@ -680,6 +727,8 @@ fun Route.mirrorRouting() {
                 try {
                     val stats = remoteMirrorService.getRemoteStats(config)
                     call.respond(stats)
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     call.respond(HttpStatusCode.BadRequest, e.message ?: "Failed to fetch stats")
                 }
@@ -693,6 +742,8 @@ fun Route.mirrorRouting() {
                 try {
                     val users = remoteMirrorService.getRemoteUsers(config)
                     call.respond(users)
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     call.respond(HttpStatusCode.BadRequest, e.message ?: "Failed to fetch users")
                 }
@@ -706,6 +757,8 @@ fun Route.mirrorRouting() {
                 try {
                     val playlists = remoteMirrorService.getRemotePlaylists(config)
                     call.respond(playlists)
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     call.respond(
                         HttpStatusCode.BadRequest,
@@ -722,6 +775,8 @@ fun Route.mirrorRouting() {
                 try {
                     val playlists = remoteMirrorService.getRemoteUserPlaylists(config)
                     call.respond(playlists)
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     call.respond(
                         HttpStatusCode.BadRequest,
@@ -738,6 +793,8 @@ fun Route.mirrorRouting() {
                 try {
                     val instances = remoteMirrorService.getProxyInstances(config)
                     call.respond(instances)
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     call.respond(
                         HttpStatusCode.BadRequest,
@@ -754,6 +811,8 @@ fun Route.mirrorRouting() {
                 try {
                     val users = userService.queryUser().map { it.copy(passwordHash = "") }
                     call.respond(users)
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     call.respond(
                         HttpStatusCode.BadRequest,

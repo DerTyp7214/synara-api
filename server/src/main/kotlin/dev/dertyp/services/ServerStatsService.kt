@@ -4,7 +4,7 @@ import dev.dertyp.data.PodcastImportState
 import dev.dertyp.data.ProxyInfo
 import dev.dertyp.data.ServerStats
 import dev.dertyp.db.*
-import dev.dertyp.dbQuery
+import dev.dertyp.core.db.dbQuery
 import dev.dertyp.server.BuildConfig
 import dev.dertyp.services.metadata.MusicBrainzCacheService
 import org.jetbrains.exposed.v1.core.count

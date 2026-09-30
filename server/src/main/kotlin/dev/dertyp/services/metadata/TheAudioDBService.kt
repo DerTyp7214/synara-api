@@ -1,15 +1,16 @@
 package dev.dertyp.services.metadata
 
 import dev.dertyp.ApiClient
+import dev.dertyp.config.ProviderCredentialKeys
 import dev.dertyp.core.HttpClientPriority
+import dev.dertyp.core.RetryOnError
+import dev.dertyp.core.RetryPolicy
+import dev.dertyp.core.retryingGet
 import io.ktor.client.call.body
 import io.ktor.client.request.HttpRequestBuilder
 import io.ktor.client.request.parameter
-import io.ktor.client.statement.HttpResponse
 import io.ktor.http.HttpStatusCode
-import io.ktor.http.isSuccess
 import io.ktor.server.application.ApplicationEnvironment
-import kotlinx.coroutines.delay
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import java.util.UUID
@@ -19,10 +20,9 @@ class TheAudioDBService(
     environment: ApplicationEnvironment
 ) : MetadataService("TheAudioDB", IMetadataService.MetadataType.theAudioDB, environment) {
     override val tokenUrl = ""
-    override val clientIdConfigPath: String = "theaudiodb.apiKey"
-    override val clientSecretConfigPath: String = ""
+    override val credentialKeys = ProviderCredentialKeys.THE_AUDIO_DB
 
-    private val apiKey by lazy { environment.config.propertyOrNull(clientIdConfigPath)?.getString() ?: "123" }
+    private val apiKey by lazy { credentials.clientId ?: "123" }
 
     private val baseUrl = "https://www.theaudiodb.com/api/v1/json"
 
@@ -90,25 +90,21 @@ class TheAudioDBService(
         noinline block: suspend HttpRequestBuilder.() -> Unit = {}
     ): T? {
         val url = "$baseUrl/$apiKey/$path"
-        var retries = 0
-        while (retries < 5) {
-            try {
-                val response: HttpResponse = ApiClient.queueInstance.enqueue(url, priority, block)
-                if (response.status == HttpStatusCode.TooManyRequests) {
-                    logger.warn("Rate limited by TheAudioDB, retrying in 1s... ($retries/5)")
-                    delay(1.seconds)
-                    retries++
-                    continue
-                }
-                if (!response.status.isSuccess()) return null
-                return response.body<T>()
-            } catch (e: Exception) {
-                logger.error("Error during TheAudioDB request to $url: ${e.message}", e)
-                delay(1.seconds)
-                retries++
-            }
-        }
-        return null
+        return retryingGet(
+            policy = RETRY_POLICY,
+            label = "TheAudioDB request to $url",
+            logger = logger,
+            request = { ApiClient.queueInstance.enqueue(url, priority, block) },
+        ) { it.body<T>() }
+    }
+
+    companion object {
+        val RETRY_POLICY = RetryPolicy(
+            maxAttempts = 5,
+            retryOn = { it == HttpStatusCode.TooManyRequests },
+            backoff = { _, _ -> 1.seconds },
+            onError = RetryOnError.RETRY,
+        )
     }
 
     private fun String?.splitMetadata(): List<String> {

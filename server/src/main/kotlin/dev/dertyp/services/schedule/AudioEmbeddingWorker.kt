@@ -5,7 +5,7 @@ import dev.dertyp.services.AudioEmbeddingService
 import dev.dertyp.services.RecommendationService
 import org.koin.core.component.inject
 
-@WorkerTask(TaskKeys.AUDIO_EMBEDDING, "Audio Embedding")
+@WorkerTask(TaskKeys.AUDIO_EMBEDDING, "Audio Embedding", afterTask = TaskKeys.AUDIO_ANALYSIS)
 class AudioEmbeddingWorker : Worker("AudioEmbeddingWorker") {
     private val audioEmbeddingService by inject<AudioEmbeddingService>()
     private val recommendationService by inject<RecommendationService>()

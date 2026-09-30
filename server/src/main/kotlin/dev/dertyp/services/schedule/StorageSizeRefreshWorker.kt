@@ -4,7 +4,7 @@ import dev.dertyp.data.TaskKeys
 import dev.dertyp.services.StorageService
 import org.koin.core.component.inject
 
-@WorkerTask(TaskKeys.STORAGE_SIZE_REFRESH, "Storage Size Refresh")
+@WorkerTask(TaskKeys.STORAGE_SIZE_REFRESH, "Storage Size Refresh", cron = "0 */6 * * *")
 class StorageSizeRefreshWorker : Worker("StorageSizeRefreshWorker") {
     private val storageService by inject<StorageService>()
 

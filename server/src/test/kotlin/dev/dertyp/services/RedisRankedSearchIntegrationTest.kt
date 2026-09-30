@@ -82,6 +82,7 @@ class RedisRankedSearchIntegrationTest : KoinTest {
                 single { genreService }
                 single { imageService }
                 single { LibraryMergeService() }
+                single { LibraryFileDeleter() }
                 single { SongService() }
             })
         }

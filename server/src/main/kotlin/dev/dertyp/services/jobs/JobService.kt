@@ -129,7 +129,8 @@ class JobService {
                 if (coroutine.isCancelled) status = JobStatus.CANCELLED
             }
         } catch (e: CancellationException) {
-            status = JobStatus.CANCELLED
+            finish(queue, job, JobStatus.CANCELLED, null)
+            throw e
         } catch (e: Exception) {
             logger.error("Job ${job.info.title} (${job.kind}) failed", e)
             status = JobStatus.FAILED

@@ -3,7 +3,7 @@ package dev.dertyp.services.credentials
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
 import dev.dertyp.db.PluginSettingTable
-import dev.dertyp.dbQuery
+import dev.dertyp.core.db.dbQuery
 import dev.dertyp.services.podcast.index.PodcastIndexCredentialSource
 import dev.dertyp.services.podcast.index.PodcastIndexCredentialSource.Companion.KEY_API_KEY
 import dev.dertyp.services.podcast.index.PodcastIndexCredentialSource.Companion.KEY_API_SECRET

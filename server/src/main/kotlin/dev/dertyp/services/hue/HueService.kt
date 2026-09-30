@@ -1,6 +1,8 @@
 package dev.dertyp.services.hue
 
 import dev.dertyp.core.ApplicationScope
+import dev.dertyp.core.HttpClientFactory
+import dev.dertyp.core.runCatchingCancellable
 import dev.dertyp.data.HueBridgeCandidate
 import dev.dertyp.data.HueBridgeInfo
 import dev.dertyp.data.HueMotionMode
@@ -16,7 +18,7 @@ import dev.dertyp.data.SongAudioData
 import dev.dertyp.db.HueBridgeTable
 import dev.dertyp.db.HueUserLinkTable
 import dev.dertyp.db.UserTable
-import dev.dertyp.dbQuery
+import dev.dertyp.core.db.dbQuery
 import dev.dertyp.plugins.HookBus
 import dev.dertyp.plugins.HookEvent
 import dev.dertyp.plugins.on
@@ -27,11 +29,11 @@ import dev.dertyp.services.SongService
 import dev.dertyp.utils.HueColor
 import com.github.benmanes.caffeine.cache.Cache
 import com.github.benmanes.caffeine.cache.Caffeine
-import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -44,6 +46,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.builtins.ListSerializer
 import org.jetbrains.exposed.v1.core.ResultRow
@@ -71,8 +74,9 @@ class HueService : Service() {
     private val imageService by inject<ImageService>()
     private val audioAnalysisService by inject<AudioAnalysisService>()
     private val discoveryService by inject<HueDiscoveryService>()
+    private val httpClientFactory by inject<HttpClientFactory>()
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    override val scopeDispatcher: CoroutineDispatcher get() = Dispatchers.Default
 
     data class BridgeRow(
         val id: UUID,
@@ -105,20 +109,6 @@ class HueService : Service() {
 
     private class BridgeRuntime(val client: HueBridgeApi, val queue: HueCommandQueue)
 
-    internal var clientFactory: (BridgeRow) -> HueBridgeApi = { row ->
-        HueBridgeClient(row.ip, row.bridgeId, row.applicationKey, row.certFingerprint) { fingerprint ->
-            scope.launch { dbQuery { HueBridgeTable.update({ HueBridgeTable.id eq row.id }) { it[certFingerprint] = fingerprint } } }
-        }
-    }
-
-    internal var streamFactory: (BridgeRow, HueEntertainmentArea) -> HueEntertainmentStream = { row, _ ->
-        HueDtlsStream(
-            row.ip,
-            row.applicationKey,
-            row.clientKey ?: throw HueBridgeException("Bridge has no client key, re-pair the bridge"),
-        )
-    }
-
     private val runtimes = ConcurrentHashMap<UUID, BridgeRuntime>()
     private val pairings = ConcurrentHashMap<Pair<UUID, String>, PairingSession>()
     private val lastGeneration = ConcurrentHashMap<UUID, Long>()
@@ -132,8 +122,6 @@ class HueService : Service() {
     private val userLocks = ConcurrentHashMap<UUID, Mutex>()
     private val scoreCache: Cache<Pair<UUID, LevelSource>, LightScore> = Caffeine.newBuilder().maximumSize(256).build()
 
-    internal var motionIntervalOverride: Long? = null
-    internal var stopGraceMs: Long = STOP_GRACE.inWholeMilliseconds
     private val targetsCache = ConcurrentHashMap<UUID, Pair<Long, List<HueTarget>>>()
     private val scenesCache = ConcurrentHashMap<UUID, Pair<Long, List<HueScene>>>()
     private val catalogs = ConcurrentHashMap<UUID, BridgeCatalog>()
@@ -160,7 +148,7 @@ class HueService : Service() {
         userLocks.clear()
         runtimes.values.forEach { it.queue.close(); it.client.close() }
         runtimes.clear()
-        scope.cancel()
+        super.stopService()
     }
 
     suspend fun discover(userId: UUID, force: Boolean = false): List<HueBridgeCandidate> {
@@ -211,19 +199,9 @@ class HueService : Service() {
         }
     }
 
-    internal var pairingClientFactory: (String, (String) -> Unit) -> HueBridgeApi = { ip, onFingerprint ->
-        HueBridgeClient(ip, null, null, null, onFingerprint)
-    }
-
-    internal var authenticatedClientFactory: (String, String, String?) -> HueBridgeApi = { ip, key, fingerprint ->
-        HueBridgeClient(ip, null, key, fingerprint)
-    }
-
-    internal var pairingPoll: Long = PAIRING_POLL.inWholeMilliseconds
-
     private suspend fun runPairing(session: PairingSession) {
         var fingerprint: String? = null
-        val client = pairingClientFactory(session.ip) { fingerprint = it }
+        val client = HueBridgeClient(httpClientFactory, session.ip, null, null, null) { fingerprint = it }
         try {
             val deadline = System.currentTimeMillis() + PAIRING_TIMEOUT.inWholeMilliseconds
             while (System.currentTimeMillis() < deadline) {
@@ -231,10 +209,10 @@ class HueService : Service() {
                 if (success == null) {
                     session.state.value = HuePairingStatus(HuePairingState.WAITING_FOR_BUTTON)
                     changeFlow.tryEmit(Unit)
-                    delay(pairingPoll)
+                    delay(PAIRING_POLL)
                     continue
                 }
-                val authenticated = authenticatedClientFactory(session.ip, success.username, fingerprint)
+                val authenticated = HueBridgeClient(httpClientFactory, session.ip, null, success.username, fingerprint)
                 val bridge = try {
                     authenticated.bridge()
                 } finally {
@@ -248,6 +226,8 @@ class HueService : Service() {
                 return
             }
             session.state.value = HuePairingStatus(HuePairingState.TIMEOUT)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             logger.warn("Hue pairing with ${session.ip} failed: ${e.message}")
             session.state.value = HuePairingStatus(HuePairingState.ERROR, e.message)
@@ -390,7 +370,7 @@ class HueService : Service() {
 
     private suspend fun warmCatalog(userId: UUID, bridgeId: UUID) {
         if (catalogs.containsKey(bridgeId)) return
-        runCatching { listTargets(userId, bridgeId) }
+        runCatchingCancellable { listTargets(userId, bridgeId) }
     }
 
     suspend fun listScenes(userId: UUID, bridgeId: UUID, force: Boolean = false): List<HueScene> {
@@ -512,7 +492,7 @@ class HueService : Service() {
             clocks.remove(event.userId)
             pendingStops.remove(event.userId)?.cancel()
             pendingStops[event.userId] = scope.launch {
-                delay(stopGraceMs)
+                delay(STOP_GRACE)
                 pendingStops.remove(event.userId)
                 lastSong.remove(event.userId)
                 links.forEach { link -> stop(event.userId, link) }
@@ -526,7 +506,7 @@ class HueService : Service() {
         val coverId = song.coverId ?: song.album?.coverId
         val image = coverId?.let { imageService.byId(it) }
         val audio = audioAnalysisService.getAudioDataBatch(listOf(songId))[songId]
-        val sources = if (motionIntervalOverride == null) links.mapNotNull { levelSource(it.motion) }.toSet() else emptySet()
+        val sources = links.mapNotNull { levelSource(it.motion) }.toSet()
         val scores = if (sources.isEmpty()) emptyMap() else timelineScores(songId, audio, song.duration, sources)
 
         lastSong[event.userId] = songId
@@ -571,11 +551,9 @@ class HueService : Service() {
         lastCommandAt[event.userId] = System.currentTimeMillis()
     }
 
-    internal fun activeStreams(): Int = streams.values.count { it.isActive }
-
     private suspend fun area(userId: UUID, bridgeId: UUID, id: String): HueEntertainmentArea? {
         areaCache[bridgeId]?.firstOrNull { it.id == id }?.let { return it }
-        runCatching { listTargets(userId, bridgeId) }
+        runCatchingCancellable { listTargets(userId, bridgeId) }
         return areaCache[bridgeId]?.firstOrNull { it.id == id }
     }
 
@@ -598,7 +576,7 @@ class HueService : Service() {
         streams[key]?.takeIf { it.isActive && it.area.id == area.id }?.let { return it }
         stopStream(userId, row.id)
         val client = runtime(row).client
-        val configuration = runCatching { client.entertainmentConfigurations().firstOrNull { it.id == area.id } }.getOrNull()
+        val configuration = runCatchingCancellable { client.entertainmentConfigurations().firstOrNull { it.id == area.id } }.getOrNull()
         if (configuration?.active == true) {
             recordError(row.id, HueBridgeException("Entertainment area ${area.name} is already streamed by another app"))
             return null
@@ -606,13 +584,20 @@ class HueService : Service() {
         var created: HueEntertainmentStream? = null
         val stream = try {
             client.setEntertainmentStreaming(area.id, true)
-            val opened = streamFactory(row, area)
+            val opened = HueDtlsStream(
+                row.ip,
+                row.applicationKey,
+                row.clientKey ?: throw HueBridgeException("Bridge has no client key, re-pair the bridge"),
+            )
             created = opened
             opened.start()
             opened
         } catch (e: Exception) {
-            runCatching { created?.close() }
-            runCatching { client.setEntertainmentStreaming(area.id, false) }
+            withContext(NonCancellable) {
+                runCatching { created?.close() }
+                runCatching { client.setEntertainmentStreaming(area.id, false) }
+            }
+            if (e is CancellationException) throw e
             recordError(row.id, e)
             return null
         }
@@ -675,7 +660,7 @@ class HueService : Service() {
         val cached = sources.mapNotNull { source -> scoreCache.getIfPresent(songId to source)?.let { source to it } }.toMap()
         val missing = sources - cached.keys
         if (missing.isEmpty()) return cached
-        val timeline = runCatching { audioAnalysisService.getAudioTimeline(songId) }.getOrNull()
+        val timeline = runCatchingCancellable { audioAnalysisService.getAudioTimeline(songId) }.getOrNull()
         val built = missing.associateWith { source ->
             val score = HueLightScore.build(timeline, audio?.bpm, durationMs, HuePaletteMapper.barMs(audio?.bpm), source)
             if (timeline != null) scoreCache.put(songId to source, score)
@@ -691,8 +676,6 @@ class HueService : Service() {
     }
 
     private fun lightScore(link: HueUserLink, scores: Map<LevelSource, LightScore>, durationMs: Long): LightScore {
-        val override = motionIntervalOverride
-        if (override != null) return HueLightScore.build(null, null, durationMs, override)
         return levelSource(link.motion)?.let { scores[it] } ?: HueLightScore.build(null, null, durationMs, SLOW_MOTION_INTERVAL)
     }
 
@@ -784,8 +767,6 @@ class HueService : Service() {
         }
     }
 
-    internal fun activeMotions(): Int = animations.values.count { it.isActive }
-
     private suspend fun stop(userId: UUID, link: HueUserLink) {
         val row = bridge(userId, link.bridgeId) ?: return
         stopStream(userId, link.bridgeId)
@@ -798,7 +779,9 @@ class HueService : Service() {
     }
 
     private fun runtime(row: BridgeRow): BridgeRuntime = runtimes.getOrPut(row.id) {
-        val client = clientFactory(row)
+        val client = HueBridgeClient(httpClientFactory, row.ip, row.bridgeId, row.applicationKey, row.certFingerprint) { fingerprint ->
+            scope.launch { dbQuery { HueBridgeTable.update({ HueBridgeTable.id eq row.id }) { it[certFingerprint] = fingerprint } } }
+        }
         val queue = HueCommandQueue(
             api = client,
             scope = scope,

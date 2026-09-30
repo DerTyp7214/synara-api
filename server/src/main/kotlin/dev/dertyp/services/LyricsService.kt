@@ -3,7 +3,7 @@ package dev.dertyp.services
 import dev.dertyp.ApiClient
 import dev.dertyp.PlatformUUID
 import dev.dertyp.db.SyncedLyricsTable
-import dev.dertyp.dbQuery
+import dev.dertyp.core.db.dbQuery
 import dev.dertyp.serializers.AppCbor
 import dev.dertyp.services.models.SyncedLyrics
 import dev.dertyp.services.schedule.LyricsSyncWorker
@@ -15,9 +15,8 @@ import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
-import io.ktor.server.application.ApplicationEnvironment
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
+import dev.dertyp.config.ServerConfig
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.decodeFromByteArray
@@ -32,14 +31,13 @@ import kotlin.time.Duration.Companion.seconds
 
 @OptIn(ExperimentalSerializationApi::class)
 class LyricsService : ILyricsService, Service() {
-    private val environment by inject<ApplicationEnvironment>()
+    private val config by inject<ServerConfig>()
     private val songService by inject<SongService>()
     private val lyricsSyncWorker by inject<LyricsSyncWorker>()
 
-    private val serviceScope = CoroutineScope(Dispatchers.IO)
 
     private val transcriberUrl: String
-        get() = environment.config.propertyOrNull("transcriber.url")?.getString() ?: "http://localhost:8000"
+        get() = config.analysis.transcriber.baseUrl
 
     override suspend fun getSyncedLyrics(songId: PlatformUUID): SyncedLyrics? = dbQuery {
         SyncedLyricsTable.select(SyncedLyricsTable.content)
@@ -75,6 +73,8 @@ class LyricsService : ILyricsService, Service() {
             val artistName = song.artists.firstOrNull()?.name ?: ""
             rawLyrics = try {
                 lyricsSearch.searchLyrics(artistName, song.title, syncedOnly = false).joinToString("\n")
+            } catch (e: CancellationException) {
+                throw e
             } catch (_: Exception) {
                 ""
             }
@@ -95,6 +95,8 @@ class LyricsService : ILyricsService, Service() {
                     "lyrics" to rawLyrics.ifBlank { null }
                 ))
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             logger.error("Failed to connect to transcriber: ${e.message}")
             return null
@@ -120,14 +122,14 @@ class LyricsService : ILyricsService, Service() {
     }
 
     override suspend fun startSyncWorker(): Boolean {
-        serviceScope.launch {
+        scope.launch {
             lyricsSyncWorker.run()
         }
         return true
     }
 
     fun isConfigured(): Boolean {
-        return !environment.config.propertyOrNull("transcriber.url")?.getString().isNullOrBlank()
+        return config.analysis.transcriber.configured
     }
 
     suspend fun isReachable(): Boolean = try {
@@ -136,6 +138,8 @@ class LyricsService : ILyricsService, Service() {
                 requestTimeoutMillis = 5.seconds.inWholeMilliseconds
             }
         }.status == HttpStatusCode.OK
+    } catch (e: CancellationException) {
+        throw e
     } catch (_: Exception) {
         false
     }

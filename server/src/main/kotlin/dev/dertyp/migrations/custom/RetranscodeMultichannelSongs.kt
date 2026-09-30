@@ -1,7 +1,7 @@
 package dev.dertyp.migrations.custom
 
-import dev.dertyp.AudioUtils
 import dev.dertyp.audio.AudioProbe
+import dev.dertyp.audio.Transcoder
 import dev.dertyp.core.CustomMigration
 import dev.dertyp.core.Migration
 import dev.dertyp.core.logTask
@@ -9,8 +9,9 @@ import dev.dertyp.db.FlacInfoTable
 import dev.dertyp.db.PcmInfoTable
 import dev.dertyp.db.SongTable
 import dev.dertyp.db.TranscodedSongTable
-import dev.dertyp.dbQuery
+import dev.dertyp.core.db.dbQuery
 import io.ktor.server.application.ApplicationEnvironment
+import kotlinx.coroutines.CancellationException
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.greater
@@ -24,6 +25,7 @@ import java.io.File
 @Migration("3.11")
 class RetranscodeMultichannelSongs : CustomMigration() {
     private val environment by inject<ApplicationEnvironment>()
+    private val transcoder by inject<Transcoder>()
 
     override suspend fun migrate() {
         logTask("Retranscode multichannel songs") {
@@ -62,7 +64,7 @@ class RetranscodeMultichannelSongs : CustomMigration() {
                     val format = row[TranscodedSongTable.format]
                     try {
                         File(row[TranscodedSongTable.path]).delete()
-                        val info = AudioUtils.transcodeAudio(environment, source, bitrate, force = true, audioFormat = format)
+                        val info = transcoder.transcodeAudio(environment, source, bitrate, force = true, audioFormat = format)
                         dbQuery {
                             TranscodedSongTable.update({
                                 (TranscodedSongTable.songId eq row[TranscodedSongTable.songId]) and
@@ -74,6 +76,8 @@ class RetranscodeMultichannelSongs : CustomMigration() {
                             }
                         }
                         retranscoded++
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (e: Exception) {
                         failed++
                         logger.error("Failed to retranscode ${source.absolutePath} @ $bitrate $format", e)

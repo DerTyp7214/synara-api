@@ -242,6 +242,53 @@ class LibraryMergeServiceIncorrectMergeTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
+    fun `fixIncorrectMerges keeps the credited alias, position and join phrase of split album artists`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+
+        transaction(database) {
+            SchemaUtils.create(ArtistAliasTable)
+            val mainId = ArtistTable.insert { it[name] = "Main" }[ArtistTable.id]
+            val guestId = ArtistTable.insert { it[name] = "Guest" }[ArtistTable.id]
+            val aliasId = ArtistAliasTable.insert { it[artistId] = mainId; it[name] = "Main Alias" }[ArtistAliasTable.id]
+            val cover1 = ImageTable.insert { it[id] = UUID.randomUUID(); it[path] = "c1"; it[imageHash] = "h1"; it[origin] = "o" }[ImageTable.id]
+            val cover2 = ImageTable.insert { it[id] = UUID.randomUUID(); it[path] = "c2"; it[imageHash] = "h2"; it[origin] = "o" }[ImageTable.id]
+
+            val albumId = AlbumTable.insert {
+                it[name] = "Album"
+                it[cover] = cover1
+                it[songCount] = 2
+            }[AlbumTable.id]
+
+            AlbumArtistTable.insert {
+                it[this.albumId] = albumId; it[artistId] = mainId; it[creditedAliasId] = aliasId; it[position] = 0; it[joinPhrase] = " & "
+            }
+            AlbumArtistTable.insert {
+                it[this.albumId] = albumId; it[artistId] = guestId; it[position] = 1; it[joinPhrase] = ""
+            }
+
+            SongTable.insert { it[title] = "S1"; it[this.albumId] = albumId; it[cover] = cover1; it[filePath] = "p1" }
+            SongTable.insert { it[title] = "S2"; it[this.albumId] = albumId; it[cover] = cover2; it[filePath] = "p2" }
+        }
+
+        service.fixIncorrectMerges()
+
+        transaction(database) {
+            val albums = AlbumTable.selectAll().toList()
+            assertEquals(2, albums.size)
+            val aliasId = ArtistAliasTable.selectAll().single()[ArtistAliasTable.id]
+            for (album in albums) {
+                val links = AlbumArtistTable.selectAll()
+                    .where { AlbumArtistTable.albumId eq album[AlbumTable.id] }
+                    .associate { it[AlbumArtistTable.artistId] to Triple(it[AlbumArtistTable.creditedAliasId], it[AlbumArtistTable.position], it[AlbumArtistTable.joinPhrase]) }
+                val main = ArtistTable.selectAll().where { ArtistTable.name eq "Main" }.single()[ArtistTable.id]
+                val guest = ArtistTable.selectAll().where { ArtistTable.name eq "Guest" }.single()[ArtistTable.id]
+                assertEquals(mapOf(main to Triple(aliasId, 0, " & "), guest to Triple(null, 1, "")), links)
+            }
+        }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
     fun `calculateSimilarity should return 0 for different covers`(dialect: DbDialect) = runBlocking {
         setup(dialect)
 

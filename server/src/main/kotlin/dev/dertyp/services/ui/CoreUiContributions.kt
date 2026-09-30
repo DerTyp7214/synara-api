@@ -4,9 +4,6 @@ import dev.dertyp.plugins.UiContribution
 import dev.dertyp.services.UserService
 import dev.dertyp.services.cover.CoverGenerationService
 import dev.dertyp.services.hue.HueService
-import dev.dertyp.services.import.ImportService
-import dev.dertyp.services.import.ImporterProxy
-import dev.dertyp.services.intake.IntakeService
 import dev.dertyp.services.jobs.JobService
 import dev.dertyp.services.metadata.ACOUSTID_UI_SOURCE
 import dev.dertyp.services.metadata.AcoustIdCredentialSource
@@ -17,18 +14,14 @@ class CoreUiContributions(
     private val registry: UiRegistry,
     private val translationService: TranslationService,
     private val uiService: UiService,
-    private val importService: ImportService,
-    private val importerProxy: ImporterProxy,
+    private val importerState: ImporterState,
     private val userService: UserService,
-    private val intakeService: IntakeService,
     private val jobService: JobService,
     private val coverGenerationService: CoverGenerationService,
     private val hueService: HueService,
     private val acoustIdCredentials: AcoustIdCredentialSource,
     private val pluginSettingsService: PluginSettingsService,
 ) {
-    private val importerState by lazy { ImporterState(importService, importerProxy, intakeService, jobService) }
-
     fun contributions(): List<UiContribution> = listOf(
         ImporterPageContribution(importerState, uiService),
         ImporterSettingsPageContribution(importerState, uiService),

@@ -6,7 +6,7 @@ import dev.dertyp.core.sha256
 import dev.dertyp.data.User
 import dev.dertyp.db.ApiKeyTable
 import dev.dertyp.db.UserTable
-import dev.dertyp.dbQuery
+import dev.dertyp.core.db.dbQuery
 import dev.dertyp.plugins.ApiKeyScope
 import io.mockk.coEvery
 import io.mockk.every

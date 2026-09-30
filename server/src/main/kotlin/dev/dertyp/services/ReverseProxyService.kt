@@ -1,6 +1,8 @@
 package dev.dertyp.services
 
+import dev.dertyp.config.ServerConfig
 import dev.dertyp.core.ApplicationScope
+import dev.dertyp.core.HttpClientFactory
 import dev.dertyp.core.ProxiedKey
 import dev.dertyp.proxy.ProxyMessage
 import dev.dertyp.routing.registerAuthenticatedServices
@@ -14,7 +16,6 @@ import io.ktor.server.application.Application
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.auth.AuthenticationContext
 import io.ktor.server.auth.jwt.JWTPrincipal
-import io.ktor.server.config.ApplicationConfig
 import io.ktor.server.request.ApplicationRequest
 import io.ktor.server.request.RequestCookies
 import io.ktor.server.response.ApplicationResponse
@@ -30,6 +31,7 @@ import kotlinx.rpc.krpc.KrpcTransport
 import kotlinx.rpc.krpc.KrpcTransportMessage
 import kotlinx.rpc.krpc.server.KrpcServer
 import org.koin.core.component.get
+import org.koin.core.component.inject
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.concurrent.atomics.AtomicBoolean
@@ -41,11 +43,14 @@ import kotlin.time.TimeSource
 
 @OptIn(ExperimentalAtomicApi::class)
 class ReverseProxyService(
-    config: ApplicationConfig
+    config: ServerConfig
 ) : Service() {
-    private val client = HttpClient {
-        install(WebSockets)
-    }
+    private val httpClientFactory by inject<HttpClientFactory>()
+
+    private val client: HttpClient
+        get() = httpClientFactory.sharedWithDefaultEngine(HttpClientFactory.REVERSE_PROXY) {
+            install(WebSockets)
+        }
 
     private val _isConnected = AtomicBoolean(false)
     val isConnected: Boolean get() = _isConnected.load()
@@ -61,12 +66,12 @@ class ReverseProxyService(
     @Volatile
     private var connectionJob: Job? = null
 
-    val proxyHost = config.propertyOrNull("proxy.hostname")?.getString()
-    val controlPort = config.propertyOrNull("proxy.controlPort")?.getString()?.toInt()
-    val proxySsl = config.propertyOrNull("proxy.ssl")?.getString()?.toBoolean() ?: false
-    private val requestedId = config.propertyOrNull("proxy.id")?.getString() ?: UUID.randomUUID().toString().take(8)
-    private val serverName = config.propertyOrNull("proxy.name")?.getString()
-    private val proxyKey = config.propertyOrNull("proxy.key")?.getString()
+    val proxyHost = config.proxy.hostname
+    val controlPort = config.proxy.controlPort
+    val proxySsl = config.proxy.ssl
+    private val requestedId = config.proxy.id ?: UUID.randomUUID().toString().take(8)
+    private val serverName = config.proxy.name
+    private val proxyKey = config.proxy.key
     
     var proxyId: String? = null
         private set
@@ -159,6 +164,8 @@ class ReverseProxyService(
                                 try {
                                     setupServer(server, msg)
                                     server.awaitCompletion()
+                                } catch (e: CancellationException) {
+                                    throw e
                                 } catch (e: Exception) {
                                     logger.error("Error in proxied server for $clientId", e)
                                 } finally {

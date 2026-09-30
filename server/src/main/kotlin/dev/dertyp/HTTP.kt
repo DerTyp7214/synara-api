@@ -2,12 +2,15 @@ package dev.dertyp
 
 import com.ucasoft.ktor.simpleCache.SimpleCache
 import com.ucasoft.ktor.simpleMemoryCache.memoryCache
+import dev.dertyp.config.ServerConfig
 import dev.dertyp.core.anyHeader
 import dev.dertyp.data.ApiVersion
 import dev.dertyp.ui.UiSchemaVersion
 import dev.dertyp.plugins.RedisCacheProvider
 import dev.dertyp.plugins.redisCache
 import dev.dertyp.services.JwtService
+import dev.dertyp.services.RedisSearchService
+import dev.dertyp.services.ServiceLifecycle
 import io.ktor.server.application.*
 import io.ktor.server.plugins.cors.routing.*
 import org.koin.ktor.ext.getKoin
@@ -22,8 +25,12 @@ fun Application.configureHTTP() {
         anyMethod()
         anyHost()
     }
+    getKoin().get<JwtService>().authenticate(this)
+}
+
+fun Application.configureCache() {
     install(SimpleCache) {
-        if (!environment.config.propertyOrNull("redis.host")?.getString().isNullOrBlank()) {
+        if (getKoin().get<ServerConfig>().redis.enabled) {
             log.info("Using redis for cache!")
             redisCache {
                 val config by inject<RedisCacheProvider.Config>()
@@ -40,6 +47,6 @@ fun Application.configureHTTP() {
             }
         }
     }
-
-    getKoin().get<JwtService>().authenticate(this)
+    getKoin().getOrNull<RedisCacheProvider>()?.let { ServiceLifecycle.register(it) }
+    getKoin().get<RedisSearchService>().initIndex()
 }

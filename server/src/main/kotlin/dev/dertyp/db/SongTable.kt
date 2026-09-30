@@ -7,14 +7,14 @@ import java.time.Instant
 object SongTable : UUIDTable("song") {
     val title = text("title").default("")
     val titleTags = text("title_tags").default("[]")
-    val albumId = reference("albumId", AlbumTable.id, onDelete = ReferenceOption.SET_NULL)
+    val albumId = reference("albumId", AlbumTable.id)
     val duration = long("duration").default(0L)
     val releaseDate = varchar("releaseDate", 128).nullable()
     val lyrics = text("lyrics").default("")
     val explicit = bool("explicit").default(false)
     val filePath = text("filePath").default("")
     val format = varchar("format", 8).default("flac")
-    val cover = reference("cover", ImageTable.id).nullable()
+    val cover = reference("cover", ImageTable.id, onDelete = ReferenceOption.SET_NULL).nullable()
     val animatedCover = reference("animatedCover", AnimatedImageTable.id).nullable()
     val originalUrl = text("originalUrl").default("")
     val isrc = varchar("isrc", 32).nullable()
@@ -32,4 +32,11 @@ object SongTable : UUIDTable("song") {
     val lastLyricsFetchAttempt = long("lastLyricsFetchAttempt").default(0L)
     val lastProviderEnrichment = long("lastProviderEnrichment").default(0L)
     val searchVector = tsvector("search_vector").nullable()
+
+    init {
+        index(false, albumId)
+        index(false, filePath)
+        index(false, isrc)
+        index(false, originalUrl)
+    }
 }

@@ -3,7 +3,7 @@ package dev.dertyp.migrations.custom
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
 import dev.dertyp.db.PluginSettingTable
-import dev.dertyp.dbQuery
+import dev.dertyp.core.db.dbQuery
 import dev.dertyp.services.credentials.CredentialCipher
 import dev.dertyp.services.metadata.AcoustIdCredentialSource
 import dev.dertyp.services.podcast.index.PodcastIndexCredentialSource

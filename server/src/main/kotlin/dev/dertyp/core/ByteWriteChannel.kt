@@ -1,6 +1,7 @@
 package dev.dertyp.core
 
 import io.ktor.utils.io.*
+import kotlinx.coroutines.CancellationException
 import kotlinx.io.IOException
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
@@ -21,5 +22,7 @@ suspend fun ByteWriteChannel.sendSafe(msg: String, message: String = "") = try {
     }\ndata: $msg\n\n"
     )
     flush()
+} catch (e: CancellationException) {
+    throw e
 } catch (_: Throwable) {
 }

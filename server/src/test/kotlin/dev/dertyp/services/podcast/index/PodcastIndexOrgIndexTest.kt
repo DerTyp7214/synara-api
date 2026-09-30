@@ -1,8 +1,10 @@
 package dev.dertyp.services.podcast.index
 
+import dev.dertyp.core.HttpClientFactory
 import dev.dertyp.plugins.PluginSettings
 import dev.dertyp.services.credentials.CredentialCipher
 import dev.dertyp.services.podcast.PodcastHttp
+import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.MockRequestHandler
 import io.ktor.client.engine.mock.respond
@@ -13,17 +15,26 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
 import io.ktor.server.config.MapApplicationConfig
 import io.mockk.coEvery
+import io.mockk.every
 import io.mockk.mockk
+import io.mockk.mockkObject
+import io.mockk.mockkStatic
+import io.mockk.unmockkObject
+import io.mockk.unmockkStatic
 import kotlinx.coroutines.runBlocking
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
+import org.koin.core.context.startKoin
+import org.koin.core.context.stopKoin
+import org.koin.dsl.module
 import java.security.MessageDigest
-import java.time.Clock
-import java.time.Instant
-import java.time.ZoneOffset
+import kotlin.time.Clock
+import kotlin.time.Instant
 
 class PodcastIndexOrgIndexTest {
     private val requests = mutableListOf<HttpRequestData>()
@@ -32,18 +43,31 @@ class PodcastIndexOrgIndexTest {
     private val settings = mockk<PluginSettings>()
     private val config = MapApplicationConfig()
     private val cipher = CredentialCipher(MapApplicationConfig("credentials.encryptionKey" to "test-key"))
-    private val clock = Clock.fixed(Instant.ofEpochSecond(1_700_000_000), ZoneOffset.UTC)
+    private val httpClientFactory = mockk<HttpClientFactory>()
+
+    @BeforeEach
+    fun setUp() {
+        mockkObject(Clock.System)
+        every { Clock.System.now() } returns Instant.fromEpochSeconds(1_700_000_000)
+        mockkStatic(HttpClientFactory::podcastIndexClient)
+        startKoin { modules(module { single { httpClientFactory } }) }
+    }
+
+    @AfterEach
+    fun tearDown() {
+        stopKoin()
+        unmockkStatic(HttpClientFactory::podcastIndexClient)
+        unmockkObject(Clock.System)
+    }
 
     private fun index(): PodcastIndexOrgIndex {
         val engine = MockEngine { request ->
             requests += request
             respondTo(this, request)
         }
+        every { httpClientFactory.podcastIndexClient() } returns HttpClient(engine) { podcastIndexConfig() }
         return PodcastIndexOrgIndex(
             credentials = PodcastIndexCredentialSource(settings, config, cipher),
-            client = podcastIndexHttpClient(engine),
-            clock = clock,
-            baseUrl = "https://index.test/api/1.0",
         )
     }
 

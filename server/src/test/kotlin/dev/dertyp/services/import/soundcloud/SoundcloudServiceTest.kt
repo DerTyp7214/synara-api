@@ -48,7 +48,7 @@ class SoundcloudServiceTest : KoinTest {
             })
         }
 
-        mockkStatic("dev.dertyp.UtilsKt")
+        mockkStatic("dev.dertyp.core.process.CommandKt")
         service = SoundcloudService(indexer, storageService, lrcLibService, musicBrainzService)
     }
 

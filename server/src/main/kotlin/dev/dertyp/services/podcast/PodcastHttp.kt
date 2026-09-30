@@ -1,55 +1,52 @@
 package dev.dertyp.services.podcast
 
+import dev.dertyp.core.HttpClientFactory
+import dev.dertyp.core.gzipEncoding
+import dev.dertyp.core.timeouts
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.HttpRedirect
-import io.ktor.client.plugins.HttpTimeout
-import io.ktor.client.plugins.HttpTimeoutConfig
-import io.ktor.client.plugins.compression.ContentEncoding
 import io.ktor.client.plugins.defaultRequest
 import io.ktor.client.request.header
 import io.ktor.http.HttpHeaders
 import io.ktor.http.Url
+import org.koin.core.component.KoinComponent
+import org.koin.core.component.inject
 import java.net.InetAddress
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
-class PodcastHttp {
-    val feedClient: HttpClient = HttpClient(OkHttp) {
-        install(HttpTimeout) {
-            requestTimeoutMillis = 60.seconds.inWholeMilliseconds
-            connectTimeoutMillis = 20.seconds.inWholeMilliseconds
-            socketTimeoutMillis = 30.seconds.inWholeMilliseconds
-        }
-        install(ContentEncoding) {
-            gzip()
-        }
-        install(HttpRedirect) {
-            allowHttpsDowngrade = true
-        }
-        defaultRequest {
-            header(HttpHeaders.UserAgent, USER_AGENT)
-            header(HttpHeaders.Accept, FEED_ACCEPT)
-        }
-    }
+class PodcastHttp : KoinComponent {
+    private val httpClientFactory by inject<HttpClientFactory>()
 
-    val mediaClient: HttpClient = HttpClient(OkHttp) {
-        install(HttpTimeout) {
-            requestTimeoutMillis = HttpTimeoutConfig.INFINITE_TIMEOUT_MS
-            connectTimeoutMillis = 20.seconds.inWholeMilliseconds
-            socketTimeoutMillis = 60.seconds.inWholeMilliseconds
+    val feedClient: HttpClient
+        get() = httpClientFactory.shared(HttpClientFactory.PODCAST_FEED, OkHttp) {
+            timeouts(request = 60.seconds, connect = 20.seconds, socket = 30.seconds)
+            gzipEncoding()
+            install(HttpRedirect) {
+                allowHttpsDowngrade = true
+            }
+            defaultRequest {
+                header(HttpHeaders.UserAgent, USER_AGENT)
+                header(HttpHeaders.Accept, FEED_ACCEPT)
+            }
         }
-        install(HttpRedirect) {
-            allowHttpsDowngrade = true
+
+    val mediaClient: HttpClient
+        get() = httpClientFactory.shared(HttpClientFactory.PODCAST_MEDIA, OkHttp) {
+            timeouts(request = Duration.INFINITE, connect = 20.seconds, socket = 60.seconds)
+            install(HttpRedirect) {
+                allowHttpsDowngrade = true
+            }
+            defaultRequest {
+                header(HttpHeaders.UserAgent, USER_AGENT)
+            }
         }
-        defaultRequest {
-            header(HttpHeaders.UserAgent, USER_AGENT)
-        }
-    }
 
     fun requirePublicHttpUrl(url: String): Url {
         val parsed = try {
             Url(url)
-        } catch (e: Throwable) {
+        } catch (e: Exception) {
             throw IllegalArgumentException("Not a valid URL: $url", e)
         }
 

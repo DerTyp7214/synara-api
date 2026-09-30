@@ -3,7 +3,7 @@ package dev.dertyp.services
 import dev.dertyp.PlatformUUID
 import dev.dertyp.data.*
 import dev.dertyp.db.*
-import dev.dertyp.dbQuery
+import dev.dertyp.core.db.dbQuery
 import dev.dertyp.utils.ColorUtils
 import dev.dertyp.utils.ImageUtils
 import kotlinx.coroutines.flow.toList

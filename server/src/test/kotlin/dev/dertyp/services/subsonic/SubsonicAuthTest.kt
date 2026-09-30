@@ -6,7 +6,7 @@ import dev.dertyp.data.User
 import dev.dertyp.db.ApiKeyTable
 import dev.dertyp.db.SubsonicCredentialTable
 import dev.dertyp.db.UserTable
-import dev.dertyp.dbQuery
+import dev.dertyp.core.db.dbQuery
 import dev.dertyp.services.ApiKeyScopeRegistry
 import dev.dertyp.services.ApiKeyService
 import dev.dertyp.services.UserService

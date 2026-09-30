@@ -1,6 +1,8 @@
 package dev.dertyp.services
 
 import dev.dertyp.Indexer
+import dev.dertyp.config.ServerConfig
+import dev.dertyp.core.HttpClientFactory
 import dev.dertyp.proxy.ProxyMessage
 import dev.dertyp.services.import.ImportService
 import dev.dertyp.services.import.ImporterProxy
@@ -65,6 +67,7 @@ class ReverseProxyServiceTest : KoinTest {
                 single { mockk<ScheduledTaskLogService>(relaxed = true) }
                 single { mockk<ReleaseService>(relaxed = true) }
                 single { mockk<MusicBrainzService>(relaxed = true) }
+                single { HttpClientFactory() }
             })
         }
     }
@@ -100,7 +103,7 @@ class ReverseProxyServiceTest : KoinTest {
         setupKoin(mockApp)
 
         try {
-            val service = ReverseProxyService(config)
+            val service = ReverseProxyService(ServerConfig(config))
             val job = launch {
                 service.startService()
             }
@@ -151,7 +154,7 @@ class ReverseProxyServiceTest : KoinTest {
         setupKoin(mockApp)
 
         try {
-            val service = ReverseProxyService(config)
+            val service = ReverseProxyService(ServerConfig(config))
             val job = launch {
                 service.startService()
             }
@@ -210,7 +213,7 @@ class ReverseProxyServiceTest : KoinTest {
         setupKoin(mockApp)
 
         try {
-            val service = ReverseProxyService(config)
+            val service = ReverseProxyService(ServerConfig(config))
             val job = launch {
                 service.startService()
             }
@@ -260,7 +263,7 @@ class ReverseProxyServiceTest : KoinTest {
         setupKoin(mockApp)
 
         try {
-            val service = ReverseProxyService(config)
+            val service = ReverseProxyService(ServerConfig(config))
             val job = launch {
                 service.startService()
             }
@@ -312,7 +315,7 @@ class ReverseProxyServiceTest : KoinTest {
         setupKoin(mockApp)
 
         try {
-            val service = ReverseProxyService(config)
+            val service = ReverseProxyService(ServerConfig(config))
             val job = launch {
                 service.startService()
             }

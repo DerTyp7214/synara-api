@@ -2,7 +2,7 @@ package dev.dertyp.services
 
 import dev.dertyp.PlatformUUID
 import dev.dertyp.db.SongTable
-import dev.dertyp.dbQuery
+import dev.dertyp.core.db.dbQuery
 import org.bytedeco.ffmpeg.global.avutil
 import org.bytedeco.javacv.FFmpegFrameGrabber
 import org.jetbrains.exposed.v1.core.eq

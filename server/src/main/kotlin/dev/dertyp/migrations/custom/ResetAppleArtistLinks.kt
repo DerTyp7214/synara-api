@@ -4,7 +4,7 @@ import dev.dertyp.core.CustomMigration
 import dev.dertyp.core.Migration
 import dev.dertyp.core.logTask
 import dev.dertyp.db.*
-import dev.dertyp.dbQuery
+import dev.dertyp.core.db.dbQuery
 import dev.dertyp.services.ImageService
 import dev.dertyp.services.import.Type
 import org.jetbrains.exposed.v1.core.*

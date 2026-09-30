@@ -1,5 +1,6 @@
 package dev.dertyp.services
 
+import dev.dertyp.config.toHttpServerConfig
 import dev.dertyp.data.ApiVersion
 import dev.dertyp.data.HandshakeResponse
 import dev.dertyp.ui.UiSchemaVersion
@@ -17,8 +18,7 @@ class HandshakeService(private val call: ApplicationCall) : IHandshakeService {
                         call.request.headers["X-Forwarded-Proto"] == "https" ||
                         call.request.headers["X-Forwarded-Proto"] == "wss"
             
-            val config = call.application.environment.config
-            val serverSslSupported = config.propertyOrNull("server.sslSupported")?.getString()?.toBoolean() ?: false
+            val serverSslSupported = call.application.environment.config.toHttpServerConfig().sslSupported
             
             val sslSupported = secure || serverSslSupported
             

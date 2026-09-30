@@ -9,4 +9,8 @@ object SongMusicBrainzTable : Table("song_musicbrainz") {
     val lastCheck = long("lastCheck").default(0L)
 
     override val primaryKey = PrimaryKey(songId)
+
+    init {
+        index(false, musicBrainzId)
+    }
 }

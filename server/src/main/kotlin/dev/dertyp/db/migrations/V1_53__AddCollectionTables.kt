@@ -1,6 +1,5 @@
 package dev.dertyp.db.migrations
 
-import dev.dertyp.core.foreignKeyOn
 import dev.dertyp.core.tempConnection
 import dev.dertyp.db.CollectionAlbumTable
 import dev.dertyp.db.CollectionArtistTable
@@ -14,8 +13,6 @@ import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 @Suppress("unused", "ClassName", "SqlSourceToSinkFlow")
 class V1_53__AddCollectionTables : BaseJavaMigration() {
     override fun migrate(context: Context) {
-        foreignKeyOn(context.connection)
-
         val statements = tempConnection {
             SchemaUtils.createStatements(
                 CollectionTable,

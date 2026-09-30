@@ -4,7 +4,7 @@ import dev.dertyp.data.TaskKeys
 import dev.dertyp.services.RecommendationService
 import org.koin.core.component.inject
 
-@WorkerTask(TaskKeys.RECOMMENDATION_TRAINING, "Recommendation Model Training")
+@WorkerTask(TaskKeys.RECOMMENDATION_TRAINING, "Recommendation Model Training", cron = "0 7 * * *")
 class RecommendationTrainWorker : Worker("RecommendationTrainWorker") {
     private val recommendationService by inject<RecommendationService>()
 

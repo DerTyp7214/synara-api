@@ -13,13 +13,11 @@ import dev.dertyp.db.ClientDeviceTable
 import dev.dertyp.db.ClientSettingHistoryTable
 import dev.dertyp.db.ClientSettingScopeTable
 import dev.dertyp.db.ClientSettingTable
-import dev.dertyp.dbQuery
+import dev.dertyp.core.PerUserChannels
+import dev.dertyp.core.db.dbQuery
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.asSharedFlow
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
 import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.SortOrder
@@ -36,7 +34,6 @@ import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.update
 import java.time.Instant
 import java.util.UUID
-import java.util.concurrent.ConcurrentHashMap
 import kotlin.time.Duration.Companion.days
 
 class ClientSettingsService : Service() {
@@ -64,10 +61,11 @@ class ClientSettingsService : Service() {
 
     private data class HistoryKey(val scopeKey: ScopeKey, val key: String)
 
-    private val locks = ConcurrentHashMap<UUID, Mutex>()
-    private val changes = ConcurrentHashMap<UUID, MutableSharedFlow<ClientSettingsChange>>()
+    private val channels = PerUserChannels<UUID, ClientSettingsChange> {
+        MutableSharedFlow(extraBufferCapacity = 8, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+    }
 
-    fun observe(userId: UUID): Flow<ClientSettingsChange> = changeFlow(userId).asSharedFlow()
+    fun observe(userId: UUID): Flow<ClientSettingsChange> = channels.observe(userId)
 
     suspend fun getSettings(
         userId: UUID,
@@ -77,7 +75,7 @@ class ClientSettingsService : Service() {
     ): List<ClientSetting> {
         val device = normalize(scope, deviceId)
         if (scope == ClientSettingScope.DEVICE) {
-            lock(userId).withLock { dbQuery { touch(userId, device, Instant.now().toEpochMilli()) } }
+            channels.withLock(userId) { dbQuery { touch(userId, device, Instant.now().toEpochMilli()) } }
         }
         return dbQuery { readEntries(userId, scope, device, includeDeleted) }
     }
@@ -85,7 +83,7 @@ class ClientSettingsService : Service() {
     suspend fun getSnapshot(userId: UUID, deviceId: String): ClientSettingsSnapshot {
         val device = normalize(ClientSettingScope.DEVICE, deviceId)
 
-        return lock(userId).withLock {
+        return channels.withLock(userId) {
             dbQuery {
                 touch(userId, device, Instant.now().toEpochMilli())
 
@@ -114,7 +112,7 @@ class ClientSettingsService : Service() {
         val size = limit.coerceIn(1, MAX_PAGE)
 
         if (scope == ClientSettingScope.DEVICE) {
-            lock(userId).withLock { dbQuery { touch(userId, device, Instant.now().toEpochMilli()) } }
+            channels.withLock(userId) { dbQuery { touch(userId, device, Instant.now().toEpochMilli()) } }
         }
 
         return dbQuery {
@@ -156,7 +154,7 @@ class ClientSettingsService : Service() {
             return ClientSettingsWriteResult.Ok(current.version, emptyList())
         }
 
-        val result = lock(userId).withLock {
+        val result = channels.withLock(userId) {
             dbQuery {
                 val now = Instant.now().toEpochMilli()
                 if (writer != null) touch(userId, writer, now)
@@ -222,7 +220,8 @@ class ClientSettingsService : Service() {
         }
 
         if (result is ClientSettingsWriteResult.Ok && result.entries.isNotEmpty()) {
-            changes[userId]?.tryEmit(
+            channels.tryEmit(
+                userId,
                 ClientSettingsChange(
                     scope = scope,
                     deviceId = device.ifBlank { null },
@@ -308,7 +307,7 @@ class ClientSettingsService : Service() {
     suspend fun registerDevice(userId: UUID, deviceId: String, name: String, platform: String): ClientDevice {
         val device = normalize(ClientSettingScope.DEVICE, deviceId)
 
-        return lock(userId).withLock {
+        return channels.withLock(userId) {
             dbQuery {
                 touch(userId, device, Instant.now().toEpochMilli(), name, platform)
 
@@ -325,7 +324,7 @@ class ClientSettingsService : Service() {
 
     suspend fun deleteDevice(userId: UUID, deviceId: String) {
         val device = normalize(ClientSettingScope.DEVICE, deviceId)
-        lock(userId).withLock { dbQuery { purgeDevice(userId, device) } }
+        channels.withLock(userId) { dbQuery { purgeDevice(userId, device) } }
     }
 
     suspend fun cleanup(
@@ -367,7 +366,7 @@ class ClientSettingsService : Service() {
                 "Purging tombstones of user ${index + 1}/${expiredByUser.size}"
             )
 
-            lock(owner).withLock {
+            channels.withLock(owner) {
                 dbQuery {
                     tombstones.groupBy { it.scopeKey }.forEach { (scopeKey, rows) ->
                         val current = loadScope(scopeKey.userId, scopeKey.scope, scopeKey.deviceId)
@@ -418,7 +417,7 @@ class ClientSettingsService : Service() {
                 "Trimming history of user ${index + 1}/${historyByUser.size}"
             )
 
-            historyTrimmed += lock(owner).withLock {
+            historyTrimmed += channels.withLock(owner) {
                 dbQuery {
                     keys.sumOf { entry ->
                         trimHistory(
@@ -448,7 +447,7 @@ class ClientSettingsService : Service() {
                 "Deleting device ${index + 1}/${staleDevices.size}"
             )
 
-            lock(owner).withLock { dbQuery { purgeDevice(owner, device) } }
+            channels.withLock(owner) { dbQuery { purgeDevice(owner, device) } }
         }
 
         onProgress(
@@ -505,12 +504,6 @@ class ClientSettingsService : Service() {
         }
 
         return device
-    }
-
-    private fun lock(userId: UUID): Mutex = locks.computeIfAbsent(userId) { Mutex() }
-
-    private fun changeFlow(userId: UUID): MutableSharedFlow<ClientSettingsChange> = changes.computeIfAbsent(userId) {
-        MutableSharedFlow(extraBufferCapacity = 8, onBufferOverflow = BufferOverflow.DROP_OLDEST)
     }
 
     private fun readEntries(

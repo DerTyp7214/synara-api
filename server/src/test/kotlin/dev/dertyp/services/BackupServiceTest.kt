@@ -3,6 +3,7 @@ package dev.dertyp.services
 import com.github.luben.zstd.ZstdInputStream
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
+import dev.dertyp.config.ServerConfig
 import dev.dertyp.db.*
 import dev.dertyp.plugins.IImporter
 import dev.dertyp.plugins.PluginManager
@@ -88,7 +89,7 @@ class BackupServiceTest {
     @EnumSource(DbDialect::class)
     fun `createBackup should create a zip file with expected entries and blobs`(dialect: DbDialect) = runBlocking {
         setup(dialect)
-        val service = BackupService(dbManagementService, storageService, pluginManager, environment)
+        val service = BackupService(dbManagementService, storageService, pluginManager, ServerConfig(environment.config))
         val dummyDbData = byteArrayOf(1, 2, 3)
         coEvery { dbManagementService.exportData(any<OutputStream>()) } answers { firstArg<OutputStream>().write(dummyDbData) }
 
@@ -205,7 +206,7 @@ class BackupServiceTest {
     @EnumSource(DbDialect::class)
     fun `loadBackup should restore database and images`(dialect: DbDialect) = runBlocking {
         setup(dialect)
-        val service = BackupService(dbManagementService, storageService, pluginManager, environment)
+        val service = BackupService(dbManagementService, storageService, pluginManager, ServerConfig(environment.config))
         val dummyDbData = byteArrayOf(1, 2, 3)
         var capturedDbData: ByteArray? = null
         coEvery { dbManagementService.exportData(any<OutputStream>()) } answers { firstArg<OutputStream>().write(dummyDbData) }
@@ -236,7 +237,7 @@ class BackupServiceTest {
     @EnumSource(DbDialect::class)
     fun `loadBackup should restore database and images from File`(dialect: DbDialect) = runBlocking {
         setup(dialect)
-        val service = BackupService(dbManagementService, storageService, pluginManager, environment)
+        val service = BackupService(dbManagementService, storageService, pluginManager, ServerConfig(environment.config))
         val dummyDbData = byteArrayOf(1, 2, 3)
         var capturedDbData: ByteArray? = null
         coEvery { dbManagementService.exportData(any<OutputStream>()) } answers { firstArg<OutputStream>().write(dummyDbData) }
@@ -268,7 +269,7 @@ class BackupServiceTest {
     @EnumSource(DbDialect::class)
     fun `createBackup should remove the partial zip when the export fails`(dialect: DbDialect) = runBlocking {
         setup(dialect)
-        val service = BackupService(dbManagementService, storageService, pluginManager, environment)
+        val service = BackupService(dbManagementService, storageService, pluginManager, ServerConfig(environment.config))
         coEvery { dbManagementService.exportData(any<OutputStream>()) } throws IllegalStateException("export failed")
 
         var thrown: Throwable? = null
@@ -289,7 +290,7 @@ class BackupServiceTest {
     @EnumSource(DbDialect::class)
     fun `rotateBackups should delete old backups and unreferenced blobs`(dialect: DbDialect) = runBlocking {
         setup(dialect)
-        val service = BackupService(dbManagementService, storageService, pluginManager, environment)
+        val service = BackupService(dbManagementService, storageService, pluginManager, ServerConfig(environment.config))
         coEvery { dbManagementService.exportData(any<OutputStream>()) } answers { firstArg<OutputStream>().write(byteArrayOf(0)) }
 
         repeat(11) { i ->

@@ -1,7 +1,7 @@
 package dev.dertyp.services
 
 import dev.dertyp.db.GenreTable
-import dev.dertyp.dbQuery
+import dev.dertyp.core.db.dbQuery
 import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.jdbc.batchInsert
 import org.jetbrains.exposed.v1.jdbc.select

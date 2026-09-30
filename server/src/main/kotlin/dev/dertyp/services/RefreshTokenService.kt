@@ -4,7 +4,7 @@ import dev.dertyp.core.date
 import dev.dertyp.core.plus
 import dev.dertyp.data.RefreshToken
 import dev.dertyp.db.RefreshTokenTable
-import dev.dertyp.dbQuery
+import dev.dertyp.core.db.dbQuery
 import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.jdbc.*
 import java.time.Instant

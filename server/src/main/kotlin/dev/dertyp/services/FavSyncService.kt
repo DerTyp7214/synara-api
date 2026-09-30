@@ -4,7 +4,7 @@ import dev.dertyp.core.date
 import dev.dertyp.data.FavSync
 import dev.dertyp.data.User
 import dev.dertyp.db.FavSyncTable
-import dev.dertyp.dbQuery
+import dev.dertyp.core.db.dbQuery
 import org.jetbrains.exposed.v1.core.ColumnSet
 import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.SortOrder

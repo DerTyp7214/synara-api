@@ -3,11 +3,8 @@ package dev.dertyp.migrations.custom
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
 import dev.dertyp.db.*
-import dev.dertyp.services.ScheduledTaskLogService
-import io.mockk.every
-import io.mockk.mockk
+import dev.dertyp.testing.relaxedTaskLogService
 import kotlinx.coroutines.runBlocking
-import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.or
 import org.jetbrains.exposed.v1.jdbc.*
@@ -26,8 +23,7 @@ class BackfillListenUpdatedAtTest : KoinTest {
     private lateinit var database: Database
 
     private fun setup(dialect: DbDialect) {
-        val logService = mockk<ScheduledTaskLogService>(relaxed = true)
-        every { logService.startLog(any(), any()) } returns EntityID(UUID.randomUUID(), ScheduledTaskLogTable)
+        val logService = relaxedTaskLogService()
         startKoin { modules(module { single { logService } }) }
 
         database = TestDatabase.connect(dialect, "backfill_listen_updated_at_test")

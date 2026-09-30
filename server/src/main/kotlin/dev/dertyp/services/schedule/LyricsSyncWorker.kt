@@ -3,8 +3,9 @@ package dev.dertyp.services.schedule
 import dev.dertyp.data.TaskKeys
 import dev.dertyp.db.SongTable
 import dev.dertyp.db.SyncedLyricsTable
-import dev.dertyp.dbQuery
+import dev.dertyp.core.db.dbQuery
 import dev.dertyp.services.LyricsService
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import org.jetbrains.exposed.v1.core.isNull
 import org.jetbrains.exposed.v1.core.leftJoin
@@ -14,7 +15,7 @@ import org.koin.core.component.inject
 import java.util.UUID
 import kotlin.time.Duration.Companion.seconds
 
-@WorkerTask(TaskKeys.LYRICS_SYNC_WORKER, "Lyrics Sync Worker")
+@WorkerTask(TaskKeys.LYRICS_SYNC_WORKER, "Lyrics Sync Worker", enabled = false, cron = "0 4 * * *")
 class LyricsSyncWorker : Worker("LyricsSyncWorker") {
     private val lyricsService by inject<LyricsService>()
 
@@ -83,6 +84,8 @@ class LyricsSyncWorker : Worker("LyricsSyncWorker") {
                 } else {
                     failed++
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 failed++
                 logger.error("Failed to process song ${song.id}: ${e.message}")

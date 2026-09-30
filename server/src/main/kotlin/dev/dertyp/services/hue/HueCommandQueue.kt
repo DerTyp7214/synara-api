@@ -9,7 +9,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.concurrent.ConcurrentHashMap
-import kotlin.time.Duration
+import kotlin.time.Clock
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
@@ -32,12 +32,8 @@ data class HueSceneCommand(val sceneId: String, val update: SceneRecallUpdate) :
 class HueCommandQueue(
     private val api: HueBridgeApi,
     scope: CoroutineScope,
-    private val lightInterval: Duration = 100.milliseconds,
-    private val groupInterval: Duration = 1.seconds,
-    private val rateLimitPenalty: Duration = 1.seconds,
-    private val clock: () -> Long = System::currentTimeMillis,
-    private val onSent: (HueCommand) -> Unit = {},
-    private val onError: (Throwable) -> Unit = {},
+    private val onSent: (HueCommand) -> Unit,
+    private val onError: (Throwable) -> Unit,
 ) {
     private val latest = ConcurrentHashMap<String, HueCommand>()
     private val keys = Channel<String>(Channel.UNLIMITED)
@@ -62,7 +58,7 @@ class HueCommandQueue(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: HueRateLimited) {
-                penaltyUntil = clock() + rateLimitPenalty.inWholeMilliseconds
+                penaltyUntil = now() + RATE_LIMIT_PENALTY.inWholeMilliseconds
                 onError(e)
             } catch (e: Exception) {
                 onError(e)
@@ -80,19 +76,26 @@ class HueCommandQueue(
     val pending: Int get() = latest.size
 
     private suspend fun pace(grouped: Boolean) {
-        val now = clock()
         val earliest = maxOf(
             penaltyUntil,
-            if (grouped) lastGroupSend + groupInterval.inWholeMilliseconds else lastLightSend + lightInterval.inWholeMilliseconds,
+            if (grouped) lastGroupSend + GROUP_INTERVAL.inWholeMilliseconds else lastLightSend + LIGHT_INTERVAL.inWholeMilliseconds,
         )
-        val wait = earliest - now
+        val wait = earliest - now()
         if (wait > 0) delay(wait)
-        val sentAt = clock()
+        val sentAt = now()
         if (grouped) lastGroupSend = sentAt else lastLightSend = sentAt
     }
+
+    private fun now(): Long = Clock.System.now().toEpochMilliseconds()
 
     fun close() {
         keys.close()
         worker.cancel()
+    }
+
+    companion object {
+        private val LIGHT_INTERVAL = 100.milliseconds
+        private val GROUP_INTERVAL = 1.seconds
+        private val RATE_LIMIT_PENALTY = 1.seconds
     }
 }

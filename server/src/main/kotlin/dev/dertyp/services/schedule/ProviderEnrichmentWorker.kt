@@ -4,10 +4,11 @@ import dev.dertyp.core.HttpClientPriority
 import dev.dertyp.data.TaskKeys
 import dev.dertyp.services.AlbumService
 import dev.dertyp.services.SongService
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.toList
 import org.koin.core.component.inject
 
-@WorkerTask(TaskKeys.PROVIDER_ENRICHMENT_WORKER, "Provider Enrichment Worker")
+@WorkerTask(TaskKeys.PROVIDER_ENRICHMENT_WORKER, "Provider Enrichment Worker", afterTask = TaskKeys.RECENT_RELEASE_WORKER)
 class ProviderEnrichmentWorker : Worker("Provider Enrichment Worker") {
     private val albumService by inject<AlbumService>()
     private val songService by inject<SongService>()
@@ -35,6 +36,8 @@ class ProviderEnrichmentWorker : Worker("Provider Enrichment Worker") {
             if (recentReleaseWorker.active) return@runParallel
             try {
                 albumService.enrichProviders(id, HttpClientPriority.LOW)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 logger.error("Failed to enrich album $id", e)
             }
@@ -55,6 +58,8 @@ class ProviderEnrichmentWorker : Worker("Provider Enrichment Worker") {
             if (recentReleaseWorker.active) return@runParallel
             try {
                 songService.enrichProviders(id, HttpClientPriority.LOW)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 logger.error("Failed to enrich song $id", e)
             }
@@ -79,6 +84,8 @@ class ProviderEnrichmentWorker : Worker("Provider Enrichment Worker") {
             if (recentReleaseWorker.active) return@runParallel
             try {
                 albumService.enrichProviders(id, HttpClientPriority.LOW)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 logger.error("Failed to enrich single $id", e)
             }

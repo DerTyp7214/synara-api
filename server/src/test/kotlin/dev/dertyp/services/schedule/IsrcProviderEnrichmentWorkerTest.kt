@@ -1,5 +1,6 @@
 package dev.dertyp.services.schedule
 
+import dev.dertyp.config.ServerConfig
 import dev.dertyp.services.AlbumService
 import dev.dertyp.services.SongService
 import dev.dertyp.services.metadata.IMetadataService.Feature
@@ -56,6 +57,7 @@ class IsrcProviderEnrichmentWorkerTest : KoinTest {
                 single { recentReleaseWorker }
                 single { environment }
                 single { config }
+                single { ServerConfig(config) }
             })
         }
 

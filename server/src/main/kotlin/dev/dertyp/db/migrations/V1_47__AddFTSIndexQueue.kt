@@ -1,5 +1,6 @@
 package dev.dertyp.db.migrations
 
+import dev.dertyp.core.db.Dialect
 import dev.dertyp.core.tempConnection
 import dev.dertyp.db.SearchIndexQueueTable
 import org.flywaydb.core.api.migration.BaseJavaMigration
@@ -9,7 +10,7 @@ import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 @Suppress("unused", "ClassName")
 class V1_47__AddFTSIndexQueue : BaseJavaMigration() {
     override fun migrate(context: Context) {
-        val isPostgres = context.connection.metaData.databaseProductName.lowercase().contains("postgresql")
+        val isPostgres = Dialect.of(context.connection) == Dialect.POSTGRES
         if (!isPostgres) return
 
         val tableStatements = tempConnection {

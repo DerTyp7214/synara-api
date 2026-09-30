@@ -1,11 +1,11 @@
 package dev.dertyp.services
 
 import dev.dertyp.PlatformUUID
+import dev.dertyp.config.ServerConfig
 import dev.dertyp.db.*
-import dev.dertyp.dbQuery
+import dev.dertyp.core.db.dbQuery
 import dev.dertyp.platformUUIDFromString
 import dev.dertyp.serializers.AppJson
-import io.ktor.server.application.*
 import kotlinx.coroutines.delay
 import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.v1.core.*
@@ -25,13 +25,12 @@ import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 
 class RecommendationService : Service() {
-    private val environment by inject<ApplicationEnvironment>()
+    private val config by inject<ServerConfig>()
 
     private val dirty = AtomicBoolean(true)
 
     private val dataDir: File?
-        get() = environment.config.propertyOrNull("recsys.dataDir")?.getString()
-            ?.takeIf { it.isNotBlank() }?.let { File(it) }
+        get() = config.analysis.recommendations.dataDir
 
     fun isConfigured(): Boolean = dataDir != null
 

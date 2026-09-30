@@ -4,7 +4,7 @@ import dev.dertyp.data.TaskKeys
 import dev.dertyp.services.ClientSettingsService
 import org.koin.core.component.inject
 
-@WorkerTask(TaskKeys.CLIENT_SETTINGS_CLEANUP, "Client Settings Cleanup")
+@WorkerTask(TaskKeys.CLIENT_SETTINGS_CLEANUP, "Client Settings Cleanup", cron = "45 0 * * *")
 class ClientSettingsCleanupWorker : Worker("ClientSettingsCleanupWorker") {
     private val clientSettingsService by inject<ClientSettingsService>()
 

@@ -16,15 +16,15 @@ import dev.dertyp.db.SongComposerTable
 import dev.dertyp.db.SongLyricistTable
 import dev.dertyp.db.SongProducerTable
 import dev.dertyp.db.SongTable
-import dev.dertyp.dbQuery
-import dev.dertyp.executeCommand
-import dev.dertyp.findInPath
+import dev.dertyp.core.db.dbQuery
+import dev.dertyp.core.process.ExternalTool
 import dev.dertyp.services.audio.AudioAnalysisPostProcessor
 import dev.dertyp.services.audio.AudioTimelineCodec
 import dev.dertyp.services.audio.RmsEnvelopeExtractor
 import dev.dertyp.services.audio.ValencePostProcessor
 import dev.dertyp.services.audio.highHz
 import dev.dertyp.services.audio.lowHz
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.ExperimentalSerializationApi
@@ -57,7 +57,8 @@ import kotlin.time.Duration.Companion.days
 
 @OptIn(ExperimentalSerializationApi::class)
 open class AudioAnalysisService : IAudioAnalysisService, Service() {
-    protected open val essentiaExtractorPath = findInPath("essentia_streaming_extractor_music")
+    private val essentiaExtractor = ExternalTool("essentia_streaming_extractor_music")
+    protected open val essentiaExtractorPath: String? get() = essentiaExtractor.path
 
     protected open val postProcessors: List<AudioAnalysisPostProcessor> = listOf(
         ValencePostProcessor()
@@ -279,6 +280,8 @@ open class AudioAnalysisService : IAudioAnalysisService, Service() {
 
                 return audioData to essentia
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             logger.error("Essentia analysis failed: ${e.message}")
         } finally {
@@ -288,12 +291,10 @@ open class AudioAnalysisService : IAudioAnalysisService, Service() {
     }
 
     protected open suspend fun runEssentia(inputPath: String, outputPath: String): Int {
-        val path = essentiaExtractorPath ?: return -1
-        return executeCommand(
-            command = listOf(path, inputPath, outputPath),
-            aliveCheck = { true },
+        return essentiaExtractor.run(
+            args = listOf(inputPath, outputPath),
             logger = logger
-        ).exitCode
+        )?.exitCode ?: -1
     }
 
     private suspend fun saveAudioData(songId: PlatformUUID, audioData: SongAudioData) = dbQuery {

@@ -4,7 +4,7 @@ import dev.dertyp.data.TaskKeys
 import dev.dertyp.services.ReleaseService
 import org.koin.core.component.inject
 
-@WorkerTask(TaskKeys.RECENT_RELEASE_WORKER, "Recent Release Worker")
+@WorkerTask(TaskKeys.RECENT_RELEASE_WORKER, "Recent Release Worker", cron = "0 1 * * *")
 class RecentReleaseWorker : Worker("RecentReleaseWorker") {
     private val releaseService by inject<ReleaseService>()
 

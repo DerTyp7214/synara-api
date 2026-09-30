@@ -1,6 +1,5 @@
 package dev.dertyp.db.migrations
 
-import dev.dertyp.core.foreignKeyOn
 import dev.dertyp.core.tempConnection
 import dev.dertyp.db.ImageMetadataTable
 import dev.dertyp.db.ImageTable
@@ -12,8 +11,6 @@ import org.jetbrains.exposed.v1.migration.jdbc.MigrationUtils
 @Suppress("unused", "ClassName", "SqlSourceToSinkFlow")
 class V1_31__AddImageMetadata : BaseJavaMigration() {
     override fun migrate(context: Context) {
-        foreignKeyOn(context.connection)
-
         val statements = tempConnection {
             MigrationUtils.statementsRequiredForDatabaseMigration(ImageTable) +
                     SchemaUtils.createStatements(ImageMetadataTable)

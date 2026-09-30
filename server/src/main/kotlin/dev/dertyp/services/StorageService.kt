@@ -1,49 +1,32 @@
 package dev.dertyp.services
 
+import dev.dertyp.config.ServerConfig
 import dev.dertyp.core.getTotalSize
 import dev.dertyp.plugins.IServerStorageService
 import dev.dertyp.services.import.ImportBackend
-import io.ktor.server.application.ApplicationEnvironment
+import kotlinx.coroutines.CancellationException
 import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.time.Duration.Companion.minutes
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 enum class StorageCategory { TOTAL, IMAGES, ANIMATED_IMAGES, PODCASTS }
 
-class StorageService(environment: ApplicationEnvironment) : IStorageService, IServerStorageService, Service() {
-    override val tracksPath =
-        environment.config.propertyOrNull("audio.tracks")?.getString()?.removeSuffix("/")
-    override val albumsPath =
-        environment.config.propertyOrNull("audio.albums")?.getString()?.removeSuffix("/")
-    override val playlistsPath =
-        environment.config.propertyOrNull("audio.playlists")?.getString()?.removeSuffix("/")
-    override val customAudioPath =
-        environment.config.property("audio.custom").getString().removeSuffix("/")
-    override val imagesPath =
-        environment.config.property("data.images").getString().removeSuffix("/")
-    override val animatedImagesPath =
-        environment.config.property("data.animated-images").getString().removeSuffix("/")
-    override val podcastLibraryPath =
-        environment.config.property("podcasts.library").getString().removeSuffix("/")
-    override val podcastImportsPath =
-        environment.config.property("podcasts.imports").getString().removeSuffix("/")
-    override val secondaryTracksPaths = try {
-        environment.config.propertyOrNull("audio.secondary-tracks")?.getList()?.map {
-            it.removeSuffix("/")
-        } ?: emptyList()
-    } catch (_: Throwable) {
-        emptyList()
-    }
+class StorageService(config: ServerConfig) : IStorageService, IServerStorageService, Service() {
+    private val paths = config.library
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    override val tracksPath = paths.tracks?.removeSuffix("/")
+    override val albumsPath = paths.albums?.removeSuffix("/")
+    override val playlistsPath = paths.playlists?.removeSuffix("/")
+    override val customAudioPath = paths.customAudio.removeSuffix("/")
+    override val imagesPath = paths.images.removeSuffix("/")
+    override val animatedImagesPath = paths.animatedImages.removeSuffix("/")
+    override val podcastLibraryPath = paths.podcastLibrary.removeSuffix("/")
+    override val podcastImportsPath = paths.podcastImports.removeSuffix("/")
+    override val secondaryTracksPaths = paths.secondaryTracks.map { it.removeSuffix("/") }
 
     private val caches = mapOf(
         StorageCategory.TOTAL to CachedSize(::computeTotalStorage),
@@ -71,6 +54,8 @@ class StorageService(environment: ApplicationEnvironment) : IStorageService, ISe
         caches.values.forEach { cache ->
             try {
                 cache.recompute()
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Throwable) {
                 logger.error("Failed to compute storage size", e)
             }
@@ -79,10 +64,6 @@ class StorageService(environment: ApplicationEnvironment) : IStorageService, ISe
 
     suspend fun recomputeAll(): Map<StorageCategory, Long> =
         caches.mapValues { (_, cache) -> cache.recompute() }
-
-    override suspend fun stopService() {
-        scope.cancel()
-    }
 
     private fun computeTotalStorage(): Long {
         val pathsToMeasure = (
@@ -138,6 +119,8 @@ class StorageService(environment: ApplicationEnvironment) : IStorageService, ISe
                 scope.launch {
                     try {
                         recompute()
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (e: Throwable) {
                         logger.error("Failed to refresh storage size", e)
                     } finally {

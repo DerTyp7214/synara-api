@@ -5,11 +5,11 @@ import dev.dertyp.core.sha256
 import dev.dertyp.data.AnimatedImage
 import dev.dertyp.data.InsertableAnimatedImage
 import dev.dertyp.data.PaginatedResponse
-import dev.dertyp.db.AlbumTable
 import dev.dertyp.db.AnimatedImageTable
 import dev.dertyp.db.ImageTable
-import dev.dertyp.db.SongTable
-import dev.dertyp.dbQuery
+import dev.dertyp.core.db.SchemaTables
+import dev.dertyp.core.db.dbQuery
+import dev.dertyp.core.db.referencedUuids
 import dev.dertyp.plugins.RedisCacheProvider
 import dev.dertyp.utils.LogParam
 import kotlinx.coroutines.Dispatchers
@@ -141,11 +141,9 @@ class AnimatedImageService(
     }
 
     suspend fun deleteUnreferencedAnimatedImages(onProgress: suspend (Double, String) -> Unit = { _, _ -> }): Int = dbQuery {
-        val referencedIds = mutableSetOf<UUID>()
-        referencedIds.addAll(AlbumTable.selectAll().mapNotNull { it[AlbumTable.animatedCover]?.value })
-        referencedIds.addAll(SongTable.selectAll().mapNotNull { it[SongTable.animatedCover]?.value })
+        val referencedIds = SchemaTables.referencesTo(AnimatedImageTable).flatMapTo(mutableSetOf()) { it.referencedUuids() }
 
-        val allAnimatedImages = AnimatedImageTable.selectAll().map {
+        val allAnimatedImages = AnimatedImageTable.select(AnimatedImageTable.id, AnimatedImageTable.path).map {
             it[AnimatedImageTable.id].value to it[AnimatedImageTable.path]
         }
 

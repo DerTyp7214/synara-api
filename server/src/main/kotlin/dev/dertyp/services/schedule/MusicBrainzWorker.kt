@@ -2,14 +2,14 @@ package dev.dertyp.services.schedule
 
 import dev.dertyp.core.HttpClientPriority
 import dev.dertyp.data.TaskKeys
-import dev.dertyp.dbQuery
 import dev.dertyp.services.*
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.produceIn
 import kotlinx.coroutines.withTimeoutOrNull
 import org.koin.core.component.inject
 import kotlin.time.Duration.Companion.hours
 
-@WorkerTask(TaskKeys.MUSICBRAINZ_WORKER, "MusicBrainz Worker")
+@WorkerTask(TaskKeys.MUSICBRAINZ_WORKER, "MusicBrainz Worker", cron = "0 0 * * *")
 class MusicBrainzWorker : Worker("MusicBrainzWorker") {
     private val songService by inject<SongService>()
     private val albumService by inject<AlbumService>()
@@ -47,6 +47,8 @@ class MusicBrainzWorker : Worker("MusicBrainzWorker") {
                                     taggedSongs++
                                 }
                                 onProgress(0.0, "Checked $totalSongsChecked songs ($taggedSongs tagged), $totalAlbumsChecked albums ($taggedAlbums tagged), $totalArtistsChecked artists ($taggedArtists tagged)")
+                            } catch (e: CancellationException) {
+                                throw e
                             } catch (e: Exception) {
                                 logger.error("Error fetching MusicBrainz ID for song $songId: ${e.message}", e)
                             }
@@ -66,6 +68,8 @@ class MusicBrainzWorker : Worker("MusicBrainzWorker") {
                                     albumService.updateMusicBrainzLastCheck(albumId)
                                 }
                                 onProgress(0.0, "Checked $totalSongsChecked songs ($taggedSongs tagged), $totalAlbumsChecked albums ($taggedAlbums tagged), $totalArtistsChecked artists ($taggedArtists tagged)")
+                            } catch (e: CancellationException) {
+                                throw e
                             } catch (e: Exception) {
                                 logger.error("Error fetching MusicBrainz ID for album $albumId: ${e.message}", e)
                             }
@@ -85,6 +89,8 @@ class MusicBrainzWorker : Worker("MusicBrainzWorker") {
                                     artistService.updateMusicBrainzLastCheck(artistId)
                                 }
                                 onProgress(0.0, "Checked $totalSongsChecked songs ($taggedSongs tagged), $totalAlbumsChecked albums ($taggedAlbums tagged), $totalArtistsChecked artists ($taggedArtists tagged)")
+                            } catch (e: CancellationException) {
+                                throw e
                             } catch (e: Exception) {
                                 logger.error("Error fetching MusicBrainz ID for artist $artistId: ${e.message}", e)
                             }
@@ -99,9 +105,7 @@ class MusicBrainzWorker : Worker("MusicBrainzWorker") {
             }
         }
 
-        dbQuery {
-            libraryMergeService.mergeDuplicateAlbums()
-        }
+        libraryMergeService.mergeDuplicateAlbums()
 
         return mapOf(
             "songsChecked" to totalSongsChecked,

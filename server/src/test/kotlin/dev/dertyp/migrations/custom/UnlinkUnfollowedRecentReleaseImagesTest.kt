@@ -5,8 +5,8 @@ import dev.dertyp.TestDatabase
 import dev.dertyp.db.*
 import dev.dertyp.plugins.RedisCacheProvider
 import dev.dertyp.services.ImageService
-import dev.dertyp.services.ScheduledTaskLogService
 import dev.dertyp.services.StorageService
+import dev.dertyp.testing.relaxedTaskLogService
 import io.mockk.every
 import io.mockk.justRun
 import io.mockk.mockk
@@ -42,8 +42,7 @@ class UnlinkUnfollowedRecentReleaseImagesTest : KoinTest {
         justRun { storageService.invalidate(any()) }
         every { redisConfig.host } returns "none"
 
-        val logService = mockk<ScheduledTaskLogService>(relaxed = true)
-        every { logService.startLog(any(), any()) } returns EntityID(UUID.randomUUID(), ScheduledTaskLogTable)
+        val logService = relaxedTaskLogService()
 
         startKoin {
             modules(module {

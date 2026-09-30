@@ -2,7 +2,11 @@ package dev.dertyp.services
 
 import dev.dertyp.PlatformUUID
 import dev.dertyp.core.ApplicationScope
+import dev.dertyp.core.HttpClientFactory
 import dev.dertyp.core.fullTitle
+import dev.dertyp.core.jsonContent
+import dev.dertyp.core.timeouts
+import dev.dertyp.core.userAgent
 import dev.dertyp.core.withSplitTitleTags
 import dev.dertyp.data.*
 import dev.dertyp.randomPlatformUUID
@@ -10,13 +14,9 @@ import dev.dertyp.rpc.BaseRpcServiceManager
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.engine.cio.CIO
-import io.ktor.client.plugins.HttpTimeout
-import io.ktor.client.plugins.UserAgent
-import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.plugins.websocket.WebSockets
 import io.ktor.client.plugins.websocket.pingInterval
 import io.ktor.client.request.get
-import io.ktor.serialization.kotlinx.json.json
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.sync.Mutex
@@ -103,29 +103,24 @@ class RemoteMirrorService : Service() {
     private val userPlaylistService by inject<UserPlaylistService>()
     private val userService by inject<UserService>()
 
+    private val httpClientFactory by inject<HttpClientFactory>()
+
     @OptIn(ExperimentalSerializationApi::class)
-    private val httpClient = HttpClient(CIO) {
-        install(UserAgent) {
-            agent = "Synara/Mirror"
-        }
-        install(HttpTimeout) {
-            requestTimeoutMillis = 60000
-            connectTimeoutMillis = 20000
-            socketTimeoutMillis = 60000
-        }
-        install(WebSockets) {
-            pingInterval = 15.seconds
-            maxFrameSize = Long.MAX_VALUE
-        }
-        install(ContentNegotiation) {
-            json(ApplicationScope.json)
-        }
-        install(Krpc) {
-            serialization {
-                cbor(ApplicationScope.cbor)
+    private val httpClient: HttpClient
+        get() = httpClientFactory.shared(HttpClientFactory.MIRROR, CIO) {
+            userAgent("Synara/Mirror")
+            timeouts(request = 60.seconds, connect = 20.seconds, socket = 60.seconds)
+            install(WebSockets) {
+                pingInterval = 15.seconds
+                maxFrameSize = Long.MAX_VALUE
+            }
+            jsonContent()
+            install(Krpc) {
+                serialization {
+                    cbor(ApplicationScope.cbor)
+                }
             }
         }
-    }
 
     private val managers = ConcurrentHashMap<String, RemoteMirrorRpcManager>()
 
@@ -155,7 +150,7 @@ class RemoteMirrorService : Service() {
         }
 
         logger.info("Starting mirror from remote server: ${config.host}:${config.port} (Quality: ${config.quality})")
-        mirrorJob = CoroutineScope(Dispatchers.IO).launch {
+        mirrorJob = scope.launch {
             try {
                 isMirroring = true
                 performMirror(config)
@@ -342,7 +337,7 @@ class RemoteMirrorService : Service() {
                     session.imageIdMap[remote.id] = newId
                     session.syncedImages++
                 }
-            } catch (e: Exception) { session.recordError("Image ${remote.imageHash}", e) }
+            } catch (e: CancellationException) { throw e } catch (e: Exception) { session.recordError("Image ${remote.imageHash}", e) }
             count++
             if (count % 50 == 0) logger.info("Mirrored $count/$total images...")
             if (count % 10 == 0) session.updateProgress("Mirroring Images", count, total, "Image ${remote.imageHash}").also { yield() }
@@ -378,7 +373,7 @@ class RemoteMirrorService : Service() {
                         imageId = artist.imageId?.let { session.imageIdMap[it] },
                         artists = artist.artists.mapNotNull { sub -> session.artistIdMap[sub.id]?.let { sub.copy(id = it) } }
                     ))
-                } catch (e: Exception) { session.recordError("Artist ${artist.name}", e) }
+                } catch (e: CancellationException) { throw e } catch (e: Exception) { session.recordError("Artist ${artist.name}", e) }
                 count++
                 if (count % 100 == 0) logger.info("Mirrored $count/$total artists...")
                 if (count % 10 == 0) session.updateProgress("Mirroring Artists", count, total, artist.name).also { yield() }
@@ -395,7 +390,7 @@ class RemoteMirrorService : Service() {
             try {
                 val artistId = session.artistIdMap[alias.artistId] ?: if (session.config.isImport) return@collect else alias.artistId
                 artistService.upsertArtistAlias(alias.copy(artistId = artistId))
-            } catch (e: Exception) { session.recordError("Alias ${alias.name}", e) }
+            } catch (e: CancellationException) { throw e } catch (e: Exception) { session.recordError("Alias ${alias.name}", e) }
             if (++count % 50 == 0) session.updateProgress("Mirroring Artist Aliases", count, 0, alias.name).also { yield() }
         }
 
@@ -406,7 +401,7 @@ class RemoteMirrorService : Service() {
             try {
                 val artistId = session.artistIdMap[alias.artistId] ?: if (session.config.isImport) return@collect else alias.artistId
                 artistService.upsertArtistSplitAlias(alias.copy(artistId = artistId))
-            } catch (e: Exception) { session.recordError("Split Alias ${alias.name}", e) }
+            } catch (e: CancellationException) { throw e } catch (e: Exception) { session.recordError("Split Alias ${alias.name}", e) }
             if (++count % 50 == 0) session.updateProgress("Mirroring Artist Split Aliases", count, 0, alias.name).also { yield() }
         }
     }
@@ -441,7 +436,7 @@ class RemoteMirrorService : Service() {
                         coverId = album.coverId?.let { session.imageIdMap[it] },
                         artists = album.artists.mapNotNull { sub -> session.artistIdMap[sub.id]?.let { sub.copy(id = it) } }
                     ))
-                } catch (e: Exception) { session.recordError("Album ${album.name}", e) }
+                } catch (e: CancellationException) { throw e } catch (e: Exception) { session.recordError("Album ${album.name}", e) }
                 count++
                 if (count % 100 == 0) logger.info("Mirrored $count/$total albums...")
                 if (count % 10 == 0) session.updateProgress("Mirroring Albums", count, total, album.name).also { yield() }
@@ -465,6 +460,8 @@ class RemoteMirrorService : Service() {
                     val size = if (session.config.quality == -1) song.audio?.fileSize ?: 0L
                     else session.remoteSongService.getDownloadSize(song.id, session.config.quality)
                     emit(song to size)
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     val displayName = "${song.artists.firstOrNull()?.name} - ${song.fullTitle}"
                     session.recordError(displayName, e)
@@ -516,6 +513,8 @@ class RemoteMirrorService : Service() {
                         if (session.songCount % 50 == 0) logger.info("Mirrored ${session.songCount}/$total songs...")
                         session.updateProgress("Mirroring Songs", session.songCount, total, displayName, 1.0f, session.totalBytesSynced)
                     }
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     session.recordError(displayName, e)
                     session.progressMutex.withLock { session.songCount++ ; session.updateProgress("Mirroring Songs", session.songCount, total, displayName, 1.0f, session.totalBytesSynced) }
@@ -551,7 +550,7 @@ class RemoteMirrorService : Service() {
                     id
                 }
                 session.playlistIdMap[playlist.id] = finalId
-            } catch (e: Exception) { session.recordError("Playlist ${playlist.name}", e) }
+            } catch (e: CancellationException) { throw e } catch (e: Exception) { session.recordError("Playlist ${playlist.name}", e) }
             count++
             if (count % 10 == 0) logger.info("Mirrored $count/$total playlists...")
             session.updateProgress("Mirroring Playlists", count, total, playlist.name)
@@ -567,6 +566,8 @@ class RemoteMirrorService : Service() {
             try {
                 userService.upsertUser(user)
                 count++
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 session.recordError("User ${user.username}", e)
             }
@@ -612,7 +613,7 @@ class RemoteMirrorService : Service() {
                     id
                 }
                 session.userPlaylistIdMap[playlist.id] = finalId
-            } catch (e: Exception) { session.recordError("User Playlist ${playlist.name}", e) }
+            } catch (e: CancellationException) { throw e } catch (e: Exception) { session.recordError("User Playlist ${playlist.name}", e) }
             count++
             if (count % 10 == 0) logger.info("Mirrored $count/$total user playlists...")
             session.updateProgress("Mirroring User Playlists", count, total, playlist.name)
@@ -627,7 +628,7 @@ class RemoteMirrorService : Service() {
         session.updateProgress("Syncing User Preferences", 0, total, newStatus = "Mapping liked songs...")
         
         val remoteUserNames = mutableMapOf<PlatformUUID, String>()
-        try { session.mirrorService.getUsers().collect { remoteUserNames[it.id] = it.displayName ?: it.username } } catch (_: Exception) {}
+        try { session.mirrorService.getUsers().collect { remoteUserNames[it.id] = it.displayName ?: it.username } } catch (e: CancellationException) { throw e } catch (_: Exception) {}
 
         session.config.likedByUserIds!!.forEachIndexed { index, userId ->
             val name = remoteUserNames[userId] ?: userId.toString()

@@ -15,6 +15,7 @@ import io.ktor.http.Url
 import io.ktor.http.isSuccess
 import io.ktor.utils.io.ByteReadChannel
 import io.ktor.utils.io.readAvailable
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -139,6 +140,8 @@ class PodcastImportService(
             ImportResult.Done(finalFile, done.bytes)
         } catch (e: FeedTooLargeException) {
             fail(episode, partFile, e.message ?: "Episode is too large", permanent = true)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             val message = e.message ?: e::class.simpleName ?: "Import failed"
             val diskFull = e is IOException && message.contains("No space left", ignoreCase = true)

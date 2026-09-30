@@ -3,7 +3,7 @@ package dev.dertyp.services
 import dev.dertyp.core.CustomMigration
 import dev.dertyp.core.Migration
 import dev.dertyp.db.CustomMigrationTable
-import dev.dertyp.dbQuery
+import dev.dertyp.core.db.dbQuery
 import io.ktor.util.logging.KtorSimpleLogger
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.selectAll

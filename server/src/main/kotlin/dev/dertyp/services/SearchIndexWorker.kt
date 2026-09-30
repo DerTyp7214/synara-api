@@ -3,13 +3,13 @@ package dev.dertyp.services
 import dev.dertyp.core.logTask
 import dev.dertyp.db.SearchIndexEntityType
 import dev.dertyp.db.SearchIndexQueueTable
-import dev.dertyp.dbQuery
+import dev.dertyp.core.db.Dialect
+import dev.dertyp.core.db.dbQuery
 import io.ktor.util.logging.KtorSimpleLogger
 import kotlinx.coroutines.*
+import org.jetbrains.exposed.v1.core.SortOrder
 import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.core.java.UUIDColumnType
-import org.jetbrains.exposed.v1.core.vendors.PostgreSQLDialect
-import org.jetbrains.exposed.v1.core.vendors.currentDialect
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.TransactionManager
@@ -29,22 +29,27 @@ class SearchIndexWorker : KoinComponent {
             while (isActive) {
                 try {
                     val queueSize = dbQuery { SearchIndexQueueTable.selectAll().count() }
-                    if (queueSize > 0) {
+                    val firstBatch = if (queueSize > 0) fetchBatch() else emptyList()
+                    if (firstBatch.isNotEmpty()) {
                         logTask("Search Index Worker") {
                             var processed = 0
                             val total = queueSize.toDouble()
+                            var batch = firstBatch
                             while (isActive) {
-                                val processedInBatch = processBatch()
+                                val processedInBatch = processItems(batch)
                                 if (processedInBatch == 0) break
                                 processed += processedInBatch
                                 val progress = (processed / total * 100.0).coerceAtMost(100.0)
                                 updateProgress(progress, "Processed $processed / ${total.toInt()} items")
+                                batch = fetchBatch()
                             }
                             emptyMap()
                         }
                     } else {
                         delay(2.seconds)
                     }
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     logger.error("Error in SearchIndexWorker loop: ${e.message}")
                     delay(5.seconds)
@@ -53,37 +58,81 @@ class SearchIndexWorker : KoinComponent {
         }
     }
 
-    internal suspend fun processBatch(): Int = dbQuery {
-        val items = SearchIndexQueueTable
-            .selectAll()
-            .limit(batchSize)
-            .toList()
+    private data class QueueItem(val id: Int, val entityType: SearchIndexEntityType, val entityId: UUID)
 
-        if (items.isEmpty()) return@dbQuery 0
+    internal suspend fun processBatch(): Int = processItems(fetchBatch())
+
+    private suspend fun fetchBatch(): List<QueueItem> = dbQuery {
+        SearchIndexQueueTable
+            .selectAll()
+            .orderBy(SearchIndexQueueTable.id, SortOrder.ASC)
+            .limit(batchSize)
+            .map {
+                QueueItem(
+                    it[SearchIndexQueueTable.id],
+                    it[SearchIndexQueueTable.entityType],
+                    it[SearchIndexQueueTable.entityId]
+                )
+            }
+    }
+
+    private suspend fun processItems(items: List<QueueItem>): Int {
+        if (items.isEmpty()) return 0
+
+        val redisEnabled = redisSearchService.isEnabled()
 
         for (item in items) {
-            val entityType = item[SearchIndexQueueTable.entityType]
-            val entityId = item[SearchIndexQueueTable.entityId]
-
             try {
-                when (entityType) {
-                    SearchIndexEntityType.SONG -> rebuildSongSearchVector(entityId)
-                    SearchIndexEntityType.ALBUM -> rebuildAlbumSearchVector(entityId)
-                    SearchIndexEntityType.ARTIST -> rebuildArtistSearchVector(entityId)
+                val data = dbQuery {
+                    when (item.entityType) {
+                        SearchIndexEntityType.SONG -> rebuildSongSearchVector(item.entityId, redisEnabled)
+                        SearchIndexEntityType.ALBUM -> rebuildAlbumSearchVector(item.entityId, redisEnabled)
+                        SearchIndexEntityType.ARTIST -> rebuildArtistSearchVector(item.entityId, redisEnabled)
+                    }
                 }
+                if (data != null) writeToRedis(item.entityType, item.entityId, data)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
-                logger.error("Failed to index $entityType ($entityId): ${e.message}")
+                logger.error("Failed to index ${item.entityType} (${item.entityId}): ${e.message}")
             }
         }
 
-        val idsToDelete = items.map { it[SearchIndexQueueTable.id] }
-        SearchIndexQueueTable.deleteWhere { SearchIndexQueueTable.id inList idsToDelete }
-        
-        idsToDelete.size
+        val idsToDelete = items.map { it.id }
+        dbQuery {
+            SearchIndexQueueTable.deleteWhere { SearchIndexQueueTable.id inList idsToDelete }
+        }
+
+        return idsToDelete.size
     }
 
-    private fun rebuildSongSearchVector(songId: UUID) {
-        if (currentDialect !is PostgreSQLDialect) return
+    private fun writeToRedis(entityType: SearchIndexEntityType, entityId: UUID, data: Map<String, String>) {
+        when (entityType) {
+            SearchIndexEntityType.SONG -> redisSearchService.indexSong(
+                entityId,
+                data["title"] ?: "",
+                data["artist"] ?: "",
+                data["album"] ?: "",
+                data["metadata"] ?: ""
+            )
+            SearchIndexEntityType.ARTIST -> redisSearchService.indexArtist(
+                entityId,
+                data["name"] ?: "",
+                data["aliases"] ?: "",
+                data["groups"] ?: "",
+                data["metadata"] ?: ""
+            )
+            SearchIndexEntityType.ALBUM -> redisSearchService.indexAlbum(
+                entityId,
+                data["name"] ?: "",
+                data["artists"] ?: "",
+                data["groups"] ?: ""
+            )
+        }
+    }
+
+    private fun rebuildSongSearchVector(songId: UUID, redisEnabled: Boolean): Map<String, String>? {
+        if (Dialect.current() != Dialect.POSTGRES) return null
         val query = """
             UPDATE song s
             SET search_vector = (
@@ -143,21 +192,11 @@ class SearchIndexWorker : KoinComponent {
         
         TransactionManager.current().exec(query, args = listOf(UUIDColumnType() to songId))
 
-        if (redisSearchService.isEnabled()) {
-            fetchSongData(songId)?.let { data ->
-                redisSearchService.indexSong(
-                    songId,
-                    data["title"] ?: "",
-                    data["artist"] ?: "",
-                    data["album"] ?: "",
-                    data["metadata"] ?: ""
-                )
-            }
-        }
+        return if (redisEnabled) fetchSongData(songId) else null
     }
 
-    private fun rebuildArtistSearchVector(artistId: UUID) {
-        if (currentDialect !is PostgreSQLDialect) return
+    private fun rebuildArtistSearchVector(artistId: UUID, redisEnabled: Boolean): Map<String, String>? {
+        if (Dialect.current() != Dialect.POSTGRES) return null
         val query = """
             UPDATE artist a
             SET search_vector = (
@@ -199,21 +238,11 @@ class SearchIndexWorker : KoinComponent {
 
         TransactionManager.current().exec(query, args = listOf(UUIDColumnType() to artistId))
 
-        if (redisSearchService.isEnabled()) {
-            fetchArtistData(artistId)?.let { data ->
-                redisSearchService.indexArtist(
-                    artistId,
-                    data["name"] ?: "",
-                    data["aliases"] ?: "",
-                    data["groups"] ?: "",
-                    data["metadata"] ?: ""
-                )
-            }
-        }
+        return if (redisEnabled) fetchArtistData(artistId) else null
     }
 
-    private fun rebuildAlbumSearchVector(albumId: UUID) {
-        if (currentDialect !is PostgreSQLDialect) return
+    private fun rebuildAlbumSearchVector(albumId: UUID, redisEnabled: Boolean): Map<String, String>? {
+        if (Dialect.current() != Dialect.POSTGRES) return null
         val query = """
             UPDATE album alb
             SET search_vector = (
@@ -257,16 +286,7 @@ class SearchIndexWorker : KoinComponent {
 
         TransactionManager.current().exec(query, args = listOf(UUIDColumnType() to albumId))
 
-        if (redisSearchService.isEnabled()) {
-            fetchAlbumData(albumId)?.let { data ->
-                redisSearchService.indexAlbum(
-                    albumId,
-                    data["name"] ?: "",
-                    data["artists"] ?: "",
-                    data["groups"] ?: ""
-                )
-            }
-        }
+        return if (redisEnabled) fetchAlbumData(albumId) else null
     }
 
     private fun fetchSongData(songId: UUID): Map<String, String>? {

@@ -8,7 +8,7 @@ import dev.dertyp.services.podcast.PodcastService
 import org.koin.core.component.inject
 import java.util.concurrent.atomic.AtomicInteger
 
-@WorkerTask(TaskKeys.PODCAST_REFRESH, "Podcast Refresh")
+@WorkerTask(TaskKeys.PODCAST_REFRESH, "Podcast Refresh", cron = "15 * * * *")
 class PodcastRefreshWorker : Worker("PodcastRefreshWorker") {
     private val podcastService by inject<PodcastService>()
     private val feedService by inject<PodcastFeedService>()

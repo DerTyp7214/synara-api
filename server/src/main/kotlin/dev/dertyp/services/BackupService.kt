@@ -2,6 +2,8 @@ package dev.dertyp.services
 
 import com.github.luben.zstd.ZstdInputStream
 import com.github.luben.zstd.ZstdOutputStream
+import dev.dertyp.config.ServerConfig
+import dev.dertyp.core.db.dbQuery
 import dev.dertyp.data.User
 import dev.dertyp.db.FlacInfoTable
 import dev.dertyp.db.PcmInfoTable
@@ -9,7 +11,6 @@ import dev.dertyp.db.SongMusicBrainzTable
 import dev.dertyp.db.SongTable
 import dev.dertyp.plugins.PluginManager
 import dev.dertyp.services.import.ImportBackend
-import io.ktor.server.application.ApplicationEnvironment
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
@@ -19,7 +20,6 @@ import kotlinx.serialization.decodeFromByteArray
 import kotlinx.serialization.encodeToByteArray
 import org.jetbrains.exposed.v1.core.leftJoin
 import org.jetbrains.exposed.v1.jdbc.selectAll
-import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -95,17 +95,14 @@ class BackupService(
     private val dbManagementService: DbManagementService,
     private val storageService: StorageService,
     private val pluginManager: PluginManager,
-    private val environment: ApplicationEnvironment
+    private val config: ServerConfig
 ) : Service(), IBackupService {
-    private val backupDir =
-        (environment.config.propertyOrNull("backup.dir")?.getString()?.ifBlank { null }?.let { Paths.get(it) }
-            ?: Paths.get(System.getProperty("user.home"), ".config", "backups")).toFile()
+    private val backupDir = config.backup.directory.toFile()
 
     private val blobsDir = backupDir.resolve("blobs")
     private val maxBackups = 10
 
-    private val imagePath =
-        environment.config.propertyOrNull("data.images")?.getString()?.let { Paths.get(it) }?.toFile()
+    private val imagePath = Paths.get(storageService.imagesPath).toFile()
 
     private fun getAllAudioPaths(): Map<String, Path> {
         val paths = mutableMapOf<String, Path>()
@@ -120,7 +117,7 @@ class BackupService(
         addPath("albums", storageService.albumsPath)
         addPath("playlists", storageService.playlistsPath)
         addPath("custom", storageService.customAudioPath)
-        addPath("transcode", environment.config.propertyOrNull("audio.transcode")?.getString())
+        addPath("transcode", config.transcode.outputPath)
 
         storageService.secondaryTracksPaths.forEachIndexed { index, path ->
             addPath("secondary-tracks-$index", path)
@@ -176,7 +173,7 @@ class BackupService(
                 logger.debug("File tree compressed")
                 onProgress(45.0, "File tree compressed")
 
-                val imageIndex = if (imagePath != null && imagePath.exists()) {
+                val imageIndex = if (imagePath.exists()) {
                     logger.info("Backing up images from $imagePath")
                     onProgress(50.0, "Backing up images...")
                     backupImages(imagePath)
@@ -239,7 +236,7 @@ class BackupService(
         )
     }
 
-    private fun fetchSongMetadata(): Map<String, Pair<String?, String?>> = transaction {
+    private suspend fun fetchSongMetadata(): Map<String, Pair<String?, String?>> = dbQuery {
         val result = mutableMapOf<String, Pair<String?, String?>>()
         
         val songMetadata = SongTable
@@ -342,12 +339,10 @@ class BackupService(
                         }
 
                         "images.index.cbor.zst" -> {
-                            if (imagePath != null) {
-                                logger.info("Restoring images from ${backupFile.name}")
-                                val indexCborBytes = decompressZstd(zip.readBytes())
-                                val index = Cbor.decodeFromByteArray<List<ImageEntry>>(indexCborBytes)
-                                restoreImages(index)
-                            }
+                            logger.info("Restoring images from ${backupFile.name}")
+                            val indexCborBytes = decompressZstd(zip.readBytes())
+                            val index = Cbor.decodeFromByteArray<List<ImageEntry>>(indexCborBytes)
+                            restoreImages(index)
                         }
                     }
                     entry = zip.nextEntry
@@ -372,8 +367,6 @@ class BackupService(
     }
 
     private fun restoreImages(index: List<ImageEntry>) {
-        if (imagePath == null) return
-
         imagePath.mkdirs()
 
         index.forEach { entry ->

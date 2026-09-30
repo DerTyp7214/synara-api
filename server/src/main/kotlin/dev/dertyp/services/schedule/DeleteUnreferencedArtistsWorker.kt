@@ -4,7 +4,7 @@ import dev.dertyp.data.TaskKeys
 import dev.dertyp.services.ArtistService
 import org.koin.core.component.inject
 
-@WorkerTask(TaskKeys.DELETE_UNREFERENCED_ARTISTS, "Delete Unreferenced Artists")
+@WorkerTask(TaskKeys.DELETE_UNREFERENCED_ARTISTS, "Delete Unreferenced Artists", afterTask = TaskKeys.DELETE_EMPTY_ALBUMS)
 class DeleteUnreferencedArtistsWorker : Worker("DeleteUnreferencedArtistsWorker") {
     private val artistService by inject<ArtistService>()
 

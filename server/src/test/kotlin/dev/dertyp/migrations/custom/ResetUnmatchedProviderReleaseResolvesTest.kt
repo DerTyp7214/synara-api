@@ -5,8 +5,9 @@ import dev.dertyp.TestDatabase
 import dev.dertyp.db.*
 import dev.dertyp.plugins.RedisCacheProvider
 import dev.dertyp.services.ImageService
-import dev.dertyp.services.ScheduledTaskLogService
 import dev.dertyp.services.StorageService
+import dev.dertyp.testing.insertArtist
+import dev.dertyp.testing.relaxedTaskLogService
 import io.mockk.every
 import io.mockk.justRun
 import io.mockk.mockk
@@ -40,8 +41,7 @@ class ResetUnmatchedProviderReleaseResolvesTest : KoinTest {
         justRun { storageService.invalidate(any()) }
         every { redisConfig.host } returns "none"
 
-        val logService = mockk<ScheduledTaskLogService>(relaxed = true)
-        every { logService.startLog(any(), any()) } returns EntityID(UUID.randomUUID(), ScheduledTaskLogTable)
+        val logService = relaxedTaskLogService()
 
         startKoin {
             modules(module {
@@ -87,15 +87,6 @@ class ResetUnmatchedProviderReleaseResolvesTest : KoinTest {
         stopKoin()
         TestDatabase.cleanUp()
         tempDir.deleteRecursively()
-    }
-
-    private fun insertArtist(id: UUID, artistName: String) {
-        transaction(database) {
-            ArtistTable.insert {
-                it[ArtistTable.id] = id
-                it[ArtistTable.name] = artistName
-            }
-        }
     }
 
     private fun insertReleaseGroup(releaseGroupId: UUID) {
@@ -146,7 +137,7 @@ class ResetUnmatchedProviderReleaseResolvesTest : KoinTest {
             val matchedResolvedId = UUID.randomUUID()
             val unmatchedUnresolvedId = UUID.randomUUID()
 
-            insertArtist(artist, "Artist")
+            insertArtist(database, artist, "Artist")
             insertReleaseGroup(releaseGroup)
 
             insertProviderRelease(unmatchedResolvedId, "111", artist, null, 123L)

@@ -4,17 +4,22 @@ import dev.dertyp.data.HueTarget
 import dev.dertyp.data.HueTargetType
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.every
 import io.mockk.mockk
+import io.mockk.mockkObject
+import io.mockk.unmockkAll
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.yield
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.util.concurrent.CopyOnWriteArrayList
-import kotlin.time.Duration.Companion.milliseconds
-import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Clock
+import kotlin.time.Instant
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class HueCommandQueueTest {
@@ -22,11 +27,22 @@ class HueCommandQueueTest {
     private val room = HueTarget(HueTargetType.ROOM, "r", "room", "g")
     private fun update(brightness: Double) = LightUpdate(on = ClipOn(true), dimming = ClipDimming(brightness))
 
+    @AfterEach
+    fun tearDown() {
+        unmockkAll()
+    }
+
+    private fun TestScope.useVirtualTime() {
+        mockkObject(Clock.System)
+        every { Clock.System.now() } answers { Instant.fromEpochMilliseconds(testScheduler.currentTime) }
+    }
+
     @Test
     fun `light commands are paced at the light interval`() = runTest {
         val api = mockk<HueBridgeApi>(relaxed = true)
         val sentAt = CopyOnWriteArrayList<Long>()
-        val queue = HueCommandQueue(api, backgroundScope, 100.milliseconds, 1.seconds, clock = { testScheduler.currentTime }, onSent = { sentAt += testScheduler.currentTime })
+        useVirtualTime()
+        val queue = HueCommandQueue(api, backgroundScope, onSent = { sentAt += testScheduler.currentTime }, onError = {})
         repeat(5) { queue.submit(HueLightCommand(light("l$it"), update(50.0))) }
         advanceTimeBy(1)
         yield()
@@ -42,7 +58,8 @@ class HueCommandQueueTest {
     @Test
     fun `rapid updates to one light collapse to the latest`() = runTest {
         val api = mockk<HueBridgeApi>(relaxed = true)
-        val queue = HueCommandQueue(api, backgroundScope, 100.milliseconds, 1.seconds, clock = { testScheduler.currentTime })
+        useVirtualTime()
+        val queue = HueCommandQueue(api, backgroundScope, onSent = {}, onError = {})
         queue.submit(HueLightCommand(light("a"), update(10.0)))
         queue.submit(HueLightCommand(light("b"), update(10.0)))
         queue.submit(HueLightCommand(light("b"), update(20.0)))
@@ -61,7 +78,8 @@ class HueCommandQueueTest {
         val errors = CopyOnWriteArrayList<Throwable>()
         val sentAt = CopyOnWriteArrayList<Long>()
         coEvery { api.putGroupedLight("g", update(1.0)) } throws HueRateLimited()
-        val queue = HueCommandQueue(api, backgroundScope, 100.milliseconds, 1.seconds, 1.seconds, clock = { testScheduler.currentTime }, onSent = { sentAt += testScheduler.currentTime }, onError = { errors += it })
+        useVirtualTime()
+        val queue = HueCommandQueue(api, backgroundScope, onSent = { sentAt += testScheduler.currentTime }, onError = { errors += it })
         queue.submit(HueLightCommand(room, update(1.0)))
         advanceTimeBy(1)
         yield()
@@ -88,7 +106,8 @@ class HueCommandQueueTest {
     fun `scene commands are recalled and paced at the group interval`() = runTest {
         val api = mockk<HueBridgeApi>(relaxed = true)
         val sentAt = CopyOnWriteArrayList<Long>()
-        val queue = HueCommandQueue(api, backgroundScope, 100.milliseconds, 1.seconds, clock = { testScheduler.currentTime }, onSent = { sentAt += testScheduler.currentTime })
+        useVirtualTime()
+        val queue = HueCommandQueue(api, backgroundScope, onSent = { sentAt += testScheduler.currentTime }, onError = {})
         val recall = SceneRecallUpdate(ClipSceneRecall(duration = 400))
         queue.submit(HueSceneCommand("s1", recall))
         advanceTimeBy(1)

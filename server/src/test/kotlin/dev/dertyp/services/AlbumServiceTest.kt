@@ -56,6 +56,8 @@ class AlbumServiceTest : KoinTest {
                 single { GenreService() }
                 single { CachedMusicBrainzService(get(), get()) }
                 single { libraryMergeService }
+                single { LibraryFileDeleter() }
+                single { mockk<RedisSearchService>(relaxed = true) }
             })
         }
 
@@ -1296,6 +1298,49 @@ class AlbumServiceTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
+    fun `byOriginalUrls picks the exact match first and the lowest id among equals across lookup chunks`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val exactHigh = UUID.fromString("00000000-0000-0000-0000-00000000000f")
+        val providerLow = UUID.fromString("00000000-0000-0000-0000-000000000001")
+        val sharedHigh = UUID.fromString("00000000-0000-0000-0000-00000000000e")
+        val sharedLow = UUID.fromString("00000000-0000-0000-0000-000000000002")
+
+        val exactUrl = "https://example.com/album/exact"
+        val sharedUrl = "https://example.com/album/shared"
+        val fillers = (0 until 6000).map { "https://example.com/missing/$it" }
+
+        transaction(database) {
+            fun album(albumId: UUID, albumName: String, url: String?) = AlbumTable.insert {
+                it[id] = albumId
+                it[name] = albumName
+                it[originalId] = url
+            }
+            album(exactHigh, "Exact", exactUrl)
+            album(providerLow, "Provider", null)
+            album(sharedHigh, "Shared high", sharedUrl)
+            album(sharedLow, "Shared low", sharedUrl)
+            AlbumProviderTable.insert {
+                it[AlbumProviderTable.albumId] = providerLow
+                it[provider] = "example"
+                it[externalId] = "exact"
+                it[type] = Type.ALBUM.value
+                it[rawUrl] = exactUrl
+            }
+        }
+
+        val smallUrls = listOf(exactUrl, sharedUrl)
+        val small = service.byOriginalUrls(smallUrls)
+        val large = service.byOriginalUrls(fillers.take(5500) + exactUrl + fillers.drop(5500) + sharedUrl)
+
+        assertEquals(exactHigh, small[exactUrl]?.id)
+        assertEquals(sharedLow, small[sharedUrl]?.id)
+        assertEquals(6002, large.size)
+        assertEquals(small.mapValues { it.value?.id }, smallUrls.associateWith { large[it]?.id })
+        assertTrue(fillers.all { it in large && large[it] == null })
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
     fun `extendedMetadata should return full album information`(dialect: DbDialect) = runBlocking {
         setup(dialect)
         val albumId = UUID.randomUUID()
@@ -1561,5 +1606,44 @@ class AlbumServiceTest : KoinTest {
         service.syncMusicBrainzForAlbums(listOf(albumId))
 
         coVerify(exactly = 0) { musicBrainzService.fetchReleaseById(any(), any()) }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `byOriginalIds finds every album when provider lookups span several chunks`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val count = 5003
+        val albumIds = List(count) { UUID.randomUUID() }
+        val unrelatedId = UUID.randomUUID()
+
+        transaction(database) {
+            AlbumTable.batchInsert(albumIds.withIndex()) { (index, id) ->
+                this[AlbumTable.id] = id
+                this[AlbumTable.name] = "Chunked Album $index"
+            }
+            AlbumTable.insert {
+                it[id] = unrelatedId
+                it[name] = "Unrelated Album"
+            }
+            AlbumProviderTable.batchInsert(albumIds.withIndex()) { (index, id) ->
+                this[AlbumProviderTable.albumId] = id
+                this[AlbumProviderTable.provider] = "tidal"
+                this[AlbumProviderTable.externalId] = "chunk$index"
+                this[AlbumProviderTable.type] = Type.ALBUM.value
+                this[AlbumProviderTable.rawUrl] = "https://tidal.com/album/chunk$index"
+            }
+            AlbumProviderTable.insert {
+                it[AlbumProviderTable.albumId] = unrelatedId
+                it[provider] = "tidal"
+                it[externalId] = "unrelated"
+                it[type] = Type.ALBUM.value
+                it[rawUrl] = "https://tidal.com/album/unrelated"
+            }
+        }
+
+        val results = service.byOriginalIds(List(count) { "tidal:chunk$it" })
+
+        assertEquals(albumIds.toSet(), results.map { it.id }.toSet())
+        assertEquals(count, results.size)
     }
 }

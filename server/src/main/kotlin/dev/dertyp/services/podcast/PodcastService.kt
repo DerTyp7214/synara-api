@@ -1,6 +1,9 @@
 package dev.dertyp.services.podcast
 
+import dev.dertyp.core.KeyedMutex
+import dev.dertyp.core.PerUserChannels
 import dev.dertyp.core.paging
+import dev.dertyp.core.runCatchingCancellable
 import dev.dertyp.data.EpisodePlaybackReport
 import dev.dertyp.data.PaginatedResponse
 import dev.dertyp.data.PodcastDeliveryMode
@@ -18,7 +21,7 @@ import dev.dertyp.db.PodcastEpisodeTable
 import dev.dertyp.db.PodcastShowTable
 import dev.dertyp.db.PodcastSubscriptionTable
 import dev.dertyp.db.PodcastTranscriptTable
-import dev.dertyp.dbQuery
+import dev.dertyp.core.db.dbQuery
 import dev.dertyp.services.Service
 import io.ktor.client.request.prepareGet
 import io.ktor.client.statement.bodyAsChannel
@@ -27,9 +30,6 @@ import io.ktor.utils.io.readAvailable
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.asSharedFlow
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import org.jetbrains.exposed.v1.core.ColumnSet
 import org.jetbrains.exposed.v1.core.Expression
 import org.jetbrains.exposed.v1.core.LikePattern
@@ -62,7 +62,6 @@ import java.io.ByteArrayOutputStream
 import java.io.File
 import java.time.Instant
 import java.util.UUID
-import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.max
 
 private const val LIKE_ESCAPE = '\\'
@@ -97,8 +96,10 @@ class PodcastService(private val http: PodcastHttp) : Service() {
         val deviceId: String?
     )
 
-    private val showLocks = ConcurrentHashMap<String, Mutex>()
-    private val progressChanges = ConcurrentHashMap<UUID, MutableSharedFlow<PodcastEpisodeProgress>>()
+    private val showLocks = KeyedMutex<String>()
+    private val progressChannels = PerUserChannels<UUID, PodcastEpisodeProgress> {
+        MutableSharedFlow(extraBufferCapacity = 8, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+    }
 
     suspend fun subscribeToShow(userId: UUID, showId: UUID): PodcastShow {
         dbQuery {
@@ -388,7 +389,7 @@ class PodcastService(private val http: PodcastHttp) : Service() {
             )
         }
 
-        changeFlow(userId).emit(progress)
+        progressChannels.emit(userId, progress)
         return progress
     }
 
@@ -417,11 +418,11 @@ class PodcastService(private val http: PodcastHttp) : Service() {
             )
         }
 
-        changeFlow(userId).emit(progress)
+        progressChannels.emit(userId, progress)
         return progress
     }
 
-    fun observeProgress(userId: UUID): Flow<PodcastEpisodeProgress> = changeFlow(userId).asSharedFlow()
+    fun observeProgress(userId: UUID): Flow<PodcastEpisodeProgress> = progressChannels.observe(userId)
 
     suspend fun updateShowSettings(showId: UUID, settings: PodcastShowSettings, userId: UUID): PodcastShow {
         val keep = settings.keepEpisodes
@@ -466,7 +467,7 @@ class PodcastService(private val http: PodcastHttp) : Service() {
         }
 
         val url = row.url ?: return null
-        val fetched = runCatching { downloadTranscript(url) }
+        val fetched = runCatchingCancellable { downloadTranscript(url) }
         val now = Instant.now().toEpochMilli()
         val content = fetched.getOrNull()
 
@@ -540,7 +541,7 @@ class PodcastService(private val http: PodcastHttp) : Service() {
         parsed: ParsedShow,
         imageId: UUID?,
         imageUrl: String?
-    ): UUID = showLock(sourceKey).withLock {
+    ): UUID = showLocks.withLock(sourceKey) {
         dbQuery {
             val existing = PodcastShowTable
                 .select(PodcastShowTable.id)
@@ -687,7 +688,7 @@ class PodcastService(private val http: PodcastHttp) : Service() {
 
     suspend fun upsertLocalShow(localPath: String, title: String, imageId: UUID?): UUID {
         val sourceKey = PodcastKeys.localSourceKey(localPath)
-        return showLock(sourceKey).withLock {
+        return showLocks.withLock(sourceKey) {
             dbQuery {
                 val existing = PodcastShowTable
                     .select(PodcastShowTable.id)
@@ -1174,13 +1175,6 @@ class PodcastService(private val http: PodcastHttp) : Service() {
                 deviceId = row[PodcastEpisodeProgressTable.deviceId]
             )
         }
-
-    private fun changeFlow(userId: UUID): MutableSharedFlow<PodcastEpisodeProgress> =
-        progressChanges.computeIfAbsent(userId) {
-            MutableSharedFlow(extraBufferCapacity = 8, onBufferOverflow = BufferOverflow.DROP_OLDEST)
-        }
-
-    private fun showLock(sourceKey: String): Mutex = showLocks.computeIfAbsent(sourceKey) { Mutex() }
 
     private fun truncate(value: String?): String = (value ?: "").take(MAX_DESCRIPTION)
 

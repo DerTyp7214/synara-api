@@ -1,9 +1,9 @@
 package dev.dertyp.services.metadata
 
 import dev.dertyp.core.ApplicationScope
-import dev.dertyp.executeCommand
-import dev.dertyp.findInPath
+import dev.dertyp.core.process.ExternalTool
 import dev.dertyp.services.Service
+import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.Serializable
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -13,7 +13,8 @@ data class Fingerprint(val duration: Int, val fingerprint: String)
 private data class FpcalcOutput(val duration: Double, val fingerprint: String)
 
 open class AcoustIdFingerprintService : Service() {
-    protected open val fpcalcPath: String? = findInPath("fpcalc")
+    private val fpcalc = ExternalTool("fpcalc")
+    protected open val fpcalcPath: String? get() = fpcalc.path
     private val missingLogged = AtomicBoolean(false)
 
     suspend fun fingerprint(path: String): Fingerprint? {
@@ -25,6 +26,8 @@ open class AcoustIdFingerprintService : Service() {
         }
         val output = try {
             runFpcalc(path)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             logger.error("fpcalc failed for $path: ${e.message}", e)
             null
@@ -35,13 +38,11 @@ open class AcoustIdFingerprintService : Service() {
     }
 
     protected open suspend fun runFpcalc(path: String): String? {
-        val tool = fpcalcPath ?: return null
-        val result = executeCommand(
-            command = listOf(tool, "-json", path),
-            aliveCheck = { true },
+        val result = fpcalc.run(
+            args = listOf("-json", path),
             logger = logger,
             logCommand = false,
-        )
+        ) ?: return null
         return result.fullOutput.takeIf { result.exitCode == 0 }
     }
 

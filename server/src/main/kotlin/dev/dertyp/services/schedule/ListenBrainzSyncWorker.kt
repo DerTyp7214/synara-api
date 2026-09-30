@@ -4,7 +4,7 @@ import dev.dertyp.data.TaskKeys
 import dev.dertyp.services.sync.ListenBrainzService
 import org.koin.core.component.inject
 
-@WorkerTask(TaskKeys.LISTENBRAINZ_SYNC, "ListenBrainz Sync")
+@WorkerTask(TaskKeys.LISTENBRAINZ_SYNC, "ListenBrainz Sync", cron = "0 * * * *")
 class ListenBrainzSyncWorker : Worker("ListenBrainzSyncWorker") {
     private val listenBrainzService by inject<ListenBrainzService>()
 

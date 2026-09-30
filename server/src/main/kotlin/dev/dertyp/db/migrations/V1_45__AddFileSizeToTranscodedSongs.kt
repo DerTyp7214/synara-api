@@ -1,6 +1,5 @@
 package dev.dertyp.db.migrations
 
-import dev.dertyp.core.foreignKeyOn
 import dev.dertyp.core.tempConnection
 import dev.dertyp.db.TranscodedSongTable
 import org.flywaydb.core.api.migration.BaseJavaMigration
@@ -10,8 +9,6 @@ import org.jetbrains.exposed.v1.migration.jdbc.MigrationUtils
 @Suppress("unused", "ClassName", "SqlSourceToSinkFlow")
 class V1_45__AddFileSizeToTranscodedSongs : BaseJavaMigration() {
     override fun migrate(context: Context) {
-        foreignKeyOn(context.connection)
-
         val alterStatements = tempConnection {
             MigrationUtils.statementsRequiredForDatabaseMigration(TranscodedSongTable)
         }

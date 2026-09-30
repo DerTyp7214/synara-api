@@ -16,6 +16,7 @@ import dev.dertyp.ui.UiHookKind
 import dev.dertyp.ui.UiIntakeResult
 import dev.dertyp.ui.UiIntakeStatus
 import io.ktor.util.logging.KtorSimpleLogger
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.supervisorScope
 import java.util.concurrent.ConcurrentHashMap
@@ -63,6 +64,8 @@ class IntakeService(private val translations: TranslationService) {
                         registered.resolver.offer(items, info)?.takeIf { it.accepted.isNotEmpty() }?.let { offer ->
                             Resolved(registered, offer, handler(registered, offer, locale))
                         }
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (e: Exception) {
                         logger.error("Intake resolver ${registered.resolver.id} failed", e)
                         null
@@ -143,6 +146,8 @@ class IntakeService(private val translations: TranslationService) {
                 accepted += receipt.accepted
                 receipt.messageKey?.let { messages += t.t(it, "count" to receipt.accepted.toString()) }
                 if (next == null) next = receipt.next
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 logger.error("Intake submission to ${entry.registered.resolver.id} failed", e)
                 failed = true

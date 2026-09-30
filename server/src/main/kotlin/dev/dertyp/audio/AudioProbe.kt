@@ -1,6 +1,5 @@
 package dev.dertyp.audio
 
-import dev.dertyp.AudioUtils
 import dev.dertyp.data.AudioInfo
 import org.bytedeco.javacv.FFmpegFrameGrabber
 import org.bytedeco.javacv.FrameGrabber
@@ -21,7 +20,7 @@ object AudioProbe {
                 AudioInfo(
                     codec = codec,
                     sampleRate = grabber.sampleRate,
-                    bitsPerSample = if (lossless) AudioUtils.sourceBitDepth(grabber) else 0,
+                    bitsPerSample = if (lossless) FfmpegProbe.sourceBitDepth(grabber) else 0,
                     bitRate = grabber.audioBitrate.toLong() / 1000,
                     fileSize = file.length(),
                     channels = grabber.audioChannels,

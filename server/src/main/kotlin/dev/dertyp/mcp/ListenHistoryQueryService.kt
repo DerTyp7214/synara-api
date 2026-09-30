@@ -13,7 +13,7 @@ import dev.dertyp.db.SongMusicBrainzTable
 import dev.dertyp.db.SongTable
 import dev.dertyp.db.fullSongTitle
 import dev.dertyp.db.listenOwnerPredicate
-import dev.dertyp.dbQuery
+import dev.dertyp.core.db.dbQuery
 import dev.dertyp.formatISO
 import dev.dertyp.services.AlbumService
 import dev.dertyp.services.ArtistService
@@ -377,7 +377,7 @@ class ListenHistoryQueryService(
             SongArtistTable
                 .select(SongArtistTable.songId, SongArtistTable.artistId)
                 .where { SongArtistTable.songId inList chunk }
-                .orderBy(SongArtistTable.artistId)
+                .orderBy(SongArtistTable.position to SortOrder.ASC, SongArtistTable.artistId to SortOrder.ASC)
                 .forEach {
                     library.songArtists.getOrPut(it[SongArtistTable.songId].value) { mutableListOf() }
                         .add(it[SongArtistTable.artistId].value)

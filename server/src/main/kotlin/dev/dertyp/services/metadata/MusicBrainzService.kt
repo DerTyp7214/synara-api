@@ -5,7 +5,10 @@ package dev.dertyp.services.metadata
 import dev.dertyp.ApiClient
 import dev.dertyp.PlatformUUID
 import dev.dertyp.core.HttpClientPriority
+import dev.dertyp.core.RetryOnError
+import dev.dertyp.core.RetryPolicy
 import dev.dertyp.core.cleanTitle
+import dev.dertyp.core.retryingGet
 import dev.dertyp.data.*
 import dev.dertyp.server.BuildConfig
 import dev.dertyp.services.Service
@@ -15,9 +18,8 @@ import io.ktor.client.call.body
 import io.ktor.client.request.HttpRequestBuilder
 import io.ktor.client.request.header
 import io.ktor.client.request.parameter
-import io.ktor.client.statement.HttpResponse
 import io.ktor.http.HttpStatusCode
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.UseContextualSerialization
@@ -63,37 +65,29 @@ class MusicBrainzService : Service() {
 
     companion object {
         private const val MAX_URL_LOOKUP_RELEASES = 5
+
+        val RETRY_POLICY = RetryPolicy(
+            maxAttempts = 3,
+            retryOn = { it == HttpStatusCode.ServiceUnavailable || it == HttpStatusCode.TooManyRequests || it.value >= 500 },
+            backoff = { status, _ ->
+                if (status == HttpStatusCode.ServiceUnavailable || status == HttpStatusCode.TooManyRequests) 1.seconds
+                else 10.seconds
+            },
+            onError = RetryOnError.RETRY,
+        )
     }
 
     private suspend inline fun <reified T> retryableGet(
         urlString: String,
         priority: HttpClientPriority = HttpClientPriority.NORMAL,
         noinline block: suspend HttpRequestBuilder.() -> Unit = {}
-    ): T? {
-        var retries = 0
-        val maxRetries = 3
-        while (retries < maxRetries) {
-            try {
-                val response: HttpResponse = ApiClient.queueInstance.enqueue(urlString, priority, block)
-                if (response.status == HttpStatusCode.ServiceUnavailable || response.status == HttpStatusCode.TooManyRequests) {
-                    logger.warn("Rate limited by MusicBrainz, retrying in 1s... ($retries/$maxRetries)")
-                    delay(1.seconds)
-                    retries++
-                    continue
-                }
-                return response.body<T>()
-            } catch (e: Exception) {
-                if (retries < maxRetries - 1) {
-                    logger.warn("Error during MusicBrainz request ($urlString): ${e.message}, retrying... ($retries/$maxRetries)")
-                } else {
-                    logger.error("Error during MusicBrainz request after $maxRetries retries ($urlString): ${e.message}", e)
-                }
-                delay(10.seconds)
-                retries++
-            }
-        }
-        return null
-    }
+    ): T? = retryingGet(
+        policy = RETRY_POLICY,
+        label = "MusicBrainz request ($urlString)",
+        logger = logger,
+        request = { ApiClient.queueInstance.enqueue(urlString, priority, block) },
+        onGiveUp = { response, _ -> logger.debug("MusicBrainz request ($urlString) returned ${response.status}") },
+    ) { it.body<T>() }
 
     suspend fun searchRecordingMb(
         title: String,
@@ -104,6 +98,8 @@ class MusicBrainzService : Service() {
             try {
                 val id = title.toPlatformUUID()
                 return fetchRecordingById(id, priority)
+            } catch (e: CancellationException) {
+                throw e
             } catch (_: Exception) {
             }
         }
@@ -123,6 +119,8 @@ class MusicBrainzService : Service() {
                 val targetArtists = artists.map { it.lowercase() }
                 targetArtists.any { it in recArtists }
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             logger.error("Failed to search MusicBrainz for $query", e)
             null
@@ -143,6 +141,8 @@ class MusicBrainzService : Service() {
                     val targetArtists = song.artists.map { it.name.lowercase() }
                     targetArtists.any { it in recArtists }
                 }?.let { return it }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 logger.error("Failed to search MusicBrainz for ISRC ${song.isrc}", e)
             }
@@ -186,6 +186,8 @@ class MusicBrainzService : Service() {
             }
 
             searchResponse?.recordings?.firstOrNull()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             logger.error("Failed to search MusicBrainz for $query", e)
             null
@@ -206,6 +208,8 @@ class MusicBrainzService : Service() {
                     val targetArtists = album.artists.map { it.name.lowercase() }
                     targetArtists.any { it in relArtists }
                 }?.let { return it }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 logger.error("Failed to search MusicBrainz for barcode ${album.barcode}", e)
             }
@@ -237,6 +241,8 @@ class MusicBrainzService : Service() {
                 val targetArtists = album.artists.map { it.name.lowercase() }
                 targetArtists.any { it in relArtists }
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             logger.error("Error searching MusicBrainz for $query", e)
             null
@@ -263,6 +269,8 @@ class MusicBrainzService : Service() {
                 val targetArtists = artists.map { it.lowercase() }
                 targetArtists.any { it in relArtists }
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             logger.error("Failed to search MusicBrainz for barcode $barcode", e)
             null
@@ -285,6 +293,8 @@ class MusicBrainzService : Service() {
             } ?: return null
 
             response.releases ?: emptyList()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             logger.error("Failed to search MusicBrainz for barcode $barcode", e)
             null
@@ -319,6 +329,8 @@ class MusicBrainzService : Service() {
                 .mapNotNull { id -> runCatching { UUID.fromString(id) }.getOrNull() }
 
             releaseIds.mapNotNull { fetchReleaseById(it, priority) }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             logger.error("Failed to look up MusicBrainz urls ${resources.joinToString()}", e)
             null
@@ -346,6 +358,8 @@ class MusicBrainzService : Service() {
             }
 
             response?.artists?.firstOrNull()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             logger.error("Error searching MusicBrainz for $query", e)
             null
@@ -365,6 +379,8 @@ class MusicBrainzService : Service() {
                     hasNextPage = false
                 )
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (_: Exception) {
         }
         val offset = page * pageSize
@@ -378,6 +394,8 @@ class MusicBrainzService : Service() {
                 parameter("inc", "tags+genres")
                 header("User-Agent", "Synara/${BuildConfig.VERSION} ( https://github.com/dertyp7214/synara )")
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             logger.error("Error searching MusicBrainz for artists: $query", e)
             null
@@ -405,6 +423,8 @@ class MusicBrainzService : Service() {
                 header("User-Agent", "Synara/${BuildConfig.VERSION} ( https://github.com/dertyp7214/synara )")
             }
             response?.releaseGroups ?: emptyList()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             logger.error("Error fetching release groups for artist $artistMbId", e)
             emptyList()
@@ -418,6 +438,8 @@ class MusicBrainzService : Service() {
                 parameter("fmt", "json")
                 header("User-Agent", "Synara/${BuildConfig.VERSION} ( https://github.com/dertyp7214/synara )")
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             logger.error("Error fetching artist by ID $mbId", e)
             null
@@ -431,6 +453,8 @@ class MusicBrainzService : Service() {
                 parameter("fmt", "json")
                 header("User-Agent", "Synara/${BuildConfig.VERSION} ( https://github.com/dertyp7214/synara )")
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             logger.error("Error fetching release group by ID $mbId", e)
             null
@@ -447,6 +471,8 @@ class MusicBrainzService : Service() {
                 header("User-Agent", "Synara/${BuildConfig.VERSION} ( https://github.com/dertyp7214/synara )")
             }
             response?.releases ?: emptyList()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             logger.error("Error fetching releases for artist $artistMbId", e)
             emptyList()
@@ -463,6 +489,8 @@ class MusicBrainzService : Service() {
                 header("User-Agent", "Synara/${BuildConfig.VERSION} ( https://github.com/dertyp7214/synara )")
             }
             response?.releases ?: emptyList()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             logger.error("Error fetching releases for release group $releaseGroupId", e)
             emptyList()
@@ -478,6 +506,8 @@ class MusicBrainzService : Service() {
             try {
                 val id = title.toPlatformUUID()
                 return fetchReleaseById(id, priority)
+            } catch (e: CancellationException) {
+                throw e
             } catch (_: Exception) {
             }
         }
@@ -497,6 +527,8 @@ class MusicBrainzService : Service() {
                 val targetArtists = artists.map { it.lowercase() }
                 targetArtists.any { it in relArtists }
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             logger.error("Failed to search MusicBrainz for release $query", e)
             null
@@ -510,6 +542,8 @@ class MusicBrainzService : Service() {
                 parameter("fmt", "json")
                 header("User-Agent", "Synara/${BuildConfig.VERSION} ( https://github.com/dertyp7214/synara )")
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             logger.error("Error fetching recording by ID $mbId", e)
             null
@@ -527,6 +561,8 @@ class MusicBrainzService : Service() {
                 header("User-Agent", "Synara/${BuildConfig.VERSION} ( https://github.com/dertyp7214/synara )")
             }
             searchResponse?.recordings?.firstOrNull()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             logger.error("Error fetching recording by ISRC $isrc", e)
             null
@@ -556,6 +592,8 @@ class MusicBrainzService : Service() {
                         null
                     }
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 logger.error("Error fetching recordings from ListenBrainz", e)
                 emptyList()
@@ -650,6 +688,8 @@ class MusicBrainzService : Service() {
                 parameter("fmt", "json")
                 header("User-Agent", "Synara/${BuildConfig.VERSION} ( https://github.com/dertyp7214/synara )")
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             logger.error("Error fetching release by ID $mbId", e)
             null
@@ -665,6 +705,8 @@ class MusicBrainzService : Service() {
                 header("User-Agent", "Synara/${BuildConfig.VERSION} ( https://github.com/dertyp7214/synara )")
             }
             response?.recordings ?: emptyList()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             logger.error("Error fetching recordings for release group $releaseGroupId", e)
             emptyList()

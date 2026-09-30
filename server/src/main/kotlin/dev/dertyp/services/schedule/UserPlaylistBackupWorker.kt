@@ -4,7 +4,7 @@ import dev.dertyp.data.TaskKeys
 import dev.dertyp.services.UserPlaylistBackupService
 import org.koin.core.component.inject
 
-@WorkerTask(TaskKeys.USER_PLAYLIST_BACKUP, "User Playlist Backup")
+@WorkerTask(TaskKeys.USER_PLAYLIST_BACKUP, "User Playlist Backup", cron = "0 2 * * *")
 class UserPlaylistBackupWorker : Worker("UserPlaylistBackupWorker") {
     private val userPlaylistBackupService by inject<UserPlaylistBackupService>()
 

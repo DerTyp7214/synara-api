@@ -5,7 +5,7 @@ import dev.dertyp.TestDatabase
 import dev.dertyp.core.HttpClientPriority
 import dev.dertyp.data.MusicBrainzArtist
 import dev.dertyp.db.*
-import dev.dertyp.dbQuery
+import dev.dertyp.core.db.dbQuery
 import dev.dertyp.services.ReleaseService
 import dev.dertyp.services.metadata.MusicBrainzCacheService
 import dev.dertyp.services.metadata.MusicBrainzService

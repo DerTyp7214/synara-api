@@ -5,9 +5,10 @@ import dev.dertyp.core.sha256
 import dev.dertyp.data.InsertableAlbum
 import dev.dertyp.data.InsertableImage
 import dev.dertyp.data.User
-import dev.dertyp.getDateFromISO
+import dev.dertyp.core.date.getDateFromISO
 import dev.dertyp.plugins.*
 import dev.dertyp.services.metadata.IMetadataService
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -79,6 +80,8 @@ class TidalIndexer(context: PluginContext) : BaseIndexer(context, IMetadataServi
             val resolvedMbTracks = if (mbTrackIds.isNotEmpty()) {
                 try {
                     context.metadataService.getTracksByIds(IMetadataService.MetadataType.musicBrainz, mbTrackIds).associateBy { it.id }
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     context.logger.warn("Failed to fetch MusicBrainz metadata for tracks", e)
                     emptyMap()
@@ -89,6 +92,8 @@ class TidalIndexer(context: PluginContext) : BaseIndexer(context, IMetadataServi
                 isrcsToResolve.mapNotNull { isrc ->
                     try {
                         context.metadataService.getTrackByIsrc(IMetadataService.MetadataType.musicBrainz, isrc)
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (_: Exception) {
                         null
                     }
@@ -101,6 +106,8 @@ class TidalIndexer(context: PluginContext) : BaseIndexer(context, IMetadataServi
             val resolvedMbAlbums = if (mbAlbumIds.isNotEmpty()) {
                 try {
                     context.metadataService.getAlbumsByIds(IMetadataService.MetadataType.musicBrainz, mbAlbumIds).associateBy { it.id }
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     context.logger.warn("Failed to fetch MusicBrainz metadata for albums", e)
                     emptyMap()
@@ -162,6 +169,8 @@ class TidalIndexer(context: PluginContext) : BaseIndexer(context, IMetadataServi
                 if (albumsToUpdate.isNotEmpty()) {
                     try {
                         context.metadataService.getAlbumsByIds(metadataType!!, albumsToUpdate).associateBy { it.id }
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (e: Exception) {
                         context.logger.warn("Failed to fetch album metadata for update", e)
                         emptyMap()

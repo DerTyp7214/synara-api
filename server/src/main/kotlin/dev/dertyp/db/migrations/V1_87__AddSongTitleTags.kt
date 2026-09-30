@@ -1,6 +1,6 @@
 package dev.dertyp.db.migrations
 
-import dev.dertyp.core.foreignKeyOn
+import dev.dertyp.core.db.Dialect
 import dev.dertyp.core.tempConnection
 import dev.dertyp.db.SongTable
 import org.flywaydb.core.api.migration.BaseJavaMigration
@@ -10,7 +10,6 @@ import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 @Suppress("unused", "ClassName", "SqlSourceToSinkFlow")
 class V1_87__AddSongTitleTags : BaseJavaMigration() {
     override fun migrate(context: Context) {
-        foreignKeyOn(context.connection)
         val statements = tempConnection {
             SchemaUtils.addMissingColumnsStatements(SongTable)
         }
@@ -18,7 +17,7 @@ class V1_87__AddSongTitleTags : BaseJavaMigration() {
             for (sql in statements) statement.execute(sql)
         }
 
-        val isPostgres = context.connection.metaData.databaseProductName.lowercase().contains("postgresql")
+        val isPostgres = Dialect.of(context.connection) == Dialect.POSTGRES
         if (!isPostgres) return
 
         val trigger = """

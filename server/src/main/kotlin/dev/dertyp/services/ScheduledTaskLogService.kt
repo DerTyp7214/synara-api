@@ -7,7 +7,7 @@ import dev.dertyp.data.ScheduledTaskLog
 import dev.dertyp.data.TaskStatus
 import dev.dertyp.data.User
 import dev.dertyp.db.ScheduledTaskLogTable
-import dev.dertyp.dbQuery
+import dev.dertyp.core.db.dbQuery
 import dev.dertyp.serializers.AppCbor
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.FlowPreview
@@ -23,7 +23,6 @@ import org.jetbrains.exposed.v1.core.notInList
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.selectAll
-import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.jdbc.update
 import java.time.Instant
 import java.util.UUID
@@ -59,7 +58,7 @@ class ScheduledTaskLogService : Service() {
         updateTrigger.tryEmit(Unit)
     }
 
-    fun startLog(taskName: String, startTime: Long) = transaction {
+    suspend fun startLog(taskName: String, startTime: Long) = dbQuery {
         val id = ScheduledTaskLogTable.insert {
             it[ScheduledTaskLogTable.taskName] = taskName
             it[ScheduledTaskLogTable.startTime] = startTime
@@ -70,7 +69,7 @@ class ScheduledTaskLogService : Service() {
         id
     }
 
-    fun updateProgress(runningId: UUID, progress: Double, logs: List<String>) = transaction {
+    suspend fun updateProgress(runningId: UUID, progress: Double, logs: List<String>) = dbQuery {
         ScheduledTaskLogTable.update({ ScheduledTaskLogTable.id eq runningId }) {
             it[ScheduledTaskLogTable.progress] = progress
             it[ScheduledTaskLogTable.logs] = ApplicationScope.json.encodeToString(logs)
@@ -78,7 +77,7 @@ class ScheduledTaskLogService : Service() {
         triggerUpdate()
     }
 
-    fun logTask(
+    suspend fun logTask(
         taskName: String,
         startTime: Long,
         endTime: Long,
@@ -89,7 +88,7 @@ class ScheduledTaskLogService : Service() {
         logs: List<String> = emptyList(),
         runningId: UUID? = null
     ) {
-        transaction {
+        dbQuery {
             if (runningId != null) {
                 ScheduledTaskLogTable.update({ ScheduledTaskLogTable.id eq runningId }) {
                     it[ScheduledTaskLogTable.taskName] = taskName

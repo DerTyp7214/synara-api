@@ -1,6 +1,5 @@
 package dev.dertyp.db.migrations
 
-import dev.dertyp.core.foreignKeyOn
 import dev.dertyp.core.tempConnection
 import dev.dertyp.db.MBRecordingIsrcTable
 import dev.dertyp.db.MBRelationTable
@@ -11,7 +10,6 @@ import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 @Suppress("unused", "ClassName")
 class V1_40__AddMBRecordingIsrcAndRelationTables : BaseJavaMigration() {
     override fun migrate(context: Context) {
-        foreignKeyOn(context.connection)
         val statements = tempConnection {
             SchemaUtils.createStatements(MBRecordingIsrcTable, MBRelationTable)
         }

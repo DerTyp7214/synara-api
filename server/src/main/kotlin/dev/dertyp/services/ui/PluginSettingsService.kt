@@ -1,7 +1,7 @@
 package dev.dertyp.services.ui
 
 import dev.dertyp.db.PluginSettingTable
-import dev.dertyp.dbQuery
+import dev.dertyp.core.db.dbQuery
 import dev.dertyp.plugins.PluginSettings
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.Flow

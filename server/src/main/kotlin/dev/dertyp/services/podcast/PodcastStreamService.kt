@@ -1,12 +1,15 @@
 package dev.dertyp.services.podcast
 
 import dev.dertyp.StreamInfo
+import dev.dertyp.core.chunkFlow
+import dev.dertyp.core.contentTypeFor
+import dev.dertyp.core.podcastContentTypes
+import dev.dertyp.core.runCatchingCancellable
 import dev.dertyp.services.Service
 import io.ktor.client.request.head
 import io.ktor.client.request.header
 import io.ktor.client.request.prepareGet
 import io.ktor.client.statement.bodyAsChannel
-import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentLength
@@ -14,11 +17,11 @@ import io.ktor.http.isSuccess
 import io.ktor.utils.io.readAvailable
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.runBlocking
 import java.io.File
-import java.nio.file.Files
 import java.util.UUID
 
 class PodcastStreamService(
@@ -35,7 +38,7 @@ class PodcastStreamService(
             return null
         }
 
-        return StreamInfo(file, contentTypeFor(file), file.length(), file.name)
+        return StreamInfo(file, contentTypeFor(file, podcastContentTypes), file.length(), file.name)
     }
 
     fun streamEpisode(episodeId: UUID, offset: Long, chunkSize: Int = 4096): Flow<ByteArray>? {
@@ -52,15 +55,7 @@ class PodcastStreamService(
 
         return flow {
             if (file != null) {
-                val buffer = ByteArray(chunkSize)
-                file.inputStream().use { input ->
-                    input.skip(offset)
-                    var read = input.read(buffer)
-                    while (read != -1) {
-                        emit(buffer.copyOf(read))
-                        read = input.read(buffer)
-                    }
-                }
+                emitAll(file.chunkFlow(offset, chunkSize))
                 return@flow
             }
 
@@ -105,7 +100,7 @@ class PodcastStreamService(
         if (known != null && known > 0) return known
 
         val url = episode.enclosureUrl ?: return 0
-        val remote = runCatching { remoteSize(url) }.getOrNull() ?: 0
+        val remote = runCatchingCancellable { remoteSize(url) }.getOrNull() ?: 0
         if (remote <= 0) return 0
 
         podcastService.updateEnclosureLength(episodeId, remote)
@@ -115,7 +110,7 @@ class PodcastStreamService(
     private suspend fun remoteSize(url: String): Long {
         http.requirePublicHttpUrl(url)
 
-        val probe = runCatching { http.mediaClient.head(url) }.getOrNull()
+        val probe = runCatchingCancellable { http.mediaClient.head(url) }.getOrNull()
         if (probe != null && probe.status.isSuccess()) {
             val length = probe.contentLength()
             if (length != null && length > 0) return length
@@ -135,16 +130,5 @@ class PodcastStreamService(
                 total ?: response.contentLength() ?: 0L
             }
         }
-    }
-
-    private fun contentTypeFor(file: File): ContentType = when (file.extension.lowercase()) {
-        "mp3" -> ContentType.Audio.MPEG
-        "m4a", "m4b", "mp4" -> ContentType.Audio.MP4
-        "aac" -> ContentType("audio", "aac")
-        "ogg", "oga", "opus" -> ContentType.Audio.OGG
-        "flac" -> ContentType("audio", "flac")
-        "wav" -> ContentType("audio", "wav")
-        else -> runCatching { Files.probeContentType(file.toPath())?.let(ContentType::parse) }.getOrNull()
-            ?: ContentType.Application.OctetStream
     }
 }

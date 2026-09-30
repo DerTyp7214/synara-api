@@ -11,8 +11,6 @@ import dev.dertyp.core.waitForChange
 import dev.dertyp.data.InsertablePlaylist
 import dev.dertyp.data.User
 import dev.dertyp.data.UserSong
-import dev.dertyp.executeCommand
-import dev.dertyp.findInPath
 import dev.dertyp.plugins.IPluginIndexer
 import dev.dertyp.plugins.IServerStorageService
 import dev.dertyp.plugins.setCoverImage
@@ -24,6 +22,7 @@ import dev.dertyp.services.import.*
 import dev.dertyp.services.metadata.IMetadataService
 import dev.dertyp.services.metadata.MusicBrainzService
 import dev.dertyp.utils.parsers.ParserFactory
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import kotlinx.serialization.json.jsonArray
@@ -32,7 +31,6 @@ import kotlinx.serialization.json.jsonPrimitive
 import org.jaudiotagger.audio.AudioFileIO
 import org.jaudiotagger.tag.FieldKey
 import org.koin.core.component.inject
-import java.io.File
 import java.util.UUID
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.io.path.absolutePathString
@@ -47,7 +45,7 @@ open class YoutubeService(
     private val musicBrainzService: MusicBrainzService
 ) : BaseYtdlpImporter(indexer, storageService) {
     override val id: String = ID
-    override val enabled: Boolean get() = ytdlpPath != null
+    override val enabled: Boolean get() = tool.installed
 
     private val songService by inject<SongService>()
     private val audioConfig by inject<AudioConfig>()
@@ -209,7 +207,7 @@ open class YoutubeService(
             }
         }
 
-        if (ytdlpPath == null) return null
+        if (tool.path == null) return null
         val cmd = ytdlp("-J", "--flat-playlist", url)
         val result = executeImporter(cmd, { true }) {}
         if (result.exitCode == 0) {
@@ -240,28 +238,6 @@ open class YoutubeService(
             }
         }
         return null
-    }
-
-    private val ytdlpPath = findInPath("yt-dlp")
-
-    override suspend fun executeImporter(
-        command: Collection<String>,
-        aliveCheck: suspend () -> Boolean,
-        directory: File?,
-        onLineReceived: suspend (String) -> Unit
-    ): ProcessExecutionResult {
-        val cmd = command.toMutableList()
-        if (cmd.isEmpty() || cmd[0] != "yt-dlp") {
-            return ProcessExecutionResult(-1, "Invalid command", "")
-        }
-
-        if (ytdlpPath == null) {
-            return ProcessExecutionResult(-1, "Error: The yt-dlp path does not exist.", "")
-        }
-
-        cmd[0] = ytdlpPath
-
-        return executeCommand(cmd, aliveCheck, logger, directory, onLineReceived = onLineReceived)
     }
 
     override suspend fun importContent(
@@ -358,7 +334,9 @@ open class YoutubeService(
 
             if (finalCoverUrl != null) {
                 coverData = try {
-                    ApiClient.instance.safeQueuedGetImage(finalCoverUrl)
+                    ApiClient.queueInstance.safeQueuedGetImage(finalCoverUrl)
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (_: Exception) {
                     null
                 }
@@ -418,6 +396,8 @@ open class YoutubeService(
                             )
                         }
                         audioFile.commit()
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (e: Exception) {
                         logger.error("Failed to set metadata for $path", e)
                     }
@@ -438,7 +418,7 @@ open class YoutubeService(
             if (metadata != null) return metadata
         }
 
-        if (ytdlpPath == null) return null
+        if (tool.path == null) return null
         val cmd = ytdlp("-J", "--simulate", url)
         val result = executeImporter(cmd, aliveCheck) {}
         if (result.exitCode == 0) {
@@ -489,6 +469,8 @@ open class YoutubeService(
                 json["album"]?.jsonPrimitive?.content?.let { if (it != "NA") map["album"] = it }
                 
                 return map
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 logger.error("Failed to parse yt-dlp json output", e)
             }

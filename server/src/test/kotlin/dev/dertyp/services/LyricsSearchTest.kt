@@ -1,6 +1,6 @@
 package dev.dertyp.services
 
-import dev.dertyp.executeCommand
+import dev.dertyp.core.process.executeCommand
 import dev.dertyp.services.import.ProcessExecutionResult
 import io.mockk.coEvery
 import io.mockk.mockkStatic
@@ -16,12 +16,12 @@ class LyricsSearchTest {
 
     @AfterEach
     fun tearDown() {
-        unmockkStatic("dev.dertyp.UtilsKt")
+        unmockkStatic("dev.dertyp.core.process.CommandKt")
     }
 
     @Test
     fun `searchLyrics should return lines from temp file if command succeeds`() = runBlocking {
-        mockkStatic("dev.dertyp.UtilsKt")
+        mockkStatic("dev.dertyp.core.process.CommandKt")
         
         coEvery { 
             executeCommand(any(), any(), any(), any(), any(), any())

@@ -1,5 +1,6 @@
 package dev.dertyp.services.ui
 
+import dev.dertyp.core.runCatchingCancellable
 import dev.dertyp.data.HueIntensity
 import dev.dertyp.data.HueMotionMode
 import dev.dertyp.data.HuePairingState
@@ -94,7 +95,7 @@ class HueSettingsContribution(private val hue: HueService) : UiContribution(
         val links = hue.getLinks(scope.user.id).associateBy { it.bridgeId }
         bridges.forEach { bridge ->
             val link = links[bridge.id] ?: HueUserLink(bridgeId = bridge.id)
-            val targets = runCatching { hue.listTargets(scope.user.id, bridge.id) }
+            val targets = runCatchingCancellable { hue.listTargets(scope.user.id, bridge.id) }
             val formId = "$FORM_LINK_PREFIX${bridge.id}"
             val fields = ArrayList<UiComponent>()
             fields += UiComponent.Row(
@@ -145,7 +146,7 @@ class HueSettingsContribution(private val hue: HueService) : UiContribution(
             fields += UiComponent.Select(FIELD_TRANSITION_MODE, scope.t("hue.transitionMode"), link.transitionMode.name, HueTransitionMode.entries.map { UiOption(it.name, scope.t("hue.transitionMode.${it.name}")) })
             fields += UiComponent.NumberField(FIELD_TRANSITION_MS, scope.t("hue.transitionMs"), link.transitionMs.toDouble(), min = 0.0, max = 5000.0, step = 50.0)
             fields += UiComponent.Select(FIELD_ON_STOP, scope.t("hue.onStop"), link.onStop.name, HueStopMode.entries.map { UiOption(it.name, scope.t("hue.onStop.${it.name}")) })
-            val scenes = runCatching { hue.listScenes(scope.user.id, bridge.id) }.getOrDefault(emptyList())
+            val scenes = runCatchingCancellable { hue.listScenes(scope.user.id, bridge.id) }.getOrDefault(emptyList())
             if (scenes.isNotEmpty()) {
                 val groups = scenes.groupBy { it.groupType to it.groupId }
                 fields += UiComponent.Section(
@@ -275,7 +276,7 @@ class HueSettingsContribution(private val hue: HueService) : UiContribution(
     }
 
     private suspend fun selectedTargets(userId: UUID, bridgeId: UUID, values: Map<String, UiValue>): List<HueTarget> {
-        val available = runCatching { hue.listTargets(userId, bridgeId) }.getOrDefault(emptyList())
+        val available = runCatchingCancellable { hue.listTargets(userId, bridgeId) }.getOrDefault(emptyList())
         val entertainmentId = values[FIELD_ENTERTAINMENT]?.text
         return available.filter {
             if (it.type == HueTargetType.ENTERTAINMENT) it.id == entertainmentId
@@ -284,7 +285,7 @@ class HueSettingsContribution(private val hue: HueService) : UiContribution(
     }
 
     private suspend fun selectedScenes(userId: UUID, bridgeId: UUID, values: Map<String, UiValue>): List<HueScene> {
-        val available = runCatching { hue.listScenes(userId, bridgeId) }.getOrDefault(emptyList())
+        val available = runCatchingCancellable { hue.listScenes(userId, bridgeId) }.getOrDefault(emptyList())
         return available.filter { values[sceneKey(it.groupType, it.groupId)]?.text == it.id }
     }
 

@@ -1,6 +1,7 @@
 package dev.dertyp.services.metadata
 
 import dev.dertyp.ApiClient
+import dev.dertyp.config.ProviderCredentialKeys
 import dev.dertyp.core.*
 import dev.dertyp.data.User
 import dev.dertyp.plugins.RedisCacheProvider
@@ -15,7 +16,7 @@ import io.ktor.client.statement.bodyAsText
 import io.ktor.http.*
 import io.ktor.server.application.ApplicationEnvironment
 import io.ktor.server.util.url
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import org.koin.core.component.inject
@@ -31,8 +32,28 @@ class TidalService(
     environment: ApplicationEnvironment
 ) : MetadataService("Tidal", IMetadataService.MetadataType.tidal, environment) {
     override val tokenUrl = "https://auth.tidal.com/v1/oauth2/token"
-    override val clientIdConfigPath: String = "tidal.clientId"
-    override val clientSecretConfigPath: String = "tidal.clientSecret"
+    override val credentialKeys = ProviderCredentialKeys.TIDAL
+
+    companion object {
+        private const val MAX_RETRIES = 5
+        private val BASE_RETRY_DELAY = 5.seconds
+        private val MAX_RETRY_DELAY = 2.minutes
+
+        private fun isRetryable(status: HttpStatusCode): Boolean =
+            status == HttpStatusCode.TooManyRequests ||
+                    status == HttpStatusCode.RequestTimeout ||
+                    status.value >= 500
+
+        val RETRY_POLICY = RetryPolicy(
+            maxAttempts = MAX_RETRIES + 1,
+            isSuccess = { it == HttpStatusCode.OK },
+            retryOn = ::isRetryable,
+            backoff = { _, attempt -> BASE_RETRY_DELAY * (1 shl attempt.coerceAtMost(10)) },
+            honorRetryAfter = true,
+            maxDelay = MAX_RETRY_DELAY,
+            onError = RetryOnError.THROW,
+        )
+    }
 
     private val jedisConfig by inject<RedisCacheProvider.Config>()
     val jedis by lazy {
@@ -113,7 +134,7 @@ class TidalService(
         user: User? = null,
         priority: HttpClientPriority = HttpClientPriority.NORMAL
     ): HttpResponse {
-        return ApiClient.instance.queuedGet(url, priority) {
+        return ApiClient.queueInstance.enqueue(url, priority) {
             val token = if (user != null) {
                 SyncService.getInstance(user, environment, ISyncService.SyncServiceType.tidal)
                     .getAccessToken()?.let {
@@ -127,6 +148,34 @@ class TidalService(
             header(HttpHeaders.Authorization, "${token.tokenType} ${token.accessToken}")
             header(HttpHeaders.Accept, "application/vnd.api+json")
         }
+    }
+
+    private suspend fun tidalGet(
+        url: String,
+        operation: String,
+        priority: HttpClientPriority,
+        user: User? = null,
+    ): HttpResponse? = retryingGet(
+        policy = RETRY_POLICY,
+        label = "[$operation]",
+        logger = logger,
+        request = { makeRequest(url, user, priority) },
+        onGiveUp = { response, retries ->
+            val reason = if (isRetryable(response.status)) "after $retries retries" else "without retry"
+            logger.warn("[$operation]: request failed with ${response.status} $reason: $url")
+            logger.debug(response.bodyAsText())
+        },
+    ) { it }
+
+    private suspend fun logParseFailure(operation: String, url: String, response: HttpResponse, e: Exception) {
+        val body = try {
+            response.bodyAsText()
+        } catch (c: CancellationException) {
+            throw c
+        } catch (_: Exception) {
+            null
+        }
+        logger.error("[$operation]: failed to handle response from $url: $body", e)
     }
 
     override suspend fun searchArtists(
@@ -143,30 +192,7 @@ class TidalService(
             }
         }
 
-        val response = makeRequest(url, priority = priority)
-
-        if (response.status == HttpStatusCode.TooManyRequests) {
-            delay(30.seconds)
-            return searchArtists(query, limit, priority)
-        }
-
-        if (response.status != HttpStatusCode.OK) {
-            logger.info("Searching artists for $query: $url")
-            logger.info(response.bodyAsText())
-
-            when (response.status) {
-                HttpStatusCode.BadRequest -> {
-                    logger.error("Searching artist for $query failed")
-                    logger.error("Status: ${response.status}")
-                    return emptyList()
-                }
-
-                else -> {
-                    delay(30.seconds)
-                    return searchArtists(query, limit)
-                }
-            }
-        }
+        val response = tidalGet(url, "searchArtists", priority) ?: return emptyList()
 
         val searchResponse =
             response.body<SearchResultsSingleResourceDataDocument<ArtistsAttributes, ArtistsRelationships>>()
@@ -188,30 +214,7 @@ class TidalService(
             }
         }
 
-        val response = makeRequest(url, priority = priority)
-
-        if (response.status == HttpStatusCode.TooManyRequests) {
-            delay(30.seconds)
-            return search(query, limit, priority)
-        }
-
-        if (response.status != HttpStatusCode.OK) {
-            logger.info("Searching tracks for $query: $url")
-            logger.info(response.bodyAsText())
-
-            when (response.status) {
-                HttpStatusCode.BadRequest -> {
-                    logger.error("Searching tracks for $query failed")
-                    logger.error("Status: ${response.status}")
-                    return emptyList()
-                }
-
-                else -> {
-                    delay(30.seconds)
-                    return search(query, limit)
-                }
-            }
-        }
+        val response = tidalGet(url, "search", priority) ?: return emptyList()
 
         val searchResponse =
             response.body<SearchResultsSingleResourceDataDocument<TracksAttributes, TracksRelationships>>()
@@ -234,30 +237,7 @@ class TidalService(
             }
         }
 
-        val response = makeRequest(url, priority = priority)
-
-        if (response.status == HttpStatusCode.TooManyRequests) {
-            delay(30.seconds)
-            return searchAlbums(query, limit, includeTracks, priority)
-        }
-
-        if (response.status != HttpStatusCode.OK) {
-            logger.info("Searching albums for $query: $url")
-            logger.info(response.bodyAsText())
-
-            when (response.status) {
-                HttpStatusCode.BadRequest -> {
-                    logger.error("Searching albums for $query failed")
-                    logger.error("Status: ${response.status}")
-                    return emptyList()
-                }
-
-                else -> {
-                    delay(30.seconds)
-                    return searchAlbums(query, limit, includeTracks)
-                }
-            }
-        }
+        val response = tidalGet(url, "searchAlbums", priority) ?: return emptyList()
 
         val searchResponse =
             response.body<SearchResultsSingleResourceDataDocument<JsonAttribute, JsonAttribute>>()
@@ -299,17 +279,7 @@ class TidalService(
             }
         }
 
-        val response = makeRequest(url, priority = priority)
-
-        if (response.status == HttpStatusCode.TooManyRequests) {
-            delay(5.seconds)
-            return getImages(urlPath, priority)
-        }
-
-        if (response.status != HttpStatusCode.OK) {
-            logger.info("Fetching images for $url")
-            logger.info(response.bodyAsText())
-        }
+        val response = tidalGet(url, "getImages", priority) ?: return emptyList()
 
         val imagesResponse =
             response.body<ArtworksMultiResourceDataDocument<ArtworksAttributes, ArtworksRelationships>>()
@@ -328,30 +298,17 @@ class TidalService(
             }
         }
 
-        val response = makeRequest(url, priority = priority)
-        when (response.status) {
-            HttpStatusCode.OK -> {}
-            HttpStatusCode.TooManyRequests -> {
-                logger.warn("[getAlbumIdByTrackId]: Too many requests, waiting 10 seconds")
-                delay(10.seconds)
-                return getAlbumIdByTrackId(trackId, priority)
-            }
-
-            else -> {
-                println("error: ${response.status}")
-                return null
-            }
-        }
+        val response = tidalGet(url, "getAlbumIdByTrackId", priority) ?: return null
 
         try {
             val body =
                 response.body<TracksMultiRelationshipDataDocument<ResourceIdentifier, EmptyRelationships>>()
 
             return body.data.first().id
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
-            e.printStackTrace()
-            println(response.bodyAsText())
-
+            logParseFailure("getAlbumIdByTrackId", url, response, e)
             return null
         }
     }
@@ -368,20 +325,7 @@ class TidalService(
             }
         }
 
-        val response = makeRequest(url, priority = priority)
-        when (response.status) {
-            HttpStatusCode.OK -> {}
-            HttpStatusCode.TooManyRequests -> {
-                logger.warn("[getImageUrlByAlbumId]: Too many requests, waiting 10 seconds")
-                delay(10.seconds)
-                return getImageUrlByAlbumId(albumId, priority)
-            }
-
-            else -> {
-                println("error: ${response.status}")
-                return emptyList()
-            }
-        }
+        val response = tidalGet(url, "getImageUrlByAlbumId", priority) ?: return emptyList()
 
         try {
             val body =
@@ -396,10 +340,10 @@ class TidalService(
                     )
                 } ?: emptyList()
             } ?: emptyList()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
-            e.printStackTrace()
-            println(response.bodyAsText())
-            println(url)
+            logParseFailure("getImageUrlByAlbumId", url, response, e)
             return listOf()
         }
     }
@@ -419,20 +363,7 @@ class TidalService(
             }
         }
 
-        val response = makeRequest(url, priority = priority)
-        when (response.status) {
-            HttpStatusCode.OK -> {}
-            HttpStatusCode.TooManyRequests -> {
-                logger.warn("[getImageUrlsByAlbumIds]: Too many requests, waiting 10 seconds")
-                delay(10.seconds)
-                return getImageUrlsByAlbumIds(albumIds, priority)
-            }
-
-            else -> {
-                println("error: ${response.status}")
-                return emptyMap()
-            }
-        }
+        val response = tidalGet(url, "getImageUrlsByAlbumIds", priority) ?: return emptyMap()
 
         try {
             val body =
@@ -446,10 +377,10 @@ class TidalService(
                         IMetadataService.Image(file.href, file.meta.width, file.meta.height)
                     })
             }.filterValueNotNull()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
-            e.printStackTrace()
-            println(response.bodyAsText())
-            println(url)
+            logParseFailure("getImageUrlsByAlbumIds", url, response, e)
             return albumIds.associateWith { emptyList() }
         }
     }
@@ -469,20 +400,7 @@ class TidalService(
             }
         }
 
-        val response = makeRequest(url, priority = priority)
-        when (response.status) {
-            HttpStatusCode.OK -> {}
-            HttpStatusCode.TooManyRequests -> {
-                logger.warn("[getTrackById]: Too many requests, waiting 10 seconds")
-                delay(10.seconds)
-                return getTrackById(trackId, priority)
-            }
-
-            else -> {
-                println("error: ${response.status}")
-                return null
-            }
-        }
+        val response = tidalGet(url, "getTrackById", priority) ?: return null
 
         try {
             val body =
@@ -508,9 +426,10 @@ class TidalService(
                     isrc = track.isrc
                 )
             }?.also { writeToJedis(it) }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
-            e.printStackTrace()
-            println(response.bodyAsText())
+            logParseFailure("getTrackById", url, response, e)
 
             return null
         }
@@ -529,20 +448,7 @@ class TidalService(
             }
         }
 
-        val response = makeRequest(url, priority = priority)
-        when (response.status) {
-            HttpStatusCode.OK -> {}
-            HttpStatusCode.TooManyRequests -> {
-                logger.warn("[getTrackByIsrc]: Too many requests, waiting 10 seconds")
-                delay(10.seconds)
-                return getTrackByIsrc(isrc, priority)
-            }
-
-            else -> {
-                println("error: ${response.status}")
-                return null
-            }
-        }
+        val response = tidalGet(url, "getTrackByIsrc", priority) ?: return null
 
         try {
             val body =
@@ -571,9 +477,10 @@ class TidalService(
                     isrc = track.isrc
                 )
             }?.also { writeToJedis(it) }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
-            e.printStackTrace()
-            println(response.bodyAsText())
+            logParseFailure("getTrackByIsrc", url, response, e)
 
             return null
         }
@@ -603,20 +510,7 @@ class TidalService(
             }
         }
 
-        val response = makeRequest(url, priority = priority)
-        when (response.status) {
-            HttpStatusCode.OK -> {}
-            HttpStatusCode.TooManyRequests -> {
-                logger.warn("[getTracksByIds]: Too many requests, waiting 10 seconds")
-                delay(10.seconds)
-                return getTracksByIds(filteredTrackIds, priority) + getTracksFromCache(existing)
-            }
-
-            else -> {
-                println("error: ${response.status}")
-                return getTracksFromCache(existing)
-            }
-        }
+        val response = tidalGet(url, "getTracksByIds", priority) ?: return getTracksFromCache(existing)
 
         try {
             val body =
@@ -645,9 +539,10 @@ class TidalService(
                     )
                 }
             }.cacheTracks() + getTracksFromCache(existing)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
-            e.printStackTrace()
-            println(response.bodyAsText())
+            logParseFailure("getTracksByIds", url, response, e)
 
             return emptyList()
         }
@@ -664,17 +559,7 @@ class TidalService(
             }
         }
 
-        val response = makeRequest(url, priority = priority)
-        when (response.status) {
-            HttpStatusCode.OK -> return true
-            HttpStatusCode.TooManyRequests -> {
-                logger.warn("[albumExistsById]: Too many requests, waiting 10 seconds")
-                delay(10.seconds)
-                return albumExistsById(albumId, priority)
-            }
-
-            else -> return false
-        }
+        return tidalGet(url, "albumExistsById", priority) != null
     }
 
     override suspend fun getAlbumsByIds(
@@ -701,20 +586,7 @@ class TidalService(
             }
         }
 
-        val response = makeRequest(url, priority = priority)
-        when (response.status) {
-            HttpStatusCode.OK -> {}
-            HttpStatusCode.TooManyRequests -> {
-                logger.warn("[getAlbumsByIds]: Too many requests, waiting 10 seconds")
-                delay(10.seconds)
-                return getAlbumsByIds(filteredAlbumIds, priority) + getAlbumsFromCache(existing)
-            }
-
-            else -> {
-                println("error: ${response.status}")
-                return getAlbumsFromCache(existing)
-            }
-        }
+        val response = tidalGet(url, "getAlbumsByIds", priority) ?: return getAlbumsFromCache(existing)
 
         try {
             val body =
@@ -738,9 +610,10 @@ class TidalService(
                     )
                 }
             }.cacheAlbums() + getAlbumsFromCache(existing)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
-            e.printStackTrace()
-            println(response.bodyAsText())
+            logParseFailure("getAlbumsByIds", url, response, e)
 
             return emptyList()
         }
@@ -759,20 +632,7 @@ class TidalService(
             }
         }
 
-        val response = makeRequest(url, priority = priority)
-        when (response.status) {
-            HttpStatusCode.OK -> {}
-            HttpStatusCode.TooManyRequests -> {
-                logger.warn("[getAlbumByBarcode]: Too many requests, waiting 10 seconds")
-                delay(10.seconds)
-                return getAlbumByBarcode(barcode, priority)
-            }
-
-            else -> {
-                println("error: ${response.status}")
-                return null
-            }
-        }
+        val response = tidalGet(url, "getAlbumByBarcode", priority) ?: return null
 
         try {
             val body =
@@ -796,9 +656,10 @@ class TidalService(
                     )
                 }
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
-            e.printStackTrace()
-            println(response.bodyAsText())
+            logParseFailure("getAlbumByBarcode", url, response, e)
 
             return null
         }
@@ -828,20 +689,7 @@ class TidalService(
             }
         }
 
-        val response = makeRequest(url, priority = priority)
-        when (response.status) {
-            HttpStatusCode.OK -> {}
-            HttpStatusCode.TooManyRequests -> {
-                logger.warn("[getArtistsByIds]: Too many requests, waiting 10 seconds")
-                delay(10.seconds)
-                return getArtistsByIds(filteredArtistIds, priority) + getArtistsFromCache(existing)
-            }
-
-            else -> {
-                println("error: ${response.status}")
-                return getArtistsFromCache(existing)
-            }
-        }
+        val response = tidalGet(url, "getArtistsByIds", priority) ?: return getArtistsFromCache(existing)
 
         try {
             val body =
@@ -859,9 +707,10 @@ class TidalService(
                     )
                 }
             }.cacheArtists() + getArtistsFromCache(existing)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
-            e.printStackTrace()
-            println(response.bodyAsText())
+            logParseFailure("getArtistsByIds", url, response, e)
 
             return emptyList()
         }
@@ -884,22 +733,7 @@ class TidalService(
                 }
             }
 
-            val response = makeRequest(url, priority = priority)
-            when (response.status) {
-                HttpStatusCode.OK -> {}
-                HttpStatusCode.TooManyRequests -> {
-                    val delayDuration = (10.seconds * depth).coerceAtMost(2.minutes)
-                    logger.warn("[getArtistTracks]: Too many requests, waiting ${delayDuration.inWholeSeconds} seconds")
-                    delay(delayDuration)
-                    depth++
-                    continue
-                }
-
-                else -> {
-                    println("error: ${response.status}")
-                    continue
-                }
-            }
+            val response = tidalGet(url, "getArtistTracks", priority) ?: break
 
             try {
                 val body =
@@ -926,9 +760,10 @@ class TidalService(
                 if (cursor != null) {
                     logger.info("Fetching tracks for $artistId with cursor: $cursor")
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
-                e.printStackTrace()
-                println(response.bodyAsText())
+                logParseFailure("getArtistTracks", url, response, e)
                 depth += 10
             } finally {
                 if (depth > 1000) break
@@ -953,22 +788,7 @@ class TidalService(
                 }
             }
 
-            val response = makeRequest(url, priority = priority)
-            when (response.status) {
-                HttpStatusCode.OK -> {}
-                HttpStatusCode.TooManyRequests -> {
-                    val delayDuration = (10.seconds * depth).coerceAtMost(2.minutes)
-                    logger.warn("[getAlbumTracks]: Too many requests, waiting ${delayDuration.inWholeSeconds} seconds")
-                    delay(delayDuration)
-                    depth++
-                    continue
-                }
-
-                else -> {
-                    println("error: ${response.status}")
-                    continue
-                }
-            }
+            val response = tidalGet(url, "getAlbumTracks", priority) ?: break
 
             try {
                 val body =
@@ -997,9 +817,10 @@ class TidalService(
                 if (cursor != null) {
                     logger.info("Fetching tracks for $albumId with cursor: $cursor")
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
-                e.printStackTrace()
-                println(response.bodyAsText())
+                logParseFailure("getAlbumTracks", url, response, e)
                 depth += 10
             } finally {
                 if (depth > 1000) break
@@ -1011,7 +832,6 @@ class TidalService(
         playlistId: String,
         user: User?,
         cursor: String? = null,
-        depth: Int = 1,
         priority: HttpClientPriority = HttpClientPriority.NORMAL
     ): Flow<IMetadataService.Track> = flow {
         val url = getUrl("/playlists/$playlistId/relationships/items") {
@@ -1023,17 +843,7 @@ class TidalService(
             }
         }
 
-        val response = makeRequest(url, user, priority)
-        when (response.status) {
-            HttpStatusCode.OK -> {}
-            HttpStatusCode.TooManyRequests -> {
-                logger.warn("[getTracksFromPlaylist]: Too many requests, waiting ${10 * depth} seconds")
-                delay(10.seconds * depth)
-                return@flow emitAll(getTracksFromPlaylist(playlistId, user, cursor, depth + 1, priority))
-            }
-
-            else -> return@flow println("error: ${response.status}")
-        }
+        val response = tidalGet(url, "getTracksFromPlaylist", priority, user) ?: return@flow
 
         try {
             val body =
@@ -1060,9 +870,10 @@ class TidalService(
             }
 
             return@flow
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
-            e.printStackTrace()
-            println(response.bodyAsText())
+            logParseFailure("getTracksFromPlaylist", url, response, e)
 
             return@flow
         }
@@ -1099,24 +910,7 @@ class TidalService(
             }
         }
 
-        val response = makeRequest(url, user, priority)
-        when (response.status) {
-            HttpStatusCode.OK -> {}
-            HttpStatusCode.TooManyRequests -> {
-                logger.warn("[getPlaylistsByIds]: Too many requests, waiting 10 seconds")
-                delay(10.seconds)
-                return@flow emitAll(
-                    getPlaylistsByIds(
-                        filteredPlaylistIds,
-                        includeTracks,
-                        user,
-                        priority
-                    )
-                )
-            }
-
-            else -> return@flow println("error: ${response.status}")
-        }
+        val response = tidalGet(url, "getPlaylistsByIds", priority, user) ?: return@flow
 
         try {
             val body =
@@ -1141,9 +935,10 @@ class TidalService(
             }.asFlow().let {
                 if (!includeTracks) it.cachePlaylists() else it
             })
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
-            e.printStackTrace()
-            println(response.bodyAsText())
+            logParseFailure("getPlaylistsByIds", url, response, e)
 
             return@flow
         }

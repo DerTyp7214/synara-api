@@ -1,6 +1,5 @@
 package dev.dertyp.db.migrations
 
-import dev.dertyp.core.foreignKeyOn
 import dev.dertyp.core.tempConnection
 import dev.dertyp.db.ClientDeviceTable
 import dev.dertyp.db.ClientSettingHistoryTable
@@ -13,8 +12,6 @@ import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 @Suppress("unused", "ClassName", "SqlSourceToSinkFlow")
 class V1_89__AddClientSettingsTables : BaseJavaMigration() {
     override fun migrate(context: Context) {
-        foreignKeyOn(context.connection)
-
         val statements = tempConnection {
             SchemaUtils.createStatements(
                 ClientDeviceTable,

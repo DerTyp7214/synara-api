@@ -1,18 +1,41 @@
 package dev.dertyp.audio
 
+import dev.dertyp.services.StorageService
+import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
 import org.jaudiotagger.audio.AudioFileIO
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.koin.core.context.startKoin
+import org.koin.core.context.stopKoin
+import org.koin.core.module.dsl.singleOf
+import org.koin.dsl.module
 import java.nio.file.Files
 import kotlin.io.path.exists
 import kotlin.io.path.writeBytes
 
 class AtmosProcessorTest {
     private val processor = AtmosProcessor(AudioConfig(LosslessFormat.FLAC))
+
+    @BeforeEach
+    fun setup() {
+        startKoin {
+            modules(module {
+                single { mockk<StorageService>(relaxed = true) }
+                singleOf(::Transcoder)
+            })
+        }
+    }
+
+    @AfterEach
+    fun tearDown() {
+        stopKoin()
+    }
 
     @Test
     fun `isAtmos is false for non-m4a paths and unreadable m4a files`() {

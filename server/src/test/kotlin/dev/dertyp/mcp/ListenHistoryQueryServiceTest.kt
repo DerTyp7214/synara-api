@@ -11,6 +11,7 @@ import dev.dertyp.services.ArtistService
 import dev.dertyp.services.NowPlayingSnapshot
 import dev.dertyp.services.ScrobbleService
 import dev.dertyp.services.SongService
+import dev.dertyp.testing.*
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
@@ -82,69 +83,6 @@ class ListenHistoryQueryServiceTest {
 
     private fun ms(year: Int, month: Int, day: Int, hour: Int = 0, minute: Int = 0, second: Int = 0): Long =
         ZonedDateTime.of(year, month, day, hour, minute, second, 0, ZoneOffset.UTC).toInstant().toEpochMilli()
-
-    private fun insertUser(): UUID {
-        val uid = UUID.randomUUID()
-        UserTable.insert {
-            it[id] = uid
-            it[username] = "user_$uid"
-            it[passwordHash] = "x"
-        }
-        return uid
-    }
-
-    private fun insertAlbum(name: String = "Album"): UUID {
-        val aid = UUID.randomUUID()
-        AlbumTable.insert {
-            it[id] = aid
-            it[AlbumTable.name] = name
-        }
-        return aid
-    }
-
-    private fun insertArtist(name: String): UUID {
-        val aid = UUID.randomUUID()
-        ArtistTable.insert {
-            it[id] = aid
-            it[ArtistTable.name] = name
-        }
-        return aid
-    }
-
-    private fun insertSong(albumId: UUID, title: String = "Song", durationMs: Long = 0): UUID {
-        val sid = UUID.randomUUID()
-        SongTable.insert {
-            it[id] = sid
-            it[SongTable.title] = title
-            it[SongTable.albumId] = albumId
-            it[fileSize] = 0
-            it[SongTable.duration] = durationMs
-        }
-        return sid
-    }
-
-    private fun linkSongArtist(songId: UUID, artistId: UUID) {
-        SongArtistTable.insert {
-            it[SongArtistTable.songId] = songId
-            it[SongArtistTable.artistId] = artistId
-        }
-    }
-
-    private fun insertLbUser(): UUID {
-        val id = UUID.randomUUID()
-        ListenBrainzUserTable.insert {
-            it[ListenBrainzUserTable.id] = id
-            it[username] = "lb_$id"
-        }
-        return id
-    }
-
-    private fun link(userId: UUID, lbUserId: UUID) {
-        UserListenBrainzLinkTable.insert {
-            it[UserListenBrainzLinkTable.userId] = userId
-            it[listenBrainzUserId] = lbUserId
-        }
-    }
 
     private fun insertListen(
         at: Long,
@@ -312,7 +250,7 @@ class ListenHistoryQueryServiceTest {
         val user = transaction(database) {
             val u = insertUser()
             val lb = insertLbUser()
-            link(u, lb)
+            linkListenBrainzUser(u, lb)
             val song = insertSong(insertAlbum())
             registerSong(song, "Song")
             insertListen(ms(2024, 1, 1), userId = u, songId = song, source = ListenSource.LOCAL)
@@ -401,7 +339,7 @@ class ListenHistoryQueryServiceTest {
         val user = transaction(database) {
             val u = insertUser()
             val lb = insertLbUser()
-            link(u, lb)
+            linkListenBrainzUser(u, lb)
             insertListen(
                 ms(2024, 1, 1),
                 lbUserId = lb,
@@ -547,7 +485,7 @@ class ListenHistoryQueryServiceTest {
         val (user, localSong) = transaction(database) {
             val u = insertUser()
             val lb = insertLbUser()
-            link(u, lb)
+            linkListenBrainzUser(u, lb)
             val album = insertAlbum()
             val lbSong = insertSong(album, title = "LB Song", durationMs = 229_133)
             val localSong = insertSong(album, title = "Local Song", durationMs = 229_133)
@@ -574,7 +512,7 @@ class ListenHistoryQueryServiceTest {
         val (user, localSong) = transaction(database) {
             val u = insertUser()
             val lb = insertLbUser()
-            link(u, lb)
+            linkListenBrainzUser(u, lb)
             val album = insertAlbum()
             val localSong = insertSong(album, title = "Local Song", durationMs = 157_020)
             val lbSong = insertSong(album, title = "LB Song", durationMs = 157_020)
@@ -598,7 +536,7 @@ class ListenHistoryQueryServiceTest {
         val (user, lbSong) = transaction(database) {
             val u = insertUser()
             val lb = insertLbUser()
-            link(u, lb)
+            linkListenBrainzUser(u, lb)
             val lbSong = insertSong(insertAlbum(), title = "LB Song", durationMs = 200_000)
             insertListen(ms(2026, 9, 10, 12), lbUserId = lb, songId = lbSong, playedMs = 200_000)
             u to lbSong
@@ -716,7 +654,7 @@ class ListenHistoryQueryServiceTest {
         val user = transaction(database) {
             val u = insertUser()
             val lb = insertLbUser()
-            link(u, lb)
+            linkListenBrainzUser(u, lb)
             insertListen(ms(2024, 1, 1), lbUserId = lb, trackName = "Unmatched Track", artistName = "Unmatched Artist")
             insertListen(ms(2024, 2, 1), lbUserId = lb, trackName = "Unmatched Track", artistName = "Unmatched Artist")
             u

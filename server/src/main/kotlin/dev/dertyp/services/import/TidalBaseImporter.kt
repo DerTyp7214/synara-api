@@ -5,8 +5,8 @@ import dev.dertyp.PlatformUUID
 import dev.dertyp.core.*
 import dev.dertyp.data.*
 import dev.dertyp.db.*
-import dev.dertyp.dbQuery
-import dev.dertyp.getISOFromDate
+import dev.dertyp.core.date.getISOFromDate
+import dev.dertyp.core.db.dbQuery
 import dev.dertyp.plugins.*
 import dev.dertyp.services.*
 import dev.dertyp.services.metadata.IMetadataService
@@ -188,6 +188,8 @@ abstract class TidalBaseImporter(
                             if (fullRelease != null) mbRelease = fullRelease
                         }
                     }
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     logger.warn("Failed to fetch Tidal album metadata for barcode matching: $albumId", e)
                 }
@@ -300,7 +302,9 @@ abstract class TidalBaseImporter(
                                 if (finalCoverUrl != tidalCoverUrl) {
                                     onLiveOutput("Fetching enriched cover art for: $finalTitle")
                                 }
-                                ApiClient.instance.safeQueuedGetImage(finalCoverUrl)
+                                ApiClient.queueInstance.safeQueuedGetImage(finalCoverUrl)
+                            } catch (e: CancellationException) {
+                                throw e
                             } catch (_: Exception) {
                                 null
                             }
@@ -315,7 +319,9 @@ abstract class TidalBaseImporter(
                     val animatedCoverDeferred = animatedCoverDownloads.getOrPut(animatedCoverUrl) {
                         async {
                             try {
-                                ApiClient.instance.safeQueuedGet<ByteArray>(animatedCoverUrl)
+                                ApiClient.queueInstance.safeQueuedGet<ByteArray>(animatedCoverUrl)
+                            } catch (e: CancellationException) {
+                                throw e
                             } catch (_: Exception) {
                                 null
                             }
@@ -424,6 +430,8 @@ abstract class TidalBaseImporter(
                     } else {
                         onLiveOutput("Could not find metadata match for: ${path.absolutePathString()}")
                     }
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     logger.error("Failed to post-process $path", e)
                 }
@@ -481,6 +489,8 @@ abstract class TidalBaseImporter(
                         }
                     }
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 logger.error("Failed to save animated covers", e)
             }
@@ -516,6 +526,8 @@ abstract class TidalBaseImporter(
                 val groups = ids.asFlow().map { id ->
                     val tidalAlbum = try {
                         metadataService.getAlbumsByIds(listOf(id), HttpClientPriority.HIGH).firstOrNull()
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (e: Exception) {
                         logger.warn("Failed to load Tidal album $id", e)
                         null
@@ -567,6 +579,8 @@ abstract class TidalBaseImporter(
                 }
                 true
             } else false
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             logger.error("Failed to update Tidal album metadata for $originalId", e)
             false

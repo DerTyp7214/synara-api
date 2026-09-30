@@ -1,8 +1,5 @@
-import org.jetbrains.kotlin.gradle.dsl.JvmTarget
-import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
-
 plugins {
-    alias(libs.plugins.kotlin.jvm)
+    id("synara.kotlin-jvm")
     alias(libs.plugins.ktor)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.kover)
@@ -11,17 +8,6 @@ plugins {
 application {
     mainClass = "io.ktor.server.netty.EngineMain"
     applicationDefaultJvmArgs = listOf("--enable-native-access=ALL-UNNAMED")
-}
-
-java {
-    sourceCompatibility = JavaVersion.VERSION_24
-    targetCompatibility = JavaVersion.VERSION_24
-}
-
-tasks.withType<KotlinCompile>().configureEach {
-    compilerOptions {
-        jvmTarget.set(JvmTarget.JVM_24)
-    }
 }
 
 ktor {

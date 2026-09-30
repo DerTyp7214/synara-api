@@ -7,7 +7,7 @@ import kotlinx.coroutines.launch
 import org.koin.core.component.inject
 import kotlin.time.Duration.Companion.seconds
 
-@WorkerTask(TaskKeys.REVERSE_PROXY_HEALTH_CHECK, "Reverse Proxy Health Check")
+@WorkerTask(TaskKeys.REVERSE_PROXY_HEALTH_CHECK, "Reverse Proxy Health Check", cron = "0 * * * *")
 class ReverseProxyWorker : Worker("ReverseProxyWorker") {
     private val reverseProxyService by inject<ReverseProxyService>()
 

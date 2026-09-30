@@ -3,7 +3,7 @@ package dev.dertyp.services
 import dev.dertyp.data.RadioSeed
 import dev.dertyp.data.RadioType
 import dev.dertyp.db.SongTable
-import dev.dertyp.dbQuery
+import dev.dertyp.core.db.dbQuery
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.toList

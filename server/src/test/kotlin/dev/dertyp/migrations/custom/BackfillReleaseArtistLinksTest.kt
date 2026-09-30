@@ -3,13 +3,10 @@ package dev.dertyp.migrations.custom
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
 import dev.dertyp.db.*
-import dev.dertyp.services.ScheduledTaskLogService
 import dev.dertyp.services.release.ReleaseArtistService
-import io.mockk.every
-import io.mockk.mockk
+import dev.dertyp.testing.relaxedTaskLogService
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.core.*
-import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import org.jetbrains.exposed.v1.jdbc.*
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.jupiter.api.AfterEach
@@ -26,8 +23,7 @@ class BackfillReleaseArtistLinksTest : KoinTest {
     private lateinit var database: Database
 
     private fun setup(dialect: DbDialect) {
-        val logService = mockk<ScheduledTaskLogService>(relaxed = true)
-        every { logService.startLog(any(), any()) } returns EntityID(UUID.randomUUID(), ScheduledTaskLogTable)
+        val logService = relaxedTaskLogService()
 
         startKoin {
             modules(module {

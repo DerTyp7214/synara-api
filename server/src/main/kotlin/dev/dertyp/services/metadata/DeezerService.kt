@@ -1,6 +1,7 @@
 package dev.dertyp.services.metadata
 
 import dev.dertyp.ApiClient
+import dev.dertyp.config.ProviderCredentialKeys
 import dev.dertyp.core.HttpClientPriority
 import dev.dertyp.core.safeQueuedGet
 import io.ktor.client.request.HttpRequestBuilder
@@ -14,8 +15,7 @@ class DeezerService(
     environment: ApplicationEnvironment
 ) : MetadataService("Deezer", IMetadataService.MetadataType.deezer, environment) {
     override val tokenUrl = ""
-    override val clientIdConfigPath = ""
-    override val clientSecretConfigPath = ""
+    override val credentialKeys = ProviderCredentialKeys.NONE
 
     private val baseUrl = "https://api.deezer.com"
 
@@ -27,7 +27,7 @@ class DeezerService(
         limit: Int,
         priority: HttpClientPriority
     ): List<IMetadataService.Artist> {
-        val response = ApiClient.instance.safeQueuedGet<SearchResponse>("$baseUrl/search/artist", priority) {
+        val response = ApiClient.queueInstance.safeQueuedGet<SearchResponse>("$baseUrl/search/artist", priority) {
             parameter("q", query)
             parameter("limit", limit)
         }
@@ -52,7 +52,7 @@ class DeezerService(
         isrc: String,
         priority: HttpClientPriority
     ): IMetadataService.Track? {
-        val track = ApiClient.instance.safeQueuedGet<Track>("$baseUrl/track/isrc:$isrc", priority) ?: return null
+        val track = ApiClient.queueInstance.safeQueuedGet<Track>("$baseUrl/track/isrc:$isrc", priority) ?: return null
 
         return IMetadataService.Track(
             id = track.id.toString(),
@@ -75,7 +75,7 @@ class DeezerService(
         barcode: String,
         priority: HttpClientPriority
     ): IMetadataService.Album? {
-        val album = ApiClient.instance.safeQueuedGet<Album>("$baseUrl/album/upc:$barcode", priority) ?: return null
+        val album = ApiClient.queueInstance.safeQueuedGet<Album>("$baseUrl/album/upc:$barcode", priority) ?: return null
 
         return IMetadataService.Album(
             id = album.id.toString(),

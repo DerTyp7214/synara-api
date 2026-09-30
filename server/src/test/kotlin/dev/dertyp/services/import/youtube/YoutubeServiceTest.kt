@@ -2,7 +2,7 @@ package dev.dertyp.services.import.youtube
 
 import dev.dertyp.audio.AudioConfig
 import dev.dertyp.Indexer
-import dev.dertyp.findInPath
+import dev.dertyp.core.process.findInPath
 import dev.dertyp.services.LrcLibService
 import dev.dertyp.services.SongService
 import dev.dertyp.services.StorageService
@@ -53,7 +53,7 @@ class YoutubeServiceTest : KoinTest {
             })
         }
 
-        mockkStatic("dev.dertyp.UtilsKt")
+        mockkStatic("dev.dertyp.core.process.CommandKt")
         every { findInPath("yt-dlp") } returns "/usr/bin/yt-dlp"
 
         service = YoutubeService(

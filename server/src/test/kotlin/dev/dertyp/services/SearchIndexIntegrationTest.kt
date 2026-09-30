@@ -1,6 +1,7 @@
 package dev.dertyp.services
 
 import dev.dertyp.TestDatabase
+import dev.dertyp.config.ServerConfig
 import dev.dertyp.db.*
 import dev.dertyp.services.metadata.CachedMusicBrainzService
 import dev.dertyp.services.metadata.MusicBrainzCacheService
@@ -52,7 +53,7 @@ class SearchIndexIntegrationTest : KoinTest {
         val environment = mockk<ApplicationEnvironment>()
         every { environment.config } returns config
         
-        databaseManager = DatabaseManager(environment)
+        databaseManager = DatabaseManager(ServerConfig(environment.config))
         
         database = Database.connect(
             url = dbUrl,
@@ -73,6 +74,8 @@ class SearchIndexIntegrationTest : KoinTest {
                 single { genreService }
                 single { imageService }
                 single { LibraryMergeService() }
+                single { LibraryFileDeleter() }
+                single { mockk<RedisSearchService>(relaxed = true) }
                 single { SearchIndexWorker() }
             })
         }

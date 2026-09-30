@@ -18,6 +18,10 @@ object SongGenreTable : Table("song_genre") {
     val songId = reference("songId", SongTable.id, onDelete = ReferenceOption.CASCADE)
     val genreId = reference("genreId", GenreTable.id, onDelete = ReferenceOption.CASCADE)
     override val primaryKey = PrimaryKey(songId, genreId)
+
+    init {
+        index(false, genreId)
+    }
 }
 
 object AlbumGenreTable : Table("album_genre") {

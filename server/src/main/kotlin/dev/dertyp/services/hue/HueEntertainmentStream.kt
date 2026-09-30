@@ -34,8 +34,6 @@ class HueDtlsStream(
     private val ip: String,
     private val applicationKey: String,
     private val clientKey: String,
-    private val port: Int = PORT,
-    private val handshakeTimeoutMs: Long = HANDSHAKE_TIMEOUT_MS,
 ) : HueEntertainmentStream {
     private val lock = Any()
     private var socket: DatagramSocket? = null
@@ -48,12 +46,12 @@ class HueDtlsStream(
             val udp = openSocket()
             val timedOut = AtomicBoolean(false)
             val watchdog = launch {
-                delay(handshakeTimeoutMs)
+                delay(HANDSHAKE_TIMEOUT_MS)
                 timedOut.set(true)
                 udp.close()
             }
             try {
-                val transport = withTimeout(handshakeTimeoutMs + TIMEOUT_GRACE_MS) {
+                val transport = withTimeout(HANDSHAKE_TIMEOUT_MS + TIMEOUT_GRACE_MS) {
                     runInterruptible { DTLSClientProtocol().connect(PskClient(identity), UDPTransport(udp, MTU)) }
                 }
                 val keep = synchronized(lock) {
@@ -67,10 +65,10 @@ class HueDtlsStream(
                 if (!keep) closeQuietly(transport)
             } catch (_: TimeoutCancellationException) {
                 close()
-                throw HueBridgeException(failure("timed out after $handshakeTimeoutMs ms"))
+                throw HueBridgeException(failure("timed out after $HANDSHAKE_TIMEOUT_MS ms"))
             } catch (e: IOException) {
                 close()
-                throw HueBridgeException(failure(if (timedOut.get()) "timed out after $handshakeTimeoutMs ms" else describe(e)))
+                throw HueBridgeException(failure(if (timedOut.get()) "timed out after $HANDSHAKE_TIMEOUT_MS ms" else describe(e)))
             } finally {
                 watchdog.cancel()
             }
@@ -95,7 +93,7 @@ class HueDtlsStream(
 
     private fun openSocket(): DatagramSocket {
         val udp = try {
-            val address = InetSocketAddress(ip, port)
+            val address = InetSocketAddress(ip, PORT)
             DatagramSocket().apply {
                 soTimeout = SOCKET_TIMEOUT_MS
                 connect(address)

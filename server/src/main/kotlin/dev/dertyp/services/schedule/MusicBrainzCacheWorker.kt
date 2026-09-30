@@ -10,10 +10,11 @@ import dev.dertyp.db.MBRecordingTable
 import dev.dertyp.db.MBReleaseGroupCoverTable
 import dev.dertyp.db.MBReleaseGroupTable
 import dev.dertyp.db.MBReleaseTable
-import dev.dertyp.dbQuery
+import dev.dertyp.core.db.dbQuery
 import dev.dertyp.services.ReleaseService
 import dev.dertyp.services.metadata.MusicBrainzCacheService
 import dev.dertyp.services.metadata.MusicBrainzService
+import kotlinx.coroutines.CancellationException
 import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.jdbc.andWhere
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
@@ -25,7 +26,7 @@ import java.util.UUID
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
 
-@WorkerTask(TaskKeys.MUSICBRAINZ_CACHE_WORKER, "MusicBrainz Cache Worker")
+@WorkerTask(TaskKeys.MUSICBRAINZ_CACHE_WORKER, "MusicBrainz Cache Worker", afterTask = TaskKeys.MUSICBRAINZ_WORKER)
 class MusicBrainzCacheWorker : Worker("MusicBrainzCacheWorker") {
     private val musicBrainzService by inject<MusicBrainzService>()
     private val musicBrainzCacheService by inject<MusicBrainzCacheService>()
@@ -113,6 +114,8 @@ class MusicBrainzCacheWorker : Worker("MusicBrainzCacheWorker") {
                     maxPercentage = artistMaxPercentage,
                     message = "Updating artists: $artistsUpdated/$totalArtists (${total.toInt()})"
                 )
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 logger.error("Failed to update artist $id in cache: ${e.message}")
             }
@@ -134,6 +137,8 @@ class MusicBrainzCacheWorker : Worker("MusicBrainzCacheWorker") {
                     maxPercentage = releaseGroupMaxPercentage,
                     message = "Updating release groups: $releaseGroupsUpdated/$totalReleaseGroups (${total.toInt()})"
                 )
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 logger.error("Failed to update release group $id in cache: ${e.message}")
             }
@@ -155,6 +160,8 @@ class MusicBrainzCacheWorker : Worker("MusicBrainzCacheWorker") {
                     maxPercentage = releaseMaxPercentage,
                     message = "Updating releases: $releasesUpdated/$totalReleases (${total.toInt()})"
                 )
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 logger.error("Failed to update release $id in cache: ${e.message}")
             }
@@ -176,6 +183,8 @@ class MusicBrainzCacheWorker : Worker("MusicBrainzCacheWorker") {
                     maxPercentage = recordingMaxPercentage,
                     message = "Updating recordings: $recordingsUpdated/$totalRecordings (${total.toInt()})"
                 )
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 logger.error("Failed to update recording $id in cache: ${e.message}")
             }
@@ -197,6 +206,8 @@ class MusicBrainzCacheWorker : Worker("MusicBrainzCacheWorker") {
                     maxPercentage = listenRecordingMaxPercentage,
                     message = "Caching listened recordings: ${index + 1}/${listenRecordingIds.size}"
                 )
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 logger.error("Failed to cache listened recording $id: ${e.message}")
             }
@@ -222,6 +233,8 @@ class MusicBrainzCacheWorker : Worker("MusicBrainzCacheWorker") {
                     maxPercentage = coverMaxPercentage,
                     message = "Fetching listened release covers: $coversChecked/${coverGroupIds.size}"
                 )
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 logger.error("Failed to fetch cover for release group $groupId: ${e.message}")
             }

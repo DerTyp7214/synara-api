@@ -1,14 +1,23 @@
 package dev.dertyp.services.hue
 
+import io.mockk.coEvery
+import io.mockk.mockkStatic
+import io.mockk.unmockkAll
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
-import java.net.DatagramSocket
 
 class HueDtlsStreamTest {
+    @AfterEach
+    fun tearDown() {
+        unmockkAll()
+    }
+
     @Test
     fun `a client key decodes to sixteen bytes`() {
         val bytes = HueDtlsStream.pskBytes("00112233445566778899aabbccddeeff")
@@ -42,10 +51,9 @@ class HueDtlsStreamTest {
 
     @Test
     fun `a handshake against a closed port fails fast`() {
-        val probe = DatagramSocket(0)
-        val port = probe.localPort
-        probe.close()
-        val stream = HueDtlsStream("127.0.0.1", "application-key", "00112233445566778899aabbccddeeff", port, handshakeTimeoutMs = 500)
+        mockkStatic("kotlinx.coroutines.DelayKt")
+        coEvery { delay(HueDtlsStream.HANDSHAKE_TIMEOUT_MS) } coAnswers { delay(500L) }
+        val stream = HueDtlsStream("127.0.0.1", "application-key", "00112233445566778899aabbccddeeff")
 
         val startedAt = System.currentTimeMillis()
         val error = assertThrows<HueBridgeException> { runBlocking { stream.start() } }

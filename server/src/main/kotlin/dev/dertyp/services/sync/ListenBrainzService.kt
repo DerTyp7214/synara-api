@@ -2,12 +2,13 @@ package dev.dertyp.services.sync
 
 import dev.dertyp.ApiClient
 import dev.dertyp.PlatformUUID
+import dev.dertyp.core.runCatchingCancellable
 import dev.dertyp.core.safeQueuedGet
 import dev.dertyp.data.ListenBrainzStatus
 import dev.dertyp.data.ListenedSong
 import dev.dertyp.data.User
 import dev.dertyp.db.*
-import dev.dertyp.dbQuery
+import dev.dertyp.core.db.dbQuery
 import dev.dertyp.platformUUIDFromString
 import dev.dertyp.services.IListenBrainzService
 import dev.dertyp.services.IncomingListen
@@ -31,7 +32,6 @@ class ListenBrainzService : Service() {
     private val listenService by inject<ListenService>()
     private val songService by inject<SongService>()
 
-    private val serviceScope = CoroutineScope(Dispatchers.IO)
 
     private val changes = MutableSharedFlow<Unit>(extraBufferCapacity = 8, onBufferOverflow = BufferOverflow.DROP_OLDEST)
 
@@ -75,8 +75,8 @@ class ListenBrainzService : Service() {
         }
 
         signalChange()
-        serviceScope.launch {
-            runCatching { syncAccount(lbUserId) }
+        scope.launch {
+            runCatchingCancellable { syncAccount(lbUserId) }
                 .onFailure { logger.error("Initial ListenBrainz backfill failed for account $lbUserId", it) }
         }
         return getStatus(userId) ?: error("ListenBrainz link missing after link")
@@ -115,8 +115,8 @@ class ListenBrainzService : Service() {
                 .singleOrNull()?.get(UserListenBrainzLinkTable.listenBrainzUserId)?.value
         }
         if (lbId != null) {
-            serviceScope.launch {
-                runCatching { syncAccount(lbId) }
+            scope.launch {
+                runCatchingCancellable { syncAccount(lbId) }
                     .onFailure { logger.error("ListenBrainz sync failed for account $lbId", it) }
             }
         }
@@ -168,7 +168,7 @@ class ListenBrainzService : Service() {
         var total = 0
         accountIds.forEachIndexed { index, id ->
             val base = index.toDouble() / accountIds.size * 100.0
-            runCatching { total += syncAccount(id) { message -> onProgress(base, message) } }
+            runCatchingCancellable { total += syncAccount(id) { message -> onProgress(base, message) } }
                 .onFailure { logger.error("ListenBrainz sync failed for account $id", it) }
         }
         logger.info("ListenBrainz sync complete: $total new listen(s) across ${accountIds.size} account(s)")
@@ -245,7 +245,7 @@ class ListenBrainzService : Service() {
             if (maxTs != null) append("&max_ts=$maxTs")
         }
         repeat(FETCH_ATTEMPTS) { attempt ->
-            val response = ApiClient.instance.safeQueuedGet<LbListensResponse>(url) {
+            val response = ApiClient.queueInstance.safeQueuedGet<LbListensResponse>(url) {
                 if (!token.isNullOrBlank()) header(HttpHeaders.Authorization, "Token $token")
             }
             if (response != null) return response.payload.listens
@@ -385,6 +385,8 @@ class ListenBrainzService : Service() {
                 } else {
                     logger.warn("Manual mapping $msid -> $recordingMbid rejected with ${response.status}")
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 logger.error("Manual mapping $msid -> $recordingMbid failed: ${e.message}")
             }

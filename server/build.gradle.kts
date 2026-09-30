@@ -1,11 +1,9 @@
-import org.jetbrains.kotlin.gradle.dsl.JvmTarget
-import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 plugins {
-    alias(libs.plugins.kotlin.jvm)
+    id("synara.kotlin-jvm")
     alias(libs.plugins.ktor)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.kotlinx.rpc)
@@ -17,17 +15,6 @@ plugins {
 application {
     mainClass = "io.ktor.server.netty.EngineMain"
     applicationDefaultJvmArgs = listOf("--enable-native-access=ALL-UNNAMED")
-}
-
-java {
-    sourceCompatibility = JavaVersion.VERSION_25
-    targetCompatibility = JavaVersion.VERSION_25
-}
-
-tasks.withType<KotlinCompile>().configureEach {
-    compilerOptions {
-        jvmTarget.set(JvmTarget.JVM_25)
-    }
 }
 
 tasks.shadowJar {
@@ -55,6 +42,18 @@ tasks.register<JavaExec>("generateApiConstantsDocs") {
     workingDir = rootProject.projectDir
     args("docs/API_CONSTANTS.md")
 }
+
+val javacppPlatforms: List<String> = providers.gradleProperty("javacppPlatforms")
+    .map { value -> value.split(",").map(String::trim).filter(String::isNotEmpty) }
+    .orElse(providers.systemProperty("os.name").map { osName ->
+        val name = osName.lowercase()
+        when {
+            name.contains("mac") || name.contains("darwin") -> listOf("macosx-x86_64", "macosx-arm64")
+            name.contains("windows") -> listOf("windows-x86_64")
+            else -> listOf("linux-x86_64", "linux-arm64")
+        }
+    })
+    .get()
 
 ksp {
     arg("rest.packages", "dev.dertyp,dev.dertyp.services,dev.dertyp.services.import,dev.dertyp.services.metadata")
@@ -107,9 +106,13 @@ dependencies {
     implementation(libs.exposed.migration.core)
     implementation(libs.exposed.migration.jdbc)
     implementation(libs.h2)
+    implementation(libs.javacpp)
     implementation(libs.ffmpeg)
-    implementation(libs.ffmpeg.platform)
-    implementation(libs.javacv.platform)
+    implementation(libs.javacv)
+    javacppPlatforms.forEach { platform ->
+        runtimeOnly(variantOf(libs.javacpp) { classifier(platform) })
+        runtimeOnly(variantOf(libs.ffmpeg) { classifier(platform) })
+    }
     implementation(libs.thumbnailator)
     implementation(libs.postgresql)
     implementation(libs.kotlinx.rpc.krpc.serialization.json)
@@ -163,7 +166,9 @@ dependencies {
 }
 
 tasks.test {
-    useJUnitPlatform()
+    useJUnitPlatform {
+        if (project.findProperty("equivalence") == "true") includeTags("equivalence") else excludeTags("equivalence")
+    }
     systemProperty("net.bytebuddy.experimental", "true")
     systemProperty("updateRestGolden", project.findProperty("updateRestGolden") ?: "false")
     maxHeapSize = "2g"

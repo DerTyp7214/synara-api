@@ -4,15 +4,14 @@ import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
 import dev.dertyp.data.MusicBrainzRecording
 import dev.dertyp.db.*
-import dev.dertyp.services.ScheduledTaskLogService
 import dev.dertyp.services.metadata.MusicBrainzCacheService
 import dev.dertyp.services.metadata.MusicBrainzService
+import dev.dertyp.testing.relaxedTaskLogService
 import io.mockk.coEvery
 import io.mockk.coVerify
-import io.mockk.every
+import io.mockk.coEvery
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
-import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.*
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
@@ -32,8 +31,7 @@ class FetchMissingRecordingIsrcsTest : KoinTest {
     private val musicBrainzCacheService = mockk<MusicBrainzCacheService>()
 
     fun setup(dialect: DbDialect) {
-        val logService = mockk<ScheduledTaskLogService>(relaxed = true)
-        every { logService.startLog(any(), any()) } returns EntityID(UUID.randomUUID(), ScheduledTaskLogTable)
+        val logService = relaxedTaskLogService()
 
         startKoin {
             modules(module {

@@ -18,8 +18,10 @@ import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.SchemaUtils
+import org.jetbrains.exposed.v1.jdbc.andWhere
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
@@ -51,6 +53,8 @@ class ArtistServiceTest : KoinTest {
                 single { AlbumService() }
                 single { GenreService() }
                 single { ReleaseArtistService() }
+                single { LibraryFileDeleter() }
+                single { mockk<RedisSearchService>(relaxed = true) }
             })
         }
 
@@ -1492,5 +1496,98 @@ class ArtistServiceTest : KoinTest {
 
         val removedAgain = service.removeAlias(artistId, "Alias 1")
         assertFalse(removedAgain)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `mergeArtists keeps the credit position and join phrase of the merged links`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val artistA = UUID.randomUUID()
+        val artistB = UUID.randomUUID()
+        val other = UUID.randomUUID()
+        val albumId = UUID.randomUUID()
+        val featuredSong = UUID.randomUUID()
+        val duetSong = UUID.randomUUID()
+
+        transaction(database) {
+            ArtistTable.insert { it[id] = artistA; it[name] = "Artist A" }
+            ArtistTable.insert { it[id] = artistB; it[name] = "Artist B" }
+            ArtistTable.insert { it[id] = other; it[name] = "Other" }
+            AlbumTable.insert { it[id] = albumId; it[name] = "Album" }
+            SongTable.insert { it[id] = featuredSong; it[title] = "Featured"; it[this.albumId] = albumId }
+            SongTable.insert { it[id] = duetSong; it[title] = "Duet"; it[this.albumId] = albumId }
+            SongArtistTable.insert { it[songId] = featuredSong; it[artistId] = other; it[position] = 0; it[joinPhrase] = " feat. " }
+            SongArtistTable.insert { it[songId] = featuredSong; it[artistId] = artistA; it[position] = 1; it[joinPhrase] = "" }
+            SongArtistTable.insert { it[songId] = duetSong; it[artistId] = artistA; it[position] = 0; it[joinPhrase] = " & " }
+            SongArtistTable.insert { it[songId] = duetSong; it[artistId] = artistB; it[position] = 1; it[joinPhrase] = " with " }
+            SongArtistTable.insert { it[songId] = duetSong; it[artistId] = other; it[position] = 2; it[joinPhrase] = "" }
+            AlbumArtistTable.insert { it[this.albumId] = albumId; it[artistId] = artistB; it[position] = 0; it[joinPhrase] = " x " }
+            AlbumArtistTable.insert { it[this.albumId] = albumId; it[artistId] = other; it[position] = 1; it[joinPhrase] = "" }
+        }
+
+        val merged = service.mergeArtists(MergeArtists(name = "Merged", artistIds = listOf(artistA, artistB)))!!
+
+        transaction(database) {
+            fun songLink(songId: UUID) = SongArtistTable.selectAll()
+                .where { SongArtistTable.songId eq songId }
+                .andWhere { SongArtistTable.artistId eq merged.id }
+                .single()
+
+            assertEquals(1, songLink(featuredSong)[SongArtistTable.position])
+            assertEquals("", songLink(featuredSong)[SongArtistTable.joinPhrase])
+            assertEquals(0, songLink(duetSong)[SongArtistTable.position])
+            assertEquals(" with ", songLink(duetSong)[SongArtistTable.joinPhrase])
+
+            val albumLink = AlbumArtistTable.selectAll()
+                .where { AlbumArtistTable.albumId eq albumId }
+                .andWhere { AlbumArtistTable.artistId eq merged.id }
+                .single()
+            assertEquals(0, albumLink[AlbumArtistTable.position])
+            assertEquals(" x ", albumLink[AlbumArtistTable.joinPhrase])
+        }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `splitArtist gives the split artists the credit position and hands the join phrase to the last one`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val combined = UUID.randomUUID()
+        val other = UUID.randomUUID()
+        val albumId = UUID.randomUUID()
+        val songId = UUID.randomUUID()
+
+        transaction(database) {
+            ArtistTable.insert { it[id] = combined; it[name] = "Artist A & Artist B" }
+            ArtistTable.insert { it[id] = other; it[name] = "Other" }
+            AlbumTable.insert { it[id] = albumId; it[name] = "Album" }
+            SongTable.insert { it[id] = songId; it[title] = "Song"; it[this.albumId] = albumId }
+            SongArtistTable.insert { it[this.songId] = songId; it[artistId] = other; it[position] = 0; it[joinPhrase] = " feat. " }
+            SongArtistTable.insert { it[this.songId] = songId; it[artistId] = combined; it[position] = 1; it[joinPhrase] = " remix" }
+            AlbumArtistTable.insert { it[this.albumId] = albumId; it[artistId] = combined; it[position] = 0; it[joinPhrase] = " x " }
+        }
+
+        val result = service.splitArtist(SplitArtist(artistId = combined, newArtists = mapOf("Artist A" to null, "Artist B" to null)))
+        val splitIds = result.map { it.id }.sortedBy { it.toString() }
+        assertEquals(2, splitIds.size)
+
+        transaction(database) {
+            val songLinks = SongArtistTable.selectAll()
+                .where { SongArtistTable.songId eq songId }
+                .andWhere { SongArtistTable.artistId inList splitIds }
+                .associate { it[SongArtistTable.artistId].value to (it[SongArtistTable.position] to it[SongArtistTable.joinPhrase]) }
+            assertEquals(mapOf(splitIds[0] to (1 to null), splitIds[1] to (1 to " remix")), songLinks)
+
+            val albumLinks = AlbumArtistTable.selectAll()
+                .where { AlbumArtistTable.albumId eq albumId }
+                .associate { it[AlbumArtistTable.artistId].value to (it[AlbumArtistTable.position] to it[AlbumArtistTable.joinPhrase]) }
+            assertEquals(mapOf(splitIds[0] to (0 to null), splitIds[1] to (0 to " x ")), albumLinks)
+
+            val otherLink = SongArtistTable.selectAll()
+                .where { SongArtistTable.songId eq songId }
+                .andWhere { SongArtistTable.artistId eq other }
+                .single()
+            assertEquals(0, otherLink[SongArtistTable.position])
+            assertEquals(" feat. ", otherLink[SongArtistTable.joinPhrase])
+        }
     }
 }

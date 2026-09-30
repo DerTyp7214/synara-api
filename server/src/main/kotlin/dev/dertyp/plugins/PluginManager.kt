@@ -3,13 +3,10 @@ package dev.dertyp.plugins
 import dev.dertyp.Indexer
 import dev.dertyp.services.*
 import dev.dertyp.services.import.ImportBackend
-import dev.dertyp.services.import.ImportService
 import dev.dertyp.services.import.MusicBrainzPlugin
 import dev.dertyp.services.import.TidalPlugin
 import dev.dertyp.services.metadata.IMetadataService
-import dev.dertyp.services.metadata.MetadataDispatcherService
 import dev.dertyp.services.podcast.index.PodcastIndexPlugin
-import dev.dertyp.services.schedule.ScheduleService
 import dev.dertyp.services.gamdl.GamdlPlugin
 import dev.dertyp.services.recommendation.RecommendationPlugin
 import dev.dertyp.services.soundcloud.SoundcloudPlugin
@@ -27,25 +24,9 @@ import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 import org.koin.core.context.loadKoinModules
 import org.koin.core.context.unloadKoinModules
-import org.koin.dsl.module
 import java.io.File
 import java.net.URLClassLoader
 import java.util.ServiceLoader
-
-val pluginModule = module {
-    single<IPluginIndexer> { get<Indexer>() }
-    single<IPluginImportService> { get<ImportService>() }
-    single<SongLibrary> { get<SongService>() }
-    single<AlbumLibrary> { get<AlbumService>() }
-    single<ArtistLibrary> { get<ArtistService>() }
-    single<PlaylistLibrary> { get<UserPlaylistService>() }
-    single<ImageLibrary> { get<ImageService>() }
-    single<IMetadataService> { get<MetadataDispatcherService>() }
-    single<IScheduleService> { get<ScheduleService>() }
-    single<ILrcLibService> { get<LrcLibService>() }
-    single<IServerStorageService> { get<StorageService>() }
-    single<HookBus> { get<HookService>() }
-}
 
 class PluginManager(
     private val storageService: StorageService,

@@ -1,11 +1,13 @@
 package dev.dertyp.services.hue
 
-import dev.dertyp.ApiClient
+import dev.dertyp.core.HttpClientFactory
+import dev.dertyp.core.runCatchingCancellable
 import dev.dertyp.data.HueBridgeCandidate
 import dev.dertyp.plugins.JmDNSHolder
 import dev.dertyp.services.Service
 import io.ktor.client.call.body
 import io.ktor.client.request.get
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -14,21 +16,20 @@ import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.Serializable
+import org.koin.core.component.inject
 import javax.jmdns.JmDNS
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 
 class HueDiscoveryService : Service() {
+    private val httpClientFactory by inject<HttpClientFactory>()
+
     @Serializable
     private data class CloudBridge(val id: String, val internalipaddress: String, val port: Int? = null)
 
     @Volatile
     private var cache: Pair<Long, List<HueBridgeCandidate>>? = null
-
-    internal var mdnsLister: suspend (Duration) -> List<HueBridgeCandidate>? = { timeout -> mdns(timeout) }
-    internal var cloudLister: suspend () -> List<HueBridgeCandidate> = { cloud() }
-    internal var prober: suspend (String) -> HueBridgeConfig? = { ip -> probe(ip) }
 
     private val probeLimit = Semaphore(PROBE_CONCURRENCY)
 
@@ -37,13 +38,13 @@ class HueDiscoveryService : Service() {
     suspend fun discover(timeout: Duration = 3.seconds, force: Boolean = false): List<HueBridgeCandidate> {
         val now = System.currentTimeMillis()
         cache?.let { (at, result) -> if (!force && now - at < CACHE_TTL.inWholeMilliseconds) return result }
-        val found = mdnsLister(timeout)
-        val candidates = (found.orEmpty() + cloudLister()).distinctBy { it.ip }
+        val found = mdns(timeout)
+        val candidates = (found.orEmpty() + cloud()).distinctBy { it.ip }
         val verified = coroutineScope {
             candidates.map { candidate ->
                 async {
                     val config = probeLimit.withPermit {
-                        withTimeoutOrNull(PROBE_TIMEOUT.inWholeMilliseconds) { prober(candidate.ip) }
+                        withTimeoutOrNull(PROBE_TIMEOUT.inWholeMilliseconds) { probe(candidate.ip) }
                     } ?: return@async null
                     candidate.copy(
                         bridgeId = config.bridgeid?.lowercase() ?: candidate.bridgeId,
@@ -81,16 +82,18 @@ class HueDiscoveryService : Service() {
         }
 
     private suspend fun cloud(): List<HueBridgeCandidate> =
-        runCatching {
-            ApiClient.instance.get(CLOUD_DISCOVERY_URL).body<List<CloudBridge>>().map {
+        runCatchingCancellable {
+            httpClientFactory.api.get(CLOUD_DISCOVERY_URL).body<List<CloudBridge>>().map {
                 HueBridgeCandidate(bridgeId = it.id.lowercase(), ip = it.internalipaddress)
             }
         }.onFailure { logger.warn("Hue cloud discovery failed: ${it.message}") }.getOrDefault(emptyList())
 
     private suspend fun probe(ip: String): HueBridgeConfig? {
-        val client = HueBridgeClient(ip, null, null, null)
+        val client = HueBridgeClient(httpClientFactory, ip, null, null, null)
         return try {
             client.config().takeIf { it.bridgeid != null }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             logger.debug("Hue candidate $ip did not answer: ${e.message}")
             null

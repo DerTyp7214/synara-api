@@ -29,6 +29,9 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.koin.core.context.startKoin
+import org.koin.core.context.stopKoin
+import org.koin.dsl.module
 import org.koin.test.KoinTest
 import java.time.LocalDate
 
@@ -41,6 +44,7 @@ class AppleMusicServiceTest : KoinTest {
 
     @BeforeEach
     fun setup() {
+        startKoin { modules(module { single { HttpClientQueueService() } }) }
         environment = mockk()
         every { environment.config } returns mockk(relaxed = true)
 
@@ -130,6 +134,7 @@ class AppleMusicServiceTest : KoinTest {
     fun tearDown() {
         runBlocking { queueService?.stopService() }
         queueService = null
+        stopKoin()
         unmockkAll()
     }
 

@@ -23,7 +23,7 @@ class ScrobbleService : Service() {
     private val songService by inject<SongService>()
     private val hooks by inject<HookBus>()
 
-    private val serviceScope = CoroutineScope(Dispatchers.Default)
+    override val scopeDispatcher: CoroutineDispatcher get() = Dispatchers.Default
 
     private data class NowPlayingEntry(
         val song: UserSong,
@@ -38,9 +38,6 @@ class ScrobbleService : Service() {
     private val generation = ConcurrentHashMap<PlatformUUID, Long>()
 
     private val nowPlayingChanges = MutableSharedFlow<Unit>(extraBufferCapacity = 8, onBufferOverflow = BufferOverflow.DROP_OLDEST)
-
-    internal var playingLeaseMs: Long = PLAYING_LEASE_MS
-    internal var pausedLeaseMs: Long = PAUSED_LEASE_MS
 
     suspend fun setNowPlaying(userId: PlatformUUID, songId: PlatformUUID) {
         val previous = nowPlaying[userId]?.takeIf { it.song.id == songId }
@@ -65,11 +62,11 @@ class ScrobbleService : Service() {
 
         val remaining = if (song.duration > 0) song.duration - positionMs else Long.MAX_VALUE
         val lease = when {
-            !report.playing -> pausedLeaseMs
+            !report.playing -> PAUSED_LEASE_MS
             remaining <= 0 -> END_GRACE_MS
-            else -> minOf(remaining, playingLeaseMs)
+            else -> minOf(remaining, PLAYING_LEASE_MS)
         }
-        timers[userId] = serviceScope.launch {
+        timers[userId] = scope.launch {
             delay(lease.milliseconds)
             if (generation[userId] == myGen && nowPlaying.containsKey(userId)) {
                 nowPlaying.remove(userId)

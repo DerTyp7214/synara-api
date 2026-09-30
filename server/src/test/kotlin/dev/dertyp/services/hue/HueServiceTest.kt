@@ -2,6 +2,7 @@ package dev.dertyp.services.hue
 
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
+import dev.dertyp.core.HttpClientFactory
 import dev.dertyp.data.AudioBand
 import dev.dertyp.data.HueIntensity
 import dev.dertyp.data.HueMotionMode
@@ -30,7 +31,13 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.mockkConstructor
+import io.mockk.mockkObject
+import io.mockk.mockkStatic
+import io.mockk.unmockkAll
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.core.dao.id.EntityID
@@ -54,19 +61,30 @@ import org.koin.core.context.stopKoin
 import org.koin.dsl.module
 import java.util.UUID
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.CopyOnWriteArraySet
 
 class HueServiceTest {
+    private companion object {
+        const val STOP_GRACE_MS = 3_000L
+        const val PAIRING_POLL_MS = 2_000L
+        const val SLOW_MOTION_INTERVAL_MS = 8_000L
+    }
+
     private lateinit var database: Database
     private lateinit var songService: SongService
     private lateinit var imageService: ImageService
     private lateinit var audioAnalysisService: AudioAnalysisService
     private lateinit var api: HueBridgeApi
+    private lateinit var pairingApi: HueBridgeApi
+    private lateinit var streamTarget: HueEntertainmentStream
     private lateinit var service: HueService
     private val userId = UUID.randomUUID()
     private val areaId = "0b216bc8-1d1a-4a2f-8b8c-4d5e6f708192"
     private val sent = CopyOnWriteArrayList<Pair<String, LightUpdate>>()
     private val recalled = CopyOnWriteArrayList<Pair<String, SceneRecallUpdate>>()
     private val streaming = CopyOnWriteArrayList<Pair<String, Boolean>>()
+    private val streamJobs = CopyOnWriteArraySet<Job>()
+    private val playbackClocks = CopyOnWriteArrayList<MutableStateFlow<PlaybackClock>>()
 
     private class FakeStream(private val failStart: Boolean = false) : HueEntertainmentStream {
         @Volatile var started = false
@@ -98,6 +116,11 @@ class HueServiceTest {
         coEvery { api.entertainmentConfigurations() } returns emptyList()
         coEvery { api.entertainmentServices() } returns emptyList()
         coEvery { api.setEntertainmentStreaming(any(), any()) } answers { streaming += (firstArg<String>() to secondArg<Boolean>()) }
+        routeBridgeClients()
+        routeStreams()
+        trackMotions()
+        mockkStatic("kotlinx.coroutines.DelayKt")
+        coEvery { delay(STOP_GRACE_MS) } coAnswers { delay(100L) }
         startKoin {
             modules(module {
                 single<HookBus> { HookService() }
@@ -105,6 +128,7 @@ class HueServiceTest {
                 single { imageService }
                 single { audioAnalysisService }
                 single { HueDiscoveryService() }
+                single { mockk<HttpClientFactory>(relaxed = true) }
             })
         }
         database = TestDatabase.connect(dialect, "hue_test")
@@ -117,15 +141,59 @@ class HueServiceTest {
             }
         }
         service = HueService()
-        service.clientFactory = { api }
-        service.stopGraceMs = 100
     }
 
     @AfterEach
     fun tearDown() {
         runBlocking { service.stopService() }
+        unmockkAll()
         stopKoin()
         TestDatabase.cleanUp()
+    }
+
+    private fun routeBridgeClients() {
+        mockkConstructor(HueBridgeClient::class)
+        coEvery { anyConstructed<HueBridgeClient>().pair(any()) } coAnswers { pairingApi.pair(firstArg()) }
+        coEvery { anyConstructed<HueBridgeClient>().bridge() } coAnswers { pairingApi.bridge() }
+        coEvery { anyConstructed<HueBridgeClient>().config() } coAnswers { api.config() }
+        coEvery { anyConstructed<HueBridgeClient>().lights() } coAnswers { api.lights() }
+        coEvery { anyConstructed<HueBridgeClient>().rooms() } coAnswers { api.rooms() }
+        coEvery { anyConstructed<HueBridgeClient>().zones() } coAnswers { api.zones() }
+        coEvery { anyConstructed<HueBridgeClient>().groupedLights() } coAnswers { api.groupedLights() }
+        coEvery { anyConstructed<HueBridgeClient>().scenes() } coAnswers { api.scenes() }
+        coEvery { anyConstructed<HueBridgeClient>().entertainmentConfigurations() } coAnswers { api.entertainmentConfigurations() }
+        coEvery { anyConstructed<HueBridgeClient>().entertainmentServices() } coAnswers { api.entertainmentServices() }
+        coEvery { anyConstructed<HueBridgeClient>().setEntertainmentStreaming(any(), any()) } coAnswers { api.setEntertainmentStreaming(firstArg(), secondArg()) }
+        coEvery { anyConstructed<HueBridgeClient>().putLight(any(), any()) } coAnswers { api.putLight(firstArg(), secondArg()) }
+        coEvery { anyConstructed<HueBridgeClient>().putGroupedLight(any(), any()) } coAnswers { api.putGroupedLight(firstArg(), secondArg()) }
+        coEvery { anyConstructed<HueBridgeClient>().recallScene(any(), any()) } coAnswers { api.recallScene(firstArg(), secondArg()) }
+        every { anyConstructed<HueBridgeClient>().close() } answers { api.close() }
+    }
+
+    private fun routeStreams() {
+        mockkConstructor(HueDtlsStream::class)
+        coEvery { anyConstructed<HueDtlsStream>().start() } coAnswers { streamTarget.start() }
+        every { anyConstructed<HueDtlsStream>().send(any()) } answers { streamTarget.send(firstArg()) }
+        every { anyConstructed<HueDtlsStream>().close() } answers { streamTarget.close() }
+        mockkConstructor(HueEntertainmentSession::class)
+        every { anyConstructed<HueEntertainmentSession>().launch(any()) } answers { callOriginal().also { streamJobs += it } }
+    }
+
+    private fun trackMotions() {
+        mockkStatic("kotlinx.coroutines.flow.StateFlowKt")
+        every { MutableStateFlow(ofType<PlaybackClock>()) } answers { callOriginal().also { playbackClocks += it } }
+    }
+
+    private fun runningStreams(): Int = streamJobs.count { it.isActive }
+
+    private fun runningMotions(): Int = playbackClocks.count { it.subscriptionCount.value > 0 }
+
+    private suspend fun awaitRunningMotions(): Int {
+        repeat(50) {
+            if (runningMotions() > 0) return runningMotions()
+            delay(20)
+        }
+        return runningMotions()
     }
 
     private fun insertUser(name: String): UUID {
@@ -296,9 +364,8 @@ class HueServiceTest {
         var attempts = 0
         coEvery { pairApi.pair(any()) } answers { if (++attempts < 2) null else HuePairSuccess("app-key", "client-key") }
         coEvery { pairApi.bridge() } returns ClipBridge("uuid", "001788FFFE0000AA")
-        service.pairingClientFactory = { _, _ -> pairApi }
-        service.authenticatedClientFactory = { _, _, _ -> pairApi }
-        service.pairingPoll = 50
+        pairingApi = pairApi
+        coEvery { delay(PAIRING_POLL_MS) } coAnswers { delay(50L) }
 
         val first = service.beginPairing(userId, "192.0.2.20")
         assertEquals(1, service.activePairings(userId).size)
@@ -502,7 +569,8 @@ class HueServiceTest {
     fun `ambient motion keeps sending rotated frames until playback stops`(dialect: DbDialect) = runBlocking {
         setup(dialect)
         val bridgeId = bridge()
-        service.motionIntervalOverride = 400
+        mockkObject(HueLightScore)
+        every { HueLightScore.build(null, null, any(), SLOW_MOTION_INTERVAL_MS, any()) } answers { HueLightScore.build(null, null, thirdArg(), 400L, arg(4)) }
         service.setLink(userId, HueUserLink(bridgeId, true, listOf(light("l1", "Desk"), light("l2", "Shelf")), motion = HueMotionMode.SLOW, latencyMs = 0))
         val songId = UUID.randomUUID()
         val coverId = UUID.randomUUID()
@@ -512,14 +580,14 @@ class HueServiceTest {
 
         service.onNowPlaying(HookEvent.NowPlayingChanged(userId, songId, 1, System.currentTimeMillis()))
         awaitSent(6)
-        assertEquals(1, service.activeMotions())
+        assertEquals(1, awaitRunningMotions())
         val firstColors = sent.take(2).map { it.second.color!!.xy }
         val laterColors = sent.drop(2).take(2).map { it.second.color!!.xy }
         assertEquals(firstColors.reversed(), laterColors)
 
         service.onNowPlaying(HookEvent.NowPlayingChanged(userId, null, 2, System.currentTimeMillis()))
         delay(500)
-        assertEquals(0, service.activeMotions())
+        assertEquals(0, runningMotions())
         val count = sent.size
         delay(300)
         assertEquals(count, sent.size)
@@ -543,11 +611,11 @@ class HueServiceTest {
         val startedAt = System.currentTimeMillis()
         service.onNowPlaying(HookEvent.NowPlayingChanged(userId, songId, 1, startedAt))
         awaitSent(6)
-        assertEquals(1, service.activeMotions())
+        assertEquals(1, awaitRunningMotions())
         coVerify(exactly = 1) { audioAnalysisService.getAudioTimeline(songId) }
 
         service.onNowPlaying(HookEvent.NowPlayingChanged(userId, songId, 2, System.currentTimeMillis(), positionMs = System.currentTimeMillis() - startedAt))
-        assertEquals(1, service.activeMotions())
+        assertEquals(1, awaitRunningMotions())
         coVerify(exactly = 1) { songService.byIds(listOf(songId), userId) }
 
         service.onNowPlaying(HookEvent.NowPlayingChanged(userId, songId, 3, System.currentTimeMillis(), positionMs = 30_000, playing = false))
@@ -555,11 +623,11 @@ class HueServiceTest {
         val paused = sent.size
         delay(700)
         assertEquals(paused, sent.size)
-        assertEquals(1, service.activeMotions())
+        assertEquals(1, awaitRunningMotions())
 
         service.onNowPlaying(HookEvent.NowPlayingChanged(userId, songId, 4, System.currentTimeMillis(), positionMs = 30_000, playing = true))
         awaitSent(paused + 2)
-        assertEquals(1, service.activeMotions())
+        assertEquals(1, awaitRunningMotions())
     }
 
     @ParameterizedTest
@@ -584,7 +652,7 @@ class HueServiceTest {
 
         service.onNowPlaying(HookEvent.NowPlayingChanged(userId, songId, 1, System.currentTimeMillis()))
         awaitSent(6)
-        assertEquals(1, service.activeMotions())
+        assertEquals(1, awaitRunningMotions())
         coVerify(exactly = 1) { audioAnalysisService.getAudioTimeline(songId) }
 
         val base = HuePaletteMapper.brightness(HueIntensity.MEDIUM, SongAudioData.DEFAULT_ENERGY, null)
@@ -627,7 +695,7 @@ class HueServiceTest {
 
         service.onNowPlaying(HookEvent.NowPlayingChanged(userId, songId, 1, System.currentTimeMillis()))
         awaitSent(6)
-        assertEquals(1, service.activeMotions())
+        assertEquals(1, awaitRunningMotions())
         coVerify(exactly = 1) { audioAnalysisService.getAudioTimeline(songId) }
 
         val base = HuePaletteMapper.brightness(HueIntensity.MEDIUM, SongAudioData.DEFAULT_ENERGY, null)
@@ -642,7 +710,7 @@ class HueServiceTest {
         val bridgeId = bridge()
         entertainmentBridge()
         val stream = FakeStream()
-        service.streamFactory = { _, _ -> stream }
+        streamTarget = stream
         service.setLink(userId, HueUserLink(bridgeId, true, listOf(area(), light("l1", "Desk"), light("l3", "Lamp")), onStop = HueStopMode.OFF))
         val songId = UUID.randomUUID()
         playingSong(songId, UUID.randomUUID(), listOf(0xFFE01020.toInt(), 0xFF1030E0.toInt()))
@@ -651,7 +719,7 @@ class HueServiceTest {
         awaitFrames(stream, 3)
         awaitSent(1)
         assertTrue(stream.started)
-        assertEquals(1, service.activeStreams())
+        assertEquals(1, runningStreams())
         assertEquals(listOf(areaId to true), streaming.toList())
         assertEquals(listOf("l3"), sent.map { it.first })
 
@@ -659,7 +727,7 @@ class HueServiceTest {
         playingSong(nextSong, UUID.randomUUID(), listOf(0xFF20E030.toInt(), 0xFFE0A010.toInt()))
         service.onNowPlaying(HookEvent.NowPlayingChanged(userId, nextSong, 2, System.currentTimeMillis()))
         awaitSent(2)
-        assertEquals(1, service.activeStreams())
+        assertEquals(1, runningStreams())
         assertFalse(stream.closed)
         assertEquals(listOf(areaId to true), streaming.toList())
 
@@ -667,7 +735,7 @@ class HueServiceTest {
         awaitStreaming(2)
         assertEquals(areaId to false, streaming.last())
         assertTrue(stream.closed)
-        assertEquals(0, service.activeStreams())
+        assertEquals(0, runningStreams())
         awaitSent(5)
         assertEquals(setOf("l1", "l2", "l3"), sent.drop(2).map { it.first }.toSet())
         assertTrue(sent.drop(2).all { it.second.on?.on == false })
@@ -680,14 +748,14 @@ class HueServiceTest {
         val bridgeId = bridge()
         entertainmentBridge(active = true)
         val stream = FakeStream()
-        service.streamFactory = { _, _ -> stream }
+        streamTarget = stream
         service.setLink(userId, HueUserLink(bridgeId, true, listOf(area())))
         val songId = UUID.randomUUID()
         playingSong(songId, UUID.randomUUID(), listOf(0xFFE01020.toInt(), 0xFF1030E0.toInt()))
 
         service.onNowPlaying(HookEvent.NowPlayingChanged(userId, songId, 1, System.currentTimeMillis()))
         delay(200)
-        assertEquals(0, service.activeStreams())
+        assertEquals(0, runningStreams())
         assertFalse(stream.started)
         assertTrue(streaming.isEmpty())
         assertTrue(sent.isEmpty())
@@ -699,7 +767,7 @@ class HueServiceTest {
         service.onNowPlaying(HookEvent.NowPlayingChanged(userId, nextSong, 2, System.currentTimeMillis()))
         awaitSent(1)
         assertEquals(listOf("l3"), sent.map { it.first })
-        assertEquals(0, service.activeStreams())
+        assertEquals(0, runningStreams())
     }
 
     @ParameterizedTest
@@ -709,7 +777,7 @@ class HueServiceTest {
         val bridgeId = bridge()
         entertainmentBridge()
         val stream = FakeStream(failStart = true)
-        service.streamFactory = { _, _ -> stream }
+        streamTarget = stream
         service.setLink(userId, HueUserLink(bridgeId, true, listOf(area())))
         val songId = UUID.randomUUID()
         playingSong(songId, UUID.randomUUID(), listOf(0xFFE01020.toInt(), 0xFF1030E0.toInt()))
@@ -719,7 +787,7 @@ class HueServiceTest {
         assertEquals(listOf(areaId to true, areaId to false), streaming.toList())
         assertTrue(stream.closed)
         assertFalse(stream.started)
-        assertEquals(0, service.activeStreams())
+        assertEquals(0, runningStreams())
         assertNotNull(service.listBridges(userId).single().lastError)
     }
 
@@ -730,7 +798,7 @@ class HueServiceTest {
         val bridgeId = bridge()
         entertainmentBridge()
         val stream = FakeStream()
-        service.streamFactory = { _, _ -> stream }
+        streamTarget = stream
         service.setLink(userId, HueUserLink(bridgeId, true, listOf(area()), motion = HueMotionMode.TEMPO, latencyMs = 0))
         val songId = UUID.randomUUID()
         playingSong(songId, UUID.randomUUID(), listOf(0xFFE01020.toInt(), 0xFF1030E0.toInt()))
@@ -738,7 +806,7 @@ class HueServiceTest {
 
         service.onNowPlaying(HookEvent.NowPlayingChanged(userId, songId, 1, System.currentTimeMillis()))
         awaitFrames(stream, 20)
-        assertEquals(1, service.activeStreams())
+        assertEquals(1, runningStreams())
         val payloads = stream.frames.map { it.drop(20) }.distinct()
         assertTrue(payloads.size > 1, "expected varying channel data, got ${payloads.size} distinct payloads")
     }
@@ -809,9 +877,8 @@ class HueServiceTest {
         var attempts = 0
         coEvery { pairApi.pair(any()) } answers { if (++attempts < 2) null else HuePairSuccess("app-key", "client-key") }
         coEvery { pairApi.bridge() } returns ClipBridge("uuid", "001788FFFE0000AA")
-        service.pairingClientFactory = { _, _ -> pairApi }
-        service.authenticatedClientFactory = { _, _, _ -> pairApi }
-        service.pairingPoll = 50
+        pairingApi = pairApi
+        coEvery { delay(PAIRING_POLL_MS) } coAnswers { delay(50L) }
 
         val states = service.startPairing(userId, "192.0.2.20").toList()
         assertEquals(HuePairingState.PAIRED, states.last().state)

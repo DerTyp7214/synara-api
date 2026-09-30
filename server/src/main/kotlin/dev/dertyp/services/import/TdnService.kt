@@ -5,11 +5,11 @@ import dev.dertyp.core.ClientCloseException
 import dev.dertyp.core.isInside
 import dev.dertyp.core.oneLine
 import dev.dertyp.core.resolveRelativeAbsolute
-import dev.dertyp.executeCommand
-import dev.dertyp.findInPath
+import dev.dertyp.core.process.ExternalTool
 import dev.dertyp.plugins.IPluginIndexer
 import dev.dertyp.plugins.IServerStorageService
 import dev.dertyp.utils.parsers.ParserFactory
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import java.io.File
 import java.nio.file.Path
@@ -25,7 +25,8 @@ class TdnService(
     storageService: IServerStorageService
 ) : TidalBaseImporter(indexer, storageService) {
     override val id: String = ID
-    override val installed: Boolean get() = tdnPath != null
+    override val tool = ExternalTool("tdn", pythonWrapped = true)
+    override val installed: Boolean get() = tool.installed
     override val enabled: Boolean get() = installed && tokenFileExists()
 
     override val loginCommand: MutableList<String> = mutableListOf("tdn", "login")
@@ -93,6 +94,8 @@ class TdnService(
                 } else if (!brokenFilePath.isInside(rootPath)) {
                     logProxy("File ($brokenFilePath) not inside $rootPath")
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (_: Throwable) {
             }
         } else logger.info(errorRegex.toString())
@@ -114,31 +117,5 @@ class TdnService(
         val homeDir = System.getProperty("user.home")
         val tdnTokenJson = File(homeDir, ".config/tidal_dl_ng/token.json")
         return tdnTokenJson.exists()
-    }
-
-    private val tdnPath = findInPath("tdn")
-
-    override suspend fun executeImporter(
-        command: Collection<String>,
-        aliveCheck: suspend () -> Boolean,
-        directory: File?,
-        onLineReceived: suspend (String) -> Unit
-    ): ProcessExecutionResult {
-        val cmd = command.toMutableList()
-        if (cmd.isEmpty() || (cmd[0] != "tdn" && cmd[0] != "python3")) {
-            return ProcessExecutionResult(-1, "Error: Command must start with 'tdn'.", "")
-        }
-
-        if (tdnPath == null) {
-            return ProcessExecutionResult(-1, "Error: The tdn path does not exist.", "")
-        }
-
-        if (cmd[0] != "python3") {
-            cmd[0] = tdnPath
-            cmd.add(0, "python3")
-            cmd.add(1, "-u")
-        }
-
-        return executeCommand(cmd, aliveCheck, logger, directory, onLineReceived = onLineReceived)
     }
 }

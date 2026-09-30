@@ -1,5 +1,6 @@
 package dev.dertyp
 
+import dev.dertyp.audio.Transcoder
 import dev.dertyp.core.API_KEY_QUERY
 import dev.dertyp.routing.*
 import dev.dertyp.serializers.AppCbor
@@ -80,7 +81,8 @@ fun Application.configureRouting() {
                 !indexer.isActive.load()
             }
             check("transcoder_ready") {
-                !AudioUtils.isTranscoderActive.load()
+                val transcoder by inject<Transcoder>()
+                !transcoder.isTranscoderActive.load()
             }
         }
     }

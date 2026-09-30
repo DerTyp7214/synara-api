@@ -1,11 +1,15 @@
 package dev.dertyp.services.schedule
 
+import dev.dertyp.config.ServerConfig
 import dev.dertyp.services.AudioAnalysisService
 import io.ktor.server.config.ApplicationConfig
 import io.ktor.server.config.MapApplicationConfig
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.every
 import io.mockk.mockk
+import io.mockk.mockkObject
+import io.mockk.unmockkObject
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -15,6 +19,8 @@ import org.koin.core.context.stopKoin
 import org.koin.dsl.module
 import org.koin.test.KoinTest
 import java.util.UUID
+import kotlin.time.Clock
+import kotlin.time.Instant
 
 class AudioTimelineBackfillWorkerTest : KoinTest {
 
@@ -23,12 +29,14 @@ class AudioTimelineBackfillWorkerTest : KoinTest {
             modules(module {
                 single { audioAnalysisService }
                 single<ApplicationConfig> { MapApplicationConfig() }
+                single { ServerConfig(get()) }
             })
         }
     }
 
     @AfterEach
     fun tearDown() {
+        unmockkObject(Clock.System)
         stopKoin()
     }
 
@@ -73,9 +81,10 @@ class AudioTimelineBackfillWorkerTest : KoinTest {
 
         val worker = AudioTimelineBackfillWorker()
         var callCount = 0
-        worker.clock = {
+        mockkObject(Clock.System)
+        every { Clock.System.now() } answers {
             callCount++
-            if (callCount == 1) 0L else Long.MAX_VALUE
+            Instant.fromEpochMilliseconds(if (callCount == 1) 0L else Long.MAX_VALUE)
         }
 
         val result = worker.run()

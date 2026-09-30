@@ -1,14 +1,23 @@
 package dev.dertyp.services.hue
 
+import io.mockk.every
+import io.mockk.mockkObject
+import io.mockk.mockkStatic
+import io.mockk.unmockkAll
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import kotlin.coroutines.EmptyCoroutineContext
+import kotlin.time.Clock
+import kotlin.time.Instant
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class HueEntertainmentSessionTest {
@@ -43,17 +52,29 @@ class HueEntertainmentSessionTest {
         }
     }
 
+    @AfterEach
+    fun tearDown() {
+        unmockkAll()
+    }
+
+    private fun TestScope.useVirtualTime() {
+        mockkStatic(Dispatchers::class)
+        every { Dispatchers.IO } returns StandardTestDispatcher(testScheduler)
+        mockkObject(Clock.System)
+        every { Clock.System.now() } answers { Instant.fromEpochMilliseconds(testScheduler.currentTime) }
+    }
+
     private fun renderer() = HueEntertainmentRenderer(area.orderedChannelIds, 0.5, 100)
 
     @Test
     fun `the loop sends a frame every forty milliseconds`() = runTest {
+        useVirtualTime()
         val stream = FakeStream()
         val session = HueEntertainmentSession(
             area = area,
             stream = stream,
             renderer = renderer(),
-            now = { testScheduler.currentTime },
-            context = EmptyCoroutineContext,
+            onError = {},
         )
         session.update { setPalette(listOf(0xFFFFFFFF.toInt()), 0, 0, 0) }
 
@@ -70,13 +91,13 @@ class HueEntertainmentSessionTest {
 
     @Test
     fun `every frame carries the rendered channels`() = runTest {
+        useVirtualTime()
         val stream = FakeStream()
         val session = HueEntertainmentSession(
             area = area,
             stream = stream,
             renderer = renderer(),
-            now = { testScheduler.currentTime },
-            context = EmptyCoroutineContext,
+            onError = {},
         )
         session.update { setPalette(listOf(0xFFFF0000.toInt()), 0, 0, 0) }
 
@@ -93,13 +114,13 @@ class HueEntertainmentSessionTest {
 
     @Test
     fun `close stops the loop and the stream`() = runTest {
+        useVirtualTime()
         val stream = FakeStream()
         val session = HueEntertainmentSession(
             area = area,
             stream = stream,
             renderer = renderer(),
-            now = { testScheduler.currentTime },
-            context = EmptyCoroutineContext,
+            onError = {},
         )
 
         session.launch(backgroundScope)
@@ -118,15 +139,14 @@ class HueEntertainmentSessionTest {
 
     @Test
     fun `a failing send reports once and ends the loop`() = runTest {
+        useVirtualTime()
         val stream = FakeStream(failOnSend = true)
         val errors = ArrayList<Throwable>()
         val session = HueEntertainmentSession(
             area = area,
             stream = stream,
             renderer = renderer(),
-            now = { testScheduler.currentTime },
             onError = { errors += it },
-            context = EmptyCoroutineContext,
         )
 
         session.launch(backgroundScope)

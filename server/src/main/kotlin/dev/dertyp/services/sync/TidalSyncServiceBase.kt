@@ -1,6 +1,7 @@
 package dev.dertyp.services.sync
 
 import dev.dertyp.ApiClient
+import dev.dertyp.config.ProviderCredentialKeys
 import dev.dertyp.core.getUsername
 import dev.dertyp.core.parameters
 import dev.dertyp.data.User
@@ -21,8 +22,7 @@ abstract class TidalSyncServiceBase(
     environment: ApplicationEnvironment,
     user: User
 ) : SyncService(environment, user) {
-    override val clientIdConfigPath: String = "tidal.clientId"
-    override val clientSecretConfigPath: String = "tidal.clientSecret"
+    override val credentialKeys = ProviderCredentialKeys.TIDAL
     override val scopes: List<String> = listOf(
         "collection.read",
         "user.read",

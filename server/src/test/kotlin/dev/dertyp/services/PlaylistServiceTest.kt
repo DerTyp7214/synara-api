@@ -6,6 +6,7 @@ import dev.dertyp.data.InsertablePlaylist
 import dev.dertyp.data.Playlist
 import dev.dertyp.db.*
 import io.mockk.mockk
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.SchemaUtils
@@ -163,5 +164,33 @@ class PlaylistServiceTest : KoinTest {
         
         val fromDb = service.byId(playlistId)
         assertEquals("Updated", fromDb?.name)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `allPlaylists pages past the first page and allPlaylistsFlow emits every playlist`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val ids = (1..105).map { UUID.randomUUID() }
+        transaction(database) {
+            ids.forEachIndexed { index, playlistId ->
+                PlaylistTable.insert {
+                    it[id] = playlistId
+                    it[name] = "Playlist $index"
+                }
+            }
+        }
+
+        val second = service.allPlaylists(1, 50)
+        assertEquals(50, second.data.size)
+        assertEquals(105, second.total)
+        assertEquals(true, second.hasNextPage)
+
+        val last = service.allPlaylists(2, 50)
+        assertEquals(5, last.data.size)
+        assertEquals(false, last.hasNextPage)
+
+        val emitted = service.allPlaylistsFlow().toList().map { it.id }
+        assertEquals(105, emitted.size)
+        assertEquals(ids.toSet(), emitted.toSet())
     }
 }

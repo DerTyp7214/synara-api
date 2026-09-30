@@ -1,8 +1,8 @@
 package dev.dertyp.services.import.tidal
 
 import dev.dertyp.audio.AtmosProcessor
-import dev.dertyp.executeCommand
-import dev.dertyp.findInPath
+import dev.dertyp.core.process.executeCommand
+import dev.dertyp.core.process.findInPath
 import dev.dertyp.plugins.IPluginIndexer
 import dev.dertyp.plugins.IServerStorageService
 import dev.dertyp.plugins.atmosSibling
@@ -33,7 +33,7 @@ class TiddlAtmosImportTest {
     @BeforeEach
     fun setup() {
         tempDir = Files.createTempDirectory("tiddl-atmos-test")
-        mockkStatic("dev.dertyp.UtilsKt")
+        mockkStatic("dev.dertyp.core.process.CommandKt")
         every { findInPath("tiddl") } returns "/usr/local/bin/tiddl"
         every { storageService.forImporter(any()) } returns pluginStorage
         every { pluginStorage.tracksPath } returns tempDir.toString()

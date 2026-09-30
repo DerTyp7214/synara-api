@@ -49,6 +49,8 @@ class LibraryMergeServiceTest : KoinTest {
                 single { albumService }
                 single { pluginManager }
                 single { tidalService }
+                single { LibraryFileDeleter() }
+                single { mockk<RedisSearchService>(relaxed = true) }
             })
         }
 
@@ -59,7 +61,9 @@ class LibraryMergeServiceTest : KoinTest {
                 UserTable, UserPlaylistTable, UserPlaylistSongTable, PlaylistSongTable,
                 SongArtistTable, AlbumArtistTable, AlbumMusicBrainzTable, SongMusicBrainzTable,
                 TranscodedSongTable, UserSongTable, SongProviderTable, AlbumProviderTable,
-                CollectionTable, CollectionSongTable, CollectionAlbumTable, CollectionArtistTable, CollectionPlaylistTable
+                CollectionTable, CollectionSongTable, CollectionAlbumTable, CollectionArtistTable, CollectionPlaylistTable,
+                MBReleaseGroupTable, MBReleaseGroupCoverTable, RecentReleaseTable, ProviderReleaseTable,
+                AnimatedImageTable, RadioChannelTable, PodcastShowTable, PodcastEpisodeTable
             )
         }
         service = LibraryMergeService()

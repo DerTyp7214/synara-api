@@ -5,6 +5,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlin.time.Clock
 
 data class PlaybackClock(val positionMs: Long, val anchorAt: Long, val playing: Boolean) {
     fun positionAt(now: Long): Long = if (playing) positionMs + (now - anchorAt).coerceAtLeast(0) else positionMs
@@ -16,7 +17,6 @@ class HueMotionScheduler(
     private val durationMs: Long,
     latencyMs: Int,
     private val cadence: (Keyframe) -> Boolean,
-    private val now: () -> Long = System::currentTimeMillis,
     private val emit: suspend (Keyframe, Int?) -> Unit,
 ) {
     private val latencyMs = latencyMs.coerceAtLeast(0)
@@ -51,6 +51,8 @@ class HueMotionScheduler(
         val position = clock.value.positionAt(now())
         if (frame == null || position >= frame.atMs || frame.atMs - position > latencyMs) emitted = -1
     }
+
+    private fun now(): Long = Clock.System.now().toEpochMilliseconds()
 
     private fun ended(positionMs: Long): Boolean = durationMs > 0 && positionMs >= durationMs
 }

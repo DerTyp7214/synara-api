@@ -2,6 +2,7 @@ package dev.dertyp.migrations
 
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
+import dev.dertyp.config.ServerConfig
 import dev.dertyp.services.DatabaseManager
 import io.ktor.server.application.ApplicationEnvironment
 import io.ktor.server.config.MapApplicationConfig
@@ -67,7 +68,7 @@ class FlywayMigrationTest : KoinTest {
         
         every { environment.config } returns config
         
-        val databaseManager = DatabaseManager(environment)
+        val databaseManager = DatabaseManager(ServerConfig(environment.config))
 
         startKoin {
             modules(module {

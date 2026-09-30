@@ -9,7 +9,7 @@ import dev.dertyp.data.MediaCollection
 import dev.dertyp.data.InsertableCollection
 import dev.dertyp.data.PaginatedResponse
 import dev.dertyp.db.*
-import dev.dertyp.dbQuery
+import dev.dertyp.core.db.dbQuery
 import dev.dertyp.plugins.HookBus
 import dev.dertyp.plugins.HookEvent
 import kotlinx.coroutines.Dispatchers
@@ -235,6 +235,7 @@ class CollectionService : Service() {
             .select(idColumn)
             .where { collectionColumn eq collectionId }
             .orderBy(addedAtColumn, SortOrder.ASC)
+            .orderBy(idColumn, SortOrder.ASC)
             .fetchBatchedResults(1000) { batch ->
                 batch.forEach { emit(it[idColumn].value) }
             }

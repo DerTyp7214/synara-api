@@ -5,16 +5,13 @@ import dev.dertyp.services.AudioAnalysisService
 import kotlinx.coroutines.withTimeoutOrNull
 import org.koin.core.component.inject
 import java.util.concurrent.atomic.AtomicInteger
-import kotlin.time.Duration
+import kotlin.time.Clock
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
 
-@WorkerTask(TaskKeys.AUDIO_TIMELINE_BACKFILL, "Audio Timeline Backfill")
+@WorkerTask(TaskKeys.AUDIO_TIMELINE_BACKFILL, "Audio Timeline Backfill", afterTask = TaskKeys.AUDIO_ANALYSIS)
 class AudioTimelineBackfillWorker : Worker("AudioTimelineBackfillWorker") {
     private val audioAnalysisService by inject<AudioAnalysisService>()
-
-    internal var clock: () -> Long = System::currentTimeMillis
-    internal var runBudget: Duration = RUN_BUDGET
 
     override suspend fun execute(onProgress: suspend (Double, String) -> Unit): Map<String, Any?> {
         val songIds = audioAnalysisService.getSongIdsMissingTimeline()
@@ -29,9 +26,9 @@ class AudioTimelineBackfillWorker : Worker("AudioTimelineBackfillWorker") {
         val processedCount = AtomicInteger(0)
         val refreshedCount = AtomicInteger(0)
         val skippedCount = AtomicInteger(0)
-        val deadline = clock() + runBudget.inWholeMilliseconds
+        val deadline = Clock.System.now() + RUN_BUDGET
 
-        withTimeoutOrNull(runBudget + HARD_STOP_GRACE) {
+        withTimeoutOrNull(RUN_BUDGET + HARD_STOP_GRACE) {
             if (songIds.isNotEmpty()) {
                 runParallel(
                     items = songIds,
@@ -40,7 +37,7 @@ class AudioTimelineBackfillWorker : Worker("AudioTimelineBackfillWorker") {
                         onProgress(currentCount.toDouble() / songIds.size * 100.0, "Extracted $currentCount/${songIds.size} timelines")
                     }
                 ) { songId ->
-                    if (clock() >= deadline) {
+                    if (Clock.System.now() >= deadline) {
                         skippedCount.incrementAndGet()
                         return@runParallel
                     }
@@ -57,7 +54,7 @@ class AudioTimelineBackfillWorker : Worker("AudioTimelineBackfillWorker") {
                         onProgress(currentCount.toDouble() / staleIds.size * 100.0, "Refreshed $currentCount/${staleIds.size} envelopes")
                     }
                 ) { songId ->
-                    if (clock() >= deadline) {
+                    if (Clock.System.now() >= deadline) {
                         skippedCount.incrementAndGet()
                         return@runParallel
                     }

@@ -11,12 +11,12 @@ import dev.dertyp.db.ClientSettingScopeTable
 import dev.dertyp.db.ClientSettingTable
 import dev.dertyp.db.ImageTable
 import dev.dertyp.db.UserTable
+import dev.dertyp.testing.*
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.SchemaUtils
-import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.jdbc.update
 import org.junit.jupiter.api.AfterEach
@@ -57,16 +57,6 @@ class ClientSettingsCleanupTest : KoinTest {
     fun tearDown() {
         stopKoin()
         TestDatabase.cleanUp()
-    }
-
-    private fun insertUser(): UUID {
-        val id = UUID.randomUUID()
-        UserTable.insert {
-            it[UserTable.id] = id
-            it[username] = "user_$id"
-            it[passwordHash] = "hash"
-        }
-        return id
     }
 
     private fun write(settingKey: String, settingValue: String?, baseVersion: Long = 0) =

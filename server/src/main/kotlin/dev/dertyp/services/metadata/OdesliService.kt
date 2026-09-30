@@ -6,6 +6,7 @@ import dev.dertyp.services.Service
 import io.ktor.client.call.body
 import io.ktor.client.request.parameter
 import io.ktor.http.Url
+import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.Serializable
 
 class OdesliService : Service() {
@@ -81,6 +82,8 @@ class OdesliService : Service() {
                 val body = response.body<OdesliResponse>()
                 body.linksByPlatform.values.map { it.url }
             } else emptyList()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             val id = platformUrl ?: isrc ?: upc
             logger.error("Error resolving platform links via Odesli for $id", e)

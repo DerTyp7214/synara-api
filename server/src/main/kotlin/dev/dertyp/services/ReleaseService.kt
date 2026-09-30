@@ -10,7 +10,7 @@ import dev.dertyp.data.PaginatedResponse
 import dev.dertyp.data.ReleaseSource
 import dev.dertyp.data.ReleaseType
 import dev.dertyp.db.*
-import dev.dertyp.dbQuery
+import dev.dertyp.core.db.dbQuery
 import dev.dertyp.platformDateFromEpochMilliseconds
 import dev.dertyp.services.metadata.*
 import dev.dertyp.services.models.FollowedArtist
@@ -49,11 +49,10 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
     private val RELEASE_REFRESH_WINDOW = 14.days
     private val REFRESH_COOLDOWN = 20.hours
 
-    private val serviceScope = CoroutineScope(Dispatchers.IO)
 
     fun refreshRecentReleaseAsync(releaseId: UUID) {
-        serviceScope.launch {
-            runCatching { refreshRecentRelease(releaseId) }
+        scope.launch {
+            runCatchingCancellable { refreshRecentRelease(releaseId) }
                 .onFailure { logger.error("Recent release refresh failed for $releaseId", it) }
         }
     }
@@ -66,8 +65,8 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
                 it[FollowedArtistTable.artistId] = artistId
             }.insertedCount > 0
         }
-        serviceScope.launch {
-            runCatching { backfillMissingRecentReleaseImages(artistId) }
+        scope.launch {
+            runCatchingCancellable { backfillMissingRecentReleaseImages(artistId) }
                 .onFailure { logger.error("Recent release image backfill after follow failed for $artistId", it) }
         }
         appleMusicReleaseService.fetchArtistReleasesAsync(artistId)
@@ -962,6 +961,8 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
                                     it[RecentReleaseTable.lastImageFetch] = Clock.System.now().toEpochMilliseconds()
                                 }
                             }
+                        } catch (e: CancellationException) {
+                            throw e
                         } catch (e: Exception) {
                             logger.error("Failed to backfill image for release group $releaseGroupId", e)
                             dbQuery {
@@ -1100,6 +1101,8 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
                                         dbSemaphore = dbSemaphore,
                                         forceRefresh = false
                                     )
+                                } catch (e: CancellationException) {
+                                    throw e
                                 } catch (e: Exception) {
                                     logger.error("Failed to process group ${group.id}", e)
                                     false
@@ -1127,6 +1130,8 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
                         }
 
                         if (newReleasesCount > 0) resolvedArtistName to newReleasesCount else null
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (e: Exception) {
                         logger.error("Failed to fetch new releases for artist $artistId", e)
                         null
@@ -1557,13 +1562,13 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
     }
 
     internal suspend fun fetchProviderArtworkBytes(url: String): ByteArray? =
-        ApiClient.instance.safeQueuedGetImage(url, priority = HttpClientPriority.HIGH)
+        ApiClient.queueInstance.safeQueuedGetImage(url, priority = HttpClientPriority.HIGH)
 
     private val providerImagePersistInFlight = ConcurrentHashMap.newKeySet<UUID>()
 
     private fun persistProviderReleaseImageAsync(releaseId: UUID, artworkUrl: String) {
         if (!providerImagePersistInFlight.add(releaseId)) return
-        serviceScope.launch {
+        scope.launch {
             try {
                 val bytes = fetchProviderArtworkBytes(AppleMusicService.artworkUrlForSize(artworkUrl, 0)) ?: return@launch
                 val persistedImageId = imageService.createBatch(
@@ -1581,6 +1586,8 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
                         it[ProviderReleaseTable.lastImageFetch] = Clock.System.now().toEpochMilliseconds()
                     }
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 logger.error("Failed to persist provider release image for $releaseId", e)
             } finally {
@@ -1590,7 +1597,7 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
     }
 
     internal suspend fun fetchCoverArtBytes(releaseId: UUID, variant: String): ByteArray? =
-        ApiClient.instance.safeQueuedGetImage(
+        ApiClient.queueInstance.safeQueuedGetImage(
             "https://coverartarchive.org/release-group/$releaseId/$variant",
             priority = HttpClientPriority.HIGH
         )
@@ -1599,7 +1606,7 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
 
     private fun persistReleaseImageAsync(releaseId: UUID) {
         if (!imagePersistInFlight.add(releaseId)) return
-        serviceScope.launch {
+        scope.launch {
             try {
                 val imageId = fetchReleaseGroupImage(releaseId) ?: return@launch
                 dbQuery {
@@ -1608,6 +1615,8 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
                         it[RecentReleaseTable.lastImageFetch] = Clock.System.now().toEpochMilliseconds()
                     }
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 logger.error("Failed to persist release image for $releaseId", e)
             } finally {

@@ -3,7 +3,7 @@ package dev.dertyp.migrations.custom
 import dev.dertyp.core.CustomMigration
 import dev.dertyp.core.Migration
 import dev.dertyp.db.SongVariantTable
-import dev.dertyp.dbQuery
+import dev.dertyp.core.db.dbQuery
 import org.jetbrains.exposed.v1.core.div
 import org.jetbrains.exposed.v1.core.greaterEq
 import org.jetbrains.exposed.v1.jdbc.update

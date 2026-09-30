@@ -1,5 +1,8 @@
 package dev.dertyp.services.hue
 
+import io.mockk.every
+import io.mockk.mockkObject
+import io.mockk.unmockkAll
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
@@ -7,13 +10,26 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.yield
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import kotlin.time.Clock
+import kotlin.time.Instant
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class HueMotionSchedulerTest {
     private val score = HueLightScore.build(null, 120.0, 10_000, 8_000)
+
+    @AfterEach
+    fun tearDown() {
+        unmockkAll()
+    }
+
+    private fun TestScope.useVirtualTime() {
+        mockkObject(Clock.System)
+        every { Clock.System.now() } answers { Instant.fromEpochMilliseconds(testScheduler.currentTime) }
+    }
 
     private fun runScheduler(
         clock: MutableStateFlow<PlaybackClock>,
@@ -22,9 +38,10 @@ class HueMotionSchedulerTest {
         cadence: (Keyframe) -> Boolean = { true },
         block: suspend TestScope.(List<Pair<Long, Keyframe>>, MutableStateFlow<PlaybackClock>) -> Unit,
     ) = runTest {
+        useVirtualTime()
         val emitted = ArrayList<Pair<Long, Keyframe>>()
         val job = backgroundScope.launch {
-            HueMotionScheduler(clock, score, durationMs, latencyMs, cadence, now = { testScheduler.currentTime }) { keyframe, _ ->
+            HueMotionScheduler(clock, score, durationMs, latencyMs, cadence) { keyframe, _ ->
                 emitted += testScheduler.currentTime to keyframe
             }.run()
         }
@@ -154,8 +171,9 @@ class HueMotionSchedulerTest {
         val clock = MutableStateFlow(PlaybackClock(0, 0, true))
         val nextAt = ArrayList<Int?>()
         runTest {
+            useVirtualTime()
             val job = backgroundScope.launch {
-                HueMotionScheduler(clock, score, 3_000, 0, { it.kind == KeyframeKind.DOWNBEAT }, now = { testScheduler.currentTime }) { _, next ->
+                HueMotionScheduler(clock, score, 3_000, 0, { it.kind == KeyframeKind.DOWNBEAT }) { _, next ->
                     nextAt += next
                 }.run()
             }

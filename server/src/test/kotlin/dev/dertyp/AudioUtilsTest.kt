@@ -1,9 +1,12 @@
 package dev.dertyp
 
 import dev.dertyp.audio.LosslessFormat
+import dev.dertyp.audio.TranscodedSongRepository
+import dev.dertyp.audio.Transcoder
 import dev.dertyp.data.AudioFormat
 import dev.dertyp.data.TranscodedVersion
 import dev.dertyp.db.*
+import dev.dertyp.services.StorageService
 import io.ktor.server.application.ApplicationEnvironment
 import io.ktor.server.config.MapApplicationConfig
 import io.mockk.*
@@ -34,6 +37,8 @@ import java.util.UUID
 class AudioUtilsTest {
 
     private lateinit var database: Database
+    private val transcoder = Transcoder(mockk<StorageService>(relaxed = true))
+    private val transcodedSongRepository = TranscodedSongRepository()
 
     fun setupDb(dialect: DbDialect) {
         database = TestDatabase.connect(dialect, "audioutils_test")
@@ -63,7 +68,7 @@ class AudioUtilsTest {
         "192000, 48000"
     )
     fun `closestSampleRate should return nearest supported rate`(input: Int, expected: Int) {
-        val result = AudioUtils.closestSampleRate(input)
+        val result = Transcoder.closestSampleRate(input)
         assertEquals(expected, result)
     }
 
@@ -93,7 +98,7 @@ class AudioUtilsTest {
             }
         }
 
-        val songs = AudioUtils.getSongsWithTranscodingInfo()
+        val songs = transcodedSongRepository.getSongsWithTranscodingInfo()
         assertEquals(1, songs.size)
         assertEquals(
             listOf(TranscodedVersion(128, AudioFormat.OPUS), TranscodedVersion(192, AudioFormat.OPUS)),
@@ -116,9 +121,9 @@ class AudioUtilsTest {
             }
         }
 
-        AudioUtils.insertTranscodedSong(songId, File("transcoded.ogg"), 320)
+        transcodedSongRepository.insertTranscodedSong(songId, File("transcoded.ogg"), 320)
 
-        val songs = AudioUtils.getSongsWithTranscodingInfo()
+        val songs = transcodedSongRepository.getSongsWithTranscodingInfo()
         assertEquals(1, songs.size)
         assertEquals(listOf(TranscodedVersion(320, AudioFormat.OPUS)), songs[0].transcodedTo)
     }
@@ -163,7 +168,7 @@ class AudioUtilsTest {
         every { anyConstructed<FFmpegFrameRecorder>().setMetadata(any(), any()) } just Runs
         every { anyConstructed<FFmpegFrameRecorder>().setOption(any(), any()) } just Runs
 
-        val streamInfo = AudioUtils.transcodeAudio(environment, flacFile, 128)
+        val streamInfo = transcoder.transcodeAudio(environment, flacFile, 128)
 
         assertTrue(streamInfo.file.exists())
         assertEquals("test.ogg", streamInfo.file.name)
@@ -211,7 +216,7 @@ class AudioUtilsTest {
         every { anyConstructed<FFmpegFrameRecorder>().setMetadata(any(), any()) } just Runs
         every { anyConstructed<FFmpegFrameRecorder>().setOption(any(), any()) } just Runs
 
-        val streamInfo = AudioUtils.transcodeAudio(environment, flacFile, 128, audioFormat = AudioFormat.AAC)
+        val streamInfo = transcoder.transcodeAudio(environment, flacFile, 128, audioFormat = AudioFormat.AAC)
 
         assertTrue(streamInfo.file.exists())
         assertEquals("test.m4a", streamInfo.file.name)
@@ -226,7 +231,7 @@ class AudioUtilsTest {
             val nonExistentFile = File("non_existent_file.flac")
 
             assertThrows<FileNotFoundException> {
-                AudioUtils.transcodeAudio(environment, nonExistentFile, 128)
+                transcoder.transcodeAudio(environment, nonExistentFile, 128)
             }
         }
     }
@@ -238,7 +243,7 @@ class AudioUtilsTest {
             val environment = mockk<ApplicationEnvironment>(relaxed = true)
 
             assertThrows<IOException> {
-                AudioUtils.transcodeAudio(environment, emptyFile, 128)
+                transcoder.transcodeAudio(environment, emptyFile, 128)
             }
         }
     }
@@ -250,7 +255,7 @@ class AudioUtilsTest {
             val environment = mockk<ApplicationEnvironment>(relaxed = true)
 
             assertThrows<IOException> {
-                AudioUtils.transcodeAudio(environment, directory, 128)
+                transcoder.transcodeAudio(environment, directory, 128)
             }
         }
     }
@@ -274,7 +279,7 @@ class AudioUtilsTest {
             assertTrue(m4a.length() > 0)
 
             val adts = tempDir.resolve("test.aac").toFile()
-            AudioUtils.remuxToAdts(m4a, adts)
+            transcoder.remuxToAdts(m4a, adts)
 
             val bytes = adts.readBytes()
             assertTrue(bytes.size > 100)
@@ -312,7 +317,7 @@ class AudioUtilsTest {
             writeSilentWav(source, sampleRate = 44100)
 
             val output = tempDir.resolve("out.${target.extension}").toFile()
-            AudioUtils.convertLossless(source, output, target)
+            transcoder.convertLossless(source, output, target)
 
             assertTrue(output.length() > 0)
             val grabber = FFmpegFrameGrabber(output.absolutePath).apply { start() }
@@ -335,7 +340,7 @@ class AudioUtilsTest {
         runBlocking {
             val bogus = tempDir.resolve("bogus.wav").toFile().apply { writeText("not audio") }
             val output = tempDir.resolve("out.flac").toFile()
-            assertThrows<Exception> { AudioUtils.convertLossless(bogus, output, LosslessFormat.FLAC) }
+            assertThrows<Exception> { transcoder.convertLossless(bogus, output, LosslessFormat.FLAC) }
             assertTrue(!output.exists())
         }
     }
@@ -353,7 +358,7 @@ class AudioUtilsTest {
                 "audio.transcode" to tempDir.resolve("transcode").toString()
             )
 
-            val first = AudioUtils.losslessFlacFallback(environment, source)
+            val first = transcoder.losslessFlacFallback(environment, source)
             assertEquals("song.flac", first.fileName)
             assertEquals(LosslessFormat.FLAC.contentType, first.contentType)
             assertTrue(first.file.absolutePath.contains("${File.separator}lossless_flac${File.separator}"))
@@ -362,7 +367,7 @@ class AudioUtilsTest {
 
             val modified = first.file.lastModified()
             Thread.sleep(20)
-            val second = AudioUtils.losslessFlacFallback(environment, source)
+            val second = transcoder.losslessFlacFallback(environment, source)
             assertEquals(first.file, second.file)
             assertEquals(modified, second.file.lastModified())
         }
@@ -370,11 +375,11 @@ class AudioUtilsTest {
 
     @Test
     fun `losslessCodec picks bit depth specific pcm codecs`() {
-        assertEquals(org.bytedeco.ffmpeg.global.avcodec.AV_CODEC_ID_PCM_S16LE, AudioUtils.losslessCodec(LosslessFormat.WAV, 16))
-        assertEquals(org.bytedeco.ffmpeg.global.avcodec.AV_CODEC_ID_PCM_S24LE, AudioUtils.losslessCodec(LosslessFormat.WAV, 24))
-        assertEquals(org.bytedeco.ffmpeg.global.avcodec.AV_CODEC_ID_PCM_S16BE, AudioUtils.losslessCodec(LosslessFormat.AIFF, 16))
-        assertEquals(org.bytedeco.ffmpeg.global.avcodec.AV_CODEC_ID_PCM_S24BE, AudioUtils.losslessCodec(LosslessFormat.AIFF, 24))
-        assertEquals(org.bytedeco.ffmpeg.global.avcodec.AV_CODEC_ID_FLAC, AudioUtils.losslessCodec(LosslessFormat.FLAC, 24))
+        assertEquals(org.bytedeco.ffmpeg.global.avcodec.AV_CODEC_ID_PCM_S16LE, Transcoder.losslessCodec(LosslessFormat.WAV, 16))
+        assertEquals(org.bytedeco.ffmpeg.global.avcodec.AV_CODEC_ID_PCM_S24LE, Transcoder.losslessCodec(LosslessFormat.WAV, 24))
+        assertEquals(org.bytedeco.ffmpeg.global.avcodec.AV_CODEC_ID_PCM_S16BE, Transcoder.losslessCodec(LosslessFormat.AIFF, 16))
+        assertEquals(org.bytedeco.ffmpeg.global.avcodec.AV_CODEC_ID_PCM_S24BE, Transcoder.losslessCodec(LosslessFormat.AIFF, 24))
+        assertEquals(org.bytedeco.ffmpeg.global.avcodec.AV_CODEC_ID_FLAC, Transcoder.losslessCodec(LosslessFormat.FLAC, 24))
     }
 
     @Test
@@ -383,7 +388,7 @@ class AudioUtilsTest {
             val bogus = tempDir.resolve("bogus.m4a").toFile().apply { writeText("not audio") }
             val output = tempDir.resolve("out.aac").toFile()
             assertThrows<Exception> {
-                AudioUtils.remuxToAdts(bogus, output)
+                transcoder.remuxToAdts(bogus, output)
             }
             assertTrue(!output.exists())
         }

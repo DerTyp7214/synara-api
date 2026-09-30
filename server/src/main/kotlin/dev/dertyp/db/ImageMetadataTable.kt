@@ -1,8 +1,11 @@
 package dev.dertyp.db
 
+import dev.dertyp.utils.ColorUtils
 import org.jetbrains.exposed.v1.core.*
+import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import org.jetbrains.exposed.v1.jdbc.Query
 import org.jetbrains.exposed.v1.jdbc.andWhere
+import java.util.UUID
 
 object ImageMetadataTable : Table("image_metadata") {
     val imageId = reference("imageId", ImageTable.id, onDelete = ReferenceOption.CASCADE)
@@ -48,4 +51,16 @@ fun Query.orderByColorDistance(l: Double, a: Double, b: Double): Query {
     val bDiff = ImageMetadataTable.labB.minus(b)
     val distanceSq = (lDiff.times(lDiff) plus aDiff.times(aDiff) plus bDiff.times(bDiff))
     return orderBy(distanceSq, SortOrder.ASC)
+}
+
+class ColorMatch(color: Int, private val range: Int) {
+    private val lab = ColorUtils.rgbToLab((color shr 16) and 0xFF, (color shr 8) and 0xFF, color and 0xFF)
+
+    fun join(columnSet: ColumnSet, image: Column<EntityID<UUID>?>): ColumnSet =
+        columnSet.leftJoin(ImageMetadataTable, onColumn = { image }, otherColumn = { ImageMetadataTable.imageId })
+
+    fun filterAndOrder(query: Query): Query {
+        val (l, a, b) = lab
+        return query.filterByColor(l, a, b, range).orderByColorDistance(l, a, b)
+    }
 }

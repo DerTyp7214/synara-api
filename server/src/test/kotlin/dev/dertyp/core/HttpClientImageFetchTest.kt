@@ -135,8 +135,8 @@ class HttpClientImageFetchTest {
 
     @Test
     fun `safeQueuedGetImage returns null for an html body and bytes for a jpeg`() = runBlocking {
-        assertNull(client.safeQueuedGetImage("$HOST/html"))
-        assertArrayEquals(JpegBytes, client.safeQueuedGetImage("$HOST/jpeg"))
+        assertNull(queueService.safeQueuedGetImage("$HOST/html"))
+        assertArrayEquals(JpegBytes, queueService.safeQueuedGetImage("$HOST/jpeg"))
     }
 
     @Test

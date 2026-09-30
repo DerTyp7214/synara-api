@@ -3,16 +3,15 @@ package dev.dertyp.services
 import dev.dertyp.PlatformUUID
 import dev.dertyp.db.FlacInfoTable
 import dev.dertyp.db.SongTable
-import dev.dertyp.dbQuery
-import dev.dertyp.executeCommand
-import dev.dertyp.findInPath
+import dev.dertyp.core.db.dbQuery
+import dev.dertyp.core.process.ExternalTool
 import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.jdbc.upsert
 import java.time.Instant
 
 class FlacAnalysisService : Service() {
-    private val metaflacPath = findInPath("metaflac")
+    private val metaflac = ExternalTool("metaflac")
 
     suspend fun getUnanalyzedSongIds(): List<PlatformUUID> = dbQuery {
         SongTable
@@ -31,7 +30,7 @@ class FlacAnalysisService : Service() {
     }
 
     suspend fun analyze(songId: PlatformUUID, force: Boolean = false) {
-        if (metaflacPath == null) {
+        if (!metaflac.installed) {
             logger.error("metaflac not found in PATH. FLAC analysis skipped.")
             return
         }
@@ -76,7 +75,7 @@ class FlacAnalysisService : Service() {
     }
 
     suspend fun fixSeekpoints(songId: PlatformUUID, interval: String = "2s") {
-        if (metaflacPath == null) return
+        if (!metaflac.installed) return
 
         val filePath = dbQuery {
             SongTable.select(SongTable.filePath)
@@ -84,9 +83,8 @@ class FlacAnalysisService : Service() {
                 .singleOrNull()?.get(SongTable.filePath)
         } ?: return
 
-        executeCommand(
-            command = listOf(metaflacPath, "--add-seekpoint=$interval", "--add-padding=8192", filePath),
-            aliveCheck = { true },
+        metaflac.run(
+            args = listOf("--add-seekpoint=$interval", "--add-padding=8192", filePath),
             logger = logger,
             logCommand = false,
         )
@@ -95,13 +93,11 @@ class FlacAnalysisService : Service() {
     }
 
     private suspend fun parseFlacInfo(filePath: String, fileSize: Long): FlacInfo? {
-        val path = metaflacPath ?: return null
-        val result = executeCommand(
-            command = listOf(path, "--list", filePath),
-            aliveCheck = { true },
+        val result = metaflac.run(
+            args = listOf("--list", filePath),
             logger = logger,
             logCommand = false,
-        )
+        ) ?: return null
 
         if (result.exitCode != 0) return null
 

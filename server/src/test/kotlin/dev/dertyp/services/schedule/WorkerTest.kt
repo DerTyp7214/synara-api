@@ -1,5 +1,9 @@
 package dev.dertyp.services.schedule
 
+import dev.dertyp.config.ServerConfig
+import io.mockk.every
+import io.mockk.mockkStatic
+import io.mockk.unmockkStatic
 import io.ktor.server.config.ApplicationConfig
 import io.ktor.server.config.MapApplicationConfig
 import kotlinx.coroutines.*
@@ -27,12 +31,13 @@ class WorkerTest : KoinTest {
 
     @BeforeEach
     fun setup() {
-        Worker.resetActiveWorkers()
-        Worker.overridenProcessorCount = 16
+        mockkStatic(::availableCores)
+        every { availableCores() } returns 16
     }
 
     @AfterEach
     fun tearDown() {
+        unmockkStatic(::availableCores)
         stopKoin()
     }
 
@@ -44,6 +49,7 @@ class WorkerTest : KoinTest {
                         put("workers.threadMultiplier", threadMultiplier.toString())
                     }
                 }
+                single { ServerConfig(get()) }
             })
         }
     }
@@ -133,7 +139,7 @@ class WorkerTest : KoinTest {
     @Timeout(value = 1, unit = TimeUnit.MINUTES)
     fun `runParallel should work on small systems`() = runBlocking(Dispatchers.Default) {
         setupKoin()
-        Worker.overridenProcessorCount = 1
+        every { availableCores() } returns 1
         val worker = TestWorker("SmallWorker")
 
         worker.testRunParallel((1..10).toList(), 4) {
@@ -146,7 +152,7 @@ class WorkerTest : KoinTest {
     fun `runParallel should work on large systems with complex split`() = runBlocking(Dispatchers.Default) {
         setupKoin()
         val cores = 128
-        Worker.overridenProcessorCount = cores
+        every { availableCores() } returns cores
         val maxSafe = 115
         
         val worker1 = TestWorker("LargeW1")

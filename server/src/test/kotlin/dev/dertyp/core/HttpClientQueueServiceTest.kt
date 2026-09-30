@@ -15,8 +15,11 @@ import io.mockk.unmockkAll
 import kotlinx.coroutines.*
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
@@ -119,5 +122,18 @@ class HttpClientQueueServiceTest {
         }
 
         assertEquals(listOf("first", "second", "third"), results)
+    }
+
+    @Test
+    fun `enqueue after stop fails with an illegal state instead of a cancellation`() = runBlocking {
+        queueService.stopService()
+
+        val error = assertThrows<IllegalStateException> {
+            runBlocking { queueService.enqueue("https://example.com/stopped") }
+        }
+
+        assertFalse(error is CancellationException)
+        assertEquals("HTTP queue stopped", error.message)
+        assertTrue(isActive)
     }
 }

@@ -1,7 +1,9 @@
 package dev.dertyp.services.import.youtube
 
 import dev.dertyp.ApiClient
+import dev.dertyp.config.ServerConfig
 import dev.dertyp.core.ApplicationScope
+import dev.dertyp.core.HttpClientQueueService
 import dev.dertyp.services.youtube.YoutubeApiService
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
@@ -23,6 +25,9 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.koin.core.context.startKoin
+import org.koin.core.context.stopKoin
+import org.koin.dsl.module
 
 class YoutubeApiServiceTest {
 
@@ -32,6 +37,7 @@ class YoutubeApiServiceTest {
 
     @BeforeEach
     fun setup() {
+        startKoin { modules(module { single { HttpClientQueueService() } }) }
         environment = mockk()
         config = mockk()
         every { environment.config } returns config
@@ -39,20 +45,21 @@ class YoutubeApiServiceTest {
 
     @AfterEach
     fun tearDown() {
+        stopKoin()
         unmockkAll()
     }
 
     @Test
     fun `enabled should be true when apiKey is present`() {
         every { config.propertyOrNull("youtube.apiKey") } returns mockk { every { getString() } returns "test-key" }
-        service = YoutubeApiService(environment)
+        service = YoutubeApiService(ServerConfig(environment.config))
         assertTrue(service.enabled)
     }
 
     @Test
     fun `enabled should be false when apiKey is missing`() {
         every { config.propertyOrNull("youtube.apiKey") } returns null
-        service = YoutubeApiService(environment)
+        service = YoutubeApiService(ServerConfig(environment.config))
         assertFalse(service.enabled)
     }
 
@@ -92,7 +99,7 @@ class YoutubeApiServiceTest {
         mockkObject(ApiClient)
         every { ApiClient.instance } returns mockHttpClient
 
-        service = YoutubeApiService(environment)
+        service = YoutubeApiService(ServerConfig(environment.config))
         val metadata = service.getVideoMetadata("test-id")
 
         assertNotNull(metadata)
@@ -132,7 +139,7 @@ class YoutubeApiServiceTest {
         mockkObject(ApiClient)
         every { ApiClient.instance } returns mockHttpClient
 
-        service = YoutubeApiService(environment)
+        service = YoutubeApiService(ServerConfig(environment.config))
         val items = service.getPlaylistItems("playlist-id")
 
         assertEquals(2, items.size)
@@ -162,7 +169,7 @@ class YoutubeApiServiceTest {
         mockkObject(ApiClient)
         every { ApiClient.instance } returns mockHttpClient
 
-        service = YoutubeApiService(environment)
+        service = YoutubeApiService(ServerConfig(environment.config))
         val metadata = service.getPlaylistMetadata("playlist-id")
 
         assertNotNull(metadata)

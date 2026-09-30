@@ -10,12 +10,13 @@ import dev.dertyp.services.metadata.IMetadataService
 import dev.dertyp.services.metadata.MetadataService
 import dev.dertyp.utils.parsers.ParserFactory
 import io.ktor.server.application.ApplicationEnvironment
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import org.koin.core.component.inject
 import java.util.concurrent.atomic.AtomicInteger
 
-@WorkerTask(TaskKeys.ISRC_PROVIDER_ENRICHMENT_WORKER, "ISRC/Barcode Provider Enrichment Worker")
+@WorkerTask(TaskKeys.ISRC_PROVIDER_ENRICHMENT_WORKER, "ISRC/Barcode Provider Enrichment Worker", afterTask = TaskKeys.MUSICBRAINZ_CACHE_WORKER)
 class IsrcProviderEnrichmentWorker : Worker("ISRC/Barcode Provider Enrichment Worker") {
     private val albumService by inject<AlbumService>()
     private val songService by inject<SongService>()
@@ -79,6 +80,8 @@ class IsrcProviderEnrichmentWorker : Worker("ISRC/Barcode Provider Enrichment Wo
                                     }
                                 }
                                 songService.updateProviderEnrichmentCheck(id, providerName, ProviderEnrichmentType.SONG)
+                            } catch (e: CancellationException) {
+                                throw e
                             } catch (e: Exception) {
                                 logger.error("Failed to enrich song $id with provider $providerName", e)
                             }
@@ -112,6 +115,8 @@ class IsrcProviderEnrichmentWorker : Worker("ISRC/Barcode Provider Enrichment Wo
                                     }
                                 }
                                 albumService.updateProviderEnrichmentCheck(id, providerName, ProviderEnrichmentType.ALBUM)
+                            } catch (e: CancellationException) {
+                                throw e
                             } catch (e: Exception) {
                                 logger.error("Failed to enrich album $id with provider $providerName", e)
                             }

@@ -11,7 +11,9 @@ import dev.dertyp.core.safeQueuedGet
 import dev.dertyp.core.sha256
 import dev.dertyp.data.*
 import dev.dertyp.db.*
-import dev.dertyp.dbQuery
+import dev.dertyp.core.db.SchemaTables
+import dev.dertyp.core.db.dbQuery
+import dev.dertyp.core.db.referencedUuids
 import dev.dertyp.plugins.ImageLibrary
 import dev.dertyp.plugins.RedisCacheProvider
 import dev.dertyp.plugins.coverImage
@@ -20,6 +22,7 @@ import dev.dertyp.utils.ImageUtils
 import dev.dertyp.utils.LogParam
 import io.trbl.blurhash.BlurHash
 import kotlinx.coroutines.*
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.flowOn
@@ -59,7 +62,7 @@ import kotlin.time.Duration.Companion.milliseconds
 import com.sksamuel.scrimage.pixels.Pixel as ScrPixel
 
 private class ChunkedImageOutputStream(
-    private val onChunk: suspend (ByteArray, Double) -> Unit,
+    private val onChunk: (ByteArray, Double) -> Unit,
     private val totalProgressStart: Double,
     private val totalProgressRange: Double
 ) : ImageOutputStreamImpl() {
@@ -90,7 +93,7 @@ private class ChunkedImageOutputStream(
             buffer.write(remaining)
 
             val progress = totalProgressStart + (currentProgress * totalProgressRange)
-            runBlocking { onChunk(chunk, progress) }
+            onChunk(chunk, progress)
         }
     }
 
@@ -102,7 +105,7 @@ private class ChunkedImageOutputStream(
             val chunk = buffer.toByteArray()
             buffer.reset()
             val progress = totalProgressStart + (currentProgress * totalProgressRange)
-            runBlocking { onChunk(chunk, progress) }
+            onChunk(chunk, progress)
         }
     }
 }
@@ -363,34 +366,7 @@ class ImageService(
     }
 
     suspend fun collectReferencedImageIds(): Set<UUID> = dbQuery {
-        val referencedImages = mutableSetOf<UUID>()
-
-        referencedImages.addAll(AlbumTable.selectAll().mapNotNull { it[AlbumTable.cover]?.value })
-        referencedImages.addAll(ArtistTable.selectAll().mapNotNull { it[ArtistTable.image]?.value })
-        referencedImages.addAll(SongTable.selectAll().mapNotNull { it[SongTable.cover]?.value })
-        referencedImages.addAll(PlaylistTable.selectAll().mapNotNull { it[PlaylistTable.imageId]?.value })
-        referencedImages.addAll(UserPlaylistTable.selectAll().mapNotNull { it[UserPlaylistTable.imageId]?.value })
-        referencedImages.addAll(UserTable.selectAll().mapNotNull { it[UserTable.profileImage]?.value })
-        referencedImages.addAll(RecentReleaseTable.selectAll().mapNotNull { it[RecentReleaseTable.imageId]?.value })
-        referencedImages.addAll(ProviderReleaseTable.selectAll().mapNotNull { it[ProviderReleaseTable.imageId]?.value })
-        referencedImages.addAll(AnimatedImageTable.selectAll().mapNotNull { it[AnimatedImageTable.imageId]?.value })
-        referencedImages.addAll(CollectionTable.selectAll().mapNotNull { it[CollectionTable.imageId]?.value })
-        referencedImages.addAll(RadioChannelTable.selectAll().mapNotNull { it[RadioChannelTable.imageId]?.value })
-        referencedImages.addAll(MBReleaseGroupCoverTable.selectAll().mapNotNull { it[MBReleaseGroupCoverTable.imageId]?.value })
-        referencedImages.addAll(
-            PodcastShowTable
-                .select(PodcastShowTable.imageId)
-                .where { PodcastShowTable.imageId.isNotNull() }
-                .mapNotNull { it[PodcastShowTable.imageId]?.value }
-        )
-        referencedImages.addAll(
-            PodcastEpisodeTable
-                .select(PodcastEpisodeTable.imageId)
-                .where { PodcastEpisodeTable.imageId.isNotNull() }
-                .mapNotNull { it[PodcastEpisodeTable.imageId]?.value }
-        )
-
-        referencedImages
+        SchemaTables.referencesTo(ImageTable).flatMapTo(mutableSetOf()) { it.referencedUuids() }
     }
 
     suspend fun deleteImagesByIds(
@@ -572,7 +548,7 @@ class ImageService(
 
     suspend fun getUnanalyzedImageIds(): List<UUID> = dbQuery {
         val cutoff = System.currentTimeMillis() - ANALYSIS_RETRY_INTERVAL
-        val analyzedIds = ImageMetadataTable.selectAll().map { it[ImageMetadataTable.imageId].value }.toSet()
+        val analyzedIds = ImageMetadataTable.select(ImageMetadataTable.imageId).map { it[ImageMetadataTable.imageId].value }.toSet()
         ImageTable
             .select(ImageTable.id)
             .where { ImageTable.analysisUnrecoverable eq false }
@@ -696,7 +672,7 @@ class ImageService(
 
     private suspend fun recoverImageBytes(image: Image): ByteArray? =
         when (val kind = classifyOrigin(image.origin)) {
-            is OriginKind.Url -> ApiClient.instance.safeQueuedGet<ByteArray>(kind.url, HttpClientPriority.LOW)
+            is OriginKind.Url -> ApiClient.queueInstance.safeQueuedGet<ByteArray>(kind.url, HttpClientPriority.LOW)
             is OriginKind.AudioFile -> withContext(Dispatchers.IO) {
                 val file = File(kind.path)
                 if (!file.exists()) null
@@ -880,44 +856,54 @@ class ImageService(
         g.dispose()
         @Suppress("AssignedValueIsNeverRead")
         imageCache = null
-        
-        withContext(Dispatchers.IO) {
-            val writer = ImageIO.getImageWritersByFormatName("jpeg").next()
-            val writeParam = writer.defaultWriteParam
-            if (writeParam.canWriteCompressed()) {
-                writeParam.compressionMode = ImageWriteParam.MODE_EXPLICIT
-                writeParam.compressionQuality = 0.85f
+
+        val encodedChunks = Channel<Pair<ByteArray, Double>>(Channel.UNLIMITED)
+        val chunkSender = launch {
+            for ((bytes, progress) in encodedChunks) {
+                sendProgress(progress, "Encoding and sending...")
+                send(MosaicGenerationResponse(progress, "Encoding and sending...", bytes))
+                delay(1.milliseconds)
             }
-
-            val chunkedStream = ChunkedImageOutputStream(
-                onChunk = { bytes, progress ->
-                    sendProgress(progress, "Encoding and sending...")
-                    send(MosaicGenerationResponse(progress, "Encoding and sending...", bytes))
-                    delay(1.milliseconds)
-                },
-                totalProgressStart = 0.85,
-                totalProgressRange = 0.15
-            )
-
-            writer.addIIOWriteProgressListener(object : IIOWriteProgressListener {
-                override fun imageStarted(source: ImageWriter?, imageIndex: Int) {}
-                override fun imageProgress(source: ImageWriter?, percentageDone: Float) {
-                    chunkedStream.updateProgress(percentageDone.toDouble() / 100.0)
-                }
-                override fun imageComplete(source: ImageWriter?) {}
-                override fun thumbnailStarted(source: ImageWriter?, imageIndex: Int, thumbnailIndex: Int) {}
-                override fun thumbnailProgress(source: ImageWriter?, percentageDone: Float) {}
-                override fun thumbnailComplete(source: ImageWriter?) {}
-                override fun writeAborted(source: ImageWriter?) {}
-            })
-
-            chunkedStream.use { ios ->
-                writer.output = ios
-                writer.write(null, IIOImage(mosaic, null, null), writeParam)
-                ios.flush()
-            }
-            writer.dispose()
         }
+
+        try {
+            withContext(Dispatchers.IO) {
+                val writer = ImageIO.getImageWritersByFormatName("jpeg").next()
+                val writeParam = writer.defaultWriteParam
+                if (writeParam.canWriteCompressed()) {
+                    writeParam.compressionMode = ImageWriteParam.MODE_EXPLICIT
+                    writeParam.compressionQuality = 0.85f
+                }
+
+                val chunkedStream = ChunkedImageOutputStream(
+                    onChunk = { bytes, progress -> encodedChunks.trySend(bytes to progress) },
+                    totalProgressStart = 0.85,
+                    totalProgressRange = 0.15
+                )
+
+                writer.addIIOWriteProgressListener(object : IIOWriteProgressListener {
+                    override fun imageStarted(source: ImageWriter?, imageIndex: Int) {}
+                    override fun imageProgress(source: ImageWriter?, percentageDone: Float) {
+                        chunkedStream.updateProgress(percentageDone.toDouble() / 100.0)
+                    }
+                    override fun imageComplete(source: ImageWriter?) {}
+                    override fun thumbnailStarted(source: ImageWriter?, imageIndex: Int, thumbnailIndex: Int) {}
+                    override fun thumbnailProgress(source: ImageWriter?, percentageDone: Float) {}
+                    override fun thumbnailComplete(source: ImageWriter?) {}
+                    override fun writeAborted(source: ImageWriter?) {}
+                })
+
+                chunkedStream.use { ios ->
+                    writer.output = ios
+                    writer.write(null, IIOImage(mosaic, null, null), writeParam)
+                    ios.flush()
+                }
+                writer.dispose()
+            }
+        } finally {
+            encodedChunks.close()
+        }
+        chunkSender.join()
 
         @Suppress("AssignedValueIsNeverRead")
         mosaic = null

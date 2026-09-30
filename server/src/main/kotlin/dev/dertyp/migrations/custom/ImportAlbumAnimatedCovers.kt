@@ -11,11 +11,12 @@ import dev.dertyp.db.AlbumProviderTable
 import dev.dertyp.db.AlbumTable
 import dev.dertyp.db.AnimatedImageTable
 import dev.dertyp.db.SongTable
-import dev.dertyp.dbQuery
+import dev.dertyp.core.db.dbQuery
 import dev.dertyp.services.AnimatedImageService
 import dev.dertyp.services.metadata.IMetadataService
 import dev.dertyp.services.metadata.MetadataService
 import io.ktor.server.application.*
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -71,6 +72,8 @@ class ImportAlbumAnimatedCovers : CustomMigration() {
                             val animatedImage = album.images.filter { it.animated }.maxByOrNull { it.width } ?: return@forEach
                             tidalIdToAnimatedUrl[album.id] = animatedImage.url
                         }
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (e: Exception) {
                         logger.warn("Failed to fetch Tidal album metadata batch ${index + 1}/${chunks.size}", e)
                     }
@@ -92,7 +95,9 @@ class ImportAlbumAnimatedCovers : CustomMigration() {
                     val batchBytes = batch.map { url ->
                         async {
                             try {
-                                url to ApiClient.instance.safeQueuedGet<ByteArray>(url)
+                                url to ApiClient.queueInstance.safeQueuedGet<ByteArray>(url)
+                            } catch (e: CancellationException) {
+                                throw e
                             } catch (_: Exception) {
                                 url to null
                             }

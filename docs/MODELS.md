@@ -408,6 +408,7 @@ Contains metadata about a music artist or group.
 | `musicbrainzId` | `PlatformUUID`? | The MusicBrainz Artist unique identifier. |
 | `isFollowed` | `Boolean` | Whether the current user is following this artist. |
 | `creditedName` | `String`? | The name this artist was credited as in the current song/album context, if different from the canonical name. |
+| `joinPhrase` | `String`? | The phrase that follows this artist in the credit of the current song/album context, such as " & " or " feat. ". Null when the credit source has none. |
 
 ### ArtistAlias <a name="devdertypdataartistalias"></a>
 Represents an alternative name for an artist.

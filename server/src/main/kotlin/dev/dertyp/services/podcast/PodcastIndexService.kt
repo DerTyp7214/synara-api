@@ -1,5 +1,6 @@
 package dev.dertyp.services.podcast
 
+import dev.dertyp.core.runCatchingCancellable
 import dev.dertyp.data.PodcastIndexInfo
 import dev.dertyp.data.PodcastIndexResult
 import dev.dertyp.plugins.IPodcastIndex
@@ -7,7 +8,6 @@ import dev.dertyp.plugins.PluginManager
 import dev.dertyp.plugins.PodcastIndexEntry
 import dev.dertyp.services.Service
 import kotlinx.coroutines.*
-import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
 class PodcastIndexService(
@@ -15,8 +15,6 @@ class PodcastIndexService(
     private val podcastService: PodcastService,
     private val feedService: PodcastFeedService
 ) : Service() {
-    internal var providerTimeout: Duration = PROVIDER_TIMEOUT
-
     suspend fun indexes(): List<PodcastIndexInfo> = pluginManager.getPodcastIndexes().map {
         PodcastIndexInfo(it.id, it.name, isConfigured(it))
     }
@@ -56,29 +54,25 @@ class PodcastIndexService(
             .toList()
     }
 
-    private suspend fun isConfigured(index: IPodcastIndex): Boolean = try {
-        index.isConfigured()
-    } catch (e: CancellationException) {
-        throw e
-    } catch (e: Throwable) {
-        logger.warn("Podcast index ${index.id} failed: ${e.message}", e)
-        false
-    }
-
-    private suspend fun runProvider(index: IPodcastIndex, term: String, count: Int): List<PodcastIndexEntry> = try {
-        val results = withTimeoutOrNull(providerTimeout) { index.search(term, count) }
-        if (results == null) {
-            logger.warn("Podcast index ${index.id} did not answer within $providerTimeout")
-            emptyList()
-        } else {
-            results
+    private suspend fun isConfigured(index: IPodcastIndex): Boolean =
+        runCatchingCancellable { index.isConfigured() }.getOrElse { e ->
+            logger.warn("Podcast index ${index.id} failed: ${e.message}", e)
+            false
         }
-    } catch (e: CancellationException) {
-        throw e
-    } catch (e: Throwable) {
-        logger.warn("Podcast index ${index.id} failed: ${e.message}", e)
-        emptyList()
-    }
+
+    private suspend fun runProvider(index: IPodcastIndex, term: String, count: Int): List<PodcastIndexEntry> =
+        runCatchingCancellable {
+            val results = withTimeoutOrNull(PROVIDER_TIMEOUT) { index.search(term, count) }
+            if (results == null) {
+                logger.warn("Podcast index ${index.id} did not answer within $PROVIDER_TIMEOUT")
+                emptyList()
+            } else {
+                results
+            }
+        }.getOrElse { e ->
+            logger.warn("Podcast index ${index.id} failed: ${e.message}", e)
+            emptyList()
+        }
 
     private fun candidate(index: IPodcastIndex, entry: PodcastIndexEntry): IndexCandidate? {
         if (entry.title.isBlank()) return null

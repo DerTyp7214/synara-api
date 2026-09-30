@@ -1,6 +1,5 @@
 package dev.dertyp.db.migrations
 
-import dev.dertyp.core.foreignKeyOn
 import dev.dertyp.core.tempConnection
 import dev.dertyp.db.SongProviderTable
 import org.flywaydb.core.api.migration.BaseJavaMigration
@@ -10,8 +9,6 @@ import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 @Suppress("unused", "ClassName")
 class V1_35__AddSongProviderTable : BaseJavaMigration() {
     override fun migrate(context: Context) {
-        foreignKeyOn(context.connection)
-
         val statements = tempConnection {
             SchemaUtils.createStatements(
                 SongProviderTable

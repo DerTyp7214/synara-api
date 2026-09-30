@@ -4,6 +4,7 @@ import dev.dertyp.data.Image
 import io.ktor.http.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import kotlinx.coroutines.CancellationException
 import net.coobird.thumbnailator.Thumbnails
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
@@ -52,6 +53,8 @@ suspend fun RoutingCall.respondImageSized(image: Image, size: Int) {
 
     try {
         respondBytes(sizedImage, contentType)
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Throwable) {
         e.printStackTrace()
         respondBytes(sizedImage, contentType)

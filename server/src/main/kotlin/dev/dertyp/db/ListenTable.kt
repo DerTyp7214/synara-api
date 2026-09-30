@@ -21,7 +21,7 @@ object ListenTable : UUIDTable("listen") {
     val artistName = text("artistName").nullable()
     val releaseName = text("releaseName").nullable()
     val listenedAt = long("listenedAt")
-    val listenSource = enumeration<ListenSource>("source")
+    val listenSource = enumerationByName("listenSource", 16, ListenSource::class).default(ListenSource.LOCAL)
     val msPlayed = long("msPlayed").nullable()
     val updatedAt = long("updatedAt").default(0L)
 

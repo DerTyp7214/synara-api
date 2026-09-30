@@ -6,7 +6,7 @@ import kotlinx.coroutines.CancellationException
 import org.koin.core.component.inject
 import java.util.concurrent.atomic.AtomicInteger
 
-@WorkerTask(TaskKeys.FLAC_ANALYSIS, "FLAC Analysis")
+@WorkerTask(TaskKeys.FLAC_ANALYSIS, "FLAC Analysis", cron = "0 5 * * *")
 class FlacAnalysisWorker : Worker("FlacAnalysisWorker") {
     private val flacAnalysisService by inject<FlacAnalysisService>()
 
@@ -58,8 +58,10 @@ class FlacAnalysisWorker : Worker("FlacAnalysisWorker") {
                         onProgress(progress, "Fixed $currentCount/$totalToProcess files")
                         logger.info("Fixed $currentCount/${needingFixIds.size} files")
                     }
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
-                    if (e !is CancellationException) logger.error("Failed to fix FLAC $songId: ${e.message}")
+                    logger.error("Failed to fix FLAC $songId: ${e.message}")
                 }
             }
         }

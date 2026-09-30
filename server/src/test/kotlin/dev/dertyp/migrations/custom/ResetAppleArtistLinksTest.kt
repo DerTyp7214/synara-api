@@ -5,9 +5,10 @@ import dev.dertyp.TestDatabase
 import dev.dertyp.db.*
 import dev.dertyp.plugins.RedisCacheProvider
 import dev.dertyp.services.ImageService
-import dev.dertyp.services.ScheduledTaskLogService
 import dev.dertyp.services.StorageService
 import dev.dertyp.services.import.Type
+import dev.dertyp.testing.insertArtist
+import dev.dertyp.testing.relaxedTaskLogService
 import io.mockk.every
 import io.mockk.justRun
 import io.mockk.mockk
@@ -43,8 +44,7 @@ class ResetAppleArtistLinksTest : KoinTest {
         justRun { storageService.invalidate(any()) }
         every { redisConfig.host } returns "none"
 
-        val logService = mockk<ScheduledTaskLogService>(relaxed = true)
-        every { logService.startLog(any(), any()) } returns EntityID(UUID.randomUUID(), ScheduledTaskLogTable)
+        val logService = relaxedTaskLogService()
 
         startKoin {
             modules(module {
@@ -100,15 +100,6 @@ class ResetAppleArtistLinksTest : KoinTest {
             ImageTable.select(ImageTable.path).where { ImageTable.id eq id }.single()[ImageTable.path]
         }
         return id to Path(tempDir.absolutePath, path).toFile()
-    }
-
-    private fun insertArtist(id: UUID, artistName: String) {
-        transaction(database) {
-            ArtistTable.insert {
-                it[ArtistTable.id] = id
-                it[ArtistTable.name] = artistName
-            }
-        }
     }
 
     private fun insertArtistProvider(artist: UUID, providerName: String, external: String, linkType: String?) {
@@ -232,8 +223,8 @@ class ResetAppleArtistLinksTest : KoinTest {
             val (sharedImage, sharedFile) = createStoredImage("shared cover", "https://apple.example/2")
             val (tidalImage, tidalFile) = createStoredImage("tidal cover", "https://tidal.example/1")
 
-            insertArtist(artist, "Artist")
-            insertArtist(otherArtist, "Other Artist")
+            insertArtist(database, artist, "Artist")
+            insertArtist(database, otherArtist, "Other Artist")
             transaction(database) {
                 AlbumTable.insert {
                     it[AlbumTable.name] = "Album"
@@ -302,7 +293,7 @@ class ResetAppleArtistLinksTest : KoinTest {
         val matchedGroup = UUID.randomUUID()
         val (appleImage, appleFile) = createStoredImage("apple cover", "https://apple.example/3")
 
-        insertArtist(artist, "Artist")
+        insertArtist(database, artist, "Artist")
         insertArtistProvider(artist, "apple", "1234", Type.ARTIST.value)
         insertProviderRelease(appleReleaseId, "apple", "111", artist, appleImage)
         insertReleaseGroup(matchedGroup)

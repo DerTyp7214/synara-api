@@ -5,7 +5,7 @@ import dev.dertyp.core.Migration
 import dev.dertyp.db.HueBridgeTable
 import dev.dertyp.db.HueUserLinkTable
 import dev.dertyp.db.UserTable
-import dev.dertyp.dbQuery
+import dev.dertyp.core.db.dbQuery
 import org.jetbrains.exposed.v1.core.SortOrder
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq

@@ -1,9 +1,9 @@
 package dev.dertyp.services
 
-import dev.dertyp.AudioUtils
 import dev.dertyp.Indexer
 import dev.dertyp.audio.AudioConfig
 import dev.dertyp.audio.LosslessFormat
+import dev.dertyp.audio.Transcoder
 import io.mockk.Runs
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -12,7 +12,6 @@ import io.mockk.just
 import io.mockk.justRun
 import io.mockk.mockk
 import io.mockk.mockkConstructor
-import io.mockk.mockkObject
 import io.mockk.unmockkAll
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.runBlocking
@@ -24,6 +23,9 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.EnumSource
 import org.junit.jupiter.api.io.TempDir
+import org.koin.core.context.startKoin
+import org.koin.core.context.stopKoin
+import org.koin.dsl.module
 import java.io.File
 import java.nio.file.Path
 
@@ -34,6 +36,7 @@ class CustomAudioServiceTest {
 
     @AfterEach
     fun tearDown() {
+        stopKoin()
         unmockkAll()
     }
 
@@ -83,10 +86,11 @@ class CustomAudioServiceTest {
         every { anyConstructed<FFmpegFrameGrabber>().stop() } just Runs
         every { anyConstructed<FFmpegFrameGrabber>().release() } just Runs
 
-        mockkObject(AudioUtils)
-        coEvery { AudioUtils.convertLossless(any(), any(), format) } answers {
+        val transcoder = mockk<Transcoder>()
+        coEvery { transcoder.convertLossless(any(), any(), format) } answers {
             secondArg<File>().writeText("converted data")
         }
+        startKoin { modules(module { single { transcoder } }) }
 
         val deferred = CompletableDeferred<Unit>()
         deferred.complete(Unit)
@@ -98,7 +102,7 @@ class CustomAudioServiceTest {
         assertNotNull(uuid)
         val targetFile = File(customPath, "$uuid.${format.extension}")
         assertEquals("converted data", targetFile.readText())
-        coVerify { AudioUtils.convertLossless(any(), targetFile, format) }
+        coVerify { transcoder.convertLossless(any(), targetFile, format) }
     }
 
     @Test

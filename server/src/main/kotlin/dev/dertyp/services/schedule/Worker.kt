@@ -1,9 +1,10 @@
 package dev.dertyp.services.schedule
 
-import io.ktor.server.config.ApplicationConfig
+import dev.dertyp.config.ServerConfig
 import io.ktor.util.logging.KtorSimpleLogger
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.channels.ClosedReceiveChannelException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
@@ -19,6 +20,10 @@ import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.math.floor
 import kotlin.time.Duration.Companion.milliseconds
 
+class WorkerAlreadyRunningException(val workerName: String) : Exception("$workerName is already running")
+
+internal fun availableCores(): Int = Runtime.getRuntime().availableProcessors()
+
 @OptIn(ExperimentalAtomicApi::class)
 abstract class Worker(val name: String) : KoinComponent {
     protected val logger = KtorSimpleLogger(name)
@@ -26,10 +31,10 @@ abstract class Worker(val name: String) : KoinComponent {
     val active: Boolean
         get() = isRunning.load()
 
-    private val config by inject<ApplicationConfig>()
+    protected val serverConfig by inject<ServerConfig>()
 
     protected val threadMultiplier: Double
-        get() = config.propertyOrNull("workers.threadMultiplier")?.getString()?.toDoubleOrNull() ?: 1.0
+        get() = serverConfig.workers.threadMultiplier
 
     protected val grantedThreads = MutableStateFlow(0)
 
@@ -79,47 +84,42 @@ abstract class Worker(val name: String) : KoinComponent {
 
                     val targetCount = localGrantedThreads.value
                     for (i in 0 until targetCount) {
-                        if (!activeWorkerJobs.containsKey(i)) {
-                            activeWorkerJobs[i] = outerScope.launch {
-                                try {
-                                    while (isActive) {
-                                        if (i >= localGrantedThreads.value) break
-                                        
-                                        val result = itemChannel.tryReceive()
-                                        if (result.isSuccess) {
-                                            val item = result.getOrThrow()
-                                            try {
-                                                block(item)
-                                            } finally {
-                                                onItemProcessed(processedCount.incrementAndGet())
-                                            }
-                                        } else if (result.isClosed) {
+                        if (activeWorkerJobs.containsKey(i)) continue
+
+                        val job = outerScope.launch(start = CoroutineStart.LAZY) {
+                            val thisJob = coroutineContext.job
+                            try {
+                                while (isActive) {
+                                    if (i >= localGrantedThreads.value) break
+
+                                    val result = itemChannel.tryReceive()
+                                    val item = when {
+                                        result.isSuccess -> result.getOrThrow()
+                                        result.isClosed -> break
+                                        else -> try {
+                                            itemChannel.receive()
+                                        } catch (_: ClosedReceiveChannelException) {
                                             break
-                                        } else {
-                                            val item = try {
-                                                itemChannel.receive()
-                                            } catch (_: Exception) {
-                                                break
-                                            }
-                                            
-                                            if (i >= localGrantedThreads.value) {
-                                                if (!itemChannel.isClosedForSend) {
-                                                    itemChannel.trySend(item)
-                                                }
-                                                break
-                                            }
-                                            
-                                            try {
-                                                block(item)
-                                            } finally {
-                                                onItemProcessed(processedCount.incrementAndGet())
-                                            }
                                         }
                                     }
-                                } finally {
-                                    activeWorkerJobs.remove(i)
+
+                                    try {
+                                        block(item)
+                                    } catch (e: Throwable) {
+                                        if (thisJob.isActive) onItemProcessed(processedCount.incrementAndGet())
+                                        throw e
+                                    }
+                                    onItemProcessed(processedCount.incrementAndGet())
                                 }
+                            } finally {
+                                activeWorkerJobs.remove(i, thisJob)
                             }
+                        }
+
+                        if (activeWorkerJobs.putIfAbsent(i, job) == null) {
+                            job.start()
+                        } else {
+                            job.cancel()
                         }
                     }
                     delay(50.milliseconds)
@@ -142,12 +142,29 @@ abstract class Worker(val name: String) : KoinComponent {
 
     protected abstract suspend fun execute(onProgress: suspend (Double, String) -> Unit): Map<String, Any?>
 
-    suspend fun run(onProgress: suspend (Double, String) -> Unit = { _, _ -> }): Map<String, Any?> {
+    suspend fun run(onProgress: suspend (Double, String) -> Unit = { _, _ -> }): Map<String, Any?> =
+        exclusive(onSkip = { emptyMap() }) { perform(onProgress) }
+
+    suspend fun <R> runExclusive(
+        block: suspend (runWorker: suspend (onProgress: suspend (Double, String) -> Unit) -> Map<String, Any?>) -> R
+    ): R = exclusive(onSkip = { throw WorkerAlreadyRunningException(name) }) {
+        block { onProgress -> perform(onProgress) }
+    }
+
+    private suspend fun <R> exclusive(onSkip: () -> R, block: suspend () -> R): R {
         if (!isRunning.compareAndSet(expectedValue = false, newValue = true)) {
             logger.info("$name is already running. Skipping this run.")
-            return emptyMap()
+            return onSkip()
         }
 
+        return try {
+            block()
+        } finally {
+            isRunning.store(false)
+        }
+    }
+
+    private suspend fun perform(onProgress: suspend (Double, String) -> Unit): Map<String, Any?> {
         return try {
             logger.info("Starting $name")
             onProgress(0.0, "Starting $name")
@@ -158,23 +175,14 @@ abstract class Worker(val name: String) : KoinComponent {
         } catch (e: Exception) {
             logger.error("Error in $name", e)
             throw e
-        } finally {
-            isRunning.store(false)
         }
     }
 
     companion object {
         private val activeWorkers = ConcurrentHashMap<String, Pair<Int, MutableStateFlow<Int>>>()
         private val mutex = Mutex()
-        @Volatile
-        internal var overridenProcessorCount: Int? = null
 
         fun isActive(name: String): Boolean = activeWorkers.containsKey(name)
-
-        internal fun resetActiveWorkers() {
-            activeWorkers.clear()
-            overridenProcessorCount = null
-        }
 
         internal suspend fun registerWorker(name: String, desired: Int, flow: MutableStateFlow<Int>) {
             activeWorkers[name] = desired to flow
@@ -187,7 +195,7 @@ abstract class Worker(val name: String) : KoinComponent {
         }
 
         private suspend fun recalculateAllocations() = mutex.withLock {
-            val cores = overridenProcessorCount ?: Runtime.getRuntime().availableProcessors()
+            val cores = availableCores()
             val leaveFree = when {
                 cores <= 1 -> 0
                 cores <= 4 -> 1

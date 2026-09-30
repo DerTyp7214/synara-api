@@ -1,6 +1,6 @@
 package dev.dertyp.services
 
-import dev.dertyp.core.fetchBatchedResults
+import dev.dertyp.core.fetchBatchedResultsByKeyset
 import dev.dertyp.core.fetchBatchedResultsByIdKeyset
 import dev.dertyp.data.*
 import dev.dertyp.db.ArtistAliasTable
@@ -93,7 +93,7 @@ class MirrorService : Service() {
     }.flowOn(Dispatchers.IO)
 
     fun getArtistSplitAliases(): Flow<ArtistSplitAlias> = flow {
-        ArtistSplitAliasTable.selectAll().fetchBatchedResults(1000) { batch ->
+        ArtistSplitAliasTable.selectAll().fetchBatchedResultsByKeyset(ArtistSplitAliasTable.name, ArtistSplitAliasTable.artistId, 1000) { batch ->
             for (row in batch) {
                 emit(ArtistSplitAlias(
                     artistId = row[ArtistSplitAliasTable.artistId].value,

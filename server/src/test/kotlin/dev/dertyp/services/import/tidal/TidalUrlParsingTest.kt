@@ -1,5 +1,6 @@
 package dev.dertyp.services.import.tidal
 
+import dev.dertyp.core.process.ExternalTool
 import dev.dertyp.plugins.IPluginIndexer
 import dev.dertyp.plugins.IServerStorageService
 import dev.dertyp.services.import.ProcessExecutionResult
@@ -21,6 +22,7 @@ class TidalUrlParsingTest {
     ) : TidalBaseImporter(indexer, storageService) {
         override val id: String = "test"
         override val enabled: Boolean = true
+        override val tool = ExternalTool("test")
         override val loginCommand: MutableList<String> = mutableListOf()
         override val importCommand: MutableList<String> = mutableListOf()
         override val favImportCommand: MutableList<String> = mutableListOf()

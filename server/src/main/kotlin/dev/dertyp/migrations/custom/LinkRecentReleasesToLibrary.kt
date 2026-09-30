@@ -9,8 +9,9 @@ import dev.dertyp.db.ArtistMusicBrainzTable
 import dev.dertyp.db.RecentReleaseTable
 import dev.dertyp.db.SongArtistTable
 import dev.dertyp.db.SongMusicBrainzTable
-import dev.dertyp.dbQuery
+import dev.dertyp.core.db.dbQuery
 import dev.dertyp.services.metadata.MusicBrainzService
+import kotlinx.coroutines.CancellationException
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.innerJoin
 import org.jetbrains.exposed.v1.jdbc.selectAll
@@ -49,6 +50,8 @@ class LinkRecentReleasesToLibrary : CustomMigration() {
 
             val mbReleases = try {
                 musicBrainzService.fetchReleasesByArtist(mbArtistId.value)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 logger.error("Failed to fetch releases for artist ${mbArtistId.value}", e)
                 emptyList()
@@ -88,6 +91,8 @@ class LinkRecentReleasesToLibrary : CustomMigration() {
                 val groupRecordingIds = if (type == ReleaseType.Single) {
                     try {
                         musicBrainzService.fetchRecordingsByReleaseGroup(releaseGroupId).map { it.id }.toSet()
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (e: Exception) {
                         logger.error("Failed to fetch recordings for release group $releaseGroupId", e)
                         emptySet()

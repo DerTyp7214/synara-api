@@ -5,9 +5,10 @@ import dev.dertyp.core.HttpClientPriority
 import dev.dertyp.core.Migration
 import dev.dertyp.core.logTask
 import dev.dertyp.db.MBArtistTable
-import dev.dertyp.dbQuery
+import dev.dertyp.core.db.dbQuery
 import dev.dertyp.services.metadata.MusicBrainzCacheService
 import dev.dertyp.services.metadata.MusicBrainzService
+import kotlinx.coroutines.CancellationException
 import org.jetbrains.exposed.v1.jdbc.select
 import org.koin.core.component.inject
 
@@ -32,6 +33,8 @@ class RecacheMusicBrainzArtists : CustomMigration() {
                         musicBrainzCacheService.updateArtistCache(it)
                         updated++
                     }
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     failed++
                     logger.error("Failed to re-cache artist $id: ${e.message}")

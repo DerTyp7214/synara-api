@@ -2,6 +2,7 @@ package dev.dertyp.services.metadata
 
 import dev.dertyp.ApiClient
 import dev.dertyp.core.ApplicationScope
+import dev.dertyp.core.HttpClientQueueService
 import dev.dertyp.plugins.RedisCacheProvider
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
@@ -51,6 +52,7 @@ class TidalServiceTest : KoinTest {
         startKoin {
             modules(module {
                 single { redisConfig }
+                single { HttpClientQueueService() }
             })
         }
 

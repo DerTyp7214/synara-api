@@ -3,9 +3,10 @@ package dev.dertyp.services.schedule
 import dev.dertyp.core.cleanTitle
 import dev.dertyp.data.TaskKeys
 import dev.dertyp.db.SongTable
-import dev.dertyp.dbQuery
+import dev.dertyp.core.db.dbQuery
 import dev.dertyp.services.LrcLibService
 import dev.dertyp.services.SongService
+import kotlinx.coroutines.CancellationException
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.less
@@ -15,7 +16,7 @@ import org.koin.core.component.inject
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
 
-@WorkerTask(TaskKeys.LRCLIB_WORKER, "LrcLib Worker")
+@WorkerTask(TaskKeys.LRCLIB_WORKER, "LrcLib Worker", cron = "30 4 * * *")
 class LrcLibWorker : Worker("LrcLibWorker") {
     private val lrcLibService by inject<LrcLibService>()
     private val songService by inject<SongService>()
@@ -85,6 +86,8 @@ class LrcLibWorker : Worker("LrcLibWorker") {
                     notFound++
                     logger.info("Lyrics not found for song $songId on LrcLib.")
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 failed++
                 logger.error("Failed to process song $songId: ${e.message}")

@@ -3,14 +3,17 @@ package dev.dertyp.utils
 import dev.dertyp.plugins.RedisCacheProvider
 import dev.dertyp.rpc.annotations.Cached
 import io.ktor.util.logging.KtorSimpleLogger
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.get
 import java.lang.reflect.InvocationTargetException
+import java.lang.reflect.Method
 import java.lang.reflect.Proxy
 import java.security.MessageDigest
 import kotlin.coroutines.Continuation
-import kotlin.coroutines.intrinsics.COROUTINE_SUSPENDED
+import kotlin.coroutines.intrinsics.startCoroutineUninterceptedOrReturn
+import kotlin.coroutines.intrinsics.suspendCoroutineUninterceptedOrReturn
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
 
@@ -32,6 +35,11 @@ fun <T : Any> T.withCaching(interfaceClass: Class<T>): T {
             }
         }
 
+        val lastArg = args?.lastOrNull()
+        if (lastArg !is Continuation<*>) {
+            return@newProxyInstance invokeTarget(method, target, args ?: emptyArray())
+        }
+
         val implMethod = try {
             target.javaClass.getMethod(method.name, *method.parameterTypes)
         } catch (_: NoSuchMethodException) {
@@ -40,92 +48,48 @@ fun <T : Any> T.withCaching(interfaceClass: Class<T>): T {
 
         val cachedAnnotation = method.getAnnotation(Cached::class.java)
             ?: implMethod?.getAnnotation(Cached::class.java)
-
-        if (cachedAnnotation == null) {
-            return@newProxyInstance try {
-                method.invoke(target, *(args ?: emptyArray()))
-            } catch (e: InvocationTargetException) {
-                throw e.targetException
-            }
-        }
+            ?: return@newProxyInstance invokeTarget(method, target, args)
 
         val cacheProvider = try {
             object : KoinComponent {}.get<RedisCacheProvider>()
         } catch (_: Exception) {
             null
-        }
-
-        if (cacheProvider == null) {
-            return@newProxyInstance try {
-                method.invoke(target, *(args ?: emptyArray()))
-            } catch (e: InvocationTargetException) {
-                throw e.targetException
-            }
-        }
+        } ?: return@newProxyInstance invokeTarget(method, target, args)
 
         val duration = parseDuration(cachedAnnotation.duration)
         val key = "rpc_cache:${interfaceClass.name}:${method.name}:${hashArgs(args)}"
 
-        val lastArg = args?.lastOrNull()
-        if (lastArg is Continuation<*>) {
-            @Suppress("UNCHECKED_CAST")
-            val continuation = lastArg as Continuation<Any?>
-
-            val cachedValue = runBlocking { cacheProvider.getCache(key) }
+        val continuation = lastArg as Continuation<Any?>
+        val call: suspend () -> Any? = {
+            val cachedValue = withContext(Dispatchers.IO) { cacheProvider.getCache(key) }
             if (cachedValue != null) {
                 logger.debug("Cache hit for $key")
-                continuation.resumeWith(Result.success(cachedValue))
-                return@newProxyInstance COROUTINE_SUSPENDED
-            }
-
-            val wrappedContinuation = object : Continuation<Any?> {
-                override val context = continuation.context
-                override fun resumeWith(result: Result<Any?>) {
-                    if (result.isSuccess) {
-                        val value = result.getOrNull()
-                        if (value != null) {
-                            runBlocking {
-                                cacheProvider.setCache(key, value, duration)
-                            }
-                        }
-                    }
-                    continuation.resumeWith(result)
-                }
-            }
-
-            val newArgs = args.toMutableList()
-            newArgs[newArgs.size - 1] = wrappedContinuation
-
-            try {
-                val res = method.invoke(target, *newArgs.toTypedArray())
-                if (res != COROUTINE_SUSPENDED) {
-                    if (res != null) {
-                        runBlocking { cacheProvider.setCache(key, res, duration) }
-                    }
-                }
-                return@newProxyInstance res
-            } catch (e: InvocationTargetException) {
-                throw e.targetException
-            }
-        } else {
-            val cachedValue = runBlocking { cacheProvider.getCache(key) }
-            if (cachedValue != null) {
-                logger.debug("Cache hit for $key")
-                return@newProxyInstance cachedValue
-            }
-
-            try {
-                val res = method.invoke(target, *(args ?: emptyArray()))
+                cachedValue
+            } else {
+                val res = invokeSuspending(method, target, args)
                 if (res != null) {
-                    runBlocking { cacheProvider.setCache(key, res, duration) }
+                    withContext(Dispatchers.IO) { cacheProvider.setCache(key, res, duration) }
                 }
-                return@newProxyInstance res
-            } catch (e: InvocationTargetException) {
-                throw e.targetException
+                res
             }
         }
+        call.startCoroutineUninterceptedOrReturn(continuation)
     } as T
 }
+
+private fun invokeTarget(method: Method, target: Any, args: Array<Any?>): Any? =
+    try {
+        method.invoke(target, *args)
+    } catch (e: InvocationTargetException) {
+        throw e.targetException
+    }
+
+private suspend fun invokeSuspending(method: Method, target: Any, args: Array<Any?>): Any? =
+    suspendCoroutineUninterceptedOrReturn { continuation ->
+        val newArgs = args.copyOf()
+        newArgs[newArgs.size - 1] = continuation
+        invokeTarget(method, target, newArgs)
+    }
 
 fun parseDuration(durationStr: String): Duration {
     return try {

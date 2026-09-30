@@ -2,7 +2,7 @@ package dev.dertyp.services
 
 import dev.dertyp.data.*
 import dev.dertyp.db.*
-import dev.dertyp.dbQuery
+import dev.dertyp.core.db.dbQuery
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import org.jetbrains.exposed.v1.core.*

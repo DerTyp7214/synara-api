@@ -1,6 +1,7 @@
 rootProject.name = "synara-api"
 
 pluginManagement {
+    includeBuild("build-logic")
     repositories {
         google {
             content {

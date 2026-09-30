@@ -8,7 +8,7 @@ import dev.dertyp.db.FlacInfoTable
 import dev.dertyp.db.PcmInfoTable
 import dev.dertyp.db.SongTable
 import dev.dertyp.db.SongVariantTable
-import dev.dertyp.dbQuery
+import dev.dertyp.core.db.dbQuery
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.select

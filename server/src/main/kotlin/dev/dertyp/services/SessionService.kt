@@ -4,7 +4,7 @@ import dev.dertyp.data.Session
 import dev.dertyp.db.QueueSyncDeviceTable
 import dev.dertyp.db.RefreshTokenTable
 import dev.dertyp.db.SessionTable
-import dev.dertyp.dbQuery
+import dev.dertyp.core.db.dbQuery
 import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.jdbc.andWhere
 import org.jetbrains.exposed.v1.jdbc.deleteWhere

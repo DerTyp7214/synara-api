@@ -1,33 +1,40 @@
 package dev.dertyp.services
 
 import dev.dertyp.db.*
-import dev.dertyp.dbQuery
+import dev.dertyp.core.db.SchemaTables
+import dev.dertyp.core.db.dbQuery
 import dev.dertyp.plugins.PluginManager
+import kotlinx.coroutines.sync.Mutex
 import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import org.jetbrains.exposed.v1.jdbc.*
 import org.koin.core.component.get
 import org.koin.core.component.inject
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicBoolean
 
 class LibraryMergeService : Service() {
     private val pluginManager by inject<PluginManager>()
+    private val libraryFileDeleter by inject<LibraryFileDeleter>()
 
-    suspend fun mergeDuplicates(onProgress: suspend (Double, String) -> Unit = { _, _ -> }): Map<String, Any?> = dbQuery {
+    private val albumMergeMutex = Mutex()
+    private val albumMergePending = AtomicBoolean(false)
+
+    suspend fun mergeDuplicates(onProgress: suspend (Double, String) -> Unit = { _, _ -> }): Map<String, Any?> {
         onProgress(0.0, "Merging duplicate songs...")
-        val songsMerged = mergeDuplicateSongs()
-        
+        val songsMerged = dbQuery { mergeDuplicateSongs() }
+
         onProgress(25.0, "Merging same album songs...")
-        val sameAlbumSongsMerged = mergeSameAlbumSongs()
-        
+        val sameAlbumSongsMerged = dbQuery { mergeSameAlbumSongs() }
+
         onProgress(50.0, "Merging duplicate images...")
-        val imagesMerged = mergeDuplicateImages()
-        
+        val imagesMerged = dbQuery { mergeDuplicateImages() }
+
         onProgress(75.0, "Merging duplicate albums...")
         val albumsMerged = mergeDuplicateAlbums()
-        
+
         onProgress(100.0, "Library merge completed")
-        mapOf(
+        return mapOf(
             "songsMerged" to songsMerged,
             "sameAlbumSongsMerged" to sameAlbumSongsMerged,
             "imagesMerged" to imagesMerged,
@@ -138,10 +145,11 @@ class LibraryMergeService : Service() {
             SongTable.deleteWhere { SongTable.id eq oldSongId }
             mergedInGroup++
         }
+        libraryFileDeleter.removeFromSearchIndex(SearchIndexEntityType.SONG, songsToMerge.map { it[SongTable.id].value })
         return mergedInGroup
     }
 
-    suspend fun mergeSameAlbumSongs(): Int {
+    private suspend fun mergeSameAlbumSongs(): Int {
         logger.info("Starting same-album duplicate song merge check")
 
         val allSongsInAlbums = SongTable
@@ -221,6 +229,21 @@ class LibraryMergeService : Service() {
     }
 
     suspend fun mergeDuplicateAlbums(): Int {
+        albumMergePending.set(true)
+        var merged = 0
+        while (albumMergePending.get() && albumMergeMutex.tryLock()) {
+            try {
+                while (albumMergePending.getAndSet(false)) {
+                    merged += dbQuery { mergeDuplicateAlbumsPass() }
+                }
+            } finally {
+                albumMergeMutex.unlock()
+            }
+        }
+        return merged
+    }
+
+    private suspend fun mergeDuplicateAlbumsPass(): Int {
         logger.info("Starting duplicate album merge check")
         var totalMerged = 0
 
@@ -250,6 +273,7 @@ class LibraryMergeService : Service() {
                 AlbumTable.deleteWhere { AlbumTable.id eq oldAlbum[AlbumTable.id].value }
                 totalMerged++
             }
+            libraryFileDeleter.removeFromSearchIndex(SearchIndexEntityType.ALBUM, albumsToMerge.map { it[AlbumTable.id].value })
 
             if (totalMerged > 0) {
                 val albumService = get<AlbumService>()
@@ -293,6 +317,7 @@ class LibraryMergeService : Service() {
                 AlbumTable.deleteWhere { AlbumTable.id eq oldAlbum[AlbumTable.id].value }
                 totalMerged++
             }
+            libraryFileDeleter.removeFromSearchIndex(SearchIndexEntityType.ALBUM, albumsToMerge.map { it[AlbumTable.id].value })
 
             val musicBrainzId = keptAlbum.getOrNull(AlbumMusicBrainzTable.musicBrainzId)?.value
             if (musicBrainzId != null) {
@@ -361,98 +386,130 @@ class LibraryMergeService : Service() {
                 AlbumTable.deleteWhere { AlbumTable.id eq oldAlbum[AlbumTable.id].value }
                 totalMerged++
             }
+            libraryFileDeleter.removeFromSearchIndex(SearchIndexEntityType.ALBUM, albumsToMerge.map { it[AlbumTable.id].value })
         }
 
         logger.info("Duplicate album merge completed")
         return totalMerged
     }
 
-    suspend fun fixIncorrectMerges(onProgress: suspend (Double, String) -> Unit = { _, _ -> }): Int = dbQuery {
-        val allAlbums = AlbumTable.leftJoin(AlbumMusicBrainzTable).selectAll().toList()
+    suspend fun fixIncorrectMerges(onProgress: suspend (Double, String) -> Unit = { _, _ -> }): Int {
+        val albumIds = dbQuery { AlbumTable.select(AlbumTable.id).map { it[AlbumTable.id].value } }
         var totalFixed = 0
 
-        allAlbums.forEachIndexed { index, albumRow ->
-            onProgress((index.toDouble() / allAlbums.size) * 100.0, "Checking album ${albumRow[AlbumTable.name]}...")
+        albumIds.chunked(FIX_MERGES_CHUNK_SIZE).forEachIndexed { chunkIndex, chunk ->
+            val progress = mutableListOf<Pair<Double, String>>()
+            totalFixed += dbQuery {
+                progress.clear()
+                val albumRows = AlbumTable.leftJoin(AlbumMusicBrainzTable)
+                    .selectAll()
+                    .where { AlbumTable.id inList chunk }
+                    .associateBy { it[AlbumTable.id].value }
 
-            val albumId = albumRow[AlbumTable.id].value
-            val albumCover = albumRow[AlbumTable.cover]?.value
-            val albumMbId = albumRow.getOrNull(AlbumMusicBrainzTable.musicBrainzId)?.value
+                var fixedInChunk = 0
+                chunk.forEachIndexed { offset, albumId ->
+                    val albumRow = albumRows[albumId] ?: return@forEachIndexed
+                    val index = chunkIndex * FIX_MERGES_CHUNK_SIZE + offset
+                    progress += (index.toDouble() / albumIds.size) * 100.0 to "Checking album ${albumRow[AlbumTable.name]}..."
+                    fixedInChunk += fixIncorrectMerge(albumRow)
+                }
+                fixedInChunk
+            }
+            progress.forEach { (percent, message) -> onProgress(percent, message) }
+        }
+        return totalFixed
+    }
 
-            val songs = SongTable
-                .leftJoin(SongMusicBrainzTable)
-                .select(
-                    SongTable.id,
-                    SongTable.cover,
-                    SongTable.discNumber,
-                    SongTable.trackNumber,
-                    SongMusicBrainzTable.musicBrainzId
-                )
-                .where { SongTable.albumId eq albumId }
-                .toList()
+    private suspend fun fixIncorrectMerge(albumRow: ResultRow): Int {
+        val albumId = albumRow[AlbumTable.id].value
+        val albumCover = albumRow[AlbumTable.cover]?.value
+        val albumMbId = albumRow.getOrNull(AlbumMusicBrainzTable.musicBrainzId)?.value
 
-            if (songs.size <= 1) return@forEachIndexed
+        val songs = SongTable
+            .leftJoin(SongMusicBrainzTable)
+            .select(
+                SongTable.id,
+                SongTable.cover,
+                SongTable.discNumber,
+                SongTable.trackNumber,
+                SongMusicBrainzTable.musicBrainzId
+            )
+            .where { SongTable.albumId eq albumId }
+            .toList()
 
-            val identityGroups = songs.groupBy { songRow ->
-                val songCover = songRow[SongTable.cover]?.value
-                val songMbId = songRow.getOrNull(SongMusicBrainzTable.musicBrainzId)?.value
+        if (songs.size <= 1) return 0
 
-                val belongs = if (songMbId != null && albumMbId != null) {
-                    MBRecordingReleaseTable.selectAll()
-                        .where { (MBRecordingReleaseTable.recordingId eq songMbId) and (MBRecordingReleaseTable.releaseId eq albumMbId) }
-                        .any()
+        val releasesByRecording = if (albumMbId != null) {
+            recordingReleases(songs.mapNotNull { it.getOrNull(SongMusicBrainzTable.musicBrainzId)?.value }.distinct())
+        } else {
+            emptyMap()
+        }
+
+        val identityGroups = songs.groupBy { songRow ->
+            val songCover = songRow[SongTable.cover]?.value
+            val songMbId = songRow.getOrNull(SongMusicBrainzTable.musicBrainzId)?.value
+
+            val belongs = if (songMbId != null && albumMbId != null) {
+                releasesByRecording[songMbId].orEmpty().contains(albumMbId)
+            } else {
+                true
+            }
+
+            val primaryOtherRelease = if (songMbId != null && !belongs) {
+                releasesByRecording[songMbId]?.firstOrNull()
+            } else null
+
+            Triple(songCover, belongs, primaryOtherRelease)
+        }
+
+        val finalGroups = mutableListOf<Pair<Triple<UUID?, Boolean, UUID?>, List<ResultRow>>>()
+        identityGroups.forEach { (identity, groupSongs) ->
+            val subgroups = mutableListOf<MutableList<ResultRow>>()
+            groupSongs.forEach { song ->
+                val pos = song[SongTable.discNumber] to song[SongTable.trackNumber]
+                val targetSubgroup = subgroups.find { sub ->
+                    sub.none { it[SongTable.discNumber] == pos.first && it[SongTable.trackNumber] == pos.second }
+                }
+                if (targetSubgroup != null) {
+                    targetSubgroup.add(song)
                 } else {
-                    true
+                    subgroups.add(mutableListOf(song))
                 }
-                
-                val primaryOtherRelease = if (songMbId != null && !belongs) {
-                    MBRecordingReleaseTable.select(MBRecordingReleaseTable.releaseId)
-                        .where { MBRecordingReleaseTable.recordingId eq songMbId }
-                        .firstOrNull()?.get(MBRecordingReleaseTable.releaseId)?.value
-                } else null
-
-                Triple(songCover, belongs, primaryOtherRelease)
             }
+            subgroups.forEach { finalGroups.add(identity to it) }
+        }
 
-            val finalGroups = mutableListOf<Pair<Triple<UUID?, Boolean, UUID?>, List<ResultRow>>>()
-            identityGroups.forEach { (identity, groupSongs) ->
-                val subgroups = mutableListOf<MutableList<ResultRow>>()
-                groupSongs.forEach { song ->
-                    val pos = song[SongTable.discNumber] to song[SongTable.trackNumber]
-                    val targetSubgroup = subgroups.find { sub ->
-                        sub.none { it[SongTable.discNumber] == pos.first && it[SongTable.trackNumber] == pos.second }
-                    }
-                    if (targetSubgroup != null) {
-                        targetSubgroup.add(song)
-                    } else {
-                        subgroups.add(mutableListOf(song))
-                    }
-                }
-                subgroups.forEach { finalGroups.add(identity to it) }
-            }
+        if (finalGroups.size <= 1) return 0
 
-            if (finalGroups.size > 1) {
-                val targetGroupIndex = finalGroups.indices.find { i ->
-                    val (identity, _) = finalGroups[i]
-                    identity.first == albumCover && identity.second
-                } ?: finalGroups.indices.find { i -> finalGroups[i].first.second }
-                  ?: finalGroups.indices.find { i -> finalGroups[i].first.first == albumCover }
-                  ?: finalGroups.indices.maxBy { finalGroups[it].second.size }
+        val targetGroupIndex = finalGroups.indices.find { i ->
+            val (identity, _) = finalGroups[i]
+            identity.first == albumCover && identity.second
+        } ?: finalGroups.indices.find { i -> finalGroups[i].first.second }
+          ?: finalGroups.indices.find { i -> finalGroups[i].first.first == albumCover }
+          ?: finalGroups.indices.maxBy { finalGroups[it].second.size }
 
-                val targetIdentity = finalGroups[targetGroupIndex].first
+        val targetIdentity = finalGroups[targetGroupIndex].first
 
-                finalGroups.filterIndexed { i, _ -> i != targetGroupIndex }.forEach { (identity, groupSongs) ->
-                    val (groupCover, belongsToAlbum, suggestedMbId) = identity
-                    
-                    if (groupCover != albumCover || !belongsToAlbum || identity == targetIdentity) {
-                        logger.info("Splitting ${groupSongs.size} songs from album ${albumRow[AlbumTable.name]} ($albumId) - Identity match: $belongsToAlbum, Cover match: ${groupCover == albumCover}, Collision: ${identity == targetIdentity}")
-                        splitSongsToNewAlbum(albumRow, groupSongs, suggestedMbId)
-                        totalFixed++
-                    }
-                }
+        var fixed = 0
+        finalGroups.filterIndexed { i, _ -> i != targetGroupIndex }.forEach { (identity, groupSongs) ->
+            val (groupCover, belongsToAlbum, suggestedMbId) = identity
+
+            if (groupCover != albumCover || !belongsToAlbum || identity == targetIdentity) {
+                logger.info("Splitting ${groupSongs.size} songs from album ${albumRow[AlbumTable.name]} ($albumId) - Identity match: $belongsToAlbum, Cover match: ${groupCover == albumCover}, Collision: ${identity == targetIdentity}")
+                splitSongsToNewAlbum(albumRow, groupSongs, suggestedMbId)
+                fixed++
             }
         }
-        totalFixed
+        return fixed
     }
+
+    private fun recordingReleases(recordingIds: List<UUID>): Map<UUID, List<UUID>> =
+        recordingIds.chunked(5000).flatMap { chunk ->
+            MBRecordingReleaseTable
+                .select(MBRecordingReleaseTable.recordingId, MBRecordingReleaseTable.releaseId)
+                .where { MBRecordingReleaseTable.recordingId inList chunk }
+                .map { it[MBRecordingReleaseTable.recordingId].value to it[MBRecordingReleaseTable.releaseId].value }
+        }.groupBy({ it.first }, { it.second })
 
     private suspend fun splitSongsToNewAlbum(originalAlbum: ResultRow, songs: List<ResultRow>, suggestedMbId: UUID?) {
         val originalAlbumId = originalAlbum[AlbumTable.id].value
@@ -512,10 +569,16 @@ class LibraryMergeService : Service() {
             }
         }
 
-        val artists = AlbumArtistTable.select(AlbumArtistTable.artistId).where { AlbumArtistTable.albumId eq originalAlbumId }.toList()
+        val artists = AlbumArtistTable
+            .select(AlbumArtistTable.artistId, AlbumArtistTable.creditedAliasId, AlbumArtistTable.position, AlbumArtistTable.joinPhrase)
+            .where { AlbumArtistTable.albumId eq originalAlbumId }
+            .toList()
         AlbumArtistTable.batchInsert(artists) { row ->
             this[AlbumArtistTable.albumId] = EntityID(newAlbumId, AlbumTable)
             this[AlbumArtistTable.artistId] = row[AlbumArtistTable.artistId]
+            this[AlbumArtistTable.creditedAliasId] = row[AlbumArtistTable.creditedAliasId]
+            this[AlbumArtistTable.position] = row[AlbumArtistTable.position]
+            this[AlbumArtistTable.joinPhrase] = row[AlbumArtistTable.joinPhrase]
         }
 
         val genres = AlbumGenreTable.select(AlbumGenreTable.genreId).where { AlbumGenreTable.albumId eq originalAlbumId }.toList()
@@ -800,23 +863,17 @@ class LibraryMergeService : Service() {
     }
 
     private fun mergeImageReferences(oldImageId: UUID, keptImageId: UUID) {
-        SongTable.update({ SongTable.cover eq oldImageId }) {
-            it[SongTable.cover] = keptImageId
-        }
-        AlbumTable.update({ AlbumTable.cover eq oldImageId }) {
-            it[AlbumTable.cover] = keptImageId
-        }
-        ArtistTable.update({ ArtistTable.image eq oldImageId }) {
-            it[ArtistTable.image] = keptImageId
-        }
-        UserTable.update({ UserTable.profileImage eq oldImageId }) {
-            it[UserTable.profileImage] = keptImageId
-        }
-        PlaylistTable.update({ PlaylistTable.imageId eq oldImageId }) {
-            it[PlaylistTable.imageId] = keptImageId
-        }
-        UserPlaylistTable.update({ UserPlaylistTable.imageId eq oldImageId }) {
-            it[UserPlaylistTable.imageId] = keptImageId
-        }
+        SchemaTables.referencesTo(ImageTable).forEach { it.repoint(oldImageId, keptImageId) }
+    }
+
+    private fun <T> Column<T>.repoint(oldId: UUID, keptId: UUID): Int {
+        val column = this
+        val old = QueryParameter(columnType.valueFromDB(oldId), columnType)
+        val kept = QueryParameter(columnType.valueFromDB(keptId), columnType)
+        return table.update({ EqOp(column, old) }) { it[column] = kept }
+    }
+
+    companion object {
+        internal const val FIX_MERGES_CHUNK_SIZE = 200
     }
 }

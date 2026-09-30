@@ -6,7 +6,7 @@ import dev.dertyp.data.RpcCallTotal
 import dev.dertyp.db.RpcCallEventTable
 import dev.dertyp.db.RpcCallStatsTable
 import dev.dertyp.db.RpcCallTotalsTable
-import dev.dertyp.dbQuery
+import dev.dertyp.core.db.dbQuery
 import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.jdbc.selectAll
 

@@ -1,15 +1,14 @@
 package dev.dertyp.services
 
+import dev.dertyp.config.ServerConfig
 import dev.dertyp.data.BackupImage
 import dev.dertyp.data.User
 import dev.dertyp.data.UserPlaylistBackup
 import dev.dertyp.serializers.AppJson
-import io.ktor.server.application.ApplicationEnvironment
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.withContext
 import java.io.File
-import java.nio.file.Paths
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
@@ -42,12 +41,9 @@ class UserPlaylistBackupService(
     private val userPlaylistService: UserPlaylistService,
     private val imageService: ImageService,
     private val userService: UserService,
-    environment: ApplicationEnvironment
+    config: ServerConfig
 ) : Service() {
-    private val backupDir =
-        (environment.config.propertyOrNull("backup.dir")?.getString()?.ifBlank { null }?.let { Paths.get(it) }
-            ?: Paths.get(System.getProperty("user.home"), ".config", "backups"))
-            .resolve("user-playlists").toFile()
+    private val backupDir = config.backup.directory.resolve("user-playlists").toFile()
 
     init {
         if (!backupDir.exists()) {

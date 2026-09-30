@@ -4,11 +4,12 @@ import dev.dertyp.ApiClient
 import dev.dertyp.core.*
 import dev.dertyp.data.InsertableImage
 import dev.dertyp.db.*
-import dev.dertyp.dbQuery
+import dev.dertyp.core.db.dbQuery
 import dev.dertyp.services.metadata.IMetadataService
 import dev.dertyp.services.metadata.MetadataService
 import dev.dertyp.services.metadata.MusicBrainzService
 import io.ktor.server.application.ApplicationEnvironment
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.ensureActive
@@ -104,6 +105,8 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
                                 genres.addAll(it.genres)
                                 genres.addAll(it.styles)
                             }
+                        } catch (e: CancellationException) {
+                            throw e
                         } catch (e: Exception) {
                             logger.error("Error fetching artist from TheAudioDB: $mbid", e)
                         }
@@ -112,6 +115,8 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
                             musicBrainzService.fetchArtistById(mbid)?.let {
                                 it.genres?.map { g -> g.name }?.let { g -> genres.addAll(g) }
                             }
+                        } catch (e: CancellationException) {
+                            throw e
                         } catch (e: Exception) {
                             logger.error("Error fetching artist from MusicBrainz: $mbid", e)
                         }
@@ -182,6 +187,8 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
                             tdbService.getAlbumByMbId(mbid)?.let {
                                 genres.addAll(it.genres)
                             }
+                        } catch (e: CancellationException) {
+                            throw e
                         } catch (e: Exception) {
                             logger.error("Error fetching album from TheAudioDB: $mbid", e)
                         }
@@ -253,6 +260,8 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
                             tdbService.getTrackByMbId(mbid)?.let {
                                 genres.addAll(it.genres)
                             }
+                        } catch (e: CancellationException) {
+                            throw e
                         } catch (e: Exception) {
                             logger.error("Error fetching song from TheAudioDB: $mbid", e)
                         }
@@ -409,6 +418,8 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
                             val artist = if (metadataProvider == IMetadataService.MetadataType.theAudioDB && mbid != null) {
                                 try {
                                     service.getArtistByMbId(mbid)
+                                } catch (e: CancellationException) {
+                                    throw e
                                 } catch (e: Exception) {
                                     logger.error("Error fetching artist by MBID for $name ($mbid)", e)
                                     null
@@ -416,6 +427,8 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
                             } else {
                                 val response = try {
                                     service.searchArtists(name, 20)
+                                } catch (e: CancellationException) {
+                                    throw e
                                 } catch (e: Exception) {
                                     logger.error("Error searching artists for $name", e)
                                     emptyList()
@@ -533,6 +546,8 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
                         val artist = if (metadataProvider == IMetadataService.MetadataType.theAudioDB && mbid != null) {
                             try {
                                 service.getArtistByMbId(mbid)
+                            } catch (e: CancellationException) {
+                                throw e
                             } catch (e: Exception) {
                                 logger.error("Error fetching artist by MBID for $name ($mbid)", e)
                                 null
@@ -540,6 +555,8 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
                         } else {
                             val response = try {
                                 service.searchArtists(name, 20)
+                            } catch (e: CancellationException) {
+                                throw e
                             } catch (e: Exception) {
                                 logger.error("Error searching artists for $name", e)
                                 emptyList()
@@ -666,6 +683,8 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
                             val images = if (metadataProvider == IMetadataService.MetadataType.theAudioDB && mbid != null) {
                                 try {
                                     service.getImageUrlByAlbumMbId(mbid)
+                                } catch (e: CancellationException) {
+                                    throw e
                                 } catch (e: Exception) {
                                     logger.error("Error fetching images by MBID for $name ($mbid)", e)
                                     emptyList()
@@ -675,6 +694,8 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
                                     service.searchAlbums(name, 20)
                                         .firstOrNull { it.title.equals(name, ignoreCase = true) }
                                         ?.images ?: emptyList()
+                                } catch (e: CancellationException) {
+                                    throw e
                                 } catch (e: Exception) {
                                     logger.error("Error searching albums for $name", e)
                                     emptyList()
@@ -781,6 +802,8 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
                         val albumMetadata = if (metadataProvider == IMetadataService.MetadataType.theAudioDB && mbid != null) {
                             try {
                                 service.getAlbumByMbId(mbid)
+                            } catch (e: CancellationException) {
+                                throw e
                             } catch (e: Exception) {
                                 logger.error("Error fetching album by MBID for $name ($mbid)", e)
                                 null
@@ -789,6 +812,8 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
                             try {
                                 service.searchAlbums(name, 20)
                                     .firstOrNull { it.title.equals(name, ignoreCase = true) }
+                            } catch (e: CancellationException) {
+                                throw e
                             } catch (e: Exception) {
                                 logger.error("Error searching albums for $name", e)
                                 null
@@ -904,6 +929,8 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
 
                         val trackMetadata = try {
                             service.getTrackByMbId(mbid)
+                        } catch (e: CancellationException) {
+                            throw e
                         } catch (e: Exception) {
                             logger.error("Error fetching track by MBID for $name ($mbid)", e)
                             null
@@ -967,6 +994,8 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
         val artist = if (metadataProvider == IMetadataService.MetadataType.theAudioDB && mbid != null) {
             try {
                 service.getArtistByMbId(mbid)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 logger.error("Error fetching artist by MBID for $name ($mbid)", e)
                 null
@@ -974,6 +1003,8 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
         } else {
             val response = try {
                 service.searchArtists(name, 20)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 logger.error("Error searching artists for $name", e)
                 emptyList()
@@ -1014,7 +1045,7 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
         val images = artist.images
         val image = images.maxByOrNull { it.width }
         if (image != null) {
-            val imageBytes = ApiClient.instance.safeQueuedGetImage(
+            val imageBytes = ApiClient.queueInstance.safeQueuedGetImage(
                 urlString = image.url,
                 priority = HttpClientPriority.HIGH
             )

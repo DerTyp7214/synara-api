@@ -5,7 +5,7 @@ import dev.dertyp.services.MetadataFetchingService
 import dev.dertyp.services.metadata.IMetadataService
 import org.koin.core.component.inject
 
-@WorkerTask(TaskKeys.FETCH_METADATA_THEAUDIODB, "Fetch Metadata (TheAudioDB)")
+@WorkerTask(TaskKeys.FETCH_METADATA_THEAUDIODB, "Fetch Metadata (TheAudioDB)", afterTask = TaskKeys.ARTIST_IMAGE_WORKER)
 class MetadataTheAudioDBWorker : Worker("MetadataTheAudioDBWorker") {
     private val metadataFetchingService by inject<MetadataFetchingService>()
 

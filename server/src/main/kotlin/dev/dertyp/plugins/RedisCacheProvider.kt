@@ -3,6 +3,7 @@ package dev.dertyp.plugins
 import com.google.gson.Gson
 import com.ucasoft.ktor.simpleCache.SimpleCacheConfig
 import com.ucasoft.ktor.simpleCache.SimpleCacheProvider
+import dev.dertyp.config.ServerConfig
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 import org.koin.core.context.loadKoinModules
@@ -11,8 +12,9 @@ import redis.clients.jedis.HostAndPort
 import redis.clients.jedis.RedisClusterClient
 import redis.clients.jedis.params.SetParams
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.days
 
-class RedisCacheProvider(config: Config) : SimpleCacheProvider(config) {
+class RedisCacheProvider(config: Config) : SimpleCacheProvider(config), AutoCloseable {
     val jedis: RedisClusterClient = RedisClusterClient.create(HostAndPort(config.host, config.port))
 
     init {
@@ -38,6 +40,10 @@ class RedisCacheProvider(config: Config) : SimpleCacheProvider(config) {
                 SetParams().px(invalidateAt.inWholeMilliseconds)
             )
         else jedis.set(key, RedisCacheObject.fromObject(content).toString())
+    }
+
+    override fun close() {
+        jedis.close()
     }
 
     class Config internal constructor() : SimpleCacheProvider.Config() {
@@ -73,6 +79,20 @@ class RedisCacheObject(val type: String, val content: String) : KoinComponent {
             val jsonString = cache.substring(colonIndex + 1 + typeLength)
             return gson.fromJson(jsonString, Class.forName(type)) as T
         }
+    }
+}
+
+fun ServerConfig.toRedisCacheProviderConfig(): RedisCacheProvider.Config {
+    val settings = redis
+    val redisHost = settings.host
+    if (redisHost.isNullOrBlank()) return RedisCacheProvider.Config().apply { host = "none" }
+    return RedisCacheProvider.Config().apply {
+        invalidateAt = 30.days
+        host = redisHost
+        port = settings.port ?: port
+        useRedisSearch = settings.useSearch ?: useRedisSearch
+        indexPrefix = settings.indexPrefix ?: indexPrefix
+        cacheAnimatedImages = settings.cacheAnimatedImages ?: cacheAnimatedImages
     }
 }
 

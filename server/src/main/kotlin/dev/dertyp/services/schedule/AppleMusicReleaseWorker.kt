@@ -4,7 +4,7 @@ import dev.dertyp.data.TaskKeys
 import dev.dertyp.services.release.AppleMusicReleaseService
 import org.koin.core.component.inject
 
-@WorkerTask(TaskKeys.APPLE_MUSIC_RELEASE_WORKER, "Apple Music Release Worker")
+@WorkerTask(TaskKeys.APPLE_MUSIC_RELEASE_WORKER, "Apple Music Release Worker", cron = "0 6 * * *")
 class AppleMusicReleaseWorker : Worker("AppleMusicReleaseWorker") {
     private val appleMusicReleaseService by inject<AppleMusicReleaseService>()
 

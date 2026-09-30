@@ -76,6 +76,8 @@ class SongDeduplicationTest : KoinTest {
                 single { imageService }
                 single { pluginManager }
                 single { LibraryMergeService() }
+                single { LibraryFileDeleter() }
+                single { mockk<RedisSearchService>(relaxed = true) }
             })
         }
     }

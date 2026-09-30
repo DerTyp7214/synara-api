@@ -1,6 +1,6 @@
 package dev.dertyp.routing
 
-import dev.dertyp.AudioUtils
+import dev.dertyp.audio.Transcoder
 import dev.dertyp.core.apiKeyUser
 import dev.dertyp.core.fullTitle
 import dev.dertyp.core.toUUIDOrNull
@@ -17,6 +17,7 @@ import io.ktor.server.application.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.ktor.utils.io.*
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -34,6 +35,7 @@ fun Route.radioRouting() {
     val radioService by inject<RadioService>()
     val radioChannelService by inject<RadioChannelService>()
     val songService by inject<SongService>()
+    val transcoder by inject<Transcoder>()
 
     route("/radio") {
         get("/channel/{channelId}/stream", {
@@ -72,7 +74,7 @@ fun Route.radioRouting() {
                 radioChannelService.randomSongs(channelId, exclude, limit)
             }
             val session = radioService.getSession(sessionId, user.id)
-            call.streamRadio(radioService, songService, session, quality, channel.name)
+            call.streamRadio(radioService, songService, transcoder, session, quality, channel.name)
         }
 
         get("/{sessionId}/stream", {
@@ -104,10 +106,12 @@ fun Route.radioRouting() {
                 ?: return@get call.respond(HttpStatusCode.BadRequest, "invalid session id")
             val session = try {
                 radioService.getSession(sessionId, user.id)
+            } catch (e: CancellationException) {
+                throw e
             } catch (_: Exception) {
                 return@get call.respond(HttpStatusCode.NotFound, "unknown radio session")
             }
-            call.streamRadio(radioService, songService, session, quality)
+            call.streamRadio(radioService, songService, transcoder, session, quality)
         }
 
         get("/stream", {
@@ -144,7 +148,7 @@ fun Route.radioRouting() {
             val seed = parseSeed(call.request.queryParameters)
             val sessionId = radioService.createSession(user.id, type, seed)
             val session = radioService.getSession(sessionId, user.id)
-            call.streamRadio(radioService, songService, session, quality)
+            call.streamRadio(radioService, songService, transcoder, session, quality)
         }
     }
 }
@@ -163,6 +167,7 @@ private const val ICY_META_INTERVAL = 16000
 internal suspend fun ApplicationCall.streamRadio(
     radioService: RadioService,
     songService: SongService,
+    transcoder: Transcoder,
     session: RadioService.RadioSessionState,
     quality: Int,
     stationName: String = "Synara Radio",
@@ -174,10 +179,10 @@ internal suspend fun ApplicationCall.streamRadio(
     suspend fun nextTranscoded(): Pair<File, String> {
         val songId = radioService.nextSongId(session)
         val song = songService.byId(songId) ?: error("song missing for $songId")
-        val m4a = AudioUtils.transcodeAudio(environment, File(song.path), quality, false, AudioFormat.AAC).file
+        val m4a = transcoder.transcodeAudio(environment, File(song.path), quality, false, AudioFormat.AAC).file
         val adts = withContext(Dispatchers.IO) { Files.createTempFile("radio_", ".aac").toFile() }
         synchronized(tempFiles) { tempFiles.add(adts) }
-        AudioUtils.remuxToAdts(m4a, adts)
+        transcoder.remuxToAdts(m4a, adts)
         val artists = song.artists.joinToString(", ") { it.creditedName ?: it.name }
         return adts to if (artists.isEmpty()) song.fullTitle else "$artists - ${song.fullTitle}"
     }

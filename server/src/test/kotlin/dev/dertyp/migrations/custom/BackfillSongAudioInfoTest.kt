@@ -5,13 +5,11 @@ import dev.dertyp.TestDatabase
 import dev.dertyp.audio.AudioProbe
 import dev.dertyp.data.AudioInfo
 import dev.dertyp.db.*
-import dev.dertyp.services.ScheduledTaskLogService
+import dev.dertyp.testing.relaxedTaskLogService
 import io.mockk.every
-import io.mockk.mockk
 import io.mockk.mockkObject
 import io.mockk.unmockkObject
 import kotlinx.coroutines.runBlocking
-import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.*
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
@@ -30,8 +28,7 @@ class BackfillSongAudioInfoTest : KoinTest {
     private lateinit var database: Database
 
     fun setup(dialect: DbDialect) {
-        val logService = mockk<ScheduledTaskLogService>(relaxed = true)
-        every { logService.startLog(any(), any()) } returns EntityID(UUID.randomUUID(), ScheduledTaskLogTable)
+        val logService = relaxedTaskLogService()
         startKoin { modules(module { single { logService } }) }
 
         database = TestDatabase.connect(dialect, "backfill_audio_info_test")

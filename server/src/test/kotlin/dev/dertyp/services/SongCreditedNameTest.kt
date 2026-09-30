@@ -63,6 +63,8 @@ class SongCreditedNameTest : KoinTest {
                 single { mockk<ImageService>(relaxed = true) }
                 single { mockk<PluginManager>(relaxed = true) }
                 single { LibraryMergeService() }
+                single { LibraryFileDeleter() }
+                single { mockk<RedisSearchService>(relaxed = true) }
             })
         }
     }

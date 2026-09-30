@@ -2,7 +2,7 @@ package dev.dertyp.services.metadata
 
 import dev.dertyp.core.HttpClientPriority
 import dev.dertyp.db.*
-import dev.dertyp.dbQuery
+import dev.dertyp.core.db.dbQuery
 import dev.dertyp.services.Service
 import dev.dertyp.services.import.Type
 import dev.dertyp.utils.parsers.ParserFactory

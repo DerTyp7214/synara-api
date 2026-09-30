@@ -1,11 +1,10 @@
 package dev.dertyp.services.credentials
 
+import dev.dertyp.config.toCredentialsConfig
 import dev.dertyp.core.sha256
 import io.ktor.server.config.ApplicationConfig
 import io.ktor.util.logging.KtorSimpleLogger
 import java.nio.file.Files
-import java.nio.file.Path
-import java.nio.file.Paths
 import java.nio.file.attribute.PosixFilePermissions
 import java.security.SecureRandom
 import javax.crypto.Cipher
@@ -13,9 +12,10 @@ import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
 import kotlin.io.encoding.Base64
 
-class CredentialCipher(private val config: ApplicationConfig) {
+class CredentialCipher(config: ApplicationConfig) {
     private val logger = KtorSimpleLogger("CredentialCipher")
     private val random = SecureRandom()
+    private val settings by lazy { config.toCredentialsConfig() }
 
     private val key: SecretKeySpec by lazy { SecretKeySpec(resolveKey(), "AES") }
 
@@ -46,12 +46,12 @@ class CredentialCipher(private val config: ApplicationConfig) {
     }
 
     private fun resolveKey(): ByteArray {
-        val configured = config.propertyOrNull("credentials.encryptionKey")?.getString()?.trim().orEmpty()
+        val configured = settings.encryptionKey
         if (configured.isNotEmpty()) {
             logger.info("Credentials are encrypted with the key from CREDENTIALS_ENCRYPTION_KEY")
             return configured.toByteArray(Charsets.UTF_8).sha256().hexToByteArray()
         }
-        val file = keyFile()
+        val file = settings.keyFile
         if (Files.exists(file)) {
             val decoded = Base64.decode(Files.readString(file).trim())
             check(decoded.size == KEY_BYTES) { "Credential key file $file does not hold a $KEY_BYTES byte key" }
@@ -68,10 +68,6 @@ class CredentialCipher(private val config: ApplicationConfig) {
         logger.info("Generated a new credential key file at $file")
         return generated
     }
-
-    private fun keyFile(): Path =
-        config.propertyOrNull("credentials.keyFile")?.getString()?.trim()?.ifBlank { null }?.let { Paths.get(it) }
-            ?: Paths.get(System.getProperty("user.home"), ".config", "synara", "credentials.key")
 
     companion object {
         const val PREFIX = "enc:v1:"

@@ -17,6 +17,7 @@ import dev.dertyp.db.SongVariantTable
 import dev.dertyp.db.UserQueueEntryTable
 import dev.dertyp.db.UserQueueTable
 import dev.dertyp.db.UserTable
+import dev.dertyp.testing.insertUser
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.core.eq
@@ -74,16 +75,6 @@ class QueueCleanupTest : KoinTest {
     fun tearDown() {
         stopKoin()
         TestDatabase.cleanUp()
-    }
-
-    private fun insertUser(): UUID {
-        val newId = UUID.randomUUID()
-        UserTable.insert {
-            it[id] = newId
-            it[username] = "user_$newId"
-            it[passwordHash] = "hash"
-        }
-        return newId
     }
 
     private fun insertSong(): UUID {

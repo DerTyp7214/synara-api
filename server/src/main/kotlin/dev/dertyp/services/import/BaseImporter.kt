@@ -3,6 +3,7 @@ package dev.dertyp.services.import
 import dev.dertyp.PlatformUUID
 import dev.dertyp.audio.AtmosProcessor
 import dev.dertyp.core.*
+import dev.dertyp.core.process.ExternalTool
 import dev.dertyp.data.User
 import dev.dertyp.data.UserSong
 import dev.dertyp.plugins.IImporter
@@ -37,6 +38,8 @@ abstract class BaseImporter(override var indexer: IPluginIndexer, internal val s
     open val workingDirectory: File? get() = pluginStorage.tracksPath?.let { File(it).apply { mkdirs() } }
 
     internal val loggingIn = AtomicBoolean(false)
+
+    protected abstract val tool: ExternalTool
 
     internal abstract fun authorizedCheck(result: ProcessExecutionResult): Boolean
     internal open fun parseFavType(favType: ImportFavType): String = favType.name
@@ -290,10 +293,10 @@ abstract class BaseImporter(override var indexer: IPluginIndexer, internal val s
         return true
     }
 
-    internal abstract suspend fun executeImporter(
+    internal open suspend fun executeImporter(
         command: Collection<String>,
         aliveCheck: suspend () -> Boolean,
         directory: File? = workingDirectory,
         onLineReceived: suspend (String) -> Unit = {}
-    ): ProcessExecutionResult
+    ): ProcessExecutionResult = tool.runCommand(command, logger, aliveCheck, directory, onLineReceived)
 }

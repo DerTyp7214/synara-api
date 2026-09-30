@@ -4,7 +4,7 @@ import dev.dertyp.PlatformUUID
 import dev.dertyp.core.*
 import dev.dertyp.data.*
 import dev.dertyp.db.*
-import dev.dertyp.dbQuery
+import dev.dertyp.core.db.dbQuery
 import dev.dertyp.formatISO
 import dev.dertyp.plugins.HookBus
 import dev.dertyp.plugins.HookEvent
@@ -33,6 +33,7 @@ class UserPlaylistService : PlaylistLibrary, IUserPlaylistService, Service() {
     private val songService by inject<SongService>()
     private val cachedMusicBrainzService by inject<CachedMusicBrainzService>()
     private val hooks by inject<HookBus>()
+    private val redisSearchService by inject<RedisSearchService>()
 
     companion object {
         fun mapPlaylist(resultRow: ResultRow): UserPlaylist {
@@ -104,11 +105,12 @@ class UserPlaylistService : PlaylistLibrary, IUserPlaylistService, Service() {
     ): PaginatedResponse<UserPlaylist> =
         queryPlaylists(page, pageSize) {
             rankedSearchQuery(
+                redisSearchService,
                 query,
                 listOf(10),
                 listOf(UserPlaylistTable.name),
                 UserPlaylistTable.id
-            ).scope()
+            ).query.scope()
         }
 
     override suspend fun allPlaylists(creator: UUID?, page: Int, pageSize: Int): PaginatedResponse<UserPlaylist> =
@@ -343,18 +345,23 @@ class UserPlaylistService : PlaylistLibrary, IUserPlaylistService, Service() {
     ) =
         dbQuery {
             val offset = if (pageSize == Int.MAX_VALUE) 0 else 1
-            val mainPlaylistRows = UserPlaylistTable
+            val mainQuery = UserPlaylistTable
                 .leftJoin(ImageTable, onColumn = { UserPlaylistTable.imageId }, otherColumn = { ImageTable.id })
                 .columnSet()
                 .selectAll()
                 .query()
+            val countExpression = UserPlaylistTable.id.countDistinct()
+            val total = if (pageSize == Int.MAX_VALUE) null else Query(Slice(mainQuery.set.source, listOf(countExpression)), mainQuery.where)
+                .first()[countExpression]
+                .toInt()
+            val mainPlaylistRows = mainQuery
                 .orderBy(UserPlaylistTable.name)
                 .paging(page, pageSize, offset)
                 .toList()
 
             if (mainPlaylistRows.isEmpty()) return@dbQuery PaginatedResponse(
                 data = listOf(),
-                total = 0,
+                total = total ?: 0,
                 page = page,
                 pageSize = pageSize
             )
@@ -377,11 +384,11 @@ class UserPlaylistService : PlaylistLibrary, IUserPlaylistService, Service() {
             val data = mapEagerly(mainPlaylistRows, songLinkRows, songInfoById)
 
             PaginatedResponse(
-                data = data.drop(page * pageSize).take(pageSize),
-                total = data.size,
+                data = data.take(pageSize),
+                total = total ?: data.size,
                 page = page,
                 pageSize = pageSize,
-                hasNextPage = data.drop(page * pageSize).size >= pageSize + offset,
+                hasNextPage = data.size >= pageSize + offset,
             )
         }
 

@@ -305,7 +305,7 @@ class UpcomingReleaseImportService(
         for (isrc in track.isrcs) {
             val outcome = semaphore.withPermit {
                 withTimeoutOrNull(LOOKUP_TIMEOUT) {
-                    runCatching { tidal.getTrackByIsrc(isrc, HttpClientPriority.HIGH) }
+                    runCatchingCancellable { tidal.getTrackByIsrc(isrc, HttpClientPriority.HIGH) }
                 }
             }
 

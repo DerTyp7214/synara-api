@@ -3,6 +3,7 @@ package dev.dertyp.services
 import at.favre.lib.crypto.bcrypt.BCrypt
 import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
+import dev.dertyp.config.ServerConfig
 import dev.dertyp.core.date
 import dev.dertyp.core.getUser
 import dev.dertyp.core.plus
@@ -16,7 +17,6 @@ import io.github.smiley4.ktoropenapi.route
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.auth.HttpAuthHeader
 import io.ktor.server.application.Application
-import io.ktor.server.application.ApplicationEnvironment
 import io.ktor.server.auth.authenticate
 import io.ktor.server.auth.authentication
 import io.ktor.server.auth.jwt.JWTPrincipal
@@ -28,6 +28,7 @@ import io.ktor.server.request.receive
 import io.ktor.server.request.userAgent
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
+import kotlinx.coroutines.CancellationException
 import java.security.SecureRandom
 import java.time.Instant
 import java.util.UUID
@@ -36,15 +37,15 @@ import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.hours
 
 class JwtService(
-    environment: ApplicationEnvironment,
+    config: ServerConfig,
     private val userService: UserService,
     private val refreshTokenService: RefreshTokenService,
     private val sessionService: SessionService
 ) : Service() {
-    val jwtAudience = environment.config.property("jwt.audience").getString()
-    val jwtIssuer = environment.config.property("jwt.issuer").getString()
-    val jwtRealm = environment.config.property("jwt.realm").getString()
-    val jwtSecret = environment.config.property("jwt.secret").getString()
+    val jwtAudience = config.jwt.audience
+    val jwtIssuer = config.jwt.issuer
+    val jwtRealm = config.jwt.realm
+    val jwtSecret = config.jwt.secret
 
     fun authenticated(route: Route, routeBuilder: Route.() -> Unit) = route.authenticate(AUTH_PROVIDER) {
         route({
@@ -103,6 +104,8 @@ class JwtService(
                 .build()
             val decoded = verifier.verify(token)
             validateToken(decoded)
+        } catch (e: CancellationException) {
+            throw e
         } catch (_: Exception) {
             null
         }

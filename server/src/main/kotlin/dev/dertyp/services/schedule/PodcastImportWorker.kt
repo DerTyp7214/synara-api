@@ -4,7 +4,7 @@ import dev.dertyp.data.TaskKeys
 import dev.dertyp.services.podcast.PodcastImportService
 import org.koin.core.component.inject
 
-@WorkerTask(TaskKeys.PODCAST_IMPORT, "Podcast Import")
+@WorkerTask(TaskKeys.PODCAST_IMPORT, "Podcast Import", cron = "*/15 * * * *")
 class PodcastImportWorker : Worker("PodcastImportWorker") {
     private val importService by inject<PodcastImportService>()
 

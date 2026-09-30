@@ -1,5 +1,6 @@
 package dev.dertyp.services
 
+import dev.dertyp.config.ServerConfig
 import io.ktor.server.application.ApplicationEnvironment
 import io.ktor.server.config.MapApplicationConfig
 import io.mockk.every
@@ -77,7 +78,7 @@ class StorageServiceTest {
         val environment = mockk<ApplicationEnvironment>()
         every { environment.config } returns config
 
-        val service = StorageService(environment)
+        val service = StorageService(ServerConfig(environment.config))
         
         // expected: 
         // mainParents (audioDir) size: 5 + 10 + 3 = 18
@@ -103,7 +104,7 @@ class StorageServiceTest {
         val environment = mockk<ApplicationEnvironment>()
         every { environment.config } returns config
 
-        val service = StorageService(environment)
+        val service = StorageService(ServerConfig(environment.config))
         assertEquals(0L, service.getTotalStorage())
     }
 
@@ -137,7 +138,7 @@ class StorageServiceTest {
         val environment = mockk<ApplicationEnvironment>()
         every { environment.config } returns config
 
-        val service = StorageService(environment)
+        val service = StorageService(ServerConfig(environment.config))
 
         // Parent is 'audio', total size 8.
         assertEquals(8L, service.getTotalStorage())
@@ -173,7 +174,7 @@ class StorageServiceTest {
         val environment = mockk<ApplicationEnvironment>()
         every { environment.config } returns config
 
-        val service = StorageService(environment)
+        val service = StorageService(ServerConfig(environment.config))
         
         // Parent of tracks is 'audio'. 'custom' is also in 'audio'.
         // total size should be 9.

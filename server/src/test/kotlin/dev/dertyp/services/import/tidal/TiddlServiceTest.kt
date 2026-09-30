@@ -1,7 +1,7 @@
 package dev.dertyp.services.import.tidal
 
-import dev.dertyp.executeCommand
-import dev.dertyp.findInPath
+import dev.dertyp.core.process.executeCommand
+import dev.dertyp.core.process.findInPath
 import dev.dertyp.plugins.IPluginIndexer
 import dev.dertyp.plugins.IServerStorageService
 import dev.dertyp.services.import.ImportFavType
@@ -21,7 +21,7 @@ class TiddlServiceTest {
 
     @BeforeEach
     fun setup() {
-        mockkStatic("dev.dertyp.UtilsKt")
+        mockkStatic("dev.dertyp.core.process.CommandKt")
         every { findInPath("tiddl") } returns "/usr/local/bin/tiddl"
         service = TiddlService(indexer, storageService)
     }

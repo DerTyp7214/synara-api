@@ -1,6 +1,7 @@
 package dev.dertyp.services.ui
 
 import dev.dertyp.core.ApplicationScope
+import dev.dertyp.core.runCatchingCancellable
 import dev.dertyp.data.User
 import dev.dertyp.data.UserCapability
 import dev.dertyp.plugins.IImporter
@@ -9,6 +10,7 @@ import dev.dertyp.plugins.UiContribution
 import dev.dertyp.plugins.UiHookOffer
 import dev.dertyp.plugins.UiRenderScope
 import dev.dertyp.services.ISyncService
+import dev.dertyp.services.Service
 import dev.dertyp.services.UserService
 import dev.dertyp.services.import.FavouriteImportQueueEntry
 import dev.dertyp.services.import.ImportQueueEntry
@@ -43,6 +45,7 @@ import dev.dertyp.ui.UiTextStyle
 import dev.dertyp.ui.UiTone
 import dev.dertyp.ui.UiValue
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -61,7 +64,7 @@ class ImporterState(
     val importerProxy: ImporterProxy,
     val intakeService: IntakeService,
     val jobService: JobService,
-) {
+) : Service() {
     private val authChangeFlow = MutableSharedFlow<Unit>(extraBufferCapacity = 8, onBufferOverflow = BufferOverflow.DROP_OLDEST)
     val authChanges: Flow<Unit> = authChangeFlow.asSharedFlow()
 
@@ -82,7 +85,7 @@ class ImporterState(
     private val logBuffer = ArrayDeque<String>()
 
     private val logCollector by lazy {
-        ApplicationScope.scope.launch {
+        scope.launch(start = CoroutineStart.UNDISPATCHED) {
             importService.log.filterNotNull().filter(::lineOk).collect { line ->
                 synchronized(logBuffer) {
                     logBuffer.addLast(line)
@@ -90,6 +93,10 @@ class ImporterState(
                 }
             }
         }
+    }
+
+    override suspend fun startService() {
+        startLogBuffer()
     }
 
     fun startLogBuffer() {
@@ -126,7 +133,7 @@ class ImporterState(
                 authChangeFlow.tryEmit(Unit)
             }
         }
-        val loginUrl = withTimeoutOrNull(30.seconds) { runCatching { url.await() }.getOrNull() }
+        val loginUrl = withTimeoutOrNull(30.seconds) { runCatchingCancellable { url.await() }.getOrNull() }
         if (loginUrl == null) {
             job.cancel()
             return UiInvokeResult(UiInvokeStatus.ERROR, scope.t("importer.error.loginUrl"))

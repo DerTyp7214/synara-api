@@ -4,7 +4,7 @@ import dev.dertyp.data.TaskKeys
 import dev.dertyp.services.SessionService
 import org.koin.core.component.inject
 
-@WorkerTask(TaskKeys.SESSION_CLEANUP, "Session Cleanup")
+@WorkerTask(TaskKeys.SESSION_CLEANUP, "Session Cleanup", cron = "0 0 * * *")
 class SessionCleanupWorker : Worker("SessionCleanupWorker") {
     private val sessionService by inject<SessionService>()
 

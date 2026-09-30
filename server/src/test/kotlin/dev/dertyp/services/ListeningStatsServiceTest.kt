@@ -8,6 +8,7 @@ import dev.dertyp.data.TopOrder
 import dev.dertyp.db.*
 import dev.dertyp.plugins.HookBus
 import dev.dertyp.services.sync.ListenBrainzService
+import dev.dertyp.testing.*
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.jdbc.Database
@@ -84,69 +85,6 @@ class ListeningStatsServiceTest : KoinTest {
     private fun epochMs(year: Int, month: Int, day: Int, hour: Int = 0): Long =
         ZonedDateTime.of(year, month, day, hour, 0, 0, 0, ZoneOffset.UTC).toInstant().toEpochMilli()
 
-    private fun insertUser(): UUID {
-        val uid = UUID.randomUUID()
-        UserTable.insert {
-            it[id] = uid
-            it[username] = "user_$uid"
-            it[passwordHash] = "x"
-        }
-        return uid
-    }
-
-    private fun insertAlbum(name: String = "Album"): UUID {
-        val aid = UUID.randomUUID()
-        AlbumTable.insert {
-            it[id] = aid
-            it[AlbumTable.name] = name
-        }
-        return aid
-    }
-
-    private fun insertSong(albumId: UUID, title: String = "Song", durationMs: Long = 0): UUID {
-        val sid = UUID.randomUUID()
-        SongTable.insert {
-            it[id] = sid
-            it[SongTable.title] = title
-            it[SongTable.albumId] = albumId
-            it[fileSize] = 0
-            it[SongTable.duration] = durationMs
-        }
-        return sid
-    }
-
-    private fun insertArtist(name: String): UUID {
-        val aid = UUID.randomUUID()
-        ArtistTable.insert {
-            it[id] = aid
-            it[ArtistTable.name] = name
-        }
-        return aid
-    }
-
-    private fun linkSongArtist(songId: UUID, artistId: UUID) {
-        SongArtistTable.insert {
-            it[SongArtistTable.songId] = songId
-            it[SongArtistTable.artistId] = artistId
-        }
-    }
-
-    private fun insertLbUser(): UUID {
-        val id = UUID.randomUUID()
-        ListenBrainzUserTable.insert {
-            it[ListenBrainzUserTable.id] = id
-            it[username] = "lb_$id"
-        }
-        return id
-    }
-
-    private fun link(userId: UUID, lbUserId: UUID) {
-        UserListenBrainzLinkTable.insert {
-            it[UserListenBrainzLinkTable.userId] = userId
-            it[listenBrainzUserId] = lbUserId
-        }
-    }
-
     private fun insertListen(
         at: Long,
         userId: UUID? = null,
@@ -195,7 +133,7 @@ class ListeningStatsServiceTest : KoinTest {
         val user = transaction(database) {
             val u = insertUser()
             val lb = insertLbUser()
-            link(u, lb)
+            linkListenBrainzUser(u, lb)
             val song = insertSong(insertAlbum())
             insertListen(at(1), lbUserId = lb, songId = song)
             insertListen(at(1) + 1000, userId = u, songId = song)
@@ -215,7 +153,7 @@ class ListeningStatsServiceTest : KoinTest {
         val user = transaction(database) {
             val u = insertUser()
             val lb = insertLbUser()
-            link(u, lb)
+            linkListenBrainzUser(u, lb)
             val album = insertAlbum()
             val mbid = UUID.randomUUID()
             insertListen(at(1), lbUserId = lb, songId = insertSong(album), recordingMbid = mbid)
@@ -237,7 +175,7 @@ class ListeningStatsServiceTest : KoinTest {
         val (user, localSong) = transaction(database) {
             val u = insertUser()
             val lb = insertLbUser()
-            link(u, lb)
+            linkListenBrainzUser(u, lb)
             val album = insertAlbum()
             val lbSong = insertSong(album, title = "LB Song", durationMs = 229_133)
             val localSong = insertSong(album, title = "Local Song", durationMs = 229_133)
@@ -262,7 +200,7 @@ class ListeningStatsServiceTest : KoinTest {
         val (user, localSong) = transaction(database) {
             val u = insertUser()
             val lb = insertLbUser()
-            link(u, lb)
+            linkListenBrainzUser(u, lb)
             val album = insertAlbum()
             val localSong = insertSong(album, title = "Local Song", durationMs = 157_020)
             val lbSong = insertSong(album, title = "LB Song", durationMs = 157_020)
@@ -286,7 +224,7 @@ class ListeningStatsServiceTest : KoinTest {
         val (user, lbSong) = transaction(database) {
             val u = insertUser()
             val lb = insertLbUser()
-            link(u, lb)
+            linkListenBrainzUser(u, lb)
             val lbSong = insertSong(insertAlbum(), title = "LB Song", durationMs = 200_000)
             insertListen(at(1), lbUserId = lb, songId = lbSong, playedMs = 200_000)
             u to lbSong
@@ -324,7 +262,7 @@ class ListeningStatsServiceTest : KoinTest {
         val user = transaction(database) {
             val u = insertUser()
             val lb = insertLbUser()
-            link(u, lb)
+            linkListenBrainzUser(u, lb)
             val song = insertSong(insertAlbum(), durationMs = 240_000)
             insertListen(at(2), userId = u, songId = song, playedMs = 200_000)
             insertListen(at(1), lbUserId = lb, songId = song, playedMs = 240_000)
@@ -345,7 +283,7 @@ class ListeningStatsServiceTest : KoinTest {
         val user = transaction(database) {
             val u = insertUser()
             val lb = insertLbUser()
-            link(u, lb)
+            linkListenBrainzUser(u, lb)
             insertListen(at(1), lbUserId = lb, trackName = "Track A", artistName = "Artist A")
             insertListen(at(1) + 500, lbUserId = lb, trackName = "Track B", artistName = "Artist B")
             u
@@ -366,7 +304,7 @@ class ListeningStatsServiceTest : KoinTest {
         val user = transaction(database) {
             val u = insertUser()
             val lb = insertLbUser()
-            link(u, lb)
+            linkListenBrainzUser(u, lb)
             insertListen(at(1), lbUserId = lb, trackName = "My Track", artistName = "My Artist")
             insertListen(at(2), lbUserId = lb, trackName = "my track ", artistName = "MY ARTIST")
             val mbid = UUID.randomUUID()
@@ -612,7 +550,7 @@ class ListeningStatsServiceTest : KoinTest {
         val (user, artist, album) = transaction(database) {
             val u = insertUser()
             val lb = insertLbUser()
-            link(u, lb)
+            linkListenBrainzUser(u, lb)
             val artist = insertArtist("Lib Artist")
             val mbArtist = UUID.randomUUID()
             MBArtistTable.insert {
@@ -672,7 +610,7 @@ class ListeningStatsServiceTest : KoinTest {
         val (user, imageId) = transaction(database) {
             val u = insertUser()
             val lb = insertLbUser()
-            link(u, lb)
+            linkListenBrainzUser(u, lb)
             val imageId = UUID.randomUUID()
             ImageTable.insert {
                 it[id] = imageId
@@ -722,7 +660,7 @@ class ListeningStatsServiceTest : KoinTest {
         val user = transaction(database) {
             val u = insertUser()
             val lb = insertLbUser()
-            link(u, lb)
+            linkListenBrainzUser(u, lb)
             insertListen(at(1), lbUserId = lb, trackName = "With Ids", recordingMbid = mbid, recordingMsid = msid)
             insertListen(at(2), lbUserId = lb, trackName = "Names Only", artistName = "Someone")
             u
@@ -746,7 +684,7 @@ class ListeningStatsServiceTest : KoinTest {
         val (user, song) = transaction(database) {
             val u = insertUser()
             val lb = insertLbUser()
-            link(u, lb)
+            linkListenBrainzUser(u, lb)
             val song = insertSong(insertAlbum(), title = "Lib Song")
             insertListen(at(1), lbUserId = lb, trackName = "Foreign Name", recordingMbid = mbid, recordingMsid = UUID.randomUUID())
             insertListen(at(2), lbUserId = lb, trackName = "Foreign Name", recordingMbid = mbid)
@@ -847,7 +785,7 @@ class ListeningStatsServiceTest : KoinTest {
             val u = insertUser()
             val other = insertUser()
             val otherLb = insertLbUser()
-            link(other, otherLb)
+            linkListenBrainzUser(other, otherLb)
             val song = insertSong(insertAlbum())
             insertListen(at(1), userId = other, songId = song)
             insertListen(at(2), lbUserId = otherLb, songId = song)
@@ -913,7 +851,7 @@ class ListeningStatsServiceTest : KoinTest {
         val user = transaction(database) {
             val u = insertUser()
             val lb = insertLbUser()
-            link(u, lb)
+            linkListenBrainzUser(u, lb)
             val song = insertSong(insertAlbum(), durationMs = 240_000)
             insertListen(at(1), userId = u, songId = song)
             insertListen(at(2), lbUserId = lb, trackName = "Unmatched", artistName = "Nobody")

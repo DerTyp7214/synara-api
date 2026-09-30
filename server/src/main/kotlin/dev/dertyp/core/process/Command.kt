@@ -1,4 +1,4 @@
-package dev.dertyp
+package dev.dertyp.core.process
 
 import dev.dertyp.core.ClientCloseException
 import dev.dertyp.core.kill
@@ -10,44 +10,13 @@ import io.ktor.utils.io.CancellationException
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel.Factory.UNLIMITED
 import kotlinx.coroutines.flow.buffer
-import org.jetbrains.exposed.v1.jdbc.transactions.suspendTransaction
 import java.io.File
 import java.io.InputStreamReader
-import java.time.LocalDate
-import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.util.Collections
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.time.Duration.Companion.milliseconds
-
-fun getDateFromISO(iso: String?): LocalDate? {
-    if (iso.isNullOrBlank()) return null
-    return try {
-        if (iso.length == 4 && iso.all { it.isDigit() }) {
-            LocalDate.parse("$iso-01-01", DateTimeFormatter.ISO_LOCAL_DATE)
-        } else {
-            LocalDate.parse(iso, DateTimeFormatter.ISO_LOCAL_DATE)
-        }
-    } catch (_: Exception) {
-        null
-    }
-}
-
-fun getDateTimeFromISO(iso: String?): LocalDateTime? {
-    return if (iso == null) null else LocalDateTime.parse(iso, DateTimeFormatter.ISO_LOCAL_DATE_TIME)
-}
-
-fun getISOFromDate(date: LocalDate?): String? {
-    return if (date == null) null else DateTimeFormatter.ISO_LOCAL_DATE.format(date)
-}
-
-fun getISOFromDateTime(date: LocalDateTime): String {
-    return DateTimeFormatter.ISO_LOCAL_DATE_TIME.format(date)
-}
-
-suspend fun <T> dbQuery(block: suspend () -> T): T =
-    suspendTransaction { withContext(Dispatchers.IO) { block() } }
 
 private val processes: MutableList<Process> = Collections.synchronizedList(mutableListOf<Process>())
 
@@ -142,6 +111,8 @@ suspend fun executeCommand(
 
             return@coroutineScope ProcessExecutionResult(exitCode, fullOutput.toString(), "")
 
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             if (e is ClientCloseException || e.cause is ClientCloseException) logger.info("Client disconnected.")
             else e.printStackTrace()

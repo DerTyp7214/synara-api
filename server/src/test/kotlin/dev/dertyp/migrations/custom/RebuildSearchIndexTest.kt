@@ -3,14 +3,11 @@ package dev.dertyp.migrations.custom
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
 import dev.dertyp.db.*
-import dev.dertyp.services.ScheduledTaskLogService
 import dev.dertyp.services.schedule.SearchIndexRebuildWorker
-import io.mockk.every
-import io.mockk.mockk
+import dev.dertyp.testing.relaxedTaskLogService
 import io.ktor.server.config.MapApplicationConfig
 import io.ktor.server.config.ApplicationConfig
 import kotlinx.coroutines.runBlocking
-import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.insert
@@ -32,8 +29,7 @@ class RebuildSearchIndexTest : KoinTest {
     private lateinit var database: Database
 
     fun setup(dialect: DbDialect) {
-        val logService = mockk<ScheduledTaskLogService>(relaxed = true)
-        every { logService.startLog(any(), any()) } returns EntityID(UUID.randomUUID(), ScheduledTaskLogTable)
+        val logService = relaxedTaskLogService()
 
         val config = MapApplicationConfig(
             "workers.threadMultiplier" to "1.0"

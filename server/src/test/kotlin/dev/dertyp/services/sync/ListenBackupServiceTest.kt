@@ -2,11 +2,13 @@ package dev.dertyp.services.sync
 
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
+import dev.dertyp.core.HttpClientFactory
 import dev.dertyp.data.ListenBackupConfig
 import dev.dertyp.db.*
 import dev.dertyp.listenbackup.ListenBackupBatch
 import dev.dertyp.listenbackup.ListenBackupProtocol
 import io.ktor.client.HttpClient
+import io.ktor.client.engine.HttpClientEngineConfig
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
@@ -15,6 +17,8 @@ import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
 import io.ktor.serialization.kotlinx.json.json
+import io.mockk.every
+import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import org.jetbrains.exposed.v1.core.eq
@@ -32,6 +36,9 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.EnumSource
+import org.koin.core.context.startKoin
+import org.koin.core.context.stopKoin
+import org.koin.dsl.module
 import java.util.*
 import java.util.concurrent.CopyOnWriteArrayList
 
@@ -90,11 +97,15 @@ class ListenBackupServiceTest {
         val client = HttpClient(engine) {
             install(ContentNegotiation) { json(json) }
         }
-        service = ListenBackupService().apply { httpClient = client }
+        val httpClientFactory = mockk<HttpClientFactory>()
+        every { httpClientFactory.shared<HttpClientEngineConfig>(any(), any(), any(), any()) } returns client
+        startKoin { modules(module { single { httpClientFactory } }) }
+        service = ListenBackupService()
     }
 
     @AfterEach
     fun tearDown() {
+        stopKoin()
         received.clear()
         receivedKeys.clear()
         failNext = false

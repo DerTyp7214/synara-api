@@ -62,6 +62,8 @@ class SongSearchTest : KoinTest {
                 single { genreService }
                 single { imageService }
                 single { LibraryMergeService() }
+                single { LibraryFileDeleter() }
+                single { mockk<RedisSearchService>(relaxed = true) }
             })
         }
     }

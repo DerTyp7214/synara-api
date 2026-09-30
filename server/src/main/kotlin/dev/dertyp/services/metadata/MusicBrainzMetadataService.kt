@@ -1,12 +1,14 @@
 package dev.dertyp.services.metadata
 
 import dev.dertyp.PlatformUUID
+import dev.dertyp.config.ProviderCredentialKeys
 import dev.dertyp.core.HttpClientPriority
 import dev.dertyp.data.MusicBrainzRecording
 import dev.dertyp.data.MusicBrainzRelease
-import dev.dertyp.getDateFromISO
+import dev.dertyp.core.date.getDateFromISO
 import io.ktor.client.request.HttpRequestBuilder
 import io.ktor.server.application.ApplicationEnvironment
+import kotlinx.coroutines.CancellationException
 import java.util.UUID
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
@@ -16,8 +18,7 @@ class MusicBrainzMetadataService(
     environment: ApplicationEnvironment
 ) : MetadataService("MusicBrainz", IMetadataService.MetadataType.musicBrainz, environment) {
 
-    override val clientIdConfigPath: String = ""
-    override val clientSecretConfigPath: String = ""
+    override val credentialKeys = ProviderCredentialKeys.NONE
     override val tokenUrl: String = ""
 
     override fun HttpRequestBuilder.getAccessTokenHeader(clientId: String, clientSecret: String) {}
@@ -33,6 +34,8 @@ class MusicBrainzMetadataService(
         return trackIds.mapNotNull { id ->
             try {
                 getTrackByMbId(UUID.fromString(id), priority)
+            } catch (e: CancellationException) {
+                throw e
             } catch (_: Exception) {
                 null
             }
@@ -43,6 +46,8 @@ class MusicBrainzMetadataService(
         return albumIds.mapNotNull { id ->
             try {
                 getAlbumByMbId(UUID.fromString(id), priority)
+            } catch (e: CancellationException) {
+                throw e
             } catch (_: Exception) {
                 null
             }
@@ -53,6 +58,8 @@ class MusicBrainzMetadataService(
         return artistIds.mapNotNull { id ->
             try {
                 getArtistByMbId(UUID.fromString(id), priority)
+            } catch (e: CancellationException) {
+                throw e
             } catch (_: Exception) {
                 null
             }

@@ -1,7 +1,6 @@
 package dev.dertyp.services.import
 
-import dev.dertyp.executeCommand
-import dev.dertyp.findInPath
+import dev.dertyp.core.process.ExternalTool
 import dev.dertyp.plugins.IPluginIndexer
 import dev.dertyp.plugins.IServerStorageService
 import dev.dertyp.utils.parsers.ParserFactory
@@ -14,7 +13,8 @@ open class TiddlService(
     storageService: IServerStorageService
 ) : TidalBaseImporter(indexer, storageService) {
     override val id: String = ID
-    override val installed: Boolean get() = tiddlPath != null
+    override val tool = ExternalTool("tiddl", pythonWrapped = true)
+    override val installed: Boolean get() = tool.installed
     override val enabled: Boolean get() = installed && tokenFileExists()
 
     override val loginCommand: MutableList<String> = mutableListOf("tiddl", "auth", "login", "--no-browser")
@@ -44,29 +44,4 @@ open class TiddlService(
         return tiddlTokenJson.exists()
     }
 
-    private val tiddlPath = findInPath("tiddl")
-
-    override suspend fun executeImporter(
-        command: Collection<String>,
-        aliveCheck: suspend () -> Boolean,
-        directory: File?,
-        onLineReceived: suspend (String) -> Unit
-    ): ProcessExecutionResult {
-        val cmd = command.toMutableList()
-        if (cmd.isEmpty() || (cmd[0] != "tiddl" && cmd[0] != "python3")) {
-            return ProcessExecutionResult(-1, "Error: Command must start with 'tiddl'.", "")
-        }
-
-        if (tiddlPath == null) {
-            return ProcessExecutionResult(-1, "Error: The tiddl path does not exist.", "")
-        }
-
-        if (cmd[0] != "python3") {
-            cmd[0] = tiddlPath
-            cmd.add(0, "python3")
-            cmd.add(1, "-u")
-        }
-
-        return executeCommand(cmd, aliveCheck, logger, directory, onLineReceived = onLineReceived)
-    }
 }

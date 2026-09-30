@@ -16,6 +16,8 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.mockkStatic
+import io.mockk.unmockkStatic
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.Flow
@@ -45,6 +47,7 @@ class ScrobbleServiceTest : KoinTest {
         every { listenService.listenChanges } returns listenChanges
         coEvery { listenService.recentListens(any(), any()) } returns emptyList()
         hookService = HookService()
+        mockkStatic("kotlinx.coroutines.DelayKt")
         startKoin {
             modules(module {
                 single { listenService }
@@ -58,6 +61,7 @@ class ScrobbleServiceTest : KoinTest {
 
     @AfterEach
     fun tearDown() {
+        unmockkStatic("kotlinx.coroutines.DelayKt")
         collectorScope.cancel()
         stopKoin()
     }
@@ -256,7 +260,7 @@ class ScrobbleServiceTest : KoinTest {
     fun `a paused report expires after the paused lease`() = runBlocking {
         setup()
         val service = ScrobbleService()
-        service.pausedLeaseMs = 200
+        coEvery { delay(ScrobbleService.PAUSED_LEASE_MS) } coAnswers { delay(200L) }
         val user = UUID.randomUUID()
         val songId = UUID.randomUUID()
         coEvery { songService.byIds(listOf(songId), user) } returns listOf(songStub(songId, 600_000))
@@ -279,7 +283,7 @@ class ScrobbleServiceTest : KoinTest {
     fun `a heartbeat while playing keeps extending the lease`() = runBlocking {
         setup()
         val service = ScrobbleService()
-        service.playingLeaseMs = 300
+        coEvery { delay(ScrobbleService.PLAYING_LEASE_MS) } coAnswers { delay(300L) }
         val user = UUID.randomUUID()
         val songId = UUID.randomUUID()
         coEvery { songService.byIds(listOf(songId), user) } returns listOf(songStub(songId, 600_000))

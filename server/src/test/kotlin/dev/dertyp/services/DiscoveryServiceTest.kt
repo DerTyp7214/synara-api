@@ -4,7 +4,7 @@ import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
 import dev.dertyp.data.SongAudioData
 import dev.dertyp.db.*
-import dev.dertyp.dbQuery
+import dev.dertyp.core.db.dbQuery
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk

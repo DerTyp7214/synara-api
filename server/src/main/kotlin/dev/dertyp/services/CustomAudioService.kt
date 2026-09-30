@@ -1,17 +1,19 @@
 package dev.dertyp.services
 
-import dev.dertyp.AudioUtils
 import dev.dertyp.Indexer
 import dev.dertyp.audio.AudioConfig
 import dev.dertyp.audio.LosslessFormat
+import dev.dertyp.audio.Transcoder
 import dev.dertyp.data.CustomMetadata
 import dev.dertyp.utils.LogParam
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.bytedeco.javacv.FFmpegFrameGrabber
 import org.jaudiotagger.audio.AudioFileIO
 import org.jaudiotagger.tag.FieldKey
 import org.jaudiotagger.tag.images.ArtworkFactory
+import org.koin.core.component.inject
 import java.io.File
 import java.util.*
 
@@ -32,6 +34,7 @@ class CustomAudioService(
     private val storageService: StorageService,
     private val audioConfig: AudioConfig = AudioConfig(),
 ) : Service() {
+    private val transcoder by inject<Transcoder>()
 
     init {
         File(storageService.customAudioPath).mkdirs()
@@ -57,7 +60,7 @@ class CustomAudioService(
             val sourceFormat = detectLosslessFormat(tempFile)
             if (sourceFormat != targetFormat) {
                 logger.info("File is ${sourceFormat ?: "not lossless"}, converting to $targetFormat...")
-                AudioUtils.convertLossless(tempFile, targetFile, targetFormat)
+                transcoder.convertLossless(tempFile, targetFile, targetFormat)
                 logger.info("Conversion successful.")
             } else {
                 logger.info("File is already $targetFormat, copying...")
@@ -104,6 +107,9 @@ class CustomAudioService(
             ).await()
 
             return@withContext uuid
+        } catch (e: CancellationException) {
+            targetFile.delete()
+            throw e
         } catch (e: Exception) {
             logger.error("Failed to process custom audio upload", e)
             targetFile.delete()

@@ -9,7 +9,7 @@ import dev.dertyp.TestRedis
 import dev.dertyp.data.InsertableAlbum
 import dev.dertyp.data.InsertableSong
 import dev.dertyp.db.*
-import dev.dertyp.dbQuery
+import dev.dertyp.core.db.dbQuery
 import dev.dertyp.plugins.RedisCacheProvider
 import dev.dertyp.services.*
 import dev.dertyp.services.metadata.CachedMusicBrainzService
@@ -49,7 +49,8 @@ object SearchBenchmark {
     private lateinit var database: Database
 
     private val userId = UUID.randomUUID()
-    private val sizes = listOf(1000, 5000, 25000, 100000)
+    private var sizes = listOf(1000, 5000, 25000, 100000)
+    private var backends = Backend.entries.toList()
     private val NUM_RUNS = mapOf(
         1000 to 15,
         5000 to 10,
@@ -71,12 +72,13 @@ object SearchBenchmark {
         SongMusicBrainzTable, AlbumMusicBrainzTable, ArtistMusicBrainzTable, ArtistAliasTable,
         ImageTable, GenreTable, SongGenreTable, AlbumGenreTable, ArtistGenreTable,
         ArtistMemberTable, SearchIndexQueueTable, MBRecordingTable, MBReleaseTable,
-        MBArtistTable, MBArtistAliasTable, UserSongTable, FollowedArtistTable,
+        MBArtistTable, MBArtistAliasTable, MBRecordingArtistCreditTable, MBReleaseArtistCreditTable,
+        UserSongTable, FollowedArtistTable,
         ArtistSplitAliasTable, ImageMetadataTable, ProviderEnrichmentCheckTable,
         SongProviderTable, AlbumProviderTable, SongAudioDataTable, SyncedLyricsTable,
         PlaylistSongTable, UserPlaylistSongTable, PlaylistTable, UserPlaylistTable,
         PersonTable, SongComposerTable, SongLyricistTable, SongProducerTable,
-        TranscodedSongTable
+        TranscodedSongTable, TimecodeTagTable
     )
 
     private object UI {
@@ -125,7 +127,7 @@ object SearchBenchmark {
                 out.append(" \u001b[1;34mSEARCH BENCHMARK PROGRESS\u001b[0m\n")
                 out.append("=========================================================\n")
                 out.append("Dataset:   \u001b[36m%-10d\u001b[0m [%d/%d]\n".format(size, sizes.indexOf(size) + 1, sizes.size))
-                out.append("Backend:   \u001b[35m%-10s\u001b[0m [%d/%d]\n".format(backend.name, Backend.entries.indexOf(backend) + 1, Backend.entries.size))
+                out.append("Backend:   \u001b[35m%-10s\u001b[0m [%d/%d]\n".format(backend.name, backends.indexOf(backend) + 1, backends.size))
                 out.append("Iteration: \u001b[32m%d/%-10d\u001b[0m\n".format(run, NUM_RUNS[size]))
                 out.append("---------------------------------------------------------\n")
 
@@ -165,6 +167,8 @@ object SearchBenchmark {
 
     @JvmStatic
     fun main(args: Array<String>) = runBlocking {
+        args.getOrNull(0)?.let { arg -> sizes = arg.split(",").map { it.trim().toInt() } }
+        args.getOrNull(1)?.let { arg -> backends = arg.split(",").map { name -> Backend.valueOf(name.trim()) } }
         (LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME) as Logger).level = Level.OFF
         (LoggerFactory.getLogger("org.testcontainers") as Logger).level = Level.OFF
         (LoggerFactory.getLogger("Exposed") as Logger).level = Level.OFF
@@ -181,7 +185,7 @@ object SearchBenchmark {
         val resultFile = File("benchmark_results.md")
         resultFile.writeText("# Search Performance Benchmark Results\n")
 
-        for (runs in NUM_RUNS) {
+        for (runs in NUM_RUNS.filterKeys { it in sizes }) {
             resultFile.appendText("- Dataset Size: ${runs.key} (${runs.value} runs)\n")
         }
         
@@ -192,7 +196,7 @@ object SearchBenchmark {
             resultFile.appendText("| :--- | :--- | :--- | :--- |\n")
 
             val sizeReports = mutableListOf<AggregatedReport>()
-            for (backend in Backend.entries) {
+            for (backend in backends) {
                 val runResults = mutableListOf<SingleRunResult>()
                 
                 for (i in 1..NUM_RUNS[size]!!) {
@@ -359,7 +363,7 @@ object SearchBenchmark {
         sb.append("| Backend | 1k -> 100k Latency Increase |\n")
         sb.append("| :--- | :--- |\n")
         
-        for (backend in Backend.entries) {
+        for (backend in backends) {
             val small = reports.find { it.backend == backend.name && it.datasetSize == sizes.first() }
             val big = reports.find { it.backend == backend.name && it.datasetSize == sizes.last() }
             

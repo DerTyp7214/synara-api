@@ -1,10 +1,11 @@
 package dev.dertyp.services.hue
 
-import io.ktor.client.HttpClient
+import dev.dertyp.core.HttpClientFactory
+import dev.dertyp.core.jsonContent
+import dev.dertyp.core.runCatchingCancellable
+import dev.dertyp.core.timeouts
 import io.ktor.client.call.body
 import io.ktor.client.engine.okhttp.OkHttp
-import io.ktor.client.plugins.HttpTimeout
-import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.post
@@ -15,9 +16,9 @@ import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
-import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.json.Json
+import kotlin.time.Duration.Companion.seconds
 
 class HueRateLimited : Exception("Hue bridge rate limit exceeded")
 
@@ -43,6 +44,7 @@ interface HueBridgeApi {
 
 @OptIn(ExperimentalSerializationApi::class)
 class HueBridgeClient(
+    httpClientFactory: HttpClientFactory,
     val ip: String,
     val bridgeId: String?,
     private val applicationKey: String?,
@@ -52,19 +54,17 @@ class HueBridgeClient(
     private val trustManager = HueTrust.PinnedTrustManager(pinnedFingerprint, onFingerprint)
     private val base = "https://$ip"
 
-    private val client = HttpClient(OkHttp) {
-        engine {
+    private val client = httpClientFactory.create(
+        OkHttp,
+        engineConfig = {
             config {
                 sslSocketFactory(HueTrust.sslContext(trustManager).socketFactory, trustManager)
                 hostnameVerifier(HueTrust.hostnameVerifier(bridgeId))
             }
-        }
-        install(ContentNegotiation) { json(json) }
-        install(HttpTimeout) {
-            requestTimeoutMillis = 5_000
-            connectTimeoutMillis = 3_000
-            socketTimeoutMillis = 5_000
-        }
+        },
+    ) {
+        jsonContent(json)
+        timeouts(request = 5.seconds, connect = 3.seconds, socket = 5.seconds)
         expectSuccess = false
     }
 
@@ -131,7 +131,7 @@ class HueBridgeClient(
     private suspend fun check(response: HttpResponse) {
         if (response.status == HttpStatusCode.TooManyRequests) throw HueRateLimited()
         if (!response.status.isSuccess()) {
-            val text = runCatching { response.bodyAsText() }.getOrDefault("")
+            val text = runCatchingCancellable { response.bodyAsText() }.getOrDefault("")
             throw HueBridgeException("Bridge responded ${response.status.value}: ${text.take(200)}")
         }
     }

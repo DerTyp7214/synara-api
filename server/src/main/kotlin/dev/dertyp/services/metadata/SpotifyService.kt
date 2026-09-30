@@ -1,6 +1,7 @@
 package dev.dertyp.services.metadata
 
 import dev.dertyp.ApiClient
+import dev.dertyp.config.ProviderCredentialKeys
 import dev.dertyp.core.HttpClientPriority
 import dev.dertyp.core.safeQueuedGet
 import io.ktor.client.request.HttpRequestBuilder
@@ -17,8 +18,7 @@ class SpotifyService(
     environment: ApplicationEnvironment
 ) : MetadataService("Spotify", IMetadataService.MetadataType.spotify, environment) {
     override val tokenUrl = "https://accounts.spotify.com/api/token"
-    override val clientIdConfigPath = "spotify.clientId"
-    override val clientSecretConfigPath = "spotify.clientSecret"
+    override val credentialKeys = ProviderCredentialKeys.SPOTIFY
 
     override fun HttpRequestBuilder.getAccessTokenHeader(clientId: String, clientSecret: String) {
         parameter("client_id", clientId)
@@ -30,7 +30,7 @@ class SpotifyService(
         limit: Int,
         priority: HttpClientPriority
     ): List<IMetadataService.Track> {
-        val searchResponse = ApiClient.instance.safeQueuedGet<SearchResponse>("https://api.spotify.com/v1/search", priority) {
+        val searchResponse = ApiClient.queueInstance.safeQueuedGet<SearchResponse>("https://api.spotify.com/v1/search", priority) {
             val token = getAccessToken()
             header(HttpHeaders.Authorization, "${token.tokenType} ${token.accessToken}")
             header(HttpHeaders.ContentType, ContentType.Application.Json)
@@ -61,7 +61,7 @@ class SpotifyService(
         isrc: String,
         priority: HttpClientPriority
     ): IMetadataService.Track? {
-        val searchResponse = ApiClient.instance.safeQueuedGet<SearchResponse>("https://api.spotify.com/v1/search", priority) {
+        val searchResponse = ApiClient.queueInstance.safeQueuedGet<SearchResponse>("https://api.spotify.com/v1/search", priority) {
             val token = getAccessToken()
             header(HttpHeaders.Authorization, "${token.tokenType} ${token.accessToken}")
             header(HttpHeaders.ContentType, ContentType.Application.Json)
@@ -92,7 +92,7 @@ class SpotifyService(
         barcode: String,
         priority: HttpClientPriority
     ): IMetadataService.Album? {
-        val searchResponse = ApiClient.instance.safeQueuedGet<SearchResponse>("https://api.spotify.com/v1/search", priority) {
+        val searchResponse = ApiClient.queueInstance.safeQueuedGet<SearchResponse>("https://api.spotify.com/v1/search", priority) {
             val token = getAccessToken()
             header(HttpHeaders.Authorization, "${token.tokenType} ${token.accessToken}")
             header(HttpHeaders.ContentType, ContentType.Application.Json)
@@ -124,7 +124,7 @@ class SpotifyService(
         limit: Int,
         priority: HttpClientPriority
     ): List<IMetadataService.Artist> {
-        val searchResponse = ApiClient.instance.safeQueuedGet<SearchResponse>("https://api.spotify.com/v1/search", priority) {
+        val searchResponse = ApiClient.queueInstance.safeQueuedGet<SearchResponse>("https://api.spotify.com/v1/search", priority) {
             val token = getAccessToken()
             header(HttpHeaders.Authorization, "${token.tokenType} ${token.accessToken}")
             header(HttpHeaders.ContentType, ContentType.Application.Json)
@@ -156,7 +156,7 @@ class SpotifyService(
         includeTracks: Boolean,
         priority: HttpClientPriority
     ): List<IMetadataService.Album> {
-        val searchResponse = ApiClient.instance.safeQueuedGet<SearchResponse>("https://api.spotify.com/v1/search", priority) {
+        val searchResponse = ApiClient.queueInstance.safeQueuedGet<SearchResponse>("https://api.spotify.com/v1/search", priority) {
             val token = getAccessToken()
             header(HttpHeaders.Authorization, "${token.tokenType} ${token.accessToken}")
             header(HttpHeaders.ContentType, ContentType.Application.Json)

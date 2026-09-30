@@ -5,6 +5,7 @@ import kotlin.io.path.extension
 import dev.dertyp.ApiClient
 import dev.dertyp.PlatformUUID
 import dev.dertyp.core.HttpClientPriority
+import dev.dertyp.core.process.ExternalTool
 import dev.dertyp.data.*
 import dev.dertyp.plugins.IPluginIndexer
 import dev.dertyp.plugins.IServerStorageService
@@ -66,6 +67,7 @@ class TidalMetadataEnrichmentTest : KoinTest {
     ) : TidalBaseImporter(indexer, storageService) {
         override val id: String = "test"
         override val enabled: Boolean = true
+        override val tool = ExternalTool("test-dl")
         override val loginCommand: MutableList<String> = mutableListOf()
         override val importCommand: MutableList<String> = mutableListOf("test-dl")
         override val favImportCommand: MutableList<String> = mutableListOf()

@@ -6,7 +6,7 @@ import dev.dertyp.data.RecommendationWindow
 import dev.dertyp.data.User
 import dev.dertyp.data.UserSong
 import dev.dertyp.db.SongEmbeddingTable
-import dev.dertyp.dbQuery
+import dev.dertyp.core.db.dbQuery
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.jetbrains.exposed.v1.core.*

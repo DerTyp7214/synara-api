@@ -6,9 +6,7 @@ import dev.dertyp.data.ApiKeyScopeInfo
 import dev.dertyp.data.User
 import dev.dertyp.db.ApiKeyTable
 import dev.dertyp.plugins.ApiKeyScope
-import dev.dertyp.dbQuery
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
+import dev.dertyp.core.db.dbQuery
 import kotlinx.coroutines.launch
 import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.jdbc.andWhere
@@ -26,7 +24,6 @@ import kotlin.io.encoding.ExperimentalEncodingApi
 class ApiKeyService : Service() {
     private val userService by inject<UserService>()
     private val scopeRegistry by inject<ApiKeyScopeRegistry>()
-    private val scope = CoroutineScope(Dispatchers.IO)
 
     private fun generateRawKey(): String {
         val random = SecureRandom.getInstanceStrong()

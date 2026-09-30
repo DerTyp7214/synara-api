@@ -5,7 +5,7 @@ import dev.dertyp.TestDatabase
 import dev.dertyp.core.ApplicationScope
 import dev.dertyp.data.AudioScale
 import dev.dertyp.db.*
-import dev.dertyp.dbQuery
+import dev.dertyp.core.db.dbQuery
 import dev.dertyp.services.audio.ValencePostProcessor
 import io.mockk.coEvery
 import io.mockk.every

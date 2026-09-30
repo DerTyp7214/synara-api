@@ -28,6 +28,7 @@ import dev.dertyp.ui.UiRender
 import dev.dertyp.ui.UiSchemaVersion
 import dev.dertyp.ui.UiSlotRender
 import io.ktor.server.application.ApplicationCall
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChangedBy
@@ -158,6 +159,8 @@ class UiService(
         val items = registry.bySlot(slot).filter { allowed(it, user) }.mapNotNull { registered ->
             try {
                 renderWith(registered, scope(registered, user, client, context, call))
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 logger.error("Failed to render UI contribution ${registered.contribution.id} in slot $slot", e)
                 null
@@ -196,6 +199,8 @@ class UiService(
             UiInvokeResult(UiInvokeStatus.VALIDATION_ERROR, e.message)
         } catch (e: UnauthorizedException) {
             UiInvokeResult(UiInvokeStatus.UNAUTHORIZED, e.message)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             logger.error("UI action $actionId of $id failed", e)
             UiInvokeResult(UiInvokeStatus.ERROR, e.message ?: e::class.simpleName)
@@ -211,6 +216,8 @@ class UiService(
                 async {
                     try {
                         registered.contribution.onHook(scope(registered, user, client, UiContext(), call), event)?.let { registered to it }
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (e: Exception) {
                         logger.error("UI hook ${event.kind} of ${registered.contribution.id} failed", e)
                         null

@@ -5,7 +5,7 @@ import dev.dertyp.TestDatabase
 import dev.dertyp.db.ImageTable
 import dev.dertyp.db.UserHomeCardTable
 import dev.dertyp.db.UserTable
-import dev.dertyp.dbQuery
+import dev.dertyp.core.db.dbQuery
 import dev.dertyp.services.ui.UserHomeCardService
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.toList

@@ -1,84 +1,52 @@
 package dev.dertyp
 
-import com.google.gson.Gson
-import com.google.gson.GsonBuilder
-import com.google.gson.TypeAdapter
-import com.google.gson.stream.JsonReader
-import com.google.gson.stream.JsonToken
-import com.google.gson.stream.JsonWriter
-import dev.dertyp.audio.AtmosProcessor
-import dev.dertyp.audio.toAudioConfig
-import dev.dertyp.services.cover.CoverAssetPackService
-import dev.dertyp.services.cover.CoverAutoTrigger
-import dev.dertyp.services.cover.CoverGenerationService
-import dev.dertyp.services.cover.CoverSourceCollector
-import dev.dertyp.services.cover.toCoverConfig
-import dev.dertyp.services.credentials.CredentialCipher
-import dev.dertyp.services.hue.HueDiscoveryService
-import dev.dertyp.services.hue.HueService
+import dev.dertyp.config.ServerConfig
+import dev.dertyp.config.configModule
+import dev.dertyp.core.ApplicationScope
+import dev.dertyp.core.HttpClientFactory
+import dev.dertyp.core.HttpClientQueueService
 import dev.dertyp.core.configureScheduledTasks
+import dev.dertyp.core.coreModule
+import dev.dertyp.core.db.SqliteForeignKeyCheck
+import dev.dertyp.core.process.killAll
 import dev.dertyp.data.RemoteServerConfig
 import dev.dertyp.db.SongTable
-import dev.dertyp.mcp.ListenHistoryMcpServerFactory
-import dev.dertyp.mcp.ListenHistoryQueryService
 import dev.dertyp.db.UserTable
+import dev.dertyp.mcp.mcpModule
 import dev.dertyp.plugins.JmDNSPlugin
-import dev.dertyp.plugins.PluginManager
-import dev.dertyp.plugins.RedisCacheProvider
-import dev.dertyp.plugins.pluginModule
-import dev.dertyp.serializers.ByteArrayISO8859TypeAdapter
-import dev.dertyp.serializers.DurationAdapter
-import dev.dertyp.serializers.LocalDateAdapter
-import dev.dertyp.serializers.OffsetDateTimeAdapter
 import dev.dertyp.server.BuildConfig
 import dev.dertyp.services.*
-import dev.dertyp.services.import.ImportService
-import dev.dertyp.services.import.ImporterProxy
-import dev.dertyp.services.import.UpcomingReleaseImportService
-import dev.dertyp.services.metadata.*
-import dev.dertyp.services.podcast.PodcastFeedService
-import dev.dertyp.services.podcast.PodcastIndexService
-import dev.dertyp.services.podcast.PodcastHttp
-import dev.dertyp.services.podcast.PodcastImportService
-import dev.dertyp.services.podcast.PodcastLocalScanService
-import dev.dertyp.services.podcast.PodcastMaintenanceService
-import dev.dertyp.services.podcast.PodcastService
-import dev.dertyp.services.podcast.PodcastStreamService
-import dev.dertyp.services.release.AppleMusicReleaseService
-import dev.dertyp.services.release.ProviderLinkService
-import dev.dertyp.services.release.ReleaseArtistService
-import dev.dertyp.services.schedule.ScheduleService
-import dev.dertyp.services.schedule.ScheduledTaskConfigurationService
-import dev.dertyp.services.subsonic.SubsonicCredentialService
-import dev.dertyp.services.sync.ListenBackupService
-import dev.dertyp.services.sync.ListenBrainzService
+import dev.dertyp.services.cover.coverModule
+import dev.dertyp.services.credentials.credentialsModule
+import dev.dertyp.services.hue.hueModule
+import dev.dertyp.services.import.importModule
 import dev.dertyp.services.intake.ImporterResolvers
 import dev.dertyp.services.intake.IntakeService
-import dev.dertyp.services.jobs.JobService
+import dev.dertyp.services.intake.intakeModule
+import dev.dertyp.services.metadata.LinkResolverService
+import dev.dertyp.services.metadata.metadataModule
+import dev.dertyp.services.podcast.podcastModule
+import dev.dertyp.services.release.releaseModule
+import dev.dertyp.services.schedule.ScheduleService
+import dev.dertyp.services.schedule.ScheduledTaskConfigurationService
+import dev.dertyp.services.schedule.scheduleModule
+import dev.dertyp.services.subsonic.subsonicModule
+import dev.dertyp.services.sync.syncModule
 import dev.dertyp.services.ui.CoreUiContributions
-import dev.dertyp.services.ui.PluginSettingsService
-import dev.dertyp.services.ui.TranslationService
-import dev.dertyp.services.ui.UiRegistry
-import dev.dertyp.services.ui.UiService
-import dev.dertyp.services.ui.UserHomeCardService
-import dev.dertyp.services.schedule.Worker
-import dev.dertyp.services.schedule.WorkerTask
-import io.github.classgraph.ClassGraph
+import dev.dertyp.services.ui.uiModule
+import io.ktor.http.DEFAULT_PORT
+import io.ktor.http.URLProtocol
 import io.ktor.server.application.Application
 import io.ktor.server.application.ApplicationEnvironment
+import io.ktor.server.application.ApplicationStopping
 import io.ktor.server.application.install
 import io.ktor.server.application.log
-import io.ktor.server.config.ApplicationConfig
 import io.ktor.server.netty.EngineMain
 import io.ktor.server.plugins.calllogging.CallLogging
 import kotlinx.coroutines.*
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.emptyFlow
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.koin.core.module.Module
-import org.koin.core.module.dsl.singleOf
-import org.koin.dsl.binds
 import org.koin.dsl.module
 import org.koin.ktor.ext.get
 import org.koin.ktor.plugin.Koin
@@ -89,11 +57,7 @@ import org.jaudiotagger.tag.TagOptionSingleton
 import org.jaudiotagger.tag.reference.ID3V2Version
 import org.slf4j.bridge.SLF4JBridgeHandler
 import java.io.File
-import java.time.LocalDate
-import java.time.OffsetDateTime
 import kotlin.system.exitProcess
-import kotlin.time.Duration
-import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.seconds
 
 fun main(args: Array<String>) {
@@ -139,17 +103,22 @@ fun Application.module() {
     val application = this
     install(Koin) {
         slf4jLogger()
-        modules(mainModule(application, environment), pluginModule)
+        modules(mainModule(application, environment))
     }
 
+    ServiceLifecycle.register(get<DatabaseManager>())
+    ServiceLifecycle.start(get<HttpClientFactory>())
+    ServiceLifecycle.start(get<HttpClientQueueService>())
+
     get<DatabaseManager>().init()
-    get<RedisSearchService>().initIndex()
+    configureCache()
 
     val backupService = get<BackupService>()
     val remoteMirrorService = get<RemoteMirrorService>()
-    val setupFromBackup = environment.config.propertyOrNull("setup.fromBackup")?.getString()
-    val setupFromMirrorUrl = environment.config.propertyOrNull("setup.fromMirror.url")?.getString()
-    
+    val setup = get<ServerConfig>().setup
+    val setupFromBackup = setup.fromBackup
+    val setupFromMirrorUrl = setup.fromMirror.url
+
     if (!setupFromBackup.isNullOrBlank() || !setupFromMirrorUrl.isNullOrBlank()) {
         transaction {
             val songCount = SongTable.selectAll().count()
@@ -168,19 +137,18 @@ fun Application.module() {
                         log.error("Backup file not found: $setupFromBackup")
                     }
                 } else if (!setupFromMirrorUrl.isNullOrBlank()) {
-                    val setupFromMirrorUser = environment.config.propertyOrNull("setup.fromMirror.username")?.getString()
-                    val setupFromMirrorPass = environment.config.propertyOrNull("setup.fromMirror.password")?.getString()
-                    
-                    if (setupFromMirrorUser != null && setupFromMirrorPass != null) {
+                    val setupFromMirrorUser = setup.fromMirror.username
+                    val setupFromMirrorPass = setup.fromMirror.password
+                    val endpoint = setup.fromMirror.endpoint
+
+                    if (setupFromMirrorUser != null && setupFromMirrorPass != null && endpoint != null) {
                         log.info("Database is empty. Setting up from mirror: $setupFromMirrorUrl")
-                        val url = setupFromMirrorUrl.substringAfter("://")
-                        val host = url.substringBefore(":")
-                        val port = url.substringAfter(":", "8080").substringBefore("/").toIntOrNull() ?: 8080
-                        val secure = setupFromMirrorUrl.startsWith("https")
-                        
+                        val port = endpoint.specifiedPort.takeIf { it != DEFAULT_PORT } ?: 8080
+                        val secure = endpoint.protocol == URLProtocol.HTTPS
+
                         runBlocking {
                             remoteMirrorService.startMirror(RemoteServerConfig(
-                                host = host,
+                                host = endpoint.host,
                                 port = port,
                                 username = setupFromMirrorUser,
                                 password = setupFromMirrorPass,
@@ -205,32 +173,32 @@ fun Application.module() {
 
     val logService = get<ScheduledTaskLogService>()
     val customMigrationService = get<CustomMigrationService>()
-    CoroutineScope(Dispatchers.IO).launch {
+    val foreignKeyCheck = get<SqliteForeignKeyCheck>()
+    ApplicationScope.scope.launch(Dispatchers.IO) {
         logService.cleanupRunningLogs()
         customMigrationService.runMigrations()
+        foreignKeyCheck.run()
     }
 
     val scheduleService = get<ScheduleService>()
     val configService = get<ScheduledTaskConfigurationService>()
-    
+
     runBlocking {
         configService.ensureDefaults(ScheduledTaskConfigurationService.DEFAULTS)
     }
 
     configureScheduledTasks()
 
-    CoroutineScope(Dispatchers.IO).launch {
-        launch { scheduleService.startService() }
-    }
+    ServiceLifecycle.start(scheduleService)
 
     val linkResolverService = get<LinkResolverService>()
-    CoroutineScope(Dispatchers.IO).launch {
+    ApplicationScope.scope.launch(Dispatchers.IO) {
         linkResolverService.refreshSupported()
     }
 
     val metricsCollector = get<RpcMetricsCollector>()
     if (metricsCollector.enabled) {
-        CoroutineScope(Dispatchers.IO).launch {
+        ApplicationScope.scope.launch(Dispatchers.IO) {
             metricsCollector.runFlushLoop()
         }
     }
@@ -240,172 +208,50 @@ fun Application.module() {
     get<CoreUiContributions>().register()
     get<ImporterResolvers>().register(get<IntakeService>())
     configureServices()
+    configureShutdown()
+}
+
+fun Application.configureShutdown() {
+    monitor.subscribe(ApplicationStopping) {
+        try {
+            runBlocking { ServiceLifecycle.stopAll() }
+        } catch (e: Exception) {
+            log.error("Failed to stop services", e)
+        }
+        try {
+            ApplicationScope.scope.cancel()
+        } catch (e: Exception) {
+            log.error("Failed to cancel application scope", e)
+        }
+        try {
+            killAll()
+        } catch (e: Exception) {
+            log.error("Failed to kill child processes", e)
+        }
+    }
 }
 
 fun mainModule(application: Application, environment: ApplicationEnvironment): Module = module {
-    single<Application> { application }
-    single<ApplicationEnvironment> { environment }
-    single { environment.config }
-
-    singleOf(::Indexer)
-    singleOf(::HookService)
-    singleOf(::ListenService)
-    singleOf(::ScrobbleService)
-    singleOf(::ListeningStatsService)
-    singleOf(::ListenHistoryQueryService)
-    singleOf(::ListenHistoryMcpServerFactory)
-    singleOf(::ListenBrainzService)
-    singleOf(::ListenBackupService)
-    singleOf(::AudioEmbeddingService)
-    singleOf(::RecommendationService)
-    singleOf(::RecommendationServingService)
-    singleOf(::RadioService)
-    singleOf(::RadioChannelService)
-    singleOf(::ApiKeyService)
-    singleOf(::ApiKeyScopeRegistry)
-    singleOf(::SubsonicCredentialService)
-    singleOf(::PluginManager)
-    singleOf(::JwtService)
-    singleOf(::UserService)
-    singleOf(::AuthService)
-    singleOf(::SongService)
-    singleOf(::AudioAnalysisService)
-    singleOf(::FlacAnalysisService)
-    singleOf(::PcmAnalysisService)
-    singleOf(::AudioStartAnalysisService)
-    singleOf(::ImageService)
-    singleOf(::AnimatedImageService)
-    singleOf(::AlbumService)
-    singleOf(::LyricsSearch)
-    singleOf(::LyricsService)
-    singleOf(::LrcLibService)
-    singleOf(::GenreService)
-    singleOf(::ArtistService)
-    singleOf(::StorageService)
-    singleOf(::FavSyncService)
-    singleOf(::DatabaseManager)
-    singleOf(::PlaylistService)
-    singleOf(::LibraryMergeService)
-    singleOf(::ImportService)
-    singleOf(::ScheduleService)
-    singleOf(::ScheduledTaskConfigurationService)
-    singleOf(::ServerStatsService)
-    singleOf(::UiRegistry)
-    singleOf(::TranslationService)
-    singleOf(::PluginSettingsService)
-    singleOf(::UserHomeCardService)
-    singleOf(::UiService)
-    singleOf(::CoreUiContributions)
-    singleOf(::JobService)
-    singleOf(::IntakeService)
-    singleOf(::ImporterResolvers)
-    singleOf(ApplicationConfig::toMetricsConfig)
-    singleOf(ApplicationConfig::toAudioConfig)
-    singleOf(ApplicationConfig::toCoverConfig)
-    singleOf(::CoverAssetPackService)
-    singleOf(::CoverSourceCollector)
-    singleOf(::CoverGenerationService)
-    singleOf(::CoverAutoTrigger)
-    singleOf(::HueDiscoveryService)
-    singleOf(::HueService)
-    singleOf(::AtmosProcessor)
-    singleOf(::RpcMetricsCollector)
-    singleOf(::RpcMetricsService)
-    singleOf(::UserPlaylistService)
-    singleOf(::CollectionService)
-    singleOf(::RefreshTokenService)
-    singleOf(::ScheduledTaskLogService)
-    singleOf(::DiscoveryService)
-    singleOf(::ImporterProxy)
-    singleOf(::UpcomingReleaseImportService)
-    singleOf(::SessionService)
-    singleOf(::PlaybackService)
-    singleOf(::QueueService)
-    singleOf(::ClientSettingsService)
-    singleOf(::TimecodeTagService)
-    singleOf(::PodcastHttp)
-    singleOf(::PodcastService)
-    singleOf(::PodcastFeedService)
-    singleOf(::PodcastLocalScanService)
-    singleOf(::PodcastImportService)
-    singleOf(::PodcastMaintenanceService)
-    singleOf(::PodcastStreamService)
-    singleOf(::PodcastIndexService)
-    singleOf(::ClientRequestService)
-    singleOf(::RemoteControlService)
-    singleOf(::CustomAudioService)
-    singleOf(::ReverseProxyService)
-    singleOf(::DbManagementService)
-    singleOf(::BackupService)
-    singleOf(::UserPlaylistBackupService)
-    singleOf(::MetadataFetchingService)
-    singleOf(::MetadataDispatcherService)
-    singleOf(::MirrorService)
-    singleOf(::RemoteMirrorService)
-    singleOf(::MusicBrainzService)
-    singleOf(::AcoustIdFingerprintService)
-    singleOf(::CredentialCipher)
-    singleOf(::AcoustIdCredentialSource)
-    singleOf(::AcoustIdService)
-    singleOf(::MusicBrainzCacheService)
-    singleOf(::CachedMusicBrainzService)
-    singleOf(::LinkResolverService)
-    singleOf(::ReleaseService)
-    singleOf(::AppleMusicReleaseService)
-    singleOf(::ProviderLinkService)
-    singleOf(::ReleaseArtistService)
-    singleOf(::AppleMusicArtistResolver)
-    singleOf(::SearchIndexWorker)
-    singleOf(::RedisSearchService)
-
-    ClassGraph()
-        .enableClassInfo()
-        .enableAnnotationInfo()
-        .acceptPackages("dev.dertyp.services.schedule")
-        .scan().use { scanResult ->
-            scanResult.getClassesWithAnnotation(WorkerTask::class.java.name).forEach { classInfo ->
-                val clazz = classInfo.loadClass()
-                single { clazz.getDeclaredConstructor().newInstance() } binds arrayOf(clazz.kotlin, Worker::class)
-            }
-        }
-    
-    singleOf(::CustomMigrationService)
-
-    single<IMusicBrainzService> { get<CachedMusicBrainzService>() }
-
-    single<Gson> {
-        GsonBuilder()
-            .registerTypeAdapter(OffsetDateTime::class.java, OffsetDateTimeAdapter())
-            .registerTypeAdapter(ByteArray::class.java, ByteArrayISO8859TypeAdapter())
-            .registerTypeAdapter(LocalDate::class.java, LocalDateAdapter())
-            .registerTypeAdapter(Duration::class.java, DurationAdapter())
-            .registerTypeHierarchyAdapter(Flow::class.java, object : TypeAdapter<Flow<*>>() {
-                override fun write(out: JsonWriter, value: Flow<*>?) {
-                    out.nullValue()
-                }
-
-                override fun read(reader: JsonReader): Flow<*> {
-                    if (reader.peek() == JsonToken.NULL) {
-                        reader.nextNull()
-                    } else {
-                        reader.skipValue()
-                    }
-                    return emptyFlow<Any>()
-                }
-            })
-            .create()
-    }
-
-    single<RedisCacheProvider.Config> {
-        if (!environment.config.propertyOrNull("redis.host")?.getString().isNullOrBlank()) {
-            RedisCacheProvider.Config().apply {
-                invalidateAt = 30.days
-                host = environment.config.propertyOrNull("redis.host")!!.getString()
-                port = environment.config.propertyOrNull("redis.port")?.getString()?.toInt() ?: port
-                useRedisSearch = environment.config.propertyOrNull("redis.useSearch")?.getString()?.toBoolean() ?: useRedisSearch
-                indexPrefix = environment.config.propertyOrNull("redis.indexPrefix")?.getString() ?: indexPrefix
-                cacheAnimatedImages = environment.config.propertyOrNull("redis.cacheAnimatedImages")?.getString()?.toBoolean() ?: cacheAnimatedImages
-            }
-        } else RedisCacheProvider.Config().apply { host = "none" }
-    }
+    includes(
+        coreModule(application, environment),
+        configModule,
+        systemModule,
+        authModule,
+        libraryModule,
+        listeningModule,
+        audioModule,
+        credentialsModule,
+        metadataModule,
+        releaseModule,
+        importModule,
+        intakeModule,
+        podcastModule,
+        coverModule,
+        uiModule,
+        scheduleModule,
+        syncModule,
+        hueModule,
+        subsonicModule,
+        mcpModule,
+    )
 }

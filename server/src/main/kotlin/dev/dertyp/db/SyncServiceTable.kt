@@ -5,7 +5,7 @@ import org.jetbrains.exposed.v1.core.Table
 
 object SyncServiceTable : Table("syncService") {
     val name = varchar("name", 255)
-    val ownerId = reference("ownerId", UserTable.id, onDelete = ReferenceOption.SET_NULL)
+    val ownerId = reference("ownerId", UserTable.id, onDelete = ReferenceOption.CASCADE)
     val scope = text("scope")
     val accessToken = text("accessToken")
     val refreshToken = text("refreshToken")

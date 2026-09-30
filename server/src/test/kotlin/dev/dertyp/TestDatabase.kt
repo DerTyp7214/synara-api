@@ -34,10 +34,11 @@ object TestDatabase {
                 stmt.execute("CREATE DATABASE $dbName")
             }
         }
-        return container.jdbcUrl.replace(container.databaseName, dbName)
+        val url = container.jdbcUrl.replace(container.databaseName, dbName)
+        return url + (if ('?' in url) "&" else "?") + "options=-c%20jit=off"
     }
 
-    fun connect(dialect: DbDialect, name: String): Database {
+    fun connect(dialect: DbDialect, name: String, foreignKeys: Boolean = true): Database {
         return when (dialect) {
             DbDialect.POSTGRES -> {
                 val dbName = "${name}_${UUID.randomUUID().toString().replace("-", "")}".lowercase()
@@ -57,7 +58,7 @@ object TestDatabase {
             }
             DbDialect.SQLITE -> {
                 currentFile = File.createTempFile(name, ".db")
-                Database.connect("jdbc:sqlite:${currentFile!!.absolutePath}", "org.sqlite.JDBC")
+                Database.connect("jdbc:sqlite:${currentFile!!.absolutePath}?foreign_keys=$foreignKeys", "org.sqlite.JDBC")
             }
         }
     }

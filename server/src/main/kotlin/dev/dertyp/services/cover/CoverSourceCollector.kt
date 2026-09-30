@@ -3,7 +3,7 @@ package dev.dertyp.services.cover
 import dev.dertyp.data.CoverTarget
 import dev.dertyp.data.CoverTargetType
 import dev.dertyp.db.*
-import dev.dertyp.dbQuery
+import dev.dertyp.core.db.dbQuery
 import dev.dertyp.services.Service
 import dev.dertyp.utils.ColorUtils
 import org.jetbrains.exposed.v1.core.Column

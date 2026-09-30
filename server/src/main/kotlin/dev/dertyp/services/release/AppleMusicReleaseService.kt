@@ -4,7 +4,7 @@ import dev.dertyp.ApiClient
 import dev.dertyp.core.*
 import dev.dertyp.data.*
 import dev.dertyp.db.*
-import dev.dertyp.dbQuery
+import dev.dertyp.core.db.dbQuery
 import dev.dertyp.services.ImageService
 import dev.dertyp.services.release.ArtistIdentityEvidence.KnownEvidence
 import dev.dertyp.services.release.ArtistIdentityEvidence.Signals
@@ -42,7 +42,6 @@ class AppleMusicReleaseService(private val environment: ApplicationEnvironment) 
     private val releaseService by inject<ReleaseService>()
     private val releaseArtistService by inject<ReleaseArtistService>()
 
-    private val serviceScope = CoroutineScope(Dispatchers.IO)
 
     private val appleMusicService: AppleMusicService
         get() = MetadataService.getMetadataService(
@@ -130,7 +129,7 @@ class AppleMusicReleaseService(private val environment: ApplicationEnvironment) 
         val results = artists.map { (artistId, artistName) ->
             async {
                 artistSemaphore.withPermit {
-                    val result = runCatching {
+                    val result = runCatchingCancellable {
                         processArtist(artistId, artistName, apple, dbSemaphore, HttpClientPriority.LOW)
                     }.onFailure {
                         logger.error("Apple Music release fetch failed for artist $artistId", it)
@@ -173,8 +172,8 @@ class AppleMusicReleaseService(private val environment: ApplicationEnvironment) 
     }
 
     fun fetchArtistReleasesAsync(artistId: UUID) {
-        serviceScope.launch {
-            runCatching { fetchArtistReleases(artistId) }
+        scope.launch {
+            runCatchingCancellable { fetchArtistReleases(artistId) }
                 .onFailure { logger.error("Apple Music release fetch failed for artist $artistId", it) }
         }
     }
@@ -628,7 +627,7 @@ class AppleMusicReleaseService(private val environment: ApplicationEnvironment) 
             var finalGroupId = matchedGroupId
             val trackableGroupId = untrackedGroupId
             if (finalGroupId == null && trackableGroupId != null) {
-                val tracked = runCatching { releaseService.trackReleaseGroup(trackableGroupId, artistId, priority) }
+                val tracked = runCatchingCancellable { releaseService.trackReleaseGroup(trackableGroupId, artistId, priority) }
                     .onFailure { logger.error("Failed to track release group $trackableGroupId for artist $artistId", it) }
                     .getOrDefault(false)
                 if (tracked) finalGroupId = trackableGroupId
@@ -651,7 +650,7 @@ class AppleMusicReleaseService(private val environment: ApplicationEnvironment) 
                     (lastImageFetch == null || nowMs - lastImageFetch >= IMAGE_RETRY.inWholeMilliseconds)
 
             if (albumArtworkUrl != null && imageDue) {
-                val persistedImageId = runCatching { persistArtwork(albumArtworkUrl) }
+                val persistedImageId = runCatchingCancellable { persistArtwork(albumArtworkUrl) }
                     .onFailure { logger.error("Failed to persist Apple Music artwork for ${album.id}", it) }
                     .getOrNull()
 

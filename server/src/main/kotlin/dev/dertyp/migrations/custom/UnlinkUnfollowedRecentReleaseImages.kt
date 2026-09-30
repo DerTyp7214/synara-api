@@ -5,7 +5,7 @@ import dev.dertyp.core.Migration
 import dev.dertyp.core.logTask
 import dev.dertyp.db.FollowedArtistTable
 import dev.dertyp.db.RecentReleaseTable
-import dev.dertyp.dbQuery
+import dev.dertyp.core.db.dbQuery
 import dev.dertyp.services.ImageService
 import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.core.isNotNull

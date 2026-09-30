@@ -7,7 +7,7 @@ import dev.dertyp.data.UserCapability
 import dev.dertyp.db.ImageTable
 import dev.dertyp.db.UserCapabilityTable
 import dev.dertyp.db.UserTable
-import dev.dertyp.dbQuery
+import dev.dertyp.core.db.dbQuery
 import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.inList

@@ -9,12 +9,9 @@ import dev.dertyp.db.ImageTable
 import dev.dertyp.db.ScheduledTaskLogTable
 import dev.dertyp.db.SongTable
 import dev.dertyp.db.decodeTitleTags
-import dev.dertyp.services.ScheduledTaskLogService
-import io.mockk.every
-import io.mockk.mockk
+import dev.dertyp.testing.relaxedTaskLogService
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.core.ResultRow
-import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.insert
@@ -35,8 +32,7 @@ class BackfillSongTitleTagsTest : KoinTest {
     private lateinit var database: Database
 
     private fun setup(dialect: DbDialect) {
-        val logService = mockk<ScheduledTaskLogService>(relaxed = true)
-        every { logService.startLog(any(), any()) } returns EntityID(UUID.randomUUID(), ScheduledTaskLogTable)
+        val logService = relaxedTaskLogService()
         startKoin { modules(module { single { logService } }) }
 
         database = TestDatabase.connect(dialect, "backfill_song_title_tags_test")

@@ -4,7 +4,7 @@ import dev.dertyp.core.CustomMigration
 import dev.dertyp.core.Migration
 import dev.dertyp.db.AlbumProviderTable
 import dev.dertyp.db.AlbumTable
-import dev.dertyp.dbQuery
+import dev.dertyp.core.db.dbQuery
 import dev.dertyp.services.import.Type
 import dev.dertyp.utils.parsers.ParserFactory
 import org.jetbrains.exposed.v1.core.isNotNull

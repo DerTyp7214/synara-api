@@ -8,7 +8,7 @@ import dev.dertyp.data.UserSong
 import dev.dertyp.db.AlbumTable
 import dev.dertyp.db.SongTable
 import dev.dertyp.db.SongVariantTable
-import dev.dertyp.dbQuery
+import dev.dertyp.core.db.dbQuery
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk

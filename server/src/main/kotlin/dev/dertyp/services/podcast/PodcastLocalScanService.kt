@@ -1,6 +1,7 @@
 package dev.dertyp.services.podcast
 
 import dev.dertyp.core.isInside
+import dev.dertyp.core.runCatchingCancellable
 import dev.dertyp.data.PodcastScanResult
 import dev.dertyp.services.ImageService
 import dev.dertyp.services.Service
@@ -50,7 +51,7 @@ class PodcastLocalScanService(
 
             var showArtwork = coverBytes
             var showImageId = coverBytes?.let { bytes ->
-                runCatching { imageService.createImage(bytes, "podcast-local:$localPath") }.getOrNull()
+                runCatchingCancellable { imageService.createImage(bytes, "podcast-local:$localPath") }.getOrNull()
             }
 
             val showId = podcastService.upsertLocalShow(localPath, localPath, showImageId)
@@ -76,10 +77,10 @@ class PodcastLocalScanService(
                 if (artwork != null) {
                     if (showArtwork == null) {
                         showArtwork = artwork
-                        showImageId = runCatching { imageService.createImage(artwork, "podcast-local:$localPath") }.getOrNull()
+                        showImageId = runCatchingCancellable { imageService.createImage(artwork, "podcast-local:$localPath") }.getOrNull()
                         podcastService.upsertLocalShow(localPath, localPath, showImageId)
                     } else if (!artwork.contentEquals(showArtwork)) {
-                        imageId = runCatching { imageService.createImage(artwork, "podcast-local-episode:$guid") }.getOrNull()
+                        imageId = runCatchingCancellable { imageService.createImage(artwork, "podcast-local-episode:$guid") }.getOrNull()
                     }
                 }
 

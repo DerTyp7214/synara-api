@@ -1,9 +1,10 @@
 package dev.dertyp.services.gamdl
 
 import dev.dertyp.audio.AudioConfig
+import dev.dertyp.config.ServerConfig
 import dev.dertyp.data.User
-import dev.dertyp.executeCommand
-import dev.dertyp.findInPath
+import dev.dertyp.core.process.executeCommand
+import dev.dertyp.core.process.findInPath
 import dev.dertyp.plugins.IPluginIndexer
 import dev.dertyp.plugins.IServerStorageService
 import dev.dertyp.services.SongService
@@ -61,13 +62,14 @@ class GamdlServiceTest : KoinTest {
         startKoin {
             modules(module {
                 single { environment }
+                single { ServerConfig(environment.config) }
                 single { AudioConfig() }
                 single { songService }
                 single { importService }
             })
         }
 
-        mockkStatic("dev.dertyp.UtilsKt")
+        mockkStatic("dev.dertyp.core.process.CommandKt")
         every { findInPath("gamdl") } returns "/usr/bin/gamdl"
         every { findInPath("ffmpeg") } returns "/usr/bin/ffmpeg"
 

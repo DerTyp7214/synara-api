@@ -7,6 +7,12 @@ object AlbumArtistTable : Table("albumArtist") {
     val albumId = reference("albumId", AlbumTable.id, onDelete = ReferenceOption.CASCADE)
     val artistId = reference("artistId", ArtistTable.id, onDelete = ReferenceOption.CASCADE)
     val creditedAliasId = reference("creditedAliasId", ArtistAliasTable.id, onDelete = ReferenceOption.SET_NULL).nullable()
+    val position = integer("position").default(0)
+    val joinPhrase = text("joinPhrase").nullable()
 
     override val primaryKey = PrimaryKey(albumId, artistId)
+
+    init {
+        index(false, artistId)
+    }
 }

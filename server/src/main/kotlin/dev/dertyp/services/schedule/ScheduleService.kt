@@ -1,6 +1,7 @@
 package dev.dertyp.services.schedule
 
 import dev.dertyp.core.ApplicationScope
+import dev.dertyp.core.logTask
 import dev.dertyp.core.plus
 import dev.dertyp.data.TaskConfiguration
 import dev.dertyp.data.TriggerDefinition
@@ -11,15 +12,19 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.time.withTimeoutOrNull
 import org.jetbrains.annotations.Range
 import org.koin.core.component.get
 import java.time.Duration
 import java.time.Instant
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.PriorityBlockingQueue
 import kotlin.concurrent.atomics.AtomicBoolean
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
+import kotlin.reflect.full.findAnnotation
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.ExperimentalTime
 
@@ -64,9 +69,11 @@ data class ScheduledTask(
 class ScheduleService : IScheduleService, Service() {
     private val stopped: AtomicBoolean = AtomicBoolean(true)
     private val schedules: PriorityBlockingQueue<ScheduledTask> = PriorityBlockingQueue()
-    private val eventRegistry = mutableMapOf<String, MutableSet<CustomTrigger>>()
-    
-    private val managedTasks = mutableMapOf<String, ManagedTask>()
+    private val eventRegistry = ConcurrentHashMap<String, MutableSet<CustomTrigger>>()
+
+    private val managedTasks = ConcurrentHashMap<String, ManagedTask>()
+
+    private val scheduleMutex = Mutex()
 
     private val queueUpdateNotifier = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     
@@ -81,7 +88,19 @@ class ScheduleService : IScheduleService, Service() {
         managedTasks[key] = ManagedTask(key, name, task)
     }
 
-    private fun updateFromConfig(configurations: List<TaskConfiguration>) {
+    fun registerManagedWorker(key: String, name: String, worker: Worker) {
+        registerManagedTask(key, name, workerTask(name, worker))
+    }
+
+    fun workerTask(name: String, worker: Worker): Task = {
+        worker.runExclusive { runWorker ->
+            logTask(name) {
+                runWorker { p, l -> updateProgress(p, l) }
+            }
+        }
+    }
+
+    private suspend fun updateFromConfig(configurations: List<TaskConfiguration>) = scheduleMutex.withLock {
         val configsByKey = configurations.associateBy { it.key }
 
         schedules.filter { it.key != null }.toList().forEach { task ->
@@ -156,30 +175,35 @@ class ScheduleService : IScheduleService, Service() {
                     val waitTime = Duration.between(now, next.trigger.scheduledTime)
 
                     if (waitTime <= Duration.ZERO) {
-                        val scheduledTask = schedules.poll() ?: continue
-                        val taskName = if (scheduledTask.name != null) "${scheduledTask.name} (${scheduledTask.id})" else "${scheduledTask.id}"
-                        logger.info("Executing task: $taskName")
-                        launch {
-                            try {
-                                scheduledTask.task()
-                                notifyTaskCompletion(scheduledTask.id, scheduledTask.key)
-                            } catch (e: Exception) {
-                                logger.error("Error executing scheduled task", e)
+                        scheduleMutex.withLock {
+                            val scheduledTask = schedules.poll() ?: return@withLock
+                            val taskName = if (scheduledTask.name != null) "${scheduledTask.name} (${scheduledTask.id})" else "${scheduledTask.id}"
+                            logger.info("Executing task: $taskName")
+                            launch {
+                                try {
+                                    runAndNotify(scheduledTask.task, scheduledTask.id, scheduledTask.key)
+                                } catch (e: WorkerAlreadyRunningException) {
+                                    logger.info("Skipped task $taskName because ${e.workerName} is already running")
+                                } catch (e: CancellationException) {
+                                    throw e
+                                } catch (e: Exception) {
+                                    logger.error("Error executing scheduled task", e)
 
-                                if (!scheduledTask.trigger.doesRepeat()) {
-                                    logger.info("Rescheduling failed task: $taskName")
-                                    val nextTrigger = ScheduleTrigger(
-                                        scheduledTime = Instant.now() + 10.minutes
-                                    )
-                                    schedule(scheduledTask.copy(trigger = nextTrigger))
+                                    if (!scheduledTask.trigger.doesRepeat()) {
+                                        logger.info("Rescheduling failed task: $taskName")
+                                        val nextTrigger = ScheduleTrigger(
+                                            scheduledTime = Instant.now() + 10.minutes
+                                        )
+                                        schedule(scheduledTask.copy(trigger = nextTrigger))
+                                    }
                                 }
                             }
-                        }
 
-                        if (scheduledTask.trigger.doesRepeat()) {
-                            logger.info("Rescheduling repeating task: $taskName")
-                            val updateTrigger = scheduledTask.trigger.updateForNextRun()
-                            schedule(scheduledTask.copy(trigger = updateTrigger))
+                            if (scheduledTask.trigger.doesRepeat()) {
+                                logger.info("Rescheduling repeating task: $taskName")
+                                val updateTrigger = scheduledTask.trigger.updateForNextRun()
+                                schedule(scheduledTask.copy(trigger = updateTrigger))
+                            }
                         }
                     } else {
                         logger.info("Next task in $waitTime")
@@ -220,24 +244,37 @@ class ScheduleService : IScheduleService, Service() {
     }
 
     override fun schedulePostIndexTasks() {
-        val musicBrainzWorker = get<MusicBrainzWorker>()
-        val imageAnalysisWorker = get<ImageAnalysisWorker>()
-        val audioStartAnalysisWorker = get<AudioStartAnalysisWorker>()
-        scheduleTask(
-            trigger = ScheduleTrigger(Instant.now()),
-            name = "MusicBrainzWorker-AfterIndex",
-            task = { musicBrainzWorker.run { _, _ -> } }
+        listOf<Worker>(
+            get<MusicBrainzWorker>(),
+            get<ImageAnalysisWorker>(),
+            get<AudioStartAnalysisWorker>()
+        ).forEach { worker ->
+            scheduleTask(
+                trigger = ScheduleTrigger(Instant.now()),
+                name = "${worker.name}-AfterIndex",
+                task = { runPostIndexWorker(worker) }
+            )
+        }
+    }
+
+    private suspend fun runPostIndexWorker(worker: Worker) {
+        val annotation = worker::class.findAnnotation<WorkerTask>()
+        if (annotation == null) {
+            workerTask(worker.name, worker)()
+            return
+        }
+        runManagedTask(
+            managedTasks[annotation.key]
+                ?: ManagedTask(annotation.key, annotation.name, workerTask(annotation.name, worker))
         )
-        scheduleTask(
-            trigger = ScheduleTrigger(Instant.now()),
-            name = "ImageAnalysisWorker-AfterIndex",
-            task = { imageAnalysisWorker.run { _, _ -> } }
-        )
-        scheduleTask(
-            trigger = ScheduleTrigger(Instant.now()),
-            name = "AudioStartAnalysisWorker-AfterIndex",
-            task = { audioStartAnalysisWorker.run { _, _ -> } }
-        )
+    }
+
+    private suspend fun runManagedTask(managedTask: ManagedTask) =
+        runAndNotify(managedTask.task, UUID.randomUUID(), managedTask.key)
+
+    private suspend fun runAndNotify(task: Task, id: UUID, key: String?) {
+        task()
+        notifyTaskCompletion(id, key)
     }
 
     fun fireEvent(id: UUID) {
@@ -255,10 +292,13 @@ class ScheduleService : IScheduleService, Service() {
         val scheduledTask = schedules.find { it.id == id } ?: return false
         val taskName = if (scheduledTask.name != null) "${scheduledTask.name} (${scheduledTask.id})" else "${scheduledTask.id}"
         logger.info("Manually triggering task: $taskName")
-        CoroutineScope(Dispatchers.Default).launch {
+        ApplicationScope.scope.launch {
             try {
-                scheduledTask.task()
-                notifyTaskCompletion(scheduledTask.id, scheduledTask.key)
+                runAndNotify(scheduledTask.task, scheduledTask.id, scheduledTask.key)
+            } catch (e: WorkerAlreadyRunningException) {
+                logger.info("Skipped task $taskName because ${e.workerName} is already running")
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 logger.error("Error executing manually triggered task: $taskName", e)
             }
@@ -270,10 +310,13 @@ class ScheduleService : IScheduleService, Service() {
         val managedTask = managedTasks[key] ?: return false
         val taskName = managedTask.name
         logger.info("Manually triggering managed task: $taskName")
-        CoroutineScope(Dispatchers.Default).launch {
+        ApplicationScope.scope.launch {
             try {
-                managedTask.task()
-                notifyTaskCompletion(UUID.randomUUID(), key)
+                runManagedTask(managedTask)
+            } catch (e: WorkerAlreadyRunningException) {
+                logger.info("Skipped task $taskName because ${e.workerName} is already running")
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 logger.error("Error executing manually triggered task: $taskName", e)
             }
@@ -300,7 +343,7 @@ class ScheduleService : IScheduleService, Service() {
         logger.info("Registering task for key: $key")
         val trigger = CustomTrigger(true)
 
-        eventRegistry.getOrPut(key) { mutableSetOf() }.add(trigger)
+        eventRegistry.computeIfAbsent(key) { ConcurrentHashMap.newKeySet() }.add(trigger)
 
         val scheduledTask = ScheduledTask(trigger = trigger, task = task)
         schedule(scheduledTask)
@@ -322,7 +365,7 @@ class ScheduleService : IScheduleService, Service() {
         queueUpdateNotifier.tryEmit(Unit)
     }
 
-    private fun notifyTaskCompletion(completedTaskId: UUID, completedTaskKey: String?) {
+    private suspend fun notifyTaskCompletion(completedTaskId: UUID, completedTaskKey: String?) = scheduleMutex.withLock {
         val dependentTasks = schedules.filter {
             val trigger = it.trigger
             trigger is TaskCompletionTrigger && (trigger.dependencyId == completedTaskId || (completedTaskKey != null && trigger.dependencyKey == completedTaskKey))

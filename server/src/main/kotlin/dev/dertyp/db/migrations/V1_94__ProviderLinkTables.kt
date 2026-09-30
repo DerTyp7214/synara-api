@@ -1,6 +1,6 @@
 package dev.dertyp.db.migrations
 
-import dev.dertyp.core.foreignKeyOn
+import dev.dertyp.core.db.Dialect
 import dev.dertyp.core.tempConnection
 import dev.dertyp.db.ProviderLinkTable
 import dev.dertyp.db.ProviderReleaseLinkTable
@@ -18,8 +18,6 @@ import java.util.UUID
 @Suppress("unused", "ClassName", "SqlSourceToSinkFlow")
 class V1_94__ProviderLinkTables : BaseJavaMigration() {
     override fun migrate(context: Context) {
-        foreignKeyOn(context.connection)
-
         val statements = tempConnection {
             SchemaUtils.createStatements(
                 ProviderLinkTable,
@@ -45,7 +43,7 @@ class V1_94__ProviderLinkTables : BaseJavaMigration() {
     internal fun copyLegacyLinks(connection: Connection) {
         if (!tableExists(connection, "recent_release_provider")) return
 
-        val binaryUuid = connection.metaData.driverName.contains("sqlite", ignoreCase = true)
+        val binaryUuid = Dialect.of(connection) == Dialect.SQLITE
         val linkIds = mutableMapOf<Pair<String, String>, UUID>()
         val linkRows = mutableListOf<LegacyLink>()
         val mappings = mutableListOf<Pair<UUID, UUID>>()

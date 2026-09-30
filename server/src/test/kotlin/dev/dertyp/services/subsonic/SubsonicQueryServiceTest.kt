@@ -14,7 +14,7 @@ import dev.dertyp.db.SongTable
 import dev.dertyp.db.SongVariantTable
 import dev.dertyp.db.UserAlbumTable
 import dev.dertyp.db.UserTable
-import dev.dertyp.dbQuery
+import dev.dertyp.core.db.dbQuery
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.insert

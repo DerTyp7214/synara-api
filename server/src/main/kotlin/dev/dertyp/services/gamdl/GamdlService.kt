@@ -3,11 +3,11 @@ package dev.dertyp.services.gamdl
 import dev.dertyp.PlatformUUID
 import dev.dertyp.audio.AudioConfig
 import dev.dertyp.audio.LosslessFormat
+import dev.dertyp.config.ServerConfig
 import dev.dertyp.core.*
 import dev.dertyp.data.User
 import dev.dertyp.data.UserSong
-import dev.dertyp.executeCommand
-import dev.dertyp.findInPath
+import dev.dertyp.core.process.ExternalTool
 import dev.dertyp.plugins.IPluginIndexer
 import dev.dertyp.plugins.IServerStorageService
 import dev.dertyp.services.SongService
@@ -34,16 +34,17 @@ class GamdlService(
 ) : BaseImporter(indexer, storageService) {
     override val id: String = ID
     override val metadataType = IMetadataService.MetadataType.appleMusic
-    override val installed: Boolean get() = gamdlPath != null
+    override val installed: Boolean get() = tool.installed
     override val enabled: Boolean get() = installed && cookiesFile().exists()
 
     private val environment by inject<ApplicationEnvironment>()
+    private val serverConfig by inject<ServerConfig>()
     private val songService by inject<SongService>()
     private val audioConfig by inject<AudioConfig>()
     private val importService by inject<ImportService>()
 
-    private val gamdlPath = findInPath("gamdl")
-    private val ffmpegPath = findInPath("ffmpeg")
+    override val tool = ExternalTool("gamdl", acceptsResolvedPath = true)
+    private val ffmpeg = ExternalTool("ffmpeg")
 
     companion object {
         val ID = ImportBackend.Gamdl.id
@@ -59,11 +60,11 @@ class GamdlService(
     )
 
     private val cookiesPath: String
-        get() = environment.config.propertyOrNull("gamdl.cookiesPath")?.getString()?.ifBlank { null } ?: "cookies.txt"
+        get() = serverConfig.importers.gamdl.cookiesPath
     private val wvdPath: String?
-        get() = environment.config.propertyOrNull("gamdl.wvdPath")?.getString()?.ifBlank { null }
+        get() = serverConfig.importers.gamdl.wvdPath
     private val codec: String?
-        get() = environment.config.propertyOrNull("gamdl.codecSong")?.getString()?.ifBlank { null }
+        get() = serverConfig.importers.gamdl.codecSong
 
     private fun cookiesFile() = File(cookiesPath)
 
@@ -230,24 +231,6 @@ class GamdlService(
         return contentToImport to emptyList()
     }
 
-    override suspend fun executeImporter(
-        command: Collection<String>,
-        aliveCheck: suspend () -> Boolean,
-        directory: File?,
-        onLineReceived: suspend (String) -> Unit
-    ): ProcessExecutionResult {
-        val cmd = command.toMutableList()
-        if (cmd.isEmpty() || (cmd[0] != "gamdl" && cmd[0] != gamdlPath)) {
-            return ProcessExecutionResult(-1, "Error: Command must start with 'gamdl'.", "")
-        }
-        if (gamdlPath == null) {
-            return ProcessExecutionResult(-1, "Error: The gamdl path does not exist.", "")
-        }
-        cmd[0] = gamdlPath
-
-        return executeCommand(cmd, aliveCheck, logger, directory, onLineReceived = onLineReceived)
-    }
-
     @OptIn(ExperimentalAtomicApi::class)
     override suspend fun importContent(
         urls: List<String>,
@@ -297,15 +280,15 @@ class GamdlService(
         aliveCheck: suspend () -> Boolean,
         onLiveOutput: suspend (String) -> Unit
     ): Path? {
-        if (ffmpegPath == null) {
+        if (!ffmpeg.installed) {
             onLiveOutput("ffmpeg not found on PATH; cannot transcode ${m4a.absolutePathString()}")
             return null
         }
         val output = m4a.resolveSibling(m4a.nameWithoutExtension + "." + target.extension)
-        val cmd = listOf(ffmpegPath, "-y", "-i", m4a.absolutePathString()) +
+        val args = listOf("-y", "-i", m4a.absolutePathString()) +
             losslessFfmpegArgs(target) +
             listOf("-map_metadata", "0", output.absolutePathString())
-        val res = executeCommand(cmd, aliveCheck, logger, workingDirectory) { onLiveOutput(it) }
+        val res = ffmpeg.run(args, logger, aliveCheck, workingDirectory) { onLiveOutput(it) } ?: return null
         return if (res.exitCode == 0 && output.exists()) {
             runCatching { m4a.deleteIfExists() }
             output

@@ -2,13 +2,13 @@ package dev.dertyp.services.schedule
 
 import dev.dertyp.data.TaskKeys
 import dev.dertyp.db.ScheduledTaskLogTable
-import dev.dertyp.dbQuery
+import dev.dertyp.core.db.dbQuery
 import org.jetbrains.exposed.v1.core.less
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
 
-@WorkerTask(TaskKeys.LOG_CLEANUP_WORKER, "Log Cleanup Worker")
+@WorkerTask(TaskKeys.LOG_CLEANUP_WORKER, "Log Cleanup Worker", cron = "0 0 * * *")
 class LogCleanupWorker : Worker("LogCleanupWorker") {
 
     override suspend fun execute(onProgress: suspend (Double, String) -> Unit): Map<String, Any?> {

@@ -1,7 +1,9 @@
 package dev.dertyp.services
 
+import dev.dertyp.db.SearchIndexEntityType
 import dev.dertyp.plugins.RedisCacheProvider
 import org.koin.core.component.inject
+import redis.clients.jedis.RedisClusterClient
 import redis.clients.jedis.search.IndexDefinition
 import redis.clients.jedis.search.IndexOptions
 import redis.clients.jedis.search.Query
@@ -19,40 +21,52 @@ class RedisSearchService : Service() {
     fun initIndex() {
         if (!isEnabled()) return
 
+        val client = try {
+            jedis
+        } catch (e: Exception) {
+            logger.error("Redis search indexes were not created because the Redis provider is unavailable", e)
+            return
+        }
+
         val prefix = config.indexPrefix
-        
-        createIndex("${prefix}:song-index", "${prefix}:song:", Schema()
+
+        createIndex(client, "${prefix}:song-index", "${prefix}:song:", Schema()
             .addTextField("title", 5.0)
             .addTextField("artist", 2.0)
             .addTextField("album", 1.0)
             .addTextField("metadata", 1.0)
         )
 
-        createIndex("${prefix}:artist-index", "${prefix}:artist:", Schema()
+        createIndex(client, "${prefix}:artist-index", "${prefix}:artist:", Schema()
             .addTextField("name", 5.0)
             .addTextField("aliases", 2.0)
             .addTextField("groups", 1.0)
             .addTextField("metadata", 1.0)
         )
 
-        createIndex("${prefix}:album-index", "${prefix}:album:", Schema()
+        createIndex(client, "${prefix}:album-index", "${prefix}:album:", Schema()
             .addTextField("name", 5.0)
             .addTextField("artists", 2.0)
             .addTextField("groups", 1.0)
         )
     }
 
-    private fun createIndex(indexName: String, prefix: String, schema: Schema) {
-        try {
-            jedis.ftInfo(indexName)
+    private fun createIndex(client: RedisClusterClient, indexName: String, prefix: String, schema: Schema) {
+        val exists = try {
+            client.ftInfo(indexName)
+            true
         } catch (_: Exception) {
-            try {
-                jedis.ftCreate(
-                    indexName,
-                    IndexOptions.defaultOptions().setDefinition(IndexDefinition().setPrefixes(prefix)),
-                    schema
-                )
-            } catch (_: Exception) { }
+            false
+        }
+        if (exists) return
+        try {
+            client.ftCreate(
+                indexName,
+                IndexOptions.defaultOptions().setDefinition(IndexDefinition().setPrefixes(prefix)),
+                schema
+            )
+        } catch (e: Exception) {
+            logger.error("Failed to create Redis search index $indexName", e)
         }
     }
 
@@ -86,6 +100,14 @@ class RedisSearchService : Service() {
             "artists" to artists,
             "groups" to groups
         ))
+    }
+
+    fun remove(type: SearchIndexEntityType, ids: Collection<UUID>) {
+        if (ids.isEmpty() || !isEnabled()) return
+        val kind = type.name.lowercase()
+        for (id in ids) {
+            jedis.del("${config.indexPrefix}:$kind:$id")
+        }
     }
 
     data class SearchResult(val ids: List<UUID>, val total: Long)

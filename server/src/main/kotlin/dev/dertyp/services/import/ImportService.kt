@@ -5,7 +5,7 @@ import dev.dertyp.core.*
 import dev.dertyp.data.User
 import dev.dertyp.data.UserSong
 import dev.dertyp.getPrefix
-import dev.dertyp.killAll
+import dev.dertyp.core.process.killAll
 import dev.dertyp.plugins.IImporter
 import dev.dertyp.plugins.IPluginImportService
 import dev.dertyp.plugins.JobContext

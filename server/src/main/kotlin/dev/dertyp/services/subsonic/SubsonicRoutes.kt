@@ -1,5 +1,6 @@
 package dev.dertyp.services.subsonic
 
+import dev.dertyp.core.runCatchingCancellable
 import dev.dertyp.data.User
 import dev.dertyp.services.AlbumService
 import dev.dertyp.services.ArtistService
@@ -23,7 +24,7 @@ internal const val SUBSONIC_AUTH_NOTE =
 internal fun Route.sub(name: String, docs: RouteConfig.() -> Unit = {}, handler: suspend RoutingContext.(Parameters) -> Unit) {
     val impl: suspend RoutingContext.() -> Unit = {
         val form = if (call.request.local.method == HttpMethod.Post) {
-            runCatching { call.receiveParameters() }.getOrNull()
+            runCatchingCancellable { call.receiveParameters() }.getOrNull()
         } else null
         val params = if (form == null || form.isEmpty()) call.request.queryParameters else Parameters.build {
             appendAll(call.request.queryParameters)

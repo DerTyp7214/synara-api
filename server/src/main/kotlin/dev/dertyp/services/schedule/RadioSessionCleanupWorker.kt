@@ -4,7 +4,7 @@ import dev.dertyp.data.TaskKeys
 import dev.dertyp.services.RadioService
 import org.koin.core.component.inject
 
-@WorkerTask(TaskKeys.RADIO_SESSION_CLEANUP, "Radio Session Cleanup")
+@WorkerTask(TaskKeys.RADIO_SESSION_CLEANUP, "Radio Session Cleanup", cron = "0 * * * *")
 class RadioSessionCleanupWorker : Worker("RadioSessionCleanupWorker") {
     private val radioService by inject<RadioService>()
 

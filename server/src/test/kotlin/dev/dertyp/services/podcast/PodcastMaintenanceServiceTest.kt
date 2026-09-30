@@ -2,6 +2,7 @@ package dev.dertyp.services.podcast
 
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
+import dev.dertyp.config.ServerConfig
 import dev.dertyp.data.PodcastDeliveryMode
 import dev.dertyp.data.PodcastImportState
 import dev.dertyp.data.PodcastRetention
@@ -81,7 +82,7 @@ class PodcastMaintenanceServiceTest : KoinTest {
         }
         val environment = mockk<ApplicationEnvironment>()
         every { environment.config } returns config
-        storageService = StorageService(environment)
+        storageService = StorageService(ServerConfig(environment.config))
 
         database = TestDatabase.connect(dialect, "podcast_maintenance_test")
         transaction(database) {

@@ -2,7 +2,8 @@ package dev.dertyp.services
 
 import com.github.luben.zstd.ZstdInputStream
 import com.github.luben.zstd.ZstdOutputStream
-import io.github.classgraph.ClassGraph
+import dev.dertyp.core.db.SchemaTables
+import dev.dertyp.core.db.dbQuery
 import kotlinx.serialization.*
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.MapSerializer
@@ -11,9 +12,9 @@ import kotlinx.serialization.cbor.Cbor
 import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import org.jetbrains.exposed.v1.jdbc.*
-import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import java.io.*
 import java.util.UUID
+import kotlin.sequences.Sequence
 
 @Serializable
 sealed class DbValue {
@@ -51,25 +52,20 @@ class DbManagementService : IDbManagementService {
     private val rowSerializer = MapSerializer(String.serializer(), DbValue.serializer())
 
     private val tables: List<Table> by lazy {
-        ClassGraph()
-            .enableClassInfo()
-            .acceptPackages("dev.dertyp.db")
-            .scan()
-            .use { scanResult ->
-                scanResult.getSubclasses(Table::class.java.name)
-                    .loadClasses(Table::class.java)
-                    .asSequence()
-                    .mapNotNull {
-                        try {
-                            it.kotlin.objectInstance
-                        } catch (_: Exception) {
-                            null
-                        }
-                    }
-                    .distinct()
-                    .sortedBy { it.tableName }
-                    .toList()
-            }
+        val discovered = SchemaTables.all
+        val known = discovered.toSet()
+        SchemaUtils.sortTablesByReferences(discovered).filter { it in known }
+    }
+
+    private val parents: Map<Table, Set<Table>> by lazy {
+        val known = tables.toSet()
+        tables.associateWith { table ->
+            table.foreignKeys.map { it.targetTable }.filter { it != table && it in known }.toSet()
+        }
+    }
+
+    private val children: Map<Table, List<Table>> by lazy {
+        tables.associateWith { table -> tables.filter { table in parents.getValue(it) } }
     }
 
     override suspend fun exportData(): ByteArray {
@@ -84,7 +80,7 @@ class DbManagementService : IDbManagementService {
     suspend fun exportData(output: OutputStream) {
         ZstdOutputStream(ShieldedOutputStream(output)).use { zstd ->
             DataOutputStream(zstd).use { dos ->
-                transaction {
+                dbQuery {
                     dos.writeInt(FORMAT_V2_MARKER)
                     dos.writeInt(tables.size)
                     tables.forEach { table ->
@@ -118,68 +114,131 @@ class DbManagementService : IDbManagementService {
         }
     }
 
-    @OptIn(ExperimentalSerializationApi::class)
-    private fun importV2(dis: DataInputStream) {
-        val tableCount = dis.readInt()
-        repeat(tableCount) {
-            val tableName = dis.readUTF()
-            val table = tables.find { it.tableName == tableName }
-            if (table == null) {
-                while (true) {
-                    val size = dis.readInt()
-                    if (size == ROW_TERMINATOR) break
-                    dis.readFully(ByteArray(size))
+    private inner class Restore {
+        private val cleared = mutableSetOf<Table>()
+        private val restored = mutableSetOf<Table>()
+
+        fun isReady(table: Table) = parents.getValue(table).all { it in restored }
+
+        suspend fun restore(table: Table, rows: Sequence<Map<String, DbValue>>) {
+            clear(table)
+            dbQuery {
+                val ordered = if (table.foreignKeys.any { it.targetTable == table }) {
+                    orderSelfReferences(table, rows.toList()).asSequence()
+                } else {
+                    rows
                 }
-            } else {
-                transaction {
-                    table.deleteAll()
-                    val chunk = mutableListOf<Map<String, DbValue>>()
-                    while (true) {
-                        val size = dis.readInt()
-                        if (size == ROW_TERMINATOR) break
-                        val bytes = ByteArray(size)
-                        dis.readFully(bytes)
-                        chunk.add(Cbor.decodeFromByteArray(rowSerializer, bytes))
-                        if (chunk.size >= CHUNK_SIZE) {
-                            insertChunk(table, chunk)
-                            chunk.clear()
-                        }
-                    }
-                    if (chunk.isNotEmpty()) insertChunk(table, chunk)
-                }
+                ordered.chunked(CHUNK_SIZE).forEach { insertChunk(table, it) }
             }
+            restored += table
+        }
+
+        private suspend fun clear(table: Table) {
+            if (!cleared.add(table)) return
+            children.getValue(table).forEach { clear(it) }
+            dbQuery { table.deleteAll() }
         }
     }
 
     @OptIn(ExperimentalSerializationApi::class)
-    private fun importV1(dis: DataInputStream, tableCount: Int) {
+    private fun readRows(dis: DataInputStream): Sequence<Map<String, DbValue>> = sequence {
+        while (true) {
+            val size = dis.readInt()
+            if (size == ROW_TERMINATOR) break
+            val bytes = ByteArray(size)
+            dis.readFully(bytes)
+            yield(Cbor.decodeFromByteArray(rowSerializer, bytes))
+        }
+    }
+
+    private fun skipRows(dis: DataInputStream) {
+        while (true) {
+            val size = dis.readInt()
+            if (size == ROW_TERMINATOR) break
+            dis.readFully(ByteArray(size))
+        }
+    }
+
+    private fun spoolRows(dis: DataInputStream): File {
+        val file = File.createTempFile("synara-restore", ".rows")
+        DataOutputStream(BufferedOutputStream(FileOutputStream(file))).use { out ->
+            while (true) {
+                val size = dis.readInt()
+                out.writeInt(size)
+                if (size == ROW_TERMINATOR) break
+                val bytes = ByteArray(size)
+                dis.readFully(bytes)
+                out.write(bytes)
+            }
+        }
+        return file
+    }
+
+    private suspend fun importV2(dis: DataInputStream) {
+        val restore = Restore()
+        val deferred = mutableMapOf<Table, File>()
+        try {
+            val tableCount = dis.readInt()
+            repeat(tableCount) {
+                val tableName = dis.readUTF()
+                val table = tables.find { it.tableName == tableName }
+                when {
+                    table == null -> skipRows(dis)
+                    restore.isReady(table) -> restore.restore(table, readRows(dis))
+                    else -> deferred.put(table, spoolRows(dis))?.delete()
+                }
+            }
+            tables.filter { it in deferred }.forEach { table ->
+                DataInputStream(BufferedInputStream(FileInputStream(deferred.getValue(table)))).use { spooled ->
+                    restore.restore(table, readRows(spooled))
+                }
+            }
+        } finally {
+            deferred.values.forEach { it.delete() }
+        }
+    }
+
+    @OptIn(ExperimentalSerializationApi::class)
+    private suspend fun importV1(dis: DataInputStream, tableCount: Int) {
+        val restore = Restore()
+        val deferred = mutableMapOf<Table, ByteArray>()
+        suspend fun restoreTable(table: Table, cborBytes: ByteArray) {
+            restore.restore(table, Cbor.decodeFromByteArray<TableData>(cborBytes).rows.asSequence())
+        }
         for (i in 0 until tableCount) {
             val tableName = dis.readUTF()
             val dataSize = dis.readInt()
             val cborBytes = ByteArray(dataSize)
             dis.readFully(cborBytes)
 
-            val table = tables.find { it.tableName == tableName }
-            if (table != null) {
-                val tableData = Cbor.decodeFromByteArray<TableData>(cborBytes)
+            val table = tables.find { it.tableName == tableName } ?: continue
+            if (restore.isReady(table)) restoreTable(table, cborBytes) else deferred[table] = cborBytes
+        }
+        tables.filter { it in deferred }.forEach { restoreTable(it, deferred.getValue(it)) }
+    }
 
-                transaction {
-                    table.deleteAll()
-                    tableData.rows.forEach { rowMap ->
-                        table.insert { iTable ->
-                            table.columns.forEach { column ->
-                                val dbValue = rowMap[column.name]
-                                if (dbValue != null) {
-                                    val value = convertFromDbValue(dbValue)
-                                    @Suppress("UNCHECKED_CAST")
-                                    iTable[column as Column<Any?>] = value?.let { column.columnType.valueFromDB(it) }
-                                }
-                            }
-                        }
-                    }
+    private fun orderSelfReferences(table: Table, rows: List<Map<String, DbValue>>): List<Map<String, DbValue>> {
+        val keys = table.foreignKeys.filter { it.targetTable == table }.map { key ->
+            key.references.map { (from, target) -> from.name to target.name }
+        }
+        val byTarget = keys.map { pairs ->
+            rows.indices.groupBy { index -> pairs.map { rows[index][it.second] } }
+        }
+        val visited = BooleanArray(rows.size)
+        val ordered = ArrayList<Map<String, DbValue>>(rows.size)
+        fun visit(index: Int) {
+            if (visited[index]) return
+            visited[index] = true
+            keys.forEachIndexed { keyIndex, pairs ->
+                val refs = pairs.map { rows[index][it.first] }
+                if (refs.none { it == null || it == DbValue.DbNull }) {
+                    byTarget[keyIndex][refs]?.forEach { visit(it) }
                 }
             }
+            ordered += rows[index]
         }
+        rows.indices.forEach { visit(it) }
+        return ordered
     }
 
     private fun insertChunk(table: Table, rows: List<Map<String, DbValue>>) {

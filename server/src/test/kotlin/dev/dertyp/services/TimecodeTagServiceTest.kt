@@ -13,13 +13,13 @@ import dev.dertyp.db.SongTable
 import dev.dertyp.db.SongVariantTable
 import dev.dertyp.db.TimecodeTagTable
 import dev.dertyp.db.UserTable
+import dev.dertyp.testing.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
-import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -61,35 +61,6 @@ class TimecodeTagServiceTest : KoinTest {
     fun tearDown() {
         stopKoin()
         TestDatabase.cleanUp()
-    }
-
-    private fun insertUser(): UUID {
-        val id = UUID.randomUUID()
-        UserTable.insert {
-            it[UserTable.id] = id
-            it[username] = "user_$id"
-            it[passwordHash] = "hash"
-        }
-        return id
-    }
-
-    private fun insertAlbum(): UUID {
-        val id = UUID.randomUUID()
-        AlbumTable.insert {
-            it[AlbumTable.id] = id
-            it[name] = "Album"
-        }
-        return id
-    }
-
-    private fun insertSong(albumId: UUID): UUID {
-        val id = UUID.randomUUID()
-        SongTable.insert {
-            it[SongTable.id] = id
-            it[title] = "Song"
-            it[SongTable.albumId] = albumId
-        }
-        return id
     }
 
     private fun input(

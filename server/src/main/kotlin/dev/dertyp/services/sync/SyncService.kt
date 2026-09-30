@@ -1,10 +1,12 @@
 package dev.dertyp.services.sync
 
 import com.github.benmanes.caffeine.cache.Caffeine
+import dev.dertyp.config.ProviderCredentialKeys
+import dev.dertyp.config.toClientCredentials
 import dev.dertyp.core.getUsername
 import dev.dertyp.data.User
 import dev.dertyp.db.SyncServiceTable
-import dev.dertyp.dbQuery
+import dev.dertyp.core.db.dbQuery
 import dev.dertyp.services.ISyncService
 import dev.dertyp.services.Service
 import dev.dertyp.services.UserService
@@ -13,6 +15,7 @@ import io.ktor.server.application.*
 import io.ktor.server.html.*
 import io.ktor.server.response.*
 import io.ktor.server.util.*
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.html.*
 import org.jetbrains.exposed.v1.core.ResultRow
@@ -31,8 +34,7 @@ abstract class SyncService(
     protected val environment: ApplicationEnvironment,
     protected val user: User
 ) : ISyncService, Service() {
-    abstract val clientIdConfigPath: String
-    abstract val clientSecretConfigPath: String
+    abstract val credentialKeys: ProviderCredentialKeys
     abstract val scopes: List<String>
 
     private val serviceType: ISyncService.SyncServiceType = when {
@@ -41,8 +43,9 @@ abstract class SyncService(
     }
     private val redirectPath: String by lazy { "/sync/${serviceType.name}/callback" }
 
-    protected val clientId by lazy { environment.config.propertyOrNull(clientIdConfigPath)?.getString() }
-    protected val clientSecret by lazy { environment.config.propertyOrNull(clientSecretConfigPath)?.getString() }
+    private val credentials by lazy { environment.config.toClientCredentials(credentialKeys) }
+    protected val clientId: String? get() = credentials.clientId
+    protected val clientSecret: String? get() = credentials.clientSecret
 
     companion object {
         val authFlowCache = Caffeine.newBuilder()
@@ -170,6 +173,8 @@ abstract class SyncService(
         try {
             val url = buildAuthUrl(call)
             call.respond(url)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             call.respond(HttpStatusCode.InternalServerError, e.message ?: "Internal Server Error")
         }
@@ -202,6 +207,8 @@ abstract class SyncService(
                     }
                 }
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             call.respond(HttpStatusCode.InternalServerError, e.message ?: "Internal Server Error")
         }

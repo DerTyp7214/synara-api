@@ -3,7 +3,7 @@ package dev.dertyp.services.metadata
 import dev.dertyp.core.fetchBatchedResultsByIdKeyset
 import dev.dertyp.data.*
 import dev.dertyp.db.*
-import dev.dertyp.dbQuery
+import dev.dertyp.core.db.dbQuery
 import dev.dertyp.services.Service
 import dev.dertyp.utils.parsers.ParserFactory
 import kotlinx.coroutines.flow.Flow

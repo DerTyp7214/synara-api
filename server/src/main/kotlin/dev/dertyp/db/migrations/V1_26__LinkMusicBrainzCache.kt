@@ -1,6 +1,6 @@
 package dev.dertyp.db.migrations
 
-import dev.dertyp.core.foreignKeyOn
+import dev.dertyp.core.db.Dialect
 import dev.dertyp.core.tempConnection
 import dev.dertyp.db.*
 import org.flywaydb.core.api.migration.BaseJavaMigration
@@ -11,12 +11,10 @@ import java.util.UUID
 @Suppress("unused", "ClassName", "SqlSourceToSinkFlow")
 class V1_26__LinkMusicBrainzCache : BaseJavaMigration() {
     override fun migrate(context: Context) {
-        foreignKeyOn(context.connection)
-
         val allStatements = mutableListOf<String>()
 
         tempConnection {
-            val isPostgres = this.db.dialect.name.contains("postgres", ignoreCase = true)
+            val isPostgres = Dialect.of(this.db.dialect) == Dialect.POSTGRES
             val insertPrefix = if (isPostgres) "INSERT" else "INSERT OR IGNORE"
             val onConflict = if (isPostgres) " ON CONFLICT (\"id\") DO NOTHING" else ""
 

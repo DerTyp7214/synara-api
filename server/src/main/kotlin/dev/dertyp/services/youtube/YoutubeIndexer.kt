@@ -4,9 +4,10 @@ import dev.dertyp.core.sha256
 import dev.dertyp.data.InsertableAlbum
 import dev.dertyp.data.InsertableImage
 import dev.dertyp.data.InsertableSong
-import dev.dertyp.getDateFromISO
+import dev.dertyp.core.date.getDateFromISO
 import dev.dertyp.plugins.*
 import dev.dertyp.services.metadata.IMetadataService
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -88,7 +89,7 @@ class YoutubeIndexer(context: PluginContext) : BaseIndexer(context, IMetadataSer
                             var finalOriginalId = "$id:${youtubeId ?: if (!isMbId) fallbackId else audioFile.file.nameWithoutExtension}"
 
                             if (mbReleaseId != null) {
-                                val existingAlbum = try { context.albumLibrary.byMusicBrainzId(UUID.fromString(mbReleaseId)).firstOrNull() } catch (_: Exception) { null }
+                                val existingAlbum = try { context.albumLibrary.byMusicBrainzId(UUID.fromString(mbReleaseId)).firstOrNull() } catch (e: CancellationException) { throw e } catch (_: Exception) { null }
                                 if (existingAlbum != null) {
                                     finalAlbumName = existingAlbum.name
                                     finalAlbumArtists = existingAlbum.artists.map { it.name }.sorted()
@@ -109,6 +110,8 @@ class YoutubeIndexer(context: PluginContext) : BaseIndexer(context, IMetadataSer
 
                             val albumList = map.computeIfAbsent(album) { Collections.synchronizedList(mutableListOf()) }
                             albumList.add(audioFile)
+                        } catch (e: CancellationException) {
+                            throw e
                         } catch (e: Exception) {
                             context.logger.error("Failed to read audio file: $file", e)
                         }
@@ -140,6 +143,8 @@ class YoutubeIndexer(context: PluginContext) : BaseIndexer(context, IMetadataSer
                     artists = artists.ifEmpty { baseSong.artists }
                 )
             } else baseSong
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             context.logger.error("Failed to fetch full metadata for YouTube indexing from MusicBrainz: $mbId", e)
             baseSong

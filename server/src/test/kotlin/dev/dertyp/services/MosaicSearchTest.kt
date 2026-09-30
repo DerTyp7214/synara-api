@@ -2,6 +2,7 @@ package dev.dertyp.services
 
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
+import dev.dertyp.config.ServerConfig
 import dev.dertyp.db.*
 import dev.dertyp.services.metadata.CachedMusicBrainzService
 import dev.dertyp.services.metadata.MusicBrainzCacheService
@@ -57,6 +58,7 @@ class MosaicSearchTest : KoinTest {
         startKoin {
             modules(module {
                 single { mockk<ApplicationEnvironment>(relaxed = true) }
+                single { ServerConfig(get<ApplicationEnvironment>().config) }
                 single { ArtistService() }
                 single { AlbumService() }
                 single { SongService() }

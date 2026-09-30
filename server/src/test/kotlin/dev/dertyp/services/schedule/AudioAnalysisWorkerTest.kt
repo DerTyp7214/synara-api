@@ -2,10 +2,11 @@ package dev.dertyp.services.schedule
 
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
+import dev.dertyp.config.ServerConfig
 import dev.dertyp.db.SongAudioDataTable
 import dev.dertyp.db.SongTable
 import dev.dertyp.db.SongVariantTable
-import dev.dertyp.dbQuery
+import dev.dertyp.core.db.dbQuery
 import dev.dertyp.services.AudioAnalysisService
 import io.ktor.server.config.ApplicationConfig
 import io.ktor.server.config.MapApplicationConfig
@@ -52,6 +53,7 @@ class AudioAnalysisWorkerTest : KoinTest {
             modules(module {
                 single { audioAnalysisService }
                 single<ApplicationConfig> { MapApplicationConfig() }
+                single { ServerConfig(get()) }
             })
         }
 

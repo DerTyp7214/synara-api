@@ -1,6 +1,8 @@
 package dev.dertyp.services.schedule
 
-import dev.dertyp.AudioUtils
+import dev.dertyp.audio.TranscodedSongRepository
+import dev.dertyp.audio.Transcoder
+import dev.dertyp.config.ServerConfig
 import dev.dertyp.data.AudioInfo
 import dev.dertyp.data.SimpleSong
 import dev.dertyp.data.TranscodedVersion
@@ -54,17 +56,21 @@ class AutoTranscodeWorkerTest : KoinTest {
             transcodedTo = emptyList()
         )
 
-        mockkObject(AudioUtils)
-        every { AudioUtils.isTranscoderActive.compareAndSet(any(), any()) } returns true
-        every { AudioUtils.isTranscoderActive.store(any()) } just Runs
-        coEvery { AudioUtils.getSongsWithTranscodingInfo(any()) } returns listOf(song)
-        coEvery { AudioUtils.insertTranscodedSong(any<List<Triple<SimpleSong, File, TranscodedVersion>>>()) } just Runs
+        val transcoder = mockk<Transcoder>()
+        val transcodedSongRepository = mockk<TranscodedSongRepository>()
+        every { transcoder.isTranscoderActive.compareAndSet(any(), any()) } returns true
+        every { transcoder.isTranscoderActive.store(any()) } just Runs
+        coEvery { transcodedSongRepository.getSongsWithTranscodingInfo(any()) } returns listOf(song)
+        coEvery { transcodedSongRepository.insertTranscodedSong(any<List<Triple<SimpleSong, File, TranscodedVersion>>>()) } just Runs
 
         startKoin {
             modules(
                 module {
                     single { environment }
                     single<ApplicationConfig> { config }
+                    single { ServerConfig(get()) }
+                    single { transcoder }
+                    single { transcodedSongRepository }
                 }
             )
         }
@@ -73,6 +79,6 @@ class AutoTranscodeWorkerTest : KoinTest {
         val results = worker.run()
 
         assertEquals(0, results["quality_OPUS_128"])
-        coVerify(exactly = 0) { AudioUtils.transcodeAudio(any(), any(), any(), any(), any()) }
+        coVerify(exactly = 0) { transcoder.transcodeAudio(any(), any(), any(), any(), any()) }
     }
 }
