@@ -226,7 +226,7 @@ class CoverSourceCollector : Service() {
             fun from(row: ResultRow) = SongRow(
                 id = row[SongTable.id].value,
                 cover = row[SongTable.cover]?.value,
-                albumId = row[SongTable.albumId]?.value,
+                albumId = row[SongTable.albumId].value,
                 albumCover = row.getOrNull(AlbumTable.cover)?.value,
                 explicit = row[SongTable.explicit],
             )

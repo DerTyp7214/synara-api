@@ -82,7 +82,7 @@ COPY --from=ffmpeg-builder /usr/local/bin/ffprobe /usr/bin/
 
 COPY --from=fpcalc-builder /src/chromaprint-fpcalc-1.5.1-linux-x86_64/fpcalc /usr/local/bin/fpcalc
 
-ENV LD_LIBRARY_PATH="/usr/lib:/usr/local/lib:$LD_LIBRARY_PATH"
+ENV LD_LIBRARY_PATH="/usr/lib:/usr/local/lib"
 
 RUN groupadd -g $APP_GROUP_ID appgroup && useradd -u $APP_USER_ID -g appgroup -s /bin/bash -m -d /home/appuser appuser
 

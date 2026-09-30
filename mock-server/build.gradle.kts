@@ -7,6 +7,7 @@ plugins {
 
 application {
     mainClass = "dev.dertyp.mock.MainKt"
+    applicationDefaultJvmArgs = listOf("--enable-native-access=ALL-UNNAMED")
 }
 
 tasks.shadowJar {

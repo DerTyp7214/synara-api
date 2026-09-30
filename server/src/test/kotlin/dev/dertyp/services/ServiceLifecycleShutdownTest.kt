@@ -1,5 +1,6 @@
 package dev.dertyp.services
 
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -21,6 +22,7 @@ class ServiceLifecycleShutdownTest {
         }
     }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
     @Test
     fun `a service that does not stop in time is skipped and the rest still stop`() = runTest {
         val stopped = Collections.synchronizedList(mutableListOf<String>())

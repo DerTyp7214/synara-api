@@ -33,7 +33,7 @@ object PodcastMediaProbe {
             val header = audioFile.audioHeader
             val tag = audioFile.tag
 
-            val durationMs = runCatching { header.preciseTrackLength.toDouble() }.getOrNull()
+            val durationMs = runCatching { header.preciseTrackLength }.getOrNull()
                 ?.takeIf { it > 0.0 }
                 ?.let { (it * 1000).toLong() }
                 ?: runCatching { header.trackLength }.getOrNull()?.takeIf { it > 0 }?.let { it * 1000L }

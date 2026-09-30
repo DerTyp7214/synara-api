@@ -272,7 +272,7 @@ class GeneratedRestRoutesSmokeTest {
             assertEquals(ContentType.Text.EventStream, response.contentType()?.withoutParameters())
             assertEquals("no-cache", response.headers[HttpHeaders.CacheControl])
             val channel = response.bodyAsChannel()
-            val first = withTimeout(2.seconds) { channel.readUTF8Line() }
+            val first = withTimeout(2.seconds) { channel.readLine() }
             assertEquals(": $SseKeepAliveComment", first)
             channel.cancel()
         }

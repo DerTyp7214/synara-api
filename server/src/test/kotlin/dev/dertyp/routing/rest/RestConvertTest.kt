@@ -2,6 +2,7 @@ package dev.dertyp.routing.rest
 
 import dev.dertyp.services.metadata.IMetadataService
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertInstanceOf
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Test
 import java.time.Instant
@@ -62,7 +63,7 @@ class RestConvertTest {
     @Test
     fun `binding exception is an illegal argument`() {
         val e = RestBindingException("boom")
-        assertEquals(true, e is IllegalArgumentException)
+        assertInstanceOf(IllegalArgumentException::class.java, e)
         assertEquals("boom", e.message)
     }
 }

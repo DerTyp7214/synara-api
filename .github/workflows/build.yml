@@ -32,7 +32,10 @@ on:
 
 jobs:
   run-tests:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      checks: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -65,7 +68,7 @@ jobs:
           include_passed: true
 
       - name: Add Coverage to Summary
-        uses: madrapps/jacoco-report@v1.7.1
+        uses: madrapps/jacoco-report@v1.8.0
         if: always() && github.event_name != 'schedule'
         with:
           paths: |
@@ -75,7 +78,7 @@ jobs:
           min-coverage-changed-files: 0
           title: Code Coverage Report
           update-comment: true
-          comment-type: both
+          comment-type: summary
 
       - name: Upload Coverage Report
         uses: actions/upload-artifact@v7
@@ -86,7 +89,7 @@ jobs:
             **/build/reports/kover/html/
 
   build-artifact:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       app_version: ${{ steps.version_info.outputs.APP_VERSION }}
 
@@ -160,7 +163,7 @@ jobs:
 
   build-publish-docker:
     needs: [run-tests, build-artifact]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       matrix:
         include:
@@ -265,7 +268,7 @@ jobs:
   create-github-release:
     needs: [run-tests, build-artifact]
     if: github.ref == 'refs/heads/release' || github.ref == 'refs/heads/master'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Download Server fat JAR

@@ -212,7 +212,7 @@ class PodcastLocalScanServiceTest : KoinTest {
             assertEquals(PodcastImportState.IMPORTED, episode.importState)
             assertEquals("wav", episode.format)
             assertTrue(File(episode.filePath!!).isAbsolute)
-            assertTrue(File(episode.filePath!!).isFile)
+            assertTrue(File(episode.filePath).isFile)
             val duration = episode.durationMs
             assertNotNull(duration)
             assertTrue(duration!! in 900L..1100L, "expected about 1000 ms but got $duration")
