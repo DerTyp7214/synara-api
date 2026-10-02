@@ -99,6 +99,7 @@ tasks.register("generateEnvDocs") {
             "COVER_AUTO_DEBOUNCE_SECONDS" to mapOf("desc" to "Seconds to wait after the last content change before regenerating a cover.", "cat" to "Covers"),
             "AUDIO_TRACKS_SECONDARY_PATH" to mapOf("desc" to "Optional secondary audio path.", "cat" to "Storage & Paths"),
             "YTDLP_CONFIG_PATH" to mapOf("desc" to "Path to yt-dlp.conf for yt-dlp.", "cat" to "Storage & Paths"),
+            "TIDDL_AUTH" to mapOf("desc" to "Optional Tidal client for tiddl in the form client_id;client_secret, the same value tiddl reads. When set, the credential server page sends it for tiddl sessions whenever the client id and secret fields are blank.", "cat" to "External Services"),
             "GAMDL_COOKIES_PATH" to mapOf("desc" to "Path to the Netscape cookies.txt for Apple Music (gamdl importer).", "cat" to "External Services"),
             "GAMDL_WVD_PATH" to mapOf("desc" to "Optional path to a Widevine .wvd device for higher-quality gamdl codecs.", "cat" to "External Services"),
             "GAMDL_CODEC_SONG" to mapOf("desc" to "Optional gamdl song codec override (empty = gamdl default, e.g. aac-web). Advanced/version-sensitive.", "cat" to "External Services"),

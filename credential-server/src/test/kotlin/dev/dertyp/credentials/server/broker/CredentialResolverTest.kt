@@ -21,6 +21,7 @@ import kotlin.test.assertNull
 
 class CredentialResolverTest {
     private val resolver = CredentialResolver(FakeSecretRepository(), MockUpstream { json("{}") }.client)
+    private val customName = "custom.tidal"
 
     private fun cookies(expirySeconds: Long, name: String = FileBroker.MEDIA_USER_TOKEN) = """
         # Netscape HTTP Cookie File
@@ -102,6 +103,7 @@ class CredentialResolverTest {
         val existing = OAuthSecret("id", "secret", "https://a/token", OAuthAuthStyle.BASIC, "s")
 
         val updated = resolver.toStoredSecret(
+            customName,
             CredentialKind.OAUTH_CLIENT_CREDENTIALS,
             CredentialInput.OAuthClientCredentialsInput("", "", "https://b/token", OAuthAuthStyle.FORM),
             existing,
@@ -110,6 +112,7 @@ class CredentialResolverTest {
         assertEquals(OAuthSecret("id", "secret", "https://b/token", OAuthAuthStyle.FORM, null), updated)
 
         val pair = resolver.toStoredSecret(
+            customName,
             CredentialKind.API_KEY_PAIR,
             CredentialInput.ApiKeyPairInput("new-key", ""),
             ApiKeyPairSecret("old-key", "old-secret"),
@@ -120,7 +123,7 @@ class CredentialResolverTest {
     @Test
     fun `blank secret fields without an existing value are invalid`() {
         val error = assertFailsWith<CredentialException> {
-            resolver.toStoredSecret(CredentialKind.API_KEY, CredentialInput.ApiKeyInput(""), null)
+            resolver.toStoredSecret(customName, CredentialKind.API_KEY, CredentialInput.ApiKeyInput(""), null)
         }
         assertEquals(CredentialErrorCode.INVALID, error.code)
     }
@@ -128,7 +131,7 @@ class CredentialResolverTest {
     @Test
     fun `input of another kind is rejected`() {
         val error = assertFailsWith<CredentialException> {
-            resolver.toStoredSecret(CredentialKind.API_KEY_PAIR, CredentialInput.ApiKeyInput("k"), null)
+            resolver.toStoredSecret(customName, CredentialKind.API_KEY_PAIR, CredentialInput.ApiKeyInput("k"), null)
         }
         assertEquals(CredentialErrorCode.INVALID, error.code)
     }
@@ -137,6 +140,7 @@ class CredentialResolverTest {
     fun `invalid apple keys are rejected`() {
         val error = assertFailsWith<CredentialException> {
             resolver.toStoredSecret(
+                customName,
                 CredentialKind.APPLE_DEVELOPER_KEY,
                 CredentialInput.AppleDeveloperKeyInput("team", "key", "-----BEGIN PRIVATE KEY-----\nAAAA\n-----END PRIVATE KEY-----"),
                 null,
@@ -154,6 +158,7 @@ class CredentialResolverTest {
 
         val kept = assertIs<TidalSessionSecret>(
             resolver.toStoredSecret(
+                customName,
                 CredentialKind.TIDAL_DEVICE_SESSION,
                 CredentialInput.TidalSessionInput(TidalSessionFormat.TIDDL, "", ""),
                 existing,
@@ -163,6 +168,7 @@ class CredentialResolverTest {
 
         val imported = assertIs<TidalSessionSecret>(
             resolver.toStoredSecret(
+                customName,
                 CredentialKind.TIDAL_DEVICE_SESSION,
                 CredentialInput.TidalSessionInput(
                     TidalSessionFormat.TIDDL, "new-cid", "",
@@ -179,6 +185,7 @@ class CredentialResolverTest {
 
         val fresh = assertIs<TidalSessionSecret>(
             resolver.toStoredSecret(
+                customName,
                 CredentialKind.TIDAL_DEVICE_SESSION,
                 CredentialInput.TidalSessionInput(TidalSessionFormat.TDN, "cid", "secret"),
                 null,
@@ -189,12 +196,67 @@ class CredentialResolverTest {
     }
 
     @Test
+    fun `blank tidal clients of the importer presets use the default client`() {
+        for (name in listOf(CredentialNames.IMPORTER_TIDDL, CredentialNames.IMPORTER_TDN)) {
+            val fresh = assertIs<TidalSessionSecret>(
+                resolver.toStoredSecret(
+                    name,
+                    CredentialKind.TIDAL_DEVICE_SESSION,
+                    CredentialInput.TidalSessionInput(TidalSessionFormat.TIDDL, "", ""),
+                    null,
+                ),
+            )
+            assertEquals(CredentialPresets.TIDAL_IMPORTER_CLIENT_ID, fresh.clientId)
+            assertEquals(CredentialPresets.TIDAL_IMPORTER_CLIENT_SECRET, fresh.clientSecret)
+        }
+    }
+
+    @Test
+    fun `typed and existing tidal clients win over the preset default`() {
+        val typed = assertIs<TidalSessionSecret>(
+            resolver.toStoredSecret(
+                CredentialNames.IMPORTER_TIDDL,
+                CredentialKind.TIDAL_DEVICE_SESSION,
+                CredentialInput.TidalSessionInput(TidalSessionFormat.TIDDL, "typed-id", "typed-secret"),
+                TidalSessionSecret(TidalSessionFormat.TIDDL, "stored-id", "stored-secret"),
+            ),
+        )
+        assertEquals("typed-id", typed.clientId)
+        assertEquals("typed-secret", typed.clientSecret)
+
+        val stored = assertIs<TidalSessionSecret>(
+            resolver.toStoredSecret(
+                CredentialNames.IMPORTER_TIDDL,
+                CredentialKind.TIDAL_DEVICE_SESSION,
+                CredentialInput.TidalSessionInput(TidalSessionFormat.TIDDL, "", ""),
+                TidalSessionSecret(TidalSessionFormat.TIDDL, "stored-id", "stored-secret"),
+            ),
+        )
+        assertEquals("stored-id", stored.clientId)
+        assertEquals("stored-secret", stored.clientSecret)
+    }
+
+    @Test
+    fun `blank tidal clients without a preset are invalid`() {
+        val error = assertFailsWith<CredentialException> {
+            resolver.toStoredSecret(
+                customName,
+                CredentialKind.TIDAL_DEVICE_SESSION,
+                CredentialInput.TidalSessionInput(TidalSessionFormat.TIDDL, "", ""),
+                null,
+            )
+        }
+        assertEquals(CredentialErrorCode.INVALID, error.code)
+    }
+
+    @Test
     fun `file input keeps blank and absent roles from the existing secret`() {
         val existing = cookieSecret(cookies(1999999999))
         val wvd = CredentialFile(CredentialFileRoles.GAMDL_WVD, Base64.getEncoder().encodeToString(byteArrayOf(9)))
 
         val updated = assertIs<FileSecret>(
             resolver.toStoredSecret(
+                customName,
                 CredentialKind.FILE,
                 CredentialInput.FileInput(listOf(CredentialFile(CredentialFileRoles.GAMDL_COOKIES, ""), wvd)),
                 existing,
@@ -203,12 +265,13 @@ class CredentialResolverTest {
         assertEquals(listOf(existing.files[0], wvd), updated.files)
 
         val untouched = assertIs<FileSecret>(
-            resolver.toStoredSecret(CredentialKind.FILE, CredentialInput.FileInput(listOf(wvd)), existing),
+            resolver.toStoredSecret(customName, CredentialKind.FILE, CredentialInput.FileInput(listOf(wvd)), existing),
         )
         assertEquals(listOf(existing.files[0], wvd), untouched.files)
 
         val error = assertFailsWith<CredentialException> {
             resolver.toStoredSecret(
+                customName,
                 CredentialKind.FILE,
                 CredentialInput.FileInput(listOf(CredentialFile(CredentialFileRoles.GAMDL_WVD, "not base64!"))),
                 null,

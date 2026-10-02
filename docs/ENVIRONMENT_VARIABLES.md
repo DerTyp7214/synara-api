@@ -75,6 +75,7 @@ Most variables have sensible defaults and are **optional**. Only variables witho
 | `SPOTIFY_CLIENT_SECRET` | Spotify API Client Secret. | No | - | - |
 | `TIDAL_CLIENT_ID` | Tidal API Client ID. | No | - | - |
 | `TIDAL_CLIENT_SECRET` | Tidal API Client Secret. | No | - | - |
+| `TIDDL_AUTH` | Optional Tidal client for tiddl in the form client_id;client_secret, the same value tiddl reads. When set, the credential server page sends it for tiddl sessions whenever the client id and secret fields are blank. | No | - | - |
 | `TRANSCRIBER_URL` | Transcriber service URL. | No | `http://localhost:8000` | - |
 
 ## General & Authentication

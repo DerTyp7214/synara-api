@@ -133,6 +133,8 @@
   "credentialserver.field.secret": "Secret",
   "credentialserver.field.format": "Session format",
   "credentialserver.field.tidalClientHelper": "Client id and secret of the Tidal app that runs the device login and refreshes the session.",
+  "credentialserver.field.tidalClientDefaultHelper": "Leave this blank to use the importer's default client.",
+  "credentialserver.field.tiddlAuthHelper": "This server's TIDDL_AUTH client is used when you leave this blank.",
   "credentialserver.field.authFileHelper": "Pick or paste an existing auth.json, or leave this blank and log in with Tidal.",
   "credentialserver.field.base64Helper": "Pick the file or paste it as base64. Leave this blank to keep the stored file.",
   "credentialserver.tidal.title": "Tidal login",

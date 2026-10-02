@@ -1,6 +1,7 @@
 package dev.dertyp.credentials.server.broker
 
 import dev.dertyp.credentials.CredentialErrorCode
+import dev.dertyp.credentials.CredentialNames
 import dev.dertyp.credentials.CredentialStatus
 import dev.dertyp.credentials.TidalLoginStart
 import dev.dertyp.credentials.TidalLoginState
@@ -145,10 +146,37 @@ class TidalDeviceLoginManagerTest {
     }
 
     @Test
-    fun `missing client credentials are invalid`() = runBlocking {
+    fun `importer presets fall back to the default client`() = runBlocking {
+        for (preset in listOf(CredentialNames.IMPORTER_TIDDL, CredentialNames.IMPORTER_TDN)) {
+            val upstream = MockUpstream { json(deviceResponse()) }
+            val manager = TidalDeviceLoginManager(FakeSecretRepository(), upstream.client, scope)
+
+            val session = manager.start(preset, TidalLoginStart(TidalSessionFormat.TIDDL, "", ""))
+            manager.cancel(session.loginId)
+
+            assertEquals(CredentialPresets.TIDAL_IMPORTER_CLIENT_ID, upstream.requests.first().form["client_id"])
+        }
+    }
+
+    @Test
+    fun `typed and stored clients win over the preset default`() = runBlocking {
+        val upstream = MockUpstream { json(deviceResponse()) }
+        val repository = FakeSecretRepository().apply {
+            put(name, TidalSessionSecret(TidalSessionFormat.TIDDL, "stored-client", "stored-secret"))
+        }
+        val manager = TidalDeviceLoginManager(repository, upstream.client, scope)
+
+        manager.cancel(manager.start(name, TidalLoginStart(TidalSessionFormat.TIDDL, "typed-client", "typed-secret")).loginId)
+        manager.cancel(manager.start(name, TidalLoginStart(TidalSessionFormat.TIDDL, "", "")).loginId)
+
+        assertEquals(listOf("typed-client", "stored-client"), upstream.requests.map { it.form["client_id"] })
+    }
+
+    @Test
+    fun `missing client credentials without a preset are invalid`() = runBlocking {
         val manager = TidalDeviceLoginManager(FakeSecretRepository(), MockUpstream { json("{}") }.client, scope)
 
-        val error = assertFailsWith<CredentialException> { manager.start(name, TidalLoginStart(TidalSessionFormat.TIDDL)) }
+        val error = assertFailsWith<CredentialException> { manager.start("custom.tidal", TidalLoginStart(TidalSessionFormat.TIDDL)) }
 
         assertEquals(CredentialErrorCode.INVALID, error.code)
         assertNull(manager.events("unknown"))

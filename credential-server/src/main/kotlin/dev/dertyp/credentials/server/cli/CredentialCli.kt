@@ -102,8 +102,8 @@ class CredentialCli(
                 CredentialKind.TIDAL_DEVICE_SESSION,
                 CredentialInput.TidalSessionInput(
                     format = TidalSessionFormat.TIDDL,
-                    clientId = args.required("client-id"),
-                    clientSecret = args.required("client-secret"),
+                    clientId = args.optional("client-id").orEmpty(),
+                    clientSecret = args.optional("client-secret").orEmpty(),
                     authFileContent = Files.readString(Path.of(args.required("auth-file"))),
                 ),
             )
@@ -242,8 +242,8 @@ class CredentialCli(
               credentials set-oauth <name> --preset <preset> --client-id <id> --client-secret <secret>
               credentials set-apple <name> --team-id <id> --key-id <id> --p8 <path>
               credentials import-file <name> --role <role> --file <path> [--role <role> --file <path>]...
-              credentials import-tiddl <name> --auth-file <path> --client-id <id> --client-secret <secret>
-              credentials tidal-login <name> --format tiddl|tdn --client-id <id> --client-secret <secret>
+              credentials import-tiddl <name> --auth-file <path> [--client-id <id> --client-secret <secret>]
+              credentials tidal-login <name> --format tiddl|tdn [--client-id <id> --client-secret <secret>]
               credentials test|delete <name>
               keys rotate
         """.trimIndent()

@@ -15,7 +15,7 @@ class CredentialAdminOperations(
         requireValidName(name)
         val existingKind = store.kind(name)
         val existing = if (existingKind == request.kind) store.loadSecret(name) else null
-        val secret = resolver.toStoredSecret(request.kind, request.input, existing)
+        val secret = resolver.toStoredSecret(name, request.kind, request.input, existing)
         val state = resolver.initialState(secret)
         val summary = store.upsertCredential(name, request.kind, request.description, secret, state)
         resolver.invalidate(name)

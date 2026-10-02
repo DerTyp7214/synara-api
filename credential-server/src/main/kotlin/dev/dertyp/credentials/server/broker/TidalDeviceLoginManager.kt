@@ -49,14 +49,11 @@ class TidalDeviceLoginManager(
             is TidalSessionSecret -> existing
             else -> throw CredentialException(CredentialErrorCode.INVALID, "$name is not a Tidal session credential")
         }
-        val clientId = request.clientId?.takeIf { it.isNotBlank() } ?: previous?.clientId
-            ?: throw CredentialException(CredentialErrorCode.INVALID, "A Tidal client id is required")
-        val clientSecret = request.clientSecret?.takeIf { it.isNotBlank() } ?: previous?.clientSecret
-            ?: throw CredentialException(CredentialErrorCode.INVALID, "A Tidal client secret is required")
-        val authorization = authApi.deviceAuthorization(clientId)
+        val client = CredentialPresets.tidalClient(name, request.clientId, request.clientSecret, previous)
+        val authorization = authApi.deviceAuthorization(client.id)
         val loginId = UUID.randomUUID().toString()
         val events = MutableStateFlow(TidalLoginEvent(TidalLoginState.PENDING))
-        val target = LoginTarget(name, request, clientId, clientSecret, authorization)
+        val target = LoginTarget(name, request, client.id, client.secret, authorization)
         val job = scope.launch {
             events.finish(poll(target))
         }

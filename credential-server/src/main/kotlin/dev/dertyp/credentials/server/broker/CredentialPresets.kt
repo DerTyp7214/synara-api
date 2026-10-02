@@ -1,5 +1,6 @@
 package dev.dertyp.credentials.server.broker
 
+import dev.dertyp.credentials.CredentialErrorCode
 import dev.dertyp.credentials.CredentialFileRoles
 import dev.dertyp.credentials.CredentialKind
 import dev.dertyp.credentials.CredentialNames
@@ -7,8 +8,29 @@ import dev.dertyp.credentials.CredentialPreset
 import dev.dertyp.credentials.OAuthAuthStyle
 import dev.dertyp.credentials.TidalSessionFormat
 
+data class TidalClient(val id: String, val secret: String)
+
 object CredentialPresets {
     const val SPOTIFY_TOKEN_URL = "https://accounts.spotify.com/api/token"
+    const val TIDAL_IMPORTER_CLIENT_ID = "4N3n6Q1x95LL5K7p"
+    const val TIDAL_IMPORTER_CLIENT_SECRET = "oKOXfJW371cX6xaZ0PyhgGNBdNLlBZd4AKKYougMjik="
+
+    private val tidalImporterClient = TidalClient(TIDAL_IMPORTER_CLIENT_ID, TIDAL_IMPORTER_CLIENT_SECRET)
+
+    private val defaultTidalClients: Map<String, TidalClient> = mapOf(
+        CredentialNames.IMPORTER_TIDDL to tidalImporterClient,
+        CredentialNames.IMPORTER_TDN to tidalImporterClient,
+    )
+
+    fun tidalClient(name: String, clientId: String?, clientSecret: String?, previous: TidalSessionSecret?): TidalClient {
+        val default = defaultTidalClients[name]
+        return TidalClient(
+            id = clientId?.takeIf { it.isNotBlank() } ?: previous?.clientId ?: default?.id
+                ?: throw CredentialException(CredentialErrorCode.INVALID, "A Tidal client id is required"),
+            secret = clientSecret?.takeIf { it.isNotBlank() } ?: previous?.clientSecret ?: default?.secret
+                ?: throw CredentialException(CredentialErrorCode.INVALID, "A Tidal client secret is required"),
+        )
+    }
 
     val all: List<CredentialPreset> = listOf(
         CredentialPreset(

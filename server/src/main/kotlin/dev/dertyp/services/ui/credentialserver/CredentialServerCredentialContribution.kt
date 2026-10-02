@@ -1,6 +1,7 @@
 package dev.dertyp.services.ui.credentialserver
 
 import dev.dertyp.core.runCatchingCancellable
+import dev.dertyp.config.TiddlAuthConfig
 import dev.dertyp.credentials.*
 import dev.dertyp.plugins.UiAccess
 import dev.dertyp.plugins.UiContribution
@@ -113,10 +114,12 @@ class CredentialServerCredentialContribution(private val ui: CredentialServerUiC
     private fun fields(scope: UiRenderScope, target: Target): List<UiComponent> {
         val stored = target.existing != null
         val keep = if (stored) scope.t("$PREFIX.keepHint") else null
-        fun text(key: String, labelKey: String, secret: Boolean = false, value: String? = null, helper: String? = keep) =
-            UiComponent.TextField(key, scope.t(labelKey), value = value, secret = secret, helper = helper, required = !stored && value == null)
+        fun text(key: String, labelKey: String, secret: Boolean = false, value: String? = null, helper: String? = keep, required: Boolean = !stored && value == null) =
+            UiComponent.TextField(key, scope.t(labelKey), value = value, secret = secret, helper = helper, required = required)
         val preset = target.preset
-        val tidalClientHelper = listOfNotNull(scope.t("$PREFIX.field.tidalClientHelper"), keep).joinToString(" ")
+        val tidalClientFallback = keep ?: preset?.let { scope.t("$PREFIX.field.tidalClientDefaultHelper") }
+        val tidalClientHelper = listOfNotNull(scope.t("$PREFIX.field.tidalClientHelper"), tidalClientFallback).joinToString(" ")
+        val tidalClientRequired = !stored && preset == null
         val description = UiComponent.TextField(
             FIELD_DESCRIPTION,
             scope.t("$PREFIX.field.description"),
@@ -148,6 +151,11 @@ class CredentialServerCredentialContribution(private val ui: CredentialServerUiC
             )
             CredentialKind.TIDAL_DEVICE_SESSION -> {
                 val format = preset?.format ?: TidalSessionFormat.TIDDL
+                val clientHelper = if (format == TidalSessionFormat.TIDDL && ui.serverConfig.importers.tiddlAuth != null) {
+                    "$tidalClientHelper ${scope.t("$PREFIX.field.tiddlAuthHelper")}"
+                } else {
+                    tidalClientHelper
+                }
                 val authRole = when (format) {
                     TidalSessionFormat.TIDDL -> CredentialFileRoles.TIDDL_AUTH
                     TidalSessionFormat.TDN -> CredentialFileRoles.TDN_TOKEN
@@ -159,8 +167,8 @@ class CredentialServerCredentialContribution(private val ui: CredentialServerUiC
                         format.name,
                         TidalSessionFormat.entries.map { UiOption(it.name, scope.t("$PREFIX.format.${it.name}")) },
                     ),
-                    text(FIELD_CLIENT_ID, "$PREFIX.field.clientId", helper = tidalClientHelper),
-                    text(FIELD_CLIENT_SECRET, "$PREFIX.field.clientSecret", secret = true, helper = tidalClientHelper),
+                    text(FIELD_CLIENT_ID, "$PREFIX.field.clientId", helper = clientHelper, required = tidalClientRequired),
+                    text(FIELD_CLIENT_SECRET, "$PREFIX.field.clientSecret", secret = true, helper = clientHelper, required = tidalClientRequired),
                     UiComponent.FileField(
                         FIELD_AUTH_FILE,
                         scope.t("$PREFIX.fileRole.$authRole"),
@@ -255,7 +263,8 @@ class CredentialServerCredentialContribution(private val ui: CredentialServerUiC
     }
 
     private suspend fun clientFieldErrors(scope: UiRenderScope, name: String, values: Map<String, UiValue>): Map<String, String> {
-        if (target(name, CredentialKind.TIDAL_DEVICE_SESSION.name)?.existing != null) return emptyMap()
+        val target = target(name, CredentialKind.TIDAL_DEVICE_SESSION.name)
+        if (target?.existing != null || target?.preset != null) return emptyMap()
         return listOf(FIELD_CLIENT_ID, FIELD_CLIENT_SECRET).filter { values.text(it).isEmpty() }.associateWith { scope.t("$PREFIX.error.required") }
     }
 
@@ -263,16 +272,23 @@ class CredentialServerCredentialContribution(private val ui: CredentialServerUiC
         val errors = clientFieldErrors(scope, name, values)
         if (errors.isNotEmpty()) return UiInvokeResult(UiInvokeStatus.VALIDATION_ERROR, fieldErrors = errors)
         val format = TidalSessionFormat.entries.firstOrNull { it.name == values.text(FIELD_FORMAT) } ?: TidalSessionFormat.TIDDL
+        val client = clientFor(format, values)
         val session = ui.admin.startTidalLogin(
             name,
             TidalLoginStart(
                 format = format,
-                clientId = values.text(FIELD_CLIENT_ID).ifEmpty { null },
-                clientSecret = values.text(FIELD_CLIENT_SECRET).ifEmpty { null },
+                clientId = client.clientId.ifEmpty { null },
+                clientSecret = client.clientSecret.ifEmpty { null },
             ),
         )
         ui.tidalLogins.put(scope.user.id, name, session)
         return UiInvokeResult(UiInvokeStatus.OK, scope.t("$PREFIX.tidal.started"), refresh = true)
+    }
+
+    private fun clientFor(format: TidalSessionFormat, values: Map<String, UiValue>): TiddlAuthConfig {
+        val typed = TiddlAuthConfig(values.text(FIELD_CLIENT_ID), values.text(FIELD_CLIENT_SECRET))
+        if (format != TidalSessionFormat.TIDDL || typed.clientId.isNotEmpty() || typed.clientSecret.isNotEmpty()) return typed
+        return ui.serverConfig.importers.tiddlAuth ?: typed
     }
 
     private fun localSession(name: String): Pair<TidalSessionFormat, File>? {
@@ -286,13 +302,14 @@ class CredentialServerCredentialContribution(private val ui: CredentialServerUiC
         val (format, file) = localSession(name) ?: return UiInvokeResult(UiInvokeStatus.ERROR, scope.t("$PREFIX.credential.localLoginMissing"))
         val errors = clientFieldErrors(scope, name, values)
         if (errors.isNotEmpty()) return UiInvokeResult(UiInvokeStatus.VALIDATION_ERROR, fieldErrors = errors)
+        val client = clientFor(format, values)
         val request = UpsertCredentialRequest(
             CredentialKind.TIDAL_DEVICE_SESSION,
             values.text(FIELD_DESCRIPTION).ifEmpty { null },
             CredentialInput.TidalSessionInput(
                 format = format,
-                clientId = values.text(FIELD_CLIENT_ID),
-                clientSecret = values.text(FIELD_CLIENT_SECRET),
+                clientId = client.clientId,
+                clientSecret = client.clientSecret,
                 authFileContent = file.readText(),
             ),
         )
@@ -329,8 +346,8 @@ class CredentialServerCredentialContribution(private val ui: CredentialServerUiC
             CredentialKind.API_KEY_PAIR -> CredentialInput.ApiKeyPairInput(field(FIELD_KEY), field(FIELD_SECRET))
             CredentialKind.TIDAL_DEVICE_SESSION -> CredentialInput.TidalSessionInput(
                 format = TidalSessionFormat.entries.firstOrNull { it.name == values.text(FIELD_FORMAT) } ?: TidalSessionFormat.TIDDL,
-                clientId = field(FIELD_CLIENT_ID),
-                clientSecret = field(FIELD_CLIENT_SECRET),
+                clientId = field(FIELD_CLIENT_ID, required = !stored && target.preset == null),
+                clientSecret = field(FIELD_CLIENT_SECRET, required = !stored && target.preset == null),
                 authFileContent = values.text(FIELD_AUTH_FILE).ifEmpty { null },
             )
             CredentialKind.FILE -> {

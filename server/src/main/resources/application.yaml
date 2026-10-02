@@ -89,6 +89,8 @@ linkresolver:
   apiKey: ${LINKRESOLVER_API_KEY:}
 youtube:
   apiKey: ${YOUTUBE_API_KEY:}
+tiddl:
+  auth: ${TIDDL_AUTH:}
 ytdlp:
   config: ${YTDLP_CONFIG_PATH:}
 gamdl:

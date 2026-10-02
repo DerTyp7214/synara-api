@@ -63,7 +63,7 @@ class CredentialResolver(private val repository: SecretRepository, httpClient: H
         CredentialTestResult(ok = false, expiresAt = null, message = "${e.code}: ${e.message}")
     }
 
-    fun toStoredSecret(kind: CredentialKind, input: CredentialInput, existing: StoredSecret?): StoredSecret {
+    fun toStoredSecret(name: String, kind: CredentialKind, input: CredentialInput, existing: StoredSecret?): StoredSecret {
         val inputKind = kindOf(input)
         if (inputKind != kind) {
             throw CredentialException(CredentialErrorCode.INVALID, "Input $inputKind does not match kind $kind")
@@ -103,7 +103,7 @@ class CredentialResolver(private val repository: SecretRepository, httpClient: H
                     secret = keep(input.secret, previous?.secret, "secret"),
                 )
             }
-            is CredentialInput.TidalSessionInput -> tidalSecret(input, existing as? TidalSessionSecret)
+            is CredentialInput.TidalSessionInput -> tidalSecret(name, input, existing as? TidalSessionSecret)
             is CredentialInput.FileInput -> fileSecret(input.files, existing as? FileSecret)
         }
     }
@@ -148,11 +148,12 @@ class CredentialResolver(private val repository: SecretRepository, httpClient: H
         repository.updateState(name, initialState(secret).copy(status = status, statusMessage = failure.message))
     }
 
-    private fun tidalSecret(input: CredentialInput.TidalSessionInput, previous: TidalSessionSecret?): TidalSessionSecret {
+    private fun tidalSecret(name: String, input: CredentialInput.TidalSessionInput, previous: TidalSessionSecret?): TidalSessionSecret {
+        val client = CredentialPresets.tidalClient(name, input.clientId, input.clientSecret, previous)
         val base = TidalSessionSecret(
             format = input.format,
-            clientId = keep(input.clientId, previous?.clientId, "clientId"),
-            clientSecret = keep(input.clientSecret, previous?.clientSecret, "clientSecret"),
+            clientId = client.id,
+            clientSecret = client.secret,
             accessToken = previous?.accessToken,
             refreshToken = previous?.refreshToken,
             expiresAt = previous?.expiresAt,

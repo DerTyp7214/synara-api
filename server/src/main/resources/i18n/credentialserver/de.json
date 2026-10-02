@@ -133,6 +133,8 @@
   "credentialserver.field.secret": "Secret",
   "credentialserver.field.format": "Sitzungsformat",
   "credentialserver.field.tidalClientHelper": "Client-ID und Secret der Tidal-App, mit der die Geräteanmeldung läuft und die Sitzung erneuert wird.",
+  "credentialserver.field.tidalClientDefaultHelper": "Lass das Feld leer, um den Standard-Client des Importers zu verwenden.",
+  "credentialserver.field.tiddlAuthHelper": "Der TIDDL_AUTH-Client dieses Servers wird verwendet, wenn du das Feld leer lässt.",
   "credentialserver.field.authFileHelper": "Wähle eine vorhandene auth.json aus oder füge sie ein, oder lass das Feld leer und melde dich mit Tidal an.",
   "credentialserver.field.base64Helper": "Wähle die Datei aus oder füge sie als Base64 ein. Lass das Feld leer, um die gespeicherte Datei zu behalten.",
   "credentialserver.tidal.title": "Tidal-Anmeldung",

@@ -9,6 +9,7 @@ import dev.dertyp.services.toMetricsConfig
 import io.ktor.http.Url
 import io.ktor.server.config.ApplicationConfig
 import io.ktor.server.config.tryGetString
+import io.ktor.util.logging.KtorSimpleLogger
 import java.io.File
 import java.nio.file.Path
 import java.nio.file.Paths
@@ -44,6 +45,7 @@ class ProvidersConfig(config: ApplicationConfig) {
 class ImportersConfig(config: ApplicationConfig) {
     val ytdlp: YtdlpConfig by lazy { config.toYtdlpConfig() }
     val gamdl: GamdlConfig by lazy { config.toGamdlConfig() }
+    val tiddlAuth: TiddlAuthConfig? by lazy { config.toTiddlAuthConfig() }
 }
 
 class AnalysisConfig(config: ApplicationConfig) {
@@ -283,6 +285,19 @@ data class YoutubeApiConfig(val apiKey: String?)
 fun ApplicationConfig.toYoutubeApiConfig(): YoutubeApiConfig = YoutubeApiConfig(
     apiKey = propertyOrNull("youtube.apiKey")?.getString(),
 )
+
+data class TiddlAuthConfig(val clientId: String, val clientSecret: String)
+
+fun ApplicationConfig.toTiddlAuthConfig(): TiddlAuthConfig? {
+    val raw = propertyOrNull("tiddl.auth")?.getString()?.trim()?.ifBlank { null } ?: return null
+    val clientId = raw.substringBefore(';').trim()
+    val clientSecret = raw.substringAfter(';', "").trim()
+    if (clientId.isEmpty() || clientSecret.isEmpty()) {
+        KtorSimpleLogger("ServerConfig").warn("TIDDL_AUTH is set but is not in the form <client_id>;<client_secret>, ignoring it")
+        return null
+    }
+    return TiddlAuthConfig(clientId, clientSecret)
+}
 
 data class YtdlpConfig(val configPath: String?)
 

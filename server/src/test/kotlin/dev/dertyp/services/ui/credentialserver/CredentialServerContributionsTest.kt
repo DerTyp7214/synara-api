@@ -1,7 +1,9 @@
 package dev.dertyp.services.ui.credentialserver
 
+import dev.dertyp.config.ImportersConfig
 import dev.dertyp.config.ProxyConfig
 import dev.dertyp.config.ServerConfig
+import dev.dertyp.config.TiddlAuthConfig
 import dev.dertyp.core.ApplicationScope
 import dev.dertyp.core.ClientInfo
 import dev.dertyp.core.HttpClientFactory
@@ -109,7 +111,12 @@ class CredentialServerContributionsTest {
     private val local = LocalCredentialProvider(ClientCredentialsExchange(mockk(relaxed = true)), AppleDeveloperTokenSigner(), localStore, LocalPluginCredentialStore(settingsService, cipher))
     private val remoteNames = mutableSetOf<String>()
     private val provider = PartlyRemoteProvider(local, remoteNames)
+    private var tiddlAuth: TiddlAuthConfig? = null
+    private val importersConfig = mockk<ImportersConfig> {
+        every { tiddlAuth } answers { this@CredentialServerContributionsTest.tiddlAuth }
+    }
     private val serverConfig = mockk<ServerConfig> {
+        every { importers } returns importersConfig
         every { proxy } returns ProxyConfig(hostname = null, controlPort = null, ssl = false, id = null, name = "Home", key = null)
     }
     private val importers = CopyOnWriteArrayList<IImporter>()
@@ -804,22 +811,30 @@ class CredentialServerContributionsTest {
     }
 
     @Test
-    fun `a new tidal session needs the client fields before any login starts`() = runBlocking {
+    fun `a new tidal session without a preset needs the client fields before any login starts`() = runBlocking {
         connect()
         credentials.removeIf { it.name == CredentialNames.IMPORTER_TIDDL }
         localLogin(CredentialNames.IMPORTER_TIDDL, CredentialFileRoles.TIDDL_AUTH, "{}")
         val params = mapOf(CredentialServerPages.PARAM_NAME to CredentialNames.IMPORTER_TIDDL)
         val page = contribution(CredentialServerPages.CREDENTIAL)
         val blank = mapOf(CredentialServerPages.PARAM_KIND to UiValue.of(CredentialKind.TIDAL_DEVICE_SESSION.name), "clientSecret" to UiValue.of(" "))
+        val required = mapOf(
+            "clientId" to translations.resolve(CREDENTIAL_SERVER_UI_SOURCE, "en", "credentialserver.error.required"),
+            "clientSecret" to translations.resolve(CREDENTIAL_SERVER_UI_SOURCE, "en", "credentialserver.error.required"),
+        )
 
         listOf(CredentialServerCredentialContribution.ACTION_USE_LOCAL_LOGIN, CredentialServerCredentialContribution.ACTION_TIDAL_LOGIN).forEach { action ->
             val result = page.invoke(scope(params = params), action, blank)
             assertEquals(UiInvokeStatus.VALIDATION_ERROR, result.status)
-            assertEquals(
-                mapOf("clientId" to translations.resolve(CREDENTIAL_SERVER_UI_SOURCE, "en", "credentialserver.error.required"), "clientSecret" to translations.resolve(CREDENTIAL_SERVER_UI_SOURCE, "en", "credentialserver.error.required")),
-                result.fieldErrors,
-            )
+            assertEquals(required, result.fieldErrors)
         }
+        val custom = page.invoke(
+            scope(params = mapOf(CredentialServerPages.PARAM_NAME to "custom.tidal")),
+            CredentialServerCredentialContribution.ACTION_TIDAL_LOGIN,
+            blank,
+        )
+        assertEquals(UiInvokeStatus.VALIDATION_ERROR, custom.status)
+        assertEquals(required, custom.fieldErrors)
         assertTrue(requests.none { it.method == HttpMethod.Put || it.method == HttpMethod.Post })
 
         val entered = page.invoke(
@@ -829,6 +844,83 @@ class CredentialServerContributionsTest {
         )
         assertEquals(UiInvokeStatus.OK, entered.status)
         assertEquals(CredentialInput.TidalSessionInput(TidalSessionFormat.TIDDL, "my-client", "my-secret", "{}"), upserts().single().second.input)
+    }
+
+    @Test
+    fun `a new preset tidal session sends blank client fields for the importer default`() = runBlocking {
+        connect()
+        credentials.removeIf { it.name == CredentialNames.IMPORTER_TIDDL }
+        presets += CredentialPreset(CredentialNames.IMPORTER_TIDDL, CredentialKind.TIDAL_DEVICE_SESSION, "preset description", format = TidalSessionFormat.TIDDL)
+        localLogin(CredentialNames.IMPORTER_TIDDL, CredentialFileRoles.TIDDL_AUTH, "{}")
+        val params = mapOf(CredentialServerPages.PARAM_NAME to CredentialNames.IMPORTER_TIDDL)
+        val page = contribution(CredentialServerPages.CREDENTIAL)
+
+        val clientFields = page.render(scope(params = params)).flatten().filterIsInstance<UiComponent.TextField>()
+            .filter { it.key == "clientId" || it.key == "clientSecret" }
+        assertEquals(2, clientFields.size)
+        val defaultHelper = translations.resolve(CREDENTIAL_SERVER_UI_SOURCE, "en", "credentialserver.field.tidalClientDefaultHelper")!!
+        assertTrue(clientFields.all { !it.required && it.helper.orEmpty().endsWith(defaultHelper) })
+
+        val local = page.invoke(scope(params = params), CredentialServerCredentialContribution.ACTION_USE_LOCAL_LOGIN, emptyMap())
+        assertEquals(UiInvokeStatus.OK, local.status)
+        assertTrue(local.fieldErrors.isEmpty())
+        val (path, request) = upserts().single()
+        assertEquals("/admin/credentials/${CredentialNames.IMPORTER_TIDDL}", path)
+        assertEquals(CredentialInput.TidalSessionInput(TidalSessionFormat.TIDDL, "", "", "{}"), request.input)
+
+        val login = page.invoke(scope(params = params), CredentialServerCredentialContribution.ACTION_TIDAL_LOGIN, emptyMap())
+        assertEquals(UiInvokeStatus.OK, login.status)
+        assertTrue(login.fieldErrors.isEmpty())
+        val start = requests.single { it.method == HttpMethod.Post && it.url.encodedPath.endsWith("/tidal-login") }
+        assertEquals(TidalLoginStart(TidalSessionFormat.TIDDL, null, null), json.decodeFromString<TidalLoginStart>((start.body as TextContent).text))
+    }
+
+    @Test
+    fun `a configured tiddl client is sent for blank fields on both tiddl actions and typed values win`() = runBlocking {
+        connect()
+        tiddlAuth = TiddlAuthConfig("env-id", "env-secret")
+        credentials.removeIf { it.name == CredentialNames.IMPORTER_TIDDL }
+        presets += CredentialPreset(CredentialNames.IMPORTER_TIDDL, CredentialKind.TIDAL_DEVICE_SESSION, "preset description", format = TidalSessionFormat.TIDDL)
+        localLogin(CredentialNames.IMPORTER_TIDDL, CredentialFileRoles.TIDDL_AUTH, "{}")
+        val params = mapOf(CredentialServerPages.PARAM_NAME to CredentialNames.IMPORTER_TIDDL)
+        val page = contribution(CredentialServerPages.CREDENTIAL)
+        val envHelper = translations.resolve(CREDENTIAL_SERVER_UI_SOURCE, "en", "credentialserver.field.tiddlAuthHelper")!!
+
+        val fields = page.render(scope(params = params)).flatten().filterIsInstance<UiComponent.TextField>()
+            .filter { it.key == "clientId" || it.key == "clientSecret" }
+        assertTrue(fields.all { it.helper.orEmpty().contains(envHelper) })
+
+        assertEquals(UiInvokeStatus.OK, page.invoke(scope(params = params), CredentialServerCredentialContribution.ACTION_USE_LOCAL_LOGIN, emptyMap()).status)
+        assertEquals(CredentialInput.TidalSessionInput(TidalSessionFormat.TIDDL, "env-id", "env-secret", "{}"), upserts().single().second.input)
+
+        assertEquals(UiInvokeStatus.OK, page.invoke(scope(params = params), CredentialServerCredentialContribution.ACTION_TIDAL_LOGIN, emptyMap()).status)
+        val start = requests.single { it.method == HttpMethod.Post && it.url.encodedPath.endsWith("/tidal-login") }
+        assertEquals(TidalLoginStart(TidalSessionFormat.TIDDL, "env-id", "env-secret"), json.decodeFromString<TidalLoginStart>((start.body as TextContent).text))
+
+        val typed = mapOf("clientId" to UiValue.of("my-client"), "clientSecret" to UiValue.of("my-secret"))
+        page.invoke(scope(params = params), CredentialServerCredentialContribution.ACTION_USE_LOCAL_LOGIN, typed)
+        assertEquals(CredentialInput.TidalSessionInput(TidalSessionFormat.TIDDL, "my-client", "my-secret", "{}"), upserts().last().second.input)
+    }
+
+    @Test
+    fun `a configured tiddl client is ignored for tdn sessions`() = runBlocking {
+        connect()
+        tiddlAuth = TiddlAuthConfig("env-id", "env-secret")
+        credentials += credential(CredentialNames.IMPORTER_TDN, CredentialKind.TIDAL_DEVICE_SESSION)
+        presets += CredentialPreset(CredentialNames.IMPORTER_TDN, CredentialKind.TIDAL_DEVICE_SESSION, "preset description", format = TidalSessionFormat.TDN)
+        localLogin(CredentialNames.IMPORTER_TDN, CredentialFileRoles.TDN_TOKEN, "{}")
+        val params = mapOf(
+            CredentialServerPages.PARAM_NAME to CredentialNames.IMPORTER_TDN,
+            CredentialServerPages.PARAM_KIND to CredentialKind.TIDAL_DEVICE_SESSION.name,
+        )
+        val page = contribution(CredentialServerPages.CREDENTIAL)
+
+        page.invoke(scope(params = params), CredentialServerCredentialContribution.ACTION_USE_LOCAL_LOGIN, emptyMap())
+
+        assertEquals(CredentialInput.TidalSessionInput(TidalSessionFormat.TDN, "", "", "{}"), upserts().single().second.input)
+        val fields = page.render(scope(params = params)).flatten().filterIsInstance<UiComponent.TextField>().filter { it.key == "clientId" }
+        val envHelper = translations.resolve(CREDENTIAL_SERVER_UI_SOURCE, "en", "credentialserver.field.tiddlAuthHelper")!!
+        assertTrue(fields.none { it.helper.orEmpty().contains(envHelper) })
     }
 
     @Test

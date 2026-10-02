@@ -25,7 +25,7 @@ The server brokers tokens where the provider allows it, so the long-lived secret
 
 Importer logins are handed out as files that the consumer writes next to the CLI tool before it runs.
 
-- **tiddl**: the server stores the Tidal session (client id, client secret and refresh token entered by the admin). On every hand-out it runs a refresh token grant, persists a rotated refresh token and renders a fresh `auth.json`. Consumers therefore always receive a valid token. If Tidal rejects the refresh token, the credential gets the status `NEEDS_LOGIN` and has to be logged in again.
+- **tiddl**: the server stores the Tidal session (client id, client secret and refresh token entered by the admin). The client id and secret are optional for the `importer.tiddl` and `importer.tdn` presets because they default to the public client that tiddl and tidal-dl-ng ship with. A typed value or an already stored client wins over that default. A Synara server with `TIDDL_AUTH` set sends that client for tiddl sessions instead of the default whenever the fields are blank. On every hand-out it runs a refresh token grant, persists a rotated refresh token and renders a fresh `auth.json`. Consumers therefore always receive a valid token. If Tidal rejects the refresh token, the credential gets the status `NEEDS_LOGIN` and has to be logged in again.
 - **Write-back**: tiddl may rotate its refresh token while it runs. A consumer with the write-back grant sends the changed file back through `PUT /credentials/{name}/files` together with the fingerprint it received. The server accepts it only if that fingerprint is still current and otherwise answers 409, so two consumers sharing one session cannot silently overwrite each other. The loser may need a new login.
 - **gamdl**: cookies and the device file are stored as they are and can not be refreshed. The server reads the cookie expiry so the status can show that the cookies are expiring. They have to be replaced manually.
 
@@ -102,7 +102,7 @@ The jar doubles as a command line tool that works directly on the database, so a
 ```bash
 java -jar credential-server-all.jar credentials set-api-key acoustid.api <key>
 java -jar credential-server-all.jar credentials set-oauth tidal.api --preset tidal.api --client-id <id> --client-secret <secret>
-java -jar credential-server-all.jar credentials import-tiddl importer.tiddl --auth-file ~/.tiddl/auth.json --client-id <id> --client-secret <secret>
+java -jar credential-server-all.jar credentials import-tiddl importer.tiddl --auth-file ~/.tiddl/auth.json
 java -jar credential-server-all.jar clients create my-synara --grant acoustid.api --grant tidal.api --grant importer.tiddl:w
 ```
 
@@ -122,13 +122,13 @@ credentials set-key-pair <name> <key> <secret>
 credentials set-oauth <name> --preset <preset> --client-id <id> --client-secret <secret>
 credentials set-apple <name> --team-id <id> --key-id <id> --p8 <path>
 credentials import-file <name> --role <role> --file <path> [--role <role> --file <path>]...
-credentials import-tiddl <name> --auth-file <path> --client-id <id> --client-secret <secret>
-credentials tidal-login <name> --format tiddl|tdn --client-id <id> --client-secret <secret>
+credentials import-tiddl <name> --auth-file <path> [--client-id <id> --client-secret <secret>]
+credentials tidal-login <name> --format tiddl|tdn [--client-id <id> --client-secret <secret>]
 credentials test|delete <name>
 keys rotate
 ```
 
-`clients rotate` prints the new secret once. `credentials tidal-login` prints the verification link and code and waits until the login completes, fails, expires or is cancelled. The `set-*` and `import-*` commands also take `--description <text>`. `set-oauth` accepts `--token-url`, `--auth-style basic|form` and `--scope` instead of or on top of a preset. Run `java -jar credential-server-all.jar help` to print the list. Without a command the jar starts the server.
+`clients rotate` prints the new secret once. `credentials tidal-login` prints the verification link and code and waits until the login completes, fails, expires or is cancelled. For `importer.tiddl` and `importer.tdn` the `--client-id` and `--client-secret` options of `import-tiddl` and `tidal-login` are optional. Without them the stored client is kept, and a new credential uses the public default client of tiddl and tidal-dl-ng. Other Tidal session names need both options on their first save. The `set-*` and `import-*` commands also take `--description <text>`. `set-oauth` accepts `--token-url`, `--auth-style basic|form` and `--scope` instead of or on top of a preset. Run `java -jar credential-server-all.jar help` to print the list. Without a command the jar starts the server.
 
 The same management is available over the admin REST routes under `/admin`, protected by `X-Admin-Key`.
 
