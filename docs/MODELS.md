@@ -2364,7 +2364,7 @@ Kind of version marker split off a song title.
 | `FEAT` | Featured artists, e.g. feat. Drake or with Artist. |
 | `PROD` | Producer credit, e.g. prod. Metro Boomin. |
 | `REMIX` | A remix, rework, bootleg, flip or VIP. |
-| `MIX` | A named mix, e.g. Extended Mix, Club Mix, Radio Mix. |
+| `MIX` | A named mix, e.g. Extended Mix, Club Mix, Radio Mix or a Mix Cut from a DJ mix. |
 | `LIVE` | A live recording, optionally with venue or date. |
 | `COVER` | A cover version. |
 | `ACOUSTIC` | An acoustic or unplugged version. |
