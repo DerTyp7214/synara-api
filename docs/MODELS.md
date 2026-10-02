@@ -238,6 +238,7 @@ Services: [RPC_SERVICES.md](RPC_SERVICES.md) · REST routes: [REST_API.md](REST_
 - [LyricWord](#devdertypservicesmodelslyricword)
 - [RecentRelease](#devdertypservicesmodelsrecentrelease)
 - [SyncedLyrics](#devdertypservicesmodelssyncedlyrics)
+- [ClientTimeZone](#devdertypuiclienttimezone)
 - [IntakeItem](#devdertypuiintakeitem)
 - [Code](#devdertypuiintakeitemcode)
 - [File](#devdertypuiintakeitemfile)
@@ -2939,6 +2940,13 @@ A collection of time-synced lyrics for a song.
 | Field | Type | Description |
 | :--- | :--- | :--- |
 | `lines` | `List`<[LyricLine](#devdertypservicesmodelslyricline)> | List of individual lyric lines. |
+
+### ClientTimeZone <a name="devdertypuiclienttimezone"></a>
+The client's time zone, sent as an optional request header next to X-Ui-Schema-Version and Accept-Language. The server formats times on server-driven pages in this zone. Clients without it get times in UTC.
+
+| Field | Type | Description |
+| :--- | :--- | :--- |
+| `HEADER` | `String` | Header name. The value is an IANA time zone id such as Europe/Berlin. Invalid values are ignored. |
 
 ### IntakeItem <a name="devdertypuiintakeitem"></a>
 Something a user hands to the server to act on: a link, a catalog code, a provider id, free text or a file. Plugins offer to handle items through intake resolvers.

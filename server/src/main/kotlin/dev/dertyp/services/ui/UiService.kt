@@ -59,7 +59,9 @@ class ServerUiRenderScope(
     val account: User,
     val client: ClientInfo,
     val call: ApplicationCall?,
-) : UiRenderScope(user, context, i18n, settings, clientSchemaVersion)
+) : UiRenderScope(user, context, i18n, settings, clientSchemaVersion) {
+    override val timeZone: String? get() = client.timeZone?.id
+}
 
 class UiService(
     val registry: UiRegistry,

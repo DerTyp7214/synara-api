@@ -35,7 +35,7 @@ class CredentialServerClientContribution(private val ui: CredentialServerUiConte
         val credentials = runCatchingCancellable { ui.admin.listCredentials() }.getOrDefault(emptyList()).sortedBy { it.name }
         val params = mapOf(PARAM_ID to UiValue.of(client.id))
         val children = mutableListOf<UiComponent>()
-        ui.reveal.take(scope.user.id, client.id)?.let { secret ->
+        ui.reveal.peek(scope.user.id, client.id)?.let { secret ->
             children += UiComponent.Card(
                 title = scope.t("$PREFIX.client.secretTitle"),
                 icon = UiIcon(UiIconName.KEY),
@@ -43,6 +43,12 @@ class CredentialServerClientContribution(private val ui: CredentialServerUiConte
                 children = listOf(
                     UiComponent.Text(secret, UiTextStyle.CODE),
                     UiComponent.Text(scope.t("$PREFIX.client.secretHint"), UiTextStyle.CAPTION, UiTone.MUTED),
+                    UiComponent.Button(
+                        scope.t("$PREFIX.client.hideSecret"),
+                        UiAction.Invoke(id, ACTION_HIDE_SECRET, params = params),
+                        UiButtonStyle.SECONDARY,
+                        UiIcon(UiIconName.CLOSE),
+                    ),
                 ),
             )
         }
@@ -50,10 +56,11 @@ class CredentialServerClientContribution(private val ui: CredentialServerUiConte
         val grants = client.grants.associateBy { it.name }
         val grantFields = credentials.flatMap { credential ->
             val grant = grants[credential.name]
+            val label = ui.credentialText(scope, credential.name).label
             buildList {
-                add(UiComponent.Switch(grantKey(credential.name), credential.name, grant != null, helper = scope.kindText(credential.kind)))
+                add(UiComponent.Switch(grantKey(credential.name), label, grant != null, helper = "${credential.name} · ${scope.kindText(credential.kind)}"))
                 if (writeBackCapable(credential.kind)) {
-                    add(UiComponent.Switch(writeBackKey(credential.name), scope.t("$PREFIX.client.writeBack", "name" to credential.name), grant?.writeBack == true))
+                    add(UiComponent.Switch(writeBackKey(credential.name), scope.t("$PREFIX.client.writeBack", "name" to label), grant?.writeBack == true))
                 }
             }
         }
@@ -111,7 +118,7 @@ class CredentialServerClientContribution(private val ui: CredentialServerUiConte
                 UiComponent.Row(badges, spacing = UiSpacing.SMALL),
                 UiComponent.Text(scope.t("$PREFIX.client.clientId", "clientId" to client.clientId), UiTextStyle.CAPTION, UiTone.MUTED),
                 UiComponent.Text(
-                    client.lastTokenAt?.let { scope.t("$PREFIX.client.lastToken", "time" to formatTime(it)) } ?: scope.t("$PREFIX.client.neverUsed"),
+                    client.lastTokenAt?.let { scope.t("$PREFIX.client.lastToken", "time" to formatTime(scope, it)) } ?: scope.t("$PREFIX.client.neverUsed"),
                     UiTextStyle.CAPTION,
                     UiTone.MUTED,
                 ),
@@ -131,13 +138,17 @@ class CredentialServerClientContribution(private val ui: CredentialServerUiConte
                 ui.reveal.put(scope.user.id, rotated.client.id, rotated.clientSecret)
                 UiInvokeResult(UiInvokeStatus.OK, scope.t("$PREFIX.client.rotated"), refresh = true)
             }
+            ACTION_HIDE_SECRET -> {
+                ui.reveal.remove(scope.user.id, clientId)
+                UiInvokeResult(UiInvokeStatus.OK, refresh = true)
+            }
             ACTION_REVOKE -> {
                 ui.admin.revokeTokens(clientId)
                 UiInvokeResult(UiInvokeStatus.OK, scope.t("$PREFIX.client.revoked"), refresh = true)
             }
             else -> {
                 ui.admin.deleteClient(clientId)
-                UiInvokeResult(UiInvokeStatus.OK, scope.t("$PREFIX.client.deleted"), next = UiAction.OpenPage(CredentialServerPages.OVERVIEW))
+                UiInvokeResult(UiInvokeStatus.OK, scope.t("$PREFIX.client.deleted"), next = UiAction.OpenPage(CredentialServerPages.CLIENTS))
             }
         }
     }
@@ -164,7 +175,8 @@ class CredentialServerClientContribution(private val ui: CredentialServerUiConte
         const val ACTION_ROTATE = "rotate"
         const val ACTION_REVOKE = "revoke"
         const val ACTION_DELETE = "delete"
-        private val ACTIONS = setOf(ACTION_SAVE, ACTION_ROTATE, ACTION_REVOKE, ACTION_DELETE)
+        const val ACTION_HIDE_SECRET = "hideSecret"
+        private val ACTIONS = setOf(ACTION_SAVE, ACTION_ROTATE, ACTION_HIDE_SECRET, ACTION_REVOKE, ACTION_DELETE)
 
         fun grantKey(name: String) = "$FIELD_GRANT_PREFIX$name"
 

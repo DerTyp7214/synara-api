@@ -36,6 +36,7 @@ CORS allows any origin and any method, but **not** credentials, so a browser can
 | `X-Api-Version` | always | The value of `ApiVersion.CURRENT` you compiled against — see [API_CONSTANTS.md#api-version](API_CONSTANTS.md#api-version). Absent means the legacy version, and the server then reshapes responses accordingly. See [API_VERSIONING.md](API_VERSIONING.md). |
 | `X-Ui-Schema-Version` | if you render server-driven UI | Omit it and every component arrives as `Fallback`. See [SERVER_DRIVEN_UI.md](SERVER_DRIVEN_UI.md). |
 | `Accept-Language` | if you show server text | e.g. `de-AT, de;q=0.9, en;q=0.5`; the highest-quality language wins, fallback `en`. |
+| `X-Time-Zone` | optionally, if you show server text | An IANA time zone id such as `Europe/Berlin`. Times in server-driven UI are shown in this zone. Without it, or with an invalid id, they are shown in UTC. |
 | `Content-Type: application/json` | on requests with a body | Bodies are always JSON. |
 
 The code samples throughout this page and the rest of the docs send `X-Api-Version: 6` — the number current when they were written. A lower number still works against a newer server: the server shapes its response down to what that version understands, per [API_VERSIONING.md](API_VERSIONING.md).

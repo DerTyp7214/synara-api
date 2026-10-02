@@ -36,6 +36,8 @@ open class UiRenderScope(
     val settings: PluginSettings,
     val clientSchemaVersion: Int,
 ) {
+    open val timeZone: String? get() = null
+
     fun t(key: String, vararg args: Pair<String, String>): String = i18n.t(key, *args)
 }
 

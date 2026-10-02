@@ -43,7 +43,7 @@ class CoreUiContributions(
     )
 
     private fun credentialContributions(): List<UiContribution> =
-        CredentialServerUiContext(credentialServerAdmin, credentialServerConnection, credentialProvider, localCredentials, serverConfig, pluginManager).contributions()
+        CredentialServerUiContext(credentialServerAdmin, credentialServerConnection, credentialProvider, localCredentials, serverConfig, pluginManager, translationService).contributions()
 
     fun register() {
         val registrar = registry.forSource(UiRegistry.SERVER_SOURCE)

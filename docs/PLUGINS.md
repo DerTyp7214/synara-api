@@ -124,7 +124,7 @@ class MySettings : UiContribution(
 ```
 
 - A slot item is an entry, not a screen: in the list slots (`settings`, `library`) render a `ListItem` or `Tile` that opens a `PAGE` contribution, and put the forms and cards on that page. Only `importer` and the `*.detail` slots render inline sections — a `Card` placed into the host screen.
-- `render` is called with a `UiRenderScope` carrying the user (`scope.user`), the host `context` (entity or page params), a translator (`scope.t`), the plugin's `settings`, and the client's schema version.
+- `render` is called with a `UiRenderScope` carrying the user (`scope.user`), the host `context` (entity or page params), a translator (`scope.t`), the plugin's `settings`, the client's schema version and the client's time zone (`scope.timeZone`, an IANA id, or null when the client sends none).
 - `toolbar` (pages only) returns components for the native app bar — buttons with icons, portals — so the page body holds content only.
 - `live(scope, key)` serves a `UiComponent.Live(key, child)` node in your tree: return a `Flow<UiLiveUpdate>` (`Replace(child)` or `AppendLines(lines)` for a `Log` child) so frequent data such as process output updates that subtree only, without re-rendering the page. Return `null` for unknown keys. Example: `UiComponent.Live("log", UiComponent.Log(currentLines))` in `render`, and `live` returning `process.output.map { UiLiveUpdate.AppendLines(listOf(it)) }`.
 - `changes` returns a `Flow<Unit>` when the contribution is live; the server re-renders subscribers on each emission. Return `null` (the default) for static content.
@@ -182,6 +182,8 @@ context.intake.register(object : IntakeResolver {
 `context.credentials` stores and reads secrets such as API keys and logins. It requires `apiVersion` 3. Names are scoped to your plugin, so two plugins can both use the name `api`. `get(name)` returns the `ResolvedCredential` or null, `store(name, credential)` saves one and `remove(name)` deletes it.
 
 Without a credential server configured, credentials are kept encrypted in the local database. With a credential server, grants are looked up as `plugin:<pluginId>:<name>`. `managedRemotely` tells whether the credential server is in use. Names managed remotely cannot be changed from the plugin, so `store` and `remove` are rejected for them.
+
+The Credentials pages show your credentials under a label from your own translation bundle (registered through `context.i18n`). Ship `credentials.name.<name>` and optionally `credentials.about.<name>` as a short description, where `<name>` is the name you pass to `context.credentials`. Without them, the raw name `plugin:<pluginId>:<name>` is shown.
 
 ### Podcast indexes
 

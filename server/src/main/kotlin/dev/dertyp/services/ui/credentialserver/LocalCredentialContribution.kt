@@ -144,7 +144,7 @@ class LocalCredentialContribution(private val ui: CredentialServerUiContext) : U
     private suspend fun test(scope: UiRenderScope, name: String): UiInvokeResult {
         val resolved = runCatchingCancellable { ui.provider.resolve(name) }.getOrNull()
             ?: return UiInvokeResult(UiInvokeStatus.ERROR, scope.t("credentials.testFailed"), refresh = true)
-        val expiry = resolved.expiresAt?.let { scope.t("credentials.expires", "time" to formatTime(it)) }
+        val expiry = resolved.expiresAt?.let { scope.t("credentials.expires", "time" to formatTime(scope, it)) }
         return UiInvokeResult(UiInvokeStatus.OK, listOfNotNull(scope.t("credentials.testOk"), expiry).joinToString(". "), refresh = true)
     }
 

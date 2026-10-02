@@ -8,6 +8,7 @@ import dev.dertyp.data.ApiVersion
 import dev.dertyp.services.ApiKeyScopeRegistry
 import dev.dertyp.services.JwtService
 import dev.dertyp.services.subsonic.SubsonicPlugin
+import dev.dertyp.ui.ClientTimeZone
 import dev.dertyp.ui.UiComponent
 import dev.dertyp.ui.UiSchema
 import dev.dertyp.ui.UiSchemaVersion
@@ -83,6 +84,7 @@ private fun buildDocument(): String = buildString {
             listOf(code("UiSchemaVersion.HEADER"), code(UiSchemaVersion.HEADER)),
             listOf(code("UiSchemaVersion.NONE"), code(UiSchemaVersion.NONE.toString())),
             listOf(code("UiSchemaVersion.CURRENT"), code(UiSchemaVersion.CURRENT.toString())),
+            listOf(code("ClientTimeZone.HEADER"), code(ClientTimeZone.HEADER)),
         ),
     )
     appendLine()

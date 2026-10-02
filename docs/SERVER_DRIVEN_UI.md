@@ -17,14 +17,15 @@ This document is for client implementers. Plugin authors should read the [plugin
 
 ## Headers and handshake
 
-Send two headers on every request, including the websocket upgrade for `/rpc`:
+Send these headers on every request, including the websocket upgrade for `/rpc`:
 
 | Header | Value | Purpose |
 |---|---|---|
 | `X-Ui-Schema-Version` | `UiSchemaVersion.CURRENT` of the `common-rpc` you compiled against (see [API_CONSTANTS.md#ui-schema-version](API_CONSTANTS.md#ui-schema-version)) | The server replaces components your build doesn't know with `Fallback`. Omit it and **every** component becomes `Fallback`. |
 | `Accept-Language` | e.g. `de-AT, de;q=0.9, en;q=0.5` | All text in the tree arrives translated (highest-quality language wins, fallback `en`). Changing the app language means reconnecting the RPC websocket, because headers are read at upgrade time. |
+| `X-Time-Zone` | optional, an IANA time zone id such as `Europe/Berlin` (`ClientTimeZone.HEADER`) | Times on server pages are shown in this zone. Without it, or with an invalid id, they are shown in UTC. Like the language, it is read at upgrade time, so a change applies on reconnect. |
 
-Kotlin clients using `BaseRpcServiceManager` can call `uiHeaders(locale)` next to `apiVersionHeader()`.
+Kotlin clients using `BaseRpcServiceManager` can call `uiHeaders(locale, timeZone)` next to `apiVersionHeader()`, or override `uiLocale()` and `uiTimeZone()`.
 
 `IHandshakeService.handshake()` returns `uiSchemaVersion`; `0` means the server has no server-driven UI.
 

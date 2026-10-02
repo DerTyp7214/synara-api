@@ -1,10 +1,12 @@
 package dev.dertyp.core
 
 import dev.dertyp.data.ApiVersion
+import dev.dertyp.ui.ClientTimeZone
 import dev.dertyp.ui.UiSchemaVersion
 import io.ktor.http.HttpHeaders
 import io.ktor.http.parseHeaderValue
 import io.ktor.server.application.ApplicationCall
+import java.time.ZoneId
 
 @Target(AnnotationTarget.FIELD)
 @Retention(AnnotationRetention.RUNTIME)
@@ -55,6 +57,7 @@ data class ClientInfo(
     val apiVersion: Int,
     val uiSchemaVersion: Int = UiSchemaVersion.NONE,
     val locale: String = DEFAULT_LOCALE,
+    val timeZone: ZoneId? = null,
 ) {
     fun supports(feature: ClientFeature): Boolean =
         apiVersion >= feature.minApiVersion && (feature.maxApiVersion == null || apiVersion <= feature.maxApiVersion)
@@ -68,10 +71,11 @@ data class ClientInfo(
 
         fun fromHeader(value: String?): ClientInfo = fromHeaders(value, null, null)
 
-        fun fromHeaders(apiVersion: String?, uiSchemaVersion: String?, acceptLanguage: String?): ClientInfo = ClientInfo(
+        fun fromHeaders(apiVersion: String?, uiSchemaVersion: String?, acceptLanguage: String?, timeZone: String? = null): ClientInfo = ClientInfo(
             apiVersion = apiVersion?.trim()?.toIntOrNull()?.takeIf { it >= ApiVersion.LEGACY } ?: ApiVersion.LEGACY,
             uiSchemaVersion = uiSchemaVersion?.trim()?.toIntOrNull()?.takeIf { it >= UiSchemaVersion.NONE } ?: UiSchemaVersion.NONE,
             locale = parseLocale(acceptLanguage),
+            timeZone = timeZone?.trim()?.takeIf { it.isNotEmpty() }?.let { runCatching { ZoneId.of(it) }.getOrNull() },
         )
 
         fun parseLocale(acceptLanguage: String?): String {
@@ -89,6 +93,7 @@ data class ClientInfo(
             call.request.headers[ApiVersion.HEADER],
             call.request.headers[UiSchemaVersion.HEADER],
             call.request.headers[HttpHeaders.AcceptLanguage],
+            call.request.headers[ClientTimeZone.HEADER],
         )
     }
 }

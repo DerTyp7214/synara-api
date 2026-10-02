@@ -41,20 +41,21 @@ class CredentialServerCredentialContribution(private val ui: CredentialServerUiC
                 children += UiComponent.Live("$LIVE_TIDAL_PREFIX${session.loginId}", loginComponent(scope, target.name, session, TidalLoginEvent(TidalLoginState.PENDING)))
             }
         }
-        val formActions = buildList {
-            if (target.kind == CredentialKind.TIDAL_DEVICE_SESSION) {
-                add(UiComponent.Button(scope.t("$PREFIX.credential.tidalLogin"), UiAction.Invoke(id, ACTION_TIDAL_LOGIN, params = params, formId = FORM_CREDENTIAL), UiButtonStyle.TEXT, UiIcon(UiIconName.LOGIN)))
-                if (localSession(target.name) != null) {
-                    add(UiComponent.Button(scope.t("$PREFIX.credential.useLocalLogin"), UiAction.Invoke(id, ACTION_USE_LOCAL_LOGIN, params = params, formId = FORM_CREDENTIAL), UiButtonStyle.TEXT, UiIcon(UiIconName.IMPORT)))
-                }
+        val formChildren = fields(scope, target).toMutableList()
+        if (target.kind == CredentialKind.TIDAL_DEVICE_SESSION) {
+            val loginButtons = mutableListOf<UiComponent>(
+                UiComponent.Button(scope.t("$PREFIX.credential.tidalLogin"), UiAction.Invoke(id, ACTION_TIDAL_LOGIN, params = params, formId = FORM_CREDENTIAL), UiButtonStyle.TEXT, UiIcon(UiIconName.LOGIN)),
+            )
+            if (localSession(target.name) != null) {
+                loginButtons += UiComponent.Button(scope.t("$PREFIX.credential.useLocalLogin"), UiAction.Invoke(id, ACTION_USE_LOCAL_LOGIN, params = params, formId = FORM_CREDENTIAL), UiButtonStyle.TEXT, UiIcon(UiIconName.IMPORT))
             }
+            formChildren += UiComponent.Column(loginButtons, spacing = UiSpacing.SMALL, align = UiAlign.START)
         }
         children += UiComponent.Form(
             id = FORM_CREDENTIAL,
             submit = UiAction.Invoke(id, ACTION_SAVE, params = params, formId = FORM_CREDENTIAL),
             submitLabel = scope.t("$PREFIX.save"),
-            actions = formActions,
-            children = fields(scope, target),
+            children = formChildren,
         )
         if (target.existing != null) {
             children += UiComponent.Divider
@@ -84,7 +85,12 @@ class CredentialServerCredentialContribution(private val ui: CredentialServerUiC
 
     private fun header(scope: UiRenderScope, target: Target): UiComponent {
         val existing = target.existing
-        val lines = mutableListOf<UiComponent>(UiComponent.Text(target.name, UiTextStyle.TITLE))
+        val text = ui.credentialText(scope, target.name)
+        val lines = mutableListOf<UiComponent>(
+            UiComponent.Text(text.label, UiTextStyle.TITLE),
+            UiComponent.Text(target.name, UiTextStyle.CAPTION, UiTone.MUTED),
+        )
+        text.description?.let { lines += UiComponent.Text(it, UiTextStyle.CAPTION, UiTone.MUTED) }
         val badges = mutableListOf<UiComponent>(UiComponent.Badge(scope.kindText(target.kind), UiTone.DEFAULT))
         if (existing == null) {
             badges += UiComponent.Badge(scope.t("$PREFIX.credential.new"), UiTone.MUTED)
@@ -93,7 +99,7 @@ class CredentialServerCredentialContribution(private val ui: CredentialServerUiC
         }
         lines += UiComponent.Row(badges, spacing = UiSpacing.SMALL)
         existing?.statusMessage?.takeIf { it.isNotBlank() }?.let { lines += UiComponent.Text(it, UiTextStyle.CAPTION, statusTone(existing.status)) }
-        existing?.expiresAt?.let { lines += UiComponent.Text(scope.t("$PREFIX.credential.expires", "time" to formatTime(it)), UiTextStyle.CAPTION, UiTone.MUTED) }
+        existing?.expiresAt?.let { lines += UiComponent.Text(scope.t("$PREFIX.credential.expires", "time" to formatTime(scope, it)), UiTextStyle.CAPTION, UiTone.MUTED) }
         existing?.let {
             lines += UiComponent.Text(
                 if (it.grantedTo.isEmpty()) scope.t("$PREFIX.credential.notGranted") else scope.t("$PREFIX.credential.grantedTo", "clients" to it.grantedTo.joinToString(", ")),
@@ -101,7 +107,6 @@ class CredentialServerCredentialContribution(private val ui: CredentialServerUiC
                 UiTone.MUTED,
             )
         }
-        target.preset?.description?.takeIf { existing == null }?.let { lines += UiComponent.Text(it, UiTextStyle.CAPTION, UiTone.MUTED) }
         return UiComponent.Column(lines, spacing = UiSpacing.SMALL)
     }
 
@@ -111,10 +116,11 @@ class CredentialServerCredentialContribution(private val ui: CredentialServerUiC
         fun text(key: String, labelKey: String, secret: Boolean = false, value: String? = null, helper: String? = keep) =
             UiComponent.TextField(key, scope.t(labelKey), value = value, secret = secret, helper = helper, required = !stored && value == null)
         val preset = target.preset
+        val tidalClientHelper = listOfNotNull(scope.t("$PREFIX.field.tidalClientHelper"), keep).joinToString(" ")
         val description = UiComponent.TextField(
             FIELD_DESCRIPTION,
             scope.t("$PREFIX.field.description"),
-            value = target.existing?.description ?: preset?.description,
+            value = target.existing?.description,
         )
         val specific = when (target.kind) {
             CredentialKind.OAUTH_CLIENT_CREDENTIALS -> listOf(
@@ -140,28 +146,36 @@ class CredentialServerCredentialContribution(private val ui: CredentialServerUiC
                 text(FIELD_KEY, "$PREFIX.field.key", secret = true),
                 text(FIELD_SECRET, "$PREFIX.field.secret", secret = true),
             )
-            CredentialKind.TIDAL_DEVICE_SESSION -> listOf(
-                UiComponent.Select(
-                    FIELD_FORMAT,
-                    scope.t("$PREFIX.field.format"),
-                    (preset?.format ?: TidalSessionFormat.TIDDL).name,
-                    TidalSessionFormat.entries.map { UiOption(it.name, it.name.lowercase()) },
-                ),
-                text(FIELD_CLIENT_ID, "$PREFIX.field.clientId"),
-                text(FIELD_CLIENT_SECRET, "$PREFIX.field.clientSecret", secret = true),
-                UiComponent.FileField(
-                    FIELD_AUTH_FILE,
-                    scope.t("$PREFIX.field.authFile"),
-                    accept = accept(CredentialFileRoles.TIDDL_AUTH),
-                    secret = true,
-                    helper = scope.t("$PREFIX.field.authFileHelper"),
-                ),
-            )
+            CredentialKind.TIDAL_DEVICE_SESSION -> {
+                val format = preset?.format ?: TidalSessionFormat.TIDDL
+                val authRole = when (format) {
+                    TidalSessionFormat.TIDDL -> CredentialFileRoles.TIDDL_AUTH
+                    TidalSessionFormat.TDN -> CredentialFileRoles.TDN_TOKEN
+                }
+                listOf(
+                    UiComponent.Select(
+                        FIELD_FORMAT,
+                        scope.t("$PREFIX.field.format"),
+                        format.name,
+                        TidalSessionFormat.entries.map { UiOption(it.name, scope.t("$PREFIX.format.${it.name}")) },
+                    ),
+                    text(FIELD_CLIENT_ID, "$PREFIX.field.clientId", helper = tidalClientHelper),
+                    text(FIELD_CLIENT_SECRET, "$PREFIX.field.clientSecret", secret = true, helper = tidalClientHelper),
+                    UiComponent.FileField(
+                        FIELD_AUTH_FILE,
+                        scope.t("$PREFIX.fileRole.$authRole"),
+                        accept = accept(authRole),
+                        secret = true,
+                        helper = scope.t("$PREFIX.field.authFileHelper"),
+                    ),
+                )
+            }
             CredentialKind.FILE -> fileRoles(target).map { role ->
+                val label = ui.translations.resolve(CREDENTIAL_SERVER_UI_SOURCE, scope.i18n.locale, "$PREFIX.fileRole.$role") ?: role
                 if (isBinaryRole(role)) {
-                    UiComponent.FileField(fileKey(role), role, accept = accept(role), binary = true, secret = true, helper = scope.t("$PREFIX.field.base64Helper"))
+                    UiComponent.FileField(fileKey(role), label, accept = accept(role), binary = true, secret = true, helper = scope.t("$PREFIX.field.base64Helper"))
                 } else {
-                    UiComponent.FileField(fileKey(role), role, accept = accept(role), secret = true, helper = keep)
+                    UiComponent.FileField(fileKey(role), label, accept = accept(role), secret = true, helper = keep)
                 }
             }
         }
@@ -191,7 +205,7 @@ class CredentialServerCredentialContribution(private val ui: CredentialServerUiC
                     UiComponent.Text(scope.t("$PREFIX.tidal.instructions"), UiTextStyle.BODY),
                     UiComponent.Text(session.userCode, UiTextStyle.CODE),
                     UiComponent.Text(session.verificationUri, UiTextStyle.CAPTION, UiTone.MUTED),
-                    UiComponent.Progress(null, event.message ?: scope.t("$PREFIX.tidal.waiting", "time" to formatTime(session.expiresAt))),
+                    UiComponent.Progress(null, event.message ?: scope.t("$PREFIX.tidal.waiting", "time" to formatTime(scope, session.expiresAt))),
                 ),
                 actions = listOf(
                     UiComponent.Button(scope.t("$PREFIX.tidal.open"), UiAction.OpenUrl(url), UiButtonStyle.PRIMARY, UiIcon(UiIconName.LINK)),
@@ -218,7 +232,7 @@ class CredentialServerCredentialContribution(private val ui: CredentialServerUiC
             ACTION_SAVE -> save(scope, name, values)
             ACTION_TEST -> {
                 val result = ui.admin.testCredential(name)
-                val expiry = result.expiresAt?.let { scope.t("$PREFIX.credential.expires", "time" to formatTime(it)) }
+                val expiry = result.expiresAt?.let { scope.t("$PREFIX.credential.expires", "time" to formatTime(scope, it)) }
                 if (result.ok) {
                     UiInvokeResult(UiInvokeStatus.OK, listOfNotNull(scope.t("$PREFIX.credential.testOk"), expiry).joinToString(". "), refresh = true)
                 } else {
@@ -227,7 +241,7 @@ class CredentialServerCredentialContribution(private val ui: CredentialServerUiC
             }
             ACTION_DELETE -> {
                 ui.admin.deleteCredential(name)
-                UiInvokeResult(UiInvokeStatus.OK, scope.t("$PREFIX.credential.deleted"), next = UiAction.OpenPage(CredentialServerPages.OVERVIEW))
+                UiInvokeResult(UiInvokeStatus.OK, scope.t("$PREFIX.credential.deleted"), next = UiAction.OpenPage(CredentialServerPages.SERVER))
             }
             ACTION_TIDAL_LOGIN -> startTidalLogin(scope, name, values)
             ACTION_USE_LOCAL_LOGIN -> useLocalLogin(scope, name, values)
@@ -240,7 +254,14 @@ class CredentialServerCredentialContribution(private val ui: CredentialServerUiC
         }
     }
 
+    private suspend fun clientFieldErrors(scope: UiRenderScope, name: String, values: Map<String, UiValue>): Map<String, String> {
+        if (target(name, CredentialKind.TIDAL_DEVICE_SESSION.name)?.existing != null) return emptyMap()
+        return listOf(FIELD_CLIENT_ID, FIELD_CLIENT_SECRET).filter { values.text(it).isEmpty() }.associateWith { scope.t("$PREFIX.error.required") }
+    }
+
     private suspend fun startTidalLogin(scope: UiRenderScope, name: String, values: Map<String, UiValue>): UiInvokeResult {
+        val errors = clientFieldErrors(scope, name, values)
+        if (errors.isNotEmpty()) return UiInvokeResult(UiInvokeStatus.VALIDATION_ERROR, fieldErrors = errors)
         val format = TidalSessionFormat.entries.firstOrNull { it.name == values.text(FIELD_FORMAT) } ?: TidalSessionFormat.TIDDL
         val session = ui.admin.startTidalLogin(
             name,
@@ -263,6 +284,8 @@ class CredentialServerCredentialContribution(private val ui: CredentialServerUiC
 
     private suspend fun useLocalLogin(scope: UiRenderScope, name: String, values: Map<String, UiValue>): UiInvokeResult {
         val (format, file) = localSession(name) ?: return UiInvokeResult(UiInvokeStatus.ERROR, scope.t("$PREFIX.credential.localLoginMissing"))
+        val errors = clientFieldErrors(scope, name, values)
+        if (errors.isNotEmpty()) return UiInvokeResult(UiInvokeStatus.VALIDATION_ERROR, fieldErrors = errors)
         val request = UpsertCredentialRequest(
             CredentialKind.TIDAL_DEVICE_SESSION,
             values.text(FIELD_DESCRIPTION).ifEmpty { null },

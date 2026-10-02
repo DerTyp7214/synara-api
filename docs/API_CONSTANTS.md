@@ -30,6 +30,7 @@ Guides: [API_VERSIONING.md](API_VERSIONING.md) · [AUTHENTICATION.md](AUTHENTICA
 | `UiSchemaVersion.HEADER` | `X-Ui-Schema-Version` |
 | `UiSchemaVersion.NONE` | `0` |
 | `UiSchemaVersion.CURRENT` | `2` |
+| `ClientTimeZone.HEADER` | `X-Time-Zone` |
 
 | Component | Introduced in |
 |---|---|

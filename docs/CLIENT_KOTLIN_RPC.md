@@ -78,7 +78,7 @@ Create it once and keep it for the lifetime of the app.
 | `val sslConfirmed: Boolean` | Whether TLS has ever worked against this server. Persisted, not per-run. |
 | `suspend fun setSslConfirmed(value: Boolean)` | Store that flag. |
 
-Optional overrides worth knowing: `supportsSsl` (default `true`; set `false` on a platform without TLS to skip the probe entirely), `uiLocale()` (default `null`, see *Locale* below), `onServerReachable()` / `onServerUnreachable()` (default: flip the `isServerReachable` flow), and the classifiers `isAuthException`, `isTransportException`, `isRefreshRejected`, `isSslException`.
+Optional overrides worth knowing: `supportsSsl` (default `true`; set `false` on a platform without TLS to skip the probe entirely), `uiLocale()` and `uiTimeZone()` (default `null`, see *Locale* below), `onServerReachable()` / `onServerUnreachable()` (default: flip the `isServerReachable` flow), and the classifiers `isAuthException`, `isTransportException`, `isRefreshRejected`, `isSslException`.
 
 ### A complete minimal subclass
 
@@ -242,6 +242,14 @@ override fun uiLocale(): String? = "de-AT, de;q=0.9, en;q=0.5"
 ```
 
 The manager adds it — together with `X-Api-Version` and `X-Ui-Schema-Version` — to every connection it opens, through its internal `connectionHeaders()`. Because headers are read at WebSocket upgrade time, changing the language means calling `clear()` so the next call reconnects; otherwise server-driven UI text keeps arriving in the old language.
+
+Override `uiTimeZone()` to return an IANA time zone id, which the manager sends as `X-Time-Zone`:
+
+```kotlin
+override fun uiTimeZone(): String? = TimeZone.currentSystemDefault().id
+```
+
+Times on server pages are then shown in that zone. Without it they are shown in UTC. A change applies on the next reconnect, like the language.
 
 ## Error surfaces
 

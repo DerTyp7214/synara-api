@@ -22,6 +22,7 @@ import dev.dertyp.services.credentials.admin.CredentialServerAdminClient
 import dev.dertyp.services.metadata.AcoustIdCredentialSource
 import dev.dertyp.services.podcast.index.PodcastIndexCredentialSource
 import dev.dertyp.services.ui.PluginSettingsService
+import dev.dertyp.services.ui.ServerUiRenderScope
 import dev.dertyp.services.ui.TranslationService
 import dev.dertyp.services.ui.UiService
 import dev.dertyp.services.ui.UiRegistry
@@ -41,11 +42,15 @@ import io.ktor.http.headersOf
 import io.ktor.server.config.MapApplicationConfig
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.mockkObject
+import io.mockk.unmockkObject
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.runBlocking
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -53,8 +58,16 @@ import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.api.io.TempDir
 import java.io.File
 import java.nio.file.Path
+import java.time.ZoneId
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
+import java.util.Locale
 import java.util.UUID
 import java.util.concurrent.CopyOnWriteArrayList
+import kotlin.time.Clock
+import kotlin.time.Instant
+import java.time.Instant as JavaInstant
 
 class CredentialServerContributionsTest {
     private val json = CredentialJson.json
@@ -80,10 +93,13 @@ class CredentialServerContributionsTest {
     private val clients = CopyOnWriteArrayList<ClientSummary>()
     private var healthy = true
     private var loginEvents = emptyList<TidalLoginEvent>()
-    private val credentials = listOf(
-        credential(CredentialNames.TIDAL_API, CredentialKind.OAUTH_CLIENT_CREDENTIALS),
-        credential(CredentialNames.IMPORTER_TIDDL, CredentialKind.TIDAL_DEVICE_SESSION),
-        credential(CredentialNames.plugin("demo", "token"), CredentialKind.API_KEY),
+    private val presets = CopyOnWriteArrayList<CredentialPreset>()
+    private val credentials = CopyOnWriteArrayList(
+        listOf(
+            credential(CredentialNames.TIDAL_API, CredentialKind.OAUTH_CLIENT_CREDENTIALS),
+            credential(CredentialNames.IMPORTER_TIDDL, CredentialKind.TIDAL_DEVICE_SESSION),
+            credential(CredentialNames.plugin("demo", "token"), CredentialKind.API_KEY),
+        ),
     )
     private val admin = User(UUID.randomUUID(), "root", displayName = "Root", passwordHash = "", isAdmin = true)
     private val member = User(UUID.randomUUID(), "member", displayName = "Member", passwordHash = "", isAdmin = false)
@@ -101,13 +117,21 @@ class CredentialServerContributionsTest {
         every { getAllImporters() } answers { importers.toList() }
     }
     private var rejectUpsert = false
-    private val ui = CredentialServerUiContext(adminClient, connection, provider, localStore, serverConfig, pluginManager)
+    private var virtualMillis = 1_000_000L
+    private val ui = CredentialServerUiContext(adminClient, connection, provider, localStore, serverConfig, pluginManager, translations)
 
     @TempDir
     lateinit var tempDir: Path
     private val contributions = ui.contributions()
 
+    @AfterEach
+    fun tearDown() {
+        unmockkObject(Clock.System)
+    }
+
     init {
+        mockkObject(Clock.System)
+        every { Clock.System.now() } answers { Instant.fromEpochMilliseconds(virtualMillis) }
         translations.forSource(CREDENTIAL_SERVER_UI_SOURCE).registerBundlesFromResources(javaClass.classLoader, "i18n/credentialserver", listOf("en", "de"))
     }
 
@@ -162,6 +186,10 @@ class CredentialServerContributionsTest {
             ok(json.encodeToString(CreatedClient(created, SECRET)))
         }
         request.url.encodedPath == "/admin/clients" -> ok(json.encodeToString(clients.toList()))
+        request.url.encodedPath.endsWith("/rotate-secret") -> {
+            val id = request.url.encodedPath.removePrefix("/admin/clients/").removeSuffix("/rotate-secret")
+            ok(json.encodeToString(CreatedClient(clients.first { it.id == id }, ROTATED_SECRET)))
+        }
         request.url.encodedPath.startsWith("/admin/clients/") -> {
             val id = request.url.encodedPath.removePrefix("/admin/clients/")
             clients.firstOrNull { it.id == id }?.let { ok(json.encodeToString(it)) }
@@ -175,7 +203,7 @@ class CredentialServerContributionsTest {
                 HttpStatusCode.OK,
                 headersOf("Content-Type", "application/x-ndjson"),
             )
-        request.url.encodedPath == "/admin/credentials" -> ok(json.encodeToString(credentials))
+        request.url.encodedPath == "/admin/credentials" -> ok(json.encodeToString(credentials.toList()))
         request.url.encodedPath.startsWith("/admin/credentials/") && request.method == HttpMethod.Put ->
             if (rejectUpsert) {
                 respond(json.encodeToString(CredentialError(CredentialErrorCode.INVALID, "Tidal client id and secret are required")), HttpStatusCode.BadRequest)
@@ -187,7 +215,7 @@ class CredentialServerContributionsTest {
             credentials.firstOrNull { it.name == name }?.let { ok(json.encodeToString(it)) }
                 ?: respond(json.encodeToString(CredentialError(CredentialErrorCode.NOT_FOUND, "missing")), HttpStatusCode.NotFound)
         }
-        request.url.encodedPath == "/admin/presets" -> ok("[]")
+        request.url.encodedPath == "/admin/presets" -> ok(json.encodeToString(presets.toList()))
         else -> respond("", HttpStatusCode.NotFound)
     }
 
@@ -198,10 +226,10 @@ class CredentialServerContributionsTest {
         connection.store(mapOf(KEY_URL to "https://creds.example.com", KEY_ADMIN_KEY to adminKey))
     }
 
-    private fun scope(user: User = admin, params: Map<String, String> = emptyMap()) = UiRenderScope(
+    private fun scope(user: User = admin, params: Map<String, String> = emptyMap(), locale: String = "en") = UiRenderScope(
         user = UserInfo.fromUser(user),
         context = UiContext(params = params),
-        i18n = translations.translator(CREDENTIAL_SERVER_UI_SOURCE, "en"),
+        i18n = translations.translator(CREDENTIAL_SERVER_UI_SOURCE, locale),
         settings = connectionSettings,
         clientSchemaVersion = UiSchemaVersion.CURRENT,
     )
@@ -225,17 +253,17 @@ class CredentialServerContributionsTest {
 
     private suspend fun localPage(name: String): UiComponent = contribution(CredentialServerPages.LOCAL).render(localScope(name))
 
-    private suspend fun rows(): Map<String, String?> {
-        val section = overview().flatten().filterIsInstance<UiComponent.Section>().first { it.title == "On this server" }
-        return section.children.filterIsInstance<UiComponent.ListItem>().associate { item ->
+    private fun UiComponent.opens(pageId: String): Boolean = this is UiComponent.ListItem && (action as? UiAction.OpenPage)?.pageId == pageId
+
+    private fun UiComponent.invokes(actionId: String): Boolean = this is UiComponent.Button && (action as? UiAction.Invoke)?.actionId == actionId
+
+    private suspend fun rows(): Map<String, String?> =
+        overview().flatten().filter { it.opens(CredentialServerPages.LOCAL) }.filterIsInstance<UiComponent.ListItem>().associate { item ->
             (item.action as UiAction.OpenPage).params.getValue(CredentialServerPages.PARAM_NAME) to item.trailing
         }
-    }
 
     private suspend fun invokeLocal(name: String, action: String, values: Map<String, String> = emptyMap()) =
         contribution(CredentialServerPages.LOCAL).invoke(localScope(name), action, values.mapValues { UiValue.of(it.value) })
-
-    private fun sectionTitles(component: UiComponent) = component.flatten().filterIsInstance<UiComponent.Section>().map { it.title }
 
     @Test
     fun `the central settings entry is an admin list item opening the credentials page`() = runBlocking {
@@ -255,7 +283,7 @@ class CredentialServerContributionsTest {
 
     @Test
     fun `every contribution is admin only and denied to other users`() = runBlocking {
-        assertEquals(5, contributions.size)
+        assertEquals(7, contributions.size)
         assertTrue(contributions.all { it.access.requiresAdmin })
         assertTrue(contributions.none { it.access.allows(UserInfo.fromUser(member)) })
 
@@ -265,7 +293,10 @@ class CredentialServerContributionsTest {
         val client = ClientInfo(apiVersion = 99, uiSchemaVersion = UiSchemaVersion.CURRENT)
 
         assertThrows<UnauthorizedException> { service.render(member, client, CredentialServerPages.OVERVIEW, UiContext()) }
-        assertThrows<UnauthorizedException> { service.invoke(member, client, CredentialServerPages.OVERVIEW, "register", UiInvokePayload()) }
+        assertThrows<UnauthorizedException> { service.invoke(member, client, CredentialServerPages.SERVER, "register", UiInvokePayload()) }
+        assertThrows<UnauthorizedException> { service.render(member, client, CredentialServerPages.SERVER, UiContext()) }
+        assertThrows<UnauthorizedException> { service.render(member, client, CredentialServerPages.CLIENTS, UiContext()) }
+        assertThrows<UnauthorizedException> { service.invoke(member, client, CredentialServerPages.CLIENTS, "createClient", UiInvokePayload()) }
         assertThrows<UnauthorizedException> {
             service.invoke(member, client, CredentialServerPages.LOCAL, "save", UiInvokePayload())
         }
@@ -354,14 +385,14 @@ class CredentialServerContributionsTest {
     fun `clearing goes back to the environment`() = runBlocking {
         invokeLocal(CredentialNames.YOUTUBE_API, "save", mapOf("apiKey" to "stored-youtube"))
         assertEquals(ResolvedCredential.ApiKey(CredentialNames.YOUTUBE_API, "stored-youtube"), provider.resolve(CredentialNames.YOUTUBE_API))
-        assertTrue(localPage(CredentialNames.YOUTUBE_API).flatten().filterIsInstance<UiComponent.Button>().any { it.label == "Remove stored values" })
+        assertTrue(localPage(CredentialNames.YOUTUBE_API).flatten().any { it.invokes(LocalCredentialContribution.ACTION_CLEAR) })
 
         val cleared = invokeLocal(CredentialNames.YOUTUBE_API, "clear")
 
         assertEquals(UiInvokeStatus.OK, cleared.status)
         assertEquals(ResolvedCredential.ApiKey(CredentialNames.YOUTUBE_API, "env-youtube"), provider.resolve(CredentialNames.YOUTUBE_API))
         assertEquals("Environment", rows()[CredentialNames.YOUTUBE_API])
-        assertTrue(localPage(CredentialNames.YOUTUBE_API).flatten().filterIsInstance<UiComponent.Button>().none { it.label == "Remove stored values" })
+        assertTrue(localPage(CredentialNames.YOUTUBE_API).flatten().none { it.invokes(LocalCredentialContribution.ACTION_CLEAR) })
     }
 
     @Test
@@ -412,21 +443,27 @@ class CredentialServerContributionsTest {
 
     @Test
     fun `admin sections stay hidden without an admin key the credential server accepts`() = runBlocking {
-        val register = "Register this server"
-        assertFalse(sectionTitles(overview()).contains(register))
-        assertTrue(sectionTitles(overview()).contains("Credential server"))
+        val adminForms = listOf(CredentialServerServerContribution.FORM_REGISTER, CredentialServerServerContribution.FORM_CREATE_CREDENTIAL)
+        fun formIds(component: UiComponent) = component.flatten().filterIsInstance<UiComponent.Form>().map { it.id }
+        val server = contribution(CredentialServerPages.SERVER)
+        assertTrue(formIds(server.render(scope())).none { it in adminForms })
+        assertTrue(overview().flatten().any { it.opens(CredentialServerPages.SERVER) })
+        assertTrue(formIds(server.render(scope())).contains(CredentialServerServerContribution.FORM_CONNECTION))
 
         connect(adminKey = "wrong-key")
-        val rejected = overview()
-        assertFalse(sectionTitles(rejected).contains(register))
-        assertFalse(sectionTitles(rejected).contains("Clients"))
-        assertTrue(rejected.flatten().filterIsInstance<UiComponent.Text>().any { it.text.startsWith("The credential server does not accept the admin key") })
+        val rejected = server.render(scope())
+        assertTrue(formIds(rejected).none { it in adminForms })
+        assertTrue(overview().flatten().none { it.opens(CredentialServerPages.CLIENTS) })
+        assertTrue(rejected.flatten().filterIsInstance<UiComponent.Text>().any { it.text == translations.resolve(CREDENTIAL_SERVER_UI_SOURCE, "en", "credentialserver.adminKeyRejected") })
+        assertTrue(contribution(CredentialServerPages.CLIENTS).render(scope()) is UiComponent.EmptyState)
         assertTrue(contribution(CredentialServerPages.CLIENT).render(scope(params = mapOf("id" to "c1"))) is UiComponent.EmptyState)
         assertTrue(contribution(CredentialServerPages.CREDENTIAL).render(scope(params = mapOf("name" to CredentialNames.TIDAL_API))) is UiComponent.EmptyState)
 
         connect()
-        val accepted = overview()
-        assertTrue(sectionTitles(accepted).containsAll(listOf(register, "Credentials", "Clients")))
+        val accepted = server.render(scope())
+        assertTrue(formIds(accepted).containsAll(adminForms))
+        assertTrue(overview().flatten().any { it.opens(CredentialServerPages.CLIENTS) })
+        assertTrue(formIds(contribution(CredentialServerPages.CLIENTS).render(scope())).contains(CredentialServerClientsContribution.FORM_CREATE_CLIENT))
         assertFalse(contribution(CredentialServerPages.CREDENTIAL).render(scope(params = mapOf("name" to CredentialNames.TIDAL_API))) is UiComponent.EmptyState)
     }
 
@@ -452,9 +489,9 @@ class CredentialServerContributionsTest {
     @Test
     fun `register this server stores the returned secret and never renders it`() = runBlocking {
         connect()
-        val overview = contribution(CredentialServerPages.OVERVIEW)
+        val server = contribution(CredentialServerPages.SERVER)
 
-        val result = overview.invoke(scope(), "register", mapOf("serverName" to UiValue.of("Home")))
+        val result = server.invoke(scope(), "register", mapOf("serverName" to UiValue.of("Home")))
 
         assertEquals(UiInvokeStatus.OK, result.status)
         assertFalse(result.message.orEmpty().contains(SECRET))
@@ -470,21 +507,79 @@ class CredentialServerContributionsTest {
         assertEquals(SECRET, stored.clientSecret)
         assertTrue(connectionSettings.getAll().values.none { it.contains(SECRET) })
 
-        assertFalse(overview.render(scope()).encoded().contains(SECRET))
+        assertFalse(server.render(scope()).encoded().contains(SECRET))
+        assertFalse(overview().encoded().contains(SECRET))
+        assertFalse(contribution(CredentialServerPages.CLIENTS).render(scope()).encoded().contains(SECRET))
         assertFalse(contribution(CredentialServerPages.CLIENT).render(scope(params = mapOf("id" to "c1"))).encoded().contains(SECRET))
     }
 
     @Test
-    fun `a created client secret is revealed once on its page`() = runBlocking {
+    fun `a created client secret stays visible across renders on its page`() = runBlocking {
         connect()
-        val result = contribution(CredentialServerPages.OVERVIEW).invoke(scope(), "createClient", mapOf("clientName" to UiValue.of("Laptop")))
+        val result = contribution(CredentialServerPages.CLIENTS).invoke(scope(), "createClient", mapOf("clientName" to UiValue.of("Laptop")))
         assertEquals(UiAction.OpenPage(CredentialServerPages.CLIENT, mapOf("id" to "c1")), result.next)
         assertFalse(result.message.orEmpty().contains(SECRET))
 
         val page = contribution(CredentialServerPages.CLIENT)
         assertTrue(page.render(scope(params = mapOf("id" to "c1"))).encoded().contains(SECRET))
-        assertFalse(page.render(scope(params = mapOf("id" to "c1"))).encoded().contains(SECRET))
+        assertTrue(page.render(scope(params = mapOf("id" to "c1"))).encoded().contains(SECRET))
         assertNull(connection.current()?.clientSecret)
+    }
+
+    @Test
+    fun `hiding the secret removes it from the next render and refreshes`() = runBlocking {
+        connect()
+        contribution(CredentialServerPages.CLIENTS).invoke(scope(), "createClient", mapOf("clientName" to UiValue.of("Laptop")))
+        val page = contribution(CredentialServerPages.CLIENT)
+        val params = mapOf("id" to "c1")
+        val hide = page.render(scope(params = params)).flatten().filterIsInstance<UiComponent.Button>()
+            .single { (it.action as? UiAction.Invoke)?.actionId == CredentialServerClientContribution.ACTION_HIDE_SECRET }
+
+        val result = page.invoke(scope(params = params), (hide.action as UiAction.Invoke).actionId, emptyMap())
+
+        assertEquals(UiInvokeStatus.OK, result.status)
+        assertTrue(result.refresh)
+        assertFalse(page.render(scope(params = params)).encoded().contains(SECRET))
+    }
+
+    @Test
+    fun `a revealed secret expires after the time to live`() = runBlocking {
+        connect()
+        contribution(CredentialServerPages.CLIENTS).invoke(scope(), "createClient", mapOf("clientName" to UiValue.of("Laptop")))
+        val page = contribution(CredentialServerPages.CLIENT)
+        val params = mapOf("id" to "c1")
+
+        virtualMillis += CredentialServerSecretReveal.TTL.inWholeMilliseconds - 1
+        assertTrue(page.render(scope(params = params)).encoded().contains(SECRET))
+        virtualMillis += 1
+        assertFalse(page.render(scope(params = params)).encoded().contains(SECRET))
+    }
+
+    @Test
+    fun `a rotated secret stays visible across renders`() = runBlocking {
+        connect()
+        contribution(CredentialServerPages.CLIENTS).invoke(scope(), "createClient", mapOf("clientName" to UiValue.of("Laptop")))
+        val page = contribution(CredentialServerPages.CLIENT)
+        val params = mapOf("id" to "c1")
+
+        val result = page.invoke(scope(params = params), CredentialServerClientContribution.ACTION_ROTATE, emptyMap())
+
+        assertEquals(UiInvokeStatus.OK, result.status)
+        repeat(2) {
+            val encoded = page.render(scope(params = params)).encoded()
+            assertTrue(encoded.contains(ROTATED_SECRET))
+            assertFalse(encoded.contains(SECRET))
+        }
+    }
+
+    @Test
+    fun `a revealed secret never appears for another user`() = runBlocking {
+        connect()
+        contribution(CredentialServerPages.CLIENTS).invoke(scope(), "createClient", mapOf("clientName" to UiValue.of("Laptop")))
+        val page = contribution(CredentialServerPages.CLIENT)
+
+        assertFalse(page.render(scope(user = member, params = mapOf("id" to "c1"))).encoded().contains(SECRET))
+        assertTrue(page.render(scope(params = mapOf("id" to "c1"))).encoded().contains(SECRET))
     }
 
     @Test
@@ -577,6 +672,7 @@ class CredentialServerContributionsTest {
     @Test
     fun `the existing tdn login keeps blank client ids for the credential server to merge`() = runBlocking {
         connect()
+        credentials += credential(CredentialNames.IMPORTER_TDN, CredentialKind.TIDAL_DEVICE_SESSION)
         val content = """{"token_type":"Bearer","access_token":"local-tdn-token"}"""
         localLogin(CredentialNames.IMPORTER_TDN, CredentialFileRoles.TDN_TOKEN, content)
         val params = mapOf(
@@ -607,8 +703,275 @@ class CredentialServerContributionsTest {
         assertEquals("Tidal client id and secret are required", result.message)
     }
 
+    private fun buttonColumn(page: UiComponent.Column, formId: String): UiComponent.Column {
+        val index = page.children.indexOfFirst { it is UiComponent.Form && it.id == formId }
+        val form = page.children[index] as UiComponent.Form
+        assertTrue(form.actions.isEmpty())
+        assertTrue(form.flatten().none { it is UiComponent.Button })
+        assertEquals(UiComponent.Divider, page.children[index + 1])
+        return page.children[index + 2] as UiComponent.Column
+    }
+
+    private fun actionIds(column: UiComponent.Column) = column.children.map { ((it as UiComponent.Button).action as UiAction.Invoke).actionId }
+
+
+    @Test
+    fun `the overview starts with the navigation and lists the local credentials below`() = runBlocking {
+        val local = overview() as UiComponent.Column
+        assertTrue(local.children[0].opens(CredentialServerPages.SERVER))
+        assertEquals(translations.resolve(CREDENTIAL_SERVER_UI_SOURCE, "en", "credentialserver.status.local"), (local.children[0] as UiComponent.ListItem).trailing)
+        assertTrue(local.children.none { it.opens(CredentialServerPages.CLIENTS) })
+        assertEquals(2, local.children.size)
+        assertEquals(9, local.children[1].flatten().count { it.opens(CredentialServerPages.LOCAL) })
+
+        connect()
+        contribution(CredentialServerPages.CLIENTS).invoke(scope(), "createClient", mapOf("clientName" to UiValue.of("Laptop")))
+        val accepted = overview() as UiComponent.Column
+        assertTrue(accepted.children[0].opens(CredentialServerPages.SERVER))
+        assertEquals(translations.resolve(CREDENTIAL_SERVER_UI_SOURCE, "en", "credentialserver.status.connected"), (accepted.children[0] as UiComponent.ListItem).trailing)
+        assertTrue(accepted.children[1].opens(CredentialServerPages.CLIENTS))
+        assertEquals("1", (accepted.children[1] as UiComponent.ListItem).trailing)
+        assertEquals(3, accepted.children.size)
+        assertEquals(9, accepted.children[2].flatten().count { it.opens(CredentialServerPages.LOCAL) })
+    }
+
+    @Test
+    fun `the server page puts test and disconnect in their own rows after the connection form`() = runBlocking {
+        val server = contribution(CredentialServerPages.SERVER)
+        val local = buttonColumn(server.render(scope()) as UiComponent.Column, CredentialServerServerContribution.FORM_CONNECTION)
+        assertEquals(UiAlign.START, local.align)
+        assertEquals(listOf(CredentialServerServerContribution.ACTION_TEST), actionIds(local))
+        assertEquals(UiButtonStyle.SECONDARY, (local.children[0] as UiComponent.Button).style)
+
+        connect()
+        val connected = buttonColumn(server.render(scope()) as UiComponent.Column, CredentialServerServerContribution.FORM_CONNECTION)
+        assertEquals(listOf(CredentialServerServerContribution.ACTION_TEST, CredentialServerServerContribution.ACTION_DISCONNECT), actionIds(connected))
+        val disconnect = connected.children[1] as UiComponent.Button
+        assertEquals(UiButtonStyle.DESTRUCTIVE, disconnect.style)
+        assertEquals(translations.resolve(CREDENTIAL_SERVER_UI_SOURCE, "en", "credentialserver.disconnectConfirm"), (disconnect.action as UiAction.Invoke).confirmText)
+
+        val result = server.invoke(scope(), CredentialServerServerContribution.ACTION_DISCONNECT, emptyMap())
+        assertEquals(UiInvokeStatus.OK, result.status)
+        assertNull(connection.current()?.baseUrl)
+    }
+
+    @Test
+    fun `the clients page lists clients and creating one opens its page with the secret`() = runBlocking {
+        connect()
+        val page = contribution(CredentialServerPages.CLIENTS)
+        assertTrue(page.render(scope()).flatten().none { it.opens(CredentialServerPages.CLIENT) })
+
+        val result = page.invoke(scope(), CredentialServerClientsContribution.ACTION_CREATE_CLIENT, mapOf(CredentialServerClientsContribution.FIELD_CLIENT_NAME to UiValue.of("Laptop")))
+
+        assertEquals(UiInvokeStatus.OK, result.status)
+        assertEquals(UiAction.OpenPage(CredentialServerPages.CLIENT, mapOf(CredentialServerPages.PARAM_ID to "c1")), result.next)
+        val item = page.render(scope()).flatten().filterIsInstance<UiComponent.ListItem>().single { it.opens(CredentialServerPages.CLIENT) }
+        assertEquals("Laptop", item.title)
+        assertEquals(mapOf(CredentialServerPages.PARAM_ID to "c1"), (item.action as UiAction.OpenPage).params)
+        assertFalse(page.render(scope()).encoded().contains(SECRET))
+        assertTrue(contribution(CredentialServerPages.CLIENT).render(scope(params = mapOf(CredentialServerPages.PARAM_ID to "c1"))).encoded().contains(SECRET))
+
+        val blank = page.invoke(scope(), CredentialServerClientsContribution.ACTION_CREATE_CLIENT, emptyMap())
+        assertEquals(UiInvokeStatus.VALIDATION_ERROR, blank.status)
+        assertEquals(setOf(CredentialServerClientsContribution.FIELD_CLIENT_NAME), blank.fieldErrors.keys)
+    }
+
+    @Test
+    fun `deleting from a detail page goes back to its list page`() = runBlocking {
+        connect()
+        contribution(CredentialServerPages.CLIENTS).invoke(scope(), "createClient", mapOf("clientName" to UiValue.of("Laptop")))
+
+        val client = contribution(CredentialServerPages.CLIENT).invoke(scope(params = mapOf(CredentialServerPages.PARAM_ID to "c1")), CredentialServerClientContribution.ACTION_DELETE, emptyMap())
+        val credential = contribution(CredentialServerPages.CREDENTIAL).invoke(scope(params = mapOf(CredentialServerPages.PARAM_NAME to CredentialNames.TIDAL_API)), CredentialServerCredentialContribution.ACTION_DELETE, emptyMap())
+
+        assertEquals(UiAction.OpenPage(CredentialServerPages.CLIENTS), client.next)
+        assertEquals(UiAction.OpenPage(CredentialServerPages.SERVER), credential.next)
+    }
+
+    @Test
+    fun `both tidal buttons sit inside the credential form and send its values`() = runBlocking {
+        connect()
+        localLogin(CredentialNames.IMPORTER_TIDDL, CredentialFileRoles.TIDDL_AUTH, "{}")
+        val page = contribution(CredentialServerPages.CREDENTIAL).render(scope(params = mapOf(CredentialServerPages.PARAM_NAME to CredentialNames.IMPORTER_TIDDL)))
+
+        val form = page.flatten().filterIsInstance<UiComponent.Form>().single { it.id == CredentialServerCredentialContribution.FORM_CREDENTIAL }
+        assertTrue(form.actions.isEmpty())
+        val column = form.children.last() as UiComponent.Column
+        assertEquals(UiAlign.START, column.align)
+        assertEquals(UiSpacing.SMALL, column.spacing)
+        assertEquals(listOf(CredentialServerCredentialContribution.ACTION_TIDAL_LOGIN, CredentialServerCredentialContribution.ACTION_USE_LOCAL_LOGIN), actionIds(column))
+        assertTrue(column.children.all { ((it as UiComponent.Button).action as UiAction.Invoke).formId == CredentialServerCredentialContribution.FORM_CREDENTIAL })
+    }
+
+    @Test
+    fun `a new tidal session needs the client fields before any login starts`() = runBlocking {
+        connect()
+        credentials.removeIf { it.name == CredentialNames.IMPORTER_TIDDL }
+        localLogin(CredentialNames.IMPORTER_TIDDL, CredentialFileRoles.TIDDL_AUTH, "{}")
+        val params = mapOf(CredentialServerPages.PARAM_NAME to CredentialNames.IMPORTER_TIDDL)
+        val page = contribution(CredentialServerPages.CREDENTIAL)
+        val blank = mapOf(CredentialServerPages.PARAM_KIND to UiValue.of(CredentialKind.TIDAL_DEVICE_SESSION.name), "clientSecret" to UiValue.of(" "))
+
+        listOf(CredentialServerCredentialContribution.ACTION_USE_LOCAL_LOGIN, CredentialServerCredentialContribution.ACTION_TIDAL_LOGIN).forEach { action ->
+            val result = page.invoke(scope(params = params), action, blank)
+            assertEquals(UiInvokeStatus.VALIDATION_ERROR, result.status)
+            assertEquals(
+                mapOf("clientId" to translations.resolve(CREDENTIAL_SERVER_UI_SOURCE, "en", "credentialserver.error.required"), "clientSecret" to translations.resolve(CREDENTIAL_SERVER_UI_SOURCE, "en", "credentialserver.error.required")),
+                result.fieldErrors,
+            )
+        }
+        assertTrue(requests.none { it.method == HttpMethod.Put || it.method == HttpMethod.Post })
+
+        val entered = page.invoke(
+            scope(params = params),
+            CredentialServerCredentialContribution.ACTION_USE_LOCAL_LOGIN,
+            mapOf("clientId" to UiValue.of("my-client"), "clientSecret" to UiValue.of("my-secret")),
+        )
+        assertEquals(UiInvokeStatus.OK, entered.status)
+        assertEquals(CredentialInput.TidalSessionInput(TidalSessionFormat.TIDDL, "my-client", "my-secret", "{}"), upserts().single().second.input)
+    }
+
+    @Test
+    fun `an existing tidal session passes blank client fields through`() = runBlocking {
+        connect()
+        val params = mapOf(CredentialServerPages.PARAM_NAME to CredentialNames.IMPORTER_TIDDL)
+
+        val result = contribution(CredentialServerPages.CREDENTIAL).invoke(scope(params = params), CredentialServerCredentialContribution.ACTION_TIDAL_LOGIN, emptyMap())
+
+        assertEquals(UiInvokeStatus.OK, result.status)
+        val request = requests.single { it.method == HttpMethod.Post && it.url.encodedPath.endsWith("/tidal-login") }
+        assertEquals(TidalLoginStart(TidalSessionFormat.TIDDL, null, null), json.decodeFromString<TidalLoginStart>((request.body as TextContent).text))
+    }
+
+    @Test
+    fun `core credential names and descriptions are translated`() = runBlocking {
+        connect()
+        val text = ui.credentialText(scope(locale = "de"), CredentialNames.IMPORTER_TIDDL)
+        assertEquals(translations.resolve(CREDENTIAL_SERVER_UI_SOURCE, "de", "credentials.name.importer.tiddl"), text.label)
+        assertNotNull(text.description)
+        assertEquals(translations.resolve(CREDENTIAL_SERVER_UI_SOURCE, "de", "credentials.about.importer.tiddl"), text.description)
+
+        val header = contribution(CredentialServerPages.CREDENTIAL).render(scope(params = mapOf(CredentialServerPages.PARAM_NAME to CredentialNames.IMPORTER_TIDDL), locale = "de"))
+            .flatten().filterIsInstance<UiComponent.Text>()
+        assertEquals(UiTextStyle.TITLE, header[0].style)
+        assertEquals(text.label, header[0].text)
+        assertEquals(UiComponent.Text(CredentialNames.IMPORTER_TIDDL, UiTextStyle.CAPTION, UiTone.MUTED), header[1])
+        assertEquals(text.description, header[2].text)
+
+        val listed = contribution(CredentialServerPages.SERVER).render(scope(locale = "de")).flatten().filterIsInstance<UiComponent.ListItem>()
+            .single { (it.action as? UiAction.OpenPage)?.params?.get(CredentialServerPages.PARAM_NAME) == CredentialNames.IMPORTER_TIDDL }
+        assertEquals(text.label, listed.title)
+        assertTrue(listed.subtitle.orEmpty().startsWith(CredentialNames.IMPORTER_TIDDL))
+
+        contribution(CredentialServerPages.CLIENTS).invoke(scope(), "createClient", mapOf("clientName" to UiValue.of("Laptop")))
+        val grant = contribution(CredentialServerPages.CLIENT).render(scope(params = mapOf(CredentialServerPages.PARAM_ID to "c1"), locale = "de"))
+            .flatten().filterIsInstance<UiComponent.Switch>().single { it.key == CredentialServerClientContribution.grantKey(CredentialNames.IMPORTER_TIDDL) }
+        assertEquals(text.label, grant.label)
+        assertTrue(grant.helper.orEmpty().startsWith(CredentialNames.IMPORTER_TIDDL))
+    }
+
+    @Test
+    fun `plugin credential names come from the plugin bundle`() {
+        translations.forSource("lastfm").registerBundle("de", mapOf("credentials.name.apiKey" to "Last.fm-API-Schlüssel"))
+
+        val text = ui.credentialText(scope(locale = "de"), CredentialNames.plugin("lastfm", "apiKey"))
+
+        assertEquals(translations.resolve("lastfm", "de", "credentials.name.apiKey"), text.label)
+        assertNull(text.description)
+    }
+
+    @Test
+    fun `untranslatable credential names stay raw`() {
+        translations.forSource("lastfm").registerBundle("de", mapOf("credentials.name.apiKey" to "Last.fm-API-Schlüssel"))
+        listOf("custom.thing", CredentialNames.plugin("lastfm", "other"), CredentialNames.plugin("unknown", "token")).forEach { name ->
+            assertEquals(CredentialText(name, null), ui.credentialText(scope(locale = "de"), name))
+        }
+    }
+
+    @Test
+    fun `file roles and tidal formats are translated`() = runBlocking {
+        connect()
+        val files = contribution(CredentialServerPages.CREDENTIAL)
+            .render(scope(params = mapOf(CredentialServerPages.PARAM_NAME to CredentialNames.IMPORTER_GAMDL, CredentialServerPages.PARAM_KIND to CredentialKind.FILE.name), locale = "de"))
+            .flatten().filterIsInstance<UiComponent.FileField>()
+        assertEquals(
+            listOf(
+                CredentialServerCredentialContribution.fileKey(CredentialFileRoles.GAMDL_COOKIES) to translations.resolve(CREDENTIAL_SERVER_UI_SOURCE, "de", "credentialserver.fileRole.cookies.txt"),
+                CredentialServerCredentialContribution.fileKey(CredentialFileRoles.GAMDL_WVD) to translations.resolve(CREDENTIAL_SERVER_UI_SOURCE, "de", "credentialserver.fileRole.device.wvd"),
+            ),
+            files.map { it.key to it.label },
+        )
+
+        val format = contribution(CredentialServerPages.CREDENTIAL)
+            .render(scope(params = mapOf(CredentialServerPages.PARAM_NAME to CredentialNames.IMPORTER_TIDDL), locale = "de"))
+            .flatten().filterIsInstance<UiComponent.Select>().single { it.key == CredentialServerCredentialContribution.FIELD_FORMAT }
+        assertEquals(
+            listOf(
+                TidalSessionFormat.TIDDL.name to translations.resolve(CREDENTIAL_SERVER_UI_SOURCE, "de", "credentialserver.format.TIDDL"),
+                TidalSessionFormat.TDN.name to translations.resolve(CREDENTIAL_SERVER_UI_SOURCE, "de", "credentialserver.format.TDN"),
+            ),
+            format.options.map { it.value to it.label },
+        )
+    }
+
+    @Test
+    fun `the tidal session file field is labelled by the session format`() = runBlocking {
+        connect()
+        presets += CredentialPreset(CredentialNames.IMPORTER_TDN, CredentialKind.TIDAL_DEVICE_SESSION, "preset description", format = TidalSessionFormat.TDN)
+        val page = contribution(CredentialServerPages.CREDENTIAL)
+
+        val tiddl = page.render(scope(params = mapOf(CredentialServerPages.PARAM_NAME to CredentialNames.IMPORTER_TIDDL), locale = "de"))
+            .flatten().filterIsInstance<UiComponent.FileField>().single { it.key == CredentialServerCredentialContribution.FIELD_AUTH_FILE }
+        val tdn = page.render(scope(params = mapOf(CredentialServerPages.PARAM_NAME to CredentialNames.IMPORTER_TDN), locale = "de"))
+            .flatten().filterIsInstance<UiComponent.FileField>().single { it.key == CredentialServerCredentialContribution.FIELD_AUTH_FILE }
+
+        assertEquals(translations.resolve(CREDENTIAL_SERVER_UI_SOURCE, "de", "credentialserver.fileRole.auth.json"), tiddl.label)
+        assertEquals(translations.resolve(CREDENTIAL_SERVER_UI_SOURCE, "de", "credentialserver.fileRole.token.json"), tdn.label)
+        assertEquals(listOf(".json"), tdn.accept)
+    }
+
+    @Test
+    fun `a new entry starts with an empty description and an existing one shows its stored description`() = runBlocking {
+        connect()
+        presets += CredentialPreset(CredentialNames.IMPORTER_TDN, CredentialKind.TIDAL_DEVICE_SESSION, "preset description", format = TidalSessionFormat.TDN)
+        credentials.replaceAll {
+            if (it.name == CredentialNames.IMPORTER_TIDDL) it.copy(description = "stored description") else it
+        }
+        val page = contribution(CredentialServerPages.CREDENTIAL)
+        suspend fun description(name: String) =
+            page.render(scope(params = mapOf(CredentialServerPages.PARAM_NAME to name))).flatten().filterIsInstance<UiComponent.TextField>()
+                .single { it.key == CredentialServerCredentialContribution.FIELD_DESCRIPTION }
+
+        assertNull(description(CredentialNames.IMPORTER_TDN).value)
+        assertEquals("stored description", description(CredentialNames.IMPORTER_TIDDL).value)
+    }
+
+    @Test
+    fun `times are formatted for the locale in the client time zone or in utc`() {
+        val millis = 1_790_000_000_000L
+        val formatter = DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM, FormatStyle.SHORT).withLocale(Locale.forLanguageTag("de"))
+        val berlin = ZoneId.of("Europe/Berlin")
+        val zoned = ServerUiRenderScope(
+            user = UserInfo.fromUser(admin),
+            context = UiContext(),
+            i18n = translations.translator(CREDENTIAL_SERVER_UI_SOURCE, "de"),
+            settings = connectionSettings,
+            clientSchemaVersion = UiSchemaVersion.CURRENT,
+            account = admin,
+            client = ClientInfo(apiVersion = 99, uiSchemaVersion = UiSchemaVersion.CURRENT, locale = "de", timeZone = berlin),
+            call = null,
+        )
+
+        assertEquals(formatter.withZone(berlin).format(JavaInstant.ofEpochMilli(millis)), formatTime(zoned, millis))
+        assertEquals(
+            requireNotNull(translations.resolve(CREDENTIAL_SERVER_UI_SOURCE, "de", "credentialserver.time")).replace("{time}", formatter.withZone(ZoneOffset.UTC).format(JavaInstant.ofEpochMilli(millis))),
+            formatTime(scope(locale = "de"), millis),
+        )
+    }
+
     companion object {
         private const val ADMIN_KEY = "admin-key"
         private const val SECRET = "very-secret-client-secret"
+        private const val ROTATED_SECRET = "rotated-client-secret"
     }
 }

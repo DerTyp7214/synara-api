@@ -4,8 +4,10 @@ import dev.dertyp.data.ApiVersion
 import dev.dertyp.ui.UiSchemaVersion
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import java.time.ZoneId
 
 class ClientInfoTest {
 
@@ -61,6 +63,21 @@ class ClientInfoTest {
         assertEquals(ClientInfo.DEFAULT_LOCALE, client.locale)
         assertEquals(UiSchemaVersion.NONE, ClientInfo.fromHeaders("5", "abc", "*").uiSchemaVersion)
         assertEquals(ClientInfo.DEFAULT_LOCALE, ClientInfo.fromHeaders("5", "-1", "*").locale)
+    }
+
+    @Test
+    fun `a valid time zone header is parsed`() {
+        assertEquals(ZoneId.of("Europe/Berlin"), ClientInfo.fromHeaders("5", "2", "de", "Europe/Berlin").timeZone)
+        assertEquals(ZoneId.of("America/New_York"), ClientInfo.fromHeaders("5", "2", "en", " America/New_York ").timeZone)
+    }
+
+    @Test
+    fun `invalid blank or missing time zones resolve to none`() {
+        assertNull(ClientInfo.fromHeaders("5", "2", "de", "Mars/Olympus").timeZone)
+        assertNull(ClientInfo.fromHeaders("5", "2", "de", "not a zone").timeZone)
+        assertNull(ClientInfo.fromHeaders("5", "2", "de", "  ").timeZone)
+        assertNull(ClientInfo.fromHeaders("5", "2", "de", null).timeZone)
+        assertNull(ClientInfo.fromHeaders("5", "2", "de").timeZone)
     }
 
     @Test
