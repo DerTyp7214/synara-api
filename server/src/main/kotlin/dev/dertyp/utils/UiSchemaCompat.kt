@@ -24,20 +24,7 @@ class UiSchemaCompat(
     fun downgrade(component: UiComponent, version: Int): UiComponent {
         if (component is UiComponent.FileField && versionOf(component) > version) return downgrade(asTextField(component), version)
         if (versionOf(component) > version) return UiComponent.Fallback()
-        val shape: (UiComponent) -> UiComponent = { downgrade(it, version) }
-        return when (component) {
-            is UiComponent.Column -> component.copy(children = component.children.map(shape))
-            is UiComponent.Row -> component.copy(children = component.children.map(shape))
-            is UiComponent.Grid -> component.copy(children = component.children.map(shape))
-            is UiComponent.Card -> component.copy(children = component.children.map(shape), actions = component.actions.map(shape))
-            is UiComponent.Section -> component.copy(children = component.children.map(shape))
-            is UiComponent.Form -> component.copy(children = component.children.map(shape), actions = component.actions.map(shape))
-            is UiComponent.Native -> component.copy(fallback = component.fallback?.let(shape))
-            is UiComponent.Live -> component.copy(child = shape(component.child))
-            is UiComponent.EmptyState -> component.copy(actions = component.actions.map(shape))
-            is UiComponent.TextField -> component.copy(toolbar = component.toolbar.map(shape))
-            else -> component
-        }
+        return component.mapChildren { downgrade(it, version) }
     }
 
     private fun asTextField(field: UiComponent.FileField): UiComponent.TextField = UiComponent.TextField(
@@ -50,6 +37,7 @@ class UiSchemaCompat(
         error = field.error,
         required = field.required,
         enabled = field.enabled,
+        toolbar = field.toolbar,
     )
 
     companion object {

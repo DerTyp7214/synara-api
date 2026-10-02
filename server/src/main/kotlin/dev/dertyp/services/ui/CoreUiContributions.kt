@@ -1,6 +1,7 @@
 package dev.dertyp.services.ui
 
 import dev.dertyp.config.ServerConfig
+import dev.dertyp.plugins.PluginManager
 import dev.dertyp.plugins.UiContribution
 import dev.dertyp.services.UserService
 import dev.dertyp.services.credentials.CredentialProvider
@@ -27,6 +28,7 @@ class CoreUiContributions(
     private val credentialProvider: CredentialProvider,
     private val localCredentials: LocalCredentialStore,
     private val serverConfig: ServerConfig,
+    private val pluginManager: PluginManager,
 ) {
     fun contributions(): List<UiContribution> = listOf(
         ImporterPageContribution(importerState, uiService),
@@ -41,7 +43,7 @@ class CoreUiContributions(
     )
 
     private fun credentialContributions(): List<UiContribution> =
-        CredentialServerUiContext(credentialServerAdmin, credentialServerConnection, credentialProvider, localCredentials, serverConfig).contributions()
+        CredentialServerUiContext(credentialServerAdmin, credentialServerConnection, credentialProvider, localCredentials, serverConfig, pluginManager).contributions()
 
     fun register() {
         val registrar = registry.forSource(UiRegistry.SERVER_SOURCE)

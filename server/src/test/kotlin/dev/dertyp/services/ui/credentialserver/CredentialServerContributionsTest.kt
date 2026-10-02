@@ -9,9 +9,13 @@ import dev.dertyp.core.UnauthorizedException
 import dev.dertyp.credentials.*
 import dev.dertyp.data.User
 import dev.dertyp.data.UserInfo
+import dev.dertyp.plugins.IImporter
+import dev.dertyp.plugins.PluginManager
 import dev.dertyp.plugins.UiContribution
 import dev.dertyp.plugins.UiRenderScope
 import dev.dertyp.services.credentials.*
+import dev.dertyp.services.import.TdnService
+import dev.dertyp.services.import.TiddlService
 import dev.dertyp.services.credentials.CredentialServerConnectionSource.Companion.KEY_ADMIN_KEY
 import dev.dertyp.services.credentials.CredentialServerConnectionSource.Companion.KEY_URL
 import dev.dertyp.services.credentials.admin.CredentialServerAdminClient
@@ -46,6 +50,9 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
+import org.junit.jupiter.api.io.TempDir
+import java.io.File
+import java.nio.file.Path
 import java.util.UUID
 import java.util.concurrent.CopyOnWriteArrayList
 
@@ -89,7 +96,15 @@ class CredentialServerContributionsTest {
     private val serverConfig = mockk<ServerConfig> {
         every { proxy } returns ProxyConfig(hostname = null, controlPort = null, ssl = false, id = null, name = "Home", key = null)
     }
-    private val ui = CredentialServerUiContext(adminClient, connection, provider, localStore, serverConfig)
+    private val importers = CopyOnWriteArrayList<IImporter>()
+    private val pluginManager = mockk<PluginManager> {
+        every { getAllImporters() } answers { importers.toList() }
+    }
+    private var rejectUpsert = false
+    private val ui = CredentialServerUiContext(adminClient, connection, provider, localStore, serverConfig, pluginManager)
+
+    @TempDir
+    lateinit var tempDir: Path
     private val contributions = ui.contributions()
 
     init {
@@ -161,6 +176,12 @@ class CredentialServerContributionsTest {
                 headersOf("Content-Type", "application/x-ndjson"),
             )
         request.url.encodedPath == "/admin/credentials" -> ok(json.encodeToString(credentials))
+        request.url.encodedPath.startsWith("/admin/credentials/") && request.method == HttpMethod.Put ->
+            if (rejectUpsert) {
+                respond(json.encodeToString(CredentialError(CredentialErrorCode.INVALID, "Tidal client id and secret are required")), HttpStatusCode.BadRequest)
+            } else {
+                ok(json.encodeToString(credential(request.url.encodedPath.removePrefix("/admin/credentials/"), CredentialKind.TIDAL_DEVICE_SESSION)))
+            }
         request.url.encodedPath.startsWith("/admin/credentials/") -> {
             val name = request.url.encodedPath.removePrefix("/admin/credentials/")
             credentials.firstOrNull { it.name == name }?.let { ok(json.encodeToString(it)) }
@@ -485,6 +506,105 @@ class CredentialServerContributionsTest {
         assertEquals(UiTone.MUTED, badge.tone)
         assertTrue(updates.dropLast(1).all { (it as UiLiveUpdate.Replace).child is UiComponent.Card })
         assertNull(ui.tidalLogins.active(admin.id, CredentialNames.IMPORTER_TIDDL))
+    }
+
+    private fun localLogin(name: String, role: String, content: String): File {
+        val file = tempDir.resolve(role).toFile().apply { writeText(content) }
+        importers += when (name) {
+            CredentialNames.IMPORTER_TDN -> mockk<TdnService> {
+                every { credentialName } returns name
+                every { credentialTargets() } returns mapOf(role to file)
+            }
+            else -> mockk<TiddlService> {
+                every { credentialName } returns name
+                every { credentialTargets() } returns mapOf(role to file)
+            }
+        }
+        return file
+    }
+
+    private fun localLoginButtons(page: UiComponent) = page.flatten().filterIsInstance<UiComponent.Button>()
+        .filter { (it.action as? UiAction.Invoke)?.actionId == CredentialServerCredentialContribution.ACTION_USE_LOCAL_LOGIN }
+
+    private fun upserts() = requests.filter { it.method == HttpMethod.Put }
+        .map { it.url.encodedPath to json.decodeFromString<UpsertCredentialRequest>((it.body as TextContent).text) }
+
+    @Test
+    fun `the existing login action is hidden without a local login file`() = runBlocking {
+        connect()
+        importers += mockk<TiddlService> {
+            every { credentialName } returns CredentialNames.IMPORTER_TIDDL
+            every { credentialTargets() } returns mapOf(CredentialFileRoles.TIDDL_AUTH to tempDir.resolve("missing.json").toFile())
+        }
+        val params = mapOf(CredentialServerPages.PARAM_NAME to CredentialNames.IMPORTER_TIDDL)
+
+        assertTrue(localLoginButtons(contribution(CredentialServerPages.CREDENTIAL).render(scope(params = params))).isEmpty())
+        val result = contribution(CredentialServerPages.CREDENTIAL).invoke(scope(params = params), CredentialServerCredentialContribution.ACTION_USE_LOCAL_LOGIN, emptyMap())
+        assertEquals(UiInvokeStatus.ERROR, result.status)
+        assertTrue(upserts().isEmpty())
+    }
+
+    @Test
+    fun `the existing tiddl login is sent with the entered client ids and never rendered`() = runBlocking {
+        connect()
+        val content = """{"token":"local-tiddl-token","refresh_token":"r"}"""
+        localLogin(CredentialNames.IMPORTER_TIDDL, CredentialFileRoles.TIDDL_AUTH, content)
+        val params = mapOf(CredentialServerPages.PARAM_NAME to CredentialNames.IMPORTER_TIDDL)
+        val page = contribution(CredentialServerPages.CREDENTIAL)
+
+        val rendered = page.render(scope(params = params))
+        val button = localLoginButtons(rendered).single()
+        assertEquals("Use this server's existing login", button.label)
+        assertEquals(CredentialServerCredentialContribution.FORM_CREDENTIAL, (button.action as UiAction.Invoke).formId)
+        assertFalse(rendered.encoded().contains("local-tiddl-token"))
+
+        val result = page.invoke(
+            scope(params = params),
+            CredentialServerCredentialContribution.ACTION_USE_LOCAL_LOGIN,
+            mapOf("clientId" to UiValue.of("my-client"), "clientSecret" to UiValue.of("my-secret")),
+        )
+
+        assertEquals(UiInvokeStatus.OK, result.status)
+        assertTrue(result.refresh)
+        assertEquals("This server's existing login was uploaded.", result.message)
+        assertFalse(result.message.orEmpty().contains("local-tiddl-token"))
+        val (path, request) = upserts().single()
+        assertEquals("/admin/credentials/${CredentialNames.IMPORTER_TIDDL}", path)
+        assertEquals(CredentialKind.TIDAL_DEVICE_SESSION, request.kind)
+        assertEquals(CredentialInput.TidalSessionInput(TidalSessionFormat.TIDDL, "my-client", "my-secret", content), request.input)
+    }
+
+    @Test
+    fun `the existing tdn login keeps blank client ids for the credential server to merge`() = runBlocking {
+        connect()
+        val content = """{"token_type":"Bearer","access_token":"local-tdn-token"}"""
+        localLogin(CredentialNames.IMPORTER_TDN, CredentialFileRoles.TDN_TOKEN, content)
+        val params = mapOf(
+            CredentialServerPages.PARAM_NAME to CredentialNames.IMPORTER_TDN,
+            CredentialServerPages.PARAM_KIND to CredentialKind.TIDAL_DEVICE_SESSION.name,
+        )
+        val page = contribution(CredentialServerPages.CREDENTIAL)
+        assertEquals(1, localLoginButtons(page.render(scope(params = params))).size)
+
+        val result = page.invoke(scope(params = params), CredentialServerCredentialContribution.ACTION_USE_LOCAL_LOGIN, emptyMap())
+
+        assertEquals(UiInvokeStatus.OK, result.status)
+        val (path, request) = upserts().single()
+        assertEquals("/admin/credentials/${CredentialNames.IMPORTER_TDN}", path)
+        assertEquals(CredentialInput.TidalSessionInput(TidalSessionFormat.TDN, "", "", content), request.input)
+    }
+
+    @Test
+    fun `a rejected existing login shows the credential server error`() = runBlocking {
+        connect()
+        rejectUpsert = true
+        localLogin(CredentialNames.IMPORTER_TIDDL, CredentialFileRoles.TIDDL_AUTH, "{}")
+        val params = mapOf(CredentialServerPages.PARAM_NAME to CredentialNames.IMPORTER_TIDDL)
+
+        val result = contribution(CredentialServerPages.CREDENTIAL).invoke(scope(params = params), CredentialServerCredentialContribution.ACTION_USE_LOCAL_LOGIN, emptyMap())
+
+        assertEquals(UiInvokeStatus.ERROR, result.status)
+        assertEquals("Tidal client id and secret are required", result.message)
     }
 
     companion object {

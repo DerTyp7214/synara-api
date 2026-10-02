@@ -11,7 +11,12 @@ import dev.dertyp.plugins.UiTranslator
 import dev.dertyp.services.Service
 import dev.dertyp.services.intake.IntakeService
 import dev.dertyp.ui.IntakeItem
+import dev.dertyp.ui.UiAction
+import dev.dertyp.ui.UiButtonStyle
+import dev.dertyp.ui.UiComponent
 import dev.dertyp.ui.UiContext
+import dev.dertyp.ui.UiIcon
+import dev.dertyp.ui.UiIconName
 import dev.dertyp.ui.UiIntakeResult
 import dev.dertyp.ui.UiContributionInfo
 import dev.dertyp.ui.UiContributionKind
@@ -27,6 +32,7 @@ import dev.dertyp.ui.UiHookKind
 import dev.dertyp.ui.UiRender
 import dev.dertyp.ui.UiSchemaVersion
 import dev.dertyp.ui.UiSlotRender
+import dev.dertyp.utils.mapChildren
 import io.ktor.server.application.ApplicationCall
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
@@ -138,15 +144,33 @@ class UiService(
             call = call,
         )
 
+    private fun keyboardToolbar(client: ClientInfo): List<UiComponent> = listOf(
+        UiComponent.Button(
+            translations.translator(UiRegistry.SERVER_SOURCE, client.locale).t("ui.keyboard.done"),
+            UiAction.DismissKeyboard,
+            UiButtonStyle.TEXT,
+            icon = UiIcon(UiIconName.CHECK),
+        ),
+    )
+
+    private fun withKeyboardToolbar(component: UiComponent, done: List<UiComponent>): UiComponent =
+        when (val shaped = component.mapChildren { withKeyboardToolbar(it, done) }) {
+            is UiComponent.TextField -> if (shaped.toolbar.isEmpty()) shaped.copy(toolbar = done) else shaped
+            is UiComponent.NumberField -> if (shaped.toolbar.isEmpty()) shaped.copy(toolbar = done) else shaped
+            is UiComponent.FileField -> if (shaped.toolbar.isEmpty()) shaped.copy(toolbar = done) else shaped
+            else -> shaped
+        }
+
     private suspend fun renderWith(registered: RegisteredContribution, scope: ServerUiRenderScope): UiRender {
         val contribution = registered.contribution
+        val done = keyboardToolbar(scope.client)
         return UiRender(
             contributionId = contribution.id,
-            root = contribution.render(scope),
+            root = withKeyboardToolbar(contribution.render(scope), done),
             title = scope.t(contribution.titleKey),
             schemaVersion = UiSchemaVersion.CURRENT,
             revision = revisions.getOrPut(contribution.id) { AtomicLong() }.incrementAndGet(),
-            toolbar = if (contribution.kind == UiContributionKind.PAGE) contribution.toolbar(scope) else emptyList(),
+            toolbar = if (contribution.kind == UiContributionKind.PAGE) contribution.toolbar(scope).map { withKeyboardToolbar(it, done) } else emptyList(),
         )
     }
 
@@ -192,7 +216,8 @@ class UiService(
         val registered = require(id, user)
         val scope = scope(registered, user, client, context, call)
         val updates = registered.contribution.live(scope, key) ?: throw IllegalArgumentException("Unknown live key '$key' for UI contribution $id")
-        emitAll(updates)
+        val done = keyboardToolbar(client)
+        emitAll(updates.map { if (it is UiLiveUpdate.Replace) it.copy(child = withKeyboardToolbar(it.child, done)) else it })
     }
 
     suspend fun invoke(user: User, client: ClientInfo, id: String, actionId: String, payload: UiInvokePayload, call: ApplicationCall? = null): UiInvokeResult {

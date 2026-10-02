@@ -5,6 +5,7 @@ import dev.dertyp.core.sha256
 import dev.dertyp.credentials.CredentialKind
 import dev.dertyp.credentials.CredentialStatus
 import dev.dertyp.credentials.TidalLoginSession
+import dev.dertyp.plugins.PluginManager
 import dev.dertyp.plugins.UiContribution
 import dev.dertyp.plugins.UiRenderScope
 import dev.dertyp.services.credentials.CredentialProvider
@@ -74,6 +75,7 @@ class CredentialServerUiContext(
     val provider: CredentialProvider,
     val localStore: LocalCredentialStore,
     val serverConfig: ServerConfig,
+    val pluginManager: PluginManager,
 ) {
     private data class AdminProbe(val fingerprint: String, val admin: Boolean, val checkedAt: Long)
 

@@ -83,6 +83,23 @@ class UiSchemaCompatTest {
     }
 
     @Test
+    fun `number and file field toolbars are shaped and survive the file field downgrade`() {
+        val done = UiComponent.Button("Done", UiAction.DismissKeyboard)
+        val table = UiComponent.Table(emptyList(), emptyList())
+        val number = UiComponent.NumberField("n", "Number", toolbar = listOf(done, table))
+        val file = UiComponent.FileField("f", "File", toolbar = listOf(done, table))
+
+        assertEquals(number.copy(toolbar = listOf(done, UiComponent.Fallback())), rule.downgrade(number, 1))
+        assertEquals(
+            UiComponent.TextField("f", "File", multiline = true, toolbar = listOf(done, UiComponent.Fallback())),
+            rule.downgrade(file, 1),
+        )
+        val tableLater = UiSchemaCompat(UiSchema.introducedIn + (UiComponent.Table::class to 3))
+        assertEquals(file.copy(toolbar = listOf(done, UiComponent.Fallback())), tableLater.downgrade(file, 2))
+        assertEquals(file, rule.downgrade(file, 2))
+    }
+
+    @Test
     fun `clients on schema version 1 are shaped by the default rule`() {
         val field = UiComponent.FileField("k", "l")
         val old = ClientInfo(ApiVersion.CURRENT, uiSchemaVersion = 1)

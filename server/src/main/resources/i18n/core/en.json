@@ -1,4 +1,5 @@
 {
+  "ui.keyboard.done": "Done",
   "importer.title": "Importer",
   "importer.subtitle": "Import music from streaming services",
   "importer.input.title": "Import URLs",

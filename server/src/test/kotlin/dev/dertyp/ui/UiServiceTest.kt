@@ -17,6 +17,8 @@ import dev.dertyp.services.ui.UiService
 import dev.dertyp.services.ui.UserHomeCardService
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.toList
@@ -172,6 +174,84 @@ class UiServiceTest {
         assertEquals(UiAction.OpenPage("hook.second"), handlers[1].action)
         assertTrue(service.dispatchHook(plain, client, UiHookEvent.ShareText("hello")).isEmpty())
         assertEquals("hook.admin", service.dispatchHook(admin, client, UiHookEvent.ShareUrl("u")).first().id)
+    }
+
+    private class Fields(id: String, kind: UiContributionKind, slot: String?) : Fake(id, kind = kind, slot = slot) {
+        override suspend fun render(scope: UiRenderScope): UiComponent = UiComponent.Column(
+            listOf(
+                UiComponent.Form(
+                    "form",
+                    listOf(
+                        UiComponent.TextField("text", "Text"),
+                        UiComponent.Card(listOf(UiComponent.Section(listOf(UiComponent.NumberField("number", "Number")), "Section"))),
+                    ),
+                    UiAction.Invoke(id, "save", formId = "form"),
+                    "Save",
+                ),
+                UiComponent.Row(listOf(UiComponent.Grid(listOf(UiComponent.FileField("file", "File"))))),
+                UiComponent.Live("live", UiComponent.Column(listOf(UiComponent.TextField("liveText", "Live")))),
+                UiComponent.TextField("explicit", "Explicit", toolbar = listOf(UiComponent.Icon(UiIcon(UiIconName.SEARCH)))),
+            ),
+        )
+
+        override fun live(scope: UiRenderScope, key: String): Flow<UiLiveUpdate> = flowOf(
+            UiLiveUpdate.Replace(UiComponent.Card(listOf(UiComponent.NumberField("liveNumber", "Live number")))),
+            UiLiveUpdate.AppendLines(listOf("line")),
+        )
+    }
+
+    private val done = listOf(UiComponent.Button("Fertig", UiAction.DismissKeyboard, UiButtonStyle.TEXT, icon = UiIcon(UiIconName.CHECK)))
+
+    private fun UiComponent.fields(): List<UiComponent> = when (this) {
+        is UiComponent.TextField, is UiComponent.NumberField, is UiComponent.FileField -> listOf(this)
+        is UiComponent.Column -> children.flatMap { it.fields() }
+        is UiComponent.Row -> children.flatMap { it.fields() }
+        is UiComponent.Grid -> children.flatMap { it.fields() }
+        is UiComponent.Section -> children.flatMap { it.fields() }
+        is UiComponent.Card -> (children + actions).flatMap { it.fields() }
+        is UiComponent.Form -> (children + actions).flatMap { it.fields() }
+        is UiComponent.Live -> child.fields()
+        else -> emptyList()
+    }
+
+    private fun UiComponent.toolbars(): Map<String, List<UiComponent>> = fields().associate {
+        when (it) {
+            is UiComponent.TextField -> it.key to it.toolbar
+            is UiComponent.NumberField -> it.key to it.toolbar
+            is UiComponent.FileField -> it.key to it.toolbar
+            else -> error("not a field")
+        }
+    }
+
+    @Test
+    fun `every nested input field gets the keyboard done toolbar and explicit toolbars are kept`() = runBlocking {
+        registry.register(Fields("core.fields", UiContributionKind.PAGE, null), "plugin")
+
+        val toolbars = service.render(admin, client, "core.fields", UiContext()).root.toolbars()
+
+        assertEquals(listOf("text", "number", "file", "liveText", "explicit"), toolbars.keys.toList())
+        assertEquals(done, toolbars.getValue("text"))
+        assertEquals(done, toolbars.getValue("number"))
+        assertEquals(done, toolbars.getValue("file"))
+        assertEquals(done, toolbars.getValue("liveText"))
+        assertEquals(listOf(UiComponent.Icon(UiIcon(UiIconName.SEARCH))), toolbars.getValue("explicit"))
+        val english = service.render(admin, ClientInfo(ApiVersion.CURRENT, UiSchemaVersion.CURRENT, "en"), "core.fields", UiContext())
+        assertEquals("Done", (english.root.toolbars().getValue("text").single() as UiComponent.Button).label)
+    }
+
+    @Test
+    fun `slot renders, subscribe re-renders and live replacements get the keyboard done toolbar`() = runBlocking {
+        registry.register(Fields("core.fields", UiContributionKind.SLOT, UiSlots.LIBRARY), "server")
+
+        val slot = service.renderSlot(admin, client, UiSlots.LIBRARY, UiContext()).items.single()
+        assertTrue(slot.root.toolbars().filterKeys { it != "explicit" }.values.all { it == done })
+        val subscribed = service.subscribe(admin, client, "core.fields").first()
+        assertTrue(subscribed.root.toolbars().filterKeys { it != "explicit" }.values.all { it == done })
+
+        val updates = service.subscribeLive(admin, client, "core.fields", "live").toList()
+
+        assertEquals(mapOf("liveNumber" to done), (updates.first() as UiLiveUpdate.Replace).child.toolbars())
+        assertEquals(UiLiveUpdate.AppendLines(listOf("line")), updates.last())
     }
 
     @Test

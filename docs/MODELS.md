@@ -3186,6 +3186,7 @@ File input. Clients pick a file with a native file picker and submit its content
 | `error` | `String`? | Validation error to display. |
 | `required` | `Boolean` | Whether a value is required. |
 | `enabled` | `Boolean` | Whether the field is editable. |
+| `toolbar` | `List`<[UiComponent](#devdertypuiuicomponent)> | Keyboard accessory toolbar shown above the on-screen keyboard while the field is focused. Items are trailing-aligned. Buttons, Icons and Native portals. |
 
 ### Form <a name="devdertypuiuicomponentform"></a>
 Groups form fields; their values are submitted together with the submit action.
@@ -3278,6 +3279,7 @@ Numeric input.
 | `error` | `String`? | Validation error to display. |
 | `required` | `Boolean` | Whether a value is required. |
 | `enabled` | `Boolean` | Whether the field is editable. |
+| `toolbar` | `List`<[UiComponent](#devdertypuiuicomponent)> | Keyboard accessory toolbar shown above the on-screen keyboard while the field is focused. Items are trailing-aligned. Buttons, Icons and Native portals. |
 
 ### Progress <a name="devdertypuiuicomponentprogress"></a>
 Progress indicator.
@@ -3386,7 +3388,7 @@ Single- or multi-line text input.
 | `required` | `Boolean` | Whether a value is required. |
 | `enabled` | `Boolean` | Whether the field is editable. |
 | `kind` | [UiTextKind](#devdertypuiuitextkind) | Input kind. |
-| `toolbar` | `List`<[UiComponent](#devdertypuiuicomponent)> | Keyboard accessory toolbar shown above the on-screen keyboard while the field is focused; items are trailing-aligned. Buttons, Icons and Native portals. |
+| `toolbar` | `List`<[UiComponent](#devdertypuiuicomponent)> | Keyboard accessory toolbar shown above the on-screen keyboard while the field is focused. Items are trailing-aligned. Buttons, Icons and Native portals. |
 
 ### Tile <a name="devdertypuiuicomponenttile"></a>
 A tappable tile with title, subtitle and icon.

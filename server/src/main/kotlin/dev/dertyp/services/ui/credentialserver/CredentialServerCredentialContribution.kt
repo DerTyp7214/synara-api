@@ -5,12 +5,14 @@ import dev.dertyp.credentials.*
 import dev.dertyp.plugins.UiAccess
 import dev.dertyp.plugins.UiContribution
 import dev.dertyp.plugins.UiRenderScope
+import dev.dertyp.services.import.BaseImporter
 import dev.dertyp.services.ui.credentialserver.CredentialServerPages.PARAM_KIND
 import dev.dertyp.services.ui.credentialserver.CredentialServerPages.PARAM_NAME
 import dev.dertyp.services.ui.credentialserver.CredentialServerPages.PREFIX
 import dev.dertyp.ui.*
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import java.io.File
 import kotlin.io.encoding.Base64
 
 class CredentialServerCredentialContribution(private val ui: CredentialServerUiContext) : UiContribution(
@@ -42,6 +44,9 @@ class CredentialServerCredentialContribution(private val ui: CredentialServerUiC
         val formActions = buildList {
             if (target.kind == CredentialKind.TIDAL_DEVICE_SESSION) {
                 add(UiComponent.Button(scope.t("$PREFIX.credential.tidalLogin"), UiAction.Invoke(id, ACTION_TIDAL_LOGIN, params = params, formId = FORM_CREDENTIAL), UiButtonStyle.TEXT, UiIcon(UiIconName.LOGIN)))
+                if (localSession(target.name) != null) {
+                    add(UiComponent.Button(scope.t("$PREFIX.credential.useLocalLogin"), UiAction.Invoke(id, ACTION_USE_LOCAL_LOGIN, params = params, formId = FORM_CREDENTIAL), UiButtonStyle.TEXT, UiIcon(UiIconName.IMPORT)))
+                }
             }
         }
         children += UiComponent.Form(
@@ -225,6 +230,7 @@ class CredentialServerCredentialContribution(private val ui: CredentialServerUiC
                 UiInvokeResult(UiInvokeStatus.OK, scope.t("$PREFIX.credential.deleted"), next = UiAction.OpenPage(CredentialServerPages.OVERVIEW))
             }
             ACTION_TIDAL_LOGIN -> startTidalLogin(scope, name, values)
+            ACTION_USE_LOCAL_LOGIN -> useLocalLogin(scope, name, values)
             else -> {
                 val loginId = values.text(FIELD_LOGIN_ID)
                 if (loginId.isNotEmpty()) runCatchingCancellable { ui.admin.cancelTidalLogin(loginId) }
@@ -246,6 +252,31 @@ class CredentialServerCredentialContribution(private val ui: CredentialServerUiC
         )
         ui.tidalLogins.put(scope.user.id, name, session)
         return UiInvokeResult(UiInvokeStatus.OK, scope.t("$PREFIX.tidal.started"), refresh = true)
+    }
+
+    private fun localSession(name: String): Pair<TidalSessionFormat, File>? {
+        val (format, role) = LOCAL_SESSIONS[name] ?: return null
+        val importer = ui.pluginManager.getAllImporters().filterIsInstance<BaseImporter>().firstOrNull { it.credentialName == name } ?: return null
+        val file = importer.credentialTargets()[role]?.takeIf { it.isFile } ?: return null
+        return format to file
+    }
+
+    private suspend fun useLocalLogin(scope: UiRenderScope, name: String, values: Map<String, UiValue>): UiInvokeResult {
+        val (format, file) = localSession(name) ?: return UiInvokeResult(UiInvokeStatus.ERROR, scope.t("$PREFIX.credential.localLoginMissing"))
+        val request = UpsertCredentialRequest(
+            CredentialKind.TIDAL_DEVICE_SESSION,
+            values.text(FIELD_DESCRIPTION).ifEmpty { null },
+            CredentialInput.TidalSessionInput(
+                format = format,
+                clientId = values.text(FIELD_CLIENT_ID),
+                clientSecret = values.text(FIELD_CLIENT_SECRET),
+                authFileContent = file.readText(),
+            ),
+        )
+        runCatchingCancellable { ui.admin.upsertCredential(name, request) }.onFailure {
+            return UiInvokeResult(UiInvokeStatus.ERROR, scope.errorText(it))
+        }
+        return UiInvokeResult(UiInvokeStatus.OK, scope.t("$PREFIX.credential.localLoginUsed"), refresh = true)
     }
 
     private suspend fun save(scope: UiRenderScope, name: String, values: Map<String, UiValue>): UiInvokeResult {
@@ -337,9 +368,14 @@ class CredentialServerCredentialContribution(private val ui: CredentialServerUiC
         const val ACTION_DELETE = "delete"
         const val ACTION_TIDAL_LOGIN = "tidalLogin"
         const val ACTION_TIDAL_CANCEL = "tidalCancel"
+        const val ACTION_USE_LOCAL_LOGIN = "useLocalLogin"
         const val DEFAULT_FILE_ROLE = "file"
         const val DEFAULT_APPLE_TTL = 43200L
-        private val ACTIONS = setOf(ACTION_SAVE, ACTION_TEST, ACTION_DELETE, ACTION_TIDAL_LOGIN, ACTION_TIDAL_CANCEL)
+        private val ACTIONS = setOf(ACTION_SAVE, ACTION_TEST, ACTION_DELETE, ACTION_TIDAL_LOGIN, ACTION_TIDAL_CANCEL, ACTION_USE_LOCAL_LOGIN)
+        private val LOCAL_SESSIONS = mapOf(
+            CredentialNames.IMPORTER_TIDDL to (TidalSessionFormat.TIDDL to CredentialFileRoles.TIDDL_AUTH),
+            CredentialNames.IMPORTER_TDN to (TidalSessionFormat.TDN to CredentialFileRoles.TDN_TOKEN),
+        )
 
         fun fileKey(role: String) = "$FIELD_FILE_PREFIX$role"
     }
