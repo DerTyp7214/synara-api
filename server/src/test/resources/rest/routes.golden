@@ -332,8 +332,8 @@ GET /serverStats/stats IServerStatsService.getStats [] JSON
 DELETE /session/deactivateSession/{sessionId} ISessionService.deactivateSession [p:sessionId] UNIT
 GET /session/sessions ISessionService.getSessions [] JSON
 DELETE /song/songs ISongService.deleteSongs [q:ids] JSON
-GET /song/allSongIds ISongService.allSongIds [q:explicit q:tags? q:invertTags?] SSE
-GET /song/allSongs ISongService.allSongs [q:page? q:pageSize? q:explicit q:tags? q:invertTags?] JSON
+GET /song/allSongIds ISongService.allSongIds [q:explicit q:tags? q:excludeTags? q:titleTags? q:excludeTitleTags?] SSE
+GET /song/allSongs ISongService.allSongs [q:page? q:pageSize? q:explicit q:tags? q:excludeTags? q:titleTags? q:excludeTitleTags?] JSON
 GET /song/atmosStreamSize/{id} ISongService.getAtmosStreamSize [p:id] JSON
 GET /song/byAlbum/{albumId} ISongService.byAlbum [q:page? q:pageSize? p:albumId] JSON
 GET /song/byArtist/{artistId} ISongService.byArtist [q:page? q:pageSize? p:artistId] JSON

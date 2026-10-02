@@ -100,6 +100,7 @@ class AppleMusicReleaseServiceTest : KoinTest {
                 AlbumProviderTable,
                 SongTable,
                 SongVariantTable,
+                SongTitleTagTable,
                 SongArtistTable,
                 SongMusicBrainzTable,
                 SongProviderTable,

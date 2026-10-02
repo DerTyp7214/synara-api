@@ -134,6 +134,7 @@ class LibraryMergeService : Service() {
                 it[explicit] = anyExplicit
                 it[titleTags] = encodeTitleTags(bestTags)
             }
+            syncSongTitleTags(keptSongId, bestTags)
         }
 
         logger.info("Merging ${songsToMerge.size} songs into $keptSongId")

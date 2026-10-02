@@ -331,8 +331,8 @@ GET /serverStats/proxyInfo IServerStatsService.getProxyInfo | Retrieve informati
 GET /serverStats/stats IServerStatsService.getStats | Retrieve detailed system performance metrics and library statistics. | serverStats | - | - | body:no
 DELETE /session/deactivateSession/{sessionId} ISessionService.deactivateSession | Terminate a specific user session. | session | UserAuth | sessionId:path | body:no
 GET /session/sessions ISessionService.getSessions | List all sessions for the current user. | session | UserAuth | - | body:no
-GET /song/allSongIds ISongService.allSongIds | Stream all song IDs with optional filtering. | song | UserAuth | explicit:query,tags:query,invertTags:query | body:no
-GET /song/allSongs ISongService.allSongs | Get all songs with optional filtering. | song | UserAuth | page:query,pageSize:query,explicit:query,tags:query,invertTags:query | body:no
+GET /song/allSongIds ISongService.allSongIds | Stream all song IDs with optional filtering. | song | UserAuth | explicit:query,tags:query,excludeTags:query,titleTags:query,excludeTitleTags:query | body:no
+GET /song/allSongs ISongService.allSongs | Get all songs with optional filtering. | song | UserAuth | page:query,pageSize:query,explicit:query,tags:query,excludeTags:query,titleTags:query,excludeTitleTags:query | body:no
 PUT /song/artists/{id} ISongService.setArtists | Update song artists. | song | UserAuth | id:path,artistIds:query | body:no
 GET /song/atmosStreamSize/{id} ISongService.getAtmosStreamSize | Get the size of the song's Dolby Atmos stream, or 0 if the song has no Atmos variant. | song | UserAuth | id:path | body:no
 GET /song/byAlbum/{albumId} ISongService.byAlbum | List songs in an album. | song | UserAuth | page:query,pageSize:query,albumId:path | body:no

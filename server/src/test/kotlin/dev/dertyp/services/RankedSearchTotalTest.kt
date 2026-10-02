@@ -29,7 +29,7 @@ class RankedSearchTotalTest : KoinTest {
     private val redisSearchService = mockk<RedisSearchService>(relaxed = true)
 
     private val allTables = arrayOf(
-        ArtistTable, AlbumTable, SongTable, SongVariantTable, SongArtistTable,
+        ArtistTable, AlbumTable, SongTable, SongVariantTable, SongTitleTagTable, SongArtistTable,
         SongMusicBrainzTable, SongAudioDataTable, ImageTable, GenreTable,
         UserTable, AlbumMusicBrainzTable, ArtistMusicBrainzTable,
         ArtistAliasTable, ArtistMemberTable, AlbumArtistTable,

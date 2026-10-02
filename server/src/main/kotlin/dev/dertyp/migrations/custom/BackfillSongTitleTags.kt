@@ -7,6 +7,7 @@ import dev.dertyp.core.mergeTitleTags
 import dev.dertyp.core.splitTitleTags
 import dev.dertyp.db.SongTable
 import dev.dertyp.db.encodeTitleTags
+import dev.dertyp.db.syncSongTitleTags
 import dev.dertyp.db.titleTags
 import dev.dertyp.core.db.dbQuery
 import org.jetbrains.exposed.v1.core.eq
@@ -48,6 +49,7 @@ internal suspend fun CustomMigration.splitSongTitleTags(taskName: String) {
                         it[title] = split.title + marker
                         it[titleTags] = encodeTitleTags(tags)
                     }
+                    syncSongTitleTags(row[SongTable.id].value, tags)
                     updated++
                 }
             }

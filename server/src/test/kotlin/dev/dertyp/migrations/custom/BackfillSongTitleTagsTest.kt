@@ -8,6 +8,7 @@ import dev.dertyp.db.AlbumTable
 import dev.dertyp.db.ImageTable
 import dev.dertyp.db.ScheduledTaskLogTable
 import dev.dertyp.db.SongTable
+import dev.dertyp.db.SongTitleTagTable
 import dev.dertyp.db.decodeTitleTags
 import dev.dertyp.testing.relaxedTaskLogService
 import kotlinx.coroutines.runBlocking
@@ -37,7 +38,7 @@ class BackfillSongTitleTagsTest : KoinTest {
 
         database = TestDatabase.connect(dialect, "backfill_song_title_tags_test")
         transaction(database) {
-            SchemaUtils.create(ImageTable, AlbumTable, SongTable, ScheduledTaskLogTable)
+            SchemaUtils.create(ImageTable, AlbumTable, SongTable, SongTitleTagTable, ScheduledTaskLogTable)
         }
     }
 

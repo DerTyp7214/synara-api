@@ -2,6 +2,8 @@ package dev.dertyp.services
 
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
+import dev.dertyp.data.TitleTag
+import dev.dertyp.data.TitleTagKind
 import dev.dertyp.db.*
 import dev.dertyp.plugins.PluginManager
 import dev.dertyp.services.metadata.MetadataService
@@ -57,7 +59,7 @@ class LibraryMergeServiceTest : KoinTest {
         database = TestDatabase.connect(dialect, "merge_test")
         transaction(database) {
             SchemaUtils.create(
-                ArtistTable, AlbumTable, SongTable, SongVariantTable, ImageTable, PlaylistTable,
+                ArtistTable, AlbumTable, SongTable, SongVariantTable, SongTitleTagTable, ImageTable, PlaylistTable,
                 UserTable, UserPlaylistTable, UserPlaylistSongTable, PlaylistSongTable,
                 SongArtistTable, AlbumArtistTable, AlbumMusicBrainzTable, SongMusicBrainzTable,
                 TranscodedSongTable, UserSongTable, SongProviderTable, AlbumProviderTable,
@@ -109,6 +111,49 @@ class LibraryMergeServiceTest : KoinTest {
         assertEquals(1, result["songsMerged"])
         transaction(database) {
             assertEquals(1, SongTable.selectAll().count())
+        }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `merging duplicate songs keeps the title tag table in sync`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+
+        val remixTags = listOf(TitleTag(TitleTagKind.REMIX, "Skrillex Remix"), TitleTag(TitleTagKind.FEAT, "feat. X"))
+        val (keptId, mergedId) = transaction(database) {
+            val albumId = AlbumTable.insert { it[name] = "Album" }[AlbumTable.id]
+
+            val kept = SongTable.insert {
+                it[title] = "\uD83C\uDD74"
+                it[this.albumId] = albumId
+                it[fileSize] = 100L
+                it[duration] = 60L
+                it[filePath] = "path/1"
+                it[inserted] = 1000L
+            }[SongTable.id].value
+            val merged = SongTable.insert {
+                it[title] = "Song"
+                it[titleTags] = encodeTitleTags(remixTags)
+                it[this.albumId] = albumId
+                it[fileSize] = 100L
+                it[duration] = 60L
+                it[filePath] = "path/1"
+                it[inserted] = 2000L
+            }[SongTable.id].value
+            syncSongTitleTags(merged, remixTags)
+            kept to merged
+        }
+
+        val mergedCount = transaction(database) { service.mergeDuplicateSongs() }
+
+        assertEquals(1, mergedCount)
+        transaction(database) {
+            val row = SongTable.selectAll().single()
+            assertEquals(keptId, row[SongTable.id].value)
+            assertEquals(remixTags, row.titleTags())
+            val kinds = SongTitleTagTable.selectAll().map { it[SongTitleTagTable.songId].value to it[SongTitleTagTable.kind] }.toSet()
+            assertEquals(setOf(keptId to TitleTagKind.REMIX, keptId to TitleTagKind.FEAT), kinds)
+            assertEquals(0L, SongTitleTagTable.selectAll().where { SongTitleTagTable.songId eq mergedId }.count())
         }
     }
 

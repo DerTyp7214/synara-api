@@ -45,7 +45,7 @@ class LibraryMergeImageReferencesTest : KoinTest {
         database = TestDatabase.connect(dialect, "merge_image_refs_test")
         transaction(database) {
             SchemaUtils.create(
-                ArtistTable, AlbumTable, SongTable, SongVariantTable, ImageTable, ImageMetadataTable, PlaylistTable,
+                ArtistTable, AlbumTable, SongTable, SongVariantTable, SongTitleTagTable, ImageTable, ImageMetadataTable, PlaylistTable,
                 UserTable, UserPlaylistTable, UserPlaylistSongTable, PlaylistSongTable,
                 SongArtistTable, AlbumArtistTable, AlbumMusicBrainzTable, SongMusicBrainzTable,
                 TranscodedSongTable, UserSongTable, SongProviderTable, AlbumProviderTable,

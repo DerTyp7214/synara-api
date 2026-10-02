@@ -107,6 +107,7 @@ class SongServiceTest : KoinTest {
                 AlbumArtistTable,
                 SongMusicBrainzTable,
                 SongAcoustIdTable,
+                SongTitleTagTable,
                 AlbumMusicBrainzTable,
                 ArtistMusicBrainzTable,
                 UserSongTable,
@@ -1360,6 +1361,99 @@ class SongServiceTest : KoinTest {
         )
     }
 
+    private fun titleTagKindsBySong(): Map<UUID, Set<TitleTagKind>> = transaction(database) {
+        SongTitleTagTable.selectAll()
+            .groupBy({ it[SongTitleTagTable.songId].value }, { it[SongTitleTagTable.kind] })
+            .mapValues { it.value.toSet() }
+    }
+
+    private fun assertTitleTagTableMatchesColumn() {
+        val expected = transaction(database) {
+            SongTable.select(SongTable.id, SongTable.titleTags)
+                .associate { it[SongTable.id].value to decodeTitleTags(it[SongTable.titleTags]).map { tag -> tag.kind }.toSet() }
+                .filterValues { it.isNotEmpty() }
+        }
+        assertEquals(expected, titleTagKindsBySong())
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `createBatch keeps the title tag table in sync for new and dirty songs`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val album = InsertableAlbum("Sync Album", listOf("Sync Artist"))
+        val created = songService.createBatch(
+            listOf(
+                InsertableSong(
+                    title = "Song (Skrillex Remix) (feat. X)",
+                    artists = listOf("Sync Artist"),
+                    album = album,
+                    duration = 100,
+                    explicit = false,
+                    path = "/sync/remix.flac",
+                    trackNumber = 1,
+                ),
+                InsertableSong(
+                    title = "Plain",
+                    artists = listOf("Sync Artist"),
+                    album = album,
+                    duration = 120,
+                    explicit = false,
+                    path = "/sync/plain.flac",
+                    trackNumber = 2,
+                ),
+            )
+        )
+        assertEquals(2, created.size)
+        val remixId = created.values.single { it.title == "Song" }.id
+        assertEquals(mapOf(remixId to setOf(TitleTagKind.REMIX, TitleTagKind.FEAT)), titleTagKindsBySong())
+        assertTitleTagTableMatchesColumn()
+
+        val again = songService.createBatch(
+            listOf(
+                InsertableSong(
+                    title = "Song (Live)",
+                    artists = listOf("Sync Artist"),
+                    album = album,
+                    duration = 100,
+                    explicit = false,
+                    path = "/sync/remix.flac",
+                    trackNumber = 1,
+                ),
+            )
+        )
+        assertTrue(again.isEmpty())
+        assertEquals(mapOf(remixId to setOf(TitleTagKind.LIVE)), titleTagKindsBySong())
+        assertTitleTagTableMatchesColumn()
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `updateSong and upsertSong keep the title tag table in sync`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val songId = insertSongWithPath("/sync/song.mp3")
+
+        songService.updateSong(
+            songService.byId(songId)!!.copy(
+                title = "Song (Radio Edit)",
+                tags = listOf(TitleTag(TitleTagKind.FEAT, "feat. X"), TitleTag(TitleTagKind.FEAT, "with Y"))
+            ),
+            user.id
+        )
+        assertEquals(mapOf(songId to setOf(TitleTagKind.FEAT, TitleTagKind.EDIT)), titleTagKindsBySong())
+        assertTitleTagTableMatchesColumn()
+
+        songService.updateSong(songService.byId(songId)!!.copy(title = "Song", tags = emptyList()), user.id)
+        assertEquals(emptyMap<UUID, Set<TitleTagKind>>(), titleTagKindsBySong())
+        assertTitleTagTableMatchesColumn()
+
+        songService.upsertSong(songService.byId(songId)!!.copy(title = "Song (Live)", tags = emptyList()))
+        assertEquals(mapOf(songId to setOf(TitleTagKind.LIVE)), titleTagKindsBySong())
+        assertTitleTagTableMatchesColumn()
+
+        songService.deleteSongs(listOf(songId))
+        assertEquals(0L, transaction(database) { SongTitleTagTable.selectAll().count() })
+    }
+
     @ParameterizedTest
     @EnumSource(DbDialect::class)
     fun `user songs carry only the requesting user's tags with an action and song edits leave them untouched`(dialect: DbDialect) = runBlocking {
@@ -1433,7 +1527,7 @@ class SongServiceTest : KoinTest {
         val withLyrics = songService.allSongIds(true, tags = listOf(SongTag.HAS_LYRICS)).toList()
         assertEquals(1, withLyrics.size)
 
-        val notHighQuality = songService.allSongIds(true, tags = listOf(SongTag.Q_96), invertTags = true).toList()
+        val notHighQuality = songService.allSongIds(true, excludeTags = listOf(SongTag.Q_96)).toList()
         assertEquals(2, notHighQuality.size)
     }
 
@@ -1524,11 +1618,11 @@ class SongServiceTest : KoinTest {
             }
         }
 
-        val resultExplicit = rpcService.allSongs(0, 10, explicit = true, tags = emptyList(), invertTags = false)
+        val resultExplicit = rpcService.allSongs(0, 10, explicit = true, tags = emptyList())
         assertEquals(1, resultExplicit.data.size)
         assertTrue(resultExplicit.data[0].explicit)
 
-        val resultNonExplicit = rpcService.allSongs(0, 10, explicit = false, tags = emptyList(), invertTags = false)
+        val resultNonExplicit = rpcService.allSongs(0, 10, explicit = false, tags = emptyList())
         assertEquals(1, resultNonExplicit.data.size)
         assertFalse(resultNonExplicit.data[0].explicit)
     }
@@ -1552,16 +1646,16 @@ class SongServiceTest : KoinTest {
             }
         }
 
-        val firstPage = rpcService.allSongs(0, 2, true, emptyList(), false)
+        val firstPage = rpcService.allSongs(0, 2, true, emptyList())
         assertEquals(2, firstPage.data.size)
         assertTrue(firstPage.hasNextPage)
         assertEquals(5, firstPage.total)
 
-        val secondPage = rpcService.allSongs(1, 2, true, emptyList(), false)
+        val secondPage = rpcService.allSongs(1, 2, true, emptyList())
         assertEquals(2, secondPage.data.size)
         assertTrue(secondPage.hasNextPage)
 
-        val lastPage = rpcService.allSongs(2, 2, true, emptyList(), false)
+        val lastPage = rpcService.allSongs(2, 2, true, emptyList())
         assertEquals(1, lastPage.data.size)
         assertFalse(lastPage.hasNextPage)
     }
@@ -1660,6 +1754,123 @@ class SongServiceTest : KoinTest {
         assertEquals(1, songService.allSongIds(true, tags = listOf(SongTag.Q_192)).toList().size)
         assertEquals(1, songService.allSongIds(true, tags = listOf(SongTag.B_16)).toList().size)
         assertEquals(1, songService.allSongIds(true, tags = listOf(SongTag.HAS_MUSICBRAINZ_ID)).toList().size)
+    }
+
+    private fun insertTaggedSong(
+        albumId: UUID,
+        songTitle: String,
+        tags: List<TitleTag>,
+        rate: Int = 44100,
+        songLyrics: String = "",
+    ): UUID {
+        val songId = UUID.randomUUID()
+        transaction(database) {
+            SongTable.insert {
+                it[id] = songId
+                it[title] = songTitle
+                it[SongTable.albumId] = albumId
+                it[titleTags] = encodeTitleTags(tags)
+                it[sampleRate] = rate
+                it[lyrics] = songLyrics
+            }
+            syncSongTitleTags(songId, tags)
+        }
+        return songId
+    }
+
+    private suspend fun assertFilteredSongs(
+        expected: Set<UUID>,
+        tags: List<SongTag> = emptyList(),
+        excludeTags: List<SongTag> = emptyList(),
+        titleTags: List<TitleTagKind> = emptyList(),
+        excludeTitleTags: List<TitleTagKind> = emptyList(),
+    ) {
+        val ids = songService.allSongIds(true, tags, excludeTags, titleTags, excludeTitleTags).toList()
+        assertEquals(expected, ids.toSet())
+        assertEquals(expected.size, ids.size)
+
+        val page = rpcService.allSongs(0, 50, true, tags, excludeTags, titleTags, excludeTitleTags)
+        assertEquals(expected, page.data.map { it.id }.toSet())
+        assertEquals(expected.size, page.total)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `allSongs and allSongIds combine included and excluded song tags and title tags`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val albumId = UUID.randomUUID()
+        transaction(database) {
+            AlbumTable.insert { it[id] = albumId; it[name] = "Album" }
+        }
+        val plain = insertTaggedSong(albumId, "Plain", emptyList(), rate = 96000, songLyrics = "La la")
+        val remix = insertTaggedSong(albumId, "Remixed", listOf(TitleTag(TitleTagKind.REMIX, "Skrillex Remix")))
+        val liveFeat = insertTaggedSong(
+            albumId,
+            "Live Feat",
+            listOf(TitleTag(TitleTagKind.LIVE, "Live"), TitleTag(TitleTagKind.FEAT, "feat. X")),
+            rate = 96000,
+        )
+        val feat = insertTaggedSong(albumId, "Feat", listOf(TitleTag(TitleTagKind.FEAT, "feat. Y")), songLyrics = "La la")
+        val mbId = UUID.randomUUID()
+        transaction(database) {
+            MBRecordingTable.insert {
+                it[id] = mbId
+                it[title] = "Remixed"
+            }
+            SongMusicBrainzTable.insert {
+                it[SongMusicBrainzTable.songId] = remix
+                it[musicBrainzId] = mbId
+            }
+        }
+
+        assertFilteredSongs(setOf(plain, remix, liveFeat, feat))
+        assertFilteredSongs(setOf(remix), titleTags = listOf(TitleTagKind.REMIX))
+        assertFilteredSongs(setOf(remix, liveFeat), titleTags = listOf(TitleTagKind.LIVE, TitleTagKind.REMIX))
+        assertFilteredSongs(setOf(plain, remix), excludeTitleTags = listOf(TitleTagKind.FEAT))
+        assertFilteredSongs(setOf(feat), titleTags = listOf(TitleTagKind.FEAT), excludeTitleTags = listOf(TitleTagKind.LIVE))
+        assertFilteredSongs(setOf(remix, feat), excludeTags = listOf(SongTag.Q_96))
+        assertFilteredSongs(setOf(remix), excludeTags = listOf(SongTag.Q_96, SongTag.HAS_LYRICS))
+        assertFilteredSongs(setOf(plain, remix, liveFeat, feat), excludeTags = listOf(SongTag.Q_192))
+        assertFilteredSongs(setOf(liveFeat), tags = listOf(SongTag.Q_96), excludeTags = listOf(SongTag.HAS_LYRICS))
+        assertFilteredSongs(setOf(plain), tags = listOf(SongTag.Q_96), excludeTitleTags = listOf(TitleTagKind.FEAT))
+        assertFilteredSongs(
+            setOf(liveFeat),
+            excludeTags = listOf(SongTag.HAS_LYRICS),
+            excludeTitleTags = listOf(TitleTagKind.REMIX),
+        )
+        assertFilteredSongs(setOf(remix), tags = listOf(SongTag.HAS_MUSICBRAINZ_ID))
+        assertFilteredSongs(setOf(plain, liveFeat, feat), excludeTags = listOf(SongTag.HAS_MUSICBRAINZ_ID))
+        assertFilteredSongs(
+            setOf(liveFeat, feat),
+            excludeTags = listOf(SongTag.HAS_MUSICBRAINZ_ID),
+            titleTags = listOf(TitleTagKind.REMIX, TitleTagKind.FEAT),
+        )
+        assertFilteredSongs(
+            setOf(feat),
+            tags = listOf(SongTag.HAS_LYRICS, SongTag.HAS_MUSICBRAINZ_ID),
+            excludeTags = listOf(SongTag.Q_96),
+            titleTags = listOf(TitleTagKind.FEAT, TitleTagKind.REMIX),
+            excludeTitleTags = listOf(TitleTagKind.REMIX),
+        )
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `exclude only filters keep songs without title tags`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        every { storageService.customAudioPath } returns "/custom/path"
+        val albumId = UUID.randomUUID()
+        transaction(database) {
+            AlbumTable.insert { it[id] = albumId; it[name] = "Album" }
+        }
+        val plain = insertTaggedSong(albumId, "Plain", emptyList())
+        val live = insertTaggedSong(albumId, "Live", listOf(TitleTag(TitleTagKind.LIVE, "Live")))
+
+        assertFilteredSongs(setOf(plain), excludeTitleTags = TitleTagKind.entries)
+        assertFilteredSongs(setOf(plain, live), excludeTitleTags = listOf(TitleTagKind.REMIX))
+        assertFilteredSongs(setOf(plain), excludeTags = listOf(SongTag.HAS_LYRICS), excludeTitleTags = listOf(TitleTagKind.LIVE))
+        assertFilteredSongs(setOf(plain, live), excludeTags = listOf(SongTag.HAS_LYRICS, SongTag.CUSTOM_UPLOAD))
+        assertFilteredSongs(emptySet(), titleTags = listOf(TitleTagKind.REMIX))
     }
 
     @ParameterizedTest

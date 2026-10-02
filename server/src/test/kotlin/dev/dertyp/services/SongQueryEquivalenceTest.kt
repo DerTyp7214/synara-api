@@ -258,7 +258,9 @@ class SongQueryEquivalenceTest : KoinTest {
                         orderBy(SongTable.inserted, SortOrder.DESC)
                         orderBy(SongTable.id, SortOrder.ASC)
                     })
-                }, { page, size -> service.allSongs(page, size, explicit, userId, tags, invert) })
+                }, { page, size -> if (invert) service.allSongs(page, size, explicit, userId, excludeTags = tags)
+                else service.allSongs(page, size, explicit, userId, tags)
+                })
             }
 
             cases.paged("likedSongs explicit=$explicit", sizes, { page, size ->

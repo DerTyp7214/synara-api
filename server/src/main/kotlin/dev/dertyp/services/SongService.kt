@@ -174,9 +174,11 @@ class SongRpcService(
         pageSize: Int,
         explicit: Boolean,
         tags: List<SongTag>,
-        invertTags: Boolean
+        excludeTags: List<SongTag>,
+        titleTags: List<TitleTagKind>,
+        excludeTitleTags: List<TitleTagKind>
     ): PaginatedResponse<UserSong> =
-        songService.allSongs(page, pageSize, explicit, user.id, tags, invertTags)
+        songService.allSongs(page, pageSize, explicit, user.id, tags, excludeTags, titleTags, excludeTitleTags)
 
     override suspend fun byColor(
         page: Int,
@@ -236,9 +238,11 @@ class SongRpcService(
     override fun allSongIds(
         explicit: Boolean,
         tags: List<SongTag>,
-        invertTags: Boolean
+        excludeTags: List<SongTag>,
+        titleTags: List<TitleTagKind>,
+        excludeTitleTags: List<TitleTagKind>
     ): Flow<UUID> =
-        songService.allSongIds(explicit, tags, invertTags)
+        songService.allSongIds(explicit, tags, excludeTags, titleTags, excludeTitleTags)
 
     override fun likedSongIds(explicit: Boolean): Flow<UUID> =
         songService.likedSongIds(explicit, user.id)
@@ -635,6 +639,7 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                 it[trackNumber] = normalized.trackNumber
                 it[discNumber] = normalized.discNumber
             }
+            syncSongTitleTags(normalized.id, normalized.tags)
 
             SongArtistTable.deleteWhere { SongArtistTable.songId eq normalized.id }
             val creditedAliasIds = normalized.artists.associate { artist ->
@@ -1519,12 +1524,15 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
         explicit: Boolean,
         userId: UUID,
         tags: List<SongTag> = emptyList(),
-        invertTags: Boolean = false
+        excludeTags: List<SongTag> = emptyList(),
+        titleTags: List<TitleTagKind> = emptyList(),
+        excludeTitleTags: List<TitleTagKind> = emptyList()
     ): PaginatedResponse<UserSong> =
         querySongs(
             page, pageSize, explicit, userId,
             query = {
-                applyTags(tags, invertTags)
+                applyTags(tags, excludeTags)
+                applyTitleTags(titleTags, excludeTitleTags)
                 orderBy(SongTable.inserted, SortOrder.DESC)
                 orderBy(SongTable.id, SortOrder.ASC)
             }
@@ -1657,7 +1665,9 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
     fun allSongIds(
         explicit: Boolean,
         tags: List<SongTag> = emptyList(),
-        invertTags: Boolean = false
+        excludeTags: List<SongTag> = emptyList(),
+        titleTags: List<TitleTagKind> = emptyList(),
+        excludeTitleTags: List<TitleTagKind> = emptyList()
     ): Flow<UUID> = flow {
         SongTable
             .leftJoin(SongMusicBrainzTable)
@@ -1666,7 +1676,8 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                 if (!explicit) it.where { SongTable.explicit eq false }
                 else it
             }
-            .applyTags(tags, invertTags)
+            .applyTags(tags, excludeTags)
+            .applyTitleTags(titleTags, excludeTitleTags)
             .orderBy(SongTable.inserted, SortOrder.DESC)
             .orderBy(SongTable.id, SortOrder.ASC)
             .fetchBatchedResults(1000) { batch ->
@@ -1676,29 +1687,40 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
             }
     }
 
-    private fun Query.applyTags(tags: List<SongTag>, invert: Boolean): Query {
-        if (tags.isNotEmpty()) {
-            val customAudioPath = get<StorageService>().customAudioPath
-
-            val conditions = tags.map { tag ->
-                when (tag) {
-                    SongTag.Q_44_48 -> (SongTable.sampleRate eq 44100) or (SongTable.sampleRate eq 48000)
-                    SongTag.Q_96 -> (SongTable.sampleRate eq 96000)
-                    SongTag.Q_192 -> (SongTable.sampleRate eq 192000)
-                    SongTag.B_16 -> (SongTable.bitsPerSample eq 16)
-                    SongTag.B_24 -> (SongTable.bitsPerSample eq 24)
-                    SongTag.HAS_LYRICS -> (SongTable.lyrics neq "")
-                    SongTag.CUSTOM_UPLOAD -> (SongTable.filePath like "$customAudioPath%")
-                    SongTag.HAS_MUSICBRAINZ_ID -> (SongMusicBrainzTable.musicBrainzId.isNotNull())
-                }
-            }
-
-            val combinedCondition = conditions.reduce { acc, op -> acc or op }
-            if (invert) andWhere { not(combinedCondition) }
-            else andWhere { combinedCondition }
-        }
+    private fun Query.applyTags(tags: List<SongTag>, excludeTags: List<SongTag>): Query {
+        anyTagCondition(tags)?.let { condition -> andWhere { condition } }
+        anyTagCondition(excludeTags)?.let { condition -> andWhere { not(condition) } }
         return this
     }
+
+    private fun anyTagCondition(tags: List<SongTag>): Op<Boolean>? {
+        if (tags.isEmpty()) return null
+        val customAudioPath = get<StorageService>().customAudioPath
+
+        return tags.distinct().map { tag ->
+            when (tag) {
+                SongTag.Q_44_48 -> (SongTable.sampleRate eq 44100) or (SongTable.sampleRate eq 48000)
+                SongTag.Q_96 -> (SongTable.sampleRate eq 96000)
+                SongTag.Q_192 -> (SongTable.sampleRate eq 192000)
+                SongTag.B_16 -> (SongTable.bitsPerSample eq 16)
+                SongTag.B_24 -> (SongTable.bitsPerSample eq 24)
+                SongTag.HAS_LYRICS -> (SongTable.lyrics neq "")
+                SongTag.CUSTOM_UPLOAD -> (SongTable.filePath like "$customAudioPath%")
+                SongTag.HAS_MUSICBRAINZ_ID -> (SongMusicBrainzTable.musicBrainzId.isNotNull())
+            }
+        }.reduce { acc, op -> acc or op }
+    }
+
+    private fun Query.applyTitleTags(titleTags: List<TitleTagKind>, excludeTitleTags: List<TitleTagKind>): Query {
+        if (titleTags.isNotEmpty()) andWhere { SongTable.id inSubQuery songIdsWithTitleTags(titleTags) }
+        if (excludeTitleTags.isNotEmpty()) andWhere { SongTable.id notInSubQuery songIdsWithTitleTags(excludeTitleTags) }
+        return this
+    }
+
+    private fun songIdsWithTitleTags(kinds: List<TitleTagKind>): Query =
+        SongTitleTagTable
+            .select(SongTitleTagTable.songId)
+            .where { SongTitleTagTable.kind inList kinds.distinct() }
 
     fun likedSongIds(explicit: Boolean, userId: UUID): Flow<UUID> = flow {
         SongTable
@@ -2389,6 +2411,7 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                             it[titleTags] = encodeTitleTags(song.tags)
                         }
                     }
+                    syncSongTitleTags(dirtySongs.map { (song, existing) -> existing.id to song.tags })
                 }
                 logBlock("Dirty song updates")
             }
@@ -2456,6 +2479,8 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                     this[SongTable.channels] = song.audio.channels
                     this[SongTable.cover] = imageId
                     this[SongTable.isrc] = song.isrc
+                }.also { rows ->
+                    syncSongTitleTags(rows.mapIndexed { index, row -> row[SongTable.id].value to filteredSongs[index].tags })
                 }
             }
             logBlock("Main song insertion")
@@ -2593,6 +2618,7 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
             it[cover] = song.coverId?.let { coverId -> EntityID(coverId, ImageTable) }
             it[audioStartMs] = song.audioStartMs
         }
+        syncSongTitleTags(song.id, song.tags)
 
         if (song.originalUrl.isNotBlank()) {
             addProviderUrl(song.id, song.originalUrl)
