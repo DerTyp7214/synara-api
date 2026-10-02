@@ -463,7 +463,7 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
         }
 
         if (musicBrainzId != null && triggerMerge) {
-            ApplicationScope.scope.launch {
+            scope.launch {
                 libraryMergeService.mergeDuplicateAlbums()
             }
         }
@@ -660,7 +660,7 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
             } ?: return@forEach
             syncAlbumSongsWithMusicBrainz(albumId, mbId)
         }
-        ApplicationScope.scope.launch {
+        scope.launch {
             libraryMergeService.mergeDuplicateAlbums()
         }
     }
@@ -1617,7 +1617,7 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
             syncAlbumSongsWithMusicBrainz(album.id, album.musicbrainzId!!)
 
             if (triggerMerge) {
-                ApplicationScope.scope.launch {
+                scope.launch {
                     libraryMergeService.mergeDuplicateAlbums()
                 }
             }

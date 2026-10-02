@@ -97,6 +97,7 @@ class AlbumServiceTest : KoinTest {
 
     @AfterEach
     fun tearDown() {
+        if (::service.isInitialized) runBlocking { service.stopService() }
         stopKoin()
         TestDatabase.cleanUp()
     }
