@@ -4,15 +4,21 @@ import dev.dertyp.core.process.executeCommand
 import dev.dertyp.core.process.findInPath
 import dev.dertyp.plugins.IPluginIndexer
 import dev.dertyp.plugins.IServerStorageService
+import dev.dertyp.services.credentials.CredentialProvider
+import dev.dertyp.services.credentials.ImporterCredentialMaterializer
 import dev.dertyp.services.import.ImportFavType
 import dev.dertyp.services.import.ProcessExecutionResult
 import dev.dertyp.services.import.TiddlService
+import dev.dertyp.testing.FakeCredentialProvider
 import io.mockk.*
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.koin.core.context.startKoin
+import org.koin.core.context.stopKoin
+import org.koin.dsl.module
 
 class TiddlServiceTest {
     private val indexer = mockk<IPluginIndexer>(relaxed = true)
@@ -21,6 +27,13 @@ class TiddlServiceTest {
 
     @BeforeEach
     fun setup() {
+        val credentialProvider = FakeCredentialProvider()
+        startKoin {
+            modules(module {
+                single<CredentialProvider> { credentialProvider }
+                single { ImporterCredentialMaterializer(credentialProvider) }
+            })
+        }
         mockkStatic("dev.dertyp.core.process.CommandKt")
         every { findInPath("tiddl") } returns "/usr/local/bin/tiddl"
         service = TiddlService(indexer, storageService)
@@ -28,6 +41,7 @@ class TiddlServiceTest {
 
     @AfterEach
     fun tearDown() {
+        stopKoin()
         unmockkAll()
     }
 

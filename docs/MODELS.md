@@ -265,6 +265,7 @@ Services: [RPC_SERVICES.md](RPC_SERVICES.md) · REST routes: [REST_API.md](REST_
 - [Divider](#devdertypuiuicomponentdivider)
 - [EmptyState](#devdertypuiuicomponentemptystate)
 - [Fallback](#devdertypuiuicomponentfallback)
+- [FileField](#devdertypuiuicomponentfilefield)
 - [Form](#devdertypuiuicomponentform)
 - [Grid](#devdertypuiuicomponentgrid)
 - [Icon](#devdertypuiuicomponenticon)
@@ -3168,6 +3169,23 @@ Placeholder the server substitutes for components the client's schema version do
 | Field | Type | Description |
 | :--- | :--- | :--- |
 | `text` | `String`? | Optional text to show; clients show a generic message when null. |
+
+### FileField <a name="devdertypuiuicomponentfilefield"></a>
+File input. Clients pick a file with a native file picker and submit its content under key. Clients without file field support receive a multi-line TextField with the same key.
+
+| Field | Type | Description |
+| :--- | :--- | :--- |
+| `key` | `String` | Payload key. |
+| `label` | `String` | Label. |
+| `accept` | `List`<`String`> | Allowed file extensions including the dot, e.g. .p8. Empty allows any file. |
+| `binary` | `Boolean` | Whether the file is binary. The submitted value is the UTF-8 text of the file when false and the base64 of its bytes when true. |
+| `allowPaste` | `Boolean` | Whether the client also offers pasting the content, as text or as base64 for binary files. |
+| `secret` | `Boolean` | Whether the content is secret. The value is never populated and an empty submitted value means unchanged. |
+| `value` | `String`? | Current content. Never populated for secret fields. |
+| `helper` | `String`? | Helper text. |
+| `error` | `String`? | Validation error to display. |
+| `required` | `Boolean` | Whether a value is required. |
+| `enabled` | `Boolean` | Whether the field is editable. |
 
 ### Form <a name="devdertypuiuicomponentform"></a>
 Groups form fields; their values are submitted together with the submit action.

@@ -1,17 +1,15 @@
 package dev.dertyp.services.metadata
 
-import com.auth0.jwt.JWT
-import com.auth0.jwt.algorithms.Algorithm
 import dev.dertyp.ApiClient
-import dev.dertyp.config.ProviderCredentialKeys
 import dev.dertyp.config.appleMusicStorefront
-import dev.dertyp.config.toAppleMusicKeyConfig
 import dev.dertyp.core.ApplicationScope
 import dev.dertyp.core.HttpClientPriority
 import dev.dertyp.core.RetryOnError
 import dev.dertyp.core.RetryPolicy
 import dev.dertyp.core.retryingGet
 import dev.dertyp.core.safeQueuedGet
+import dev.dertyp.credentials.CredentialNames
+import dev.dertyp.credentials.ResolvedCredential
 import io.ktor.client.request.HttpRequestBuilder
 import io.ktor.client.request.header
 import io.ktor.client.request.parameter
@@ -29,72 +27,26 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import java.io.File
-import java.security.KeyFactory
-import java.security.interfaces.ECPrivateKey
-import java.security.spec.PKCS8EncodedKeySpec
 import java.time.LocalDate
 import java.time.OffsetDateTime
-import java.util.Base64
-import java.util.Date
 import kotlin.time.Duration.Companion.milliseconds
-import kotlin.time.Duration.Companion.minutes
 
 class AppleMusicService(
     environment: ApplicationEnvironment
 ) : MetadataService("Apple Music", IMetadataService.MetadataType.appleMusic, environment) {
-    override val tokenUrl = ""
-    override val credentialKeys = ProviderCredentialKeys.NONE
-
-    private val signingKey by lazy { environment.config.toAppleMusicKeyConfig() }
-    private val teamId: String? get() = signingKey.teamId
-    private val keyId: String? get() = signingKey.keyId
-    private val p8Path: String? get() = signingKey.p8Path
     val storefront: String by lazy { environment.config.appleMusicStorefront() }
 
     val catalogEnabled: Boolean
-        get() = signingKey.complete
+        get() = credentialProvider.isAvailable(CredentialNames.APPLE_MUSIC_DEVELOPER)
 
-    private var appleMusicToken: String? = null
-    private var tokenExpiration: Long = 0
-
-    private fun getAppleMusicToken(): String? {
-        if (appleMusicToken != null && System.currentTimeMillis() < tokenExpiration) return appleMusicToken
+    private suspend fun getAppleMusicToken(): String? {
         if (!catalogEnabled) return null
-
-        val file = File(p8Path!!)
-        if (!file.exists()) {
-            logger.error("p8 file not found at $p8Path")
+        val credential = credentialProvider.resolve(CredentialNames.APPLE_MUSIC_DEVELOPER) as? ResolvedCredential.DeveloperToken
+        if (credential == null) {
+            logger.warn("Apple Music developer token ${CredentialNames.APPLE_MUSIC_DEVELOPER} is unavailable")
             return null
         }
-
-        val keyContent = file.readText()
-            .replace("-----BEGIN PRIVATE KEY-----", "")
-            .replace("-----END PRIVATE KEY-----", "")
-            .replace("\\s".toRegex(), "")
-
-        val keyBytes = Base64.getDecoder().decode(keyContent)
-        val spec = PKCS8EncodedKeySpec(keyBytes)
-        val kf = KeyFactory.getInstance("EC")
-        val privateKey = kf.generatePrivate(spec) as ECPrivateKey
-
-        val expiration = System.currentTimeMillis() + 30.minutes.inWholeMilliseconds
-        tokenExpiration = expiration
-
-        appleMusicToken = JWT.create()
-            .withHeader(mapOf("alg" to "ES256", "kid" to keyId))
-            .withIssuer(teamId)
-            .withIssuedAt(Date())
-            .withExpiresAt(Date(expiration))
-            .sign(Algorithm.ECDSA256(null, privateKey))
-
-        return appleMusicToken
-    }
-
-    override fun HttpRequestBuilder.getAccessTokenHeader(clientId: String, clientSecret: String) {}
-
-    override suspend fun getAccessToken(): IMetadataService.AccessTokenResponse {
-        return IMetadataService.AccessTokenResponse("", "", 0)
+        return credential.token
     }
 
     override suspend fun search(

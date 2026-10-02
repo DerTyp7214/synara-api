@@ -1,10 +1,8 @@
 package dev.dertyp.services.metadata
 
 import dev.dertyp.ApiClient
-import dev.dertyp.config.ProviderCredentialKeys
 import dev.dertyp.core.HttpClientPriority
 import dev.dertyp.core.safeQueuedGet
-import io.ktor.client.request.HttpRequestBuilder
 import io.ktor.client.request.parameter
 import io.ktor.server.application.ApplicationEnvironment
 import kotlinx.serialization.SerialName
@@ -14,13 +12,7 @@ import kotlin.time.Duration.Companion.milliseconds
 class DeezerService(
     environment: ApplicationEnvironment
 ) : MetadataService("Deezer", IMetadataService.MetadataType.deezer, environment) {
-    override val tokenUrl = ""
-    override val credentialKeys = ProviderCredentialKeys.NONE
-
     private val baseUrl = "https://api.deezer.com"
-
-    override fun HttpRequestBuilder.getAccessTokenHeader(clientId: String, clientSecret: String) {
-    }
 
     override suspend fun searchArtists(
         query: String,

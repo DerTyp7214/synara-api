@@ -177,6 +177,12 @@ context.intake.register(object : IntakeResolver {
 
 `context.jobs` is a per-kind FIFO queue with one running job per kind (kinds run in parallel): `enqueue(kind, title, user, summary) { … }` returns the job id; inside the body use `log(line)`, `progress(value, message)` and `isActive()` (false once cancelled). `jobs(kind, user)` streams `JobInfo`s (pending/running/finished with progress), `log(jobId)` streams a job's lines, `cancel(jobId)` cancels your own source's jobs. Imports run in kind `"import"`, favourites syncs in `"favourites"`.
 
+### Credentials
+
+`context.credentials` stores and reads secrets such as API keys and logins. It requires `apiVersion` 3. Names are scoped to your plugin, so two plugins can both use the name `api`. `get(name)` returns the `ResolvedCredential` or null, `store(name, credential)` saves one and `remove(name)` deletes it.
+
+Without a credential server configured, credentials are kept encrypted in the local database. With a credential server, grants are looked up as `plugin:<pluginId>:<name>`. `managedRemotely` tells whether the credential server is in use. Names managed remotely cannot be changed from the plugin, so `store` and `remove` are rejected for them.
+
 ### Podcast indexes
 
 An `IPodcastIndex` is a searchable external podcast directory. `id` must be unique and stable — clients pass it to `searchIndex` — and `name` is shown to users. `isConfigured()` says whether the index can be searched right now (for example credentials are present); unconfigured indexes are skipped. `search(query, limit)` returns up to `limit` `PodcastIndexEntry` values with at least `feedUrl` and `title`; it may throw, in which case the server logs the failure and treats the index as empty for that call, and applies a 10 second timeout per index. The server normalizes and deduplicates results by feed URL across indexes and leaves out feeds it already follows.
@@ -195,4 +201,4 @@ All text in a tree must be translated on the server. Register bundles with `cont
 
 Plugins specify an `apiVersion`. Synara will only load plugins with an `apiVersion` less than or equal to the server's current supported version. This ensures backward compatibility as the plugin API evolves.
 
-Current Supported API Version: **2** (adds `ui`, `settings` and `i18n` to `PluginContext` and the `IUiPlugin` interface).
+Current Supported API Version: **3** (adds `credentials` to `PluginContext`). Version 2 added `ui`, `settings` and `i18n` to `PluginContext` and the `IUiPlugin` interface. Plugins with version 2 or 1 still load.

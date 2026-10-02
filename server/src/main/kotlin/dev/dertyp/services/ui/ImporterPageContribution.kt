@@ -12,6 +12,8 @@ import dev.dertyp.plugins.UiRenderScope
 import dev.dertyp.services.ISyncService
 import dev.dertyp.services.Service
 import dev.dertyp.services.UserService
+import dev.dertyp.services.credentials.CredentialProvider
+import dev.dertyp.services.import.BaseImporter
 import dev.dertyp.services.import.FavouriteImportQueueEntry
 import dev.dertyp.services.import.ImportQueueEntry
 import dev.dertyp.services.import.ImportService
@@ -64,9 +66,13 @@ class ImporterState(
     val importerProxy: ImporterProxy,
     val intakeService: IntakeService,
     val jobService: JobService,
+    private val credentialProvider: CredentialProvider,
 ) : Service() {
     private val authChangeFlow = MutableSharedFlow<Unit>(extraBufferCapacity = 8, onBufferOverflow = BufferOverflow.DROP_OLDEST)
-    val authChanges: Flow<Unit> = authChangeFlow.asSharedFlow()
+    val authChanges: Flow<Unit> = merge(authChangeFlow.asSharedFlow(), credentialProvider.changes())
+
+    fun managedRemotely(importer: IImporter): Boolean =
+        (importer as? BaseImporter)?.credentialName?.let { credentialProvider.isManagedRemotely(it) } ?: false
 
     fun enabledImporters(): List<IImporter> = importService.pluginManager.getAllImporters().filter { it.enabled }
 
@@ -116,6 +122,9 @@ class ImporterState(
     suspend fun login(scope: ServerUiRenderScope, importerId: String?): UiInvokeResult {
         val importer = (importerId?.let { id -> installedImporters().firstOrNull { it.id == id } } ?: defaultImporter())
             ?: throw IllegalArgumentException(scope.t("importer.error.unknownBackend"))
+        if (managedRemotely(importer)) {
+            return UiInvokeResult(UiInvokeStatus.ERROR, scope.t("importer.login.managed"))
+        }
         if (importer.tokenFileExists()) {
             authChangeFlow.tryEmit(Unit)
             return UiInvokeResult(UiInvokeStatus.OK, scope.t("importer.backends.authorized"), refresh = true)
@@ -260,13 +269,14 @@ class ImporterPageContribution(
 
         val default = state.defaultImporter()
         if (default != null && !default.tokenFileExists()) {
+            val managed = state.managedRemotely(default)
             children += UiComponent.Card(
                 title = scope.t("importer.login.title"),
                 subtitle = scope.t("importer.login.message"),
                 icon = UiIcon(UiIconName.LOGIN),
                 tone = UiTone.WARNING,
-                children = emptyList(),
-                actions = listOf(
+                children = if (managed) listOf(UiComponent.Text(scope.t("importer.login.managed"), UiTextStyle.CAPTION, UiTone.MUTED)) else emptyList(),
+                actions = if (managed) emptyList() else listOf(
                     UiComponent.Button(
                         label = scope.t("importer.login.action"),
                         action = UiAction.Invoke(id, "login", params = mapOf(PARAM_IMPORTER to UiValue.of(default.id))),
@@ -440,7 +450,8 @@ class ImporterSettingsPageContribution(
                     children = listOfNotNull(
                         UiComponent.ListItem(title = importer.name, subtitle = statusText, icon = UiIcon(UiIconName.PLUG)),
                         UiComponent.Badge(statusText, if (authorized) UiTone.SUCCESS else UiTone.WARNING),
-                        if (!authorized && state.canLogin(importer)) UiComponent.Button(
+                        if (state.managedRemotely(importer)) UiComponent.Text(scope.t("importer.login.managed"), UiTextStyle.CAPTION, UiTone.MUTED)
+                        else if (!authorized && state.canLogin(importer)) UiComponent.Button(
                             label = scope.t("importer.login.action"),
                             action = UiAction.Invoke(id, "login", params = mapOf(ImporterPageContribution.PARAM_IMPORTER to UiValue.of(importer.id))),
                             style = UiButtonStyle.PRIMARY,

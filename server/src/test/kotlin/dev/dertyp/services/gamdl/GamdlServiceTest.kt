@@ -2,15 +2,22 @@ package dev.dertyp.services.gamdl
 
 import dev.dertyp.audio.AudioConfig
 import dev.dertyp.config.ServerConfig
+import dev.dertyp.credentials.CredentialFile
+import dev.dertyp.credentials.CredentialFileRoles
+import dev.dertyp.credentials.CredentialNames
+import dev.dertyp.credentials.ResolvedCredential
 import dev.dertyp.data.User
 import dev.dertyp.core.process.executeCommand
 import dev.dertyp.core.process.findInPath
 import dev.dertyp.plugins.IPluginIndexer
 import dev.dertyp.plugins.IServerStorageService
 import dev.dertyp.services.SongService
+import dev.dertyp.services.credentials.CredentialProvider
+import dev.dertyp.services.credentials.ImporterCredentialMaterializer
 import dev.dertyp.services.import.*
 import dev.dertyp.services.metadata.IMetadataService
 import dev.dertyp.services.metadata.MetadataService
+import dev.dertyp.testing.FakeCredentialProvider
 import io.ktor.server.application.*
 import io.ktor.server.config.*
 import io.mockk.*
@@ -40,6 +47,7 @@ class GamdlServiceTest : KoinTest {
     private lateinit var environment: ApplicationEnvironment
     private lateinit var config: ApplicationConfig
     private lateinit var service: GamdlService
+    private lateinit var credentialProvider: FakeCredentialProvider
 
     @TempDir
     lateinit var tempDir: Path
@@ -59,8 +67,11 @@ class GamdlServiceTest : KoinTest {
         cookiesFile = tempDir.resolve("cookies.txt").toFile()
         stubConfig(cookiesFile.absolutePath)
 
+        credentialProvider = FakeCredentialProvider()
         startKoin {
             modules(module {
+                single<CredentialProvider> { credentialProvider }
+                single { ImporterCredentialMaterializer(credentialProvider) }
                 single { environment }
                 single { ServerConfig(environment.config) }
                 single { AudioConfig() }
@@ -175,6 +186,60 @@ class GamdlServiceTest : KoinTest {
         assertEquals("# Netscape HTTP Cookie File\ntoken", cookiesFile.readText())
         assertTrue(service.enabled)
     }
+
+    @Test
+    fun `provideCredentials is refused when the credential server manages gamdl`() = runBlocking {
+        credentialProvider.put(remoteFiles(), managedRemotely = true)
+
+        assertThrows(IllegalStateException::class.java) {
+            runBlocking { service.provideCredentials(GamdlCredentials(cookiesTxt = "# Netscape HTTP Cookie File")) }
+        }
+        assertFalse(cookiesFile.exists())
+    }
+
+    @Test
+    fun `enabled follows the remote credential when the credential server manages gamdl`() {
+        credentialProvider.put(remoteFiles(), managedRemotely = true)
+        assertTrue(service.enabled)
+        assertTrue(service.tokenFileExists())
+
+        credentialProvider.remove(CredentialNames.IMPORTER_GAMDL)
+        cookiesFile.writeText("# Netscape HTTP Cookie File")
+        assertFalse(service.enabled)
+        assertFalse(service.tokenFileExists())
+    }
+
+    @Test
+    fun `importContent materializes the remote cookies and device before gamdl runs`() = runBlocking {
+        val wvdFile = tempDir.resolve("device.wvd").toFile()
+        stubConfig(cookiesFile.absolutePath, wvd = wvdFile.absolutePath)
+        credentialProvider.put(remoteFiles(), managedRemotely = true)
+        var seenCookies: String? = null
+        var seenWvd: String? = null
+        coEvery {
+            executeCommand(match { it.first() == "/usr/bin/gamdl" }, any(), any(), any(), any(), any())
+        } answers {
+            seenCookies = cookiesFile.readText()
+            seenWvd = wvdFile.readText()
+            ProcessExecutionResult(0, "", "")
+        }
+        coEvery { indexer.queue(any(), any(), any(), any(), any()) } returns CompletableDeferred(Unit)
+
+        service.importContent(listOf("https://music.apple.com/us/album/x/123"), 1, { true }, null) {}
+
+        assertEquals("remote-cookies", seenCookies)
+        assertEquals("remote-wvd", seenWvd)
+        assertTrue(credentialProvider.writeBacks.isEmpty())
+    }
+
+    private fun remoteFiles() = ResolvedCredential.Files(
+        name = CredentialNames.IMPORTER_GAMDL,
+        files = listOf(
+            CredentialFile(CredentialFileRoles.GAMDL_COOKIES, Base64.getEncoder().encodeToString("remote-cookies".toByteArray())),
+            CredentialFile(CredentialFileRoles.GAMDL_WVD, Base64.getEncoder().encodeToString("remote-wvd".toByteArray())),
+        ),
+        fingerprint = "fp-1",
+    )
 
     @Test
     fun `importFavoriteCollection is unsupported`() = runBlocking {

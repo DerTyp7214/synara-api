@@ -10,6 +10,7 @@ dependencies {
     api(libs.cron.utils)
     api(libs.ktor.server.core)
     implementation(project(":common-rpc"))
+    api(project(":common-credentials"))
 
     testImplementation(libs.junit.jupiter.api)
     testRuntimeOnly(libs.junit.jupiter.engine)

@@ -27,7 +27,7 @@ The full index is at [docs/README.md](docs/README.md); Swagger/OpenAPI documenta
 
 **Reference (generated, do not edit — `./gradlew generateDocs` regenerates all of these)**: [RPC Services](docs/RPC_SERVICES.md) (`:common-rpc:kspCommonMainKotlinMetadata`) · [Models](docs/MODELS.md) (`:common-rpc:kspCommonMainKotlinMetadata`) · [Permissions](docs/PERMISSIONS.md) (`:common-rpc:kspCommonMainKotlinMetadata`) · [REST API](docs/REST_API.md) (`:server:kspKotlin`) · [API Constants](docs/API_CONSTANTS.md) (`:server:generateApiConstantsDocs`) · [Environment Variables](docs/ENVIRONMENT_VARIABLES.md) (`generateEnvDocs`)
 
-**Extend the server**: [Plugins](docs/PLUGINS.md) · [MCP](docs/MCP.md) · [Listen Backup](docs/LISTEN_BACKUP.md)
+**Extend the server**: [Plugins](docs/PLUGINS.md) · [MCP](docs/MCP.md) · [Listen Backup](docs/LISTEN_BACKUP.md) · [Credential Server](docs/CREDENTIAL_SERVER.md)
 
 **Work on the server**: [Architecture](docs/ARCHITECTURE.md) · [Development](docs/DEVELOPMENT.md)
 

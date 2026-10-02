@@ -100,6 +100,11 @@ podcastIndex:
   apiSecret: ${PODCAST_INDEX_API_SECRET:}
 acoustid:
   apiKey: ${ACOUSTID_API_KEY:}
+credentialServer:
+  url: ${CREDENTIAL_SERVER_URL:}
+  clientId: ${CREDENTIAL_SERVER_CLIENT_ID:}
+  clientSecret: ${CREDENTIAL_SERVER_CLIENT_SECRET:}
+  adminKey: ${CREDENTIAL_SERVER_ADMIN_KEY:}
 workers:
   threadMultiplier: ${WORKER_THREAD_MULTIPLIER:1.0}
 metrics:

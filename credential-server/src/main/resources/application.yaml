@@ -1,0 +1,17 @@
+ktor:
+    application:
+        modules:
+            - dev.dertyp.credentials.server.ApplicationKt.module
+    deployment:
+        port: ${CREDENTIAL_SERVER_PORT:8083}
+credentials:
+    adminKey: ${CREDENTIAL_SERVER_ADMIN_KEY:}
+    masterKey: ${CREDENTIAL_SERVER_MASTER_KEY:}
+    keyFile: ${CREDENTIAL_SERVER_KEY_FILE:master.key}
+    issuer: ${CREDENTIAL_SERVER_ISSUER:synara-credentials}
+    tokenTtlSeconds: ${CREDENTIAL_SERVER_TOKEN_TTL_SECONDS:900}
+storage:
+    driverClassName: ${CREDENTIAL_SERVER_DB_DRIVER:org.sqlite.JDBC}
+    jdbcURL: ${CREDENTIAL_SERVER_DB_URL:jdbc:sqlite:credentials.db}
+    user: ${CREDENTIAL_SERVER_DB_USER:}
+    password: ${CREDENTIAL_SERVER_DB_PASSWORD:}

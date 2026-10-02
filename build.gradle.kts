@@ -32,7 +32,8 @@ tasks.register("generateEnvDocs") {
 
     val yamlFiles = listOf(
         file("server/src/main/resources/application.yaml"),
-        file("proxy/src/main/resources/application.yaml")
+        file("proxy/src/main/resources/application.yaml"),
+        file("credential-server/src/main/resources/application.yaml")
     )
     val dockerfile = file("Dockerfile.nobuild")
     val envFile = file("example.env")
@@ -110,6 +111,19 @@ tasks.register("generateEnvDocs") {
             "PROXY_NAME" to mapOf("desc" to "Display name for this proxy instance.", "cat" to "Proxy Configuration"),
             "PROXY_ID" to mapOf("desc" to "Unique identifier for this proxy.", "cat" to "Proxy Configuration"),
             "PROXY_KEY" to mapOf("desc" to "Authentication key for the proxy.", "cat" to "Proxy Configuration"),
+            "CREDENTIAL_SERVER_PORT" to mapOf("desc" to "HTTP port of the credential server.", "cat" to "Credential Server"),
+            "CREDENTIAL_SERVER_ADMIN_KEY" to mapOf("desc" to "Admin key of the credential server. The credential server requires it as X-Admin-Key for its admin routes and answers 503 while it is unset. A Synara server uses the same variable to manage a connected credential server.", "cat" to "Credential Server"),
+            "CREDENTIAL_SERVER_MASTER_KEY" to mapOf("desc" to "Master key that encrypts the stored credentials and signing keys of the credential server. When empty, a key file is generated instead.", "cat" to "Credential Server"),
+            "CREDENTIAL_SERVER_KEY_FILE" to mapOf("desc" to "Path of the generated master key file, used when no master key is set.", "cat" to "Credential Server"),
+            "CREDENTIAL_SERVER_ISSUER" to mapOf("desc" to "Issuer claim of the tokens signed by the credential server.", "cat" to "Credential Server"),
+            "CREDENTIAL_SERVER_TOKEN_TTL_SECONDS" to mapOf("desc" to "Lifetime of the access tokens issued by the credential server in seconds.", "cat" to "Credential Server"),
+            "CREDENTIAL_SERVER_DB_DRIVER" to mapOf("desc" to "JDBC driver of the credential server database. Use org.postgresql.Driver for PostgreSQL.", "cat" to "Credential Server"),
+            "CREDENTIAL_SERVER_DB_URL" to mapOf("desc" to "JDBC URL of the credential server database.", "cat" to "Credential Server"),
+            "CREDENTIAL_SERVER_DB_USER" to mapOf("desc" to "Database user of the credential server (PostgreSQL only).", "cat" to "Credential Server"),
+            "CREDENTIAL_SERVER_DB_PASSWORD" to mapOf("desc" to "Database password of the credential server (PostgreSQL only).", "cat" to "Credential Server"),
+            "CREDENTIAL_SERVER_URL" to mapOf("desc" to "Base URL of a credential server this Synara server fetches third-party credentials from. Can also be set on the credential server settings page.", "cat" to "Credential Server"),
+            "CREDENTIAL_SERVER_CLIENT_ID" to mapOf("desc" to "Client id this Synara server uses to authenticate at the credential server.", "cat" to "Credential Server"),
+            "CREDENTIAL_SERVER_CLIENT_SECRET" to mapOf("desc" to "Client secret belonging to CREDENTIAL_SERVER_CLIENT_ID.", "cat" to "Credential Server"),
             "YOUTUBE_API_KEY" to mapOf("desc" to "Youtube API key for YouTube Data API v3 (Downloader).", "cat" to "Other"),
             "WORKER_THREAD_MULTIPLIER" to mapOf("desc" to "Multiplier for background worker threads. Scales the number of parallel tasks relative to CPU cores.", "cat" to "Other"),
             "METRICS_ENABLED" to mapOf("desc" to "Whether to collect RPC call usage metrics (invocation counts per call, per user, over time).", "cat" to "Metrics"),

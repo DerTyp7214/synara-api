@@ -3,6 +3,10 @@ package dev.dertyp.services.metadata
 import dev.dertyp.ApiClient
 import dev.dertyp.core.ApplicationScope
 import dev.dertyp.core.HttpClientQueueService
+import dev.dertyp.credentials.CredentialNames
+import dev.dertyp.credentials.ResolvedCredential
+import dev.dertyp.services.credentials.CredentialProvider
+import dev.dertyp.testing.FakeCredentialProvider
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
@@ -37,12 +41,17 @@ class SpotifyServiceTest : KoinTest {
 
     @BeforeEach
     fun setup() {
-        startKoin { modules(module { single { HttpClientQueueService() } }) }
+        startKoin {
+            modules(module {
+                single { HttpClientQueueService() }
+                single<CredentialProvider> {
+                    FakeCredentialProvider(ResolvedCredential.AccessToken(CredentialNames.SPOTIFY_API, "test-token", "Bearer", null))
+                }
+            })
+        }
         environment = mockk()
         val config = mockk<ApplicationConfig>()
         every { environment.config } returns config
-        every { config.propertyOrNull("spotify.clientId") } returns mockk { every { getString() } returns "test-client-id" }
-        every { config.propertyOrNull("spotify.clientSecret") } returns mockk { every { getString() } returns "test-client-secret" }
 
         mockEngine = MockEngine { request ->
             when (request.url.encodedPath) {

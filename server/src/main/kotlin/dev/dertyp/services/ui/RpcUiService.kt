@@ -43,6 +43,12 @@ class RpcUiService(
     override fun subscribeLive(contributionId: String, key: String, entityId: UUID?): Flow<UiLiveUpdate> =
         uiService.subscribeLive(user, client, contributionId, key, entityId, call)
 
+    override fun subscribeWithContext(contributionId: String, context: UiContext): Flow<UiRender> =
+        uiService.subscribe(user, client, contributionId, context, call)
+
+    override fun subscribeLiveWithContext(contributionId: String, key: String, context: UiContext): Flow<UiLiveUpdate> =
+        uiService.subscribeLive(user, client, contributionId, key, context, call)
+
     override suspend fun invoke(contributionId: String, actionId: String, payload: UiInvokePayload): UiInvokeResult =
         uiService.invoke(user, client, contributionId, actionId, payload, call)
 

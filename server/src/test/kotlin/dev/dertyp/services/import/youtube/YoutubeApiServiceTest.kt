@@ -1,10 +1,13 @@
 package dev.dertyp.services.import.youtube
 
 import dev.dertyp.ApiClient
-import dev.dertyp.config.ServerConfig
 import dev.dertyp.core.ApplicationScope
 import dev.dertyp.core.HttpClientQueueService
+import dev.dertyp.credentials.CredentialNames
+import dev.dertyp.credentials.ResolvedCredential
+import dev.dertyp.services.credentials.CredentialProvider
 import dev.dertyp.services.youtube.YoutubeApiService
+import dev.dertyp.testing.FakeCredentialProvider
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
@@ -14,10 +17,7 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
 import io.ktor.serialization.kotlinx.json.json
-import io.ktor.server.application.ApplicationEnvironment
-import io.ktor.server.config.ApplicationConfig
 import io.mockk.every
-import io.mockk.mockk
 import io.mockk.mockkObject
 import io.mockk.unmockkAll
 import kotlinx.coroutines.runBlocking
@@ -31,16 +31,22 @@ import org.koin.dsl.module
 
 class YoutubeApiServiceTest {
 
-    private lateinit var environment: ApplicationEnvironment
-    private lateinit var config: ApplicationConfig
+    private lateinit var credentialProvider: FakeCredentialProvider
     private lateinit var service: YoutubeApiService
 
     @BeforeEach
     fun setup() {
-        startKoin { modules(module { single { HttpClientQueueService() } }) }
-        environment = mockk()
-        config = mockk()
-        every { environment.config } returns config
+        credentialProvider = FakeCredentialProvider()
+        startKoin {
+            modules(module {
+                single { HttpClientQueueService() }
+                single<CredentialProvider> { credentialProvider }
+            })
+        }
+    }
+
+    private fun provideApiKey() {
+        credentialProvider.put(ResolvedCredential.ApiKey(CredentialNames.YOUTUBE_API, "test-key"))
     }
 
     @AfterEach
@@ -51,23 +57,24 @@ class YoutubeApiServiceTest {
 
     @Test
     fun `enabled should be true when apiKey is present`() {
-        every { config.propertyOrNull("youtube.apiKey") } returns mockk { every { getString() } returns "test-key" }
-        service = YoutubeApiService(ServerConfig(environment.config))
+        provideApiKey()
+        service = YoutubeApiService()
         assertTrue(service.enabled)
     }
 
     @Test
     fun `enabled should be false when apiKey is missing`() {
-        every { config.propertyOrNull("youtube.apiKey") } returns null
-        service = YoutubeApiService(ServerConfig(environment.config))
+        service = YoutubeApiService()
         assertFalse(service.enabled)
     }
 
     @Test
     fun `getVideoMetadata should return correct map`() = runBlocking {
-        every { config.propertyOrNull("youtube.apiKey") } returns mockk { every { getString() } returns "test-key" }
-        
-        val mockEngine = MockEngine { _ ->
+        provideApiKey()
+        val apiKeys = mutableListOf<String?>()
+
+        val mockEngine = MockEngine { request ->
+            if (request.url.host == "www.googleapis.com") apiKeys += request.url.parameters["key"]
             respond(
                 content = """
                     {
@@ -99,7 +106,7 @@ class YoutubeApiServiceTest {
         mockkObject(ApiClient)
         every { ApiClient.instance } returns mockHttpClient
 
-        service = YoutubeApiService(ServerConfig(environment.config))
+        service = YoutubeApiService()
         val metadata = service.getVideoMetadata("test-id")
 
         assertNotNull(metadata)
@@ -109,11 +116,12 @@ class YoutubeApiServiceTest {
         assertEquals("https://example.com/max.jpg", metadata?.get("thumbnail"))
         assertEquals("1280", metadata?.get("width"))
         assertEquals("720", metadata?.get("height"))
+        assertEquals(listOf<String?>("test-key"), apiKeys)
     }
 
     @Test
     fun `getPlaylistItems should return all items with pagination`() = runBlocking {
-        every { config.propertyOrNull("youtube.apiKey") } returns mockk { every { getString() } returns "test-key" }
+        provideApiKey()
 
         var callCount = 0
         val mockEngine = MockEngine { request ->
@@ -139,7 +147,7 @@ class YoutubeApiServiceTest {
         mockkObject(ApiClient)
         every { ApiClient.instance } returns mockHttpClient
 
-        service = YoutubeApiService(ServerConfig(environment.config))
+        service = YoutubeApiService()
         val items = service.getPlaylistItems("playlist-id")
 
         assertEquals(2, items.size)
@@ -150,7 +158,7 @@ class YoutubeApiServiceTest {
 
     @Test
     fun `getPlaylistMetadata should return metadata`() = runBlocking {
-        every { config.propertyOrNull("youtube.apiKey") } returns mockk { every { getString() } returns "test-key" }
+        provideApiKey()
 
         val mockEngine = MockEngine { _ ->
             respond(
@@ -169,7 +177,7 @@ class YoutubeApiServiceTest {
         mockkObject(ApiClient)
         every { ApiClient.instance } returns mockHttpClient
 
-        service = YoutubeApiService(ServerConfig(environment.config))
+        service = YoutubeApiService()
         val metadata = service.getPlaylistMetadata("playlist-id")
 
         assertNotNull(metadata)

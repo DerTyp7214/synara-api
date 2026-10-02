@@ -29,7 +29,7 @@ Guides: [API_VERSIONING.md](API_VERSIONING.md) · [AUTHENTICATION.md](AUTHENTICA
 |---|---|
 | `UiSchemaVersion.HEADER` | `X-Ui-Schema-Version` |
 | `UiSchemaVersion.NONE` | `0` |
-| `UiSchemaVersion.CURRENT` | `1` |
+| `UiSchemaVersion.CURRENT` | `2` |
 
 | Component | Introduced in |
 |---|---|
@@ -60,6 +60,7 @@ Guides: [API_VERSIONING.md](API_VERSIONING.md) · [AUTHENTICATION.md](AUTHENTICA
 | `text` | 1 |
 | `textField` | 1 |
 | `tile` | 1 |
+| `fileField` | 2 |
 
 ## Authentication
 

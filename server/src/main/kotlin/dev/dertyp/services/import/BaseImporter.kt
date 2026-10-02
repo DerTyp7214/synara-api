@@ -11,6 +11,8 @@ import dev.dertyp.plugins.IPluginIndexer
 import dev.dertyp.plugins.IServerStorageService
 import dev.dertyp.plugins.SearchResult
 import dev.dertyp.services.Service
+import dev.dertyp.services.credentials.CredentialProvider
+import dev.dertyp.services.credentials.ImporterCredentialMaterializer
 import dev.dertyp.services.metadata.IMetadataService
 import kotlinx.coroutines.yield
 import org.koin.core.component.inject
@@ -34,6 +36,21 @@ abstract class BaseImporter(override var indexer: IPluginIndexer, internal val s
 
     protected val pluginStorage by lazy { storageService.forImporter(ImportBackend(id)) }
     internal open val atmosProcessor: AtmosProcessor by inject()
+    protected val credentialProvider by inject<CredentialProvider>()
+    private val credentialMaterializer by inject<ImporterCredentialMaterializer>()
+
+    open val credentialName: String? = null
+
+    open fun credentialTargets(): Map<String, File> = emptyMap()
+
+    protected fun credentialManagedRemotely(): Boolean =
+        credentialName?.let { credentialProvider.isManagedRemotely(it) } ?: false
+
+    protected fun credentialPresent(localFile: File): Boolean {
+        val name = credentialName
+        if (name != null && credentialProvider.isManagedRemotely(name)) return credentialProvider.isAvailable(name)
+        return localFile.exists()
+    }
 
     open val workingDirectory: File? get() = pluginStorage.tracksPath?.let { File(it).apply { mkdirs() } }
 
@@ -250,6 +267,13 @@ abstract class BaseImporter(override var indexer: IPluginIndexer, internal val s
         onLiveOutput: suspend (String) -> Unit
     ): ProcessExecutionResult {
         loggingIn.waitForChange(false)
+
+        if (credentialManagedRemotely()) {
+            val message = "Credentials for $id are managed by the credential server ($credentialName)"
+            onLiveOutput(message)
+            return ProcessExecutionResult(0, message, "")
+        }
+
         loggingIn.store(true)
 
         val command = loginCommand
@@ -298,5 +322,10 @@ abstract class BaseImporter(override var indexer: IPluginIndexer, internal val s
         aliveCheck: suspend () -> Boolean,
         directory: File? = workingDirectory,
         onLineReceived: suspend (String) -> Unit = {}
-    ): ProcessExecutionResult = tool.runCommand(command, logger, aliveCheck, directory, onLineReceived)
+    ): ProcessExecutionResult {
+        val name = credentialName ?: return tool.runCommand(command, logger, aliveCheck, directory, onLineReceived)
+        return credentialMaterializer.withFiles(name, credentialTargets()) {
+            tool.runCommand(command, logger, aliveCheck, directory, onLineReceived)
+        }
+    }
 }

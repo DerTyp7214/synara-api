@@ -28,6 +28,7 @@ class ServerConfig(config: ApplicationConfig) {
     val metrics: MetricsConfig by lazy { config.toMetricsConfig() }
     val workers: WorkersConfig by lazy { config.toWorkersConfig() }
     val proxy: ProxyConfig by lazy { config.toProxyConfig() }
+    val credentialServer: CredentialServerConfig by lazy { config.toCredentialServerConfig() }
     val providers: ProvidersConfig = ProvidersConfig(config)
     val importers: ImportersConfig = ImportersConfig(config)
     val analysis: AnalysisConfig = AnalysisConfig(config)
@@ -36,6 +37,8 @@ class ServerConfig(config: ApplicationConfig) {
 class ProvidersConfig(config: ApplicationConfig) {
     val linkResolver: LinkResolverConfig by lazy { config.toLinkResolverConfig() }
     val youtube: YoutubeApiConfig by lazy { config.toYoutubeApiConfig() }
+    val appleMusicKey: AppleMusicKeyConfig by lazy { config.toAppleMusicKeyConfig() }
+    val imageCache: ImageCacheConfig by lazy { config.toImageCacheConfig() }
 }
 
 class ImportersConfig(config: ApplicationConfig) {
@@ -210,6 +213,27 @@ fun ApplicationConfig.toProxyConfig(): ProxyConfig = ProxyConfig(
     id = propertyOrNull("proxy.id")?.getString(),
     name = propertyOrNull("proxy.name")?.getString(),
     key = propertyOrNull("proxy.key")?.getString(),
+)
+
+data class CredentialServerConfig(
+    val url: String?,
+    val clientId: String?,
+    val clientSecret: String?,
+    val adminKey: String?,
+) {
+    companion object {
+        const val URL_PATH = "credentialServer.url"
+        const val CLIENT_ID_PATH = "credentialServer.clientId"
+        const val CLIENT_SECRET_PATH = "credentialServer.clientSecret"
+        const val ADMIN_KEY_PATH = "credentialServer.adminKey"
+    }
+}
+
+fun ApplicationConfig.toCredentialServerConfig(): CredentialServerConfig = CredentialServerConfig(
+    url = propertyOrNull(CredentialServerConfig.URL_PATH)?.getString()?.trim()?.ifBlank { null },
+    clientId = propertyOrNull(CredentialServerConfig.CLIENT_ID_PATH)?.getString()?.trim()?.ifBlank { null },
+    clientSecret = propertyOrNull(CredentialServerConfig.CLIENT_SECRET_PATH)?.getString()?.trim()?.ifBlank { null },
+    adminKey = propertyOrNull(CredentialServerConfig.ADMIN_KEY_PATH)?.getString()?.trim()?.ifBlank { null },
 )
 
 enum class ProviderCredentialKeys(val idKey: String, val secretKey: String) {

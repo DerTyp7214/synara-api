@@ -398,6 +398,8 @@ POST /ui/invoke/{contributionId} IUiService.invoke [p:contributionId q:actionId 
 POST /ui/render/{contributionId} IUiService.render [p:contributionId b:context] JSON
 POST /ui/renderSlot IUiService.renderSlot [q:slot b:context] JSON
 POST /ui/resolveIntake IUiService.resolveIntake [b:items] JSON
+POST /ui/subscribeLiveWithContext/{contributionId} IUiService.subscribeLiveWithContext [p:contributionId q:key b:context] SSE
+POST /ui/subscribeWithContext/{contributionId} IUiService.subscribeWithContext [p:contributionId b:context] SSE
 PUT /ui/homeCardOrder IUiService.setHomeCardOrder [q:contributionIds] JSON
 PUT /ui/homeCardPinned/{contributionId} IUiService.setHomeCardPinned [p:contributionId q:pinned] JSON
 GET /user/allUsers IUserService.getAllUsers [] JSON

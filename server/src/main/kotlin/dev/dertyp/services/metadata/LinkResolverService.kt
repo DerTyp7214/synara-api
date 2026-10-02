@@ -1,9 +1,11 @@
 package dev.dertyp.services.metadata
 
 import dev.dertyp.ApiClient
-import dev.dertyp.config.ServerConfig
 import dev.dertyp.core.HttpClientPriority
+import dev.dertyp.credentials.CredentialNames
+import dev.dertyp.credentials.ResolvedCredential
 import dev.dertyp.services.Service
+import dev.dertyp.services.credentials.CredentialProvider
 import io.ktor.client.call.body
 import io.ktor.client.request.header
 import io.ktor.client.request.parameter
@@ -12,16 +14,20 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.Serializable
+import org.koin.core.component.inject
 import kotlin.time.Clock
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Instant
 
-class LinkResolverService(config: ServerConfig) : Service() {
+class LinkResolverService : Service() {
     private val baseUrl = "https://linkresolver.synara.audio"
-    private val apiKey = config.providers.linkResolver.apiKey
+    private val credentialProvider by inject<CredentialProvider>()
 
-    val enabled: Boolean get() = apiKey.isNotBlank()
+    val enabled: Boolean get() = credentialProvider.isAvailable(CredentialNames.LINKRESOLVER_API)
+
+    private suspend fun apiKey(): String? =
+        (credentialProvider.resolve(CredentialNames.LINKRESOLVER_API) as? ResolvedCredential.ApiKey)?.key?.takeIf { it.isNotBlank() }
 
     @Volatile
     private var supportedHosts: List<String> = DEFAULT_SUPPORTED_HOSTS
@@ -35,6 +41,7 @@ class LinkResolverService(config: ServerConfig) : Service() {
         if (!enabled) return
         supportedRefreshMutex.withLock {
             try {
+                val apiKey = apiKey() ?: return
                 val response = ApiClient.queueInstance.enqueue("$baseUrl/supported", priority = HttpClientPriority.NORMAL) {
                     header("X-API-Key", apiKey)
                 }
@@ -114,6 +121,7 @@ class LinkResolverService(config: ServerConfig) : Service() {
         if (!enabled) return emptyList()
 
         return try {
+            val apiKey = apiKey() ?: return emptyList()
             val response = ApiClient.queueInstance.enqueue("$baseUrl/resolve", priority = priority) {
                 header("X-API-Key", apiKey)
                 when {

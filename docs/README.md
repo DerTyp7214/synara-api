@@ -34,6 +34,7 @@
 | [PLUGINS.md](PLUGINS.md) | Writing a plugin (`ISynaraPlugin`): importers, indexers, routes, scheduled tasks, server-driven UI. |
 | [MCP.md](MCP.md) | The read-only Model Context Protocol endpoint for querying listening history from an AI assistant. |
 | [LISTEN_BACKUP.md](LISTEN_BACKUP.md) | Running a standalone receiver that keeps a copy of listening history. |
+| [CREDENTIAL_SERVER.md](CREDENTIAL_SERVER.md) | Running a standalone server that hands third-party credentials to Synara servers and plugins. |
 
 ## Work on the server
 

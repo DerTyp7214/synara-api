@@ -63,6 +63,7 @@ class UiSerializationTest {
                         "t", "Text", "v", "p", secret = true, multiline = true, helper = "h", error = "e", required = true, enabled = false, kind = UiTextKind.MULTILINE_URLS,
                         toolbar = listOf(UiComponent.Button("Done", UiAction.DismissKeyboard, icon = UiIcon(UiIconName.CHECK))),
                     ),
+                    UiComponent.FileField("file", "Key", listOf(".p8"), binary = true, allowPaste = false, secret = true, value = "v", helper = "h", error = "e", required = true, enabled = false),
                     UiComponent.NumberField("n", "Number", 1.0, 0.0, 10.0, 1.0),
                     UiComponent.Switch("s", "Switch", true),
                     UiComponent.Select("sel", "Select", "a", listOf(UiOption("a", "A", UiIcon(UiIconName.INFO)))),
@@ -132,7 +133,7 @@ class UiSerializationTest {
         assertEquals(
             setOf(
                 "column", "row", "grid", "card", "section", "form", "text", "icon", "image", "badge", "stat", "progress", "tile",
-                "button", "listItem", "table", "spacer", "divider", "fallback", "native", "emptyState", "log", "live", "textField", "numberField", "switch", "select",
+                "button", "listItem", "table", "spacer", "divider", "fallback", "native", "emptyState", "log", "live", "textField", "fileField", "numberField", "switch", "select",
             ),
             componentNames,
         )

@@ -3,7 +3,11 @@ package dev.dertyp.services.metadata
 import dev.dertyp.ApiClient
 import dev.dertyp.core.ApplicationScope
 import dev.dertyp.core.HttpClientQueueService
+import dev.dertyp.credentials.CredentialNames
+import dev.dertyp.credentials.ResolvedCredential
 import dev.dertyp.plugins.RedisCacheProvider
+import dev.dertyp.services.credentials.CredentialProvider
+import dev.dertyp.testing.FakeCredentialProvider
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.MockRequestHandleScope
@@ -89,8 +93,6 @@ class TidalServiceRetryTest : KoinTest {
         environment = mockk()
         val config = mockk<ApplicationConfig>()
         every { environment.config } returns config
-        every { config.propertyOrNull("tidal.clientId") } returns mockk { every { getString() } returns "test-client-id" }
-        every { config.propertyOrNull("tidal.clientSecret") } returns mockk { every { getString() } returns "test-client-secret" }
 
         val redisConfig = mockk<RedisCacheProvider.Config>()
         every { redisConfig.host } returns "none"
@@ -99,6 +101,9 @@ class TidalServiceRetryTest : KoinTest {
             modules(module {
                 single { redisConfig }
                 single { HttpClientQueueService() }
+                single<CredentialProvider> {
+                    FakeCredentialProvider(ResolvedCredential.AccessToken(CredentialNames.TIDAL_API, "test-token", "Bearer", null))
+                }
             })
         }
 

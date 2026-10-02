@@ -3,6 +3,10 @@ package dev.dertyp.services.metadata
 import dev.dertyp.ApiClient
 import dev.dertyp.core.ApplicationScope
 import dev.dertyp.core.HttpClientQueueService
+import dev.dertyp.credentials.CredentialNames
+import dev.dertyp.credentials.ResolvedCredential
+import dev.dertyp.services.credentials.CredentialProvider
+import dev.dertyp.testing.FakeCredentialProvider
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
@@ -23,9 +27,14 @@ import io.mockk.unmockkAll
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.koin.core.context.startKoin
+import org.koin.core.context.stopKoin
+import org.koin.dsl.module
 import org.koin.test.KoinTest
 import java.util.UUID
 
@@ -34,15 +43,20 @@ class TheAudioDBServiceTest : KoinTest {
     private lateinit var environment: ApplicationEnvironment
     private lateinit var service: TheAudioDBService
     private lateinit var mockEngine: MockEngine
+    private lateinit var credentialProvider: FakeCredentialProvider
+    private val requestedUrls = mutableListOf<String>()
 
     @BeforeEach
     fun setup() {
         environment = mockk()
         val config = mockk<ApplicationConfig>()
         every { environment.config } returns config
-        every { config.propertyOrNull("theaudiodb.apiKey") } returns mockk { every { getString() } returns "test-api-key" }
+        credentialProvider = FakeCredentialProvider(ResolvedCredential.ApiKey(CredentialNames.THEAUDIODB_API, "test-api-key"))
+        startKoin { modules(module { single<CredentialProvider> { credentialProvider } }) }
+        requestedUrls.clear()
 
         mockEngine = MockEngine { request ->
+            requestedUrls += request.url.toString()
             when {
                 request.url.encodedPath.contains("search.php") -> {
                     respond(
@@ -128,7 +142,26 @@ class TheAudioDBServiceTest : KoinTest {
 
     @AfterEach
     fun tearDown() {
+        stopKoin()
         unmockkAll()
+    }
+
+    @Test
+    fun `the api key comes from the credential provider`() = runBlocking {
+        service.searchArtists("Coldplay", 1)
+
+        assertTrue(requestedUrls.single().startsWith("https://www.theaudiodb.com/api/v1/json/test-api-key/search.php"))
+        assertTrue(service.supported())
+    }
+
+    @Test
+    fun `an unavailable credential sends no request and reports unsupported`() = runBlocking {
+        credentialProvider.remove(CredentialNames.THEAUDIODB_API)
+
+        assertTrue(service.searchArtists("Coldplay", 1).isEmpty())
+        assertTrue(requestedUrls.isEmpty())
+        assertFalse(service.supported())
+        assertTrue(service.supportedFeatures.isEmpty())
     }
 
     @Test

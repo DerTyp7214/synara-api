@@ -1,10 +1,11 @@
 package dev.dertyp.services.metadata
 
 import dev.dertyp.ApiClient
-import dev.dertyp.config.ProviderCredentialKeys
 import dev.dertyp.config.toImageCacheConfig
 import dev.dertyp.core.HttpClientPriority
 import dev.dertyp.core.bytes
+import dev.dertyp.credentials.CredentialNames
+import dev.dertyp.credentials.ResolvedCredential
 import dev.dertyp.services.ImageService
 import io.ktor.client.request.*
 import io.ktor.client.statement.bodyAsText
@@ -19,13 +20,14 @@ import kotlin.concurrent.atomics.ExperimentalAtomicApi
 class ImageCacheService(
     environment: ApplicationEnvironment
 ) : MetadataService("ImageCache", IMetadataService.MetadataType.imageCache, environment) {
-    override val tokenUrl = ""
-    override val credentialKeys = ProviderCredentialKeys.NONE
-
     private val imageCacheConfig by lazy { environment.config.toImageCacheConfig() }
 
-    override fun HttpRequestBuilder.getAccessTokenHeader(clientId: String, clientSecret: String) {
-    }
+    private suspend fun token(): String? =
+        when (val credential = credentialProvider.resolve(CredentialNames.IMAGE_CACHE_TOKEN)) {
+            is ResolvedCredential.ApiKey -> credential.key
+            is ResolvedCredential.AccessToken -> credential.accessToken
+            else -> null
+        }
 
     private fun getUrl(path: String? = null, block: URLBuilder.() -> Unit = {}): String {
         return url {
@@ -45,7 +47,7 @@ class ImageCacheService(
         }
 
         val url = getUrl(image.imageHash)
-        val token = imageCacheConfig.token
+        val token = token()
         if (token.isNullOrBlank()) {
             logger.error("No token found")
             return null

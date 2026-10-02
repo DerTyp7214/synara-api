@@ -19,8 +19,11 @@ class UiSchemaCompat(
     override fun shapeUiComponent(component: UiComponent, client: ClientInfo): UiComponent =
         downgrade(component, client.uiSchemaVersion)
 
+    private fun versionOf(component: UiComponent): Int = introducedIn[component::class] ?: UiSchemaVersion.CURRENT
+
     fun downgrade(component: UiComponent, version: Int): UiComponent {
-        if ((introducedIn[component::class] ?: UiSchemaVersion.CURRENT) > version) return UiComponent.Fallback()
+        if (component is UiComponent.FileField && versionOf(component) > version) return downgrade(asTextField(component), version)
+        if (versionOf(component) > version) return UiComponent.Fallback()
         val shape: (UiComponent) -> UiComponent = { downgrade(it, version) }
         return when (component) {
             is UiComponent.Column -> component.copy(children = component.children.map(shape))
@@ -35,5 +38,21 @@ class UiSchemaCompat(
             is UiComponent.TextField -> component.copy(toolbar = component.toolbar.map(shape))
             else -> component
         }
+    }
+
+    private fun asTextField(field: UiComponent.FileField): UiComponent.TextField = UiComponent.TextField(
+        key = field.key,
+        label = field.label,
+        value = field.value.takeUnless { field.secret },
+        secret = field.secret,
+        multiline = true,
+        helper = if (field.binary) listOfNotNull(field.helper, BASE64_HINT).joinToString(" ") else field.helper,
+        error = field.error,
+        required = field.required,
+        enabled = field.enabled,
+    )
+
+    companion object {
+        const val BASE64_HINT = "Paste the file content as base64."
     }
 }

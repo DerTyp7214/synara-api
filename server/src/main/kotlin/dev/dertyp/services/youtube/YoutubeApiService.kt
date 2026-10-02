@@ -1,9 +1,11 @@
 package dev.dertyp.services.youtube
 
 import dev.dertyp.ApiClient
-import dev.dertyp.config.ServerConfig
 import dev.dertyp.core.HttpClientPriority
+import dev.dertyp.credentials.CredentialNames
+import dev.dertyp.credentials.ResolvedCredential
 import dev.dertyp.services.Service
+import dev.dertyp.services.credentials.CredentialProvider
 import io.ktor.client.call.body
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
@@ -12,6 +14,7 @@ import io.ktor.http.isSuccess
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.serialization.Serializable
+import org.koin.core.component.inject
 import kotlin.time.Duration.Companion.seconds
 
 @Serializable
@@ -84,13 +87,14 @@ data class YoutubePlaylist(
     val snippet: YoutubeSnippet? = null
 )
 
-class YoutubeApiService(
-    config: ServerConfig
-) : Service() {
-    private val apiKey = config.providers.youtube.apiKey
+class YoutubeApiService : Service() {
+    private val credentialProvider by inject<CredentialProvider>()
     private val baseUrl = "https://www.googleapis.com/youtube/v3"
 
-    val enabled: Boolean get() = !apiKey.isNullOrBlank()
+    val enabled: Boolean get() = credentialProvider.isAvailable(CredentialNames.YOUTUBE_API)
+
+    private suspend fun apiKey(): String? =
+        (credentialProvider.resolve(CredentialNames.YOUTUBE_API) as? ResolvedCredential.ApiKey)?.key?.takeIf { it.isNotBlank() }
 
     private suspend inline fun <reified T> retryableQueuedGet(
         url: String,
@@ -140,6 +144,7 @@ class YoutubeApiService(
 
     suspend fun getVideoMetadata(videoId: String): Map<String, String>? {
         if (!enabled) return null
+        val apiKey = apiKey() ?: return null
         val url = "$baseUrl/videos?part=snippet,contentDetails&id=$videoId&key=$apiKey"
         return try {
             val response = retryableQueuedGet<YoutubeVideoListResponse>(url, HttpClientPriority.HIGH)
@@ -181,7 +186,8 @@ class YoutubeApiService(
 
     suspend fun getPlaylistItems(playlistId: String): List<YoutubePlaylistItem> {
         if (!enabled) return emptyList()
-        
+        val apiKey = apiKey() ?: return emptyList()
+
         val items = mutableListOf<YoutubePlaylistItem>()
         var nextToken: String? = null
 
@@ -200,6 +206,7 @@ class YoutubeApiService(
 
     suspend fun getPlaylistMetadata(playlistId: String): YoutubePlaylist? {
         if (!enabled) return null
+        val apiKey = apiKey() ?: return null
         val url = "$baseUrl/playlists?part=snippet&id=$playlistId&key=$apiKey"
         return retryableQueuedGet<YoutubePlaylistListResponse>(url, HttpClientPriority.HIGH)?.items?.firstOrNull()
     }

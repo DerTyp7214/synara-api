@@ -1,6 +1,8 @@
 package dev.dertyp.services.import
 
 import dev.dertyp.core.process.ExternalTool
+import dev.dertyp.credentials.CredentialFileRoles
+import dev.dertyp.credentials.CredentialNames
 import dev.dertyp.plugins.IPluginIndexer
 import dev.dertyp.plugins.IServerStorageService
 import dev.dertyp.utils.parsers.ParserFactory
@@ -38,10 +40,12 @@ open class TiddlService(
         ImportFavType.videos -> "video"
     }
 
-    override fun tokenFileExists(): Boolean {
-        val homeDir = System.getProperty("user.home")
-        val tiddlTokenJson = File(homeDir, ".tiddl/auth.json")
-        return tiddlTokenJson.exists()
-    }
+    override val credentialName: String = CredentialNames.IMPORTER_TIDDL
+
+    override fun credentialTargets(): Map<String, File> = mapOf(CredentialFileRoles.TIDDL_AUTH to authFile())
+
+    private fun authFile(): File = File(System.getProperty("user.home"), ".tiddl/auth.json")
+
+    override fun tokenFileExists(): Boolean = credentialPresent(authFile())
 
 }

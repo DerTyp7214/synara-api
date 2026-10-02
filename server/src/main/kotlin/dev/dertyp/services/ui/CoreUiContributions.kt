@@ -1,14 +1,17 @@
 package dev.dertyp.services.ui
 
+import dev.dertyp.config.ServerConfig
 import dev.dertyp.plugins.UiContribution
 import dev.dertyp.services.UserService
+import dev.dertyp.services.credentials.CredentialProvider
+import dev.dertyp.services.credentials.CredentialServerConnectionSource
+import dev.dertyp.services.credentials.LocalCredentialStore
+import dev.dertyp.services.credentials.admin.CredentialServerAdminClient
 import dev.dertyp.services.cover.CoverGenerationService
 import dev.dertyp.services.hue.HueService
 import dev.dertyp.services.jobs.JobService
-import dev.dertyp.services.metadata.ACOUSTID_UI_SOURCE
-import dev.dertyp.services.metadata.AcoustIdCredentialSource
-import dev.dertyp.services.metadata.AcoustIdCredentialsContribution
-import dev.dertyp.services.metadata.AcoustIdCredentialsEntryContribution
+import dev.dertyp.services.ui.credentialserver.CREDENTIAL_SERVER_UI_SOURCE
+import dev.dertyp.services.ui.credentialserver.CredentialServerUiContext
 
 class CoreUiContributions(
     private val registry: UiRegistry,
@@ -19,8 +22,11 @@ class CoreUiContributions(
     private val jobService: JobService,
     private val coverGenerationService: CoverGenerationService,
     private val hueService: HueService,
-    private val acoustIdCredentials: AcoustIdCredentialSource,
-    private val pluginSettingsService: PluginSettingsService,
+    private val credentialServerAdmin: CredentialServerAdminClient,
+    private val credentialServerConnection: CredentialServerConnectionSource,
+    private val credentialProvider: CredentialProvider,
+    private val localCredentials: LocalCredentialStore,
+    private val serverConfig: ServerConfig,
 ) {
     fun contributions(): List<UiContribution> = listOf(
         ImporterPageContribution(importerState, uiService),
@@ -34,18 +40,16 @@ class CoreUiContributions(
         HueSettingsContribution(hueService),
     )
 
-    private fun acoustIdContributions(): List<UiContribution> = listOf(
-        AcoustIdCredentialsEntryContribution(acoustIdCredentials, pluginSettingsService),
-        AcoustIdCredentialsContribution(acoustIdCredentials, pluginSettingsService),
-    )
+    private fun credentialContributions(): List<UiContribution> =
+        CredentialServerUiContext(credentialServerAdmin, credentialServerConnection, credentialProvider, localCredentials, serverConfig).contributions()
 
     fun register() {
         val registrar = registry.forSource(UiRegistry.SERVER_SOURCE)
         contributions().forEach { registrar.register(it) }
 
-        translationService.forSource(ACOUSTID_UI_SOURCE)
-            .registerBundlesFromResources(javaClass.classLoader, "i18n/acoustid", listOf("en", "de"))
-        val acoustIdRegistrar = registry.forSource(ACOUSTID_UI_SOURCE)
-        acoustIdContributions().forEach { acoustIdRegistrar.register(it) }
+        translationService.forSource(CREDENTIAL_SERVER_UI_SOURCE)
+            .registerBundlesFromResources(javaClass.classLoader, "i18n/credentialserver", listOf("en", "de"))
+        val credentialRegistrar = registry.forSource(CREDENTIAL_SERVER_UI_SOURCE)
+        credentialContributions().forEach { credentialRegistrar.register(it) }
     }
 }

@@ -4,8 +4,11 @@ import dev.dertyp.core.HttpClientFactory
 import dev.dertyp.core.gzipEncoding
 import dev.dertyp.core.jsonContent
 import dev.dertyp.core.timeouts
+import dev.dertyp.credentials.CredentialNames
+import dev.dertyp.credentials.ResolvedCredential
 import dev.dertyp.plugins.IPodcastIndex
 import dev.dertyp.plugins.PodcastIndexEntry
+import dev.dertyp.services.credentials.CredentialProvider
 import dev.dertyp.services.podcast.PodcastHttp
 import io.ktor.client.HttpClient
 import io.ktor.client.HttpClientConfig
@@ -43,26 +46,26 @@ fun HttpClientFactory.podcastIndexClient(): HttpClient =
 
 class PodcastIndexException(message: String, val status: Int? = null) : RuntimeException(message)
 
-class PodcastIndexOrgIndex(
-    private val credentials: PodcastIndexCredentialSource,
-) : IPodcastIndex, KoinComponent {
+class PodcastIndexOrgIndex : IPodcastIndex, KoinComponent {
     private val httpClientFactory by inject<HttpClientFactory>()
+    private val credentialProvider by inject<CredentialProvider>()
 
     override val id: String = ID
     override val name: String = "Podcast Index"
 
-    override suspend fun isConfigured(): Boolean = credentials.current() != null
+    override suspend fun isConfigured(): Boolean = credentialProvider.isAvailable(CredentialNames.PODCAST_INDEX_API)
 
     override suspend fun search(query: String, limit: Int): List<PodcastIndexEntry> {
-        val creds = credentials.current() ?: return emptyList()
+        val creds = credentialProvider.resolve(CredentialNames.PODCAST_INDEX_API) as? ResolvedCredential.ApiKeyPair
+            ?: return emptyList()
         val date = Clock.System.now().epochSeconds
         val response = httpClientFactory.podcastIndexClient().get("$BASE_URL/search/byterm") {
             parameter("q", query)
             parameter("max", limit)
             parameter("fulltext", "")
-            header(HEADER_AUTH_KEY, creds.apiKey)
+            header(HEADER_AUTH_KEY, creds.key)
             header(HEADER_AUTH_DATE, date.toString())
-            header(HttpHeaders.Authorization, sha1Hex(creds.apiKey + creds.apiSecret + date))
+            header(HttpHeaders.Authorization, sha1Hex(creds.key + creds.secret + date))
         }
         if (!response.status.isSuccess()) {
             throw PodcastIndexException("Podcast Index answered ${response.status.value}", response.status.value)

@@ -4,6 +4,7 @@ import dev.dertyp.core.ApplicationScope
 import dev.dertyp.data.User
 import dev.dertyp.plugins.*
 import dev.dertyp.services.*
+import dev.dertyp.services.credentials.PluginCredentialsFactory
 import dev.dertyp.services.intake.IntakeService
 import dev.dertyp.services.jobs.JobService
 import dev.dertyp.services.ui.PluginSettingsService
@@ -97,6 +98,7 @@ class Indexer(
         override val i18n: TranslationRegistrar get() = getKoin().get<TranslationService>().forSource(UiRegistry.SERVER_SOURCE)
         override val intake: IntakeRegistrar get() = getKoin().get<IntakeService>().forSource(UiRegistry.SERVER_SOURCE)
         override val jobs: Jobs get() = getKoin().get<JobService>().forSource(UiRegistry.SERVER_SOURCE)
+        override val credentials: PluginCredentials get() = getKoin().get<PluginCredentialsFactory>().forPlugin(UiRegistry.SERVER_SOURCE)
     }, metadataType = null) {
         override val id: String = "core"
         override val name: String = "Core Indexer"

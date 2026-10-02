@@ -10,6 +10,7 @@
   "importer.login.title": "Login Required",
   "importer.login.message": "Please log in to use the importer.",
   "importer.login.action": "Login",
+  "importer.login.managed": "Managed by the credential server",
   "importer.favorites.title": "Sync Favorites",
   "importer.favorites.confirm": "Are you sure you want to synchronize your favorites?",
   "importer.favorites.authorize": "Authorize Synara with Tidal to sync favorites.",

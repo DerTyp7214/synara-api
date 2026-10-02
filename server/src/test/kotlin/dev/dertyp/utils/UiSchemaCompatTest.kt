@@ -61,6 +61,36 @@ class UiSchemaCompatTest {
         assertEquals(UiComponent.Fallback(), rule.downgrade(tree, UiSchemaVersion.NONE))
     }
 
+    @Test
+    fun `file fields become multi-line text fields for clients without file field support`() {
+        val current = UiSchemaCompat()
+        val text = UiComponent.FileField("pem", "Certificate", accept = listOf(".pem"), value = "-----BEGIN", helper = "PEM file", error = "invalid", required = true)
+        val key = UiComponent.FileField("p8", "Key", accept = listOf(".p8"), binary = true, secret = true, helper = "Apple key", enabled = false)
+        val form = UiComponent.Form("f", listOf(text, key), UiAction.Invoke("c", "save"), "Save")
+
+        val shaped = current.downgrade(form, 1) as UiComponent.Form
+        assertEquals(
+            UiComponent.TextField("pem", "Certificate", value = "-----BEGIN", multiline = true, helper = "PEM file", error = "invalid", required = true),
+            shaped.children[0],
+        )
+        assertEquals(
+            UiComponent.TextField("p8", "Key", secret = true, multiline = true, helper = "Apple key ${UiSchemaCompat.BASE64_HINT}", enabled = false),
+            shaped.children[1],
+        )
+        assertEquals(UiSchemaCompat.BASE64_HINT, (current.downgrade(UiComponent.FileField("k", "l", binary = true), 1) as UiComponent.TextField).helper)
+        assertEquals(form, current.downgrade(form, 2))
+        assertEquals(UiComponent.Fallback(), current.downgrade(text, UiSchemaVersion.NONE))
+    }
+
+    @Test
+    fun `clients on schema version 1 are shaped by the default rule`() {
+        val field = UiComponent.FileField("k", "l")
+        val old = ClientInfo(ApiVersion.CURRENT, uiSchemaVersion = 1)
+        assertTrue(UiSchemaCompat().isActive(old))
+        assertEquals(UiComponent.TextField("k", "l", multiline = true), UiSchemaCompat().shapeUiComponent(field, old))
+        assertFalse(UiSchemaCompat().isActive(ClientInfo(ApiVersion.CURRENT, uiSchemaVersion = UiSchemaVersion.CURRENT)))
+    }
+
     interface UiApi {
         suspend fun render(): UiRender
         suspend fun slot(): UiSlotRender

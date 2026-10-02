@@ -38,6 +38,8 @@ import dev.dertyp.services.ui.TranslationService
 import dev.dertyp.services.ui.UiRegistry
 import dev.dertyp.services.ui.UiService
 import dev.dertyp.services.ui.UserHomeCardService
+import dev.dertyp.services.import.BaseImporter
+import dev.dertyp.testing.FakeCredentialProvider
 import dev.dertyp.ui.UiIntakeCodeKind
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -110,7 +112,8 @@ class ImporterPageContributionTest {
     private val uiService = UiService(registry, translations, PluginSettingsService(), UserHomeCardService(), IntakeService(translations))
     private val intakeService = mockk<IntakeService>()
     private val jobService = JobService()
-    private val state = ImporterState(importService, importerProxy, intakeService, jobService)
+    private val credentials = FakeCredentialProvider()
+    private val state = ImporterState(importService, importerProxy, intakeService, jobService, credentials)
     private val page = ImporterPageContribution(state, uiService)
     private val settingsPage = ImporterSettingsPageContribution(state, uiService)
     private val queuePage = ImporterQueuePageContribution(state, userService)
@@ -247,6 +250,52 @@ class ImporterPageContributionTest {
         val loginRequiredBadges = all.filterIsInstance<UiComponent.Badge>().filter { it.text == "Login required" }
         assertEquals(2, loginRequiredBadges.size)
         assertTrue(loginRequiredBadges.all { it.tone == UiTone.WARNING })
+    }
+
+    private fun credentialImporter(): BaseImporter = mockk(relaxed = true) {
+        every { id } returns "tiddl"
+        every { name } returns "Tiddl"
+        every { enabled } returns true
+        every { installed } returns true
+        every { tokenFileExists() } returns false
+        every { capabilities } returns setOf(ImporterCapability.LOGIN)
+        every { canHandle(any()) } returns false
+        every { credentialName } returns "importer.tiddl"
+    }
+
+    @Test
+    fun `managed importer shows the note instead of login on the page and settings`() = runBlocking {
+        val tiddl = credentialImporter()
+        every { pluginManager.getAllImporters() } returns listOf(tiddl)
+        every { importerProxy.defaultService } returns ImportBackend("tiddl")
+        credentials.markRemote("importer.tiddl")
+
+        val card = (page.render(scope()) as UiComponent.Column).children[0] as UiComponent.Card
+        assertTrue(card.actions.isEmpty())
+        assertEquals("Managed by the credential server", card.children.filterIsInstance<UiComponent.Text>().single().text)
+
+        val settingsAll = (settingsPage.render(scope()) as UiComponent.Column).children[0].flatten()
+        assertTrue(settingsAll.filterIsInstance<UiComponent.Button>().none { (it.action as? UiAction.Invoke)?.actionId == "login" })
+        assertTrue(settingsAll.filterIsInstance<UiComponent.Text>().any { it.text == "Managed by the credential server" })
+        assertTrue(settingsAll.filterIsInstance<UiComponent.Badge>().any { it.text == "Login required" })
+
+        val result = state.login(scope(), "tiddl")
+        assertEquals(UiInvokeStatus.ERROR, result.status)
+        coVerify(exactly = 0) { tiddl.login(any(), any()) }
+    }
+
+    @Test
+    fun `local importer keeps the login button`() = runBlocking {
+        val tiddl = credentialImporter()
+        every { pluginManager.getAllImporters() } returns listOf(tiddl)
+        every { importerProxy.defaultService } returns ImportBackend("tiddl")
+
+        val card = (page.render(scope()) as UiComponent.Column).children[0] as UiComponent.Card
+        assertEquals("Login", (card.actions.single() as UiComponent.Button).label)
+
+        val settingsAll = (settingsPage.render(scope()) as UiComponent.Column).children[0].flatten()
+        assertEquals(1, settingsAll.filterIsInstance<UiComponent.Button>().count { (it.action as? UiAction.Invoke)?.actionId == "login" })
+        assertTrue(settingsAll.filterIsInstance<UiComponent.Text>().none { it.text == "Managed by the credential server" })
     }
 
     @Test

@@ -77,6 +77,8 @@ class HttpClientFactory : Service() {
         const val PODCAST_FEED = "podcast-feed"
         const val PODCAST_MEDIA = "podcast-media"
         const val PODCAST_INDEX = "podcast-index"
+        const val CREDENTIAL_SERVER = "credential-server"
+        const val CREDENTIAL_SERVER_ADMIN = "credential-server-admin"
     }
 }
 

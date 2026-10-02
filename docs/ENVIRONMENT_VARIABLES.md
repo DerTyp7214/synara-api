@@ -22,6 +22,24 @@ Most variables have sensible defaults and are **optional**. Only variables witho
 | `COVER_AUTO_GENERATE` | Whether covers are generated automatically for playlists and collections without one. | No | `true` | - |
 | `COVER_NSFW_PACKS_ENABLED` | Whether NSFW cover asset packs may be used when a request opts in. | No | `false` | - |
 
+## Credential Server
+
+| Variable | Description | Required | Default (Standalone) | Default (Docker) |
+|:---|:---|:---:|:---|:---|
+| `CREDENTIAL_SERVER_ADMIN_KEY` | Admin key of the credential server. The credential server requires it as X-Admin-Key for its admin routes and answers 503 while it is unset. A Synara server uses the same variable to manage a connected credential server. | No | - | - |
+| `CREDENTIAL_SERVER_CLIENT_ID` | Client id this Synara server uses to authenticate at the credential server. | No | - | - |
+| `CREDENTIAL_SERVER_CLIENT_SECRET` | Client secret belonging to CREDENTIAL_SERVER_CLIENT_ID. | No | - | - |
+| `CREDENTIAL_SERVER_DB_DRIVER` | JDBC driver of the credential server database. Use org.postgresql.Driver for PostgreSQL. | No | `org.sqlite.JDBC` | - |
+| `CREDENTIAL_SERVER_DB_PASSWORD` | Database password of the credential server (PostgreSQL only). | No | - | - |
+| `CREDENTIAL_SERVER_DB_URL` | JDBC URL of the credential server database. | No | `jdbc:sqlite:credentials.db` | - |
+| `CREDENTIAL_SERVER_DB_USER` | Database user of the credential server (PostgreSQL only). | No | - | - |
+| `CREDENTIAL_SERVER_ISSUER` | Issuer claim of the tokens signed by the credential server. | No | `synara-credentials` | - |
+| `CREDENTIAL_SERVER_KEY_FILE` | Path of the generated master key file, used when no master key is set. | No | `master.key` | - |
+| `CREDENTIAL_SERVER_MASTER_KEY` | Master key that encrypts the stored credentials and signing keys of the credential server. When empty, a key file is generated instead. | No | - | - |
+| `CREDENTIAL_SERVER_PORT` | HTTP port of the credential server. | No | `8083` | - |
+| `CREDENTIAL_SERVER_TOKEN_TTL_SECONDS` | Lifetime of the access tokens issued by the credential server in seconds. | No | `900` | - |
+| `CREDENTIAL_SERVER_URL` | Base URL of a credential server this Synara server fetches third-party credentials from. Can also be set on the credential server settings page. | No | - | - |
+
 ## Database Configuration
 
 | Variable | Description | Required | Default (Standalone) | Default (Docker) |

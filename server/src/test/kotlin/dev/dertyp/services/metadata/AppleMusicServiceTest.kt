@@ -3,6 +3,10 @@ package dev.dertyp.services.metadata
 import dev.dertyp.ApiClient
 import dev.dertyp.core.ApplicationScope
 import dev.dertyp.core.HttpClientQueueService
+import dev.dertyp.credentials.CredentialNames
+import dev.dertyp.credentials.ResolvedCredential
+import dev.dertyp.services.credentials.CredentialProvider
+import dev.dertyp.testing.FakeCredentialProvider
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.MockRequestHandleScope
@@ -41,10 +45,17 @@ class AppleMusicServiceTest : KoinTest {
     private lateinit var appleMusicService: AppleMusicService
     private lateinit var mockEngine: MockEngine
     private var queueService: HttpClientQueueService? = null
+    private lateinit var credentialProvider: FakeCredentialProvider
 
     @BeforeEach
     fun setup() {
-        startKoin { modules(module { single { HttpClientQueueService() } }) }
+        credentialProvider = FakeCredentialProvider()
+        startKoin {
+            modules(module {
+                single { HttpClientQueueService() }
+                single<CredentialProvider> { credentialProvider }
+            })
+        }
         environment = mockk()
         every { environment.config } returns mockk(relaxed = true)
 
@@ -139,24 +150,19 @@ class AppleMusicServiceTest : KoinTest {
     }
 
     private fun enableCatalog(storefront: String? = null) {
-        every { environment.config.propertyOrNull("appleMusic.teamId") } returns mockk { every { getString() } returns "TEAM1" }
-        every { environment.config.propertyOrNull("appleMusic.keyId") } returns mockk { every { getString() } returns "KEY1" }
-        every { environment.config.propertyOrNull("appleMusic.p8Path") } returns mockk { every { getString() } returns "/tmp/apple.p8" }
         every { environment.config.propertyOrNull("appleMusic.storefront") } returns
                 storefront?.let { value -> mockk { every { getString() } returns value } }
+        provideDeveloperToken()
+    }
 
-        val tokenField = appleMusicService.javaClass.getDeclaredField("appleMusicToken")
-        tokenField.isAccessible = true
-        tokenField.set(appleMusicService, "mock-token")
-        val expirationField = appleMusicService.javaClass.getDeclaredField("tokenExpiration")
-        expirationField.isAccessible = true
-        expirationField.set(appleMusicService, System.currentTimeMillis() + 100000)
+    private fun provideDeveloperToken() {
+        credentialProvider.put(
+            ResolvedCredential.DeveloperToken(CredentialNames.APPLE_MUSIC_DEVELOPER, "mock-token", System.currentTimeMillis() + 100000)
+        )
     }
 
     private fun disableCatalog() {
-        every { environment.config.propertyOrNull("appleMusic.teamId") } returns null
-        every { environment.config.propertyOrNull("appleMusic.keyId") } returns null
-        every { environment.config.propertyOrNull("appleMusic.p8Path") } returns null
+        credentialProvider.remove(CredentialNames.APPLE_MUSIC_DEVELOPER)
     }
 
     private suspend fun useEngine(handler: MockRequestHandler) {
@@ -227,15 +233,30 @@ class AppleMusicServiceTest : KoinTest {
     }
 
     @Test
-    fun `catalogEnabled is false when the configuration yields blank values`() {
+    fun `catalogEnabled is false when no developer token was provided`() {
         assertFalse(appleMusicService.catalogEnabled)
     }
 
     @Test
-    fun `catalogEnabled is true when team, key and p8 path are configured`() {
+    fun `catalogEnabled is true when the developer token is available`() {
         enableCatalog()
 
         assertTrue(appleMusicService.catalogEnabled)
+    }
+
+    @Test
+    fun `catalog requests resolve the developer token through the credential provider`() = runBlocking {
+        enableCatalog()
+        val authorizations = mutableListOf<String?>()
+        useEngine { request ->
+            authorizations += request.headers[HttpHeaders.Authorization]
+            respondJson("""{"data": []}""")
+        }
+
+        appleMusicService.getArtistCatalogAlbums("111")
+
+        assertEquals(listOf<String?>("Bearer mock-token"), authorizations)
+        assertTrue(CredentialNames.APPLE_MUSIC_DEVELOPER in credentialProvider.resolved)
     }
 
     @Test
@@ -671,12 +692,7 @@ class AppleMusicServiceTest : KoinTest {
     fun `getTrackByIsrc should return track from catalog API when token is provided`() = runBlocking {
         val isrc = "USUM71900764"
 
-        val tokenField = appleMusicService.javaClass.getDeclaredField("appleMusicToken")
-        tokenField.isAccessible = true
-        tokenField.set(appleMusicService, "mock-token")
-        val expirationField = appleMusicService.javaClass.getDeclaredField("tokenExpiration")
-        expirationField.isAccessible = true
-        expirationField.set(appleMusicService, System.currentTimeMillis() + 100000)
+        provideDeveloperToken()
 
         mockEngine = MockEngine { request ->
             if (request.url.toString().contains("api.music.apple.com")) {
@@ -721,9 +737,7 @@ class AppleMusicServiceTest : KoinTest {
 
     @Test
     fun `getTrackByIsrc should return track for valid ISRC using iTunes fallback`() = runBlocking {
-        every { environment.config.propertyOrNull("appleMusic.teamId") } returns null
-        every { environment.config.propertyOrNull("appleMusic.keyId") } returns null
-        every { environment.config.propertyOrNull("appleMusic.p8Path") } returns null
+        disableCatalog()
 
         val isrc = "USUM71900764"
         mockEngine = MockEngine { request ->
@@ -795,9 +809,7 @@ class AppleMusicServiceTest : KoinTest {
 
     @Test
     fun `getAlbumsByIds maximises artwork and parses date via the iTunes fallback`() = runBlocking {
-        every { environment.config.propertyOrNull("appleMusic.teamId") } returns null
-        every { environment.config.propertyOrNull("appleMusic.keyId") } returns null
-        every { environment.config.propertyOrNull("appleMusic.p8Path") } returns null
+        disableCatalog()
 
         mockEngine = MockEngine { request ->
             assertEquals("/lookup", request.url.encodedPath)

@@ -2,8 +2,12 @@ package dev.dertyp.services
 
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
+import dev.dertyp.credentials.CredentialNames
+import dev.dertyp.credentials.ResolvedCredential
 import dev.dertyp.db.*
+import dev.dertyp.services.credentials.CredentialProvider
 import dev.dertyp.services.metadata.*
+import dev.dertyp.testing.FakeCredentialProvider
 import io.ktor.server.application.ApplicationEnvironment
 import io.mockk.coEvery
 import io.mockk.every
@@ -33,7 +37,6 @@ class SongServiceDeletionTest : KoinTest {
     private val environment = mockk<ApplicationEnvironment>()
     private val storageService = mockk<StorageService>(relaxed = true)
     private val fingerprintService = mockk<AcoustIdFingerprintService>()
-    private val acoustIdCredentials = mockk<AcoustIdCredentialSource>()
     private val redisSearchService = mockk<RedisSearchService>(relaxed = true)
 
     @TempDir
@@ -46,7 +49,8 @@ class SongServiceDeletionTest : KoinTest {
                 single { musicBrainzService }
                 single { MusicBrainzCacheService() }
                 single { CachedMusicBrainzService(get(), get()) }
-                single { AcoustIdService(fingerprintService, acoustIdCredentials) }
+                single { AcoustIdService(fingerprintService) }
+                single<CredentialProvider> { FakeCredentialProvider(ResolvedCredential.ApiKey(CredentialNames.ACOUSTID_API, "testKey")) }
                 single { mockk<ImageService>(relaxed = true) }
                 single { storageService }
                 single { mockk<MetadataFetchingService>(relaxed = true) }
@@ -97,7 +101,6 @@ class SongServiceDeletionTest : KoinTest {
         }
 
         coEvery { fingerprintService.fingerprint(any()) } returns null
-        coEvery { acoustIdCredentials.current() } returns "testKey"
         every { storageService.albumsPath } returns null
         every { redisSearchService.isEnabled() } returns true
 

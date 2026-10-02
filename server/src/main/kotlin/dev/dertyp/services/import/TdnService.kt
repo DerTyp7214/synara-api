@@ -6,6 +6,8 @@ import dev.dertyp.core.isInside
 import dev.dertyp.core.oneLine
 import dev.dertyp.core.resolveRelativeAbsolute
 import dev.dertyp.core.process.ExternalTool
+import dev.dertyp.credentials.CredentialFileRoles
+import dev.dertyp.credentials.CredentialNames
 import dev.dertyp.plugins.IPluginIndexer
 import dev.dertyp.plugins.IServerStorageService
 import dev.dertyp.utils.parsers.ParserFactory
@@ -113,9 +115,11 @@ class TdnService(
         return newResult
     }
 
-    override fun tokenFileExists(): Boolean {
-        val homeDir = System.getProperty("user.home")
-        val tdnTokenJson = File(homeDir, ".config/tidal_dl_ng/token.json")
-        return tdnTokenJson.exists()
-    }
+    override val credentialName: String = CredentialNames.IMPORTER_TDN
+
+    override fun credentialTargets(): Map<String, File> = mapOf(CredentialFileRoles.TDN_TOKEN to tokenFile())
+
+    private fun tokenFile(): File = File(System.getProperty("user.home"), ".config/tidal_dl_ng/token.json")
+
+    override fun tokenFileExists(): Boolean = credentialPresent(tokenFile())
 }

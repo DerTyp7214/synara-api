@@ -1,15 +1,14 @@
 package dev.dertyp.services.metadata
 
 import dev.dertyp.ApiClient
-import dev.dertyp.config.ProviderCredentialKeys
 import dev.dertyp.core.*
+import dev.dertyp.credentials.CredentialNames
 import dev.dertyp.data.User
 import dev.dertyp.plugins.RedisCacheProvider
 import dev.dertyp.services.ISyncService
 import dev.dertyp.services.models.tidal.*
 import dev.dertyp.services.sync.SyncService
 import io.ktor.client.call.body
-import io.ktor.client.request.HttpRequestBuilder
 import io.ktor.client.request.header
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
@@ -23,7 +22,6 @@ import org.koin.core.component.inject
 import redis.clients.jedis.HostAndPort
 import redis.clients.jedis.RedisClusterClient
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
-import kotlin.io.encoding.Base64
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 
@@ -31,8 +29,7 @@ import kotlin.time.Duration.Companion.seconds
 class TidalService(
     environment: ApplicationEnvironment
 ) : MetadataService("Tidal", IMetadataService.MetadataType.tidal, environment) {
-    override val tokenUrl = "https://auth.tidal.com/v1/oauth2/token"
-    override val credentialKeys = ProviderCredentialKeys.TIDAL
+    override val credentialName: String = CredentialNames.TIDAL_API
 
     companion object {
         private const val MAX_RETRIES = 5
@@ -107,14 +104,6 @@ class TidalService(
         } ?: this
     }
 
-    override fun HttpRequestBuilder.getAccessTokenHeader(clientId: String, clientSecret: String) {
-        header(
-            HttpHeaders.Authorization,
-            "Basic ${Base64.encode("$clientId:$clientSecret".toByteArray())}"
-        )
-        header("grant_type", "client_credentials")
-    }
-
     private val baseUrl = URLBuilder().apply {
         protocol = URLProtocol.HTTPS
         host = "openapi.tidal.com"
@@ -135,17 +124,13 @@ class TidalService(
         priority: HttpClientPriority = HttpClientPriority.NORMAL
     ): HttpResponse {
         return ApiClient.queueInstance.enqueue(url, priority) {
-            val token = if (user != null) {
-                SyncService.getInstance(user, environment, ISyncService.SyncServiceType.tidal)
-                    .getAccessToken()?.let {
-                        IMetadataService.AccessTokenResponse(
-                            tokenType = it.tokenType,
-                            accessToken = it.accessToken,
-                            expiresIn = it.expiresIn
-                        )
-                    } ?: getAccessToken()
-            } else getAccessToken()
-            header(HttpHeaders.Authorization, "${token.tokenType} ${token.accessToken}")
+            val userAuthorization = user?.let {
+                SyncService.getInstance(it, environment, ISyncService.SyncServiceType.tidal)
+                    .getAccessToken()?.let { token -> "${token.tokenType} ${token.accessToken}" }
+            }
+            val authorization = userAuthorization
+                ?: getAccessToken().let { token -> "${token.tokenType} ${token.accessToken}" }
+            header(HttpHeaders.Authorization, authorization)
             header(HttpHeaders.Accept, "application/vnd.api+json")
         }
     }

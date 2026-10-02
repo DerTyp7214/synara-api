@@ -20,6 +20,8 @@ on:
       - common-proxy/**
       - listen-backup/**
       - common-listen-backup/**
+      - credential-server/**
+      - common-credentials/**
       - Dockerfile.nobuild
       - data/cover-assets/**
       - build.gradle.kts
@@ -119,7 +121,7 @@ jobs:
         run: chmod +x gradlew
 
       - name: Build Ktor fat JARs
-        run: ./gradlew :server:shadowJar :proxy:shadowJar :mock-server:shadowJar :listen-backup:shadowJar
+        run: ./gradlew :server:shadowJar :proxy:shadowJar :mock-server:shadowJar :listen-backup:shadowJar :credential-server:shadowJar
 
       - name: Extract Application Version
         id: version_info
@@ -161,6 +163,13 @@ jobs:
           path: listen-backup/build/libs/listen-backup-all.jar
           retention-days: 1
 
+      - name: Upload Credential Server fat JAR
+        uses: actions/upload-artifact@v7
+        with:
+          name: credential-server-fat-jar
+          path: credential-server/build/libs/credential-server-all.jar
+          retention-days: 1
+
   build-publish-docker:
     needs: [run-tests, build-artifact]
     runs-on: ubuntu-24.04
@@ -186,6 +195,11 @@ jobs:
             repo: "dertyp7214/synara-listen-backup"
             dockerfile: "./Dockerfile.listen-backup"
             artifact: "listen-backup-fat-jar"
+            context: "."
+          - name: credentials
+            repo: "dertyp7214/synara-credentials"
+            dockerfile: "./Dockerfile.credentials"
+            artifact: "credential-server-fat-jar"
             context: "."
           - name: transcriber
             repo: "dertyp7214/synara-transcriber"
@@ -293,6 +307,12 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           name: listen-backup-fat-jar
+          path: release-asset/
+
+      - name: Download Credential Server fat JAR
+        uses: actions/download-artifact@v8
+        with:
+          name: credential-server-fat-jar
           path: release-asset/
 
       - name: Create GitHub Release and Upload Assets

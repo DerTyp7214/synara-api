@@ -193,12 +193,18 @@ class MockUiService : IUiService {
 
     override suspend fun render(contributionId: String, context: UiContext): UiRender = render(contributionId, tree(contributionId, context))
 
-    override fun subscribe(contributionId: String, entityId: UUID?): Flow<UiRender> = flow {
+    override fun subscribe(contributionId: String, entityId: UUID?): Flow<UiRender> =
+        subscribeWithContext(contributionId, UiContext(entityId = entityId))
+
+    override fun subscribeWithContext(contributionId: String, context: UiContext): Flow<UiRender> = flow {
         while (true) {
-            emit(render(contributionId, UiContext(entityId = entityId)))
+            emit(render(contributionId, context))
             delay(2.seconds)
         }
     }
+
+    override fun subscribeLiveWithContext(contributionId: String, key: String, context: UiContext): Flow<UiLiveUpdate> =
+        subscribeLive(contributionId, key, context.entityId)
 
     override fun subscribeLive(contributionId: String, key: String, entityId: UUID?): Flow<UiLiveUpdate> = flow {
         require(contributionId == "core.importer" && key == "log") { "Unknown live key '$key' for UI contribution $contributionId" }

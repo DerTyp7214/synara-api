@@ -1,8 +1,9 @@
 package dev.dertyp.services.metadata
 
 import dev.dertyp.ApiClient
-import dev.dertyp.config.ProviderCredentialKeys
 import dev.dertyp.core.HttpClientPriority
+import dev.dertyp.credentials.CredentialNames
+import dev.dertyp.credentials.ResolvedCredential
 import dev.dertyp.core.RetryOnError
 import dev.dertyp.core.RetryPolicy
 import dev.dertyp.core.retryingGet
@@ -19,10 +20,10 @@ import kotlin.time.Duration.Companion.seconds
 class TheAudioDBService(
     environment: ApplicationEnvironment
 ) : MetadataService("TheAudioDB", IMetadataService.MetadataType.theAudioDB, environment) {
-    override val tokenUrl = ""
-    override val credentialKeys = ProviderCredentialKeys.THE_AUDIO_DB
+    override val credentialName: String = CredentialNames.THEAUDIODB_API
 
-    private val apiKey by lazy { credentials.clientId ?: "123" }
+    private suspend fun apiKey(): String? =
+        (credentialProvider.resolve(credentialName) as? ResolvedCredential.ApiKey)?.key
 
     private val baseUrl = "https://www.theaudiodb.com/api/v1/json"
 
@@ -81,15 +82,17 @@ class TheAudioDBService(
         @SerialName("strStyle") val style: String? = null,
     )
 
-    override fun HttpRequestBuilder.getAccessTokenHeader(clientId: String, clientSecret: String) {
-    }
-
     private suspend inline fun <reified T> retryableGet(
         path: String,
         priority: HttpClientPriority = HttpClientPriority.NORMAL,
         noinline block: suspend HttpRequestBuilder.() -> Unit = {}
     ): T? {
-        val url = "$baseUrl/$apiKey/$path"
+        val key = apiKey()
+        if (key == null) {
+            logger.warn("TheAudioDB credential $credentialName is unavailable, skipping $path")
+            return null
+        }
+        val url = "$baseUrl/$key/$path"
         return retryingGet(
             policy = RETRY_POLICY,
             label = "TheAudioDB request to $url",

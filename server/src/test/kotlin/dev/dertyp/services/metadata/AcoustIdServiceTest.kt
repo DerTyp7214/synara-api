@@ -9,6 +9,10 @@ import dev.dertyp.data.UserSong
 import dev.dertyp.plugins.PluginSettings
 import dev.dertyp.services.credentials.CredentialCipher
 import dev.dertyp.services.credentials.CredentialOrigin
+import dev.dertyp.services.credentials.CredentialProvider
+import dev.dertyp.services.credentials.LocalCredentialProvider
+import dev.dertyp.services.credentials.LocalCredentialStore
+import dev.dertyp.services.podcast.index.PodcastIndexCredentialSource
 import dev.dertyp.services.ui.PluginSettingsService
 import dev.dertyp.services.ui.UiRegistry
 import io.ktor.client.HttpClient
@@ -35,6 +39,9 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.koin.core.context.startKoin
+import org.koin.core.context.stopKoin
+import org.koin.dsl.module
 import java.util.UUID
 
 class AcoustIdServiceTest {
@@ -59,15 +66,25 @@ class AcoustIdServiceTest {
         coEvery { settings.getAll() } answers { storedKey?.let { mapOf(ACOUSTID_API_KEY_SETTING to it) } ?: emptyMap() }
         val settingsService = mockk<PluginSettingsService>()
         every { settingsService.forPlugin(UiRegistry.SERVER_SOURCE) } returns settings
+        every { settingsService.forPlugin(PodcastIndexCredentialSource.PLUGIN_ID) } returns mockk(relaxed = true)
+        every { settingsService.forPlugin(LocalCredentialStore.PLUGIN_ID) } returns mockk(relaxed = true)
         config = MapApplicationConfig("acoustid.apiKey" to ENV_KEY)
         credentials = AcoustIdCredentialSource(settingsService, config, cipher)
-        service = AcoustIdService(mockk(relaxed = true), credentials)
+        val provider = LocalCredentialProvider(
+            exchange = mockk(relaxed = true),
+            appleSigner = mockk(relaxed = true),
+            store = LocalCredentialStore(settingsService, config, cipher, credentials),
+            pluginStore = mockk(relaxed = true),
+        )
+        startKoin { modules(module { single<CredentialProvider> { provider } }) }
+        service = AcoustIdService(mockk(relaxed = true))
     }
 
     @AfterEach
     fun tearDown() {
         runBlocking { queueService?.stopService() }
         queueService = null
+        stopKoin()
         unmockkAll()
     }
 

@@ -149,6 +149,7 @@ dependencies {
     implementation(project(":common-rpc"))
     implementation(project(":common-proxy"))
     implementation(project(":common-listen-backup"))
+    implementation(project(":common-credentials"))
     implementation(project(":plugin-api"))
 
     testRuntimeOnly(libs.junit.jupiter.engine)

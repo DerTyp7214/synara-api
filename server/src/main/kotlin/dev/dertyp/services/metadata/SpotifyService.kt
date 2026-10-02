@@ -1,10 +1,9 @@
 package dev.dertyp.services.metadata
 
 import dev.dertyp.ApiClient
-import dev.dertyp.config.ProviderCredentialKeys
 import dev.dertyp.core.HttpClientPriority
 import dev.dertyp.core.safeQueuedGet
-import io.ktor.client.request.HttpRequestBuilder
+import dev.dertyp.credentials.CredentialNames
 import io.ktor.client.request.header
 import io.ktor.client.request.parameter
 import io.ktor.http.ContentType
@@ -17,13 +16,7 @@ import kotlin.time.Duration.Companion.milliseconds
 class SpotifyService(
     environment: ApplicationEnvironment
 ) : MetadataService("Spotify", IMetadataService.MetadataType.spotify, environment) {
-    override val tokenUrl = "https://accounts.spotify.com/api/token"
-    override val credentialKeys = ProviderCredentialKeys.SPOTIFY
-
-    override fun HttpRequestBuilder.getAccessTokenHeader(clientId: String, clientSecret: String) {
-        parameter("client_id", clientId)
-        parameter("client_secret", clientSecret)
-    }
+    override val credentialName: String = CredentialNames.SPOTIFY_API
 
     override suspend fun search(
         query: String,

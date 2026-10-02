@@ -4,6 +4,7 @@ import dev.dertyp.Indexer
 import dev.dertyp.services.ApiKeyScopeRegistry
 import dev.dertyp.services.ILrcLibService
 import dev.dertyp.services.StorageService
+import dev.dertyp.services.credentials.PluginCredentialsFactory
 import dev.dertyp.services.metadata.IMetadataService
 import io.mockk.every
 import io.mockk.mockk
@@ -24,18 +25,21 @@ import org.koin.core.module.Module
 import org.koin.dsl.module
 import org.koin.test.KoinTest
 import kotlin.test.assertEquals
+import kotlin.test.assertSame
 
 class PluginManagerTest : KoinTest {
 
     private lateinit var storageService: StorageService
     private lateinit var indexer: Indexer
     private lateinit var pluginManager: PluginManager
+    private lateinit var credentialsFactory: PluginCredentialsFactory
 
     @BeforeEach
     fun setup() {
         storageService = mockk(relaxed = true)
         indexer = mockk(relaxed = true)
-        
+        credentialsFactory = mockk(relaxed = true)
+
         startKoin {
             modules(module {
                 single { storageService }
@@ -56,6 +60,7 @@ class PluginManagerTest : KoinTest {
                 single { PluginSettingsService() }
                 single { IntakeService(get()) }
                 single { JobService() }
+                single { credentialsFactory }
             })
         }
         
@@ -146,6 +151,44 @@ class PluginManagerTest : KoinTest {
         assert(externalPlugin.moduleRequested)
         assert(externalPlugin.initCalled)
         assertEquals(1337, getKoin().get<Int>())
+    }
+
+    @Test
+    fun `scopes plugin credentials to the plugin id and loads api version 2 plugins`() {
+        val scoped = mockk<PluginCredentials>()
+        every { credentialsFactory.forPlugin("scoped") } returns scoped
+        var received: PluginCredentials? = null
+
+        val plugin = object : ISynaraPlugin {
+            override val id: String = "scoped"
+            override val name: String = "Scoped"
+            override val apiVersion: Int = 2
+
+            override fun init(context: PluginContext) {
+                received = context.credentials
+            }
+        }
+
+        val loadPluginMethod = pluginManager.javaClass.getDeclaredMethod("loadPlugin", ISynaraPlugin::class.java)
+        loadPluginMethod.isAccessible = true
+        loadPluginMethod.invoke(pluginManager, plugin)
+
+        assertSame(scoped, received)
+        verify(exactly = 1) { credentialsFactory.forPlugin("scoped") }
+    }
+
+    @Test
+    fun `rejects plugins newer than the supported api version`() {
+        val plugin = mockk<ISynaraPlugin>(relaxed = true)
+        every { plugin.apiVersion } returns PluginManager.CURRENT_API_VERSION + 1
+        every { plugin.id } returns "future"
+        every { plugin.name } returns "Future"
+
+        val loadPluginMethod = pluginManager.javaClass.getDeclaredMethod("loadPlugin", ISynaraPlugin::class.java)
+        loadPluginMethod.isAccessible = true
+        loadPluginMethod.invoke(pluginManager, plugin)
+
+        verify(exactly = 0) { plugin.init(any()) }
     }
 
     @Test

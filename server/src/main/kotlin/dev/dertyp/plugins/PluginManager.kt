@@ -2,6 +2,7 @@ package dev.dertyp.plugins
 
 import dev.dertyp.Indexer
 import dev.dertyp.services.*
+import dev.dertyp.services.credentials.PluginCredentialsFactory
 import dev.dertyp.services.import.ImportBackend
 import dev.dertyp.services.import.MusicBrainzPlugin
 import dev.dertyp.services.import.TidalPlugin
@@ -39,6 +40,7 @@ class PluginManager(
     private val pluginSettingsService by inject<PluginSettingsService>()
     private val intakeService by inject<IntakeService>()
     private val jobService by inject<JobService>()
+    private val credentialsFactory by inject<PluginCredentialsFactory>()
     private val pluginsDir = File("plugins").apply { mkdirs() }
     private val loadedPlugins = mutableListOf<ISynaraPlugin>()
     private val importers = mutableMapOf<String, IImporter>()
@@ -48,7 +50,7 @@ class PluginManager(
     var defaultImporterId: String = "tiddl"
 
     companion object {
-        const val CURRENT_API_VERSION = 2
+        const val CURRENT_API_VERSION = 3
     }
 
     override suspend fun startService() {
@@ -94,6 +96,7 @@ class PluginManager(
                 override val i18n = translationService.forSource(plugin.id)
                 override val intake = intakeService.forSource(plugin.id)
                 override val jobs = jobService.forSource(plugin.id)
+                override val credentials = credentialsFactory.forPlugin(plugin.id)
             }
 
             plugin.init(pluginContext)
@@ -148,6 +151,7 @@ class PluginManager(
         override val i18n get() = translationService.forSource(UiRegistry.SERVER_SOURCE)
         override val intake get() = intakeService.forSource(UiRegistry.SERVER_SOURCE)
         override val jobs get() = jobService.forSource(UiRegistry.SERVER_SOURCE)
+        override val credentials get() = credentialsFactory.forPlugin(UiRegistry.SERVER_SOURCE)
     }
 
     private fun loadPlugins() {

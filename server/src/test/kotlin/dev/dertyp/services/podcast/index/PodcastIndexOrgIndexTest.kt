@@ -1,9 +1,11 @@
 package dev.dertyp.services.podcast.index
 
 import dev.dertyp.core.HttpClientFactory
-import dev.dertyp.plugins.PluginSettings
-import dev.dertyp.services.credentials.CredentialCipher
+import dev.dertyp.credentials.CredentialNames
+import dev.dertyp.credentials.ResolvedCredential
+import dev.dertyp.services.credentials.CredentialProvider
 import dev.dertyp.services.podcast.PodcastHttp
+import dev.dertyp.testing.FakeCredentialProvider
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.MockRequestHandler
@@ -13,8 +15,6 @@ import io.ktor.client.request.HttpRequestData
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
-import io.ktor.server.config.MapApplicationConfig
-import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkObject
@@ -40,9 +40,7 @@ class PodcastIndexOrgIndexTest {
     private val requests = mutableListOf<HttpRequestData>()
     private var respondTo: MockRequestHandler = { respondError(HttpStatusCode.NotFound) }
 
-    private val settings = mockk<PluginSettings>()
-    private val config = MapApplicationConfig()
-    private val cipher = CredentialCipher(MapApplicationConfig("credentials.encryptionKey" to "test-key"))
+    private val credentialProvider = FakeCredentialProvider()
     private val httpClientFactory = mockk<HttpClientFactory>()
 
     @BeforeEach
@@ -50,7 +48,12 @@ class PodcastIndexOrgIndexTest {
         mockkObject(Clock.System)
         every { Clock.System.now() } returns Instant.fromEpochSeconds(1_700_000_000)
         mockkStatic(HttpClientFactory::podcastIndexClient)
-        startKoin { modules(module { single { httpClientFactory } }) }
+        startKoin {
+            modules(module {
+                single { httpClientFactory }
+                single<CredentialProvider> { credentialProvider }
+            })
+        }
     }
 
     @AfterEach
@@ -66,9 +69,7 @@ class PodcastIndexOrgIndexTest {
             respondTo(this, request)
         }
         every { httpClientFactory.podcastIndexClient() } returns HttpClient(engine) { podcastIndexConfig() }
-        return PodcastIndexOrgIndex(
-            credentials = PodcastIndexCredentialSource(settings, config, cipher),
-        )
+        return PodcastIndexOrgIndex()
     }
 
     private fun json(body: String): MockRequestHandler = {
@@ -76,10 +77,7 @@ class PodcastIndexOrgIndexTest {
     }
 
     private fun configured() {
-        coEvery { settings.getAll() } returns mapOf(
-            PodcastIndexCredentialSource.KEY_API_KEY to cipher.encrypt(PodcastIndexCredentialSource.KEY_API_KEY, "key123"),
-            PodcastIndexCredentialSource.KEY_API_SECRET to cipher.encrypt(PodcastIndexCredentialSource.KEY_API_SECRET, "secret456"),
-        )
+        credentialProvider.put(ResolvedCredential.ApiKeyPair(CredentialNames.PODCAST_INDEX_API, "key123", "secret456"))
     }
 
     private fun sha1Hex(value: String): String =
@@ -193,7 +191,6 @@ class PodcastIndexOrgIndexTest {
 
     @Test
     fun `returns nothing and sends no request when unconfigured`() = runBlocking {
-        coEvery { settings.getAll() } returns emptyMap()
         val index = index()
         assertTrue(index.search("space", 10).isEmpty())
         assertTrue(requests.isEmpty())

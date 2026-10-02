@@ -9,6 +9,8 @@ import dev.dertyp.services.StorageService
 import dev.dertyp.services.cover.CoverAssetPackService
 import dev.dertyp.services.cover.CoverAutoTrigger
 import dev.dertyp.services.cover.CoverGenerationService
+import dev.dertyp.services.credentials.LocalCredentialProvider
+import dev.dertyp.services.credentials.remote.RemoteCredentialProvider
 import dev.dertyp.services.hue.HueService
 import dev.dertyp.services.ui.ImporterState
 import io.ktor.server.application.Application
@@ -24,7 +26,11 @@ fun Application.configureServices() {
     val coverAutoTrigger by inject<CoverAutoTrigger>()
     val hueService by inject<HueService>()
     val importerState by inject<ImporterState>()
+    val localCredentialProvider by inject<LocalCredentialProvider>()
+    val remoteCredentialProvider by inject<RemoteCredentialProvider>()
 
+    ServiceLifecycle.start(localCredentialProvider)
+    ServiceLifecycle.start(remoteCredentialProvider)
     ServiceLifecycle.start(pluginManager)
     ServiceLifecycle.start(importerState)
     ServiceLifecycle.start(importService)

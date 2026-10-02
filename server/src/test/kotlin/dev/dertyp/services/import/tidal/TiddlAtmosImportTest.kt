@@ -6,8 +6,11 @@ import dev.dertyp.core.process.findInPath
 import dev.dertyp.plugins.IPluginIndexer
 import dev.dertyp.plugins.IServerStorageService
 import dev.dertyp.plugins.atmosSibling
+import dev.dertyp.services.credentials.CredentialProvider
+import dev.dertyp.services.credentials.ImporterCredentialMaterializer
 import dev.dertyp.services.import.ProcessExecutionResult
 import dev.dertyp.services.import.TiddlService
+import dev.dertyp.testing.FakeCredentialProvider
 import io.mockk.*
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.runBlocking
@@ -16,6 +19,9 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.koin.core.context.startKoin
+import org.koin.core.context.stopKoin
+import org.koin.dsl.module
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.attribute.FileTime
@@ -33,6 +39,13 @@ class TiddlAtmosImportTest {
     @BeforeEach
     fun setup() {
         tempDir = Files.createTempDirectory("tiddl-atmos-test")
+        val credentialProvider = FakeCredentialProvider()
+        startKoin {
+            modules(module {
+                single<CredentialProvider> { credentialProvider }
+                single { ImporterCredentialMaterializer(credentialProvider) }
+            })
+        }
         mockkStatic("dev.dertyp.core.process.CommandKt")
         every { findInPath("tiddl") } returns "/usr/local/bin/tiddl"
         every { storageService.forImporter(any()) } returns pluginStorage
@@ -61,6 +74,7 @@ class TiddlAtmosImportTest {
 
     @AfterEach
     fun tearDown() {
+        stopKoin()
         unmockkAll()
         tempDir.toFile().deleteRecursively()
     }

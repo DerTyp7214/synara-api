@@ -73,11 +73,14 @@ All fields have `key` (the payload key), `label`, `helper?`, `error?`, `required
 | Type | Extra fields | Payload value |
 |---|---|---|
 | `textField` | `value?`, `placeholder?`, `secret`, `multiline`, `kind`, `toolbar` | `{"text": "…"}` |
+| `fileField` | `accept`, `binary`, `allowPaste`, `secret`, `value?` | `{"text": "<file content>"}` |
 | `numberField` | `value?`, `min?`, `max?`, `step?` | `{"number": 3.0}` |
 | `switch` | `value` | `{"flag": true}` |
 | `select` | `value?`, `options[{value,label,icon?}]` | `{"text": "<option value>"}` |
 
 `secret` fields never contain the stored value; submitting an empty value means "unchanged". `kind` hints at the keyboard: `URL`, `EMAIL`, `BARCODE` (offer a scanner), `MULTILINE_URLS` (one entry per line, a scanner appends a line). `toolbar` is the **keyboard accessory toolbar**: shown above the on-screen keyboard while the field is focused (iOS `.keyboard` toolbar placement, Android IME accessory row; on desktop render it inline under the field), items trailing-aligned — typically a single `button` with `dismissKeyboard`.
+
+`fileField` opens a native file picker filtered by `accept` (extensions such as `.p8`) and submits the file's UTF-8 text, or the base64 of its bytes when `binary` is set. With `allowPaste` the client also offers pasting that content. Clients on an older UI schema version receive a multi-line `textField` with the same key instead.
 
 ### Icons
 
@@ -124,11 +127,11 @@ If you don't implement a name, render `fallback` if present, otherwise nothing.
 - `listContributions(kind?, slot?)` – discover what exists (`UiContributionInfo` includes `title`, `icon`, `live`, `hooks`, access flags).
 - `renderSlot(slot, context)` – one call per native screen; render `items` in order.
 - `render(contributionId, context)` – one-off render, e.g. a page.
-- `subscribe(contributionId, entityId?)` – a `Flow<UiRender>` that emits immediately and again on every change; use it for pages and live cards. `revision` increases per emission; only re-render when `root` or `toolbar` actually changed.
+- `subscribeWithContext(contributionId, context)` – a `Flow<UiRender>` that emits immediately and again on every change; use it for pages and live cards with the same `UiContext` passed to `render`, so pages opened with `params` keep them. `revision` increases per emission; only re-render when `root` or `toolbar` actually changed. `subscribe(contributionId, entityId?)` is the older variant that only carries the entity id.
 
 ### Live values
 
-Re-rendering a whole page for every log line would be wasteful, so high-frequency data uses a second channel. A `live` node marks a subtree; the client renders its `child` immediately and opens `subscribeLive(contributionId, key, entityId?)` — a `Flow<UiLiveUpdate>`:
+Re-rendering a whole page for every log line would be wasteful, so high-frequency data uses a second channel. A `live` node marks a subtree; the client renders its `child` immediately and opens `subscribeLiveWithContext(contributionId, key, context)` (or the older `subscribeLive(contributionId, key, entityId?)`) — a `Flow<UiLiveUpdate>`:
 
 | Update | Effect on the `live` child |
 |---|---|

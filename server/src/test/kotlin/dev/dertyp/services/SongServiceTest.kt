@@ -11,9 +11,13 @@ import dev.dertyp.core.ClientInfo
 import dev.dertyp.core.HttpClientQueueService
 import dev.dertyp.core.date
 import dev.dertyp.core.date.getDateFromISO
+import dev.dertyp.credentials.CredentialNames
+import dev.dertyp.credentials.ResolvedCredential
 import dev.dertyp.data.*
 import dev.dertyp.db.*
+import dev.dertyp.services.credentials.CredentialProvider
 import dev.dertyp.services.import.Type
+import dev.dertyp.testing.FakeCredentialProvider
 import dev.dertyp.services.metadata.*
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
@@ -63,7 +67,6 @@ class SongServiceTest : KoinTest {
     private val transcoder = mockk<Transcoder>()
     private val storageService = mockk<StorageService>(relaxed = true)
     private val fingerprintService = mockk<AcoustIdFingerprintService>()
-    private val acoustIdCredentials = mockk<AcoustIdCredentialSource>()
     private var acoustIdQueue: HttpClientQueueService? = null
     private val acoustIdRequests = mutableListOf<Url>()
     
@@ -82,7 +85,8 @@ class SongServiceTest : KoinTest {
                 single { musicBrainzService }
                 single { MusicBrainzCacheService() }
                 single { CachedMusicBrainzService(get(), get()) }
-                single { AcoustIdService(fingerprintService, acoustIdCredentials) }
+                single { AcoustIdService(fingerprintService) }
+                single<CredentialProvider> { FakeCredentialProvider(ResolvedCredential.ApiKey(CredentialNames.ACOUSTID_API, "testKey")) }
                 single { mockk<ImageService>(relaxed = true) }
                 single { storageService }
                 single { mockk<MetadataFetchingService>(relaxed = true) }
@@ -140,7 +144,6 @@ class SongServiceTest : KoinTest {
         }
 
         coEvery { fingerprintService.fingerprint(any()) } returns null
-        coEvery { acoustIdCredentials.current() } returns "testKey"
 
         songService = SongService()
         rpcService = SongRpcService(user, songService)

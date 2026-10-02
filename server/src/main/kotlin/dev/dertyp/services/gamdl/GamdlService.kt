@@ -5,6 +5,8 @@ import dev.dertyp.audio.AudioConfig
 import dev.dertyp.audio.LosslessFormat
 import dev.dertyp.config.ServerConfig
 import dev.dertyp.core.*
+import dev.dertyp.credentials.CredentialFileRoles
+import dev.dertyp.credentials.CredentialNames
 import dev.dertyp.data.User
 import dev.dertyp.data.UserSong
 import dev.dertyp.core.process.ExternalTool
@@ -35,7 +37,8 @@ class GamdlService(
     override val id: String = ID
     override val metadataType = IMetadataService.MetadataType.appleMusic
     override val installed: Boolean get() = tool.installed
-    override val enabled: Boolean get() = installed && cookiesFile().exists()
+    override val enabled: Boolean get() = installed && tokenFileExists()
+    override val credentialName: String = CredentialNames.IMPORTER_GAMDL
 
     private val environment by inject<ApplicationEnvironment>()
     private val serverConfig by inject<ServerConfig>()
@@ -86,9 +89,14 @@ class GamdlService(
             codec?.let { add("--codec-song"); add(it) }
         }.toMutableList()
 
-    override fun authorizedCheck(result: ProcessExecutionResult): Boolean = cookiesFile().exists()
+    override fun credentialTargets(): Map<String, File> = buildMap {
+        put(CredentialFileRoles.GAMDL_COOKIES, cookiesFile())
+        wvdPath?.let { put(CredentialFileRoles.GAMDL_WVD, File(it)) }
+    }
 
-    override fun tokenFileExists(): Boolean = cookiesFile().exists()
+    override fun authorizedCheck(result: ProcessExecutionResult): Boolean = tokenFileExists()
+
+    override fun tokenFileExists(): Boolean = credentialPresent(cookiesFile())
 
     override fun canHandle(url: String): Boolean =
         ParserFactory.getParserForProvider("apple")?.canHandle(url) ?: false
@@ -98,6 +106,7 @@ class GamdlService(
 
     override suspend fun provideCredentials(credentials: ImporterCredentials) {
         if (credentials !is GamdlCredentials) return
+        check(!credentialManagedRemotely()) { "gamdl credentials are managed by the credential server ($credentialName)" }
         cookiesFile().apply { parentFile?.mkdirs() }.writeText(credentials.cookiesTxt)
         credentials.wvdBase64?.let { b64 ->
             wvdPath?.let { path ->

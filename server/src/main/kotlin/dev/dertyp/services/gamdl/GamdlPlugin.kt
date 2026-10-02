@@ -6,6 +6,7 @@ import dev.dertyp.plugins.IPluginIndexer
 import dev.dertyp.plugins.IUiPlugin
 import dev.dertyp.plugins.PluginContext
 import dev.dertyp.plugins.UiContribution
+import dev.dertyp.services.credentials.CredentialProvider
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 import org.koin.core.module.Module
@@ -18,6 +19,7 @@ class GamdlPlugin : IContentSourcePlugin, IUiPlugin, KoinComponent {
     override val enabled: Boolean get() = gamdlService.installed
 
     private val gamdlService: GamdlService by inject()
+    private val credentialProvider: CredentialProvider by inject()
     private lateinit var indexer: GamdlIndexer
 
     override fun init(context: PluginContext) {
@@ -33,5 +35,5 @@ class GamdlPlugin : IContentSourcePlugin, IUiPlugin, KoinComponent {
     override fun getImporter(): IImporter = gamdlService
     override fun getIndexer(): IPluginIndexer = indexer
 
-    override fun getUiContributions(): List<UiContribution> = listOf(GamdlCredentialsContribution(gamdlService))
+    override fun getUiContributions(): List<UiContribution> = listOf(GamdlCredentialsContribution(gamdlService, credentialProvider))
 }

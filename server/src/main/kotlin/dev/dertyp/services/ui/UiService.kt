@@ -169,9 +169,11 @@ class UiService(
         return UiSlotRender(slot, items)
     }
 
-    fun subscribe(user: User, client: ClientInfo, id: String, entityId: UUID? = null, call: ApplicationCall? = null): Flow<UiRender> = flow {
+    fun subscribe(user: User, client: ClientInfo, id: String, entityId: UUID? = null, call: ApplicationCall? = null): Flow<UiRender> =
+        subscribe(user, client, id, UiContext(entityId = entityId), call)
+
+    fun subscribe(user: User, client: ClientInfo, id: String, context: UiContext, call: ApplicationCall? = null): Flow<UiRender> = flow {
         val registered = require(id, user)
-        val context = UiContext(entityId = entityId)
         val scope = scope(registered, user, client, context, call)
         val changes = registered.contribution.changes(scope) ?: emptyFlow()
         val invalidations = registry.invalidations.filter { it == id }.map { }
@@ -183,9 +185,12 @@ class UiService(
         )
     }
 
-    fun subscribeLive(user: User, client: ClientInfo, id: String, key: String, entityId: UUID? = null, call: ApplicationCall? = null): Flow<UiLiveUpdate> = flow {
+    fun subscribeLive(user: User, client: ClientInfo, id: String, key: String, entityId: UUID? = null, call: ApplicationCall? = null): Flow<UiLiveUpdate> =
+        subscribeLive(user, client, id, key, UiContext(entityId = entityId), call)
+
+    fun subscribeLive(user: User, client: ClientInfo, id: String, key: String, context: UiContext, call: ApplicationCall? = null): Flow<UiLiveUpdate> = flow {
         val registered = require(id, user)
-        val scope = scope(registered, user, client, UiContext(entityId = entityId), call)
+        val scope = scope(registered, user, client, context, call)
         val updates = registered.contribution.live(scope, key) ?: throw IllegalArgumentException("Unknown live key '$key' for UI contribution $id")
         emitAll(updates)
     }

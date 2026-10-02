@@ -1,12 +1,10 @@
 package dev.dertyp.services.metadata
 
 import dev.dertyp.PlatformUUID
-import dev.dertyp.config.ProviderCredentialKeys
 import dev.dertyp.core.HttpClientPriority
 import dev.dertyp.data.MusicBrainzRecording
 import dev.dertyp.data.MusicBrainzRelease
 import dev.dertyp.core.date.getDateFromISO
-import io.ktor.client.request.HttpRequestBuilder
 import io.ktor.server.application.ApplicationEnvironment
 import kotlinx.coroutines.CancellationException
 import java.util.UUID
@@ -17,12 +15,6 @@ class MusicBrainzMetadataService(
     private val musicBrainzService: IMusicBrainzService,
     environment: ApplicationEnvironment
 ) : MetadataService("MusicBrainz", IMetadataService.MetadataType.musicBrainz, environment) {
-
-    override val credentialKeys = ProviderCredentialKeys.NONE
-    override val tokenUrl: String = ""
-
-    override fun HttpRequestBuilder.getAccessTokenHeader(clientId: String, clientSecret: String) {}
-    override suspend fun getAccessToken(): IMetadataService.AccessTokenResponse = IMetadataService.AccessTokenResponse("", "", 0)
 
     override suspend fun getAlbumIdByTrackId(trackId: String, priority: HttpClientPriority): String? {
         val mbId = try { UUID.fromString(trackId) } catch (_: Exception) { return null }

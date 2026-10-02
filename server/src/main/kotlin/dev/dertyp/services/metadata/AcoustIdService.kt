@@ -7,11 +7,14 @@ import dev.dertyp.core.RetryOnError
 import dev.dertyp.core.RetryPolicy
 import dev.dertyp.core.cleanTitle
 import dev.dertyp.core.retryingGet
+import dev.dertyp.credentials.CredentialNames
+import dev.dertyp.credentials.ResolvedCredential
 import dev.dertyp.data.BaseSong
 import dev.dertyp.db.SongAcoustIdTable
 import dev.dertyp.core.db.dbQuery
 import dev.dertyp.server.BuildConfig
 import dev.dertyp.services.Service
+import dev.dertyp.services.credentials.CredentialProvider
 import dev.dertyp.toPlatformUUID
 import io.ktor.client.call.body
 import io.ktor.client.request.header
@@ -20,6 +23,7 @@ import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.upsert
+import org.koin.core.component.inject
 import java.text.Normalizer
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.abs
@@ -62,8 +66,9 @@ data class AcoustIdMatch(val acoustId: String, val recordingId: PlatformUUID, va
 
 class AcoustIdService(
     private val fingerprintService: AcoustIdFingerprintService,
-    private val credentials: AcoustIdCredentialSource,
 ) : Service() {
+    private val credentialProvider by inject<CredentialProvider>()
+
     private val missingKeyLogged = AtomicBoolean(false)
 
     companion object {
@@ -164,7 +169,7 @@ class AcoustIdService(
     }
 
     suspend fun lookup(fingerprint: Fingerprint, priority: HttpClientPriority = HttpClientPriority.NORMAL): AcoustIdLookupResponse? {
-        val apiKey = credentials.current()
+        val apiKey = (credentialProvider.resolve(CredentialNames.ACOUSTID_API) as? ResolvedCredential.ApiKey)?.key
         if (apiKey == null) {
             if (missingKeyLogged.compareAndSet(false, true)) {
                 logger.warn("No AcoustID API key is configured, set ACOUSTID_API_KEY or store one in the admin settings to match songs by fingerprint")

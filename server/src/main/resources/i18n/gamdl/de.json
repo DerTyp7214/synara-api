@@ -9,5 +9,6 @@
   "gamdl.credentials.wvdHelper": "Optional; für manche Codecs erforderlich.",
   "gamdl.credentials.save": "Zugangsdaten speichern",
   "gamdl.credentials.saved": "Zugangsdaten gespeichert",
+  "gamdl.credentials.managed": "Vom Credential-Server verwaltet",
   "gamdl.credentials.error.cookies": "cookies.txt ist erforderlich."
 }

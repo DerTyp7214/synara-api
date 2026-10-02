@@ -1,32 +1,21 @@
 package dev.dertyp.services.metadata
 
-import dev.dertyp.ApiClient
-import dev.dertyp.config.ClientCredentials
-import dev.dertyp.config.ProviderCredentialKeys
-import dev.dertyp.config.toClientCredentials
 import dev.dertyp.core.HttpClientPriority
+import dev.dertyp.credentials.ResolvedCredential
 import dev.dertyp.data.User
 import dev.dertyp.plugins.PluginManager
 import dev.dertyp.services.Service
+import dev.dertyp.services.credentials.CredentialProvider
+import dev.dertyp.services.credentials.CredentialUnavailableException
 import dev.dertyp.services.metadata.IMetadataService.MetadataType
-import io.ktor.client.call.body
-import io.ktor.client.request.HttpRequestBuilder
-import io.ktor.client.request.header
-import io.ktor.client.request.parameter
-import io.ktor.client.request.post
-import io.ktor.client.statement.bodyAsText
-import io.ktor.http.ContentType
-import io.ktor.http.HttpHeaders
-import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationEnvironment
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
+import org.koin.core.component.inject
 import org.koin.mp.KoinPlatformTools
 import java.util.UUID
 import kotlin.concurrent.atomics.AtomicBoolean
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
-import kotlin.time.Duration.Companion.seconds
 
 @OptIn(ExperimentalAtomicApi::class)
 abstract class MetadataService(
@@ -34,17 +23,14 @@ abstract class MetadataService(
     metadataType: MetadataType,
     protected val environment: ApplicationEnvironment
 ) : IMetadataService, Service() {
-    protected abstract val credentialKeys: ProviderCredentialKeys
-    protected abstract val tokenUrl: String
+    protected open val credentialName: String? = null
 
-    protected val credentials: ClientCredentials by lazy { environment.config.toClientCredentials(credentialKeys) }
-    private val clientId: String? get() = credentials.clientId
-    private val clientSecret: String? get() = credentials.clientSecret
+    protected val credentialProvider by inject<CredentialProvider>()
 
-    protected abstract fun HttpRequestBuilder.getAccessTokenHeader(clientId: String, clientSecret: String)
+    open val supportedFeatures: Set<IMetadataService.Feature>
+        get() = if (supported()) declaredFeatures else emptySet()
 
-    open val supportedFeatures: Set<IMetadataService.Feature> by lazy {
-        if (!supported()) return@lazy emptySet()
+    private val declaredFeatures: Set<IMetadataService.Feature> by lazy {
         val features = mutableSetOf<IMetadataService.Feature>()
         val baseClass = MetadataService::class.java
         val interfaceClass = IMetadataService::class.java
@@ -298,8 +284,6 @@ abstract class MetadataService(
         priority: HttpClientPriority = HttpClientPriority.NORMAL
     ): Flow<IMetadataService.FlowPlaylist> = emptyFlow()
 
-    private var accessToken: Pair<IMetadataService.AccessTokenResponse, Long>? = null
-
     init {
         logger.info("Initializing MetadataService for $providerName")
         instances[metadataType] = this
@@ -342,39 +326,12 @@ abstract class MetadataService(
         }
     }
 
-    open fun supported(): Boolean {
-        if (credentialKeys.idKey.isNotEmpty() && clientId.isNullOrBlank()) return false
-        if (credentialKeys.secretKey.isNotEmpty() && clientSecret.isNullOrBlank()) return false
-        return true
-    }
+    open fun supported(): Boolean = credentialName?.let { credentialProvider.isAvailable(it) } ?: true
 
-    protected open suspend fun getAccessToken(): IMetadataService.AccessTokenResponse {
-        if (clientId == null || clientSecret == null) throw NullPointerException("$providerName credentials are null. (${credentialKeys.idKey} & ${credentialKeys.secretKey})")
-
-        if ((accessToken?.second ?: 0) > System.currentTimeMillis()) return accessToken!!.first
-
-        logger.info("Requesting access token for $providerName")
-
-        val response = ApiClient.instance.post(tokenUrl) {
-            header(HttpHeaders.ContentType, ContentType.parse("application/x-www-form-urlencoded"))
-            parameter("grant_type", "client_credentials")
-            getAccessTokenHeader(clientId!!, clientSecret!!)
-        }
-
-        if (response.status != HttpStatusCode.OK) {
-            logger.info("Something went wrong while fetching access token for $providerName, ${response.status}: ${response.bodyAsText()}")
-            delay(30.seconds)
-            return getAccessToken()
-        }
-
-        val tokenResponse = response.body<IMetadataService.AccessTokenResponse>()
-
-        logger.info("Got new access token for $providerName")
-
-        accessToken = Pair(
-            tokenResponse,
-            System.currentTimeMillis() + tokenResponse.expiresIn.seconds.inWholeMilliseconds
-        )
-        return tokenResponse
+    protected suspend fun getAccessToken(): ResolvedCredential.AccessToken {
+        val name = credentialName
+            ?: throw CredentialUnavailableException("", "$providerName has no credential")
+        return credentialProvider.resolve(name) as? ResolvedCredential.AccessToken
+            ?: throw CredentialUnavailableException(name, "$providerName credential $name is unavailable")
     }
 }
