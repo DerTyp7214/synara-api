@@ -128,7 +128,7 @@ credentials test|delete <name>
 keys rotate
 ```
 
-`clients rotate` prints the new secret once. `credentials tidal-login` prints the verification link and code and waits until the login completes, fails or expires. The `set-*` and `import-*` commands also take `--description <text>`. `set-oauth` accepts `--token-url`, `--auth-style basic|form` and `--scope` instead of or on top of a preset. Run `java -jar credential-server-all.jar help` to print the list. Without a command the jar starts the server.
+`clients rotate` prints the new secret once. `credentials tidal-login` prints the verification link and code and waits until the login completes, fails, expires or is cancelled. The `set-*` and `import-*` commands also take `--description <text>`. `set-oauth` accepts `--token-url`, `--auth-style basic|form` and `--scope` instead of or on top of a preset. Run `java -jar credential-server-all.jar help` to print the list. Without a command the jar starts the server.
 
 The same management is available over the admin REST routes under `/admin`, protected by `X-Admin-Key`.
 

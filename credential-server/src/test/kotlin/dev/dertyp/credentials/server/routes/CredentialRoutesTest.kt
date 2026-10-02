@@ -23,6 +23,7 @@ import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.isSuccess
 import io.ktor.http.contentType
 import io.ktor.http.headersOf
 import io.ktor.server.testing.ApplicationTestBuilder
@@ -320,6 +321,36 @@ class CredentialRoutesTest {
             val snapshot = client.admin("GET", "/tidal-logins/${started.loginId}").body<TidalLoginEvent>()
             assertEquals(TidalLoginState.COMPLETED, snapshot.state)
             assertEquals(CredentialKind.TIDAL_DEVICE_SESSION, deps.store.credential("importer.tiddl")!!.kind)
+        }
+    }
+
+    @Test
+    fun `a cancelled tidal login ends the ndjson stream with the cancelled state`() {
+        val upstream = HttpClient(MockEngine { request ->
+            val json = headersOf(HttpHeaders.ContentType, "application/json")
+            if (request.url.encodedPath.endsWith("device_authorization")) {
+                respond(
+                    """{"deviceCode":"dev","userCode":"ABCD","verificationUri":"link.tidal.com","expiresIn":60,"interval":1}""",
+                    HttpStatusCode.OK,
+                    json,
+                )
+            } else {
+                respond("""{"error":"authorization_pending"}""", HttpStatusCode.BadRequest, json)
+            }
+        })
+        routesTest(testDeps(dir, httpClient = upstream)) { _, client ->
+            val started = client.admin(
+                "POST",
+                "/credentials/importer.tiddl/tidal-login",
+                TidalLoginStart(TidalSessionFormat.TIDDL, "client-id", "client-secret"),
+            ).body<TidalLoginSession>()
+
+            assertTrue(client.admin("DELETE", "/tidal-logins/${started.loginId}").status.isSuccess())
+
+            val events = client.admin("GET", "/tidal-logins/${started.loginId}/events").bodyAsText().lines().filter { it.isNotBlank() }
+                .map { CredentialJson.json.decodeFromString(TidalLoginEvent.serializer(), it) }
+            assertEquals(TidalLoginEvent(TidalLoginState.CANCELLED), events.last())
+            assertEquals(TidalLoginState.CANCELLED, client.admin("GET", "/tidal-logins/${started.loginId}").body<TidalLoginEvent>().state)
         }
     }
 }

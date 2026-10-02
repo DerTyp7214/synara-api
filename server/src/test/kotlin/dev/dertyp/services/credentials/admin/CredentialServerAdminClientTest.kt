@@ -173,6 +173,22 @@ class CredentialServerAdminClientTest {
         assertEquals(ADMIN_KEY, requests.single().headers[CredentialProtocol.ADMIN_KEY_HEADER])
     }
 
+    @Test
+    fun `tidal login events end on a cancelled state`() = runBlocking {
+        configure()
+        val lines = listOf(
+            TidalLoginEvent(TidalLoginState.PENDING),
+            TidalLoginEvent(TidalLoginState.CANCELLED),
+            TidalLoginEvent(TidalLoginState.COMPLETED),
+        ).joinToString("\n") { json.encodeToString(it) } + "\n"
+        val admin = client { respond(lines, HttpStatusCode.OK, headersOf("Content-Type", "application/x-ndjson")) }
+
+        val events = admin.tidalLoginEvents("login1").toList()
+
+        assertEquals(listOf(TidalLoginState.PENDING, TidalLoginState.CANCELLED), events.map { it.state })
+        assertNull(events.last().message)
+    }
+
     companion object {
         private const val ADMIN_KEY = "admin-key-123"
     }

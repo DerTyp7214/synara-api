@@ -13,6 +13,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.JsonObject
@@ -57,16 +58,13 @@ class TidalDeviceLoginManager(
         val events = MutableStateFlow(TidalLoginEvent(TidalLoginState.PENDING))
         val target = LoginTarget(name, request, clientId, clientSecret, authorization)
         val job = scope.launch {
-            try {
-                events.value = poll(target)
-            } finally {
-                if (events.value.state == TidalLoginState.PENDING) {
-                    events.value = TidalLoginEvent(TidalLoginState.FAILED, "Login cancelled")
-                }
-                scope.launch {
-                    delay(RETENTION)
-                    logins.remove(loginId)
-                }
+            events.finish(poll(target))
+        }
+        job.invokeOnCompletion {
+            events.finish(CANCELLED)
+            scope.launch {
+                delay(RETENTION)
+                logins.remove(loginId)
             }
         }
         logins[loginId] = Login(events, job)
@@ -82,7 +80,13 @@ class TidalDeviceLoginManager(
     fun events(loginId: String): StateFlow<TidalLoginEvent>? = logins[loginId]?.events?.asStateFlow()
 
     fun cancel(loginId: String) {
-        logins[loginId]?.job?.cancel()
+        val login = logins[loginId] ?: return
+        login.events.finish(CANCELLED)
+        login.job.cancel()
+    }
+
+    private fun MutableStateFlow<TidalLoginEvent>.finish(event: TidalLoginEvent) {
+        update { if (it.state == TidalLoginState.PENDING) event else it }
     }
 
     private suspend fun poll(target: LoginTarget): TidalLoginEvent {
@@ -98,13 +102,13 @@ class TidalDeviceLoginManager(
                         interval += SLOW_DOWN_STEP_SECONDS
                         null
                     }
-                    TidalDevicePoll.Expired -> expired()
+                    TidalDevicePoll.Expired -> EXPIRED
                     is TidalDevicePoll.Failed -> TidalLoginEvent(TidalLoginState.FAILED, result.message)
                     is TidalDevicePoll.Granted -> complete(target, result.grant)
                 }
             } while (outcome == null)
             outcome
-        } ?: expired()
+        } ?: EXPIRED
     }
 
     private fun complete(target: LoginTarget, grant: TidalTokenGrant): TidalLoginEvent {
@@ -130,9 +134,9 @@ class TidalDeviceLoginManager(
         }
     }
 
-    private fun expired() = TidalLoginEvent(TidalLoginState.EXPIRED, "The login code expired")
-
     private companion object {
+        val CANCELLED = TidalLoginEvent(TidalLoginState.CANCELLED)
+        val EXPIRED = TidalLoginEvent(TidalLoginState.EXPIRED, "The login code expired")
         val RETENTION = 10.minutes
         const val SLOW_DOWN_STEP_SECONDS = 5L
     }

@@ -201,6 +201,7 @@ class CredentialServerCredentialContribution(private val ui: CredentialServerUiC
             TidalLoginState.COMPLETED -> UiComponent.Badge(scope.t("$PREFIX.tidal.completed"), UiTone.SUCCESS, UiIcon(UiIconName.CHECK))
             TidalLoginState.EXPIRED -> UiComponent.Badge(scope.t("$PREFIX.tidal.expired"), UiTone.WARNING, UiIcon(UiIconName.WARNING))
             TidalLoginState.FAILED -> UiComponent.Badge(scope.t("$PREFIX.tidal.failed", "reason" to (event.message ?: "")), UiTone.ERROR, UiIcon(UiIconName.ERROR))
+            TidalLoginState.CANCELLED -> UiComponent.Badge(scope.t("$PREFIX.tidal.cancelled"), UiTone.MUTED, UiIcon(UiIconName.CLOSE))
         }
     }
 

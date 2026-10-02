@@ -126,7 +126,8 @@ class TidalDeviceLoginManagerTest {
         manager.cancel(session.loginId)
         val done = withTimeout(10_000) { manager.events(session.loginId)!!.first { it.state != TidalLoginState.PENDING } }
 
-        assertEquals(TidalLoginState.FAILED, done.state)
+        assertEquals(TidalLoginState.CANCELLED, done.state)
+        assertNull(done.message)
     }
 
     @Test

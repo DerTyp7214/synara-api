@@ -38,6 +38,7 @@ import io.ktor.server.config.MapApplicationConfig
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -71,6 +72,7 @@ class CredentialServerContributionsTest {
     private val requests = CopyOnWriteArrayList<HttpRequestData>()
     private val clients = CopyOnWriteArrayList<ClientSummary>()
     private var healthy = true
+    private var loginEvents = emptyList<TidalLoginEvent>()
     private val credentials = listOf(
         credential(CredentialNames.TIDAL_API, CredentialKind.OAUTH_CLIENT_CREDENTIALS),
         credential(CredentialNames.IMPORTER_TIDDL, CredentialKind.TIDAL_DEVICE_SESSION),
@@ -150,6 +152,14 @@ class CredentialServerContributionsTest {
             clients.firstOrNull { it.id == id }?.let { ok(json.encodeToString(it)) }
                 ?: respond(json.encodeToString(CredentialError(CredentialErrorCode.NOT_FOUND, "missing")), HttpStatusCode.NotFound)
         }
+        request.url.encodedPath == "/admin/credentials/${CredentialNames.IMPORTER_TIDDL}/tidal-login" && request.method == HttpMethod.Post ->
+            ok(json.encodeToString(TidalLoginSession("login1", "link.tidal.com", null, "ABCD", 0)))
+        request.url.encodedPath == "/admin/tidal-logins/login1/events" ->
+            respond(
+                loginEvents.joinToString("\n", postfix = "\n") { json.encodeToString(it) },
+                HttpStatusCode.OK,
+                headersOf("Content-Type", "application/x-ndjson"),
+            )
         request.url.encodedPath == "/admin/credentials" -> ok(json.encodeToString(credentials))
         request.url.encodedPath.startsWith("/admin/credentials/") -> {
             val name = request.url.encodedPath.removePrefix("/admin/credentials/")
@@ -454,6 +464,27 @@ class CredentialServerContributionsTest {
         assertTrue(page.render(scope(params = mapOf("id" to "c1"))).encoded().contains(SECRET))
         assertFalse(page.render(scope(params = mapOf("id" to "c1"))).encoded().contains(SECRET))
         assertNull(connection.current()?.clientSecret)
+    }
+
+    @Test
+    fun `a cancelled tidal login renders the neutral cancelled badge`() = runBlocking {
+        connect()
+        loginEvents = listOf(TidalLoginEvent(TidalLoginState.PENDING), TidalLoginEvent(TidalLoginState.CANCELLED))
+        val params = mapOf(
+            CredentialServerPages.PARAM_NAME to CredentialNames.IMPORTER_TIDDL,
+            CredentialServerPages.PARAM_KIND to CredentialKind.TIDAL_DEVICE_SESSION.name,
+        )
+        val page = contribution(CredentialServerPages.CREDENTIAL)
+        val started = page.invoke(scope(params = params), CredentialServerCredentialContribution.ACTION_TIDAL_LOGIN, emptyMap())
+        assertEquals(UiInvokeStatus.OK, started.status)
+
+        val updates = page.live(scope(params = params), "${CredentialServerCredentialContribution.LIVE_TIDAL_PREFIX}login1")!!.toList()
+
+        val badge = (updates.last() as UiLiveUpdate.Replace).child as UiComponent.Badge
+        assertEquals("Login cancelled", badge.text)
+        assertEquals(UiTone.MUTED, badge.tone)
+        assertTrue(updates.dropLast(1).all { (it as UiLiveUpdate.Replace).child is UiComponent.Card })
+        assertNull(ui.tidalLogins.active(admin.id, CredentialNames.IMPORTER_TIDDL))
     }
 
     companion object {

@@ -127,7 +127,7 @@ data class TidalLoginSession(
 )
 
 @Serializable
-enum class TidalLoginState { PENDING, COMPLETED, EXPIRED, FAILED }
+enum class TidalLoginState { PENDING, COMPLETED, EXPIRED, FAILED, CANCELLED }
 
 @Serializable
 data class TidalLoginEvent(val state: TidalLoginState, val message: String? = null)
