@@ -50,8 +50,14 @@ class LegacySealed<T : Any>(
     }
 }
 
+private class WireEntry(source: SerialDescriptor, val wire: SerialDescriptor?) {
+    private val names = Array(source.elementsCount) { source.getElementName(it) }
+
+    fun describes(desc: SerialDescriptor): Boolean = names.indices.all { names[it] == desc.getElementName(it) }
+}
+
 class LegacyWire(sealed: List<LegacySealed<*>>) {
-    private val descriptors = ConcurrentHashMap<SerialDescriptor, SerialDescriptor>()
+    private val descriptors = ConcurrentHashMap<SerialDescriptor, WireEntry>()
 
     private val sealedByName: Map<String, LegacySealed<*>> = sealed.associateBy { it.serialName }
 
@@ -59,7 +65,9 @@ class LegacyWire(sealed: List<LegacySealed<*>>) {
 
     fun wireDescriptor(desc: SerialDescriptor): SerialDescriptor {
         if (desc.kind != StructureKind.CLASS) return desc
-        return descriptors.computeIfAbsent(desc) { copy(desc, desc.serialName) ?: desc }
+        val entry = descriptors.computeIfAbsent(desc) { WireEntry(it, copy(it, it.serialName)) }
+        val wire = if (entry.describes(desc)) entry.wire else copy(desc, desc.serialName)
+        return wire ?: desc
     }
 
     private fun copy(desc: SerialDescriptor, serialName: String): SerialDescriptor? {
