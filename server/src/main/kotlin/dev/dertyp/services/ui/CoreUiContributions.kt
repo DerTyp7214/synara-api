@@ -8,6 +8,7 @@ import dev.dertyp.services.credentials.CredentialProvider
 import dev.dertyp.services.credentials.CredentialServerConnectionSource
 import dev.dertyp.services.credentials.LocalCredentialStore
 import dev.dertyp.services.credentials.admin.CredentialServerAdminClient
+import dev.dertyp.services.credentials.remote.RemoteCredentialProvider
 import dev.dertyp.services.cover.CoverGenerationService
 import dev.dertyp.services.hue.HueService
 import dev.dertyp.services.jobs.JobService
@@ -26,6 +27,7 @@ class CoreUiContributions(
     private val credentialServerAdmin: CredentialServerAdminClient,
     private val credentialServerConnection: CredentialServerConnectionSource,
     private val credentialProvider: CredentialProvider,
+    private val remoteCredentials: RemoteCredentialProvider,
     private val localCredentials: LocalCredentialStore,
     private val serverConfig: ServerConfig,
     private val pluginManager: PluginManager,
@@ -43,7 +45,16 @@ class CoreUiContributions(
     )
 
     private fun credentialContributions(): List<UiContribution> =
-        CredentialServerUiContext(credentialServerAdmin, credentialServerConnection, credentialProvider, localCredentials, serverConfig, pluginManager, translationService).contributions()
+        CredentialServerUiContext(
+            admin = credentialServerAdmin,
+            connection = credentialServerConnection,
+            provider = credentialProvider,
+            remote = remoteCredentials,
+            localStore = localCredentials,
+            serverConfig = serverConfig,
+            pluginManager = pluginManager,
+            translations = translationService,
+        ).contributions()
 
     fun register() {
         val registrar = registry.forSource(UiRegistry.SERVER_SOURCE)

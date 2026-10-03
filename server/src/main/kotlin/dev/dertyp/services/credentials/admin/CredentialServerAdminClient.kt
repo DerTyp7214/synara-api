@@ -58,9 +58,6 @@ class CredentialServerAdminClient(
     suspend fun health(): CredentialServerHealth =
         decode(send(HttpMethod.Get, CredentialProtocol.HEALTH_PATH, admin = false))
 
-    suspend fun testConsumer(clientId: String, clientSecret: String): TokenResponse =
-        decode(send(HttpMethod.Post, CredentialProtocol.TOKEN_PATH, json.encodeToString(TokenRequest(clientId, clientSecret)), admin = false))
-
     suspend fun listClients(): List<ClientSummary> = decode(send(HttpMethod.Get, CLIENTS))
 
     suspend fun getClient(id: String): ClientSummary = decode(send(HttpMethod.Get, client(id)))

@@ -3,14 +3,18 @@ package dev.dertyp.services.credentials
 import dev.dertyp.credentials.CredentialFile
 import dev.dertyp.credentials.CredentialKind
 import dev.dertyp.credentials.CredentialNames
+import dev.dertyp.credentials.GrantSpec
 import dev.dertyp.credentials.ResolvedCredential
 import dev.dertyp.services.credentials.FakeCredentialServer.Companion.grant
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.seconds
 
 class RemoteCredentialProviderTest {
     private val server = FakeCredentialServer(
@@ -161,6 +165,54 @@ class RemoteCredentialProviderTest {
         server.unreachable = true
 
         assertNull(provider.resolve(CredentialNames.YOUTUBE_API))
+    }
+
+    @Test
+    fun `an admin change refreshes the grants so a newly granted name becomes available`() = runBlocking {
+        val source = server.connectionSource()
+        val client = server.client(source)
+        val admin = server.admin(source)
+        val provider = server.provider(client, source, admin)
+        server.credentials[CredentialNames.PODCAST_INDEX_API] = ResolvedCredential.ApiKeyPair(CredentialNames.PODCAST_INDEX_API, "pi-key", "pi-secret")
+        provider.connect()
+        assertFalse(provider.isAvailable(CredentialNames.PODCAST_INDEX_API))
+
+        provider.startService()
+        try {
+            admin.setGrants("c1", server.grants.map { GrantSpec(it.name, it.writeBack) } + GrantSpec(CredentialNames.PODCAST_INDEX_API))
+            withTimeout(5.seconds) { client.grants.first { CredentialNames.PODCAST_INDEX_API in it } }
+
+            assertTrue(provider.isAvailable(CredentialNames.PODCAST_INDEX_API))
+            assertEquals(
+                ResolvedCredential.ApiKeyPair(CredentialNames.PODCAST_INDEX_API, "pi-key", "pi-secret"),
+                provider.resolve(CredentialNames.PODCAST_INDEX_API),
+            )
+        } finally {
+            provider.stopService()
+        }
+    }
+
+    @Test
+    fun `refreshing the grants picks up a new grant`() = runBlocking {
+        val provider = server.provider()
+        provider.connect()
+        server.grants = server.grants + grant(CredentialNames.ACOUSTID_API)
+
+        val granted = provider.refreshGrants()
+
+        assertTrue(granted!!.contains(CredentialNames.ACOUSTID_API))
+        assertTrue(provider.isManagedRemotely(CredentialNames.ACOUSTID_API))
+        assertEquals(2, server.tokenCalls.get())
+    }
+
+    @Test
+    fun `refreshing the grants does nothing without a consumer`() = runBlocking {
+        val source = server.connectionSource(clientSecret = null)
+        val provider = server.provider(server.client(source), source)
+
+        assertNull(provider.refreshGrants())
+        assertFalse(provider.refreshAfterLocalMiss(CredentialNames.YOUTUBE_API))
+        assertEquals(0, server.tokenCalls.get())
     }
 
     @Test

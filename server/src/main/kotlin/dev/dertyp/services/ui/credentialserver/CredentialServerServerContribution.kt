@@ -217,11 +217,9 @@ class CredentialServerServerContribution(private val ui: CredentialServerUiConte
                 { scope.t("$PREFIX.testAdminFailed", "reason" to scope.errorText(it)) },
             )
         }
-        val clientId = connection.clientId
-        val clientSecret = connection.clientSecret
-        if (connection.consumerConfigured && clientId != null && clientSecret != null) {
-            parts += runCatchingCancellable { ui.admin.testConsumer(clientId, clientSecret) }.fold(
-                { scope.t("$PREFIX.testConsumerOk", "count" to it.grants.size.toString()) },
+        if (connection.consumerConfigured) {
+            parts += runCatchingCancellable { ui.remote.refreshGrants() }.fold(
+                { scope.t("$PREFIX.testConsumerOk", "count" to (it?.size ?: 0).toString()) },
                 { scope.t("$PREFIX.testConsumerFailed", "reason" to scope.errorText(it)) },
             )
         }

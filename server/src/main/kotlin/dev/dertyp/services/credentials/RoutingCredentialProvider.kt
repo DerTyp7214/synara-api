@@ -21,7 +21,10 @@ class RoutingCredentialProvider(
     override fun isManagedRemotely(name: String): Boolean = remote.isManagedRemotely(name)
 
     override suspend fun resolve(name: String): ResolvedCredential? {
-        if (!remote.isManagedRemotely(name)) return local.resolve(name)
+        if (!remote.isManagedRemotely(name)) {
+            local.resolve(name)?.let { return it }
+            return if (remote.refreshAfterLocalMiss(name)) remote.resolve(name) else null
+        }
         val resolved = remote.resolve(name)
         if (resolved == null) logger.warn("Credential $name is managed by the credential server but is unavailable right now")
         return resolved

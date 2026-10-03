@@ -15,6 +15,7 @@ import dev.dertyp.services.credentials.CredentialServerConnectionSource
 import dev.dertyp.services.credentials.LocalCredentialStore
 import dev.dertyp.services.credentials.admin.CredentialServerAdminClient
 import dev.dertyp.services.credentials.admin.CredentialServerAdminException
+import dev.dertyp.services.credentials.remote.RemoteCredentialProvider
 import dev.dertyp.services.ui.TranslationService
 import dev.dertyp.ui.UiTone
 import io.ktor.http.HttpStatusCode
@@ -106,6 +107,7 @@ class CredentialServerUiContext(
     val admin: CredentialServerAdminClient,
     val connection: CredentialServerConnectionSource,
     val provider: CredentialProvider,
+    val remote: RemoteCredentialProvider,
     val localStore: LocalCredentialStore,
     val serverConfig: ServerConfig,
     val pluginManager: PluginManager,

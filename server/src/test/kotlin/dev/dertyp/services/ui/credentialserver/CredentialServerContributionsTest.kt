@@ -19,8 +19,12 @@ import dev.dertyp.services.credentials.*
 import dev.dertyp.services.import.TdnService
 import dev.dertyp.services.import.TiddlService
 import dev.dertyp.services.credentials.CredentialServerConnectionSource.Companion.KEY_ADMIN_KEY
+import dev.dertyp.services.credentials.CredentialServerConnectionSource.Companion.KEY_CLIENT_ID
+import dev.dertyp.services.credentials.CredentialServerConnectionSource.Companion.KEY_CLIENT_SECRET
 import dev.dertyp.services.credentials.CredentialServerConnectionSource.Companion.KEY_URL
 import dev.dertyp.services.credentials.admin.CredentialServerAdminClient
+import dev.dertyp.services.credentials.remote.CredentialServerClient
+import dev.dertyp.services.credentials.remote.RemoteCredentialProvider
 import dev.dertyp.services.metadata.AcoustIdCredentialSource
 import dev.dertyp.services.podcast.index.PodcastIndexCredentialSource
 import dev.dertyp.services.ui.PluginSettingsService
@@ -106,7 +110,9 @@ class CredentialServerContributionsTest {
     private val admin = User(UUID.randomUUID(), "root", displayName = "Root", passwordHash = "", isAdmin = true)
     private val member = User(UUID.randomUUID(), "member", displayName = "Member", passwordHash = "", isAdmin = false)
 
-    private val adminClient = CredentialServerAdminClient(connection, httpClientFactory())
+    private var consumerGrants = emptyList<GrantInfo>()
+    private val factory = httpClientFactory()
+    private val adminClient = CredentialServerAdminClient(connection, factory)
     private val localStore = LocalCredentialStore(settingsService, environment, cipher, AcoustIdCredentialSource(settingsService, environment, cipher))
     private val local = LocalCredentialProvider(ClientCredentialsExchange(mockk(relaxed = true)), AppleDeveloperTokenSigner(), localStore, LocalPluginCredentialStore(settingsService, cipher))
     private val remoteNames = mutableSetOf<String>()
@@ -125,7 +131,20 @@ class CredentialServerContributionsTest {
     }
     private var rejectUpsert = false
     private var virtualMillis = 1_000_000L
-    private val ui = CredentialServerUiContext(adminClient, connection, provider, localStore, serverConfig, pluginManager, translations)
+    private val consumerClient = CredentialServerClient(factory, connection)
+    private val remote = RemoteCredentialProvider(consumerClient, connection, adminClient)
+    private val ui = context(provider)
+
+    private fun context(credentialProvider: CredentialProvider) = CredentialServerUiContext(
+        admin = adminClient,
+        connection = connection,
+        provider = credentialProvider,
+        remote = remote,
+        localStore = localStore,
+        serverConfig = serverConfig,
+        pluginManager = pluginManager,
+        translations = translations,
+    )
 
     @TempDir
     lateinit var tempDir: Path
@@ -168,10 +187,25 @@ class CredentialServerContributionsTest {
         val http = HttpClient(engine) { install(HttpTimeout) }
         val factory = mockk<HttpClientFactory>()
         every { factory.shared<HttpClientEngineConfig>(HttpClientFactory.CREDENTIAL_SERVER_ADMIN, any(), any(), any()) } returns http
+        every { factory.shared<HttpClientEngineConfig>(HttpClientFactory.CREDENTIAL_SERVER, any(), any(), any()) } returns http
         return factory
     }
 
     private fun MockRequestHandleScope.handle(request: HttpRequestData) = when {
+        request.url.encodedPath == CredentialProtocol.TOKEN_PATH -> {
+            val body = json.decodeFromString<TokenRequest>((request.body as TextContent).text)
+            if (body.clientId == CONSUMER_ID && body.clientSecret == CONSUMER_SECRET) {
+                ok(json.encodeToString(TokenResponse("consumer-token", expiresAt = System.currentTimeMillis() + 15 * 60_000L, grants = consumerGrants)))
+            } else {
+                respond(json.encodeToString(CredentialError(CredentialErrorCode.UNAUTHORIZED, "bad client")), HttpStatusCode.Unauthorized)
+            }
+        }
+        request.url.encodedPath == CredentialProtocol.credentialPath(CredentialNames.PODCAST_INDEX_API) ->
+            if (consumerGrants.any { it.name == CredentialNames.PODCAST_INDEX_API }) {
+                ok(json.encodeToString<ResolvedCredential>(ResolvedCredential.ApiKeyPair(CredentialNames.PODCAST_INDEX_API, "remote-key", "remote-secret")))
+            } else {
+                respond(json.encodeToString(CredentialError(CredentialErrorCode.NOT_GRANTED, "not granted")), HttpStatusCode.Forbidden)
+            }
         request.url.encodedPath == "/health" ->
             if (healthy) ok(json.encodeToString(CredentialServerHealth(true, CredentialProtocol.PROTOCOL_VERSION, "1.2.3")))
             else respond("down", HttpStatusCode.ServiceUnavailable)
@@ -763,6 +797,46 @@ class CredentialServerContributionsTest {
     }
 
     @Test
+    fun `test connection refreshes the consumer grants and reports the granted count`() = runBlocking {
+        connect()
+        connection.store(mapOf(KEY_CLIENT_ID to CONSUMER_ID, KEY_CLIENT_SECRET to CONSUMER_SECRET))
+        consumerGrants = listOf(GrantInfo(CredentialNames.YOUTUBE_API, CredentialKind.API_KEY, false))
+        val server = contribution(CredentialServerPages.SERVER)
+
+        val first = server.invoke(scope(), CredentialServerServerContribution.ACTION_TEST, emptyMap())
+        assertEquals(UiInvokeStatus.OK, first.status)
+        assertTrue(first.message.orEmpty().contains("Client login works with 1 granted credentials"))
+        assertTrue(remote.isManagedRemotely(CredentialNames.YOUTUBE_API))
+        assertFalse(remote.isManagedRemotely(CredentialNames.PODCAST_INDEX_API))
+
+        consumerGrants = consumerGrants + GrantInfo(CredentialNames.PODCAST_INDEX_API, CredentialKind.API_KEY_PAIR, false)
+        val second = server.invoke(scope(), CredentialServerServerContribution.ACTION_TEST, emptyMap())
+        assertTrue(second.message.orEmpty().contains("Client login works with 2 granted credentials"))
+        assertTrue(remote.isManagedRemotely(CredentialNames.PODCAST_INDEX_API))
+
+        connection.store(mapOf(KEY_CLIENT_SECRET to "wrong"))
+        val failed = server.invoke(scope(), CredentialServerServerContribution.ACTION_TEST, emptyMap())
+        assertTrue(failed.message.orEmpty().contains("Client login failed"))
+    }
+
+    @Test
+    fun `the local test of a newly granted podcast index credential succeeds without a restart`() = runBlocking {
+        connect()
+        connection.store(mapOf(KEY_CLIENT_ID to CONSUMER_ID, KEY_CLIENT_SECRET to CONSUMER_SECRET))
+        val routed = context(RoutingCredentialProvider(local, remote))
+        val page = routed.contributions().single { it.id == CredentialServerPages.LOCAL }
+        val params = mapOf(CredentialServerPages.PARAM_NAME to UiValue.of(CredentialNames.PODCAST_INDEX_API))
+        assertEquals(LocalCredentialState.NONE, routed.localState(CredentialNames.PODCAST_INDEX_API))
+
+        consumerGrants = listOf(GrantInfo(CredentialNames.PODCAST_INDEX_API, CredentialKind.API_KEY_PAIR, false))
+        val result = page.invoke(localScope(CredentialNames.PODCAST_INDEX_API), LocalCredentialContribution.ACTION_TEST, params)
+
+        assertEquals(UiInvokeStatus.OK, result.status)
+        assertEquals(translations.resolve(CREDENTIAL_SERVER_UI_SOURCE, "en", "credentials.testOk"), result.message)
+        assertEquals(LocalCredentialState.REMOTE, routed.localState(CredentialNames.PODCAST_INDEX_API))
+    }
+
+    @Test
     fun `the clients page lists clients and creating one opens its page with the secret`() = runBlocking {
         connect()
         val page = contribution(CredentialServerPages.CLIENTS)
@@ -1065,5 +1139,7 @@ class CredentialServerContributionsTest {
         private const val ADMIN_KEY = "admin-key"
         private const val SECRET = "very-secret-client-secret"
         private const val ROTATED_SECRET = "rotated-client-secret"
+        private const val CONSUMER_ID = "synara-consumer"
+        private const val CONSUMER_SECRET = "consumer-secret"
     }
 }

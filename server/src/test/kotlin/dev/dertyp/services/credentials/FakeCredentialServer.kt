@@ -1,6 +1,7 @@
 package dev.dertyp.services.credentials
 
 import dev.dertyp.core.HttpClientFactory
+import dev.dertyp.credentials.ClientSummary
 import dev.dertyp.credentials.CredentialError
 import dev.dertyp.credentials.CredentialErrorCode
 import dev.dertyp.credentials.CredentialJson
@@ -8,13 +9,16 @@ import dev.dertyp.credentials.CredentialKind
 import dev.dertyp.credentials.CredentialProtocol
 import dev.dertyp.credentials.GrantInfo
 import dev.dertyp.credentials.ResolvedCredential
+import dev.dertyp.credentials.SetGrantsRequest
 import dev.dertyp.credentials.TokenRequest
 import dev.dertyp.credentials.TokenResponse
 import dev.dertyp.credentials.WriteBackRequest
 import dev.dertyp.credentials.WriteBackResult
+import dev.dertyp.services.credentials.admin.CredentialServerAdminClient
 import dev.dertyp.services.credentials.remote.CredentialServerClient
 import dev.dertyp.services.credentials.remote.RemoteCredentialProvider
 import dev.dertyp.services.ui.PluginSettingsService
+import dev.dertyp.services.ui.credentialserver.InMemoryPluginSettings
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.HttpClientEngineConfig
 import io.ktor.client.engine.mock.MockEngine
@@ -73,6 +77,26 @@ class FakeCredentialServer(grants: List<GrantInfo> = emptyList()) {
                     )
                 )
             }
+            path.startsWith(CredentialProtocol.ADMIN_PREFIX + "/") -> {
+                if (request.headers[CredentialProtocol.ADMIN_KEY_HEADER] != ADMIN_KEY) {
+                    return@MockEngine failure(HttpStatusCode.Unauthorized, CredentialErrorCode.UNAUTHORIZED)
+                }
+                if (!path.endsWith("/grants") || request.method != HttpMethod.Put) {
+                    return@MockEngine respond("not found", HttpStatusCode.NotFound)
+                }
+                val body = CredentialJson.json.decodeFromString<SetGrantsRequest>((request.body as TextContent).text)
+                val current = this@FakeCredentialServer.grants
+                this@FakeCredentialServer.grants = body.grants.map { spec ->
+                    GrantInfo(spec.name, current.firstOrNull { it.name == spec.name }?.kind ?: CredentialKind.API_KEY, spec.writeBack)
+                }
+                val id = path.removePrefix(CredentialProtocol.ADMIN_PREFIX + "/clients/").removeSuffix("/grants")
+                json(
+                    CredentialJson.json.encodeToString(
+                        ClientSummary.serializer(),
+                        ClientSummary(id, CLIENT_ID, "Synara", true, 1, 0, null, this@FakeCredentialServer.grants),
+                    )
+                )
+            }
             path.startsWith(CredentialProtocol.CREDENTIALS_PATH + "/") && path.endsWith("/files") && request.method == HttpMethod.Put -> {
                 val name = path.removePrefix(CredentialProtocol.CREDENTIALS_PATH + "/").removeSuffix("/files")
                 val body = CredentialJson.json.decodeFromString<WriteBackRequest>((request.body as TextContent).text)
@@ -109,13 +133,19 @@ class FakeCredentialServer(grants: List<GrantInfo> = emptyList()) {
         url: String? = URL,
         clientId: String? = CLIENT_ID,
         clientSecret: String? = CLIENT_SECRET,
+        adminKey: String? = ADMIN_KEY,
     ): CredentialServerConnectionSource {
         val config = MapApplicationConfig()
         url?.let { config.put("credentialServer.url", it) }
         clientId?.let { config.put("credentialServer.clientId", it) }
         clientSecret?.let { config.put("credentialServer.clientSecret", it) }
+        adminKey?.let { config.put("credentialServer.adminKey", it) }
+        val settings = InMemoryPluginSettings()
+        val settingsService = mockk<PluginSettingsService> {
+            every { forPlugin(CredentialServerConnectionSource.PLUGIN_ID) } returns settings
+        }
         return CredentialServerConnectionSource(
-            PluginSettingsService(),
+            settingsService,
             config,
             CredentialCipher(MapApplicationConfig("credentials.encryptionKey" to "test-key")),
         )
@@ -123,7 +153,13 @@ class FakeCredentialServer(grants: List<GrantInfo> = emptyList()) {
 
     fun client(source: CredentialServerConnectionSource = connectionSource()) = CredentialServerClient(httpClientFactory, source)
 
-    fun provider(client: CredentialServerClient = client()) = RemoteCredentialProvider(client, connectionSource())
+    fun admin(source: CredentialServerConnectionSource = connectionSource()) = CredentialServerAdminClient(source, httpClientFactory)
+
+    fun provider(
+        client: CredentialServerClient = client(),
+        source: CredentialServerConnectionSource = connectionSource(),
+        admin: CredentialServerAdminClient = admin(source),
+    ) = RemoteCredentialProvider(client, source, admin)
 
     private fun MockRequestHandleScope.json(body: String): HttpResponseData =
         respond(body, HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, "application/json"))
@@ -139,6 +175,7 @@ class FakeCredentialServer(grants: List<GrantInfo> = emptyList()) {
         const val URL = "http://localhost:8083"
         const val CLIENT_ID = "synara"
         const val CLIENT_SECRET = "secret"
+        const val ADMIN_KEY = "admin-key"
 
         fun grant(name: String, kind: CredentialKind = CredentialKind.API_KEY, writeBack: Boolean = false) =
             GrantInfo(name, kind, writeBack)

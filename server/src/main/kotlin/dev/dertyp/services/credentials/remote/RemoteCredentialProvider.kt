@@ -8,7 +8,9 @@ import dev.dertyp.services.credentials.CredentialMode
 import dev.dertyp.services.credentials.CredentialProvider
 import dev.dertyp.services.credentials.CredentialServerConnection
 import dev.dertyp.services.credentials.CredentialServerConnectionSource
+import dev.dertyp.services.credentials.admin.CredentialServerAdminClient
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.map
@@ -17,11 +19,15 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.util.concurrent.ConcurrentHashMap
+import kotlin.time.Clock
 import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Instant
 
 class RemoteCredentialProvider(
     private val client: CredentialServerClient,
     private val connectionSource: CredentialServerConnectionSource,
+    private val admin: CredentialServerAdminClient,
 ) : Service(), CredentialProvider {
     private data class CachedCredential(
         val connection: CredentialServerConnection,
@@ -31,6 +37,10 @@ class RemoteCredentialProvider(
 
     private val cache = ConcurrentHashMap<String, CachedCredential>()
     private val locks = ConcurrentHashMap<String, Mutex>()
+    private val missRefreshLock = Mutex()
+
+    @Volatile
+    private var lastMissRefresh: Instant? = null
 
     override val mode: CredentialMode
         get() = if (client.connection.value.consumerConfigured) CredentialMode.REMOTE else CredentialMode.LOCAL
@@ -39,18 +49,27 @@ class RemoteCredentialProvider(
         scope.launch {
             var first = true
             connectionSource.changes().collect {
-                val current = try {
-                    connectionSource.current() ?: CredentialServerConnection.NONE
+                val changed = try {
+                    syncConnection()
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
                     logger.warn("Credential server connection could not be read: ${e.message}")
                     return@collect
                 }
-                val changed = client.updateConnection(current)
-                if (changed) cache.clear()
                 if (changed || first) connect()
                 first = false
+            }
+        }
+        scope.launch(start = CoroutineStart.UNDISPATCHED) {
+            admin.changes().collect {
+                try {
+                    refreshGrants()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    logger.warn("Refreshing credential server grants after an admin change failed: ${e.message}")
+                }
             }
         }
     }
@@ -65,6 +84,42 @@ class RemoteCredentialProvider(
         } catch (e: Exception) {
             logger.warn("Credential server token exchange failed: ${e.message}")
         }
+    }
+
+    suspend fun refreshGrants(): Set<String>? {
+        syncConnection()
+        if (!client.connection.value.consumerConfigured) return null
+        val before = grantedNames()
+        client.exchangeToken(force = true)
+        val after = grantedNames()
+        if (after == before) logger.debug("Credential server grants unchanged, ${after.size} granted credentials")
+        else logger.info("Credential server grants changed, ${after.size} granted credentials")
+        return after
+    }
+
+    suspend fun refreshAfterLocalMiss(name: String): Boolean {
+        val due = missRefreshLock.withLock {
+            val now = Clock.System.now()
+            val last = lastMissRefresh
+            (last == null || now - last >= LOCAL_MISS_REFRESH_INTERVAL).also { if (it) lastMissRefresh = now }
+        }
+        if (!due) return false
+        val granted = try {
+            refreshGrants()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            logger.warn("Refreshing credential server grants for $name failed: ${e.message}")
+            null
+        }
+        return granted != null && name in granted
+    }
+
+    private suspend fun syncConnection(): Boolean {
+        val current = connectionSource.current() ?: CredentialServerConnection.NONE
+        val changed = client.updateConnection(current)
+        if (changed) cache.clear()
+        return changed
     }
 
     fun grantedNames(): Set<String> =
@@ -132,5 +187,6 @@ class RemoteCredentialProvider(
 
     companion object {
         val KEY_CACHE_TTL_MS = 5.minutes.inWholeMilliseconds
+        val LOCAL_MISS_REFRESH_INTERVAL = 60.seconds
     }
 }
