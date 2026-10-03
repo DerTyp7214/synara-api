@@ -32,7 +32,7 @@ Copy [`example.env`](../example.env) to `.env` and fill in the variables you nee
 
 ## Git hooks
 
-`./gradlew installGitHooks` points git at `.githooks` (`git config core.hooksPath .githooks`). The `pre-commit` hook runs `generateDocs` whenever staged changes touch `server`, `common-rpc` or `plugin-api` sources, an `application.yaml` file, `Dockerfile.nobuild`, or one of the build scripts, and stages every regenerated output. Facts a client needs — versions, features, auth constants, permissions — are generated: add them to the generator that produces the relevant doc, never to a hand-written guide.
+`./gradlew installGitHooks` points git at `.githooks` (`git config core.hooksPath .githooks`). The `pre-commit` hook runs `generateDocs` whenever staged changes touch `server`, `common-rpc` or `plugin-api` sources, an `application.yaml` file, `Dockerfile.nobuild`, or one of the build scripts, and stages every regenerated output. Before that, the hook formats the staged Kotlin files with IntelliJ's formatter and the project code style (`.idea/codeStyles/Project.xml`) and restages them. It skips files with unstaged changes and looks for the formatter at `IDEA_FORMATTER`, the JetBrains Toolbox `idea` script or `idea` on the `PATH`. It never blocks a commit when the formatter is missing or fails. Facts a client needs — versions, features, auth constants, permissions — are generated: add them to the generator that produces the relevant doc, never to a hand-written guide.
 
 ## Tests and goldens
 

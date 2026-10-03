@@ -1,5 +1,7 @@
 #!/bin/bash
 
+"$(git rev-parse --show-toplevel)/.githooks/format-kotlin.sh"
+
 # Paths whose changes feed the generated documentation
 PATHS_TO_CHECK=(
     "common-rpc/"
