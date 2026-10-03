@@ -809,7 +809,7 @@ fun Route.mirrorRouting() {
 
                 val userService by inject<UserService>()
                 try {
-                    val users = userService.queryUser().map { it.copy(passwordHash = "") }
+                    val users = userService.queryUser()
                     call.respond(users)
                 } catch (e: CancellationException) {
                     throw e

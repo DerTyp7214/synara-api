@@ -3,10 +3,13 @@ package dev.dertyp.services
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
 import dev.dertyp.data.AuthenticationRequest
+import dev.dertyp.data.User
+import dev.dertyp.data.UserPasswordHash
 import dev.dertyp.db.ImageMetadataTable
 import dev.dertyp.db.ImageTable
 import dev.dertyp.db.UserCapabilityTable
 import dev.dertyp.db.UserTable
+import dev.dertyp.serializers.AppJson
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.jdbc.Database
@@ -168,5 +171,77 @@ class UserServiceTest : KoinTest {
 
         val users = service.queryUser()
         assertEquals(2, users.size)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `client facing user calls send an empty password hash`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val userId = UUID.randomUUID()
+        transaction(database) {
+            UserTable.insert {
+                it[id] = userId
+                it[username] = "hashed"
+                it[passwordHash] = "stored-hash"
+            }
+        }
+        val caller = service.findUserById(userId)!!
+        val rpc = RpcUserService(caller, service, mockk(relaxed = true))
+
+        val users = listOfNotNull(rpc.byId(userId), rpc.byUsername("hashed"), rpc.me()) + rpc.allUsers()
+        assertEquals(4, users.size)
+        users.forEach { user ->
+            val json = AppJson.encodeToString(User.serializer(), user)
+            assertTrue(json.contains("\"passwordHash\":\"\""), json)
+            assertFalse(json.contains("stored-hash"), json)
+        }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `passwordHashOf reads the stored hash`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        transaction(database) {
+            UserTable.insert {
+                it[username] = "hashed"
+                it[passwordHash] = "stored-hash"
+            }
+        }
+
+        assertEquals("stored-hash", service.passwordHashOf("hashed"))
+        assertNull(service.passwordHashOf("missing"))
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `upsertUser keeps the stored hash and setPasswordHash replaces it`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val mirrored = User(id = UUID.randomUUID(), username = "mirrored")
+
+        service.upsertUser(mirrored)
+        assertEquals("", service.passwordHashOf("mirrored"))
+
+        service.setPasswordHash(id = mirrored.id, hash = "mirrored-hash")
+        service.upsertUser(mirrored.copy(displayName = "Mirrored"))
+
+        assertEquals("mirrored-hash", service.passwordHashOf("mirrored"))
+        assertEquals("Mirrored", service.findUserById(mirrored.id)?.displayName)
+        assertEquals(
+            listOf(UserPasswordHash(id = mirrored.id, passwordHash = "mirrored-hash")),
+            service.passwordHashes()
+        )
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `login checks the password against the stored hash`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val created = service.createUser(AuthenticationRequest("login", "secret"))!!
+        val authService = AuthService(service, mockk(), mockk())
+
+        assertEquals(created.id, authService.validateUser("login", "secret").id)
+        assertThrows(IllegalArgumentException::class.java) {
+            runBlocking { authService.validateUser("login", "wrong") }
+        }
     }
 }

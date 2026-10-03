@@ -262,7 +262,10 @@ private fun registerAuthenticated(koin: Koin, call: ApplicationCall, user: User,
         playlistService.withAuthorization<IPlaylistService>(user).withLogging<IPlaylistService>(call)
     }
     registrar.register(IUserPlaylistService::class) {
-        userPlaylistService.withAuthorization<IUserPlaylistService>(user).withLogging<IUserPlaylistService>(call)
+        RpcUserPlaylistService(
+            user,
+            userPlaylistService
+        ).withAuthorization<IUserPlaylistService>(user).withLogging<IUserPlaylistService>(call)
     }
     registrar.register(ICollectionService::class) {
         RpcCollectionService(

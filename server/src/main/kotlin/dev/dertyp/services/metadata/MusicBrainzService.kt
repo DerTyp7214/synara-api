@@ -154,23 +154,23 @@ class MusicBrainzService : Service() {
         val queryParts = mutableListOf<String>()
         queryParts.add("recording:\"${song.title.cleanTitle()}\"")
         song.artists.forEach {
-            if (it.musicbrainzId != null) {
-                queryParts.add("arid:${it.musicbrainzId}")
+            if (it.musicBrainzId != null) {
+                queryParts.add("arid:${it.musicBrainzId}")
             } else {
                 queryParts.add("artist:\"${it.name}\"")
             }
         }
 
         song.album?.let { album ->
-            if (album.musicbrainzId != null) {
-                queryParts.add("reid:${album.musicbrainzId}")
+            if (album.musicBrainzId != null) {
+                queryParts.add("reid:${album.musicBrainzId}")
             } else {
                 if (album.name != song.title) {
                     queryParts.add("release:\"${album.name}\"")
                 }
 
                 album.artists.forEach { artist ->
-                    if (artist.musicbrainzId == null) {
+                    if (artist.musicBrainzId == null) {
                         queryParts.add("artistname:\"${artist.name}\"")
                     }
                 }
@@ -224,8 +224,8 @@ class MusicBrainzService : Service() {
         val queryParts = mutableListOf<String>()
         queryParts.add("release:\"${album.name}\"")
         album.artists.forEach {
-            if (it.musicbrainzId != null) {
-                queryParts.add("arid:${it.musicbrainzId}")
+            if (it.musicBrainzId != null) {
+                queryParts.add("arid:${it.musicBrainzId}")
             } else {
                 queryParts.add("artist:\"${it.name}\"")
             }

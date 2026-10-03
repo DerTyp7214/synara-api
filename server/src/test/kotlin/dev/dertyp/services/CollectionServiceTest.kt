@@ -639,10 +639,10 @@ class CollectionServiceTest : KoinTest {
             setOf(f.directSong, f.albumSong, f.artistSong, f.playlistSong),
             byId.keys,
         )
-        assertTrue(byId.getValue(f.directSong).explicitMember)
-        assertFalse(byId.getValue(f.albumSong).explicitMember)
-        assertFalse(byId.getValue(f.artistSong).explicitMember)
-        assertFalse(byId.getValue(f.playlistSong).explicitMember)
+        assertTrue(byId.getValue(f.directSong).directMember)
+        assertFalse(byId.getValue(f.albumSong).directMember)
+        assertFalse(byId.getValue(f.artistSong).directMember)
+        assertFalse(byId.getValue(f.playlistSong).directMember)
     }
 
     @ParameterizedTest

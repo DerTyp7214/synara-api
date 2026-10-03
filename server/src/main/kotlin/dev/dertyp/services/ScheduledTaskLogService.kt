@@ -38,7 +38,7 @@ class RpcScheduledTaskLogService(
         return logService.getGroupedLogs()
     }
 
-    override fun getGroupedLogsFlow(): Flow<Map<String, List<ScheduledTaskLog>>> {
+    override fun observeGroupedLogs(): Flow<Map<String, List<ScheduledTaskLog>>> {
         if (!user.isAdmin) {
             throw SecurityException("Only admins can access scheduled task logs")
         }

@@ -2,6 +2,7 @@ package dev.dertyp.services
 
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
+import dev.dertyp.core.toCredit
 import dev.dertyp.data.*
 import dev.dertyp.db.*
 import dev.dertyp.services.import.Type
@@ -332,7 +333,7 @@ class AlbumServiceTest : KoinTest {
 
         val artist2 = transaction(database) {
             val row = ArtistTable.selectAll().where { ArtistTable.id eq artistId2 }.single()
-            ArtistService.mapArtist(row)
+            ArtistService.mapArtist(row).toCredit()
         }
         val updatedAlbum = album.copy(artists = listOf(artist2))
 
@@ -1463,7 +1464,7 @@ class AlbumServiceTest : KoinTest {
 
         val updated = service.fetchMusicBrainzId(albumId, user.id)
         assertNotNull(updated)
-        assertEquals(mbId, updated?.musicbrainzId)
+        assertEquals(mbId, updated?.musicBrainzId)
 
         coVerify { musicBrainzService.searchAlbumMb(match { it.barcode == barcode }, any()) }
     }

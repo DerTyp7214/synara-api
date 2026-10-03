@@ -39,7 +39,7 @@ class ClientCompatTest {
         suspend fun page(): PaginatedResponse<UserSong>
         suspend fun map(): Map<String, UserSong?>
         suspend fun nowPlaying(): NowPlaying
-        suspend fun queueEntry(): PlaybackState.QueueEntry.Explicit
+        suspend fun queueEntry(): PlaybackState.QueueEntry.WithSong
         suspend fun queueItem(): QueueItem
         suspend fun recentListens(): RecentListens
         suspend fun playbackState(): PlaybackState
@@ -78,7 +78,7 @@ class ClientCompatTest {
         override suspend fun page() = PaginatedResponse(listOf(userSong), page = 2, total = 10)
         override suspend fun map() = mapOf("a" to userSong, "b" to null)
         override suspend fun nowPlaying() = NowPlaying(userSong, 42)
-        override suspend fun queueEntry() = PlaybackState.QueueEntry.Explicit(userSong, 7)
+        override suspend fun queueEntry() = PlaybackState.QueueEntry.WithSong(userSong, 7)
         override suspend fun queueItem() = QueueItem(songId = userSong.id, queueId = 1, position = 0, song = userSong)
         override suspend fun recentListens() =
             RecentListens(NowPlaying(userSong, 42), listOf(ListenedSong(userSong, 99)))
@@ -86,12 +86,12 @@ class ClientCompatTest {
         override suspend fun playbackState() = PlaybackState(
             queue = listOf(
                 PlaybackState.QueueEntry.FromSource(UUID.randomUUID(), 1),
-                PlaybackState.QueueEntry.Explicit(userSong, 2)
+                PlaybackState.QueueEntry.WithSong(userSong, 2)
             ),
             currentIndex = 1,
             isPlaying = true,
             positionMs = 500,
-            shuffleMode = false,
+            isShuffled = false,
             repeatMode = RepeatMode.OFF,
         )
 
@@ -133,7 +133,7 @@ class ClientCompatTest {
         assertEquals("", recentListens.recent.single().song.title)
         assertEquals(99, recentListens.recent.single().listenedAt)
         val playbackState = wrapped.playbackState()
-        assertEquals("", (playbackState.queue[1] as PlaybackState.QueueEntry.Explicit).song.title)
+        assertEquals("", (playbackState.queue[1] as PlaybackState.QueueEntry.WithSong).song.title)
         assertEquals(1, playbackState.queue.first().queueId)
         assertEquals(1, playbackState.currentIndex)
         assertEquals(500, playbackState.positionMs)

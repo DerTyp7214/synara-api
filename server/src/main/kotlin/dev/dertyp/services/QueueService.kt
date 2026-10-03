@@ -118,7 +118,7 @@ class QueueService : Service() {
                     queueId = row.queueId,
                     position = row.position,
                     shuffledPosition = row.shuffledPosition,
-                    explicit = row.explicit,
+                    userAdded = row.explicit,
                     song = songs[row.songId]
                 )
             },
@@ -170,11 +170,11 @@ class QueueService : Service() {
             val known = existingSongs(items.map { it.songId })
             rows.clear()
             items.filter { it.songId in known }.mapTo(rows) {
-                Row(it.queueId, it.songId, it.position, it.shuffledPosition, it.explicit)
+                Row(it.queueId, it.songId, it.position, it.shuffledPosition, it.userAdded)
             }
             current.copy(
                 currentIndex = meta.currentIndex,
-                shuffleMode = meta.shuffleMode,
+                shuffleMode = meta.isShuffled,
                 repeatMode = meta.repeatMode,
                 sourceId = meta.sourceId
             )
@@ -218,7 +218,7 @@ class QueueService : Service() {
                     rows.clear()
                     rows.addAll(shifted)
                     accepted.forEachIndexed { index, item ->
-                        rows.add(Row(item.queueId, item.songId, maxPosition + 1 + index, at + index, item.explicit))
+                        rows.add(Row(item.queueId, item.songId, maxPosition + 1 + index, at + index, item.userAdded))
                     }
                 } else {
                     val shifted = rows.map { row ->
@@ -227,7 +227,7 @@ class QueueService : Service() {
                     rows.clear()
                     rows.addAll(shifted)
                     accepted.forEachIndexed { index, item ->
-                        rows.add(Row(item.queueId, item.songId, at + index, null, item.explicit))
+                        rows.add(Row(item.queueId, item.songId, at + index, null, item.userAdded))
                     }
                 }
             }
@@ -611,7 +611,7 @@ class QueueService : Service() {
         modifiedBySessionId = meta.modifiedBySessionId,
         modifiedByDeviceName = meta.modifiedByDeviceName,
         currentIndex = meta.currentIndex,
-        shuffleMode = meta.shuffleMode,
+        isShuffled = meta.shuffleMode,
         repeatMode = meta.repeatMode,
         sourceId = meta.sourceId,
         total = total

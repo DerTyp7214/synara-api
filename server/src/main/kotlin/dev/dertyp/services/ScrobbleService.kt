@@ -5,6 +5,7 @@ import dev.dertyp.core.ChangeNotifier
 import dev.dertyp.data.*
 import dev.dertyp.plugins.HookBus
 import dev.dertyp.plugins.HookEvent
+import dev.dertyp.rpc.annotations.REMOVED_IN_API_9
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.*
@@ -58,7 +59,7 @@ class ScrobbleService : Service() {
     suspend fun reportPlayback(userId: PlatformUUID, report: PlaybackReport): Long {
         val now = System.currentTimeMillis()
         val previous = nowPlaying[userId]?.takeIf { it.song.id == report.songId }
-        if (previous == null && !report.playing) {
+        if (previous == null && !report.isPlaying) {
             if (nowPlaying.containsKey(userId)) clearNowPlaying(userId)
             return now
         }
@@ -66,13 +67,13 @@ class ScrobbleService : Service() {
         val myGen = generation.merge(userId, 1L, Long::plus)!!
         timers.remove(userId)?.cancel()
         val positionMs = correctedPosition(report, now)
-        nowPlaying[userId] = NowPlayingEntry(song, previous?.firstStartedAt ?: now, now, positionMs, report.playing)
+        nowPlaying[userId] = NowPlayingEntry(song, previous?.firstStartedAt ?: now, now, positionMs, report.isPlaying)
         if (previous == null) nowPlayingChanged(userId)
-        hooks.emit(HookEvent.NowPlayingChanged(userId, report.songId, myGen, now, positionMs, report.playing))
+        hooks.emit(HookEvent.NowPlayingChanged(userId, report.songId, myGen, now, positionMs, report.isPlaying))
 
         val remaining = if (song.duration > 0) song.duration - positionMs else Long.MAX_VALUE
         val lease = when {
-            !report.playing -> PAUSED_LEASE_MS
+            !report.isPlaying -> PAUSED_LEASE_MS
             remaining <= 0 -> END_GRACE_MS
             else -> minOf(remaining, PLAYING_LEASE_MS)
         }
@@ -90,7 +91,7 @@ class ScrobbleService : Service() {
     private fun correctedPosition(report: PlaybackReport, now: Long): Long {
         val delay = report.sentAt?.let { now - it } ?: 0L
         val corrected =
-            if (report.playing && delay in 0..MAX_REPORT_DELAY_MS) report.positionMs + delay else report.positionMs
+            if (report.isPlaying && delay in 0..MAX_REPORT_DELAY_MS) report.positionMs + delay else report.positionMs
         return corrected.coerceAtLeast(0)
     }
 
@@ -181,13 +182,16 @@ class RpcScrobbleService(
 
     override suspend fun recentListens(limit: Int): RecentListens = service.recentListens(user.id, limit)
 
+    @Deprecated(REMOVED_IN_API_9 + " Use IChangeService.observeChanges and recentListens.")
     override fun recentListensFlow(limit: Int): Flow<RecentListens> = service.recentListensFlow(user.id, limit)
 
     override suspend fun recentArtists(limit: Int): List<ListenedArtist> = service.recentArtists(user.id, limit)
 
+    @Deprecated(REMOVED_IN_API_9 + " Use IChangeService.observeChanges and recentArtists.")
     override fun recentArtistsFlow(limit: Int): Flow<List<ListenedArtist>> = service.recentArtistsFlow(user.id, limit)
 
     override suspend fun recentAlbums(limit: Int): List<ListenedAlbum> = service.recentAlbums(user.id, limit)
 
+    @Deprecated(REMOVED_IN_API_9 + " Use IChangeService.observeChanges and recentAlbums.")
     override fun recentAlbumsFlow(limit: Int): Flow<List<ListenedAlbum>> = service.recentAlbumsFlow(user.id, limit)
 }

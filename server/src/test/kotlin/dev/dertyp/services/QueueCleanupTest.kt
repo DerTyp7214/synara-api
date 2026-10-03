@@ -44,7 +44,7 @@ class QueueCleanupTest : KoinTest {
     private lateinit var database: Database
     private lateinit var service: QueueService
 
-    private val defaultMeta = QueueMeta(currentIndex = 0, shuffleMode = false, repeatMode = RepeatMode.OFF)
+    private val defaultMeta = QueueMeta(currentIndex = 0, isShuffled = false, repeatMode = RepeatMode.OFF)
 
     private fun setup(dialect: DbDialect) {
         startKoin {

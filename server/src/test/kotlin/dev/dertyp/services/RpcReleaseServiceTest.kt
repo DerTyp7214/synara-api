@@ -40,6 +40,15 @@ class RpcReleaseServiceTest {
     }
 
     @Test
+    fun `unfollowArtistByMusicBrainzId should delegate to releaseService`() = runBlocking {
+        val mbId = UUID.randomUUID()
+        coEvery { releaseService.unfollowArtistByMusicBrainzId(user.id, mbId) } returns true
+
+        val result = rpcService.unfollowArtistByMusicBrainzId(mbId)
+        assertTrue(result)
+    }
+
+    @Test
     fun `getReleaseImage should delegate to releaseService`() = runBlocking {
         val releaseId = UUID.randomUUID()
         val bytes = byteArrayOf(1, 2, 3)
@@ -64,6 +73,9 @@ class RpcReleaseServiceTest {
 
         assertThrows<UnauthorizedException> { runBlocking { anonymousService.followArtist(UUID.randomUUID()) } }
         assertThrows<UnauthorizedException> { runBlocking { anonymousService.unfollowArtist(UUID.randomUUID()) } }
+        assertThrows<UnauthorizedException> {
+            runBlocking { anonymousService.unfollowArtistByMusicBrainzId(UUID.randomUUID()) }
+        }
         assertThrows<UnauthorizedException> { runBlocking { anonymousService.getFollowedArtists() } }
         assertThrows<UnauthorizedException> { runBlocking { anonymousService.getRecentReleases(0, 10) } }
         assertThrows<UnauthorizedException> {

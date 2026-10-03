@@ -105,6 +105,14 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
         } > 0
     }
 
+    suspend fun unfollowArtistByMusicBrainzId(userId: UUID, musicBrainzId: UUID): Boolean = dbQuery {
+        FollowedArtistTable.deleteWhere {
+            (FollowedArtistTable.userId eq userId) and (FollowedArtistTable.artistId inSubQuery ArtistMusicBrainzTable
+                .select(ArtistMusicBrainzTable.artistId)
+                .where { ArtistMusicBrainzTable.musicBrainzId eq musicBrainzId })
+        } > 0
+    }
+
     suspend fun getFollowedArtists(userId: UUID): List<FollowedArtist> = dbQuery {
         (FollowedArtistTable innerJoin ArtistTable)
             .selectAll()

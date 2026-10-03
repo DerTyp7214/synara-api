@@ -13,6 +13,6 @@ class RadioRpcService(
     override suspend fun createRadioSession(type: RadioType, seed: RadioSeed?): PlatformUUID =
         radioService.createSession(user.id, type, seed)
 
-    override fun radioFlow(sessionId: PlatformUUID): Flow<PlatformUUID> =
+    override fun observeRadio(sessionId: PlatformUUID): Flow<PlatformUUID> =
         radioService.radioFlow(sessionId, user.id)
 }

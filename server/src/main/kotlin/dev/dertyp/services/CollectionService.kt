@@ -206,7 +206,7 @@ class CollectionService : Service() {
             }
 
             PaginatedResponse(
-                data = songPage.data.map { CollectionSongMatch(it, explicitMember = it.id in explicitIds) },
+                data = songPage.data.map { CollectionSongMatch(it, directMember = it.id in explicitIds) },
                 page = songPage.page,
                 total = songPage.total,
                 pageSize = songPage.pageSize,

@@ -2,6 +2,8 @@ package dev.dertyp
 
 import dev.dertyp.audio.Transcoder
 import dev.dertyp.core.API_KEY_QUERY
+import dev.dertyp.core.cborFor
+import dev.dertyp.core.clientInfo
 import dev.dertyp.routing.*
 import dev.dertyp.serializers.AppCbor
 import dev.dertyp.serializers.AppJson
@@ -35,9 +37,7 @@ import io.ktor.server.websocket.timeout
 import io.ktor.server.websocket.webSocket
 import io.ktor.websocket.Frame
 import io.ktor.websocket.close
-import kotlinx.rpc.krpc.ktor.server.Krpc
 import kotlinx.rpc.krpc.ktor.server.rpc
-import kotlinx.rpc.krpc.serialization.cbor.cbor
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.encodeToByteArray
 import org.koin.ktor.ext.inject
@@ -59,12 +59,6 @@ fun Application.configureRouting() {
         timeout = 5.minutes
         maxFrameSize = Long.MAX_VALUE
         masking = false
-    }
-    install(Krpc) {
-        serialization {
-            cbor(AppCbor)
-            //synaraCbor(AppCbor)
-        }
     }
     install(KHealth) {
         successfulCheckStatusCode = HttpStatusCode.Accepted
@@ -129,11 +123,13 @@ fun Application.configureRouting() {
 
         rpc("/rpc") {
             //withSynaraPack()
+            rpcConfig { serialization { cborFor(call.clientInfo) } }
             registerPublicServices(koin)
         }
 
         rpc("/rpc/auth") {
             //withSynaraPack()
+            rpcConfig { serialization { cborFor(call.clientInfo) } }
             registerPublicServices(koin)
         }
 
@@ -150,6 +146,7 @@ fun Application.configureRouting() {
         jwtService.authenticated(this) {
             rpc("/rpc/services") {
                 //withSynaraPack()
+                rpcConfig { serialization { cborFor(call.clientInfo) } }
                 registerAuthenticatedServices(koin)
             }
 

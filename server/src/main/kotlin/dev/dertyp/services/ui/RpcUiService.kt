@@ -2,6 +2,7 @@ package dev.dertyp.services.ui
 
 import dev.dertyp.core.ClientInfo
 import dev.dertyp.data.User
+import dev.dertyp.rpc.annotations.REMOVED_IN_API_9
 import dev.dertyp.services.IUiService
 import dev.dertyp.ui.IntakeItem
 import dev.dertyp.ui.UiContext
@@ -72,5 +73,6 @@ class RpcUiService(
     override suspend fun setHomeCardOrder(contributionIds: List<String>): UiHomeLayout =
         uiService.setHomeCardOrder(user, client, contributionIds)
 
+    @Deprecated(REMOVED_IN_API_9 + " Use IChangeService.observeChanges and getHomeCards.")
     override fun getHomeCardsFlow(): Flow<UiHomeLayout> = uiService.homeLayoutFlow(user, client)
 }

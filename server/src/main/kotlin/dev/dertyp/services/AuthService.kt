@@ -14,9 +14,12 @@ class AuthService(
         val user = userService.findUserByUsername(username)
             ?: throw IllegalArgumentException("Invalid username or password")
 
+        val passwordHash = userService.passwordHashOf(username)
+            ?: throw IllegalArgumentException("Invalid username or password")
+
         val passwordMatches = BCrypt.verifyer().verify(
             password.toCharArray(),
-            user.passwordHash
+            passwordHash
         )
         if (!passwordMatches.verified) {
             throw IllegalArgumentException("Invalid username or password")

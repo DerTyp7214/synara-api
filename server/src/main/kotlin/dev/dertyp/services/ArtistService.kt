@@ -80,7 +80,7 @@ class ArtistRpcService(private val user: User, private val artistService: Artist
     override suspend fun setArtistImageByUrl(id: UUID, url: String): Artist? =
         artistService.setArtistImageByUrl(id, url, user.id)
 
-    override fun artistsWithoutMusicBrainzIdFlow(): Flow<Artist> =
+    override fun artistsWithoutMusicBrainzId(): Flow<Artist> =
         artistService.artistsWithoutMusicBrainzIdFlow(user.id)
 
     override fun artistIdsWithoutMusicBrainzId(): Flow<UUID> = artistService.artistIdsWithoutMusicBrainzId()
@@ -154,7 +154,7 @@ class ArtistService(private val searchIndexWorker: SearchIndexWorker? = null) : 
                 genres = genres,
                 imageId = imageId,
                 blurHash = blurHash,
-                musicbrainzId = musicbrainzId ?: if (table == ArtistTable) resultRow.getOrNull(
+                musicBrainzId = musicbrainzId ?: if (table == ArtistTable) resultRow.getOrNull(
                     ArtistMusicBrainzTable.musicBrainzId
                 )?.value else null,
                 isFollowed = isFollowed
@@ -171,7 +171,7 @@ class ArtistService(private val searchIndexWorker: SearchIndexWorker? = null) : 
     ): Artist? {
         val artist = byId(id, userId) ?: return null
 
-        var mbArtistId: UUID? = artist.musicbrainzId
+        var mbArtistId: UUID? = artist.musicBrainzId
 
         if (mbArtistId == null) {
             val songIds = songService.songIdsByArtist(id).take(5).toList()
@@ -207,8 +207,8 @@ class ArtistService(private val searchIndexWorker: SearchIndexWorker? = null) : 
             val albums =
                 albumService.byArtist(page = 0, pageSize = 5, artistId = id, singles = false, userId = userId).data
             for (album in albums) {
-                val mbRelease = if (album.musicbrainzId != null) {
-                    cachedMusicBrainzService.getRelease(album.musicbrainzId!!, priority)
+                val mbRelease = if (album.musicBrainzId != null) {
+                    cachedMusicBrainzService.getRelease(album.musicBrainzId!!, priority)
                 } else {
                     musicBrainzService.searchAlbumMb(album, priority)?.also {
                         musicBrainzCacheService.updateReleaseCache(it)
@@ -1225,8 +1225,8 @@ class ArtistService(private val searchIndexWorker: SearchIndexWorker? = null) : 
             it[image] = artist.imageId?.let { imageId -> EntityID(imageId, ImageTable) }
         }
 
-        if (artist.musicbrainzId != null) {
-            val mbId = artist.musicbrainzId!!
+        if (artist.musicBrainzId != null) {
+            val mbId = artist.musicBrainzId!!
             if (MBArtistTable.selectAll().where { MBArtistTable.id eq mbId }.empty()) {
                 MBArtistTable.insert {
                     it[id] = EntityID(mbId, MBArtistTable)

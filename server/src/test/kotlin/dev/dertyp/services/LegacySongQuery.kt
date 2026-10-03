@@ -366,7 +366,7 @@ class LegacySongQuery(val songService: SongService) {
                     creditedName = row.getOrNull(songCreditedAliasAlias[ArtistAliasTable.name]),
                     joinPhrase = row[SongArtistTable.joinPhrase],
                 )
-            }.inCreditOrder { positions.getValue(it.id) }
+            }.inCreditOrder { positions.getValue(it.id) }.map { it.toCredit() }
         }
 
         val albumIds = songRows.map { it[SongTable.albumId].value }.distinct()
@@ -407,7 +407,7 @@ class LegacySongQuery(val songService: SongService) {
                     creditedName = row.getOrNull(albumCreditedAliasAlias[ArtistAliasTable.name]),
                     joinPhrase = row[AlbumArtistTable.joinPhrase],
                 )
-            }.inCreditOrder { positions.getValue(it.id) }
+            }.inCreditOrder { positions.getValue(it.id) }.map { it.toCredit() }
         }
 
         val genresBySong = songIdChunks.flatMap { chunk ->

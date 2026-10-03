@@ -134,9 +134,14 @@ class JwtService(
                 "Invalid username or password"
             )
 
+            val passwordHash = userService.passwordHashOf(user.username) ?: return@post call.respond(
+                HttpStatusCode.Unauthorized,
+                "Invalid username or password"
+            )
+
             val passwordMatches = BCrypt.verifyer().verify(
                 authenticationRequest.password.toCharArray(),
-                user.passwordHash
+                passwordHash
             )
             if (!passwordMatches.verified) return@post call.respond(
                 HttpStatusCode.Unauthorized,

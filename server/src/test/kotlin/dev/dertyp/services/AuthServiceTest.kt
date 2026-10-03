@@ -21,9 +21,10 @@ class AuthServiceTest {
         runBlocking {
             val password = "securepassword"
             val hash = BCrypt.withDefaults().hashToString(12, password.toCharArray())
-            val user = User(UUID.randomUUID(), "testuser", passwordHash = hash)
+            val user = User(UUID.randomUUID(), "testuser")
 
             coEvery { userService.findUserByUsername("testuser") } returns user
+            coEvery { userService.passwordHashOf("testuser") } returns hash
 
             val validated = service.validateUser("testuser", password)
             assertEquals(user.id, validated.id)
@@ -34,9 +35,10 @@ class AuthServiceTest {
     fun `validateUser should throw if password incorrect`() {
         runBlocking {
             val hash = BCrypt.withDefaults().hashToString(12, "correct".toCharArray())
-            val user = User(UUID.randomUUID(), "testuser", passwordHash = hash)
+            val user = User(UUID.randomUUID(), "testuser")
 
             coEvery { userService.findUserByUsername("testuser") } returns user
+            coEvery { userService.passwordHashOf("testuser") } returns hash
 
             assertThrows(IllegalArgumentException::class.java) {
                 runBlocking { service.validateUser("testuser", "wrong") }

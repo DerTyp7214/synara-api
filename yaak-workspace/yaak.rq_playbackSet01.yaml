@@ -14,7 +14,7 @@ body:
       "currentIndex": 0,
       "isPlaying": true,
       "positionMs": 1000,
-      "shuffleMode": false,
+      "isShuffled": false,
       "repeatMode": "OFF"
     }
 bodyType: application/json
@@ -23,6 +23,10 @@ headers:
 - enabled: true
   name: Content-Type
   value: application/json
+  id: null
+- enabled: true
+  name: X-Api-Version
+  value: '8'
   id: null
 method: POST
 name: Set Playback State

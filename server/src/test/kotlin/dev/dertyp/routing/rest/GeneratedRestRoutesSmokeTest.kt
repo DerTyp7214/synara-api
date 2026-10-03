@@ -44,6 +44,7 @@ import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.*
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -155,7 +156,7 @@ class GeneratedRestRoutesSmokeTest {
             version = 2,
             modifiedAt = 5,
             currentIndex = 0,
-            shuffleMode = false,
+            isShuffled = false,
             repeatMode = RepeatMode.OFF,
             total = 0,
         ),
@@ -202,7 +203,7 @@ class GeneratedRestRoutesSmokeTest {
     @Test
     fun `metadata types are unwrapped to their values`() = testApplication {
         setUpApplication()
-        coEvery { metadata.getAllMetadataTypes(any()) } returns listOf(
+        coEvery { metadata.allMetadataTypes(any()) } returns listOf(
             IMetadataService.MetadataType("tidal"),
             IMetadataService.MetadataType("spotify"),
         )
@@ -320,7 +321,7 @@ class GeneratedRestRoutesSmokeTest {
             isPlaying = true,
             positionMs = 4321,
             durationMs = 60000,
-            shuffleMode = false,
+            isShuffled = false,
             repeatMode = RepeatMode.ONE,
             volume = 0.5f,
             reportedAt = 12,
@@ -410,6 +411,49 @@ class GeneratedRestRoutesSmokeTest {
 
         assertEquals(HttpStatusCode.OK, response.status)
         coVerify { queue.setModes(1L, true, RepeatMode.ALL, false) }
+    }
+
+    @Test
+    fun `clients below api version 8 get only the old key of a renamed field`() = testApplication {
+        setUpApplication()
+        coEvery { queue.setModes(any(), any(), any(), any()) } returns queueResult()
+
+        val legacy = client.put("/queue/modes?baseVersion=1&shuffleMode=false&repeatMode=off") {
+            header(ApiVersion.HEADER, "7")
+        }
+        val current = client.put("/queue/modes?baseVersion=1&shuffleMode=false&repeatMode=off") {
+            header(ApiVersion.HEADER, "8")
+        }
+
+        val legacyInfo = AppJson.parseToJsonElement(legacy.bodyAsText()).jsonObject.getValue("info").jsonObject
+        assertEquals(JsonPrimitive(false), legacyInfo["shuffleMode"])
+        assertFalse("isShuffled" in legacyInfo)
+        val currentInfo = AppJson.parseToJsonElement(current.bodyAsText()).jsonObject.getValue("info").jsonObject
+        assertEquals(JsonPrimitive(false), currentInfo["isShuffled"])
+        assertFalse("shuffleMode" in currentInfo)
+    }
+
+    @Test
+    fun `a request body is accepted with the old key of a renamed field`() = testApplication {
+        setUpApplication()
+        coEvery { remoteControl.reportStatus(any()) } returns Unit
+        val status =
+            RemotePlaybackStatus(isPlaying = true, positionMs = 10, isShuffled = true, repeatMode = RepeatMode.OFF)
+        val body = buildJsonObject {
+            AppJson.encodeToJsonElement(RemotePlaybackStatus.serializer(), status).jsonObject
+                .filterKeys { it != "isShuffled" }
+                .forEach { (key, value) -> put(key, value) }
+            put("shuffleMode", true)
+        }
+
+        val response = client.post("/remoteControl/reportStatus") {
+            header(ApiVersion.HEADER, "7")
+            contentType(ContentType.Application.Json)
+            setBody(AppJson.encodeToString(JsonObject.serializer(), body))
+        }
+
+        assertEquals(HttpStatusCode.OK, response.status)
+        coVerify { remoteControl.reportStatus(status) }
     }
 
     @Test

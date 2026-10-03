@@ -20,7 +20,7 @@ class PlaybackServiceTest {
             currentIndex = 0,
             isPlaying = isPlaying,
             positionMs = 0,
-            shuffleMode = false,
+            isShuffled = false,
             repeatMode = RepeatMode.OFF
         )
     }

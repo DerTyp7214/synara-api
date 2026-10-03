@@ -4,7 +4,7 @@ import dev.dertyp.ApiClient
 import dev.dertyp.core.ApplicationScope
 import dev.dertyp.core.HttpClientQueueService
 import dev.dertyp.data.Album
-import dev.dertyp.data.Artist
+import dev.dertyp.data.ArtistCredit
 import dev.dertyp.data.UserSong
 import dev.dertyp.plugins.PluginSettings
 import dev.dertyp.services.credentials.CredentialCipher
@@ -116,7 +116,7 @@ class AcoustIdServiceTest {
     ) = UserSong(
         id = UUID.randomUUID(),
         title = title,
-        artists = listOf(Artist(id = UUID.randomUUID(), name = artist, isGroup = false)),
+        artists = listOf(ArtistCredit(id = UUID.randomUUID(), name = artist, isGroup = false)),
         album = album?.let {
             Album(
                 id = UUID.randomUUID(),

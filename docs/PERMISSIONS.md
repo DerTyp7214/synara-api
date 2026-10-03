@@ -20,6 +20,7 @@ An admin implicitly has every capability, so every method on this page is open t
 | [IImageService](RPC_SERVICES.md#devdertypservicesiimageservice) | `moveImages` | Batch update image file paths. |
 | [IListenBackupService](RPC_SERVICES.md#devdertypservicesilistenbackupservice) | `getState` | Get the current backup configuration and sync state. |
 | [IListenBackupService](RPC_SERVICES.md#devdertypservicesilistenbackupservice) | `getStateFlow` | Stream the backup state, re-emitting whenever the configuration or sync progress changes. |
+| [IListenBackupService](RPC_SERVICES.md#devdertypservicesilistenbackupservice) | `observeState` | Stream the backup state, re-emitting whenever the configuration or sync progress changes. |
 | [IListenBackupService](RPC_SERVICES.md#devdertypservicesilistenbackupservice) | `resetCursor` | Reset the sync cursor so the next run re-pushes every local listen. |
 | [IListenBackupService](RPC_SERVICES.md#devdertypservicesilistenbackupservice) | `syncNow` | Run a backup sync now and return the resulting state. |
 | [IListenBackupService](RPC_SERVICES.md#devdertypservicesilistenbackupservice) | `testConnection` | Probe a receiver. Uses the stored configuration when no config is given. |
@@ -36,6 +37,7 @@ An admin implicitly has every capability, so every method on this page is open t
 | [IMirrorService](RPC_SERVICES.md#devdertypservicesimirrorservice) | `getSongs` | Stream all local songs with metadata for mirroring. |
 | [IMirrorService](RPC_SERVICES.md#devdertypservicesimirrorservice) | `getSongsByPlaylist` | Stream all songs belonging to a specific system playlist for mirroring. |
 | [IMirrorService](RPC_SERVICES.md#devdertypservicesimirrorservice) | `getSongsByUserPlaylist` | Stream all songs belonging to a specific user playlist for mirroring. |
+| [IMirrorService](RPC_SERVICES.md#devdertypservicesimirrorservice) | `getUserPasswordHashes` | Stream the password hashes of all local user accounts for mirroring. |
 | [IMirrorService](RPC_SERVICES.md#devdertypservicesimirrorservice) | `getUserPlaylists` | Stream all local user playlists for mirroring. |
 | [IMirrorService](RPC_SERVICES.md#devdertypservicesimirrorservice) | `getUsers` | Stream all local user accounts (profiles) for mirroring. |
 | [IPodcastService](RPC_SERVICES.md#devdertypservicesipodcastservice) | `deleteShow` | Remove a feed show from the server for everyone: its episodes, their transcripts, the listening positions of every user and every subscription to it are deleted, and the audio the server stored for it is deleted from disk. Returns false if the show does not exist. Shows of the local podcast library cannot be removed this way, as the server picks them up again on the next scan. |
@@ -60,11 +62,14 @@ An admin implicitly has every capability, so every method on this page is open t
 | [IRpcMetricsService](RPC_SERVICES.md#devdertypservicesirpcmetricsservice) | `timeSeries` | Hourly time-series of invocation counts for a specific call, oldest first. |
 | [IScheduledTaskConfigurationService](RPC_SERVICES.md#devdertypservicesischeduledtaskconfigurationservice) | `getConfigurations` | Retrieve all background task configurations. |
 | [IScheduledTaskConfigurationService](RPC_SERVICES.md#devdertypservicesischeduledtaskconfigurationservice) | `getConfigurationsFlow` | Stream real-time updates for all background task configurations. |
+| [IScheduledTaskConfigurationService](RPC_SERVICES.md#devdertypservicesischeduledtaskconfigurationservice) | `observeConfigurations` | Stream real-time updates for all background task configurations. |
 | [IScheduledTaskConfigurationService](RPC_SERVICES.md#devdertypservicesischeduledtaskconfigurationservice) | `triggerTask` | Manually trigger a background task by its unique key. |
 | [IScheduledTaskConfigurationService](RPC_SERVICES.md#devdertypservicesischeduledtaskconfigurationservice) | `updateConfiguration` | Update a task configuration. |
 | [IScheduledTaskLogService](RPC_SERVICES.md#devdertypservicesischeduledtasklogservice) | `getGroupedLogs` | Retrieve a snapshot of the most recent background task logs grouped by task name. |
 | [IScheduledTaskLogService](RPC_SERVICES.md#devdertypservicesischeduledtasklogservice) | `getGroupedLogsFlow` | Stream real-time updates for all background task progress and completion. |
+| [IScheduledTaskLogService](RPC_SERVICES.md#devdertypservicesischeduledtasklogservice) | `observeGroupedLogs` | Stream real-time updates for all background task progress and completion. |
 | [ISongService](RPC_SERVICES.md#devdertypservicesisongservice) | `moveSongs` | Batch update song file paths. |
+| [IUserService](RPC_SERVICES.md#devdertypservicesiuserservice) | `allUsers` | List all users on the server. |
 | [IUserService](RPC_SERVICES.md#devdertypservicesiuserservice) | `createUser` | Create a new user. |
 | [IUserService](RPC_SERVICES.md#devdertypservicesiuserservice) | `getAllUsers` | List all users on the server. |
 | [IUserService](RPC_SERVICES.md#devdertypservicesiuserservice) | `setCapabilities` | Update the capabilities for a specific user. |
@@ -112,7 +117,8 @@ An admin implicitly has every capability, so every method on this page is open t
 | Service | Method | Description |
 | :--- | :--- | :--- |
 | [IImportService](RPC_SERVICES.md#devdertypservicesimportiimportservice) | `importIds` | Queue content for import by its IDs. |
-| [IImportService](RPC_SERVICES.md#devdertypservicesimportiimportservice) | `importUrls` | Queue content for import. Each entry may be a URL, an ISRC (track), or a UPC (album barcode); codes are resolved to a supported importer (preferring the default). |
+| [IImportService](RPC_SERVICES.md#devdertypservicesimportiimportservice) | `importLogin` | Trigger the OAuth login flow and stream the login URL. |
+| [IImportService](RPC_SERVICES.md#devdertypservicesimportiimportservice) | `importUrls` | Queue content for import. Each entry may be a URL, an ISRC (track), or a UPC (album barcode). Codes are resolved to a supported importer (preferring the default). |
 | [IImportService](RPC_SERVICES.md#devdertypservicesimportiimportservice) | `syncFavourites` | Synchronize favorites with the local library. |
 
 ## PODCAST_EDIT

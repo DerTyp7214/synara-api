@@ -39,6 +39,8 @@ class MirrorRpcService(
 
     override fun getUsers(): Flow<User> = mirrorService.getUsers()
 
+    override fun getUserPasswordHashes(): Flow<UserPasswordHash> = mirrorService.getUserPasswordHashes()
+
     override fun getSongsByPlaylist(playlistId: UUID): Flow<Song> = mirrorService.getSongsByPlaylist(playlistId)
 
     override fun getSongsByUserPlaylist(playlistId: UUID): Flow<Song> = mirrorService.getSongsByUserPlaylist(playlistId)
@@ -66,7 +68,12 @@ class MirrorService : Service() {
     )
 
     fun getUsers(): Flow<User> = flow {
-        userService.queryUser().forEach { emit(it) }
+        val hashes = userService.passwordHashes().associate { it.id to it.passwordHash }
+        userService.queryUser().forEach { emit(it.copy(passwordHash = hashes[it.id].orEmpty())) }
+    }.flowOn(Dispatchers.IO)
+
+    fun getUserPasswordHashes(): Flow<UserPasswordHash> = flow {
+        userService.passwordHashes().forEach { emit(it) }
     }.flowOn(Dispatchers.IO)
 
     fun getSongsByPlaylist(playlistId: UUID): Flow<Song> =

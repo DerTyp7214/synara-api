@@ -1,10 +1,12 @@
 package dev.dertyp.core
 
 import dev.dertyp.data.ApiVersion
+import dev.dertyp.serializers.AppJson
 import dev.dertyp.ui.UiSchemaVersion
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.time.ZoneId
@@ -107,6 +109,21 @@ class ClientInfoTest {
         assertFalse(ClientInfo.LEGACY.supports(ClientFeature.RELEASE_VERSIONS))
         assertFalse(ClientInfo(6).supports(ClientFeature.RELEASE_VERSIONS))
         assertTrue(ClientInfo(7).supports(ClientFeature.RELEASE_VERSIONS))
+    }
+
+    @Test
+    fun `field renames require api version 8`() {
+        assertFalse(ClientInfo.LEGACY.supports(ClientFeature.FIELD_RENAMES))
+        assertFalse(ClientInfo(7).supports(ClientFeature.FIELD_RENAMES))
+        assertTrue(ClientInfo(8).supports(ClientFeature.FIELD_RENAMES))
+    }
+
+    @Test
+    fun `wire formats send old keys only below api version 8`() {
+        assertSame(LegacyServerJson, jsonFor(ClientInfo.LEGACY).format)
+        assertSame(LegacyServerJson, jsonFor(ClientInfo(7)).format)
+        assertSame(AppJson, jsonFor(ClientInfo(8)).format)
+        assertSame(AppJson, jsonFor(ClientInfo(ApiVersion.CURRENT)).format)
     }
 
     @Test

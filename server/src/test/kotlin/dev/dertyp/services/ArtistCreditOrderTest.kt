@@ -105,8 +105,8 @@ class ArtistCreditOrderTest : KoinTest {
 
     private fun stubArtistLookup() {
         coEvery { artistService.byMusicBrainzIds(any(), any()) } returns listOf(
-            Artist(id = highId, name = "High", isGroup = false, musicbrainzId = highMbId),
-            Artist(id = lowId, name = "Low", isGroup = false, musicbrainzId = lowMbId),
+            Artist(id = highId, name = "High", isGroup = false, musicBrainzId = highMbId),
+            Artist(id = lowId, name = "Low", isGroup = false, musicBrainzId = lowMbId),
         )
     }
 
@@ -322,8 +322,8 @@ class ArtistCreditOrderTest : KoinTest {
                 AlbumTable.insert { it[id] = albumId; it[name] = "Album" }
             }
             val artists = listOf(
-                Artist(id = highId, name = "High", isGroup = false, joinPhrase = " with "),
-                Artist(id = lowId, name = "Low", isGroup = false),
+                ArtistCredit(id = highId, name = "High", isGroup = false, joinPhrase = " with "),
+                ArtistCredit(id = lowId, name = "Low", isGroup = false),
             )
 
             AlbumService().upsertAlbum(

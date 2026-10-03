@@ -276,7 +276,7 @@ class RemoteMirrorService : Service() {
         logger.info("Stage: Analyzing selection for selective sync...")
         session.updateProgress("Analyzing Selection", 0, 0, newStatus = "Identifying required metadata...")
 
-        fun addRequiredArtist(artist: Artist) {
+        fun addRequiredArtist(artist: ArtistCredit) {
             if (session.requiredArtistIds.add(artist.id)) {
                 artist.imageId?.let { session.requiredImageIds.add(it) }
                 artist.artists.forEach { addRequiredArtist(it) }
@@ -396,10 +396,10 @@ class RemoteMirrorService : Service() {
                 try {
                     artistService.upsertArtist(
                         artist.copy(
-                        id = session.artistIdMap[artist.id]!!,
-                        imageId = artist.imageId?.let { session.imageIdMap[it] },
-                        artists = artist.artists.mapNotNull { sub -> session.artistIdMap[sub.id]?.let { sub.copy(id = it) } }
-                    ))
+                            id = session.artistIdMap[artist.id]!!,
+                            imageId = artist.imageId?.let { session.imageIdMap[it] },
+                            artists = artist.artists.mapNotNull { sub -> session.artistIdMap[sub.id]?.let { sub.copy(id = it) } }
+                        ))
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
@@ -496,10 +496,10 @@ class RemoteMirrorService : Service() {
                 try {
                     albumService.upsertAlbum(
                         album.copy(
-                        id = session.albumIdMap[album.id]!!,
-                        coverId = album.coverId?.let { session.imageIdMap[it] },
-                        artists = album.artists.mapNotNull { sub -> session.artistIdMap[sub.id]?.let { sub.copy(id = it) } }
-                    ))
+                            id = session.albumIdMap[album.id]!!,
+                            coverId = album.coverId?.let { session.imageIdMap[it] },
+                            artists = album.artists.mapNotNull { sub -> session.artistIdMap[sub.id]?.let { sub.copy(id = it) } }
+                        ))
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
@@ -699,6 +699,15 @@ class RemoteMirrorService : Service() {
                 throw e
             } catch (e: Exception) {
                 session.recordError("User ${user.username}", e)
+            }
+        }
+        session.mirrorService.getUserPasswordHashes().collect { hash ->
+            try {
+                userService.setPasswordHash(id = hash.id, hash = hash.passwordHash)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                session.recordError("User password ${hash.id}", e)
             }
         }
         logger.info("Completed mirroring $count user accounts")

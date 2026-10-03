@@ -16,7 +16,7 @@ class MetadataDispatcherService(
     override suspend fun getSupportedFeatures(type: IMetadataService.MetadataType): Set<IMetadataService.Feature> =
         getService(type).getSupportedFeatures(type)
 
-    override suspend fun getAllMetadataTypes(features: Set<IMetadataService.Feature>): List<IMetadataService.MetadataType> {
+    override suspend fun allMetadataTypes(features: Set<IMetadataService.Feature>): List<IMetadataService.MetadataType> {
         val allTypes = IMetadataService.MetadataType.all()
         if (features.isEmpty()) return allTypes
 

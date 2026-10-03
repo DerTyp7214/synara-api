@@ -4,6 +4,7 @@ import at.favre.lib.crypto.bcrypt.BCrypt
 import dev.dertyp.data.AuthenticationRequest
 import dev.dertyp.data.User
 import dev.dertyp.data.UserCapability
+import dev.dertyp.data.UserPasswordHash
 import dev.dertyp.db.ImageTable
 import dev.dertyp.db.UserCapabilityTable
 import dev.dertyp.db.UserTable
@@ -20,14 +21,13 @@ class RpcUserService(
     private val userService: UserService,
     private val imageService: ImageService
 ) : IUserService {
-    override suspend fun findUserById(id: UUID) = userService.findUserById(id)
-    override suspend fun findUserByUsername(username: String) =
-        userService.findUserByUsername(username)
+    override suspend fun byId(id: UUID) = userService.findUserById(id)
 
-    override suspend fun me() = userService.findUserById(user.id)!!.copy(passwordHash = "")
-    override suspend fun getAllUsers(): List<User> {
-        return userService.queryUser().map { it.copy(passwordHash = "") }
-    }
+    override suspend fun byUsername(username: String) = userService.findUserByUsername(username)
+
+    override suspend fun me() = userService.findUserById(user.id)!!
+
+    override suspend fun allUsers(): List<User> = userService.queryUser()
 
     override suspend fun setProfileImage(bytes: ByteArray) {
         val imageId = imageService.createImage(bytes, "profile")
@@ -58,7 +58,6 @@ class UserService : Service() {
                 id = row[UserTable.id].value,
                 username = row[UserTable.username],
                 displayName = row[UserTable.displayName],
-                passwordHash = row[UserTable.passwordHash],
                 isAdmin = row[UserTable.isAdmin],
                 profileImageId = row[UserTable.profileImage]?.value,
                 blurHash = row.getOrNull(ImageTable.blurHash)
@@ -126,11 +125,31 @@ class UserService : Service() {
         return createdUser
     }
 
+    suspend fun passwordHashOf(username: String): String? = dbQuery {
+        UserTable
+            .select(UserTable.passwordHash)
+            .where { UserTable.username eq username }
+            .singleOrNull()
+            ?.get(UserTable.passwordHash)
+    }
+
+    suspend fun passwordHashes(): List<UserPasswordHash> = dbQuery {
+        UserTable
+            .select(UserTable.id, UserTable.passwordHash)
+            .map { UserPasswordHash(id = it[UserTable.id].value, passwordHash = it[UserTable.passwordHash]) }
+    }
+
+    suspend fun setPasswordHash(id: UUID, hash: String) = dbQuery {
+        UserTable.update({ UserTable.id eq id }) {
+            it[passwordHash] = hash
+        }
+    }
+
     suspend fun upsertUser(user: User) = dbQuery {
-        UserTable.upsert {
+        UserTable.upsert(onUpdateExclude = listOf(UserTable.passwordHash)) {
             it[id] = user.id
             it[username] = user.username
-            it[passwordHash] = user.passwordHash
+            it[passwordHash] = ""
             it[displayName] = user.displayName
             it[isAdmin] = user.isAdmin
             it[profileImage] = user.profileImageId

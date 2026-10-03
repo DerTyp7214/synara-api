@@ -63,6 +63,6 @@ Backup settings are managed by admins through `IListenBackupService` (RPC and RE
 - `testConnection(config?)` — probe the receiver and report how many listens it already holds for this server.
 - `syncNow()` — run a push immediately.
 - `resetCursor()` — re-push everything on the next run.
-- `getState()` / `getStateFlow()` — configuration (without the key), server id, last sync time, last error and the number of pending listens.
+- `getState()` / `observeState()` — configuration (without the key), server id, last sync time, last error and the number of pending listens.
 
 The `Listen Backup` scheduled task runs every hour at minute 30 by default and does nothing until the backup is enabled and a URL is configured. Its schedule can be changed like any other task through `IScheduledTaskConfigurationService`.

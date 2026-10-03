@@ -42,3 +42,4 @@
 |---|---|
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Module map, request flow, package layout, DI, workers, migrations, generators. |
 | [DEVELOPMENT.md](DEVELOPMENT.md) | Cloning, running, testing, the `common-rpc` submodule workflow, adding an RPC method, troubleshooting. |
+| [DEPRECATIONS.md](DEPRECATIONS.md) | Checklist of what to remove or change when an API, UI schema or plugin API version bump reaches a target version. |

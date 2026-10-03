@@ -303,33 +303,33 @@ class SongQueryEquivalenceTest : KoinTest {
 
             cases.paged(
                 "likedSongs explicit=$explicit", sizes, { page, size ->
-                legacy.querySongs<UserSong>(page, size, explicit, userId) {
-                    where { UserSongTable.isFavourite eq true }
-                    orderBy(UserSongTable.updatedAt to SortOrder.DESC)
-                }
-            }, { page, size -> service.likedSongs(page, size, explicit, userId) },
+                    legacy.querySongs<UserSong>(page, size, explicit, userId) {
+                        where { UserSongTable.isFavourite eq true }
+                        orderBy(UserSongTable.updatedAt to SortOrder.DESC)
+                    }
+                }, { page, size -> service.likedSongs(page, size, explicit, userId) },
                 listOf(SortKey(true) { facts.getValue(it).updatedAt })
             )
 
             cases.paged(
                 "superLikedSongs explicit=$explicit", sizes, { page, size ->
-                legacy.querySongs<UserSong>(page, size, explicit, userId) {
-                    where { UserSongTable.superLikedAt.isNotNull() }
-                    orderBy(UserSongTable.superLikedAt to SortOrder.DESC)
-                }
-            }, { page, size -> service.superLikedSongs(page, size, explicit, userId) },
+                    legacy.querySongs<UserSong>(page, size, explicit, userId) {
+                        where { UserSongTable.superLikedAt.isNotNull() }
+                        orderBy(UserSongTable.superLikedAt to SortOrder.DESC)
+                    }
+                }, { page, size -> service.superLikedSongs(page, size, explicit, userId) },
                 listOf(SortKey(true) { facts.getValue(it).superLikedAt })
             )
 
             cases.paged(
                 "byColor explicit=$explicit", sizes, { page, size ->
-                val match = ColorMatch(COLOR, 40)
-                legacy.querySongs<UserSong>(
-                    page, size, explicit, userId,
-                    columnSet = { match.join(this, SongTable.cover) },
-                    query = { match.filterAndOrder(this) }
-                )
-            }, { page, size -> service.byColor(page, size, COLOR, 40, explicit, userId) },
+                    val match = ColorMatch(COLOR, 40)
+                    legacy.querySongs<UserSong>(
+                        page, size, explicit, userId,
+                        columnSet = { match.join(this, SongTable.cover) },
+                        query = { match.filterAndOrder(this) }
+                    )
+                }, { page, size -> service.byColor(page, size, COLOR, 40, explicit, userId) },
                 listOf(SortKey(false) { facts.getValue(it).colorDistance })
             )
 
@@ -448,19 +448,19 @@ class SongQueryEquivalenceTest : KoinTest {
             val albumId = fixture.albumIds[albumIndex]
             cases.paged(
                 "byAlbum $albumIndex", smallResultSizes, { page, size ->
-                legacy.querySongs<UserSong>(page, size, true, userId) {
-                    where { SongTable.albumId eq albumId }
-                    orderBy(SongTable.discNumber, SortOrder.ASC)
-                    orderBy(SongTable.trackNumber, SortOrder.ASC)
-                }
-            }, { page, size -> service.byAlbum(page, size, albumId, userId) }, listOf(
-                SortKey(false) { facts.getValue(it).discNumber },
-                SortKey(false) { facts.getValue(it).trackNumber },
-                SortKey(false) { facts.getValue(it).title },
-            ), listOf(
-                SortKey(false) { facts.getValue(it).discNumber },
-                SortKey(false) { facts.getValue(it).trackNumber },
-            )
+                    legacy.querySongs<UserSong>(page, size, true, userId) {
+                        where { SongTable.albumId eq albumId }
+                        orderBy(SongTable.discNumber, SortOrder.ASC)
+                        orderBy(SongTable.trackNumber, SortOrder.ASC)
+                    }
+                }, { page, size -> service.byAlbum(page, size, albumId, userId) }, listOf(
+                    SortKey(false) { facts.getValue(it).discNumber },
+                    SortKey(false) { facts.getValue(it).trackNumber },
+                    SortKey(false) { facts.getValue(it).title },
+                ), listOf(
+                    SortKey(false) { facts.getValue(it).discNumber },
+                    SortKey(false) { facts.getValue(it).trackNumber },
+                )
             )
         }
 
@@ -857,7 +857,7 @@ class SongQueryEquivalenceTest : KoinTest {
         runEquivalence(dialect, duplicates = false)
 
     private fun fixtureCoverage(songs: List<Song>, fixture: SongQueryFixture): Map<String, Int> {
-        val byIdString = compareBy<Artist> { it.id.toString() }
+        val byIdString = compareBy<ArtistCredit> { it.id.toString() }
         return mapOf(
             "artistsOutOfIdOrder" to songs.count { it.artists != it.artists.sortedWith(byIdString) },
             "albumArtistsOutOfIdOrder" to songs.count { song ->

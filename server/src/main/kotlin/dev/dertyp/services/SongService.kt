@@ -14,6 +14,7 @@ import dev.dertyp.core.db.dbQuery
 import dev.dertyp.data.*
 import dev.dertyp.db.*
 import dev.dertyp.plugins.SongLibrary
+import dev.dertyp.rpc.annotations.REMOVED_IN_API_9
 import dev.dertyp.routing.rest.RestFileProvider
 import dev.dertyp.services.AlbumService.Companion.calculateAlbumStats
 import dev.dertyp.services.AlbumService.Companion.mapAlbum
@@ -75,6 +76,10 @@ class SongRpcService(
         return null
     }
 
+    @Deprecated(
+        REMOVED_IN_API_9 + " Use setLikeLevel.",
+        ReplaceWith("setLikeLevel(id, if (liked) LikeLevel.LIKE else LikeLevel.NONE)")
+    )
     override suspend fun setLiked(
         id: UUID,
         liked: Boolean,
@@ -722,7 +727,7 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
 
             val mbArtistIds = artistCredits.mapNotNull { it.artist?.id }.distinct()
             val existingArtistsByMbId = if (mbArtistIds.isNotEmpty()) {
-                artistService.byMusicBrainzIds(mbArtistIds, userId).associateBy { it.musicbrainzId }
+                artistService.byMusicBrainzIds(mbArtistIds, userId).associateBy { it.musicBrainzId }
             } else emptyMap()
 
             val resolvedArtists = mutableListOf<ResolvedCredit>()
@@ -795,7 +800,7 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                     if (artist != null) {
                         if (mbId != null) {
                             artistService.setMusicBrainzId(artist.id, mbId, userId)
-                            artist = artist.copy(musicbrainzId = mbId)
+                            artist = artist.copy(musicBrainzId = mbId)
                         }
                     } else if (mbId != null) {
                         artist = artistService.createArtist(
@@ -2178,7 +2183,7 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                     creditedName = row.getOrNull(songCreditedAliasAlias[ArtistAliasTable.name]),
                     joinPhrase = row[SongArtistTable.joinPhrase],
                 )
-            }.inCreditOrder { positions.getValue(it.id) }
+            }.inCreditOrder { positions.getValue(it.id) }.map { it.toCredit() }
         }
 
         val albumIds = songRows.map { it[SongTable.albumId].value }.distinct()
@@ -2219,7 +2224,7 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                     creditedName = row.getOrNull(albumCreditedAliasAlias[ArtistAliasTable.name]),
                     joinPhrase = row[AlbumArtistTable.joinPhrase],
                 )
-            }.inCreditOrder { positions.getValue(it.id) }
+            }.inCreditOrder { positions.getValue(it.id) }.map { it.toCredit() }
         }
 
         val genresBySong = songIdChunks.flatMap { chunk ->

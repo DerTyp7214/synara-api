@@ -10,6 +10,8 @@ import dev.dertyp.core.db.dbQuery
 import dev.dertyp.services.ApiKeyScopeRegistry
 import dev.dertyp.services.ApiKeyService
 import dev.dertyp.services.UserService
+import dev.dertyp.services.credentials.CredentialCipher
+import io.ktor.server.config.MapApplicationConfig
 import io.ktor.http.*
 import io.mockk.coEvery
 import io.mockk.mockk
@@ -52,7 +54,13 @@ class SubsonicAuthTest : KoinTest {
 
         val registry = ApiKeyScopeRegistry()
         registry.register(SubsonicPlugin.SCOPE, "subsonic")
-        startKoin { modules(module { single { userService }; single { registry } }) }
+        startKoin {
+            modules(module {
+                single { userService }
+                single { registry }
+                single { CredentialCipher(MapApplicationConfig("credentials.encryptionKey" to "test-key")) }
+            })
+        }
 
         val credentialService = SubsonicCredentialService()
         credentialService.regenerate(userId, "tester")

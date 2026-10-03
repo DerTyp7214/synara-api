@@ -60,7 +60,7 @@ class RpcPlaybackServiceTest {
         currentIndex = 0,
         isPlaying = true,
         positionMs = positionMs,
-        shuffleMode = false,
+        isShuffled = false,
         repeatMode = RepeatMode.OFF,
     )
 

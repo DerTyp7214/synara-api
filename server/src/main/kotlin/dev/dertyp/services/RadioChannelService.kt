@@ -136,7 +136,7 @@ class RadioChannelService : Service() {
             }
 
             PaginatedResponse(
-                data = songPage.data.map { RadioChannelSongMatch(it, explicitMember = it.id in explicitIds) },
+                data = songPage.data.map { RadioChannelSongMatch(it, directMember = it.id in explicitIds) },
                 page = songPage.page,
                 total = songPage.total,
                 pageSize = songPage.pageSize,

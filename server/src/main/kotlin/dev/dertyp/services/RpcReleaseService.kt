@@ -22,6 +22,10 @@ class RpcReleaseService(
         return releaseService.unfollowArtist(requireUser().id, artistId)
     }
 
+    override suspend fun unfollowArtistByMusicBrainzId(musicBrainzId: UUID): Boolean {
+        return releaseService.unfollowArtistByMusicBrainzId(requireUser().id, musicBrainzId)
+    }
+
     override suspend fun getFollowedArtists(): List<FollowedArtist> {
         return releaseService.getFollowedArtists(requireUser().id)
     }

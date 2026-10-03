@@ -28,7 +28,7 @@ class RpcRemoteControlServiceTest {
         isPlaying = true,
         positionMs = positionMs,
         durationMs = 1000,
-        shuffleMode = false,
+        isShuffled = false,
         repeatMode = RepeatMode.ALL,
         volume = 0.4f,
     )

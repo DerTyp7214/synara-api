@@ -25,7 +25,7 @@ class RpcScheduledTaskConfigurationService(
         configService.updateConfiguration(configuration)
     }
 
-    override fun getConfigurationsFlow(): Flow<List<TaskConfiguration>> {
+    override fun observeConfigurations(): Flow<List<TaskConfiguration>> {
         return configService.configurationsFlow
     }
 

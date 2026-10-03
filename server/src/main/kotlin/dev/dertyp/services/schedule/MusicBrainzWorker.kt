@@ -69,7 +69,7 @@ class MusicBrainzWorker : Worker("MusicBrainzWorker") {
                                     triggerMerge = false
                                 )
                                 totalAlbumsChecked++
-                                if (album?.musicbrainzId != null) {
+                                if (album?.musicBrainzId != null) {
                                     taggedAlbums++
                                 } else {
                                     albumService.updateMusicBrainzLastCheck(albumId)
@@ -94,7 +94,7 @@ class MusicBrainzWorker : Worker("MusicBrainzWorker") {
                                 val artist =
                                     artistService.fetchMusicBrainzId(artistId, priority = HttpClientPriority.LOW)
                                 totalArtistsChecked++
-                                if (artist?.musicbrainzId != null) {
+                                if (artist?.musicBrainzId != null) {
                                     taggedArtists++
                                 } else {
                                     artistService.updateMusicBrainzLastCheck(artistId)

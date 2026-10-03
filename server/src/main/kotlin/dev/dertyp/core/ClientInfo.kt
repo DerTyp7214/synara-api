@@ -29,28 +29,34 @@ enum class ClientFeature(val minApiVersion: Int, val maxApiVersion: Int? = null)
     DOLBY_ATMOS(3),
 
     @FeatureDoc(
-        introduces = "File properties nested in `audio` and `atmos` as [`AudioInfo`](MODELS.md#devdertypdataaudioinfo) — `codec`, `sampleRate`, `bitsPerSample`, `bitRate`, `fileSize`, `channels`.",
+        introduces = "File properties nested in `audio` and `atmos` as @AudioInfo — `codec`, `sampleRate`, `bitsPerSample`, `bitRate`, `fileSize`, `channels`.",
         fallback = "`audio` and `atmos` are cleared and their values flattened back into the deprecated top-level `sampleRate`, `bitsPerSample`, `bitRate`, `fileSize` and `atmosPath` fields.",
     )
     AUDIO_INFO(4),
 
     @FeatureDoc(
         introduces = "Component trees from the server, rendered natively by the client.",
-        fallback = "Nothing to render; the companion `X-Ui-Schema-Version` header controls the detail.",
+        fallback = "Nothing to render. The companion `X-Ui-Schema-Version` header controls the detail.",
     )
     SERVER_DRIVEN_UI(5),
 
     @FeatureDoc(
-        introduces = "`tags`: version markers such as *Radio Edit*, *feat. Drake* or *Live at Wembley*, split off the title into [`TitleTag`](MODELS.md#devdertypdatatitletag) entries, so `title` is clean.",
+        introduces = "`tags`: version markers such as *Radio Edit*, *feat. Drake* or *Live at Wembley*, split off the title into @TitleTag entries, so `title` is clean.",
         fallback = "`title` is put back together into the full original title and `tags` is emptied.",
     )
     TITLE_TAGS(6),
 
     @FeatureDoc(
-        introduces = "`versions` on [`RecentRelease`](MODELS.md#devdertypservicesmodelsrecentrelease): the editions of one release (explicit, deluxe, remastered, or the same release from another catalog) are folded under a single feed entry.",
+        introduces = "`versions` on @RecentRelease: the editions of one release (explicit, deluxe, remastered, or the same release from another catalog) are folded under a single feed entry.",
         fallback = "Every edition is its own feed entry, following the entry it was folded into, and `versions` is empty.",
     )
     RELEASE_VERSIONS(7),
+
+    @FeatureDoc(
+        introduces = "Renamed fields under their new names: `musicBrainzId` on @Album, @Artist and @ArtistCredit, `isPlaying` on @PlaybackReport, `directMember` on @CollectionSongMatch and @RadioChannelSongMatch, `isShuffled` on @PlaybackState, @QueueInfo, @QueueMeta and @RemotePlaybackStatus, and `userAdded` on @QueueItem. The queue entry with full song metadata has the type `WithSong`.",
+        fallback = "Clients below API version 8 receive and send only the old names: `musicbrainzId`, `playing`, `explicitMember`, `shuffleMode`, `explicit`, and the queue entry type `Explicit`.",
+    )
+    FIELD_RENAMES(8),
 }
 
 data class ClientInfo(

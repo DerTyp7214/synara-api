@@ -566,6 +566,51 @@ class ReleaseServiceTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
+    fun `unfollowArtistByMusicBrainzId removes the follow made by MusicBrainz id`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val userId = UUID.randomUUID()
+        val otherUserId = UUID.randomUUID()
+        val artistId = UUID.randomUUID()
+        val mbId = UUID.randomUUID()
+
+        transaction(database) {
+            UserTable.insert { it[id] = userId; it[username] = "user"; it[passwordHash] = "hash" }
+            UserTable.insert { it[id] = otherUserId; it[username] = "other"; it[passwordHash] = "hash" }
+            ArtistTable.insert { it[id] = artistId; it[name] = "Artist" }
+            MBArtistTable.insert { it[id] = mbId; it[name] = "Artist"; it[sortName] = "Artist" }
+            ArtistMusicBrainzTable.insert { it[this.artistId] = artistId; it[musicBrainzId] = mbId }
+        }
+
+        assertTrue(service.followArtist(userId, mbId))
+        assertTrue(service.followArtist(otherUserId, mbId))
+        assertEquals(listOf(artistId), service.getFollowedArtists(userId).map { it.artistId })
+
+        assertTrue(service.unfollowArtistByMusicBrainzId(userId, mbId))
+
+        assertTrue(service.getFollowedArtists(userId).isEmpty())
+        assertEquals(listOf(artistId), service.getFollowedArtists(otherUserId).map { it.artistId })
+        assertFalse(service.unfollowArtistByMusicBrainzId(userId, mbId))
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `unfollowArtistByMusicBrainzId returns false for an unknown MusicBrainz id`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val userId = UUID.randomUUID()
+        val artistId = UUID.randomUUID()
+
+        transaction(database) {
+            UserTable.insert { it[id] = userId; it[username] = "user"; it[passwordHash] = "hash" }
+            ArtistTable.insert { it[id] = artistId; it[name] = "Artist" }
+            FollowedArtistTable.insert { it[this.userId] = userId; it[this.artistId] = artistId }
+        }
+
+        assertFalse(service.unfollowArtistByMusicBrainzId(userId, UUID.randomUUID()))
+        assertEquals(listOf(artistId), service.getFollowedArtists(userId).map { it.artistId })
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
     fun `fetchNewReleases should handle MusicBrainz API failure`(dialect: DbDialect) = runBlocking {
         setup(dialect)
         val mbId = UUID.randomUUID()

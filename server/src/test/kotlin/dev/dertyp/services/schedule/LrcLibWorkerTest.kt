@@ -2,7 +2,7 @@ package dev.dertyp.services.schedule
 
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
-import dev.dertyp.data.Artist
+import dev.dertyp.data.ArtistCredit
 import dev.dertyp.data.Song
 import dev.dertyp.db.AlbumTable
 import dev.dertyp.db.ImageTable
@@ -72,7 +72,7 @@ class LrcLibWorkerTest : KoinTest {
             }
         }
 
-        val mockArtist = mockk<Artist>()
+        val mockArtist = mockk<ArtistCredit>()
         every { mockArtist.name } returns "Test Artist"
 
         val songMetadata = mockk<Song>()

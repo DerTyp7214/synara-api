@@ -3,7 +3,7 @@ package dev.dertyp.mcp
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
 import dev.dertyp.data.Album
-import dev.dertyp.data.Artist
+import dev.dertyp.data.ArtistCredit
 import dev.dertyp.data.UserSong
 import dev.dertyp.db.*
 import dev.dertyp.services.AlbumService
@@ -120,7 +120,7 @@ class ListenHistoryQueryServiceTest {
         id: UUID,
         title: String,
         durationMs: Long = 0,
-        artists: List<Artist> = emptyList(),
+        artists: List<ArtistCredit> = emptyList(),
         album: Album? = null
     ) {
         songDtos[id] = UserSong(

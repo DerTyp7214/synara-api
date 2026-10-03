@@ -1,5 +1,6 @@
 package dev.dertyp.services
 
+import dev.dertyp.core.UnauthorizedException
 import dev.dertyp.data.CollectionItemType
 import dev.dertyp.data.CollectionSearchResults
 import dev.dertyp.data.MediaCollection
@@ -19,19 +20,30 @@ class RpcCollectionService(
     override suspend fun createCollection(collection: InsertableCollection): UUID =
         collectionService.createCollection(user.id, collection)
 
-    override suspend fun updateCollection(id: UUID, collection: InsertableCollection): Boolean =
-        collectionService.updateCollection(id, collection)
+    override suspend fun updateCollection(id: UUID, collection: InsertableCollection): Boolean {
+        requireOwner(id)
+        return collectionService.updateCollection(id, collection)
+    }
 
-    override suspend fun addItem(id: UUID, itemType: CollectionItemType, itemId: UUID): Boolean =
-        collectionService.addItem(id, itemType, itemId)
+    override suspend fun addItem(id: UUID, itemType: CollectionItemType, itemId: UUID): Boolean {
+        requireOwner(id)
+        return collectionService.addItem(id, itemType, itemId)
+    }
 
-    override suspend fun removeItem(id: UUID, itemType: CollectionItemType, itemId: UUID): Boolean =
-        collectionService.removeItem(id, itemType, itemId)
+    override suspend fun removeItem(id: UUID, itemType: CollectionItemType, itemId: UUID): Boolean {
+        requireOwner(id)
+        return collectionService.removeItem(id, itemType, itemId)
+    }
 
-    override suspend fun setCollectionImage(id: UUID, imageId: UUID?): Boolean =
-        collectionService.setCollectionImage(id, imageId)
+    override suspend fun setCollectionImage(id: UUID, imageId: UUID?): Boolean {
+        requireOwner(id)
+        return collectionService.setCollectionImage(id, imageId)
+    }
 
-    override suspend fun delete(id: UUID): Boolean = collectionService.delete(id)
+    override suspend fun delete(id: UUID): Boolean {
+        requireOwner(id)
+        return collectionService.delete(id)
+    }
 
     override suspend fun rankedSearch(
         collectionId: UUID,
@@ -46,4 +58,9 @@ class RpcCollectionService(
     override fun albumIds(collectionId: UUID): Flow<UUID> = collectionService.albumIds(collectionId)
     override fun artistIds(collectionId: UUID): Flow<UUID> = collectionService.artistIds(collectionId)
     override fun playlistIds(collectionId: UUID): Flow<UUID> = collectionService.playlistIds(collectionId)
+
+    private suspend fun requireOwner(id: UUID) {
+        val collection = collectionService.byId(id) ?: return
+        if (collection.creator != user.id && !user.isAdmin) throw UnauthorizedException("Not the owner of collection $id")
+    }
 }

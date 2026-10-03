@@ -125,7 +125,7 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
                 genres = genres,
                 originalId = resultRow[AlbumTable.originalId],
                 barcode = resultRow[AlbumTable.barcode],
-                musicbrainzId = resultRow.getOrNull(AlbumMusicBrainzTable.musicBrainzId)?.value,
+                musicBrainzId = resultRow.getOrNull(AlbumMusicBrainzTable.musicBrainzId)?.value,
                 animatedCoverId = resultRow[AlbumTable.animatedCover]?.value,
                 animatedCoverImageId = animatedCoverImageIdColumn?.let { resultRow.getOrNull(it) }?.value,
                 animatedCoverBlurHash = animatedCoverBlurHashColumn?.let { resultRow.getOrNull(it) },
@@ -160,7 +160,7 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
     ): Album? {
         val album = byId(id, userId) ?: return null
 
-        val mbId = album.musicbrainzId ?: musicBrainzService.searchAlbumMb(album, priority)?.also {
+        val mbId = album.musicBrainzId ?: musicBrainzService.searchAlbumMb(album, priority)?.also {
             musicBrainzCacheService.updateReleaseCache(it)
         }?.id ?: return album
 
@@ -173,7 +173,7 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
 
             val mbArtistIds = artistCredits.mapNotNull { it.artist?.id }.distinct()
             val existingArtistsByMbId = if (mbArtistIds.isNotEmpty()) {
-                artistService.byMusicBrainzIds(mbArtistIds, userId).associateBy { it.musicbrainzId }
+                artistService.byMusicBrainzIds(mbArtistIds, userId).associateBy { it.musicBrainzId }
             } else emptyMap()
 
             val resolvedArtists = mutableListOf<ResolvedCredit>()
@@ -247,7 +247,7 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
                     if (artist != null) {
                         if (mbId != null) {
                             artistService.setMusicBrainzId(artist.id, mbId, userId)
-                            artist = artist.copy(musicbrainzId = mbId)
+                            artist = artist.copy(musicBrainzId = mbId)
                         }
                     } else if (mbId != null) {
                         artist = artistService.createArtist(
@@ -602,7 +602,7 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
         val urls = mutableSetOf<String>()
         var upc: String? = null
 
-        album.musicbrainzId?.let { mbId ->
+        album.musicBrainzId?.let { mbId ->
             cachedMusicBrainzService.getRelease(mbId, priority)?.let { release ->
                 val mbUrls = (release.relations ?: emptyList())
                     .mapNotNull { it.url?.resource }
@@ -698,7 +698,7 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
         }.data
 
         directMatches.forEach { album ->
-            album.musicbrainzId?.let { mbId ->
+            album.musicBrainzId?.let { mbId ->
                 if (mbId in remainingIds) {
                     val list = results.getOrPut(mbId) { mutableListOf() } as MutableList<Album>
                     if (album !in list) list.add(album)
@@ -861,8 +861,8 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
     suspend fun versions(id: UUID, userId: UUID? = null): List<Album> {
         val album = byId(id, userId) ?: return emptyList()
 
-        if (album.musicbrainzId != null) {
-            val release = cachedMusicBrainzService.getRelease(album.musicbrainzId!!)
+        if (album.musicBrainzId != null) {
+            val release = cachedMusicBrainzService.getRelease(album.musicBrainzId!!)
             val releaseGroupId = release?.releaseGroup?.id
             if (releaseGroupId != null) {
                 val otherAlbumIds = dbQuery {
@@ -1253,7 +1253,7 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
 
         return albumMap.values.map { album ->
             val albumArtists = albumArtistsMap[album.id]?.distinctBy { it.id }
-                ?.inCreditOrder { albumArtistPositions[album.id to it.id] ?: 0 } ?: listOf()
+                ?.inCreditOrder { albumArtistPositions[album.id to it.id] ?: 0 }?.map { it.toCredit() } ?: listOf()
             val albumGenres = albumGenresMap[album.id]?.distinctBy { it.id }?.inNameOrder() ?: listOf()
 
             album.copy(
@@ -1380,7 +1380,7 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
 
             val inputAlbum = uniqueAlbumMetadata.firstOrNull {
                 val inputMbId = it.musicBrainzId
-                if (inputMbId != null && row.musicbrainzId == inputMbId) return@firstOrNull true
+                if (inputMbId != null && row.musicBrainzId == inputMbId) return@firstOrNull true
 
                 val inputBarcode = it.barcode
                 if (inputBarcode?.isNotBlank() == true && inputBarcode.length >= 8 && inputBarcode.uppercase() != "BARCODE" && row.barcode == inputBarcode) return@firstOrNull true
@@ -1654,8 +1654,8 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
                 }
             }
 
-            if (album.musicbrainzId != null) {
-                val mbId = album.musicbrainzId!!
+            if (album.musicBrainzId != null) {
+                val mbId = album.musicBrainzId!!
                 if (MBReleaseTable.selectAll().where { MBReleaseTable.id eq mbId }.empty()) {
                     MBReleaseTable.insert {
                         it[id] = EntityID(mbId, MBReleaseTable)
@@ -1684,8 +1684,8 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
             }
         }
 
-        if (triggerSync && album.musicbrainzId != null && album.musicbrainzId != currentMbId) {
-            syncAlbumSongsWithMusicBrainz(album.id, album.musicbrainzId!!)
+        if (triggerSync && album.musicBrainzId != null && album.musicBrainzId != currentMbId) {
+            syncAlbumSongsWithMusicBrainz(album.id, album.musicBrainzId!!)
 
             if (triggerMerge) {
                 scope.launch {

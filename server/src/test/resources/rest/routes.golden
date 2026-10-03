@@ -31,6 +31,7 @@ GET /artist/aliases/{id} IArtistService.aliases [p:id] JSON
 GET /artist/allArtists IArtistService.allArtists [q:page? q:pageSize?] JSON
 GET /artist/artistIdsWithoutMusicBrainzId IArtistService.artistIdsWithoutMusicBrainzId [] SSE
 GET /artist/artistOnMusicBrainz IArtistService.searchArtistOnMusicBrainz [q:query q:page? q:pageSize?] JSON
+GET /artist/artistsWithoutMusicBrainzId IArtistService.artistsWithoutMusicBrainzId [] SSE
 GET /artist/artistsWithoutMusicBrainzIdFlow IArtistService.artistsWithoutMusicBrainzIdFlow [] SSE
 GET /artist/byColor IArtistService.byColor [q:page? q:pageSize? q:color q:range?] JSON
 GET /artist/byGroup/{groupId} IArtistService.byGroup [q:page? q:pageSize? p:groupId] JSON
@@ -126,7 +127,7 @@ POST /image/batch IImageService.createBatch [b:images] JSON
 POST /image/generateMosaicImage IImageService.generateMosaicImage [b:image q:width q:height q:resultSize?] SSE
 POST /image/image IImageService.createImage [b:bytes q:origin?] JSON
 POST /image/moveImages IImageService.moveImages [q:oldPath q:newPath] JSON
-GET /import/allImportServices IImportService.getAllImportServices [] JSON
+GET /import/allImportServices IImportService.allImportServices [] JSON
 GET /import/authUrl IImportService.getAuthUrl [] JSON
 GET /import/currentImport IImportService.currentImport [] JSON
 GET /import/existsByOriginalId/{id} IImportService.existsByOriginalId [p:id q:type?] JSON
@@ -148,6 +149,7 @@ POST /import/syncFavourites IImportService.syncFavourites [] UNIT
 PUT /import/importCredentials IImportService.setImportCredentials [b:backend b:credentials] UNIT
 PUT /import/importService IImportService.setImportService [b:service] UNIT
 POST /indexer/start IIndexer.start [] SSE
+GET /listenBackup/observeState IListenBackupService.observeState [] SSE
 GET /listenBackup/state IListenBackupService.getState [] JSON
 GET /listenBackup/stateFlow IListenBackupService.getStateFlow [] SSE
 POST /listenBackup/resetCursor IListenBackupService.resetCursor [] JSON
@@ -166,7 +168,7 @@ GET /lyrics/syncedLyrics/{songId} ILyricsService.getSyncedLyrics [p:songId] JSON
 POST /lyrics/startSyncWorker ILyricsService.startSyncWorker [] JSON
 POST /lyrics/transcribeLyrics/{songId} ILyricsService.transcribeLyrics [p:songId q:lyrics?] JSON
 GET /lyricsSearch/lyrics ILyricsSearch.searchLyrics [q:artist q:title q:syncedOnly?] JSON
-GET /metadata/allMetadataTypes IMetadataService.getAllMetadataTypes [q:features?] JSON
+GET /metadata/allMetadataTypes IMetadataService.allMetadataTypes [q:features?] JSON
 GET /metadata/{type}/albumByBarcode IMetadataService.getAlbumByBarcode [p:type q:barcode] JSON
 GET /metadata/{type}/albumByMbId/{mbId} IMetadataService.getAlbumByMbId [p:type p:mbId] JSON
 GET /metadata/{type}/albumExistsById/{albumId} IMetadataService.albumExistsById [p:type p:albumId] JSON
@@ -267,6 +269,7 @@ POST /queue/uploadPage/{uploadId} IQueueService.uploadPage [p:uploadId b:items] 
 PUT /queue/currentIndex IQueueService.setCurrentIndex [q:baseVersion q:currentIndex q:force?] JSON
 PUT /queue/modes IQueueService.setModes [q:baseVersion q:shuffleMode q:repeatMode q:force?] JSON
 PUT /queue/syncEnabled IQueueService.setSyncEnabled [q:enabled q:deviceName] UNIT
+GET /radio/observeRadio/{sessionId} IRadioService.observeRadio [p:sessionId] SSE
 GET /radio/radioFlow/{sessionId} IRadioService.radioFlow [p:sessionId] SSE
 POST /radio/radioSession IRadioService.createRadioSession [q:type? b:seed?] JSON
 DELETE /radioChannel/channel/{id} IRadioChannelService.deleteChannel [p:id] JSON
@@ -284,6 +287,7 @@ GET /recommendation/moodPlaylist IRecommendationService.getMoodPlaylist [q:mood 
 GET /recommendation/moods IRecommendationService.getMoods [] JSON
 GET /recommendation/similarSongs IRecommendationService.getSimilarSongs [q:seedSongIds q:limit?] JSON
 DELETE /release/unfollowArtist/{artistId} IReleaseService.unfollowArtist [p:artistId] JSON
+DELETE /release/unfollowArtistByMusicBrainzId/{musicBrainzId} IReleaseService.unfollowArtistByMusicBrainzId [p:musicBrainzId] JSON
 GET /release/artistRecentReleases/{artistId} IReleaseService.getArtistRecentReleases [p:artistId q:page? q:pageSize? q:includeHidden?] JSON
 GET /release/followedArtists IReleaseService.getFollowedArtists [] JSON
 GET /release/recentReleases IReleaseService.getRecentReleases [q:page? q:pageSize?] JSON
@@ -312,10 +316,12 @@ POST /rpcMetrics/recentEvents IRpcMetricsService.recentEvents [q:limit?] JSON
 POST /rpcMetrics/timeSeries IRpcMetricsService.timeSeries [q:service q:method q:sinceMillis] JSON
 GET /scheduledTaskConfiguration/configurations IScheduledTaskConfigurationService.getConfigurations [] JSON
 GET /scheduledTaskConfiguration/configurationsFlow IScheduledTaskConfigurationService.getConfigurationsFlow [] SSE
+GET /scheduledTaskConfiguration/observeConfigurations IScheduledTaskConfigurationService.observeConfigurations [] SSE
 POST /scheduledTaskConfiguration/triggerTask IScheduledTaskConfigurationService.triggerTask [q:key] JSON
 PUT /scheduledTaskConfiguration/configuration IScheduledTaskConfigurationService.updateConfiguration [b:configuration] UNIT
 GET /scheduledTaskLog/groupedLogs IScheduledTaskLogService.getGroupedLogs [] JSON
 GET /scheduledTaskLog/groupedLogsFlow IScheduledTaskLogService.getGroupedLogsFlow [] SSE
+GET /scheduledTaskLog/observeGroupedLogs IScheduledTaskLogService.observeGroupedLogs [] SSE
 GET /scrobble/recentAlbums IScrobbleService.recentAlbums [q:limit] JSON
 GET /scrobble/recentAlbumsFlow IScrobbleService.recentAlbumsFlow [q:limit] SSE
 GET /scrobble/recentArtists IScrobbleService.recentArtists [q:limit] JSON
@@ -402,7 +408,9 @@ POST /ui/subscribeLiveWithContext/{contributionId} IUiService.subscribeLiveWithC
 POST /ui/subscribeWithContext/{contributionId} IUiService.subscribeWithContext [p:contributionId b:context] SSE
 PUT /ui/homeCardOrder IUiService.setHomeCardOrder [q:contributionIds] JSON
 PUT /ui/homeCardPinned/{contributionId} IUiService.setHomeCardPinned [p:contributionId q:pinned] JSON
-GET /user/allUsers IUserService.getAllUsers [] JSON
+GET /user/allUsers IUserService.allUsers [] JSON
+GET /user/byId/{id} IUserService.byId [p:id] JSON
+GET /user/byUsername IUserService.byUsername [q:username] JSON
 GET /user/me IUserService.me [] JSON
 GET /user/userById/{id} IUserService.findUserById [p:id] JSON
 GET /user/userByUsername IUserService.findUserByUsername [q:username] JSON

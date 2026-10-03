@@ -6,6 +6,7 @@ import dev.dertyp.data.ApiKeyScopeInfo
 import dev.dertyp.data.User
 import dev.dertyp.db.ApiKeyTable
 import dev.dertyp.plugins.ApiKeyScope
+import dev.dertyp.services.credentials.CredentialCipher
 import dev.dertyp.core.db.dbQuery
 import kotlinx.coroutines.launch
 import org.jetbrains.exposed.v1.core.*
@@ -24,6 +25,7 @@ import kotlin.io.encoding.ExperimentalEncodingApi
 class ApiKeyService : Service() {
     private val userService by inject<UserService>()
     private val scopeRegistry by inject<ApiKeyScopeRegistry>()
+    private val cipher by inject<CredentialCipher>()
 
     private fun generateRawKey(): String {
         val random = SecureRandom.getInstanceStrong()
@@ -55,7 +57,7 @@ class ApiKeyService : Service() {
         dbQuery {
             ApiKeyTable.insert {
                 it[ApiKeyTable.keyHash] = keyHash
-                it[ApiKeyTable.rawKey] = raw
+                it[ApiKeyTable.rawKey] = cipher.encrypt(keyHash, raw)
                 it[ApiKeyTable.userId] = userId
                 it[ApiKeyTable.label] = label
                 it[ApiKeyTable.scopes] = scopes.distinct().joinToString(",")
@@ -64,12 +66,15 @@ class ApiKeyService : Service() {
         return raw
     }
 
-    suspend fun getKeyString(id: UUID, userId: UUID): String? = dbQuery {
-        ApiKeyTable.select(ApiKeyTable.rawKey)
-            .where { ApiKeyTable.id eq id }
-            .andWhere { ApiKeyTable.userId eq userId }
-            .singleOrNull()
-            ?.get(ApiKeyTable.rawKey)
+    suspend fun getKeyString(id: UUID, userId: UUID): String? {
+        val row = dbQuery {
+            ApiKeyTable.select(ApiKeyTable.keyHash, ApiKeyTable.rawKey)
+                .where { ApiKeyTable.id eq id }
+                .andWhere { ApiKeyTable.userId eq userId }
+                .singleOrNull()
+        } ?: return null
+        val stored = row[ApiKeyTable.rawKey] ?: return null
+        return cipher.decrypt(row[ApiKeyTable.keyHash], stored)
     }
 
     fun availableScopes(): List<ApiKeyScopeInfo> = scopeRegistry.all()

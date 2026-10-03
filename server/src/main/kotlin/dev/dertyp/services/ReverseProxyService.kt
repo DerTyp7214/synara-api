@@ -1,9 +1,10 @@
 package dev.dertyp.services
 
 import dev.dertyp.config.ServerConfig
-import dev.dertyp.core.ApplicationScope
 import dev.dertyp.core.HttpClientFactory
 import dev.dertyp.core.ProxiedKey
+import dev.dertyp.core.cborFor
+import dev.dertyp.core.clientInfo
 import dev.dertyp.proxy.ProxyMessage
 import dev.dertyp.routing.registerAuthenticatedServices
 import dev.dertyp.routing.registerPublicServices
@@ -27,8 +28,10 @@ import io.ktor.websocket.CloseReason
 import io.ktor.websocket.close
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
+import kotlinx.rpc.krpc.KrpcConfig
 import kotlinx.rpc.krpc.KrpcTransport
 import kotlinx.rpc.krpc.KrpcTransportMessage
+import kotlinx.rpc.krpc.rpcServerConfig
 import kotlinx.rpc.krpc.server.KrpcServer
 import org.koin.core.component.get
 import org.koin.core.component.inject
@@ -156,13 +159,21 @@ class ReverseProxyService(
 
                     when (msg) {
                         is ProxyMessage.NewClient -> {
+                            val call = ProxyCall(
+                                application = get(),
+                                uriString = msg.uri,
+                                headersMap = msg.headers,
+                            )
                             val transport = MultiplexedTransport(this.coroutineContext, clientId, this)
-                            val server = ProxyKrpcServer(transport)
+                            val server = ProxyKrpcServer(
+                                transport = transport,
+                                config = rpcServerConfig { serialization { cborFor(call.clientInfo) } },
+                            )
                             activeServers[clientId] = server
 
                             launch {
                                 try {
-                                    setupServer(server, msg)
+                                    setupServer(server, call, msg)
                                     server.awaitCompletion()
                                 } catch (e: CancellationException) {
                                     throw e
@@ -202,18 +213,12 @@ class ReverseProxyService(
         }
     }
 
-    private suspend fun setupServer(server: ProxyKrpcServer, metadata: ProxyMessage.NewClient) {
+    private suspend fun setupServer(server: ProxyKrpcServer, call: ProxyCall, metadata: ProxyMessage.NewClient) {
         val jwtService = get<JwtService>()
         val authHeader = metadata.headers["Authorization"]
         val token = authHeader?.removePrefix("Bearer ")
         val principal = token?.let { jwtService.validateToken(it) }
-
-        val call = ProxyCall(
-            application = get(),
-            uriString = metadata.uri,
-            headersMap = metadata.headers,
-            principal = principal
-        )
+        principal?.let { call.authenticate(it) }
 
         val path = metadata.uri.substringBefore('?')
         if (path == "/rpc" || path == "/rpc/auth") {
@@ -233,8 +238,9 @@ class ReverseProxyService(
     }
 
     private class ProxyKrpcServer(
-        val transport: MultiplexedTransport
-    ) : KrpcServer(ApplicationScope.rpcConfig, transport)
+        val transport: MultiplexedTransport,
+        config: KrpcConfig.Server,
+    ) : KrpcServer(config, transport)
 
     private class MultiplexedTransport(
         override val coroutineContext: CoroutineContext,
@@ -270,16 +276,17 @@ class ReverseProxyService(
         override val application: Application,
         val uriString: String,
         val headersMap: Map<String, String>,
-        val principal: JWTPrincipal?
     ) : ApplicationCall {
         override val attributes = Attributes(true).apply {
             put(ProxiedKey, true)
-            principal?.let {
-                val context = AuthenticationContext(this@ProxyCall)
-                context.principal(it)
-                put(AttributeKey<AuthenticationContext>("AuthContext"), context)
-            }
         }
+
+        fun authenticate(principal: JWTPrincipal) {
+            val context = AuthenticationContext(this)
+            context.principal(principal)
+            attributes.put(AttributeKey<AuthenticationContext>("AuthContext"), context)
+        }
+
         override val parameters: Parameters by lazy {
             val query = uriString.substringAfter('?', "")
             parseQueryString(query)

@@ -56,7 +56,7 @@ import kotlin.time.Duration.Companion.seconds
 
 class RpcListenBackupService(private val service: ListenBackupService) : IListenBackupService {
     override suspend fun getState(): ListenBackupState = service.getState()
-    override fun getStateFlow(): Flow<ListenBackupState> = service.stateFlow
+    override fun observeState(): Flow<ListenBackupState> = service.stateFlow
     override suspend fun updateConfig(config: ListenBackupConfig): ListenBackupState = service.updateConfig(config)
     override suspend fun testConnection(config: ListenBackupConfig?): ListenBackupConnectionTest =
         service.testConnection(config)

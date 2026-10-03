@@ -64,7 +64,7 @@ fun Album.toAlbumID3(starred: String? = null): AlbumID3 = AlbumID3(
     starred = starred,
     year = releaseDate?.year,
     genre = genres.firstOrNull()?.name,
-    musicBrainzId = musicbrainzId?.toString(),
+    musicBrainzId = musicBrainzId?.toString(),
     genres = genres.map { ItemGenre(it.name) }.ifEmpty { null },
 )
 
@@ -74,7 +74,7 @@ fun Artist.toArtistID3(albumCount: Int? = null): ArtistID3 = ArtistID3(
     coverArt = imageId?.imId(),
     albumCount = albumCount,
     starred = if (isFollowed) EPOCH_ISO else null,
-    musicBrainzId = musicbrainzId?.toString(),
+    musicBrainzId = musicBrainzId?.toString(),
 )
 
 fun UserPlaylist.toPlaylistDto(owner: String?, songCount: Int, durationMs: Long): PlaylistDto = PlaylistDto(

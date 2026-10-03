@@ -39,7 +39,7 @@ private fun StringBuilder.table(headers: List<String>, rows: List<List<String>>)
     rows.forEach { appendLine(it.joinToString(" | ", prefix = "| ", postfix = " |")) }
 }
 
-private fun buildDocument(): String = buildString {
+private fun buildDocument(references: MarkdownDocReferences): String = buildString {
     appendLine(HEADLINE)
     appendLine()
     appendLine(GENERATED_BY)
@@ -65,11 +65,12 @@ private fun buildDocument(): String = buildString {
         listOf("Version", "Feature", "Introduces", "Older clients get", "Max version"),
         ClientFeature.entries.sortedBy { it.minApiVersion }.map {
             val doc = featureDoc(it)
+            val sourceName = "ClientFeature.${it.name}"
             listOf(
                 it.minApiVersion.toString(),
                 code(it.name),
-                doc?.introduces ?: "-",
-                doc?.fallback ?: "-",
+                doc?.introduces?.let { text -> references.link(text, sourceName) } ?: "-",
+                doc?.fallback?.let { text -> references.link(text, sourceName) } ?: "-",
                 it.maxApiVersion?.toString() ?: "-",
             )
         },
@@ -124,8 +125,16 @@ private fun buildDocument(): String = buildString {
 }
 
 fun main(args: Array<String>) {
-    val target = File(args.firstOrNull() ?: "docs/API_CONSTANTS.md")
-    val content = buildDocument()
+    val target = File(args.getOrNull(0) ?: "docs/API_CONSTANTS.md")
+    val modelsFile = File(args.getOrNull(1) ?: "docs/MODELS.md")
+    val servicesFile = File(args.getOrNull(2) ?: "docs/RPC_SERVICES.md")
+    val references = MarkdownDocReferences(
+        services = parseDocEntries(servicesFile.readText()),
+        models = parseDocEntries(modelsFile.readText()),
+        serviceDoc = servicesFile.name,
+        modelDoc = modelsFile.name,
+    )
+    val content = buildDocument(references)
     if (target.exists() && target.readText() == content) {
         println("docs/API_CONSTANTS.md is up to date.")
         return

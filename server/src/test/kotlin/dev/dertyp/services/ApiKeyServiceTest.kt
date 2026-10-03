@@ -8,6 +8,8 @@ import dev.dertyp.db.ApiKeyTable
 import dev.dertyp.db.UserTable
 import dev.dertyp.core.db.dbQuery
 import dev.dertyp.plugins.ApiKeyScope
+import dev.dertyp.services.credentials.CredentialCipher
+import io.ktor.server.config.MapApplicationConfig
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
@@ -24,6 +26,7 @@ import org.koin.dsl.module
 import org.koin.test.KoinTest
 import java.util.UUID
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -31,6 +34,7 @@ import kotlin.test.assertTrue
 class ApiKeyServiceTest : KoinTest {
 
     private val userService = mockk<UserService>()
+    private val cipher = CredentialCipher(MapApplicationConfig("credentials.encryptionKey" to "test-key"))
     private val userId = UUID.randomUUID()
 
     private fun setup(dialect: DbDialect) = runBlocking {
@@ -45,7 +49,7 @@ class ApiKeyServiceTest : KoinTest {
         }
         coEvery { userService.findUserById(userId) } returns mockk<User> { every { id } returns userId }
 
-        startKoin { modules(module { single { userService }; single { ApiKeyScopeRegistry() } }) }
+        startKoin { modules(module { single { userService }; single { ApiKeyScopeRegistry() }; single { cipher } }) }
     }
 
     @AfterEach
@@ -147,6 +151,22 @@ class ApiKeyServiceTest : KoinTest {
             }
         }
         assertNull(service.getKeyString(legacyId, userId), "legacy keys have no stored secret")
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `stored key string is encrypted at rest`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val service = ApiKeyService()
+
+        val raw = service.createKey(userId, "mpv", listOf(ApiKeyScope.Radio.id))
+        val row = dbQuery { ApiKeyTable.selectAll().single() }
+        val stored = row[ApiKeyTable.rawKey]!!
+
+        assertTrue(cipher.isEncrypted(stored))
+        assertFalse(stored.contains(raw))
+        assertEquals(raw, cipher.decrypt(row[ApiKeyTable.keyHash], stored))
+        assertEquals(raw, service.getKeyString(row[ApiKeyTable.id].value, userId))
     }
 
     @ParameterizedTest

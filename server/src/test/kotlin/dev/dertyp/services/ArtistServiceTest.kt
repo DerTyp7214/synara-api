@@ -472,7 +472,7 @@ class ArtistServiceTest : KoinTest {
         assertEquals(name, created.name)
         assertEquals(true, created.isGroup)
         assertEquals(about, created.about)
-        assertEquals(mbId, created.musicbrainzId)
+        assertEquals(mbId, created.musicBrainzId)
     }
 
     @ParameterizedTest
@@ -993,7 +993,7 @@ class ArtistServiceTest : KoinTest {
         service.setMusicBrainzId(id, mbId)
 
         val updated = service.byId(id)
-        assertEquals(mbId, updated?.musicbrainzId)
+        assertEquals(mbId, updated?.musicBrainzId)
     }
 
     @ParameterizedTest

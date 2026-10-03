@@ -84,7 +84,7 @@ Two different things are called radio.
 
 These routes authenticate **only with an API key** — `?apiKey=`, `X-API-Key`, or `Authorization: Bearer <key>` — created with `POST /apiKey/apiKey?label=…&scopes=radio`. A JWT is not accepted here. `quality` is required. Send `Icy-MetaData: 1` to receive ICY metadata: the response then carries `icy-name`, `icy-br` and `icy-metaint: 16000`, and a `StreamTitle='Artist - Title';` block is interleaved every 16000 bytes.
 
-**Client-mixed station.** `POST /radio/radioSession?type=` (optional [`RadioSeed`](MODELS.md#devdertypdataradioseed) body) returns a session id, and `GET /radio/radioFlow/{sessionId}` is an SSE stream of song ids that never repeats within the session. A normal JWT client uses this and plays each id through `streamSong`, keeping gapless buffering, scrobbling and the queue under its own control.
+**Client-mixed station.** `POST /radio/radioSession?type=` (optional [`RadioSeed`](MODELS.md#devdertypdataradioseed) body) returns a session id, and `GET /radio/observeRadio/{sessionId}` is an SSE stream of song ids that never repeats within the session. A normal JWT client uses this and plays each id through `streamSong`, keeping gapless buffering, scrobbling and the queue under its own control.
 
 ## Images
 
@@ -111,7 +111,7 @@ Image ids are stable for the lifetime of the image, so cache by id.
 Reporting is what makes now-playing, listening statistics and ListenBrainz work. It is cheap, and the server needs it whether or not you also use the queue.
 
 1. **On track start** — `POST /scrobble/nowPlaying/{songId}`. The now-playing state expires on its own after the song's duration, so a client that dies does not leave a ghost.
-2. **On every playback event and while playing** — `POST /scrobble/reportPlayback` with [`PlaybackReport`](MODELS.md#devdertypdataplaybackreport): `{"songId": …, "positionMs": 12345, "playing": true, "sentAt": <client epoch ms>}`. Send it on play, pause, resume and seek, and every 10 to 15 seconds while playing. The response is the server's epoch milliseconds at receipt, so you can measure the offset between client and server clocks; `sentAt` lets the server compensate transport delay.
+2. **On every playback event and while playing** — `POST /scrobble/reportPlayback` with [`PlaybackReport`](MODELS.md#devdertypdataplaybackreport): `{"songId": …, "positionMs": 12345, "isPlaying": true, "sentAt": <client epoch ms>}`. Send it on play, pause, resume and seek, and every 10 to 15 seconds while playing. The response is the server's epoch milliseconds at receipt, so you can measure the offset between client and server clocks; `sentAt` lets the server compensate transport delay.
 3. **On finish** — `POST /scrobble/listened` with [`ScrobbleRequest`](MODELS.md#devdertypdatascrobblerequest): `{"songId": …, "listenedAt": <epoch ms>, "msPlayed": …}`. `listenedAt` defaults to the server's current time.
 4. **On stop** — `POST /scrobble/clearNowPlaying`.
 5. **To follow along** — `GET /scrobble/recentListensFlow?limit=20` is an SSE stream of [`RecentListens`](MODELS.md#devdertypdatarecentlistens) (`nowPlaying` plus the recent list), debounced by 100 ms; `limit` is clamped to 1…1000. `GET /scrobble/recentListens?limit=20` returns the same once. `GET /scrobble/recentArtists` and `GET /scrobble/recentAlbums` (plus their `Flow` variants) list the recently listened artists and albums with the time each was last played, most recent first.
@@ -130,7 +130,7 @@ Playback state is stored **per session**, so devices can watch each other:
 | `PUT /playback/playbackState/{sessionId}` | write your own (body: the state object) |
 | `GET /playback/observePlaybackState/{sessionId}` | SSE of that device's state |
 
-`PlaybackState` carries its own `queue`, `currentIndex`, `isPlaying`, `positionMs`, `shuffleMode`, `repeatMode` and `sourceId`. It is a snapshot used to transfer a queue to another device — write your own state so that device can pick it up — not a way to watch or steer one live; live control of another device goes through the remote control channel described below. The shared, paged, conflict-checked list further down is the queue a client should keep in sync.
+`PlaybackState` carries its own `queue`, `currentIndex`, `isPlaying`, `positionMs`, `isShuffled`, `repeatMode` and `sourceId`. It is a snapshot used to transfer a queue to another device — write your own state so that device can pick it up — not a way to watch or steer one live; live control of another device goes through the remote control channel described below. The shared, paged, conflict-checked list further down is the queue a client should keep in sync.
 
 ## Online devices and capabilities
 
@@ -156,7 +156,7 @@ A controller picks a device from `getOnlineDevices`, then sends `POST /remoteCon
 
 Playing a particular song on the target goes through the shared queue described below, so that loading a queue and starting a song in it cannot race. The controller writes the queue first — an upload or an incremental insert, any write that returns the new version — and then sends `PlayQueueItem` with the entry's `queueId` and exactly that version. The target applies at least that version of the shared queue, pulling it when it has not seen it yet, before it selects the entry, and answers `REJECTED` when the entry is not in its queue afterwards. Versions only ever grow, so a later write of the target itself cannot invalidate the check. A device that is being controlled should apply shared queue changes right away instead of asking its user about them.
 
-[`RemotePlaybackStatus`](MODELS.md#devdertypdataremoteplaybackstatus) carries `songId`, `isPlaying`, `positionMs`, `durationMs`, `shuffleMode`, `repeatMode`, `volume`, `currentQueueId`, `queueVersion` and `reportedAt` (server epoch ms, stamped on receipt). `currentQueueId` is the shared queue entry the device is playing, so a controller can highlight it in the queue it shows, and `queueVersion` is the version the device has applied, so the controller knows how far behind the target is; both are null on a device that does not play its shared queue or does not take part in queue sync. A controlled device reports on every change and, while playing, every 10 to 15 seconds — the same rhythm as playback reporting above — and a controller should project the position forward instead of waiting for the next report: `positionMs + (now - reportedAt)` while playing.
+[`RemotePlaybackStatus`](MODELS.md#devdertypdataremoteplaybackstatus) carries `songId`, `isPlaying`, `positionMs`, `durationMs`, `isShuffled`, `repeatMode`, `volume`, `currentQueueId`, `queueVersion` and `reportedAt` (server epoch ms, stamped on receipt). `currentQueueId` is the shared queue entry the device is playing, so a controller can highlight it in the queue it shows, and `queueVersion` is the version the device has applied, so the controller knows how far behind the target is; both are null on a device that does not play its shared queue or does not take part in queue sync. A controlled device reports on every change and, while playing, every 10 to 15 seconds — the same rhythm as playback reporting above — and a controller should project the position forward instead of waiting for the next report: `positionMs + (now - reportedAt)` while playing.
 
 | Route | Purpose |
 |---|---|
@@ -173,7 +173,7 @@ A session belonging to another user answers `403`. A target that is not online, 
 
 Reading:
 
-- `GET /queue/queueInfo` → [`QueueInfo`](MODELS.md#devdertypdataqueueinfo): `version`, `total`, `currentIndex`, `shuffleMode`, `repeatMode`, `sourceId`, and who wrote last (`modifiedBySessionId`, `modifiedByDeviceName`). A user without a stored queue reports version 0.
+- `GET /queue/queueInfo` → [`QueueInfo`](MODELS.md#devdertypdataqueueinfo): `version`, `total`, `currentIndex`, `isShuffled`, `repeatMode`, `sourceId`, and who wrote last (`modifiedBySessionId`, `modifiedByDeviceName`). A user without a stored queue reports version 0.
 - `GET /queue/queue?page=&pageSize=&includeSongs=` → a page of [`QueueItem`](MODELS.md#devdertypdataqueueitem) in original order; each item also carries its `shuffledPosition`. Leave `includeSongs` false for large queues and resolve songs separately.
 - `GET /queue/observeQueue` → SSE of `QueueInfo`, one emission after every successful write, including writes from other devices. There is **no initial snapshot**: a fresh subscription stays silent until someone writes, so read `queueInfo` (and the pages you need) once when you subscribe.
 
@@ -193,7 +193,7 @@ Replacing the whole queue is a three-step upload, because a queue can be large:
 
 1. `POST /queue/beginUpload?baseVersion=&force=` → [`QueueUploadStart`](MODELS.md#devdertypdataqueueuploadstart), either `{"type": "Started", "uploadId": …, "expiresAt": …}` or `{"type": "Conflict", "info": …}`. Starting an upload discards any previous staged upload of that user, and a staged upload expires if it is not committed.
 2. `POST /queue/uploadPage/{uploadId}` with the next page of items (body: the item list) → the number staged so far. Repeat.
-3. `POST /queue/commitUpload/{uploadId}` with [`QueueMeta`](MODELS.md#devdertypdataqueuemeta) (`currentIndex`, `shuffleMode`, `repeatMode`, `sourceId`) → `QueueWriteResult`. Only now does anything become visible. Entries whose song no longer exists are dropped and both orders are renumbered.
+3. `POST /queue/commitUpload/{uploadId}` with [`QueueMeta`](MODELS.md#devdertypdataqueuemeta) (`currentIndex`, `isShuffled`, `repeatMode`, `sourceId`) → `QueueWriteResult`. Only now does anything become visible. Entries whose song no longer exists are dropped and both orders are renumbered.
 
 `POST /queue/cancelUpload/{uploadId}` throws a staged upload away.
 
@@ -214,7 +214,7 @@ Media elements and `EventSource` cannot set an `Authorization` header, and the s
 
 - **Web.** Store the JWT in the cookie after login (`document.cookie = "synara-auth=" + token + "; path=/; SameSite=Strict"`) and point `<audio src="/song/streamSong/<id>">` at the same origin. CORS does not allow credentials, so a cross-origin deployment must be put behind a shared reverse proxy. `<img src="/image/imageData/<id>?size=512">` needs no cookie at all.
 - **iOS / macOS (`AVPlayer`).** Build the asset with the cookie attached — `AVURLAsset(url:options: [AVURLAssetHTTPCookiesKey: [cookie]])` with an `HTTPCookie` for `synara-auth` — and let `AVPlayer` do its own ranged requests. Atmos: only offer `streamSongAtmos` where E-AC-3 JOC playback exists; otherwise fall back to `streamSong`.
-- **Android (ExoPlayer).** The HTTP data source is configurable, so prefer the header: `DefaultHttpDataSource.Factory().setDefaultRequestProperties(mapOf("Authorization" to "Bearer $token", "X-Api-Version" to "6"))`. Range handling comes for free.
+- **Android (ExoPlayer).** The HTTP data source is configurable, so prefer the header: `DefaultHttpDataSource.Factory().setDefaultRequestProperties(mapOf("Authorization" to "Bearer $token", "X-Api-Version" to "6"))`. Range handling comes for free. The `6` follows the sample convention described under [Headers in CLIENT_REST.md](CLIENT_REST.md#headers). Send the `ApiVersion.CURRENT` you built against.
 - **Desktop.** Same rule as everywhere else: play what the platform decodes. Clients do not bundle native decoders, so an unsupported variant (Atmos in particular) is simply not streamed — check `atmos` on the song and hide the option.
 
 ## Checklist

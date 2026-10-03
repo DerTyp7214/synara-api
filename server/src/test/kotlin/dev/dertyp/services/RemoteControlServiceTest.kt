@@ -72,7 +72,7 @@ class RemoteControlServiceTest : KoinTest {
         isPlaying = true,
         positionMs = positionMs,
         durationMs = 200_000,
-        shuffleMode = false,
+        isShuffled = false,
         repeatMode = RepeatMode.OFF,
         volume = volume,
     )

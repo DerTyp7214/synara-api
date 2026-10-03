@@ -58,7 +58,7 @@ open class ResponseShaper(val client: ClientInfo, rules: List<CompatRule> = Comp
         is CollectionSongMatch -> value.copy(song = shapeUserSong(value.song))
         is RadioChannelSongMatch -> value.copy(song = shapeUserSong(value.song))
         is PlaybackState -> value.copy(queue = value.queue.map { shape(it) as PlaybackState.QueueEntry })
-        is PlaybackState.QueueEntry.Explicit -> value.copy(song = shapeUserSong(value.song))
+        is PlaybackState.QueueEntry.WithSong -> value.copy(song = shapeUserSong(value.song))
         is QueueItem -> value.copy(song = value.song?.let(::shapeUserSong))
         else -> value
     }

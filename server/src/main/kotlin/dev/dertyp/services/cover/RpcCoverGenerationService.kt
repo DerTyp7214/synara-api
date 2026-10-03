@@ -1,5 +1,6 @@
 package dev.dertyp.services.cover
 
+import dev.dertyp.core.UnauthorizedException
 import dev.dertyp.data.CoverGenerationOptions
 import dev.dertyp.data.CoverGenerationParams
 import dev.dertyp.data.CoverInfo
@@ -37,6 +38,6 @@ class RpcCoverGenerationService(
     private suspend fun requireOwner(target: CoverTarget) {
         val row = service.row(target)
             ?: throw IllegalArgumentException("Unknown ${target.type.name.lowercase()} ${target.id}")
-        if (row.creator != user.id && !user.isAdmin) throw IllegalAccessException("Not the owner of ${target.type.name.lowercase()} ${target.id}")
+        if (row.creator != user.id && !user.isAdmin) throw UnauthorizedException("Not the owner of ${target.type.name.lowercase()} ${target.id}")
     }
 }

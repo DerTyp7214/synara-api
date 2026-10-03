@@ -245,7 +245,7 @@ class ScrobbleServiceTest : KoinTest {
         assertTrue(events[0].playing)
         assertTrue(events[0].positionMs in 1_300..1_450, "position ${events[0].positionMs}")
 
-        service.reportPlayback(user, PlaybackReport(songId, positionMs = 1_500, playing = false))
+        service.reportPlayback(user, PlaybackReport(songId, positionMs = 1_500, isPlaying = false))
         awaitCondition { events.size == 2 }
         assertEquals(1_500, events[1].positionMs)
         assertTrue(!events[1].playing)
@@ -276,7 +276,7 @@ class ScrobbleServiceTest : KoinTest {
 
         service.reportPlayback(user, PlaybackReport(songId, positionMs = 1_000))
         awaitCondition { events.size == 1 }
-        service.reportPlayback(user, PlaybackReport(songId, positionMs = 1_000, playing = false))
+        service.reportPlayback(user, PlaybackReport(songId, positionMs = 1_000, isPlaying = false))
         awaitCondition { events.size == 2 }
         assertEquals(songId, events[1].songId)
         assertTrue(!events[1].playing)
@@ -322,7 +322,7 @@ class ScrobbleServiceTest : KoinTest {
         awaitCondition { events.size == 1 }
         assertEquals(0, events[0].positionMs)
 
-        service.reportPlayback(user, PlaybackReport(songId, positionMs = 30_000, playing = false))
+        service.reportPlayback(user, PlaybackReport(songId, positionMs = 30_000, isPlaying = false))
         awaitCondition { events.size == 2 }
         service.setNowPlaying(user, songId)
         awaitCondition { events.size == 3 }
@@ -361,7 +361,7 @@ class ScrobbleServiceTest : KoinTest {
 
         service.reportPlayback(
             user,
-            PlaybackReport(songId, positionMs = 7_000, playing = false, sentAt = System.currentTimeMillis() - 500)
+            PlaybackReport(songId, positionMs = 7_000, isPlaying = false, sentAt = System.currentTimeMillis() - 500)
         )
         awaitCondition { events.size == 3 }
         assertEquals(7_000, events[2].positionMs)
@@ -380,14 +380,14 @@ class ScrobbleServiceTest : KoinTest {
         hookService.on<HookEvent.NowPlayingChanged> { events.add(it) }
         val emissions = collect(service, user)
 
-        service.reportPlayback(user, PlaybackReport(second, positionMs = 1_000, playing = false))
+        service.reportPlayback(user, PlaybackReport(second, positionMs = 1_000, isPlaying = false))
         delay(300)
         assertTrue(events.isEmpty())
         assertTrue(emissions.all { it.nowPlaying == null })
 
         service.reportPlayback(user, PlaybackReport(first, positionMs = 0))
         awaitCondition { events.size == 1 && events[0].songId == first }
-        service.reportPlayback(user, PlaybackReport(second, positionMs = 1_000, playing = false))
+        service.reportPlayback(user, PlaybackReport(second, positionMs = 1_000, isPlaying = false))
         awaitCondition { events.size == 2 }
         assertNull(events[1].songId)
         awaitCondition { emissions.isNotEmpty() && emissions.last().nowPlaying == null }

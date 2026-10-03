@@ -3,8 +3,9 @@ package dev.dertyp.routing.rest
 import dev.dertyp.core.UnauthorizedException
 import dev.dertyp.core.clientInfo
 import dev.dertyp.core.getUser
+import dev.dertyp.core.jsonFor
 import dev.dertyp.core.sniffMediaType
-import dev.dertyp.serializers.AppJson
+import dev.dertyp.core.wire.WireJson
 import dev.dertyp.utils.ResponseShaper
 import dev.dertyp.utils.unwrapProxyTarget
 import dev.dertyp.utils.withClientCompat
@@ -53,6 +54,9 @@ class RestCall<S : Any>(
     val service: S,
     private val fileProvider: RestFileProvider?,
 ) {
+    @PublishedApi
+    internal val json: WireJson = jsonFor(call.clientInfo)
+
     fun <T : Any> pathParam(name: String, convert: RestConverter<T>): T {
         val raw = call.parameters[name] ?: throw RestBindingException("Missing path parameter $name")
         return convert.convert(raw)
@@ -79,7 +83,7 @@ class RestCall<S : Any>(
         val raw = call.request.queryParameters[name]
         if (raw.isNullOrBlank()) return null
         return try {
-            AppJson.decodeFromString(AppJson.serializersModule.serializer<T>(), raw)
+            json.decodeFromString(json.serializersModule.serializer<T>(), raw)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -97,7 +101,7 @@ class RestCall<S : Any>(
     suspend inline fun <reified T> receiveJsonBody(name: String): T {
         val text = restBodyText()
         return try {
-            AppJson.decodeFromString(AppJson.serializersModule.serializer<T>(), text)
+            json.decodeFromString(json.serializersModule.serializer<T>(), text)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -122,7 +126,7 @@ class RestCall<S : Any>(
             JsonObject(emptyMap())
         } else {
             val element = try {
-                AppJson.parseToJsonElement(text)
+                json.format.parseToJsonElement(text)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -135,13 +139,13 @@ class RestCall<S : Any>(
     }
 
     suspend inline fun <reified T> receiveJsonField(name: String): T {
-        val serializer = AppJson.serializersModule.serializer<T>()
+        val serializer = json.serializersModule.serializer<T>()
         val element = restBodyObject()[name] ?: JsonNull
         if (element is JsonNull && !serializer.descriptor.isNullable) {
             throw RestBindingException("Missing body field '$name'")
         }
         return try {
-            AppJson.decodeFromJsonElement(serializer, element)
+            json.decodeFromJsonElement(serializer, element)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -153,7 +157,7 @@ class RestCall<S : Any>(
         val element = restBodyObject()[name] ?: return null
         if (element is JsonNull) return null
         return try {
-            AppJson.decodeFromJsonElement(AppJson.serializersModule.serializer<T>(), element)
+            json.decodeFromJsonElement(json.serializersModule.serializer<T>(), element)
         } catch (e: CancellationException) {
             throw e
         } catch (_: Exception) {
@@ -203,7 +207,7 @@ class RestCall<S : Any>(
 
     suspend inline fun <reified T> respondJson(value: T) {
         call.respondText(
-            AppJson.encodeToString(AppJson.serializersModule.serializer<T>(), value),
+            json.encodeToString(json.serializersModule.serializer<T>(), value),
             ContentType.Application.Json,
         )
     }
@@ -228,7 +232,7 @@ class RestCall<S : Any>(
     }
 
     suspend inline fun <reified T : Any> respondSse(flow: Flow<T?>) {
-        val itemSerializer = AppJson.serializersModule.serializer<T>()
+        val itemSerializer = json.serializersModule.serializer<T>()
         call.response.cacheControl(CacheControl.NoCache(null))
         call.respond(SSEServerContent(call, handle = {
             send(ServerSentEvent(comments = SseKeepAliveComment))
@@ -242,7 +246,7 @@ class RestCall<S : Any>(
                 try {
                     flow.collect { item ->
                         if (item != null) {
-                            send(ServerSentEvent(data = AppJson.encodeToString(itemSerializer, item)))
+                            send(ServerSentEvent(data = json.encodeToString(itemSerializer, item)))
                         }
                     }
                 } finally {

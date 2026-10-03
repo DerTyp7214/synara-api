@@ -252,7 +252,7 @@ class ImportRpcService(
     }
 
     override suspend fun getImportService(): ImportBackend = importerProxy.defaultService
-    override suspend fun getAllImportServices(): List<ImportBackend> = importService.getAllImportServices()
+    override suspend fun allImportServices(): List<ImportBackend> = importService.getAllImportServices()
     override suspend fun setImportService(service: ImportBackend) {
         importerProxy.defaultService = service
     }

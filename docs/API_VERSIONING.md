@@ -22,6 +22,8 @@ Every registered service is wrapped in a chain of proxies — caching, then metr
 
 The shaper ([ClientCompat.kt](../server/src/main/kotlin/dev/dertyp/utils/ClientCompat.kt)) walks the returned value recursively, so a rule reaches a `Song` whether it came back on its own, inside a `PaginatedResponse`, a `List`, a `Map`, a `Flow`, a queue entry, a now-playing record or a listen history entry. Rules are applied newest-first, so a client sending `ApiVersion.LEGACY` gets the title-tag rule, then the audio-info rule, then the Atmos rule, each on the result of the previous. When the client supports everything, the shaper reports itself as a no-op and no proxy is installed at all.
 
+Renamed fields are handled one layer lower, in the wire format. For a client below the `FIELD_RENAMES` version the server writes and reads the old field and type names on the RPC and the REST wire alike ([WireFormats.kt](../server/src/main/kotlin/dev/dertyp/core/WireFormats.kt), [LegacyWire.kt](../server/src/main/kotlin/dev/dertyp/core/wire/LegacyWire.kt)). The models in `common-rpc` only carry the old name in a `@LegacyWireName` annotation, and clients use the plain generated serializers without any compatibility code.
+
 The consequence for you: **you never see a half-shaped object.** Whatever version you claim, the models are internally consistent; you just have to claim the right one.
 
 ## The UI schema version

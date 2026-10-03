@@ -60,7 +60,7 @@ class QueueServiceTest : KoinTest {
     private lateinit var service: QueueService
     private lateinit var songService: SongService
 
-    private val defaultMeta = QueueMeta(currentIndex = 0, shuffleMode = false, repeatMode = RepeatMode.OFF)
+    private val defaultMeta = QueueMeta(currentIndex = 0, isShuffled = false, repeatMode = RepeatMode.OFF)
 
     private fun setup(dialect: DbDialect) {
         songService = mockk(relaxed = true)
@@ -299,7 +299,7 @@ class QueueServiceTest : KoinTest {
             item(songIds[2], 3, 2, shuffledPosition = 1),
         )
 
-        upload(userId, sessionId, items, defaultMeta.copy(shuffleMode = true))
+        upload(userId, sessionId, items, defaultMeta.copy(isShuffled = true))
 
         val byQueueId = service.getQueue(userId, 0, 10, false).data.associateBy { it.queueId }
         assertEquals(2, byQueueId.getValue(1).shuffledPosition)
@@ -321,7 +321,7 @@ class QueueServiceTest : KoinTest {
             userId,
             sessionId,
             listOf(item(songId, 1, 0, shuffledPosition = 5)),
-            defaultMeta.copy(shuffleMode = false)
+            defaultMeta.copy(isShuffled = false)
         )
 
         val page = service.getQueue(userId, 0, 10, false)
@@ -363,7 +363,7 @@ class QueueServiceTest : KoinTest {
             val base = upload(
                 userId, sessionId,
                 listOf(item(songIds[0], 1, 0, shuffledPosition = 0), item(songIds[1], 2, 1, shuffledPosition = 1)),
-                defaultMeta.copy(shuffleMode = true),
+                defaultMeta.copy(isShuffled = true),
             )
             check(base is QueueWriteResult.Ok)
             val newSongId = transaction(database) { insertSong(insertAlbum()) }
@@ -498,7 +498,7 @@ class QueueServiceTest : KoinTest {
 
         check(result is QueueWriteResult.Ok)
         assertEquals(0, result.info.currentIndex)
-        assertTrue(result.info.shuffleMode)
+        assertTrue(result.info.isShuffled)
         val page = service.getQueue(userId, 0, 10, false)
         assertEquals(0, page.data.single { it.queueId == 3L }.shuffledPosition)
         assertEquals(setOf(0, 1, 2), page.data.mapNotNull { it.shuffledPosition }.toSet())
@@ -520,13 +520,13 @@ class QueueServiceTest : KoinTest {
                 item(songIds[1], 2, 1, shuffledPosition = 0),
                 item(songIds[2], 3, 2, shuffledPosition = 1),
             )
-            val base = upload(userId, sessionId, items, defaultMeta.copy(shuffleMode = true, currentIndex = 0))
+            val base = upload(userId, sessionId, items, defaultMeta.copy(isShuffled = true, currentIndex = 0))
             check(base is QueueWriteResult.Ok)
 
             val result = service.setModes(userId, sessionId, base.info.version, false, RepeatMode.OFF, false)
 
             check(result is QueueWriteResult.Ok)
-            assertFalse(result.info.shuffleMode)
+            assertFalse(result.info.isShuffled)
             assertEquals(1, result.info.currentIndex)
             val page = service.getQueue(userId, 0, 10, false)
             assertTrue(page.data.all { it.shuffledPosition == null })

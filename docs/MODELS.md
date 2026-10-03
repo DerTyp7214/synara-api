@@ -12,6 +12,7 @@ Services: [RPC_SERVICES.md](RPC_SERVICES.md) · REST routes: [REST_API.md](REST_
 - [ApiKeyScopeInfo](#devdertypdataapikeyscopeinfo)
 - [dev.dertyp.data.Artist](#devdertypdataartist)
 - [ArtistAlias](#devdertypdataartistalias)
+- [ArtistCredit](#devdertypdataartistcredit)
 - [ArtistPlaylistSortStrategy](#devdertypdataartistplaylistsortstrategy)
 - [ArtistSplitAlias](#devdertypdataartistsplitalias)
 - [ArtistType](#devdertypdataartisttype)
@@ -114,8 +115,8 @@ Services: [RPC_SERVICES.md](RPC_SERVICES.md) · REST routes: [REST_API.md](REST_
 - [PlaybackReport](#devdertypdataplaybackreport)
 - [PlaybackState](#devdertypdataplaybackstate)
 - [QueueEntry](#devdertypdataplaybackstatequeueentry)
-- [Explicit](#devdertypdataplaybackstatequeueentryexplicit)
 - [FromSource](#devdertypdataplaybackstatequeueentryfromsource)
+- [WithSong](#devdertypdataplaybackstatequeueentrywithsong)
 - [dev.dertyp.data.Playlist](#devdertypdataplaylist)
 - [PlaylistEntry](#devdertypdataplaylistentry)
 - [PodcastDeliveryMode](#devdertypdatapodcastdeliverymode)
@@ -203,6 +204,7 @@ Services: [RPC_SERVICES.md](RPC_SERVICES.md) · REST routes: [REST_API.md](REST_
 - [User](#devdertypdatauser)
 - [UserCapability](#devdertypdatausercapability)
 - [UserInfo](#devdertypdatauserinfo)
+- [UserPasswordHash](#devdertypdatauserpasswordhash)
 - [UserPlaylist](#devdertypdatauserplaylist)
 - [UserPlaylistBackup](#devdertypdatauserplaylistbackup)
 - [UserPlaylistSong](#devdertypdatauserplaylistsong)
@@ -336,7 +338,7 @@ Contains metadata about a collection of songs released together.
 | :--- | :--- | :--- |
 | `id` | `PlatformUUID` | The album unique identifier. |
 | `name` | `String` | The name of the album. |
-| `artists` | `List`<[Artist](#devdertypdataartist)> | Collection of artists credited for this album. |
+| `artists` | `List`<[ArtistCredit](#devdertypdataartistcredit)> | Collection of artists credited for this album. |
 | `songCount` | `Int` | Total number of songs in the album. |
 | `releaseDate` | `PlatformLocalDate`? | The date the album was released. |
 | `totalDuration` | `Long` | Sum of all track durations in milliseconds. |
@@ -346,7 +348,8 @@ Contains metadata about a collection of songs released together.
 | `genres` | `List`<[Genre](#devdertypdatagenre)> | Collection of genres associated with this album. |
 | `originalId` | `String`? | The original ID of the album on external sources. |
 | `barcode` | `String`? | The barcode or UPC of the album. |
-| `musicbrainzId` | `PlatformUUID`? | The MusicBrainz Release unique identifier. |
+| `musicBrainzId` | `PlatformUUID`? | The MusicBrainz Release unique identifier. |
+| `musicbrainzId` | `PlatformUUID`? | Old name, used for clients below API version 8. |
 | `animatedCoverId` | `PlatformUUID`? | The animated cover unique identifier. |
 | `animatedCoverImageId` | `PlatformUUID`? | Identifier of the still Image from the animated cover's first frame. |
 | `animatedCoverBlurHash` | `String`? | BlurHash of the animated cover's first frame. |
@@ -409,7 +412,8 @@ Contains metadata about a music artist or group.
 | `genres` | `List`<[Genre](#devdertypdatagenre)> | Collection of genres associated with this artist. |
 | `imageId` | `PlatformUUID`? | The artist image unique identifier. |
 | `blurHash` | `String`? | The blur hash of the artist image. |
-| `musicbrainzId` | `PlatformUUID`? | The MusicBrainz Artist unique identifier. |
+| `musicBrainzId` | `PlatformUUID`? | The MusicBrainz Artist unique identifier. |
+| `musicbrainzId` | `PlatformUUID`? | Old name, used for clients below API version 8. |
 | `isFollowed` | `Boolean` | Whether the current user is following this artist. |
 | `creditedName` | `String`? | The name this artist was credited as in the current song/album context, if different from the canonical name. |
 | `joinPhrase` | `String`? | The phrase that follows this artist in the credit of the current song/album context, such as " & " or " feat. ". Null when the credit source has none. |
@@ -421,6 +425,24 @@ Represents an alternative name for an artist.
 | :--- | :--- | :--- |
 | `artistId` | `PlatformUUID` | The artist unique identifier. |
 | `name` | `String` | The alternative name. |
+
+### ArtistCredit <a name="devdertypdataartistcredit"></a>
+An artist as credited on a song or album. Carries the same fields as a full artist without the biography.
+
+| Field | Type | Description |
+| :--- | :--- | :--- |
+| `id` | `PlatformUUID` | The artist unique identifier. |
+| `name` | `String` | The name of the artist. |
+| `isGroup` | `Boolean` | Whether the artist record represents a group of individuals. |
+| `artists` | `List`<[ArtistCredit](#devdertypdataartistcredit)> | Collection of sub-artists if this is a group. |
+| `genres` | `List`<[Genre](#devdertypdatagenre)> | Collection of genres associated with this artist. |
+| `imageId` | `PlatformUUID`? | The artist image unique identifier. |
+| `blurHash` | `String`? | The blur hash of the artist image. |
+| `musicBrainzId` | `PlatformUUID`? | The MusicBrainz Artist unique identifier. |
+| `musicbrainzId` | `PlatformUUID`? | Old name, used for clients below API version 8. |
+| `isFollowed` | `Boolean` | Whether the current user is following this artist. |
+| `creditedName` | `String`? | The name this artist was credited as in the current song/album context, if different from the canonical name. |
+| `joinPhrase` | `String`? | The phrase that follows this artist in the credit of the current song/album context, such as " & " or " feat. ". Null when the credit source has none. |
 
 ### ArtistPlaylistSortStrategy <a name="devdertypdataartistplaylistsortstrategy"></a>
 Strategy for sorting songs when creating a playlist from artists.
@@ -480,7 +502,7 @@ Physical properties of one audio file belonging to a song.
 | :--- | :--- | :--- |
 | `codec` | `String` | Audio codec of the file, e.g. flac, wav, eac3. |
 | `sampleRate` | `Int` | Audio sample rate in Hz. |
-| `bitsPerSample` | `Int` | Number of bits per audio sample; 0 for lossy codecs. |
+| `bitsPerSample` | `Int` | Number of bits per audio sample. 0 for lossy codecs. |
 | `bitRate` | `Long` | Audio bit rate in kilobits per second. |
 | `fileSize` | `Long` | Size of the audio file in bytes. |
 | `channels` | `Int` | Number of audio channels, e.g. 2 for stereo or 6 for 5.1. |
@@ -734,7 +756,8 @@ A song matched by a collection search, with how it belongs to the collection.
 | Field | Type | Description |
 | :--- | :--- | :--- |
 | `song` | [UserSong](#devdertypdatausersong) | The matched song. |
-| `explicitMember` | `Boolean` | True when the song is added directly to the collection; false when it is reached via an album, artist or playlist that is in the collection. |
+| `directMember` | `Boolean` | True when the song is added directly to the collection. False when it is reached via an album, artist or playlist that is in the collection. |
+| `explicitMember` | `Boolean` | Old name, used for clients below API version 8. |
 
 ### CoverGenerationOptions <a name="devdertypdatacovergenerationoptions"></a>
 Styles and asset packs the current user may choose from.
@@ -742,7 +765,7 @@ Styles and asset packs the current user may choose from.
 | Field | Type | Description |
 | :--- | :--- | :--- |
 | `styles` | `List`<[CoverStyle](#devdertypdatacoverstyle)> | Available styles. |
-| `packs` | `List`<[CoverPackInfo](#devdertypdatacoverpackinfo)> | Available asset packs; NSFW packs are only listed when enabled on the server. |
+| `packs` | `List`<[CoverPackInfo](#devdertypdatacoverpackinfo)> | Available asset packs. NSFW packs are only listed when enabled on the server. |
 | `nsfwEnabled` | `Boolean` | Whether NSFW packs are enabled on the server. |
 
 ### CoverGenerationParams <a name="devdertypdatacovergenerationparams"></a>
@@ -751,10 +774,10 @@ Parameters controlling how a cover is generated.
 | Field | Type | Description |
 | :--- | :--- | :--- |
 | `style` | [CoverStyle](#devdertypdatacoverstyle) | Layout style. |
-| `seed` | `Long`? | Seed for deterministic output; null derives a stable seed from the content. |
+| `seed` | `Long`? | Seed for deterministic output. Null derives a stable seed from the content. |
 | `allowNsfw` | `Boolean` | Whether NSFW asset packs may be used. Ignored unless enabled on the server. |
 | `includeTitle` | `Boolean` | Whether to draw the playlist or collection name on the cover. |
-| `pack` | `String`? | Asset pack id to use; null picks the best match for the content. |
+| `pack` | `String`? | Asset pack id to use. Null picks the best match for the content. |
 
 ### CoverInfo <a name="devdertypdatacoverinfo"></a>
 The current cover state of a playlist or collection.
@@ -763,7 +786,7 @@ The current cover state of a playlist or collection.
 | :--- | :--- | :--- |
 | `target` | [CoverTarget](#devdertypdatacovertarget) | The entity the info refers to. |
 | `imageId` | `PlatformUUID`? | The current cover image unique identifier. |
-| `source` | [ImageSource](#devdertypdataimagesource)? | Where the current cover came from; null when there is no cover. |
+| `source` | [ImageSource](#devdertypdataimagesource)? | Where the current cover came from. Null when there is no cover. |
 | `style` | [CoverStyle](#devdertypdatacoverstyle)? | Style used for the last generated cover. |
 | `seed` | `Long`? | Seed used for the last generated cover. |
 
@@ -788,7 +811,7 @@ Layout style of a generated cover.
 | `GRID` | A 2x2 grid of source images. |
 | `MOSAIC` | A 3x3 grid of source images. |
 | `STACKED` | Overlapping, slightly rotated source images. |
-| `GRADIENT` | No source images; a gradient derived from the content palette. |
+| `GRADIENT` | No source images. A gradient derived from the content palette. |
 
 ### CoverTarget <a name="devdertypdatacovertarget"></a>
 Identifies the playlist or collection a cover operation applies to.
@@ -861,8 +884,8 @@ Response for the server handshake/reachability test.
 | :--- | :--- | :--- |
 | `secure` | `Boolean` | Whether the current connection is secure (HTTPS/WSS). |
 | `sslSupported` | `Boolean` | Whether the server supports secure connections (HTTPS/WSS). |
-| `apiVersion` | `Int` | Highest API version the server supports. Clients send the version they support in the X-Api-Version header; absent means 1. |
-| `uiSchemaVersion` | `Int` | Highest server-driven UI schema version the server supports; 0 means unsupported. Clients send theirs in the X-Ui-Schema-Version header. |
+| `apiVersion` | `Int` | Highest API version the server supports. Clients send the version they support in the X-Api-Version header. An absent header means 1. |
+| `uiSchemaVersion` | `Int` | Highest server-driven UI schema version the server supports. 0 means unsupported. Clients send theirs in the X-Ui-Schema-Version header. |
 
 ### HueBridgeCandidate <a name="devdertypdatahuebridgecandidate"></a>
 A Hue bridge found on the network but not necessarily paired yet.
@@ -934,7 +957,7 @@ A scene on a bridge, scoped to a room or zone.
 | :--- | :--- | :--- |
 | `id` | `String` | Bridge resource id of the scene. |
 | `name` | `String` | Display name. |
-| `groupType` | [HueTargetType](#devdertypdatahuetargettype) | Kind of group the scene belongs to; ROOM or ZONE. |
+| `groupType` | [HueTargetType](#devdertypdatahuetargettype) | Kind of group the scene belongs to. ROOM or ZONE. |
 | `groupId` | `String` | Bridge resource id of the room or zone. |
 | `groupName` | `String` | Display name of the room or zone. |
 
@@ -972,9 +995,9 @@ Kind of light target on a bridge, including entertainment areas.
 | Value | Description |
 | :--- | :--- |
 | `LIGHT` | A single light. |
-| `ROOM` | A room; controlled through its grouped light. |
-| `ZONE` | A zone; controlled through its grouped light. |
-| `ENTERTAINMENT` | An entertainment area; streamed over the Entertainment API at up to 25 frames per second, at most one per bridge link. |
+| `ROOM` | A room. Controlled through its grouped light. |
+| `ZONE` | A zone. Controlled through its grouped light. |
+| `ENTERTAINMENT` | An entertainment area. Streamed over the Entertainment API at up to 25 frames per second, at most one per bridge link. |
 
 ### HueTransitionMode <a name="devdertypdatahuetransitionmode"></a>
 How the transition duration between colors is chosen.
@@ -991,15 +1014,15 @@ A user's link to a bridge: which lights follow the user's playback and how.
 | :--- | :--- | :--- |
 | `bridgeId` | `PlatformUUID` | Server-side unique identifier of the bridge. |
 | `enabled` | `Boolean` | Whether the link is active. |
-| `targets` | `List`<[HueTarget](#devdertypdatahuetarget)> | Lights, rooms and zones that follow playback; at most one entertainment area. |
+| `targets` | `List`<[HueTarget](#devdertypdatahuetarget)> | Lights, rooms and zones that follow playback. At most one entertainment area. |
 | `intensity` | [HueIntensity](#devdertypdatahueintensity) | Reaction strength. |
 | `transitionMode` | [HueTransitionMode](#devdertypdatahuetransitionmode) | Transition duration mode. |
 | `transitionMs` | `Int` | Transition duration in milliseconds for FIXED mode. |
 | `onStop` | [HueStopMode](#devdertypdatahuestopmode) | Behaviour when playback stops. |
 | `updatedAt` | `Long` | Unix timestamp in milliseconds of the last change. |
 | `motion` | [HueMotionMode](#devdertypdatahuemotionmode) | Ambient movement while a song plays. |
-| `latencyMs` | `Int` | Milliseconds by which light changes are sent early to compensate bridge and lamp latency; 0..1000. |
-| `stopScenes` | `List`<[HueScene](#devdertypdatahuescene)> | Scenes recalled when playback stops in SCENE mode; at most one per room or zone. |
+| `latencyMs` | `Int` | Milliseconds by which light changes are sent early to compensate bridge and lamp latency. Between 0 and 1000. |
+| `stopScenes` | `List`<[HueScene](#devdertypdatahuescene)> | Scenes recalled when playback stops in SCENE mode. At most one per room or zone. |
 
 ### Image <a name="devdertypdataimage"></a>
 *Full name: `dev.dertyp.data.Image`*
@@ -1025,8 +1048,8 @@ Where the current cover image of a playlist or collection came from.
 
 | Value | Description |
 | :--- | :--- |
-| `USER` | Chosen or uploaded by the user; never replaced automatically. |
-| `GENERATED` | Generated by the server; may be regenerated when the content changes. |
+| `USER` | Chosen or uploaded by the user. Never replaced automatically. |
+| `GENERATED` | Generated by the server. May be regenerated when the content changes. |
 
 ### InsertableAlbum <a name="devdertypdatainsertablealbum"></a>
 Configuration for creating or updating an album record.
@@ -1088,7 +1111,7 @@ Configuration for creating or updating a radio channel's metadata.
 | `name` | `String` | The channel name. |
 | `description` | `String`? | An optional description. |
 | `enabled` | `Boolean` | Whether the channel is published and visible to non-admin users. |
-| `position` | `Int` | Display ordering; lower values appear first. |
+| `position` | `Int` | Display ordering. Lower values appear first. |
 | `discovery` | `Boolean` | When true the channel expands its configured content into recommended similar songs. |
 
 ### InsertableSong <a name="devdertypdatainsertablesong"></a>
@@ -1114,8 +1137,8 @@ Configuration for creating or updating a song record.
 | `isrc` | `String`? | The International Standard Recording Code. |
 | `audioData` | [SongAudioData](#devdertypdatasongaudiodata)? | Additional audio analysis data. |
 | `atmosPath` | `String`? | Internal server path to the Dolby Atmos (E-AC-3 JOC in MP4) variant, if one exists. |
-| `atmos` | [AudioInfo](#devdertypdataaudioinfo)? | Properties of the Dolby Atmos variant; probed by the server when null and atmosPath is set. |
-| `tags` | `List`<[TitleTag](#devdertypdatatitletag)> | Version markers; when empty the server splits them off the title. |
+| `atmos` | [AudioInfo](#devdertypdataaudioinfo)? | Properties of the Dolby Atmos variant. Probed by the server when null and atmosPath is set. |
+| `tags` | `List`<[TitleTag](#devdertypdatatitletag)> | Version markers. When empty the server splits them off the title. |
 
 ### LikeLevel <a name="devdertypdatalikelevel"></a>
 How strongly a user likes a song. A super like also counts as a like everywhere likes are used.
@@ -1132,7 +1155,7 @@ Request to link a user's unmatched listens of a track to a library song, identif
 | Field | Type | Description |
 | :--- | :--- | :--- |
 | `songId` | `PlatformUUID` | The library song to link the listens to. |
-| `recordingMsid` | `PlatformUUID`? | A ListenBrainz recording MSID of the unmatched track; the server expands it to the whole group. |
+| `recordingMsid` | `PlatformUUID`? | A ListenBrainz recording MSID of the unmatched track. The server expands it to the whole group. |
 | `recordingMbid` | `PlatformUUID`? | The MusicBrainz recording MBID of the unmatched track. |
 
 ### LinkUnmatchedTrackResult <a name="devdertypdatalinkunmatchedtrackresult"></a>
@@ -1141,7 +1164,7 @@ Result of linking unmatched listens to a library song.
 | Field | Type | Description |
 | :--- | :--- | :--- |
 | `linkedListens` | `Int` | Number of listens that were linked to the song. |
-| `submittedToListenBrainz` | `Int` | Number of manual mappings accepted by the ListenBrainz API; 0 when the song has no recording MBID, no account token is stored, or no listens carry an MSID. |
+| `submittedToListenBrainz` | `Int` | Number of manual mappings accepted by the ListenBrainz API. 0 when the song has no recording MBID, no account token is stored, or no listens carry an MSID. |
 
 ### ListenBackupConfig <a name="devdertypdatalistenbackupconfig"></a>
 Configuration for backing up server-side listens to a remote listen-backup receiver.
@@ -1150,7 +1173,7 @@ Configuration for backing up server-side listens to a remote listen-backup recei
 | :--- | :--- | :--- |
 | `enabled` | `Boolean` | Whether the backup worker pushes listens to the receiver. |
 | `url` | `String` | Base URL of the listen-backup receiver, e.g. https://backup.example.com:8082. |
-| `key` | `String`? | API key sent to the receiver. Null on update keeps the stored key; the server never returns it. |
+| `key` | `String`? | API key sent to the receiver. Null on update keeps the stored key. The server never returns it. |
 | `batchSize` | `Int` | Maximum number of listens sent per request (1..10000). |
 
 ### ListenBackupConnectionTest <a name="devdertypdatalistenbackupconnectiontest"></a>
@@ -1192,8 +1215,8 @@ Distribution of listens over the hours of the day and days of the week, in the r
 
 | Field | Type | Description |
 | :--- | :--- | :--- |
-| `hourOfDay` | `List`<`Long`> | Listen counts per hour of day; 24 entries, index 0 = 00:00-00:59. |
-| `dayOfWeek` | `List`<`Long`> | Listen counts per day of week; 7 entries, index 0 = Monday. |
+| `hourOfDay` | `List`<`Long`> | Listen counts per hour of day. 24 entries, index 0 = 00:00-00:59. |
+| `dayOfWeek` | `List`<`Long`> | Listen counts per day of week. 7 entries, index 0 = Monday. |
 
 ### ListenedAlbum <a name="devdertypdatalistenedalbum"></a>
 An album from the user's listen history, with when one of its songs was last played.
@@ -1226,9 +1249,9 @@ Listening statistics for a time range over the user's unified listen history, de
 | :--- | :--- | :--- |
 | `range` | [StatsRange](#devdertypdatastatsrange) | The requested time range. |
 | `timezone` | `String` | The timezone used for range boundaries. |
-| `rangeStart` | `Long` | Start of the range (epoch milliseconds, inclusive); 0 for ALL_TIME. |
-| `rangeEnd` | `Long` | End of the range (epoch milliseconds, exclusive); now for open-ended ranges, the period end for LAST_WEEK, LAST_MONTH and LAST_YEAR. |
-| `listenCount` | `Long` | Deduplicated listen count in the range. A play only counts when at least half of the song or at least 3 minutes were played; plays without a known played duration always count. |
+| `rangeStart` | `Long` | Start of the range (epoch milliseconds, inclusive). 0 for ALL_TIME. |
+| `rangeEnd` | `Long` | End of the range (epoch milliseconds, exclusive). Now for open-ended ranges, the period end for LAST_WEEK, LAST_MONTH and LAST_YEAR. |
+| `listenCount` | `Long` | Deduplicated listen count in the range. A play only counts when at least half of the song or at least 3 minutes were played. Plays without a known played duration always count. |
 | `listenedMs` | `Long` | Total milliseconds listened in the range, including plays too short to count as a listen. Plays without a known played duration count the whole song duration. |
 | `comparison` | [RangeComparison](#devdertypdatarangecomparison)? | Comparison against the previous equivalent range, or null for ALL_TIME. |
 | `uniqueSongs` | `Int` | Distinct songs listened to in the range. |
@@ -1266,7 +1289,7 @@ A user-owned, downloadable grouping of songs, albums, artists and playlists.
 | `albumCount` | `Int` | Number of albums explicitly added as items. |
 | `artistCount` | `Int` | Number of artists explicitly added as items. |
 | `playlistCount` | `Int` | Number of playlists explicitly added as items. |
-| `imageSource` | [ImageSource](#devdertypdataimagesource)? | Where the cover image came from; null when there is no cover. |
+| `imageSource` | [ImageSource](#devdertypdataimagesource)? | Where the cover image came from. Null when there is no cover. |
 
 ### MergeArtists <a name="devdertypdatamergeartists"></a>
 Configuration for merging multiple artist records into one.
@@ -1423,8 +1446,9 @@ A playback progress report for the song the user is playing.
 | :--- | :--- | :--- |
 | `songId` | `PlatformUUID` | The library song being played. |
 | `positionMs` | `Long` | Playback position in milliseconds at the time the report was sampled. |
-| `playing` | `Boolean` | Whether playback is running; false while paused. |
-| `sentAt` | `Long`? | Client epoch milliseconds when the position was sampled; lets the server compensate transport delay. |
+| `isPlaying` | `Boolean` | Whether playback is running. False while paused. |
+| `playing` | `Boolean` | Old name, used for clients below API version 8. |
+| `sentAt` | `Long`? | Client epoch milliseconds when the position was sampled. Lets the server compensate transport delay. |
 
 ### PlaybackState <a name="devdertypdataplaybackstate"></a>
 Represents the real-time status of music playback on a device.
@@ -1435,7 +1459,8 @@ Represents the real-time status of music playback on a device.
 | `currentIndex` | `Int` | Index of the currently playing song in the queue. |
 | `isPlaying` | `Boolean` | Whether the playback is currently active. |
 | `positionMs` | `Long` | Current playback position in milliseconds. |
-| `shuffleMode` | `Boolean` | Whether the queue is being played in random order. |
+| `isShuffled` | `Boolean` | Whether the queue is being played in random order. |
+| `shuffleMode` | `Boolean` | Old name, used for clients below API version 8. |
 | `repeatMode` | [RepeatMode](#devdertypdatarepeatmode) | The current repetition mode. |
 | `sourceId` | `String`? | Identifier for the origin of the current queue (e.g., a playlist ID). |
 
@@ -1446,20 +1471,22 @@ Base class for entries in the playback queue.
 | :--- | :--- | :--- |
 | `queueId` | `Long` | A unique identifier for this specific instance in the queue. |
 
-### Explicit <a name="devdertypdataplaybackstatequeueentryexplicit"></a>
-A queue entry containing full song metadata.
-
-| Field | Type | Description |
-| :--- | :--- | :--- |
-| `song` | [UserSong](#devdertypdatausersong) | The complete song metadata. |
-| `queueId` | `Long` | A unique identifier for this specific instance in the queue. |
-
 ### FromSource <a name="devdertypdataplaybackstatequeueentryfromsource"></a>
 A queue entry linked to a persistent song ID.
 
 | Field | Type | Description |
 | :--- | :--- | :--- |
 | `songId` | `PlatformUUID` | The song unique identifier. |
+| `queueId` | `Long` | A unique identifier for this specific instance in the queue. |
+
+### WithSong <a name="devdertypdataplaybackstatequeueentrywithsong"></a>
+A queue entry containing full song metadata.
+
+Old type name `Explicit`, used for clients below API version 8.
+
+| Field | Type | Description |
+| :--- | :--- | :--- |
+| `song` | [UserSong](#devdertypdatausersong) | The complete song metadata. |
 | `queueId` | `Long` | A unique identifier for this specific instance in the queue. |
 
 ### Playlist <a name="devdertypdataplaylist"></a>
@@ -1558,7 +1585,7 @@ How far the server has got with storing the audio of an episode on disk.
 | `QUEUED` | The episode is waiting to be imported. |
 | `IMPORTING` | The audio of the episode is being transferred to the server right now. |
 | `IMPORTED` | The audio of the episode is stored on the server. |
-| `FAILED` | The last import attempt failed; the server retries a few times before giving up. |
+| `FAILED` | The last import attempt failed. The server retries a few times before giving up. |
 
 ### PodcastIndexInfo <a name="devdertypdatapodcastindexinfo"></a>
 A podcast directory the server can search for shows.
@@ -1570,7 +1597,7 @@ A podcast directory the server can search for shows.
 | `configured` | `Boolean` | Whether the directory is ready to be searched. An unconfigured directory is skipped by searchIndex. |
 
 ### PodcastIndexResult <a name="devdertypdatapodcastindexresult"></a>
-A show found in an external podcast directory. The server does not know the show yet; subscribing to it is done with subscribe and the feed address of the result, which fetches the feed and stores the show.
+A show found in an external podcast directory. The server does not know the show yet. Subscribing to it is done with subscribe and the feed address of the result, which fetches the feed and stores the show.
 
 | Field | Type | Description |
 | :--- | :--- | :--- |
@@ -1661,7 +1688,7 @@ A transcript of an episode, announced by the feed, found next to a local file or
 | `type` | `String` | The media type of the transcript, for example text/vtt, application/srt, application/json or text/plain. |
 | `language` | `String`? | The language of the transcript, if it is known. |
 | `rel` | `String`? | The relation the transcript has to the episode, for example captions. |
-| `available` | `Boolean` | Whether the content of the transcript can be read; a transcript that only exists as a remote address becomes available on first read. |
+| `available` | `Boolean` | Whether the content of the transcript can be read. A transcript that only exists as a remote address becomes available on first read. |
 
 ### PodcastTranscriptContent <a name="devdertypdatapodcasttranscriptcontent"></a>
 A transcript together with its text.
@@ -1710,7 +1737,8 @@ Metadata describing the state of the server-stored play queue of a user.
 | `modifiedBySessionId` | `PlatformUUID`? | The session that performed the last write, or null if the queue was never written. |
 | `modifiedByDeviceName` | `String`? | Snapshot of the device name of the session that performed the last write. |
 | `currentIndex` | `Int` | Index of the currently playing entry in the active order (the shuffled order while shuffle is on, otherwise the original order). |
-| `shuffleMode` | `Boolean` | Whether the queue is played in the stored shuffled order. |
+| `isShuffled` | `Boolean` | Whether the queue is played in the stored shuffled order. |
+| `shuffleMode` | `Boolean` | Old name, used for clients below API version 8. |
 | `repeatMode` | [RepeatMode](#devdertypdatarepeatmode) | The current repetition mode. |
 | `sourceId` | `String`? | Identifier for the origin of the queue (e.g., a playlist ID). |
 | `total` | `Int` | Total number of entries in the queue. |
@@ -1724,7 +1752,8 @@ A single entry of the server-stored play queue.
 | `queueId` | `Long` | Identifier of this specific instance in the queue, unique per user. The same song may appear multiple times with different queue IDs. |
 | `position` | `Int` | Zero-based index in the original (unshuffled) order. |
 | `shuffledPosition` | `Int`? | Zero-based index in the shuffled order, or null while shuffle is off. |
-| `explicit` | `Boolean` | Whether this entry was added explicitly by the user rather than by the source. |
+| `userAdded` | `Boolean` | Whether this entry was added explicitly by the user rather than by the source. |
+| `explicit` | `Boolean` | Old name, used for clients below API version 8. |
 | `song` | [UserSong](#devdertypdatausersong)? | The resolved song metadata. Filled in by the server only when the queue is read with includeSongs enabled, and ignored on writes. |
 
 ### QueueMeta <a name="devdertypdataqueuemeta"></a>
@@ -1733,7 +1762,8 @@ Playback metadata written together with a full queue upload.
 | Field | Type | Description |
 | :--- | :--- | :--- |
 | `currentIndex` | `Int` | Index of the currently playing entry in the active order. |
-| `shuffleMode` | `Boolean` | Whether the queue is played in the uploaded shuffled order. |
+| `isShuffled` | `Boolean` | Whether the queue is played in the uploaded shuffled order. |
+| `shuffleMode` | `Boolean` | Old name, used for clients below API version 8. |
 | `repeatMode` | [RepeatMode](#devdertypdatarepeatmode) | The repetition mode to store. |
 | `sourceId` | `String`? | Identifier for the origin of the queue (e.g., a playlist ID). |
 
@@ -1809,8 +1839,8 @@ An admin-curated radio station scoped to a configured set of songs, artists and 
 | `imageId` | `PlatformUUID`? | The optional cover image unique identifier. |
 | `blurHash` | `String`? | The blur hash of the cover image. |
 | `enabled` | `Boolean` | Whether the channel is published and visible to non-admin users. |
-| `position` | `Int` | Display ordering; lower values appear first. |
-| `discovery` | `Boolean` | When true the channel expands its configured content into recommended similar songs; when false it plays only the configured content. |
+| `position` | `Int` | Display ordering. Lower values appear first. |
+| `discovery` | `Boolean` | When true the channel expands its configured content into recommended similar songs. When false it plays only the configured content. |
 | `songCount` | `Int` | Number of songs explicitly configured on the channel. |
 | `artistCount` | `Int` | Number of artists configured on the channel. |
 | `albumCount` | `Int` | Number of albums configured on the channel. |
@@ -1839,7 +1869,8 @@ A song matched by a radio channel search, with how it belongs to the channel.
 | Field | Type | Description |
 | :--- | :--- | :--- |
 | `song` | [UserSong](#devdertypdatausersong) | The matched song. |
-| `explicitMember` | `Boolean` | True when the song is added directly to the channel; false when it is reached via an album or artist that is configured on the channel. |
+| `directMember` | `Boolean` | True when the song is added directly to the channel. False when it is reached via an album or artist that is configured on the channel. |
+| `explicitMember` | `Boolean` | Old name, used for clients below API version 8. |
 
 ### RadioSeed <a name="devdertypdataradioseed"></a>
 Seed material for a radio station. When any field is set, the radio is built from songs similar to the seed rather than from listen history.
@@ -1927,7 +1958,8 @@ What a remote-controllable device is playing, as it last reported it. A controll
 | `isPlaying` | `Boolean` | Whether the device is playing right now rather than paused or stopped. |
 | `positionMs` | `Long` | Playback position within the song in milliseconds at the time of the report. |
 | `durationMs` | `Long`? | Length of the song in milliseconds, when the device knows it. |
-| `shuffleMode` | `Boolean` | Whether the device plays its queue in shuffled order. |
+| `isShuffled` | `Boolean` | Whether the device plays its queue in shuffled order. |
+| `shuffleMode` | `Boolean` | Old name, used for clients below API version 8. |
 | `repeatMode` | [RepeatMode](#devdertypdatarepeatmode) | The repetition mode of the device. |
 | `volume` | `Float`? | Playback volume between 0 and 1, or null on a device that does not expose its volume. |
 | `currentQueueId` | `Long`? | Queue id of the shared queue entry the device is playing, or null when the device is not playing its shared queue. |
@@ -2130,7 +2162,7 @@ Contains core metadata about a track that is common for all users.
 | :--- | :--- | :--- |
 | `id` | `PlatformUUID` | The song unique identifier. |
 | `title` | `String` | The title of the song. |
-| `artists` | `List`<[Artist](#devdertypdataartist)> | Collection of performing artists. |
+| `artists` | `List`<[ArtistCredit](#devdertypdataartistcredit)> | Collection of performing artists. |
 | `album` | [Album](#devdertypdataalbum)? | The album this song belongs to. |
 | `duration` | `Long` | Duration of the song in milliseconds. |
 | `explicit` | `Boolean` | Whether the song contains explicit content. |
@@ -2143,10 +2175,10 @@ Contains core metadata about a track that is common for all users.
 | `copyright` | `String` | Copyright information for the track. |
 | `audio` | [AudioInfo](#devdertypdataaudioinfo)? | Properties of the primary audio file. |
 | `atmos` | [AudioInfo](#devdertypdataaudioinfo)? | Properties of the Dolby Atmos (E-AC-3 JOC in MP4) variant, if one exists. |
-| `sampleRate` | `Int`? | Audio sample rate in Hz. API version 3 and below only; see audio. |
-| `bitsPerSample` | `Int`? | Number of bits per audio sample. API version 3 and below only; see audio. |
-| `bitRate` | `Long`? | Audio bit rate in kilobits per second. API version 3 and below only; see audio. |
-| `fileSize` | `Long`? | Size of the audio file in bytes. API version 3 and below only; see audio. |
+| `sampleRate` | `Int`? | Audio sample rate in Hz. Only sent to clients that predate the audio field. See audio. |
+| `bitsPerSample` | `Int`? | Number of bits per audio sample. Only sent to clients that predate the audio field. See audio. |
+| `bitRate` | `Long`? | Audio bit rate in kilobits per second. Only sent to clients that predate the audio field. See audio. |
+| `fileSize` | `Long`? | Size of the audio file in bytes. Only sent to clients that predate the audio field. See audio. |
 | `coverId` | `PlatformUUID`? | The song cover image unique identifier. |
 | `blurHash` | `String`? | The blur hash of the song cover image. |
 | `musicBrainzId` | `PlatformUUID`? | The MusicBrainz Recording unique identifier. |
@@ -2156,7 +2188,7 @@ Contains core metadata about a track that is common for all users.
 | `animatedCoverImageId` | `PlatformUUID`? | Identifier of the still Image from the animated cover's first frame. |
 | `animatedCoverBlurHash` | `String`? | BlurHash of the animated cover's first frame. |
 | `audioStartMs` | `Long`? | Offset in milliseconds of the first audible sound, or null if not yet analyzed. |
-| `atmosPath` | `String`? | Internal server path to the Dolby Atmos variant. API version 3 only; use atmos and streamSongAtmos. |
+| `atmosPath` | `String`? | Internal server path to the Dolby Atmos variant. Only sent to clients that predate the atmos field. Use atmos and streamSongAtmos. |
 | `tags` | `List`<[TitleTag](#devdertypdatatitletag)> | Version markers split off the title, e.g. remix, live or featuring, in order of extraction. The title never contains them. |
 | `atmosVariantPath` | `String`? |  |
 
@@ -2200,9 +2232,9 @@ Time-based analysis data of a song: beat grid, loudness envelope, bass envelope 
 | `onsetRate` | `Double`? | Onsets per second. |
 | `envelopeHz` | `Int` | Sample rate of the loudness envelope in samples per second. |
 | `envelopeDb` | `List`<`Float`> | Loudness envelope in dBFS, one value per 1/envelopeHz seconds. |
-| `bassEnvelopeDb` | `List`<`Float`> | Bass band (20-130 Hz) envelope in dBFS derived from the sub and kick bands, one value per 1/envelopeHz seconds; empty when not extracted yet. |
-| `bandHz` | `Int` | Sample rate of the band level tracks in samples per second; 0 when no bands are stored. |
-| `bands` | `List`<[SongAudioBand](#devdertypdatasongaudioband)> | Per-band level tracks (sub, kick, low mid, mid, high) for visualisations and light sync; empty when not extracted yet. |
+| `bassEnvelopeDb` | `List`<`Float`> | Bass band (20-130 Hz) envelope in dBFS derived from the sub and kick bands, one value per 1/envelopeHz seconds. Empty when not extracted yet. |
+| `bandHz` | `Int` | Sample rate of the band level tracks in samples per second. 0 when no bands are stored. |
+| `bands` | `List`<[SongAudioBand](#devdertypdatasongaudioband)> | Per-band level tracks (sub, kick, low mid, mid, high) for visualisations and light sync. Empty when not extracted yet. |
 | `loudnessRange` | `Double`? | Loudness range in LU. |
 | `dynamicComplexity` | `Double`? | Dynamic complexity of the loudness. |
 | `source` | `String` | Where the beat grid came from: essentia, rms or none. |
@@ -2240,7 +2272,7 @@ Configuration for splitting an artist record into multiple artists.
 | `newArtists` | `Map`<`String`, `PlatformUUID`?> | Map of names to their new artist IDs. |
 
 ### StatsRange <a name="devdertypdatastatsrange"></a>
-A time range for listening statistics. DAY, WEEK, MONTH and YEAR run from the period start to now; LAST_WEEK, LAST_MONTH and LAST_YEAR cover the previous completed period.
+A time range for listening statistics. DAY, WEEK, MONTH and YEAR run from the period start to now. LAST_WEEK, LAST_MONTH and LAST_YEAR cover the previous completed period.
 
 | Value | Description |
 | :--- | :--- |
@@ -2355,7 +2387,7 @@ A version marker that was split off the song title, shown by clients separately 
 
 | Field | Type | Description |
 | :--- | :--- | :--- |
-| `kind` | [TitleTagKind](#devdertypdatatitletagkind) | The kind of marker. |
+| `kind` | [TitleTagKind](#devdertypdatatitletagkind) | The kind of marker. Kinds a client does not know are decoded as UNKNOWN. |
 | `label` | `String` | The original text without brackets, e.g. Skrillex Remix, Live at Wembley, feat. Drake or Radio Edit. |
 
 ### TitleTagKind <a name="devdertypdatatitletagkind"></a>
@@ -2375,6 +2407,7 @@ Kind of version marker split off a song title.
 | `VERSION` | A generic alternate version, e.g. Album Version, Take 2, Sped Up, Bonus Track or Deluxe. |
 | `REMASTER` | A remaster, optionally with year. |
 | `DEMO` | A demo recording. |
+| `UNKNOWN` | A kind this client does not know yet. Clients treat it as a generic marker. |
 
 ### TopAlbumEntry <a name="devdertypdatatopalbumentry"></a>
 An album ranked by listen count or time listened. Fallback entries for listens not matched to a library album carry a null albumId.
@@ -2399,7 +2432,7 @@ An artist ranked by listen count or time listened. Fallback entries for listens 
 | `listenedMs` | `Long` | Total milliseconds listened to this artist in the range, including plays too short to count as a listen. |
 
 ### TopOrder <a name="devdertypdatatoporder"></a>
-How top lists are ranked. LISTEN_COUNT ranks by deduplicated listen count; LISTENED_MS ranks by total milliseconds listened, which also surfaces entries whose plays were too short to count as listens.
+How top lists are ranked. LISTEN_COUNT ranks by deduplicated listen count. LISTENED_MS ranks by total milliseconds listened, which also surfaces entries whose plays were too short to count as listens.
 
 | Value | Description |
 | :--- | :--- |
@@ -2470,7 +2503,7 @@ Contains core identity and profile data for a Synara user.
 | `id` | `PlatformUUID` | The user unique identifier. |
 | `username` | `String` | The unique login name of the user. |
 | `displayName` | `String`? | Optional display name shown to other users. |
-| `passwordHash` | `String` | Hashed password for authentication. |
+| `passwordHash` | `String` | Always empty. Password hashes are never sent to clients. |
 | `isAdmin` | `Boolean` | Whether the user has administrative privileges. |
 | `capabilities` | `List`<[UserCapability](#devdertypdatausercapability)> | List of specific capabilities granted to the user. |
 | `profileImageId` | `PlatformUUID`? | The user's profile avatar image unique identifier. |
@@ -2499,6 +2532,14 @@ Publicly safe profile information about a user.
 | `profileImageId` | `PlatformUUID`? | The user's profile avatar image unique identifier. |
 | `blurHash` | `String`? | The blur hash of the profile avatar image. |
 
+### UserPasswordHash <a name="devdertypdatauserpasswordhash"></a>
+The stored password hash of a user, used only for server-to-server mirroring.
+
+| Field | Type | Description |
+| :--- | :--- | :--- |
+| `id` | `PlatformUUID` | The user unique identifier. |
+| `passwordHash` | `String` | The bcrypt hash of the user password. |
+
 ### UserPlaylist <a name="devdertypdatauserplaylist"></a>
 Represents a user-created and managed collection of tracks.
 
@@ -2515,7 +2556,7 @@ Represents a user-created and managed collection of tracks.
 | `description` | `String` | A user-provided description of the playlist. |
 | `origin` | `String`? | The source or platform where the playlist originated. |
 | `modifiedAt` | `PlatformDate`? | Timestamp of the last modification to the playlist. |
-| `imageSource` | [ImageSource](#devdertypdataimagesource)? | Where the cover image came from; null when there is no cover. |
+| `imageSource` | [ImageSource](#devdertypdataimagesource)? | Where the cover image came from. Null when there is no cover. |
 
 ### UserPlaylistBackup <a name="devdertypdatauserplaylistbackup"></a>
 A complete backup of a user's playlists and their associated images.
@@ -2542,7 +2583,7 @@ Extends track metadata with user-specific information like favorite status.
 | :--- | :--- | :--- |
 | `id` | `PlatformUUID` | The song unique identifier. |
 | `title` | `String` | The title of the song. |
-| `artists` | `List`<[Artist](#devdertypdataartist)> | Collection of performing artists. |
+| `artists` | `List`<[ArtistCredit](#devdertypdataartistcredit)> | Collection of performing artists. |
 | `album` | [Album](#devdertypdataalbum)? | The album this song belongs to. |
 | `duration` | `Long` | Duration of the song in milliseconds. |
 | `explicit` | `Boolean` | Whether the song contains explicit content. |
@@ -2555,10 +2596,10 @@ Extends track metadata with user-specific information like favorite status.
 | `copyright` | `String` | Copyright information for the track. |
 | `audio` | [AudioInfo](#devdertypdataaudioinfo)? | Properties of the primary audio file. |
 | `atmos` | [AudioInfo](#devdertypdataaudioinfo)? | Properties of the Dolby Atmos (E-AC-3 JOC in MP4) variant, if one exists. |
-| `sampleRate` | `Int`? | Audio sample rate in Hz. API version 3 and below only; see audio. |
-| `bitsPerSample` | `Int`? | Number of bits per audio sample. API version 3 and below only; see audio. |
-| `bitRate` | `Long`? | Audio bit rate in kilobits per second. API version 3 and below only; see audio. |
-| `fileSize` | `Long`? | Size of the audio file in bytes. API version 3 and below only; see audio. |
+| `sampleRate` | `Int`? | Audio sample rate in Hz. Only sent to clients that predate the audio field. See audio. |
+| `bitsPerSample` | `Int`? | Number of bits per audio sample. Only sent to clients that predate the audio field. See audio. |
+| `bitRate` | `Long`? | Audio bit rate in kilobits per second. Only sent to clients that predate the audio field. See audio. |
+| `fileSize` | `Long`? | Size of the audio file in bytes. Only sent to clients that predate the audio field. See audio. |
 | `coverId` | `PlatformUUID`? | The song cover image unique identifier. |
 | `blurHash` | `String`? | The blur hash of the song cover image. |
 | `musicBrainzId` | `PlatformUUID`? | The MusicBrainz Recording unique identifier. |
@@ -2568,7 +2609,7 @@ Extends track metadata with user-specific information like favorite status.
 | `animatedCoverImageId` | `PlatformUUID`? | Identifier of the still Image from the animated cover's first frame. |
 | `animatedCoverBlurHash` | `String`? | BlurHash of the animated cover's first frame. |
 | `audioStartMs` | `Long`? | Offset in milliseconds of the first audible sound, or null if not yet analyzed. |
-| `atmosPath` | `String`? | Internal server path to the Dolby Atmos variant. API version 3 only; use atmos and streamSongAtmos. |
+| `atmosPath` | `String`? | Internal server path to the Dolby Atmos variant. Only sent to clients that predate the atmos field. Use atmos and streamSongAtmos. |
 | `tags` | `List`<[TitleTag](#devdertypdatatitletag)> | Version markers split off the title, e.g. remix, live or featuring, in order of extraction. The title never contains them. |
 | `atmosVariantPath` | `String`? |  |
 | `isFavourite` | `Boolean`? | Whether the current user has marked this song as a favorite. |
@@ -2756,9 +2797,9 @@ Response containing an access token for an external metadata service.
 
 | Field | Type | Description |
 | :--- | :--- | :--- |
-| `accessToken` | `String` | The access token string. |
-| `tokenType` | `String` | The type of the token (e.g., Bearer). |
-| `expiresIn` | `Int` | Token lifetime in seconds. |
+| `access_token` | `String` | The access token string. |
+| `token_type` | `String` | The type of the token (e.g., Bearer). |
+| `expires_in` | `Int` | Token lifetime in seconds. |
 
 ### Album <a name="devdertypservicesmetadataimetadataservicealbum"></a>
 *Full name: `dev.dertyp.services.metadata.IMetadataService.Album`*
@@ -2932,7 +2973,7 @@ Metadata for a recently released album or single from a followed artist.
 | `suspectReason` | `String`? | Human-readable explanation of why the entry is suspect. |
 | `recordLabel` | `String`? | The record label reported by the provider, when known. |
 | `copyright` | `String`? | The copyright line reported by the provider, when known. |
-| `versions` | `List`<[RecentRelease](#devdertypservicesmodelsrecentrelease)> | Other editions of the same release folded under this entry: explicit, clean, deluxe or remastered variants, or the same release listed by another catalog. Each keeps its own identifiers, links and cover; their own versions lists are always empty. |
+| `versions` | `List`<[RecentRelease](#devdertypservicesmodelsrecentrelease)> | Other editions of the same release folded under this entry: explicit, clean, deluxe or remastered variants, or the same release listed by another catalog. Each keeps its own identifiers, links and cover. Their own versions lists are always empty. |
 
 ### SyncedLyrics <a name="devdertypservicesmodelssyncedlyrics"></a>
 A collection of time-synced lyrics for a song.
@@ -2976,7 +3017,7 @@ An id in a provider's namespace, e.g. provider "tidal", id "123".
 
 | Field | Type | Description |
 | :--- | :--- | :--- |
-| `provider` | `String` | Provider / importer id; empty means the server default. |
+| `provider` | `String` | Provider / importer id. Empty means the server default. |
 | `id` | `String` | The id. |
 | `contentType` | [Type](#devdertypservicesimporttype)? | Content type if known. |
 
@@ -3005,7 +3046,7 @@ An action a client performs when the user interacts with a UI element.
 | :--- | :--- | :--- |
 
 ### DismissKeyboard <a name="devdertypuiuiactiondismisskeyboard"></a>
-Unfocus the current input and close the on-screen keyboard; no-op where there is none.
+Unfocus the current input and close the on-screen keyboard. No-op where there is none.
 
 | Field | Type | Description |
 | :--- | :--- | :--- |
@@ -3016,7 +3057,7 @@ Hand items to the server through IUiService.intake and show the result: toast on
 | Field | Type | Description |
 | :--- | :--- | :--- |
 | `items` | `List`<[IntakeItem](#devdertypuiintakeitem)> | Items to submit. |
-| `resolverId` | `String`? | Preselected handler (resolver id); null lets the server decide. |
+| `resolverId` | `String`? | Preselected handler (resolver id). Null lets the server decide. |
 | `confirmText` | `String`? | If set, ask the user to confirm with this text first. |
 
 ### Invoke <a name="devdertypuiuiactioninvoke"></a>
@@ -3108,7 +3149,7 @@ Preferred size of a home-screen card.
 | `WIDE` | Full-width card. |
 
 ### UiComponent <a name="devdertypuiuicomponent"></a>
-A node of a server-driven UI tree. Clients render each node with their native design system; unknown nodes are replaced by the server with Fallback according to the client's X-Ui-Schema-Version.
+A node of a server-driven UI tree. Clients render each node with their native design system. Unknown nodes are replaced by the server with Fallback according to the client's X-Ui-Schema-Version.
 
 | Field | Type | Description |
 | :--- | :--- | :--- |
@@ -3176,7 +3217,7 @@ Placeholder the server substitutes for components the client's schema version do
 
 | Field | Type | Description |
 | :--- | :--- | :--- |
-| `text` | `String`? | Optional text to show; clients show a generic message when null. |
+| `text` | `String`? | Optional text to show. Clients show a generic message when null. |
 
 ### FileField <a name="devdertypuiuicomponentfilefield"></a>
 File input. Clients pick a file with a native file picker and submit its content under key. Clients without file field support receive a multi-line TextField with the same key.
@@ -3197,13 +3238,13 @@ File input. Clients pick a file with a native file picker and submit its content
 | `toolbar` | `List`<[UiComponent](#devdertypuiuicomponent)> | Keyboard accessory toolbar shown above the on-screen keyboard while the field is focused. Items are trailing-aligned. Buttons, Icons and Native portals. |
 
 ### Form <a name="devdertypuiuicomponentform"></a>
-Groups form fields; their values are submitted together with the submit action.
+Groups form fields. Their values are submitted together with the submit action.
 
 | Field | Type | Description |
 | :--- | :--- | :--- |
 | `id` | `String` | Form id referenced by UiAction.Invoke.formId. |
 | `children` | `List`<[UiComponent](#devdertypuiuicomponent)> | Content including form fields. |
-| `submit` | [Invoke](#devdertypuiuiactioninvoke) | Action dispatched on submit; its formId should equal this form's id. |
+| `submit` | [Invoke](#devdertypuiuiactioninvoke) | Action dispatched on submit. Its formId should equal this form's id. |
 | `submitLabel` | `String` | Label of the submit button. |
 | `cancelLabel` | `String`? | Label of an optional cancel/reset button. |
 | `actions` | `List`<[UiComponent](#devdertypuiuicomponent)> | Extra controls rendered in the trailing row next to (before) the submit button, e.g. a scanner portal. |
@@ -3214,7 +3255,7 @@ Grid layout container.
 | Field | Type | Description |
 | :--- | :--- | :--- |
 | `children` | `List`<[UiComponent](#devdertypuiuicomponent)> | Children, row-major. |
-| `columns` | `Int` | Preferred number of columns; clients may reduce it on narrow screens. |
+| `columns` | `Int` | Preferred number of columns. Clients may reduce it on narrow screens. |
 | `spacing` | [UiSpacing](#devdertypuiuispacing) | Spacing between cells. |
 
 ### Icon <a name="devdertypuiuicomponenticon"></a>
@@ -3261,7 +3302,7 @@ Fixed-height log pane: small monospaced secondary text, one entry per line, scro
 | Field | Type | Description |
 | :--- | :--- | :--- |
 | `lines` | `List`<`String`> | Current lines, oldest first. |
-| `maxLines` | `Int` | Maximum number of lines to keep; older lines are dropped when appending. |
+| `maxLines` | `Int` | Maximum number of lines to keep. Older lines are dropped when appending. |
 
 ### Native <a name="devdertypuiuicomponentnative"></a>
 Portal the client fills with its own native UI for a known portal name (see UiPortals). Unknown names render the fallback, or nothing.
@@ -3282,7 +3323,7 @@ Numeric input.
 | `value` | `Double`? | Current value. |
 | `min` | `Double`? | Minimum value. |
 | `max` | `Double`? | Maximum value. |
-| `step` | `Double`? | Step; 1.0 for integers. |
+| `step` | `Double`? | Step. 1.0 for integers. |
 | `helper` | `String`? | Helper text. |
 | `error` | `String`? | Validation error to display. |
 | `required` | `Boolean` | Whether a value is required. |
@@ -3389,7 +3430,7 @@ Single- or multi-line text input.
 | `label` | `String` | Label. |
 | `value` | `String`? | Current value. Never populated for secret fields. |
 | `placeholder` | `String`? | Placeholder. |
-| `secret` | `Boolean` | Whether input is masked; an empty submitted value means unchanged. |
+| `secret` | `Boolean` | Whether input is masked. An empty submitted value means unchanged. |
 | `multiline` | `Boolean` | Whether the field is multi-line. |
 | `helper` | `String`? | Helper text. |
 | `error` | `String`? | Validation error to display. |
@@ -3430,7 +3471,7 @@ Describes a UI contribution available to the current user.
 | `title` | `String` | Localized title. |
 | `description` | `String`? | Localized description. |
 | `icon` | [UiIcon](#devdertypuiuiicon)? | Icon. |
-| `order` | `Int` | Sort order within a slot; lower first. |
+| `order` | `Int` | Sort order within a slot. Lower first. |
 | `live` | `Boolean` | Whether subscribe() emits updates after the initial render. |
 | `cardSize` | [UiCardSize](#devdertypuiuicardsize) | Preferred card size for HOME_CARD contributions. |
 | `requiresAdmin` | `Boolean` | Whether the contribution is restricted to admins. |
@@ -3512,8 +3553,8 @@ A contribution's offer to handle a hook event. The client performs the action di
 
 | Field | Type | Description |
 | :--- | :--- | :--- |
-| `id` | `String` | Handler id, matches UiHookHandlerInfo.id and UiMenuItem.id; pass it as resolverId to IUiService.intake. |
-| `contributionId` | `String` | Id of the offering contribution; equals id for the built-in handlers. |
+| `id` | `String` | Handler id, matches UiHookHandlerInfo.id and UiMenuItem.id. Pass it as resolverId to IUiService.intake. |
+| `contributionId` | `String` | Id of the offering contribution. Equals id for the built-in handlers. |
 | `source` | `String` | Origin: "server" or a plugin id. |
 | `title` | `String` | Localized title, e.g. "Import with Tidal". |
 | `description` | `String`? | Localized description. |
@@ -3522,7 +3563,7 @@ A contribution's offer to handle a hook event. The client performs the action di
 | `confirmText` | `String`? | If set, ask the user to confirm with this text before performing the action, even when it is the only handler. |
 
 ### UiHookHandlerInfo <a name="devdertypuiuihookhandlerinfo"></a>
-A handler that may offer to take hook events, listed without an input. Use for pickers; whether it accepts a specific event is only known from IUiService.dispatchHook.
+A handler that may offer to take hook events, listed without an input. Use for pickers. Whether it accepts a specific event is only known from IUiService.dispatchHook.
 
 | Field | Type | Description |
 | :--- | :--- | :--- |
@@ -3635,10 +3676,10 @@ Outcome of IUiService.intake.
 | Value | Description |
 | :--- | :--- |
 | `OK` | Everything acceptable was submitted. |
-| `NEEDS_CHOICE` | Several handlers offer; let the user pick one of handlers and call intake again with its action. |
-| `UNHANDLED` | No handler accepted any item; fall back to native behaviour. |
+| `NEEDS_CHOICE` | Several handlers offer. Let the user pick one of handlers and call intake again with its action. |
+| `UNHANDLED` | No handler accepted any item. Fall back to native behaviour. |
 | `UNAUTHORIZED` | The user may not use the offering handlers. |
-| `ERROR` | Submission failed; see message. |
+| `ERROR` | Submission failed. See message. |
 
 ### UiInvokePayload <a name="devdertypuiuiinvokepayload"></a>
 Payload of an action invocation.
@@ -3665,7 +3706,7 @@ Outcome of a UI action invocation.
 | Value | Description |
 | :--- | :--- |
 | `OK` | The action succeeded. |
-| `VALIDATION_ERROR` | Submitted values were rejected; see fieldErrors. |
+| `VALIDATION_ERROR` | Submitted values were rejected. See fieldErrors. |
 | `ERROR` | The action failed. |
 | `UNAUTHORIZED` | The user is not allowed to perform the action. |
 
@@ -3695,11 +3736,11 @@ An entry of a menu opened by UiAction.OpenMenu.
 | Field | Type | Description |
 | :--- | :--- | :--- |
 | `label` | `String` | Localized label. |
-| `action` | [UiAction](#devdertypuiuiaction) | Action performed when chosen; may itself be OpenMenu for a sub-menu. |
+| `action` | [UiAction](#devdertypuiuiaction) | Action performed when chosen. May itself be OpenMenu for a sub-menu. |
 | `icon` | [UiIcon](#devdertypuiuiicon)? | Icon. |
 | `tone` | [UiTone](#devdertypuiuitone) | Tone, e.g. ERROR for destructive entries. |
 | `enabled` | `Boolean` | Whether the entry can be chosen. |
-| `id` | `String`? | Stable id, e.g. the handler id (UiHookHandler.id) when the menu lists hook handlers; null for plain entries. |
+| `id` | `String`? | Stable id, e.g. the handler id (UiHookHandler.id) when the menu lists hook handlers. Null for plain entries. |
 
 ### UiOption <a name="devdertypuiuioption"></a>
 A selectable option of a Select field.
@@ -3749,15 +3790,15 @@ A row of a Table.
 | `action` | [UiAction](#devdertypuiuiaction)? | Action performed when the row is activated. |
 
 ### UiTextKind <a name="devdertypuiuitextkind"></a>
-Input kind of a TextField; lets clients pick a keyboard or offer a scanner.
+Input kind of a TextField. Lets clients pick a keyboard or offer a scanner.
 
 | Value | Description |
 | :--- | :--- |
 | `TEXT` | Plain text. |
 | `URL` | A single URL. |
 | `EMAIL` | An e-mail address. |
-| `BARCODE` | A barcode/ISRC/UPC; clients may offer a scanner. |
-| `MULTILINE_URLS` | Multiple URLs or codes, one per line; clients may offer a scanner that appends lines. |
+| `BARCODE` | A barcode/ISRC/UPC. Clients may offer a scanner. |
+| `MULTILINE_URLS` | Multiple URLs or codes, one per line. Clients may offer a scanner that appends lines. |
 
 ### UiTextStyle <a name="devdertypuiuitextstyle"></a>
 Semantic text style.

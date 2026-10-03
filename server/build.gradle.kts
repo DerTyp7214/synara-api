@@ -41,7 +41,8 @@ tasks.register<JavaExec>("generateApiConstantsDocs") {
     mainClass.set("dev.dertyp.docs.ApiConstantsDocsKt")
     classpath = sourceSets["main"].runtimeClasspath
     workingDir = rootProject.projectDir
-    args("docs/API_CONSTANTS.md")
+    dependsOn(":common-rpc:kspCommonMainKotlinMetadata")
+    args("docs/API_CONSTANTS.md", "docs/MODELS.md", "docs/RPC_SERVICES.md")
 }
 
 val javacppPlatforms: List<String> = providers.gradleProperty("javacppPlatforms")

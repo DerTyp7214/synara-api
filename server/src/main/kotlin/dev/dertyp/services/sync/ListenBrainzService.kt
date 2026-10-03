@@ -12,6 +12,7 @@ import dev.dertyp.data.User
 import dev.dertyp.db.*
 import dev.dertyp.core.db.dbQuery
 import dev.dertyp.platformUUIDFromString
+import dev.dertyp.rpc.annotations.REMOVED_IN_API_9
 import dev.dertyp.services.IListenBrainzService
 import dev.dertyp.services.IncomingListen
 import dev.dertyp.services.ListenService
@@ -575,6 +576,7 @@ class RpcListenBrainzService(
 
     override suspend fun getStatus(): ListenBrainzStatus? = service.getStatus(user.id)
 
+    @Deprecated(REMOVED_IN_API_9 + " Use IChangeService.observeChanges and getStatus.")
     override fun getStatusFlow(): Flow<ListenBrainzStatus?> = service.statusFlow(user.id)
 
     override suspend fun syncNow(): ListenBrainzStatus = service.syncNow(user.id)

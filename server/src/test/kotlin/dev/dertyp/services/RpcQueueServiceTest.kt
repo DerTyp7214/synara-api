@@ -105,12 +105,12 @@ class RpcQueueServiceTest {
         val sessionId = UUID.randomUUID()
         val uploadId = UUID.randomUUID()
         val requestId = UUID.randomUUID()
-        val meta = QueueMeta(currentIndex = 0, shuffleMode = false, repeatMode = RepeatMode.OFF)
+        val meta = QueueMeta(currentIndex = 0, isShuffled = false, repeatMode = RepeatMode.OFF)
         val info = QueueInfo(
             version = 1,
             modifiedAt = 0,
             currentIndex = 0,
-            shuffleMode = false,
+            isShuffled = false,
             repeatMode = RepeatMode.OFF,
             total = 0
         )

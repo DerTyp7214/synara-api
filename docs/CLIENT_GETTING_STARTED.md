@@ -59,7 +59,7 @@ curl http://localhost:8080/handshake/handshake
 An observed response, from a server built at the same point in time as this page:
 
 ```json
-{"secure":false,"sslSupported":false,"apiVersion":6,"uiSchemaVersion":1}
+{"secure":false,"sslSupported":false,"apiVersion":7,"uiSchemaVersion":2}
 ```
 
 Running a server of your own is covered in [DEVELOPMENT.md](DEVELOPMENT.md) and the project [README](../README.md).
@@ -72,7 +72,7 @@ These hold across both RPC and REST and are worth internalising before you read 
 2. **Timestamps come in two shapes.** A `PlatformDate` field (`AuthenticationResponse.expiresAt`, `UserSong.userSongCreatedAt`) is epoch milliseconds as a `Long`; a `PlatformInstant` field is an ISO-8601 string. Plain durations, such as `Song.duration` and `audioStartMs`, are milliseconds. The model reference in [MODELS.md](MODELS.md) names the type per field.
 3. **Lists are paginated.** Any method with `page` and `pageSize` returns [`PaginatedResponse`](MODELS.md#devdertypdatapaginatedresponse): `data`, `page` (**0-based**), `total`, `pageSize` and `hasNextPage`. Page through until `hasNextPage` is false rather than computing page counts yourself.
 4. **`explicit` is a required filter, not a preference.** Most song and album queries (`allSongs`, `likedSongs`, `rankedSearch`, `byColor`, …) take an `explicit: Boolean` with no default: pass `false` to hide explicit tracks, `true` to include them. Whatever your app's setting is, it belongs in that parameter.
-5. **Covers are ids plus a blur hash.** Songs, albums, artists and playlists carry `coverId` and `blurHash` — never an image URL. Render the blur hash immediately, then fetch the bytes from the public route `GET /image/imageData/{id}?size=<px>` (`size=0` or omitted means original), or over RPC via `IImageService.getImageData`. See [RPC_SERVICES.md](RPC_SERVICES.md#devdertypservicesiimageservice).
+5. **Covers are ids plus a blur hash.** Songs and albums carry `coverId`, artists and playlists carry `imageId`, and a user carries `profileImageId`, each next to a `blurHash` — never an image URL. Render the blur hash immediately, then fetch the bytes from the public route `GET /image/imageData/{id}?size=<px>` (`size=0` or omitted means original), or over RPC via `IImageService.getImageData`. See [RPC_SERVICES.md](RPC_SERVICES.md#devdertypservicesiimageservice).
 
 ## Headers to always send
 
@@ -137,6 +137,8 @@ curl -s -G http://localhost:8080/song/search \
   --data-urlencode 'explicit=true' \
   -H "Authorization: Bearer $TOKEN" -H 'X-Api-Version: 6'
 ```
+
+The samples send `X-Api-Version: 6`, the convention for every sample in these docs. Send the `ApiVersion.CURRENT` you built against, as the note under [Headers in CLIENT_REST.md](CLIENT_REST.md#headers) explains.
 
 `POST /authenticate` is the hand-written login route and takes a JSON body; it answers with `token`, `refreshToken` and `expiresAt` (epoch millis). `GET /user/me` is `IUserService.me` and `GET /song/search` is `ISongService.rankedSearch` — the route naming, the query-vs-path parameter rules and the SSE streams are described in [CLIENT_REST.md](CLIENT_REST.md), and every route is listed in [REST_API.md](REST_API.md).
 

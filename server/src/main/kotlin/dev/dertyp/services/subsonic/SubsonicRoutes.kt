@@ -178,7 +178,7 @@ private fun Route.subsonicBrowseRoutes() {
                     coverArt = artist.imageId?.imId(),
                     albumCount = albums.size,
                     starred = artist.toArtistID3().starred,
-                    musicBrainzId = artist.musicbrainzId?.toString(),
+                    musicBrainzId = artist.musicBrainzId?.toString(),
                     album = albums.map { it.toAlbumID3(starredIso(stars[it.id])) },
                 ),
             ),
