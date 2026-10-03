@@ -356,8 +356,12 @@ class ImporterPageContributionTest {
         assertTrue(
             settingsAll.filterIsInstance<UiComponent.Button>()
                 .none { (it.action as? UiAction.Invoke)?.actionId == "login" })
-        assertTrue(
-            settingsAll.filterIsInstance<UiComponent.Text>().any { it.text == "Managed by the credential server" })
+        val managedRow = settingsAll.filterIsInstance<UiComponent.Row>().single()
+        assertEquals(2, managedRow.children.size)
+        assertEquals(managedRow.children.size, managedRow.weights?.size)
+        val managedItem = managedRow.children[0] as UiComponent.ListItem
+        assertEquals(scope().t("importer.login.managed"), managedItem.subtitle)
+        assertTrue(managedRow.children[1] is UiComponent.Badge)
         assertTrue(settingsAll.filterIsInstance<UiComponent.Badge>().any { it.text == "Login required" })
 
         val result = state.login(scope(), "tiddl")
@@ -379,8 +383,10 @@ class ImporterPageContributionTest {
             1,
             settingsAll.filterIsInstance<UiComponent.Button>()
                 .count { (it.action as? UiAction.Invoke)?.actionId == "login" })
-        assertTrue(
-            settingsAll.filterIsInstance<UiComponent.Text>().none { it.text == "Managed by the credential server" })
+        val row = settingsAll.filterIsInstance<UiComponent.Row>().single()
+        assertEquals(3, row.children.size)
+        assertEquals(row.children.size, row.weights?.size)
+        assertEquals(scope().t("importer.backends.loginRequired"), (row.children[0] as UiComponent.ListItem).subtitle)
     }
 
     @Test

@@ -517,31 +517,28 @@ class ImporterSettingsPageContribution(
                 val authorized = importer.tokenFileExists()
                 val statusText =
                     if (authorized) scope.t("importer.backends.authorized") else scope.t("importer.backends.loginRequired")
-                UiComponent.Row(
-                    weights = listOf(1.0, 0.0, 0.0),
-                    children = listOfNotNull(
-                        UiComponent.ListItem(
-                            title = importer.name,
-                            subtitle = statusText,
-                            icon = UiIcon(UiIconName.PLUG)
-                        ),
-                        UiComponent.Badge(statusText, if (authorized) UiTone.SUCCESS else UiTone.WARNING),
-                        if (state.managedRemotely(importer)) UiComponent.Text(
-                            scope.t("importer.login.managed"),
-                            UiTextStyle.CAPTION,
-                            UiTone.MUTED
-                        )
-                        else if (!authorized && state.canLogin(importer)) UiComponent.Button(
-                            label = scope.t("importer.login.action"),
-                            action = UiAction.Invoke(
-                                id,
-                                "login",
-                                params = mapOf(ImporterPageContribution.PARAM_IMPORTER to UiValue.of(importer.id))
-                            ),
-                            style = UiButtonStyle.PRIMARY,
-                            icon = UiIcon(UiIconName.LOGIN),
-                        ) else null,
+                val managed = state.managedRemotely(importer)
+                val children = listOfNotNull(
+                    UiComponent.ListItem(
+                        title = importer.name,
+                        subtitle = if (managed) scope.t("importer.login.managed") else statusText,
+                        icon = UiIcon(UiIconName.PLUG)
                     ),
+                    UiComponent.Badge(statusText, if (authorized) UiTone.SUCCESS else UiTone.WARNING),
+                    if (!managed && !authorized && state.canLogin(importer)) UiComponent.Button(
+                        label = scope.t("importer.login.action"),
+                        action = UiAction.Invoke(
+                            id,
+                            "login",
+                            params = mapOf(ImporterPageContribution.PARAM_IMPORTER to UiValue.of(importer.id))
+                        ),
+                        style = UiButtonStyle.PRIMARY,
+                        icon = UiIcon(UiIconName.LOGIN),
+                    ) else null,
+                )
+                UiComponent.Row(
+                    weights = List(children.size) { if (it == 0) 1.0 else 0.0 },
+                    children = children,
                 )
             },
         )
