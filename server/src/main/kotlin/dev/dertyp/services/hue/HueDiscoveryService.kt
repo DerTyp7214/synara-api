@@ -89,7 +89,13 @@ class HueDiscoveryService : Service() {
         }.onFailure { logger.warn("Hue cloud discovery failed: ${it.message}") }.getOrDefault(emptyList())
 
     private suspend fun probe(ip: String): HueBridgeConfig? {
-        val client = HueBridgeClient(httpClientFactory, ip, null, null, null)
+        val client = HueBridgeClient(
+            httpClientFactory = httpClientFactory,
+            ip = ip,
+            bridgeId = null,
+            applicationKey = null,
+            pinnedFingerprint = null,
+        )
         return try {
             client.config().takeIf { it.bridgeid != null }
         } catch (e: CancellationException) {

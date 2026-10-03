@@ -53,7 +53,13 @@ class CoverSourceCollector : Service() {
             .map { SongRow.from(it) }
 
         val coverIds = songs.mapNotNull { it.albumCover ?: it.cover }.distinct()
-        build(name, songs, coverIds, emptyList(), emptyList())
+        build(
+            name = name,
+            songs = songs,
+            coverIds = coverIds,
+            artistIds = emptyList(),
+            albumIds = emptyList(),
+        )
     }
 
     private suspend fun collection(id: UUID): CoverContext? = dbQuery {
@@ -108,12 +114,12 @@ class CoverSourceCollector : Service() {
         val coverIds = interleave(sources).distinct()
         val itemCount = artistRows.size + albumRows.size + playlistCovers.size + directSongs.size
         build(
-            name,
-            (directSongs + albumSongs).distinctBy { it.id },
-            coverIds,
-            artistRows.map { it.first },
-            albumRows.map { it.first },
-            itemCount,
+            name = name,
+            songs = (directSongs + albumSongs).distinctBy { it.id },
+            coverIds = coverIds,
+            artistIds = artistRows.map { it.first },
+            albumIds = albumRows.map { it.first },
+            itemCount = itemCount,
         )
     }
 

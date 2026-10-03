@@ -109,18 +109,18 @@ class SearchIndexWorker : KoinComponent {
     private fun writeToRedis(entityType: SearchIndexEntityType, entityId: UUID, data: Map<String, String>) {
         when (entityType) {
             SearchIndexEntityType.SONG -> redisSearchService.indexSong(
-                entityId,
-                data["title"] ?: "",
-                data["artist"] ?: "",
-                data["album"] ?: "",
-                data["metadata"] ?: ""
+                id = entityId,
+                title = data["title"] ?: "",
+                artist = data["artist"] ?: "",
+                album = data["album"] ?: "",
+                metadata = data["metadata"] ?: ""
             )
             SearchIndexEntityType.ARTIST -> redisSearchService.indexArtist(
-                entityId,
-                data["name"] ?: "",
-                data["aliases"] ?: "",
-                data["groups"] ?: "",
-                data["metadata"] ?: ""
+                id = entityId,
+                name = data["name"] ?: "",
+                aliases = data["aliases"] ?: "",
+                groups = data["groups"] ?: "",
+                metadata = data["metadata"] ?: ""
             )
             SearchIndexEntityType.ALBUM -> redisSearchService.indexAlbum(
                 entityId,

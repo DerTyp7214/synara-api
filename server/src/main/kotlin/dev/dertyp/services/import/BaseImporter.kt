@@ -187,7 +187,13 @@ abstract class BaseImporter(override var indexer: IPluginIndexer, internal val s
                 )
 
                 logProxy("Queueing ${songPaths.size} songs and ${playlistPaths.size} playlists for indexing...")
-                indexer.queue(songPaths.distinct(), playlistPaths.distinct(), indexer.id, userId, logProxy).await()
+                indexer.queue(
+                    songPaths = songPaths.distinct(),
+                    playlistPaths = playlistPaths.distinct(),
+                    type = indexer.id,
+                    userId = userId,
+                    stdout = logProxy,
+                ).await()
             }
         }
 

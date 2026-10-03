@@ -88,8 +88,25 @@ class JobService {
     ): Job {
         val id = UUID.randomUUID()
         val job = Job(
-            id, kind, source, payload, run,
-            JobInfo(id, kind, source, title, summary, user, JobStatus.PENDING, null, null, System.currentTimeMillis(), null, null),
+            id = id,
+            kind = kind,
+            source = source,
+            payload = payload,
+            run = run,
+            info = JobInfo(
+                id = id,
+                kind = kind,
+                source = source,
+                title = title,
+                summary = summary,
+                user = user,
+                status = JobStatus.PENDING,
+                progress = null,
+                message = null,
+                createdAt = System.currentTimeMillis(),
+                startedAt = null,
+                finishedAt = null,
+            ),
         )
         val queue = queue(kind)
         synchronized(queue) { queue.pending.addLast(job) }
@@ -198,7 +215,15 @@ class JobService {
 
     fun forSource(source: String): Jobs = object : Jobs {
         override suspend fun enqueue(kind: String, title: String, user: UserInfo?, summary: String, run: suspend JobContext.() -> Unit): UUID =
-            this@JobService.enqueue(kind, title, user?.id, summary, source, null, run).id
+            this@JobService.enqueue(
+                kind = kind,
+                title = title,
+                user = user?.id,
+                summary = summary,
+                source = source,
+                payload = null,
+                run = run,
+            ).id
 
         override fun jobs(kind: String?, user: UserInfo?): Flow<List<JobInfo>> = jobsFlow(kind, user)
         override fun log(jobId: UUID): Flow<String> = this@JobService.log(jobId)

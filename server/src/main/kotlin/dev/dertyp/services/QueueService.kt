@@ -566,7 +566,16 @@ class QueueService : Service() {
                 repeatMode = row[UserQueueTable.repeatMode],
                 sourceId = row[UserQueueTable.sourceId]
             )
-        } ?: Meta(0, 0, null, null, 0, false, RepeatMode.OFF, null)
+        } ?: Meta(
+            version = 0,
+            modifiedAt = 0,
+            modifiedBySessionId = null,
+            modifiedByDeviceName = null,
+            currentIndex = 0,
+            shuffleMode = false,
+            repeatMode = RepeatMode.OFF,
+            sourceId = null,
+        )
 
     private fun loadRows(userId: UUID): List<Row> = UserQueueEntryTable
         .selectAll()

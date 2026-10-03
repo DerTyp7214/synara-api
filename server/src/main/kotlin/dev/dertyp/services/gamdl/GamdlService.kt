@@ -272,7 +272,13 @@ class GamdlService(
         }
 
         onLiveOutput("Queueing ${losslessPaths.size} song(s) for indexing...")
-        indexer.queue(losslessPaths.distinct(), emptyList(), indexer.id, userId, onLiveOutput).await()
+        indexer.queue(
+            songPaths = losslessPaths.distinct(),
+            playlistPaths = emptyList(),
+            type = indexer.id,
+            userId = userId,
+            stdout = onLiveOutput,
+        ).await()
 
         return result
     }

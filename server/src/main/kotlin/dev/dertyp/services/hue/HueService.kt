@@ -91,7 +91,15 @@ class HueService : Service() {
         val lastSeen: Long?,
         val lastError: String?,
     ) {
-        fun info() = HueBridgeInfo(id, bridgeId, ip, name, modelId, lastSeen, lastError)
+        fun info() = HueBridgeInfo(
+            id = id,
+            bridgeId = bridgeId,
+            ip = ip,
+            name = name,
+            modelId = modelId,
+            lastSeen = lastSeen,
+            lastError = lastError,
+        )
     }
 
     class PairingSession(
@@ -201,7 +209,13 @@ class HueService : Service() {
 
     private suspend fun runPairing(session: PairingSession) {
         var fingerprint: String? = null
-        val client = HueBridgeClient(httpClientFactory, session.ip, null, null, null) { fingerprint = it }
+        val client = HueBridgeClient(
+            httpClientFactory = httpClientFactory,
+            ip = session.ip,
+            bridgeId = null,
+            applicationKey = null,
+            pinnedFingerprint = null,
+        ) { fingerprint = it }
         try {
             val deadline = System.currentTimeMillis() + PAIRING_TIMEOUT.inWholeMilliseconds
             while (System.currentTimeMillis() < deadline) {
@@ -212,14 +226,26 @@ class HueService : Service() {
                     delay(PAIRING_POLL)
                     continue
                 }
-                val authenticated = HueBridgeClient(httpClientFactory, session.ip, null, success.username, fingerprint)
+                val authenticated = HueBridgeClient(
+                    httpClientFactory = httpClientFactory,
+                    ip = session.ip,
+                    bridgeId = null,
+                    applicationKey = success.username,
+                    pinnedFingerprint = fingerprint,
+                )
                 val bridge = try {
                     authenticated.bridge()
                 } finally {
                     authenticated.close()
                 }
                 val hardwareId = (bridge.bridgeId ?: bridge.id).lowercase()
-                val row = upsertBridge(session.userId, hardwareId, session.ip, success, fingerprint)
+                val row = upsertBridge(
+                    userId = session.userId,
+                    hardwareId = hardwareId,
+                    ip = session.ip,
+                    success = success,
+                    fingerprint = fingerprint,
+                )
                 runtimes.remove(row.id)?.let { it.queue.close(); it.client.close() }
                 session.state.value = HuePairingStatus(HuePairingState.PAIRED, bridge = row.info())
                 changeFlow.tryEmit(Unit)
@@ -389,7 +415,13 @@ class HueService : Service() {
                     "zone" -> HueTargetType.ZONE
                     else -> return@mapNotNull null
                 }
-                HueScene(scene.id, scene.metadata?.name ?: "Scene", type, group.id, group.name)
+                HueScene(
+                    id = scene.id,
+                    name = scene.metadata?.name ?: "Scene",
+                    groupType = type,
+                    groupId = group.id,
+                    groupName = group.name,
+                )
             }.sortedWith(compareBy({ it.groupName }, { it.name }))
         } catch (e: Exception) {
             recordError(row.id, e)
@@ -779,7 +811,13 @@ class HueService : Service() {
     }
 
     private fun runtime(row: BridgeRow): BridgeRuntime = runtimes.getOrPut(row.id) {
-        val client = HueBridgeClient(httpClientFactory, row.ip, row.bridgeId, row.applicationKey, row.certFingerprint) { fingerprint ->
+        val client = HueBridgeClient(
+            httpClientFactory = httpClientFactory,
+            ip = row.ip,
+            bridgeId = row.bridgeId,
+            applicationKey = row.applicationKey,
+            pinnedFingerprint = row.certFingerprint,
+        ) { fingerprint ->
             scope.launch { dbQuery { HueBridgeTable.update({ HueBridgeTable.id eq row.id }) { it[certFingerprint] = fingerprint } } }
         }
         val queue = HueCommandQueue(

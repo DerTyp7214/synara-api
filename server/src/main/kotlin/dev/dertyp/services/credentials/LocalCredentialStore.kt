@@ -110,7 +110,13 @@ class LocalCredentialStore(
     private val byName: Map<String, LocalCredentialEntry<*>> = entries.associateBy { it.name }
 
     private fun field(name: String, field: String, configPath: String, secret: Boolean, file: Boolean = false) =
-        LocalCredentialField(field, "$name.$field", configPath, secret, file)
+        LocalCredentialField(
+            name = field,
+            settingKey = "$name.$field",
+            configPath = configPath,
+            secret = secret,
+            file = file,
+        )
 
     private fun generic(config: ApplicationConfig, cipher: CredentialCipher, name: String, vararg fields: LocalCredentialField) =
         LocalCredentialEntry(

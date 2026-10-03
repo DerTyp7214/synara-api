@@ -53,7 +53,13 @@ class TidalDeviceLoginManager(
         val authorization = authApi.deviceAuthorization(client.id)
         val loginId = UUID.randomUUID().toString()
         val events = MutableStateFlow(TidalLoginEvent(TidalLoginState.PENDING))
-        val target = LoginTarget(name, request, client.id, client.secret, authorization)
+        val target = LoginTarget(
+            name = name,
+            start = request,
+            clientId = client.id,
+            clientSecret = client.secret,
+            authorization = authorization,
+        )
         val job = scope.launch {
             events.finish(poll(target))
         }

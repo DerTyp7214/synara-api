@@ -158,10 +158,22 @@ class RemoteMirrorService : Service() {
             } catch (_: CancellationException) {
                 logger.warn("Mirror operation from ${config.host} was stopped by user")
                 _activeProgress.value =
-                    MirrorProgress("Mirror stopped by user", 0, 0, true, "Stopped")
+                    MirrorProgress(
+                        currentTask = "Mirror stopped by user",
+                        processedItems = 0,
+                        totalItems = 0,
+                        isFinished = true,
+                        error = "Stopped",
+                    )
             } catch (e: Exception) {
                 logger.error("Mirror from ${config.host} failed: ${e.message}", e)
-                _activeProgress.value = MirrorProgress("Error during mirror", 0, 0, true, e.message)
+                _activeProgress.value = MirrorProgress(
+                    currentTask = "Error during mirror",
+                    processedItems = 0,
+                    totalItems = 0,
+                    isFinished = true,
+                    error = e.message,
+                )
             } finally {
                 isMirroring = false
                 mirrorJob = null
@@ -467,7 +479,14 @@ class RemoteMirrorService : Service() {
                     session.recordError(displayName, e)
                     session.progressMutex.withLock {
                         session.songCount++
-                        session.updateProgress("Mirroring Songs", session.songCount, total, displayName, 1.0f, session.totalBytesSynced)
+                        session.updateProgress(
+                            task = "Mirroring Songs",
+                            processed = session.songCount,
+                            total = total,
+                            item = displayName,
+                            itemProgress = 1.0f,
+                            byteCount = session.totalBytesSynced,
+                        )
                     }
                 }
             }
@@ -493,7 +512,14 @@ class RemoteMirrorService : Service() {
                                 session.progressMutex.withLock {
                                     session.totalBytesSynced += chunk.size
                                     if (downloaded % (256 * 1024) > chunk.size) {
-                                        session.updateProgress("Mirroring Songs", session.songCount, total, displayName, if (size > 0) downloaded.toFloat() / size else null, session.totalBytesSynced)
+                                        session.updateProgress(
+                                            task = "Mirroring Songs",
+                                            processed = session.songCount,
+                                            total = total,
+                                            item = displayName,
+                                            itemProgress = if (size > 0) downloaded.toFloat() / size else null,
+                                            byteCount = session.totalBytesSynced,
+                                        )
                                     }
                                 }
                                 yield()
@@ -511,13 +537,30 @@ class RemoteMirrorService : Service() {
                     session.progressMutex.withLock {
                         session.songCount++
                         if (session.songCount % 50 == 0) logger.info("Mirrored ${session.songCount}/$total songs...")
-                        session.updateProgress("Mirroring Songs", session.songCount, total, displayName, 1.0f, session.totalBytesSynced)
+                        session.updateProgress(
+                            task = "Mirroring Songs",
+                            processed = session.songCount,
+                            total = total,
+                            item = displayName,
+                            itemProgress = 1.0f,
+                            byteCount = session.totalBytesSynced,
+                        )
                     }
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
                     session.recordError(displayName, e)
-                    session.progressMutex.withLock { session.songCount++ ; session.updateProgress("Mirroring Songs", session.songCount, total, displayName, 1.0f, session.totalBytesSynced) }
+                    session.progressMutex.withLock {
+                        session.songCount++
+                        session.updateProgress(
+                            task = "Mirroring Songs",
+                            processed = session.songCount,
+                            total = total,
+                            item = displayName,
+                            itemProgress = 1.0f,
+                            byteCount = session.totalBytesSynced,
+                        )
+                    }
                 }
                 emit(Unit)
             }
@@ -790,8 +833,18 @@ class RemoteMirrorService : Service() {
                 null
             }
 
-            _activeProgress.value = MirrorProgress(task, processed, total, isFinished, error, item, itemProgress, speedStr, etaStr, statusMessage,
-                if (isFinished) SyncBreakdown(
+            _activeProgress.value = MirrorProgress(
+                currentTask = task,
+                processedItems = processed,
+                totalItems = total,
+                isFinished = isFinished,
+                error = error,
+                currentItem = item,
+                currentItemProgress = itemProgress,
+                speed = speedStr,
+                eta = etaStr,
+                statusMessage = statusMessage,
+                syncBreakdown = if (isFinished) SyncBreakdown(
                     songs = syncedSongs, existingSongs = existingSongs,
                     artists = syncedArtists, existingArtists = existingArtists,
                     albums = syncedAlbums, existingAlbums = existingAlbums,

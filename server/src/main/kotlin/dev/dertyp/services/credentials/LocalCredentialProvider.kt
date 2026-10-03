@@ -88,7 +88,13 @@ class LocalCredentialProvider(
             else -> OAuthEntry(SPOTIFY_TOKEN_URL, OAuthAuthStyle.FORM)
         }
         val values = store.current(name) ?: return null
-        return exchange.exchange(name, entry.tokenUrl, values.getValue(FIELD_CLIENT_ID), values.getValue(FIELD_CLIENT_SECRET), entry.style)
+        return exchange.exchange(
+            name = name,
+            tokenUrl = entry.tokenUrl,
+            clientId = values.getValue(FIELD_CLIENT_ID),
+            clientSecret = values.getValue(FIELD_CLIENT_SECRET),
+            style = entry.style,
+        )
     }
 
     private suspend fun appleKey(): AppleDeveloperKey? {

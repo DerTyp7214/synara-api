@@ -178,7 +178,16 @@ class SongRpcService(
         titleTags: List<TitleTagKind>,
         excludeTitleTags: List<TitleTagKind>
     ): PaginatedResponse<UserSong> =
-        songService.allSongs(page, pageSize, explicit, user.id, tags, excludeTags, titleTags, excludeTitleTags)
+        songService.allSongs(
+            page = page,
+            pageSize = pageSize,
+            explicit = explicit,
+            userId = user.id,
+            tags = tags,
+            excludeTags = excludeTags,
+            titleTags = titleTags,
+            excludeTitleTags = excludeTitleTags,
+        )
 
     override suspend fun byColor(
         page: Int,
@@ -242,7 +251,13 @@ class SongRpcService(
         titleTags: List<TitleTagKind>,
         excludeTitleTags: List<TitleTagKind>
     ): Flow<UUID> =
-        songService.allSongIds(explicit, tags, excludeTags, titleTags, excludeTitleTags)
+        songService.allSongIds(
+            explicit = explicit,
+            tags = tags,
+            excludeTags = excludeTags,
+            titleTags = titleTags,
+            excludeTitleTags = excludeTitleTags,
+        )
 
     override fun likedSongIds(explicit: Boolean): Flow<UUID> =
         songService.likedSongIds(explicit, user.id)

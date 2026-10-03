@@ -236,7 +236,13 @@ abstract class BaseIndexer(
     override suspend fun start(userId: PlatformUUID?, stdout: suspend (String) -> Unit) {
         val songPaths = pluginStorages.mapNotNull { it.tracksPath }.map { Path(it) }
         val playlistPaths = pluginStorages.mapNotNull { it.playlistsPath }.map { Path(it) }
-        queue(songPaths, playlistPaths, null, userId, stdout).await()
+        queue(
+            songPaths = songPaths,
+            playlistPaths = playlistPaths,
+            type = null,
+            userId = userId,
+            stdout = stdout,
+        ).await()
     }
 
     open suspend fun start(

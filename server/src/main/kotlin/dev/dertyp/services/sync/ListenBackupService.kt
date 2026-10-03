@@ -109,7 +109,17 @@ class ListenBackupService : Service() {
                 it[id] = ListenBackupConfigTable.DEFAULT_KEY
                 it[ListenBackupConfigTable.serverId] = serverId
             }
-            return StoredConfig(false, "", null, 1000, serverId, 0L, null, 0, null)
+            return StoredConfig(
+                enabled = false,
+                url = "",
+                apiKey = null,
+                batchSize = 1000,
+                serverId = serverId,
+                lastSyncedUpdatedAt = 0L,
+                lastSyncAt = null,
+                lastSyncedCount = 0,
+                lastError = null,
+            )
         }
         return StoredConfig(
             enabled = row[ListenBackupConfigTable.enabled],

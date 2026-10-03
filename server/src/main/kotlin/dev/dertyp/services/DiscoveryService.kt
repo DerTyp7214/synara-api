@@ -61,7 +61,15 @@ class DiscoveryRpcService(
         pageSize: Int,
         range: Int
     ): PaginatedResponse<UserSong> {
-        return discoveryService.createSongMosaic(image, width, height, page, pageSize, range, user.id)
+        return discoveryService.createSongMosaic(
+            image = image,
+            width = width,
+            height = height,
+            page = page,
+            pageSize = pageSize,
+            range = range,
+            userId = user.id,
+        )
     }
 
     override suspend fun createAlbumMosaic(
@@ -72,7 +80,15 @@ class DiscoveryRpcService(
         pageSize: Int,
         range: Int
     ): PaginatedResponse<Album> {
-        return discoveryService.createAlbumMosaic(image, width, height, page, pageSize, range, user.id)
+        return discoveryService.createAlbumMosaic(
+            image = image,
+            width = width,
+            height = height,
+            page = page,
+            pageSize = pageSize,
+            range = range,
+            userId = user.id,
+        )
     }
 }
 

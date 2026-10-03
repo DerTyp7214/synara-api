@@ -120,8 +120,11 @@ class Indexer(
         val playlistRootPath = Path(storageService.playlistsPath)
 
         return@coroutineScope queue(
-            listOf(songRootPath, *secondaryTracksPaths.toTypedArray()),
-            listOf(playlistRootPath), null, userId, stdout
+            songPaths = listOf(songRootPath, *secondaryTracksPaths.toTypedArray()),
+            playlistPaths = listOf(playlistRootPath),
+            type = null,
+            userId = userId,
+            stdout = stdout,
         )
     }
 
@@ -161,12 +164,26 @@ class Indexer(
         if (type != null && type != this.id && type != "core") {
             val indexer = otherIndexers.find { it.id == type }
             if (indexer != null) {
-                return ApplicationScope.scope.async(Dispatchers.IO) { indexer.queue(songPaths, playlistPaths, type, userId, stdout).await() }
+                return ApplicationScope.scope.async(Dispatchers.IO) {
+                    indexer.queue(
+                        songPaths = songPaths,
+                        playlistPaths = playlistPaths,
+                        type = type,
+                        userId = userId,
+                        stdout = stdout,
+                    ).await()
+                }
             }
         }
 
         if (type == "core") {
-            return coreIndexer.queue(songPaths, playlistPaths, type, userId, stdout)
+            return coreIndexer.queue(
+                songPaths = songPaths,
+                playlistPaths = playlistPaths,
+                type = type,
+                userId = userId,
+                stdout = stdout,
+            )
         }
 
         val mySongs = mutableListOf<Path>()
@@ -179,7 +196,15 @@ class Indexer(
 
             songGroups.forEach { (indexer, paths) ->
                 if (indexer != null) {
-                    delegatedTasks.add(ApplicationScope.scope.async(Dispatchers.IO) { indexer.queue(paths, emptyList(), null, userId, stdout).await() })
+                    delegatedTasks.add(ApplicationScope.scope.async(Dispatchers.IO) {
+                        indexer.queue(
+                            songPaths = paths,
+                            playlistPaths = emptyList(),
+                            type = null,
+                            userId = userId,
+                            stdout = stdout,
+                        ).await()
+                    })
                 } else {
                     mySongs.addAll(paths)
                 }
@@ -187,7 +212,15 @@ class Indexer(
 
             playlistGroups.forEach { (indexer, paths) ->
                 if (indexer != null) {
-                    delegatedTasks.add(ApplicationScope.scope.async(Dispatchers.IO) { indexer.queue(emptyList(), paths, null, userId, stdout).await() })
+                    delegatedTasks.add(ApplicationScope.scope.async(Dispatchers.IO) {
+                        indexer.queue(
+                            songPaths = emptyList(),
+                            playlistPaths = paths,
+                            type = null,
+                            userId = userId,
+                            stdout = stdout,
+                        ).await()
+                    })
                 } else {
                     myPlaylists.addAll(paths)
                 }
@@ -201,7 +234,13 @@ class Indexer(
             return ApplicationScope.scope.async(Dispatchers.IO) { delegatedTasks.awaitAll() }
         }
 
-        return coreIndexer.queue(mySongs, myPlaylists, "core", userId, stdout)
+        return coreIndexer.queue(
+            songPaths = mySongs,
+            playlistPaths = myPlaylists,
+            type = "core",
+            userId = userId,
+            stdout = stdout,
+        )
             .also { deferred -> deferred.invokeOnCompletion { storageService.invalidate(StorageCategory.TOTAL) } }
     }
 
@@ -220,7 +259,15 @@ class Indexer(
 
         songGroups.forEach { (indexer, paths) ->
             if (indexer != null) {
-                delegatedTasks.add(async { indexer.queue(paths, emptyList(), null, userId, stdout).await() })
+                delegatedTasks.add(async {
+                    indexer.queue(
+                        songPaths = paths,
+                        playlistPaths = emptyList(),
+                        type = null,
+                        userId = userId,
+                        stdout = stdout,
+                    ).await()
+                })
             } else {
                 mySongs.addAll(paths)
             }
@@ -228,7 +275,15 @@ class Indexer(
 
         playlistGroups.forEach { (indexer, paths) ->
             if (indexer != null) {
-                delegatedTasks.add(async { indexer.queue(emptyList(), paths, null, userId, stdout).await() })
+                delegatedTasks.add(async {
+                    indexer.queue(
+                        songPaths = emptyList(),
+                        playlistPaths = paths,
+                        type = null,
+                        userId = userId,
+                        stdout = stdout,
+                    ).await()
+                })
             } else {
                 myPlaylists.addAll(paths)
             }

@@ -153,7 +153,19 @@ abstract class CoverSlotContribution(
 }
 
 class PlaylistCoverContribution(service: CoverGenerationService, jobService: JobService) :
-    CoverSlotContribution("core.cover.playlist", UiSlots.PLAYLIST_DETAIL, CoverTargetType.PLAYLIST, service, jobService)
+    CoverSlotContribution(
+        id = "core.cover.playlist",
+        slot = UiSlots.PLAYLIST_DETAIL,
+        type = CoverTargetType.PLAYLIST,
+        service = service,
+        jobService = jobService,
+    )
 
 class CollectionCoverContribution(service: CoverGenerationService, jobService: JobService) :
-    CoverSlotContribution("core.cover.collection", UiSlots.COLLECTION_DETAIL, CoverTargetType.COLLECTION, service, jobService)
+    CoverSlotContribution(
+        id = "core.cover.collection",
+        slot = UiSlots.COLLECTION_DETAIL,
+        type = CoverTargetType.COLLECTION,
+        service = service,
+        jobService = jobService,
+    )

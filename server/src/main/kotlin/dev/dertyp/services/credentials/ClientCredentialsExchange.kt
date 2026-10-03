@@ -43,7 +43,13 @@ class ClientCredentialsExchange(private val httpClientFactory: HttpClientFactory
         val fingerprint = fingerprint(tokenUrl, clientId, clientSecret, style)
         cached(name, fingerprint)?.let { return it }
         return locks.computeIfAbsent(name) { Mutex() }.withLock {
-            cached(name, fingerprint) ?: request(name, tokenUrl, clientId, clientSecret, style).also {
+            cached(name, fingerprint) ?: request(
+                name = name,
+                tokenUrl = tokenUrl,
+                clientId = clientId,
+                clientSecret = clientSecret,
+                style = style,
+            ).also {
                 cache[name] = CachedToken(fingerprint, it)
             }
         }
