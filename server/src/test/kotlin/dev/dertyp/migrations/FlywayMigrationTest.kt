@@ -37,19 +37,24 @@ class FlywayMigrationTest : KoinTest {
         }
 
         val environment = mockk<ApplicationEnvironment>()
-        
+
         val dbDriver: String
         val dbUrl: String
         val user: String
         val pass: String
-        
+
         when (dialect) {
             DbDialect.POSTGRES -> {
                 dbDriver = if (TestDatabase.postgresContainer != null) "org.postgresql.Driver" else "org.h2.Driver"
-                dbUrl = TestDatabase.getPostgresDbUrl("flyway_test_${UUID.randomUUID().toString().replace("-", "")}".lowercase())
+                dbUrl = TestDatabase.getPostgresDbUrl(
+                    "flyway_test_${
+                        UUID.randomUUID().toString().replace("-", "")
+                    }".lowercase()
+                )
                 user = TestDatabase.postgresContainer?.username ?: "sa"
                 pass = TestDatabase.postgresContainer?.password ?: ""
             }
+
             DbDialect.SQLITE -> {
                 currentFile = File.createTempFile("flyway_test", ".db")
                 dbDriver = "org.sqlite.JDBC"
@@ -58,16 +63,16 @@ class FlywayMigrationTest : KoinTest {
                 pass = ""
             }
         }
-        
+
         val config = MapApplicationConfig(
             "storage.driverClassName" to dbDriver,
             "storage.jdbcURL" to dbUrl,
             "storage.user" to user,
             "storage.password" to pass
         )
-        
+
         every { environment.config } returns config
-        
+
         val databaseManager = DatabaseManager(ServerConfig(environment.config))
 
         startKoin {

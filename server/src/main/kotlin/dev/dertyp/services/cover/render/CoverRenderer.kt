@@ -24,6 +24,7 @@ object CoverRenderer {
             tileCount <= 8 -> CoverStyle.GRID
             else -> CoverStyle.MOSAIC
         }
+
         CoverStyle.GRADIENT -> CoverStyle.GRADIENT
         CoverStyle.MOSAIC -> if (tileCount >= 9) CoverStyle.MOSAIC else resolveStyle(CoverStyle.GRID, tileCount)
         CoverStyle.GRID -> if (tileCount >= 4) CoverStyle.GRID else resolveStyle(CoverStyle.STACKED, tileCount)
@@ -88,7 +89,15 @@ object CoverRenderer {
         return output.toByteArray()
     }
 
-    internal fun drawCoverFit(g: Graphics2D, image: BufferedImage, x: Int, y: Int, w: Int, h: Int, flip: Boolean = false) {
+    internal fun drawCoverFit(
+        g: Graphics2D,
+        image: BufferedImage,
+        x: Int,
+        y: Int,
+        w: Int,
+        h: Int,
+        flip: Boolean = false
+    ) {
         val scale = maxOf(w.toDouble() / image.width, h.toDouble() / image.height)
         val srcW = (w / scale).toInt().coerceIn(1, image.width)
         val srcH = (h / scale).toInt().coerceIn(1, image.height)
@@ -101,7 +110,15 @@ object CoverRenderer {
         }
     }
 
-    internal fun drawRotated(g: Graphics2D, image: BufferedImage, cx: Double, cy: Double, w: Int, h: Int, angleRad: Double) {
+    internal fun drawRotated(
+        g: Graphics2D,
+        image: BufferedImage,
+        cx: Double,
+        cy: Double,
+        w: Int,
+        h: Int,
+        angleRad: Double
+    ) {
         val transform = AffineTransform()
         transform.translate(cx, cy)
         transform.rotate(angleRad)

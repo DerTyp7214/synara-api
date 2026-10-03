@@ -8,7 +8,10 @@ object TestRedis {
         try {
             GenericContainer(DockerImageName.parse("redis/redis-stack-server:latest")).apply {
                 withNetworkMode("host")
-                withEnv("REDIS_ARGS", "--cluster-enabled yes --cluster-config-file /tmp/nodes.conf --cluster-node-timeout 5000 --appendonly yes --protected-mode no")
+                withEnv(
+                    "REDIS_ARGS",
+                    "--cluster-enabled yes --cluster-config-file /tmp/nodes.conf --cluster-node-timeout 5000 --appendonly yes --protected-mode no"
+                )
                 start()
                 execInContainer("sh", "-c", "redis-cli -p 6379 cluster addslots $(seq 0 16383)")
                 Thread.sleep(5000)

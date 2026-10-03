@@ -49,27 +49,52 @@ class ClientCompatTest {
         fun flow(): Flow<Song>
     }
 
-    private val userSong = UserSong(id = UUID.randomUUID(), title = "Title", artists = emptyList(), album = null, duration = 1000, explicit = false, path = "path")
-    private val song = Song(id = UUID.randomUUID(), title = "Title", artists = emptyList(), album = null, duration = 1000, explicit = false, path = "path")
+    private val userSong = UserSong(
+        id = UUID.randomUUID(),
+        title = "Title",
+        artists = emptyList(),
+        album = null,
+        duration = 1000,
+        explicit = false,
+        path = "path"
+    )
+    private val song = Song(
+        id = UUID.randomUUID(),
+        title = "Title",
+        artists = emptyList(),
+        album = null,
+        duration = 1000,
+        explicit = false,
+        path = "path"
+    )
 
     private val fake = object : SongApi {
         override suspend fun one() = userSong
-        override suspend fun oneSuspending(): UserSong? { yield(); return userSong }
+        override suspend fun oneSuspending(): UserSong? {
+            yield(); return userSong
+        }
+
         override suspend fun list() = listOf(userSong, userSong)
         override suspend fun page() = PaginatedResponse(listOf(userSong), page = 2, total = 10)
         override suspend fun map() = mapOf("a" to userSong, "b" to null)
         override suspend fun nowPlaying() = NowPlaying(userSong, 42)
         override suspend fun queueEntry() = PlaybackState.QueueEntry.Explicit(userSong, 7)
         override suspend fun queueItem() = QueueItem(songId = userSong.id, queueId = 1, position = 0, song = userSong)
-        override suspend fun recentListens() = RecentListens(NowPlaying(userSong, 42), listOf(ListenedSong(userSong, 99)))
+        override suspend fun recentListens() =
+            RecentListens(NowPlaying(userSong, 42), listOf(ListenedSong(userSong, 99)))
+
         override suspend fun playbackState() = PlaybackState(
-            queue = listOf(PlaybackState.QueueEntry.FromSource(UUID.randomUUID(), 1), PlaybackState.QueueEntry.Explicit(userSong, 2)),
+            queue = listOf(
+                PlaybackState.QueueEntry.FromSource(UUID.randomUUID(), 1),
+                PlaybackState.QueueEntry.Explicit(userSong, 2)
+            ),
             currentIndex = 1,
             isPlaying = true,
             positionMs = 500,
             shuffleMode = false,
             repeatMode = RepeatMode.OFF,
         )
+
         override suspend fun plain() = song
         override suspend fun text() = "unchanged"
         override suspend fun failing(): UserSong? = throw IllegalStateException("boom")
@@ -132,7 +157,10 @@ class ClientCompatTest {
 
     @Test
     fun `current clients are not proxied`() {
-        val current = fake.withClientCompat(SongApi::class.java, ResponseShaper(ClientInfo(ApiVersion.CURRENT, uiSchemaVersion = UiSchemaVersion.CURRENT)))
+        val current = fake.withClientCompat(
+            SongApi::class.java,
+            ResponseShaper(ClientInfo(ApiVersion.CURRENT, uiSchemaVersion = UiSchemaVersion.CURRENT))
+        )
         assertSame(fake, current)
         assertNotSame(fake, fake.withClientCompat(SongApi::class.java, ResponseShaper(ClientInfo(ApiVersion.CURRENT))))
         assertNotSame(fake, wrapped)
@@ -178,7 +206,10 @@ class ClientCompatTest {
         assertEquals(false, ResponseShaper(ClientInfo(3)).isNoop)
         assertEquals(false, ResponseShaper(ClientInfo(4)).isNoop)
         assertEquals(false, ResponseShaper(ClientInfo(5, uiSchemaVersion = UiSchemaVersion.CURRENT)).isNoop)
-        assertEquals(true, ResponseShaper(ClientInfo(ApiVersion.CURRENT, uiSchemaVersion = UiSchemaVersion.CURRENT)).isNoop)
+        assertEquals(
+            true,
+            ResponseShaper(ClientInfo(ApiVersion.CURRENT, uiSchemaVersion = UiSchemaVersion.CURRENT)).isNoop
+        )
         assertEquals(true, ResponseShaper(ClientInfo(2), rules = emptyList()).isNoop)
         assertEquals(true, ResponseShaper(ClientInfo(3), rules = listOf(DolbyAtmosCompat)).isNoop)
         assertEquals(false, ResponseShaper(ClientInfo(2), rules = listOf(DolbyAtmosCompat)).isNoop)
@@ -193,10 +224,14 @@ class ClientCompatTest {
             override suspend fun one() = taggedUserSong
             override suspend fun plain() = taggedSong
             override suspend fun nowPlaying() = NowPlaying(taggedUserSong, 42)
-            override suspend fun recentListens() = RecentListens(NowPlaying(taggedUserSong, 42), listOf(ListenedSong(taggedUserSong, 99)))
+            override suspend fun recentListens() =
+                RecentListens(NowPlaying(taggedUserSong, 42), listOf(ListenedSong(taggedUserSong, 99)))
         }
 
-        val v5 = api.withClientCompat(SongApi::class.java, ResponseShaper(ClientInfo(5, uiSchemaVersion = UiSchemaVersion.CURRENT)))
+        val v5 = api.withClientCompat(
+            SongApi::class.java,
+            ResponseShaper(ClientInfo(5, uiSchemaVersion = UiSchemaVersion.CURRENT))
+        )
         assertEquals("Song (feat. X) (Skrillex Remix)", v5.one()!!.title)
         assertEquals(emptyList<TitleTag>(), v5.one()!!.tags)
         assertEquals("Song (feat. X) (Skrillex Remix)", v5.plain().title)
@@ -221,7 +256,14 @@ class ClientCompatTest {
     )
 
     private val foldedReleases = PaginatedResponse(
-        listOf(recentRelease("Album").copy(versions = listOf(recentRelease("Album (Explicit)"), recentRelease("Album (Deluxe)")))),
+        listOf(
+            recentRelease("Album").copy(
+                versions = listOf(
+                    recentRelease("Album (Explicit)"),
+                    recentRelease("Album (Deluxe)")
+                )
+            )
+        ),
         total = 1,
     )
 

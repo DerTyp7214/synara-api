@@ -14,7 +14,8 @@ fun duplicateSongTitleKey(title: Expression<String>): Expression<String> =
     case()
         .When(
             title like "%$EXPLICIT_TITLE_MARKER%",
-            title.withoutExplicitMarker().trimWhitespaceEnd().withoutExplicitMarker().trimWhitespaceEnd().trimWhitespaceStart()
+            title.withoutExplicitMarker().trimWhitespaceEnd().withoutExplicitMarker().trimWhitespaceEnd()
+                .trimWhitespaceStart()
         )
         .Else(title.trimWhitespaceEnd().trimWhitespaceStart())
 
@@ -22,7 +23,11 @@ private fun Expression<String>.withoutExplicitMarker(): Expression<String> =
     case()
         .When(
             this like "%$EXPLICIT_TITLE_MARKER",
-            Substring(this, intLiteral(1), MinusOp(CustomFunction("length", IntegerColumnType(), this), intLiteral(1), IntegerColumnType()))
+            Substring(
+                this,
+                intLiteral(1),
+                MinusOp(CustomFunction("length", IntegerColumnType(), this), intLiteral(1), IntegerColumnType())
+            )
         )
         .Else(this)
 

@@ -53,7 +53,7 @@ class LrcLibWorkerTest : KoinTest {
         setup(dialect)
         val lrcLibService = mockk<LrcLibService>()
         val songService = mockk<SongService>()
-        
+
         val albumId = transaction {
             AlbumTable.insert {
                 it[name] = "Test Album"
@@ -81,9 +81,9 @@ class LrcLibWorkerTest : KoinTest {
         every { songMetadata.artists } returns listOf(mockArtist)
         every { songMetadata.album } returns mockk { every { name } returns "Test Album" }
         every { songMetadata.duration } returns 180000L
-        
+
         coEvery { songService.byId(songId) } returns songMetadata
-        
+
         coEvery { lrcLibService.getLyrics(any(), any(), any(), any()) } returns LrcLibResponse(
             id = 1,
             trackName = "Test Song",

@@ -51,7 +51,14 @@ class CredentialServerAdminClientTest {
         }
         val http = HttpClient(engine) { install(HttpTimeout) }
         val factory = mockk<HttpClientFactory>()
-        every { factory.shared<HttpClientEngineConfig>(HttpClientFactory.CREDENTIAL_SERVER_ADMIN, any(), any(), any()) } returns http
+        every {
+            factory.shared<HttpClientEngineConfig>(
+                HttpClientFactory.CREDENTIAL_SERVER_ADMIN,
+                any(),
+                any(),
+                any()
+            )
+        } returns http
         return CredentialServerAdminClient(connection, factory)
     }
 
@@ -59,7 +66,12 @@ class CredentialServerAdminClientTest {
         respond(body, status, headersOf("Content-Type", ContentType.Application.Json.toString()))
 
     private fun configure(adminKey: String? = ADMIN_KEY) = runBlocking {
-        connection.store(mapOf(CredentialServerConnectionSource.KEY_URL to "https://creds.example.com/", CredentialServerConnectionSource.KEY_ADMIN_KEY to adminKey))
+        connection.store(
+            mapOf(
+                CredentialServerConnectionSource.KEY_URL to "https://creds.example.com/",
+                CredentialServerConnectionSource.KEY_ADMIN_KEY to adminKey
+            )
+        )
     }
 
     private val summary = ClientSummary(
@@ -100,7 +112,12 @@ class CredentialServerAdminClientTest {
             updatedAt = 4,
             grantedTo = listOf("synara-home"),
         )
-        val preset = CredentialPreset(CredentialNames.IMPORTER_GAMDL, CredentialKind.FILE, "gamdl", fileRoles = listOf(CredentialFileRoles.GAMDL_COOKIES))
+        val preset = CredentialPreset(
+            CredentialNames.IMPORTER_GAMDL,
+            CredentialKind.FILE,
+            "gamdl",
+            fileRoles = listOf(CredentialFileRoles.GAMDL_COOKIES)
+        )
         val admin = client { request ->
             when (request.url.encodedPath) {
                 "/admin/credentials" -> json(json.encodeToString(listOf(credential)))
@@ -134,7 +151,12 @@ class CredentialServerAdminClientTest {
     @Test
     fun `errors are parsed from the credential error body`() = runBlocking {
         configure()
-        val admin = client { json(json.encodeToString(CredentialError(CredentialErrorCode.NOT_FOUND, "no such client")), HttpStatusCode.NotFound) }
+        val admin = client {
+            json(
+                json.encodeToString(CredentialError(CredentialErrorCode.NOT_FOUND, "no such client")),
+                HttpStatusCode.NotFound
+            )
+        }
 
         val error = assertThrows<CredentialServerAdminException> { admin.getClient("missing") }
 
@@ -146,7 +168,17 @@ class CredentialServerAdminClientTest {
     @Test
     fun `admin calls fail without an admin key while health works`() = runBlocking {
         configure(adminKey = null)
-        val admin = client { json(json.encodeToString(CredentialServerHealth(true, CredentialProtocol.PROTOCOL_VERSION, "1.0"))) }
+        val admin = client {
+            json(
+                json.encodeToString(
+                    CredentialServerHealth(
+                        true,
+                        CredentialProtocol.PROTOCOL_VERSION,
+                        "1.0"
+                    )
+                )
+            )
+        }
 
         assertThrows<CredentialServerAdminException> { admin.listClients() }
         assertEquals("1.0", admin.health().version)
@@ -167,7 +199,9 @@ class CredentialServerAdminClientTest {
 
         val events = admin.tidalLoginEvents("login1").toList()
 
-        assertEquals(listOf(TidalLoginState.PENDING, TidalLoginState.PENDING, TidalLoginState.COMPLETED), events.map { it.state })
+        assertEquals(
+            listOf(TidalLoginState.PENDING, TidalLoginState.PENDING, TidalLoginState.COMPLETED),
+            events.map { it.state })
         assertEquals("waiting", events[1].message)
         assertEquals("/admin/tidal-logins/login1/events", requests.single().url.encodedPath)
         assertEquals(ADMIN_KEY, requests.single().headers[CredentialProtocol.ADMIN_KEY_HEADER])

@@ -58,11 +58,14 @@ class RpcListenBackupService(private val service: ListenBackupService) : IListen
     override suspend fun getState(): ListenBackupState = service.getState()
     override fun getStateFlow(): Flow<ListenBackupState> = service.stateFlow
     override suspend fun updateConfig(config: ListenBackupConfig): ListenBackupState = service.updateConfig(config)
-    override suspend fun testConnection(config: ListenBackupConfig?): ListenBackupConnectionTest = service.testConnection(config)
+    override suspend fun testConnection(config: ListenBackupConfig?): ListenBackupConnectionTest =
+        service.testConnection(config)
+
     override suspend fun syncNow(): ListenBackupState {
         service.sync { _, _ -> }
         return service.getState()
     }
+
     override suspend fun resetCursor(): ListenBackupState = service.resetCursor()
 }
 
@@ -198,7 +201,8 @@ class ListenBackupService : Service() {
         if (!target.isConfigured) return ListenBackupConnectionTest(false, "No receiver URL configured")
 
         return try {
-            val health = httpClient.get("${target.baseUrl}${ListenBackupProtocol.HEALTH_PATH}").checked().body<ListenBackupHealth>()
+            val health = httpClient.get("${target.baseUrl}${ListenBackupProtocol.HEALTH_PATH}").checked()
+                .body<ListenBackupHealth>()
             if (!health.ok) return ListenBackupConnectionTest(false, "Receiver reports unhealthy")
             val status = httpClient.get("${target.baseUrl}${ListenBackupProtocol.STATUS_PATH}") {
                 target.apiKey?.let { header(ListenBackupProtocol.KEY_HEADER, it) }
@@ -249,7 +253,10 @@ class ListenBackupService : Service() {
                             it[lastError] = null
                         }
                     }
-                    onProgress(if (total > 0) (sent.toDouble() / total).coerceAtMost(1.0) else 1.0, "Pushed $sent/$total listen(s)")
+                    onProgress(
+                        if (total > 0) (sent.toDouble() / total).coerceAtMost(1.0) else 1.0,
+                        "Pushed $sent/$total listen(s)"
+                    )
                 }
             }
         } catch (e: Exception) {

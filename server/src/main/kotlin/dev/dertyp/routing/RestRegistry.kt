@@ -52,7 +52,9 @@ fun Route.registerAuthenticatedRestServices(koin: Koin) {
     }
     registerISongServiceRest(authenticated = true) {
         val user = call.getUser() ?: throw IllegalArgumentException("No user found")
-        SongRpcService(songService = koin.get(), user = user, client = call.clientInfo).withAuthorization<ISongService>(user)
+        SongRpcService(songService = koin.get(), user = user, client = call.clientInfo).withAuthorization<ISongService>(
+            user
+        )
     }
     registerIAlbumServiceRest(authenticated = true) {
         val user = call.getUser() ?: throw IllegalArgumentException("No user found")
@@ -116,7 +118,9 @@ fun Route.registerAuthenticatedRestServices(koin: Koin) {
     }
     registerIQueueServiceRest(authenticated = true) {
         val user = call.getUser() ?: throw IllegalArgumentException("No user found")
-        RpcQueueService(user, call.getSessionId(), koin.get(), koin.get(), koin.get()).withAuthorization<IQueueService>(user)
+        RpcQueueService(user, call.getSessionId(), koin.get(), koin.get(), koin.get()).withAuthorization<IQueueService>(
+            user
+        )
     }
     registerIClientSettingsServiceRest(authenticated = true) {
         val user = call.getUser() ?: throw IllegalArgumentException("No user found")
@@ -128,11 +132,24 @@ fun Route.registerAuthenticatedRestServices(koin: Koin) {
     }
     registerIPodcastServiceRest(authenticated = true) {
         val user = call.getUser() ?: throw IllegalArgumentException("No user found")
-        RpcPodcastService(user, koin.get(), koin.get(), koin.get(), koin.get(), koin.get(), koin.get(), koin.get()).withAuthorization<IPodcastService>(user)
+        RpcPodcastService(
+            user,
+            koin.get(),
+            koin.get(),
+            koin.get(),
+            koin.get(),
+            koin.get(),
+            koin.get(),
+            koin.get()
+        ).withAuthorization<IPodcastService>(user)
     }
     registerIClientRequestServiceRest(authenticated = true) {
         val user = call.getUser() ?: throw IllegalArgumentException("No user found")
-        RpcClientRequestService(user, call.getSessionId() ?: throw IllegalArgumentException("No session found"), koin.get())
+        RpcClientRequestService(
+            user,
+            call.getSessionId() ?: throw IllegalArgumentException("No session found"),
+            koin.get()
+        )
             .withAuthorization<IClientRequestService>(user)
     }
     registerIChangeServiceRest(authenticated = true) {
@@ -173,7 +190,10 @@ fun Route.registerAuthenticatedRestServices(koin: Koin) {
     }
     registerIScheduledTaskConfigurationServiceRest(authenticated = true) {
         val user = call.getUser() ?: throw IllegalArgumentException("No user found")
-        RpcScheduledTaskConfigurationService(koin.get(), koin.get()).withAuthorization<IScheduledTaskConfigurationService>(user)
+        RpcScheduledTaskConfigurationService(
+            koin.get(),
+            koin.get()
+        ).withAuthorization<IScheduledTaskConfigurationService>(user)
     }
     registerIReleaseServiceRest(authenticated = true) {
         val user = call.getUser()

@@ -42,13 +42,13 @@ class StorageServiceTest {
         val tracksDir = File(audioDir, "tracks").apply { mkdirs() }
         val albumsDir = File(audioDir, "albums").apply { mkdirs() }
         val playlistsDir = File(audioDir, "playlists").apply { mkdirs() }
-        
+
         val coreTracksDir = File(tracksDir, "core").apply { mkdirs() }
         File(coreTracksDir, "song1.mp3").apply { writeText("12345") }
-        
+
         val youtubeTracksDir = File(tracksDir, "youtube").apply { mkdirs() }
         File(youtubeTracksDir, "song2.mp3").apply { writeText("1234567890") }
-        
+
         val coreAlbumsDir = File(albumsDir, "core").apply { mkdirs() }
         File(coreAlbumsDir, "cover.jpg").apply { writeText("abc") }
 
@@ -79,7 +79,7 @@ class StorageServiceTest {
         every { environment.config } returns config
 
         val service = StorageService(ServerConfig(environment.config))
-        
+
         // expected: 
         // mainParents (audioDir) size: 5 + 10 + 3 = 18
         // secondarySize: 7
@@ -121,7 +121,7 @@ class StorageServiceTest {
         val audioDir = File(tempDir.toFile(), "audio").apply { mkdirs() }
         val tracksDir = File(audioDir, "tracks").apply { mkdirs() }
         val albumsDir = File(audioDir, "albums").apply { mkdirs() }
-        
+
         File(tracksDir, "song.mp3").apply { writeText("12345") }
         File(albumsDir, "cover.jpg").apply { writeText("abc") }
 
@@ -157,7 +157,7 @@ class StorageServiceTest {
         val audioDir = File(tempDir.toFile(), "audio").apply { mkdirs() }
         val tracksDir = File(audioDir, "tracks").apply { mkdirs() }
         val customDir = File(audioDir, "custom").apply { mkdirs() }
-        
+
         File(tracksDir, "song.mp3").apply { writeText("12345") }
         File(customDir, "custom.mp3").apply { writeText("1234") }
 
@@ -175,7 +175,7 @@ class StorageServiceTest {
         every { environment.config } returns config
 
         val service = StorageService(ServerConfig(environment.config))
-        
+
         // Parent of tracks is 'audio'. 'custom' is also in 'audio'.
         // total size should be 9.
         assertEquals(9L, service.getTotalStorage())

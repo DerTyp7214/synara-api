@@ -10,7 +10,7 @@ import java.util.*
 class GenreService : Service() {
     suspend fun getOrCreateGenres(names: List<String>): List<UUID> {
         if (names.isEmpty()) return emptyList()
-        
+
         val normalizedNames = names.map { it.lowercase().trim() }.filter { it.isNotBlank() }.distinct()
         if (normalizedNames.isEmpty()) return emptyList()
 
@@ -21,7 +21,7 @@ class GenreService : Service() {
                 .associate { it[GenreTable.name] to it[GenreTable.id].value }
 
             val newNames = normalizedNames.filter { it !in existingGenres.keys }
-            
+
             val newGenreIds = if (newNames.isNotEmpty()) {
                 GenreTable.batchInsert(newNames) { name ->
                     this[GenreTable.name] = name

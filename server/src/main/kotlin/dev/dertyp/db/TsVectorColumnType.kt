@@ -9,6 +9,7 @@ class TsVectorColumnType : ColumnType<Any>() {
     override fun sqlType(): String {
         return if (Dialect.current() == Dialect.POSTGRES) "tsvector" else "VARCHAR(255)"
     }
+
     override fun valueFromDB(value: Any): Any = value
     override fun notNullValueToDB(value: Any): Any = value
     override fun nonNullValueToString(value: Any): String = value.toString()

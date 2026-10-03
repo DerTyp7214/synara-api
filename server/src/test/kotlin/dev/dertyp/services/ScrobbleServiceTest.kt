@@ -42,7 +42,8 @@ class ScrobbleServiceTest : KoinTest {
     private lateinit var listenService: ListenService
     private lateinit var songService: SongService
     private val changeNotifier = mockk<ChangeNotifier>(relaxed = true)
-    private val listenChanges = MutableSharedFlow<Unit>(extraBufferCapacity = 8, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+    private val listenChanges =
+        MutableSharedFlow<Unit>(extraBufferCapacity = 8, onBufferOverflow = BufferOverflow.DROP_OLDEST)
     private val collectorScope = CoroutineScope(Dispatchers.Default)
 
     private fun setup() {
@@ -258,7 +259,8 @@ class ScrobbleServiceTest : KoinTest {
         assertEquals(events[2].generation, events[3].generation)
         coVerify(exactly = 1) { songService.byIds(listOf(songId), user) }
         awaitCondition { emissions.isNotEmpty() && emissions.last().nowPlaying == null }
-        assertTrue(emissions.count { it.nowPlaying?.song?.id == songId } <= 1, "heartbeats must not re-emit now playing")
+        assertTrue(emissions.count { it.nowPlaying?.song?.id == songId } <= 1,
+            "heartbeats must not re-emit now playing")
     }
 
     @Test
@@ -343,15 +345,24 @@ class ScrobbleServiceTest : KoinTest {
         val events = CopyOnWriteArrayList<HookEvent.NowPlayingChanged>()
         hookService.on<HookEvent.NowPlayingChanged> { events.add(it) }
 
-        service.reportPlayback(user, PlaybackReport(songId, positionMs = 5_000, sentAt = System.currentTimeMillis() - 10_000))
+        service.reportPlayback(
+            user,
+            PlaybackReport(songId, positionMs = 5_000, sentAt = System.currentTimeMillis() - 10_000)
+        )
         awaitCondition { events.size == 1 }
         assertEquals(5_000, events[0].positionMs)
 
-        service.reportPlayback(user, PlaybackReport(songId, positionMs = 6_000, sentAt = System.currentTimeMillis() + 5_000))
+        service.reportPlayback(
+            user,
+            PlaybackReport(songId, positionMs = 6_000, sentAt = System.currentTimeMillis() + 5_000)
+        )
         awaitCondition { events.size == 2 }
         assertEquals(6_000, events[1].positionMs)
 
-        service.reportPlayback(user, PlaybackReport(songId, positionMs = 7_000, playing = false, sentAt = System.currentTimeMillis() - 500))
+        service.reportPlayback(
+            user,
+            PlaybackReport(songId, positionMs = 7_000, playing = false, sentAt = System.currentTimeMillis() - 500)
+        )
         awaitCondition { events.size == 3 }
         assertEquals(7_000, events[2].positionMs)
     }

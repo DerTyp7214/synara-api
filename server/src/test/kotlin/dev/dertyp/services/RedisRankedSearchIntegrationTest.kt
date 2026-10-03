@@ -31,7 +31,7 @@ class RedisRankedSearchIntegrationTest : KoinTest {
     private lateinit var redisProvider: RedisCacheProvider
     private lateinit var redisSearchService: RedisSearchService
     private lateinit var songService: SongService
-    
+
     private val artistService = mockk<ArtistService>(relaxed = true)
     private val albumService = mockk<AlbumService>(relaxed = true)
     private val imageService = mockk<ImageService>(relaxed = true)
@@ -90,7 +90,7 @@ class RedisRankedSearchIntegrationTest : KoinTest {
         redisProvider = GlobalContext.get().get()
         redisSearchService = GlobalContext.get().get()
         songService = GlobalContext.get().get()
-        
+
         redisSearchService.initIndex()
     }
 
@@ -117,12 +117,12 @@ class RedisRankedSearchIntegrationTest : KoinTest {
                 it[username] = "testuser"
                 it[passwordHash] = ""
             }
-            
+
             val album1 = AlbumTable.insert {
                 it[id] = UUID.randomUUID()
                 it[name] = "Other"
             }[AlbumTable.id]
-            
+
             val album2 = AlbumTable.insert {
                 it[id] = UUID.randomUUID()
                 it[name] = "Target"
@@ -176,7 +176,7 @@ class RedisRankedSearchIntegrationTest : KoinTest {
                 it[this.albumId] = albumId
             }
         }
-        
+
         val result = songService.rankedSearch(0, 10, "DatabaseOnly", true, userId)
 
         assertEquals(1, result.data.size)

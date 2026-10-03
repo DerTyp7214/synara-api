@@ -19,7 +19,7 @@ suspend infix fun IMetadataService.supports(funcType: Pair<KFunction<*>, IMetada
             }
         }?.feature
         ?: return true
-    
+
     return this.supports(type, feature)
 }
 

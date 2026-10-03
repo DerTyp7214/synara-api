@@ -39,7 +39,10 @@ class FulfillIncompleteMusicBrainzCache : CustomMigration() {
 
             val incompleteRecordingIds = dbQuery {
                 val recordingsWithNoArtists = MBRecordingTable
-                    .leftJoin(MBRecordingArtistCreditTable, onColumn = { MBRecordingTable.id }, otherColumn = { MBRecordingArtistCreditTable.recordingId })
+                    .leftJoin(
+                        MBRecordingArtistCreditTable,
+                        onColumn = { MBRecordingTable.id },
+                        otherColumn = { MBRecordingArtistCreditTable.recordingId })
                     .select(MBRecordingTable.id)
                     .where { MBRecordingArtistCreditTable.recordingId.isNull() }
                     .map { it[MBRecordingTable.id].value }
@@ -77,7 +80,10 @@ class FulfillIncompleteMusicBrainzCache : CustomMigration() {
 
             val remainingRecordingIds = dbQuery {
                 val recordingsWithNoArtists = MBRecordingTable
-                    .leftJoin(MBRecordingArtistCreditTable, onColumn = { MBRecordingTable.id }, otherColumn = { MBRecordingArtistCreditTable.recordingId })
+                    .leftJoin(
+                        MBRecordingArtistCreditTable,
+                        onColumn = { MBRecordingTable.id },
+                        otherColumn = { MBRecordingArtistCreditTable.recordingId })
                     .select(MBRecordingTable.id)
                     .where { (MBRecordingTable.id inList incompleteRecordingIds) and MBRecordingArtistCreditTable.recordingId.isNull() }
                     .map { it[MBRecordingTable.id].value }

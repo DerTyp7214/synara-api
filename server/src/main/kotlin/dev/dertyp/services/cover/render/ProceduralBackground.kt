@@ -28,7 +28,10 @@ object ProceduralBackground {
         g.paint = RadialGradientPaint(
             hx, hy, size * 0.6f,
             floatArrayOf(0f, 1f),
-            arrayOf(Color(highlight.red, highlight.green, highlight.blue, 150), Color(highlight.red, highlight.green, highlight.blue, 0)),
+            arrayOf(
+                Color(highlight.red, highlight.green, highlight.blue, 150),
+                Color(highlight.red, highlight.green, highlight.blue, 0)
+            ),
         )
         g.fillRect(0, 0, size, size)
 
@@ -56,7 +59,11 @@ object ProceduralBackground {
 
     private fun shift(color: Color, hueDelta: Double, random: Random): Color {
         val (hue, saturation, lightness) = ColorUtils.rgbToHsl(color.red, color.green, color.blue)
-        return fromHue((hue + hueDelta + random.nextDouble() * 20).mod(360.0), (saturation / 100.0 + 0.1).coerceIn(0.2, 1.0), (lightness / 100.0).coerceIn(0.25, 0.7))
+        return fromHue(
+            (hue + hueDelta + random.nextDouble() * 20).mod(360.0),
+            (saturation / 100.0 + 0.1).coerceIn(0.2, 1.0),
+            (lightness / 100.0).coerceIn(0.25, 0.7)
+        )
     }
 
     private fun darken(color: Color, factor: Double): Color =

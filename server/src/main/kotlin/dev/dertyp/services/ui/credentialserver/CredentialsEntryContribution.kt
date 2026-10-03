@@ -30,7 +30,11 @@ class CredentialsEntryContribution(private val ui: CredentialServerUiContext) : 
             title = scope.t("credentials.title"),
             subtitle = scope.t("credentials.description"),
             icon = icon,
-            trailing = scope.t("credentials.summary", "count" to available.toString(), "total" to entries.size.toString()),
+            trailing = scope.t(
+                "credentials.summary",
+                "count" to available.toString(),
+                "total" to entries.size.toString()
+            ),
             action = UiAction.OpenPage(CredentialServerPages.OVERVIEW),
         )
     }

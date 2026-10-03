@@ -32,7 +32,8 @@ object HueUserLinkTable : Table("hue_user_link") {
     val enabled = bool("enabled").default(false)
     val targets = text("targets").default("[]")
     val intensity = enumerationByName("intensity", 16, HueIntensity::class).default(HueIntensity.MEDIUM)
-    val transitionMode = enumerationByName("transitionMode", 16, HueTransitionMode::class).default(HueTransitionMode.FIXED)
+    val transitionMode =
+        enumerationByName("transitionMode", 16, HueTransitionMode::class).default(HueTransitionMode.FIXED)
     val transitionMs = integer("transitionMs").default(400)
     val onStop = enumerationByName("onStop", 16, HueStopMode::class).default(HueStopMode.KEEP)
     val updatedAt = long("updatedAt")

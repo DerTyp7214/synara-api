@@ -49,7 +49,7 @@ class FavSyncServiceTest {
 
         val date = Date()
         service.insertFavSync(user, ISyncService.SyncServiceType.tidal, date)
-        
+
         val latest = service.getLatestFavSync(user, ISyncService.SyncServiceType.tidal)
         assertNotNull(latest)
         assertEquals(date.time / 1000, latest!!.syncedAt.time / 1000)

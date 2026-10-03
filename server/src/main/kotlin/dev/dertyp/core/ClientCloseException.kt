@@ -1,3 +1,3 @@
 package dev.dertyp.core
 
-class ClientCloseException: Exception("Client disconnected")
+class ClientCloseException : Exception("Client disconnected")

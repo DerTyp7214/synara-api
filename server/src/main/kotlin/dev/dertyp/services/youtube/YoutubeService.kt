@@ -53,10 +53,21 @@ open class YoutubeService(
     private val importService by inject<ImportService>()
 
     override val loginCommand: MutableList<String> = mutableListOf()
-    override val importCommand: MutableList<String> get() = ytdlp(
-        "-x", "--audio-format", audioConfig.losslessFormat.extension, "--no-progress", "--convert-thumbnails", "jpg",
-        "--write-auto-subs", "--write-subs", "--sub-langs", "en.*,.*", "--convert-subs", "lrc"
-    )
+    override val importCommand: MutableList<String>
+        get() = ytdlp(
+            "-x",
+            "--audio-format",
+            audioConfig.losslessFormat.extension,
+            "--no-progress",
+            "--convert-thumbnails",
+            "jpg",
+            "--write-auto-subs",
+            "--write-subs",
+            "--sub-langs",
+            "en.*,.*",
+            "--convert-subs",
+            "lrc"
+        )
     override val favImportCommand: MutableList<String> = mutableListOf()
 
     companion object {
@@ -77,6 +88,7 @@ open class YoutubeService(
         if (type == Type.PLAYLIST) {
             val groups = ids.asFlow().map { id ->
                 val info = fetchPlaylistInfo("https://www.youtube.com/playlist?list=$id")
+
                 @Suppress("UNCHECKED_CAST")
                 val entries = info?.get("entries") as? List<Map<String, String>> ?: emptyList()
 
@@ -131,7 +143,8 @@ open class YoutubeService(
                         contentToImport = true
                         importService.addToQueue(
                             UrlImportQueueEntry(
-                                urls = trackChunk.map { "https://www.youtube.com/watch?v=${it.second}" }.toMutableList(),
+                                urls = trackChunk.map { "https://www.youtube.com/watch?v=${it.second}" }
+                                    .toMutableList(),
                                 ids = trackChunk.map { it.second },
                                 byUser = user.id,
                                 type = Type.SONG,
@@ -142,18 +155,19 @@ open class YoutubeService(
                                     user.id
                                 )
                                 val songIds = trackChunk.mapNotNull { entry ->
-                                    val songId = songs.find { 
+                                    val songId = songs.find {
                                         it.originalUrl.endsWith("v=${entry.second}") || it.originalUrl.contains("/${entry.second}")
                                     }?.id
                                     if (songId != null) entry.first to songId else null
                                 }
-                                
+
                                 if (playlistId != null) userPlaylistService.addToPlaylist(playlistId, songIds)
                             }
                         )
                     }
                 }
             }
+
             Type.SONG, Type.MIX -> {
                 val urls = ids.map { "https://www.youtube.com/watch?v=$it" }
                 val existingSongs = songService.byOriginalIds(urls, user.id)
@@ -176,6 +190,7 @@ open class YoutubeService(
                 }
                 return contentToImport to existingSongs
             }
+
             else -> {}
         }
 
@@ -188,13 +203,13 @@ open class YoutubeService(
             if (parsed != null && parsed.second == Type.PLAYLIST) {
                 val playlist = youtubeApiService.getPlaylistMetadata(parsed.first)
                 val items = youtubeApiService.getPlaylistItems(parsed.first)
-                
+
                 if (playlist != null || items.isNotEmpty()) {
                     val map = mutableMapOf<String, Any>()
                     map["id"] = parsed.first
                     map["title"] = playlist?.snippet?.title ?: "YouTube Playlist"
                     map["description"] = playlist?.snippet?.description ?: ""
-                    
+
                     val entries = items.map { item ->
                         val entryMap = mutableMapOf<String, String>()
                         entryMap["id"] = item.contentDetails?.videoId ?: item.snippet?.resourceId?.videoId ?: ""
@@ -215,14 +230,14 @@ open class YoutubeService(
                 val jsonStartIndex = result.fullOutput.indexOf("{")
                 if (jsonStartIndex == -1) return null
                 val jsonString = result.fullOutput.substring(jsonStartIndex)
-                
+
                 val json = ApplicationScope.json.parseToJsonElement(jsonString).jsonObject
                 val map = mutableMapOf<String, Any>()
                 map["id"] = json["id"]?.jsonPrimitive?.content ?: ""
                 map["title"] = json["title"]?.jsonPrimitive?.content ?: ""
                 map["description"] = json["description"]?.jsonPrimitive?.content ?: ""
-                
-                val entries = json["entries"]?.jsonArray?.mapNotNull { 
+
+                val entries = json["entries"]?.jsonArray?.mapNotNull {
                     it.jsonObject.let { obj ->
                         val entryMap = mutableMapOf<String, String>()
                         entryMap["id"] = obj["id"]?.jsonPrimitive?.content ?: return@let null
@@ -231,7 +246,7 @@ open class YoutubeService(
                     }
                 } ?: emptyList()
                 map["entries"] = entries
-                
+
                 return map
             } catch (e: Exception) {
                 logger.error("Failed to parse yt-dlp playlist output", e)
@@ -256,7 +271,8 @@ open class YoutubeService(
             else url
         }
 
-        val existingUrls = if (userId != null) songService.byOriginalIds(normalizedUrls, userId).map { it.originalUrl } else emptyList()
+        val existingUrls = if (userId != null) songService.byOriginalIds(normalizedUrls, userId)
+            .map { it.originalUrl } else emptyList()
 
         var finalResult = ProcessExecutionResult.EMPTY
         for ((index, url) in urls.withIndex()) {
@@ -280,7 +296,11 @@ open class YoutubeService(
             var finalMbReleaseId: String? = null
 
             if (metadata is IMetadataService.Track) {
-                val mbid = try { UUID.fromString(metadata.id) } catch (_: Exception) { null }
+                val mbid = try {
+                    UUID.fromString(metadata.id)
+                } catch (_: Exception) {
+                    null
+                }
                 if (mbid != null) {
                     onLiveOutput("Using provided MusicBrainz metadata for track: ${metadata.title}")
                     finalTitle = metadata.title
@@ -300,8 +320,12 @@ open class YoutubeService(
                 if (mbRecording != null) {
                     onLiveOutput("Matched MusicBrainz Recording: ${mbRecording.title}")
                     finalTitle = mbRecording.title ?: title
-                    finalArtist = mbRecording.artistCredit?.joinToString(indexer.artistDelimiter) { it.name ?: it.artist?.name ?: "" } ?: artist
-                    val firstRelease = mbRecording.releases?.firstOrNull { it.title?.cleanTitle()?.equals(album.cleanTitle(), true) == true } ?: mbRecording.releases?.firstOrNull()
+                    finalArtist = mbRecording.artistCredit?.joinToString(indexer.artistDelimiter) {
+                        it.name ?: it.artist?.name ?: ""
+                    } ?: artist
+                    val firstRelease = mbRecording.releases?.firstOrNull {
+                        it.title?.cleanTitle()?.equals(album.cleanTitle(), true) == true
+                    } ?: mbRecording.releases?.firstOrNull()
                     finalAlbum = firstRelease?.title
                     finalDate = firstRelease?.date
                     finalMbId = mbRecording.id.toString()
@@ -312,11 +336,11 @@ open class YoutubeService(
                     finalCoverUrl = info["thumbnail"]
                 }
             }
-            
+
             if (finalMbId != null && finalMbReleaseId != null) {
                 finalCoverUrl = "https://coverartarchive.org/release/$finalMbReleaseId/front"
             }
-            
+
             if (finalCoverUrl == null && info != null) {
                 finalCoverUrl = info["thumbnail"]
             }
@@ -359,13 +383,20 @@ open class YoutubeService(
             }
 
             onLiveOutput("Starting import for: $url")
-            val (result, _) = collectImportedFiles(cmd + url, maxRetries, 0, aliveCheck, userId, onLiveOutput) { paths ->
+            val (result, _) = collectImportedFiles(
+                cmd + url,
+                maxRetries,
+                0,
+                aliveCheck,
+                userId,
+                onLiveOutput
+            ) { paths ->
                 paths.filter { it.extension.lowercase() in LosslessFormat.extensions }.forEach { path ->
                     onLiveOutput("Post-processing: ${path.absolutePathString()}")
                     try {
                         val audioFile = AudioFileIO.read(path.toFile())
                         val tag = audioFile.tag
-                        
+
                         onLiveOutput("Tagged: $finalTitle - $finalArtist")
                         finalTitle?.let { tag.setField(FieldKey.TITLE, it) }
                         finalArtist?.let { tag.setField(FieldKey.ARTIST, it) }
@@ -429,23 +460,23 @@ open class YoutubeService(
 
                 val json = ApplicationScope.json.parseToJsonElement(jsonString).jsonObject
                 val map = mutableMapOf<String, String>()
-                
+
                 map["id"] = json["id"]?.jsonPrimitive?.content ?: ""
                 map["title"] = json["title"]?.jsonPrimitive?.content ?: ""
                 map["uploader"] = json["uploader"]?.jsonPrimitive?.content ?: ""
                 map["playlist_id"] = json["playlist_id"]?.jsonPrimitive?.content ?: ""
-                
+
                 val thumbnails = json["thumbnails"]?.jsonArray
-                val squareThumbnail = thumbnails?.mapNotNull { it.jsonObject }?.find { 
+                val squareThumbnail = thumbnails?.mapNotNull { it.jsonObject }?.find {
                     val w = it["width"]?.jsonPrimitive?.content?.toIntOrNull() ?: 0
                     val h = it["height"]?.jsonPrimitive?.content?.toIntOrNull() ?: 0
                     w == h && w > 0
                 }
 
-                val bestThumbnail = squareThumbnail ?: thumbnails?.mapNotNull { it.jsonObject }?.find { 
-                    it["id"]?.jsonPrimitive?.content == "maxresdefault" 
-                } ?: thumbnails?.mapNotNull { it.jsonObject }?.maxByOrNull { 
-                    it["width"]?.jsonPrimitive?.content?.toIntOrNull() ?: 0 
+                val bestThumbnail = squareThumbnail ?: thumbnails?.mapNotNull { it.jsonObject }?.find {
+                    it["id"]?.jsonPrimitive?.content == "maxresdefault"
+                } ?: thumbnails?.mapNotNull { it.jsonObject }?.maxByOrNull {
+                    it["width"]?.jsonPrimitive?.content?.toIntOrNull() ?: 0
                 }
 
                 bestThumbnail?.let {
@@ -457,17 +488,17 @@ open class YoutubeService(
                 }
 
                 if (videoId != null && (map["width"] != map["height"])) {
-                    youtubeApiService.getYoutubeMusicCover(videoId)?.let { 
+                    youtubeApiService.getYoutubeMusicCover(videoId)?.let {
                         map["thumbnail"] = it
                         map.remove("width")
                         map.remove("height")
                     }
                 }
-                
+
                 json["track"]?.jsonPrimitive?.content?.let { if (it != "NA") map["track"] = it }
                 json["artist"]?.jsonPrimitive?.content?.let { if (it != "NA") map["artist"] = it }
                 json["album"]?.jsonPrimitive?.content?.let { if (it != "NA") map["album"] = it }
-                
+
                 return map
             } catch (e: CancellationException) {
                 throw e

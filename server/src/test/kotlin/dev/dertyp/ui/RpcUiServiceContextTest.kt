@@ -23,7 +23,8 @@ import java.util.UUID
 class RpcUiServiceContextTest {
     private val registry = UiRegistry()
     private val translations = TranslationService(registry)
-    private val uiService = UiService(registry, translations, PluginSettingsService(), UserHomeCardService(), IntakeService(translations))
+    private val uiService =
+        UiService(registry, translations, PluginSettingsService(), UserHomeCardService(), IntakeService(translations))
     private val user = User(UUID.randomUUID(), "admin", passwordHash = "", isAdmin = true)
     private val client = ClientInfo(ApiVersion.CURRENT, UiSchemaVersion.CURRENT, "en")
     private val rpc = RpcUiService(user, client, null, uiService)
@@ -64,6 +65,9 @@ class RpcUiServiceContextTest {
     fun `subscribe and subscribeLive keep carrying only the entity id`() = runBlocking {
         assertEquals("null $entityId {}", text(rpc.subscribe("core.echo", entityId).first()))
         assertEquals("null null {}", text(rpc.subscribe("core.echo", null).first()))
-        assertEquals(UiLiveUpdate.AppendLines(listOf("log null $entityId {}")), rpc.subscribeLive("core.echo", "log", entityId).first())
+        assertEquals(
+            UiLiveUpdate.AppendLines(listOf("log null $entityId {}")),
+            rpc.subscribeLive("core.echo", "log", entityId).first()
+        )
     }
 }

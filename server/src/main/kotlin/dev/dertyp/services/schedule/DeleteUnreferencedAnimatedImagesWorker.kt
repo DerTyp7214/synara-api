@@ -4,7 +4,11 @@ import dev.dertyp.data.TaskKeys
 import dev.dertyp.services.AnimatedImageService
 import org.koin.core.component.inject
 
-@WorkerTask(TaskKeys.DELETE_UNREFERENCED_ANIMATED_IMAGES, "Delete Unreferenced Animated Images", afterTask = TaskKeys.DELETE_UNREFERENCED_ARTISTS)
+@WorkerTask(
+    TaskKeys.DELETE_UNREFERENCED_ANIMATED_IMAGES,
+    "Delete Unreferenced Animated Images",
+    afterTask = TaskKeys.DELETE_UNREFERENCED_ARTISTS
+)
 class DeleteUnreferencedAnimatedImagesWorker : Worker("DeleteUnreferencedAnimatedImagesWorker") {
     private val animatedImageService by inject<AnimatedImageService>()
 

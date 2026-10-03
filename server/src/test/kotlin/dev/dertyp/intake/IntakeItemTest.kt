@@ -8,7 +8,10 @@ import org.junit.jupiter.api.Test
 class IntakeItemTest {
     @Test
     fun `lines are classified`() {
-        assertEquals(IntakeItem.Url("https://tidal.com/browse/track/1"), IntakeItem.parse("  https://tidal.com/browse/track/1 "))
+        assertEquals(
+            IntakeItem.Url("https://tidal.com/browse/track/1"),
+            IntakeItem.parse("  https://tidal.com/browse/track/1 ")
+        )
         assertEquals(IntakeItem.Code(UiIntakeCodeKind.ISRC, "USRC17607839"), IntakeItem.parse("us-rc1-76-07839"))
         assertEquals(IntakeItem.Code(UiIntakeCodeKind.UPC, "0602577389818"), IntakeItem.parse("0602577389818"))
         assertEquals(IntakeItem.Id("tidal", "123"), IntakeItem.parse("tidal:123"))

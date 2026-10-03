@@ -41,7 +41,8 @@ class AppleMusicService(
 
     private suspend fun getAppleMusicToken(): String? {
         if (!catalogEnabled) return null
-        val credential = credentialProvider.resolve(CredentialNames.APPLE_MUSIC_DEVELOPER) as? ResolvedCredential.DeveloperToken
+        val credential =
+            credentialProvider.resolve(CredentialNames.APPLE_MUSIC_DEVELOPER) as? ResolvedCredential.DeveloperToken
         if (credential == null) {
             logger.warn("Apple Music developer token ${CredentialNames.APPLE_MUSIC_DEVELOPER} is unavailable")
             return null
@@ -90,7 +91,10 @@ class AppleMusicService(
                 label = "Apple Music Catalog API",
                 logger = logger,
                 request = {
-                    ApiClient.queueInstance.enqueue("https://api.music.apple.com/v1/catalog/$storefront/songs", priority) {
+                    ApiClient.queueInstance.enqueue(
+                        "https://api.music.apple.com/v1/catalog/$storefront/songs",
+                        priority
+                    ) {
                         header(HttpHeaders.Authorization, "Bearer $token")
                         parameter("filter[isrc]", isrc)
                     }
@@ -109,8 +113,11 @@ class AppleMusicService(
                     val attributes = trackObj["attributes"]?.jsonObject
                     val id = trackObj["id"]?.jsonPrimitive?.content ?: ""
                     val title = attributes?.get("name")?.jsonPrimitive?.content ?: ""
-                    val artists = attributes?.get("artistName")?.jsonPrimitive?.content?.let { listOf(it) } ?: emptyList()
-                    val duration = attributes?.get("durationInMillis")?.jsonPrimitive?.content?.toLongOrNull()?.milliseconds ?: 0L.milliseconds
+                    val artists =
+                        attributes?.get("artistName")?.jsonPrimitive?.content?.let { listOf(it) } ?: emptyList()
+                    val duration =
+                        attributes?.get("durationInMillis")?.jsonPrimitive?.content?.toLongOrNull()?.milliseconds
+                            ?: 0L.milliseconds
 
                     val artwork = attributes?.get("artwork")?.jsonObject
                     val artworkUrl = artwork?.get("url")?.jsonPrimitive?.content
@@ -164,7 +171,8 @@ class AppleMusicService(
         } ?: return null
 
         val searchResponse = ApplicationScope.json.decodeFromString<ITunesSearchResponse<ITunesAlbum>>(body.trim())
-        val album = searchResponse.results.firstOrNull { it.wrapperType == "collection" && it.collectionId != null } ?: return null
+        val album = searchResponse.results.firstOrNull { it.wrapperType == "collection" && it.collectionId != null }
+            ?: return null
 
         return IMetadataService.Album(
             id = album.collectionId.toString(),
@@ -221,7 +229,8 @@ class AppleMusicService(
         return searchResponse.results
             .groupBy { it.collectionId }
             .map { (collectionId, results) ->
-                val album = results.first { (it.wrapperType == "collection" || it.wrapperType == "track") && it.collectionId != null }
+                val album =
+                    results.first { (it.wrapperType == "collection" || it.wrapperType == "track") && it.collectionId != null }
                 val additionalTitles = results.mapNotNull { it.trackName }
 
                 IMetadataService.Album(
@@ -357,7 +366,8 @@ class AppleMusicService(
                 id = id,
                 title = attr?.get("name")?.jsonPrimitive?.contentOrNull ?: "",
                 artists = attr?.get("artistName")?.jsonPrimitive?.contentOrNull?.let { listOf(it) } ?: emptyList(),
-                duration = (attr?.get("durationInMillis")?.jsonPrimitive?.contentOrNull?.toLongOrNull() ?: 0L).milliseconds,
+                duration = (attr?.get("durationInMillis")?.jsonPrimitive?.contentOrNull?.toLongOrNull()
+                    ?: 0L).milliseconds,
                 trackNumber = attr?.get("trackNumber")?.jsonPrimitive?.contentOrNull?.toIntOrNull(),
                 discNumber = attr?.get("discNumber")?.jsonPrimitive?.contentOrNull?.toIntOrNull(),
                 images = catalogArtwork(attr)?.let { listOf(it) } ?: emptyList(),
@@ -391,7 +401,8 @@ class AppleMusicService(
             image = catalogArtwork(attr),
             recordLabel = attr?.get("recordLabel")?.jsonPrimitive?.contentOrNull,
             copyright = attr?.get("copyright")?.jsonPrimitive?.contentOrNull,
-            genreNames = attr?.get("genreNames")?.jsonArray?.mapNotNull { it.jsonPrimitive.contentOrNull } ?: emptyList()
+            genreNames = attr?.get("genreNames")?.jsonArray?.mapNotNull { it.jsonPrimitive.contentOrNull }
+                ?: emptyList()
         )
     }
 

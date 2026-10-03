@@ -56,7 +56,10 @@ class PodcastFeedService(
         }
 
         if (response.status == HttpStatusCode.NotModified) return FetchResult.NotModified
-        if (!response.status.isSuccess()) throw FeedFetchException("HTTP ${response.status.value}", response.status.value)
+        if (!response.status.isSuccess()) throw FeedFetchException(
+            "HTTP ${response.status.value}",
+            response.status.value
+        )
 
         val declaredLength = response.headers[HttpHeaders.ContentLength]?.toLongOrNull()
         if (declaredLength != null && declaredLength > MAX_FEED_BYTES) {

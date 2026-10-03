@@ -66,7 +66,10 @@ fun Application.backupModule(store: ListenBackupStore, backupKey: String?) {
     }
     install(StatusPages) {
         exception<BadRequestException> { call, cause ->
-            call.respond(HttpStatusCode.BadRequest, mapOf("error" to (cause.cause?.message ?: cause.message ?: "Bad request")))
+            call.respond(
+                HttpStatusCode.BadRequest,
+                mapOf("error" to (cause.cause?.message ?: cause.message ?: "Bad request"))
+            )
         }
         exception<IllegalArgumentException> { call, cause ->
             call.respond(HttpStatusCode.BadRequest, mapOf("error" to (cause.message ?: "Bad request")))

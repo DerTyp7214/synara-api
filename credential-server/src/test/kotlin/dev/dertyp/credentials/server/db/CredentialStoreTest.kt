@@ -164,7 +164,11 @@ class CredentialStoreTest {
         assertEquals(CredentialKind.TIDAL_DEVICE_SESSION, created.kind)
         assertEquals(10L, created.expiresAt)
 
-        store.saveSecret("importer.tiddl", tidal.copy(refreshToken = "r2"), CredentialStateUpdate(CredentialStatus.EXPIRING, "soon", 20L, "fp2"))
+        store.saveSecret(
+            "importer.tiddl",
+            tidal.copy(refreshToken = "r2"),
+            CredentialStateUpdate(CredentialStatus.EXPIRING, "soon", 20L, "fp2")
+        )
         assertEquals("r2", (store.loadSecret("importer.tiddl") as StoredSecret.TidalSessionSecret).refreshToken)
 
         store.updateState("importer.tiddl", CredentialStateUpdate(CredentialStatus.NEEDS_LOGIN, "login", null, "fp2"))

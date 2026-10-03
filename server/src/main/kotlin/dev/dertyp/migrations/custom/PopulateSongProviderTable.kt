@@ -27,7 +27,11 @@ class PopulateSongProviderTable : CustomMigration() {
             val externalId = parsed?.first ?: url
 
             dbQuery {
-                SongProviderTable.upsert(SongProviderTable.songId, SongProviderTable.provider, SongProviderTable.externalId) {
+                SongProviderTable.upsert(
+                    SongProviderTable.songId,
+                    SongProviderTable.provider,
+                    SongProviderTable.externalId
+                ) {
                     it[SongProviderTable.songId] = songId
                     it[SongProviderTable.provider] = provider
                     it[SongProviderTable.externalId] = externalId

@@ -66,7 +66,8 @@ class LocalCredentialStore(
     private val settings = settingsService.forPlugin(PLUGIN_ID)
     private val podcastIndexSource =
         PodcastIndexCredentialSource(settingsService.forPlugin(PodcastIndexCredentialSource.PLUGIN_ID), config, cipher)
-    private val updates = MutableSharedFlow<String>(extraBufferCapacity = 16, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+    private val updates =
+        MutableSharedFlow<String>(extraBufferCapacity = 16, onBufferOverflow = BufferOverflow.DROP_OLDEST)
 
     @Volatile
     private var storedNames: Set<String> = emptySet()
@@ -74,21 +75,63 @@ class LocalCredentialStore(
     val entries: List<LocalCredentialEntry<*>> = listOf(
         LocalCredentialEntry(
             CredentialNames.ACOUSTID_API,
-            listOf(LocalCredentialField(FIELD_API_KEY, AcoustIdCredentialSource.KEY_API_KEY, "acoustid.apiKey", secret = true)),
+            listOf(
+                LocalCredentialField(
+                    FIELD_API_KEY,
+                    AcoustIdCredentialSource.KEY_API_KEY,
+                    "acoustid.apiKey",
+                    secret = true
+                )
+            ),
             acoustIdSource,
         ) { mapOf(FIELD_API_KEY to it) },
         LocalCredentialEntry(
             CredentialNames.PODCAST_INDEX_API,
             listOf(
-                LocalCredentialField(FIELD_API_KEY, PodcastIndexCredentialSource.KEY_API_KEY, "podcastIndex.apiKey", secret = true),
-                LocalCredentialField(FIELD_API_SECRET, PodcastIndexCredentialSource.KEY_API_SECRET, "podcastIndex.apiSecret", secret = true),
+                LocalCredentialField(
+                    FIELD_API_KEY,
+                    PodcastIndexCredentialSource.KEY_API_KEY,
+                    "podcastIndex.apiKey",
+                    secret = true
+                ),
+                LocalCredentialField(
+                    FIELD_API_SECRET,
+                    PodcastIndexCredentialSource.KEY_API_SECRET,
+                    "podcastIndex.apiSecret",
+                    secret = true
+                ),
             ),
             podcastIndexSource,
-        ) { credentials: PodcastIndexCredentials -> mapOf(FIELD_API_KEY to credentials.apiKey, FIELD_API_SECRET to credentials.apiSecret) },
-        generic(config, cipher, CredentialNames.THEAUDIODB_API, field(CredentialNames.THEAUDIODB_API, FIELD_API_KEY, "theaudiodb.apiKey", secret = true)),
-        generic(config, cipher, CredentialNames.YOUTUBE_API, field(CredentialNames.YOUTUBE_API, FIELD_API_KEY, "youtube.apiKey", secret = true)),
-        generic(config, cipher, CredentialNames.LINKRESOLVER_API, field(CredentialNames.LINKRESOLVER_API, FIELD_API_KEY, "linkresolver.apiKey", secret = true)),
-        generic(config, cipher, CredentialNames.IMAGE_CACHE_TOKEN, field(CredentialNames.IMAGE_CACHE_TOKEN, FIELD_TOKEN, "imageCache.token", secret = true)),
+        ) { credentials: PodcastIndexCredentials ->
+            mapOf(
+                FIELD_API_KEY to credentials.apiKey,
+                FIELD_API_SECRET to credentials.apiSecret
+            )
+        },
+        generic(
+            config,
+            cipher,
+            CredentialNames.THEAUDIODB_API,
+            field(CredentialNames.THEAUDIODB_API, FIELD_API_KEY, "theaudiodb.apiKey", secret = true)
+        ),
+        generic(
+            config,
+            cipher,
+            CredentialNames.YOUTUBE_API,
+            field(CredentialNames.YOUTUBE_API, FIELD_API_KEY, "youtube.apiKey", secret = true)
+        ),
+        generic(
+            config,
+            cipher,
+            CredentialNames.LINKRESOLVER_API,
+            field(CredentialNames.LINKRESOLVER_API, FIELD_API_KEY, "linkresolver.apiKey", secret = true)
+        ),
+        generic(
+            config,
+            cipher,
+            CredentialNames.IMAGE_CACHE_TOKEN,
+            field(CredentialNames.IMAGE_CACHE_TOKEN, FIELD_TOKEN, "imageCache.token", secret = true)
+        ),
         generic(
             config, cipher, CredentialNames.TIDAL_API,
             field(CredentialNames.TIDAL_API, FIELD_CLIENT_ID, "tidal.clientId", secret = false),
@@ -118,11 +161,20 @@ class LocalCredentialStore(
             file = file,
         )
 
-    private fun generic(config: ApplicationConfig, cipher: CredentialCipher, name: String, vararg fields: LocalCredentialField) =
+    private fun generic(
+        config: ApplicationConfig,
+        cipher: CredentialCipher,
+        name: String,
+        vararg fields: LocalCredentialField
+    ) =
         LocalCredentialEntry(
             name,
             fields.toList(),
-            FieldCredentialSource(settings, config, cipher, fields.map { CredentialField(it.settingKey, it.configPath) }),
+            FieldCredentialSource(
+                settings,
+                config,
+                cipher,
+                fields.map { CredentialField(it.settingKey, it.configPath) }),
         ) { stored: Map<String, String> -> fields.associate { it.name to stored.getValue(it.settingKey) } }
 
     fun entry(name: String): LocalCredentialEntry<*>? = byName[name]

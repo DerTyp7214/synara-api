@@ -47,7 +47,7 @@ class IsrcProviderEnrichmentWorkerTest : KoinTest {
         coEvery { recentReleaseWorker.active } returns false
         coEvery { songService.songIdsForIsrcEnrichment(any()) } returns emptyFlow()
         coEvery { albumService.albumIdsForBarcodeEnrichment(any()) } returns emptyFlow()
-        
+
         every { metadataService.supportedFeatures } returns setOf(Feature.GET_TRACK_BY_ISRC)
 
         startKoin {

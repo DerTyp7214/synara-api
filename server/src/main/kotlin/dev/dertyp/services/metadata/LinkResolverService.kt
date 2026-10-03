@@ -42,9 +42,10 @@ class LinkResolverService : Service() {
         supportedRefreshMutex.withLock {
             try {
                 val apiKey = apiKey() ?: return
-                val response = ApiClient.queueInstance.enqueue("$baseUrl/supported", priority = HttpClientPriority.NORMAL) {
-                    header("X-API-Key", apiKey)
-                }
+                val response =
+                    ApiClient.queueInstance.enqueue("$baseUrl/supported", priority = HttpClientPriority.NORMAL) {
+                        header("X-API-Key", apiKey)
+                    }
                 if (response.status.value in 200..299) {
                     val supported = response.body<SupportedResponse>()
                     if (supported.urlHosts.isNotEmpty()) supportedHosts = supported.urlHosts
@@ -54,7 +55,10 @@ class LinkResolverService : Service() {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                logger.warn("Failed to refresh LinkResolver supported inputs, keeping ${supportedHosts.size} cached host(s)", e)
+                logger.warn(
+                    "Failed to refresh LinkResolver supported inputs, keeping ${supportedHosts.size} cached host(s)",
+                    e
+                )
             }
         }
     }

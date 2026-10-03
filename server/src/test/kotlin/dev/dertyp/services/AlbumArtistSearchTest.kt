@@ -33,7 +33,7 @@ class AlbumArtistSearchTest : KoinTest {
     private val libraryMergeService = mockk<LibraryMergeService>(relaxed = true)
 
     private val allTables = arrayOf(
-        ArtistTable, AlbumTable, SongTable, SongVariantTable, SongArtistTable, 
+        ArtistTable, AlbumTable, SongTable, SongVariantTable, SongArtistTable,
         SongMusicBrainzTable, SongAudioDataTable, ImageTable, GenreTable,
         UserTable, AlbumMusicBrainzTable, ArtistMusicBrainzTable,
         ArtistAliasTable, ArtistMemberTable, AlbumArtistTable,
@@ -85,7 +85,7 @@ class AlbumArtistSearchTest : KoinTest {
             AlbumTable.insert {
                 it[id] = UUID.randomUUID()
                 it[name] = "Random Access Memories"
-                it[songCount] = 10 
+                it[songCount] = 10
             }
             AlbumTable.insert {
                 it[id] = UUID.randomUUID()

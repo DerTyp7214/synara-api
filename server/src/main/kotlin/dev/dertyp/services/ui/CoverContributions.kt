@@ -82,7 +82,12 @@ abstract class CoverSlotContribution(
             submit = UiAction.Invoke(id, ACTION_APPLY, formId = FORM_ID),
             submitLabel = scope.t("cover.generate"),
             actions = listOf(
-                UiComponent.Button(scope.t("cover.shuffle"), UiAction.Invoke(id, ACTION_SHUFFLE, formId = FORM_ID), UiButtonStyle.TEXT, UiIcon(UiIconName.SYNC)),
+                UiComponent.Button(
+                    scope.t("cover.shuffle"),
+                    UiAction.Invoke(id, ACTION_SHUFFLE, formId = FORM_ID),
+                    UiButtonStyle.TEXT,
+                    UiIcon(UiIconName.SYNC)
+                ),
             ),
         )
 
@@ -116,11 +121,16 @@ abstract class CoverSlotContribution(
                 service.reset(target)
                 UiInvokeResult(UiInvokeStatus.OK, scope.t("cover.resetDone"), refresh = true)
             }
+
             else -> super.invoke(scope, actionId, values)
         }
     }
 
-    private suspend fun apply(scope: UiRenderScope, target: CoverTarget, params: CoverGenerationParams): UiInvokeResult =
+    private suspend fun apply(
+        scope: UiRenderScope,
+        target: CoverTarget,
+        params: CoverGenerationParams
+    ): UiInvokeResult =
         try {
             service.apply(target, params)
             UiInvokeResult(UiInvokeStatus.OK, scope.t("cover.applied"), refresh = true)
@@ -129,7 +139,8 @@ abstract class CoverSlotContribution(
         }
 
     internal fun params(values: Map<String, UiValue>): CoverGenerationParams = CoverGenerationParams(
-        style = values[FIELD_STYLE]?.text?.let { name -> CoverStyle.entries.firstOrNull { it.name == name } } ?: CoverStyle.AUTO,
+        style = values[FIELD_STYLE]?.text?.let { name -> CoverStyle.entries.firstOrNull { it.name == name } }
+            ?: CoverStyle.AUTO,
         allowNsfw = values[FIELD_NSFW]?.flag ?: false,
         includeTitle = values[FIELD_TITLE]?.flag ?: true,
         pack = values[FIELD_PACK]?.text?.takeIf { it.isNotBlank() },

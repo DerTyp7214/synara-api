@@ -65,7 +65,7 @@ class BaseIndexerTest {
             val subFlac = Files.createFile(subDir.resolve("sub.flac"))
 
             val map = indexer.buildMap(listOf(tempDir))
-            
+
             assertTrue(map.contains(flacFile.toAbsolutePath()))
             assertTrue(map.contains(m3uFile.toAbsolutePath()))
             assertTrue(map.contains(subFlac.toAbsolutePath()))
@@ -86,7 +86,7 @@ class BaseIndexerTest {
             coEvery { context.playlistLibrary.createBatch(any(), any()) } returns listOf(UUID.randomUUID())
 
             val count = indexer.parsePlaylists(listOf(m3uFile))
-            
+
             assertEquals(1, count)
         } finally {
             tempDir.toFile().deleteRecursively()
@@ -106,7 +106,7 @@ class BaseIndexerTest {
         every { header.preciseTrackLength } returns 180.0
 
         every { tag.getFirst(org.jaudiotagger.tag.FieldKey.TITLE) } returns "Song Title \uD83C\uDD74"
-        
+
         val testIndexer = object : BaseIndexer(context) {
             override val id = "test"
             override val name = "test"
@@ -114,7 +114,7 @@ class BaseIndexerTest {
         }
 
         val song = testIndexer.testInsertable(audioFile, album)
-        
+
         assertEquals("Song Title", song.title)
         assertTrue(song.explicit)
         verify { tag.setField(org.jaudiotagger.tag.FieldKey.TITLE, "Song Title") }

@@ -34,7 +34,7 @@ class LrcLibWorker : Worker("LrcLibWorker") {
                 .selectAll()
                 .where {
                     (SongTable.lyrics eq "") and
-                    (SongTable.lastLyricsFetchAttempt less oneWeekAgo.toEpochMilliseconds())
+                            (SongTable.lastLyricsFetchAttempt less oneWeekAgo.toEpochMilliseconds())
                 }
                 .map {
                     it[SongTable.id].value
@@ -56,7 +56,8 @@ class LrcLibWorker : Worker("LrcLibWorker") {
             val artistName = song.artists.firstOrNull()?.name ?: ""
 
             try {
-                val result = lrcLibService.getLyrics(artistName, song.title.cleanTitle(), song.album?.name, song.duration)
+                val result =
+                    lrcLibService.getLyrics(artistName, song.title.cleanTitle(), song.album?.name, song.duration)
                 if (result != null) {
                     val lyricsContent = result.syncedLyrics ?: result.plainLyrics
                     if (lyricsContent != null) {

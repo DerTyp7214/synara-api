@@ -34,7 +34,8 @@ abstract class CredentialSource<T : Any>(
 
     fun fromEnvironment(): T? = build(
         fields.mapNotNull { field ->
-            config.propertyOrNull(field.configPath)?.getString()?.trim()?.takeIf { it.isNotEmpty() }?.let { field.settingKey to it }
+            config.propertyOrNull(field.configPath)?.getString()?.trim()?.takeIf { it.isNotEmpty() }
+                ?.let { field.settingKey to it }
         }.toMap()
     )
 
@@ -54,7 +55,9 @@ abstract class CredentialSource<T : Any>(
 
     private suspend fun storedRaw(): Map<String, String> {
         val all = settings.getAll()
-        return fields.mapNotNull { field -> all[field.settingKey]?.takeIf { it.isNotBlank() }?.let { field.settingKey to it } }.toMap()
+        return fields.mapNotNull { field ->
+            all[field.settingKey]?.takeIf { it.isNotBlank() }?.let { field.settingKey to it }
+        }.toMap()
     }
 
     private fun decrypt(raw: Map<String, String>): Map<String, String> =

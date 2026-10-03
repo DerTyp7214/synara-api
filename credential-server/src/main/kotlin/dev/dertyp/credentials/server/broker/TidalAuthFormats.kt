@@ -46,6 +46,7 @@ object TidalAuthFormats {
                 countryCode = obj.string("country_code").nonBlank(),
                 extra = JsonObject(obj.filterKeys { it !in tiddlKeys }),
             )
+
             TidalSessionFormat.TDN -> TidalAuthData(
                 accessToken = obj.string("access_token").nonBlank(),
                 refreshToken = obj.string("refresh_token").nonBlank(),
@@ -69,6 +70,7 @@ object TidalAuthFormats {
                     put("user_id", secret.userId.toJson())
                     put("country_code", secret.countryCode.toJson())
                 }
+
                 TidalSessionFormat.TDN -> {
                     put("token_type", JsonPrimitive("Bearer"))
                     put("access_token", secret.accessToken.toJson())

@@ -61,9 +61,16 @@ class ImporterResolvers(
         override val access = UiAccess(capabilities = setOf(UserCapability.IMPORT))
 
         private suspend fun target(item: IntakeItem): Target? = when (item) {
-            is IntakeItem.Url -> importerProxy.resolveImporter(item.url)?.takeIf { it.first.id == importer.id }?.let { Target.Url(it.second) }
-                ?: if (isDefault(importer)) upcomingReleases.detect(item.url, importer)?.let { Target.Upcoming(it) } else null
-            is IntakeItem.Id -> if (item.provider == importer.id || (item.provider.isBlank() && isDefault(importer))) Target.Ids(listOf(item.id), item.contentType ?: Type.SONG) else null
+            is IntakeItem.Url -> importerProxy.resolveImporter(item.url)?.takeIf { it.first.id == importer.id }
+                ?.let { Target.Url(it.second) }
+                ?: if (isDefault(importer)) upcomingReleases.detect(item.url, importer)
+                    ?.let { Target.Upcoming(it) } else null
+
+            is IntakeItem.Id -> if (item.provider == importer.id || (item.provider.isBlank() && isDefault(importer))) Target.Ids(
+                listOf(item.id),
+                item.contentType ?: Type.SONG
+            ) else null
+
             is IntakeItem.Code -> code(item)
             is IntakeItem.Text, is IntakeItem.File -> null
         }
@@ -75,7 +82,9 @@ class ImporterResolvers(
                 val (resolvedImporter, url) = importerProxy.resolveImporterByCode(isrc = isrc, upc = upc) ?: return null
                 if (resolvedImporter.id != importer.id) return null
                 val parsed = importer.parseUrl(url)
-                return if (parsed != null) Target.Ids(listOf(parsed.first), parsed.second ?: Type.SONG) else Target.Url(url)
+                return if (parsed != null) Target.Ids(listOf(parsed.first), parsed.second ?: Type.SONG) else Target.Url(
+                    url
+                )
             }
             if (!isDefault(importer)) return null
             val metadataType = importer.metadataType ?: return null
@@ -109,7 +118,8 @@ class ImporterResolvers(
                     is Target.Ids -> ids.getOrPut(target.type) { mutableListOf() }.addAll(target.ids)
                     is Target.Url -> {
                         val parsed = importer.parseUrl(target.url)
-                        if (parsed != null) ids.getOrPut(parsed.second ?: Type.SONG) { mutableListOf() }.add(parsed.first)
+                        if (parsed != null) ids.getOrPut(parsed.second ?: Type.SONG) { mutableListOf() }
+                            .add(parsed.first)
                         else urls += target.url
                     }
 
@@ -121,7 +131,13 @@ class ImporterResolvers(
             }
             ids.forEach { (type, list) -> importService.importIds(list.asFlow(), type, account, importer.id) }
             if (urls.isNotEmpty()) {
-                importService.addToQueue(UrlImportQueueEntry(urls = urls, byUser = account.id, importer = ImportBackend(importer.id)))
+                importService.addToQueue(
+                    UrlImportQueueEntry(
+                        urls = urls,
+                        byUser = account.id,
+                        importer = ImportBackend(importer.id)
+                    )
+                )
             }
             if (targets.all { it is Target.Upcoming }) {
                 return IntakeReceipt(accepted = queued, messageKey = "intake.import.upcomingQueued")
@@ -144,7 +160,10 @@ class ImporterResolvers(
                 accepted = texts,
                 icon = icon,
                 priority = -1,
-                action = UiAction.OpenNative(UiPortals.EXTERNAL_SEARCH, mapOf("query" to texts.joinToString(" ") { it.text })),
+                action = UiAction.OpenNative(
+                    UiPortals.EXTERNAL_SEARCH,
+                    mapOf("query" to texts.joinToString(" ") { it.text })
+                ),
             )
         }
     }

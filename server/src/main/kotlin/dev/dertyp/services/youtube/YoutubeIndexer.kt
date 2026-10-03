@@ -58,7 +58,9 @@ class YoutubeIndexer(context: PluginContext) : BaseIndexer(context, IMetadataSer
                             val mbReleaseId = audioFile.musicBrainzReleaseId
                             val name = audioFile.album ?: audioFile.title ?: ""
                             val delimiter = getArtistDelimiter(audioFile)
-                            val artists = audioFile.getAlbumArtists(delimiter).ifEmpty { audioFile.getArtists(delimiter) }.sorted()
+                            val artists =
+                                audioFile.getAlbumArtists(delimiter).ifEmpty { audioFile.getArtists(delimiter) }
+                                    .sorted()
                             val songCount = audioFile.songCount ?: 0
                             val year = audioFile.year
 
@@ -84,12 +86,23 @@ class YoutubeIndexer(context: PluginContext) : BaseIndexer(context, IMetadataSer
                             var finalAlbumReleaseDate = releaseDate
 
                             val fallbackId = file.parent.fileName.toString()
-                            val isMbId = try { UUID.fromString(fallbackId); true } catch (_: Exception) { false }
-                            
-                            var finalOriginalId = "$id:${youtubeId ?: if (!isMbId) fallbackId else audioFile.file.nameWithoutExtension}"
+                            val isMbId = try {
+                                UUID.fromString(fallbackId); true
+                            } catch (_: Exception) {
+                                false
+                            }
+
+                            var finalOriginalId =
+                                "$id:${youtubeId ?: if (!isMbId) fallbackId else audioFile.file.nameWithoutExtension}"
 
                             if (mbReleaseId != null) {
-                                val existingAlbum = try { context.albumLibrary.byMusicBrainzId(UUID.fromString(mbReleaseId)).firstOrNull() } catch (e: CancellationException) { throw e } catch (_: Exception) { null }
+                                val existingAlbum = try {
+                                    context.albumLibrary.byMusicBrainzId(UUID.fromString(mbReleaseId)).firstOrNull()
+                                } catch (e: CancellationException) {
+                                    throw e
+                                } catch (_: Exception) {
+                                    null
+                                }
                                 if (existingAlbum != null) {
                                     finalAlbumName = existingAlbum.name
                                     finalAlbumArtists = existingAlbum.artists.map { it.name }.sorted()
@@ -105,7 +118,13 @@ class YoutubeIndexer(context: PluginContext) : BaseIndexer(context, IMetadataSer
                                 coverHash = hash,
                                 songCount = songCount,
                                 originalId = finalOriginalId,
-                                musicBrainzId = mbReleaseId?.let { try { UUID.fromString(it) } catch (_: Exception) { null } }
+                                musicBrainzId = mbReleaseId?.let {
+                                    try {
+                                        UUID.fromString(it)
+                                    } catch (_: Exception) {
+                                        null
+                                    }
+                                }
                             )
 
                             val albumList = map.computeIfAbsent(album) { Collections.synchronizedList(mutableListOf()) }
@@ -131,7 +150,13 @@ class YoutubeIndexer(context: PluginContext) : BaseIndexer(context, IMetadataSer
             val recording = context.metadataService.getTrackByMbId(IMetadataService.MetadataType.musicBrainz, mbId)
             if (recording != null) {
                 val artists = if (audioFile.musicBrainzArtistId != null) {
-                    val ids = audioFile.musicBrainzArtistId!!.split("/").mapNotNull { try { UUID.fromString(it) } catch (_: Exception) { null } }
+                    val ids = audioFile.musicBrainzArtistId!!.split("/").mapNotNull {
+                        try {
+                            UUID.fromString(it)
+                        } catch (_: Exception) {
+                            null
+                        }
+                    }
                     val matchedArtists = ids.mapNotNull { context.artistLibrary.byMusicBrainzId(it).firstOrNull() }
                     if (matchedArtists.size == ids.size) {
                         matchedArtists.map { it.name }

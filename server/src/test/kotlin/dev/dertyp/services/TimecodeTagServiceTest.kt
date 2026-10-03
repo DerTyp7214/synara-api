@@ -70,7 +70,14 @@ class TimecodeTagServiceTest : KoinTest {
         endMs: Long? = null,
         action: TimecodeTagAction = TimecodeTagAction.NONE,
         fade: Boolean = false
-    ) = TimecodeTagInput(type = type, text = text, timestampMs = timestampMs, endMs = endMs, action = action, fade = fade)
+    ) = TimecodeTagInput(
+        type = type,
+        text = text,
+        timestampMs = timestampMs,
+        endMs = endMs,
+        action = action,
+        fade = fade
+    )
 
     private fun actionAllowed(type: TimecodeTagType, endMs: Long?, action: TimecodeTagAction): Boolean = when (action) {
         TimecodeTagAction.NONE -> true
@@ -101,7 +108,13 @@ class TimecodeTagServiceTest : KoinTest {
                             runBlocking { service.createTag(userId, songId, type, "", 1000L, endMs, action) }
                         }
                         assertThrows<IllegalArgumentException>("$type $endMs $action") {
-                            runBlocking { service.replaceTags(userId, songId, listOf(input(type, 1000L, endMs = endMs, action = action))) }
+                            runBlocking {
+                                service.replaceTags(
+                                    userId,
+                                    songId,
+                                    listOf(input(type, 1000L, endMs = endMs, action = action))
+                                )
+                            }
                         }
                     }
                 }
@@ -120,12 +133,22 @@ class TimecodeTagServiceTest : KoinTest {
         val albumId = transaction(database) { insertAlbum() }
         val songId = transaction(database) { insertSong(albumId) }
 
-        val created = service.createTag(userId, songId, TimecodeTagType.CHAPTER, "Intro", 0L, 5000L, TimecodeTagAction.SKIP, true)
+        val created =
+            service.createTag(userId, songId, TimecodeTagType.CHAPTER, "Intro", 0L, 5000L, TimecodeTagAction.SKIP, true)
         assertEquals(TimecodeTagAction.SKIP, created.action)
         assertTrue(created.fade)
         assertEquals(listOf(created), service.getTags(userId, songId))
 
-        val updated = service.updateTag(userId, created.id, TimecodeTagType.MARKER, "Drop", 3000L, null, TimecodeTagAction.SKIP_TO, false)
+        val updated = service.updateTag(
+            userId,
+            created.id,
+            TimecodeTagType.MARKER,
+            "Drop",
+            3000L,
+            null,
+            TimecodeTagAction.SKIP_TO,
+            false
+        )
         assertEquals(TimecodeTagAction.SKIP_TO, updated.action)
         assertFalse(updated.fade)
         assertEquals(listOf(updated), service.getTags(userId, songId))
@@ -139,7 +162,11 @@ class TimecodeTagServiceTest : KoinTest {
             )
         )
         assertEquals(
-            listOf(TimecodeTagAction.PLAY_ONLY to true, TimecodeTagAction.PLAY_UNTIL to false, TimecodeTagAction.NONE to false),
+            listOf(
+                TimecodeTagAction.PLAY_ONLY to true,
+                TimecodeTagAction.PLAY_UNTIL to false,
+                TimecodeTagAction.NONE to false
+            ),
             replaced.map { it.action to it.fade }
         )
         assertEquals(replaced, service.getTags(userId, songId))
@@ -152,14 +179,16 @@ class TimecodeTagServiceTest : KoinTest {
         val userId = transaction(database) { insertUser() }
         val albumId = transaction(database) { insertAlbum() }
         val songId = transaction(database) { insertSong(albumId) }
-        val created = service.createTag(userId, songId, TimecodeTagType.CHAPTER, "Intro", 0L, 5000L, TimecodeTagAction.SKIP, true)
+        val created =
+            service.createTag(userId, songId, TimecodeTagType.CHAPTER, "Intro", 0L, 5000L, TimecodeTagAction.SKIP, true)
 
         val renamed = service.updateTag(userId, created.id, TimecodeTagType.CHAPTER, "Opening", 100L, 6000L)
         assertEquals("Opening", renamed.text)
         assertEquals(TimecodeTagAction.SKIP, renamed.action)
         assertTrue(renamed.fade)
 
-        val unfaded = service.updateTag(userId, created.id, TimecodeTagType.CHAPTER, "Opening", 100L, 6000L, fade = false)
+        val unfaded =
+            service.updateTag(userId, created.id, TimecodeTagType.CHAPTER, "Opening", 100L, 6000L, fade = false)
         assertEquals(TimecodeTagAction.SKIP, unfaded.action)
         assertFalse(unfaded.fade)
 
@@ -168,7 +197,8 @@ class TimecodeTagServiceTest : KoinTest {
         }
         assertEquals(listOf(unfaded), service.getTags(userId, songId))
 
-        val cleared = service.updateTag(userId, created.id, TimecodeTagType.NOTE, "Opening", 100L, null, TimecodeTagAction.NONE)
+        val cleared =
+            service.updateTag(userId, created.id, TimecodeTagType.NOTE, "Opening", 100L, null, TimecodeTagAction.NONE)
         assertEquals(TimecodeTagAction.NONE, cleared.action)
         assertFalse(cleared.fade)
     }
@@ -224,27 +254,28 @@ class TimecodeTagServiceTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `validation rejects negative timestamps endMs before timestamp and oversized text`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        val userId = transaction(database) { insertUser() }
-        val albumId = transaction(database) { insertAlbum() }
-        val songId = transaction(database) { insertSong(albumId) }
+    fun `validation rejects negative timestamps endMs before timestamp and oversized text`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val userId = transaction(database) { insertUser() }
+            val albumId = transaction(database) { insertAlbum() }
+            val songId = transaction(database) { insertSong(albumId) }
 
-        assertThrows<IllegalArgumentException> {
-            runBlocking { service.createTag(userId, songId, TimecodeTagType.NOTE, "", -1L, null) }
-        }
-        assertThrows<IllegalArgumentException> {
-            runBlocking { service.createTag(userId, songId, TimecodeTagType.NOTE, "", 1000L, 500L) }
-        }
-        assertThrows<IllegalArgumentException> {
-            runBlocking { service.createTag(userId, songId, TimecodeTagType.NOTE, "x".repeat(1001), 0L, null) }
-        }
+            assertThrows<IllegalArgumentException> {
+                runBlocking { service.createTag(userId, songId, TimecodeTagType.NOTE, "", -1L, null) }
+            }
+            assertThrows<IllegalArgumentException> {
+                runBlocking { service.createTag(userId, songId, TimecodeTagType.NOTE, "", 1000L, 500L) }
+            }
+            assertThrows<IllegalArgumentException> {
+                runBlocking { service.createTag(userId, songId, TimecodeTagType.NOTE, "x".repeat(1001), 0L, null) }
+            }
 
-        assertTrue(service.getTags(userId, songId).isEmpty())
+            assertTrue(service.getTags(userId, songId).isEmpty())
 
-        val accepted = service.createTag(userId, songId, TimecodeTagType.NOTE, "x".repeat(1000), 0L, null)
-        assertEquals(1000, accepted.text.length)
-    }
+            val accepted = service.createTag(userId, songId, TimecodeTagType.NOTE, "x".repeat(1000), 0L, null)
+            assertEquals(1000, accepted.text.length)
+        }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
@@ -290,21 +321,22 @@ class TimecodeTagServiceTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `deleteTag returns true once then false, and false for a foreign tag which survives`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        val ownerId = transaction(database) { insertUser() }
-        val otherId = transaction(database) { insertUser() }
-        val albumId = transaction(database) { insertAlbum() }
-        val songId = transaction(database) { insertSong(albumId) }
-        val created = service.createTag(ownerId, songId, TimecodeTagType.NOTE, "", 100L, null)
+    fun `deleteTag returns true once then false, and false for a foreign tag which survives`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val ownerId = transaction(database) { insertUser() }
+            val otherId = transaction(database) { insertUser() }
+            val albumId = transaction(database) { insertAlbum() }
+            val songId = transaction(database) { insertSong(albumId) }
+            val created = service.createTag(ownerId, songId, TimecodeTagType.NOTE, "", 100L, null)
 
-        assertTrue(service.deleteTag(ownerId, created.id))
-        assertFalse(service.deleteTag(ownerId, created.id))
+            assertTrue(service.deleteTag(ownerId, created.id))
+            assertFalse(service.deleteTag(ownerId, created.id))
 
-        val survivor = service.createTag(ownerId, songId, TimecodeTagType.NOTE, "", 200L, null)
-        assertFalse(service.deleteTag(otherId, survivor.id))
-        assertEquals(listOf(survivor), service.getTags(ownerId, songId))
-    }
+            val survivor = service.createTag(ownerId, songId, TimecodeTagType.NOTE, "", 200L, null)
+            assertFalse(service.deleteTag(otherId, survivor.id))
+            assertEquals(listOf(survivor), service.getTags(ownerId, songId))
+        }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)

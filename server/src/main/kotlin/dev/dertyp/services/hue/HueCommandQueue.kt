@@ -38,9 +38,12 @@ class HueCommandQueue(
     private val latest = ConcurrentHashMap<String, HueCommand>()
     private val keys = Channel<String>(Channel.UNLIMITED)
 
-    @Volatile private var lastLightSend = Long.MIN_VALUE / 2
-    @Volatile private var lastGroupSend = Long.MIN_VALUE / 2
-    @Volatile private var penaltyUntil = Long.MIN_VALUE / 2
+    @Volatile
+    private var lastLightSend = Long.MIN_VALUE / 2
+    @Volatile
+    private var lastGroupSend = Long.MIN_VALUE / 2
+    @Volatile
+    private var penaltyUntil = Long.MIN_VALUE / 2
 
     private val worker: Job = scope.launch {
         for (key in keys) {

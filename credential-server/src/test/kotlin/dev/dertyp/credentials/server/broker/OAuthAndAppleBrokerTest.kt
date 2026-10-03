@@ -37,7 +37,10 @@ class OAuthAndAppleBrokerTest {
         assertEquals("tok", credential.accessToken)
         val request = upstream.requests.single()
         assertEquals(tokenUrl, request.url)
-        assertEquals("Basic " + Base64.getEncoder().encodeToString("id-1:secret-1".toByteArray()), request.authorization)
+        assertEquals(
+            "Basic " + Base64.getEncoder().encodeToString("id-1:secret-1".toByteArray()),
+            request.authorization
+        )
         assertEquals("client_credentials", request.form["grant_type"])
         assertEquals("r_usr", request.form["scope"])
         assertNull(request.form["client_id"])
@@ -159,10 +162,13 @@ class OAuthAndAppleBrokerTest {
         val generator = KeyPairGenerator.getInstance("EC").apply { initialize(ECGenParameterSpec("secp256r1")) }
         val keyPair = generator.generateKeyPair()
         val pem = "-----BEGIN PRIVATE KEY-----\n" +
-            Base64.getMimeEncoder(64, "\n".toByteArray()).encodeToString(keyPair.private.encoded) +
-            "\n-----END PRIVATE KEY-----\n"
+                Base64.getMimeEncoder(64, "\n".toByteArray()).encodeToString(keyPair.private.encoded) +
+                "\n-----END PRIVATE KEY-----\n"
         val repository = FakeSecretRepository().apply {
-            put("applemusic.developer", AppleSecret(teamId = "TEAM123", keyId = "KEY456", p8Pem = pem, ttlSeconds = 43200))
+            put(
+                "applemusic.developer",
+                AppleSecret(teamId = "TEAM123", keyId = "KEY456", p8Pem = pem, ttlSeconds = 43200)
+            )
         }
         val resolver = CredentialResolver(repository, MockUpstream { json("{}") }.client)
 

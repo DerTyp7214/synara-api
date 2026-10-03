@@ -32,7 +32,8 @@ class ClientRequestService : Service() {
         description: ClientDescription,
         val connectedAt: Long
     ) {
-        @Volatile var description: ClientDescription = description
+        @Volatile
+        var description: ClientDescription = description
             internal set
 
         internal val count = AtomicInteger(0)

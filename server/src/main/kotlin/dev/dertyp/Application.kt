@@ -147,15 +147,17 @@ fun Application.module() {
                         val secure = endpoint.protocol == URLProtocol.HTTPS
 
                         runBlocking {
-                            remoteMirrorService.startMirror(RemoteServerConfig(
-                                host = endpoint.host,
-                                port = port,
-                                username = setupFromMirrorUser,
-                                password = setupFromMirrorPass,
-                                secure = secure,
-                                isImport = true,
-                                importUsers = true
-                            ))
+                            remoteMirrorService.startMirror(
+                                RemoteServerConfig(
+                                    host = endpoint.host,
+                                    port = port,
+                                    username = setupFromMirrorUser,
+                                    password = setupFromMirrorPass,
+                                    secure = secure,
+                                    isImport = true,
+                                    importUsers = true
+                                )
+                            )
 
                             while (remoteMirrorService.isMirroring) {
                                 delay(1.seconds)

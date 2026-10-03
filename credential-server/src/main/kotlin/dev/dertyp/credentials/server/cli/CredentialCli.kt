@@ -30,6 +30,7 @@ class CredentialCli(
                     out.println(USAGE)
                     0
                 }
+
                 else -> throw CliUsageException("Unknown command ${parsed.positional.first()}")
             }
         } catch (e: CliUsageException) {
@@ -51,14 +52,19 @@ class CredentialCli(
                 val grants = args.values("grant").map { parseGrant(it) }
                 printCreated(store.createClient(name, grants))
             }
+
             "rotate" -> printCreated(store.rotateSecret(args.arg(1, "clientId")))
             "enable" -> printClient(store.updateClient(args.arg(1, "clientId"), UpdateClientRequest(enabled = true)))
             "disable" -> printClient(store.updateClient(args.arg(1, "clientId"), UpdateClientRequest(enabled = false)))
             "delete" -> {
                 val ref = args.arg(1, "clientId")
-                if (!store.deleteClient(ref)) throw CredentialException(CredentialErrorCode.NOT_FOUND, "Client $ref does not exist")
+                if (!store.deleteClient(ref)) throw CredentialException(
+                    CredentialErrorCode.NOT_FOUND,
+                    "Client $ref does not exist"
+                )
                 out.println("Deleted client $ref")
             }
+
             "grant" -> printClient(store.grant(args.arg(1, "clientId"), args.arg(2, "name"), args.flag("write-back")))
             "ungrant" -> printClient(store.ungrant(args.arg(1, "clientId"), args.arg(2, "name")))
             "revoke-tokens" -> printClient(store.revokeTokens(args.arg(1, "clientId")))
@@ -76,6 +82,7 @@ class CredentialCli(
                 CredentialKind.API_KEY_PAIR,
                 CredentialInput.ApiKeyPairInput(args.arg(2, "key"), args.arg(3, "secret")),
             )
+
             "set-oauth" -> upsert(args, CredentialKind.OAUTH_CLIENT_CREDENTIALS, oauthInput(args))
             "set-apple" -> upsert(
                 args,
@@ -86,6 +93,7 @@ class CredentialCli(
                     p8Pem = Files.readString(Path.of(args.required("p8"))),
                 ),
             )
+
             "import-file" -> {
                 val roles = args.values("role")
                 val files = args.values("file")
@@ -97,6 +105,7 @@ class CredentialCli(
                 }
                 upsert(args, CredentialKind.FILE, CredentialInput.FileInput(content))
             }
+
             "import-tiddl" -> upsert(
                 args,
                 CredentialKind.TIDAL_DEVICE_SESSION,
@@ -107,6 +116,7 @@ class CredentialCli(
                     authFileContent = Files.readString(Path.of(args.required("auth-file"))),
                 ),
             )
+
             "tidal-login" -> return tidalLogin(args)
             "test" -> {
                 val name = args.arg(1, "name")
@@ -123,11 +133,16 @@ class CredentialCli(
                 )
                 return if (result.ok) 0 else 1
             }
+
             "delete" -> {
                 val name = args.arg(1, "name")
-                if (!deps.admin.delete(name)) throw CredentialException(CredentialErrorCode.NOT_FOUND, "Credential $name does not exist")
+                if (!deps.admin.delete(name)) throw CredentialException(
+                    CredentialErrorCode.NOT_FOUND,
+                    "Credential $name does not exist"
+                )
                 out.println("Deleted credential $name")
             }
+
             else -> throw CliUsageException("Unknown credentials command ${args.positional.firstOrNull()}")
         }
         return 0
@@ -152,11 +167,12 @@ class CredentialCli(
     private fun oauthInput(args: CliArgs): CredentialInput.OAuthClientCredentialsInput {
         val presetName = args.optional("preset")
         val preset = presetName?.let { wanted ->
-            deps.resolver.presets().firstOrNull { it.name == wanted && it.kind == CredentialKind.OAUTH_CLIENT_CREDENTIALS }
+            deps.resolver.presets()
+                .firstOrNull { it.name == wanted && it.kind == CredentialKind.OAUTH_CLIENT_CREDENTIALS }
                 ?: throw CliUsageException("Unknown OAuth preset $wanted")
         }
         val tokenUrl = args.optional("token-url") ?: preset?.tokenUrl
-            ?: throw CliUsageException("set-oauth needs --preset or --token-url")
+        ?: throw CliUsageException("set-oauth needs --preset or --token-url")
         val authStyle = args.optional("auth-style")?.let { style ->
             OAuthAuthStyle.entries.firstOrNull { it.name.equals(style, ignoreCase = true) }
                 ?: throw CliUsageException("Unknown auth style $style")
@@ -202,7 +218,13 @@ class CredentialCli(
     private fun printClient(client: ClientSummary) {
         val grants = client.grants.joinToString(",") { if (it.writeBack) "${it.name}:w" else it.name }.ifEmpty { "-" }
         out.println(
-            listOf(client.clientId, client.name, if (client.enabled) "enabled" else "disabled", "v${client.tokenVersion}", grants)
+            listOf(
+                client.clientId,
+                client.name,
+                if (client.enabled) "enabled" else "disabled",
+                "v${client.tokenVersion}",
+                grants
+            )
                 .joinToString("\t"),
         )
     }
@@ -287,7 +309,8 @@ class CliArgs(
                         body.contains('=') -> options.getOrPut(name) { mutableListOf() }.add(body.substringAfter('='))
                         name in FLAGS -> flags.add(name)
                         else -> {
-                            val value = args.getOrNull(index + 1) ?: throw CliUsageException("Missing value for --$name")
+                            val value =
+                                args.getOrNull(index + 1) ?: throw CliUsageException("Missing value for --$name")
                             options.getOrPut(name) { mutableListOf() }.add(value)
                             index++
                         }

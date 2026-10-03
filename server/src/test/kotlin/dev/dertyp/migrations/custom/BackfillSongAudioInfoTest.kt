@@ -33,7 +33,15 @@ class BackfillSongAudioInfoTest : KoinTest {
 
         database = TestDatabase.connect(dialect, "backfill_audio_info_test")
         transaction(database) {
-            SchemaUtils.create(ImageTable, AlbumTable, SongTable, FlacInfoTable, PcmInfoTable, SongVariantTable, ScheduledTaskLogTable)
+            SchemaUtils.create(
+                ImageTable,
+                AlbumTable,
+                SongTable,
+                FlacInfoTable,
+                PcmInfoTable,
+                SongVariantTable,
+                ScheduledTaskLogTable
+            )
         }
         mockkObject(AudioProbe)
     }
@@ -98,7 +106,8 @@ class BackfillSongAudioInfoTest : KoinTest {
         BackfillSongAudioInfo().migrate()
 
         val channels = transaction(database) {
-            SongTable.select(SongTable.id, SongTable.channels).associate { it[SongTable.id].value to it[SongTable.channels] }
+            SongTable.select(SongTable.id, SongTable.channels)
+                .associate { it[SongTable.id].value to it[SongTable.channels] }
         }
         assertEquals(6, channels[analysed])
         assertEquals(2, channels[probedSong])

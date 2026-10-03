@@ -48,21 +48,22 @@ class BackfillHueBridgeOwnersTest {
         }
     }
 
-    private fun addBridge(hardwareId: String = "001788fffe000001", ownedBy: UUID? = null): UUID = transaction(database) {
-        HueBridgeTable.insertAndGetId {
-            it[bridgeId] = hardwareId
-            it[ip] = "10.0.0.2"
-            it[name] = "Living room bridge"
-            it[modelId] = "BSB002"
-            it[applicationKey] = "app-key"
-            it[clientKey] = "client-key"
-            it[certFingerprint] = "AA:BB"
-            it[createdAt] = 1_000
-            it[lastSeen] = 2_000
-            it[lastError] = "boom"
-            it[userId] = ownedBy
-        }.value
-    }
+    private fun addBridge(hardwareId: String = "001788fffe000001", ownedBy: UUID? = null): UUID =
+        transaction(database) {
+            HueBridgeTable.insertAndGetId {
+                it[bridgeId] = hardwareId
+                it[ip] = "10.0.0.2"
+                it[name] = "Living room bridge"
+                it[modelId] = "BSB002"
+                it[applicationKey] = "app-key"
+                it[clientKey] = "client-key"
+                it[certFingerprint] = "AA:BB"
+                it[createdAt] = 1_000
+                it[lastSeen] = 2_000
+                it[lastError] = "boom"
+                it[userId] = ownedBy
+            }.value
+        }
 
     private fun addLink(user: UUID, bridge: UUID, updated: Long) = transaction(database) {
         HueUserLinkTable.insert {
@@ -162,7 +163,8 @@ class BackfillHueBridgeOwnersTest {
         assertNotEquals(shared, clone)
         assertEquals(2L, bridgeCount())
 
-        val original = transaction(database) { HueBridgeTable.selectAll().where { HueBridgeTable.id eq shared }.single() }
+        val original =
+            transaction(database) { HueBridgeTable.selectAll().where { HueBridgeTable.id eq shared }.single() }
         val copy = transaction(database) { HueBridgeTable.selectAll().where { HueBridgeTable.id eq clone!! }.single() }
         assertEquals(userB, copy[HueBridgeTable.userId]?.value)
         assertEquals(original[HueBridgeTable.bridgeId], copy[HueBridgeTable.bridgeId])

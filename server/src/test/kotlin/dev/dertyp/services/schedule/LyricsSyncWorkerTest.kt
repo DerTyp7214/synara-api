@@ -56,7 +56,7 @@ class LyricsSyncWorkerTest : KoinTest {
         val lyricsService = mockk<LyricsService>()
         every { lyricsService.isConfigured() } returns true
         coEvery { lyricsService.isReachable() } returns true
-        
+
         val albumId = transaction {
             AlbumTable.insert {
                 it[name] = "Test Album"
@@ -108,7 +108,8 @@ class LyricsSyncWorkerTest : KoinTest {
         assertEquals(1, results["notFound"])
 
         transaction {
-            val notFoundCount = SyncedLyricsTable.selectAll().where { SyncedLyricsTable.provider eq "not_found" }.count()
+            val notFoundCount =
+                SyncedLyricsTable.selectAll().where { SyncedLyricsTable.provider eq "not_found" }.count()
             assertEquals(1, notFoundCount)
         }
     }
@@ -120,7 +121,7 @@ class LyricsSyncWorkerTest : KoinTest {
         val lyricsService = mockk<LyricsService>()
         every { lyricsService.isConfigured() } returns true
         coEvery { lyricsService.isReachable() } returns true
-        
+
         // Mock a slow transcription to keep the worker running
         coEvery { lyricsService.transcribeLyrics(any(), any()) } coAnswers {
             delay(1.seconds)
@@ -145,7 +146,7 @@ class LyricsSyncWorkerTest : KoinTest {
         }
 
         val worker = LyricsSyncWorker()
-        
+
         coroutineScope {
             val firstRun = async { worker.run() }
             delay(100.milliseconds)

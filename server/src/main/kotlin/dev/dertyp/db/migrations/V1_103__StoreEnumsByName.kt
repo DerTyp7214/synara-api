@@ -67,9 +67,9 @@ class V1_103__StoreEnumsByName : BaseJavaMigration() {
                 .select(FavSyncTable.userId, legacy, FavSyncTable.syncedAt)
                 .where { userExists }
                 .prepareSQL(this, prepared = false) to
-                FavSyncTable.select(FavSyncTable.userId.count())
-                    .where { not(userExists) }
-                    .prepareSQL(this, prepared = false)
+                    FavSyncTable.select(FavSyncTable.userId.count())
+                        .where { not(userExists) }
+                        .prepareSQL(this, prepared = false)
         }
 
         val orphans = connection.createStatement().use { statement ->

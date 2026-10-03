@@ -65,7 +65,10 @@ class ScheduledTaskLogServiceTest {
         )
 
         transaction(database) {
-            assertEquals(1, ScheduledTaskLogTable.selectAll().where { ScheduledTaskLogTable.taskName eq taskName }.count())
+            assertEquals(
+                1,
+                ScheduledTaskLogTable.selectAll().where { ScheduledTaskLogTable.taskName eq taskName }.count()
+            )
         }
 
         for (i in 1..105) {

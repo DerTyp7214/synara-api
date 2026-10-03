@@ -51,35 +51,39 @@ class UserPlaylistBackupService(
         }
     }
 
-    suspend fun createBackup(user: User, onProgress: suspend (Double, String) -> Unit = { _, _ -> }) = withContext(Dispatchers.IO) {
-        logger.info("Creating user playlist backup for user: ${user.username} (${user.id})")
-        onProgress(0.0, "Creating playlist backup for: ${user.username}")
-        val playlists = userPlaylistService.allPlaylistsFlow(user.id).toList()
-        onProgress(33.0, "Playlists fetched")
+    suspend fun createBackup(user: User, onProgress: suspend (Double, String) -> Unit = { _, _ -> }) =
+        withContext(Dispatchers.IO) {
+            logger.info("Creating user playlist backup for user: ${user.username} (${user.id})")
+            onProgress(0.0, "Creating playlist backup for: ${user.username}")
+            val playlists = userPlaylistService.allPlaylistsFlow(user.id).toList()
+            onProgress(33.0, "Playlists fetched")
 
-        val imageIds = playlists.mapNotNull { it.imageId }.distinct()
-        val images = imageIds.mapIndexedNotNull { index, id ->
-            val image = imageService.byId(id)
-            val data = imageService.getImageData(id, 0)
-            onProgress(33.0 + (index.toDouble() / imageIds.size) * 33.0, "Processing image ${index + 1}/${imageIds.size}")
-            if (image != null && data != null) {
-                BackupImage(image, data)
-            } else null
+            val imageIds = playlists.mapNotNull { it.imageId }.distinct()
+            val images = imageIds.mapIndexedNotNull { index, id ->
+                val image = imageService.byId(id)
+                val data = imageService.getImageData(id, 0)
+                onProgress(
+                    33.0 + (index.toDouble() / imageIds.size) * 33.0,
+                    "Processing image ${index + 1}/${imageIds.size}"
+                )
+                if (image != null && data != null) {
+                    BackupImage(image, data)
+                } else null
+            }
+            onProgress(66.0, "Images processed")
+
+            val backup = UserPlaylistBackup(user.id, playlists, images)
+
+            val timestamp = LocalDateTime.now()
+                .format(DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss-SSS"))
+            val backupFile = File(backupDir, "playlists-${user.id}-$timestamp.json")
+
+            backupFile.writeText(AppJson.encodeToString(backup))
+            logger.info("Backup created: ${backupFile.absolutePath}")
+            onProgress(90.0, "Rotating old backups...")
+            rotateBackups(user)
+            onProgress(100.0, "Backup finished for ${user.username}")
         }
-        onProgress(66.0, "Images processed")
-
-        val backup = UserPlaylistBackup(user.id, playlists, images)
-
-        val timestamp = LocalDateTime.now()
-            .format(DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss-SSS"))
-        val backupFile = File(backupDir, "playlists-${user.id}-$timestamp.json")
-
-        backupFile.writeText(AppJson.encodeToString(backup))
-        logger.info("Backup created: ${backupFile.absolutePath}")
-        onProgress(90.0, "Rotating old backups...")
-        rotateBackups(user)
-        onProgress(100.0, "Backup finished for ${user.username}")
-    }
 
     private fun rotateBackups(user: User) {
         val backups = backupDir.listFiles { it.isFile && it.name.startsWith("playlists-${user.id}") }
@@ -99,7 +103,7 @@ class UserPlaylistBackupService(
         val users = userService.queryUser()
         for ((index, user) in users.withIndex()) {
             val userProgress = (index.toDouble() / users.size) * 100.0
-            createBackup(user) { p, l -> 
+            createBackup(user) { p, l ->
                 onProgress(userProgress + (p / users.size), l)
             }
         }

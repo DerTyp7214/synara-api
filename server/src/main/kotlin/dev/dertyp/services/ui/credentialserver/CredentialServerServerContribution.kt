@@ -39,8 +39,17 @@ class CredentialServerServerContribution(private val ui: CredentialServerUiConte
             connectionButtons(scope, connection),
         )
         when {
-            !connection.adminConfigured -> children += UiComponent.Text(scope.t("$PREFIX.adminKeyMissing"), UiTextStyle.CAPTION, UiTone.MUTED)
-            !admin -> children += UiComponent.Text(scope.t("$PREFIX.adminKeyRejected"), UiTextStyle.CAPTION, UiTone.MUTED)
+            !connection.adminConfigured -> children += UiComponent.Text(
+                scope.t("$PREFIX.adminKeyMissing"),
+                UiTextStyle.CAPTION,
+                UiTone.MUTED
+            )
+
+            !admin -> children += UiComponent.Text(
+                scope.t("$PREFIX.adminKeyRejected"),
+                UiTextStyle.CAPTION,
+                UiTone.MUTED
+            )
         }
         if (admin) {
             children += registerSection(scope, connection)
@@ -60,12 +69,23 @@ class CredentialServerServerContribution(private val ui: CredentialServerUiConte
         )
         if (status == CredentialServerLinkStatus.CONNECTED) {
             runCatchingCancellable { ui.admin.health() }.getOrNull()?.let {
-                badges += UiComponent.Badge(scope.t("$PREFIX.version", "version" to it.version), UiTone.DEFAULT, UiIcon(UiIconName.INFO))
+                badges += UiComponent.Badge(
+                    scope.t("$PREFIX.version", "version" to it.version),
+                    UiTone.DEFAULT,
+                    UiIcon(UiIconName.INFO)
+                )
             }
             if (admin && connection.consumerConfigured) {
                 runCatchingCancellable { ui.admin.listClients() }.getOrNull()
                     ?.firstOrNull { it.clientId == connection.clientId }
-                    ?.let { badges += UiComponent.Badge(scope.t("$PREFIX.grantedCount", "count" to it.grants.size.toString()), UiTone.PRIMARY, UiIcon(UiIconName.KEY)) }
+                    ?.let {
+                        badges += UiComponent.Badge(
+                            scope.t(
+                                "$PREFIX.grantedCount",
+                                "count" to it.grants.size.toString()
+                            ), UiTone.PRIMARY, UiIcon(UiIconName.KEY)
+                        )
+                    }
             }
         }
         return UiComponent.Row(badges, spacing = UiSpacing.SMALL)
@@ -78,17 +98,39 @@ class CredentialServerServerContribution(private val ui: CredentialServerUiConte
             submit = UiAction.Invoke(id, ACTION_SAVE, formId = FORM_CONNECTION),
             submitLabel = scope.t("$PREFIX.save"),
             children = listOf(
-                UiComponent.TextField(FIELD_URL, scope.t("$PREFIX.url"), value = connection.url, placeholder = "https://credentials.example.com", kind = UiTextKind.URL, required = connection.baseUrl == null),
-                UiComponent.TextField(FIELD_ADMIN_KEY, scope.t("$PREFIX.adminKey"), secret = true, helper = if (connection.adminKey != null) keepHint else null),
+                UiComponent.TextField(
+                    FIELD_URL,
+                    scope.t("$PREFIX.url"),
+                    value = connection.url,
+                    placeholder = "https://credentials.example.com",
+                    kind = UiTextKind.URL,
+                    required = connection.baseUrl == null
+                ),
+                UiComponent.TextField(
+                    FIELD_ADMIN_KEY,
+                    scope.t("$PREFIX.adminKey"),
+                    secret = true,
+                    helper = if (connection.adminKey != null) keepHint else null
+                ),
                 UiComponent.TextField(FIELD_CLIENT_ID, scope.t("$PREFIX.clientId"), value = connection.clientId),
-                UiComponent.TextField(FIELD_CLIENT_SECRET, scope.t("$PREFIX.clientSecret"), secret = true, helper = if (connection.clientSecret != null) keepHint else null),
+                UiComponent.TextField(
+                    FIELD_CLIENT_SECRET,
+                    scope.t("$PREFIX.clientSecret"),
+                    secret = true,
+                    helper = if (connection.clientSecret != null) keepHint else null
+                ),
             ),
         )
     }
 
     private fun connectionButtons(scope: UiRenderScope, connection: CredentialServerConnection): UiComponent {
         val buttons = mutableListOf<UiComponent>(
-            UiComponent.Button(scope.t("$PREFIX.test"), UiAction.Invoke(id, ACTION_TEST), UiButtonStyle.SECONDARY, UiIcon(UiIconName.SYNC)),
+            UiComponent.Button(
+                scope.t("$PREFIX.test"),
+                UiAction.Invoke(id, ACTION_TEST),
+                UiButtonStyle.SECONDARY,
+                UiIcon(UiIconName.SYNC)
+            ),
         )
         if (connection.baseUrl != null) {
             buttons += UiComponent.Button(
@@ -101,53 +143,78 @@ class CredentialServerServerContribution(private val ui: CredentialServerUiConte
         return UiComponent.Column(buttons, spacing = UiSpacing.SMALL, align = UiAlign.START)
     }
 
-    private fun registerSection(scope: UiRenderScope, connection: CredentialServerConnection): UiComponent = UiComponent.Section(
-        title = scope.t("$PREFIX.register"),
-        children = listOf(
-            UiComponent.Text(
-                scope.t(if (connection.consumerConfigured) "$PREFIX.registerReplaceHint" else "$PREFIX.registerHint"),
-                UiTextStyle.CAPTION,
-                UiTone.MUTED,
-            ),
-            UiComponent.Form(
-                id = FORM_REGISTER,
-                submit = UiAction.Invoke(
-                    id,
-                    ACTION_REGISTER,
-                    formId = FORM_REGISTER,
-                    confirmText = if (connection.consumerConfigured) scope.t("$PREFIX.registerConfirm") else null,
+    private fun registerSection(scope: UiRenderScope, connection: CredentialServerConnection): UiComponent =
+        UiComponent.Section(
+            title = scope.t("$PREFIX.register"),
+            children = listOf(
+                UiComponent.Text(
+                    scope.t(if (connection.consumerConfigured) "$PREFIX.registerReplaceHint" else "$PREFIX.registerHint"),
+                    UiTextStyle.CAPTION,
+                    UiTone.MUTED,
                 ),
-                submitLabel = scope.t("$PREFIX.registerSubmit"),
-                children = listOf(
-                    UiComponent.TextField(FIELD_SERVER_NAME, scope.t("$PREFIX.serverName"), value = ui.defaultServerName(), required = true),
+                UiComponent.Form(
+                    id = FORM_REGISTER,
+                    submit = UiAction.Invoke(
+                        id,
+                        ACTION_REGISTER,
+                        formId = FORM_REGISTER,
+                        confirmText = if (connection.consumerConfigured) scope.t("$PREFIX.registerConfirm") else null,
+                    ),
+                    submitLabel = scope.t("$PREFIX.registerSubmit"),
+                    children = listOf(
+                        UiComponent.TextField(
+                            FIELD_SERVER_NAME,
+                            scope.t("$PREFIX.serverName"),
+                            value = ui.defaultServerName(),
+                            required = true
+                        ),
+                    ),
                 ),
             ),
-        ),
-    )
+        )
 
     private suspend fun credentialSection(scope: UiRenderScope): UiComponent {
         val credentials = runCatchingCancellable { ui.admin.listCredentials() }.getOrElse {
-            return UiComponent.Text(scope.t("$PREFIX.loadFailed", "reason" to scope.errorText(it)), UiTextStyle.CAPTION, UiTone.ERROR)
+            return UiComponent.Text(
+                scope.t("$PREFIX.loadFailed", "reason" to scope.errorText(it)),
+                UiTextStyle.CAPTION,
+                UiTone.ERROR
+            )
         }
         val presets = runCatchingCancellable { ui.admin.presets() }.getOrDefault(emptyList())
         val credentialItems = credentials.sortedBy { it.name }.map { credential ->
             UiComponent.ListItem(
                 title = ui.credentialText(scope, credential.name).label,
-                subtitle = listOfNotNull(credential.name, scope.kindText(credential.kind), credential.description?.takeIf { it.isNotBlank() }).joinToString(" · "),
+                subtitle = listOfNotNull(
+                    credential.name,
+                    scope.kindText(credential.kind),
+                    credential.description?.takeIf { it.isNotBlank() }).joinToString(" · "),
                 icon = UiIcon(if (credential.kind == CredentialKind.FILE || credential.kind == CredentialKind.TIDAL_DEVICE_SESSION) UiIconName.FILE else UiIconName.KEY),
                 trailing = scope.statusText(credential.status),
-                action = UiAction.OpenPage(CredentialServerPages.CREDENTIAL, mapOf(CredentialServerPages.PARAM_NAME to credential.name)),
+                action = UiAction.OpenPage(
+                    CredentialServerPages.CREDENTIAL,
+                    mapOf(CredentialServerPages.PARAM_NAME to credential.name)
+                ),
             )
         }
         val existing = credentials.map { it.name }.toSet()
         val presetOptions = presets.map { preset ->
             val label = ui.credentialText(scope, preset.name).label
-            UiOption(preset.name, if (preset.name in existing) scope.t("$PREFIX.presetExisting", "name" to label) else label)
+            UiOption(
+                preset.name,
+                if (preset.name in existing) scope.t("$PREFIX.presetExisting", "name" to label) else label
+            )
         } + UiOption(CUSTOM, scope.t("$PREFIX.presetCustom"))
         return UiComponent.Section(
             title = scope.t("$PREFIX.credentials"),
             children = buildList {
-                if (credentialItems.isEmpty()) add(UiComponent.Text(scope.t("$PREFIX.noCredentials"), UiTextStyle.CAPTION, UiTone.MUTED))
+                if (credentialItems.isEmpty()) add(
+                    UiComponent.Text(
+                        scope.t("$PREFIX.noCredentials"),
+                        UiTextStyle.CAPTION,
+                        UiTone.MUTED
+                    )
+                )
                 addAll(credentialItems)
                 add(
                     UiComponent.Form(
@@ -155,8 +222,17 @@ class CredentialServerServerContribution(private val ui: CredentialServerUiConte
                         submit = UiAction.Invoke(id, ACTION_CREATE_CREDENTIAL, formId = FORM_CREATE_CREDENTIAL),
                         submitLabel = scope.t("$PREFIX.createCredential"),
                         children = listOf(
-                            UiComponent.Select(FIELD_PRESET, scope.t("$PREFIX.preset"), presetOptions.firstOrNull()?.value, presetOptions),
-                            UiComponent.TextField(FIELD_CUSTOM_NAME, scope.t("$PREFIX.customName"), helper = scope.t("$PREFIX.customNameHelper")),
+                            UiComponent.Select(
+                                FIELD_PRESET,
+                                scope.t("$PREFIX.preset"),
+                                presetOptions.firstOrNull()?.value,
+                                presetOptions
+                            ),
+                            UiComponent.TextField(
+                                FIELD_CUSTOM_NAME,
+                                scope.t("$PREFIX.customName"),
+                                helper = scope.t("$PREFIX.customNameHelper")
+                            ),
                             UiComponent.Select(
                                 FIELD_CUSTOM_KIND,
                                 scope.t("$PREFIX.customKind"),
@@ -170,27 +246,35 @@ class CredentialServerServerContribution(private val ui: CredentialServerUiConte
         )
     }
 
-    override suspend fun invoke(scope: UiRenderScope, actionId: String, values: Map<String, UiValue>): UiInvokeResult = when (actionId) {
-        ACTION_SAVE -> save(scope, values)
-        ACTION_TEST -> test(scope)
-        ACTION_DISCONNECT -> {
-            ui.connection.clear()
-            ui.forgetAdminProbe()
-            UiInvokeResult(UiInvokeStatus.OK, scope.t("$PREFIX.disconnected"), refresh = true)
+    override suspend fun invoke(scope: UiRenderScope, actionId: String, values: Map<String, UiValue>): UiInvokeResult =
+        when (actionId) {
+            ACTION_SAVE -> save(scope, values)
+            ACTION_TEST -> test(scope)
+            ACTION_DISCONNECT -> {
+                ui.connection.clear()
+                ui.forgetAdminProbe()
+                UiInvokeResult(UiInvokeStatus.OK, scope.t("$PREFIX.disconnected"), refresh = true)
+            }
+
+            ACTION_REGISTER -> register(scope, values)
+            ACTION_CREATE_CREDENTIAL -> createCredential(scope, values)
+            else -> super.invoke(scope, actionId, values)
         }
-        ACTION_REGISTER -> register(scope, values)
-        ACTION_CREATE_CREDENTIAL -> createCredential(scope, values)
-        else -> super.invoke(scope, actionId, values)
-    }
 
     private suspend fun save(scope: UiRenderScope, values: Map<String, UiValue>): UiInvokeResult {
         val current = ui.connection()
         val url = values.text(FIELD_URL)
         if (url.isEmpty() && current.baseUrl == null) {
-            return UiInvokeResult(UiInvokeStatus.VALIDATION_ERROR, fieldErrors = mapOf(FIELD_URL to scope.t("$PREFIX.error.url")))
+            return UiInvokeResult(
+                UiInvokeStatus.VALIDATION_ERROR,
+                fieldErrors = mapOf(FIELD_URL to scope.t("$PREFIX.error.url"))
+            )
         }
         if (url.isNotEmpty() && !url.startsWith("http://") && !url.startsWith("https://")) {
-            return UiInvokeResult(UiInvokeStatus.VALIDATION_ERROR, fieldErrors = mapOf(FIELD_URL to scope.t("$PREFIX.error.url")))
+            return UiInvokeResult(
+                UiInvokeStatus.VALIDATION_ERROR,
+                fieldErrors = mapOf(FIELD_URL to scope.t("$PREFIX.error.url"))
+            )
         }
         val updates = buildMap<String, String?> {
             if (url.isNotEmpty()) put(KEY_URL, url)
@@ -205,9 +289,15 @@ class CredentialServerServerContribution(private val ui: CredentialServerUiConte
 
     private suspend fun test(scope: UiRenderScope): UiInvokeResult {
         val connection = ui.connection()
-        if (connection.baseUrl == null) return UiInvokeResult(UiInvokeStatus.ERROR, scope.t("$PREFIX.error.notConfigured"))
+        if (connection.baseUrl == null) return UiInvokeResult(
+            UiInvokeStatus.ERROR,
+            scope.t("$PREFIX.error.notConfigured")
+        )
         val health = runCatchingCancellable { ui.admin.health() }.getOrElse {
-            return UiInvokeResult(UiInvokeStatus.ERROR, scope.t("$PREFIX.testUnreachable", "reason" to scope.errorText(it)))
+            return UiInvokeResult(
+                UiInvokeStatus.ERROR,
+                scope.t("$PREFIX.testUnreachable", "reason" to scope.errorText(it))
+            )
         }
         val parts = mutableListOf(scope.t("$PREFIX.testReachable", "version" to health.version))
         if (connection.adminConfigured) {
@@ -230,13 +320,22 @@ class CredentialServerServerContribution(private val ui: CredentialServerUiConte
         val name = values.text(FIELD_SERVER_NAME).ifEmpty { ui.defaultServerName() }
         val available = ui.admin.listCredentials().associateBy { it.name }
         val grants = CredentialNames.CORE.mapNotNull { credentialName ->
-            available[credentialName]?.let { GrantSpec(it.name, writeBack = it.kind == CredentialKind.TIDAL_DEVICE_SESSION) }
+            available[credentialName]?.let {
+                GrantSpec(
+                    it.name,
+                    writeBack = it.kind == CredentialKind.TIDAL_DEVICE_SESSION
+                )
+            }
         }
         val created = ui.admin.createClient(CreateClientRequest(name, grants))
         ui.connection.store(mapOf(KEY_CLIENT_ID to created.client.clientId, KEY_CLIENT_SECRET to created.clientSecret))
         return UiInvokeResult(
             UiInvokeStatus.OK,
-            scope.t("$PREFIX.registered", "name" to created.client.name, "count" to created.client.grants.size.toString()),
+            scope.t(
+                "$PREFIX.registered",
+                "name" to created.client.name,
+                "count" to created.client.grants.size.toString()
+            ),
             refresh = true,
         )
     }
@@ -248,9 +347,13 @@ class CredentialServerServerContribution(private val ui: CredentialServerUiConte
         } else {
             val name = values.text(FIELD_CUSTOM_NAME).lowercase()
             if (!CredentialNames.isValid(name)) {
-                return UiInvokeResult(UiInvokeStatus.VALIDATION_ERROR, fieldErrors = mapOf(FIELD_CUSTOM_NAME to scope.t("$PREFIX.error.name")))
+                return UiInvokeResult(
+                    UiInvokeStatus.VALIDATION_ERROR,
+                    fieldErrors = mapOf(FIELD_CUSTOM_NAME to scope.t("$PREFIX.error.name"))
+                )
             }
-            val kind = CredentialKind.entries.firstOrNull { it.name == values.text(FIELD_CUSTOM_KIND) } ?: CredentialKind.API_KEY
+            val kind = CredentialKind.entries.firstOrNull { it.name == values.text(FIELD_CUSTOM_KIND) }
+                ?: CredentialKind.API_KEY
             mapOf(CredentialServerPages.PARAM_NAME to name, CredentialServerPages.PARAM_KIND to kind.name)
         }
         return UiInvokeResult(UiInvokeStatus.OK, next = UiAction.OpenPage(CredentialServerPages.CREDENTIAL, params))

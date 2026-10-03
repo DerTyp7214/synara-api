@@ -30,7 +30,7 @@ class SoundcloudServiceTest : KoinTest {
     private val storageService = mockk<IServerStorageService>(relaxed = true)
     private val lrcLibService = mockk<LrcLibService>(relaxed = true)
     private val musicBrainzService = mockk<MusicBrainzService>(relaxed = true)
-    
+
     private val songService = mockk<SongService>(relaxed = true)
     private val userPlaylistService = mockk<UserPlaylistService>(relaxed = true)
     private val importService = mockk<ImportService>(relaxed = true)
@@ -63,6 +63,9 @@ class SoundcloudServiceTest : KoinTest {
         assertEquals("user" to Type.ARTIST, service.parseUrl("https://soundcloud.com/user"))
         assertEquals("user" to Type.ARTIST, service.parseUrl("https://soundcloud.com/user/reposts"))
         assertEquals("user/track" to Type.SONG, service.parseUrl("https://soundcloud.com/user/track"))
-        assertEquals("user/sets/playlist" to Type.PLAYLIST, service.parseUrl("https://soundcloud.com/user/sets/playlist"))
+        assertEquals(
+            "user/sets/playlist" to Type.PLAYLIST,
+            service.parseUrl("https://soundcloud.com/user/sets/playlist")
+        )
     }
 }

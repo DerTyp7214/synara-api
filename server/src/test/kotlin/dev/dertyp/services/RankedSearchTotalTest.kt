@@ -103,7 +103,7 @@ class RankedSearchTotalTest : KoinTest {
 
         every { redisSearchService.isEnabled() } returns true
         every { redisSearchService.search("song", "Echo", any(), any()) } returns
-            RedisSearchService.SearchResult(listOf(third, first), 42)
+                RedisSearchService.SearchResult(listOf(third, first), 42)
 
         val redisResult = songService.rankedSearch(0, 10, "Echo", true, userId)
         assertEquals(42, redisResult.total)
@@ -126,7 +126,7 @@ class RankedSearchTotalTest : KoinTest {
 
         every { redisSearchService.isEnabled() } returns true
         every { redisSearchService.search(any(), any(), any(), any()) } returns
-            RedisSearchService.SearchResult(emptyList(), 17)
+                RedisSearchService.SearchResult(emptyList(), 17)
 
         val result = songService.rankedSearch(0, 10, "Echo", true, userId)
         assertEquals(2, result.total)

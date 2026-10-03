@@ -51,7 +51,8 @@ class TheAudioDBServiceTest : KoinTest {
         environment = mockk()
         val config = mockk<ApplicationConfig>()
         every { environment.config } returns config
-        credentialProvider = FakeCredentialProvider(ResolvedCredential.ApiKey(CredentialNames.THEAUDIODB_API, "test-api-key"))
+        credentialProvider =
+            FakeCredentialProvider(ResolvedCredential.ApiKey(CredentialNames.THEAUDIODB_API, "test-api-key"))
         startKoin { modules(module { single<CredentialProvider> { credentialProvider } }) }
         requestedUrls.clear()
 
@@ -78,6 +79,7 @@ class TheAudioDBServiceTest : KoinTest {
                         headers = headersOf(HttpHeaders.ContentType, ContentType.Application.Json.toString())
                     )
                 }
+
                 request.url.encodedPath.contains("artist-mb.php") -> {
                     respond(
                         content = """
@@ -98,6 +100,7 @@ class TheAudioDBServiceTest : KoinTest {
                         headers = headersOf(HttpHeaders.ContentType, ContentType.Application.Json.toString())
                     )
                 }
+
                 request.url.encodedPath.contains("album-mb.php") -> {
                     respond(
                         content = """
@@ -118,6 +121,7 @@ class TheAudioDBServiceTest : KoinTest {
                         headers = headersOf(HttpHeaders.ContentType, ContentType.Application.Json.toString())
                     )
                 }
+
                 else -> respondError(HttpStatusCode.NotFound)
             }
         }
@@ -131,7 +135,7 @@ class TheAudioDBServiceTest : KoinTest {
         mockkObject(ApiClient)
         val mockQueueService = mockk<HttpClientQueueService>()
         every { ApiClient.queueInstance } returns mockQueueService
-        
+
         every { runBlocking { mockQueueService.enqueue(any(), any(), any()) } } answers {
             val url = firstArg<String>()
             runBlocking { mockHttpClient.get(url) }

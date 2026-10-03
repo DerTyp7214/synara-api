@@ -7,7 +7,11 @@ import org.junit.jupiter.api.Test
 import java.util.Collections
 
 class ServiceLifecycleTest {
-    private class ScopedService(private val name: String, private val stopped: MutableList<String>, private val failOnStop: Boolean = false) : Service() {
+    private class ScopedService(
+        private val name: String,
+        private val stopped: MutableList<String>,
+        private val failOnStop: Boolean = false
+    ) : Service() {
         fun launchInScope(block: suspend CoroutineScope.() -> Unit): Job = scope.launch(block = block)
 
         fun scopeJob(): Job = scope.coroutineContext.job

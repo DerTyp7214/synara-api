@@ -45,7 +45,8 @@ class LocalCredentialContribution(private val ui: CredentialServerUiContext) : U
     override fun changes(scope: UiRenderScope): Flow<Unit> = ui.changes()
 
     override suspend fun render(scope: UiRenderScope): UiComponent {
-        val name = requireNotNull(scope.context.params[PARAM_NAME]?.takeIf { it.isNotBlank() }) { "Missing credential name" }
+        val name =
+            requireNotNull(scope.context.params[PARAM_NAME]?.takeIf { it.isNotBlank() }) { "Missing credential name" }
         val entry = ui.localStore.entry(name)
             ?: return UiComponent.EmptyState(scope.t("credentials.notFound"), icon = UiIcon(UiIconName.WARNING))
         val state = ui.localState(name)
@@ -61,7 +62,12 @@ class LocalCredentialContribution(private val ui: CredentialServerUiContext) : U
             UiComponent.Text(hint(scope, entry, state), UiTextStyle.CAPTION, UiTone.MUTED),
         )
         val buttons = mutableListOf(
-            UiComponent.Button(scope.t("credentials.test"), UiAction.Invoke(id, ACTION_TEST, params = params), UiButtonStyle.SECONDARY, UiIcon(UiIconName.CHECK)),
+            UiComponent.Button(
+                scope.t("credentials.test"),
+                UiAction.Invoke(id, ACTION_TEST, params = params),
+                UiButtonStyle.SECONDARY,
+                UiIcon(UiIconName.CHECK)
+            ),
         )
         if (state != LocalCredentialState.REMOTE) {
             children += UiComponent.Form(
@@ -73,7 +79,12 @@ class LocalCredentialContribution(private val ui: CredentialServerUiContext) : U
             if (state == LocalCredentialState.STORED || state == LocalCredentialState.UNREADABLE) {
                 buttons += UiComponent.Button(
                     scope.t("credentials.clear"),
-                    UiAction.Invoke(id, ACTION_CLEAR, params = params, confirmText = scope.t("credentials.clearConfirm")),
+                    UiAction.Invoke(
+                        id,
+                        ACTION_CLEAR,
+                        params = params,
+                        confirmText = scope.t("credentials.clearConfirm")
+                    ),
                     UiButtonStyle.DESTRUCTIVE,
                     UiIcon(UiIconName.CLOSE),
                 )
@@ -84,13 +95,19 @@ class LocalCredentialContribution(private val ui: CredentialServerUiContext) : U
         return UiComponent.Column(children)
     }
 
-    private fun hint(scope: UiRenderScope, entry: LocalCredentialEntry<*>, state: LocalCredentialState): String = when (state) {
-        LocalCredentialState.UNREADABLE ->
-            scope.t(if (entry.environment() != null) "credentials.hint.UNREADABLE_ENV" else "credentials.hint.UNREADABLE")
-        else -> scope.t("credentials.hint.${state.name}")
-    }
+    private fun hint(scope: UiRenderScope, entry: LocalCredentialEntry<*>, state: LocalCredentialState): String =
+        when (state) {
+            LocalCredentialState.UNREADABLE ->
+                scope.t(if (entry.environment() != null) "credentials.hint.UNREADABLE_ENV" else "credentials.hint.UNREADABLE")
 
-    private suspend fun fields(scope: UiRenderScope, entry: LocalCredentialEntry<*>, stored: Boolean): List<UiComponent> {
+            else -> scope.t("credentials.hint.${state.name}")
+        }
+
+    private suspend fun fields(
+        scope: UiRenderScope,
+        entry: LocalCredentialEntry<*>,
+        stored: Boolean
+    ): List<UiComponent> {
         val keep = if (stored) scope.t("credentials.keepHint") else null
         val current = entry.current()
         return entry.fields.map { field ->
@@ -104,7 +121,15 @@ class LocalCredentialContribution(private val ui: CredentialServerUiContext) : U
                     helper = keep ?: scope.t("credentials.field.${field.name}Helper"),
                     required = !stored,
                 )
-                field.secret -> UiComponent.TextField(field.name, label, secret = true, helper = keep, required = !stored)
+
+                field.secret -> UiComponent.TextField(
+                    field.name,
+                    label,
+                    secret = true,
+                    helper = keep,
+                    required = !stored
+                )
+
                 else -> UiComponent.TextField(field.name, label, value = current?.get(field.name), required = !stored)
             }
         }
@@ -113,28 +138,44 @@ class LocalCredentialContribution(private val ui: CredentialServerUiContext) : U
     override suspend fun invoke(scope: UiRenderScope, actionId: String, values: Map<String, UiValue>): UiInvokeResult {
         if (actionId !in ACTIONS) return super.invoke(scope, actionId, values)
         val name = values.text(PARAM_NAME).ifEmpty { scope.context.params[PARAM_NAME].orEmpty() }
-        val entry = ui.localStore.entry(name) ?: return UiInvokeResult(UiInvokeStatus.ERROR, scope.t("credentials.notFound"))
+        val entry =
+            ui.localStore.entry(name) ?: return UiInvokeResult(UiInvokeStatus.ERROR, scope.t("credentials.notFound"))
         return when (actionId) {
             ACTION_SAVE -> save(scope, entry, values)
             ACTION_CLEAR -> {
-                if (ui.provider.isManagedRemotely(name)) return UiInvokeResult(UiInvokeStatus.ERROR, scope.t("credentials.error.managed"))
+                if (ui.provider.isManagedRemotely(name)) return UiInvokeResult(
+                    UiInvokeStatus.ERROR,
+                    scope.t("credentials.error.managed")
+                )
                 ui.localStore.clear(name)
                 UiInvokeResult(UiInvokeStatus.OK, scope.t("credentials.cleared"), refresh = true)
             }
+
             else -> test(scope, name)
         }
     }
 
-    private suspend fun save(scope: UiRenderScope, entry: LocalCredentialEntry<*>, values: Map<String, UiValue>): UiInvokeResult {
-        if (ui.provider.isManagedRemotely(entry.name)) return UiInvokeResult(UiInvokeStatus.ERROR, scope.t("credentials.error.managed"))
+    private suspend fun save(
+        scope: UiRenderScope,
+        entry: LocalCredentialEntry<*>,
+        values: Map<String, UiValue>
+    ): UiInvokeResult {
+        if (ui.provider.isManagedRemotely(entry.name)) return UiInvokeResult(
+            UiInvokeStatus.ERROR,
+            scope.t("credentials.error.managed")
+        )
         val stored = entry.origin() == CredentialOrigin.STORED
-        val updates = entry.fields.mapNotNull { field -> values.text(field.name).takeIf { it.isNotEmpty() }?.let { field.name to it } }.toMap()
+        val updates = entry.fields.mapNotNull { field ->
+            values.text(field.name).takeIf { it.isNotEmpty() }?.let { field.name to it }
+        }.toMap()
         val errors = mutableMapOf<String, String>()
         if (!stored) {
-            entry.fields.filter { it.name !in updates }.forEach { errors[it.name] = scope.t("credentials.error.required") }
+            entry.fields.filter { it.name !in updates }
+                .forEach { errors[it.name] = scope.t("credentials.error.required") }
         }
         updates[LocalCredentialStore.FIELD_P8]?.let { pem ->
-            if (!AppleDeveloperTokenSigner.isValidPrivateKey(pem)) errors[LocalCredentialStore.FIELD_P8] = scope.t("credentials.error.p8")
+            if (!AppleDeveloperTokenSigner.isValidPrivateKey(pem)) errors[LocalCredentialStore.FIELD_P8] =
+                scope.t("credentials.error.p8")
         }
         if (errors.isNotEmpty()) return UiInvokeResult(UiInvokeStatus.VALIDATION_ERROR, fieldErrors = errors)
         if (updates.isNotEmpty()) ui.localStore.store(entry.name, updates)
@@ -145,7 +186,11 @@ class LocalCredentialContribution(private val ui: CredentialServerUiContext) : U
         val resolved = runCatchingCancellable { ui.provider.resolve(name) }.getOrNull()
             ?: return UiInvokeResult(UiInvokeStatus.ERROR, scope.t("credentials.testFailed"), refresh = true)
         val expiry = resolved.expiresAt?.let { scope.t("credentials.expires", "time" to formatTime(scope, it)) }
-        return UiInvokeResult(UiInvokeStatus.OK, listOfNotNull(scope.t("credentials.testOk"), expiry).joinToString(". "), refresh = true)
+        return UiInvokeResult(
+            UiInvokeStatus.OK,
+            listOfNotNull(scope.t("credentials.testOk"), expiry).joinToString(". "),
+            refresh = true
+        )
     }
 
     companion object {

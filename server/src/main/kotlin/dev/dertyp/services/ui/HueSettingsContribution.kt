@@ -63,7 +63,10 @@ class HueSettingsContribution(private val hue: HueService) : UiContribution(
         val children = ArrayList<UiComponent>()
 
         hue.activePairings(scope.user.id).forEach { session ->
-            children += UiComponent.Live("$LIVE_PAIRING_PREFIX${session.ip}", pairingComponent(scope, session.state.value.state, session.state.value.message))
+            children += UiComponent.Live(
+                "$LIVE_PAIRING_PREFIX${session.ip}",
+                pairingComponent(scope, session.state.value.state, session.state.value.message)
+            )
         }
 
         if (bridges.isEmpty()) {
@@ -75,9 +78,17 @@ class HueSettingsContribution(private val hue: HueService) : UiContribution(
                     children = candidates.map { candidate ->
                         UiComponent.ListItem(
                             title = candidate.name ?: candidate.ip,
-                            subtitle = listOfNotNull(candidate.name?.let { candidate.ip }, candidate.bridgeId, candidate.modelId).joinToString(" · ").ifEmpty { null },
+                            subtitle = listOfNotNull(
+                                candidate.name?.let { candidate.ip },
+                                candidate.bridgeId,
+                                candidate.modelId
+                            ).joinToString(" · ").ifEmpty { null },
                             icon = UiIcon(UiIconName.PLUG),
-                            action = UiAction.Invoke(id, ACTION_PAIR, params = mapOf(FIELD_IP to UiValue.of(candidate.ip))),
+                            action = UiAction.Invoke(
+                                id,
+                                ACTION_PAIR,
+                                params = mapOf(FIELD_IP to UiValue.of(candidate.ip))
+                            ),
                         )
                     },
                 )
@@ -87,7 +98,14 @@ class HueSettingsContribution(private val hue: HueService) : UiContribution(
                 children = listOf(UiComponent.TextField(FIELD_IP, scope.t("hue.ip"), placeholder = "192.168.1.2")),
                 submit = UiAction.Invoke(id, ACTION_PAIR, formId = FORM_PAIR),
                 submitLabel = scope.t("hue.pair"),
-                actions = listOf(UiComponent.Button(scope.t("hue.discover"), UiAction.Invoke(id, ACTION_DISCOVER), UiButtonStyle.TEXT, UiIcon(UiIconName.SEARCH))),
+                actions = listOf(
+                    UiComponent.Button(
+                        scope.t("hue.discover"),
+                        UiAction.Invoke(id, ACTION_DISCOVER),
+                        UiButtonStyle.TEXT,
+                        UiIcon(UiIconName.SEARCH)
+                    )
+                ),
             )
             return UiComponent.Column(children)
         }
@@ -100,11 +118,21 @@ class HueSettingsContribution(private val hue: HueService) : UiContribution(
             val fields = ArrayList<UiComponent>()
             fields += UiComponent.Row(
                 listOfNotNull(
-                    UiComponent.Badge(bridge.name, if (bridge.lastError == null) UiTone.SUCCESS else UiTone.WARNING, UiIcon(UiIconName.PLUG)),
+                    UiComponent.Badge(
+                        bridge.name,
+                        if (bridge.lastError == null) UiTone.SUCCESS else UiTone.WARNING,
+                        UiIcon(UiIconName.PLUG)
+                    ),
                     UiComponent.Text(bridge.ip, UiTextStyle.CAPTION, UiTone.MUTED),
                 ),
             )
-            bridge.lastError?.let { fields += UiComponent.Text(scope.t("hue.bridge.unreachable", "reason" to it), UiTextStyle.CAPTION, UiTone.ERROR) }
+            bridge.lastError?.let {
+                fields += UiComponent.Text(
+                    scope.t("hue.bridge.unreachable", "reason" to it),
+                    UiTextStyle.CAPTION,
+                    UiTone.ERROR
+                )
+            }
             fields += UiComponent.Switch(FIELD_ENABLED, scope.t("hue.link.enabled"), link.enabled)
             targets.onSuccess { list ->
                 val selected = link.targets.map { it.type to it.id }.toSet()
@@ -115,7 +143,13 @@ class HueSettingsContribution(private val hue: HueService) : UiContribution(
                         title = scope.t(key),
                         collapsible = true,
                         collapsed = items.none { (it.type to it.id) in selected } && type == HueTargetType.LIGHT,
-                        children = items.map { UiComponent.Switch(targetKey(it), it.name, (it.type to it.id) in selected) },
+                        children = items.map {
+                            UiComponent.Switch(
+                                targetKey(it),
+                                it.name,
+                                (it.type to it.id) in selected
+                            )
+                        },
                     )
                 }
                 section("hue.targets.rooms", HueTargetType.ROOM)
@@ -129,23 +163,55 @@ class HueSettingsContribution(private val hue: HueService) : UiContribution(
                         collapsible = true,
                         collapsed = selectedArea == null,
                         children = listOf(
-                            UiComponent.Text(scope.t("hue.targets.entertainment.helper"), UiTextStyle.CAPTION, UiTone.MUTED),
+                            UiComponent.Text(
+                                scope.t("hue.targets.entertainment.helper"),
+                                UiTextStyle.CAPTION,
+                                UiTone.MUTED
+                            ),
                             UiComponent.Select(
                                 FIELD_ENTERTAINMENT,
                                 scope.t("hue.targets.entertainment.area"),
                                 selectedArea?.id ?: "",
-                                listOf(UiOption("", scope.t("hue.targets.entertainment.none"))) + areas.map { UiOption(it.id, it.name) },
+                                listOf(UiOption("", scope.t("hue.targets.entertainment.none"))) + areas.map {
+                                    UiOption(
+                                        it.id,
+                                        it.name
+                                    )
+                                },
                             ),
                         ),
                     )
                 }
             }.onFailure {
-                fields += UiComponent.Text(scope.t("hue.bridge.unreachable", "reason" to (it.message ?: "")), UiTextStyle.CAPTION, UiTone.ERROR)
+                fields += UiComponent.Text(
+                    scope.t("hue.bridge.unreachable", "reason" to (it.message ?: "")),
+                    UiTextStyle.CAPTION,
+                    UiTone.ERROR
+                )
             }
-            fields += UiComponent.Select(FIELD_INTENSITY, scope.t("hue.intensity"), link.intensity.name, HueIntensity.entries.map { UiOption(it.name, scope.t("hue.intensity.${it.name}")) })
-            fields += UiComponent.Select(FIELD_TRANSITION_MODE, scope.t("hue.transitionMode"), link.transitionMode.name, HueTransitionMode.entries.map { UiOption(it.name, scope.t("hue.transitionMode.${it.name}")) })
-            fields += UiComponent.NumberField(FIELD_TRANSITION_MS, scope.t("hue.transitionMs"), link.transitionMs.toDouble(), min = 0.0, max = 5000.0, step = 50.0)
-            fields += UiComponent.Select(FIELD_ON_STOP, scope.t("hue.onStop"), link.onStop.name, HueStopMode.entries.map { UiOption(it.name, scope.t("hue.onStop.${it.name}")) })
+            fields += UiComponent.Select(
+                FIELD_INTENSITY,
+                scope.t("hue.intensity"),
+                link.intensity.name,
+                HueIntensity.entries.map { UiOption(it.name, scope.t("hue.intensity.${it.name}")) })
+            fields += UiComponent.Select(
+                FIELD_TRANSITION_MODE,
+                scope.t("hue.transitionMode"),
+                link.transitionMode.name,
+                HueTransitionMode.entries.map { UiOption(it.name, scope.t("hue.transitionMode.${it.name}")) })
+            fields += UiComponent.NumberField(
+                FIELD_TRANSITION_MS,
+                scope.t("hue.transitionMs"),
+                link.transitionMs.toDouble(),
+                min = 0.0,
+                max = 5000.0,
+                step = 50.0
+            )
+            fields += UiComponent.Select(
+                FIELD_ON_STOP,
+                scope.t("hue.onStop"),
+                link.onStop.name,
+                HueStopMode.entries.map { UiOption(it.name, scope.t("hue.onStop.${it.name}")) })
             val scenes = runCatchingCancellable { hue.listScenes(scope.user.id, bridge.id) }.getOrDefault(emptyList())
             if (scenes.isNotEmpty()) {
                 val groups = scenes.groupBy { it.groupType to it.groupId }
@@ -153,18 +219,41 @@ class HueSettingsContribution(private val hue: HueService) : UiContribution(
                     title = scope.t("hue.stopScenes"),
                     collapsible = true,
                     collapsed = link.onStop != HueStopMode.SCENE,
-                    children = listOf(UiComponent.Text(scope.t("hue.stopScenes.helper"), UiTextStyle.CAPTION, UiTone.MUTED)) + groups.map { (key, items) ->
+                    children = listOf(
+                        UiComponent.Text(
+                            scope.t("hue.stopScenes.helper"),
+                            UiTextStyle.CAPTION,
+                            UiTone.MUTED
+                        )
+                    ) + groups.map { (key, items) ->
                         UiComponent.Select(
                             key = sceneKey(key.first, key.second),
                             label = items.first().groupName,
-                            value = link.stopScenes.firstOrNull { it.groupType == key.first && it.groupId == key.second }?.id ?: "",
-                            options = listOf(UiOption("", scope.t("hue.stopScenes.none"))) + items.map { UiOption(it.id, it.name) },
+                            value = link.stopScenes.firstOrNull { it.groupType == key.first && it.groupId == key.second }?.id
+                                ?: "",
+                            options = listOf(UiOption("", scope.t("hue.stopScenes.none"))) + items.map {
+                                UiOption(
+                                    it.id,
+                                    it.name
+                                )
+                            },
                         )
                     },
                 )
             }
-            fields += UiComponent.Select(FIELD_MOTION, scope.t("hue.motion"), link.motion.name, HueMotionMode.entries.map { UiOption(it.name, scope.t("hue.motion.${it.name}")) })
-            fields += UiComponent.NumberField(FIELD_LATENCY_MS, scope.t("hue.latencyMs"), link.latencyMs.toDouble(), min = 0.0, max = HueService.MAX_LATENCY_MS.toDouble(), step = 10.0)
+            fields += UiComponent.Select(
+                FIELD_MOTION,
+                scope.t("hue.motion"),
+                link.motion.name,
+                HueMotionMode.entries.map { UiOption(it.name, scope.t("hue.motion.${it.name}")) })
+            fields += UiComponent.NumberField(
+                FIELD_LATENCY_MS,
+                scope.t("hue.latencyMs"),
+                link.latencyMs.toDouble(),
+                min = 0.0,
+                max = HueService.MAX_LATENCY_MS.toDouble(),
+                step = 10.0
+            )
             fields += UiComponent.Spacer()
 
             val bridgeParam = mapOf(FIELD_BRIDGE to UiValue.of(bridge.id.toString()))
@@ -174,17 +263,32 @@ class HueSettingsContribution(private val hue: HueService) : UiContribution(
                 submit = UiAction.Invoke(id, ACTION_SAVE, params = bridgeParam, formId = formId),
                 submitLabel = scope.t("hue.save"),
                 actions = listOf(
-                    UiComponent.Button(scope.t("hue.test"), UiAction.Invoke(id, ACTION_TEST, params = bridgeParam, formId = formId), UiButtonStyle.TEXT, UiIcon(UiIconName.PLAY)),
+                    UiComponent.Button(
+                        scope.t("hue.test"),
+                        UiAction.Invoke(id, ACTION_TEST, params = bridgeParam, formId = formId),
+                        UiButtonStyle.TEXT,
+                        UiIcon(UiIconName.PLAY)
+                    ),
                 ),
             )
         }
 
         val actions = ArrayList<UiComponent>()
-        actions += UiComponent.Button(scope.t("hue.discover"), UiAction.Invoke(id, ACTION_DISCOVER), UiButtonStyle.TEXT, UiIcon(UiIconName.SEARCH))
+        actions += UiComponent.Button(
+            scope.t("hue.discover"),
+            UiAction.Invoke(id, ACTION_DISCOVER),
+            UiButtonStyle.TEXT,
+            UiIcon(UiIconName.SEARCH)
+        )
         bridges.forEach { bridge ->
             actions += UiComponent.Button(
                 "${scope.t("hue.bridge.remove")}: ${bridge.name}",
-                UiAction.Invoke(id, ACTION_REMOVE, params = mapOf(FIELD_BRIDGE to UiValue.of(bridge.id.toString())), confirmText = scope.t("hue.bridge.removeConfirm")),
+                UiAction.Invoke(
+                    id,
+                    ACTION_REMOVE,
+                    params = mapOf(FIELD_BRIDGE to UiValue.of(bridge.id.toString())),
+                    confirmText = scope.t("hue.bridge.removeConfirm")
+                ),
                 UiButtonStyle.TEXT,
                 UiIcon(UiIconName.CLOSE),
             )
@@ -199,57 +303,97 @@ class HueSettingsContribution(private val hue: HueService) : UiContribution(
     override fun live(scope: UiRenderScope, key: String): Flow<UiLiveUpdate>? {
         if (!key.startsWith(LIVE_PAIRING_PREFIX)) return null
         val session = hue.pairingSession(scope.user.id, key.removePrefix(LIVE_PAIRING_PREFIX)) ?: return null
-        return session.state.map { UiLiveUpdate.Replace(pairingComponent(scope, it.state, it.message ?: it.bridge?.name)) }
+        return session.state.map {
+            UiLiveUpdate.Replace(
+                pairingComponent(
+                    scope,
+                    it.state,
+                    it.message ?: it.bridge?.name
+                )
+            )
+        }
     }
 
-    private fun pairingComponent(scope: UiRenderScope, state: HuePairingState, detail: String?): UiComponent = when (state) {
-        HuePairingState.CONNECTING -> UiComponent.Progress(null, scope.t("hue.pairing.connecting"))
-        HuePairingState.WAITING_FOR_BUTTON -> UiComponent.Progress(null, scope.t("hue.pairing.pressButton"))
-        HuePairingState.PAIRED -> UiComponent.Badge(scope.t("hue.pairing.paired", "name" to (detail ?: "")), UiTone.SUCCESS, UiIcon(UiIconName.CHECK))
-        HuePairingState.TIMEOUT -> UiComponent.Badge(scope.t("hue.pairing.timeout"), UiTone.WARNING, UiIcon(UiIconName.WARNING))
-        HuePairingState.ERROR -> UiComponent.Badge(scope.t("hue.pairing.error", "reason" to (detail ?: "")), UiTone.ERROR, UiIcon(UiIconName.ERROR))
-    }
+    private fun pairingComponent(scope: UiRenderScope, state: HuePairingState, detail: String?): UiComponent =
+        when (state) {
+            HuePairingState.CONNECTING -> UiComponent.Progress(null, scope.t("hue.pairing.connecting"))
+            HuePairingState.WAITING_FOR_BUTTON -> UiComponent.Progress(null, scope.t("hue.pairing.pressButton"))
+            HuePairingState.PAIRED -> UiComponent.Badge(
+                scope.t("hue.pairing.paired", "name" to (detail ?: "")),
+                UiTone.SUCCESS,
+                UiIcon(UiIconName.CHECK)
+            )
 
-    override suspend fun invoke(scope: UiRenderScope, actionId: String, values: Map<String, UiValue>): UiInvokeResult = when (actionId) {
-        ACTION_DISCOVER -> {
-            val found = hue.discover(scope.user.id, force = true)
-            UiInvokeResult(UiInvokeStatus.OK, if (found.isEmpty()) scope.t("hue.noneFound") else null, refresh = true)
+            HuePairingState.TIMEOUT -> UiComponent.Badge(
+                scope.t("hue.pairing.timeout"),
+                UiTone.WARNING,
+                UiIcon(UiIconName.WARNING)
+            )
+
+            HuePairingState.ERROR -> UiComponent.Badge(
+                scope.t("hue.pairing.error", "reason" to (detail ?: "")),
+                UiTone.ERROR,
+                UiIcon(UiIconName.ERROR)
+            )
         }
-        ACTION_PAIR -> {
-            val ip = values[FIELD_IP]?.text?.trim().orEmpty()
-            if (ip.isEmpty()) UiInvokeResult(UiInvokeStatus.VALIDATION_ERROR, fieldErrors = mapOf(FIELD_IP to scope.t("hue.ip")))
-            else {
-                hue.beginPairing(scope.user.id, ip)
-                UiInvokeResult(UiInvokeStatus.OK, scope.t("hue.pairing.started"), refresh = true)
+
+    override suspend fun invoke(scope: UiRenderScope, actionId: String, values: Map<String, UiValue>): UiInvokeResult =
+        when (actionId) {
+            ACTION_DISCOVER -> {
+                val found = hue.discover(scope.user.id, force = true)
+                UiInvokeResult(
+                    UiInvokeStatus.OK,
+                    if (found.isEmpty()) scope.t("hue.noneFound") else null,
+                    refresh = true
+                )
             }
-        }
-        ACTION_SAVE -> save(scope, values)
-        ACTION_TEST -> {
-            val bridgeId = bridgeId(values) ?: return UiInvokeResult(UiInvokeStatus.ERROR, scope.t("hue.error.noBridge"))
-            val targets = selectedTargets(scope.user.id, bridgeId, values)
-            if (targets.isEmpty()) UiInvokeResult(UiInvokeStatus.ERROR, scope.t("hue.error.noTargets"))
-            else {
-                hue.test(scope.user.id, bridgeId, targets)
-                UiInvokeResult(UiInvokeStatus.OK, scope.t("hue.tested"))
+
+            ACTION_PAIR -> {
+                val ip = values[FIELD_IP]?.text?.trim().orEmpty()
+                if (ip.isEmpty()) UiInvokeResult(
+                    UiInvokeStatus.VALIDATION_ERROR,
+                    fieldErrors = mapOf(FIELD_IP to scope.t("hue.ip"))
+                )
+                else {
+                    hue.beginPairing(scope.user.id, ip)
+                    UiInvokeResult(UiInvokeStatus.OK, scope.t("hue.pairing.started"), refresh = true)
+                }
             }
-        }
-        ACTION_REMOVE -> {
-            val bridgeId = bridgeId(values)
-            if (bridgeId == null) UiInvokeResult(UiInvokeStatus.ERROR, scope.t("hue.error.noBridge"))
-            else {
-                hue.removeBridge(scope.user.id, bridgeId)
-                UiInvokeResult(UiInvokeStatus.OK, scope.t("hue.bridge.removed"), refresh = true)
+
+            ACTION_SAVE -> save(scope, values)
+            ACTION_TEST -> {
+                val bridgeId =
+                    bridgeId(values) ?: return UiInvokeResult(UiInvokeStatus.ERROR, scope.t("hue.error.noBridge"))
+                val targets = selectedTargets(scope.user.id, bridgeId, values)
+                if (targets.isEmpty()) UiInvokeResult(UiInvokeStatus.ERROR, scope.t("hue.error.noTargets"))
+                else {
+                    hue.test(scope.user.id, bridgeId, targets)
+                    UiInvokeResult(UiInvokeStatus.OK, scope.t("hue.tested"))
+                }
             }
+
+            ACTION_REMOVE -> {
+                val bridgeId = bridgeId(values)
+                if (bridgeId == null) UiInvokeResult(UiInvokeStatus.ERROR, scope.t("hue.error.noBridge"))
+                else {
+                    hue.removeBridge(scope.user.id, bridgeId)
+                    UiInvokeResult(UiInvokeStatus.OK, scope.t("hue.bridge.removed"), refresh = true)
+                }
+            }
+
+            else -> super.invoke(scope, actionId, values)
         }
-        else -> super.invoke(scope, actionId, values)
-    }
 
     private suspend fun save(scope: UiRenderScope, values: Map<String, UiValue>): UiInvokeResult {
         val bridgeId = bridgeId(values) ?: return UiInvokeResult(UiInvokeStatus.ERROR, scope.t("hue.error.noBridge"))
         val enabled = values[FIELD_ENABLED]?.flag ?: false
         val targets = selectedTargets(scope.user.id, bridgeId, values)
         if (enabled && targets.isEmpty()) {
-            return UiInvokeResult(UiInvokeStatus.VALIDATION_ERROR, scope.t("hue.error.noTargets"), fieldErrors = mapOf(FIELD_ENABLED to scope.t("hue.error.noTargets")))
+            return UiInvokeResult(
+                UiInvokeStatus.VALIDATION_ERROR,
+                scope.t("hue.error.noTargets"),
+                fieldErrors = mapOf(FIELD_ENABLED to scope.t("hue.error.noTargets"))
+            )
         }
         if (targets.count { it.type == HueTargetType.ENTERTAINMENT } > 1) {
             return UiInvokeResult(UiInvokeStatus.VALIDATION_ERROR, scope.t("hue.error.tooManyAreas"))
@@ -257,7 +401,11 @@ class HueSettingsContribution(private val hue: HueService) : UiContribution(
         val onStop = enumOr(values[FIELD_ON_STOP]?.text, HueStopMode.KEEP)
         val stopScenes = selectedScenes(scope.user.id, bridgeId, values)
         if (enabled && onStop == HueStopMode.SCENE && stopScenes.isEmpty()) {
-            return UiInvokeResult(UiInvokeStatus.VALIDATION_ERROR, scope.t("hue.error.noScenes"), fieldErrors = mapOf(FIELD_ON_STOP to scope.t("hue.error.noScenes")))
+            return UiInvokeResult(
+                UiInvokeStatus.VALIDATION_ERROR,
+                scope.t("hue.error.noScenes"),
+                fieldErrors = mapOf(FIELD_ON_STOP to scope.t("hue.error.noScenes"))
+            )
         }
         val link = HueUserLink(
             bridgeId = bridgeId,
@@ -269,7 +417,8 @@ class HueSettingsContribution(private val hue: HueService) : UiContribution(
             onStop = onStop,
             stopScenes = stopScenes,
             motion = enumOr(values[FIELD_MOTION]?.text, HueMotionMode.OFF),
-            latencyMs = values[FIELD_LATENCY_MS]?.number?.toInt()?.coerceIn(0, HueService.MAX_LATENCY_MS) ?: HueUserLink(bridgeId).latencyMs,
+            latencyMs = values[FIELD_LATENCY_MS]?.number?.toInt()?.coerceIn(0, HueService.MAX_LATENCY_MS)
+                ?: HueUserLink(bridgeId).latencyMs,
         )
         hue.setLink(scope.user.id, link)
         return UiInvokeResult(UiInvokeStatus.OK, scope.t("hue.saved"), refresh = true)

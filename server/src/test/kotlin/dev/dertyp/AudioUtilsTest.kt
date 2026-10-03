@@ -74,37 +74,38 @@ class AudioUtilsTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `getSongsWithTranscodingInfo should return songs with their transcoded bitrates`(dialect: DbDialect) = runBlocking {
-        setupDb(dialect)
+    fun `getSongsWithTranscodingInfo should return songs with their transcoded bitrates`(dialect: DbDialect) =
+        runBlocking {
+            setupDb(dialect)
 
-        val songId = UUID.randomUUID()
-        transaction(database) {
-            val albumId = AlbumTable.insert { it[name] = "Album" }[AlbumTable.id]
-            SongTable.insert {
-                it[id] = songId
-                it[title] = "Song"
-                it[this.albumId] = albumId
-                it[filePath] = "path.flac"
+            val songId = UUID.randomUUID()
+            transaction(database) {
+                val albumId = AlbumTable.insert { it[name] = "Album" }[AlbumTable.id]
+                SongTable.insert {
+                    it[id] = songId
+                    it[title] = "Song"
+                    it[this.albumId] = albumId
+                    it[filePath] = "path.flac"
+                }
+                TranscodedSongTable.insert {
+                    it[this.songId] = songId
+                    it[bitrate] = 128
+                    it[path] = "path_128.ogg"
+                }
+                TranscodedSongTable.insert {
+                    it[this.songId] = songId
+                    it[bitrate] = 192
+                    it[path] = "path_192.ogg"
+                }
             }
-            TranscodedSongTable.insert {
-                it[this.songId] = songId
-                it[bitrate] = 128
-                it[path] = "path_128.ogg"
-            }
-            TranscodedSongTable.insert {
-                it[this.songId] = songId
-                it[bitrate] = 192
-                it[path] = "path_192.ogg"
-            }
+
+            val songs = transcodedSongRepository.getSongsWithTranscodingInfo()
+            assertEquals(1, songs.size)
+            assertEquals(
+                listOf(TranscodedVersion(128, AudioFormat.OPUS), TranscodedVersion(192, AudioFormat.OPUS)),
+                songs[0].transcodedTo.sortedBy { it.bitrate }
+            )
         }
-
-        val songs = transcodedSongRepository.getSongsWithTranscodingInfo()
-        assertEquals(1, songs.size)
-        assertEquals(
-            listOf(TranscodedVersion(128, AudioFormat.OPUS), TranscodedVersion(192, AudioFormat.OPUS)),
-            songs[0].transcodedTo.sortedBy { it.bitrate }
-        )
-    }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
@@ -148,7 +149,10 @@ class AudioUtilsTest {
         every { anyConstructed<FFmpegFrameGrabber>().lengthInTime } returns 1000000
 
         val mockFrame = mockk<Frame>(relaxed = true)
-        every { anyConstructed<FFmpegFrameGrabber>().grabFrame(any(), any(), any(), any()) } returnsMany listOf(mockFrame, null)
+        every { anyConstructed<FFmpegFrameGrabber>().grabFrame(any(), any(), any(), any()) } returnsMany listOf(
+            mockFrame,
+            null
+        )
 
         mockkConstructor(FFmpegFrameRecorder::class)
         every { anyConstructed<FFmpegFrameRecorder>().start() } just Runs
@@ -196,7 +200,10 @@ class AudioUtilsTest {
         every { anyConstructed<FFmpegFrameGrabber>().lengthInTime } returns 1000000
 
         val mockFrame = mockk<Frame>(relaxed = true)
-        every { anyConstructed<FFmpegFrameGrabber>().grabFrame(any(), any(), any(), any()) } returnsMany listOf(mockFrame, null)
+        every { anyConstructed<FFmpegFrameGrabber>().grabFrame(any(), any(), any(), any()) } returnsMany listOf(
+            mockFrame,
+            null
+        )
 
         mockkConstructor(FFmpegFrameRecorder::class)
         every { anyConstructed<FFmpegFrameRecorder>().start() } just Runs
@@ -311,7 +318,10 @@ class AudioUtilsTest {
 
     @ParameterizedTest
     @EnumSource(LosslessFormat::class)
-    fun `convertLossless keeps sample rate and writes the requested container`(target: LosslessFormat, @TempDir tempDir: Path) {
+    fun `convertLossless keeps sample rate and writes the requested container`(
+        target: LosslessFormat,
+        @TempDir tempDir: Path
+    ) {
         runBlocking {
             val source = tempDir.resolve("source.wav").toFile()
             writeSilentWav(source, sampleRate = 44100)
@@ -375,11 +385,26 @@ class AudioUtilsTest {
 
     @Test
     fun `losslessCodec picks bit depth specific pcm codecs`() {
-        assertEquals(org.bytedeco.ffmpeg.global.avcodec.AV_CODEC_ID_PCM_S16LE, Transcoder.losslessCodec(LosslessFormat.WAV, 16))
-        assertEquals(org.bytedeco.ffmpeg.global.avcodec.AV_CODEC_ID_PCM_S24LE, Transcoder.losslessCodec(LosslessFormat.WAV, 24))
-        assertEquals(org.bytedeco.ffmpeg.global.avcodec.AV_CODEC_ID_PCM_S16BE, Transcoder.losslessCodec(LosslessFormat.AIFF, 16))
-        assertEquals(org.bytedeco.ffmpeg.global.avcodec.AV_CODEC_ID_PCM_S24BE, Transcoder.losslessCodec(LosslessFormat.AIFF, 24))
-        assertEquals(org.bytedeco.ffmpeg.global.avcodec.AV_CODEC_ID_FLAC, Transcoder.losslessCodec(LosslessFormat.FLAC, 24))
+        assertEquals(
+            org.bytedeco.ffmpeg.global.avcodec.AV_CODEC_ID_PCM_S16LE,
+            Transcoder.losslessCodec(LosslessFormat.WAV, 16)
+        )
+        assertEquals(
+            org.bytedeco.ffmpeg.global.avcodec.AV_CODEC_ID_PCM_S24LE,
+            Transcoder.losslessCodec(LosslessFormat.WAV, 24)
+        )
+        assertEquals(
+            org.bytedeco.ffmpeg.global.avcodec.AV_CODEC_ID_PCM_S16BE,
+            Transcoder.losslessCodec(LosslessFormat.AIFF, 16)
+        )
+        assertEquals(
+            org.bytedeco.ffmpeg.global.avcodec.AV_CODEC_ID_PCM_S24BE,
+            Transcoder.losslessCodec(LosslessFormat.AIFF, 24)
+        )
+        assertEquals(
+            org.bytedeco.ffmpeg.global.avcodec.AV_CODEC_ID_FLAC,
+            Transcoder.losslessCodec(LosslessFormat.FLAC, 24)
+        )
     }
 
     @Test

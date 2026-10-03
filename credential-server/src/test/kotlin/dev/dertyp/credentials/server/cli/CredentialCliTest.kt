@@ -43,9 +43,21 @@ class CredentialCliTest {
         assertEquals(0, deps.cli("credentials", "set-api-key", "youtube.api", "yt-key").code)
         assertEquals(0, deps.cli("credentials", "set-key-pair", "podcastindex.api", "pi-key", "pi-secret").code)
         val cookies = dir.resolve("cookies.txt").also { Files.writeString(it, "# Netscape HTTP Cookie File\n") }
-        assertEquals(0, deps.cli("credentials", "import-file", "importer.gamdl", "--role", "cookies.txt", "--file", cookies.toString()).code)
+        assertEquals(
+            0,
+            deps.cli(
+                "credentials",
+                "import-file",
+                "importer.gamdl",
+                "--role",
+                "cookies.txt",
+                "--file",
+                cookies.toString()
+            ).code
+        )
 
-        val created = deps.cli("clients", "create", "synara-main", "--grant", "youtube.api", "--grant", "importer.gamdl:w")
+        val created =
+            deps.cli("clients", "create", "synara-main", "--grant", "youtube.api", "--grant", "importer.gamdl:w")
         assertEquals(0, created.code)
         val clientId = Regex("clientId:\\s+(\\S+)").find(created.out)!!.groupValues[1]
         val secret = Regex("clientSecret:\\s+(\\S+)").find(created.out)!!.groupValues[1]
@@ -66,15 +78,26 @@ class CredentialCliTest {
                 contentType(ContentType.Application.Json)
                 setBody(TokenRequest(clientId, secret))
             }.body<TokenResponse>()
-            assertEquals(setOf("youtube.api", "importer.gamdl", "podcastindex.api"), token.grants.map { it.name }.toSet())
+            assertEquals(
+                setOf("youtube.api", "importer.gamdl", "podcastindex.api"),
+                token.grants.map { it.name }.toSet()
+            )
 
             val apiKey = client.get(CredentialProtocol.credentialPath("youtube.api")) { bearerAuth(token.accessToken) }
             assertEquals(ResolvedCredential.ApiKey("youtube.api", "yt-key"), apiKey.body<ResolvedCredential>())
-            val pair = client.get(CredentialProtocol.credentialPath("podcastindex.api")) { bearerAuth(token.accessToken) }
-            assertEquals(ResolvedCredential.ApiKeyPair("podcastindex.api", "pi-key", "pi-secret"), pair.body<ResolvedCredential>())
-            val files = client.get(CredentialProtocol.credentialPath("importer.gamdl")) { bearerAuth(token.accessToken) }
-                .body<ResolvedCredential>() as ResolvedCredential.Files
-            assertEquals("# Netscape HTTP Cookie File\n", Base64.decode(files.files.single().contentBase64).decodeToString())
+            val pair =
+                client.get(CredentialProtocol.credentialPath("podcastindex.api")) { bearerAuth(token.accessToken) }
+            assertEquals(
+                ResolvedCredential.ApiKeyPair("podcastindex.api", "pi-key", "pi-secret"),
+                pair.body<ResolvedCredential>()
+            )
+            val files =
+                client.get(CredentialProtocol.credentialPath("importer.gamdl")) { bearerAuth(token.accessToken) }
+                    .body<ResolvedCredential>() as ResolvedCredential.Files
+            assertEquals(
+                "# Netscape HTTP Cookie File\n",
+                Base64.decode(files.files.single().contentBase64).decodeToString()
+            )
 
             assertEquals(0, deps.cli("clients", "revoke-tokens", clientId).code)
             val revoked = client.get(CredentialProtocol.credentialPath("youtube.api")) { bearerAuth(token.accessToken) }

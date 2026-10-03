@@ -86,8 +86,10 @@ class TokenIssuer(
         val stored = keys.active()
         val key = if (stored?.privateKeyPkcs8 != null) {
             val factory = KeyFactory.getInstance("EC")
-            val privateKey = factory.generatePrivate(PKCS8EncodedKeySpec(Base64.decode(stored.privateKeyPkcs8))) as ECPrivateKey
-            val publicKey = factory.generatePublic(X509EncodedKeySpec(Base64.decode(stored.publicKeyX509))) as ECPublicKey
+            val privateKey =
+                factory.generatePrivate(PKCS8EncodedKeySpec(Base64.decode(stored.privateKeyPkcs8))) as ECPrivateKey
+            val publicKey =
+                factory.generatePublic(X509EncodedKeySpec(Base64.decode(stored.publicKeyX509))) as ECPublicKey
             ActiveKey(stored.kid, Algorithm.ECDSA256(publicKey, privateKey))
         } else {
             generate()

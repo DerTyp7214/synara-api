@@ -36,7 +36,13 @@ class UiSchemaCompatTest {
             ),
             UiComponent.Native("portal", fallback = UiComponent.Table(emptyList(), emptyList())),
             UiComponent.Live("log", UiComponent.Table(emptyList(), emptyList())),
-            UiComponent.Form("f", listOf(UiComponent.TextField("k", "l", toolbar = listOf(UiComponent.Table(emptyList(), emptyList())))), UiAction.Invoke("c", "a"), "s", actions = listOf(UiComponent.Table(emptyList(), emptyList()))),
+            UiComponent.Form(
+                "f",
+                listOf(UiComponent.TextField("k", "l", toolbar = listOf(UiComponent.Table(emptyList(), emptyList())))),
+                UiAction.Invoke("c", "a"),
+                "s",
+                actions = listOf(UiComponent.Table(emptyList(), emptyList()))
+            ),
         ),
         actions = listOf(UiComponent.Table(emptyList(), emptyList())),
     )
@@ -64,20 +70,54 @@ class UiSchemaCompatTest {
     @Test
     fun `file fields become multi-line text fields for clients without file field support`() {
         val current = UiSchemaCompat()
-        val text = UiComponent.FileField("pem", "Certificate", accept = listOf(".pem"), value = "-----BEGIN", helper = "PEM file", error = "invalid", required = true)
-        val key = UiComponent.FileField("p8", "Key", accept = listOf(".p8"), binary = true, secret = true, helper = "Apple key", enabled = false)
+        val text = UiComponent.FileField(
+            "pem",
+            "Certificate",
+            accept = listOf(".pem"),
+            value = "-----BEGIN",
+            helper = "PEM file",
+            error = "invalid",
+            required = true
+        )
+        val key = UiComponent.FileField(
+            "p8",
+            "Key",
+            accept = listOf(".p8"),
+            binary = true,
+            secret = true,
+            helper = "Apple key",
+            enabled = false
+        )
         val form = UiComponent.Form("f", listOf(text, key), UiAction.Invoke("c", "save"), "Save")
 
         val shaped = current.downgrade(form, 1) as UiComponent.Form
         assertEquals(
-            UiComponent.TextField("pem", "Certificate", value = "-----BEGIN", multiline = true, helper = "PEM file", error = "invalid", required = true),
+            UiComponent.TextField(
+                "pem",
+                "Certificate",
+                value = "-----BEGIN",
+                multiline = true,
+                helper = "PEM file",
+                error = "invalid",
+                required = true
+            ),
             shaped.children[0],
         )
         assertEquals(
-            UiComponent.TextField("p8", "Key", secret = true, multiline = true, helper = "Apple key ${UiSchemaCompat.BASE64_HINT}", enabled = false),
+            UiComponent.TextField(
+                "p8",
+                "Key",
+                secret = true,
+                multiline = true,
+                helper = "Apple key ${UiSchemaCompat.BASE64_HINT}",
+                enabled = false
+            ),
             shaped.children[1],
         )
-        assertEquals(UiSchemaCompat.BASE64_HINT, (current.downgrade(UiComponent.FileField("k", "l", binary = true), 1) as UiComponent.TextField).helper)
+        assertEquals(
+            UiSchemaCompat.BASE64_HINT,
+            (current.downgrade(UiComponent.FileField("k", "l", binary = true), 1) as UiComponent.TextField).helper
+        )
         assertEquals(form, current.downgrade(form, 2))
         assertEquals(UiComponent.Fallback(), current.downgrade(text, UiSchemaVersion.NONE))
     }
@@ -105,7 +145,14 @@ class UiSchemaCompatTest {
         val old = ClientInfo(ApiVersion.CURRENT, uiSchemaVersion = 1)
         assertTrue(UiSchemaCompat().isActive(old))
         assertEquals(UiComponent.TextField("k", "l", multiline = true), UiSchemaCompat().shapeUiComponent(field, old))
-        assertFalse(UiSchemaCompat().isActive(ClientInfo(ApiVersion.CURRENT, uiSchemaVersion = UiSchemaVersion.CURRENT)))
+        assertFalse(
+            UiSchemaCompat().isActive(
+                ClientInfo(
+                    ApiVersion.CURRENT,
+                    uiSchemaVersion = UiSchemaVersion.CURRENT
+                )
+            )
+        )
     }
 
     interface UiApi {
@@ -120,7 +167,10 @@ class UiSchemaCompatTest {
         override suspend fun render() = render
         override suspend fun slot() = UiSlotRender("library", listOf(render))
         override fun flow() = flowOf(render)
-        override fun live() = flowOf<UiLiveUpdate>(UiLiveUpdate.Replace(UiComponent.Table(emptyList(), emptyList())), UiLiveUpdate.AppendLines(listOf("l")))
+        override fun live() = flowOf<UiLiveUpdate>(
+            UiLiveUpdate.Replace(UiComponent.Table(emptyList(), emptyList())),
+            UiLiveUpdate.AppendLines(listOf("l"))
+        )
     }
 
     @Test
@@ -136,7 +186,10 @@ class UiSchemaCompatTest {
         assertEquals(1, shapedRender.schemaVersion)
         assertEquals(shapedRender.root, wrapped.slot().items.single().root)
         assertEquals(shapedRender.root, wrapped.flow().toList().single().root)
-        assertEquals(listOf(UiLiveUpdate.Replace(UiComponent.Fallback()), UiLiveUpdate.AppendLines(listOf("l"))), wrapped.live().toList())
+        assertEquals(
+            listOf(UiLiveUpdate.Replace(UiComponent.Fallback()), UiLiveUpdate.AppendLines(listOf("l"))),
+            wrapped.live().toList()
+        )
     }
 
     @Test

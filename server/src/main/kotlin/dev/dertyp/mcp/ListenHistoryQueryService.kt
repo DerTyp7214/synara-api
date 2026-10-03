@@ -62,7 +62,7 @@ class ListenHistoryQueryService(
             if (position != null) {
                 query = query.andWhere {
                     (ListenTable.listenedAt less position.first) or
-                        ((ListenTable.listenedAt eq position.first) and (ListenTable.id less position.second))
+                            ((ListenTable.listenedAt eq position.first) and (ListenTable.id less position.second))
                 }
             }
             query
@@ -171,7 +171,7 @@ class ListenHistoryQueryService(
         val rows = window(userId, filter)
         val now = System.currentTimeMillis()
         val startMs = filter.from ?: rows.firstOrNull()?.listenedAt
-            ?: return McpTimeline(bucket = bucket.name, timezone = zone.id, buckets = emptyList())
+        ?: return McpTimeline(bucket = bucket.name, timezone = zone.id, buckets = emptyList())
         val endMs = filter.to ?: maxOf(now, rows.lastOrNull()?.listenedAt ?: now)
 
         val starts = ArrayList<Long>()
@@ -187,7 +187,8 @@ class ListenHistoryQueryService(
         val groups = HashMap<Long, Group>()
         val uniqueSongs = HashMap<Long, MutableSet<SongKey>>()
         for (row in rows) {
-            val start = bucketStart(Instant.ofEpochMilli(row.listenedAt).atZone(zone), bucket).toInstant().toEpochMilli()
+            val start =
+                bucketStart(Instant.ofEpochMilli(row.listenedAt).atZone(zone), bucket).toInstant().toEpochMilli()
             groups.getOrPut(start) { Group() }.add(row.listenedAt, ListenTable.playedMs(row.msPlayed, row.duration))
             songKeyOf(row)?.let { uniqueSongs.getOrPut(start) { HashSet() }.add(it) }
         }
@@ -222,7 +223,12 @@ class ListenHistoryQueryService(
                 songService.rankedSearch(1, capped, query, explicit = true, userId = userId).data.map { it.toMcpSong() }
             } else emptyList(),
             artists = if (includeArtists) {
-                artistService.rankedSearch(1, capped, query, userId).data.map { McpArtistRef(it.id.toString(), it.name) }
+                artistService.rankedSearch(1, capped, query, userId).data.map {
+                    McpArtistRef(
+                        it.id.toString(),
+                        it.name
+                    )
+                }
             } else emptyList(),
             albums = if (includeAlbums) {
                 albumService.rankedSearch(1, capped, query, userId).data.map { McpAlbumRef(it.id.toString(), it.name) }
@@ -277,7 +283,8 @@ class ListenHistoryQueryService(
             previous = row
             when {
                 !duplicate -> kept.add(row)
-                row.source == ListenSource.LOCAL && kept.last().source != ListenSource.LOCAL -> kept[kept.lastIndex] = row
+                row.source == ListenSource.LOCAL && kept.last().source != ListenSource.LOCAL -> kept[kept.lastIndex] =
+                    row
             }
         }
         return kept

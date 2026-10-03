@@ -30,7 +30,10 @@ class PodcastIndexCredentialSourceTest {
 
     @Test
     fun `stored credentials win over the environment`() = runBlocking {
-        coEvery { settings.getAll() } returns mapOf("apiKey" to sealed("apiKey", " storedKey "), "apiSecret" to sealed("apiSecret", "storedSecret"))
+        coEvery { settings.getAll() } returns mapOf(
+            "apiKey" to sealed("apiKey", " storedKey "),
+            "apiSecret" to sealed("apiSecret", "storedSecret")
+        )
         val source = source(environment)
         assertEquals(PodcastIndexCredentials("storedKey", "storedSecret"), source.current())
         assertEquals(CredentialOrigin.STORED, source.origin())

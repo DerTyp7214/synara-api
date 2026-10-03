@@ -35,7 +35,7 @@ class YoutubeServiceTest : KoinTest {
     private val youtubeApiService = mockk<YoutubeApiService>(relaxed = true)
     private val lrcLibService = mockk<LrcLibService>(relaxed = true)
     private val musicBrainzService = mockk<MusicBrainzService>(relaxed = true)
-    
+
     private val songService = mockk<SongService>(relaxed = true)
     private val userPlaylistService = mockk<UserPlaylistService>(relaxed = true)
     private val importService = mockk<ImportService>(relaxed = true)

@@ -63,7 +63,7 @@ class YoutubeMetadataEnrichmentTest : KoinTest {
         musicBrainzService: MusicBrainzService,
         private val mockFiles: List<Path>
     ) : YoutubeService(indexer, storageService, youtubeApiService, lrcLibService, musicBrainzService) {
-        
+
         override suspend fun collectImportedFiles(
             command: Collection<String>,
             maxRetries: Int,
@@ -97,7 +97,7 @@ class YoutubeMetadataEnrichmentTest : KoinTest {
 
         mockkObject(ApiClient)
         mockkStatic(AudioFileIO::class)
-        
+
         every { indexer.audioExtension } returns "flac"
         every { indexer.audioExtensions } returns setOf("flac")
         every { indexer.isAudio(any()) } answers { firstArg<Path>().extension.lowercase() == "flac" }
@@ -141,18 +141,30 @@ class YoutubeMetadataEnrichmentTest : KoinTest {
                 )
             )
         )
-        coEvery { musicBrainzService.searchRecordingMb("Big Buck Bunny Theme", listOf("Blender Studio")) } returns mbRecording
+        coEvery {
+            musicBrainzService.searchRecordingMb(
+                "Big Buck Bunny Theme",
+                listOf("Blender Studio")
+            )
+        } returns mbRecording
 
         val mockAudioFile = mockk<AudioFile>(relaxed = true)
         val mockTag = mockk<Tag>(relaxed = true)
         every { mockAudioFile.tag } returns mockTag
         every { mockTag.getFirst(FieldKey.TITLE) } returns "Big Buck Bunny"
-        
+
         val file = tempDir.resolve("$videoId.flac")
         Files.createFile(file)
         every { AudioFileIO.read(file.toFile()) } returns mockAudioFile
 
-        service = TestYoutubeService(indexer, storageService, youtubeApiService, lrcLibService, musicBrainzService, listOf(file))
+        service = TestYoutubeService(
+            indexer,
+            storageService,
+            youtubeApiService,
+            lrcLibService,
+            musicBrainzService,
+            listOf(file)
+        )
 
         service.importContent(listOf(url), 1, { true }, null) {}
 

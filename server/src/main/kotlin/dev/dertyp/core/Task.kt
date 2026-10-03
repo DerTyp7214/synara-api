@@ -23,7 +23,7 @@ suspend fun KoinComponent.logTask(name: String, block: suspend TaskContext.() ->
     val logService by inject<ScheduledTaskLogService>()
     val startTime = Instant.now().toEpochMilli()
     val runningId = logService.startLog(name, startTime).value
-    
+
     class TaskContextImpl : TaskContext {
         @Volatile
         var currentProgress = 0.0

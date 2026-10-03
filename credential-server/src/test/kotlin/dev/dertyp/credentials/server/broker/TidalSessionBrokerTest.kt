@@ -48,7 +48,9 @@ class TidalSessionBrokerTest {
     )
 
     private fun decodedFile(credential: ResolvedCredential.Files): JsonObject =
-        Json.parseToJsonElement(Base64.getDecoder().decode(credential.files.single().contentBase64).decodeToString()).jsonObject
+        Json.parseToJsonElement(
+            Base64.getDecoder().decode(credential.files.single().contentBase64).decodeToString()
+        ).jsonObject
 
     @Test
     fun `every resolve refreshes the session with the stored client`() = runTest {
@@ -66,7 +68,10 @@ class TidalSessionBrokerTest {
         assertEquals(2, upstream.requests.size)
         val request = upstream.requests.first()
         assertEquals(TidalAuthApi.TOKEN_URL, request.url)
-        assertEquals("Basic " + Base64.getEncoder().encodeToString("admin-client:admin-secret".toByteArray()), request.authorization)
+        assertEquals(
+            "Basic " + Base64.getEncoder().encodeToString("admin-client:admin-secret".toByteArray()),
+            request.authorization
+        )
         assertEquals("refresh_token", request.form["grant_type"])
         assertEquals("refresh-0", request.form["refresh_token"])
         assertEquals("admin-client", request.form["client_id"])
@@ -124,7 +129,8 @@ class TidalSessionBrokerTest {
 
     @Test
     fun `tiddl parse and render round trip unknown fields`() {
-        val content = """{"token":"a","refresh_token":"r","expires_at":1700000000,"user_id":"5","country_code":"NL","future":{"x":1}}"""
+        val content =
+            """{"token":"a","refresh_token":"r","expires_at":1700000000,"user_id":"5","country_code":"NL","future":{"x":1}}"""
 
         val data = TidalAuthFormats.parse(TidalSessionFormat.TIDDL, content)
         assertEquals("a", data.accessToken)
@@ -139,7 +145,8 @@ class TidalSessionBrokerTest {
 
     @Test
     fun `tdn token json round trips with fractional expiry`() {
-        val content = """{"token_type":"Bearer","access_token":"a","refresh_token":"r","expiry_time":1700000000.5,"other":true}"""
+        val content =
+            """{"token_type":"Bearer","access_token":"a","refresh_token":"r","expiry_time":1700000000.5,"other":true}"""
 
         val data = TidalAuthFormats.parse(TidalSessionFormat.TDN, content)
         assertEquals("a", data.accessToken)
@@ -176,10 +183,16 @@ class TidalSessionBrokerTest {
         val repository = FakeSecretRepository().apply { put(name, session()) }
         val resolver = CredentialResolver(repository, upstream.client)
 
-        assertEquals(CredentialErrorCode.NEEDS_LOGIN, assertFailsWith<CredentialException> { resolver.resolve(name) }.code)
+        assertEquals(
+            CredentialErrorCode.NEEDS_LOGIN,
+            assertFailsWith<CredentialException> { resolver.resolve(name) }.code
+        )
 
         status = HttpStatusCode.BadGateway
-        assertEquals(CredentialErrorCode.UPSTREAM_FAILED, assertFailsWith<CredentialException> { resolver.resolve(name) }.code)
+        assertEquals(
+            CredentialErrorCode.UPSTREAM_FAILED,
+            assertFailsWith<CredentialException> { resolver.resolve(name) }.code
+        )
         assertEquals(CredentialStatus.ERROR, repository.states[name]?.status)
     }
 
@@ -199,11 +212,15 @@ class TidalSessionBrokerTest {
     fun `write back with the current fingerprint is adopted`() = runTest {
         val repository = FakeSecretRepository().apply { put(name, session()) }
         val resolver = CredentialResolver(repository, MockUpstream { json("{}") }.client)
-        val uploaded = """{"token":"cli-access","refresh_token":"cli-refresh","expires_at":1800000000,"user_id":"42","country_code":"DE","added":"x"}"""
+        val uploaded =
+            """{"token":"cli-access","refresh_token":"cli-refresh","expires_at":1800000000,"user_id":"42","country_code":"DE","added":"x"}"""
 
         val result = resolver.writeBack(
             name,
-            WriteBackRequest(Fingerprints.sha256Hex("refresh-0"), listOf(FileContents.encode(CredentialFileRoles.TIDDL_AUTH, uploaded))),
+            WriteBackRequest(
+                Fingerprints.sha256Hex("refresh-0"),
+                listOf(FileContents.encode(CredentialFileRoles.TIDDL_AUTH, uploaded))
+            ),
         )
 
         assertEquals(Fingerprints.sha256Hex("cli-refresh"), result.fingerprint)
@@ -224,7 +241,10 @@ class TidalSessionBrokerTest {
         val error = assertFailsWith<CredentialException> {
             resolver.writeBack(
                 name,
-                WriteBackRequest(Fingerprints.sha256Hex("stale"), listOf(FileContents.encode(CredentialFileRoles.TIDDL_AUTH, uploaded))),
+                WriteBackRequest(
+                    Fingerprints.sha256Hex("stale"),
+                    listOf(FileContents.encode(CredentialFileRoles.TIDDL_AUTH, uploaded))
+                ),
             )
         }
 
@@ -237,7 +257,12 @@ class TidalSessionBrokerTest {
         val repository = FakeSecretRepository().apply { put("youtube.api", ApiKeySecret("k")) }
         val resolver = CredentialResolver(repository, MockUpstream { json("{}") }.client)
 
-        val error = assertFailsWith<CredentialException> { resolver.writeBack("youtube.api", WriteBackRequest(null, emptyList())) }
+        val error = assertFailsWith<CredentialException> {
+            resolver.writeBack(
+                "youtube.api",
+                WriteBackRequest(null, emptyList())
+            )
+        }
 
         assertEquals(CredentialErrorCode.INVALID, error.code)
     }

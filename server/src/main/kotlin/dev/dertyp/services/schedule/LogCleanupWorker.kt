@@ -13,7 +13,7 @@ class LogCleanupWorker : Worker("LogCleanupWorker") {
 
     override suspend fun execute(onProgress: suspend (Double, String) -> Unit): Map<String, Any?> {
         val thirtyDaysAgo = Clock.System.now().toEpochMilliseconds() - 30.days.inWholeMilliseconds
-        
+
         val deletedCount = dbQuery {
             ScheduledTaskLogTable.deleteWhere {
                 ScheduledTaskLogTable.logTime less thirtyDaysAgo

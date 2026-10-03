@@ -40,6 +40,7 @@ object FfmpegProbe {
             avutil.AV_SAMPLE_FMT_S16, avutil.AV_SAMPLE_FMT_S16P -> 16
             avutil.AV_SAMPLE_FMT_S32, avutil.AV_SAMPLE_FMT_S32P,
             avutil.AV_SAMPLE_FMT_FLT, avutil.AV_SAMPLE_FMT_FLTP -> 24
+
             else -> 16
         }
     }

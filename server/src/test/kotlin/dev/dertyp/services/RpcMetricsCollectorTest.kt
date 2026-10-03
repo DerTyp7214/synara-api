@@ -66,7 +66,7 @@ class RpcMetricsCollectorTest {
             val aliceTotal = RpcCallTotalsTable.selectAll()
                 .first {
                     it[RpcCallTotalsTable.service] == "ISongService" &&
-                        it[RpcCallTotalsTable.username] == "alice"
+                            it[RpcCallTotalsTable.username] == "alice"
                 }[RpcCallTotalsTable.count]
             assertEquals(7L, aliceTotal)
         }

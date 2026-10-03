@@ -19,10 +19,10 @@ class ImporterPriorityTest {
     @Test
     fun `importContent should group URLs by importer and prioritize default`() = runBlocking {
         val proxy = ImporterProxy(pluginManager, linkResolver, musicBrainz)
-        
+
         val url1 = "https://tidal.com/1"
         val url2 = "https://youtube.com/2"
-        
+
         val tidalImporter = mockk<IImporter> {
             every { id } returns "tidal"
             every { enabled } returns true
@@ -30,7 +30,7 @@ class ImporterPriorityTest {
             every { canHandle(url2) } returns false
             coEvery { importContent(any(), any(), any(), any(), any(), any()) } returns ProcessExecutionResult.EMPTY
         }
-        
+
         val youtubeImporter = mockk<IImporter> {
             every { id } returns "youtube"
             every { enabled } returns true

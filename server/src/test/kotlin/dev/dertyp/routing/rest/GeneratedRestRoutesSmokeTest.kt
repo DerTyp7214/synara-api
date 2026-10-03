@@ -416,7 +416,8 @@ class GeneratedRestRoutesSmokeTest {
     fun `a json body is decoded into the single body parameter`() = testApplication {
         setUpApplication()
         val episodeId = UUID.fromString("55555555-5555-5555-5555-555555555555")
-        val report = EpisodePlaybackReport(episodeId = episodeId, positionMs = 1234, durationMs = 5000, deviceId = "phone")
+        val report =
+            EpisodePlaybackReport(episodeId = episodeId, positionMs = 1234, durationMs = 5000, deviceId = "phone")
         coEvery { podcast.reportPlayback(any()) } returns progress(1234)
 
         val response = client.post("/podcast/reportPlayback") {

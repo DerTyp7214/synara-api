@@ -21,13 +21,19 @@ class LocalPluginCredentialStore(
 ) {
     private val logger = KtorSimpleLogger("LocalPluginCredentialStore")
     private val known = ConcurrentHashMap.newKeySet<String>()
-    private val updates = MutableSharedFlow<String>(extraBufferCapacity = 16, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+    private val updates =
+        MutableSharedFlow<String>(extraBufferCapacity = 16, onBufferOverflow = BufferOverflow.DROP_OLDEST)
 
     suspend fun load() {
         val stored = dbQuery {
             PluginSettingTable.select(PluginSettingTable.pluginId, PluginSettingTable.key)
                 .where { PluginSettingTable.key like "$KEY_PREFIX%" }
-                .map { CredentialNames.plugin(it[PluginSettingTable.pluginId], it[PluginSettingTable.key].removePrefix(KEY_PREFIX)) }
+                .map {
+                    CredentialNames.plugin(
+                        it[PluginSettingTable.pluginId],
+                        it[PluginSettingTable.key].removePrefix(KEY_PREFIX)
+                    )
+                }
         }
         known.addAll(stored)
     }

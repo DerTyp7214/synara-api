@@ -16,7 +16,8 @@ fun parseMcpTime(value: String, zone: ZoneId): Long {
         trimmed.toLongOrNull()?.let { return it }
     }
 
-    runCatching { LocalDate.parse(trimmed) }.getOrNull()?.let { return it.atStartOfDay(zone).toInstant().toEpochMilli() }
+    runCatching { LocalDate.parse(trimmed) }.getOrNull()
+        ?.let { return it.atStartOfDay(zone).toInstant().toEpochMilli() }
     runCatching { OffsetDateTime.parse(trimmed) }.getOrNull()?.let { return it.toInstant().toEpochMilli() }
     runCatching { Instant.parse(trimmed) }.getOrNull()?.let { return it.toEpochMilli() }
     runCatching { LocalDateTime.parse(trimmed) }.getOrNull()?.let { return it.atZone(zone).toInstant().toEpochMilli() }

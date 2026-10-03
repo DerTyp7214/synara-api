@@ -175,6 +175,7 @@ fun Tag.setCustomField(key: String, value: String) {
             frame.body = FrameBodyTXXX(0.toByte(), key, value)
             setField(frame)
         }
+
         is WavTag, is AiffTag -> id3v24Tag()?.setCustomField(key, value)
     }
 }
@@ -194,6 +195,7 @@ fun Tag.deleteCustomField(key: String) {
                 toKeep.forEach { addField(it) }
             }
         }
+
         is WavTag, is AiffTag -> id3v24Tag(create = false)?.deleteCustomField(key)
     }
 }

@@ -9,7 +9,7 @@ import java.util.UUID
 object TestDatabase {
     private var currentFile: File? = null
     private var currentDbName: String? = null
-    
+
     val postgresContainer: PostgreSQLContainer<*>? by lazy {
         try {
             PostgreSQLContainer("postgres:15-alpine").apply {
@@ -44,11 +44,11 @@ object TestDatabase {
                 val dbName = "${name}_${UUID.randomUUID().toString().replace("-", "")}".lowercase()
                 currentDbName = dbName
                 val freshDbUrl = getPostgresDbUrl(dbName)
-                
+
                 val driver = if (postgresContainer != null) "org.postgresql.Driver" else "org.h2.Driver"
                 val user = postgresContainer?.username ?: "sa"
                 val password = postgresContainer?.password ?: ""
-                
+
                 Database.connect(
                     url = freshDbUrl,
                     driver = driver,
@@ -56,9 +56,13 @@ object TestDatabase {
                     password = password
                 )
             }
+
             DbDialect.SQLITE -> {
                 currentFile = File.createTempFile(name, ".db")
-                Database.connect("jdbc:sqlite:${currentFile!!.absolutePath}?foreign_keys=$foreignKeys", "org.sqlite.JDBC")
+                Database.connect(
+                    "jdbc:sqlite:${currentFile!!.absolutePath}?foreign_keys=$foreignKeys",
+                    "org.sqlite.JDBC"
+                )
             }
         }
     }

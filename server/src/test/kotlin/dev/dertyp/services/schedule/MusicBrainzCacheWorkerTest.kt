@@ -60,7 +60,7 @@ class MusicBrainzCacheWorkerTest : KoinTest {
         setup(dialect)
         val musicBrainzService = mockk<MusicBrainzService>()
         val musicBrainzCacheService = mockk<MusicBrainzCacheService>()
-        
+
         val artistId = UUID.randomUUID()
         coEvery { musicBrainzCacheService.staleArtistIdsFlow(any()) } returns flowOf(artistId)
         coEvery { musicBrainzCacheService.staleReleaseGroupIdsFlow(any()) } returns flowOf()

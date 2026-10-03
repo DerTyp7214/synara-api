@@ -124,7 +124,7 @@ class ReverseProxyServiceTest : KoinTest {
     @Test
     fun `should reconnect after server-side close`() = runBlocking {
         val connectionCount = Channel<Int>(Channel.UNLIMITED)
-        
+
         val server = embeddedServer(Netty, port = 0) {
             install(WebSockets)
             routing {
@@ -160,13 +160,13 @@ class ReverseProxyServiceTest : KoinTest {
             }
 
             connectionCount.send(1)
-            
+
             withTimeout(10.seconds) {
                 while (service.proxyId != "id-1") delay(10.milliseconds)
             }
-            
+
             connectionCount.send(2)
-            
+
             withTimeout(10.seconds) {
                 while (service.proxyId != "id-2") delay(10.milliseconds)
             }
@@ -244,7 +244,10 @@ class ReverseProxyServiceTest : KoinTest {
             routing {
                 webSocket("/proxy/server") {
                     send(ProxyMessage.AssignedId("server-1").toFrame())
-                    send(ProxyMessage.NewClient(clientId, "/rpc", mapOf("Authorization" to "Bearer valid-token")).toFrame())
+                    send(
+                        ProxyMessage.NewClient(clientId, "/rpc", mapOf("Authorization" to "Bearer valid-token"))
+                            .toFrame()
+                    )
                     send(ProxyMessage.ClientFrame(clientId, "test-data".toByteArray(), false).toFrame())
                     connectionReceived.complete(Unit)
                     delay(2.seconds)
@@ -293,7 +296,7 @@ class ReverseProxyServiceTest : KoinTest {
                 webSocket("/proxy/server") {
                     val count = connectionCount.incrementAndGet()
                     send(ProxyMessage.AssignedId("server-$count").toFrame())
-                    
+
                     for (frame in incoming) {
                         val msg = ProxyMessage.fromFrame(frame)
                         if (msg is ProxyMessage.Ping) {
@@ -305,7 +308,7 @@ class ReverseProxyServiceTest : KoinTest {
         }.start(wait = false)
 
         val port = server.engine.resolvedConnectors().first().port
-        
+
         val config = MapApplicationConfig(
             "proxy.hostname" to "127.0.0.1",
             "proxy.controlPort" to port.toString()
@@ -323,7 +326,7 @@ class ReverseProxyServiceTest : KoinTest {
             withTimeout(15.seconds) {
                 pingsReceived.receive()
             }
-            
+
             assertNotNull(service.lastInteraction)
 
             val initialInteraction = service.lastInteraction!!

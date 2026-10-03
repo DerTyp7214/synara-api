@@ -77,7 +77,13 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
                 .leftJoin(ArtistMusicBrainzTable)
                 .select(ArtistTable.id, ArtistTable.name, ArtistMusicBrainzTable.musicBrainzId)
                 .where { (ArtistMusicBrainzTable.musicBrainzId.isNotNull()) and (ArtistTable.lastMetadataCheck eq 0L or (ArtistTable.lastMetadataCheck less thirtyDaysAgo.toEpochMilliseconds())) }
-                .map { ArtistToFetch(it[ArtistTable.id].value, it[ArtistTable.name], it.getOrNull(ArtistMusicBrainzTable.musicBrainzId)?.value) }
+                .map {
+                    ArtistToFetch(
+                        it[ArtistTable.id].value,
+                        it[ArtistTable.name],
+                        it.getOrNull(ArtistMusicBrainzTable.musicBrainzId)?.value
+                    )
+                }
         }
 
         logger.info("Starting artist genre fetch for ${artists.size} artists")
@@ -160,7 +166,13 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
                 .leftJoin(AlbumMusicBrainzTable)
                 .select(AlbumTable.id, AlbumTable.name, AlbumMusicBrainzTable.musicBrainzId)
                 .where { (AlbumMusicBrainzTable.musicBrainzId.isNotNull()) and (AlbumTable.lastMetadataCheck eq 0L or (AlbumTable.lastMetadataCheck less thirtyDaysAgo.toEpochMilliseconds())) }
-                .map { AlbumToFetch(it[AlbumTable.id].value, it[AlbumTable.name], it.getOrNull(AlbumMusicBrainzTable.musicBrainzId)?.value) }
+                .map {
+                    AlbumToFetch(
+                        it[AlbumTable.id].value,
+                        it[AlbumTable.name],
+                        it.getOrNull(AlbumMusicBrainzTable.musicBrainzId)?.value
+                    )
+                }
         }
 
         logger.info("Starting album genre fetch for ${albums.size} albums")
@@ -233,7 +245,13 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
                 .leftJoin(SongMusicBrainzTable)
                 .select(SongTable.id, SongTable.title, SongMusicBrainzTable.musicBrainzId)
                 .where { (SongMusicBrainzTable.musicBrainzId.isNotNull()) and (SongTable.lastMetadataCheck eq 0L or (SongTable.lastMetadataCheck less thirtyDaysAgo.toEpochMilliseconds())) }
-                .map { TrackToFetch(it[SongTable.id].value, it[SongTable.title], it.getOrNull(SongMusicBrainzTable.musicBrainzId)?.value) }
+                .map {
+                    TrackToFetch(
+                        it[SongTable.id].value,
+                        it[SongTable.title],
+                        it.getOrNull(SongMusicBrainzTable.musicBrainzId)?.value
+                    )
+                }
         }
 
         logger.info("Starting song genre fetch for ${songs.size} songs")
@@ -295,19 +313,21 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
 
     private suspend fun updateLastMetadataCheckArtist(id: UUID) = dbQuery {
         ArtistTable.update({ ArtistTable.id eq id }) {
-            it[ArtistTable.lastMetadataCheck] = System.currentTimeMillis() + (1.days .. 5.days).random().inWholeMilliseconds
+            it[ArtistTable.lastMetadataCheck] =
+                System.currentTimeMillis() + (1.days..5.days).random().inWholeMilliseconds
         }
     }
 
     private suspend fun updateLastMetadataCheckAlbum(id: UUID) = dbQuery {
         AlbumTable.update({ AlbumTable.id eq id }) {
-            it[AlbumTable.lastMetadataCheck] = System.currentTimeMillis() + (1.days .. 5.days).random().inWholeMilliseconds
+            it[AlbumTable.lastMetadataCheck] =
+                System.currentTimeMillis() + (1.days..5.days).random().inWholeMilliseconds
         }
     }
 
     private suspend fun updateLastMetadataCheckSong(id: UUID) = dbQuery {
         SongTable.update({ SongTable.id eq id }) {
-            it[SongTable.lastMetadataCheck] = System.currentTimeMillis() + (1.days .. 5.days).random().inWholeMilliseconds
+            it[SongTable.lastMetadataCheck] = System.currentTimeMillis() + (1.days..5.days).random().inWholeMilliseconds
         }
     }
 
@@ -394,7 +414,13 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
                     .leftJoin(ArtistMusicBrainzTable)
                     .select(ArtistTable.id, ArtistTable.name, ArtistMusicBrainzTable.musicBrainzId)
                     .where { (ArtistTable.image eq null) and (ArtistTable.lastImageCheck eq 0L or (ArtistTable.lastImageCheck less thirtyDaysAgo.toEpochMilliseconds())) }
-                    .map { ArtistToFetch(it[ArtistTable.id].value, it[ArtistTable.name], it.getOrNull(ArtistMusicBrainzTable.musicBrainzId)?.value) }
+                    .map {
+                        ArtistToFetch(
+                            it[ArtistTable.id].value,
+                            it[ArtistTable.name],
+                            it.getOrNull(ArtistMusicBrainzTable.musicBrainzId)?.value
+                        )
+                    }
             }
 
             logger.info("Starting artist image fetch for ${artists.size} artists")
@@ -415,30 +441,31 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
                             val progress = (totalChecked.toDouble() / totalToFetch) * 100.0
                             onProgress(progress, "Fetching image for: $name")
 
-                            val artist = if (metadataProvider == IMetadataService.MetadataType.theAudioDB && mbid != null) {
-                                try {
-                                    service.getArtistByMbId(mbid)
-                                } catch (e: CancellationException) {
-                                    throw e
-                                } catch (e: Exception) {
-                                    logger.error("Error fetching artist by MBID for $name ($mbid)", e)
-                                    null
-                                }
-                            } else {
-                                val response = try {
-                                    service.searchArtists(name, 20)
-                                } catch (e: CancellationException) {
-                                    throw e
-                                } catch (e: Exception) {
-                                    logger.error("Error searching artists for $name", e)
-                                    emptyList()
-                                }
+                            val artist =
+                                if (metadataProvider == IMetadataService.MetadataType.theAudioDB && mbid != null) {
+                                    try {
+                                        service.getArtistByMbId(mbid)
+                                    } catch (e: CancellationException) {
+                                        throw e
+                                    } catch (e: Exception) {
+                                        logger.error("Error fetching artist by MBID for $name ($mbid)", e)
+                                        null
+                                    }
+                                } else {
+                                    val response = try {
+                                        service.searchArtists(name, 20)
+                                    } catch (e: CancellationException) {
+                                        throw e
+                                    } catch (e: Exception) {
+                                        logger.error("Error searching artists for $name", e)
+                                        emptyList()
+                                    }
 
-                                response.sortedByDescending { it.popularity }.firstOrNull { a ->
-                                    a.name.replace(".", "")
-                                        .equals(name.replace(".", ""), ignoreCase = true)
+                                    response.sortedByDescending { it.popularity }.firstOrNull { a ->
+                                        a.name.replace(".", "")
+                                            .equals(name.replace(".", ""), ignoreCase = true)
+                                    }
                                 }
-                            }
 
                             if (artist == null || artist.images.isEmpty()) {
                                 onProgress(progress, "No images for \"$name\" found.")
@@ -487,8 +514,7 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
                             if (updates == 1) {
                                 onProgress(progress, "Updated \"$name\" with an image.")
                                 foundCount++
-                            }
-                            else onProgress(progress, "Something went wrong updating $name")
+                            } else onProgress(progress, "Something went wrong updating $name")
                         }
                     }
                 }
@@ -522,7 +548,13 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
                 .leftJoin(ArtistMusicBrainzTable)
                 .select(ArtistTable.id, ArtistTable.name, ArtistMusicBrainzTable.musicBrainzId)
                 .where { (ArtistTable.image eq null or ArtistTable.about.eq("")) and (ArtistTable.lastMetadataCheck eq 0L or (ArtistTable.lastMetadataCheck less thirtyDaysAgo.toEpochMilliseconds())) }
-                .map { ArtistToFetch(it[ArtistTable.id].value, it[ArtistTable.name], it.getOrNull(ArtistMusicBrainzTable.musicBrainzId)?.value) }
+                .map {
+                    ArtistToFetch(
+                        it[ArtistTable.id].value,
+                        it[ArtistTable.name],
+                        it.getOrNull(ArtistMusicBrainzTable.musicBrainzId)?.value
+                    )
+                }
         }
 
         logger.info("Starting artist metadata fetch for ${artists.size} artists")
@@ -659,7 +691,13 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
                     .leftJoin(AlbumMusicBrainzTable)
                     .select(AlbumTable.id, AlbumTable.name, AlbumMusicBrainzTable.musicBrainzId)
                     .where { AlbumTable.cover eq null }
-                    .map { AlbumToFetch(it[AlbumTable.id].value, it[AlbumTable.name], it.getOrNull(AlbumMusicBrainzTable.musicBrainzId)?.value) }
+                    .map {
+                        AlbumToFetch(
+                            it[AlbumTable.id].value,
+                            it[AlbumTable.name],
+                            it.getOrNull(AlbumMusicBrainzTable.musicBrainzId)?.value
+                        )
+                    }
             }
 
             logger.info("Starting album image fetch for ${albums.size} albums")
@@ -680,27 +718,28 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
                             val progress = (totalChecked.toDouble() / totalToFetch) * 100.0
                             onProgress(progress, "Fetching image for: $name")
 
-                            val images = if (metadataProvider == IMetadataService.MetadataType.theAudioDB && mbid != null) {
-                                try {
-                                    service.getImageUrlByAlbumMbId(mbid)
-                                } catch (e: CancellationException) {
-                                    throw e
-                                } catch (e: Exception) {
-                                    logger.error("Error fetching images by MBID for $name ($mbid)", e)
-                                    emptyList()
+                            val images =
+                                if (metadataProvider == IMetadataService.MetadataType.theAudioDB && mbid != null) {
+                                    try {
+                                        service.getImageUrlByAlbumMbId(mbid)
+                                    } catch (e: CancellationException) {
+                                        throw e
+                                    } catch (e: Exception) {
+                                        logger.error("Error fetching images by MBID for $name ($mbid)", e)
+                                        emptyList()
+                                    }
+                                } else {
+                                    try {
+                                        service.searchAlbums(name, 20)
+                                            .firstOrNull { it.title.equals(name, ignoreCase = true) }
+                                            ?.images ?: emptyList()
+                                    } catch (e: CancellationException) {
+                                        throw e
+                                    } catch (e: Exception) {
+                                        logger.error("Error searching albums for $name", e)
+                                        emptyList()
+                                    }
                                 }
-                            } else {
-                                try {
-                                    service.searchAlbums(name, 20)
-                                        .firstOrNull { it.title.equals(name, ignoreCase = true) }
-                                        ?.images ?: emptyList()
-                                } catch (e: CancellationException) {
-                                    throw e
-                                } catch (e: Exception) {
-                                    logger.error("Error searching albums for $name", e)
-                                    emptyList()
-                                }
-                            }
 
                             if (images.isEmpty()) {
                                 onProgress(progress, "No images for \"$name\" found.")
@@ -743,8 +782,7 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
                             if (updates == 1) {
                                 onProgress(progress, "Updated \"$name\" with an image.")
                                 foundCount++
-                            }
-                            else onProgress(progress, "Something went wrong updating $name")
+                            } else onProgress(progress, "Something went wrong updating $name")
                         }
                     }
                 }
@@ -778,7 +816,13 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
                 .leftJoin(AlbumMusicBrainzTable)
                 .select(AlbumTable.id, AlbumTable.name, AlbumMusicBrainzTable.musicBrainzId)
                 .where { (AlbumTable.cover eq null) and (AlbumTable.lastMetadataCheck eq 0L or (AlbumTable.lastMetadataCheck less thirtyDaysAgo.toEpochMilliseconds())) }
-                .map { AlbumToFetch(it[AlbumTable.id].value, it[AlbumTable.name], it.getOrNull(AlbumMusicBrainzTable.musicBrainzId)?.value) }
+                .map {
+                    AlbumToFetch(
+                        it[AlbumTable.id].value,
+                        it[AlbumTable.name],
+                        it.getOrNull(AlbumMusicBrainzTable.musicBrainzId)?.value
+                    )
+                }
         }
 
         logger.info("Starting album metadata fetch for ${albums.size} albums")
@@ -799,26 +843,27 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
                         val progress = (totalChecked.toDouble() / totalToFetch) * 100.0
                         onProgress(progress, "Fetching metadata for: $name")
 
-                        val albumMetadata = if (metadataProvider == IMetadataService.MetadataType.theAudioDB && mbid != null) {
-                            try {
-                                service.getAlbumByMbId(mbid)
-                            } catch (e: CancellationException) {
-                                throw e
-                            } catch (e: Exception) {
-                                logger.error("Error fetching album by MBID for $name ($mbid)", e)
-                                null
+                        val albumMetadata =
+                            if (metadataProvider == IMetadataService.MetadataType.theAudioDB && mbid != null) {
+                                try {
+                                    service.getAlbumByMbId(mbid)
+                                } catch (e: CancellationException) {
+                                    throw e
+                                } catch (e: Exception) {
+                                    logger.error("Error fetching album by MBID for $name ($mbid)", e)
+                                    null
+                                }
+                            } else {
+                                try {
+                                    service.searchAlbums(name, 20)
+                                        .firstOrNull { it.title.equals(name, ignoreCase = true) }
+                                } catch (e: CancellationException) {
+                                    throw e
+                                } catch (e: Exception) {
+                                    logger.error("Error searching albums for $name", e)
+                                    null
+                                }
                             }
-                        } else {
-                            try {
-                                service.searchAlbums(name, 20)
-                                    .firstOrNull { it.title.equals(name, ignoreCase = true) }
-                            } catch (e: CancellationException) {
-                                throw e
-                            } catch (e: Exception) {
-                                logger.error("Error searching albums for $name", e)
-                                null
-                            }
-                        }
 
                         if (albumMetadata == null) {
                             onProgress(progress, "No metadata for \"$name\" found.")
@@ -901,7 +946,13 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
                 .leftJoin(SongGenreTable)
                 .select(SongTable.id, SongTable.title, SongMusicBrainzTable.musicBrainzId)
                 .where { (SongGenreTable.songId.isNull()) and (SongTable.lastMetadataCheck eq 0L or (SongTable.lastMetadataCheck less thirtyDaysAgo.toEpochMilliseconds())) }
-                .map { TrackToFetch(it[SongTable.id].value, it[SongTable.title], it.getOrNull(SongMusicBrainzTable.musicBrainzId)?.value) }
+                .map {
+                    TrackToFetch(
+                        it[SongTable.id].value,
+                        it[SongTable.title],
+                        it.getOrNull(SongMusicBrainzTable.musicBrainzId)?.value
+                    )
+                }
         }
 
         logger.info("Starting song metadata fetch for ${tracks.size} tracks")
@@ -984,7 +1035,13 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
                 .leftJoin(ArtistMusicBrainzTable)
                 .select(ArtistTable.id, ArtistTable.name, ArtistMusicBrainzTable.musicBrainzId)
                 .where { ArtistTable.id eq id }
-                .map { ArtistToFetch(it[ArtistTable.id].value, it[ArtistTable.name], it.getOrNull(ArtistMusicBrainzTable.musicBrainzId)?.value) }
+                .map {
+                    ArtistToFetch(
+                        it[ArtistTable.id].value,
+                        it[ArtistTable.name],
+                        it.getOrNull(ArtistMusicBrainzTable.musicBrainzId)?.value
+                    )
+                }
                 .singleOrNull()
         } ?: return
 

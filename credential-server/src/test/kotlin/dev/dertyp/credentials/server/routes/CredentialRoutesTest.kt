@@ -205,12 +205,13 @@ class CredentialRoutesTest {
     }
 
     @Test
-    fun `admin routes answer 503 when no admin key is configured`() = routesTest(testDeps(dir, adminKey = "")) { _, client ->
-        assertEquals(HttpStatusCode.ServiceUnavailable, client.admin("GET", "/clients", key = null).status)
-        assertEquals(HttpStatusCode.ServiceUnavailable, client.admin("GET", "/clients", key = "").status)
-        assertEquals(HttpStatusCode.ServiceUnavailable, client.admin("GET", "/clients", key = "anything").status)
-        assertEquals(HttpStatusCode.OK, client.get(CredentialProtocol.HEALTH_PATH).status)
-    }
+    fun `admin routes answer 503 when no admin key is configured`() =
+        routesTest(testDeps(dir, adminKey = "")) { _, client ->
+            assertEquals(HttpStatusCode.ServiceUnavailable, client.admin("GET", "/clients", key = null).status)
+            assertEquals(HttpStatusCode.ServiceUnavailable, client.admin("GET", "/clients", key = "").status)
+            assertEquals(HttpStatusCode.ServiceUnavailable, client.admin("GET", "/clients", key = "anything").status)
+            assertEquals(HttpStatusCode.OK, client.get(CredentialProtocol.HEALTH_PATH).status)
+        }
 
     @Test
     fun `secrets never appear in listings`() = routesTest { _, client ->
@@ -270,7 +271,10 @@ class CredentialRoutesTest {
 
         assertEquals(HttpStatusCode.NoContent, client.admin("DELETE", "/credentials/youtube.api").status)
         assertEquals(HttpStatusCode.NotFound, client.admin("GET", "/credentials/youtube.api").status)
-        assertEquals(emptyList<GrantInfo>(), client.admin("GET", "/clients/${created.client.id}").body<ClientSummary>().grants)
+        assertEquals(
+            emptyList<GrantInfo>(),
+            client.admin("GET", "/clients/${created.client.id}").body<ClientSummary>().grants
+        )
 
         assertEquals(HttpStatusCode.NoContent, client.admin("DELETE", "/clients/${created.client.clientId}").status)
         assertEquals(HttpStatusCode.NotFound, client.admin("GET", "/clients/${created.client.id}").status)
@@ -347,10 +351,14 @@ class CredentialRoutesTest {
 
             assertTrue(client.admin("DELETE", "/tidal-logins/${started.loginId}").status.isSuccess())
 
-            val events = client.admin("GET", "/tidal-logins/${started.loginId}/events").bodyAsText().lines().filter { it.isNotBlank() }
+            val events = client.admin("GET", "/tidal-logins/${started.loginId}/events").bodyAsText().lines()
+                .filter { it.isNotBlank() }
                 .map { CredentialJson.json.decodeFromString(TidalLoginEvent.serializer(), it) }
             assertEquals(TidalLoginEvent(TidalLoginState.CANCELLED), events.last())
-            assertEquals(TidalLoginState.CANCELLED, client.admin("GET", "/tidal-logins/${started.loginId}").body<TidalLoginEvent>().state)
+            assertEquals(
+                TidalLoginState.CANCELLED,
+                client.admin("GET", "/tidal-logins/${started.loginId}").body<TidalLoginEvent>().state
+            )
         }
     }
 }

@@ -148,31 +148,32 @@ class AlbumServiceDeletionTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `deleteAlbums deletes song and variant files after commit and invalidates storage`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        val albumDir = File(tempDir, "album").apply { mkdirs() }
-        val songFile = File(albumDir, "track.flac").apply { writeText("audio") }
-        val variantFile = File(albumDir, "track.atmos.m4a").apply { writeText("atmos") }
+    fun `deleteAlbums deletes song and variant files after commit and invalidates storage`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val albumDir = File(tempDir, "album").apply { mkdirs() }
+            val songFile = File(albumDir, "track.flac").apply { writeText("audio") }
+            val variantFile = File(albumDir, "track.atmos.m4a").apply { writeText("atmos") }
 
-        val albumId = insertAlbum("With Variant")
-        val songId = insertSong(albumId, songFile.absolutePath)
-        transaction(database) {
-            SongVariantTable.insert {
-                it[SongVariantTable.songId] = songId
-                it[kind] = SongVariantKind.ATMOS
-                it[path] = variantFile.absolutePath
+            val albumId = insertAlbum("With Variant")
+            val songId = insertSong(albumId, songFile.absolutePath)
+            transaction(database) {
+                SongVariantTable.insert {
+                    it[SongVariantTable.songId] = songId
+                    it[kind] = SongVariantKind.ATMOS
+                    it[path] = variantFile.absolutePath
+                }
             }
+
+            assertTrue(service.deleteAlbums(listOf(albumId)))
+
+            assertFalse(songFile.exists())
+            assertFalse(variantFile.exists())
+            assertFalse(albumDir.exists())
+            verify { storageService.invalidate(StorageCategory.TOTAL) }
+            verify { redisSearchService.remove(SearchIndexEntityType.SONG, listOf(songId)) }
+            verify { redisSearchService.remove(SearchIndexEntityType.ALBUM, match { albumId in it }) }
         }
-
-        assertTrue(service.deleteAlbums(listOf(albumId)))
-
-        assertFalse(songFile.exists())
-        assertFalse(variantFile.exists())
-        assertFalse(albumDir.exists())
-        verify { storageService.invalidate(StorageCategory.TOTAL) }
-        verify { redisSearchService.remove(SearchIndexEntityType.SONG, listOf(songId)) }
-        verify { redisSearchService.remove(SearchIndexEntityType.ALBUM, match { albumId in it }) }
-    }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)

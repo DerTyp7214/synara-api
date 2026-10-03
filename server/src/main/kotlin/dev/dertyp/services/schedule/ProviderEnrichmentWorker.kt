@@ -8,7 +8,11 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.toList
 import org.koin.core.component.inject
 
-@WorkerTask(TaskKeys.PROVIDER_ENRICHMENT_WORKER, "Provider Enrichment Worker", afterTask = TaskKeys.RECENT_RELEASE_WORKER)
+@WorkerTask(
+    TaskKeys.PROVIDER_ENRICHMENT_WORKER,
+    "Provider Enrichment Worker",
+    afterTask = TaskKeys.RECENT_RELEASE_WORKER
+)
 class ProviderEnrichmentWorker : Worker("Provider Enrichment Worker") {
     private val albumService by inject<AlbumService>()
     private val songService by inject<SongService>()

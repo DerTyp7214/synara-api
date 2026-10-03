@@ -57,7 +57,10 @@ class AutoTranscodeWorker : Worker("AutoTranscodeWorker") {
                     baseThreadCount = 6,
                     onItemProcessed = { processedCount ->
                         val progress = (processedCount.toDouble() / songs.size) * 100.0
-                        onProgress(progress, "Transcoding quality $quality ($format): $processedCount/${songs.size} songs")
+                        onProgress(
+                            progress,
+                            "Transcoding quality $quality ($format): $processedCount/${songs.size} songs"
+                        )
                     }
                 ) { song ->
                     val file = Paths.get(song.path).toFile()

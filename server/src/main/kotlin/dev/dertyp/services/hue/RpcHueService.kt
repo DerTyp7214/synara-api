@@ -34,7 +34,8 @@ class RpcHueService(
 
     override suspend fun removeLink(bridgeId: UUID): Boolean = service.removeLink(user.id, bridgeId)
 
-    override suspend fun test(bridgeId: UUID, targets: List<HueTarget>): Boolean = service.test(user.id, bridgeId, targets)
+    override suspend fun test(bridgeId: UUID, targets: List<HueTarget>): Boolean =
+        service.test(user.id, bridgeId, targets)
 
     override suspend fun status(): HueStatus = service.status(user.id)
 }

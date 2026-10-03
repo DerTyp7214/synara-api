@@ -29,7 +29,8 @@ import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
 
 @OptIn(ExperimentalAtomicApi::class)
-abstract class BaseImporter(override var indexer: IPluginIndexer, internal val storageService: IServerStorageService) : Service(), IImporter {
+abstract class BaseImporter(override var indexer: IPluginIndexer, internal val storageService: IServerStorageService) :
+    Service(), IImporter {
     override val id: String get() = this::class.simpleName!!.lowercase().removeSuffix("service")
     override val name: String get() = this::class.simpleName!!.removeSuffix("service")
     override val pluginId: String get() = id
@@ -169,7 +170,7 @@ abstract class BaseImporter(override var indexer: IPluginIndexer, internal val s
             if (result.exitCode == 1 && pluginStorage.playlistsPath != null) {
                 result = handleErrors(command, result, currentTry, maxRetries, paths, aliveCheck, userId, logProxy)
             }
-            
+
             onFilesFound(paths)
         } finally {
             if (currentTry == 0) {
@@ -308,7 +309,11 @@ abstract class BaseImporter(override var indexer: IPluginIndexer, internal val s
         val command = loginCommand
         val startTime = Clock.System.now()
         val result = try {
-            executeImporter(command, { Clock.System.now().minus(startTime) < 10.seconds && aliveCheck() }, workingDirectory) {
+            executeImporter(
+                command,
+                { Clock.System.now().minus(startTime) < 10.seconds && aliveCheck() },
+                workingDirectory
+            ) {
                 yield()
             }
         } finally {

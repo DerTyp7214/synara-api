@@ -11,7 +11,8 @@ object CoverTypography {
 
     val bundledFont: Font? by lazy {
         runCatching {
-            CoverTypography::class.java.getResourceAsStream("/fonts/CoverTitle.ttf")?.use { Font.createFont(Font.TRUETYPE_FONT, it) }
+            CoverTypography::class.java.getResourceAsStream("/fonts/CoverTitle.ttf")
+                ?.use { Font.createFont(Font.TRUETYPE_FONT, it) }
         }.onFailure { logger.warn("Bundled cover font unavailable: ${it.message}") }.getOrNull()
     }
 

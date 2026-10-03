@@ -26,5 +26,8 @@ internal suspend fun HttpClient.postForm(
 } catch (e: CancellationException) {
     throw e
 } catch (e: Exception) {
-    throw CredentialException(CredentialErrorCode.UPSTREAM_FAILED, "Request to $url failed: ${e.message ?: e::class.simpleName}")
+    throw CredentialException(
+        CredentialErrorCode.UPSTREAM_FAILED,
+        "Request to $url failed: ${e.message ?: e::class.simpleName}"
+    )
 }

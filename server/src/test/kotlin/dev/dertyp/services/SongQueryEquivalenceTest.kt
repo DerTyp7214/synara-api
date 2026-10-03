@@ -118,7 +118,11 @@ class SongQueryEquivalenceTest : KoinTest {
     private fun loadFacts(userId: UUID, color: Int): Map<UUID, Facts> = transaction(database) {
         val (l, a, b) = ColorUtils.rgbToLab((color shr 16) and 0xFF, (color shr 8) and 0xFF, color and 0xFF)
         SongTable
-            .leftJoin(UserSongTable, onColumn = { SongTable.id }, otherColumn = { UserSongTable.songId }, additionalConstraint = { UserSongTable.userId eq userId })
+            .leftJoin(
+                UserSongTable,
+                onColumn = { SongTable.id },
+                otherColumn = { UserSongTable.songId },
+                additionalConstraint = { UserSongTable.userId eq userId })
             .leftJoin(ImageMetadataTable, onColumn = { SongTable.cover }, otherColumn = { ImageMetadataTable.imageId })
             .leftJoin(AlbumTable, onColumn = { SongTable.albumId }, otherColumn = { AlbumTable.id })
             .selectAll()
@@ -161,27 +165,42 @@ class SongQueryEquivalenceTest : KoinTest {
         (SongTable.id inSubQuery CollectionSongTable
             .select(CollectionSongTable.songId)
             .where { CollectionSongTable.collectionId eq collectionId }
-        ) or (SongTable.albumId inSubQuery CollectionAlbumTable
+                ) or (SongTable.albumId inSubQuery CollectionAlbumTable
             .select(CollectionAlbumTable.albumId)
             .where { CollectionAlbumTable.collectionId eq collectionId }
-        ) or (SongTable.id inSubQuery SongArtistTable
-            .innerJoin(CollectionArtistTable, onColumn = { SongArtistTable.artistId }, otherColumn = { CollectionArtistTable.artistId })
+                ) or (SongTable.id inSubQuery SongArtistTable
+            .innerJoin(
+                CollectionArtistTable,
+                onColumn = { SongArtistTable.artistId },
+                otherColumn = { CollectionArtistTable.artistId })
             .select(SongArtistTable.songId)
             .where { CollectionArtistTable.collectionId eq collectionId }
-        ) or (SongTable.albumId inSubQuery AlbumArtistTable
-            .innerJoin(CollectionArtistTable, onColumn = { AlbumArtistTable.artistId }, otherColumn = { CollectionArtistTable.artistId })
+                ) or (SongTable.albumId inSubQuery AlbumArtistTable
+            .innerJoin(
+                CollectionArtistTable,
+                onColumn = { AlbumArtistTable.artistId },
+                otherColumn = { CollectionArtistTable.artistId })
             .select(AlbumArtistTable.albumId)
             .where { CollectionArtistTable.collectionId eq collectionId }
-        ) or (SongTable.id inSubQuery UserPlaylistSongTable
-            .innerJoin(CollectionPlaylistTable, onColumn = { UserPlaylistSongTable.playlistId }, otherColumn = { CollectionPlaylistTable.playlistId })
+                ) or (SongTable.id inSubQuery UserPlaylistSongTable
+            .innerJoin(
+                CollectionPlaylistTable,
+                onColumn = { UserPlaylistSongTable.playlistId },
+                otherColumn = { CollectionPlaylistTable.playlistId })
             .select(UserPlaylistSongTable.songId)
             .where { CollectionPlaylistTable.collectionId eq collectionId }
-        )
+                )
     }
 
-    private val searchQueries = listOf("Song 1", "Artist", "Artist 2 -Song", "Recording", "Alias", "MB Release", "Edge", "nothing")
+    private val searchQueries =
+        listOf("Song 1", "Artist", "Artist 2 -Song", "Recording", "Alias", "MB Release", "Edge", "nothing")
 
-    private fun buildVectorCases(cases: Cases, service: SongService, legacy: LegacySongQuery, fixture: SongQueryFixture) {
+    private fun buildVectorCases(
+        cases: Cases,
+        service: SongService,
+        legacy: LegacySongQuery,
+        fixture: SongQueryFixture
+    ) {
         val userId = fixture.userId
         val sizes = listOf(7, 100)
         for (explicit in listOf(true, false)) {
@@ -195,11 +214,24 @@ class SongQueryEquivalenceTest : KoinTest {
                     }, { page, size -> service.rankedSearch(page, size, query, explicit, userId, liked) })
                 }
             }
-            cases.paged("vector rankedSearchInCollection explicit=$explicit", sizes, { page, size ->
-                legacy.rankedSongSearchOld(page, size, "Song", explicit, userId, searchVector = true) {
-                    inCollection(fixture.collectionId)
-                }()
-            }, { page, size -> service.rankedSearchInCollection(fixture.collectionId, page, size, "Song", explicit, userId) })
+            cases.paged(
+                "vector rankedSearchInCollection explicit=$explicit",
+                sizes,
+                { page, size ->
+                    legacy.rankedSongSearchOld(page, size, "Song", explicit, userId, searchVector = true) {
+                        inCollection(fixture.collectionId)
+                    }()
+                },
+                { page, size ->
+                    service.rankedSearchInCollection(
+                        fixture.collectionId,
+                        page,
+                        size,
+                        "Song",
+                        explicit,
+                        userId
+                    )
+                })
         }
     }
 
@@ -224,7 +256,12 @@ class SongQueryEquivalenceTest : KoinTest {
         return this
     }
 
-    private fun buildCases(service: SongService, legacy: LegacySongQuery, fixture: SongQueryFixture, facts: Map<UUID, Facts>): Cases {
+    private fun buildCases(
+        service: SongService,
+        legacy: LegacySongQuery,
+        fixture: SongQueryFixture,
+        facts: Map<UUID, Facts>
+    ): Cases {
         val cases = Cases()
         val userId = fixture.userId
         val sizes = listOf(7, 100)
@@ -258,28 +295,34 @@ class SongQueryEquivalenceTest : KoinTest {
                         orderBy(SongTable.inserted, SortOrder.DESC)
                         orderBy(SongTable.id, SortOrder.ASC)
                     })
-                }, { page, size -> if (invert) service.allSongs(page, size, explicit, userId, excludeTags = tags)
-                else service.allSongs(page, size, explicit, userId, tags)
+                }, { page, size ->
+                    if (invert) service.allSongs(page, size, explicit, userId, excludeTags = tags)
+                    else service.allSongs(page, size, explicit, userId, tags)
                 })
             }
 
-            cases.paged("likedSongs explicit=$explicit", sizes, { page, size ->
+            cases.paged(
+                "likedSongs explicit=$explicit", sizes, { page, size ->
                 legacy.querySongs<UserSong>(page, size, explicit, userId) {
                     where { UserSongTable.isFavourite eq true }
                     orderBy(UserSongTable.updatedAt to SortOrder.DESC)
                 }
             }, { page, size -> service.likedSongs(page, size, explicit, userId) },
-                listOf(SortKey(true) { facts.getValue(it).updatedAt }))
+                listOf(SortKey(true) { facts.getValue(it).updatedAt })
+            )
 
-            cases.paged("superLikedSongs explicit=$explicit", sizes, { page, size ->
+            cases.paged(
+                "superLikedSongs explicit=$explicit", sizes, { page, size ->
                 legacy.querySongs<UserSong>(page, size, explicit, userId) {
                     where { UserSongTable.superLikedAt.isNotNull() }
                     orderBy(UserSongTable.superLikedAt to SortOrder.DESC)
                 }
             }, { page, size -> service.superLikedSongs(page, size, explicit, userId) },
-                listOf(SortKey(true) { facts.getValue(it).superLikedAt }))
+                listOf(SortKey(true) { facts.getValue(it).superLikedAt })
+            )
 
-            cases.paged("byColor explicit=$explicit", sizes, { page, size ->
+            cases.paged(
+                "byColor explicit=$explicit", sizes, { page, size ->
                 val match = ColorMatch(COLOR, 40)
                 legacy.querySongs<UserSong>(
                     page, size, explicit, userId,
@@ -287,29 +330,37 @@ class SongQueryEquivalenceTest : KoinTest {
                     query = { match.filterAndOrder(this) }
                 )
             }, { page, size -> service.byColor(page, size, COLOR, 40, explicit, userId) },
-                listOf(SortKey(false) { facts.getValue(it).colorDistance }))
+                listOf(SortKey(false) { facts.getValue(it).colorDistance })
+            )
 
             for (artistIndex in listOf(0, 2, 5)) {
                 val artistId = fixture.artistIds[artistIndex]
-                cases.paged("likedByArtist $artistIndex explicit=$explicit", sizes, { page, size ->
-                    legacy.querySongs<UserSong>(page, size, explicit, userId) {
-                        val songIds = SongArtistTable
-                            .select(SongArtistTable.songId)
-                            .where { SongArtistTable.artistId eq artistId }
-                            .map { it[SongArtistTable.songId].value }
+                cases.paged(
+                    "likedByArtist $artistIndex explicit=$explicit",
+                    sizes,
+                    { page, size ->
+                        legacy.querySongs<UserSong>(page, size, explicit, userId) {
+                            val songIds = SongArtistTable
+                                .select(SongArtistTable.songId)
+                                .where { SongArtistTable.artistId eq artistId }
+                                .map { it[SongArtistTable.songId].value }
 
-                        val albumIds = AlbumArtistTable
-                            .select(AlbumArtistTable.albumId)
-                            .where { AlbumArtistTable.artistId eq artistId }
-                            .map { it[AlbumArtistTable.albumId].value }
+                            val albumIds = AlbumArtistTable
+                                .select(AlbumArtistTable.albumId)
+                                .where { AlbumArtistTable.artistId eq artistId }
+                                .map { it[AlbumArtistTable.albumId].value }
 
-                        where { SongTable.id inList songIds }
-                        orWhere { SongTable.albumId inList albumIds }
-                        andWhere { UserSongTable.isFavourite eq true }
-                        orderBy(SongTable.releaseDate, SortOrder.DESC)
-                        orderBy(SongTable.trackNumber, SortOrder.ASC)
-                    }
-                }, { page, size -> service.likedByArtist(page, size, artistId, explicit, userId) }, byReleaseThenAlbum, byRelease)
+                            where { SongTable.id inList songIds }
+                            orWhere { SongTable.albumId inList albumIds }
+                            andWhere { UserSongTable.isFavourite eq true }
+                            orderBy(SongTable.releaseDate, SortOrder.DESC)
+                            orderBy(SongTable.trackNumber, SortOrder.ASC)
+                        }
+                    },
+                    { page, size -> service.likedByArtist(page, size, artistId, explicit, userId) },
+                    byReleaseThenAlbum,
+                    byRelease
+                )
             }
 
             for (query in searchQueries) {
@@ -323,11 +374,24 @@ class SongQueryEquivalenceTest : KoinTest {
                 }
             }
 
-            cases.paged("rankedSearchInCollection explicit=$explicit", sizes, { page, size ->
-                legacy.rankedSongSearchOld(page, size, "Song", explicit, userId) {
-                    inCollection(fixture.collectionId)
-                }()
-            }, { page, size -> service.rankedSearchInCollection(fixture.collectionId, page, size, "Song", explicit, userId) })
+            cases.paged(
+                "rankedSearchInCollection explicit=$explicit",
+                sizes,
+                { page, size ->
+                    legacy.rankedSongSearchOld(page, size, "Song", explicit, userId) {
+                        inCollection(fixture.collectionId)
+                    }()
+                },
+                { page, size ->
+                    service.rankedSearchInCollection(
+                        fixture.collectionId,
+                        page,
+                        size,
+                        "Song",
+                        explicit,
+                        userId
+                    )
+                })
 
             cases.paged("searchByLyrics explicit=$explicit", sizes, { page, size ->
                 legacy.querySongsRanked<UserSong>(page, size, explicit, userId, columnSet = {
@@ -382,7 +446,8 @@ class SongQueryEquivalenceTest : KoinTest {
 
         for (albumIndex in listOf(0, 1, 2, 3, 4)) {
             val albumId = fixture.albumIds[albumIndex]
-            cases.paged("byAlbum $albumIndex", smallResultSizes, { page, size ->
+            cases.paged(
+                "byAlbum $albumIndex", smallResultSizes, { page, size ->
                 legacy.querySongs<UserSong>(page, size, true, userId) {
                     where { SongTable.albumId eq albumId }
                     orderBy(SongTable.discNumber, SortOrder.ASC)
@@ -395,7 +460,8 @@ class SongQueryEquivalenceTest : KoinTest {
             ), listOf(
                 SortKey(false) { facts.getValue(it).discNumber },
                 SortKey(false) { facts.getValue(it).trackNumber },
-            ))
+            )
+            )
         }
 
         cases.paged("byPlaylist", sizes, { page, size ->
@@ -422,7 +488,14 @@ class SongQueryEquivalenceTest : KoinTest {
         val idLists = listOf(
             fixture.songIds,
             fixture.songIds.reversed(),
-            listOf(fixture.songIds[3], missing, fixture.songIds[3], fixture.songIds[0], fixture.songIds[1], fixture.songIds[3]),
+            listOf(
+                fixture.songIds[3],
+                missing,
+                fixture.songIds[3],
+                fixture.songIds[0],
+                fixture.songIds[1],
+                fixture.songIds[3]
+            ),
             fixture.songIds.filterIndexed { index, _ -> index % 4 == 1 } + missing,
             listOf(missing),
             emptyList(),
@@ -491,8 +564,19 @@ class SongQueryEquivalenceTest : KoinTest {
         }, { service.byOriginalIds(originalIds, userId) })
 
         val tracks = fixture.songIds.indices.filter { it % 9 == 0 }.map { i ->
-            IMetadataService.Track(id = "t$i", title = "none", isrc = "USABC${1000000 + i}", duration = 1.milliseconds, images = emptyList())
-        } + IMetadataService.Track(id = "t-title", title = "Song 7", duration = 180000.milliseconds, images = emptyList())
+            IMetadataService.Track(
+                id = "t$i",
+                title = "none",
+                isrc = "USABC${1000000 + i}",
+                duration = 1.milliseconds,
+                images = emptyList()
+            )
+        } + IMetadataService.Track(
+            id = "t-title",
+            title = "Song 7",
+            duration = 180000.milliseconds,
+            images = emptyList()
+        )
         cases.unordered("byOriginalTracks", {
             legacy.querySongs<UserSong>(0, Int.MAX_VALUE, true, userId) {
                 where {
@@ -542,7 +626,14 @@ class SongQueryEquivalenceTest : KoinTest {
         val correctTotal = canonical.size
         val canonicalIds = canonical.map { (it as BaseSong).id }
         if (family.order != null && canonicalIds != legacyIds) {
-            outcome.tieOrders += tieOrder(tag, family.label, legacyIds, canonicalIds, family.order) { ids(family.old(0, Int.MAX_VALUE)) }
+            outcome.tieOrders += tieOrder(tag, family.label, legacyIds, canonicalIds, family.order) {
+                ids(
+                    family.old(
+                        0,
+                        Int.MAX_VALUE
+                    )
+                )
+            }
         }
         val expectedAll = PaginatedResponse(canonical, 0, correctTotal, Int.MAX_VALUE, false)
         if (newAll != expectedAll) {
@@ -559,12 +650,23 @@ class SongQueryEquivalenceTest : KoinTest {
             for (page in 0..lastPage) {
                 val from = minOf(page * size, correctTotal)
                 val to = minOf(from + size, correctTotal)
-                val expected = PaginatedResponse(canonical.subList(from, to), page, correctTotal, size, (page + 1).toLong() * size < correctTotal)
+                val expected = PaginatedResponse(
+                    canonical.subList(from, to),
+                    page,
+                    correctTotal,
+                    size,
+                    (page + 1).toLong() * size < correctTotal
+                )
                 val newPage = family.new(page, size)
                 val legacyPage = family.old(page, size)
                 outcome.comparedPages++
                 if (newPage != expected) {
-                    outcome.mismatches += "$tag ${family.label} size=$size page=$page\n${describeDifference(expected, newPage)}"
+                    outcome.mismatches += "$tag ${family.label} size=$size page=$page\n${
+                        describeDifference(
+                            expected,
+                            newPage
+                        )
+                    }"
                 }
                 if (legacyPage == expected) {
                     outcome.identicalPages++
@@ -615,17 +717,27 @@ class SongQueryEquivalenceTest : KoinTest {
     private fun describeDifference(old: Any?, new: Any?): String {
         val oldItems = flatten(old)
         val newItems = flatten(new)
-        if (oldItems.size != newItems.size) return "  sizes expected=${oldItems.size} actual=${newItems.size}\n  expected=${summary(old)}\n  actual=${summary(new)}"
+        if (oldItems.size != newItems.size) return "  sizes expected=${oldItems.size} actual=${newItems.size}\n  expected=${
+            summary(
+                old
+            )
+        }\n  actual=${summary(new)}"
         val index = oldItems.indices.first { oldItems[it] != newItems[it] }
         val a = oldItems[index]
         val b = newItems[index]
         if (a is BaseSong && b is BaseSong) {
             val fields = listOf<Pair<String, (BaseSong) -> Any?>>(
-                "id" to { it.id }, "artists" to { it.artists.map { artist -> artist.id } }, "artistsFull" to { it.artists },
-                "album" to { it.album }, "albumArtists" to { it.album?.artists?.map { artist -> artist.id } },
-                "genres" to { it.genres }, "originalUrl" to { it.originalUrl }, "whole" to { it },
+                "id" to { it.id },
+                "artists" to { it.artists.map { artist -> artist.id } },
+                "artistsFull" to { it.artists },
+                "album" to { it.album },
+                "albumArtists" to { it.album?.artists?.map { artist -> artist.id } },
+                "genres" to { it.genres },
+                "originalUrl" to { it.originalUrl },
+                "whole" to { it },
             )
-            val differing = fields.filter { (_, get) -> get(a) != get(b) }.map { (name, get) -> "$name expected=${get(a)} actual=${get(b)}" }
+            val differing = fields.filter { (_, get) -> get(a) != get(b) }
+                .map { (name, get) -> "$name expected=${get(a)} actual=${get(b)}" }
             return "  item #$index\n  " + differing.joinToString("\n  ")
         }
         return "  item #$index expected=$a actual=$b"
@@ -643,7 +755,10 @@ class SongQueryEquivalenceTest : KoinTest {
         else -> listOf(value)
     }
 
-    private suspend fun buildAll(dialect: DbDialect, duplicates: Boolean): Triple<Cases, SongQueryFixture, LegacySongQuery> {
+    private suspend fun buildAll(
+        dialect: DbDialect,
+        duplicates: Boolean
+    ): Triple<Cases, SongQueryFixture, LegacySongQuery> {
         val fixture = SongQueryFixture.build(database, seed = 7, songCount = 60, duplicates = duplicates)
         val service = SongService()
         val legacy = LegacySongQuery(service)
@@ -652,7 +767,14 @@ class SongQueryEquivalenceTest : KoinTest {
         if (dialect == DbDialect.POSTGRES) {
             val worker = SearchIndexWorker()
             transaction(database) {
-                SchemaUtils.createIndex(Index(listOf(SongTable.searchVector), false, "song_search_vector_idx", indexType = "GIN"))
+                SchemaUtils.createIndex(
+                    Index(
+                        listOf(SongTable.searchVector),
+                        false,
+                        "song_search_vector_idx",
+                        indexType = "GIN"
+                    )
+                )
                 SearchIndexQueueTable.batchInsert(fixture.songIds) { songId ->
                     this[SearchIndexQueueTable.entityId] = songId
                     this[SearchIndexQueueTable.entityType] = SearchIndexEntityType.SONG
@@ -690,11 +812,23 @@ class SongQueryEquivalenceTest : KoinTest {
             val old = single.old() as List<*>
             val new = single.new() as List<*>
             val byId = compareBy<Any?, UUID>(uuidOrder) { (it as BaseSong).id }
-            if (old.sortedWith(byId) != new) outcome.mismatches += "$tag ${single.label}\n${describeDifference(old.sortedWith(byId), new)}"
+            if (old.sortedWith(byId) != new) outcome.mismatches += "$tag ${single.label}\n${
+                describeDifference(
+                    old.sortedWith(
+                        byId
+                    ), new
+                )
+            }"
             val oldIds = old.map { (it as BaseSong).id }
             val newIds = new.map { (it as BaseSong).id }
             if (oldIds != newIds && oldIds.size == newIds.size) {
-                outcome.tieOrders += tieOrder(tag, single.label, oldIds, newIds, emptyList()) { (single.old() as List<*>).map { (it as BaseSong).id } }
+                outcome.tieOrders += tieOrder(
+                    tag,
+                    single.label,
+                    oldIds,
+                    newIds,
+                    emptyList()
+                ) { (single.old() as List<*>).map { (it as BaseSong).id } }
             }
         }
         println("EQUIVALENCE $tag families=${cases.families.size} singles=${cases.singles.size} pages=${outcome.comparedPages} identicalPages=${outcome.identicalPages} quirkPages=${outcome.quirkPages} mismatches=${outcome.mismatches.size} elapsed=${(System.nanoTime() - started) / 1_000_000}ms")
@@ -714,21 +848,33 @@ class SongQueryEquivalenceTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `the slim song id query matches the legacy join query`(dialect: DbDialect) = runEquivalence(dialect, duplicates = true)
+    fun `the slim song id query matches the legacy join query`(dialect: DbDialect) =
+        runEquivalence(dialect, duplicates = true)
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `the slim song id query matches the legacy join query without duplicate songs`(dialect: DbDialect) = runEquivalence(dialect, duplicates = false)
+    fun `the slim song id query matches the legacy join query without duplicate songs`(dialect: DbDialect) =
+        runEquivalence(dialect, duplicates = false)
 
     private fun fixtureCoverage(songs: List<Song>, fixture: SongQueryFixture): Map<String, Int> {
         val byIdString = compareBy<Artist> { it.id.toString() }
         return mapOf(
             "artistsOutOfIdOrder" to songs.count { it.artists != it.artists.sortedWith(byIdString) },
-            "albumArtistsOutOfIdOrder" to songs.count { song -> song.album?.artists?.let { it != it.sortedWith(byIdString) } == true },
+            "albumArtistsOutOfIdOrder" to songs.count { song ->
+                song.album?.artists?.let {
+                    it != it.sortedWith(
+                        byIdString
+                    )
+                } == true
+            },
             "artistJoinPhrases" to songs.count { song -> song.artists.any { it.joinPhrase != null } },
             "albumArtistJoinPhrases" to songs.count { song -> song.album?.artists?.any { it.joinPhrase != null } == true },
             "genresOutOfIdOrder" to songs.count { song -> song.genres != song.genres.sortedBy { it.id.toString() } },
-            "originalUrlFromMatchingProvider" to songs.count { it.originalUrl.startsWith("https://example.com/") && it.id in songsWithProviders(songs) },
+            "originalUrlFromMatchingProvider" to songs.count {
+                it.originalUrl.startsWith("https://example.com/") && it.id in songsWithProviders(
+                    songs
+                )
+            },
             "originalUrlFromFirstProvider" to songs.count { it.originalUrl.contains(".example/track/") },
         ) + duplicatePairCoverage(fixture)
     }

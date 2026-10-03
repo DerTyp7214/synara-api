@@ -69,12 +69,15 @@ internal fun Route.subsonicPlaylistRoutes() {
     subAuth("createPlaylist", authenticator, {
         summary = "Create a playlist or replace its songs"
         request {
-            queryParameter<String>("name") { description = "Name for a new playlist (required unless playlistId is given)." }
+            queryParameter<String>("name") {
+                description = "Name for a new playlist (required unless playlistId is given)."
+            }
             queryParameter<String>("playlistId") { description = "Existing playlist id to overwrite (`pl-<uuid>`)." }
             queryParameter<String>("songId") { description = "Song id to include; repeatable." }
         }
     }) { params, user ->
-        val songIds = params.getAll("songId")?.mapNotNull { (SubsonicId.parse(it) as? SubsonicId.Song)?.uuid } ?: emptyList()
+        val songIds =
+            params.getAll("songId")?.mapNotNull { (SubsonicId.parse(it) as? SubsonicId.Song)?.uuid } ?: emptyList()
         val existingId = SubsonicId.parse(params["playlistId"]) as? SubsonicId.Playlist
 
         val playlistId = if (existingId != null) {
@@ -103,7 +106,9 @@ internal fun Route.subsonicPlaylistRoutes() {
             queryParameter<String>("name") { description = "New name." }
             queryParameter<String>("comment") { description = "New description." }
             queryParameter<String>("songIdToAdd") { description = "Song id to append; repeatable." }
-            queryParameter<Int>("songIndexToRemove") { description = "Zero-based index of a song to remove; repeatable." }
+            queryParameter<Int>("songIndexToRemove") {
+                description = "Zero-based index of a song to remove; repeatable."
+            }
         }
     }) { params, user ->
         val id = SubsonicId.parse(params["playlistId"]) as? SubsonicId.Playlist
@@ -113,7 +118,8 @@ internal fun Route.subsonicPlaylistRoutes() {
 
         queryService.updatePlaylistMeta(playlist.id, params["name"], params["comment"])
 
-        val toAdd = params.getAll("songIdToAdd")?.mapNotNull { (SubsonicId.parse(it) as? SubsonicId.Song)?.uuid } ?: emptyList()
+        val toAdd =
+            params.getAll("songIdToAdd")?.mapNotNull { (SubsonicId.parse(it) as? SubsonicId.Song)?.uuid } ?: emptyList()
         if (toAdd.isNotEmpty()) playlistService.addSongsToPlaylist(playlist.id, toAdd)
 
         val indexesToRemove = params.getAll("songIndexToRemove")?.mapNotNull { it.toIntOrNull() } ?: emptyList()

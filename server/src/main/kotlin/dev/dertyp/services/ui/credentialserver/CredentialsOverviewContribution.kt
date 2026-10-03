@@ -50,12 +50,21 @@ class CredentialsOverviewContribution(private val ui: CredentialServerUiContext)
                 subtitle = scope.t("credentials.about.${entry.name}"),
                 icon = UiIcon(UiIconName.KEY),
                 trailing = scope.localStateText(ui.localState(entry.name)),
-                action = UiAction.OpenPage(CredentialServerPages.LOCAL, mapOf(CredentialServerPages.PARAM_NAME to entry.name)),
+                action = UiAction.OpenPage(
+                    CredentialServerPages.LOCAL,
+                    mapOf(CredentialServerPages.PARAM_NAME to entry.name)
+                ),
             )
         }
         return UiComponent.Section(
             title = scope.t("credentials.local"),
-            children = listOf(UiComponent.Text(scope.t("credentials.localHint"), UiTextStyle.CAPTION, UiTone.MUTED)) + rows,
+            children = listOf(
+                UiComponent.Text(
+                    scope.t("credentials.localHint"),
+                    UiTextStyle.CAPTION,
+                    UiTone.MUTED
+                )
+            ) + rows,
         )
     }
 }

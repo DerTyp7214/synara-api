@@ -46,7 +46,7 @@ class ManyToManyIntegrityTest {
             ArtistTable.insert { it[id] = artist1Id; it[name] = "Artist 1" }
             ArtistTable.insert { it[id] = artist2Id; it[name] = "Artist 2" }
             SongTable.insert { it[id] = songId; it[title] = "Song"; it[this.albumId] = albumId }
-            
+
             SongArtistTable.insert { it[this.songId] = songId; it[this.artistId] = artist1Id }
             SongArtistTable.insert { it[this.songId] = songId; it[this.artistId] = artist2Id }
         }
@@ -71,7 +71,7 @@ class ManyToManyIntegrityTest {
             SongTable.insert { it[id] = song1Id; it[title] = "Song 1"; it[this.albumId] = albumId }
             SongTable.insert { it[id] = song2Id; it[title] = "Song 2"; it[this.albumId] = albumId }
             PlaylistTable.insert { it[id] = playlistId; it[name] = "Playlist" }
-            
+
             PlaylistSongTable.insert { it[this.playlistId] = playlistId; it[this.songId] = song1Id; it[position] = 1 }
             PlaylistSongTable.insert { it[this.playlistId] = playlistId; it[this.songId] = song2Id; it[position] = 2 }
         }

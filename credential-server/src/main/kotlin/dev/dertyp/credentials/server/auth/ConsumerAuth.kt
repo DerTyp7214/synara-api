@@ -40,8 +40,10 @@ fun AuthenticationConfig.consumerJwt(issuer: TokenIssuer, store: CredentialStore
             if (!client.enabled || client.tokenVersion != version) return@validate null
             ConsumerPrincipal(
                 clientUuid = clientUuid,
-                grants = credential.payload.getClaim(TokenIssuer.CLAIM_GRANTS).asList(String::class.java).orEmpty().toSet(),
-                writeBack = credential.payload.getClaim(TokenIssuer.CLAIM_WRITE_BACK).asList(String::class.java).orEmpty().toSet(),
+                grants = credential.payload.getClaim(TokenIssuer.CLAIM_GRANTS).asList(String::class.java).orEmpty()
+                    .toSet(),
+                writeBack = credential.payload.getClaim(TokenIssuer.CLAIM_WRITE_BACK).asList(String::class.java)
+                    .orEmpty().toSet(),
             )
         }
         challenge { _, _ ->

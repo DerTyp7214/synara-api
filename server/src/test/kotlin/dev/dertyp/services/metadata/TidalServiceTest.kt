@@ -56,7 +56,14 @@ class TidalServiceTest : KoinTest {
                 single { redisConfig }
                 single { HttpClientQueueService() }
                 single<CredentialProvider> {
-                    FakeCredentialProvider(ResolvedCredential.AccessToken(CredentialNames.TIDAL_API, "test-token", "Bearer", null))
+                    FakeCredentialProvider(
+                        ResolvedCredential.AccessToken(
+                            CredentialNames.TIDAL_API,
+                            "test-token",
+                            "Bearer",
+                            null
+                        )
+                    )
                 }
             })
         }
@@ -70,20 +77,24 @@ class TidalServiceTest : KoinTest {
                         headers = headersOf(HttpHeaders.ContentType, ContentType.Application.Json.toString())
                     )
                 }
+
                 "/v2/searchResults/test" -> {
                     val include = request.url.parameters["include"]
                     val included = mutableListOf<String>()
                     if (include?.contains("artists") == true) {
-                        included.add("""
+                        included.add(
+                            """
                             {
                               "id": "artist-1",
                               "type": "artists",
                               "attributes": { "name": "Artist 1", "popularity": 0.9 }
                             }
-                        """.trimIndent())
+                        """.trimIndent()
+                        )
                     }
                     if (include?.contains("albums") == true) {
-                         included.add("""
+                        included.add(
+                            """
                             {
                               "id": "album-1",
                               "type": "albums",
@@ -99,10 +110,12 @@ class TidalServiceTest : KoinTest {
                                 "type": "ALBUM"
                               }
                             }
-                        """.trimIndent())
+                        """.trimIndent()
+                        )
                     }
                     if (include?.contains("tracks") == true) {
-                         included.add("""
+                        included.add(
+                            """
                             {
                               "id": "track-1",
                               "type": "tracks",
@@ -115,7 +128,8 @@ class TidalServiceTest : KoinTest {
                                 "title": "Track 1"
                               }
                             }
-                        """.trimIndent())
+                        """.trimIndent()
+                        )
                     }
 
                     respond(
@@ -134,6 +148,7 @@ class TidalServiceTest : KoinTest {
                         headers = headersOf(HttpHeaders.ContentType, "application/vnd.api+json")
                     )
                 }
+
                 "/v2/albums" -> {
                     respond(
                         content = """
@@ -182,6 +197,7 @@ class TidalServiceTest : KoinTest {
                         headers = headersOf(HttpHeaders.ContentType, "application/vnd.api+json")
                     )
                 }
+
                 "/v2/tracks/track-1" -> {
                     respond(
                         content = """
@@ -213,8 +229,9 @@ class TidalServiceTest : KoinTest {
                         headers = headersOf(HttpHeaders.ContentType, "application/vnd.api+json")
                     )
                 }
+
                 "/v2/artists" -> {
-                     respond(
+                    respond(
                         content = """
                             {
                               "data": [
@@ -228,6 +245,7 @@ class TidalServiceTest : KoinTest {
                         headers = headersOf(HttpHeaders.ContentType, "application/vnd.api+json")
                     )
                 }
+
                 "/v2/artists/artist-1/relationships/tracks" -> {
                     respond(
                         content = """
@@ -245,6 +263,7 @@ class TidalServiceTest : KoinTest {
                         headers = headersOf(HttpHeaders.ContentType, "application/vnd.api+json")
                     )
                 }
+
                 "/v2/albums/album-1/relationships/coverArt" -> {
                     respond(
                         content = """
@@ -267,6 +286,7 @@ class TidalServiceTest : KoinTest {
                         headers = headersOf(HttpHeaders.ContentType, "application/vnd.api+json")
                     )
                 }
+
                 else -> respondError(HttpStatusCode.NotFound)
             }
         }
@@ -330,6 +350,7 @@ class TidalServiceTest : KoinTest {
                     status = HttpStatusCode.OK,
                     headers = headersOf(HttpHeaders.ContentType, ContentType.Application.Json.toString())
                 )
+
                 "/v2/tracks" -> {
                     assertEquals(isrc, request.url.parameters["filter[isrc]"])
                     respond(
@@ -364,11 +385,13 @@ class TidalServiceTest : KoinTest {
                         headers = headersOf(HttpHeaders.ContentType, "application/vnd.api+json")
                     )
                 }
+
                 "/v2/albums/album-1/relationships/coverArt" -> respond(
                     content = """{"data": [], "included": [], "links": {"self": "url"}}""",
                     status = HttpStatusCode.OK,
                     headers = headersOf(HttpHeaders.ContentType, "application/vnd.api+json")
                 )
+
                 else -> respondError(HttpStatusCode.NotFound)
             }
         }

@@ -81,6 +81,7 @@ abstract class BaseImportService(val context: PluginContext) : IPluginImportServ
                         it.urls.removeAll(existingUrls)
                         it.urls.isNotEmpty()
                     }
+
                     is FavouriteImportQueueEntry -> !existingTypes.contains(it.favoriteType)
                 }
             }
@@ -123,14 +124,31 @@ abstract class BaseImportService(val context: PluginContext) : IPluginImportServ
                     var lastRes = ProcessExecutionResult.EMPTY
                     for ((importer, groupUrls) in groups) {
                         if (importer != null) {
-                            lastRes = importer.importContent(groupUrls, entry.maxRetries, aliveCheck, entry.byUser, entry.metadata, logUnit)
+                            lastRes = importer.importContent(
+                                groupUrls,
+                                entry.maxRetries,
+                                aliveCheck,
+                                entry.byUser,
+                                entry.metadata,
+                                logUnit
+                            )
                         }
                     }
                     lastRes
                 }
+
                 is FavouriteImportQueueEntry -> {
-                    val importer = entry.importer?.let { db -> getAllImporters().find { it.id == db.id } } ?: getImporterForEntry(entry)
-                    importer?.importFavoriteCollection(entry.favoriteType, entry.maxRetries, aliveCheck, entry.byUser, logUnit)
+                    val importer =
+                        entry.importer?.let { db -> getAllImporters().find { it.id == db.id } } ?: getImporterForEntry(
+                            entry
+                        )
+                    importer?.importFavoriteCollection(
+                        entry.favoriteType,
+                        entry.maxRetries,
+                        aliveCheck,
+                        entry.byUser,
+                        logUnit
+                    )
                         ?: ProcessExecutionResult(-1, "No importer for favorites", "")
                 }
             }

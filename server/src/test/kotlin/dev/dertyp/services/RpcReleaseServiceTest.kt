@@ -25,7 +25,7 @@ class RpcReleaseServiceTest {
     fun `followArtist should delegate to releaseService`() = runBlocking {
         val mbId = UUID.randomUUID()
         coEvery { releaseService.followArtist(user.id, mbId, HttpClientPriority.HIGH) } returns true
-        
+
         val result = rpcService.followArtist(mbId)
         assertTrue(result)
     }
@@ -66,7 +66,14 @@ class RpcReleaseServiceTest {
         assertThrows<UnauthorizedException> { runBlocking { anonymousService.unfollowArtist(UUID.randomUUID()) } }
         assertThrows<UnauthorizedException> { runBlocking { anonymousService.getFollowedArtists() } }
         assertThrows<UnauthorizedException> { runBlocking { anonymousService.getRecentReleases(0, 10) } }
-        assertThrows<UnauthorizedException> { runBlocking { anonymousService.setReleaseHidden(UUID.randomUUID(), true) } }
+        assertThrows<UnauthorizedException> {
+            runBlocking {
+                anonymousService.setReleaseHidden(
+                    UUID.randomUUID(),
+                    true
+                )
+            }
+        }
         assertThrows<UnauthorizedException> { runBlocking { anonymousService.confirmRelease(UUID.randomUUID()) } }
     }
 
@@ -99,7 +106,13 @@ class RpcReleaseServiceTest {
     @Test
     fun `getArtistRecentReleases forwards includeHidden`() = runBlocking {
         val artistId = UUID.randomUUID()
-        val response = PaginatedResponse<RecentRelease>(data = emptyList(), page = 0, total = 0, pageSize = 150, hasNextPage = false)
+        val response = PaginatedResponse<RecentRelease>(
+            data = emptyList(),
+            page = 0,
+            total = 0,
+            pageSize = 150,
+            hasNextPage = false
+        )
         coEvery { releaseService.getArtistRecentReleases(artistId, 0, 150, true) } returns response
 
         val result = rpcService.getArtistRecentReleases(artistId, 0, 150, true)

@@ -24,7 +24,7 @@ class WorkerRegistrationTest : KoinTest {
     fun `should register all annotated workers`() {
         val application = mockk<Application>(relaxed = true)
         val scheduleService = ScheduleService()
-        
+
         startKoin {
             modules(module {
                 single { application }
@@ -37,7 +37,10 @@ class WorkerRegistrationTest : KoinTest {
                     .scan().use { scanResult ->
                         scanResult.getClassesWithAnnotation(WorkerTask::class.java.name).forEach { classInfo ->
                             val clazz = classInfo.loadClass()
-                            single { clazz.getDeclaredConstructor().newInstance() } binds arrayOf(clazz.kotlin, Worker::class)
+                            single { clazz.getDeclaredConstructor().newInstance() } binds arrayOf(
+                                clazz.kotlin,
+                                Worker::class
+                            )
                         }
                     }
             })
@@ -48,6 +51,9 @@ class WorkerRegistrationTest : KoinTest {
         val managedTasks = scheduleService.getManagedTasks()
         assertTrue(managedTasks.isNotEmpty(), "Should have registered some managed tasks")
 
-        assertTrue(managedTasks.any { it.value.name == "MusicBrainz Worker" }, "MusicBrainz Worker should be registered")
+        assertTrue(
+            managedTasks.any { it.value.name == "MusicBrainz Worker" },
+            "MusicBrainz Worker should be registered"
+        )
     }
 }

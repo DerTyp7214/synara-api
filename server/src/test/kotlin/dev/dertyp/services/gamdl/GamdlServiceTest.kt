@@ -97,7 +97,8 @@ class GamdlServiceTest : KoinTest {
         unmockkAll()
     }
 
-    private fun track(id: String) = IMetadataService.Track(id = id, title = "Track $id", duration = 3.minutes, images = emptyList())
+    private fun track(id: String) =
+        IMetadataService.Track(id = id, title = "Track $id", duration = 3.minutes, images = emptyList())
 
     private fun user(): User = mockk<User>(relaxed = true).also { every { it.id } returns UUID.randomUUID() }
 
@@ -235,8 +236,14 @@ class GamdlServiceTest : KoinTest {
     private fun remoteFiles() = ResolvedCredential.Files(
         name = CredentialNames.IMPORTER_GAMDL,
         files = listOf(
-            CredentialFile(CredentialFileRoles.GAMDL_COOKIES, Base64.getEncoder().encodeToString("remote-cookies".toByteArray())),
-            CredentialFile(CredentialFileRoles.GAMDL_WVD, Base64.getEncoder().encodeToString("remote-wvd".toByteArray())),
+            CredentialFile(
+                CredentialFileRoles.GAMDL_COOKIES,
+                Base64.getEncoder().encodeToString("remote-cookies".toByteArray())
+            ),
+            CredentialFile(
+                CredentialFileRoles.GAMDL_WVD,
+                Base64.getEncoder().encodeToString("remote-wvd".toByteArray())
+            ),
         ),
         fingerprint = "fp-1",
     )
@@ -254,8 +261,8 @@ class GamdlServiceTest : KoinTest {
         coVerify {
             importService.addToQueue(match {
                 it is UrlImportQueueEntry &&
-                    it.urls.contains("https://music.apple.com/us/song/111") &&
-                    it.urls.contains("https://music.apple.com/us/song/222")
+                        it.urls.contains("https://music.apple.com/us/song/111") &&
+                        it.urls.contains("https://music.apple.com/us/song/222")
             })
         }
     }
@@ -273,8 +280,8 @@ class GamdlServiceTest : KoinTest {
         coVerify {
             importService.addToQueue(match {
                 it is UrlImportQueueEntry &&
-                    it.urls.contains("https://music.apple.com/us/song/1") &&
-                    it.urls.contains("https://music.apple.com/us/song/2")
+                        it.urls.contains("https://music.apple.com/us/song/1") &&
+                        it.urls.contains("https://music.apple.com/us/song/2")
             })
         }
     }
@@ -312,7 +319,13 @@ class GamdlServiceTest : KoinTest {
         assertTrue(flac.exists())
         coVerify {
             @Suppress("DeferredResultUnused")
-            indexer.queue(match { paths -> paths.any { it.toString().endsWith("456.flac") } }, any(), any(), any(), any())
+            indexer.queue(
+                match { paths -> paths.any { it.toString().endsWith("456.flac") } },
+                any(),
+                any(),
+                any(),
+                any()
+            )
         }
     }
 }

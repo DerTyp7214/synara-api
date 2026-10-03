@@ -137,7 +137,12 @@ class HttpRetryTest {
         )
         val script = script(
             { response(HttpStatusCode.TooManyRequests, headersOf(HttpHeaders.RetryAfter, "-5")) },
-            { response(HttpStatusCode.TooManyRequests, headersOf(HttpHeaders.RetryAfter, "Wed, 21 Oct 2015 07:28:00 GMT")) },
+            {
+                response(
+                    HttpStatusCode.TooManyRequests,
+                    headersOf(HttpHeaders.RetryAfter, "Wed, 21 Oct 2015 07:28:00 GMT")
+                )
+            },
             { response(HttpStatusCode.OK) },
         )
 
@@ -215,7 +220,8 @@ class HttpRetryTest {
     fun `exceptions propagate when the policy throws on errors`() = runTest {
         val script = script({ throw IOException("reset") })
 
-        val error = runCatching { fetch(RetryPolicy(maxAttempts = 3, onError = RetryOnError.THROW), script) }.exceptionOrNull()
+        val error =
+            runCatching { fetch(RetryPolicy(maxAttempts = 3, onError = RetryOnError.THROW), script) }.exceptionOrNull()
         assertTrue(error is IOException)
         assertEquals(1, script.calls)
     }
@@ -247,7 +253,11 @@ class HttpRetryTest {
     fun `the service policies keep their status behaviour`() {
         val mb = MusicBrainzService.RETRY_POLICY
         assertEquals(3, mb.maxAttempts)
-        assertTrue(mb.retryOn(HttpStatusCode.ServiceUnavailable) && mb.retryOn(HttpStatusCode.TooManyRequests) && mb.retryOn(HttpStatusCode.BadGateway))
+        assertTrue(
+            mb.retryOn(HttpStatusCode.ServiceUnavailable) && mb.retryOn(HttpStatusCode.TooManyRequests) && mb.retryOn(
+                HttpStatusCode.BadGateway
+            )
+        )
         assertTrue(!mb.retryOn(HttpStatusCode.NotFound) && !mb.retryOn(HttpStatusCode.BadRequest))
         assertEquals(1.seconds, mb.delayFor(response(HttpStatusCode.ServiceUnavailable), 0))
         assertEquals(1.seconds, mb.delayFor(response(HttpStatusCode.TooManyRequests), 2))
@@ -265,13 +275,23 @@ class HttpRetryTest {
         val tidal = TidalService.RETRY_POLICY
         assertEquals(6, tidal.maxAttempts)
         assertTrue(!tidal.isSuccess(HttpStatusCode.NoContent) && tidal.isSuccess(HttpStatusCode.OK))
-        assertTrue(tidal.retryOn(HttpStatusCode.TooManyRequests) && tidal.retryOn(HttpStatusCode.RequestTimeout) && tidal.retryOn(HttpStatusCode.BadGateway))
+        assertTrue(
+            tidal.retryOn(HttpStatusCode.TooManyRequests) && tidal.retryOn(HttpStatusCode.RequestTimeout) && tidal.retryOn(
+                HttpStatusCode.BadGateway
+            )
+        )
         assertTrue(!tidal.retryOn(HttpStatusCode.NotFound))
         assertEquals(5.seconds, tidal.delayFor(response(HttpStatusCode.ServiceUnavailable), 0))
         assertEquals(40.seconds, tidal.delayFor(response(HttpStatusCode.ServiceUnavailable), 3))
         assertEquals(2.minutes, tidal.delayFor(response(HttpStatusCode.ServiceUnavailable), 9))
-        assertEquals(3.seconds, tidal.delayFor(response(HttpStatusCode.TooManyRequests, headersOf(HttpHeaders.RetryAfter, " 3 ")), 4))
-        assertEquals(2.minutes, tidal.delayFor(response(HttpStatusCode.TooManyRequests, headersOf(HttpHeaders.RetryAfter, "600")), 0))
+        assertEquals(
+            3.seconds,
+            tidal.delayFor(response(HttpStatusCode.TooManyRequests, headersOf(HttpHeaders.RetryAfter, " 3 ")), 4)
+        )
+        assertEquals(
+            2.minutes,
+            tidal.delayFor(response(HttpStatusCode.TooManyRequests, headersOf(HttpHeaders.RetryAfter, "600")), 0)
+        )
         assertEquals(RetryOnError.THROW, tidal.onError)
 
         val apple = AppleMusicService.CATALOG_RETRY_POLICY

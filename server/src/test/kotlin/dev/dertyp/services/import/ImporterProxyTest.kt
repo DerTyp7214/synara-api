@@ -38,8 +38,26 @@ class ImporterProxyTest {
         every { tiddlDownloader.canHandle("tdn:track/2") } returns false
         every { tdnDownloader.canHandle("tdn:track/2") } returns true
 
-        coEvery { tiddlDownloader.importContent(any(), any(), any(), any(), any(), any()) } returns ProcessExecutionResult(0, "tiddl", "")
-        coEvery { tdnDownloader.importContent(any(), any(), any(), any(), any(), any()) } returns ProcessExecutionResult(0, "tdn", "")
+        coEvery {
+            tiddlDownloader.importContent(
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any()
+            )
+        } returns ProcessExecutionResult(0, "tiddl", "")
+        coEvery {
+            tdnDownloader.importContent(
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any()
+            )
+        } returns ProcessExecutionResult(0, "tdn", "")
 
         proxy.defaultService = ImportBackend.Tiddl
 

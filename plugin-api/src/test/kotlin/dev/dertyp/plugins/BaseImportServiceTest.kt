@@ -15,7 +15,7 @@ import kotlin.test.assertEquals
 
 class BaseImportServiceTest {
     private val context = mockk<PluginContext>(relaxed = true)
-    
+
     private val service = object : BaseImportService(context) {
         val importers = mutableListOf<IImporter>()
         override suspend fun getImporterForEntry(entry: ImportQueueEntry): IImporter? = importers.firstOrNull()

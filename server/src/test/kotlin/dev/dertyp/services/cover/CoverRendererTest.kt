@@ -27,13 +27,14 @@ class CoverRendererTest {
 
     private val palette = listOf(0xFF2244AA.toInt(), 0xFFAA2244.toInt(), 0xFF44AA22.toInt())
 
-    private fun spec(style: CoverStyle, tiles: Int, seed: Long = 42, title: String? = "Late Night Drive") = CoverRenderSpec(
-        seed = seed,
-        style = style,
-        tiles = List(tiles) { tile(Color((25 * it + 30).coerceAtMost(255), 80, (200 - 20 * it).coerceAtLeast(0))) },
-        palette = palette,
-        title = title,
-    )
+    private fun spec(style: CoverStyle, tiles: Int, seed: Long = 42, title: String? = "Late Night Drive") =
+        CoverRenderSpec(
+            seed = seed,
+            style = style,
+            tiles = List(tiles) { tile(Color((25 * it + 30).coerceAtMost(255), 80, (200 - 20 * it).coerceAtLeast(0))) },
+            palette = palette,
+            title = title,
+        )
 
     @ParameterizedTest
     @EnumSource(CoverStyle::class)
@@ -77,13 +78,24 @@ class CoverRendererTest {
     fun `grid never draws the same tile twice`() {
         val colors = listOf(Color.RED, Color.GREEN, Color.BLUE, Color.YELLOW, Color.MAGENTA)
         val rendered = CoverRenderer.render(
-            CoverRenderSpec(seed = 3, style = CoverStyle.MOSAIC, tiles = colors.map { tile(it) }, palette = palette, title = null),
+            CoverRenderSpec(
+                seed = 3,
+                style = CoverStyle.MOSAIC,
+                tiles = colors.map { tile(it) },
+                palette = palette,
+                title = null
+            ),
         )
         assertEquals(CoverStyle.GRID, rendered.style)
         val margin = 1024 / 24
         val gap = 1024 / 64
         val cell = (1024 - 2 * margin - gap) / 2
-        val centers = listOf(0, 1).flatMap { row -> listOf(0, 1).map { col -> (margin + col * (cell + gap) + cell / 2) to (margin + row * (cell + gap) + cell / 2) } }
+        val centers = listOf(0, 1).flatMap { row ->
+            listOf(
+                0,
+                1
+            ).map { col -> (margin + col * (cell + gap) + cell / 2) to (margin + row * (cell + gap) + cell / 2) }
+        }
         val seen = centers.map { (x, y) -> nearest(Color(rendered.image.getRGB(x, y)), colors) }
         assertEquals(seen.size, seen.toSet().size, "cells $seen")
     }
@@ -107,7 +119,13 @@ class CoverRendererTest {
     @Test
     fun `title rendering does not fail headless and changes the bottom of the image`() {
         System.setProperty("java.awt.headless", "true")
-        val withTitle = CoverRenderer.render(spec(CoverStyle.GRADIENT, 0, title = "A Very Long Playlist Name That Needs Wrapping Onto Two Lines")).image
+        val withTitle = CoverRenderer.render(
+            spec(
+                CoverStyle.GRADIENT,
+                0,
+                title = "A Very Long Playlist Name That Needs Wrapping Onto Two Lines"
+            )
+        ).image
         val withoutTitle = CoverRenderer.render(spec(CoverStyle.GRADIENT, 0, title = null)).image
         var differing = 0
         for (x in 0 until 1024 step 8) for (y in 900 until 1024 step 8) {
@@ -125,7 +143,12 @@ class CoverRendererTest {
             g.fillRect(0, 0, 512, 64)
             g.dispose()
         }
-        val rendered = CoverRenderer.render(spec(CoverStyle.GRADIENT, 0, title = null).copy(background = background, overlay = overlay)).image
+        val rendered = CoverRenderer.render(
+            spec(CoverStyle.GRADIENT, 0, title = null).copy(
+                background = background,
+                overlay = overlay
+            )
+        ).image
         val center = Color(rendered.getRGB(512, 600))
         assertEquals(true, center.red > 150 && center.blue > 150, "background should show through: $center")
     }

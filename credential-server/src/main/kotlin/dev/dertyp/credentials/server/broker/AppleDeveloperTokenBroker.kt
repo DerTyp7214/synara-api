@@ -14,7 +14,11 @@ import java.util.Date
 import java.util.concurrent.ConcurrentHashMap
 
 class AppleDeveloperTokenBroker : CredentialBroker<AppleSecret> {
-    private data class CachedToken(val secret: AppleSecret, val token: ResolvedCredential.DeveloperToken, val validUntil: Long)
+    private data class CachedToken(
+        val secret: AppleSecret,
+        val token: ResolvedCredential.DeveloperToken,
+        val validUntil: Long
+    )
 
     private val cache = ConcurrentHashMap<String, CachedToken>()
 

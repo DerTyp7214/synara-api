@@ -88,7 +88,7 @@ class ArtistServiceTest : KoinTest {
                 ReleaseArtistTable
             )
         }
-        
+
         service = ArtistService()
     }
 
@@ -192,7 +192,7 @@ class ArtistServiceTest : KoinTest {
         setup(dialect)
         val testGroupId = UUID.randomUUID()
         val testMemberId = UUID.randomUUID()
-        
+
         transaction(database) {
             ArtistTable.insert {
                 it[id] = testGroupId
@@ -220,7 +220,7 @@ class ArtistServiceTest : KoinTest {
         setup(dialect)
         val testGroupId = UUID.randomUUID()
         val testMemberId = UUID.randomUUID()
-        
+
         transaction(database) {
             ArtistTable.insert {
                 it[id] = testGroupId
@@ -249,7 +249,7 @@ class ArtistServiceTest : KoinTest {
         val testGroupId = UUID.randomUUID()
         val testMemberId = UUID.randomUUID()
         val testArtistId = UUID.randomUUID()
-        
+
         transaction(database) {
             ArtistTable.insert {
                 it[id] = testGroupId
@@ -283,7 +283,7 @@ class ArtistServiceTest : KoinTest {
         val testGroupId = UUID.randomUUID()
         val testMember1Id = UUID.randomUUID()
         val testMember2Id = UUID.randomUUID()
-        
+
         transaction(database) {
             ArtistTable.insert {
                 it[id] = testGroupId
@@ -404,7 +404,11 @@ class ArtistServiceTest : KoinTest {
         }
 
         val result = service.rankedSearch(0, 10, "Offspring")
-        assertEquals("Offspring", result.data[0].name, "Exact match 'Offspring' should be preferred over 'The Offspring'")
+        assertEquals(
+            "Offspring",
+            result.data[0].name,
+            "Exact match 'Offspring' should be preferred over 'The Offspring'"
+        )
     }
 
     @ParameterizedTest
@@ -417,7 +421,7 @@ class ArtistServiceTest : KoinTest {
                 it[id] = artist1Id
                 it[name] = "RIN"
             }
-            
+
             val artist2Id = UUID.randomUUID()
             ArtistTable.insert {
                 it[id] = artist2Id
@@ -439,10 +443,10 @@ class ArtistServiceTest : KoinTest {
         setup(dialect)
         val name = "New Artist"
         val created = service.createArtist(name)
-        
+
         assertNotNull(created)
         assertEquals(name, created.name)
-        
+
         val fromDb = service.byId(created.id)
         assertNotNull(fromDb)
         assertEquals(name, fromDb?.name)
@@ -463,7 +467,7 @@ class ArtistServiceTest : KoinTest {
             }
         }
         val created = service.createArtist(name, isGroup = true, about = about, musicBrainzId = mbId)
-        
+
         assertNotNull(created)
         assertEquals(name, created.name)
         assertEquals(true, created.isGroup)
@@ -515,7 +519,7 @@ class ArtistServiceTest : KoinTest {
         setup(dialect)
         val groupId = UUID.randomUUID()
         val memberIds = List(2) { UUID.randomUUID() }
-        
+
         transaction(database) {
             ArtistTable.insert {
                 it[id] = groupId
@@ -531,10 +535,10 @@ class ArtistServiceTest : KoinTest {
         }
 
         service.setGroup(groupId, memberIds)
-        
+
         val group = service.byId(groupId)
         assertEquals(2, group?.artists?.size)
-        
+
         val membersResult = service.byGroup(0, 10, groupId)
         assertEquals(2, membersResult.data.size)
         assertEquals(memberIds.toSet(), membersResult.data.map { it.id }.toSet())
@@ -542,7 +546,9 @@ class ArtistServiceTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `byGroup should not return duplicate members when an artist is followed by multiple users or has multiple genres`(dialect: DbDialect) = runBlocking {
+    fun `byGroup should not return duplicate members when an artist is followed by multiple users or has multiple genres`(
+        dialect: DbDialect
+    ) = runBlocking {
         setup(dialect)
         val testGroupId = UUID.randomUUID()
         val testMemberId = UUID.randomUUID()
@@ -617,7 +623,7 @@ class ArtistServiceTest : KoinTest {
         setup(dialect)
         val artistId = UUID.randomUUID()
         val mbId = UUID.randomUUID()
-        
+
         transaction(database) {
             ArtistTable.insert {
                 it[id] = artistId
@@ -659,7 +665,7 @@ class ArtistServiceTest : KoinTest {
         setup(dialect)
         val artistId1 = UUID.randomUUID()
         val artistId2 = UUID.randomUUID()
-        
+
         transaction(database) {
             ArtistTable.insert {
                 it[id] = artistId1
@@ -682,7 +688,8 @@ class ArtistServiceTest : KoinTest {
         assertEquals("Merged Artist", merged?.name)
 
         val aliases = transaction(database) {
-            ArtistAliasTable.selectAll().where { ArtistAliasTable.artistId eq merged!!.id }.map { it[ArtistAliasTable.name] }
+            ArtistAliasTable.selectAll().where { ArtistAliasTable.artistId eq merged!!.id }
+                .map { it[ArtistAliasTable.name] }
         }
         assertTrue(aliases.contains("Artist A"))
         assertTrue(aliases.contains("Artist B"))
@@ -705,7 +712,9 @@ class ArtistServiceTest : KoinTest {
             val userId = UserTable.insert { it[username] = "u"; it[passwordHash] = "p" }[UserTable.id]
             CollectionTable.insert { it[id] = collectionId; it[name] = "C"; it[creator] = userId }
 
-            CollectionArtistTable.insert { it[CollectionArtistTable.collectionId] = collectionId; it[artistId] = artistId1 }
+            CollectionArtistTable.insert {
+                it[CollectionArtistTable.collectionId] = collectionId; it[artistId] = artistId1
+            }
         }
 
         val merged = service.mergeArtists(MergeArtists(name = "Merged", artistIds = listOf(artistId1, artistId2)))
@@ -721,32 +730,37 @@ class ArtistServiceTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `mergeArtists collapses a collection holding several merged artists into one row`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        val artistId1 = UUID.randomUUID()
-        val artistId2 = UUID.randomUUID()
-        val collectionId = UUID.randomUUID()
+    fun `mergeArtists collapses a collection holding several merged artists into one row`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val artistId1 = UUID.randomUUID()
+            val artistId2 = UUID.randomUUID()
+            val collectionId = UUID.randomUUID()
 
-        transaction(database) {
-            ArtistTable.insert { it[id] = artistId1; it[name] = "Artist A" }
-            ArtistTable.insert { it[id] = artistId2; it[name] = "Artist B" }
-            val userId = UserTable.insert { it[username] = "u"; it[passwordHash] = "p" }[UserTable.id]
-            CollectionTable.insert { it[id] = collectionId; it[name] = "C"; it[creator] = userId }
+            transaction(database) {
+                ArtistTable.insert { it[id] = artistId1; it[name] = "Artist A" }
+                ArtistTable.insert { it[id] = artistId2; it[name] = "Artist B" }
+                val userId = UserTable.insert { it[username] = "u"; it[passwordHash] = "p" }[UserTable.id]
+                CollectionTable.insert { it[id] = collectionId; it[name] = "C"; it[creator] = userId }
 
-            CollectionArtistTable.insert { it[CollectionArtistTable.collectionId] = collectionId; it[artistId] = artistId1 }
-            CollectionArtistTable.insert { it[CollectionArtistTable.collectionId] = collectionId; it[artistId] = artistId2 }
+                CollectionArtistTable.insert {
+                    it[CollectionArtistTable.collectionId] = collectionId; it[artistId] = artistId1
+                }
+                CollectionArtistTable.insert {
+                    it[CollectionArtistTable.collectionId] = collectionId; it[artistId] = artistId2
+                }
+            }
+
+            val merged = service.mergeArtists(MergeArtists(name = "Merged", artistIds = listOf(artistId1, artistId2)))
+            assertNotNull(merged)
+
+            val artistsInCollection = transaction(database) {
+                CollectionArtistTable.selectAll().where { CollectionArtistTable.collectionId eq collectionId }
+                    .map { it[CollectionArtistTable.artistId].value }
+            }
+
+            assertEquals(listOf(merged!!.id), artistsInCollection)
         }
-
-        val merged = service.mergeArtists(MergeArtists(name = "Merged", artistIds = listOf(artistId1, artistId2)))
-        assertNotNull(merged)
-
-        val artistsInCollection = transaction(database) {
-            CollectionArtistTable.selectAll().where { CollectionArtistTable.collectionId eq collectionId }
-                .map { it[CollectionArtistTable.artistId].value }
-        }
-
-        assertEquals(listOf(merged!!.id), artistsInCollection)
-    }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
@@ -769,7 +783,8 @@ class ArtistServiceTest : KoinTest {
         assertNotNull(merged)
 
         val follows = transaction(database) {
-            FollowedArtistTable.selectAll().map { it[FollowedArtistTable.userId].value to it[FollowedArtistTable.artistId].value }
+            FollowedArtistTable.selectAll()
+                .map { it[FollowedArtistTable.userId].value to it[FollowedArtistTable.artistId].value }
         }
 
         assertEquals(listOf(userId to merged!!.id), follows)
@@ -799,7 +814,8 @@ class ArtistServiceTest : KoinTest {
         assertNotNull(merged)
 
         val memberships = transaction(database) {
-            ArtistMemberTable.selectAll().map { it[ArtistMemberTable.artistId].value to it[ArtistMemberTable.groupId].value }.toSet()
+            ArtistMemberTable.selectAll()
+                .map { it[ArtistMemberTable.artistId].value to it[ArtistMemberTable.groupId].value }.toSet()
         }
         assertEquals(setOf(merged!!.id to groupId, standaloneMemberId to merged.id), memberships)
     }
@@ -879,79 +895,80 @@ class ArtistServiceTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `mergeArtists repoints hidden releases and source rules to the merged artist`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        val artistId1 = UUID.randomUUID()
-        val artistId2 = UUID.randomUUID()
-        val hiddenReleaseId = UUID.randomUUID()
+    fun `mergeArtists repoints hidden releases and source rules to the merged artist`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val artistId1 = UUID.randomUUID()
+            val artistId2 = UUID.randomUUID()
+            val hiddenReleaseId = UUID.randomUUID()
 
-        transaction(database) {
-            ArtistTable.insert { it[id] = artistId1; it[name] = "Artist A" }
-            ArtistTable.insert { it[id] = artistId2; it[name] = "Artist B" }
-            MBReleaseGroupTable.insert { it[id] = hiddenReleaseId; it[title] = "Hidden RG" }
-            HiddenReleaseTable.insert {
-                it[HiddenReleaseTable.releaseGroupId] = hiddenReleaseId
-                it[HiddenReleaseTable.artistId] = artistId1
-            }
-            ArtistSourceRuleTable.insert {
-                it[artistId] = artistId1
-                it[provider] = "apple"
-                it[kind] = ArtistSourceRuleKind.LABEL
-                it[value] = "Shared Label"
-                it[rule] = ArtistSourceRulePolarity.TRUST
-                it[createdAt] = 1_000L
-            }
-            ArtistSourceRuleTable.insert {
-                it[artistId] = artistId2
-                it[provider] = "apple"
-                it[kind] = ArtistSourceRuleKind.LABEL
-                it[value] = "Shared Label"
-                it[rule] = ArtistSourceRulePolarity.BLOCK
-                it[createdAt] = 2_000L
-            }
-            ArtistSourceRuleTable.insert {
-                it[artistId] = artistId2
-                it[provider] = "apple"
-                it[kind] = ArtistSourceRuleKind.COPYRIGHT_HOLDER
-                it[value] = "Other Holder"
-                it[rule] = ArtistSourceRulePolarity.BLOCK
-                it[createdAt] = 3_000L
-            }
-        }
-
-        val merged = service.mergeArtists(MergeArtists(name = "Merged", artistIds = listOf(artistId1, artistId2)))
-        assertNotNull(merged)
-
-        val mergedId = merged!!.id
-
-        val hidden = transaction(database) { HiddenReleaseTable.selectAll().toList() }
-        assertEquals(1, hidden.size)
-        assertEquals(mergedId, hidden.single()[HiddenReleaseTable.artistId].value)
-        assertEquals(hiddenReleaseId, hidden.single()[HiddenReleaseTable.releaseGroupId]?.value)
-        assertNull(hidden.single()[HiddenReleaseTable.providerReleaseId])
-
-        val mergedRules = transaction(database) {
-            ArtistSourceRuleTable
-                .selectAll()
-                .where { ArtistSourceRuleTable.artistId eq mergedId }
-                .map {
-                    Triple(
-                        it[ArtistSourceRuleTable.kind],
-                        it[ArtistSourceRuleTable.value],
-                        it[ArtistSourceRuleTable.rule]
-                    )
+            transaction(database) {
+                ArtistTable.insert { it[id] = artistId1; it[name] = "Artist A" }
+                ArtistTable.insert { it[id] = artistId2; it[name] = "Artist B" }
+                MBReleaseGroupTable.insert { it[id] = hiddenReleaseId; it[title] = "Hidden RG" }
+                HiddenReleaseTable.insert {
+                    it[HiddenReleaseTable.releaseGroupId] = hiddenReleaseId
+                    it[HiddenReleaseTable.artistId] = artistId1
                 }
-        }
+                ArtistSourceRuleTable.insert {
+                    it[artistId] = artistId1
+                    it[provider] = "apple"
+                    it[kind] = ArtistSourceRuleKind.LABEL
+                    it[value] = "Shared Label"
+                    it[rule] = ArtistSourceRulePolarity.TRUST
+                    it[createdAt] = 1_000L
+                }
+                ArtistSourceRuleTable.insert {
+                    it[artistId] = artistId2
+                    it[provider] = "apple"
+                    it[kind] = ArtistSourceRuleKind.LABEL
+                    it[value] = "Shared Label"
+                    it[rule] = ArtistSourceRulePolarity.BLOCK
+                    it[createdAt] = 2_000L
+                }
+                ArtistSourceRuleTable.insert {
+                    it[artistId] = artistId2
+                    it[provider] = "apple"
+                    it[kind] = ArtistSourceRuleKind.COPYRIGHT_HOLDER
+                    it[value] = "Other Holder"
+                    it[rule] = ArtistSourceRulePolarity.BLOCK
+                    it[createdAt] = 3_000L
+                }
+            }
 
-        assertEquals(
-            setOf(
-                Triple(ArtistSourceRuleKind.LABEL, "Shared Label", ArtistSourceRulePolarity.TRUST),
-                Triple(ArtistSourceRuleKind.COPYRIGHT_HOLDER, "Other Holder", ArtistSourceRulePolarity.BLOCK)
-            ),
-            mergedRules.toSet()
-        )
-        assertEquals(2, mergedRules.size)
-    }
+            val merged = service.mergeArtists(MergeArtists(name = "Merged", artistIds = listOf(artistId1, artistId2)))
+            assertNotNull(merged)
+
+            val mergedId = merged!!.id
+
+            val hidden = transaction(database) { HiddenReleaseTable.selectAll().toList() }
+            assertEquals(1, hidden.size)
+            assertEquals(mergedId, hidden.single()[HiddenReleaseTable.artistId].value)
+            assertEquals(hiddenReleaseId, hidden.single()[HiddenReleaseTable.releaseGroupId]?.value)
+            assertNull(hidden.single()[HiddenReleaseTable.providerReleaseId])
+
+            val mergedRules = transaction(database) {
+                ArtistSourceRuleTable
+                    .selectAll()
+                    .where { ArtistSourceRuleTable.artistId eq mergedId }
+                    .map {
+                        Triple(
+                            it[ArtistSourceRuleTable.kind],
+                            it[ArtistSourceRuleTable.value],
+                            it[ArtistSourceRuleTable.rule]
+                        )
+                    }
+            }
+
+            assertEquals(
+                setOf(
+                    Triple(ArtistSourceRuleKind.LABEL, "Shared Label", ArtistSourceRulePolarity.TRUST),
+                    Triple(ArtistSourceRuleKind.COPYRIGHT_HOLDER, "Other Holder", ArtistSourceRulePolarity.BLOCK)
+                ),
+                mergedRules.toSet()
+            )
+            assertEquals(2, mergedRules.size)
+        }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
@@ -974,7 +991,7 @@ class ArtistServiceTest : KoinTest {
             }
         }
         service.setMusicBrainzId(id, mbId)
-        
+
         val updated = service.byId(id)
         assertEquals(mbId, updated?.musicbrainzId)
     }
@@ -985,7 +1002,7 @@ class ArtistServiceTest : KoinTest {
         setup(dialect)
         val artistId = UUID.randomUUID()
         val userId = UUID.randomUUID()
-        
+
         transaction(database) {
             UserTable.insert {
                 it[id] = userId
@@ -1014,7 +1031,7 @@ class ArtistServiceTest : KoinTest {
         val artistId = UUID.randomUUID()
         val userId = UUID.randomUUID()
         val otherUserId = UUID.randomUUID()
-        
+
         transaction(database) {
             UserTable.insert {
                 it[id] = userId
@@ -1047,7 +1064,7 @@ class ArtistServiceTest : KoinTest {
         setup(dialect)
         val artistId = UUID.randomUUID()
         val songId = UUID.randomUUID()
-        
+
         transaction(database) {
             ArtistTable.insert {
                 it[id] = artistId
@@ -1079,10 +1096,11 @@ class ArtistServiceTest : KoinTest {
 
         val result = service.splitArtist(splitArtist)
         assertEquals(2, result.size)
-        
+
         val newArtistIds = result.map { it.id }
         transaction(database) {
-            val linkedArtists = SongArtistTable.selectAll().where { SongArtistTable.songId eq songId }.map { it[SongArtistTable.artistId].value }
+            val linkedArtists = SongArtistTable.selectAll().where { SongArtistTable.songId eq songId }
+                .map { it[SongArtistTable.artistId].value }
             assertEquals(2, linkedArtists.size)
             assertTrue(linkedArtists.containsAll(newArtistIds))
 
@@ -1104,11 +1122,11 @@ class ArtistServiceTest : KoinTest {
 
         val names = listOf("Existing", "New Artist")
         val result = service.getOrBulkCreate(names)
-        
+
         assertEquals(2, result.size)
         assertTrue(result["Existing"]!!.contains(existingId))
         assertTrue(result.containsKey("New Artist"))
-        
+
         val newArtistId = result["New Artist"]!!.first()
         assertNotNull(service.byId(newArtistId))
     }
@@ -1143,7 +1161,7 @@ class ArtistServiceTest : KoinTest {
 
         val deletedCount = service.deleteUnreferencedArtists()
         assertEquals(1, deletedCount)
-        
+
         val artists = service.allArtists(0, 10).data
         assertEquals(1, artists.size)
         assertEquals("Referenced", artists[0].name)
@@ -1155,7 +1173,7 @@ class ArtistServiceTest : KoinTest {
         setup(dialect)
         val testGroupId = UUID.randomUUID()
         val testMemberId = UUID.randomUUID()
-        
+
         transaction(database) {
             ArtistTable.insert {
                 it[id] = testGroupId
@@ -1187,7 +1205,7 @@ class ArtistServiceTest : KoinTest {
 
         val deletedCount = service.deleteUnreferencedArtists()
         assertEquals(0, deletedCount)
-        
+
         val artists = service.allArtists(0, 10).data
         assertEquals(2, artists.size)
         assertTrue(artists.any { it.name == "The Group" })
@@ -1356,47 +1374,48 @@ class ArtistServiceTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `setMusicBrainzId should not clear metadata but refresh when mbId is set for the first time`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        val artistId = UUID.randomUUID()
-        val mbId = UUID.randomUUID()
-        val imageId = UUID.randomUUID()
+    fun `setMusicBrainzId should not clear metadata but refresh when mbId is set for the first time`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val artistId = UUID.randomUUID()
+            val mbId = UUID.randomUUID()
+            val imageId = UUID.randomUUID()
 
-        transaction(database) {
-            ImageTable.insert {
-                it[id] = imageId
-                it[path] = "some/path"
-                it[imageHash] = "hash"
-                it[origin] = "origin"
+            transaction(database) {
+                ImageTable.insert {
+                    it[id] = imageId
+                    it[path] = "some/path"
+                    it[imageHash] = "hash"
+                    it[origin] = "origin"
+                }
+                ArtistTable.insert {
+                    it[id] = artistId
+                    it[name] = "Artist"
+                    it[about] = "Existing Biography"
+                    it[image] = imageId
+                    it[lastImageCheck] = 12345L
+                    it[lastMetadataCheck] = 67890L
+                }
+                MBArtistTable.insert {
+                    it[id] = mbId
+                    it[name] = "Artist"
+                    it[sortName] = "Artist"
+                }
             }
-            ArtistTable.insert {
-                it[id] = artistId
-                it[name] = "Artist"
-                it[about] = "Existing Biography"
-                it[image] = imageId
-                it[lastImageCheck] = 12345L
-                it[lastMetadataCheck] = 67890L
+
+            service.setMusicBrainzId(artistId, mbId)
+
+            val updatedArtist = transaction(database) {
+                ArtistTable.selectAll().where { ArtistTable.id eq artistId }.single()
             }
-            MBArtistTable.insert {
-                it[id] = mbId
-                it[name] = "Artist"
-                it[sortName] = "Artist"
-            }
+
+            assertEquals("Existing Biography", updatedArtist[ArtistTable.about])
+            assertEquals(imageId, updatedArtist[ArtistTable.image]?.value)
+            assertEquals(12345L, updatedArtist[ArtistTable.lastImageCheck])
+            assertEquals(67890L, updatedArtist[ArtistTable.lastMetadataCheck])
+
+            coVerify { metadataFetchingService.refreshArtistMetadata(artistId) }
         }
-
-        service.setMusicBrainzId(artistId, mbId)
-
-        val updatedArtist = transaction(database) {
-            ArtistTable.selectAll().where { ArtistTable.id eq artistId }.single()
-        }
-
-        assertEquals("Existing Biography", updatedArtist[ArtistTable.about])
-        assertEquals(imageId, updatedArtist[ArtistTable.image]?.value)
-        assertEquals(12345L, updatedArtist[ArtistTable.lastImageCheck])
-        assertEquals(67890L, updatedArtist[ArtistTable.lastMetadataCheck])
-
-        coVerify { metadataFetchingService.refreshArtistMetadata(artistId) }
-    }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
@@ -1516,13 +1535,27 @@ class ArtistServiceTest : KoinTest {
             AlbumTable.insert { it[id] = albumId; it[name] = "Album" }
             SongTable.insert { it[id] = featuredSong; it[title] = "Featured"; it[this.albumId] = albumId }
             SongTable.insert { it[id] = duetSong; it[title] = "Duet"; it[this.albumId] = albumId }
-            SongArtistTable.insert { it[songId] = featuredSong; it[artistId] = other; it[position] = 0; it[joinPhrase] = " feat. " }
-            SongArtistTable.insert { it[songId] = featuredSong; it[artistId] = artistA; it[position] = 1; it[joinPhrase] = "" }
-            SongArtistTable.insert { it[songId] = duetSong; it[artistId] = artistA; it[position] = 0; it[joinPhrase] = " & " }
-            SongArtistTable.insert { it[songId] = duetSong; it[artistId] = artistB; it[position] = 1; it[joinPhrase] = " with " }
-            SongArtistTable.insert { it[songId] = duetSong; it[artistId] = other; it[position] = 2; it[joinPhrase] = "" }
-            AlbumArtistTable.insert { it[this.albumId] = albumId; it[artistId] = artistB; it[position] = 0; it[joinPhrase] = " x " }
-            AlbumArtistTable.insert { it[this.albumId] = albumId; it[artistId] = other; it[position] = 1; it[joinPhrase] = "" }
+            SongArtistTable.insert {
+                it[songId] = featuredSong; it[artistId] = other; it[position] = 0; it[joinPhrase] = " feat. "
+            }
+            SongArtistTable.insert {
+                it[songId] = featuredSong; it[artistId] = artistA; it[position] = 1; it[joinPhrase] = ""
+            }
+            SongArtistTable.insert {
+                it[songId] = duetSong; it[artistId] = artistA; it[position] = 0; it[joinPhrase] = " & "
+            }
+            SongArtistTable.insert {
+                it[songId] = duetSong; it[artistId] = artistB; it[position] = 1; it[joinPhrase] = " with "
+            }
+            SongArtistTable.insert {
+                it[songId] = duetSong; it[artistId] = other; it[position] = 2; it[joinPhrase] = ""
+            }
+            AlbumArtistTable.insert {
+                it[this.albumId] = albumId; it[artistId] = artistB; it[position] = 0; it[joinPhrase] = " x "
+            }
+            AlbumArtistTable.insert {
+                it[this.albumId] = albumId; it[artistId] = other; it[position] = 1; it[joinPhrase] = ""
+            }
         }
 
         val merged = service.mergeArtists(MergeArtists(name = "Merged", artistIds = listOf(artistA, artistB)))!!
@@ -1549,45 +1582,57 @@ class ArtistServiceTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `splitArtist gives the split artists the credit position and hands the join phrase to the last one`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        val combined = UUID.randomUUID()
-        val other = UUID.randomUUID()
-        val albumId = UUID.randomUUID()
-        val songId = UUID.randomUUID()
+    fun `splitArtist gives the split artists the credit position and hands the join phrase to the last one`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val combined = UUID.randomUUID()
+            val other = UUID.randomUUID()
+            val albumId = UUID.randomUUID()
+            val songId = UUID.randomUUID()
 
-        transaction(database) {
-            ArtistTable.insert { it[id] = combined; it[name] = "Artist A & Artist B" }
-            ArtistTable.insert { it[id] = other; it[name] = "Other" }
-            AlbumTable.insert { it[id] = albumId; it[name] = "Album" }
-            SongTable.insert { it[id] = songId; it[title] = "Song"; it[this.albumId] = albumId }
-            SongArtistTable.insert { it[this.songId] = songId; it[artistId] = other; it[position] = 0; it[joinPhrase] = " feat. " }
-            SongArtistTable.insert { it[this.songId] = songId; it[artistId] = combined; it[position] = 1; it[joinPhrase] = " remix" }
-            AlbumArtistTable.insert { it[this.albumId] = albumId; it[artistId] = combined; it[position] = 0; it[joinPhrase] = " x " }
+            transaction(database) {
+                ArtistTable.insert { it[id] = combined; it[name] = "Artist A & Artist B" }
+                ArtistTable.insert { it[id] = other; it[name] = "Other" }
+                AlbumTable.insert { it[id] = albumId; it[name] = "Album" }
+                SongTable.insert { it[id] = songId; it[title] = "Song"; it[this.albumId] = albumId }
+                SongArtistTable.insert {
+                    it[this.songId] = songId; it[artistId] = other; it[position] = 0; it[joinPhrase] = " feat. "
+                }
+                SongArtistTable.insert {
+                    it[this.songId] = songId; it[artistId] = combined; it[position] = 1; it[joinPhrase] = " remix"
+                }
+                AlbumArtistTable.insert {
+                    it[this.albumId] = albumId; it[artistId] = combined; it[position] = 0; it[joinPhrase] = " x "
+                }
+            }
+
+            val result = service.splitArtist(
+                SplitArtist(
+                    artistId = combined,
+                    newArtists = mapOf("Artist A" to null, "Artist B" to null)
+                )
+            )
+            val splitIds = result.map { it.id }.sortedBy { it.toString() }
+            assertEquals(2, splitIds.size)
+
+            transaction(database) {
+                val songLinks = SongArtistTable.selectAll()
+                    .where { SongArtistTable.songId eq songId }
+                    .andWhere { SongArtistTable.artistId inList splitIds }
+                    .associate { it[SongArtistTable.artistId].value to (it[SongArtistTable.position] to it[SongArtistTable.joinPhrase]) }
+                assertEquals(mapOf(splitIds[0] to (1 to null), splitIds[1] to (1 to " remix")), songLinks)
+
+                val albumLinks = AlbumArtistTable.selectAll()
+                    .where { AlbumArtistTable.albumId eq albumId }
+                    .associate { it[AlbumArtistTable.artistId].value to (it[AlbumArtistTable.position] to it[AlbumArtistTable.joinPhrase]) }
+                assertEquals(mapOf(splitIds[0] to (0 to null), splitIds[1] to (0 to " x ")), albumLinks)
+
+                val otherLink = SongArtistTable.selectAll()
+                    .where { SongArtistTable.songId eq songId }
+                    .andWhere { SongArtistTable.artistId eq other }
+                    .single()
+                assertEquals(0, otherLink[SongArtistTable.position])
+                assertEquals(" feat. ", otherLink[SongArtistTable.joinPhrase])
+            }
         }
-
-        val result = service.splitArtist(SplitArtist(artistId = combined, newArtists = mapOf("Artist A" to null, "Artist B" to null)))
-        val splitIds = result.map { it.id }.sortedBy { it.toString() }
-        assertEquals(2, splitIds.size)
-
-        transaction(database) {
-            val songLinks = SongArtistTable.selectAll()
-                .where { SongArtistTable.songId eq songId }
-                .andWhere { SongArtistTable.artistId inList splitIds }
-                .associate { it[SongArtistTable.artistId].value to (it[SongArtistTable.position] to it[SongArtistTable.joinPhrase]) }
-            assertEquals(mapOf(splitIds[0] to (1 to null), splitIds[1] to (1 to " remix")), songLinks)
-
-            val albumLinks = AlbumArtistTable.selectAll()
-                .where { AlbumArtistTable.albumId eq albumId }
-                .associate { it[AlbumArtistTable.artistId].value to (it[AlbumArtistTable.position] to it[AlbumArtistTable.joinPhrase]) }
-            assertEquals(mapOf(splitIds[0] to (0 to null), splitIds[1] to (0 to " x ")), albumLinks)
-
-            val otherLink = SongArtistTable.selectAll()
-                .where { SongArtistTable.songId eq songId }
-                .andWhere { SongArtistTable.artistId eq other }
-                .single()
-            assertEquals(0, otherLink[SongArtistTable.position])
-            assertEquals(" feat. ", otherLink[SongArtistTable.joinPhrase])
-        }
-    }
 }

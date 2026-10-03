@@ -237,7 +237,9 @@ object PodcastFeedParser {
 
             when {
                 namespace == NS_ITUNES -> when (name) {
-                    "summary", "subtitle" -> if (summary == null) summary = textOf(reader).ifBlank { null } else skipElement(reader)
+                    "summary", "subtitle" -> if (summary == null) summary =
+                        textOf(reader).ifBlank { null } else skipElement(reader)
+
                     "duration" -> duration = textOf(reader).ifBlank { null }
                     "image" -> {
                         imageUrl = attribute(reader, "href")
@@ -338,7 +340,9 @@ object PodcastFeedParser {
 
                 namespace == NS_ITUNES -> when (name) {
                     "author" -> author = textOf(reader).ifBlank { null }
-                    "summary" -> if (description == null) description = textOf(reader).ifBlank { null } else skipElement(reader)
+                    "summary" -> if (description == null) description =
+                        textOf(reader).ifBlank { null } else skipElement(reader)
+
                     "image" -> {
                         itunesImage = attribute(reader, "href")
                         skipElement(reader)
@@ -350,12 +354,17 @@ object PodcastFeedParser {
                 }
 
                 name == "title" -> title = textOf(reader).ifBlank { null }
-                name == "subtitle" -> if (description == null) description = textOf(reader).ifBlank { null } else skipElement(reader)
-                name == "logo" || name == "icon" -> if (imageUrl == null) imageUrl = textOf(reader).ifBlank { null } else skipElement(reader)
+                name == "subtitle" -> if (description == null) description =
+                    textOf(reader).ifBlank { null } else skipElement(reader)
+
+                name == "logo" || name == "icon" -> if (imageUrl == null) imageUrl =
+                    textOf(reader).ifBlank { null } else skipElement(reader)
+
                 name == "author" -> {
                     val parsed = parseAtomAuthor(reader)
                     if (author == null) author = parsed
                 }
+
                 name == "link" -> {
                     val rel = attribute(reader, "rel")
                     val href = attribute(reader, "href")
@@ -421,7 +430,9 @@ object PodcastFeedParser {
 
             when {
                 namespace == NS_ITUNES -> when (name) {
-                    "summary", "subtitle" -> if (summary == null) summary = textOf(reader).ifBlank { null } else skipElement(reader)
+                    "summary", "subtitle" -> if (summary == null) summary =
+                        textOf(reader).ifBlank { null } else skipElement(reader)
+
                     "duration" -> duration = textOf(reader).ifBlank { null }
                     "image" -> {
                         imageUrl = attribute(reader, "href")
@@ -452,7 +463,10 @@ object PodcastFeedParser {
                 name == "id" -> id = textOf(reader).ifBlank { null }
                 name == "title" -> title = textOf(reader).ifBlank { null }
                 name == "content" -> content = textOf(reader).ifBlank { null }
-                name == "summary" -> if (summary == null) summary = textOf(reader).ifBlank { null } else skipElement(reader)
+                name == "summary" -> if (summary == null) summary = textOf(reader).ifBlank { null } else skipElement(
+                    reader
+                )
+
                 name == "published" -> published = textOf(reader).ifBlank { null }
                 name == "updated" -> updated = textOf(reader).ifBlank { null }
                 name == "link" -> {
@@ -539,7 +553,8 @@ object PodcastFeedParser {
 
         for (candidate in candidates) {
             for (format in DATE_FORMATS) {
-                val parsed = runCatching { ZonedDateTime.parse(candidate, format).toInstant().toEpochMilli() }.getOrNull()
+                val parsed =
+                    runCatching { ZonedDateTime.parse(candidate, format).toInstant().toEpochMilli() }.getOrNull()
                 if (parsed != null) return parsed
             }
             val iso = parseIso(candidate)

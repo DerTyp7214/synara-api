@@ -30,7 +30,8 @@ class ServerValidationTest {
             port: Int,
             ssl: Boolean,
             path: String
-        ) {}
+        ) {
+        }
 
         override fun getAuthToken(): String? = null
         override fun getRefreshToken(): String? = null
@@ -60,6 +61,7 @@ class ServerValidationTest {
             musicBrainzCache = ServerStats.MusicBrainzCacheStats(0, 0, 0, 0, 0, 0, 0, 0),
             version = ServerStats.Version("", "", "", "", "")
         )
+
         override suspend fun health(): Boolean = true
         override suspend fun getProxyInfo(): ProxyInfo? = null
     }
@@ -91,7 +93,7 @@ class ServerValidationTest {
         val manager = TestRpcManager(client)
 
         val result = manager.validateServer("localhost", 80, "/", useSsl = false)
-        
+
         assertTrue(result.validated)
         assertFalse(result.useSsl)
     }
@@ -123,7 +125,7 @@ class ServerValidationTest {
         val manager = TestRpcManager(client)
 
         val result = manager.validateServer("localhost", 80, "/", useSsl = true)
-        
+
         assertTrue(result.validated)
         assertTrue(result.useSsl)
     }
@@ -153,9 +155,9 @@ class ServerValidationTest {
         }
 
         val manager = TestRpcManager(client)
-        
+
         val result = manager.validateServer("localhost", 80, "/wrong-path", useSsl = true)
-        
+
         assertFalse(result.validated)
     }
 }

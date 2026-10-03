@@ -50,7 +50,7 @@ class RefreshTokenServiceTest {
         setup(dialect)
         val tokenHash = "some-hash"
         val sessionId = UUID.randomUUID()
-        
+
         transaction(database) {
             SessionTable.insert {
                 it[id] = sessionId
@@ -120,7 +120,7 @@ class RefreshTokenServiceTest {
         setup(dialect)
         val sessionId = UUID.randomUUID()
         val hash = "session-hash"
-        
+
         transaction(database) {
             SessionTable.insert {
                 it[id] = sessionId
@@ -131,7 +131,7 @@ class RefreshTokenServiceTest {
                 it[isActive] = true
             }
         }
-        
+
         service.createToken(userId, 1.hours, hash, sessionId)
         assertEquals(sessionId, service.getSessionId(hash))
     }

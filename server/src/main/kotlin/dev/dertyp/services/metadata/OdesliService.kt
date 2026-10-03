@@ -64,20 +64,22 @@ class OdesliService : Service() {
         if (platformUrl == null && isrc == null && upc == null) return emptyList()
 
         return try {
-            val response = ApiClient.queueInstance.enqueue("https://api.song.link/v1-alpha.1/links", priority = priority) {
-                when {
-                    platformUrl != null -> parameter("url", platformUrl)
-                    isrc != null -> {
-                        parameter("id", isrc)
-                        parameter("platform", "isrc")
+            val response =
+                ApiClient.queueInstance.enqueue("https://api.song.link/v1-alpha.1/links", priority = priority) {
+                    when {
+                        platformUrl != null -> parameter("url", platformUrl)
+                        isrc != null -> {
+                            parameter("id", isrc)
+                            parameter("platform", "isrc")
+                        }
+
+                        upc != null -> {
+                            parameter("id", upc)
+                            parameter("platform", "upc")
+                        }
                     }
-                    upc != null -> {
-                        parameter("id", upc)
-                        parameter("platform", "upc")
-                    }
+                    if (userCountry != null) parameter("userCountry", userCountry)
                 }
-                if (userCountry != null) parameter("userCountry", userCountry)
-            }
             if (response.status.value in 200..299) {
                 val body = response.body<OdesliResponse>()
                 body.linksByPlatform.values.map { it.url }

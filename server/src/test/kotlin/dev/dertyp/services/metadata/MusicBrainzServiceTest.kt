@@ -87,6 +87,7 @@ class MusicBrainzServiceTest {
                     }
                     """.trimIndent()
                 )
+
                 else -> respondError(HttpStatusCode.NotFound)
             }
         }
@@ -138,6 +139,7 @@ class MusicBrainzServiceTest {
                     }
                     """.trimIndent()
                 )
+
                 "/ws/2/release/$releaseId" -> respondJson(
                     """
                     {
@@ -147,6 +149,7 @@ class MusicBrainzServiceTest {
                     }
                     """.trimIndent()
                 )
+
                 else -> respondError(HttpStatusCode.NotFound)
             }
         }

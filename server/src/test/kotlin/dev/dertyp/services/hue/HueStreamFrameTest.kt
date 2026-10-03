@@ -32,7 +32,12 @@ class HueStreamFrameTest {
 
     @Test
     fun `the color space and out of range values are clamped`() {
-        val frame = HueStreamFrame.encode(configurationId, 0, listOf(HueChannelColor(0, -5, 70_000, 0)), HueStreamFrame.COLOR_SPACE_XY)
+        val frame = HueStreamFrame.encode(
+            configurationId,
+            0,
+            listOf(HueChannelColor(0, -5, 70_000, 0)),
+            HueStreamFrame.COLOR_SPACE_XY
+        )
 
         assertEquals(HueStreamFrame.COLOR_SPACE_XY.toByte(), frame[14])
         assertEquals(0x00.toByte(), frame[53])

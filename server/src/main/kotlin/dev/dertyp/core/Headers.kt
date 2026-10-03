@@ -5,7 +5,7 @@ import io.ktor.server.plugins.cors.*
 
 fun CORSConfig.anyHeader(includeUnsafe: Boolean = false) {
     HttpHeaders.safeHeader.forEach { allowHeader(it) }
-    if(includeUnsafe)
+    if (includeUnsafe)
         HttpHeaders.unsafeHeader.forEach { allowHeader(it) }
 }
 

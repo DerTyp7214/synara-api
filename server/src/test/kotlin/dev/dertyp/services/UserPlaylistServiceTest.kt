@@ -139,11 +139,28 @@ class UserPlaylistServiceTest : KoinTest {
             duration = 2000, explicit = false, path = "path2", musicBrainzId = mbId2
         )
 
-        coEvery { songService.byArtist(0, 10, artistId, userId) } returns PaginatedResponse(listOf(song1, song2), 2, 0, 10)
-        coEvery { mbService.getRecording(mbId1) } returns MusicBrainzRecording(id = mbId1, releases = listOf(MusicBrainzRelease(id = UUID.randomUUID(), date = "2020-01-01")))
-        coEvery { mbService.getRecording(mbId2) } returns MusicBrainzRecording(id = mbId2, releases = listOf(MusicBrainzRelease(id = UUID.randomUUID(), date = "2010-01-01")))
+        coEvery { songService.byArtist(0, 10, artistId, userId) } returns PaginatedResponse(
+            listOf(song1, song2),
+            2,
+            0,
+            10
+        )
+        coEvery { mbService.getRecording(mbId1) } returns MusicBrainzRecording(
+            id = mbId1,
+            releases = listOf(MusicBrainzRelease(id = UUID.randomUUID(), date = "2020-01-01"))
+        )
+        coEvery { mbService.getRecording(mbId2) } returns MusicBrainzRecording(
+            id = mbId2,
+            releases = listOf(MusicBrainzRelease(id = UUID.randomUUID(), date = "2010-01-01"))
+        )
 
-        val playlistId = service.createPlaylistFromArtists(userId, "Smart Playlist", listOf(artistId), 10, ArtistPlaylistSortStrategy.MB_RELEASE_DATE)
+        val playlistId = service.createPlaylistFromArtists(
+            userId,
+            "Smart Playlist",
+            listOf(artistId),
+            10,
+            ArtistPlaylistSortStrategy.MB_RELEASE_DATE
+        )
 
         val playlist = service.byId(playlistId)
         assertNotNull(playlist)
@@ -219,11 +236,28 @@ class UserPlaylistServiceTest : KoinTest {
             duration = 2000, explicit = false, path = "path2", musicBrainzId = mbId2
         )
 
-        coEvery { songService.byArtist(0, 10, artistId, userId) } returns PaginatedResponse(listOf(song1, song2), 2, 0, 10)
-        coEvery { mbService.getRecording(mbId1) } returns MusicBrainzRecording(id = mbId1, releases = listOf(MusicBrainzRelease(id = UUID.randomUUID(), date = "2020-01-01")))
-        coEvery { mbService.getRecording(mbId2) } returns MusicBrainzRecording(id = mbId2, releases = listOf(MusicBrainzRelease(id = UUID.randomUUID(), date = "2010-01-01")))
+        coEvery { songService.byArtist(0, 10, artistId, userId) } returns PaginatedResponse(
+            listOf(song1, song2),
+            2,
+            0,
+            10
+        )
+        coEvery { mbService.getRecording(mbId1) } returns MusicBrainzRecording(
+            id = mbId1,
+            releases = listOf(MusicBrainzRelease(id = UUID.randomUUID(), date = "2020-01-01"))
+        )
+        coEvery { mbService.getRecording(mbId2) } returns MusicBrainzRecording(
+            id = mbId2,
+            releases = listOf(MusicBrainzRelease(id = UUID.randomUUID(), date = "2010-01-01"))
+        )
 
-        val playlistId = service.createPlaylistFromArtists(userId, "Smart Playlist Asc", listOf(artistId), 10, ArtistPlaylistSortStrategy.MB_RELEASE_DATE_ASC)
+        val playlistId = service.createPlaylistFromArtists(
+            userId,
+            "Smart Playlist Asc",
+            listOf(artistId),
+            10,
+            ArtistPlaylistSortStrategy.MB_RELEASE_DATE_ASC
+        )
 
         val playlist = service.byId(playlistId)
         assertNotNull(playlist)

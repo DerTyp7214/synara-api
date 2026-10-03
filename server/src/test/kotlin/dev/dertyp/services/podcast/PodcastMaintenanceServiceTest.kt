@@ -359,63 +359,66 @@ class PodcastMaintenanceServiceTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `queueImports with unlistened retention queues every episode no subscriber finished`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        val showId = insertShow(keep = null, retention = PodcastRetention.UNLISTENED)
-        subscribe(showId, secondSubscriberId)
-        val episodes = (1..4).map { insertEpisode(showId, published = it * 1000L) }
-        insertProgress(episodes[0], subscriberId, finished = true)
+    fun `queueImports with unlistened retention queues every episode no subscriber finished`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val showId = insertShow(keep = null, retention = PodcastRetention.UNLISTENED)
+            subscribe(showId, secondSubscriberId)
+            val episodes = (1..4).map { insertEpisode(showId, published = it * 1000L) }
+            insertProgress(episodes[0], subscriberId, finished = true)
 
-        assertEquals(4, maintenanceService.queueImports())
+            assertEquals(4, maintenanceService.queueImports())
 
-        episodes.forEach { assertEquals(PodcastImportState.QUEUED, stateOf(it)) }
-    }
-
-    @ParameterizedTest
-    @EnumSource(DbDialect::class)
-    fun `queueImports with unlistened retention fills the keep count with what is already stored`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        val showId = insertShow(keep = 2, retention = PodcastRetention.UNLISTENED)
-        subscribe(showId, secondSubscriberId)
-        importedEpisode(showId, published = 5000L)
-        val pending = (1..3).map { insertEpisode(showId, published = it * 1000L) }
-
-        assertEquals(1, maintenanceService.queueImports())
-
-        assertEquals(PodcastImportState.QUEUED, stateOf(pending[2]))
-        assertEquals(PodcastImportState.NONE, stateOf(pending[1]))
-        assertEquals(PodcastImportState.NONE, stateOf(pending[0]))
-
-        assertEquals(0, maintenanceService.queueImports())
-    }
+            episodes.forEach { assertEquals(PodcastImportState.QUEUED, stateOf(it)) }
+        }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `enforceRetention with unlistened retention deletes only what every subscriber finished`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        val showId = insertShow(keep = null, retention = PodcastRetention.UNLISTENED)
-        subscribe(showId, secondSubscriberId)
-        val (finishedId, finishedFile) = importedEpisode(showId, published = 1000L)
-        val (halfId, halfFile) = importedEpisode(showId, published = 2000L)
-        val (untouchedId, untouchedFile) = importedEpisode(showId, published = 3000L)
+    fun `queueImports with unlistened retention fills the keep count with what is already stored`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val showId = insertShow(keep = 2, retention = PodcastRetention.UNLISTENED)
+            subscribe(showId, secondSubscriberId)
+            importedEpisode(showId, published = 5000L)
+            val pending = (1..3).map { insertEpisode(showId, published = it * 1000L) }
 
-        insertProgress(finishedId, subscriberId, finished = true)
-        insertProgress(finishedId, secondSubscriberId, finished = true)
-        insertProgress(halfId, subscriberId, finished = true)
-        insertProgress(halfId, secondSubscriberId, finished = false)
+            assertEquals(1, maintenanceService.queueImports())
 
-        assertEquals(1, maintenanceService.enforceRetention())
+            assertEquals(PodcastImportState.QUEUED, stateOf(pending[2]))
+            assertEquals(PodcastImportState.NONE, stateOf(pending[1]))
+            assertEquals(PodcastImportState.NONE, stateOf(pending[0]))
 
-        assertFalse(finishedFile.exists())
-        val finished = podcastService.episodeById(finishedId)!!
-        assertEquals(PodcastImportState.NONE, finished.importState)
-        assertNull(finished.filePath)
+            assertEquals(0, maintenanceService.queueImports())
+        }
 
-        assertTrue(halfFile.exists())
-        assertEquals(PodcastImportState.IMPORTED, podcastService.episodeById(halfId)!!.importState)
-        assertTrue(untouchedFile.exists())
-        assertEquals(PodcastImportState.IMPORTED, podcastService.episodeById(untouchedId)!!.importState)
-    }
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `enforceRetention with unlistened retention deletes only what every subscriber finished`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val showId = insertShow(keep = null, retention = PodcastRetention.UNLISTENED)
+            subscribe(showId, secondSubscriberId)
+            val (finishedId, finishedFile) = importedEpisode(showId, published = 1000L)
+            val (halfId, halfFile) = importedEpisode(showId, published = 2000L)
+            val (untouchedId, untouchedFile) = importedEpisode(showId, published = 3000L)
+
+            insertProgress(finishedId, subscriberId, finished = true)
+            insertProgress(finishedId, secondSubscriberId, finished = true)
+            insertProgress(halfId, subscriberId, finished = true)
+            insertProgress(halfId, secondSubscriberId, finished = false)
+
+            assertEquals(1, maintenanceService.enforceRetention())
+
+            assertFalse(finishedFile.exists())
+            val finished = podcastService.episodeById(finishedId)!!
+            assertEquals(PodcastImportState.NONE, finished.importState)
+            assertNull(finished.filePath)
+
+            assertTrue(halfFile.exists())
+            assertEquals(PodcastImportState.IMPORTED, podcastService.episodeById(halfId)!!.importState)
+            assertTrue(untouchedFile.exists())
+            assertEquals(PodcastImportState.IMPORTED, podcastService.episodeById(untouchedId)!!.importState)
+        }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
@@ -477,7 +480,9 @@ class PodcastMaintenanceServiceTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `deleteShow removes a feed show its episodes transcripts progress and subscriptions and deletes the imported file`(dialect: DbDialect) =
+    fun `deleteShow removes a feed show its episodes transcripts progress and subscriptions and deletes the imported file`(
+        dialect: DbDialect
+    ) =
         runBlocking {
             setup(dialect)
             val showId = insertShow(subscribed = true)

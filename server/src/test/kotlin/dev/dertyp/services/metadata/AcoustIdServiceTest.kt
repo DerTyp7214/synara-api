@@ -117,7 +117,15 @@ class AcoustIdServiceTest {
         id = UUID.randomUUID(),
         title = title,
         artists = listOf(Artist(id = UUID.randomUUID(), name = artist, isGroup = false)),
-        album = album?.let { Album(id = UUID.randomUUID(), name = it, artists = emptyList(), releaseDate = null, totalDuration = 0) },
+        album = album?.let {
+            Album(
+                id = UUID.randomUUID(),
+                name = it,
+                artists = emptyList(),
+                releaseDate = null,
+                totalDuration = 0
+            )
+        },
         duration = durationMs,
         explicit = false,
         path = "",
@@ -137,10 +145,10 @@ class AcoustIdServiceTest {
 
     private fun response(vararg results: Pair<Double, List<String>>) = """
         {"status": "ok", "results": [${
-            results.joinToString(",") { (score, recordings) ->
-                """{"id": "${UUID.randomUUID()}", "score": $score, "recordings": [${recordings.joinToString(",")}]}"""
-            }
-        }]}
+        results.joinToString(",") { (score, recordings) ->
+            """{"id": "${UUID.randomUUID()}", "score": $score, "recordings": [${recordings.joinToString(",")}]}"""
+        }
+    }]}
     """.trimIndent()
 
     private suspend fun resolve(song: UserSong, body: String): AcoustIdMatch? {

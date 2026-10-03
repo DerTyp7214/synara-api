@@ -22,7 +22,9 @@ object RestGoldenSupport {
             var currentMethod = method
             when (val selector = node.selector) {
                 is PathSegmentConstantRouteSelector -> currentSegments = segments + selector.value
-                is PathSegmentParameterRouteSelector -> currentSegments = segments + "${selector.prefix ?: ""}{${selector.name}}${selector.suffix ?: ""}"
+                is PathSegmentParameterRouteSelector -> currentSegments =
+                    segments + "${selector.prefix ?: ""}{${selector.name}}${selector.suffix ?: ""}"
+
                 is TrailingSlashRouteSelector -> currentTrailing = true
                 is HttpMethodRouteSelector -> currentMethod = selector.method.value
                 else -> {}
@@ -55,7 +57,10 @@ object RestGoldenSupport {
         if (expected != content) {
             fail<Unit>(
                 "Golden file $file differs from the current output; rerun with -PupdateRestGolden=true to accept.\n" +
-                    unifiedDiff(name, expected.lines().dropLastWhile { it.isEmpty() }, content.lines().dropLastWhile { it.isEmpty() }),
+                        unifiedDiff(
+                            name,
+                            expected.lines().dropLastWhile { it.isEmpty() },
+                            content.lines().dropLastWhile { it.isEmpty() }),
             )
         }
     }
@@ -83,6 +88,7 @@ object RestGoldenSupport {
                     i++
                     j++
                 }
+
                 lcs[i + 1][j] >= lcs[i][j + 1] -> ops += Op.Remove(old[i++])
                 else -> ops += Op.Add(new[j++])
             }
@@ -111,7 +117,10 @@ object RestGoldenSupport {
             var newStart = 1
             for (k in 0 until start) {
                 when (ops[k]) {
-                    is Op.Keep -> { oldStart++; newStart++ }
+                    is Op.Keep -> {
+                        oldStart++; newStart++
+                    }
+
                     is Op.Remove -> oldStart++
                     is Op.Add -> newStart++
                 }

@@ -121,7 +121,8 @@ class CredentialServerUiContext(
     @Volatile
     private var adminProbe: AdminProbe? = null
 
-    fun changes(): Flow<Unit> = merge(connection.changes().map { }, admin.changes(), provider.changes(), reveal.changes())
+    fun changes(): Flow<Unit> =
+        merge(connection.changes().map { }, admin.changes(), provider.changes(), reveal.changes())
 
     suspend fun connection(): CredentialServerConnection = connection.current() ?: CredentialServerConnection.NONE
 
@@ -131,7 +132,8 @@ class CredentialServerUiContext(
         val adminKey = current.adminKey?.takeIf { it.isNotBlank() } ?: return false
         val fingerprint = "$baseUrl\n$adminKey".toByteArray(Charsets.UTF_8).sha256()
         val now = System.currentTimeMillis()
-        adminProbe?.takeIf { it.fingerprint == fingerprint && now - it.checkedAt < ADMIN_PROBE_TTL.inWholeMilliseconds }?.let { return it.admin }
+        adminProbe?.takeIf { it.fingerprint == fingerprint && now - it.checkedAt < ADMIN_PROBE_TTL.inWholeMilliseconds }
+            ?.let { return it.admin }
         val accepted = try {
             withTimeoutOrNull(HEALTH_TIMEOUT) {
                 admin.listClients()
@@ -231,7 +233,8 @@ internal fun linkStatusTone(status: CredentialServerLinkStatus): UiTone = when (
     CredentialServerLinkStatus.UNREACHABLE -> UiTone.ERROR
 }
 
-internal fun UiRenderScope.statusText(status: CredentialStatus): String = t("credentialserver.credentialStatus.${status.name}")
+internal fun UiRenderScope.statusText(status: CredentialStatus): String =
+    t("credentialserver.credentialStatus.${status.name}")
 
 internal fun statusTone(status: CredentialStatus): UiTone = when (status) {
     CredentialStatus.OK -> UiTone.SUCCESS
@@ -242,9 +245,13 @@ internal fun statusTone(status: CredentialStatus): UiTone = when (status) {
 internal fun UiRenderScope.kindText(kind: CredentialKind): String = t("credentialserver.kind.${kind.name}")
 
 internal fun formatTime(scope: UiRenderScope, epochMillis: Long): String {
-    val formatter = DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM, FormatStyle.SHORT).withLocale(Locale.forLanguageTag(scope.i18n.locale))
+    val formatter = DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM, FormatStyle.SHORT)
+        .withLocale(Locale.forLanguageTag(scope.i18n.locale))
     val instant = Instant.ofEpochMilli(epochMillis)
-    val zone = scope.timeZone ?: return scope.t("${CredentialServerPages.PREFIX}.time", "time" to formatter.withZone(ZoneOffset.UTC).format(instant))
+    val zone = scope.timeZone ?: return scope.t(
+        "${CredentialServerPages.PREFIX}.time",
+        "time" to formatter.withZone(ZoneOffset.UTC).format(instant)
+    )
     return formatter.withZone(ZoneId.of(zone)).format(instant)
 }
 

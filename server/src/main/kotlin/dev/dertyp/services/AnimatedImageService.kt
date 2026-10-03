@@ -35,10 +35,15 @@ class AnimatedImageRpcService(
 ) : IAnimatedImageService {
     override suspend fun byId(id: UUID): AnimatedImage? = animatedImageService.byId(id)
     override suspend fun byHash(hash: String): AnimatedImage? = animatedImageService.byHash(hash)
-    override suspend fun getCoverHashes(hashes: List<String>): Map<String, UUID> = animatedImageService.getCoverHashes(hashes)
+    override suspend fun getCoverHashes(hashes: List<String>): Map<String, UUID> =
+        animatedImageService.getCoverHashes(hashes)
+
     override suspend fun getAnimatedImageData(id: UUID): ByteArray? = animatedImageService.getAnimatedImageData(id)
-    override suspend fun createAnimatedImage(bytes: ByteArray, origin: String): UUID = animatedImageService.createAnimatedImage(bytes, origin)
-    override suspend fun createBatch(images: List<InsertableAnimatedImage>): Map<String, UUID> = animatedImageService.createBatch(images)
+    override suspend fun createAnimatedImage(bytes: ByteArray, origin: String): UUID =
+        animatedImageService.createAnimatedImage(bytes, origin)
+
+    override suspend fun createBatch(images: List<InsertableAnimatedImage>): Map<String, UUID> =
+        animatedImageService.createBatch(images)
 }
 
 class AnimatedImageService(
@@ -140,37 +145,39 @@ class AnimatedImageService(
         )
     }
 
-    suspend fun deleteUnreferencedAnimatedImages(onProgress: suspend (Double, String) -> Unit = { _, _ -> }): Int = dbQuery {
-        val referencedIds = SchemaTables.referencesTo(AnimatedImageTable).flatMapTo(mutableSetOf()) { it.referencedUuids() }
+    suspend fun deleteUnreferencedAnimatedImages(onProgress: suspend (Double, String) -> Unit = { _, _ -> }): Int =
+        dbQuery {
+            val referencedIds =
+                SchemaTables.referencesTo(AnimatedImageTable).flatMapTo(mutableSetOf()) { it.referencedUuids() }
 
-        val allAnimatedImages = AnimatedImageTable.select(AnimatedImageTable.id, AnimatedImageTable.path).map {
-            it[AnimatedImageTable.id].value to it[AnimatedImageTable.path]
-        }
-
-        val unreferenced = allAnimatedImages.filter { (id, _) -> id !in referencedIds }
-        onProgress(0.0, "Found ${unreferenced.size} unreferenced animated images")
-
-        val chunks = unreferenced.chunked(5000)
-        chunks.forEachIndexed { index, batch ->
-            val progress = (index.toDouble() / chunks.size) * 100.0
-            onProgress(progress, "Deleting batch ${index + 1}/${chunks.size} (${batch.size} animated images)")
-
-            val idsToDelete = batch.map { it.first }
-
-            batch.forEach { (_, path) ->
-                val filePath = Path(storageService.animatedImagesPath, path)
-                if (filePath.exists()) filePath.deleteIfExists()
+            val allAnimatedImages = AnimatedImageTable.select(AnimatedImageTable.id, AnimatedImageTable.path).map {
+                it[AnimatedImageTable.id].value to it[AnimatedImageTable.path]
             }
 
-            AnimatedImageTable.deleteWhere { AnimatedImageTable.id inList idsToDelete }
+            val unreferenced = allAnimatedImages.filter { (id, _) -> id !in referencedIds }
+            onProgress(0.0, "Found ${unreferenced.size} unreferenced animated images")
+
+            val chunks = unreferenced.chunked(5000)
+            chunks.forEachIndexed { index, batch ->
+                val progress = (index.toDouble() / chunks.size) * 100.0
+                onProgress(progress, "Deleting batch ${index + 1}/${chunks.size} (${batch.size} animated images)")
+
+                val idsToDelete = batch.map { it.first }
+
+                batch.forEach { (_, path) ->
+                    val filePath = Path(storageService.animatedImagesPath, path)
+                    if (filePath.exists()) filePath.deleteIfExists()
+                }
+
+                AnimatedImageTable.deleteWhere { AnimatedImageTable.id inList idsToDelete }
+            }
+
+            if (unreferenced.isNotEmpty()) storageService.invalidate(StorageCategory.ANIMATED_IMAGES)
+
+            onProgress(100.0, "Deleted ${unreferenced.size} animated images")
+            logger.info("Deleted ${unreferenced.size} unreferenced animated images")
+            unreferenced.size
         }
-
-        if (unreferenced.isNotEmpty()) storageService.invalidate(StorageCategory.ANIMATED_IMAGES)
-
-        onProgress(100.0, "Deleted ${unreferenced.size} animated images")
-        logger.info("Deleted ${unreferenced.size} unreferenced animated images")
-        unreferenced.size
-    }
 
     override suspend fun createBatch(images: List<InsertableAnimatedImage>): Map<String, UUID> {
         if (images.isEmpty()) return emptyMap()

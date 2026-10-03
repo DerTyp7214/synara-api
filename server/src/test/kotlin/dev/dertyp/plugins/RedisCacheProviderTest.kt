@@ -55,12 +55,12 @@ class RedisCacheProviderTest {
 
         provider.setCache(key, content, duration)
 
-        verify { 
+        verify {
             mockJedis.set(
-                eq(key), 
-                match { it.contains("test-content") }, 
+                eq(key),
+                match { it.contains("test-content") },
                 any<SetParams>()
-            ) 
+            )
         }
     }
 

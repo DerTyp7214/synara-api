@@ -44,7 +44,8 @@ class RpcPodcastServiceTest {
             maintenanceService,
         )
 
-    private fun show() = PodcastShow(id = UUID.randomUUID(), source = PodcastSource.FEED, title = "Show", createdAt = 0, updatedAt = 0)
+    private fun show() =
+        PodcastShow(id = UUID.randomUUID(), source = PodcastSource.FEED, title = "Show", createdAt = 0, updatedAt = 0)
 
     private fun episode(id: UUID = UUID.randomUUID()) = PodcastEpisode(
         id = id,
@@ -101,7 +102,14 @@ class RpcPodcastServiceTest {
 
     @Test
     fun `searchIndex forwards query limit and indexes`() = runBlocking {
-        val results = listOf(PodcastIndexResult(indexId = "a", indexName = "A", feedUrl = "https://feed.example/x.xml", title = "Show"))
+        val results = listOf(
+            PodcastIndexResult(
+                indexId = "a",
+                indexName = "A",
+                feedUrl = "https://feed.example/x.xml",
+                title = "Show"
+            )
+        )
         coEvery { indexService.search("q", 10, listOf("a")) } returns results
 
         assertEquals(results, service.searchIndex("q", 10, listOf("a")))
@@ -218,17 +226,18 @@ class RpcPodcastServiceTest {
     }
 
     @Test
-    fun `refreshShow refreshes through the feed service then reads the show through the podcast service`() = runBlocking {
-        val showId = UUID.randomUUID()
-        val refreshed = show()
-        coEvery { podcastService.getShow(user.id, showId) } returns refreshed
+    fun `refreshShow refreshes through the feed service then reads the show through the podcast service`() =
+        runBlocking {
+            val showId = UUID.randomUUID()
+            val refreshed = show()
+            coEvery { podcastService.getShow(user.id, showId) } returns refreshed
 
-        val result = service.refreshShow(showId)
+            val result = service.refreshShow(showId)
 
-        coVerify(exactly = 1) { feedService.refreshShow(showId) }
-        coVerify(exactly = 1) { podcastService.getShow(user.id, showId) }
-        assertEquals(refreshed, result)
-    }
+            coVerify(exactly = 1) { feedService.refreshShow(showId) }
+            coVerify(exactly = 1) { podcastService.getShow(user.id, showId) }
+            assertEquals(refreshed, result)
+        }
 
     @Test
     fun `updateShowSettings forwards the show id settings and user id`() = runBlocking {
@@ -241,30 +250,32 @@ class RpcPodcastServiceTest {
     }
 
     @Test
-    fun `importEpisode imports through the import service then reads the episode through the podcast service`() = runBlocking {
-        val episodeId = UUID.randomUUID()
-        val imported = episode(episodeId)
-        coEvery { podcastService.getEpisode(user.id, episodeId) } returns imported
+    fun `importEpisode imports through the import service then reads the episode through the podcast service`() =
+        runBlocking {
+            val episodeId = UUID.randomUUID()
+            val imported = episode(episodeId)
+            coEvery { podcastService.getEpisode(user.id, episodeId) } returns imported
 
-        val result = service.importEpisode(episodeId)
+            val result = service.importEpisode(episodeId)
 
-        coVerify(exactly = 1) { importService.importEpisode(episodeId) }
-        coVerify(exactly = 1) { podcastService.getEpisode(user.id, episodeId) }
-        assertEquals(imported, result)
-    }
+            coVerify(exactly = 1) { importService.importEpisode(episodeId) }
+            coVerify(exactly = 1) { podcastService.getEpisode(user.id, episodeId) }
+            assertEquals(imported, result)
+        }
 
     @Test
-    fun `removeImport removes through the import service then reads the episode through the podcast service`() = runBlocking {
-        val episodeId = UUID.randomUUID()
-        val removed = episode(episodeId)
-        coEvery { podcastService.getEpisode(user.id, episodeId) } returns removed
+    fun `removeImport removes through the import service then reads the episode through the podcast service`() =
+        runBlocking {
+            val episodeId = UUID.randomUUID()
+            val removed = episode(episodeId)
+            coEvery { podcastService.getEpisode(user.id, episodeId) } returns removed
 
-        val result = service.removeImport(episodeId)
+            val result = service.removeImport(episodeId)
 
-        coVerify(exactly = 1) { importService.removeImport(episodeId) }
-        coVerify(exactly = 1) { podcastService.getEpisode(user.id, episodeId) }
-        assertEquals(removed, result)
-    }
+            coVerify(exactly = 1) { importService.removeImport(episodeId) }
+            coVerify(exactly = 1) { podcastService.getEpisode(user.id, episodeId) }
+            assertEquals(removed, result)
+        }
 
     @Test
     fun `scanLocal forwards to the local scan service`() = runBlocking {

@@ -80,7 +80,8 @@ object PodcastMediaProbe {
         if (text.isEmpty()) return null
 
         runCatching {
-            return LocalDate.parse(text, DateTimeFormatter.ISO_LOCAL_DATE).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
+            return LocalDate.parse(text, DateTimeFormatter.ISO_LOCAL_DATE).atStartOfDay(ZoneOffset.UTC).toInstant()
+                .toEpochMilli()
         }
 
         val year = text.take(4).toIntOrNull() ?: return null

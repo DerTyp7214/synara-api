@@ -121,7 +121,8 @@ class IntakeService(private val translations: TranslationService) {
                 val known = all().any { it.resolver.id == resolverId }
                 return UiIntakeResult(
                     if (known) UiIntakeStatus.UNHANDLED else UiIntakeStatus.ERROR,
-                    message = translations.translator(UiRegistry.SERVER_SOURCE, locale).t(if (known) "intake.nothingAccepted" else "intake.unknownHandler"),
+                    message = translations.translator(UiRegistry.SERVER_SOURCE, locale)
+                        .t(if (known) "intake.nothingAccepted" else "intake.unknownHandler"),
                     rejected = items,
                 )
             }
@@ -159,10 +160,29 @@ class IntakeService(private val translations: TranslationService) {
         val rejected = items.filter { it !in acceptedItems }
 
         return when {
-            failed -> UiIntakeResult(UiIntakeStatus.ERROR, messages.joinToString("\n"), accepted, rejected, navigational.map { it.handler }, next)
-            submitting.isEmpty() && navigational.isNotEmpty() -> UiIntakeResult(UiIntakeStatus.NEEDS_CHOICE, rejected = rejected, handlers = navigational.map { it.handler })
+            failed -> UiIntakeResult(
+                UiIntakeStatus.ERROR,
+                messages.joinToString("\n"),
+                accepted,
+                rejected,
+                navigational.map { it.handler },
+                next
+            )
+
+            submitting.isEmpty() && navigational.isNotEmpty() -> UiIntakeResult(
+                UiIntakeStatus.NEEDS_CHOICE,
+                rejected = rejected,
+                handlers = navigational.map { it.handler })
+
             submitting.isEmpty() -> UiIntakeResult(UiIntakeStatus.UNHANDLED, rejected = rejected)
-            else -> UiIntakeResult(UiIntakeStatus.OK, messages.joinToString("\n").ifBlank { null }, accepted, rejected, navigational.map { it.handler }, next)
+            else -> UiIntakeResult(
+                UiIntakeStatus.OK,
+                messages.joinToString("\n").ifBlank { null },
+                accepted,
+                rejected,
+                navigational.map { it.handler },
+                next
+            )
         }
     }
 }

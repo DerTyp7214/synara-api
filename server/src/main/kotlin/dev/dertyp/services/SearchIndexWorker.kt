@@ -115,6 +115,7 @@ class SearchIndexWorker : KoinComponent {
                 album = data["album"] ?: "",
                 metadata = data["metadata"] ?: ""
             )
+
             SearchIndexEntityType.ARTIST -> redisSearchService.indexArtist(
                 id = entityId,
                 name = data["name"] ?: "",
@@ -122,6 +123,7 @@ class SearchIndexWorker : KoinComponent {
                 groups = data["groups"] ?: "",
                 metadata = data["metadata"] ?: ""
             )
+
             SearchIndexEntityType.ALBUM -> redisSearchService.indexAlbum(
                 entityId,
                 data["name"] ?: "",
@@ -189,7 +191,7 @@ class SearchIndexWorker : KoinComponent {
             )
             WHERE s.id = ?
         """.trimIndent()
-        
+
         TransactionManager.current().exec(query, args = listOf(UUIDColumnType() to songId))
 
         return if (redisEnabled) fetchSongData(songId) else null
@@ -337,7 +339,7 @@ class SearchIndexWorker : KoinComponent {
                     rs.getString("group_names"),
                     rs.getString("member_names")
                 ).filter { !it.isNullOrBlank() }
-                
+
                 val titleParts = listOf(
                     rs.getString("song_title"),
                     rs.getString("title_tags")
@@ -389,7 +391,10 @@ class SearchIndexWorker : KoinComponent {
                 result = mapOf(
                     "name" to (rs.getString("artist_name") ?: ""),
                     "aliases" to (rs.getString("artist_aliases") ?: ""),
-                    "groups" to listOf(rs.getString("group_names"), rs.getString("member_names")).filter { !it.isNullOrBlank() }.joinToString(" "),
+                    "groups" to listOf(
+                        rs.getString("group_names"),
+                        rs.getString("member_names")
+                    ).filter { !it.isNullOrBlank() }.joinToString(" "),
                     "metadata" to metadataParts.joinToString(" ")
                 )
             }

@@ -28,7 +28,10 @@ class IntakeHandlerInfoTest {
     fun `handler infos fill the title placeholders and respect access`() {
         val service = IntakeService(TranslationService(UiRegistry()))
         service.register(NamedResolver("Tidal"), UiRegistry.SERVER_SOURCE)
-        service.register(NamedResolver("Restricted", UiAccess(capabilities = setOf(UserCapability.IMPORT))), UiRegistry.SERVER_SOURCE)
+        service.register(
+            NamedResolver("Restricted", UiAccess(capabilities = setOf(UserCapability.IMPORT))),
+            UiRegistry.SERVER_SOURCE
+        )
 
         val plain = User(UUID.randomUUID(), "u", passwordHash = "")
         val infos = service.handlerInfos(plain, "en")
@@ -37,6 +40,8 @@ class IntakeHandlerInfoTest {
         assertTrue(infos.single().kinds.containsAll(UiHookKind.entries))
 
         val importer = User(UUID.randomUUID(), "i", passwordHash = "", capabilities = listOf(UserCapability.IMPORT))
-        assertEquals(listOf("Import with Restricted", "Import with Tidal"), service.handlerInfos(importer, "en").map { it.title })
+        assertEquals(
+            listOf("Import with Restricted", "Import with Tidal"),
+            service.handlerInfos(importer, "en").map { it.title })
     }
 }

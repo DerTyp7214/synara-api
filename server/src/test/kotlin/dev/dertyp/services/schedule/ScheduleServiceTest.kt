@@ -30,7 +30,7 @@ class ScheduleServiceTest : KoinTest {
     fun setup() {
         val configService = mockk<ScheduledTaskConfigurationService>()
         every { configService.configurationsFlow } returns emptyFlow()
-        
+
         startKoin {
             modules(module {
                 single { configService }
@@ -49,17 +49,17 @@ class ScheduleServiceTest : KoinTest {
     fun `should execute scheduled task`() = runBlocking {
         val service = ScheduleService()
         val executed = CompletableDeferred<Unit>()
-        
+
         service.scheduleTask(ScheduleTrigger(Instant.now())) {
             executed.complete(Unit)
         }
 
         val job = launch { service.startService() }
-        
+
         withTimeout(1.seconds) {
             executed.await()
         }
-        
+
         service.stopService()
         job.join()
     }
@@ -132,7 +132,8 @@ class ScheduleServiceTest : KoinTest {
             firstExecuted.complete(Unit)
         }
 
-        service.schedule(ScheduledTask(
+        service.schedule(
+            ScheduledTask(
             trigger = TaskCompletionTrigger(firstTask.id),
             task = {
                 secondExecuted.complete(Unit)
@@ -160,7 +161,7 @@ class ScheduleServiceTest : KoinTest {
         }
 
         val job = launch { service.startService() }
-        
+
         delay(50.milliseconds)
         service.signal("my-key")
 
@@ -202,7 +203,7 @@ class ScheduleServiceTest : KoinTest {
 
         spiedService.stopService()
         job.join()
-        
+
         assertEquals(1, attempt.get())
     }
 }

@@ -27,9 +27,9 @@ class AudioFileExtensionsTest {
     fun testAudioFileProperties() {
         val audioFile = mockk<AudioFile>()
         val tag = mockk<Tag>()
-        
+
         every { audioFile.tag } returns tag
-        
+
         every { tag.getFirst(FieldKey.TITLE) } returns "My Title"
         assertEquals("My Title", audioFile.title)
 

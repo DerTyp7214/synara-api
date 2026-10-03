@@ -71,6 +71,7 @@ class CustomMigrationService : KoinComponent {
                             loadMigration(fullClassName)?.let { migrations.add(it) }
                         }
                 }
+
                 "jar" -> {
                     val rawPath = resource.path
                     val jarPath = if (rawPath.startsWith("file:")) {
@@ -98,7 +99,8 @@ class CustomMigrationService : KoinComponent {
             if (CustomMigration::class.java.isAssignableFrom(clazz) &&
                 clazz.isAnnotationPresent(Migration::class.java) &&
                 !clazz.isInterface &&
-                !Modifier.isAbstract(clazz.modifiers)) {
+                !Modifier.isAbstract(clazz.modifiers)
+            ) {
                 clazz.getDeclaredConstructor().newInstance() as CustomMigration
             } else null
         } catch (_: Exception) {

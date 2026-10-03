@@ -37,7 +37,13 @@ class ExternalToolTest {
             return Outcome.Rejected(ProcessExecutionResult(-1, importer.invalidMessage, ""))
         }
         val path = importer.path
-            ?: return Outcome.Rejected(ProcessExecutionResult(-1, "Error: The ${importer.name} path does not exist.", ""))
+            ?: return Outcome.Rejected(
+                ProcessExecutionResult(
+                    -1,
+                    "Error: The ${importer.name} path does not exist.",
+                    ""
+                )
+            )
         if (importer.pythonWrapped) {
             if (cmd[0] != "python3") {
                 cmd[0] = path
@@ -55,7 +61,11 @@ class ExternalToolTest {
     )
 
     private fun legacyTiddl(path: String?) = LegacyImporter(
-        "tiddl", path, { head, _ -> head == "tiddl" || head == "python3" }, "Error: Command must start with 'tiddl'.", true
+        "tiddl",
+        path,
+        { head, _ -> head == "tiddl" || head == "python3" },
+        "Error: Command must start with 'tiddl'.",
+        true
     )
 
     private fun legacyTdn(path: String?) = LegacyImporter(
@@ -63,7 +73,11 @@ class ExternalToolTest {
     )
 
     private fun legacyGamdl(path: String?) = LegacyImporter(
-        "gamdl", path, { head, resolved -> head == "gamdl" || head == resolved }, "Error: Command must start with 'gamdl'.", false
+        "gamdl",
+        path,
+        { head, resolved -> head == "gamdl" || head == resolved },
+        "Error: Command must start with 'gamdl'.",
+        false
     )
 
     @BeforeEach
@@ -83,22 +97,24 @@ class ExternalToolTest {
         unmockkAll()
     }
 
-    private fun assertMatchesLegacy(tool: ExternalTool, legacy: LegacyImporter, commands: List<List<String>>) = runBlocking {
-        for (command in commands) {
-            executed.clear()
-            val result = tool.runCommand(command, logger, { true }, directory) {}
-            when (val expected = legacy(legacy, command)) {
-                is Outcome.Rejected -> {
-                    assertEquals(expected.result, result, "command $command")
-                    assertTrue(executed.isEmpty(), "command $command must not run")
-                }
-                is Outcome.Executed -> {
-                    assertEquals(listOf(expected.command), executed, "command $command")
-                    assertEquals(ProcessExecutionResult(0, "ok", ""), result)
+    private fun assertMatchesLegacy(tool: ExternalTool, legacy: LegacyImporter, commands: List<List<String>>) =
+        runBlocking {
+            for (command in commands) {
+                executed.clear()
+                val result = tool.runCommand(command, logger, { true }, directory) {}
+                when (val expected = legacy(legacy, command)) {
+                    is Outcome.Rejected -> {
+                        assertEquals(expected.result, result, "command $command")
+                        assertTrue(executed.isEmpty(), "command $command must not run")
+                    }
+
+                    is Outcome.Executed -> {
+                        assertEquals(listOf(expected.command), executed, "command $command")
+                        assertEquals(ProcessExecutionResult(0, "ok", ""), result)
+                    }
                 }
             }
         }
-    }
 
     private fun commandsFor(name: String, path: String) = listOf(
         emptyList(),
@@ -152,10 +168,18 @@ class ExternalToolTest {
     @Test
     fun `missing executables are reported like the previous importers`() {
         every { findInPath(any()) } returns null
-        assertMatchesLegacy(ExternalTool("yt-dlp", invalidCommandMessage = "Invalid command"), legacyYtdlp(null), commandsFor("yt-dlp", "/x"))
+        assertMatchesLegacy(
+            ExternalTool("yt-dlp", invalidCommandMessage = "Invalid command"),
+            legacyYtdlp(null),
+            commandsFor("yt-dlp", "/x")
+        )
         assertMatchesLegacy(ExternalTool("tiddl", pythonWrapped = true), legacyTiddl(null), commandsFor("tiddl", "/x"))
         assertMatchesLegacy(ExternalTool("tdn", pythonWrapped = true), legacyTdn(null), commandsFor("tdn", "/x"))
-        assertMatchesLegacy(ExternalTool("gamdl", acceptsResolvedPath = true), legacyGamdl(null), commandsFor("gamdl", "/x"))
+        assertMatchesLegacy(
+            ExternalTool("gamdl", acceptsResolvedPath = true),
+            legacyGamdl(null),
+            commandsFor("gamdl", "/x")
+        )
     }
 
     @Test
@@ -167,7 +191,14 @@ class ExternalToolTest {
         tool.run(listOf("-v", "error", "-i", "in.wav"), logger, directory = directory, logCommand = false)
 
         coVerify(exactly = 1) {
-            executeCommand(listOf("/usr/bin/ffmpeg", "-v", "error", "-i", "in.wav"), any(), logger, directory, false, any())
+            executeCommand(
+                listOf("/usr/bin/ffmpeg", "-v", "error", "-i", "in.wav"),
+                any(),
+                logger,
+                directory,
+                false,
+                any()
+            )
         }
     }
 

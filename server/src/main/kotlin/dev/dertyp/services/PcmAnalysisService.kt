@@ -78,9 +78,15 @@ class PcmAnalysisService : Service() {
     internal suspend fun parsePcmInfo(file: File, container: LosslessFormat): PcmInfo? {
         val result = ffprobe.run(
             args = listOf(
-                "-v", "error", "-select_streams", "a:0",
-                "-show_entries", "stream=codec_name,sample_rate,channels,bits_per_sample,bits_per_raw_sample,sample_fmt:format=duration",
-                "-of", "default=noprint_wrappers=1", file.absolutePath
+                "-v",
+                "error",
+                "-select_streams",
+                "a:0",
+                "-show_entries",
+                "stream=codec_name,sample_rate,channels,bits_per_sample,bits_per_raw_sample,sample_fmt:format=duration",
+                "-of",
+                "default=noprint_wrappers=1",
+                file.absolutePath
             ),
             logger = logger,
             logCommand = false,
@@ -105,7 +111,9 @@ class PcmAnalysisService : Service() {
             fileSize = fileSize,
             bitrateAvg = if (duration > 0) ((fileSize * 8) / duration).toInt() else 0,
             codec = probeInfo.codec,
-            isFloat = probeInfo.codec.startsWith("pcm_f") || probeInfo.sampleFmt.startsWith("flt") || probeInfo.sampleFmt.startsWith("dbl"),
+            isFloat = probeInfo.codec.startsWith("pcm_f") || probeInfo.sampleFmt.startsWith("flt") || probeInfo.sampleFmt.startsWith(
+                "dbl"
+            ),
             isBigEndian = probeInfo.codec.endsWith("be"),
             dataOffset = layout.dataOffset,
             dataSize = layout.dataSize,

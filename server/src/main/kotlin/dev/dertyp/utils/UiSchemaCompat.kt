@@ -22,7 +22,10 @@ class UiSchemaCompat(
     private fun versionOf(component: UiComponent): Int = introducedIn[component::class] ?: UiSchemaVersion.CURRENT
 
     fun downgrade(component: UiComponent, version: Int): UiComponent {
-        if (component is UiComponent.FileField && versionOf(component) > version) return downgrade(asTextField(component), version)
+        if (component is UiComponent.FileField && versionOf(component) > version) return downgrade(
+            asTextField(component),
+            version
+        )
         if (versionOf(component) > version) return UiComponent.Fallback()
         return component.mapChildren { downgrade(it, version) }
     }

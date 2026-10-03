@@ -66,19 +66,25 @@ class ListeningStatsService : Service() {
 
         val pass = dbQuery { runPass(userId, rangeStart, rangeEnd, previousStart, zone) }
 
-        val inRangeSongIds = (pass.songCounts.keys + pass.songPlayed.keys).filterIsInstance<SongKey.Matched>().map { it.songId }.distinct()
-        val allSongIds = (pass.songFirstSeen.keys + pass.songPlayed.keys).filterIsInstance<SongKey.Matched>().map { it.songId }.distinct()
+        val inRangeSongIds =
+            (pass.songCounts.keys + pass.songPlayed.keys).filterIsInstance<SongKey.Matched>().map { it.songId }
+                .distinct()
+        val allSongIds =
+            (pass.songFirstSeen.keys + pass.songPlayed.keys).filterIsInstance<SongKey.Matched>().map { it.songId }
+                .distinct()
         val unmatchedArtistMbids = (pass.unmatchedArtistCounts.keys + pass.unmatchedArtistFirstSeen.keys)
             .filterIsInstance<ArtistKey.Mbid>().map { it.mbid }.distinct()
         val unmatchedReleaseMbids = (pass.unmatchedAlbumCounts.keys.filterIsInstance<AlbumKey.Mbid>().map { it.mbid } +
-            pass.songDisplay.values.mapNotNull { it.releaseMbid }).distinct()
-        val library = dbQuery { resolveLibrary(inRangeSongIds, allSongIds, unmatchedArtistMbids, unmatchedReleaseMbids) }
+                pass.songDisplay.values.mapNotNull { it.releaseMbid }).distinct()
+        val library =
+            dbQuery { resolveLibrary(inRangeSongIds, allSongIds, unmatchedArtistMbids, unmatchedReleaseMbids) }
 
         fun canonArtist(key: ArtistKey): ArtistKey =
             (key as? ArtistKey.Mbid)?.let { m -> library.artistIdByMbid[m.mbid]?.let { ArtistKey.Matched(it) } } ?: key
 
         fun canonAlbum(key: AlbumKey): AlbumKey =
-            (key as? AlbumKey.Mbid)?.let { m -> library.albumIdByReleaseMbid[m.mbid]?.let { AlbumKey.Matched(it) } } ?: key
+            (key as? AlbumKey.Mbid)?.let { m -> library.albumIdByReleaseMbid[m.mbid]?.let { AlbumKey.Matched(it) } }
+                ?: key
 
         val artistCounts = LinkedHashMap<ArtistKey, Long>()
         pass.unmatchedArtistCounts.forEach { (key, count) -> artistCounts.merge(canonArtist(key), count, Long::plus) }
@@ -101,10 +107,22 @@ class ListeningStatsService : Service() {
         }
 
         val artistFirstSeen = HashMap<ArtistKey, Long>()
-        pass.unmatchedArtistFirstSeen.forEach { (key, firstSeen) -> artistFirstSeen.merge(canonArtist(key), firstSeen, ::minOf) }
+        pass.unmatchedArtistFirstSeen.forEach { (key, firstSeen) ->
+            artistFirstSeen.merge(
+                canonArtist(key),
+                firstSeen,
+                ::minOf
+            )
+        }
         for ((key, firstSeen) in pass.songFirstSeen) {
             if (key !is SongKey.Matched) continue
-            library.songArtists[key.songId]?.forEach { artistFirstSeen.merge(ArtistKey.Matched(it), firstSeen, ::minOf) }
+            library.songArtists[key.songId]?.forEach {
+                artistFirstSeen.merge(
+                    ArtistKey.Matched(it),
+                    firstSeen,
+                    ::minOf
+                )
+            }
         }
 
         fun songEntry(key: SongKey, count: Long): TopSongEntry = when (key) {
@@ -179,7 +197,11 @@ class ListeningStatsService : Service() {
             )
         }
 
-        fun <K> top(counts: Map<K, Long>, played: Map<K, Long>, filter: (K) -> Boolean = { true }): List<Pair<K, Long>> {
+        fun <K> top(
+            counts: Map<K, Long>,
+            played: Map<K, Long>,
+            filter: (K) -> Boolean = { true }
+        ): List<Pair<K, Long>> {
             val metric = if (topOrder == TopOrder.LISTENED_MS) played else counts
             return metric.entries
                 .filter { filter(it.key) }
@@ -188,8 +210,10 @@ class ListeningStatsService : Service() {
                 .map { it.key to (counts[it.key] ?: 0L) }
         }
 
-        val discoverySongs = top(pass.songCounts, pass.songPlayed) { key -> pass.songFirstSeen[key]?.let { it >= rangeStart } == true }
-        val discoveryArtists = top(artistCounts, artistPlayed) { key -> artistFirstSeen[key]?.let { it >= rangeStart } == true }
+        val discoverySongs =
+            top(pass.songCounts, pass.songPlayed) { key -> pass.songFirstSeen[key]?.let { it >= rangeStart } == true }
+        val discoveryArtists =
+            top(artistCounts, artistPlayed) { key -> artistFirstSeen[key]?.let { it >= rangeStart } == true }
 
         val comparison = previousStart?.let {
             RangeComparison(
@@ -345,16 +369,17 @@ class ListeningStatsService : Service() {
                 val isrcs = ListenTable.parseIsrcs(row[ListenTable.isrcs])
 
                 val duplicatePlay = ts - lastTs <= ListenTable.DEDUP_WINDOW_MS && (
-                    (songId != null && songId == lastSongId) ||
-                        (recordingMbid != null && recordingMbid == lastRecordingMbid) ||
-                        isrcs.any { it in lastIsrcs }
-                    )
+                        (songId != null && songId == lastSongId) ||
+                                (recordingMbid != null && recordingMbid == lastRecordingMbid) ||
+                                isrcs.any { it in lastIsrcs }
+                        )
                 lastTs = ts
                 lastSongId = songId
                 lastRecordingMbid = recordingMbid
                 lastIsrcs = isrcs
                 if (duplicatePlay) {
-                    if (row[ListenTable.listenSource] == ListenSource.LOCAL && pending?.get(ListenTable.listenSource) != ListenSource.LOCAL) pending = row
+                    if (row[ListenTable.listenSource] == ListenSource.LOCAL && pending?.get(ListenTable.listenSource) != ListenSource.LOCAL) pending =
+                        row
                     return@forEach
                 }
 
@@ -475,10 +500,12 @@ class ListeningStatsService : Service() {
                 }
         }
         for ((songId, recordingId) in songToRecording) {
-            creditsByRecording[recordingId]?.toString()?.trim()?.ifBlank { null }?.let { library.creditNames[songId] = it }
+            creditsByRecording[recordingId]?.toString()?.trim()?.ifBlank { null }
+                ?.let { library.creditNames[songId] = it }
         }
 
-        val artistIds = (inRangeSongIds.flatMap { library.songArtists[it].orEmpty() } + library.artistIdByMbid.values).distinct()
+        val artistIds =
+            (inRangeSongIds.flatMap { library.songArtists[it].orEmpty() } + library.artistIdByMbid.values).distinct()
         artistIds.chunked(CHUNK_SIZE).forEach { chunk ->
             ArtistTable
                 .select(ArtistTable.id, ArtistTable.name, ArtistTable.image)
@@ -614,7 +641,12 @@ class RpcListeningStatsService(
     private val user: User,
     private val service: ListeningStatsService,
 ) : IListeningStatsService {
-    override suspend fun getStats(range: StatsRange, timezone: String, topLimit: Int, topOrder: TopOrder): ListeningStats =
+    override suspend fun getStats(
+        range: StatsRange,
+        timezone: String,
+        topLimit: Int,
+        topOrder: TopOrder
+    ): ListeningStats =
         service.stats(user.id, range, timezone, topLimit.coerceIn(1, 100), topOrder)
 
     override suspend fun linkUnmatchedTrack(request: LinkUnmatchedTrackRequest): LinkUnmatchedTrackResult =

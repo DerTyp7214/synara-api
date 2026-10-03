@@ -16,7 +16,11 @@ class V1_44__AddFormatToTranscodedSongs : BaseJavaMigration() {
 
         context.connection.createStatement().use { statement ->
             if (Dialect.of(context.connection) == Dialect.POSTGRES) {
-                val schema = try { context.connection.schema } catch (e: Exception) { null }
+                val schema = try {
+                    context.connection.schema
+                } catch (e: Exception) {
+                    null
+                }
                 val pkInfo = listOf("transcodedSong", "transcodedsong").firstNotNullOfOrNull { tableName ->
                     context.connection.metaData.getPrimaryKeys(null, schema, tableName).use { rs ->
                         if (rs.next()) tableName to rs.getString("PK_NAME") else null

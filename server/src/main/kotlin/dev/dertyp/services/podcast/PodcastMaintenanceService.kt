@@ -25,7 +25,8 @@ class PodcastMaintenanceService(
                     }
 
                     PodcastRetention.UNLISTENED -> {
-                        val unlistened = podcastService.unlistenedImportCandidates(show.id, PodcastImportService.MAX_ATTEMPTS)
+                        val unlistened =
+                            podcastService.unlistenedImportCandidates(show.id, PodcastImportService.MAX_ATTEMPTS)
                         val room = show.keepEpisodes
                             ?.let { it - podcastService.importedOrPendingCount(show.id) }
                             ?.coerceAtLeast(0)

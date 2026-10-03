@@ -91,15 +91,51 @@ class ListenServiceTest : KoinTest {
     }
 
     private val libraryTables = arrayOf(
-        UserTable, ImageTable, ImageMetadataTable, AnimatedImageTable,
-        ArtistTable, AlbumTable, SongTable, SongVariantTable, SongArtistTable, SongMusicBrainzTable, SongAudioDataTable,
-        GenreTable, AlbumMusicBrainzTable, ArtistMusicBrainzTable, ArtistAliasTable, ArtistMemberTable,
-        AlbumArtistTable, PlaylistTable, UserSongTable, TimecodeTagTable, UserPlaylistTable, SongGenreTable, ArtistGenreTable,
-        AlbumGenreTable, PlaylistSongTable, UserPlaylistSongTable, SyncedLyricsTable, RecentReleaseTable,
-        FollowedArtistTable, TranscodedSongTable, CustomMigrationTable, ScheduledTaskLogTable,
-        ArtistSplitAliasTable, SyncServiceTable, SongProviderTable, AlbumProviderTable,
-        CollectionTable, CollectionSongTable, CollectionAlbumTable, CollectionArtistTable, CollectionPlaylistTable,
-        ListenBrainzUserTable, UserListenBrainzLinkTable, ListenTable, ListenLinkTable,
+        UserTable,
+        ImageTable,
+        ImageMetadataTable,
+        AnimatedImageTable,
+        ArtistTable,
+        AlbumTable,
+        SongTable,
+        SongVariantTable,
+        SongArtistTable,
+        SongMusicBrainzTable,
+        SongAudioDataTable,
+        GenreTable,
+        AlbumMusicBrainzTable,
+        ArtistMusicBrainzTable,
+        ArtistAliasTable,
+        ArtistMemberTable,
+        AlbumArtistTable,
+        PlaylistTable,
+        UserSongTable,
+        TimecodeTagTable,
+        UserPlaylistTable,
+        SongGenreTable,
+        ArtistGenreTable,
+        AlbumGenreTable,
+        PlaylistSongTable,
+        UserPlaylistSongTable,
+        SyncedLyricsTable,
+        RecentReleaseTable,
+        FollowedArtistTable,
+        TranscodedSongTable,
+        CustomMigrationTable,
+        ScheduledTaskLogTable,
+        ArtistSplitAliasTable,
+        SyncServiceTable,
+        SongProviderTable,
+        AlbumProviderTable,
+        CollectionTable,
+        CollectionSongTable,
+        CollectionAlbumTable,
+        CollectionArtistTable,
+        CollectionPlaylistTable,
+        ListenBrainzUserTable,
+        UserListenBrainzLinkTable,
+        ListenTable,
+        ListenLinkTable,
         *allMusicBrainzTables,
     )
 
@@ -177,38 +213,40 @@ class ListenServiceTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `linkUnmatched by MBID links matching unmatched listens and stores an override`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        val mbid = UUID.randomUUID()
-        val otherMbid = UUID.randomUUID()
-        val msid = UUID.randomUUID()
-        val (user, song) = transaction(database) {
-            val u = insertUser()
-            val lb = insertLbUser()
-            linkListenBrainzUser(u, lb)
-            val song = insertSong(insertAlbum())
-            insertUnmatchedLb(lb, 100, recordingMbid = mbid, recordingMsid = msid)
-            insertUnmatchedLb(lb, 200, recordingMbid = mbid)
-            insertUnmatchedLb(lb, 300, recordingMbid = otherMbid)
-            u to song
-        }
+    fun `linkUnmatched by MBID links matching unmatched listens and stores an override`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val mbid = UUID.randomUUID()
+            val otherMbid = UUID.randomUUID()
+            val msid = UUID.randomUUID()
+            val (user, song) = transaction(database) {
+                val u = insertUser()
+                val lb = insertLbUser()
+                linkListenBrainzUser(u, lb)
+                val song = insertSong(insertAlbum())
+                insertUnmatchedLb(lb, 100, recordingMbid = mbid, recordingMsid = msid)
+                insertUnmatchedLb(lb, 200, recordingMbid = mbid)
+                insertUnmatchedLb(lb, 300, recordingMbid = otherMbid)
+                u to song
+            }
 
-        val result = service.linkUnmatched(user, song, null, mbid)
+            val result = service.linkUnmatched(user, song, null, mbid)
 
-        assertEquals(2, result.linkedListens)
-        assertEquals(listOf(msid), result.recordingMsids)
-        transaction(database) {
-            val linked = ListenTable.selectAll().where { ListenTable.recordingMbid eq mbid }.map { it[ListenTable.songId]?.value }
-            assertEquals(listOf(song, song), linked)
-            val untouched = ListenTable.selectAll().where { ListenTable.recordingMbid eq otherMbid }.single()
-            assertEquals(null, untouched[ListenTable.songId])
-            val override = ListenLinkTable.selectAll().single()
-            assertEquals(user, override[ListenLinkTable.userId].value)
-            assertEquals(song, override[ListenLinkTable.songId].value)
-            assertEquals(mbid, override[ListenLinkTable.recordingMbid])
-            assertEquals(null, override[ListenLinkTable.recordingMsid])
+            assertEquals(2, result.linkedListens)
+            assertEquals(listOf(msid), result.recordingMsids)
+            transaction(database) {
+                val linked = ListenTable.selectAll().where { ListenTable.recordingMbid eq mbid }
+                    .map { it[ListenTable.songId]?.value }
+                assertEquals(listOf(song, song), linked)
+                val untouched = ListenTable.selectAll().where { ListenTable.recordingMbid eq otherMbid }.single()
+                assertEquals(null, untouched[ListenTable.songId])
+                val override = ListenLinkTable.selectAll().single()
+                assertEquals(user, override[ListenLinkTable.userId].value)
+                assertEquals(song, override[ListenLinkTable.songId].value)
+                assertEquals(mbid, override[ListenLinkTable.recordingMbid])
+                assertEquals(null, override[ListenLinkTable.recordingMsid])
+            }
         }
-    }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
@@ -627,34 +665,35 @@ class ListenServiceTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `recentSeedWeights without listens adds the super like bonus to a super liked favourite`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        transaction(database) { SchemaUtils.create(UserSongTable) }
-        val (user, favourite, superLiked) = transaction(database) {
-            val u = insertUser()
-            val album = insertAlbum()
-            val favourite = insertSong(album)
-            val superLiked = insertSong(album)
-            UserSongTable.insert {
-                it[userId] = u
-                it[songId] = favourite
-                it[isFavourite] = true
+    fun `recentSeedWeights without listens adds the super like bonus to a super liked favourite`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            transaction(database) { SchemaUtils.create(UserSongTable) }
+            val (user, favourite, superLiked) = transaction(database) {
+                val u = insertUser()
+                val album = insertAlbum()
+                val favourite = insertSong(album)
+                val superLiked = insertSong(album)
+                UserSongTable.insert {
+                    it[userId] = u
+                    it[songId] = favourite
+                    it[isFavourite] = true
+                }
+                UserSongTable.insert {
+                    it[userId] = u
+                    it[songId] = superLiked
+                    it[isFavourite] = true
+                    it[superLikedAt] = 1_000L
+                }
+                Triple(u, favourite, superLiked)
             }
-            UserSongTable.insert {
-                it[userId] = u
-                it[songId] = superLiked
-                it[isFavourite] = true
-                it[superLikedAt] = 1_000L
-            }
-            Triple(u, favourite, superLiked)
+
+            val weights = service.recentSeedWeights(user, 0)
+
+            assertEquals(setOf(favourite, superLiked), weights.keys)
+            assertEquals(1f, weights[favourite])
+            assertEquals(1f + ListenService.SUPER_LIKE_SEED_BONUS, weights[superLiked])
         }
-
-        val weights = service.recentSeedWeights(user, 0)
-
-        assertEquals(setOf(favourite, superLiked), weights.keys)
-        assertEquals(1f, weights[favourite])
-        assertEquals(1f + ListenService.SUPER_LIKE_SEED_BONUS, weights[superLiked])
-    }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)

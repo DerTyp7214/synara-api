@@ -11,7 +11,8 @@ class ValencePostProcessor : AudioAnalysisPostProcessor {
 
         val calculatedArousal = if (rawBpm != null || rawDanceability != null) {
             val bpmArousal = (((rawBpm ?: SongAudioData.DEFAULT_BPM) - 60.0) / 100.0).coerceIn(0.0, 1.0)
-            val danceArousal = (((rawDanceability ?: SongAudioData.DEFAULT_DANCEABILITY) - 0.5) / 2.0).coerceIn(0.0, 1.0)
+            val danceArousal =
+                (((rawDanceability ?: SongAudioData.DEFAULT_DANCEABILITY) - 0.5) / 2.0).coerceIn(0.0, 1.0)
             (bpmArousal * 0.4 + danceArousal * 0.6)
         } else null
 

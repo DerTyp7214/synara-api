@@ -25,7 +25,8 @@ import org.koin.dsl.module
 
 class PodcastIndexRemoteGrantTest {
     private val server = FakeCredentialServer(listOf(grant(CredentialNames.YOUTUBE_API))).apply {
-        credentials[CredentialNames.PODCAST_INDEX_API] = ResolvedCredential.ApiKeyPair(CredentialNames.PODCAST_INDEX_API, "pi-key", "pi-secret")
+        credentials[CredentialNames.PODCAST_INDEX_API] =
+            ResolvedCredential.ApiKeyPair(CredentialNames.PODCAST_INDEX_API, "pi-key", "pi-secret")
     }
     private val local = mockk<LocalCredentialProvider> {
         every { isAvailable(any()) } returns false

@@ -120,7 +120,7 @@ class TidalMetadataEnrichmentTest : KoinTest {
 
         mockkObject(MetadataService)
         mockkObject(ApiClient)
-        
+
         val mockResponse = mockk<HttpResponse>(relaxed = true)
         every { mockResponse.status } returns HttpStatusCode.OK
         coEvery { mockResponse.body<ByteArray>() } returns ByteArray(0)
@@ -131,7 +131,7 @@ class TidalMetadataEnrichmentTest : KoinTest {
         every { storageService.forImporter(any()) } returns mockk(relaxed = true) {
             every { tracksPath } returns tempDir.toString()
         }
-        
+
         every { indexer.audioExtension } returns "flac"
         every { indexer.audioExtensions } returns setOf("flac")
         every { indexer.isAudio(any()) } answers { firstArg<Path>().extension.lowercase() == "flac" }
@@ -161,7 +161,12 @@ class TidalMetadataEnrichmentTest : KoinTest {
         val mbRecordingId = UUID.randomUUID()
 
         val mockTidalService = mockk<MetadataService>(relaxed = true)
-        every { MetadataService.getMetadataService(IMetadataService.MetadataType.tidal, any()) } returns mockTidalService
+        every {
+            MetadataService.getMetadataService(
+                IMetadataService.MetadataType.tidal,
+                any()
+            )
+        } returns mockTidalService
         coEvery { mockTidalService.getTrackById("777", any()) } returns tidalTrack
 
         val mbRelease = MusicBrainzRelease(
@@ -192,7 +197,7 @@ class TidalMetadataEnrichmentTest : KoinTest {
         val mockTag = mockk<Tag>(relaxed = true)
         every { mockAudioFile.tag } returns mockTag
         every { mockTag.getFirst(FieldKey.TITLE) } returns "Get Lucky"
-        
+
         val file = tempDir.resolve("777.flac")
         Files.createFile(file)
         every { AudioFileIO.read(file.toFile()) } returns mockAudioFile
@@ -247,7 +252,12 @@ class TidalMetadataEnrichmentTest : KoinTest {
         )
 
         val mockTidalService = mockk<MetadataService>(relaxed = true)
-        every { MetadataService.getMetadataService(IMetadataService.MetadataType.tidal, any()) } returns mockTidalService
+        every {
+            MetadataService.getMetadataService(
+                IMetadataService.MetadataType.tidal,
+                any()
+            )
+        } returns mockTidalService
         coEvery { mockTidalService.getTrackById("777", any()) } returns tidalTrack
 
         val mbRelease = MusicBrainzRelease(
@@ -346,7 +356,12 @@ class TidalMetadataEnrichmentTest : KoinTest {
         )
 
         val mockTidalService = mockk<MetadataService>(relaxed = true)
-        every { MetadataService.getMetadataService(IMetadataService.MetadataType.tidal, any()) } returns mockTidalService
+        every {
+            MetadataService.getMetadataService(
+                IMetadataService.MetadataType.tidal,
+                any()
+            )
+        } returns mockTidalService
         coEvery { mockTidalService.getTrackById("777", any()) } returns tidalTrack
 
         val mockAudioFile = mockk<AudioFile>(relaxed = true)
@@ -415,7 +430,12 @@ class TidalMetadataEnrichmentTest : KoinTest {
     private fun prepareAlbumImport(libraryBarcode: String?) {
         val isrc = "USQX91300108"
         val mockTidalService = mockk<MetadataService>(relaxed = true)
-        every { MetadataService.getMetadataService(IMetadataService.MetadataType.tidal, any()) } returns mockTidalService
+        every {
+            MetadataService.getMetadataService(
+                IMetadataService.MetadataType.tidal,
+                any()
+            )
+        } returns mockTidalService
 
         coEvery { mockTidalService.getAlbumsByIds(listOf("album-999"), any<HttpClientPriority>()) } returns listOf(
             IMetadataService.Album(

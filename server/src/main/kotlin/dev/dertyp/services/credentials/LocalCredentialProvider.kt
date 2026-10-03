@@ -55,13 +55,21 @@ class LocalCredentialProvider(
         when (name) {
             CredentialNames.TIDAL_API, CredentialNames.SPOTIFY_API -> oauth(name)
             CredentialNames.APPLE_MUSIC_DEVELOPER -> appleKey()?.let { appleSigner.token(it) }
-            CredentialNames.THEAUDIODB_API -> ResolvedCredential.ApiKey(name, store.current(name)?.get(FIELD_API_KEY) ?: THEAUDIODB_DEFAULT_KEY)
+            CredentialNames.THEAUDIODB_API -> ResolvedCredential.ApiKey(
+                name,
+                store.current(name)?.get(FIELD_API_KEY) ?: THEAUDIODB_DEFAULT_KEY
+            )
+
             CredentialNames.YOUTUBE_API, CredentialNames.LINKRESOLVER_API, CredentialNames.ACOUSTID_API ->
                 store.current(name)?.get(FIELD_API_KEY)?.let { ResolvedCredential.ApiKey(name, it) }
-            CredentialNames.IMAGE_CACHE_TOKEN -> store.current(name)?.get(FIELD_TOKEN)?.let { ResolvedCredential.ApiKey(name, it) }
+
+            CredentialNames.IMAGE_CACHE_TOKEN -> store.current(name)?.get(FIELD_TOKEN)
+                ?.let { ResolvedCredential.ApiKey(name, it) }
+
             CredentialNames.PODCAST_INDEX_API -> store.current(name)?.let {
                 ResolvedCredential.ApiKeyPair(name, it.getValue(FIELD_API_KEY), it.getValue(FIELD_API_SECRET))
             }
+
             else -> pluginName(name)?.let { (pluginId, key) -> pluginStore.get(pluginId, key) }
         }
     } catch (e: CancellationException) {
@@ -71,7 +79,8 @@ class LocalCredentialProvider(
         null
     }
 
-    override suspend fun writeBack(name: String, expectedFingerprint: String?, files: List<CredentialFile>): Boolean = false
+    override suspend fun writeBack(name: String, expectedFingerprint: String?, files: List<CredentialFile>): Boolean =
+        false
 
     override fun changes(): Flow<Unit> = merge(store.changes(), pluginStore.changes().map { })
 
@@ -99,7 +108,13 @@ class LocalCredentialProvider(
 
     private suspend fun appleKey(): AppleDeveloperKey? {
         val name = CredentialNames.APPLE_MUSIC_DEVELOPER
-        store.stored(name)?.let { return AppleDeveloperKey(it.getValue(FIELD_TEAM_ID), it.getValue(FIELD_KEY_ID), it.getValue(FIELD_P8)) }
+        store.stored(name)?.let {
+            return AppleDeveloperKey(
+                it.getValue(FIELD_TEAM_ID),
+                it.getValue(FIELD_KEY_ID),
+                it.getValue(FIELD_P8)
+            )
+        }
         val environment = store.environment(name) ?: return null
         val path = environment.getValue(FIELD_P8)
         val file = File(path)
@@ -107,7 +122,11 @@ class LocalCredentialProvider(
             logger.error("p8 file not found at $path")
             return null
         }
-        return AppleDeveloperKey(environment.getValue(FIELD_TEAM_ID), environment.getValue(FIELD_KEY_ID), file.readText())
+        return AppleDeveloperKey(
+            environment.getValue(FIELD_TEAM_ID),
+            environment.getValue(FIELD_KEY_ID),
+            file.readText()
+        )
     }
 
     private fun pluginName(name: String): Pair<String, String>? {

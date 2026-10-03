@@ -129,7 +129,10 @@ class PlaylistService : PlaylistLibrary, IPlaylistService, Service() {
                 .selectAll()
                 .query()
             val countExpression = PlaylistTable.id.countDistinct()
-            val total = if (pageSize == Int.MAX_VALUE) null else Query(Slice(mainQuery.set.source, listOf(countExpression)), mainQuery.where)
+            val total = if (pageSize == Int.MAX_VALUE) null else Query(
+                Slice(mainQuery.set.source, listOf(countExpression)),
+                mainQuery.where
+            )
                 .first()[countExpression]
                 .toInt()
             val mainPlaylistRows = mainQuery
@@ -235,80 +238,85 @@ class PlaylistService : PlaylistLibrary, IPlaylistService, Service() {
         return Pair(playlistName, sortedEntries)
     }
 
-    override suspend fun createBatch(playlists: List<InsertablePlaylist>, userId: PlatformUUID?): List<PlatformUUID> = dbQuery {
-        if (playlists.isEmpty()) return@dbQuery emptyList()
-
-        val allUniqueImageHashes = playlists.mapNotNull { it.imageHash }.distinct()
-        val allUniqueSongPaths = playlists.flatMap { it.songPaths }.distinct()
-
-        val existingRows = dbQuery {
-            PlaylistTable
-                .select(PlaylistTable.id, PlaylistTable.name)
-                .where { PlaylistTable.name inList playlists.map { it.name } }
-                .toList()
-        }
-
-        val existingNames = existingRows.map { it[PlaylistTable.name] }.toSet()
-        val existingMap = existingRows.associate { it[PlaylistTable.name] to it[PlaylistTable.id].value }
-
-        val existingPlaylists = playlists.filter { it.name in existingNames }.mapNotNull { existingMap[it.name] }
-
+    override suspend fun createBatch(playlists: List<InsertablePlaylist>, userId: PlatformUUID?): List<PlatformUUID> =
         dbQuery {
-            PlaylistTable.deleteWhere {
-                PlaylistTable.id inList existingPlaylists
+            if (playlists.isEmpty()) return@dbQuery emptyList()
+
+            val allUniqueImageHashes = playlists.mapNotNull { it.imageHash }.distinct()
+            val allUniqueSongPaths = playlists.flatMap { it.songPaths }.distinct()
+
+            val existingRows = dbQuery {
+                PlaylistTable
+                    .select(PlaylistTable.id, PlaylistTable.name)
+                    .where { PlaylistTable.name inList playlists.map { it.name } }
+                    .toList()
             }
-            PlaylistSongTable.deleteWhere {
-                PlaylistSongTable.playlistId inList existingPlaylists
-            }
-        }
 
-        val imageIdMap: Map<String, UUID> = imageService.getCoverHashes(allUniqueImageHashes)
+            val existingNames = existingRows.map { it[PlaylistTable.name] }.toSet()
+            val existingMap = existingRows.associate { it[PlaylistTable.name] to it[PlaylistTable.id].value }
 
-        val songIdByPath: Map<String, UUID> = dbQuery {
-            SongTable
-                .select(SongTable.id, SongTable.filePath)
-                .where { SongTable.filePath inList allUniqueSongPaths }
-                .associate { it[SongTable.filePath] to it[SongTable.id].value }
-        }
+            val existingPlaylists = playlists.filter { it.name in existingNames }.mapNotNull { existingMap[it.name] }
 
-        val playlistInsertResults: List<ResultRow> = dbQuery {
-            PlaylistTable.batchInsert(playlists) { playlist ->
-                val imageId = playlist.imageHash?.let { imageIdMap[it] }
-
-                this[PlaylistTable.name] = playlist.name
-                this[PlaylistTable.imageId] = imageId
-            }
-        }
-
-        val insertedPlaylistsWithData = playlistInsertResults
-            .map { it[PlaylistTable.id].value to playlists[playlistInsertResults.indexOf(it)] }
-
-        val insertedPlaylistIds = insertedPlaylistsWithData.map { it.first }
-
-        val playlistSongLinks = insertedPlaylistsWithData.flatMap { (playlistId, playlistData) ->
-            var position = 1
-            playlistData.songPaths.mapNotNull { songPath ->
-                val songId = songIdByPath[songPath]
-
-                songId?.let {
-                    val link = Triple(playlistId, it, position++)
-                    link
+            dbQuery {
+                PlaylistTable.deleteWhere {
+                    PlaylistTable.id inList existingPlaylists
+                }
+                PlaylistSongTable.deleteWhere {
+                    PlaylistSongTable.playlistId inList existingPlaylists
                 }
             }
-        }.distinctBy { listOf(it.first, it.second) }
 
-        dbQuery {
-            PlaylistSongTable.batchInsert(playlistSongLinks) { (playlistId, songId, position) ->
-                this[PlaylistSongTable.playlistId] = playlistId
-                this[PlaylistSongTable.songId] = songId
-                this[PlaylistSongTable.position] = position
+            val imageIdMap: Map<String, UUID> = imageService.getCoverHashes(allUniqueImageHashes)
+
+            val songIdByPath: Map<String, UUID> = dbQuery {
+                SongTable
+                    .select(SongTable.id, SongTable.filePath)
+                    .where { SongTable.filePath inList allUniqueSongPaths }
+                    .associate { it[SongTable.filePath] to it[SongTable.id].value }
             }
+
+            val playlistInsertResults: List<ResultRow> = dbQuery {
+                PlaylistTable.batchInsert(playlists) { playlist ->
+                    val imageId = playlist.imageHash?.let { imageIdMap[it] }
+
+                    this[PlaylistTable.name] = playlist.name
+                    this[PlaylistTable.imageId] = imageId
+                }
+            }
+
+            val insertedPlaylistsWithData = playlistInsertResults
+                .map { it[PlaylistTable.id].value to playlists[playlistInsertResults.indexOf(it)] }
+
+            val insertedPlaylistIds = insertedPlaylistsWithData.map { it.first }
+
+            val playlistSongLinks = insertedPlaylistsWithData.flatMap { (playlistId, playlistData) ->
+                var position = 1
+                playlistData.songPaths.mapNotNull { songPath ->
+                    val songId = songIdByPath[songPath]
+
+                    songId?.let {
+                        val link = Triple(playlistId, it, position++)
+                        link
+                    }
+                }
+            }.distinctBy { listOf(it.first, it.second) }
+
+            dbQuery {
+                PlaylistSongTable.batchInsert(playlistSongLinks) { (playlistId, songId, position) ->
+                    this[PlaylistSongTable.playlistId] = playlistId
+                    this[PlaylistSongTable.songId] = songId
+                    this[PlaylistSongTable.position] = position
+                }
+            }
+
+            insertedPlaylistIds
         }
 
-        insertedPlaylistIds
-    }
-
-    override suspend fun getOrAddPlaylist(userId: PlatformUUID, customIdentifier: String?, playlist: InsertablePlaylist): UUID {
+    override suspend fun getOrAddPlaylist(
+        userId: PlatformUUID,
+        customIdentifier: String?,
+        playlist: InsertablePlaylist
+    ): UUID {
         val image = playlist.imageHash?.let { hash -> imageService.byHash(hash)?.id }
         return dbQuery {
             val existingId = PlaylistTable

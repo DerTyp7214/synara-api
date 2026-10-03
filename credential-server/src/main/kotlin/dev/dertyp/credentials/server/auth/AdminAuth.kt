@@ -24,10 +24,16 @@ class AdminKeyAuthenticationProvider(config: Config) : AuthenticationProvider(co
 
     override suspend fun onAuthenticate(context: AuthenticationContext) {
         if (adminKey.isBlank()) {
-            context.challenge(ADMIN_AUTH, AuthenticationFailedCause.Error("Admin key is not configured")) { challenge, call ->
+            context.challenge(
+                ADMIN_AUTH,
+                AuthenticationFailedCause.Error("Admin key is not configured")
+            ) { challenge, call ->
                 call.respond(
                     HttpStatusCode.ServiceUnavailable,
-                    CredentialError(CredentialErrorCode.UNAUTHORIZED, "Admin API is disabled because CREDENTIAL_SERVER_ADMIN_KEY is not set"),
+                    CredentialError(
+                        CredentialErrorCode.UNAUTHORIZED,
+                        "Admin API is disabled because CREDENTIAL_SERVER_ADMIN_KEY is not set"
+                    ),
                 )
                 challenge.complete()
             }
@@ -38,11 +44,15 @@ class AdminKeyAuthenticationProvider(config: Config) : AuthenticationProvider(co
             context.principal(name, AdminPrincipal)
             return
         }
-        val cause = if (provided == null) AuthenticationFailedCause.NoCredentials else AuthenticationFailedCause.InvalidCredentials
+        val cause =
+            if (provided == null) AuthenticationFailedCause.NoCredentials else AuthenticationFailedCause.InvalidCredentials
         context.challenge(ADMIN_AUTH, cause) { challenge, call ->
             call.respond(
                 HttpStatusCode.Unauthorized,
-                CredentialError(CredentialErrorCode.UNAUTHORIZED, "Missing or invalid ${CredentialProtocol.ADMIN_KEY_HEADER}"),
+                CredentialError(
+                    CredentialErrorCode.UNAUTHORIZED,
+                    "Missing or invalid ${CredentialProtocol.ADMIN_KEY_HEADER}"
+                ),
             )
             challenge.complete()
         }
@@ -50,5 +60,8 @@ class AdminKeyAuthenticationProvider(config: Config) : AuthenticationProvider(co
 }
 
 fun AuthenticationConfig.adminKey(adminKey: String) {
-    register(AdminKeyAuthenticationProvider(AdminKeyAuthenticationProvider.Config(ADMIN_AUTH).apply { this.adminKey = adminKey }))
+    register(
+        AdminKeyAuthenticationProvider(
+            AdminKeyAuthenticationProvider.Config(ADMIN_AUTH).apply { this.adminKey = adminKey })
+    )
 }

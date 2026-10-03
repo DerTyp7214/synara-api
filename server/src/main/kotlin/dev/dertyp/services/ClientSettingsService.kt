@@ -95,7 +95,7 @@ class ClientSettingsService : Service() {
                     syncedVersion = synced.version,
                     deviceVersion = own.version,
                     entries = readEntries(userId, ClientSettingScope.SYNCED, "", false) +
-                        readEntries(userId, ClientSettingScope.DEVICE, device, false)
+                            readEntries(userId, ClientSettingScope.DEVICE, device, false)
                 )
             }
         }
@@ -570,8 +570,8 @@ class ClientSettingsService : Service() {
     private fun writeScope(owner: UUID, target: ClientSettingScope, device: String, state: Scope) {
         val updated = ClientSettingScopeTable.update({
             (ClientSettingScopeTable.userId eq owner) and
-                (ClientSettingScopeTable.scope eq target) and
-                (ClientSettingScopeTable.deviceId eq device)
+                    (ClientSettingScopeTable.scope eq target) and
+                    (ClientSettingScopeTable.deviceId eq device)
         }) {
             it[version] = state.version
             it[modifiedAt] = state.modifiedAt
@@ -602,9 +602,9 @@ class ClientSettingsService : Service() {
     ) {
         val updated = ClientSettingTable.update({
             (ClientSettingTable.userId eq owner) and
-                (ClientSettingTable.scope eq target) and
-                (ClientSettingTable.deviceId eq device) and
-                (ClientSettingTable.key eq entryKey)
+                    (ClientSettingTable.scope eq target) and
+                    (ClientSettingTable.deviceId eq device) and
+                    (ClientSettingTable.key eq entryKey)
         }) {
             it[value] = entryValue
             it[deleted] = entryValue == null
@@ -670,10 +670,10 @@ class ClientSettingsService : Service() {
 
         return ClientSettingHistoryTable.deleteWhere {
             (ClientSettingHistoryTable.userId eq owner) and
-                (ClientSettingHistoryTable.scope eq target) and
-                (ClientSettingHistoryTable.deviceId eq device) and
-                (ClientSettingHistoryTable.key eq entryKey) and
-                (ClientSettingHistoryTable.version less threshold)
+                    (ClientSettingHistoryTable.scope eq target) and
+                    (ClientSettingHistoryTable.deviceId eq device) and
+                    (ClientSettingHistoryTable.key eq entryKey) and
+                    (ClientSettingHistoryTable.version less threshold)
         }
     }
 
@@ -681,17 +681,17 @@ class ClientSettingsService : Service() {
         keys.distinct().chunked(LOOKUP_CHUNK).forEach { chunk ->
             ClientSettingTable.deleteWhere {
                 (ClientSettingTable.userId eq scopeKey.userId) and
-                    (ClientSettingTable.scope eq scopeKey.scope) and
-                    (ClientSettingTable.deviceId eq scopeKey.deviceId) and
-                    (ClientSettingTable.deleted eq true) and
-                    (ClientSettingTable.key inList chunk)
+                        (ClientSettingTable.scope eq scopeKey.scope) and
+                        (ClientSettingTable.deviceId eq scopeKey.deviceId) and
+                        (ClientSettingTable.deleted eq true) and
+                        (ClientSettingTable.key inList chunk)
             }
 
             ClientSettingHistoryTable.deleteWhere {
                 (ClientSettingHistoryTable.userId eq scopeKey.userId) and
-                    (ClientSettingHistoryTable.scope eq scopeKey.scope) and
-                    (ClientSettingHistoryTable.deviceId eq scopeKey.deviceId) and
-                    (ClientSettingHistoryTable.key inList chunk)
+                        (ClientSettingHistoryTable.scope eq scopeKey.scope) and
+                        (ClientSettingHistoryTable.deviceId eq scopeKey.deviceId) and
+                        (ClientSettingHistoryTable.key inList chunk)
             }
         }
     }
@@ -699,20 +699,20 @@ class ClientSettingsService : Service() {
     private fun purgeDevice(owner: UUID, device: String) {
         ClientSettingHistoryTable.deleteWhere {
             (ClientSettingHistoryTable.userId eq owner) and
-                (ClientSettingHistoryTable.scope eq ClientSettingScope.DEVICE) and
-                (ClientSettingHistoryTable.deviceId eq device)
+                    (ClientSettingHistoryTable.scope eq ClientSettingScope.DEVICE) and
+                    (ClientSettingHistoryTable.deviceId eq device)
         }
 
         ClientSettingTable.deleteWhere {
             (ClientSettingTable.userId eq owner) and
-                (ClientSettingTable.scope eq ClientSettingScope.DEVICE) and
-                (ClientSettingTable.deviceId eq device)
+                    (ClientSettingTable.scope eq ClientSettingScope.DEVICE) and
+                    (ClientSettingTable.deviceId eq device)
         }
 
         ClientSettingScopeTable.deleteWhere {
             (ClientSettingScopeTable.userId eq owner) and
-                (ClientSettingScopeTable.scope eq ClientSettingScope.DEVICE) and
-                (ClientSettingScopeTable.deviceId eq device)
+                    (ClientSettingScopeTable.scope eq ClientSettingScope.DEVICE) and
+                    (ClientSettingScopeTable.deviceId eq device)
         }
 
         ClientDeviceTable.deleteWhere {

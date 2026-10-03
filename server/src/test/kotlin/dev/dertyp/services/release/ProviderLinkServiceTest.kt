@@ -127,7 +127,10 @@ class ProviderLinkServiceTest {
 
         assertEquals(2, linkIds.size)
         transaction(database) {
-            assertEquals(2L, RecentReleaseLinkTable.selectAll().where { RecentReleaseLinkTable.releaseId eq groupId }.count())
+            assertEquals(
+                2L,
+                RecentReleaseLinkTable.selectAll().where { RecentReleaseLinkTable.releaseId eq groupId }.count()
+            )
         }
 
         assertEquals(

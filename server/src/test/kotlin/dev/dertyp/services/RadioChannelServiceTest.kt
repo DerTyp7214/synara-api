@@ -55,7 +55,8 @@ class RadioChannelServiceTest : KoinTest {
             AlbumTable.insert { it[id] = otherAlbum; it[name] = "Other Album" }
             ArtistTable.insert { it[id] = channelArtist; it[name] = "Channel Artist" }
 
-            fun song(songId: UUID, album: UUID) = SongTable.insert { it[id] = songId; it[title] = "s"; it[albumId] = album }
+            fun song(songId: UUID, album: UUID) =
+                SongTable.insert { it[id] = songId; it[title] = "s"; it[albumId] = album }
             song(songExplicit, otherAlbum)
             song(songInAlbum, channelAlbum)
             song(songByArtistA, otherAlbum)
@@ -135,14 +136,46 @@ class RadioChannelServiceTest : KoinTest {
     }
 
     private val searchTables = arrayOf(
-        UserTable, ImageTable, ImageMetadataTable, AnimatedImageTable,
-        ArtistTable, AlbumTable, SongTable, SongVariantTable, SongArtistTable, SongMusicBrainzTable, SongAudioDataTable,
-        GenreTable, AlbumMusicBrainzTable, ArtistMusicBrainzTable, ArtistAliasTable, ArtistMemberTable,
-        AlbumArtistTable, PlaylistTable, UserSongTable, TimecodeTagTable, UserPlaylistTable, SongGenreTable, ArtistGenreTable,
-        AlbumGenreTable, PlaylistSongTable, UserPlaylistSongTable, SyncedLyricsTable, RecentReleaseTable,
-        FollowedArtistTable, TranscodedSongTable, CustomMigrationTable, ScheduledTaskLogTable,
-        ArtistSplitAliasTable, SyncServiceTable, SongProviderTable, AlbumProviderTable,
-        RadioChannelTable, RadioChannelSongTable, RadioChannelArtistTable, RadioChannelAlbumTable,
+        UserTable,
+        ImageTable,
+        ImageMetadataTable,
+        AnimatedImageTable,
+        ArtistTable,
+        AlbumTable,
+        SongTable,
+        SongVariantTable,
+        SongArtistTable,
+        SongMusicBrainzTable,
+        SongAudioDataTable,
+        GenreTable,
+        AlbumMusicBrainzTable,
+        ArtistMusicBrainzTable,
+        ArtistAliasTable,
+        ArtistMemberTable,
+        AlbumArtistTable,
+        PlaylistTable,
+        UserSongTable,
+        TimecodeTagTable,
+        UserPlaylistTable,
+        SongGenreTable,
+        ArtistGenreTable,
+        AlbumGenreTable,
+        PlaylistSongTable,
+        UserPlaylistSongTable,
+        SyncedLyricsTable,
+        RecentReleaseTable,
+        FollowedArtistTable,
+        TranscodedSongTable,
+        CustomMigrationTable,
+        ScheduledTaskLogTable,
+        ArtistSplitAliasTable,
+        SyncServiceTable,
+        SongProviderTable,
+        AlbumProviderTable,
+        RadioChannelTable,
+        RadioChannelSongTable,
+        RadioChannelArtistTable,
+        RadioChannelAlbumTable,
         *allMusicBrainzTables,
     )
 
@@ -242,7 +275,8 @@ class RadioChannelServiceTest : KoinTest {
         val service = RadioChannelService()
         val f = searchFixture(service)
 
-        val results = service.rankedSearch(f.channelId, "Alpha", explicit = true, page = 0, pageSize = 50, userId = creatorId)
+        val results =
+            service.rankedSearch(f.channelId, "Alpha", explicit = true, page = 0, pageSize = 50, userId = creatorId)
         val byId = results.songs.data.associateBy { it.song.id }
 
         assertEquals(setOf(f.directSong, f.albumSong, f.artistSong, f.albumArtistSong), byId.keys)
@@ -270,7 +304,8 @@ class RadioChannelServiceTest : KoinTest {
         assertTrue(service.addItem(channelId, RadioChannelItemType.ARTIST, artistIn))
         assertTrue(service.addItem(channelId, RadioChannelItemType.ALBUM, albumIn))
 
-        val results = service.rankedSearch(channelId, "Alpha", explicit = true, page = 0, pageSize = 50, userId = creatorId)
+        val results =
+            service.rankedSearch(channelId, "Alpha", explicit = true, page = 0, pageSize = 50, userId = creatorId)
 
         assertEquals(listOf(artistIn), results.artists.data.map { it.id })
         assertEquals(listOf(albumIn), results.albums.data.map { it.id })
@@ -284,7 +319,8 @@ class RadioChannelServiceTest : KoinTest {
         val service = RadioChannelService()
         val f = searchFixture(service)
 
-        val results = service.rankedSearch(f.channelId, "", explicit = true, page = 0, pageSize = 50, userId = creatorId)
+        val results =
+            service.rankedSearch(f.channelId, "", explicit = true, page = 0, pageSize = 50, userId = creatorId)
 
         assertEquals(
             setOf(f.directSong, f.albumSong, f.artistSong, f.albumArtistSong),

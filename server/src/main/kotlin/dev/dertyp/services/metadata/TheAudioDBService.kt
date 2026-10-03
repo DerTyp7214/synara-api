@@ -141,7 +141,10 @@ class TheAudioDBService(
         } ?: emptyList()
     }
 
-    override suspend fun getImageUrlByArtistMbId(mbId: UUID, priority: HttpClientPriority): List<IMetadataService.Image> {
+    override suspend fun getImageUrlByArtistMbId(
+        mbId: UUID,
+        priority: HttpClientPriority
+    ): List<IMetadataService.Image> {
         return getArtistByMbId(mbId, priority)?.images ?: emptyList()
     }
 
@@ -166,7 +169,10 @@ class TheAudioDBService(
         )
     }
 
-    override suspend fun getImageUrlByAlbumMbId(mbId: UUID, priority: HttpClientPriority): List<IMetadataService.Image> {
+    override suspend fun getImageUrlByAlbumMbId(
+        mbId: UUID,
+        priority: HttpClientPriority
+    ): List<IMetadataService.Image> {
         return getAlbumByMbId(mbId, priority)?.images ?: emptyList()
     }
 
@@ -187,7 +193,10 @@ class TheAudioDBService(
         )
     }
 
-    override suspend fun getImageUrlByTrackMbId(mbId: UUID, priority: HttpClientPriority): List<IMetadataService.Image> {
+    override suspend fun getImageUrlByTrackMbId(
+        mbId: UUID,
+        priority: HttpClientPriority
+    ): List<IMetadataService.Image> {
         return getTrackByMbId(mbId, priority)?.images ?: emptyList()
     }
 

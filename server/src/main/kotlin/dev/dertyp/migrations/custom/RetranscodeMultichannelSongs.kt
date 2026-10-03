@@ -64,7 +64,8 @@ class RetranscodeMultichannelSongs : CustomMigration() {
                     val format = row[TranscodedSongTable.format]
                     try {
                         File(row[TranscodedSongTable.path]).delete()
-                        val info = transcoder.transcodeAudio(environment, source, bitrate, force = true, audioFormat = format)
+                        val info =
+                            transcoder.transcodeAudio(environment, source, bitrate, force = true, audioFormat = format)
                         dbQuery {
                             TranscodedSongTable.update({
                                 (TranscodedSongTable.songId eq row[TranscodedSongTable.songId]) and
@@ -84,7 +85,10 @@ class RetranscodeMultichannelSongs : CustomMigration() {
                     }
                 }
 
-                updateProgress((index + 1).toDouble() / rows.size, "Checked ${index + 1}/${rows.size}, retranscoded $retranscoded, failed $failed")
+                updateProgress(
+                    (index + 1).toDouble() / rows.size,
+                    "Checked ${index + 1}/${rows.size}, retranscoded $retranscoded, failed $failed"
+                )
             }
 
             mapOf("checked" to rows.size, "retranscoded" to retranscoded, "failed" to failed)

@@ -76,13 +76,13 @@ class SessionService : Service() {
             chunks.forEachIndexed { index, chunk ->
                 val progress = (index.toDouble() / chunks.size) * 100.0
                 onProgress(progress, "Cleaning up sessions batch ${index + 1}/${chunks.size}")
-                
+
                 QueueSyncDeviceTable.deleteWhere { QueueSyncDeviceTable.sessionId inList chunk }
                 RefreshTokenTable.deleteWhere { sessionId inList chunk }
                 SessionTable.deleteWhere { id inList chunk }
             }
         }
-        
+
         onProgress(100.0, "Cleaned up ${sessionsToDelete.size} sessions")
         sessionsToDelete.size
     }

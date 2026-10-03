@@ -98,15 +98,27 @@ class DiscoveryService : Service() {
     private val audioAnalysisService: AudioAnalysisService by inject()
     private val recommendationServingService: RecommendationServingService by inject()
 
-    suspend fun getSongsBySameComposers(seedSongIds: List<PlatformUUID>, limit: Int = 20, userId: PlatformUUID): List<UserSong> {
+    suspend fun getSongsBySameComposers(
+        seedSongIds: List<PlatformUUID>,
+        limit: Int = 20,
+        userId: PlatformUUID
+    ): List<UserSong> {
         return getSongsBySameCredits(seedSongIds, SongComposerTable, limit, userId)
     }
 
-    suspend fun getSongsBySameLyricists(seedSongIds: List<PlatformUUID>, limit: Int = 20, userId: PlatformUUID): List<UserSong> {
+    suspend fun getSongsBySameLyricists(
+        seedSongIds: List<PlatformUUID>,
+        limit: Int = 20,
+        userId: PlatformUUID
+    ): List<UserSong> {
         return getSongsBySameCredits(seedSongIds, SongLyricistTable, limit, userId)
     }
 
-    suspend fun getSongsBySameProducers(seedSongIds: List<PlatformUUID>, limit: Int = 20, userId: PlatformUUID): List<UserSong> {
+    suspend fun getSongsBySameProducers(
+        seedSongIds: List<PlatformUUID>,
+        limit: Int = 20,
+        userId: PlatformUUID
+    ): List<UserSong> {
         return getSongsBySameCredits(seedSongIds, SongProducerTable, limit, userId)
     }
 
@@ -238,19 +250,31 @@ class DiscoveryService : Service() {
         return getSimilarSongs(songIds, limit, userId)
     }
 
-    suspend fun getSimilarSongsByBpm(seedSongIds: List<PlatformUUID>, limit: Int = 20, userId: PlatformUUID): List<UserSong> {
+    suspend fun getSimilarSongsByBpm(
+        seedSongIds: List<PlatformUUID>,
+        limit: Int = 20,
+        userId: PlatformUUID
+    ): List<UserSong> {
         return getSimilarSongsByFeature(seedSongIds, limit, userId) { target, candidate ->
             1.0 - abs(normalize(target.bpm, 50.0, 200.0) - normalize(candidate.bpm, 50.0, 200.0))
         }
     }
 
-    suspend fun getSimilarSongsByEnergy(seedSongIds: List<PlatformUUID>, limit: Int = 20, userId: PlatformUUID): List<UserSong> {
+    suspend fun getSimilarSongsByEnergy(
+        seedSongIds: List<PlatformUUID>,
+        limit: Int = 20,
+        userId: PlatformUUID
+    ): List<UserSong> {
         return getSimilarSongsByFeature(seedSongIds, limit, userId) { target, candidate ->
             1.0 - abs(target.energy - candidate.energy)
         }
     }
 
-    suspend fun getSimilarSongsByMood(seedSongIds: List<PlatformUUID>, limit: Int = 20, userId: PlatformUUID): List<UserSong> {
+    suspend fun getSimilarSongsByMood(
+        seedSongIds: List<PlatformUUID>,
+        limit: Int = 20,
+        userId: PlatformUUID
+    ): List<UserSong> {
         return getSimilarSongsByFeature(seedSongIds, limit, userId) { target, candidate ->
             val distance = weightedDistance {
                 add(target.energy, candidate.energy, weight = 1.0)
@@ -355,11 +379,12 @@ class DiscoveryService : Service() {
     ): List<UserSong> = dbQuery {
         @Suppress("UNCHECKED_CAST")
         val songIdCol = creditTable.columns[0] as Column<EntityID<UUID>>
+
         @Suppress("UNCHECKED_CAST")
         val personIdCol = creditTable.columns[1] as Column<EntityID<UUID>>
 
         val seedSet = seedSongIds.toSet()
-        
+
         val personIds = seedSongIds.chunked(1000).flatMap { chunk ->
             creditTable.select(personIdCol)
                 .where { songIdCol inList chunk }
@@ -406,9 +431,17 @@ class DiscoveryService : Service() {
     }
 
     private fun camelotDistance(c1: String, c2: String): Int {
-        val n1 = try { c1.dropLast(1).toInt() } catch (_: Exception) { 0 }
+        val n1 = try {
+            c1.dropLast(1).toInt()
+        } catch (_: Exception) {
+            0
+        }
         val l1 = c1.last()
-        val n2 = try { c2.dropLast(1).toInt() } catch (_: Exception) { 0 }
+        val n2 = try {
+            c2.dropLast(1).toInt()
+        } catch (_: Exception) {
+            0
+        }
         val l2 = c2.last()
 
         val numDist = abs(n1 - n2).let { min(it, 12 - it) }

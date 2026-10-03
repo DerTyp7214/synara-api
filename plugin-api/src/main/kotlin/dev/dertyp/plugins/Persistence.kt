@@ -10,7 +10,12 @@ interface SongLibrary {
     suspend fun byOriginalIds(ids: Collection<PrefixedId>, userId: PlatformUUID): List<UserSong>
     suspend fun byOriginalUrls(urls: Collection<String>, userId: PlatformUUID): Map<String, UserSong?>
     suspend fun setLiked(songId: PlatformUUID, userId: PlatformUUID, liked: Boolean, addedAt: Instant? = null)
-    suspend fun setLikedReturning(songId: PlatformUUID, userId: PlatformUUID, liked: Boolean, addedAt: Instant? = null): UserSong?
+    suspend fun setLikedReturning(
+        songId: PlatformUUID,
+        userId: PlatformUUID,
+        liked: Boolean,
+        addedAt: Instant? = null
+    ): UserSong?
 }
 
 interface AlbumLibrary {
@@ -30,6 +35,11 @@ interface ImageLibrary {
 
 interface PlaylistLibrary {
     suspend fun createBatch(playlists: List<InsertablePlaylist>, userId: PlatformUUID? = null): List<PlatformUUID>
-    suspend fun getOrAddPlaylist(userId: PlatformUUID, customIdentifier: String?, playlist: InsertablePlaylist): PlatformUUID
+    suspend fun getOrAddPlaylist(
+        userId: PlatformUUID,
+        customIdentifier: String?,
+        playlist: InsertablePlaylist
+    ): PlatformUUID
+
     suspend fun addToPlaylist(id: PlatformUUID, songIds: List<Pair<Long, PlatformUUID>>)
 }

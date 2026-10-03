@@ -130,6 +130,9 @@ class HueEntertainmentRendererTest {
 
         renderer.pulse(1.0, 0, 0)
 
-        assertEquals(32_896, renderer.tick(HueEntertainmentRenderer.ATTACK_MS + HueEntertainmentRenderer.MIN_DECAY_MS.toLong()).single().r)
+        assertEquals(32_896,
+            renderer.tick(HueEntertainmentRenderer.ATTACK_MS + HueEntertainmentRenderer.MIN_DECAY_MS.toLong())
+                .single().r
+        )
     }
 }

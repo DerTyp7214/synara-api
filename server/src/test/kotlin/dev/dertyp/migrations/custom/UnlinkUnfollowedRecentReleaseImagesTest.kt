@@ -123,9 +123,18 @@ class UnlinkUnfollowedRecentReleaseImagesTest : KoinTest {
         val sharedRelease = UUID.randomUUID()
         val followedRelease = UUID.randomUUID()
 
-        val (unfollowedImage, unfollowedFile) = createStoredImage("unfollowed cover", "https://coverartarchive.org/release-group/$unfollowedRelease/front")
-        val (sharedImage, sharedFile) = createStoredImage("shared cover", "https://coverartarchive.org/release-group/$sharedRelease/front")
-        val (followedImage, followedFile) = createStoredImage("followed cover", "https://coverartarchive.org/release-group/$followedRelease/front")
+        val (unfollowedImage, unfollowedFile) = createStoredImage(
+            "unfollowed cover",
+            "https://coverartarchive.org/release-group/$unfollowedRelease/front"
+        )
+        val (sharedImage, sharedFile) = createStoredImage(
+            "shared cover",
+            "https://coverartarchive.org/release-group/$sharedRelease/front"
+        )
+        val (followedImage, followedFile) = createStoredImage(
+            "followed cover",
+            "https://coverartarchive.org/release-group/$followedRelease/front"
+        )
 
         transaction(database) {
             UserTable.insert { it[id] = userId; it[username] = "user"; it[passwordHash] = "hash" }

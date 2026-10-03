@@ -58,7 +58,7 @@ class DbManagementServiceTest : KoinTest {
         database = TestDatabase.connect(dialect, "db_mgmt_test")
         service = DbManagementService()
         val tables = getDiscoveredTables(service).toTypedArray()
-        
+
         transaction(database) {
             SchemaUtils.create(*tables)
         }
@@ -74,10 +74,10 @@ class DbManagementServiceTest : KoinTest {
     @EnumSource(DbDialect::class)
     fun `export and import should preserve data`(dialect: DbDialect) = runBlocking {
         setup(dialect)
-        
+
         val userId = UUID.randomUUID()
         val artistId = UUID.randomUUID()
-        
+
         transaction(database) {
             UserTable.insert {
                 it[id] = userId
@@ -97,7 +97,7 @@ class DbManagementServiceTest : KoinTest {
             SchemaUtils.drop(*tables)
             SchemaUtils.create(*tables)
         }
-        
+
         transaction(database) {
             assertEquals(0, UserTable.selectAll().count())
             assertEquals(0, ArtistTable.selectAll().count())
@@ -250,27 +250,28 @@ class DbManagementServiceTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `restore over existing rows respects foreign keys between image album and song`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
+    fun `restore over existing rows respects foreign keys between image album and song`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
 
-        val imageId = UUID.randomUUID()
-        val albumId = UUID.randomUUID()
-        val songId = UUID.randomUUID()
-        insertLibrary(imageId, albumId, songId, "backup")
+            val imageId = UUID.randomUUID()
+            val albumId = UUID.randomUUID()
+            val songId = UUID.randomUUID()
+            insertLibrary(imageId, albumId, songId, "backup")
 
-        val exportedData = service.exportData()
+            val exportedData = service.exportData()
 
-        transaction(database) {
-            SongTable.deleteAll()
-            AlbumTable.deleteAll()
-            ImageTable.deleteAll()
+            transaction(database) {
+                SongTable.deleteAll()
+                AlbumTable.deleteAll()
+                ImageTable.deleteAll()
+            }
+            insertLibrary(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), "current")
+
+            service.importData(exportedData)
+
+            assertLibrary(imageId, albumId, songId, "backup")
         }
-        insertLibrary(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), "current")
-
-        service.importData(exportedData)
-
-        assertLibrary(imageId, albumId, songId, "backup")
-    }
 
     @OptIn(ExperimentalSerializationApi::class)
     @ParameterizedTest
@@ -326,67 +327,68 @@ class DbManagementServiceTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `restore replaces users that own sync service rows under the legacy set null constraint`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
+    fun `restore replaces users that own sync service rows under the legacy set null constraint`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
 
-        val backupUserId = UUID.randomUUID()
-        transaction(database) {
-            UserTable.insert {
-                it[id] = backupUserId
-                it[username] = "backup-user"
-                it[passwordHash] = "hash"
-            }
-        }
-        val exportedData = service.exportData()
-
-        transaction(database) {
-            UserTable.deleteAll()
-            SchemaUtils.drop(SyncServiceTable)
-            SchemaUtils.create(LegacySyncServiceTable)
-        }
-
-        val currentUserId = UUID.randomUUID()
-        transaction(database) {
-            UserTable.insert {
-                it[id] = currentUserId
-                it[username] = "current-user"
-                it[passwordHash] = "hash"
-            }
-            SyncServiceTable.insert {
-                it[name] = "spotify"
-                it[ownerId] = currentUserId
-                it[scope] = "scope"
-                it[accessToken] = "access"
-                it[refreshToken] = "refresh"
-                it[expiresIn] = 3600
-                it[tokenType] = "Bearer"
-                it[userId] = 1L
-                it[createdAt] = 0L
-            }
-        }
-
-        assertThrows(Exception::class.java) {
+            val backupUserId = UUID.randomUUID()
             transaction(database) {
-                UserTable.deleteWhere { UserTable.id eq currentUserId }
+                UserTable.insert {
+                    it[id] = backupUserId
+                    it[username] = "backup-user"
+                    it[passwordHash] = "hash"
+                }
+            }
+            val exportedData = service.exportData()
+
+            transaction(database) {
+                UserTable.deleteAll()
+                SchemaUtils.drop(SyncServiceTable)
+                SchemaUtils.create(LegacySyncServiceTable)
+            }
+
+            val currentUserId = UUID.randomUUID()
+            transaction(database) {
+                UserTable.insert {
+                    it[id] = currentUserId
+                    it[username] = "current-user"
+                    it[passwordHash] = "hash"
+                }
+                SyncServiceTable.insert {
+                    it[name] = "spotify"
+                    it[ownerId] = currentUserId
+                    it[scope] = "scope"
+                    it[accessToken] = "access"
+                    it[refreshToken] = "refresh"
+                    it[expiresIn] = 3600
+                    it[tokenType] = "Bearer"
+                    it[userId] = 1L
+                    it[createdAt] = 0L
+                }
+            }
+
+            assertThrows(Exception::class.java) {
+                transaction(database) {
+                    UserTable.deleteWhere { UserTable.id eq currentUserId }
+                }
+            }
+
+            service.importData(exportedData)
+
+            transaction(database) {
+                val users = UserTable.selectAll().toList()
+                assertEquals(1, users.size)
+                assertEquals(backupUserId, users[0][UserTable.id].value)
+                assertEquals(0, SyncServiceTable.selectAll().count())
             }
         }
-
-        service.importData(exportedData)
-
-        transaction(database) {
-            val users = UserTable.selectAll().toList()
-            assertEquals(1, users.size)
-            assertEquals(backupUserId, users[0][UserTable.id].value)
-            assertEquals(0, SyncServiceTable.selectAll().count())
-        }
-    }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
     fun `should automatically discover tables`(dialect: DbDialect) = runBlocking {
         setup(dialect)
         val discoveredTables = getDiscoveredTables(service)
-        
+
         assertTrue(discoveredTables.size > 30)
         assertTrue(discoveredTables.any { it.tableName == "user" })
         assertTrue(discoveredTables.any { it.tableName == "song" })

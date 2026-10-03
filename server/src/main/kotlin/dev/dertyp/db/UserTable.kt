@@ -3,7 +3,7 @@ package dev.dertyp.db
 import org.jetbrains.exposed.v1.core.ReferenceOption
 import org.jetbrains.exposed.v1.core.dao.id.java.UUIDTable
 
-object UserTable: UUIDTable("user") {
+object UserTable : UUIDTable("user") {
     val username = varchar("username", 255).uniqueIndex()
     val displayName = varchar("displayName", 255).nullable()
     val passwordHash = varchar("passwordHash", 255)

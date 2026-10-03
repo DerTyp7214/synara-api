@@ -26,7 +26,7 @@ class MusicBrainzWorker : Worker("MusicBrainzWorker") {
         var totalAlbumsChecked = 0
         var taggedArtists = 0
         var totalArtistsChecked = 0
-        
+
         withTimeoutOrNull(3.hours) {
             val songIdsChannel = songService.songIdsWithoutMusicBrainzId().produceIn(this)
             val albumIdsChannel = albumService.albumIdsWithoutMusicBrainzId().produceIn(this)
@@ -46,7 +46,10 @@ class MusicBrainzWorker : Worker("MusicBrainzWorker") {
                                 if (song?.musicBrainzId != null) {
                                     taggedSongs++
                                 }
-                                onProgress(0.0, "Checked $totalSongsChecked songs ($taggedSongs tagged), $totalAlbumsChecked albums ($taggedAlbums tagged), $totalArtistsChecked artists ($taggedArtists tagged)")
+                                onProgress(
+                                    0.0,
+                                    "Checked $totalSongsChecked songs ($taggedSongs tagged), $totalAlbumsChecked albums ($taggedAlbums tagged), $totalArtistsChecked artists ($taggedArtists tagged)"
+                                )
                             } catch (e: CancellationException) {
                                 throw e
                             } catch (e: Exception) {
@@ -60,14 +63,21 @@ class MusicBrainzWorker : Worker("MusicBrainzWorker") {
                         val albumResult = albumIdsChannel.receiveCatching()
                         albumResult.getOrNull()?.let { albumId ->
                             try {
-                                val album = albumService.fetchMusicBrainzId(albumId, priority = HttpClientPriority.LOW, triggerMerge = false)
+                                val album = albumService.fetchMusicBrainzId(
+                                    albumId,
+                                    priority = HttpClientPriority.LOW,
+                                    triggerMerge = false
+                                )
                                 totalAlbumsChecked++
                                 if (album?.musicbrainzId != null) {
                                     taggedAlbums++
                                 } else {
                                     albumService.updateMusicBrainzLastCheck(albumId)
                                 }
-                                onProgress(0.0, "Checked $totalSongsChecked songs ($taggedSongs tagged), $totalAlbumsChecked albums ($taggedAlbums tagged), $totalArtistsChecked artists ($taggedArtists tagged)")
+                                onProgress(
+                                    0.0,
+                                    "Checked $totalSongsChecked songs ($taggedSongs tagged), $totalAlbumsChecked albums ($taggedAlbums tagged), $totalArtistsChecked artists ($taggedArtists tagged)"
+                                )
                             } catch (e: CancellationException) {
                                 throw e
                             } catch (e: Exception) {
@@ -81,14 +91,18 @@ class MusicBrainzWorker : Worker("MusicBrainzWorker") {
                         val artistResult = artistIdsChannel.receiveCatching()
                         artistResult.getOrNull()?.let { artistId ->
                             try {
-                                val artist = artistService.fetchMusicBrainzId(artistId, priority = HttpClientPriority.LOW)
+                                val artist =
+                                    artistService.fetchMusicBrainzId(artistId, priority = HttpClientPriority.LOW)
                                 totalArtistsChecked++
                                 if (artist?.musicbrainzId != null) {
                                     taggedArtists++
                                 } else {
                                     artistService.updateMusicBrainzLastCheck(artistId)
                                 }
-                                onProgress(0.0, "Checked $totalSongsChecked songs ($taggedSongs tagged), $totalAlbumsChecked albums ($taggedAlbums tagged), $totalArtistsChecked artists ($taggedArtists tagged)")
+                                onProgress(
+                                    0.0,
+                                    "Checked $totalSongsChecked songs ($taggedSongs tagged), $totalAlbumsChecked albums ($taggedAlbums tagged), $totalArtistsChecked artists ($taggedArtists tagged)"
+                                )
                             } catch (e: CancellationException) {
                                 throw e
                             } catch (e: Exception) {

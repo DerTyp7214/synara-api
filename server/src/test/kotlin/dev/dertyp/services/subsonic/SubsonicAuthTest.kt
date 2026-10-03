@@ -76,13 +76,31 @@ class SubsonicAuthTest : KoinTest {
         val auth = setup(dialect)
         val salt = "abc123"
 
-        val ok = auth.authenticate(parametersOf("u" to listOf("tester"), "t" to listOf(md5Hex(secret() + salt)), "s" to listOf(salt)))
+        val ok = auth.authenticate(
+            parametersOf(
+                "u" to listOf("tester"),
+                "t" to listOf(md5Hex(secret() + salt)),
+                "s" to listOf(salt)
+            )
+        )
         assertEquals(userId, assertIs<SubsonicAuthResult.Ok>(ok).user.id)
 
-        val wrong = auth.authenticate(parametersOf("u" to listOf("tester"), "t" to listOf(md5Hex("wrong$salt")), "s" to listOf(salt)))
+        val wrong = auth.authenticate(
+            parametersOf(
+                "u" to listOf("tester"),
+                "t" to listOf(md5Hex("wrong$salt")),
+                "s" to listOf(salt)
+            )
+        )
         assertEquals(40, assertIs<SubsonicAuthResult.Failure>(wrong).code)
 
-        val unknown = auth.authenticate(parametersOf("u" to listOf("nobody"), "t" to listOf(md5Hex(secret() + salt)), "s" to listOf(salt)))
+        val unknown = auth.authenticate(
+            parametersOf(
+                "u" to listOf("nobody"),
+                "t" to listOf(md5Hex(secret() + salt)),
+                "s" to listOf(salt)
+            )
+        )
         assertEquals(40, assertIs<SubsonicAuthResult.Failure>(unknown).code)
     }
 

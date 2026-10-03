@@ -82,7 +82,10 @@ class CredentialResolverTest {
         val secret = cookieSecret(cookies(System.currentTimeMillis() / 1000 + 60L * 24 * 3600))
         val repository = FakeSecretRepository().apply { put(CredentialNames.IMPORTER_GAMDL, secret) }
         val resolver = CredentialResolver(repository, MockUpstream { json("{}") }.client)
-        val newCookies = FileContents.encode(CredentialFileRoles.GAMDL_COOKIES, cookies(System.currentTimeMillis() / 1000 + 90L * 24 * 3600))
+        val newCookies = FileContents.encode(
+            CredentialFileRoles.GAMDL_COOKIES,
+            cookies(System.currentTimeMillis() / 1000 + 90L * 24 * 3600)
+        )
 
         val conflict = assertFailsWith<CredentialException> {
             resolver.writeBack(CredentialNames.IMPORTER_GAMDL, WriteBackRequest("stale", listOf(newCookies)))
@@ -142,7 +145,11 @@ class CredentialResolverTest {
             resolver.toStoredSecret(
                 customName,
                 CredentialKind.APPLE_DEVELOPER_KEY,
-                CredentialInput.AppleDeveloperKeyInput("team", "key", "-----BEGIN PRIVATE KEY-----\nAAAA\n-----END PRIVATE KEY-----"),
+                CredentialInput.AppleDeveloperKeyInput(
+                    "team",
+                    "key",
+                    "-----BEGIN PRIVATE KEY-----\nAAAA\n-----END PRIVATE KEY-----"
+                ),
                 null,
             )
         }

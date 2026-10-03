@@ -90,7 +90,10 @@ class ImporterCredentialMaterializerTest {
 
         ImporterCredentialMaterializer(provider).withFiles(
             name,
-            mapOf(CredentialFileRoles.TIDDL_AUTH to target(), CredentialFileRoles.TDN_TOKEN to File(dir, "untouched.json")),
+            mapOf(
+                CredentialFileRoles.TIDDL_AUTH to target(),
+                CredentialFileRoles.TDN_TOKEN to File(dir, "untouched.json")
+            ),
         ) { target().writeText(rotated) }
 
         assertEquals(1, written.captured.size)
@@ -104,7 +107,10 @@ class ImporterCredentialMaterializerTest {
 
         assertThrows<IllegalStateException> {
             runBlocking {
-                ImporterCredentialMaterializer(provider).withFiles(name, mapOf(CredentialFileRoles.TIDDL_AUTH to target())) {
+                ImporterCredentialMaterializer(provider).withFiles(
+                    name,
+                    mapOf(CredentialFileRoles.TIDDL_AUTH to target())
+                ) {
                     target().writeText("{}")
                     throw IllegalStateException("cli failed")
                 }
@@ -120,7 +126,12 @@ class ImporterCredentialMaterializerTest {
         var ran = false
 
         assertThrows<CredentialUnavailableException> {
-            runBlocking { ImporterCredentialMaterializer(provider).withFiles(name, mapOf(CredentialFileRoles.TIDDL_AUTH to target())) { ran = true } }
+            runBlocking {
+                ImporterCredentialMaterializer(provider).withFiles(
+                    name,
+                    mapOf(CredentialFileRoles.TIDDL_AUTH to target())
+                ) { ran = true }
+            }
         }
         assertFalse(ran)
     }

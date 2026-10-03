@@ -95,7 +95,11 @@ class ArtistCreditOrderTest : KoinTest {
     }
 
     private fun credits(): List<MusicBrainzArtistCredit> = listOf(
-        MusicBrainzArtistCredit(name = "High", joinphrase = " feat. ", artist = MusicBrainzArtist(id = highMbId, name = "High")),
+        MusicBrainzArtistCredit(
+            name = "High",
+            joinphrase = " feat. ",
+            artist = MusicBrainzArtist(id = highMbId, name = "High")
+        ),
         MusicBrainzArtistCredit(name = "Low", joinphrase = "", artist = MusicBrainzArtist(id = lowMbId, name = "Low")),
     )
 
@@ -123,7 +127,7 @@ class ArtistCreditOrderTest : KoinTest {
             SongMusicBrainzTable.insert { it[this.songId] = songId; it[musicBrainzId] = recordingId }
         }
         coEvery { cachedMusicBrainzService.getRecording(recordingId, any()) } returns
-            MusicBrainzRecording(id = recordingId, title = "Duet", artistCredit = credits())
+                MusicBrainzRecording(id = recordingId, title = "Duet", artistCredit = credits())
 
         val songService = SongService()
         songService.fetchMusicBrainzId(songId, UUID.randomUUID())
@@ -150,7 +154,7 @@ class ArtistCreditOrderTest : KoinTest {
             AlbumMusicBrainzTable.insert { it[this.albumId] = albumId; it[musicBrainzId] = releaseId }
         }
         coEvery { cachedMusicBrainzService.getRelease(releaseId, any()) } returns
-            MusicBrainzRelease(id = releaseId, title = "Album", artistCredit = credits())
+                MusicBrainzRelease(id = releaseId, title = "Album", artistCredit = credits())
 
         val albumService = AlbumService()
         albumService.fetchMusicBrainzId(albumId, triggerMerge = false)
@@ -182,16 +186,20 @@ class ArtistCreditOrderTest : KoinTest {
             MBReleaseTable.insert { it[id] = releaseId; it[title] = "Album" }
             AlbumMusicBrainzTable.insert { it[this.albumId] = albumId; it[musicBrainzId] = releaseId }
             MBRecordingArtistCreditTable.insert {
-                it[this.recordingId] = recordingId; it[artistId] = highMbId; it[name] = "High"; it[joinPhrase] = " & "; it[position] = 0
+                it[this.recordingId] = recordingId; it[artistId] = highMbId; it[name] = "High"; it[joinPhrase] =
+                " & "; it[position] = 0
             }
             MBRecordingArtistCreditTable.insert {
-                it[this.recordingId] = recordingId; it[artistId] = lowMbId; it[name] = "Low"; it[joinPhrase] = ""; it[position] = 1
+                it[this.recordingId] = recordingId; it[artistId] = lowMbId; it[name] = "Low"; it[joinPhrase] =
+                ""; it[position] = 1
             }
             MBReleaseArtistCreditTable.insert {
-                it[this.releaseId] = releaseId; it[artistId] = highMbId; it[name] = "High"; it[joinPhrase] = " x "; it[position] = 0
+                it[this.releaseId] = releaseId; it[artistId] = highMbId; it[name] = "High"; it[joinPhrase] =
+                " x "; it[position] = 0
             }
             MBReleaseArtistCreditTable.insert {
-                it[this.releaseId] = releaseId; it[artistId] = lowMbId; it[name] = "Low"; it[joinPhrase] = ""; it[position] = 1
+                it[this.releaseId] = releaseId; it[artistId] = lowMbId; it[name] = "Low"; it[joinPhrase] =
+                ""; it[position] = 1
             }
             SongArtistTable.insert { it[this.songId] = songId; it[artistId] = lowId }
             SongArtistTable.insert { it[this.songId] = songId; it[artistId] = highId }
@@ -231,10 +239,12 @@ class ArtistCreditOrderTest : KoinTest {
             MBRecordingTable.insert { it[id] = recordingId; it[title] = "Song" }
             SongMusicBrainzTable.insert { it[this.songId] = songId; it[musicBrainzId] = recordingId }
             MBRecordingArtistCreditTable.insert {
-                it[this.recordingId] = recordingId; it[artistId] = highMbId; it[name] = "High"; it[joinPhrase] = " feat. "; it[position] = 0
+                it[this.recordingId] = recordingId; it[artistId] = highMbId; it[name] = "High"; it[joinPhrase] =
+                " feat. "; it[position] = 0
             }
             MBRecordingArtistCreditTable.insert {
-                it[this.recordingId] = recordingId; it[artistId] = lowMbId; it[name] = "Low"; it[joinPhrase] = ""; it[position] = 1
+                it[this.recordingId] = recordingId; it[artistId] = lowMbId; it[name] = "Low"; it[joinPhrase] =
+                ""; it[position] = 1
             }
             SongArtistTable.insert { it[this.songId] = songId; it[artistId] = secondUnmatchedId }
             SongArtistTable.insert { it[this.songId] = songId; it[artistId] = unmatchedId }
@@ -300,37 +310,64 @@ class ArtistCreditOrderTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `mirrored songs and albums keep the artist order and join phrases they arrive with`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
+    fun `mirrored songs and albums keep the artist order and join phrases they arrive with`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
 
-        val albumId = UUID.randomUUID()
-        val songId = UUID.randomUUID()
-        transaction(database) {
-            ArtistTable.insert { it[id] = highId; it[name] = "High" }
-            ArtistTable.insert { it[id] = lowId; it[name] = "Low" }
-            AlbumTable.insert { it[id] = albumId; it[name] = "Album" }
-        }
-        val artists = listOf(
-            Artist(id = highId, name = "High", isGroup = false, joinPhrase = " with "),
-            Artist(id = lowId, name = "Low", isGroup = false),
-        )
-
-        AlbumService().upsertAlbum(Album(id = albumId, name = "Album", artists = artists, releaseDate = null, songCount = 1, totalDuration = 1000))
-        val songService = SongService()
-        songService.upsertSong(
-            Song(
-                id = songId, title = "Song", artists = artists, album = Album(id = albumId, name = "Album", artists = artists, releaseDate = null, songCount = 1, totalDuration = 1000),
-                duration = 1000, explicit = false, releaseDate = null, lyrics = "", path = "song.flac", originalUrl = "",
-                trackNumber = 1, discNumber = 1, copyright = "",
+            val albumId = UUID.randomUUID()
+            val songId = UUID.randomUUID()
+            transaction(database) {
+                ArtistTable.insert { it[id] = highId; it[name] = "High" }
+                ArtistTable.insert { it[id] = lowId; it[name] = "Low" }
+                AlbumTable.insert { it[id] = albumId; it[name] = "Album" }
+            }
+            val artists = listOf(
+                Artist(id = highId, name = "High", isGroup = false, joinPhrase = " with "),
+                Artist(id = lowId, name = "Low", isGroup = false),
             )
-        )
 
-        val song = songService.byId(songId)!!
-        assertEquals(listOf(highId, lowId), song.artists.map { it.id })
-        assertEquals(listOf(" with ", null), song.artists.map { it.joinPhrase })
-        assertEquals(listOf(highId, lowId), song.album!!.artists.map { it.id })
-        assertEquals(listOf(" with ", null), song.album!!.artists.map { it.joinPhrase })
-    }
+            AlbumService().upsertAlbum(
+                Album(
+                    id = albumId,
+                    name = "Album",
+                    artists = artists,
+                    releaseDate = null,
+                    songCount = 1,
+                    totalDuration = 1000
+                )
+            )
+            val songService = SongService()
+            songService.upsertSong(
+                Song(
+                    id = songId,
+                    title = "Song",
+                    artists = artists,
+                    album = Album(
+                        id = albumId,
+                        name = "Album",
+                        artists = artists,
+                        releaseDate = null,
+                        songCount = 1,
+                        totalDuration = 1000
+                    ),
+                    duration = 1000,
+                    explicit = false,
+                    releaseDate = null,
+                    lyrics = "",
+                    path = "song.flac",
+                    originalUrl = "",
+                    trackNumber = 1,
+                    discNumber = 1,
+                    copyright = "",
+                )
+            )
+
+            val song = songService.byId(songId)!!
+            assertEquals(listOf(highId, lowId), song.artists.map { it.id })
+            assertEquals(listOf(" with ", null), song.artists.map { it.joinPhrase })
+            assertEquals(listOf(highId, lowId), song.album!!.artists.map { it.id })
+            assertEquals(listOf(" with ", null), song.album!!.artists.map { it.joinPhrase })
+        }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
@@ -370,13 +407,18 @@ class ArtistCreditOrderTest : KoinTest {
             AlbumTable.insert { it[id] = albumId; it[name] = "Album" }
             SongTable.insert { it[id] = oldest; it[title] = "Song"; it[this.albumId] = albumId; it[inserted] = 1000L }
             SongTable.insert { it[id] = newer; it[title] = "Song"; it[this.albumId] = albumId; it[inserted] = 2000L }
-            SongTable.insert { it[id] = explicitNewest; it[title] = "Song"; it[this.albumId] = albumId; it[inserted] = 3000L; it[explicit] = true }
+            SongTable.insert {
+                it[id] = explicitNewest; it[title] = "Song"; it[this.albumId] = albumId; it[inserted] =
+                3000L; it[explicit] = true
+            }
         }
 
         val songService = SongService()
         val userId = UUID.randomUUID()
         assertEquals(listOf(oldest), songService.allSongs(0, 10, explicit = false, userId = userId).data.map { it.id })
-        assertEquals(listOf(explicitNewest), songService.allSongs(0, 10, explicit = true, userId = userId).data.map { it.id })
+        assertEquals(
+            listOf(explicitNewest),
+            songService.allSongs(0, 10, explicit = true, userId = userId).data.map { it.id })
     }
 
     @ParameterizedTest
@@ -409,13 +451,29 @@ class ArtistCreditOrderTest : KoinTest {
         val legacySong = UUID.randomUUID()
         transaction(database) {
             AlbumTable.insert { it[id] = albumId; it[name] = "Album" }
-            SongTable.insert { it[id] = storedSong; it[title] = "Stored"; it[this.albumId] = albumId; it[originalUrl] = "https://tidal/2" }
-            SongTable.insert { it[id] = legacySong; it[title] = "Legacy"; it[this.albumId] = albumId; it[originalUrl] = "https://legacy/1" }
-            SongProviderTable.insert { it[songId] = storedSong; it[provider] = "deezer"; it[externalId] = "1"; it[rawUrl] = "https://deezer/1" }
-            SongProviderTable.insert { it[songId] = storedSong; it[provider] = "tidal"; it[externalId] = "2"; it[rawUrl] = "https://tidal/2" }
-            SongProviderTable.insert { it[songId] = legacySong; it[provider] = "tidal"; it[externalId] = "9"; it[rawUrl] = "https://tidal/9" }
-            SongProviderTable.insert { it[songId] = legacySong; it[provider] = "deezer"; it[externalId] = "7"; it[rawUrl] = "https://deezer/7" }
-            SongProviderTable.insert { it[songId] = legacySong; it[provider] = "deezer"; it[externalId] = "5"; it[rawUrl] = "https://deezer/5" }
+            SongTable.insert {
+                it[id] = storedSong; it[title] = "Stored"; it[this.albumId] = albumId; it[originalUrl] =
+                "https://tidal/2"
+            }
+            SongTable.insert {
+                it[id] = legacySong; it[title] = "Legacy"; it[this.albumId] = albumId; it[originalUrl] =
+                "https://legacy/1"
+            }
+            SongProviderTable.insert {
+                it[songId] = storedSong; it[provider] = "deezer"; it[externalId] = "1"; it[rawUrl] = "https://deezer/1"
+            }
+            SongProviderTable.insert {
+                it[songId] = storedSong; it[provider] = "tidal"; it[externalId] = "2"; it[rawUrl] = "https://tidal/2"
+            }
+            SongProviderTable.insert {
+                it[songId] = legacySong; it[provider] = "tidal"; it[externalId] = "9"; it[rawUrl] = "https://tidal/9"
+            }
+            SongProviderTable.insert {
+                it[songId] = legacySong; it[provider] = "deezer"; it[externalId] = "7"; it[rawUrl] = "https://deezer/7"
+            }
+            SongProviderTable.insert {
+                it[songId] = legacySong; it[provider] = "deezer"; it[externalId] = "5"; it[rawUrl] = "https://deezer/5"
+            }
         }
 
         val songService = SongService()

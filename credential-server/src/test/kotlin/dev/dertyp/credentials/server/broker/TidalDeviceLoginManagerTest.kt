@@ -82,7 +82,10 @@ class TidalDeviceLoginManagerTest {
         assertEquals(TidalAuthApi.TOKEN_URL, poll.url)
         assertEquals(TidalAuthApi.DEVICE_CODE_GRANT, poll.form["grant_type"])
         assertEquals("dev-code", poll.form["device_code"])
-        assertEquals("Basic " + Base64.getEncoder().encodeToString("client-x:secret-x".toByteArray()), poll.authorization)
+        assertEquals(
+            "Basic " + Base64.getEncoder().encodeToString("client-x:secret-x".toByteArray()),
+            poll.authorization
+        )
     }
 
     @Test
@@ -95,7 +98,8 @@ class TidalDeviceLoginManagerTest {
         val manager = TidalDeviceLoginManager(repository, upstream.client, scope)
 
         val session = manager.start(name, TidalLoginStart(TidalSessionFormat.TIDDL, "client-x", "secret-x"))
-        val done = withTimeout(10_000) { manager.events(session.loginId)!!.first { it.state != TidalLoginState.PENDING } }
+        val done =
+            withTimeout(10_000) { manager.events(session.loginId)!!.first { it.state != TidalLoginState.PENDING } }
 
         assertEquals(TidalLoginState.EXPIRED, done.state)
         assertTrue(repository.secrets.isEmpty())
@@ -110,7 +114,8 @@ class TidalDeviceLoginManagerTest {
         val manager = TidalDeviceLoginManager(FakeSecretRepository(), upstream.client, scope)
 
         val session = manager.start(name, TidalLoginStart(TidalSessionFormat.TIDDL, "client-x", "secret-x"))
-        val done = withTimeout(10_000) { manager.events(session.loginId)!!.first { it.state != TidalLoginState.PENDING } }
+        val done =
+            withTimeout(10_000) { manager.events(session.loginId)!!.first { it.state != TidalLoginState.PENDING } }
 
         assertEquals(TidalLoginState.EXPIRED, done.state)
     }
@@ -125,7 +130,8 @@ class TidalDeviceLoginManagerTest {
 
         val session = manager.start(name, TidalLoginStart(TidalSessionFormat.TIDDL, "client-x", "secret-x"))
         manager.cancel(session.loginId)
-        val done = withTimeout(10_000) { manager.events(session.loginId)!!.first { it.state != TidalLoginState.PENDING } }
+        val done =
+            withTimeout(10_000) { manager.events(session.loginId)!!.first { it.state != TidalLoginState.PENDING } }
 
         assertEquals(TidalLoginState.CANCELLED, done.state)
         assertNull(done.message)
@@ -166,7 +172,12 @@ class TidalDeviceLoginManagerTest {
         }
         val manager = TidalDeviceLoginManager(repository, upstream.client, scope)
 
-        manager.cancel(manager.start(name, TidalLoginStart(TidalSessionFormat.TIDDL, "typed-client", "typed-secret")).loginId)
+        manager.cancel(
+            manager.start(
+                name,
+                TidalLoginStart(TidalSessionFormat.TIDDL, "typed-client", "typed-secret")
+            ).loginId
+        )
         manager.cancel(manager.start(name, TidalLoginStart(TidalSessionFormat.TIDDL, "", "")).loginId)
 
         assertEquals(listOf("typed-client", "stored-client"), upstream.requests.map { it.form["client_id"] })
@@ -176,7 +187,12 @@ class TidalDeviceLoginManagerTest {
     fun `missing client credentials without a preset are invalid`() = runBlocking {
         val manager = TidalDeviceLoginManager(FakeSecretRepository(), MockUpstream { json("{}") }.client, scope)
 
-        val error = assertFailsWith<CredentialException> { manager.start("custom.tidal", TidalLoginStart(TidalSessionFormat.TIDDL)) }
+        val error = assertFailsWith<CredentialException> {
+            manager.start(
+                "custom.tidal",
+                TidalLoginStart(TidalSessionFormat.TIDDL)
+            )
+        }
 
         assertEquals(CredentialErrorCode.INVALID, error.code)
         assertNull(manager.events("unknown"))

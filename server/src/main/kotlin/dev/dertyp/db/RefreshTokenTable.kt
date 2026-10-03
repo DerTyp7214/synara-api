@@ -3,7 +3,7 @@ package dev.dertyp.db
 import org.jetbrains.exposed.v1.core.ReferenceOption
 import org.jetbrains.exposed.v1.core.dao.id.java.UUIDTable
 
-object RefreshTokenTable: UUIDTable(name = "refreshToken") {
+object RefreshTokenTable : UUIDTable(name = "refreshToken") {
     val tokenHash = varchar("tokenHash", 255).uniqueIndex()
     val userId = reference("userId", UserTable.id, onDelete = ReferenceOption.CASCADE)
     val sessionId = reference("sessionId", SessionTable.id, onDelete = ReferenceOption.CASCADE).nullable()

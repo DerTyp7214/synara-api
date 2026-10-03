@@ -99,12 +99,14 @@ class TidalDeviceLoginManager(
             var outcome: TidalLoginEvent?
             do {
                 delay(interval.seconds)
-                outcome = when (val result = authApi.pollDeviceToken(target.clientId, target.clientSecret, authorization.deviceCode)) {
+                outcome = when (val result =
+                    authApi.pollDeviceToken(target.clientId, target.clientSecret, authorization.deviceCode)) {
                     TidalDevicePoll.Pending -> null
                     TidalDevicePoll.SlowDown -> {
                         interval += SLOW_DOWN_STEP_SECONDS
                         null
                     }
+
                     TidalDevicePoll.Expired -> EXPIRED
                     is TidalDevicePoll.Failed -> TidalLoginEvent(TidalLoginState.FAILED, result.message)
                     is TidalDevicePoll.Granted -> complete(target, result.grant)

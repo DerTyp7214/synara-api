@@ -44,7 +44,8 @@ class FetchMissingRecordingIsrcs : CustomMigration() {
                     recordings.forEach { recording ->
                         val isrcs = recording.isrcs
                         if (isrcs?.isNotEmpty() == true) {
-                            musicBrainzCacheService.updateRecordingIsrcs(recording.id,
+                            musicBrainzCacheService.updateRecordingIsrcs(
+                                recording.id,
                                 isrcs
                             )
 

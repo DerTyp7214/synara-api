@@ -88,10 +88,12 @@ class RadioChannelService : Service() {
                 if (SongTable.select(SongTable.id).where { SongTable.id eq itemId }.empty()) return@dbQuery false
                 RadioChannelSongTable.insertIgnore { it[channelId] = id; it[songId] = itemId }.insertedCount > 0
             }
+
             RadioChannelItemType.ARTIST -> {
                 if (ArtistTable.select(ArtistTable.id).where { ArtistTable.id eq itemId }.empty()) return@dbQuery false
                 RadioChannelArtistTable.insertIgnore { it[channelId] = id; it[artistId] = itemId }.insertedCount > 0
             }
+
             RadioChannelItemType.ALBUM -> {
                 if (AlbumTable.select(AlbumTable.id).where { AlbumTable.id eq itemId }.empty()) return@dbQuery false
                 RadioChannelAlbumTable.insertIgnore { it[channelId] = id; it[albumId] = itemId }.insertedCount > 0
@@ -103,8 +105,10 @@ class RadioChannelService : Service() {
         when (type) {
             RadioChannelItemType.SONG ->
                 RadioChannelSongTable.deleteWhere { (channelId eq id) and (songId eq itemId) } > 0
+
             RadioChannelItemType.ARTIST ->
                 RadioChannelArtistTable.deleteWhere { (channelId eq id) and (artistId eq itemId) } > 0
+
             RadioChannelItemType.ALBUM ->
                 RadioChannelAlbumTable.deleteWhere { (channelId eq id) and (albumId eq itemId) } > 0
         }
@@ -139,7 +143,8 @@ class RadioChannelService : Service() {
                 hasNextPage = songPage.hasNextPage,
             )
         }
-        val artistsDeferred = async { artistService.rankedSearchInRadioChannel(channelId, page, pageSize, query, userId) }
+        val artistsDeferred =
+            async { artistService.rankedSearchInRadioChannel(channelId, page, pageSize, query, userId) }
         val albumsDeferred = async { albumService.rankedSearchInRadioChannel(channelId, page, pageSize, query, userId) }
 
         RadioChannelSearchResults(
@@ -158,11 +163,11 @@ class RadioChannelService : Service() {
             .where { RadioChannelArtistTable.channelId eq id }
 
         val membership = (SongTable.id inSubQuery channelSongs) or
-            (SongTable.albumId inSubQuery channelAlbums) or
-            (SongTable.id inSubQuery SongArtistTable.select(SongArtistTable.songId)
-                .where { SongArtistTable.artistId inSubQuery channelArtists }) or
-            (SongTable.albumId inSubQuery AlbumArtistTable.select(AlbumArtistTable.albumId)
-                .where { AlbumArtistTable.artistId inSubQuery channelArtists })
+                (SongTable.albumId inSubQuery channelAlbums) or
+                (SongTable.id inSubQuery SongArtistTable.select(SongArtistTable.songId)
+                    .where { SongArtistTable.artistId inSubQuery channelArtists }) or
+                (SongTable.albumId inSubQuery AlbumArtistTable.select(AlbumArtistTable.albumId)
+                    .where { AlbumArtistTable.artistId inSubQuery channelArtists })
 
         var query = SongTable.select(SongTable.id).where { membership }
         if (exclude.isNotEmpty()) query = query.andWhere { SongTable.id notInList exclude }
@@ -171,9 +176,12 @@ class RadioChannelService : Service() {
 
     private suspend fun RadioChannel.withCounts(): RadioChannel = dbQuery {
         copy(
-            songCount = RadioChannelSongTable.selectAll().where { RadioChannelSongTable.channelId eq id }.count().toInt(),
-            artistCount = RadioChannelArtistTable.selectAll().where { RadioChannelArtistTable.channelId eq id }.count().toInt(),
-            albumCount = RadioChannelAlbumTable.selectAll().where { RadioChannelAlbumTable.channelId eq id }.count().toInt(),
+            songCount = RadioChannelSongTable.selectAll().where { RadioChannelSongTable.channelId eq id }.count()
+                .toInt(),
+            artistCount = RadioChannelArtistTable.selectAll().where { RadioChannelArtistTable.channelId eq id }.count()
+                .toInt(),
+            albumCount = RadioChannelAlbumTable.selectAll().where { RadioChannelAlbumTable.channelId eq id }.count()
+                .toInt(),
         )
     }
 }

@@ -34,7 +34,7 @@ class MetadataFetchingServiceTest : KoinTest {
     private val environment = mockk<ApplicationEnvironment>(relaxed = true)
 
     private val allTables = arrayOf(
-        ArtistTable, AlbumTable, SongTable, SongVariantTable, SongArtistTable, 
+        ArtistTable, AlbumTable, SongTable, SongVariantTable, SongArtistTable,
         SongMusicBrainzTable, SongAudioDataTable, ImageTable, GenreTable,
         UserTable, AlbumMusicBrainzTable, ArtistMusicBrainzTable,
         ArtistAliasTable, ArtistMemberTable, AlbumArtistTable,
@@ -97,7 +97,7 @@ class MetadataFetchingServiceTest : KoinTest {
 
         val mockTdbService = mockk<MetadataService>(relaxed = true)
         MetadataService.register(IMetadataService.MetadataType.theAudioDB, mockTdbService)
-        
+
         coEvery { mockTdbService.getArtistByMbId(mbId, any()) } throws RuntimeException("TDB is down")
 
         assertDoesNotThrow {

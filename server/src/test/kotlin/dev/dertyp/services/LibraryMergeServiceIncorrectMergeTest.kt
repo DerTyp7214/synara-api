@@ -113,10 +113,16 @@ class LibraryMergeServiceIncorrectMergeTest : KoinTest {
         transaction(database) {
             val albums = AlbumTable.selectAll().toList()
             assertEquals(2, albums.size)
-            
-            val album1 = albums.find { it[AlbumTable.songCount] == 1 && it[AlbumTable.cover]?.value == ImageTable.selectAll().where { ImageTable.path eq "cover1" }.single()[ImageTable.id].value }
-            val album2 = albums.find { it[AlbumTable.songCount] == 1 && it[AlbumTable.cover]?.value == ImageTable.selectAll().where { ImageTable.path eq "cover2" }.single()[ImageTable.id].value }
-            
+
+            val album1 = albums.find {
+                it[AlbumTable.songCount] == 1 && it[AlbumTable.cover]?.value == ImageTable.selectAll()
+                    .where { ImageTable.path eq "cover1" }.single()[ImageTable.id].value
+            }
+            val album2 = albums.find {
+                it[AlbumTable.songCount] == 1 && it[AlbumTable.cover]?.value == ImageTable.selectAll()
+                    .where { ImageTable.path eq "cover2" }.single()[ImageTable.id].value
+            }
+
             assertNotEquals(null, album1)
             assertNotEquals(null, album2)
         }
@@ -138,13 +144,23 @@ class LibraryMergeServiceIncorrectMergeTest : KoinTest {
             MBReleaseGroupTable.insert { it[id] = EntityID(rg1, MBReleaseGroupTable); it[title] = "RG1" }
             MBReleaseGroupTable.insert { it[id] = EntityID(rg2, MBReleaseGroupTable); it[title] = "RG2" }
 
-            MBReleaseTable.insert { it[id] = EntityID(rel1, MBReleaseTable); it[title] = "R1"; it[releaseGroupId] = EntityID(rg1, MBReleaseGroupTable) }
-            MBReleaseTable.insert { it[id] = EntityID(rel2, MBReleaseTable); it[title] = "R2"; it[releaseGroupId] = EntityID(rg2, MBReleaseGroupTable) }
+            MBReleaseTable.insert {
+                it[id] = EntityID(rel1, MBReleaseTable); it[title] = "R1"; it[releaseGroupId] =
+                EntityID(rg1, MBReleaseGroupTable)
+            }
+            MBReleaseTable.insert {
+                it[id] = EntityID(rel2, MBReleaseTable); it[title] = "R2"; it[releaseGroupId] =
+                EntityID(rg2, MBReleaseGroupTable)
+            }
             MBRecordingTable.insert { it[id] = EntityID(rec1, MBRecordingTable); it[title] = "S1" }
             MBRecordingTable.insert { it[id] = EntityID(rec2, MBRecordingTable); it[title] = "S2" }
 
-            MBRecordingReleaseTable.insert { it[recordingId] = EntityID(rec1, MBRecordingTable); it[releaseId] = EntityID(rel1, MBReleaseTable) }
-            MBRecordingReleaseTable.insert { it[recordingId] = EntityID(rec2, MBRecordingTable); it[releaseId] = EntityID(rel2, MBReleaseTable) }
+            MBRecordingReleaseTable.insert {
+                it[recordingId] = EntityID(rec1, MBRecordingTable); it[releaseId] = EntityID(rel1, MBReleaseTable)
+            }
+            MBRecordingReleaseTable.insert {
+                it[recordingId] = EntityID(rec2, MBRecordingTable); it[releaseId] = EntityID(rel2, MBReleaseTable)
+            }
 
             val albumId = AlbumTable.insert {
                 it[name] = "Album"
@@ -189,10 +205,18 @@ class LibraryMergeServiceIncorrectMergeTest : KoinTest {
                 it[songCount] = 4
             }[AlbumTable.id]
 
-            SongTable.insert { it[title] = "S1-A"; it[this.albumId] = albumId; it[trackNumber] = 1; it[filePath] = "p1" }
-            SongTable.insert { it[title] = "S2-A"; it[this.albumId] = albumId; it[trackNumber] = 2; it[filePath] = "p2" }
-            SongTable.insert { it[title] = "S1-B"; it[this.albumId] = albumId; it[trackNumber] = 1; it[filePath] = "p3" }
-            SongTable.insert { it[title] = "S2-B"; it[this.albumId] = albumId; it[trackNumber] = 2; it[filePath] = "p4" }
+            SongTable.insert {
+                it[title] = "S1-A"; it[this.albumId] = albumId; it[trackNumber] = 1; it[filePath] = "p1"
+            }
+            SongTable.insert {
+                it[title] = "S2-A"; it[this.albumId] = albumId; it[trackNumber] = 2; it[filePath] = "p2"
+            }
+            SongTable.insert {
+                it[title] = "S1-B"; it[this.albumId] = albumId; it[trackNumber] = 1; it[filePath] = "p3"
+            }
+            SongTable.insert {
+                it[title] = "S2-B"; it[this.albumId] = albumId; it[trackNumber] = 2; it[filePath] = "p4"
+            }
         }
 
         val fixed = service.fixIncorrectMerges()
@@ -212,8 +236,12 @@ class LibraryMergeServiceIncorrectMergeTest : KoinTest {
         transaction(database) {
             val artistId = ArtistTable.insert { it[name] = "Artist" }[ArtistTable.id]
             val genreId = GenreTable.insert { it[name] = "Genre" }[GenreTable.id]
-            val cover1 = ImageTable.insert { it[id] = UUID.randomUUID(); it[path] = "c1"; it[imageHash] = "h1"; it[origin] = "o" }[ImageTable.id]
-            val cover2 = ImageTable.insert { it[id] = UUID.randomUUID(); it[path] = "c2"; it[imageHash] = "h2"; it[origin] = "o" }[ImageTable.id]
+            val cover1 = ImageTable.insert {
+                it[id] = UUID.randomUUID(); it[path] = "c1"; it[imageHash] = "h1"; it[origin] = "o"
+            }[ImageTable.id]
+            val cover2 = ImageTable.insert {
+                it[id] = UUID.randomUUID(); it[path] = "c2"; it[imageHash] = "h2"; it[origin] = "o"
+            }[ImageTable.id]
 
             val albumId = AlbumTable.insert {
                 it[name] = "Album"
@@ -242,50 +270,67 @@ class LibraryMergeServiceIncorrectMergeTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `fixIncorrectMerges keeps the credited alias, position and join phrase of split album artists`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
+    fun `fixIncorrectMerges keeps the credited alias, position and join phrase of split album artists`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
 
-        transaction(database) {
-            SchemaUtils.create(ArtistAliasTable)
-            val mainId = ArtistTable.insert { it[name] = "Main" }[ArtistTable.id]
-            val guestId = ArtistTable.insert { it[name] = "Guest" }[ArtistTable.id]
-            val aliasId = ArtistAliasTable.insert { it[artistId] = mainId; it[name] = "Main Alias" }[ArtistAliasTable.id]
-            val cover1 = ImageTable.insert { it[id] = UUID.randomUUID(); it[path] = "c1"; it[imageHash] = "h1"; it[origin] = "o" }[ImageTable.id]
-            val cover2 = ImageTable.insert { it[id] = UUID.randomUUID(); it[path] = "c2"; it[imageHash] = "h2"; it[origin] = "o" }[ImageTable.id]
+            transaction(database) {
+                SchemaUtils.create(ArtistAliasTable)
+                val mainId = ArtistTable.insert { it[name] = "Main" }[ArtistTable.id]
+                val guestId = ArtistTable.insert { it[name] = "Guest" }[ArtistTable.id]
+                val aliasId =
+                    ArtistAliasTable.insert { it[artistId] = mainId; it[name] = "Main Alias" }[ArtistAliasTable.id]
+                val cover1 = ImageTable.insert {
+                    it[id] = UUID.randomUUID(); it[path] = "c1"; it[imageHash] = "h1"; it[origin] = "o"
+                }[ImageTable.id]
+                val cover2 = ImageTable.insert {
+                    it[id] = UUID.randomUUID(); it[path] = "c2"; it[imageHash] = "h2"; it[origin] = "o"
+                }[ImageTable.id]
 
-            val albumId = AlbumTable.insert {
-                it[name] = "Album"
-                it[cover] = cover1
-                it[songCount] = 2
-            }[AlbumTable.id]
+                val albumId = AlbumTable.insert {
+                    it[name] = "Album"
+                    it[cover] = cover1
+                    it[songCount] = 2
+                }[AlbumTable.id]
 
-            AlbumArtistTable.insert {
-                it[this.albumId] = albumId; it[artistId] = mainId; it[creditedAliasId] = aliasId; it[position] = 0; it[joinPhrase] = " & "
+                AlbumArtistTable.insert {
+                    it[this.albumId] = albumId; it[artistId] = mainId; it[creditedAliasId] = aliasId; it[position] =
+                    0; it[joinPhrase] = " & "
+                }
+                AlbumArtistTable.insert {
+                    it[this.albumId] = albumId; it[artistId] = guestId; it[position] = 1; it[joinPhrase] = ""
+                }
+
+                SongTable.insert {
+                    it[title] = "S1"; it[this.albumId] = albumId; it[cover] = cover1; it[filePath] = "p1"
+                }
+                SongTable.insert {
+                    it[title] = "S2"; it[this.albumId] = albumId; it[cover] = cover2; it[filePath] = "p2"
+                }
             }
-            AlbumArtistTable.insert {
-                it[this.albumId] = albumId; it[artistId] = guestId; it[position] = 1; it[joinPhrase] = ""
-            }
 
-            SongTable.insert { it[title] = "S1"; it[this.albumId] = albumId; it[cover] = cover1; it[filePath] = "p1" }
-            SongTable.insert { it[title] = "S2"; it[this.albumId] = albumId; it[cover] = cover2; it[filePath] = "p2" }
+            service.fixIncorrectMerges()
+
+            transaction(database) {
+                val albums = AlbumTable.selectAll().toList()
+                assertEquals(2, albums.size)
+                val aliasId = ArtistAliasTable.selectAll().single()[ArtistAliasTable.id]
+                for (album in albums) {
+                    val links = AlbumArtistTable.selectAll()
+                        .where { AlbumArtistTable.albumId eq album[AlbumTable.id] }
+                        .associate {
+                            it[AlbumArtistTable.artistId] to Triple(
+                                it[AlbumArtistTable.creditedAliasId],
+                                it[AlbumArtistTable.position],
+                                it[AlbumArtistTable.joinPhrase]
+                            )
+                        }
+                    val main = ArtistTable.selectAll().where { ArtistTable.name eq "Main" }.single()[ArtistTable.id]
+                    val guest = ArtistTable.selectAll().where { ArtistTable.name eq "Guest" }.single()[ArtistTable.id]
+                    assertEquals(mapOf(main to Triple(aliasId, 0, " & "), guest to Triple(null, 1, "")), links)
+                }
+            }
         }
-
-        service.fixIncorrectMerges()
-
-        transaction(database) {
-            val albums = AlbumTable.selectAll().toList()
-            assertEquals(2, albums.size)
-            val aliasId = ArtistAliasTable.selectAll().single()[ArtistAliasTable.id]
-            for (album in albums) {
-                val links = AlbumArtistTable.selectAll()
-                    .where { AlbumArtistTable.albumId eq album[AlbumTable.id] }
-                    .associate { it[AlbumArtistTable.artistId] to Triple(it[AlbumArtistTable.creditedAliasId], it[AlbumArtistTable.position], it[AlbumArtistTable.joinPhrase]) }
-                val main = ArtistTable.selectAll().where { ArtistTable.name eq "Main" }.single()[ArtistTable.id]
-                val guest = ArtistTable.selectAll().where { ArtistTable.name eq "Guest" }.single()[ArtistTable.id]
-                assertEquals(mapOf(main to Triple(aliasId, 0, " & "), guest to Triple(null, 1, "")), links)
-            }
-        }
-    }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
@@ -293,8 +338,12 @@ class LibraryMergeServiceIncorrectMergeTest : KoinTest {
         setup(dialect)
 
         transaction(database) {
-            val cover1 = ImageTable.insert { it[id] = UUID.randomUUID(); it[path] = "c1"; it[imageHash] = "h1"; it[origin] = "o" }[ImageTable.id]
-            val cover2 = ImageTable.insert { it[id] = UUID.randomUUID(); it[path] = "c2"; it[imageHash] = "h2"; it[origin] = "o" }[ImageTable.id]
+            val cover1 = ImageTable.insert {
+                it[id] = UUID.randomUUID(); it[path] = "c1"; it[imageHash] = "h1"; it[origin] = "o"
+            }[ImageTable.id]
+            val cover2 = ImageTable.insert {
+                it[id] = UUID.randomUUID(); it[path] = "c2"; it[imageHash] = "h2"; it[origin] = "o"
+            }[ImageTable.id]
 
             AlbumTable.insert { it[name] = "Album"; it[cover] = cover1 }
             AlbumTable.insert { it[name] = "Album"; it[cover] = cover2 }
@@ -302,12 +351,14 @@ class LibraryMergeServiceIncorrectMergeTest : KoinTest {
             val albumRow1 = AlbumTable.selectAll().where { AlbumTable.cover eq cover1 }.single()
             val albumRow2 = AlbumTable.selectAll().where { AlbumTable.cover eq cover2 }.single()
 
-            val similarity = service.javaClass.getDeclaredMethod("calculateSimilarity", 
+            val similarity = service.javaClass.getDeclaredMethod(
+                "calculateSimilarity",
                 ResultRow::class.java,
                 ResultRow::class.java,
-                List::class.java, 
+                List::class.java,
                 List::class.java
-            ).apply { isAccessible = true }.invoke(service, albumRow1, albumRow2, emptyList<UUID>(), emptyList<UUID>()) as Int
+            ).apply { isAccessible = true }
+                .invoke(service, albumRow1, albumRow2, emptyList<UUID>(), emptyList<UUID>()) as Int
 
             assertEquals(0, similarity)
         }

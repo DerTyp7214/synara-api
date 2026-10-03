@@ -59,7 +59,13 @@ class SongDuplicateKeyTest {
         )
         val years = listOf("0000", "0004", "0100", "1600", "1900", "2000", "2023", "2024", "2100", "2400", "9996")
         val calendar = years.flatMap { year ->
-            (0..13).flatMap { month -> (0..32).map { day -> "$year-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}" } }
+            (0..13).flatMap { month ->
+                (0..32).map { day ->
+                    "$year-${month.toString().padStart(2, '0')}-${
+                        day.toString().padStart(2, '0')
+                    }"
+                }
+            }
         }
         val random = Random(9)
         val alphabet = "0123456789-9 a".toList()

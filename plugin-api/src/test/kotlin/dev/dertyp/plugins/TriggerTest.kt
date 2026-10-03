@@ -21,10 +21,10 @@ class TriggerTest {
     fun testScheduleTrigger() {
         val startTime = Instant.parse("2023-01-01T10:00:00Z")
         val trigger = ScheduleTrigger(startTime, Duration.ofHours(1))
-        
+
         assertTrue(trigger.doesRepeat())
         assertEquals(Instant.parse("2023-01-01T11:00:00Z"), trigger.nextExecution(startTime))
-        
+
         val nextTrigger = trigger.updateForNextRun(startTime)
         assertEquals(Instant.parse("2023-01-01T11:00:00Z"), nextTrigger.scheduledTime)
     }
@@ -33,7 +33,7 @@ class TriggerTest {
     fun testEventTrigger() {
         val trigger = EventTrigger()
         assertEquals(Instant.MAX, trigger.scheduledTime)
-        
+
         val fired = trigger.fire()
         assertTrue(fired.scheduledTime <= Instant.now())
     }
@@ -43,11 +43,11 @@ class TriggerTest {
         val id = UUID.randomUUID()
         val trigger = TaskCompletionTrigger(id)
         assertEquals(Instant.MAX, trigger.scheduledTime)
-        
+
         trigger.activate()
         val activatedAt = trigger.scheduledTime
         assertTrue(activatedAt <= Instant.now())
-        
+
         val reset = trigger.updateForNextRun(Instant.now())
         assertEquals(Instant.MAX, reset.scheduledTime)
         assertTrue(reset is TaskCompletionTrigger)

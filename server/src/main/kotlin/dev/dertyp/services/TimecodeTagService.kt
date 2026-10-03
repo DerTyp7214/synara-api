@@ -137,7 +137,15 @@ class TimecodeTagService : Service() {
             validateAction(type, endMs, effectiveAction)
 
             val updated = writeTag(
-                userId, tagId, type, text, timestampMs, endMs, effectiveAction, effectiveFade, Instant.now().toEpochMilli()
+                userId,
+                tagId,
+                type,
+                text,
+                timestampMs,
+                endMs,
+                effectiveAction,
+                effectiveFade,
+                Instant.now().toEpochMilli()
             )
             require(updated == 1) { "Timecode tag $tagId not found" }
 
@@ -219,6 +227,7 @@ class TimecodeTagService : Service() {
                 require(type == TimecodeTagType.CHAPTER) { "The action $action is only available on chapters" }
                 require(endMs != null) { "The action $action needs a chapter with an end position" }
             }
+
             TimecodeTagAction.SKIP_TO, TimecodeTagAction.PLAY_UNTIL -> {
                 require(type == TimecodeTagType.MARKER) { "The action $action is only available on markers" }
                 require(endMs == null) { "The action $action needs a marker without an end position" }

@@ -277,16 +277,19 @@ class CollectionServiceTest : KoinTest {
                 it[songId] = itemId
                 it[CollectionSongTable.addedAt] = addedAt
             }
+
             CollectionItemType.ALBUM -> CollectionAlbumTable.insert {
                 it[CollectionAlbumTable.collectionId] = collectionId
                 it[albumId] = itemId
                 it[CollectionAlbumTable.addedAt] = addedAt
             }
+
             CollectionItemType.ARTIST -> CollectionArtistTable.insert {
                 it[CollectionArtistTable.collectionId] = collectionId
                 it[artistId] = itemId
                 it[CollectionArtistTable.addedAt] = addedAt
             }
+
             CollectionItemType.PLAYLIST -> CollectionPlaylistTable.insert {
                 it[CollectionPlaylistTable.collectionId] = collectionId
                 it[playlistId] = itemId
@@ -445,43 +448,77 @@ class CollectionServiceTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `songIds over items added at the same time across page breaks returns each once in id order`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        val userId = transaction(database) { insertUser() }
-        val collectionId = service.createCollection(userId, InsertableCollection("C"))
-        val expected = transaction(database) {
-            val albumId = insertAlbum()
-            val songIds = (1..2500).map { UUID.randomUUID() }
-            SongTable.batchInsert(songIds) { songId ->
-                this[SongTable.id] = songId
-                this[SongTable.title] = "Song"
-                this[SongTable.albumId] = albumId
+    fun `songIds over items added at the same time across page breaks returns each once in id order`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val userId = transaction(database) { insertUser() }
+            val collectionId = service.createCollection(userId, InsertableCollection("C"))
+            val expected = transaction(database) {
+                val albumId = insertAlbum()
+                val songIds = (1..2500).map { UUID.randomUUID() }
+                SongTable.batchInsert(songIds) { songId ->
+                    this[SongTable.id] = songId
+                    this[SongTable.title] = "Song"
+                    this[SongTable.albumId] = albumId
+                }
+                CollectionSongTable.batchInsert(songIds) { songId ->
+                    this[CollectionSongTable.collectionId] = collectionId
+                    this[CollectionSongTable.songId] = songId
+                    this[CollectionSongTable.addedAt] = 1000L
+                }
+                CollectionSongTable
+                    .select(CollectionSongTable.songId)
+                    .where { CollectionSongTable.collectionId eq collectionId }
+                    .orderBy(CollectionSongTable.songId, SortOrder.ASC)
+                    .map { it[CollectionSongTable.songId].value }
             }
-            CollectionSongTable.batchInsert(songIds) { songId ->
-                this[CollectionSongTable.collectionId] = collectionId
-                this[CollectionSongTable.songId] = songId
-                this[CollectionSongTable.addedAt] = 1000L
-            }
-            CollectionSongTable
-                .select(CollectionSongTable.songId)
-                .where { CollectionSongTable.collectionId eq collectionId }
-                .orderBy(CollectionSongTable.songId, SortOrder.ASC)
-                .map { it[CollectionSongTable.songId].value }
+
+            assertEquals(2500, expected.distinct().size)
+            assertEquals(expected, service.songIds(collectionId).toList())
         }
 
-        assertEquals(2500, expected.distinct().size)
-        assertEquals(expected, service.songIds(collectionId).toList())
-    }
-
     private val searchTables = arrayOf(
-        UserTable, ImageTable, ImageMetadataTable, AnimatedImageTable,
-        ArtistTable, AlbumTable, SongTable, SongVariantTable, SongArtistTable, SongMusicBrainzTable, SongAudioDataTable,
-        GenreTable, AlbumMusicBrainzTable, ArtistMusicBrainzTable, ArtistAliasTable, ArtistMemberTable,
-        AlbumArtistTable, PlaylistTable, UserSongTable, TimecodeTagTable, UserPlaylistTable, SongGenreTable, ArtistGenreTable,
-        AlbumGenreTable, PlaylistSongTable, UserPlaylistSongTable, SyncedLyricsTable, RecentReleaseTable,
-        FollowedArtistTable, TranscodedSongTable, CustomMigrationTable, ScheduledTaskLogTable,
-        ArtistSplitAliasTable, SyncServiceTable, SongProviderTable, AlbumProviderTable,
-        CollectionTable, CollectionSongTable, CollectionAlbumTable, CollectionArtistTable, CollectionPlaylistTable,
+        UserTable,
+        ImageTable,
+        ImageMetadataTable,
+        AnimatedImageTable,
+        ArtistTable,
+        AlbumTable,
+        SongTable,
+        SongVariantTable,
+        SongArtistTable,
+        SongMusicBrainzTable,
+        SongAudioDataTable,
+        GenreTable,
+        AlbumMusicBrainzTable,
+        ArtistMusicBrainzTable,
+        ArtistAliasTable,
+        ArtistMemberTable,
+        AlbumArtistTable,
+        PlaylistTable,
+        UserSongTable,
+        TimecodeTagTable,
+        UserPlaylistTable,
+        SongGenreTable,
+        ArtistGenreTable,
+        AlbumGenreTable,
+        PlaylistSongTable,
+        UserPlaylistSongTable,
+        SyncedLyricsTable,
+        RecentReleaseTable,
+        FollowedArtistTable,
+        TranscodedSongTable,
+        CustomMigrationTable,
+        ScheduledTaskLogTable,
+        ArtistSplitAliasTable,
+        SyncServiceTable,
+        SongProviderTable,
+        AlbumProviderTable,
+        CollectionTable,
+        CollectionSongTable,
+        CollectionAlbumTable,
+        CollectionArtistTable,
+        CollectionPlaylistTable,
         *allMusicBrainzTables,
     )
 
@@ -575,7 +612,16 @@ class CollectionServiceTest : KoinTest {
 
             insertNamedSong(insertAlbum("Fifth Album"), "Alpha Five")
 
-            SongSearchFixture(userId, directSong, collectionAlbum, albumSong, artist, artistSong, playlist, playlistSong)
+            SongSearchFixture(
+                userId,
+                directSong,
+                collectionAlbum,
+                albumSong,
+                artist,
+                artistSong,
+                playlist,
+                playlistSong
+            )
         }
 
         val id = service.createCollection(f.userId, InsertableCollection("C"))
@@ -604,6 +650,7 @@ class CollectionServiceTest : KoinTest {
     fun `rankedSearch scopes artists albums and playlists to collection items`(dialect: DbDialect) = runBlocking {
         setupSearch(dialect)
         data class Fixture(val userId: UUID, val artistIn: UUID, val albumIn: UUID, val playlistIn: UUID)
+
         val f = transaction(database) {
             val userId = insertUser()
             val artistIn = insertArtist("Alpha Artist")

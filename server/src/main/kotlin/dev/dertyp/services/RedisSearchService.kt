@@ -30,24 +30,27 @@ class RedisSearchService : Service() {
 
         val prefix = config.indexPrefix
 
-        createIndex(client, "${prefix}:song-index", "${prefix}:song:", Schema()
-            .addTextField("title", 5.0)
-            .addTextField("artist", 2.0)
-            .addTextField("album", 1.0)
-            .addTextField("metadata", 1.0)
+        createIndex(
+            client, "${prefix}:song-index", "${prefix}:song:", Schema()
+                .addTextField("title", 5.0)
+                .addTextField("artist", 2.0)
+                .addTextField("album", 1.0)
+                .addTextField("metadata", 1.0)
         )
 
-        createIndex(client, "${prefix}:artist-index", "${prefix}:artist:", Schema()
-            .addTextField("name", 5.0)
-            .addTextField("aliases", 2.0)
-            .addTextField("groups", 1.0)
-            .addTextField("metadata", 1.0)
+        createIndex(
+            client, "${prefix}:artist-index", "${prefix}:artist:", Schema()
+                .addTextField("name", 5.0)
+                .addTextField("aliases", 2.0)
+                .addTextField("groups", 1.0)
+                .addTextField("metadata", 1.0)
         )
 
-        createIndex(client, "${prefix}:album-index", "${prefix}:album:", Schema()
-            .addTextField("name", 5.0)
-            .addTextField("artists", 2.0)
-            .addTextField("groups", 1.0)
+        createIndex(
+            client, "${prefix}:album-index", "${prefix}:album:", Schema()
+                .addTextField("name", 5.0)
+                .addTextField("artists", 2.0)
+                .addTextField("groups", 1.0)
         )
     }
 
@@ -73,33 +76,39 @@ class RedisSearchService : Service() {
     fun indexSong(id: UUID, title: String, artist: String, album: String, metadata: String) {
         if (!isEnabled()) return
         val key = "${config.indexPrefix}:song:$id"
-        jedis.hset(key, mapOf(
-            "title" to title,
-            "artist" to artist,
-            "album" to album,
-            "metadata" to metadata
-        ))
+        jedis.hset(
+            key, mapOf(
+                "title" to title,
+                "artist" to artist,
+                "album" to album,
+                "metadata" to metadata
+            )
+        )
     }
 
     fun indexArtist(id: UUID, name: String, aliases: String, groups: String, metadata: String) {
         if (!isEnabled()) return
         val key = "${config.indexPrefix}:artist:$id"
-        jedis.hset(key, mapOf(
-            "name" to name,
-            "aliases" to aliases,
-            "groups" to groups,
-            "metadata" to metadata
-        ))
+        jedis.hset(
+            key, mapOf(
+                "name" to name,
+                "aliases" to aliases,
+                "groups" to groups,
+                "metadata" to metadata
+            )
+        )
     }
 
     fun indexAlbum(id: UUID, name: String, artists: String, groups: String) {
         if (!isEnabled()) return
         val key = "${config.indexPrefix}:album:$id"
-        jedis.hset(key, mapOf(
-            "name" to name,
-            "artists" to artists,
-            "groups" to groups
-        ))
+        jedis.hset(
+            key, mapOf(
+                "name" to name,
+                "artists" to artists,
+                "groups" to groups
+            )
+        )
     }
 
     fun remove(type: SearchIndexEntityType, ids: Collection<UUID>) {
@@ -138,7 +147,7 @@ class RedisSearchService : Service() {
             logger.error("Redis search failed: ${e.message}")
             return SearchResult(emptyList(), 0)
         }
-        
+
         val ids = result.documents.map { doc ->
             UUID.fromString(doc.id.substringAfterLast(":"))
         }
@@ -153,11 +162,11 @@ class RedisSearchService : Service() {
             val albumInfo = jedis.ftInfo("${config.indexPrefix}:album-index")
 
             fun extract(map: Map<String, Any?>): Long {
-                val value = map["total_index_memory_sz_mb"] 
-                    ?: map["inverted_sz_mb"] 
-                    ?: map["total_index_memory_mib"] 
+                val value = map["total_index_memory_sz_mb"]
+                    ?: map["inverted_sz_mb"]
+                    ?: map["total_index_memory_mib"]
                     ?: return 0L
-                
+
                 return when (value) {
                     is Number -> value.toLong()
                     is String -> value.toDoubleOrNull()?.toLong() ?: 0L

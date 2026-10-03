@@ -72,7 +72,7 @@ class ReverseProxyService(
     private val requestedId = config.proxy.id ?: UUID.randomUUID().toString().take(8)
     private val serverName = config.proxy.name
     private val proxyKey = config.proxy.key
-    
+
     var proxyId: String? = null
         private set
 
@@ -123,7 +123,7 @@ class ReverseProxyService(
                     host = proxyHost!!
                     port = controlPort!!
                     path("/proxy/server")
-                    
+
                     parameters.append("id", requestedId)
                     serverName?.let { parameters.append("name", it) }
                     proxyKey?.let { parameters.append("key", it) }
@@ -159,7 +159,7 @@ class ReverseProxyService(
                             val transport = MultiplexedTransport(this.coroutineContext, clientId, this)
                             val server = ProxyKrpcServer(transport)
                             activeServers[clientId] = server
-                            
+
                             launch {
                                 try {
                                     setupServer(server, msg)
@@ -173,17 +173,21 @@ class ReverseProxyService(
                                 }
                             }
                         }
+
                         is ProxyMessage.ClientFrame -> {
                             activeServers[clientId]?.transport?.onData(msg.data, msg.isBinary)
                         }
+
                         is ProxyMessage.ClientDisconnected -> {
                             logger.info("Proxied client disconnected: $clientId")
                             activeServers.remove(clientId)?.close()
                         }
+
                         is ProxyMessage.AssignedId -> {
                             this@ReverseProxyService.proxyId = msg.id
                             logger.info("Proxy assigned ID: ${msg.id}")
                         }
+
                         is ProxyMessage.Pong -> {}
                         is ProxyMessage.Ping -> {
                             send(ProxyMessage.Pong.toFrame())
@@ -203,14 +207,19 @@ class ReverseProxyService(
         val authHeader = metadata.headers["Authorization"]
         val token = authHeader?.removePrefix("Bearer ")
         val principal = token?.let { jwtService.validateToken(it) }
-        
-        val call = ProxyCall(application = get(), uriString = metadata.uri, headersMap = metadata.headers, principal = principal)
-        
+
+        val call = ProxyCall(
+            application = get(),
+            uriString = metadata.uri,
+            headersMap = metadata.headers,
+            principal = principal
+        )
+
         val path = metadata.uri.substringBefore('?')
         if (path == "/rpc" || path == "/rpc/auth") {
             server.registerPublicServices(getKoin(), call)
         } else if (path == "/rpc/services") {
-            val user = principal?.let { 
+            val user = principal?.let {
                 get<UserService>().findUserByUsername(it.payload.getClaim(JwtService.CLAIM_USERNAME).asString())
             }
             if (user != null) {
@@ -239,6 +248,7 @@ class ReverseProxyService(
                 is KrpcTransportMessage.BinaryMessage -> {
                     proxySession.send(ProxyMessage.ClientFrame(clientId, message.value, true).toFrame())
                 }
+
                 is KrpcTransportMessage.StringMessage -> {
                     proxySession.send(ProxyMessage.ClientFrame(clientId, message.value.toByteArray(), false).toFrame())
                 }
@@ -275,7 +285,7 @@ class ReverseProxyService(
             parseQueryString(query)
         }
         override val coroutineContext: CoroutineContext = application.coroutineContext
-        
+
         override val request = object : ApplicationRequest {
             override val call: ApplicationCall get() = this@ProxyCall
             override val cookies: RequestCookies get() = throw UnsupportedOperationException()
@@ -287,6 +297,7 @@ class ReverseProxyService(
                 @Suppress("DEPRECATION")
                 override val host: String = "127.0.0.1"
                 override val method: HttpMethod = HttpMethod.Get
+
                 @Deprecated("Use localPort or serverPort instead", level = DeprecationLevel.ERROR)
                 @Suppress("DEPRECATION")
                 override val port: Int = 80
@@ -307,7 +318,7 @@ class ReverseProxyService(
             override fun receiveChannel(): ByteReadChannel = throw UnsupportedOperationException()
         }
         override val response: ApplicationResponse get() = throw UnsupportedOperationException()
-        
+
         override suspend fun respond(message: Any?, typeInfo: TypeInfo?) {
             throw UnsupportedOperationException()
         }

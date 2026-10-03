@@ -22,8 +22,8 @@ class LyricsSearchTest {
     @Test
     fun `searchLyrics should return lines from temp file if command succeeds`() = runBlocking {
         mockkStatic("dev.dertyp.core.process.CommandKt")
-        
-        coEvery { 
+
+        coEvery {
             executeCommand(any(), any(), any(), any(), any(), any())
         } answers {
             val command = it.invocation.args[0] as List<*>
@@ -33,7 +33,7 @@ class LyricsSearchTest {
         }
 
         val lyrics = service.searchLyrics("Artist", "Title", false)
-        
+
         assertEquals(listOf("Line 1", "Line 2"), lyrics)
     }
 }

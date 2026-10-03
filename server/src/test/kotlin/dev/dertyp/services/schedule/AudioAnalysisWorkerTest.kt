@@ -45,7 +45,7 @@ class AudioAnalysisWorkerTest : KoinTest {
         setup(dialect)
         val audioAnalysisService = mockk<AudioAnalysisService>()
         val songId = UUID.randomUUID()
-        
+
         coEvery { audioAnalysisService.getUnanalyzedSongIds() } returns listOf(songId)
         coEvery { audioAnalysisService.analyzeSong(songId) } returns Unit
 

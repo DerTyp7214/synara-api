@@ -63,7 +63,7 @@ class ScheduleServiceConfigIntegrationTest : KoinTest {
     @EnumSource(DbDialect::class)
     fun `ScheduleService should schedule tasks based on initial config`(dialect: DbDialect) = runBlocking {
         setupDb(dialect)
-        
+
         val executed = CompletableDeferred<Unit>()
 
         scheduleService.registerManagedTask(
@@ -72,12 +72,14 @@ class ScheduleServiceConfigIntegrationTest : KoinTest {
             task = { executed.complete(Unit) }
         )
 
-        configService.updateConfiguration(TaskConfiguration(
-            key = TaskKeys.DATABASE_BACKUP,
-            name = "Test Task",
-            enabled = true,
-            trigger = TriggerDefinition.Interval(1)
-        ))
+        configService.updateConfiguration(
+            TaskConfiguration(
+                key = TaskKeys.DATABASE_BACKUP,
+                name = "Test Task",
+                enabled = true,
+                trigger = TriggerDefinition.Interval(1)
+            )
+        )
 
         val job = launch { scheduleService.startService() }
 
@@ -93,33 +95,37 @@ class ScheduleServiceConfigIntegrationTest : KoinTest {
     @EnumSource(DbDialect::class)
     fun `ScheduleService should update tasks when config changes`(dialect: DbDialect) = runBlocking {
         setupDb(dialect)
-        
+
         val count = java.util.concurrent.atomic.AtomicInteger(0)
-        
+
         scheduleService.registerManagedTask(
             key = "dynamic-task",
             name = "Dynamic Task",
             task = { count.incrementAndGet() }
         )
 
-        configService.updateConfiguration(TaskConfiguration(
-            key = "dynamic-task",
-            name = "Dynamic Task",
-            enabled = false,
-            trigger = TriggerDefinition.Interval(1)
-        ))
+        configService.updateConfiguration(
+            TaskConfiguration(
+                key = "dynamic-task",
+                name = "Dynamic Task",
+                enabled = false,
+                trigger = TriggerDefinition.Interval(1)
+            )
+        )
 
         val job = launch { scheduleService.startService() }
-        
+
         delay(2.seconds)
         assertEquals(0, count.get(), "Task should not run when disabled")
 
-        configService.updateConfiguration(TaskConfiguration(
-            key = "dynamic-task",
-            name = "Dynamic Task",
-            enabled = true,
-            trigger = TriggerDefinition.Interval(1)
-        ))
+        configService.updateConfiguration(
+            TaskConfiguration(
+                key = "dynamic-task",
+                name = "Dynamic Task",
+                enabled = true,
+                trigger = TriggerDefinition.Interval(1)
+            )
+        )
 
         withTimeout(10.seconds) {
             while (count.get() == 0) delay(100.milliseconds)
@@ -134,7 +140,7 @@ class ScheduleServiceConfigIntegrationTest : KoinTest {
     @EnumSource(DbDialect::class)
     fun `ScheduleService should handle AfterTask trigger from config`(dialect: DbDialect) = runBlocking {
         setupDb(dialect)
-        
+
         val firstExecuted = CompletableDeferred<Unit>()
         val secondExecuted = CompletableDeferred<Unit>()
 
@@ -150,22 +156,26 @@ class ScheduleServiceConfigIntegrationTest : KoinTest {
             task = { secondExecuted.complete(Unit) }
         )
 
-        configService.updateConfiguration(TaskConfiguration(
-            key = "task-a",
-            name = "Task A",
-            enabled = true,
-            trigger = TriggerDefinition.Manual
-        ))
+        configService.updateConfiguration(
+            TaskConfiguration(
+                key = "task-a",
+                name = "Task A",
+                enabled = true,
+                trigger = TriggerDefinition.Manual
+            )
+        )
 
-        configService.updateConfiguration(TaskConfiguration(
-            key = "task-b",
-            name = "Task B",
-            enabled = true,
-            trigger = TriggerDefinition.AfterTask("task-a")
-        ))
+        configService.updateConfiguration(
+            TaskConfiguration(
+                key = "task-b",
+                name = "Task B",
+                enabled = true,
+                trigger = TriggerDefinition.AfterTask("task-a")
+            )
+        )
 
         val job = launch { scheduleService.startService() }
-        
+
         delay(500.milliseconds)
 
         scheduleService.triggerTask("task-a")

@@ -46,7 +46,11 @@ data class CredentialServerDeps(
             return create(settings, createDataSource(settings.database), defaultHttpClient())
         }
 
-        fun create(settings: CredentialServerSettings, dataSource: DataSource, httpClient: HttpClient): CredentialServerDeps {
+        fun create(
+            settings: CredentialServerSettings,
+            dataSource: DataSource,
+            httpClient: HttpClient
+        ): CredentialServerDeps {
             val box = SecretBox.create(settings.masterKey, settings.keyFile)
             val database = connectDatabase(dataSource)
             val store = CredentialStore(database, box)

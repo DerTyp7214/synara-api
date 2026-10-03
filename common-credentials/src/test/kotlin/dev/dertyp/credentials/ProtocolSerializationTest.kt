@@ -33,7 +33,13 @@ class ProtocolSerializationTest {
     @Test
     fun credentialInputVariantsRoundTrip() {
         val cases = listOf<Pair<CredentialInput, String>>(
-            CredentialInput.OAuthClientCredentialsInput("id", "secret", "https://x/token", OAuthAuthStyle.BASIC, "s") to "oauth_client_credentials",
+            CredentialInput.OAuthClientCredentialsInput(
+                "id",
+                "secret",
+                "https://x/token",
+                OAuthAuthStyle.BASIC,
+                "s"
+            ) to "oauth_client_credentials",
             CredentialInput.AppleDeveloperKeyInput("team", "key", "pem") to "apple_developer_key",
             CredentialInput.ApiKeyInput("k") to "api_key",
             CredentialInput.ApiKeyPairInput("k", "s") to "api_key_pair",

@@ -59,7 +59,7 @@ class ReAnalyzeMissingValence : CustomMigration() {
             }
             songChannel.close()
         }
-        
+
         logger.info("Finished re-analyzing ${processedCount.get()} songs.")
     }
 }

@@ -46,7 +46,10 @@ class BackfillListenIsrc : CustomMigration() {
                         (ListenTable.recordingMbid eq mbid) and ListenTable.isrcs.isNull()
                     }) { it[ListenTable.isrcs] = isrcs }
                     if (index % 100 == 0 || index == mbidToIsrcs.size - 1) {
-                        updateProgress((index + 1).toDouble() / mbidToIsrcs.size, "Backfilling listen ISRCs: ${index + 1}/${mbidToIsrcs.size}")
+                        updateProgress(
+                            (index + 1).toDouble() / mbidToIsrcs.size,
+                            "Backfilling listen ISRCs: ${index + 1}/${mbidToIsrcs.size}"
+                        )
                     }
                 }
             }

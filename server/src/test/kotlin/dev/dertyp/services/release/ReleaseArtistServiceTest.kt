@@ -135,22 +135,23 @@ class ReleaseArtistServiceTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `groupIdsForArtist and providerReleaseIdsForArtist return the linked releases`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        val artistId = UUID.randomUUID()
-        insertArtist(artistId)
+    fun `groupIdsForArtist and providerReleaseIdsForArtist return the linked releases`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val artistId = UUID.randomUUID()
+            insertArtist(artistId)
 
-        val groupId = UUID.randomUUID()
-        insertReleaseGroup(groupId, artistId)
-        val rowId = UUID.randomUUID()
-        insertProviderRelease(rowId, artistId)
+            val groupId = UUID.randomUUID()
+            insertReleaseGroup(groupId, artistId)
+            val rowId = UUID.randomUUID()
+            insertProviderRelease(rowId, artistId)
 
-        service.linkGroup(groupId, listOf(artistId))
-        service.linkProviderRelease(rowId, listOf(artistId))
+            service.linkGroup(groupId, listOf(artistId))
+            service.linkProviderRelease(rowId, listOf(artistId))
 
-        assertEquals(listOf(groupId), service.groupIdsForArtist(artistId))
-        assertEquals(listOf(rowId), service.providerReleaseIdsForArtist(artistId))
-    }
+            assertEquals(listOf(groupId), service.groupIdsForArtist(artistId))
+            assertEquals(listOf(rowId), service.providerReleaseIdsForArtist(artistId))
+        }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)

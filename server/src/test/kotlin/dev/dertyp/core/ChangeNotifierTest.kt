@@ -40,8 +40,10 @@ class ChangeNotifierTest {
     private fun Channel<Change>.drain(): List<Change> = generateSequence { tryReceive().getOrNull() }.toList()
 
     private fun entries(): Map<*, *> {
-        val channels = ChangeNotifier::class.java.getDeclaredField("channels").apply { isAccessible = true }.get(notifier)
-        return PerUserChannels::class.java.getDeclaredField("entries").apply { isAccessible = true }.get(channels) as Map<*, *>
+        val channels =
+            ChangeNotifier::class.java.getDeclaredField("channels").apply { isAccessible = true }.get(notifier)
+        return PerUserChannels::class.java.getDeclaredField("entries").apply { isAccessible = true }
+            .get(channels) as Map<*, *>
     }
 
     @Test

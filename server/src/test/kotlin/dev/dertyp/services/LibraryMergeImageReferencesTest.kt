@@ -45,14 +45,42 @@ class LibraryMergeImageReferencesTest : KoinTest {
         database = TestDatabase.connect(dialect, "merge_image_refs_test")
         transaction(database) {
             SchemaUtils.create(
-                ArtistTable, AlbumTable, SongTable, SongVariantTable, SongTitleTagTable, ImageTable, ImageMetadataTable, PlaylistTable,
-                UserTable, UserPlaylistTable, UserPlaylistSongTable, PlaylistSongTable,
-                SongArtistTable, AlbumArtistTable, AlbumMusicBrainzTable, SongMusicBrainzTable,
-                TranscodedSongTable, UserSongTable, SongProviderTable, AlbumProviderTable,
-                CollectionTable, CollectionSongTable, CollectionAlbumTable, CollectionArtistTable, CollectionPlaylistTable,
-                MBReleaseGroupTable, MBReleaseGroupCoverTable, RecentReleaseTable, ProviderReleaseTable,
-                ProviderLinkTable, RecentReleaseLinkTable, ProviderReleaseLinkTable,
-                AnimatedImageTable, RadioChannelTable, PodcastShowTable, PodcastEpisodeTable
+                ArtistTable,
+                AlbumTable,
+                SongTable,
+                SongVariantTable,
+                SongTitleTagTable,
+                ImageTable,
+                ImageMetadataTable,
+                PlaylistTable,
+                UserTable,
+                UserPlaylistTable,
+                UserPlaylistSongTable,
+                PlaylistSongTable,
+                SongArtistTable,
+                AlbumArtistTable,
+                AlbumMusicBrainzTable,
+                SongMusicBrainzTable,
+                TranscodedSongTable,
+                UserSongTable,
+                SongProviderTable,
+                AlbumProviderTable,
+                CollectionTable,
+                CollectionSongTable,
+                CollectionAlbumTable,
+                CollectionArtistTable,
+                CollectionPlaylistTable,
+                MBReleaseGroupTable,
+                MBReleaseGroupCoverTable,
+                RecentReleaseTable,
+                ProviderReleaseTable,
+                ProviderLinkTable,
+                RecentReleaseLinkTable,
+                ProviderReleaseLinkTable,
+                AnimatedImageTable,
+                RadioChannelTable,
+                PodcastShowTable,
+                PodcastEpisodeTable
             )
         }
         service = LibraryMergeService()
@@ -162,34 +190,35 @@ class LibraryMergeImageReferencesTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `merging duplicate images repoints every referencing column to the kept image`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
+    fun `merging duplicate images repoints every referencing column to the kept image`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
 
-        val images = transaction(database) {
-            val first = insertImage("first")
-            val second = insertImage("second")
-            insertReferences(first, "a")
-            insertReferences(second, "b")
-            setOf(first.value, second.value)
-        }
+            val images = transaction(database) {
+                val first = insertImage("first")
+                val second = insertImage("second")
+                insertReferences(first, "a")
+                insertReferences(second, "b")
+                setOf(first.value, second.value)
+            }
 
-        val result = service.mergeDuplicates()
+            val result = service.mergeDuplicates()
 
-        assertEquals(1, result["imagesMerged"])
-        transaction(database) {
-            val kept = ImageTable.select(ImageTable.id).map { it[ImageTable.id].value }
-            assertEquals(1, kept.size)
-            val keptId = kept.single()
-            assertEquals(true, keptId in images)
+            assertEquals(1, result["imagesMerged"])
+            transaction(database) {
+                val kept = ImageTable.select(ImageTable.id).map { it[ImageTable.id].value }
+                assertEquals(1, kept.size)
+                val keptId = kept.single()
+                assertEquals(true, keptId in images)
 
-            val columns = SchemaTables.referencesTo(ImageTable)
-            assertEquals(14, columns.size)
-            columns.forEach { column ->
-                val name = "${column.table.tableName}.${column.name}"
-                val values = column.values().map { (it as EntityID<*>?)?.value }
-                assertEquals(listOf(keptId, keptId), values, "$name must point at the kept image")
-                assertEquals(0L, column.table.selectAll().where { column.isNull() }.count(), "$name was cleared")
+                val columns = SchemaTables.referencesTo(ImageTable)
+                assertEquals(14, columns.size)
+                columns.forEach { column ->
+                    val name = "${column.table.tableName}.${column.name}"
+                    val values = column.values().map { (it as EntityID<*>?)?.value }
+                    assertEquals(listOf(keptId, keptId), values, "$name must point at the kept image")
+                    assertEquals(0L, column.table.selectAll().where { column.isNull() }.count(), "$name was cleared")
+                }
             }
         }
-    }
 }

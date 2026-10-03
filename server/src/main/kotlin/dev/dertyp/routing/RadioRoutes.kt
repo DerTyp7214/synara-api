@@ -41,7 +41,8 @@ fun Route.radioRouting() {
         get("/channel/{channelId}/stream", {
             tags("Radio")
             summary = "Stream a radio channel"
-            description = "Infinite chained AAC (ADTS) audio stream with ICY metadata for a curated radio channel. $API_KEY_NOTE"
+            description =
+                "Infinite chained AAC (ADTS) audio stream with ICY metadata for a curated radio channel. $API_KEY_NOTE"
             securitySchemeNames("ApiKeyAuth")
             request {
                 pathParameter<String>("channelId") { description = "The radio channel unique identifier." }
@@ -80,10 +81,13 @@ fun Route.radioRouting() {
         get("/{sessionId}/stream", {
             tags("Radio")
             summary = "Resume a radio session"
-            description = "Continues an existing radio session where it left off as an infinite audio stream. $API_KEY_NOTE"
+            description =
+                "Continues an existing radio session where it left off as an infinite audio stream. $API_KEY_NOTE"
             securitySchemeNames("ApiKeyAuth")
             request {
-                pathParameter<String>("sessionId") { description = "A radio session id from createRadioSession or startChannel." }
+                pathParameter<String>("sessionId") {
+                    description = "A radio session id from createRadioSession or startChannel."
+                }
                 queryParameter<Int>("quality") {
                     description = "Target AAC bitrate in kbps (e.g. 256)."
                     required = true
@@ -117,14 +121,17 @@ fun Route.radioRouting() {
         get("/stream", {
             tags("Radio")
             summary = "Start a radio stream"
-            description = "Creates a radio session and streams it as infinite audio. Seed with a type (random/history) or with song/playlist/album/artist ids. $API_KEY_NOTE"
+            description =
+                "Creates a radio session and streams it as infinite audio. Seed with a type (random/history) or with song/playlist/album/artist ids. $API_KEY_NOTE"
             securitySchemeNames("ApiKeyAuth")
             request {
                 queryParameter<Int>("quality") {
                     description = "Target AAC bitrate in kbps (e.g. 256)."
                     required = true
                 }
-                queryParameter<RadioType>("type") { description = "Seed strategy: RANDOM (default), LAST_WEEK, LAST_MONTH or LAST_YEAR." }
+                queryParameter<RadioType>("type") {
+                    description = "Seed strategy: RANDOM (default), LAST_WEEK, LAST_MONTH or LAST_YEAR."
+                }
                 queryParameter<String>("songId") { description = "Seed song id(s); repeatable." }
                 queryParameter<String>("playlistId") { description = "Seed from a playlist's songs." }
                 queryParameter<String>("albumId") { description = "Seed from an album's songs." }

@@ -28,7 +28,8 @@ class SigningKeyStore(private val database: Database, private val box: SecretBox
     }
 
     fun list(): List<StoredSigningKey> = transaction(database) {
-        SigningKeyTable.selectAll().orderBy(SigningKeyTable.createdAt to SortOrder.ASC).map { it.toKey(withPrivate = false) }
+        SigningKeyTable.selectAll().orderBy(SigningKeyTable.createdAt to SortOrder.ASC)
+            .map { it.toKey(withPrivate = false) }
     }
 
     fun activate(kid: String, privateKeyPkcs8: String, publicKeyX509: String) {

@@ -52,9 +52,10 @@ class SoundcloudService(
     private val importService by inject<ImportService>()
 
     override val loginCommand: MutableList<String> = mutableListOf()
-    override val importCommand: MutableList<String> get() = ytdlp(
-        "-x", "--audio-format", audioConfig.losslessFormat.extension, "--no-progress", "--convert-thumbnails", "jpg"
-    )
+    override val importCommand: MutableList<String>
+        get() = ytdlp(
+            "-x", "--audio-format", audioConfig.losslessFormat.extension, "--no-progress", "--convert-thumbnails", "jpg"
+        )
     override val favImportCommand: MutableList<String> = mutableListOf()
 
     companion object {
@@ -76,6 +77,7 @@ class SoundcloudService(
             val groups = ids.asFlow().map { id ->
                 val url = if (id.startsWith("http")) id else "https://soundcloud.com/$id"
                 val info = fetchPlaylistInfo(url)
+
                 @Suppress("UNCHECKED_CAST")
                 val entries = info?.get("entries") as? List<Map<String, String>> ?: emptyList()
 
@@ -114,7 +116,8 @@ class SoundcloudService(
                 wrapper.idGroups.buffer(2).collect { idGroup ->
                     val playlistId = idGroup.metadata?.let { playlist ->
                         if (playlist is IMetadataService.FlowPlaylist) {
-                            val url = if (idGroup.id.startsWith("http")) idGroup.id else "https://soundcloud.com/${idGroup.id}"
+                            val url =
+                                if (idGroup.id.startsWith("http")) idGroup.id else "https://soundcloud.com/${idGroup.id}"
                             userPlaylistService.getOrAddPlaylist(
                                 user.id, idGroup.id, InsertablePlaylist(
                                     name = playlist.name,
@@ -131,7 +134,8 @@ class SoundcloudService(
                         contentToImport = true
                         importService.addToQueue(
                             UrlImportQueueEntry(
-                                urls = trackChunk.map { if (it.second.startsWith("http")) it.second else "https://soundcloud.com/${it.second}" }.toMutableList(),
+                                urls = trackChunk.map { if (it.second.startsWith("http")) it.second else "https://soundcloud.com/${it.second}" }
+                                    .toMutableList(),
                                 ids = trackChunk.map { it.second },
                                 byUser = user.id,
                                 type = Type.SONG,
@@ -142,18 +146,19 @@ class SoundcloudService(
                                     user.id
                                 )
                                 val songIds = trackChunk.mapNotNull { entry ->
-                                    val songId = songs.find { 
+                                    val songId = songs.find {
                                         it.originalUrl == entry.second || it.originalUrl.endsWith("/${entry.second}")
                                     }?.id
                                     if (songId != null) entry.first to songId else null
                                 }
-                                
+
                                 if (playlistId != null) userPlaylistService.addToPlaylist(playlistId, songIds)
                             }
                         )
                     }
                 }
             }
+
             Type.SONG -> {
                 val urls = ids.map { if (it.startsWith("http")) it else "https://soundcloud.com/$it" }
                 val existingSongs = songService.byOriginalIds(urls, user.id)
@@ -176,6 +181,7 @@ class SoundcloudService(
                 }
                 return contentToImport to existingSongs
             }
+
             else -> {}
         }
 
@@ -191,23 +197,24 @@ class SoundcloudService(
                 val jsonStartIndex = result.fullOutput.indexOf("{")
                 if (jsonStartIndex == -1) return null
                 val jsonString = result.fullOutput.substring(jsonStartIndex)
-                
+
                 val json = ApplicationScope.json.parseToJsonElement(jsonString).jsonObject
                 val map = mutableMapOf<String, Any>()
                 map["id"] = json["id"]?.jsonPrimitive?.content ?: ""
                 map["title"] = json["title"]?.jsonPrimitive?.content ?: ""
                 map["description"] = json["description"]?.jsonPrimitive?.content ?: ""
-                
-                val entries = json["entries"]?.jsonArray?.mapNotNull { 
+
+                val entries = json["entries"]?.jsonArray?.mapNotNull {
                     it.jsonObject.let { obj ->
                         val entryMap = mutableMapOf<String, String>()
-                        entryMap["id"] = obj["url"]?.jsonPrimitive?.content ?: obj["id"]?.jsonPrimitive?.content ?: return@let null
+                        entryMap["id"] =
+                            obj["url"]?.jsonPrimitive?.content ?: obj["id"]?.jsonPrimitive?.content ?: return@let null
                         entryMap["title"] = obj["title"]?.jsonPrimitive?.content ?: ""
                         entryMap
                     }
                 } ?: emptyList()
                 map["entries"] = entries
-                
+
                 return map
             } catch (e: Exception) {
                 logger.error("Failed to parse yt-dlp playlist output", e)
@@ -226,7 +233,8 @@ class SoundcloudService(
     ): ProcessExecutionResult {
         loggingIn.waitForChange(false)
 
-        val existingUrls = if (userId != null) songService.byOriginalIds(urls, userId).map { it.originalUrl } else emptyList()
+        val existingUrls =
+            if (userId != null) songService.byOriginalIds(urls, userId).map { it.originalUrl } else emptyList()
 
         var finalResult = ProcessExecutionResult.EMPTY
         for (url in urls) {
@@ -249,7 +257,11 @@ class SoundcloudService(
             var finalMbReleaseId: String? = null
 
             if (metadata is IMetadataService.Track) {
-                val mbid = try { UUID.fromString(metadata.id) } catch (_: Exception) { null }
+                val mbid = try {
+                    UUID.fromString(metadata.id)
+                } catch (_: Exception) {
+                    null
+                }
                 if (mbid != null) {
                     onLiveOutput("Using provided MusicBrainz metadata for track: ${metadata.title}")
                     finalTitle = metadata.title
@@ -269,8 +281,12 @@ class SoundcloudService(
                 if (mbRecording != null) {
                     onLiveOutput("Matched MusicBrainz Recording: ${mbRecording.title}")
                     finalTitle = mbRecording.title ?: title
-                    finalArtist = mbRecording.artistCredit?.joinToString(indexer.artistDelimiter) { it.name ?: it.artist?.name ?: "" } ?: artist
-                    val firstRelease = mbRecording.releases?.firstOrNull { it.title?.cleanTitle()?.equals(album.cleanTitle(), true) == true } ?: mbRecording.releases?.firstOrNull()
+                    finalArtist = mbRecording.artistCredit?.joinToString(indexer.artistDelimiter) {
+                        it.name ?: it.artist?.name ?: ""
+                    } ?: artist
+                    val firstRelease = mbRecording.releases?.firstOrNull {
+                        it.title?.cleanTitle()?.equals(album.cleanTitle(), true) == true
+                    } ?: mbRecording.releases?.firstOrNull()
                     finalAlbum = firstRelease?.title
                     finalDate = firstRelease?.date
                     finalMbId = mbRecording.id.toString()
@@ -281,11 +297,11 @@ class SoundcloudService(
                     finalCoverUrl = info["thumbnail"]
                 }
             }
-            
+
             if (finalMbId != null && finalMbReleaseId != null) {
                 finalCoverUrl = "https://coverartarchive.org/release/$finalMbReleaseId/front"
             }
-            
+
             if (finalCoverUrl == null && info != null) {
                 finalCoverUrl = info["thumbnail"]
             }
@@ -328,13 +344,20 @@ class SoundcloudService(
             }
 
             onLiveOutput("Starting download for: $url")
-            val (result, _) = collectImportedFiles(cmd + url, maxRetries, 0, aliveCheck, userId, onLiveOutput) { paths ->
+            val (result, _) = collectImportedFiles(
+                cmd + url,
+                maxRetries,
+                0,
+                aliveCheck,
+                userId,
+                onLiveOutput
+            ) { paths ->
                 paths.filter { it.extension.lowercase() in LosslessFormat.extensions }.forEach { path ->
                     onLiveOutput("Post-processing: ${path.absolutePathString()}")
                     try {
                         val audioFile = AudioFileIO.read(path.toFile())
                         val tag = audioFile.tag
-                        
+
                         onLiveOutput("Tagged: $finalTitle - $finalArtist")
                         finalTitle?.let { tag.setField(FieldKey.TITLE, it) }
                         finalArtist?.let { tag.setField(FieldKey.ARTIST, it) }
@@ -387,18 +410,18 @@ class SoundcloudService(
 
                 val json = ApplicationScope.json.parseToJsonElement(jsonString).jsonObject
                 val map = mutableMapOf<String, String>()
-                
+
                 map["id"] = json["id"]?.jsonPrimitive?.content ?: ""
                 map["title"] = json["title"]?.jsonPrimitive?.content ?: ""
                 map["uploader"] = json["uploader"]?.jsonPrimitive?.content ?: ""
                 map["playlist_id"] = json["playlist_id"]?.jsonPrimitive?.content ?: ""
-                
+
                 map["thumbnail"] = json["thumbnail"]?.jsonPrimitive?.content ?: ""
-                
+
                 json["track"]?.jsonPrimitive?.content?.let { if (it != "NA") map["track"] = it }
                 json["artist"]?.jsonPrimitive?.content?.let { if (it != "NA") map["artist"] = it }
                 json["album"]?.jsonPrimitive?.content?.let { if (it != "NA") map["album"] = it }
-                
+
                 return map
             } catch (e: Exception) {
                 logger.error("Failed to parse yt-dlp json output", e)

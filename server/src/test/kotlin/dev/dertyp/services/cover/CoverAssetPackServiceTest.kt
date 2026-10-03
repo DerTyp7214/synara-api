@@ -19,7 +19,13 @@ class CoverAssetPackServiceTest {
         dir.resolve("backgrounds").createDirectories()
         repeat(backgrounds) { Files.write(dir.resolve("backgrounds/bg-$it.jpg"), byteArrayOf(1, 2, 3)) }
         dir.resolve("pack.json").writeText(
-            """{"id":"$id","name":"$id","tags":${tags.joinToString(",", "[", "]") { "\"$it\"" }},"nsfw":$nsfw,"backgrounds":["backgrounds/*.jpg"]}"""
+            """{"id":"$id","name":"$id","tags":${
+                tags.joinToString(
+                    ",",
+                    "[",
+                    "]"
+                ) { "\"$it\"" }
+            },"nsfw":$nsfw,"backgrounds":["backgrounds/*.jpg"]}"""
         )
     }
 
@@ -45,9 +51,23 @@ class CoverAssetPackServiceTest {
         val disabled = service(root, nsfw = false)
         assertFalse(disabled.packs(includeNsfw = false).any { it.nsfw })
         assertEquals("calm", disabled.select(setOf("mood:calm"), 1, allowNsfw = true, packId = null).id)
-        assertThrows(IllegalArgumentException::class.java) { disabled.select(emptySet(), 1, allowNsfw = true, packId = "spicy") }
+        assertThrows(IllegalArgumentException::class.java) {
+            disabled.select(
+                emptySet(),
+                1,
+                allowNsfw = true,
+                packId = "spicy"
+            )
+        }
         repeat(20) { seed ->
-            assertFalse(disabled.select(setOf("explicit", "mood:sensual"), seed.toLong(), allowNsfw = true, packId = null).nsfw)
+            assertFalse(
+                disabled.select(
+                    setOf("explicit", "mood:sensual"),
+                    seed.toLong(),
+                    allowNsfw = true,
+                    packId = null
+                ).nsfw
+            )
         }
 
         val enabled = service(root, nsfw = true)
@@ -66,7 +86,14 @@ class CoverAssetPackServiceTest {
         val a = service.select(emptySet(), 99, allowNsfw = false, packId = null).id
         val b = service.select(emptySet(), 99, allowNsfw = false, packId = null).id
         assertEquals(a, b)
-        assertThrows(IllegalArgumentException::class.java) { service.select(emptySet(), 1, allowNsfw = false, packId = "missing") }
+        assertThrows(IllegalArgumentException::class.java) {
+            service.select(
+                emptySet(),
+                1,
+                allowNsfw = false,
+                packId = "missing"
+            )
+        }
     }
 
     @Test

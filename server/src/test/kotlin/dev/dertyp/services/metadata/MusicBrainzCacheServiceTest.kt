@@ -76,37 +76,38 @@ class MusicBrainzCacheServiceTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `staleArtistIdsFlow should not skip results when dataset shrinks during iteration`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        val staleSince = Clock.System.now().toEpochMilliseconds()
+    fun `staleArtistIdsFlow should not skip results when dataset shrinks during iteration`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val staleSince = Clock.System.now().toEpochMilliseconds()
 
-        val ids = (1..250).map { UUID.randomUUID() }
-        transaction(database) {
-            ids.forEach { uuid ->
-                MBArtistTable.insert {
-                    it[id] = uuid
-                    it[name] = "Artist $uuid"
-                    it[sortName] = "Artist $uuid"
-                    it[lastUpdate] = staleSince - 1000
+            val ids = (1..250).map { UUID.randomUUID() }
+            transaction(database) {
+                ids.forEach { uuid ->
+                    MBArtistTable.insert {
+                        it[id] = uuid
+                        it[name] = "Artist $uuid"
+                        it[sortName] = "Artist $uuid"
+                        it[lastUpdate] = staleSince - 1000
+                    }
                 }
             }
-        }
 
-        val fetchedIds = mutableListOf<UUID>()
-        
-        service.staleArtistIdsFlow(staleSince).collect { id ->
-            fetchedIds.add(id)
-            transaction(database) {
-                MBArtistTable.deleteWhere { MBArtistTable.id eq id }
+            val fetchedIds = mutableListOf<UUID>()
+
+            service.staleArtistIdsFlow(staleSince).collect { id ->
+                fetchedIds.add(id)
+                transaction(database) {
+                    MBArtistTable.deleteWhere { MBArtistTable.id eq id }
+                }
             }
+
+            assertEquals(250, fetchedIds.size)
+            assertTrue(fetchedIds.containsAll(ids))
+
+            val secondFetch = service.staleArtistIdsFlow(staleSince).toList()
+            assertEquals(0, secondFetch.size)
         }
-
-        assertEquals(250, fetchedIds.size)
-        assertTrue(fetchedIds.containsAll(ids))
-
-        val secondFetch = service.staleArtistIdsFlow(staleSince).toList()
-        assertEquals(0, secondFetch.size)
-    }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)

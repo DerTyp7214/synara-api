@@ -102,7 +102,14 @@ class TidalServiceRetryTest : KoinTest {
                 single { redisConfig }
                 single { HttpClientQueueService() }
                 single<CredentialProvider> {
-                    FakeCredentialProvider(ResolvedCredential.AccessToken(CredentialNames.TIDAL_API, "test-token", "Bearer", null))
+                    FakeCredentialProvider(
+                        ResolvedCredential.AccessToken(
+                            CredentialNames.TIDAL_API,
+                            "test-token",
+                            "Bearer",
+                            null
+                        )
+                    )
                 }
             })
         }

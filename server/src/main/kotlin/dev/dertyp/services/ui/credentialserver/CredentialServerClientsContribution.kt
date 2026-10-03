@@ -20,9 +20,16 @@ class CredentialServerClientsContribution(private val ui: CredentialServerUiCont
     override fun changes(scope: UiRenderScope): Flow<Unit> = ui.changes()
 
     override suspend fun render(scope: UiRenderScope): UiComponent {
-        if (!ui.isAdmin()) return UiComponent.EmptyState(scope.t("credentials.adminRequired"), icon = UiIcon(UiIconName.WARNING))
+        if (!ui.isAdmin()) return UiComponent.EmptyState(
+            scope.t("credentials.adminRequired"),
+            icon = UiIcon(UiIconName.WARNING)
+        )
         val clients = runCatchingCancellable { ui.admin.listClients() }.getOrElse {
-            return UiComponent.Text(scope.t("$PREFIX.loadFailed", "reason" to scope.errorText(it)), UiTextStyle.BODY, UiTone.ERROR)
+            return UiComponent.Text(
+                scope.t("$PREFIX.loadFailed", "reason" to scope.errorText(it)),
+                UiTextStyle.BODY,
+                UiTone.ERROR
+            )
         }
         val connection = ui.connection()
         val clientItems = clients.sortedBy { it.name.lowercase() }.map { client ->
@@ -35,33 +42,52 @@ class CredentialServerClientsContribution(private val ui: CredentialServerUiCont
                 ).joinToString(" · "),
                 icon = UiIcon(UiIconName.USER),
                 trailing = "$state · ${scope.t("$PREFIX.grantCount", "count" to client.grants.size.toString())}",
-                action = UiAction.OpenPage(CredentialServerPages.CLIENT, mapOf(CredentialServerPages.PARAM_ID to client.id)),
+                action = UiAction.OpenPage(
+                    CredentialServerPages.CLIENT,
+                    mapOf(CredentialServerPages.PARAM_ID to client.id)
+                ),
             )
         }
         val children = buildList {
-            if (clientItems.isEmpty()) add(UiComponent.Text(scope.t("$PREFIX.noClients"), UiTextStyle.CAPTION, UiTone.MUTED))
+            if (clientItems.isEmpty()) add(
+                UiComponent.Text(
+                    scope.t("$PREFIX.noClients"),
+                    UiTextStyle.CAPTION,
+                    UiTone.MUTED
+                )
+            )
             addAll(clientItems)
             add(
                 UiComponent.Form(
                     id = FORM_CREATE_CLIENT,
                     submit = UiAction.Invoke(id, ACTION_CREATE_CLIENT, formId = FORM_CREATE_CLIENT),
                     submitLabel = scope.t("$PREFIX.createClient"),
-                    children = listOf(UiComponent.TextField(FIELD_CLIENT_NAME, scope.t("$PREFIX.clientName"), required = true)),
+                    children = listOf(
+                        UiComponent.TextField(
+                            FIELD_CLIENT_NAME,
+                            scope.t("$PREFIX.clientName"),
+                            required = true
+                        )
+                    ),
                 ),
             )
         }
         return UiComponent.Column(children)
     }
 
-    override suspend fun invoke(scope: UiRenderScope, actionId: String, values: Map<String, UiValue>): UiInvokeResult = when (actionId) {
-        ACTION_CREATE_CLIENT -> createClient(scope, values)
-        else -> super.invoke(scope, actionId, values)
-    }
+    override suspend fun invoke(scope: UiRenderScope, actionId: String, values: Map<String, UiValue>): UiInvokeResult =
+        when (actionId) {
+            ACTION_CREATE_CLIENT -> createClient(scope, values)
+            else -> super.invoke(scope, actionId, values)
+        }
 
     private suspend fun createClient(scope: UiRenderScope, values: Map<String, UiValue>): UiInvokeResult {
         val name = values.text(FIELD_CLIENT_NAME)
         if (name.isEmpty()) {
-            return UiInvokeResult(UiInvokeStatus.VALIDATION_ERROR, fieldErrors = mapOf(FIELD_CLIENT_NAME to scope.t("$PREFIX.error.clientName")))
+            return UiInvokeResult(
+                UiInvokeStatus.VALIDATION_ERROR,
+                fieldErrors = mapOf(FIELD_CLIENT_NAME to scope.t("$PREFIX.error.clientName"))
+            )
         }
         val created = ui.admin.createClient(CreateClientRequest(name))
         ui.reveal.put(scope.user.id, created.client.id, created.clientSecret)
@@ -69,7 +95,10 @@ class CredentialServerClientsContribution(private val ui: CredentialServerUiCont
             UiInvokeStatus.OK,
             scope.t("$PREFIX.clientCreated", "name" to created.client.name),
             refresh = true,
-            next = UiAction.OpenPage(CredentialServerPages.CLIENT, mapOf(CredentialServerPages.PARAM_ID to created.client.id)),
+            next = UiAction.OpenPage(
+                CredentialServerPages.CLIENT,
+                mapOf(CredentialServerPages.PARAM_ID to created.client.id)
+            ),
         )
     }
 

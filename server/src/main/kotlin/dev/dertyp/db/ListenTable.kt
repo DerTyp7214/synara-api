@@ -9,7 +9,8 @@ import org.jetbrains.exposed.v1.jdbc.select
 enum class ListenSource { LISTENBRAINZ, LOCAL }
 
 object ListenTable : UUIDTable("listen") {
-    val listenBrainzUserId = reference("listenBrainzUserId", ListenBrainzUserTable.id, onDelete = ReferenceOption.CASCADE).nullable()
+    val listenBrainzUserId =
+        reference("listenBrainzUserId", ListenBrainzUserTable.id, onDelete = ReferenceOption.CASCADE).nullable()
     val userId = reference("userId", UserTable.id, onDelete = ReferenceOption.CASCADE).nullable()
     val songId = reference("songId", SongTable.id, onDelete = ReferenceOption.SET_NULL).nullable()
     val recordingMbid = javaUUID("recordingMbid").nullable()
@@ -39,7 +40,7 @@ object ListenTable : UUIDTable("listen") {
 
     fun isQualifiedPlay(msPlayed: Long?, songDurationMs: Long?): Boolean =
         msPlayed == null || msPlayed >= QUALIFIED_MIN_MS ||
-            (songDurationMs != null && songDurationMs > 0 && msPlayed * 2 >= songDurationMs)
+                (songDurationMs != null && songDurationMs > 0 && msPlayed * 2 >= songDurationMs)
 
     fun playWeight(msPlayed: Long?, songDurationMs: Long?): Float = when {
         msPlayed == null -> 1f
@@ -51,8 +52,8 @@ object ListenTable : UUIDTable("listen") {
 
     val qualifiedPlay: Op<Boolean>
         get() = msPlayed.isNull() or
-            (msPlayed greaterEq QUALIFIED_MIN_MS) or
-            ((SongTable.duration greater 0L) and ((msPlayed times 2L) greaterEq SongTable.duration))
+                (msPlayed greaterEq QUALIFIED_MIN_MS) or
+                ((SongTable.duration greater 0L) and ((msPlayed times 2L) greaterEq SongTable.duration))
 
     fun parseIsrcs(csv: String?): Set<String> =
         csv?.split(',')?.filter { it.isNotBlank() }?.toSet() ?: emptySet()

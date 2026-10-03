@@ -67,7 +67,7 @@ class MusicBrainzCacheWorker : Worker("MusicBrainzCacheWorker") {
         val prunedCovers = pruneUnlistenedCovers(activeCoverGroupIds)
 
         val total = (totalArtists + totalReleaseGroups + totalReleases + totalRecordings +
-            listenRecordingIds.size + coverGroupIds.size).toDouble()
+                listenRecordingIds.size + coverGroupIds.size).toDouble()
 
         val artistBasePercentage = .0
         val artistMaxPercentage = if (total > 0) totalArtists / total * 100 else 0.0
@@ -326,7 +326,7 @@ class MusicBrainzCacheWorker : Worker("MusicBrainzCacheWorker") {
                 .where { MBReleaseGroupCoverTable.releaseGroupId inList chunk }
                 .andWhere {
                     MBReleaseGroupCoverTable.imageId.isNotNull() or
-                        (MBReleaseGroupCoverTable.lastFetch greaterEq coverRetryCutoff)
+                            (MBReleaseGroupCoverTable.lastFetch greaterEq coverRetryCutoff)
                 }
                 .forEach { fresh.add(it[MBReleaseGroupCoverTable.releaseGroupId].value) }
         }

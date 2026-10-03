@@ -40,7 +40,7 @@ class SearchIndexIntegrationTest : KoinTest {
 
         val dbName = "integration_test_${UUID.randomUUID().toString().replace("-", "")}".lowercase()
         val dbUrl = TestDatabase.getPostgresDbUrl(dbName)
-        
+
         val config = MapApplicationConfig(
             "storage.driverClassName" to "org.postgresql.Driver",
             "storage.jdbcURL" to dbUrl,
@@ -49,12 +49,12 @@ class SearchIndexIntegrationTest : KoinTest {
             "client.id" to "test-client",
             "client.secret" to "test-secret"
         )
-        
+
         val environment = mockk<ApplicationEnvironment>()
         every { environment.config } returns config
-        
+
         databaseManager = DatabaseManager(ServerConfig(environment.config))
-        
+
         database = Database.connect(
             url = dbUrl,
             driver = "org.postgresql.Driver",
@@ -98,7 +98,7 @@ class SearchIndexIntegrationTest : KoinTest {
             println("Skipping PostgreSQL integration test because Docker is not available.")
             return@runBlocking
         }
-        
+
         setup()
 
         val userId = UUID.randomUUID()
@@ -134,13 +134,13 @@ class SearchIndexIntegrationTest : KoinTest {
         val queuedItems = transaction(database) {
             SearchIndexQueueTable.selectAll().toList()
         }
-        
+
         assertTrue(queuedItems.isNotEmpty(), "Triggers should have added rows to the search index queue table")
-        
-        val queuedEntities = queuedItems.map { 
-            it[SearchIndexQueueTable.entityType] to it[SearchIndexQueueTable.entityId] 
+
+        val queuedEntities = queuedItems.map {
+            it[SearchIndexQueueTable.entityType] to it[SearchIndexQueueTable.entityId]
         }
-        
+
         assertTrue(queuedEntities.contains(SearchIndexEntityType.SONG to songId), "Song should be queued")
         assertTrue(queuedEntities.contains(SearchIndexEntityType.ALBUM to albumId), "Album should be queued")
         assertTrue(queuedEntities.contains(SearchIndexEntityType.ARTIST to artistId), "Artist should be queued")

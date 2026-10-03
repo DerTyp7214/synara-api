@@ -11,7 +11,11 @@ import io.ktor.http.parameters
 import java.util.concurrent.ConcurrentHashMap
 
 class OAuthClientCredentialsBroker(private val httpClient: HttpClient) : CredentialBroker<OAuthSecret> {
-    private data class CachedToken(val secret: OAuthSecret, val token: ResolvedCredential.AccessToken, val validUntil: Long)
+    private data class CachedToken(
+        val secret: OAuthSecret,
+        val token: ResolvedCredential.AccessToken,
+        val validUntil: Long
+    )
 
     private val cache = ConcurrentHashMap<String, CachedToken>()
 

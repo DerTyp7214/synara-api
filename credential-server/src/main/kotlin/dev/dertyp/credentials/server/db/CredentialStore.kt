@@ -27,7 +27,10 @@ class CredentialStore(private val database: Database, private val box: SecretBox
 
     fun createClient(name: String, grants: List<GrantSpec> = emptyList()): CreatedClient {
         val clientName = name.trim()
-        if (clientName.isEmpty()) throw CredentialException(CredentialErrorCode.INVALID, "Client name must not be empty")
+        if (clientName.isEmpty()) throw CredentialException(
+            CredentialErrorCode.INVALID,
+            "Client name must not be empty"
+        )
         val secret = SecretHasher.newSecret()
         val summary = transaction(database) {
             val id = ClientTable.insertAndGetId {
@@ -167,7 +170,10 @@ class CredentialStore(private val database: Database, private val box: SecretBox
         secret: StoredSecret,
         state: CredentialStateUpdate,
     ): CredentialSummary {
-        if (!CredentialNames.isValid(name)) throw CredentialException(CredentialErrorCode.INVALID, "Invalid credential name $name")
+        if (!CredentialNames.isValid(name)) throw CredentialException(
+            CredentialErrorCode.INVALID,
+            "Invalid credential name $name"
+        )
         val sealed = seal(name, secret)
         val now = System.currentTimeMillis()
         transaction(database) {

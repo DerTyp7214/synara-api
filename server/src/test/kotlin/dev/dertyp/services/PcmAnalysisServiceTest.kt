@@ -52,7 +52,10 @@ class PcmAnalysisServiceTest {
         assertEquals(1000L, layout.dataSize)
         assertTrue(layout.hasInfoChunk)
         assertTrue(layout.hasId3)
-        assertEquals(pcm.size, file.readBytes().copyOfRange(layout.dataOffset.toInt(), (layout.dataOffset + layout.dataSize).toInt()).size)
+        assertEquals(
+            pcm.size,
+            file.readBytes().copyOfRange(layout.dataOffset.toInt(), (layout.dataOffset + layout.dataSize).toInt()).size
+        )
         assertEquals("data", String(file.readBytes(), layout.dataOffset.toInt() - 8, 4, Charsets.US_ASCII))
     }
 
@@ -89,7 +92,13 @@ class PcmAnalysisServiceTest {
         val body = ByteArrayOutputStream()
         body.write("WAVE".toByteArray(Charsets.US_ASCII))
         body.write(chunk("fmt ", ByteArray(16), le))
-        if (withInfo) body.write(chunk("LIST", "INFO".toByteArray(Charsets.US_ASCII) + chunk("INAM", "x".toByteArray(), le), le))
+        if (withInfo) body.write(
+            chunk(
+                "LIST",
+                "INFO".toByteArray(Charsets.US_ASCII) + chunk("INAM", "x".toByteArray(), le),
+                le
+            )
+        )
         body.write(chunk("data", pcm, le))
         if (withId3) body.write(chunk("id3 ", ByteArray(10), le))
         return chunk("RIFF", body.toByteArray(), le)

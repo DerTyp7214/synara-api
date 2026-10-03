@@ -263,7 +263,15 @@ class QueueServiceTest : KoinTest {
         }
         val sessionId = newSession(userId)
         upload(userId, sessionId, listOf(item(songId, 1, 0)), defaultMeta)
-        val resolved = UserSong(id = songId, title = "Title", artists = emptyList(), album = null, duration = 1000, explicit = false, path = "path")
+        val resolved = UserSong(
+            id = songId,
+            title = "Title",
+            artists = emptyList(),
+            album = null,
+            duration = 1000,
+            explicit = false,
+            path = "path"
+        )
 
         val withoutSongs = service.getQueue(userId, 0, 10, false)
         assertNull(withoutSongs.data.single().song)
@@ -309,7 +317,12 @@ class QueueServiceTest : KoinTest {
         }
         val sessionId = newSession(userId)
 
-        upload(userId, sessionId, listOf(item(songId, 1, 0, shuffledPosition = 5)), defaultMeta.copy(shuffleMode = false))
+        upload(
+            userId,
+            sessionId,
+            listOf(item(songId, 1, 0, shuffledPosition = 5)),
+            defaultMeta.copy(shuffleMode = false)
+        )
 
         val page = service.getQueue(userId, 0, 10, false)
         assertNull(page.data.single().shuffledPosition)
@@ -338,31 +351,32 @@ class QueueServiceTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `insert splices into the shuffled order and appends to the original order while shuffle is on`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        val (userId, songIds) = transaction(database) {
-            val u = insertUser()
-            val album = insertAlbum()
-            u to (1..2).map { insertSong(album) }
+    fun `insert splices into the shuffled order and appends to the original order while shuffle is on`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val (userId, songIds) = transaction(database) {
+                val u = insertUser()
+                val album = insertAlbum()
+                u to (1..2).map { insertSong(album) }
+            }
+            val sessionId = newSession(userId)
+            val base = upload(
+                userId, sessionId,
+                listOf(item(songIds[0], 1, 0, shuffledPosition = 0), item(songIds[1], 2, 1, shuffledPosition = 1)),
+                defaultMeta.copy(shuffleMode = true),
+            )
+            check(base is QueueWriteResult.Ok)
+            val newSongId = transaction(database) { insertSong(insertAlbum()) }
+
+            val result = service.insert(userId, sessionId, base.info.version, 1, listOf(item(newSongId, 3, 0)), false)
+
+            check(result is QueueWriteResult.Ok)
+            val byQueueId = service.getQueue(userId, 0, 10, false).data.associateBy { it.queueId }
+            assertEquals(2, byQueueId.getValue(3).position)
+            assertEquals(1, byQueueId.getValue(3).shuffledPosition)
+            assertEquals(0, byQueueId.getValue(1).shuffledPosition)
+            assertEquals(2, byQueueId.getValue(2).shuffledPosition)
         }
-        val sessionId = newSession(userId)
-        val base = upload(
-            userId, sessionId,
-            listOf(item(songIds[0], 1, 0, shuffledPosition = 0), item(songIds[1], 2, 1, shuffledPosition = 1)),
-            defaultMeta.copy(shuffleMode = true),
-        )
-        check(base is QueueWriteResult.Ok)
-        val newSongId = transaction(database) { insertSong(insertAlbum()) }
-
-        val result = service.insert(userId, sessionId, base.info.version, 1, listOf(item(newSongId, 3, 0)), false)
-
-        check(result is QueueWriteResult.Ok)
-        val byQueueId = service.getQueue(userId, 0, 10, false).data.associateBy { it.queueId }
-        assertEquals(2, byQueueId.getValue(3).position)
-        assertEquals(1, byQueueId.getValue(3).shuffledPosition)
-        assertEquals(0, byQueueId.getValue(1).shuffledPosition)
-        assertEquals(2, byQueueId.getValue(2).shuffledPosition)
-    }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
@@ -492,30 +506,31 @@ class QueueServiceTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `disabling shuffle drops the shuffled order and restores the original current index`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        val (userId, songIds) = transaction(database) {
-            val u = insertUser()
-            val album = insertAlbum()
-            u to (1..3).map { insertSong(album) }
+    fun `disabling shuffle drops the shuffled order and restores the original current index`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val (userId, songIds) = transaction(database) {
+                val u = insertUser()
+                val album = insertAlbum()
+                u to (1..3).map { insertSong(album) }
+            }
+            val sessionId = newSession(userId)
+            val items = listOf(
+                item(songIds[0], 1, 0, shuffledPosition = 2),
+                item(songIds[1], 2, 1, shuffledPosition = 0),
+                item(songIds[2], 3, 2, shuffledPosition = 1),
+            )
+            val base = upload(userId, sessionId, items, defaultMeta.copy(shuffleMode = true, currentIndex = 0))
+            check(base is QueueWriteResult.Ok)
+
+            val result = service.setModes(userId, sessionId, base.info.version, false, RepeatMode.OFF, false)
+
+            check(result is QueueWriteResult.Ok)
+            assertFalse(result.info.shuffleMode)
+            assertEquals(1, result.info.currentIndex)
+            val page = service.getQueue(userId, 0, 10, false)
+            assertTrue(page.data.all { it.shuffledPosition == null })
         }
-        val sessionId = newSession(userId)
-        val items = listOf(
-            item(songIds[0], 1, 0, shuffledPosition = 2),
-            item(songIds[1], 2, 1, shuffledPosition = 0),
-            item(songIds[2], 3, 2, shuffledPosition = 1),
-        )
-        val base = upload(userId, sessionId, items, defaultMeta.copy(shuffleMode = true, currentIndex = 0))
-        check(base is QueueWriteResult.Ok)
-
-        val result = service.setModes(userId, sessionId, base.info.version, false, RepeatMode.OFF, false)
-
-        check(result is QueueWriteResult.Ok)
-        assertFalse(result.info.shuffleMode)
-        assertEquals(1, result.info.currentIndex)
-        val page = service.getQueue(userId, 0, 10, false)
-        assertTrue(page.data.all { it.shuffledPosition == null })
-    }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)

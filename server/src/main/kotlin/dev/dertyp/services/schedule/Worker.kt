@@ -70,10 +70,10 @@ abstract class Worker(val name: String) : KoinComponent {
         val itemChannel = Channel<T>(Channel.BUFFERED)
         val processedCount = AtomicInteger(0)
         val localGrantedThreads = if (workerName == name) grantedThreads else MutableStateFlow(0)
-        
+
         registerWorker(workerName, desired, localGrantedThreads)
         localGrantedThreads.first { it > 0 }
-        
+
         try {
             val activeWorkerJobs = ConcurrentHashMap<Int, Job>()
             val outerScope = this
@@ -133,7 +133,7 @@ abstract class Worker(val name: String) : KoinComponent {
                 if (activeWorkerJobs.isEmpty() && itemChannel.isClosedForReceive) break
                 delay(10.milliseconds)
             }
-            
+
             supervisor.cancel()
         } finally {
             unregisterWorker(workerName)
@@ -204,27 +204,27 @@ abstract class Worker(val name: String) : KoinComponent {
             val totalMaxSafe = (cores * 0.9).toInt()
                 .coerceAtMost(cores - leaveFree)
                 .coerceAtLeast(1)
-            
+
             val totalDesired = activeWorkers.values.sumOf { it.first }
-            
+
             if (totalDesired <= totalMaxSafe) {
                 activeWorkers.forEach { (_, pair) -> pair.second.value = pair.first }
             } else {
                 var remaining = totalMaxSafe
                 val sortedWorkers = activeWorkers.toList().sortedBy { it.second.first }
-                
+
                 val minThreadsPerWorker = if (totalMaxSafe >= activeWorkers.size) 1 else 0
 
                 sortedWorkers.forEach { (_, pair) ->
                     val desired = pair.first
                     val share = floor(totalMaxSafe * (desired.toDouble() / totalDesired)).toInt()
                         .coerceAtLeast(minThreadsPerWorker)
-                    
+
                     val granted = share.coerceAtMost(remaining).coerceAtMost(desired)
                     pair.second.value = granted
                     remaining -= granted
                 }
-                
+
                 while (remaining > 0) {
                     var anyAdded = false
                     for ((_, pair) in sortedWorkers) {

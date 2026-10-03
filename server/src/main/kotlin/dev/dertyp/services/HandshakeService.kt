@@ -13,15 +13,15 @@ class HandshakeService(private val call: ApplicationCall) : IHandshakeService {
 
     companion object {
         fun determineHandshakeResponse(call: ApplicationCall): HandshakeResponse {
-            val secure = call.request.local.scheme == "https" || 
-                        call.request.local.scheme == "wss" ||
-                        call.request.headers["X-Forwarded-Proto"] == "https" ||
-                        call.request.headers["X-Forwarded-Proto"] == "wss"
-            
+            val secure = call.request.local.scheme == "https" ||
+                    call.request.local.scheme == "wss" ||
+                    call.request.headers["X-Forwarded-Proto"] == "https" ||
+                    call.request.headers["X-Forwarded-Proto"] == "wss"
+
             val serverSslSupported = call.application.environment.config.toHttpServerConfig().sslSupported
-            
+
             val sslSupported = secure || serverSslSupported
-            
+
             return HandshakeResponse(
                 secure = secure,
                 sslSupported = sslSupported,

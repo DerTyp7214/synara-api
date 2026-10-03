@@ -34,7 +34,10 @@ class AudioTimelineBackfillWorker : Worker("AudioTimelineBackfillWorker") {
                     items = songIds,
                     baseThreadCount = baseThreads,
                     onItemProcessed = { currentCount ->
-                        onProgress(currentCount.toDouble() / songIds.size * 100.0, "Extracted $currentCount/${songIds.size} timelines")
+                        onProgress(
+                            currentCount.toDouble() / songIds.size * 100.0,
+                            "Extracted $currentCount/${songIds.size} timelines"
+                        )
                     }
                 ) { songId ->
                     if (Clock.System.now() >= deadline) {
@@ -51,7 +54,10 @@ class AudioTimelineBackfillWorker : Worker("AudioTimelineBackfillWorker") {
                     items = staleIds,
                     baseThreadCount = baseThreads,
                     onItemProcessed = { currentCount ->
-                        onProgress(currentCount.toDouble() / staleIds.size * 100.0, "Refreshed $currentCount/${staleIds.size} envelopes")
+                        onProgress(
+                            currentCount.toDouble() / staleIds.size * 100.0,
+                            "Refreshed $currentCount/${staleIds.size} envelopes"
+                        )
                     }
                 ) { songId ->
                     if (Clock.System.now() >= deadline) {

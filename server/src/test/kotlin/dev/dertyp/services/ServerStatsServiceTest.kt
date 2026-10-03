@@ -33,8 +33,21 @@ class ServerStatsServiceTest {
         database = TestDatabase.connect(dialect, "stats_test")
         transaction(database) {
             SchemaUtils.create(
-                ArtistTable, AlbumTable, ImageTable, AnimatedImageTable, SongTable, SongVariantTable, PlaylistTable, UserTable, UserPlaylistTable, TranscodedSongTable,
-                PodcastShowTable, PodcastEpisodeTable, PodcastTranscriptTable, PodcastSubscriptionTable, PodcastEpisodeProgressTable,
+                ArtistTable,
+                AlbumTable,
+                ImageTable,
+                AnimatedImageTable,
+                SongTable,
+                SongVariantTable,
+                PlaylistTable,
+                UserTable,
+                UserPlaylistTable,
+                TranscodedSongTable,
+                PodcastShowTable,
+                PodcastEpisodeTable,
+                PodcastTranscriptTable,
+                PodcastSubscriptionTable,
+                PodcastEpisodeProgressTable,
             )
         }
         storageService = mockk()
@@ -58,7 +71,11 @@ class ServerStatsServiceTest {
         return id
     }
 
-    private fun insertEpisode(showId: UUID, guid: String, importState: PodcastImportState = PodcastImportState.NONE): UUID {
+    private fun insertEpisode(
+        showId: UUID,
+        guid: String,
+        importState: PodcastImportState = PodcastImportState.NONE
+    ): UUID {
         val id = UUID.randomUUID()
         val now = Instant.now().toEpochMilli()
         PodcastEpisodeTable.insert {
@@ -84,7 +101,7 @@ class ServerStatsServiceTest {
     @EnumSource(DbDialect::class)
     fun `getStats should return correct counts and sums`(dialect: DbDialect) = runBlocking {
         setup(dialect)
-        
+
         coEvery { storageService.getTotalStorage() } returns 1000L
         coEvery { storageService.getImagesStorage() } returns 500L
         coEvery { storageService.getAnimatedImagesStorage() } returns 250L
@@ -94,7 +111,7 @@ class ServerStatsServiceTest {
         transaction(database) {
             ArtistTable.insert { it[name] = "Artist" }[ArtistTable.id]
             val albumId = AlbumTable.insert { it[name] = "Album" }[AlbumTable.id]
-            
+
             SongTable.insert {
                 it[title] = "Song 1"
                 it[this.albumId] = albumId
@@ -107,12 +124,12 @@ class ServerStatsServiceTest {
                 it[fileSize] = 200L
                 it[duration] = 120L
             }
-            
+
             PlaylistTable.insert { it[name] = "Playlist" }
         }
 
         val stats = service.getStats()
-        
+
         assertEquals(2, stats.songCount)
         assertEquals(1, stats.albumCount)
         assertEquals(1, stats.artistCount)

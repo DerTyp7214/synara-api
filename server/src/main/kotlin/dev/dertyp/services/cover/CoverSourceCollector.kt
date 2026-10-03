@@ -162,7 +162,14 @@ class CoverSourceCollector : Service() {
         val paletteSource = coverIds.take(MAX_TILES)
         val palette = paletteSource.chunked(maxBatchSize).flatMap { chunk ->
             ImageMetadataTable
-                .select(ImageMetadataTable.imageId, ImageMetadataTable.color1, ImageMetadataTable.color2, ImageMetadataTable.color3, ImageMetadataTable.color4, ImageMetadataTable.color5)
+                .select(
+                    ImageMetadataTable.imageId,
+                    ImageMetadataTable.color1,
+                    ImageMetadataTable.color2,
+                    ImageMetadataTable.color3,
+                    ImageMetadataTable.color4,
+                    ImageMetadataTable.color5
+                )
                 .where { ImageMetadataTable.imageId inList chunk }
                 .associateBy { it[ImageMetadataTable.imageId].value }
                 .let { byId -> chunk.mapNotNull { byId[it] } }
@@ -227,7 +234,13 @@ class CoverSourceCollector : Service() {
         return result
     }
 
-    private data class SongRow(val id: UUID, val cover: UUID?, val albumId: UUID?, val albumCover: UUID?, val explicit: Boolean) {
+    private data class SongRow(
+        val id: UUID,
+        val cover: UUID?,
+        val albumId: UUID?,
+        val albumCover: UUID?,
+        val explicit: Boolean
+    ) {
         companion object {
             fun from(row: ResultRow) = SongRow(
                 id = row[SongTable.id].value,

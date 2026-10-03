@@ -42,10 +42,10 @@ class ImageServiceTest {
 
     fun setup(dialect: DbDialect) {
         tempDir = Files.createTempDirectory("image_test").toFile()
-        
+
         storageService = mockk<StorageService>()
         redisConfig = mockk<RedisCacheProvider.Config>()
-        
+
         every { storageService.imagesPath } returns tempDir.absolutePath
         justRun { storageService.invalidate(any()) }
         every { redisConfig.host } returns "none"
@@ -59,7 +59,29 @@ class ImageServiceTest {
 
         database = TestDatabase.connect(dialect, "image_test")
         transaction(database) {
-            SchemaUtils.create(ImageTable, ImageMetadataTable, AlbumTable, ArtistTable, SongTable, SongVariantTable, PlaylistTable, UserPlaylistTable, UserTable, MBReleaseGroupTable, MBReleaseGroupCoverTable, RecentReleaseTable, ProviderReleaseTable, ProviderLinkTable, RecentReleaseLinkTable, ProviderReleaseLinkTable, AnimatedImageTable, CollectionTable, RadioChannelTable, PodcastShowTable, PodcastEpisodeTable)
+            SchemaUtils.create(
+                ImageTable,
+                ImageMetadataTable,
+                AlbumTable,
+                ArtistTable,
+                SongTable,
+                SongVariantTable,
+                PlaylistTable,
+                UserPlaylistTable,
+                UserTable,
+                MBReleaseGroupTable,
+                MBReleaseGroupCoverTable,
+                RecentReleaseTable,
+                ProviderReleaseTable,
+                ProviderLinkTable,
+                RecentReleaseLinkTable,
+                ProviderReleaseLinkTable,
+                AnimatedImageTable,
+                CollectionTable,
+                RadioChannelTable,
+                PodcastShowTable,
+                PodcastEpisodeTable
+            )
         }
 
         service = ImageService(storageService, redisConfig)
@@ -107,32 +129,32 @@ class ImageServiceTest {
     @EnumSource(DbDialect::class)
     fun `analyzeImage should calculate BlurHash and metadata`(dialect: DbDialect) = runBlocking {
         setup(dialect)
-        
+
         val bufferedImage = BufferedImage(100, 100, BufferedImage.TYPE_INT_RGB)
         val g = bufferedImage.createGraphics()
         g.color = Color.RED
         g.fillRect(0, 0, 100, 100)
         g.dispose()
-        
+
         val baos = ByteArrayOutputStream()
         ImageIO.write(bufferedImage, "png", baos)
         val data = baos.toByteArray()
-        
+
         val id = service.createImage(data, "test_analysis")
-        
+
         service.analyzeImage(id)
-        
+
         val image = service.byId(id)
         assertNotNull(image)
         assertNotNull(image?.blurHash)
         assertEquals(100, image?.width)
         assertEquals(100, image?.height)
         assertEquals(data.size.toLong(), image?.byteSize)
-        
+
         assertEquals(0xFFFF0000.toInt(), image?.primaryColor)
-        
+
         assertEquals(0.2126, image?.luminance!!, 0.01)
-        
+
         assertNotNull(image.palette)
         assertTrue(image.palette?.contains(0xFFFF0000.toInt()) == true)
 
@@ -153,7 +175,7 @@ class ImageServiceTest {
         setup(dialect)
         val id1 = service.createImage(byteArrayOf(1, 2, 3, 4), "test1")
         val id2 = service.createImage(byteArrayOf(5, 6, 7, 8), "test2")
-        
+
         transaction(database) {
             ImageMetadataTable.insert {
                 it[imageId] = EntityID(id1, ImageTable)
@@ -167,7 +189,7 @@ class ImageServiceTest {
                 it[luminance] = 0.0
             }
         }
-        
+
         val unanalyzed = service.getUnanalyzedImageIds()
         assertEquals(1, unanalyzed.size)
         assertEquals(id2, unanalyzed[0])
@@ -204,25 +226,28 @@ class ImageServiceTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `analyzeImage marks audio-origin image with missing source as retryable not unrecoverable`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        val id = service.createImage(redPngBytes(), "/nonexistent/path/song.flac")
-        File(service.byId(id)!!.path).delete()
+    fun `analyzeImage marks audio-origin image with missing source as retryable not unrecoverable`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val id = service.createImage(redPngBytes(), "/nonexistent/path/song.flac")
+            File(service.byId(id)!!.path).delete()
 
-        service.analyzeImage(id)
+            service.analyzeImage(id)
 
-        transaction(database) {
-            val row = ImageTable.selectAll().where { ImageTable.id eq id }.single()
-            assertFalse(row[ImageTable.analysisUnrecoverable])
-            assertNotNull(row[ImageTable.lastAnalysisAttempt])
-            assertEquals(0L, ImageMetadataTable.selectAll().where { ImageMetadataTable.imageId eq id }.count())
+            transaction(database) {
+                val row = ImageTable.selectAll().where { ImageTable.id eq id }.single()
+                assertFalse(row[ImageTable.analysisUnrecoverable])
+                assertNotNull(row[ImageTable.lastAnalysisAttempt])
+                assertEquals(0L, ImageMetadataTable.selectAll().where { ImageMetadataTable.imageId eq id }.count())
+            }
+            assertFalse(service.getUnanalyzedImageIds().contains(id))
         }
-        assertFalse(service.getUnanalyzedImageIds().contains(id))
-    }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `getUnanalyzedImageIds throttles recently attempted images but re-includes them after the retry interval`(dialect: DbDialect) = runBlocking {
+    fun `getUnanalyzedImageIds throttles recently attempted images but re-includes them after the retry interval`(
+        dialect: DbDialect
+    ) = runBlocking {
         setup(dialect)
         val recentId = UUID.randomUUID()
         val staleId = UUID.randomUUID()
@@ -264,12 +289,12 @@ class ImageServiceTest {
         setup(dialect)
         val data = byteArrayOf(1, 2, 3, 4)
         val id = service.createImage(data, "test")
-        
+
         assertNotNull(id)
         val image = service.byId(id)
         assertNotNull(image)
         assertEquals("test", image?.origin)
-        
+
         val file = File(image!!.path)
         assertEquals(true, file.exists())
         assertEquals(data.toList(), file.readBytes().toList())
@@ -282,49 +307,50 @@ class ImageServiceTest {
         val data = byteArrayOf(5, 6, 7, 8)
         val id = service.createImage(data, "origin")
         val image = service.byId(id)
-        
+
         val found = service.byHash(image!!.imageHash)
         assertEquals(id, found?.id)
     }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `deleteUnreferencedImages should not delete images referenced in RecentReleaseTable`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        
-        val data = byteArrayOf(9, 10, 11, 12)
-        val imageId = service.createImage(data, "release_origin")
-        
-        transaction(database) {
-            val aId = ArtistTable.insertAndGetId {
-                it[ArtistTable.name] = "Artist"
+    fun `deleteUnreferencedImages should not delete images referenced in RecentReleaseTable`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+
+            val data = byteArrayOf(9, 10, 11, 12)
+            val imageId = service.createImage(data, "release_origin")
+
+            transaction(database) {
+                val aId = ArtistTable.insertAndGetId {
+                    it[ArtistTable.name] = "Artist"
+                }
+                val relGroupId = UUID.randomUUID()
+                MBReleaseGroupTable.insert {
+                    it[id] = relGroupId
+                    it[title] = "Title"
+                }
+                RecentReleaseTable.insert {
+                    it[RecentReleaseTable.releaseId] = relGroupId
+                    it[RecentReleaseTable.artistId] = aId
+                    it[RecentReleaseTable.title] = "Title"
+                    it[RecentReleaseTable.imageId] = EntityID(imageId, ImageTable)
+                }
             }
-            val relGroupId = UUID.randomUUID()
-            MBReleaseGroupTable.insert {
-                it[id] = relGroupId
-                it[title] = "Title"
-            }
-            RecentReleaseTable.insert {
-                it[RecentReleaseTable.releaseId] = relGroupId
-                it[RecentReleaseTable.artistId] = aId
-                it[RecentReleaseTable.title] = "Title"
-                it[RecentReleaseTable.imageId] = EntityID(imageId, ImageTable)
-            }
+
+            val deletedCount = service.deleteUnreferencedImages()
+            assertEquals(0, deletedCount)
+            assertNotNull(service.byId(imageId))
         }
-        
-        val deletedCount = service.deleteUnreferencedImages()
-        assertEquals(0, deletedCount)
-        assertNotNull(service.byId(imageId))
-    }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
     fun `deleteUnreferencedImages should delete unreferenced images`(dialect: DbDialect) = runBlocking {
         setup(dialect)
-        
+
         val data = byteArrayOf(13, 14, 15, 16)
         val imageId = service.createImage(data, "unreferenced")
-        
+
         val deletedCount = service.deleteUnreferencedImages()
         assertEquals(1, deletedCount)
         assertEquals(null, service.byId(imageId))
@@ -332,31 +358,32 @@ class ImageServiceTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `collectReferencedImageIds should include images from all referencing tables`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
+    fun `collectReferencedImageIds should include images from all referencing tables`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
 
-        val albumImage = service.createImage(byteArrayOf(20, 21), "album")
-        val releaseImage = service.createImage(byteArrayOf(22, 23), "release")
-        val unreferencedImage = service.createImage(byteArrayOf(24, 25), "unreferenced")
+            val albumImage = service.createImage(byteArrayOf(20, 21), "album")
+            val releaseImage = service.createImage(byteArrayOf(22, 23), "release")
+            val unreferencedImage = service.createImage(byteArrayOf(24, 25), "unreferenced")
 
-        transaction(database) {
-            AlbumTable.insert { it[name] = "Album"; it[cover] = EntityID(albumImage, ImageTable) }
-            val aId = ArtistTable.insertAndGetId { it[name] = "Artist" }
-            val relGroupId = UUID.randomUUID()
-            MBReleaseGroupTable.insert { it[id] = relGroupId; it[title] = "Title" }
-            RecentReleaseTable.insert {
-                it[RecentReleaseTable.releaseId] = relGroupId
-                it[RecentReleaseTable.artistId] = aId
-                it[RecentReleaseTable.title] = "Title"
-                it[RecentReleaseTable.imageId] = EntityID(releaseImage, ImageTable)
+            transaction(database) {
+                AlbumTable.insert { it[name] = "Album"; it[cover] = EntityID(albumImage, ImageTable) }
+                val aId = ArtistTable.insertAndGetId { it[name] = "Artist" }
+                val relGroupId = UUID.randomUUID()
+                MBReleaseGroupTable.insert { it[id] = relGroupId; it[title] = "Title" }
+                RecentReleaseTable.insert {
+                    it[RecentReleaseTable.releaseId] = relGroupId
+                    it[RecentReleaseTable.artistId] = aId
+                    it[RecentReleaseTable.title] = "Title"
+                    it[RecentReleaseTable.imageId] = EntityID(releaseImage, ImageTable)
+                }
             }
-        }
 
-        val referenced = service.collectReferencedImageIds()
-        assertTrue(albumImage in referenced)
-        assertTrue(releaseImage in referenced)
-        assertFalse(unreferencedImage in referenced)
-    }
+            val referenced = service.collectReferencedImageIds()
+            assertTrue(albumImage in referenced)
+            assertTrue(releaseImage in referenced)
+            assertFalse(unreferencedImage in referenced)
+        }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
@@ -455,7 +482,7 @@ class ImageServiceTest {
 
         val results = service.generateMosaicImage(baos.toByteArray(), 2, 2, 1024).toList()
         assertTrue(results.isNotEmpty())
-        
+
         val assembledImage = results.mapNotNull { it.chunk }.fold(ByteArray(0)) { acc, chunk -> acc + chunk }
         assertTrue(assembledImage.isNotEmpty())
 
@@ -520,7 +547,7 @@ class ImageServiceTest {
         ImageIO.write(inputImg, "png", baos)
 
         val results = service.generateMosaicImage(baos.toByteArray(), 50, 50, 8192).toList()
-        
+
         assertTrue(results.any { it.progress == 0.0 }, "Should have starting progress")
         assertTrue(results.any { it.progress in 0.1..0.45 }, "Should have loading progress")
         assertTrue(results.any { it.progress in 0.45..0.85 }, "Should have rendering progress")
@@ -535,10 +562,10 @@ class ImageServiceTest {
 
         val chunks = results.filter { it.chunk != null }
         assertTrue(chunks.size > 1, "Should have multiple chunks for 8k image (got ${chunks.size})")
-        
+
         assertTrue(results.last().isLast, "Last response should have isLast = true")
-        
-        chunks.forEach { 
+
+        chunks.forEach {
             assertTrue(it.chunk!!.size <= 1024 * 1024, "Chunk size should not exceed 1MB")
         }
 
@@ -577,98 +604,99 @@ class ImageServiceTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `purgeNonImageFiles removes non-image files with matching origins and unlinks references`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
+    fun `purgeNonImageFiles removes non-image files with matching origins and unlinks references`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
 
-        val bogusId = service.createImage(
-            "<!doctype html><html>not found</html>".toByteArray(),
-            "https://coverartarchive.org/release-group/x/front"
-        )
-        val goodId = service.createImage(redPngBytes(), "https://coverartarchive.org/release-group/y/front")
-        val profileId = service.createImage("<html>profile error</html>".toByteArray(), "profile")
+            val bogusId = service.createImage(
+                "<!doctype html><html>not found</html>".toByteArray(),
+                "https://coverartarchive.org/release-group/x/front"
+            )
+            val goodId = service.createImage(redPngBytes(), "https://coverartarchive.org/release-group/y/front")
+            val profileId = service.createImage("<html>profile error</html>".toByteArray(), "profile")
 
-        val bogusFile = File(service.byId(bogusId)!!.path)
-        val goodFile = File(service.byId(goodId)!!.path)
-        val profileFile = File(service.byId(profileId)!!.path)
+            val bogusFile = File(service.byId(bogusId)!!.path)
+            val goodFile = File(service.byId(goodId)!!.path)
+            val profileFile = File(service.byId(profileId)!!.path)
 
-        val bogusGroupId = UUID.randomUUID()
-        val goodGroupId = UUID.randomUUID()
+            val bogusGroupId = UUID.randomUUID()
+            val goodGroupId = UUID.randomUUID()
 
-        transaction(database) {
-            val albumId = AlbumTable.insertAndGetId {
-                it[name] = "Album"
-                it[cover] = EntityID(bogusId, ImageTable)
-            }
-            val artistId = ArtistTable.insertAndGetId {
-                it[name] = "Artist"
-                it[image] = EntityID(bogusId, ImageTable)
-            }
-            SongTable.insert {
-                it[title] = "Song"
-                it[SongTable.albumId] = albumId
-                it[cover] = EntityID(bogusId, ImageTable)
+            transaction(database) {
+                val albumId = AlbumTable.insertAndGetId {
+                    it[name] = "Album"
+                    it[cover] = EntityID(bogusId, ImageTable)
+                }
+                val artistId = ArtistTable.insertAndGetId {
+                    it[name] = "Artist"
+                    it[image] = EntityID(bogusId, ImageTable)
+                }
+                SongTable.insert {
+                    it[title] = "Song"
+                    it[SongTable.albumId] = albumId
+                    it[cover] = EntityID(bogusId, ImageTable)
+                }
+
+                MBReleaseGroupTable.insert { it[id] = bogusGroupId; it[title] = "Bogus" }
+                RecentReleaseTable.insert {
+                    it[releaseId] = bogusGroupId
+                    it[RecentReleaseTable.artistId] = artistId
+                    it[title] = "Bogus"
+                    it[imageId] = EntityID(bogusId, ImageTable)
+                    it[lastImageFetch] = 1000L
+                }
+                MBReleaseGroupCoverTable.insert {
+                    it[releaseGroupId] = bogusGroupId
+                    it[imageId] = EntityID(bogusId, ImageTable)
+                    it[lastFetch] = 1000L
+                }
+
+                MBReleaseGroupTable.insert { it[id] = goodGroupId; it[title] = "Good" }
+                RecentReleaseTable.insert {
+                    it[releaseId] = goodGroupId
+                    it[RecentReleaseTable.artistId] = artistId
+                    it[title] = "Good"
+                    it[imageId] = EntityID(goodId, ImageTable)
+                }
             }
 
-            MBReleaseGroupTable.insert { it[id] = bogusGroupId; it[title] = "Bogus" }
-            RecentReleaseTable.insert {
-                it[releaseId] = bogusGroupId
-                it[RecentReleaseTable.artistId] = artistId
-                it[title] = "Bogus"
-                it[imageId] = EntityID(bogusId, ImageTable)
-                it[lastImageFetch] = 1000L
-            }
-            MBReleaseGroupCoverTable.insert {
-                it[releaseGroupId] = bogusGroupId
-                it[imageId] = EntityID(bogusId, ImageTable)
-                it[lastFetch] = 1000L
+            val result = service.purgeNonImageFiles(listOf("https://coverartarchive.org/"))
+
+            assertNull(service.byId(bogusId))
+            assertFalse(bogusFile.exists())
+            assertNotNull(service.byId(goodId))
+            assertTrue(goodFile.exists())
+            assertNotNull(service.byId(profileId))
+            assertTrue(profileFile.exists())
+
+            transaction(database) {
+                val bogusRelease = RecentReleaseTable.selectAll()
+                    .where { RecentReleaseTable.releaseId eq bogusGroupId }
+                    .single()
+                assertNull(bogusRelease[RecentReleaseTable.imageId])
+                assertNull(bogusRelease[RecentReleaseTable.lastImageFetch])
+
+                val cover = MBReleaseGroupCoverTable.selectAll()
+                    .where { MBReleaseGroupCoverTable.releaseGroupId eq bogusGroupId }
+                    .single()
+                assertNull(cover[MBReleaseGroupCoverTable.imageId])
+                assertEquals(0L, cover[MBReleaseGroupCoverTable.lastFetch])
+
+                assertNull(AlbumTable.selectAll().single()[AlbumTable.cover])
+                assertNull(ArtistTable.selectAll().single()[ArtistTable.image])
+                assertNull(SongTable.selectAll().single()[SongTable.cover])
+
+                val goodRelease = RecentReleaseTable.selectAll()
+                    .where { RecentReleaseTable.releaseId eq goodGroupId }
+                    .single()
+                assertEquals(goodId, goodRelease[RecentReleaseTable.imageId]?.value)
             }
 
-            MBReleaseGroupTable.insert { it[id] = goodGroupId; it[title] = "Good" }
-            RecentReleaseTable.insert {
-                it[releaseId] = goodGroupId
-                it[RecentReleaseTable.artistId] = artistId
-                it[title] = "Good"
-                it[imageId] = EntityID(goodId, ImageTable)
-            }
+            assertEquals(2, result.scanned)
+            assertEquals(1, result.bogus)
+            assertEquals(1, result.deleted)
+            assertTrue(result.unlinked >= 5, "Expected at least 5 unlinked references, got ${result.unlinked}")
         }
-
-        val result = service.purgeNonImageFiles(listOf("https://coverartarchive.org/"))
-
-        assertNull(service.byId(bogusId))
-        assertFalse(bogusFile.exists())
-        assertNotNull(service.byId(goodId))
-        assertTrue(goodFile.exists())
-        assertNotNull(service.byId(profileId))
-        assertTrue(profileFile.exists())
-
-        transaction(database) {
-            val bogusRelease = RecentReleaseTable.selectAll()
-                .where { RecentReleaseTable.releaseId eq bogusGroupId }
-                .single()
-            assertNull(bogusRelease[RecentReleaseTable.imageId])
-            assertNull(bogusRelease[RecentReleaseTable.lastImageFetch])
-
-            val cover = MBReleaseGroupCoverTable.selectAll()
-                .where { MBReleaseGroupCoverTable.releaseGroupId eq bogusGroupId }
-                .single()
-            assertNull(cover[MBReleaseGroupCoverTable.imageId])
-            assertEquals(0L, cover[MBReleaseGroupCoverTable.lastFetch])
-
-            assertNull(AlbumTable.selectAll().single()[AlbumTable.cover])
-            assertNull(ArtistTable.selectAll().single()[ArtistTable.image])
-            assertNull(SongTable.selectAll().single()[SongTable.cover])
-
-            val goodRelease = RecentReleaseTable.selectAll()
-                .where { RecentReleaseTable.releaseId eq goodGroupId }
-                .single()
-            assertEquals(goodId, goodRelease[RecentReleaseTable.imageId]?.value)
-        }
-
-        assertEquals(2, result.scanned)
-        assertEquals(1, result.bogus)
-        assertEquals(1, result.deleted)
-        assertTrue(result.unlinked >= 5, "Expected at least 5 unlinked references, got ${result.unlinked}")
-    }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)

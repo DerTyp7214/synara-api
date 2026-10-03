@@ -42,10 +42,13 @@ class LyricsSyncWorker : Worker("LyricsSyncWorker") {
         var failed = 0
 
         val songsToProcess = dbQuery {
-            SongTable.leftJoin(SyncedLyricsTable, onColumn = { SongTable.id }, otherColumn = { SyncedLyricsTable.songId })
+            SongTable.leftJoin(
+                SyncedLyricsTable,
+                onColumn = { SongTable.id },
+                otherColumn = { SyncedLyricsTable.songId })
                 .selectAll()
                 .where { SyncedLyricsTable.songId.isNull() }
-                .map { 
+                .map {
                     SongInfo(
                         id = it[SongTable.id].value,
                         hasLyrics = it[SongTable.lyrics].isNotBlank()
@@ -64,9 +67,9 @@ class LyricsSyncWorker : Worker("LyricsSyncWorker") {
         sortedSongs.forEachIndexed { index, song ->
             val progress = (index / total) * 100
             onProgress(progress, "Syncing lyrics for song ${index + 1}/${sortedSongs.size}")
-            
+
             logger.info("Processing song ${song.id} (${index + 1}/${sortedSongs.size})")
-            
+
             try {
                 val result = lyricsService.transcribeLyrics(song.id)
                 if (result != null) {

@@ -180,6 +180,7 @@ class RemoteCredentialProvider(
             is ResolvedCredential.Files -> return
             is ResolvedCredential.ApiKey, is ResolvedCredential.ApiKeyPair ->
                 minOf(now + KEY_CACHE_TTL_MS, expiryBound ?: Long.MAX_VALUE)
+
             is ResolvedCredential.AccessToken, is ResolvedCredential.DeveloperToken -> expiryBound ?: return
         }
         if (validUntil > now) cache[name] = CachedCredential(connection, credential, validUntil)

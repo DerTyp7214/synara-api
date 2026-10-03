@@ -26,11 +26,11 @@ dependencies {
     implementation(libs.ktor.server.cors)
     implementation(libs.ktor.server.call.logging)
     implementation(libs.ktor.server.status.pages)
-    
+
     implementation(libs.kotlinx.rpc.krpc.ktor.server)
     implementation(libs.kotlinx.rpc.krpc.serialization.json)
     implementation(libs.kotlinx.rpc.krpc.serialization.cbor)
-    
+
     implementation(libs.logback.classic)
     implementation("org.jetbrains.kotlin:kotlin-reflect")
     implementation(libs.kotlinx.serialization.json)

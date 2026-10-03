@@ -62,7 +62,7 @@ class SessionServiceTest : KoinTest {
 
         val sessionId = service.createSession(userId, "agent", "127.0.0.1")
         assertNotNull(sessionId)
-        
+
         val sessions = service.getSessions(userId)
         assertEquals(1, sessions.size)
         assertEquals("agent", sessions[0].userAgent)

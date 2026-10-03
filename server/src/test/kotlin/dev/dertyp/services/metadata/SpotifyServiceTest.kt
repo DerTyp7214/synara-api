@@ -45,7 +45,14 @@ class SpotifyServiceTest : KoinTest {
             modules(module {
                 single { HttpClientQueueService() }
                 single<CredentialProvider> {
-                    FakeCredentialProvider(ResolvedCredential.AccessToken(CredentialNames.SPOTIFY_API, "test-token", "Bearer", null))
+                    FakeCredentialProvider(
+                        ResolvedCredential.AccessToken(
+                            CredentialNames.SPOTIFY_API,
+                            "test-token",
+                            "Bearer",
+                            null
+                        )
+                    )
                 }
             })
         }
@@ -62,6 +69,7 @@ class SpotifyServiceTest : KoinTest {
                         headers = headersOf(HttpHeaders.ContentType, ContentType.Application.Json.toString())
                     )
                 }
+
                 "/v1/search" -> {
                     val type = request.url.parameters["type"]
                     val content = when (type) {
@@ -82,6 +90,7 @@ class SpotifyServiceTest : KoinTest {
                               }
                             }
                         """.trimIndent()
+
                         "track" -> """
                             {
                               "tracks": {
@@ -99,6 +108,7 @@ class SpotifyServiceTest : KoinTest {
                               }
                             }
                         """.trimIndent()
+
                         "album" -> """
                             {
                               "albums": {
@@ -117,6 +127,7 @@ class SpotifyServiceTest : KoinTest {
                               }
                             }
                         """.trimIndent()
+
                         else -> "{}"
                     }
                     respond(
@@ -125,6 +136,7 @@ class SpotifyServiceTest : KoinTest {
                         headers = headersOf(HttpHeaders.ContentType, ContentType.Application.Json.toString())
                     )
                 }
+
                 else -> respondError(HttpStatusCode.NotFound)
             }
         }
@@ -185,6 +197,7 @@ class SpotifyServiceTest : KoinTest {
                     status = HttpStatusCode.OK,
                     headers = headersOf(HttpHeaders.ContentType, ContentType.Application.Json.toString())
                 )
+
                 "/v1/search" -> {
                     assertEquals("isrc:$isrc", request.url.parameters["q"])
                     assertEquals("track", request.url.parameters["type"])
@@ -211,6 +224,7 @@ class SpotifyServiceTest : KoinTest {
                         headers = headersOf(HttpHeaders.ContentType, ContentType.Application.Json.toString())
                     )
                 }
+
                 else -> respondError(HttpStatusCode.NotFound)
             }
         }

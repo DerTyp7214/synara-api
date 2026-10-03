@@ -20,7 +20,7 @@ class JwtServiceTest {
     private val userService = mockk<UserService>()
     private val refreshTokenService = mockk<RefreshTokenService>()
     private val sessionService = mockk<SessionService>()
-    
+
     private lateinit var jwtService: JwtService
 
     @BeforeEach
@@ -31,7 +31,7 @@ class JwtServiceTest {
         every { config.property("jwt.issuer").getString() } returns "test-issuer"
         every { config.property("jwt.realm").getString() } returns "test-realm"
         every { config.property("jwt.secret").getString() } returns "test-secret"
-        
+
         jwtService = JwtService(ServerConfig(environment.config), userService, refreshTokenService, sessionService)
     }
 
@@ -44,15 +44,15 @@ class JwtServiceTest {
     fun `generateToken and validateToken should work for active session`() = runBlocking {
         val user = User(id = UUID.randomUUID(), username = "testuser", passwordHash = "")
         val sessionId = UUID.randomUUID()
-        
+
         coEvery { refreshTokenService.createToken(any(), any(), any(), any()) } returns mockk()
-        
+
         val authResponse = jwtService.generateToken(user, sessionId)
         assertNotNull(authResponse)
         val token = authResponse!!.token
-        
+
         coEvery { sessionService.isSessionActive(sessionId) } returns true
-        
+
         val principal = jwtService.validateToken(token)
         assertNotNull(principal)
         assertEquals("testuser", principal!!.payload.getClaim("usr").asString())
@@ -62,14 +62,14 @@ class JwtServiceTest {
     fun `validateToken should return null for inactive session`() = runBlocking {
         val user = User(id = UUID.randomUUID(), username = "testuser", passwordHash = "")
         val sessionId = UUID.randomUUID()
-        
+
         coEvery { refreshTokenService.createToken(any(), any(), any(), any()) } returns mockk()
-        
+
         val authResponse = jwtService.generateToken(user, sessionId)
         val token = authResponse!!.token
-        
+
         coEvery { sessionService.isSessionActive(sessionId) } returns false
-        
+
         val principal = jwtService.validateToken(token)
         assertNull(principal)
     }

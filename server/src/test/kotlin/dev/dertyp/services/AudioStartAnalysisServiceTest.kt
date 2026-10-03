@@ -80,7 +80,16 @@ class AudioStartAnalysisServiceTest {
     @Test
     fun `analyze persists the detected offset and unanalyzed query excludes it`(@TempDir tempDir: Path) = runBlocking {
         val db = TestDatabase.connect(DbDialect.SQLITE, "audio_start_test")
-        transaction(db) { SchemaUtils.create(ArtistTable, ImageTable, AnimatedImageTable, AlbumTable, SongTable, SongVariantTable) }
+        transaction(db) {
+            SchemaUtils.create(
+                ArtistTable,
+                ImageTable,
+                AnimatedImageTable,
+                AlbumTable,
+                SongTable,
+                SongVariantTable
+            )
+        }
 
         val file = tempDir.resolve("song.wav").toFile()
         writeWav(file, silenceMs = 200, toneMs = 200)
@@ -108,12 +117,20 @@ class AudioStartAnalysisServiceTest {
         assertTrue(abs(detected - 200) <= 15, "expected ~200ms, got $detected")
         assertNull(service.analyze(missingId))
 
-        val stored = transaction(db) { SongTable.select(SongTable.audioStartMs).where { SongTable.id eq songId }.single()[SongTable.audioStartMs] }
+        val stored = transaction(db) {
+            SongTable.select(SongTable.audioStartMs).where { SongTable.id eq songId }.single()[SongTable.audioStartMs]
+        }
         assertEquals(detected, stored)
         assertEquals(listOf(missingId), service.getUnanalyzedSongIds())
     }
 
-    private fun writeWav(file: File, silenceMs: Int, toneMs: Int, sampleRate: Int = 44100, noiseAmplitude: Double = 0.0) {
+    private fun writeWav(
+        file: File,
+        silenceMs: Int,
+        toneMs: Int,
+        sampleRate: Int = 44100,
+        noiseAmplitude: Double = 0.0
+    ) {
         val recorder = FFmpegFrameRecorder(file.absolutePath, 1).apply {
             audioCodec = avcodec.AV_CODEC_ID_PCM_S16LE
             format = "wav"
@@ -126,7 +143,9 @@ class AudioStartAnalysisServiceTest {
         val buffer = ShortBuffer.allocate(silenceSamples + toneSamples)
         val random = java.util.Random(42)
         repeat(silenceSamples) {
-            buffer.put((random.nextGaussian() * noiseAmplitude * Short.MAX_VALUE).toInt().coerceIn(-32768, 32767).toShort())
+            buffer.put(
+                (random.nextGaussian() * noiseAmplitude * Short.MAX_VALUE).toInt().coerceIn(-32768, 32767).toShort()
+            )
         }
         repeat(toneSamples) { i ->
             buffer.put((sin(2 * PI * 440 * i / sampleRate) * 0.5 * Short.MAX_VALUE).toInt().toShort())

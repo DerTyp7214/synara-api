@@ -166,8 +166,10 @@ class AudioAnalysisServiceTest {
 
         dbQuery {
             val persons = PersonTable.selectAll().map { it[PersonTable.name] }.sorted()
-            val expectedPersons = (expectedData.composer.orEmpty() + expectedData.lyricist.orEmpty() + expectedData.producers.orEmpty()).distinct().sorted()
-            
+            val expectedPersons =
+                (expectedData.composer.orEmpty() + expectedData.lyricist.orEmpty() + expectedData.producers.orEmpty()).distinct()
+                    .sorted()
+
             for (person in expectedPersons) {
                 assertTrue(persons.contains(person), "Person $person should be in the database")
             }

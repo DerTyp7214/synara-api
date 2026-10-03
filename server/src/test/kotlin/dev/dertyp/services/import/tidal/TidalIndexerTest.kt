@@ -32,7 +32,7 @@ class TidalIndexerTest {
         mockkStatic(AudioFileIO::class)
         mockkStatic("dev.dertyp.core.UtilsKt")
         mockkStatic("dev.dertyp.core.Sha256Kt")
-        
+
         indexer = TidalIndexer(context)
     }
 
@@ -53,10 +53,10 @@ class TidalIndexerTest {
 
         val audio1 = mockk<AudioFile>(relaxed = true)
         val audio2 = mockk<AudioFile>(relaxed = true)
-        
+
         every { audio1.tag } returns tag1
         every { audio2.tag } returns tag2
-        
+
         every { AudioFileIO.read(file1.toFile()) } returns audio1
         every { AudioFileIO.read(file2.toFile()) } returns audio2
 
@@ -156,12 +156,16 @@ class TidalIndexerTest {
         val (_, albums) = indexer.groupByAlbum(listOf(file1, file2))
 
         assertEquals(1, albums.size)
-        assertEquals(mbReleaseId, albums.keys.first().musicBrainzId, "Merged album should retain musicBrainzId from the track that had it")
+        assertEquals(
+            mbReleaseId,
+            albums.keys.first().musicBrainzId,
+            "Merged album should retain musicBrainzId from the track that had it"
+        )
     }
 
     @Test
     fun `groupByAlbum should limit concurrency using semaphore`() = runBlocking {
-        val files = (1..10).map { 
+        val files = (1..10).map {
             val f = tempDir.resolve("track$it.flac")
             Files.createFile(f)
             f

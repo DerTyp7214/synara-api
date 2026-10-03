@@ -19,7 +19,8 @@ import kotlin.time.Duration.Companion.seconds
 
 class ItemWorkerTimeoutTest : KoinTest {
 
-    class BlockingWorker(private val blocking: Set<Int>, override val timeout: Duration?) : ItemWorker<Int>("BlockingWorker") {
+    class BlockingWorker(private val blocking: Set<Int>, override val timeout: Duration?) :
+        ItemWorker<Int>("BlockingWorker") {
         override val baseThreads = 4
         override val resultKey = "processed"
         override val emptyMessage = "Nothing to do"

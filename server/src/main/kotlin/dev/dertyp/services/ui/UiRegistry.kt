@@ -15,7 +15,8 @@ data class RegisteredContribution(val contribution: UiContribution, val source: 
 class UiRegistry {
     private val logger = KtorSimpleLogger("UiRegistry")
     private val contributions = ConcurrentHashMap<String, RegisteredContribution>()
-    private val invalidationFlow = MutableSharedFlow<String>(extraBufferCapacity = 64, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+    private val invalidationFlow =
+        MutableSharedFlow<String>(extraBufferCapacity = 64, onBufferOverflow = BufferOverflow.DROP_OLDEST)
 
     val invalidations: Flow<String> = invalidationFlow.asSharedFlow()
 
@@ -40,14 +41,17 @@ class UiRegistry {
 
     fun get(id: String): RegisteredContribution? = contributions[id]
 
-    fun all(): List<RegisteredContribution> = contributions.values.sortedWith(compareBy({ it.contribution.order }, { it.contribution.id }))
+    fun all(): List<RegisteredContribution> =
+        contributions.values.sortedWith(compareBy({ it.contribution.order }, { it.contribution.id }))
 
     fun bySlot(slot: String): List<RegisteredContribution> = all().filter { it.contribution.slot == slot }
 
     fun bySource(source: String): List<RegisteredContribution> = all().filter { it.source == source }
 
     fun forSource(source: String): UiRegistrar = object : UiRegistrar {
-        override fun register(contribution: UiContribution): UiRegistration = this@UiRegistry.register(contribution, source)
+        override fun register(contribution: UiContribution): UiRegistration =
+            this@UiRegistry.register(contribution, source)
+
         override fun invalidate(contributionId: String) = this@UiRegistry.invalidate(contributionId)
     }
 

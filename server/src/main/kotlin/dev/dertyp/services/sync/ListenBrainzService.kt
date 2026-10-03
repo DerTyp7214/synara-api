@@ -35,7 +35,8 @@ class ListenBrainzService : Service() {
     private val songService by inject<SongService>()
     private val changeNotifier by inject<ChangeNotifier>()
 
-    private val changes = MutableSharedFlow<Unit>(extraBufferCapacity = 8, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+    private val changes =
+        MutableSharedFlow<Unit>(extraBufferCapacity = 8, onBufferOverflow = BufferOverflow.DROP_OLDEST)
 
     private fun signalChange(userIds: Collection<PlatformUUID>) {
         changes.tryEmit(Unit)
@@ -311,7 +312,13 @@ class ListenBrainzService : Service() {
         val accounts = dbQuery {
             ListenBrainzUserTable
                 .select(ListenBrainzUserTable.id, ListenBrainzUserTable.username, ListenBrainzUserTable.token)
-                .map { Triple(it[ListenBrainzUserTable.id].value, it[ListenBrainzUserTable.username], it[ListenBrainzUserTable.token]) }
+                .map {
+                    Triple(
+                        it[ListenBrainzUserTable.id].value,
+                        it[ListenBrainzUserTable.username],
+                        it[ListenBrainzUserTable.token]
+                    )
+                }
         }
 
         var totalUpdated = 0
@@ -345,8 +352,8 @@ class ListenBrainzService : Service() {
                     updates.forEach { (listenedAt, msid) ->
                         updated += ListenTable.update({
                             (ListenTable.listenBrainzUserId eq lbUserId) and
-                                (ListenTable.listenedAt eq listenedAt) and
-                                ListenTable.recordingMsid.isNull()
+                                    (ListenTable.listenedAt eq listenedAt) and
+                                    ListenTable.recordingMsid.isNull()
                         }) {
                             it[ListenTable.recordingMsid] = msid
                             it[ListenTable.updatedAt] = System.currentTimeMillis()
@@ -372,7 +379,11 @@ class ListenBrainzService : Service() {
         return totalUpdated
     }
 
-    suspend fun submitManualMapping(userId: PlatformUUID, recordingMbid: PlatformUUID, recordingMsids: List<PlatformUUID>): Int {
+    suspend fun submitManualMapping(
+        userId: PlatformUUID,
+        recordingMbid: PlatformUUID,
+        recordingMsids: List<PlatformUUID>
+    ): Int {
         if (recordingMsids.isEmpty()) return 0
 
         val token = dbQuery {
@@ -421,7 +432,12 @@ class ListenBrainzService : Service() {
                 onColumn = ListenLinkTable.userId,
                 otherColumn = UserListenBrainzLinkTable.userId,
             )
-            .select(ListenLinkTable.recordingMbid, ListenLinkTable.recordingMsid, ListenLinkTable.songId, ListenLinkTable.createdAt)
+            .select(
+                ListenLinkTable.recordingMbid,
+                ListenLinkTable.recordingMsid,
+                ListenLinkTable.songId,
+                ListenLinkTable.createdAt
+            )
             .where { UserListenBrainzLinkTable.listenBrainzUserId eq lbUserId }
             .orderBy(ListenLinkTable.createdAt to SortOrder.ASC)
             .forEach { row ->
@@ -534,7 +550,11 @@ class ListenBrainzService : Service() {
     )
 
     private fun String.toPlatformUuidOrNull(): PlatformUUID? =
-        try { platformUUIDFromString(this) } catch (_: Exception) { null }
+        try {
+            platformUUIDFromString(this)
+        } catch (_: Exception) {
+            null
+        }
 
     companion object {
         private const val API_BASE = "https://api.listenbrainz.org/1"
@@ -578,10 +598,14 @@ private data class LbListen(
     @SerialName("recording_msid") val recordingMsid: String? = null,
     @SerialName("track_metadata") val trackMetadata: LbTrackMetadata = LbTrackMetadata(),
 ) {
-    fun recordingMbid(): String? = trackMetadata.additionalInfo?.recordingMbid ?: trackMetadata.mbidMapping?.recordingMbid
+    fun recordingMbid(): String? =
+        trackMetadata.additionalInfo?.recordingMbid ?: trackMetadata.mbidMapping?.recordingMbid
+
     fun releaseMbid(): String? = trackMetadata.additionalInfo?.releaseMbid ?: trackMetadata.mbidMapping?.releaseMbid
     fun artistMbids(): List<String> =
-        trackMetadata.additionalInfo?.artistMbids?.takeIf { it.isNotEmpty() } ?: trackMetadata.mbidMapping?.artistMbids ?: emptyList()
+        trackMetadata.additionalInfo?.artistMbids?.takeIf { it.isNotEmpty() } ?: trackMetadata.mbidMapping?.artistMbids
+        ?: emptyList()
+
     fun isrc(): String? = trackMetadata.additionalInfo?.isrc
     fun trackName(): String? = trackMetadata.trackName
     fun artistName(): String? = trackMetadata.artistName

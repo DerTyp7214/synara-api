@@ -58,7 +58,8 @@ class AppleDeveloperTokenSigner {
             val body = pem.replace(PEM_BEGIN, "").replace(PEM_END, "").replace(WHITESPACE, "")
             require(body.isNotEmpty()) { "The private key is empty" }
             val key = try {
-                KeyFactory.getInstance("EC").generatePrivate(PKCS8EncodedKeySpec(Base64.getDecoder().decode(body))) as? ECPrivateKey
+                KeyFactory.getInstance("EC")
+                    .generatePrivate(PKCS8EncodedKeySpec(Base64.getDecoder().decode(body))) as? ECPrivateKey
             } catch (_: GeneralSecurityException) {
                 null
             } catch (_: IllegalArgumentException) {

@@ -98,7 +98,10 @@ class PodcastImportService(
 
                 val written = writeToFile(response.bodyAsChannel(), partFile)
                 if (declaredLength != null && declaredLength != written) {
-                    return@execute ImportResult.Failed("Incomplete transfer, expected $declaredLength bytes but got $written", false)
+                    return@execute ImportResult.Failed(
+                        "Incomplete transfer, expected $declaredLength bytes but got $written",
+                        false
+                    )
                 }
 
                 ImportResult.Done(partFile, written)

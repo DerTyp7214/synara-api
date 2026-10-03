@@ -34,10 +34,12 @@ import java.util.UUID
 class UiServiceTest {
     private val registry = UiRegistry()
     private val translations = TranslationService(registry)
-    private val service = UiService(registry, translations, PluginSettingsService(), UserHomeCardService(), IntakeService(translations))
+    private val service =
+        UiService(registry, translations, PluginSettingsService(), UserHomeCardService(), IntakeService(translations))
 
     private val admin = User(UUID.randomUUID(), "admin", passwordHash = "", isAdmin = true)
-    private val importer = User(UUID.randomUUID(), "importer", passwordHash = "", capabilities = listOf(UserCapability.IMPORT))
+    private val importer =
+        User(UUID.randomUUID(), "importer", passwordHash = "", capabilities = listOf(UserCapability.IMPORT))
     private val plain = User(UUID.randomUUID(), "plain", passwordHash = "")
     private val client = ClientInfo(ApiVersion.CURRENT, UiSchemaVersion.CURRENT, "de")
 
@@ -63,7 +65,11 @@ class UiServiceTest {
         override fun live(scope: UiRenderScope, key: String): Flow<UiLiveUpdate>? =
             if (key == "lines") ticks.map { UiLiveUpdate.AppendLines(listOf(scope.i18n.locale)) } else null
 
-        override suspend fun invoke(scope: UiRenderScope, actionId: String, values: Map<String, UiValue>): UiInvokeResult {
+        override suspend fun invoke(
+            scope: UiRenderScope,
+            actionId: String,
+            values: Map<String, UiValue>
+        ): UiInvokeResult {
             invoked += actionId to values
             return when (actionId) {
                 "ok" -> UiInvokeResult(UiInvokeStatus.OK, refresh = true)
@@ -148,24 +154,57 @@ class UiServiceTest {
 
     @Test
     fun `renderSlot renders visible contributions in order`() = runBlocking {
-        assertEquals(listOf("core.open", "core.import"), service.renderSlot(importer, client, UiSlots.SETTINGS, UiContext()).items.map { it.contributionId })
-        assertEquals(listOf("core.open"), service.renderSlot(plain, client, UiSlots.SETTINGS, UiContext()).items.map { it.contributionId })
+        assertEquals(
+            listOf("core.open", "core.import"),
+            service.renderSlot(importer, client, UiSlots.SETTINGS, UiContext()).items.map { it.contributionId })
+        assertEquals(
+            listOf("core.open"),
+            service.renderSlot(plain, client, UiSlots.SETTINGS, UiContext()).items.map { it.contributionId })
     }
 
     @Test
     fun `dispatchHook returns every offering contribution in order and tolerates failures`() = runBlocking {
-        class Hooked(id: String, order: Int, private val offer: UiHookOffer?, private val fail: Boolean = false, access: UiAccess = UiAccess()) :
+        class Hooked(
+            id: String,
+            order: Int,
+            private val offer: UiHookOffer?,
+            private val fail: Boolean = false,
+            access: UiAccess = UiAccess()
+        ) :
             Fake(id, access, UiContributionKind.PAGE, null, setOf(UiHookKind.SHARE_URL), order) {
             override suspend fun onHook(scope: UiRenderScope, event: UiHookEvent): UiHookOffer? {
                 if (fail) throw IllegalStateException("nope")
                 return offer
             }
         }
-        registry.register(Hooked("hook.second", 20, UiHookOffer("importer.hook.import", UiAction.OpenPage("hook.second"))), "b")
-        registry.register(Hooked("hook.first", 10, UiHookOffer("importer.hook.search", UiAction.OpenNative("externalSearch"), icon = UiIcon(UiIconName.SEARCH))), "a")
+        registry.register(
+            Hooked(
+                "hook.second",
+                20,
+                UiHookOffer("importer.hook.import", UiAction.OpenPage("hook.second"))
+            ), "b"
+        )
+        registry.register(
+            Hooked(
+                "hook.first",
+                10,
+                UiHookOffer(
+                    "importer.hook.search",
+                    UiAction.OpenNative("externalSearch"),
+                    icon = UiIcon(UiIconName.SEARCH)
+                )
+            ), "a"
+        )
         registry.register(Hooked("hook.declines", 5, null), "c")
         registry.register(Hooked("hook.fails", 1, UiHookOffer("x", UiAction.Refresh), fail = true), "d")
-        registry.register(Hooked("hook.admin", 0, UiHookOffer("x", UiAction.Refresh), access = UiAccess(requiresAdmin = true)), "e")
+        registry.register(
+            Hooked(
+                "hook.admin",
+                0,
+                UiHookOffer("x", UiAction.Refresh),
+                access = UiAccess(requiresAdmin = true)
+            ), "e"
+        )
 
         val handlers = service.dispatchHook(plain, client, UiHookEvent.ShareUrl("https://tidal.com/x"))
         assertEquals(listOf("hook.first", "hook.second"), handlers.map { it.id })
@@ -183,14 +222,25 @@ class UiServiceTest {
                     "form",
                     listOf(
                         UiComponent.TextField("text", "Text"),
-                        UiComponent.Card(listOf(UiComponent.Section(listOf(UiComponent.NumberField("number", "Number")), "Section"))),
+                        UiComponent.Card(
+                            listOf(
+                                UiComponent.Section(
+                                    listOf(UiComponent.NumberField("number", "Number")),
+                                    "Section"
+                                )
+                            )
+                        ),
                     ),
                     UiAction.Invoke(id, "save", formId = "form"),
                     "Save",
                 ),
                 UiComponent.Row(listOf(UiComponent.Grid(listOf(UiComponent.FileField("file", "File"))))),
                 UiComponent.Live("live", UiComponent.Column(listOf(UiComponent.TextField("liveText", "Live")))),
-                UiComponent.TextField("explicit", "Explicit", toolbar = listOf(UiComponent.Icon(UiIcon(UiIconName.SEARCH)))),
+                UiComponent.TextField(
+                    "explicit",
+                    "Explicit",
+                    toolbar = listOf(UiComponent.Icon(UiIcon(UiIconName.SEARCH)))
+                ),
             ),
         )
 
@@ -200,7 +250,14 @@ class UiServiceTest {
         )
     }
 
-    private val done = listOf(UiComponent.Button("Fertig", UiAction.DismissKeyboard, UiButtonStyle.TEXT, icon = UiIcon(UiIconName.CHECK)))
+    private val done = listOf(
+        UiComponent.Button(
+            "Fertig",
+            UiAction.DismissKeyboard,
+            UiButtonStyle.TEXT,
+            icon = UiIcon(UiIconName.CHECK)
+        )
+    )
 
     private fun UiComponent.fields(): List<UiComponent> = when (this) {
         is UiComponent.TextField, is UiComponent.NumberField, is UiComponent.FileField -> listOf(this)
@@ -235,7 +292,12 @@ class UiServiceTest {
         assertEquals(done, toolbars.getValue("file"))
         assertEquals(done, toolbars.getValue("liveText"))
         assertEquals(listOf(UiComponent.Icon(UiIcon(UiIconName.SEARCH))), toolbars.getValue("explicit"))
-        val english = service.render(admin, ClientInfo(ApiVersion.CURRENT, UiSchemaVersion.CURRENT, "en"), "core.fields", UiContext())
+        val english = service.render(
+            admin,
+            ClientInfo(ApiVersion.CURRENT, UiSchemaVersion.CURRENT, "en"),
+            "core.fields",
+            UiContext()
+        )
         assertEquals("Done", (english.root.toolbars().getValue("text").single() as UiComponent.Button).label)
     }
 

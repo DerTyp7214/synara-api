@@ -50,7 +50,16 @@ class RetranscodeMultichannelSongsTest : KoinTest {
         tempDir = Files.createTempDirectory("retranscode-test").toFile()
         database = TestDatabase.connect(dialect, "retranscode_multichannel_test")
         transaction(database) {
-            SchemaUtils.create(ImageTable, AlbumTable, SongTable, SongVariantTable, FlacInfoTable, PcmInfoTable, TranscodedSongTable, ScheduledTaskLogTable)
+            SchemaUtils.create(
+                ImageTable,
+                AlbumTable,
+                SongTable,
+                SongVariantTable,
+                FlacInfoTable,
+                PcmInfoTable,
+                TranscodedSongTable,
+                ScheduledTaskLogTable
+            )
         }
     }
 
@@ -113,13 +122,22 @@ class RetranscodeMultichannelSongsTest : KoinTest {
 
         RetranscodeMultichannelSongs().migrate()
 
-        coVerify(exactly = 1) { transcoder.transcodeAudio(any(), match { it.name == "surround.flac" }, 128, true, AudioFormat.AAC) }
+        coVerify(exactly = 1) {
+            transcoder.transcodeAudio(
+                any(),
+                match { it.name == "surround.flac" },
+                128,
+                true,
+                AudioFormat.AAC
+            )
+        }
         assertFalse(surroundCached.exists())
         assertTrue(stereoCached.exists())
         assertTrue(unknownCached.exists())
 
         val rows = transaction(database) {
-            TranscodedSongTable.selectAll().associate { it[TranscodedSongTable.songId].value to (it[TranscodedSongTable.path] to it[TranscodedSongTable.fileSize]) }
+            TranscodedSongTable.selectAll()
+                .associate { it[TranscodedSongTable.songId].value to (it[TranscodedSongTable.path] to it[TranscodedSongTable.fileSize]) }
         }
         assertEquals(newFile.absolutePath to newFile.length(), rows[surroundId])
         assertEquals(stereoCached.absolutePath to 3L, rows[stereoId])

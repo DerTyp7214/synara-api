@@ -42,7 +42,11 @@ class PerUserChannelsTest {
         return Subscriber(job, received, firstProbe)
     }
 
-    private suspend fun awaitSubscribed(channels: PerUserChannels<String, Int>, key: String, vararg subscribers: Subscriber) {
+    private suspend fun awaitSubscribed(
+        channels: PerUserChannels<String, Int>,
+        key: String,
+        vararg subscribers: Subscriber
+    ) {
         withTimeout(5.seconds) {
             while (subscribers.any { !it.firstProbe.isCompleted }) {
                 channels.tryEmit(key, -1)
@@ -128,7 +132,11 @@ class PerUserChannelsTest {
 
         val subscribers = (0 until 20).map { subscribe(channels, "user-${it % 5}") }
         (0 until 5).forEach { key ->
-            awaitSubscribed(channels, "user-$key", *subscribers.filterIndexed { index, _ -> index % 5 == key }.toTypedArray())
+            awaitSubscribed(
+                channels,
+                "user-$key",
+                *subscribers.filterIndexed { index, _ -> index % 5 == key }.toTypedArray()
+            )
         }
         assertEquals(5, entries(channels).size)
 

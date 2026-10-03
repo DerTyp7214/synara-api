@@ -57,13 +57,14 @@ fun Route.mcpRouting() {
         post({
             tags("MCP")
             summary = "Model Context Protocol endpoint (read-only listen history)"
-            description = "Stateless Streamable HTTP transport for the Model Context Protocol. Every request carries a " +
-                "complete JSON-RPC 2.0 message (or a batch of them) and is answered with a JSON response; no session id is " +
-                "issued and no server-initiated stream is opened, so `initialize`, `tools/list` and `tools/call` can each be " +
-                "sent as an independent POST. Send `Content-Type: application/json` and " +
-                "`Accept: application/json, text/event-stream`. The exposed tools are read-only and scoped to the " +
-                "authenticated user: search_library, get_listens, get_listening_summary, get_top, get_listen_timeline, " +
-                "get_listening_stats and get_now_playing. $API_KEY_NOTE"
+            description =
+                "Stateless Streamable HTTP transport for the Model Context Protocol. Every request carries a " +
+                        "complete JSON-RPC 2.0 message (or a batch of them) and is answered with a JSON response; no session id is " +
+                        "issued and no server-initiated stream is opened, so `initialize`, `tools/list` and `tools/call` can each be " +
+                        "sent as an independent POST. Send `Content-Type: application/json` and " +
+                        "`Accept: application/json, text/event-stream`. The exposed tools are read-only and scoped to the " +
+                        "authenticated user: search_library, get_listens, get_listening_summary, get_top, get_listen_timeline, " +
+                        "get_listening_stats and get_now_playing. $API_KEY_NOTE"
             securitySchemeNames("ApiKeyAuth")
             request {
                 headerParameter<String>("Accept") {
@@ -80,9 +81,15 @@ fun Route.mcpRouting() {
                     description = "The JSON-RPC response, or an array of responses for a batch."
                     body<String> { mediaTypes(ContentType.Application.Json) }
                 }
-                HttpStatusCode.Accepted to { description = "The body contained only notifications or responses, so there is nothing to return." }
-                HttpStatusCode.Unauthorized to { description = "Missing or invalid API key, or the key lacks the `mcp` scope." }
-                HttpStatusCode.NotAcceptable to { description = "The Accept header does not allow both application/json and text/event-stream." }
+                HttpStatusCode.Accepted to {
+                    description = "The body contained only notifications or responses, so there is nothing to return."
+                }
+                HttpStatusCode.Unauthorized to {
+                    description = "Missing or invalid API key, or the key lacks the `mcp` scope."
+                }
+                HttpStatusCode.NotAcceptable to {
+                    description = "The Accept header does not allow both application/json and text/event-stream."
+                }
                 HttpStatusCode.UnsupportedMediaType to { description = "The Content-Type is not application/json." }
             }
         }) {

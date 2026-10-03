@@ -54,7 +54,7 @@ class CapabilityAuthorizationTest : KoinTest {
         transaction(database) {
             SchemaUtils.create(UserTable, UserCapabilityTable)
         }
-        
+
         startKoin {
             modules(module {
                 single { mockk<SongService>(relaxed = true) }
@@ -131,7 +131,8 @@ class CapabilityAuthorizationTest : KoinTest {
         authorizedService.setLyrics(UUID.randomUUID(), listOf("lyrics"))
     }
 
-    private fun podcastShow() = PodcastShow(id = UUID.randomUUID(), source = PodcastSource.FEED, title = "Show", createdAt = 0, updatedAt = 0)
+    private fun podcastShow() =
+        PodcastShow(id = UUID.randomUUID(), source = PodcastSource.FEED, title = "Show", createdAt = 0, updatedAt = 0)
 
     private fun podcastEpisode() = PodcastEpisode(
         id = UUID.randomUUID(),
@@ -178,40 +179,51 @@ class CapabilityAuthorizationTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `podcast updateShowSettings importEpisode removeImport and scanLocal require PODCAST_EDIT`(dialect: DbDialect): Unit = runBlocking {
-        setup(dialect)
-        val userWithoutEdit = User(id = UUID.randomUUID(), username = "podcast-noedit", passwordHash = "", isAdmin = false, capabilities = emptyList())
-        val authorizedService = podcastRpcService(userWithoutEdit).withAuthorization<IPodcastService>(userWithoutEdit)
+    fun `podcast updateShowSettings importEpisode removeImport and scanLocal require PODCAST_EDIT`(dialect: DbDialect): Unit =
+        runBlocking {
+            setup(dialect)
+            val userWithoutEdit = User(
+                id = UUID.randomUUID(),
+                username = "podcast-noedit",
+                passwordHash = "",
+                isAdmin = false,
+                capabilities = emptyList()
+            )
+            val authorizedService =
+                podcastRpcService(userWithoutEdit).withAuthorization<IPodcastService>(userWithoutEdit)
 
-        assertFailsWith<UnauthorizedException> {
-            try {
-                authorizedService.updateShowSettings(UUID.randomUUID(), PodcastShowSettings(PodcastDeliveryMode.IMPORT))
-            } catch (e: UndeclaredThrowableException) {
-                throw e.undeclaredThrowable
+            assertFailsWith<UnauthorizedException> {
+                try {
+                    authorizedService.updateShowSettings(
+                        UUID.randomUUID(),
+                        PodcastShowSettings(PodcastDeliveryMode.IMPORT)
+                    )
+                } catch (e: UndeclaredThrowableException) {
+                    throw e.undeclaredThrowable
+                }
+            }
+            assertFailsWith<UnauthorizedException> {
+                try {
+                    authorizedService.importEpisode(UUID.randomUUID())
+                } catch (e: UndeclaredThrowableException) {
+                    throw e.undeclaredThrowable
+                }
+            }
+            assertFailsWith<UnauthorizedException> {
+                try {
+                    authorizedService.removeImport(UUID.randomUUID())
+                } catch (e: UndeclaredThrowableException) {
+                    throw e.undeclaredThrowable
+                }
+            }
+            assertFailsWith<UnauthorizedException> {
+                try {
+                    authorizedService.scanLocal()
+                } catch (e: UndeclaredThrowableException) {
+                    throw e.undeclaredThrowable
+                }
             }
         }
-        assertFailsWith<UnauthorizedException> {
-            try {
-                authorizedService.importEpisode(UUID.randomUUID())
-            } catch (e: UndeclaredThrowableException) {
-                throw e.undeclaredThrowable
-            }
-        }
-        assertFailsWith<UnauthorizedException> {
-            try {
-                authorizedService.removeImport(UUID.randomUUID())
-            } catch (e: UndeclaredThrowableException) {
-                throw e.undeclaredThrowable
-            }
-        }
-        assertFailsWith<UnauthorizedException> {
-            try {
-                authorizedService.scanLocal()
-            } catch (e: UndeclaredThrowableException) {
-                throw e.undeclaredThrowable
-            }
-        }
-    }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
@@ -234,33 +246,54 @@ class CapabilityAuthorizationTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `podcast PODCAST_EDIT methods are allowed for an admin without the capability`(dialect: DbDialect): Unit = runBlocking {
-        setup(dialect)
-        val adminUser = User(id = UUID.randomUUID(), username = "podcast-admin", passwordHash = "", isAdmin = true, capabilities = emptyList())
-        val authorizedService = podcastRpcService(adminUser).withAuthorization<IPodcastService>(adminUser)
+    fun `podcast PODCAST_EDIT methods are allowed for an admin without the capability`(dialect: DbDialect): Unit =
+        runBlocking {
+            setup(dialect)
+            val adminUser = User(
+                id = UUID.randomUUID(),
+                username = "podcast-admin",
+                passwordHash = "",
+                isAdmin = true,
+                capabilities = emptyList()
+            )
+            val authorizedService = podcastRpcService(adminUser).withAuthorization<IPodcastService>(adminUser)
 
-        authorizedService.updateShowSettings(UUID.randomUUID(), PodcastShowSettings(PodcastDeliveryMode.IMPORT))
-        authorizedService.importEpisode(UUID.randomUUID())
-        authorizedService.removeImport(UUID.randomUUID())
-        authorizedService.scanLocal()
-    }
+            authorizedService.updateShowSettings(UUID.randomUUID(), PodcastShowSettings(PodcastDeliveryMode.IMPORT))
+            authorizedService.importEpisode(UUID.randomUUID())
+            authorizedService.removeImport(UUID.randomUUID())
+            authorizedService.scanLocal()
+        }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `podcast subscribe and reportPlayback are allowed without PODCAST_EDIT`(dialect: DbDialect): Unit = runBlocking {
-        setup(dialect)
-        val userWithoutEdit = User(id = UUID.randomUUID(), username = "podcast-noedit2", passwordHash = "", isAdmin = false, capabilities = emptyList())
-        val authorizedService = podcastRpcService(userWithoutEdit).withAuthorization<IPodcastService>(userWithoutEdit)
+    fun `podcast subscribe and reportPlayback are allowed without PODCAST_EDIT`(dialect: DbDialect): Unit =
+        runBlocking {
+            setup(dialect)
+            val userWithoutEdit = User(
+                id = UUID.randomUUID(),
+                username = "podcast-noedit2",
+                passwordHash = "",
+                isAdmin = false,
+                capabilities = emptyList()
+            )
+            val authorizedService =
+                podcastRpcService(userWithoutEdit).withAuthorization<IPodcastService>(userWithoutEdit)
 
-        authorizedService.subscribe("https://feed.example/show.xml")
-        authorizedService.reportPlayback(EpisodePlaybackReport(episodeId = UUID.randomUUID(), positionMs = 0))
-    }
+            authorizedService.subscribe("https://feed.example/show.xml")
+            authorizedService.reportPlayback(EpisodePlaybackReport(episodeId = UUID.randomUUID(), positionMs = 0))
+        }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
     fun `podcast deleteShow requires admin`(dialect: DbDialect): Unit = runBlocking {
         setup(dialect)
-        val userWithoutAdmin = User(id = UUID.randomUUID(), username = "podcast-nonadmin", passwordHash = "", isAdmin = false, capabilities = emptyList())
+        val userWithoutAdmin = User(
+            id = UUID.randomUUID(),
+            username = "podcast-nonadmin",
+            passwordHash = "",
+            isAdmin = false,
+            capabilities = emptyList()
+        )
         val authorizedService = podcastRpcService(userWithoutAdmin).withAuthorization<IPodcastService>(userWithoutAdmin)
 
         assertFailsWith<UnauthorizedException> {
@@ -276,7 +309,13 @@ class CapabilityAuthorizationTest : KoinTest {
     @EnumSource(DbDialect::class)
     fun `podcast deleteShow is allowed for an admin`(dialect: DbDialect): Unit = runBlocking {
         setup(dialect)
-        val adminUser = User(id = UUID.randomUUID(), username = "podcast-delete-admin", passwordHash = "", isAdmin = true, capabilities = emptyList())
+        val adminUser = User(
+            id = UUID.randomUUID(),
+            username = "podcast-delete-admin",
+            passwordHash = "",
+            isAdmin = true,
+            capabilities = emptyList()
+        )
         val authorizedService = podcastRpcService(adminUser).withAuthorization<IPodcastService>(adminUser)
 
         authorizedService.deleteShow(UUID.randomUUID())
@@ -302,7 +341,13 @@ class CapabilityAuthorizationTest : KoinTest {
     @EnumSource(DbDialect::class)
     fun `release setReleaseHidden and confirmRelease require EDIT`(dialect: DbDialect): Unit = runBlocking {
         setup(dialect)
-        val userWithoutEdit = User(id = UUID.randomUUID(), username = "release-noedit", passwordHash = "", isAdmin = false, capabilities = emptyList())
+        val userWithoutEdit = User(
+            id = UUID.randomUUID(),
+            username = "release-noedit",
+            passwordHash = "",
+            isAdmin = false,
+            capabilities = emptyList()
+        )
         val authorizedService = releaseRpcService(userWithoutEdit).withAuthorization<IReleaseService>(userWithoutEdit)
 
         assertFailsWith<UnauthorizedException> {
@@ -325,7 +370,13 @@ class CapabilityAuthorizationTest : KoinTest {
     @EnumSource(DbDialect::class)
     fun `release setReleaseHidden and confirmRelease are allowed with EDIT`(dialect: DbDialect): Unit = runBlocking {
         setup(dialect)
-        val userWithEdit = User(id = UUID.randomUUID(), username = "release-withedit", passwordHash = "", isAdmin = false, capabilities = listOf(UserCapability.EDIT))
+        val userWithEdit = User(
+            id = UUID.randomUUID(),
+            username = "release-withedit",
+            passwordHash = "",
+            isAdmin = false,
+            capabilities = listOf(UserCapability.EDIT)
+        )
         val authorizedService = releaseRpcService(userWithEdit).withAuthorization<IReleaseService>(userWithEdit)
 
         authorizedService.setReleaseHidden(UUID.randomUUID(), true)
@@ -336,7 +387,13 @@ class CapabilityAuthorizationTest : KoinTest {
     @EnumSource(DbDialect::class)
     fun `release setReleaseHidden and confirmRelease are allowed for an admin`(dialect: DbDialect): Unit = runBlocking {
         setup(dialect)
-        val adminUser = User(id = UUID.randomUUID(), username = "release-admin", passwordHash = "", isAdmin = true, capabilities = emptyList())
+        val adminUser = User(
+            id = UUID.randomUUID(),
+            username = "release-admin",
+            passwordHash = "",
+            isAdmin = true,
+            capabilities = emptyList()
+        )
         val authorizedService = releaseRpcService(adminUser).withAuthorization<IReleaseService>(adminUser)
 
         authorizedService.setReleaseHidden(UUID.randomUUID(), true)

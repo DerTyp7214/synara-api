@@ -56,7 +56,8 @@ class CoverAssetPackService(private val config: CoverConfig) : Service() {
     fun select(tags: Set<String>, seed: Long, allowNsfw: Boolean, packId: String?): CoverAssetPack {
         val nsfw = nsfwAllowed(allowNsfw)
         if (packId != null) {
-            val pack = loaded.firstOrNull { it.id == packId } ?: throw IllegalArgumentException("Unknown cover asset pack: $packId")
+            val pack = loaded.firstOrNull { it.id == packId }
+                ?: throw IllegalArgumentException("Unknown cover asset pack: $packId")
             if (pack.nsfw && !nsfw) throw IllegalArgumentException("NSFW cover asset packs are not enabled")
             return pack
         }

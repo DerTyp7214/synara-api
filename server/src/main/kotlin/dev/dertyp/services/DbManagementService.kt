@@ -18,15 +18,33 @@ import kotlin.sequences.Sequence
 
 @Serializable
 sealed class DbValue {
-    @Serializable @SerialName("null") object DbNull : DbValue()
-    @Serializable @SerialName("int") data class DbInt(val value: Int) : DbValue()
-    @Serializable @SerialName("long") data class DbLong(val value: Long) : DbValue()
-    @Serializable @SerialName("float") data class DbFloat(val value: Float) : DbValue()
-    @Serializable @SerialName("double") data class DbDouble(val value: Double) : DbValue()
-    @Serializable @SerialName("bool") data class DbBoolean(val value: Boolean) : DbValue()
-    @Serializable @SerialName("str") data class DbString(val value: String) : DbValue()
-    @Serializable @SerialName("uuid") data class DbUuid(val value: String) : DbValue()
-    @Serializable @SerialName("bytes") data class DbBytes(val value: ByteArray) : DbValue() {
+    @Serializable
+    @SerialName("null")
+    object DbNull : DbValue()
+    @Serializable
+    @SerialName("int")
+    data class DbInt(val value: Int) : DbValue()
+    @Serializable
+    @SerialName("long")
+    data class DbLong(val value: Long) : DbValue()
+    @Serializable
+    @SerialName("float")
+    data class DbFloat(val value: Float) : DbValue()
+    @Serializable
+    @SerialName("double")
+    data class DbDouble(val value: Double) : DbValue()
+    @Serializable
+    @SerialName("bool")
+    data class DbBoolean(val value: Boolean) : DbValue()
+    @Serializable
+    @SerialName("str")
+    data class DbString(val value: String) : DbValue()
+    @Serializable
+    @SerialName("uuid")
+    data class DbUuid(val value: String) : DbValue()
+    @Serializable
+    @SerialName("bytes")
+    data class DbBytes(val value: ByteArray) : DbValue() {
         override fun equals(other: Any?): Boolean {
             if (this === other) return true
             if (javaClass != other?.javaClass) return false

@@ -27,7 +27,7 @@ data class Quintuple<out A, out B, out C, out D, out E>(
     val third: C,
     val fourth: D,
     val fifth: E
-): Serializable {
+) : Serializable {
     override fun toString(): String = "($first, $second, $third, $fourth, $fifth)"
 }
 

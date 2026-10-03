@@ -27,11 +27,13 @@ import java.util.UUID
 class GamdlCredentialsContributionTest {
     private val admin = User(UUID.randomUUID(), "admin", passwordHash = "")
     private val translations = TranslationService(UiRegistry())
+
     init {
-        translations.forSource(UiRegistry.SERVER_SOURCE).registerBundlesFromResources(javaClass.classLoader, "i18n/gamdl", listOf("en", "de"))
+        translations.forSource(UiRegistry.SERVER_SOURCE)
+            .registerBundlesFromResources(javaClass.classLoader, "i18n/gamdl", listOf("en", "de"))
     }
 
-    private val gamdlService =mockk<GamdlService>(relaxed = true) { every { tokenFileExists() } returns true }
+    private val gamdlService = mockk<GamdlService>(relaxed = true) { every { tokenFileExists() } returns true }
     private val credentials = FakeCredentialProvider()
     private val contribution = GamdlCredentialsContribution(gamdlService, credentials)
 
@@ -58,7 +60,10 @@ class GamdlCredentialsContributionTest {
         credentials.markRemote(CredentialNames.IMPORTER_GAMDL)
         val card = contribution.render(scope()) as UiComponent.Card
         assertTrue(card.children.none { it is UiComponent.Form })
-        assertEquals("Managed by the credential server", card.children.filterIsInstance<UiComponent.Text>().single().text)
+        assertEquals(
+            "Managed by the credential server",
+            card.children.filterIsInstance<UiComponent.Text>().single().text
+        )
     }
 
     @Test

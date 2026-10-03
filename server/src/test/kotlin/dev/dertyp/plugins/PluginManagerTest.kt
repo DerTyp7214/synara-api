@@ -63,7 +63,7 @@ class PluginManagerTest : KoinTest {
                 single { credentialsFactory }
             })
         }
-        
+
         pluginManager = PluginManager(storageService, indexer)
     }
 
@@ -75,10 +75,10 @@ class PluginManagerTest : KoinTest {
     @Test
     fun `should not load disabled plugin and should unload its module`() {
         val disabledPlugin = mockk<ISynaraPlugin>(relaxed = true)
-        val testModule = module { 
+        val testModule = module {
             single { 42 }
         }
-        
+
         every { disabledPlugin.enabled } returns false
         every { disabledPlugin.getKoinModule() } returns testModule
         every { disabledPlugin.name } returns "Disabled Plugin"
@@ -86,9 +86,9 @@ class PluginManagerTest : KoinTest {
 
         val loadPluginMethod = pluginManager.javaClass.getDeclaredMethod("loadPlugin", ISynaraPlugin::class.java)
         loadPluginMethod.isAccessible = true
-        
+
         loadPluginMethod.invoke(pluginManager, disabledPlugin)
-        
+
         verify(exactly = 1) { disabledPlugin.getKoinModule() }
 
         assertEquals(0, pluginManager.getAllImporters().size)
@@ -102,24 +102,24 @@ class PluginManagerTest : KoinTest {
     @Test
     fun `should load enabled plugin and its module`() {
         val enabledPlugin = mockk<ISynaraPlugin>(relaxed = true)
-        val testModule = module { 
+        val testModule = module {
             single { "plugin-service" }
         }
-        
+
         every { enabledPlugin.enabled } returns true
         every { enabledPlugin.getKoinModule() } returns testModule
         every { enabledPlugin.apiVersion } returns 1
         every { enabledPlugin.id } returns "test"
         every { enabledPlugin.name } returns "Enabled Plugin"
-        
+
         val loadPluginMethod = pluginManager.javaClass.getDeclaredMethod("loadPlugin", ISynaraPlugin::class.java)
         loadPluginMethod.isAccessible = true
-        
+
         loadPluginMethod.invoke(pluginManager, enabledPlugin)
-        
+
         verify(exactly = 1) { enabledPlugin.getKoinModule() }
         verify(exactly = 1) { enabledPlugin.init(any()) }
-        
+
         assertEquals("plugin-service", getKoin().get<String>())
     }
 
@@ -137,7 +137,7 @@ class PluginManagerTest : KoinTest {
 
             override fun getKoinModule(): Module {
                 moduleRequested = true
-                return module { 
+                return module {
                     single { 1337 }
                 }
             }
@@ -145,9 +145,9 @@ class PluginManagerTest : KoinTest {
 
         val loadPluginMethod = pluginManager.javaClass.getDeclaredMethod("loadPlugin", ISynaraPlugin::class.java)
         loadPluginMethod.isAccessible = true
-        
+
         loadPluginMethod.invoke(pluginManager, externalPlugin)
-        
+
         assert(externalPlugin.moduleRequested)
         assert(externalPlugin.initCalled)
         assertEquals(1337, getKoin().get<Int>())

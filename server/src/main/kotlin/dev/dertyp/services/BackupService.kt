@@ -166,7 +166,10 @@ class BackupService(
                 val fileTrees = allAudioPaths.mapValues { (name, path) ->
                     currentPathIndex++
                     logger.debug("Generating file tree for {} ({})", name, path)
-                    onProgress(20.0 + (currentPathIndex.toDouble() / totalPaths) * 20.0, "Generating file tree for $name")
+                    onProgress(
+                        20.0 + (currentPathIndex.toDouble() / totalPaths) * 20.0,
+                        "Generating file tree for $name"
+                    )
                     generateFileTree(path, metadataMap)
                 }
                 val fileTreeBytes = compressZstd(Cbor.encodeToByteArray(fileTrees))
@@ -238,7 +241,7 @@ class BackupService(
 
     private suspend fun fetchSongMetadata(): Map<String, Pair<String?, String?>> = dbQuery {
         val result = mutableMapOf<String, Pair<String?, String?>>()
-        
+
         val songMetadata = SongTable
             .leftJoin(FlacInfoTable, onColumn = { SongTable.id }, otherColumn = { FlacInfoTable.songId })
             .leftJoin(PcmInfoTable, onColumn = { SongTable.id }, otherColumn = { PcmInfoTable.songId })
@@ -246,11 +249,12 @@ class BackupService(
             .selectAll()
             .map { row ->
                 val filePath = row[SongTable.filePath]
-                val hash = row.getOrNull(FlacInfoTable.audioMd5) ?: row.getOrNull(PcmInfoTable.audioMd5)?.takeIf { it.isNotBlank() }
+                val hash = row.getOrNull(FlacInfoTable.audioMd5) ?: row.getOrNull(PcmInfoTable.audioMd5)
+                    ?.takeIf { it.isNotBlank() }
                 val mbid = row.getOrNull(SongMusicBrainzTable.musicBrainzId)?.value?.toString()
                 filePath to (hash to mbid)
             }
-        
+
         result.putAll(songMetadata)
         result
     }

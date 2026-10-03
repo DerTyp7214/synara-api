@@ -39,7 +39,8 @@ class ScrobbleService : Service() {
     private val timers = ConcurrentHashMap<PlatformUUID, Job>()
     private val generation = ConcurrentHashMap<PlatformUUID, Long>()
 
-    private val nowPlayingChanges = MutableSharedFlow<Unit>(extraBufferCapacity = 8, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+    private val nowPlayingChanges =
+        MutableSharedFlow<Unit>(extraBufferCapacity = 8, onBufferOverflow = BufferOverflow.DROP_OLDEST)
 
     private fun nowPlayingChanged(userId: PlatformUUID) {
         nowPlayingChanges.tryEmit(Unit)
@@ -48,7 +49,9 @@ class ScrobbleService : Service() {
 
     suspend fun setNowPlaying(userId: PlatformUUID, songId: PlatformUUID) {
         val previous = nowPlaying[userId]?.takeIf { it.song.id == songId }
-        val positionMs = previous?.let { it.positionMs + if (it.playing) (System.currentTimeMillis() - it.anchorAt).coerceAtLeast(0) else 0L } ?: 0L
+        val positionMs =
+            previous?.let { it.positionMs + if (it.playing) (System.currentTimeMillis() - it.anchorAt).coerceAtLeast(0) else 0L }
+                ?: 0L
         reportPlayback(userId, PlaybackReport(songId, positionMs = positionMs))
     }
 
@@ -86,14 +89,15 @@ class ScrobbleService : Service() {
 
     private fun correctedPosition(report: PlaybackReport, now: Long): Long {
         val delay = report.sentAt?.let { now - it } ?: 0L
-        val corrected = if (report.playing && delay in 0..MAX_REPORT_DELAY_MS) report.positionMs + delay else report.positionMs
+        val corrected =
+            if (report.playing && delay in 0..MAX_REPORT_DELAY_MS) report.positionMs + delay else report.positionMs
         return corrected.coerceAtLeast(0)
     }
 
     fun currentNowPlaying(userId: PlatformUUID): NowPlayingSnapshot? {
         val entry = nowPlaying[userId] ?: return null
         val positionMs = entry.positionMs +
-            if (entry.playing) (System.currentTimeMillis() - entry.anchorAt).coerceAtLeast(0) else 0L
+                if (entry.playing) (System.currentTimeMillis() - entry.anchorAt).coerceAtLeast(0) else 0L
         return NowPlayingSnapshot(
             song = entry.song,
             startedAt = entry.firstStartedAt,
@@ -127,9 +131,11 @@ class ScrobbleService : Service() {
             .map { recentListens(userId, limit) }
             .distinctUntilChanged()
 
-    suspend fun recentArtists(userId: PlatformUUID, limit: Int): List<ListenedArtist> = listenService.recentArtists(userId, limit)
+    suspend fun recentArtists(userId: PlatformUUID, limit: Int): List<ListenedArtist> =
+        listenService.recentArtists(userId, limit)
 
-    suspend fun recentAlbums(userId: PlatformUUID, limit: Int): List<ListenedAlbum> = listenService.recentAlbums(userId, limit)
+    suspend fun recentAlbums(userId: PlatformUUID, limit: Int): List<ListenedAlbum> =
+        listenService.recentAlbums(userId, limit)
 
     @OptIn(FlowPreview::class)
     fun recentArtistsFlow(userId: PlatformUUID, limit: Int): Flow<List<ListenedArtist>> =

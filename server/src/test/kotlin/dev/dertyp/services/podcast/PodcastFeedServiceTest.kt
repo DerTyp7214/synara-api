@@ -174,6 +174,7 @@ class PodcastFeedServiceTest : KoinTest {
                 HttpStatusCode.OK,
                 headersOf(HttpHeaders.ContentType, "image/jpeg")
             )
+
             else -> respondError(HttpStatusCode.NotFound)
         }
     }
@@ -182,38 +183,39 @@ class PodcastFeedServiceTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `subscribe creates the show with metadata episodes artwork and the subscription`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        val userId = insertUser()
-        respondTo = servingFeed(feedXml(), etag = "\"v1\"", lastModified = "Tue, 10 Sep 2024 12:00:00 GMT")
+    fun `subscribe creates the show with metadata episodes artwork and the subscription`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val userId = insertUser()
+            respondTo = servingFeed(feedXml(), etag = "\"v1\"", lastModified = "Tue, 10 Sep 2024 12:00:00 GMT")
 
-        val show = feedService.subscribe(userId, feedAddress)
+            val show = feedService.subscribe(userId, feedAddress)
 
-        assertEquals("Example Show", show.title)
-        assertEquals("Example description", show.description)
-        assertEquals("Example Author", show.author)
-        assertEquals("en-us", show.language)
-        assertEquals(feedAddress, show.feedUrl)
-        assertEquals(artworkId, show.imageId)
-        assertTrue(show.subscribed)
+            assertEquals("Example Show", show.title)
+            assertEquals("Example description", show.description)
+            assertEquals("Example Author", show.author)
+            assertEquals("en-us", show.language)
+            assertEquals(feedAddress, show.feedUrl)
+            assertEquals(artworkId, show.imageId)
+            assertTrue(show.subscribed)
 
-        val row = storedShow(show.id)
-        assertEquals("\"v1\"", row.etag)
-        assertEquals("Tue, 10 Sep 2024 12:00:00 GMT", row.lastModified)
-        assertEquals(coverAddress, row.imageUrl)
-        assertNull(row.lastFetchError)
-        assertNotNull(row.lastFetchedAt)
+            val row = storedShow(show.id)
+            assertEquals("\"v1\"", row.etag)
+            assertEquals("Tue, 10 Sep 2024 12:00:00 GMT", row.lastModified)
+            assertEquals(coverAddress, row.imageUrl)
+            assertNull(row.lastFetchError)
+            assertNotNull(row.lastFetchedAt)
 
-        val episodes = podcastService.episodesOfShow(show.id)
-        assertEquals(listOf("guid-1"), episodes.map { it.guid })
-        assertEquals("First Episode", episodes.single().title)
-        assertEquals(600_000L, episodes.single().durationMs)
-        assertEquals("https://example.com/1.mp3", episodes.single().enclosureUrl)
+            val episodes = podcastService.episodesOfShow(show.id)
+            assertEquals(listOf("guid-1"), episodes.map { it.guid })
+            assertEquals("First Episode", episodes.single().title)
+            assertEquals(600_000L, episodes.single().durationMs)
+            assertEquals("https://example.com/1.mp3", episodes.single().enclosureUrl)
 
-        assertEquals(1, requestCount("/feed.xml"))
-        assertEquals(1, requestCount("/cover.jpg"))
-        assertEquals(listOf(show.id), podcastService.getSubscriptions(userId).map { it.id })
-    }
+            assertEquals(1, requestCount("/feed.xml"))
+            assertEquals(1, requestCount("/cover.jpg"))
+            assertEquals(listOf(show.id), podcastService.getSubscriptions(userId).map { it.id })
+        }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
@@ -257,34 +259,35 @@ class PodcastFeedServiceTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `refreshShow sends conditional headers and only touches lastFetchedAt on 304`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        val userId = insertUser()
-        respondTo = servingFeed(feedXml(), etag = "\"v1\"", lastModified = "Tue, 10 Sep 2024 12:00:00 GMT")
-        val show = feedService.subscribe(userId, feedAddress)
-        val before = storedShow(show.id)
-        ageShow(show.id, System.currentTimeMillis() - 600_000L)
+    fun `refreshShow sends conditional headers and only touches lastFetchedAt on 304`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val userId = insertUser()
+            respondTo = servingFeed(feedXml(), etag = "\"v1\"", lastModified = "Tue, 10 Sep 2024 12:00:00 GMT")
+            val show = feedService.subscribe(userId, feedAddress)
+            val before = storedShow(show.id)
+            ageShow(show.id, System.currentTimeMillis() - 600_000L)
 
-        requests.clear()
-        respondTo = { respond("", HttpStatusCode.NotModified) }
+            requests.clear()
+            respondTo = { respond("", HttpStatusCode.NotModified) }
 
-        val outcome = feedService.refreshShow(show.id)
+            val outcome = feedService.refreshShow(show.id)
 
-        assertFalse(outcome.changed)
-        assertNull(outcome.error)
-        assertEquals(0, outcome.inserted)
-        assertEquals(0, outcome.updated)
+            assertFalse(outcome.changed)
+            assertNull(outcome.error)
+            assertEquals(0, outcome.inserted)
+            assertEquals(0, outcome.updated)
 
-        val conditional = requests.single()
-        assertEquals("\"v1\"", conditional.headers[HttpHeaders.IfNoneMatch])
-        assertEquals("Tue, 10 Sep 2024 12:00:00 GMT", conditional.headers[HttpHeaders.IfModifiedSince])
+            val conditional = requests.single()
+            assertEquals("\"v1\"", conditional.headers[HttpHeaders.IfNoneMatch])
+            assertEquals("Tue, 10 Sep 2024 12:00:00 GMT", conditional.headers[HttpHeaders.IfModifiedSince])
 
-        val after = storedShow(show.id)
-        assertEquals("\"v1\"", after.etag)
-        assertNull(after.lastFetchError)
-        assertTrue((after.lastFetchedAt ?: 0) >= (before.lastFetchedAt ?: 0))
-        assertEquals(1, podcastService.episodesOfShow(show.id).size)
-    }
+            val after = storedShow(show.id)
+            assertEquals("\"v1\"", after.etag)
+            assertNull(after.lastFetchError)
+            assertTrue((after.lastFetchedAt ?: 0) >= (before.lastFetchedAt ?: 0))
+            assertEquals(1, podcastService.episodesOfShow(show.id).size)
+        }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)

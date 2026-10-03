@@ -35,7 +35,11 @@ class AudioTimelineCodecTest {
 
     @Test
     fun `envelope values outside the range are clamped`() {
-        val decoded = AudioTimelineCodec.decodeEnvelope(AudioTimelineCodec.encodeEnvelope(floatArrayOf(-200f, 50f), -70f, 0f), -70f, 0f)
+        val decoded = AudioTimelineCodec.decodeEnvelope(
+            AudioTimelineCodec.encodeEnvelope(floatArrayOf(-200f, 50f), -70f, 0f),
+            -70f,
+            0f
+        )
         assertEquals(-70f, decoded[0])
         assertEquals(0f, decoded[1])
     }

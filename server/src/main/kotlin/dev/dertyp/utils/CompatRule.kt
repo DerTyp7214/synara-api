@@ -63,9 +63,16 @@ object ReleaseVersionsCompat : CompatRule {
     override val feature = ClientFeature.RELEASE_VERSIONS
 
     override fun shapeRecentReleases(releases: List<RecentRelease>): List<RecentRelease> =
-        releases.flatMap { release -> listOf(release.copy(versions = emptyList())) + release.versions.map { it.copy(versions = emptyList()) } }
+        releases.flatMap { release ->
+            listOf(release.copy(versions = emptyList())) + release.versions.map {
+                it.copy(
+                    versions = emptyList()
+                )
+            }
+        }
 }
 
 object CompatRules {
-    val all: List<CompatRule> = listOf(AudioInfoCompat, DolbyAtmosCompat, TitleTagsCompat, ReleaseVersionsCompat, UiSchemaCompat())
+    val all: List<CompatRule> =
+        listOf(AudioInfoCompat, DolbyAtmosCompat, TitleTagsCompat, ReleaseVersionsCompat, UiSchemaCompat())
 }

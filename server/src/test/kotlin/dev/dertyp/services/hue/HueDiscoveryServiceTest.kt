@@ -64,7 +64,8 @@ class HueDiscoveryServiceTest {
                 })
             }
         }.toString()
-        val engine = MockEngine { respond(body, HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, "application/json")) }
+        val engine =
+            MockEngine { respond(body, HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, "application/json")) }
         every { httpClientFactory.api } returns HttpClient(engine) { apiDefaults() }
     }
 
@@ -74,7 +75,11 @@ class HueDiscoveryServiceTest {
             if (config == null) {
                 respondError(HttpStatusCode.ServiceUnavailable)
             } else {
-                respond(Json.encodeToString(HueBridgeConfig.serializer(), config), HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, "application/json"))
+                respond(
+                    Json.encodeToString(HueBridgeConfig.serializer(), config),
+                    HttpStatusCode.OK,
+                    headersOf(HttpHeaders.ContentType, "application/json")
+                )
             }
         }
         every { httpClientFactory.create(any<HttpClientEngineFactory<OkHttpConfig>>(), any(), any()) } answers {
@@ -93,7 +98,12 @@ class HueDiscoveryServiceTest {
         )
         probeAnswers { ip ->
             when (ip) {
-                "192.168.178.21" -> HueBridgeConfig(name = "Living room", bridgeid = "001788FFFE0000AA", modelid = "BSB002")
+                "192.168.178.21" -> HueBridgeConfig(
+                    name = "Living room",
+                    bridgeid = "001788FFFE0000AA",
+                    modelid = "BSB002"
+                )
+
                 "192.168.178.46" -> HueBridgeConfig(name = "Old", bridgeid = "001788FFFE0000AA", modelid = "BSB002")
                 else -> null
             }
@@ -128,7 +138,12 @@ class HueDiscoveryServiceTest {
     fun `candidates that never answer are excluded and no probe answer means empty`() = runBlocking {
         val service = HueDiscoveryService()
         mdnsAnswers { emptySet() }
-        cloudAnswers(listOf(HueBridgeCandidate(bridgeId = "x", ip = "10.0.0.1"), HueBridgeCandidate(bridgeId = "y", ip = "10.0.0.2")))
+        cloudAnswers(
+            listOf(
+                HueBridgeCandidate(bridgeId = "x", ip = "10.0.0.1"),
+                HueBridgeCandidate(bridgeId = "y", ip = "10.0.0.2")
+            )
+        )
         probeAnswers { null }
         assertTrue(service.discover(force = true).isEmpty())
     }

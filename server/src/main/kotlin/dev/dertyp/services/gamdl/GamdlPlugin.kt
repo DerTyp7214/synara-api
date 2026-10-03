@@ -35,5 +35,6 @@ class GamdlPlugin : IContentSourcePlugin, IUiPlugin, KoinComponent {
     override fun getImporter(): IImporter = gamdlService
     override fun getIndexer(): IPluginIndexer = indexer
 
-    override fun getUiContributions(): List<UiContribution> = listOf(GamdlCredentialsContribution(gamdlService, credentialProvider))
+    override fun getUiContributions(): List<UiContribution> =
+        listOf(GamdlCredentialsContribution(gamdlService, credentialProvider))
 }

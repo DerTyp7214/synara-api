@@ -66,18 +66,24 @@ class UserPlaylistService : PlaylistLibrary, IUserPlaylistService, Service() {
         where { UserPlaylistTable.id eq id }
     }
 
-    override suspend fun byIds(@LogParam("size") ids: List<UUID>): List<UserPlaylist> = queryPlaylists(0, Int.MAX_VALUE) {
-        where { UserPlaylistTable.id inList ids }
-    }.let { response ->
-        val playlistMap = response.data.associateBy { it.id }
-        ids.mapNotNull { playlistMap[it] }
-    }
+    override suspend fun byIds(@LogParam("size") ids: List<UUID>): List<UserPlaylist> =
+        queryPlaylists(0, Int.MAX_VALUE) {
+            where { UserPlaylistTable.id inList ids }
+        }.let { response ->
+            val playlistMap = response.data.associateBy { it.id }
+            ids.mapNotNull { playlistMap[it] }
+        }
 
     suspend fun byName(name: String, creator: UUID): UserPlaylist? = querySingle {
         where { (UserPlaylistTable.name eq name) and (UserPlaylistTable.creator eq creator) }
     }
 
-    override suspend fun rankedSearch(creator: UUID?, page: Int, pageSize: Int, query: String): PaginatedResponse<UserPlaylist> =
+    override suspend fun rankedSearch(
+        creator: UUID?,
+        page: Int,
+        pageSize: Int,
+        query: String
+    ): PaginatedResponse<UserPlaylist> =
         rankedPlaylistSearch(page, pageSize, query) {
             if (creator != null) andWhere { UserPlaylistTable.creator eq creator }
             else this
@@ -128,7 +134,10 @@ class UserPlaylistService : PlaylistLibrary, IUserPlaylistService, Service() {
     ): PaginatedResponse<UserPlaylist> {
         val (l, a, b) = ColorUtils.rgbToLab((color shr 16) and 0xFF, (color shr 8) and 0xFF, color and 0xFF)
         return queryPlaylists(page, pageSize, columnSet = {
-            leftJoin(ImageMetadataTable, onColumn = { UserPlaylistTable.imageId }, otherColumn = { ImageMetadataTable.imageId })
+            leftJoin(
+                ImageMetadataTable,
+                onColumn = { UserPlaylistTable.imageId },
+                otherColumn = { ImageMetadataTable.imageId })
         }) {
             filterByColor(l, a, b, range)
             orderByColorDistance(l, a, b)
@@ -351,7 +360,10 @@ class UserPlaylistService : PlaylistLibrary, IUserPlaylistService, Service() {
                 .selectAll()
                 .query()
             val countExpression = UserPlaylistTable.id.countDistinct()
-            val total = if (pageSize == Int.MAX_VALUE) null else Query(Slice(mainQuery.set.source, listOf(countExpression)), mainQuery.where)
+            val total = if (pageSize == Int.MAX_VALUE) null else Query(
+                Slice(mainQuery.set.source, listOf(countExpression)),
+                mainQuery.where
+            )
                 .first()[countExpression]
                 .toInt()
             val mainPlaylistRows = mainQuery

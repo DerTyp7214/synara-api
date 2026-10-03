@@ -8,7 +8,11 @@ import org.junit.jupiter.api.Test
 import java.util.Collections
 
 class ServiceLifecycleShutdownTest {
-    private class RecordingService(private val name: String, private val stopped: MutableList<String>, private val hang: Boolean = false) : Service() {
+    private class RecordingService(
+        private val name: String,
+        private val stopped: MutableList<String>,
+        private val hang: Boolean = false
+    ) : Service() {
         override suspend fun stopService() {
             if (hang) awaitCancellation()
             stopped += name
@@ -16,7 +20,8 @@ class ServiceLifecycleShutdownTest {
         }
     }
 
-    private class RecordingResource(private val name: String, private val stopped: MutableList<String>) : AutoCloseable {
+    private class RecordingResource(private val name: String, private val stopped: MutableList<String>) :
+        AutoCloseable {
         override fun close() {
             stopped += name
         }

@@ -118,7 +118,9 @@ class ImageRpcService(private val user: User?, private val imageService: ImageSe
     override suspend fun getCoverHashes(hashes: List<String>): Map<String, UUID> = imageService.getCoverHashes(hashes)
     override suspend fun getImageData(id: UUID, size: Int): ByteArray? = imageService.getImageData(id, size)
     override suspend fun createImage(bytes: ByteArray, origin: String): UUID = imageService.createImage(bytes, origin)
-    override suspend fun createBatch(images: List<InsertableImage>): Map<String, UUID> = imageService.createBatch(images)
+    override suspend fun createBatch(images: List<InsertableImage>): Map<String, UUID> =
+        imageService.createBatch(images)
+
     override suspend fun moveImages(oldPath: String, newPath: String): Int {
         if (user == null) throw IllegalStateException("No user found")
         if (!user.isAdmin) throw IllegalStateException("Only admins can move images")
@@ -548,7 +550,8 @@ class ImageService(
 
     suspend fun getUnanalyzedImageIds(): List<UUID> = dbQuery {
         val cutoff = System.currentTimeMillis() - ANALYSIS_RETRY_INTERVAL
-        val analyzedIds = ImageMetadataTable.select(ImageMetadataTable.imageId).map { it[ImageMetadataTable.imageId].value }.toSet()
+        val analyzedIds =
+            ImageMetadataTable.select(ImageMetadataTable.imageId).map { it[ImageMetadataTable.imageId].value }.toSet()
         ImageTable
             .select(ImageTable.id)
             .where { ImageTable.analysisUnrecoverable eq false }
@@ -598,7 +601,7 @@ class ImageService(
 
         val smallImage = scrImage.max(64, 64)
         val pixels = smallImage.pixels()
-        
+
         var rSum = 0L
         var gSum = 0L
         var bSum = 0L
@@ -678,6 +681,7 @@ class ImageService(
                 if (!file.exists()) null
                 else runCatching { AudioFileIO.read(file).coverImage }.getOrNull()
             }
+
             is OriginKind.Generated -> generatedImageRecoverer?.invoke(kind.target)
             OriginKind.Custom -> null
         }
@@ -692,7 +696,7 @@ class ImageService(
     @Suppress("SameParameterValue")
     private fun extractPalette(pixels: Array<ScrPixel>, k: Int): List<Int> {
         if (pixels.isEmpty()) return emptyList()
-        
+
         val samples = if (pixels.size > 1000) {
             val step = pixels.size / 1000
             (0 until 1000).map { pixels[it * step] }
@@ -700,18 +704,18 @@ class ImageService(
             pixels.toList()
         }
 
-        var centroids = samples.shuffled().take(k).map { 
+        var centroids = samples.shuffled().take(k).map {
             doubleArrayOf(it.red().toDouble(), it.green().toDouble(), it.blue().toDouble())
         }
 
         repeat(10) {
             val clusters = Array(centroids.size) { mutableListOf<DoubleArray>() }
-            
+
             for (pixel in samples) {
                 val p = doubleArrayOf(pixel.red().toDouble(), pixel.green().toDouble(), pixel.blue().toDouble())
                 var minDist = Double.MAX_VALUE
                 var closestIndex = 0
-                
+
                 for (i in centroids.indices) {
                     val dist = sqDist(p, centroids[i])
                     if (dist < minDist) {
@@ -721,7 +725,7 @@ class ImageService(
                 }
                 clusters[closestIndex].add(p)
             }
-            
+
             centroids = clusters.mapIndexed { i, cluster ->
                 if (cluster.isEmpty()) centroids[i]
                 else {
@@ -739,7 +743,7 @@ class ImageService(
             }
         }
 
-        return centroids.map { 
+        return centroids.map {
             val r = it[0].roundToInt().coerceIn(0, 255)
             val g = it[1].roundToInt().coerceIn(0, 255)
             val b = it[2].roundToInt().coerceIn(0, 255)
@@ -747,7 +751,12 @@ class ImageService(
         }
     }
 
-    fun generateMosaicImage(image: ByteArray, width: Int, height: Int, outputSize: Int): Flow<MosaicGenerationResponse> = channelFlow {
+    fun generateMosaicImage(
+        image: ByteArray,
+        width: Int,
+        height: Int,
+        outputSize: Int
+    ): Flow<MosaicGenerationResponse> = channelFlow {
         val maxTiles = 256 * 256
         if (width * height > maxTiles) throw IllegalArgumentException("Grid size too large (max 65,536 tiles)")
 
@@ -772,7 +781,10 @@ class ImageService(
 
         distinctPixels.forEachIndexed { idx, pixel ->
             if (idx % 10 == 0) {
-                sendProgress(0.1 * (idx.toDouble() / distinctPixels.size), "Finding matches (${idx}/${distinctPixels.size})...")
+                sendProgress(
+                    0.1 * (idx.toDouble() / distinctPixels.size),
+                    "Finding matches (${idx}/${distinctPixels.size})..."
+                )
             }
             val count = pixelRanks[pixel] ?: 0
             val (l, a, b) = ColorUtils.rgbToLab(pixel.r, pixel.g, pixel.b)
@@ -808,7 +820,11 @@ class ImageService(
                         if (path != null) {
                             val fullPath = Path(storageService.imagesPath, path)
                             if (fullPath.exists()) {
-                                val img = try { ImageIO.read(fullPath.toFile()) } catch (_: Exception) { null }
+                                val img = try {
+                                    ImageIO.read(fullPath.toFile())
+                                } catch (_: Exception) {
+                                    null
+                                }
                                 if (img != null) {
                                     val scaled = BufferedImage(tw, th, BufferedImage.TYPE_INT_RGB)
                                     val sg = scaled.createGraphics()
@@ -828,14 +844,17 @@ class ImageService(
 
         pixelWithRank.forEachIndexed { index, (pixel, rank) ->
             if (index % 10 == 0) {
-                sendProgress(0.45 + 0.4 * (index.toDouble() / pixelWithRank.size), "Rendering mosaic (${index}/${pixelWithRank.size})...")
+                sendProgress(
+                    0.45 + 0.4 * (index.toDouble() / pixelWithRank.size),
+                    "Rendering mosaic (${index}/${pixelWithRank.size})..."
+                )
             }
             val pool = idsByPixel[pixel] ?: emptyList()
             val imageId = if (pool.isNotEmpty()) pool[rank % pool.size] else null
 
             val ix = index % width
             val iy = index / width
-            
+
             val x = (ix * outputSize) / width
             val nextX = ((ix + 1) * outputSize) / width
             val currentTileWidth = nextX - x
@@ -886,6 +905,7 @@ class ImageService(
                     override fun imageProgress(source: ImageWriter?, percentageDone: Float) {
                         chunkedStream.updateProgress(percentageDone.toDouble() / 100.0)
                     }
+
                     override fun imageComplete(source: ImageWriter?) {}
                     override fun thumbnailStarted(source: ImageWriter?, imageIndex: Int, thumbnailIndex: Int) {}
                     override fun thumbnailProgress(source: ImageWriter?, percentageDone: Float) {}
@@ -907,7 +927,7 @@ class ImageService(
 
         @Suppress("AssignedValueIsNeverRead")
         mosaic = null
-        
+
         sendProgress(1.0, "Finished", isLast = true)
     }.flowOn(Dispatchers.IO)
 

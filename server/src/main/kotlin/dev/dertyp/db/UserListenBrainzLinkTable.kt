@@ -6,7 +6,8 @@ import java.time.Instant
 
 object UserListenBrainzLinkTable : Table("user_listenbrainz_link") {
     val userId = reference("userId", UserTable.id, onDelete = ReferenceOption.CASCADE)
-    val listenBrainzUserId = reference("listenBrainzUserId", ListenBrainzUserTable.id, onDelete = ReferenceOption.CASCADE)
+    val listenBrainzUserId =
+        reference("listenBrainzUserId", ListenBrainzUserTable.id, onDelete = ReferenceOption.CASCADE)
     val enabled = bool("enabled").default(true)
     val linkedAt = long("linkedAt").clientDefault { Instant.now().toEpochMilli() }
 

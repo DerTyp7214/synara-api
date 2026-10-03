@@ -57,7 +57,8 @@ abstract class MetadataService(
 
     override suspend fun getSupportedFeatures(type: MetadataType): Set<IMetadataService.Feature> = supportedFeatures
 
-    override suspend fun getAllMetadataTypes(features: Set<IMetadataService.Feature>): List<MetadataType> = MetadataType.all()
+    override suspend fun getAllMetadataTypes(features: Set<IMetadataService.Feature>): List<MetadataType> =
+        MetadataType.all()
 
     override suspend fun searchArtists(
         type: MetadataType,

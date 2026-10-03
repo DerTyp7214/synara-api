@@ -26,7 +26,8 @@ class EncryptStoredCredentials : CustomMigration() {
         dbQuery {
             for ((pluginId, settingKey) in CREDENTIAL_ROWS) {
                 val row = { (PluginSettingTable.pluginId eq pluginId) and (PluginSettingTable.key eq settingKey) }
-                val value = PluginSettingTable.selectAll().where(row).firstOrNull()?.get(PluginSettingTable.value) ?: continue
+                val value =
+                    PluginSettingTable.selectAll().where(row).firstOrNull()?.get(PluginSettingTable.value) ?: continue
                 if (cipher.isEncrypted(value)) continue
                 val plain = value.trim()
                 if (plain.isEmpty()) {

@@ -93,7 +93,8 @@ class CredentialServerClient(
         }
         if (!response.status.isSuccess()) {
             token = null
-            if (response.status == HttpStatusCode.Unauthorized || response.status == HttpStatusCode.Forbidden) _grants.value = emptyMap()
+            if (response.status == HttpStatusCode.Unauthorized || response.status == HttpStatusCode.Forbidden) _grants.value =
+                emptyMap()
             throw failure(response)
         }
         val parsed = CredentialJson.json.decodeFromString(TokenResponse.serializer(), response.bodyAsText())
@@ -142,7 +143,8 @@ class CredentialServerClient(
 
     private suspend fun authorized(call: suspend (String, String) -> HttpResponse): HttpResponse {
         val first = exchangeToken() ?: throw IllegalStateException("Credential server connection is not configured")
-        val baseUrl = _connection.value.baseUrl ?: throw IllegalStateException("Credential server connection is not configured")
+        val baseUrl =
+            _connection.value.baseUrl ?: throw IllegalStateException("Credential server connection is not configured")
         val response = call(first.accessToken, baseUrl)
         if (response.status != HttpStatusCode.Unauthorized) return response
         val renewed = exchangeToken(force = true) ?: return response

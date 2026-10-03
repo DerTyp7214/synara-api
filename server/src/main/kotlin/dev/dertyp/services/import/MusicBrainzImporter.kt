@@ -15,15 +15,16 @@ class MusicBrainzImporter(private val context: PluginContext) : IImporter, KoinC
     override val name: String = "MusicBrainz"
     override val pluginId: String = "musicbrainz"
     override lateinit var indexer: IPluginIndexer
-    
+
     private val mbService: MusicBrainzService by inject()
     private val pluginManager: PluginManager by inject()
 
     private val mbRecordingRegex = Regex("musicbrainz\\.org/recording/([a-f0-9-]+)", RegexOption.IGNORE_CASE)
     private val mbReleaseRegex = Regex("musicbrainz\\.org/release/([a-f0-9-]+)", RegexOption.IGNORE_CASE)
     private val mbReleaseGroupRegex = Regex("musicbrainz\\.org/release-group/([a-f0-9-]+)", RegexOption.IGNORE_CASE)
-    
-    private val lbRecordingRegex = Regex("listenbrainz\\.org/(?:player/)?recording/([a-f0-9-]+)", RegexOption.IGNORE_CASE)
+
+    private val lbRecordingRegex =
+        Regex("listenbrainz\\.org/(?:player/)?recording/([a-f0-9-]+)", RegexOption.IGNORE_CASE)
     private val lbReleaseRegex = Regex("listenbrainz\\.org/(?:player/)?release/([a-f0-9-]+)", RegexOption.IGNORE_CASE)
 
     override fun canHandle(url: String): Boolean {
@@ -53,10 +54,14 @@ class MusicBrainzImporter(private val context: PluginContext) : IImporter, KoinC
     ): ProcessExecutionResult {
         for (url in urls) {
             val (mbidStr, type) = parseUrl(url) ?: continue
-            val mbid = try { UUID.fromString(mbidStr) } catch (_: Exception) { continue }
-            
+            val mbid = try {
+                UUID.fromString(mbidStr)
+            } catch (_: Exception) {
+                continue
+            }
+
             onLiveOutput("Fetching relations for MusicBrainz $type: $mbid...")
-            
+
             val mbMetadata = when (type) {
                 Type.SONG -> context.metadataService.getTrackByMbId(IMetadataService.MetadataType.musicBrainz, mbid)
                 Type.ALBUM -> context.metadataService.getAlbumByMbId(IMetadataService.MetadataType.musicBrainz, mbid)
@@ -70,20 +75,22 @@ class MusicBrainzImporter(private val context: PluginContext) : IImporter, KoinC
                 Type.MIX -> mbService.fetchReleaseGroupById(mbid)?.relations
                 else -> null
             }
-            
+
             val externalUrls = relations?.mapNotNull { it.url?.resource } ?: emptyList()
-            
+
             val validUrls = externalUrls.filter { extUrl ->
                 pluginManager.getAllImporters().any { it.id != this.id && it.enabled && it.canHandle(extUrl) }
             }
-            
+
             if (validUrls.isNotEmpty()) {
                 onLiveOutput("Found ${validUrls.size} supported streaming links. Queueing for import...")
-                context.importService.addToQueue(UrlImportQueueEntry(
-                    urls = validUrls.toMutableList(), 
-                    byUser = userId,
-                    metadata = mbMetadata
-                ))
+                context.importService.addToQueue(
+                    UrlImportQueueEntry(
+                        urls = validUrls.toMutableList(),
+                        byUser = userId,
+                        metadata = mbMetadata
+                    )
+                )
             } else {
                 onLiveOutput("No supported streaming links found for $url")
             }
@@ -91,12 +98,29 @@ class MusicBrainzImporter(private val context: PluginContext) : IImporter, KoinC
         return ProcessExecutionResult(0, "MusicBrainz import process finished", "")
     }
 
-    override suspend fun getWrapper(type: Type, ids: List<String>, user: User) = IdsWrapper.from(type, ids.associateBy { UUID.randomUUID().mostSignificantBits })
-    override suspend fun importIds(ids: List<String>, type: Type, user: User, callback: suspend (List<String>) -> Unit) = Pair(false, emptyList<UserSong>())
-    override suspend fun importFavoriteCollection(type: ImportFavType, maxRetries: Int, aliveCheck: suspend () -> Boolean, userId: PlatformUUID?, onLiveOutput: suspend (String) -> Unit) = ProcessExecutionResult.EMPTY
+    override suspend fun getWrapper(type: Type, ids: List<String>, user: User) =
+        IdsWrapper.from(type, ids.associateBy { UUID.randomUUID().mostSignificantBits })
+
+    override suspend fun importIds(
+        ids: List<String>,
+        type: Type,
+        user: User,
+        callback: suspend (List<String>) -> Unit
+    ) = Pair(false, emptyList<UserSong>())
+
+    override suspend fun importFavoriteCollection(
+        type: ImportFavType,
+        maxRetries: Int,
+        aliveCheck: suspend () -> Boolean,
+        userId: PlatformUUID?,
+        onLiveOutput: suspend (String) -> Unit
+    ) = ProcessExecutionResult.EMPTY
+
     override suspend fun syncFavorites(user: User, onProgress: suspend (Double, String) -> Unit) {}
     override suspend fun search(query: String, count: Int) = emptyList<SearchResult>()
-    override suspend fun login(aliveCheck: suspend () -> Boolean, onLiveOutput: suspend (String) -> Unit) = ProcessExecutionResult.EMPTY
+    override suspend fun login(aliveCheck: suspend () -> Boolean, onLiveOutput: suspend (String) -> Unit) =
+        ProcessExecutionResult.EMPTY
+
     override suspend fun authorized(aliveCheck: suspend () -> Boolean): Boolean = true
     override fun tokenFileExists(): Boolean = true
 }

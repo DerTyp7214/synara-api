@@ -18,7 +18,10 @@ val mbArtistAliasSearchTable = MBArtistAliasTable.alias("mbArtistAliasSearch")
 
 fun ColumnSet.withMBArtistSearch(): ColumnSet = this
     .leftJoin(mbArtistSearchTable, { ArtistMusicBrainzTable.musicBrainzId }, { mbArtistSearchTable[MBArtistTable.id] })
-    .leftJoin(mbArtistAliasSearchTable, { mbArtistSearchTable[MBArtistTable.id] }, { mbArtistAliasSearchTable[MBArtistAliasTable.artistId] })
+    .leftJoin(
+        mbArtistAliasSearchTable,
+        { mbArtistSearchTable[MBArtistTable.id] },
+        { mbArtistAliasSearchTable[MBArtistAliasTable.artistId] })
 
 val mbArtistSearchColumns: List<Expression<out String?>> = listOf(
     mbArtistSearchTable[MBArtistTable.name],
@@ -29,7 +32,10 @@ val mbArtistSearchColumns: List<Expression<out String?>> = listOf(
 val mbReleaseSearchTable = MBReleaseTable.alias("mbReleaseSearch")
 
 fun ColumnSet.withMBReleaseSearch(): ColumnSet = this
-    .leftJoin(mbReleaseSearchTable, { AlbumMusicBrainzTable.musicBrainzId }, { mbReleaseSearchTable[MBReleaseTable.id] })
+    .leftJoin(
+        mbReleaseSearchTable,
+        { AlbumMusicBrainzTable.musicBrainzId },
+        { mbReleaseSearchTable[MBReleaseTable.id] })
 
 val mbReleaseSearchColumns: List<Expression<out String?>> = listOf(
     mbReleaseSearchTable[MBReleaseTable.title],
@@ -39,7 +45,10 @@ val mbReleaseSearchColumns: List<Expression<out String?>> = listOf(
 val mbRecordingSearchTable = MBRecordingTable.alias("mbRecordingSearch")
 
 fun ColumnSet.withMBRecordingSearch(): ColumnSet = this
-    .leftJoin(mbRecordingSearchTable, { SongMusicBrainzTable.musicBrainzId }, { mbRecordingSearchTable[MBRecordingTable.id] })
+    .leftJoin(
+        mbRecordingSearchTable,
+        { SongMusicBrainzTable.musicBrainzId },
+        { mbRecordingSearchTable[MBRecordingTable.id] })
 
 fun Query.paging(page: Int, pageSize: Int, offset: Int = 0) = apply {
     offset((pageSize * page).toLong())
@@ -48,7 +57,12 @@ fun Query.paging(page: Int, pageSize: Int, offset: Int = 0) = apply {
 
 fun utf8SortKey(text: Expression<String>): Expression<String> =
     if (Dialect.current() == Dialect.POSTGRES) {
-        CustomFunction("encode", TextColumnType(), CustomFunction("convert_to", TextColumnType(), text, stringLiteral("UTF8")), stringLiteral("hex"))
+        CustomFunction(
+            "encode",
+            TextColumnType(),
+            CustomFunction("convert_to", TextColumnType(), text, stringLiteral("UTF8")),
+            stringLiteral("hex")
+        )
     } else {
         CustomFunction("hex", TextColumnType(), text)
     }
@@ -72,7 +86,8 @@ infix fun Expression<*>.match(query: Expression<*>): Op<Boolean> = MatchOp(this,
 fun tsRank(vector: Expression<*>, query: Expression<*>): Function<Float> =
     CustomFunction("ts_rank_cd", FloatColumnType(), vector, query)
 
-class FloatMathOp(val operator: String, val expr1: Expression<*>, val expr2: Expression<*>) : ExpressionWithColumnType<Float>() {
+class FloatMathOp(val operator: String, val expr1: Expression<*>, val expr2: Expression<*>) :
+    ExpressionWithColumnType<Float>() {
     override val columnType = FloatColumnType()
     override fun toQueryBuilder(queryBuilder: QueryBuilder) {
         queryBuilder.append("(")
@@ -161,7 +176,10 @@ fun Query.rankedSearchQuery(
         }
     }
 
-    return RankedSearch(databaseRankedSearch(queryString, weights, columns, sortFallback, searchVectorColumn), redisTotal)
+    return RankedSearch(
+        databaseRankedSearch(queryString, weights, columns, sortFallback, searchVectorColumn),
+        redisTotal
+    )
 }
 
 private fun Query.databaseRankedSearch(
@@ -236,17 +254,25 @@ private fun Query.databaseRankedSearch(
 
         val exactScoreExpression = columns.mapIndexed { index, col ->
             val coalesceCol = CustomFunction("coalesce", VarCharColumnType(), col, stringLiteral(""))
-            
+
             val exactMatchOp = CustomFunction("lower", VarCharColumnType(), coalesceCol) eq queryString.lowercase()
-            val phraseMatchOp = MatchOp(toTsVector(coalesceCol), CustomFunction("phraseto_tsquery", VarCharColumnType(), stringLiteral("simple"), stringParam(queryString))) as Op<Boolean>
-            
+            val phraseMatchOp = MatchOp(
+                toTsVector(coalesceCol),
+                CustomFunction(
+                    "phraseto_tsquery",
+                    VarCharColumnType(),
+                    stringLiteral("simple"),
+                    stringParam(queryString)
+                )
+            ) as Op<Boolean>
+
             val exactMatchBonus = case()
                 .When(exactMatchOp, intLiteral(1000 * weights[index]))
                 .When(phraseMatchOp, intLiteral(100 * weights[index]))
                 .Else(intLiteral(0))
 
             var totalRankForCol: ExpressionWithColumnType<Float> = intLiteral(0).castTo(FloatColumnType())
-            
+
             for (token in positiveTokens) {
                 val tsQuery = toTsQuery("$token:*")
                 val vector = toTsVector(coalesceCol)
@@ -254,7 +280,7 @@ private fun Query.databaseRankedSearch(
                 val rankWeighted = FloatMathOp("*", rank, intLiteral(weights[index]))
                 totalRankForCol = FloatMathOp("+", totalRankForCol, rankWeighted)
             }
-            
+
             FloatMathOp("+", totalRankForCol, exactMatchBonus)
         }.reduce { acc, weightedRank ->
             FloatMathOp("+", acc, weightedRank)
@@ -324,9 +350,9 @@ private fun Query.databaseRankedSearch(
         val matches = columns.map { col ->
             col.isNull() or not(
                 (col ilike "$clean %") or
-                (col ilike "% $clean") or
-                (col ilike "% $clean %") or
-                (col eq stringLiteral(clean))
+                        (col ilike "% $clean") or
+                        (col ilike "% $clean %") or
+                        (col eq stringLiteral(clean))
             )
         }
 
@@ -424,7 +450,10 @@ suspend inline fun <A : Any, B : Any> Query.fetchBatchedResultsByKeyset(
                 query.adjustWhere {
                     val firstParam = QueryParameter(after.first, firstColumn.columnType)
                     val newOp = GreaterOp(firstColumn, firstParam) or
-                            (EqOp(firstColumn, firstParam) and GreaterOp(secondColumn, QueryParameter(after.second, secondColumn.columnType)))
+                            (EqOp(firstColumn, firstParam) and GreaterOp(
+                                secondColumn,
+                                QueryParameter(after.second, secondColumn.columnType)
+                            ))
                     if (this != null) this and newOp
                     else newOp
                 }

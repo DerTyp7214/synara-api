@@ -40,7 +40,7 @@ class PrefixLegacyTidalIdsTest {
         setup(dialect)
         val albumId = UUID.randomUUID()
         val legacyId = "12345"
-        
+
         transaction(database) {
             AlbumTable.insert {
                 it[id] = albumId
@@ -60,7 +60,7 @@ class PrefixLegacyTidalIdsTest {
         transaction(database) {
             val updated = AlbumTable.selectAll().where { AlbumTable.id eq albumId }.single()
             assertEquals("tidal:12345", updated[AlbumTable.originalId])
-            
+
             val modernCount = AlbumTable.selectAll().where { AlbumTable.originalId eq "tidal:67890" }.count()
             assertEquals(1L, modernCount)
         }

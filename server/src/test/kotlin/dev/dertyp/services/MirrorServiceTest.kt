@@ -29,7 +29,7 @@ class MirrorServiceTest : KoinTest {
     private lateinit var imageService: ImageService
     private lateinit var storageService: StorageService
     private lateinit var userService: UserService
-    
+
     private lateinit var service: MirrorService
 
     @BeforeEach
@@ -55,7 +55,7 @@ class MirrorServiceTest : KoinTest {
                 single { userService }
             })
         }
-        
+
         service = MirrorService()
     }
 
@@ -71,7 +71,7 @@ class MirrorServiceTest : KoinTest {
         every { storageService.playlistsPath } returns "/playlists"
         every { storageService.customAudioPath } returns "/custom"
         every { storageService.secondaryTracksPaths } returns listOf("/extra")
-        
+
         val paths = service.getServerPaths()
         assertEquals("/tracks", paths.tracksPath)
         assertEquals("/albums", paths.albumsPath)
@@ -95,7 +95,7 @@ class MirrorServiceTest : KoinTest {
     fun `getSongs should delegate to songService`() = runBlocking {
         val song = mockk<Song>()
         every { songService.allSongsFlow() } returns flowOf(song)
-        
+
         val songs = service.getSongs().toList()
         assertEquals(1, songs.size)
         assertEquals(song, songs[0])
@@ -105,7 +105,7 @@ class MirrorServiceTest : KoinTest {
     fun `getArtists should delegate to artistService`() = runBlocking {
         val artist = mockk<Artist>()
         every { artistService.allArtistsFlow() } returns flowOf(artist)
-        
+
         val artists = service.getArtists().toList()
         assertEquals(1, artists.size)
         assertEquals(artist, artists[0])
@@ -116,7 +116,7 @@ class MirrorServiceTest : KoinTest {
         val songId = UUID.randomUUID()
         val data = byteArrayOf(1, 2, 3)
         every { songService.streamSong(songId, 0, any()) } returns flowOf(data)
-        
+
         val result = service.getSongData(songId, -1).toList()
         assertEquals(1, result.size)
         assertEquals(data.toList(), result[0].toList())
@@ -127,7 +127,7 @@ class MirrorServiceTest : KoinTest {
         val songId = UUID.randomUUID()
         val data = byteArrayOf(4, 5, 6)
         every { songService.downloadSong(songId, 320, 0, any()) } returns flowOf(data)
-        
+
         val result = service.getSongData(songId, 320).toList()
         assertEquals(1, result.size)
         assertEquals(data.toList(), result[0].toList())

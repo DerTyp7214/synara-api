@@ -50,7 +50,8 @@ class ListenService : Service() {
 
     private val changeNotifier by inject<ChangeNotifier>()
 
-    private val _listenChanges = MutableSharedFlow<Unit>(extraBufferCapacity = 8, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+    private val _listenChanges =
+        MutableSharedFlow<Unit>(extraBufferCapacity = 8, onBufferOverflow = BufferOverflow.DROP_OLDEST)
     val listenChanges: SharedFlow<Unit> = _listenChanges.asSharedFlow()
 
     private fun listensChanged(userIds: Collection<PlatformUUID>) {
@@ -178,7 +179,12 @@ class ListenService : Service() {
 
         val artistRows = SongArtistTable
             .join(ArtistTable, JoinType.INNER, onColumn = SongArtistTable.artistId, otherColumn = ArtistTable.id)
-            .join(ArtistMusicBrainzTable, JoinType.LEFT, onColumn = SongArtistTable.artistId, otherColumn = ArtistMusicBrainzTable.artistId)
+            .join(
+                ArtistMusicBrainzTable,
+                JoinType.LEFT,
+                onColumn = SongArtistTable.artistId,
+                otherColumn = ArtistMusicBrainzTable.artistId
+            )
             .select(ArtistTable.name, ArtistMusicBrainzTable.musicBrainzId)
             .where { SongArtistTable.songId eq songId }
             .orderBy(SongArtistTable.position to SortOrder.ASC, SongArtistTable.artistId to SortOrder.ASC)
@@ -295,7 +301,13 @@ class ListenService : Service() {
             val owner = listenOwnerPredicate(userId)
 
             ListenTable
-                .select(ListenTable.songId, ListenTable.listenedAt, ListenTable.recordingMbid, ListenTable.isrcs, ListenTable.listenSource)
+                .select(
+                    ListenTable.songId,
+                    ListenTable.listenedAt,
+                    ListenTable.recordingMbid,
+                    ListenTable.isrcs,
+                    ListenTable.listenSource
+                )
                 .where { owner }
                 .andWhere { ListenTable.songId.isNotNull() }
                 .orderBy(ListenTable.listenedAt to SortOrder.DESC)
@@ -323,7 +335,14 @@ class ListenService : Service() {
         }
 
         val songs = songService.byIds(kept.map { it.songId }.distinct(), userId).associateBy { it.id }
-        return kept.mapNotNull { row -> songs[row.songId]?.let { ListenedSong(song = it, listenedAt = row.listenedAt) } }
+        return kept.mapNotNull { row ->
+            songs[row.songId]?.let {
+                ListenedSong(
+                    song = it,
+                    listenedAt = row.listenedAt
+                )
+            }
+        }
     }
 
     suspend fun recentArtists(userId: PlatformUUID, limit: Int): List<ListenedArtist> {
@@ -332,7 +351,12 @@ class ListenService : Service() {
         val lastListened = dbQuery {
             val lastListen = ListenTable.listenedAt.max().alias("lastListen")
             ListenTable
-                .join(SongArtistTable, JoinType.INNER, onColumn = ListenTable.songId, otherColumn = SongArtistTable.songId)
+                .join(
+                    SongArtistTable,
+                    JoinType.INNER,
+                    onColumn = ListenTable.songId,
+                    otherColumn = SongArtistTable.songId
+                )
                 .select(SongArtistTable.artistId, lastListen)
                 .where { listenOwnerPredicate(userId) }
                 .andWhere { ListenTable.songId.isNotNull() }

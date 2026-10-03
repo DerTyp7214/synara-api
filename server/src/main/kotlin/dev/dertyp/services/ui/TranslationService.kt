@@ -11,7 +11,11 @@ class TranslationService(private val registry: UiRegistry) {
     private val bundles = ConcurrentHashMap<String, ConcurrentHashMap<String, Map<String, String>>>()
 
     init {
-        forSource(UiRegistry.SERVER_SOURCE).registerBundlesFromResources(javaClass.classLoader, "i18n/core", CORE_LOCALES)
+        forSource(UiRegistry.SERVER_SOURCE).registerBundlesFromResources(
+            javaClass.classLoader,
+            "i18n/core",
+            CORE_LOCALES
+        )
     }
 
     fun registerBundle(source: String, locale: String, messages: Map<String, String>) {
@@ -30,7 +34,8 @@ class TranslationService(private val registry: UiRegistry) {
         val normalized = normalize(locale)
         val language = normalized.substringBefore('-')
         val chain = listOf(normalized, language, DEFAULT_LOCALE).distinct()
-        val sources = if (source == UiRegistry.SERVER_SOURCE) listOf(source) else listOf(source, UiRegistry.SERVER_SOURCE)
+        val sources =
+            if (source == UiRegistry.SERVER_SOURCE) listOf(source) else listOf(source, UiRegistry.SERVER_SOURCE)
         for (s in sources) {
             val perLocale = bundles[s] ?: continue
             for (l in chain) {

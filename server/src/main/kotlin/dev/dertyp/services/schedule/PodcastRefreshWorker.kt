@@ -31,7 +31,12 @@ class PodcastRefreshWorker : Worker("PodcastRefreshWorker") {
         runParallel(
             items = shows,
             baseThreadCount = 3,
-            onItemProcessed = { processed -> onProgress(processed * 60.0 / total, "Refreshed $processed of ${shows.size} feeds") }
+            onItemProcessed = { processed ->
+                onProgress(
+                    processed * 60.0 / total,
+                    "Refreshed $processed of ${shows.size} feeds"
+                )
+            }
         ) { show ->
             val outcome = feedService.refreshShow(show.id, force = true)
             when {

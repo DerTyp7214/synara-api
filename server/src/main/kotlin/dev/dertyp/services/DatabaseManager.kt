@@ -53,7 +53,7 @@ class DatabaseManager(private val config: ServerConfig) : Closeable {
         val hikariConfig = HikariConfig().apply {
             jdbcUrl = dbUrl
             driverClassName = dbDriver
-            
+
             if (Dialect.ofDriver(dbDriver) == Dialect.SQLITE) {
                 maximumPoolSize = 1
                 addDataSourceProperty("journal_mode", "WAL")

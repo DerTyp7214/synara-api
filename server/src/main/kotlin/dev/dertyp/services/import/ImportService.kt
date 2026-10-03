@@ -356,7 +356,8 @@ class ImportService(
     override suspend fun addToQueue(vararg importEntries: ImportQueueEntry) {
         val pending = pendingEntries()
         val existingUrls = pending.filterIsInstance<UrlImportQueueEntry>().flatMap { it.urls }.toMutableList()
-        val existingTypes = pending.filterIsInstance<FavouriteImportQueueEntry>().map { it.favoriteType }.toMutableList()
+        val existingTypes =
+            pending.filterIsInstance<FavouriteImportQueueEntry>().map { it.favoriteType }.toMutableList()
 
         currentImport?.let {
             when (val entry = it.importQueueEntry) {
@@ -386,7 +387,12 @@ class ImportService(
         )
 
         entries.forEach { entry ->
-            jobService.enqueue(JOB_KIND, titleOf(entry), entry.byUser, summaryOf(entry), payload = entry) { runEntry(entry, this) }
+            jobService.enqueue(JOB_KIND, titleOf(entry), entry.byUser, summaryOf(entry), payload = entry) {
+                runEntry(
+                    entry,
+                    this
+                )
+            }
         }
     }
 
@@ -581,48 +587,49 @@ class ImportService(
 
         val handle = Job()
         jobService.enqueue(FAVOURITES_KIND, "Favorites sync", user.id, user.username) {
-          try {
-            val latestFavSync = favSyncService.getLatestFavSync(user, ISyncService.SyncServiceType.tidal)
+            try {
+                val latestFavSync = favSyncService.getLatestFavSync(user, ISyncService.SyncServiceType.tidal)
 
-            val idMap = ConcurrentHashMap<String, ISyncService.LikedSong>()
+                val idMap = ConcurrentHashMap<String, ISyncService.LikedSong>()
 
-            val songs = service.getLikedSongs { songs ->
-                latestFavSync == null || songs.none { it.addedAt < latestFavSync.syncedAt }
-            }
-                .filter { song -> latestFavSync == null || song.addedAt > latestFavSync.syncedAt }
-                .onEach { idMap[it.id] = it }
+                val songs = service.getLikedSongs { songs ->
+                    latestFavSync == null || songs.none { it.addedAt < latestFavSync.syncedAt }
+                }
+                    .filter { song -> latestFavSync == null || song.addedAt > latestFavSync.syncedAt }
+                    .onEach { idMap[it.id] = it }
 
-            val idsToFetch = songs.map { it.id }
-            val tidalImporter = pluginManager.getAllImporters().find { it.id == "tidal" } ?:
-                                 pluginManager.getAllImporters().find { it.canHandle("https://tidal.com") }
-            val (_, songsToLike) = importIds(
-                ids = idsToFetch,
-                type = Type.SONG,
-                user = user,
-                importerId = tidalImporter?.id
-            ) {
-                for (song in songService.byOriginalIds(it, user.id)) {
-                    if (!(song.isFavourite ?: false)) {
-                        val addedAt = idMap[song.originalUrl.tidalId()]?.addedAt?.toInstant()
-                        songService.setLikedReturning(song.id, user.id, true, addedAt)
+                val idsToFetch = songs.map { it.id }
+                val tidalImporter =
+                    pluginManager.getAllImporters().find { it.id == "tidal" } ?: pluginManager.getAllImporters()
+                        .find { it.canHandle("https://tidal.com") }
+                val (_, songsToLike) = importIds(
+                    ids = idsToFetch,
+                    type = Type.SONG,
+                    user = user,
+                    importerId = tidalImporter?.id
+                ) {
+                    for (song in songService.byOriginalIds(it, user.id)) {
+                        if (!(song.isFavourite ?: false)) {
+                            val addedAt = idMap[song.originalUrl.tidalId()]?.addedAt?.toInstant()
+                            songService.setLikedReturning(song.id, user.id, true, addedAt)
+                        }
                     }
                 }
-            }
 
-            logger.info("[${user.username}] Liking existing songs")
+                logger.info("[${user.username}] Liking existing songs")
 
-            for (song in songsToLike) {
-                songService.setLikedReturning(song.id, user.id, true)
-            }
+                for (song in songsToLike) {
+                    songService.setLikedReturning(song.id, user.id, true)
+                }
 
-            syncMutex.withLock {
-                syncMap[user.id]?.store(false)
-            }
+                syncMutex.withLock {
+                    syncMap[user.id]?.store(false)
+                }
 
-            favSyncService.insertFavSync(user, ISyncService.SyncServiceType.tidal, Date.from(Instant.now()))
+                favSyncService.insertFavSync(user, ISyncService.SyncServiceType.tidal, Date.from(Instant.now()))
 
-            logger.info("[${user.username}] Sync favourite songs finished.")
-          } finally {
+                logger.info("[${user.username}] Sync favourite songs finished.")
+            } finally {
                 syncMutex.withLock {
                     syncMap[user.id]?.store(false)
                 }

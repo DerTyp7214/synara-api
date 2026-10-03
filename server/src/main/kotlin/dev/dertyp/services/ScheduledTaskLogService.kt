@@ -140,7 +140,11 @@ class ScheduledTaskLogService : Service() {
                     endTime = it[ScheduledTaskLogTable.endTime],
                     status = it[ScheduledTaskLogTable.status],
                     message = it[ScheduledTaskLogTable.message],
-                    details = it[ScheduledTaskLogTable.details]?.let { bytes -> AppCbor.decodeFromByteArray<Map<String, String>>(bytes) },
+                    details = it[ScheduledTaskLogTable.details]?.let { bytes ->
+                        AppCbor.decodeFromByteArray<Map<String, String>>(
+                            bytes
+                        )
+                    },
                     progress = it[ScheduledTaskLogTable.progress],
                     logs = try {
                         ApplicationScope.json.decodeFromString<List<String>>(it[ScheduledTaskLogTable.logs])

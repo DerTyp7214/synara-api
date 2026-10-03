@@ -22,7 +22,10 @@ class ImporterCredentialMaterializer(private val provider: CredentialProvider) {
         if (name == null || !provider.isManagedRemotely(name)) return block()
         return locks.computeIfAbsent(name) { Mutex() }.withLock {
             val resolved = provider.resolve(name) as? ResolvedCredential.Files
-                ?: throw CredentialUnavailableException(name, "Credential $name is managed by the credential server but is unavailable right now")
+                ?: throw CredentialUnavailableException(
+                    name,
+                    "Credential $name is managed by the credential server but is unavailable right now"
+                )
             val snapshot = materialize(resolved, targets)
             try {
                 block()
@@ -42,7 +45,12 @@ class ImporterCredentialMaterializer(private val provider: CredentialProvider) {
         return targets.mapValues { (_, target) -> read(target) }
     }
 
-    private suspend fun syncBack(name: String, resolved: ResolvedCredential.Files, targets: Map<String, File>, snapshot: Map<String, ByteArray?>) {
+    private suspend fun syncBack(
+        name: String,
+        resolved: ResolvedCredential.Files,
+        targets: Map<String, File>,
+        snapshot: Map<String, ByteArray?>
+    ) {
         val changed = targets.mapNotNull { (role, target) ->
             val current = read(target) ?: return@mapNotNull null
             if (snapshot[role]?.contentEquals(current) == true) null

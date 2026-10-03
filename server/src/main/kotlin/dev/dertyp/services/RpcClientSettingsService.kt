@@ -16,13 +16,22 @@ class RpcClientSettingsService(
     private val user: User,
     private val clientSettingsService: ClientSettingsService
 ) : IClientSettingsService {
-    override suspend fun getSettings(scope: ClientSettingScope, device: String?, includeDeleted: Boolean): List<ClientSetting> =
+    override suspend fun getSettings(
+        scope: ClientSettingScope,
+        device: String?,
+        includeDeleted: Boolean
+    ): List<ClientSetting> =
         clientSettingsService.getSettings(user.id, scope, device, includeDeleted)
 
     override suspend fun getSnapshot(deviceId: String): ClientSettingsSnapshot =
         clientSettingsService.getSnapshot(user.id, deviceId)
 
-    override suspend fun getChanges(scope: ClientSettingScope, sinceVersion: Long, device: String?, limit: Int): ClientSettingsChanges =
+    override suspend fun getChanges(
+        scope: ClientSettingScope,
+        sinceVersion: Long,
+        device: String?,
+        limit: Int
+    ): ClientSettingsChanges =
         clientSettingsService.getChanges(user.id, scope, device, sinceVersion, limit)
 
     override suspend fun setSettings(
@@ -32,10 +41,21 @@ class RpcClientSettingsService(
         force: Boolean
     ): ClientSettingsWriteResult = clientSettingsService.setSettings(user.id, scope, device, entries, force)
 
-    override suspend fun getHistory(scope: ClientSettingScope, key: String, device: String?, limit: Int): List<ClientSetting> =
+    override suspend fun getHistory(
+        scope: ClientSettingScope,
+        key: String,
+        device: String?,
+        limit: Int
+    ): List<ClientSetting> =
         clientSettingsService.getHistory(user.id, scope, device, key, limit)
 
-    override suspend fun restore(scope: ClientSettingScope, key: String, version: Long, device: String?, force: Boolean): ClientSettingsWriteResult =
+    override suspend fun restore(
+        scope: ClientSettingScope,
+        key: String,
+        version: Long,
+        device: String?,
+        force: Boolean
+    ): ClientSettingsWriteResult =
         clientSettingsService.restore(user.id, scope, device, key, version, force)
 
     override fun observeSettings(): Flow<ClientSettingsChange> = clientSettingsService.observe(user.id)

@@ -101,12 +101,22 @@ class RpcPodcastService(
 
     override suspend fun importEpisode(episodeId: UUID): PodcastEpisode {
         importService.importEpisode(episodeId)
-        return requireNotNull(podcastService.getEpisode(user.id, episodeId)) { "Podcast episode $episodeId does not exist" }
+        return requireNotNull(
+            podcastService.getEpisode(
+                user.id,
+                episodeId
+            )
+        ) { "Podcast episode $episodeId does not exist" }
     }
 
     override suspend fun removeImport(episodeId: UUID): PodcastEpisode {
         importService.removeImport(episodeId)
-        return requireNotNull(podcastService.getEpisode(user.id, episodeId)) { "Podcast episode $episodeId does not exist" }
+        return requireNotNull(
+            podcastService.getEpisode(
+                user.id,
+                episodeId
+            )
+        ) { "Podcast episode $episodeId does not exist" }
     }
 
     override suspend fun deleteShow(showId: UUID): Boolean = maintenanceService.deleteShow(showId)

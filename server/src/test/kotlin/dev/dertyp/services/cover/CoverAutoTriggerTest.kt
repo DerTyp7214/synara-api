@@ -53,7 +53,12 @@ class CoverAutoTriggerTest {
         assertEquals(0, enqueued.size)
         delay(400)
         assertEquals(2, enqueued.size)
-        assertEquals(setOf(CoverTarget(CoverTargetType.PLAYLIST, playlist), CoverTarget(CoverTargetType.COLLECTION, collection)), enqueued.toSet())
+        assertEquals(
+            setOf(
+                CoverTarget(CoverTargetType.PLAYLIST, playlist),
+                CoverTarget(CoverTargetType.COLLECTION, collection)
+            ), enqueued.toSet()
+        )
         assertEquals(0, trigger.pendingCount())
         trigger.stopService()
     }

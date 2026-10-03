@@ -127,7 +127,10 @@ class MusicBrainzService : Service() {
         }
     }
 
-    suspend fun searchMb(song: BaseSong, priority: HttpClientPriority = HttpClientPriority.NORMAL): MusicBrainzRecording? {
+    suspend fun searchMb(
+        song: BaseSong,
+        priority: HttpClientPriority = HttpClientPriority.NORMAL
+    ): MusicBrainzRecording? {
         if (song.isrc != null && song.isrc!!.length >= 10 && song.isrc!!.uppercase() != "ISRC") {
             try {
                 val searchResponse = retryableGet<MusicBrainzSearchResponse>("$mbBaseUrl/recording", priority) {
@@ -194,7 +197,10 @@ class MusicBrainzService : Service() {
         }
     }
 
-    suspend fun searchAlbumMb(album: Album, priority: HttpClientPriority = HttpClientPriority.NORMAL): MusicBrainzRelease? {
+    suspend fun searchAlbumMb(
+        album: Album,
+        priority: HttpClientPriority = HttpClientPriority.NORMAL
+    ): MusicBrainzRelease? {
         if (album.barcode != null && album.barcode!!.length >= 8 && album.barcode!!.uppercase() != "BARCODE") {
             try {
                 val response = retryableGet<MusicBrainzReleaseSearchResponse>("$mbBaseUrl/release", priority) {
@@ -337,7 +343,10 @@ class MusicBrainzService : Service() {
         }
     }
 
-    suspend fun searchArtistMb(artist: Artist, priority: HttpClientPriority = HttpClientPriority.NORMAL): MusicBrainzArtist? {
+    suspend fun searchArtistMb(
+        artist: Artist,
+        priority: HttpClientPriority = HttpClientPriority.NORMAL
+    ): MusicBrainzArtist? {
         val queryParts = mutableListOf<String>()
         queryParts.add("artist:\"${artist.name}\"")
         queryParts.add("artistaccent:\"${artist.name}\"")
@@ -366,7 +375,12 @@ class MusicBrainzService : Service() {
         }
     }
 
-    suspend fun searchArtistsMbPaged(query: String, page: Int, pageSize: Int, priority: HttpClientPriority = HttpClientPriority.NORMAL): PaginatedResponse<MusicBrainzArtist> {
+    suspend fun searchArtistsMbPaged(
+        query: String,
+        page: Int,
+        pageSize: Int,
+        priority: HttpClientPriority = HttpClientPriority.NORMAL
+    ): PaginatedResponse<MusicBrainzArtist> {
         try {
             val id = query.toPlatformUUID()
             val artist = fetchArtistById(id, priority)
@@ -413,7 +427,10 @@ class MusicBrainzService : Service() {
         )
     }
 
-    suspend fun fetchReleaseGroups(artistMbId: PlatformUUID, priority: HttpClientPriority = HttpClientPriority.NORMAL): List<MusicBrainzReleaseGroup> {
+    suspend fun fetchReleaseGroups(
+        artistMbId: PlatformUUID,
+        priority: HttpClientPriority = HttpClientPriority.NORMAL
+    ): List<MusicBrainzReleaseGroup> {
         return try {
             val response = retryableGet<MusicBrainzReleaseGroupResponse>("$mbBaseUrl/release-group", priority) {
                 parameter("artist", artistMbId.toString())
@@ -431,7 +448,10 @@ class MusicBrainzService : Service() {
         }
     }
 
-    suspend fun fetchArtistById(mbId: PlatformUUID, priority: HttpClientPriority = HttpClientPriority.NORMAL): MusicBrainzArtist? {
+    suspend fun fetchArtistById(
+        mbId: PlatformUUID,
+        priority: HttpClientPriority = HttpClientPriority.NORMAL
+    ): MusicBrainzArtist? {
         return try {
             retryableGet<MusicBrainzArtist>("$mbBaseUrl/artist/$mbId", priority) {
                 parameter("inc", "tags+genres+aliases+url-rels")
@@ -446,7 +466,10 @@ class MusicBrainzService : Service() {
         }
     }
 
-    suspend fun fetchReleaseGroupById(mbId: PlatformUUID, priority: HttpClientPriority = HttpClientPriority.NORMAL): MusicBrainzReleaseGroup? {
+    suspend fun fetchReleaseGroupById(
+        mbId: PlatformUUID,
+        priority: HttpClientPriority = HttpClientPriority.NORMAL
+    ): MusicBrainzReleaseGroup? {
         return try {
             retryableGet<MusicBrainzReleaseGroup>("$mbBaseUrl/release-group/$mbId", priority) {
                 parameter("inc", "tags+genres+url-rels")
@@ -461,7 +484,10 @@ class MusicBrainzService : Service() {
         }
     }
 
-    suspend fun fetchReleasesByArtist(artistMbId: PlatformUUID, priority: HttpClientPriority = HttpClientPriority.NORMAL): List<MusicBrainzRelease> {
+    suspend fun fetchReleasesByArtist(
+        artistMbId: PlatformUUID,
+        priority: HttpClientPriority = HttpClientPriority.NORMAL
+    ): List<MusicBrainzRelease> {
         return try {
             val response = retryableGet<MusicBrainzReleaseResponse>("$mbBaseUrl/release", priority) {
                 parameter("artist", artistMbId.toString())
@@ -479,7 +505,10 @@ class MusicBrainzService : Service() {
         }
     }
 
-    suspend fun fetchReleasesByReleaseGroup(releaseGroupId: PlatformUUID, priority: HttpClientPriority = HttpClientPriority.NORMAL): List<MusicBrainzRelease> {
+    suspend fun fetchReleasesByReleaseGroup(
+        releaseGroupId: PlatformUUID,
+        priority: HttpClientPriority = HttpClientPriority.NORMAL
+    ): List<MusicBrainzRelease> {
         return try {
             val response = retryableGet<MusicBrainzReleaseResponse>("$mbBaseUrl/release", priority) {
                 parameter("release-group", releaseGroupId.toString())
@@ -535,7 +564,10 @@ class MusicBrainzService : Service() {
         }
     }
 
-    suspend fun fetchRecordingById(mbId: PlatformUUID, priority: HttpClientPriority = HttpClientPriority.NORMAL): MusicBrainzRecording? {
+    suspend fun fetchRecordingById(
+        mbId: PlatformUUID,
+        priority: HttpClientPriority = HttpClientPriority.NORMAL
+    ): MusicBrainzRecording? {
         return try {
             retryableGet<MusicBrainzRecording>("$mbBaseUrl/recording/$mbId", priority) {
                 parameter("inc", "artist-credits+releases+tags+genres+url-rels+isrcs")
@@ -550,7 +582,10 @@ class MusicBrainzService : Service() {
         }
     }
 
-    suspend fun fetchRecordingByIsrc(isrc: String, priority: HttpClientPriority = HttpClientPriority.NORMAL): MusicBrainzRecording? {
+    suspend fun fetchRecordingByIsrc(
+        isrc: String,
+        priority: HttpClientPriority = HttpClientPriority.NORMAL
+    ): MusicBrainzRecording? {
         if (isrc.length < 10 || isrc.uppercase() == "ISRC") return null
 
         return try {
@@ -578,10 +613,11 @@ class MusicBrainzService : Service() {
         return mbIds.chunked(50).flatMap { chunk ->
             try {
                 val mbidsString = chunk.joinToString(",")
-                val response = retryableGet<JsonObject>("https://api.listenbrainz.org/1/metadata/recording/", priority) {
-                    parameter("recording_mbids", mbidsString)
-                    parameter("inc", "artist release tag")
-                } ?: return@flatMap emptyList()
+                val response =
+                    retryableGet<JsonObject>("https://api.listenbrainz.org/1/metadata/recording/", priority) {
+                        parameter("recording_mbids", mbidsString)
+                        parameter("inc", "artist release tag")
+                    } ?: return@flatMap emptyList()
 
                 response.mapNotNull { (mbid, data) ->
                     try {
@@ -613,7 +649,8 @@ class MusicBrainzService : Service() {
 
         val artistCredits = (artistData?.get("artists") as? JsonArray)?.mapNotNull { artistElement ->
             val art = artistElement as? JsonObject ?: return@mapNotNull null
-            val artistId = art["artist_mbid"]?.jsonPrimitive?.contentOrNull?.let { UUID.fromString(it) } ?: return@mapNotNull null
+            val artistId =
+                art["artist_mbid"]?.jsonPrimitive?.contentOrNull?.let { UUID.fromString(it) } ?: return@mapNotNull null
             MusicBrainzArtistCredit(
                 name = art["name"]?.jsonPrimitive?.contentOrNull,
                 artist = MusicBrainzArtist(
@@ -681,7 +718,10 @@ class MusicBrainzService : Service() {
         )
     }
 
-    suspend fun fetchReleaseById(mbId: PlatformUUID, priority: HttpClientPriority = HttpClientPriority.NORMAL): MusicBrainzRelease? {
+    suspend fun fetchReleaseById(
+        mbId: PlatformUUID,
+        priority: HttpClientPriority = HttpClientPriority.NORMAL
+    ): MusicBrainzRelease? {
         return try {
             retryableGet<MusicBrainzRelease>("$mbBaseUrl/release/$mbId", priority) {
                 parameter("inc", "artist-credits+recordings+isrcs+release-groups+tags+genres+media+url-rels")
@@ -696,7 +736,10 @@ class MusicBrainzService : Service() {
         }
     }
 
-    suspend fun fetchRecordingsByReleaseGroup(releaseGroupId: PlatformUUID, priority: HttpClientPriority = HttpClientPriority.NORMAL): List<MusicBrainzRecording> {
+    suspend fun fetchRecordingsByReleaseGroup(
+        releaseGroupId: PlatformUUID,
+        priority: HttpClientPriority = HttpClientPriority.NORMAL
+    ): List<MusicBrainzRecording> {
         return try {
             val response = retryableGet<MusicBrainzSearchResponse>("$mbBaseUrl/recording", priority) {
                 parameter("release-group", releaseGroupId.toString())
@@ -720,7 +763,10 @@ class CachedMusicBrainzService(
 ) : IMusicBrainzService {
     override suspend fun getArtist(id: PlatformUUID) = getArtist(id, HttpClientPriority.HIGH)
 
-    suspend fun getArtist(id: PlatformUUID, priority: HttpClientPriority = HttpClientPriority.NORMAL): MusicBrainzArtist? {
+    suspend fun getArtist(
+        id: PlatformUUID,
+        priority: HttpClientPriority = HttpClientPriority.NORMAL
+    ): MusicBrainzArtist? {
         val cached = musicBrainzCacheService.getArtist(id)
         if (cached != null && cached.fetchedAt != 0L) return cached
         return musicBrainzService.fetchArtistById(id, priority)?.also {
@@ -730,7 +776,10 @@ class CachedMusicBrainzService(
 
     override suspend fun getRecording(id: PlatformUUID) = getRecording(id, HttpClientPriority.HIGH)
 
-    suspend fun getRecording(id: PlatformUUID, priority: HttpClientPriority = HttpClientPriority.NORMAL): MusicBrainzRecording? {
+    suspend fun getRecording(
+        id: PlatformUUID,
+        priority: HttpClientPriority = HttpClientPriority.NORMAL
+    ): MusicBrainzRecording? {
         val cached = musicBrainzCacheService.getRecording(id)
         if (cached != null && cached.fetchedAt != 0L && !cached.title.isNullOrBlank() && !cached.artistCredit.isNullOrEmpty()) return cached
         return musicBrainzService.fetchRecordingById(id, priority)?.also {
@@ -740,7 +789,10 @@ class CachedMusicBrainzService(
 
     override suspend fun getRecordingByIsrc(isrc: String) = getRecordingByIsrc(isrc, HttpClientPriority.HIGH)
 
-    suspend fun getRecordingByIsrc(isrc: String, priority: HttpClientPriority = HttpClientPriority.NORMAL): MusicBrainzRecording? {
+    suspend fun getRecordingByIsrc(
+        isrc: String,
+        priority: HttpClientPriority = HttpClientPriority.NORMAL
+    ): MusicBrainzRecording? {
         val cached = musicBrainzCacheService.getRecordingByIsrc(isrc)
         if (cached != null && cached.fetchedAt != 0L && !cached.title.isNullOrBlank() && !cached.artistCredit.isNullOrEmpty()) return cached
         return musicBrainzService.fetchRecordingByIsrc(isrc, priority)?.also {
@@ -750,7 +802,10 @@ class CachedMusicBrainzService(
 
     override suspend fun getRelease(id: PlatformUUID) = getRelease(id, HttpClientPriority.HIGH)
 
-    suspend fun getRelease(id: PlatformUUID, priority: HttpClientPriority = HttpClientPriority.NORMAL): MusicBrainzRelease? {
+    suspend fun getRelease(
+        id: PlatformUUID,
+        priority: HttpClientPriority = HttpClientPriority.NORMAL
+    ): MusicBrainzRelease? {
         val cached = musicBrainzCacheService.getRelease(id)
         if (cached != null && cached.fetchedAt != 0L && cached.media?.isNotEmpty() == true) {
             val hasTracks = cached.media!!.firstOrNull()?.tracks?.isNotEmpty() == true
@@ -763,7 +818,10 @@ class CachedMusicBrainzService(
 
     override suspend fun getReleaseGroup(id: PlatformUUID) = getReleaseGroup(id, HttpClientPriority.HIGH)
 
-    suspend fun getReleaseGroup(id: PlatformUUID, priority: HttpClientPriority = HttpClientPriority.NORMAL): MusicBrainzReleaseGroup? {
+    suspend fun getReleaseGroup(
+        id: PlatformUUID,
+        priority: HttpClientPriority = HttpClientPriority.NORMAL
+    ): MusicBrainzReleaseGroup? {
         val cached = musicBrainzCacheService.getReleaseGroup(id)
         if (cached != null && cached.fetchedAt != 0L) return cached
         return musicBrainzService.fetchReleaseGroupById(id, priority)?.also {
@@ -771,9 +829,13 @@ class CachedMusicBrainzService(
         } ?: cached
     }
 
-    override suspend fun getReleasesByReleaseGroup(id: PlatformUUID): List<MusicBrainzRelease> = getReleasesByReleaseGroup(id, HttpClientPriority.HIGH)
+    override suspend fun getReleasesByReleaseGroup(id: PlatformUUID): List<MusicBrainzRelease> =
+        getReleasesByReleaseGroup(id, HttpClientPriority.HIGH)
 
-    suspend fun getReleasesByReleaseGroup(id: PlatformUUID, priority: HttpClientPriority = HttpClientPriority.NORMAL): List<MusicBrainzRelease> {
+    suspend fun getReleasesByReleaseGroup(
+        id: PlatformUUID,
+        priority: HttpClientPriority = HttpClientPriority.NORMAL
+    ): List<MusicBrainzRelease> {
         val cached = musicBrainzCacheService.getReleasesByReleaseGroup(id)
         if (cached.isNotEmpty()) return cached
         return musicBrainzService.fetchReleasesByReleaseGroup(id, priority).onEach {
@@ -781,23 +843,38 @@ class CachedMusicBrainzService(
         }
     }
 
-    override suspend fun searchRecording(title: String, artists: List<String>) = searchRecording(title, artists, HttpClientPriority.HIGH)
+    override suspend fun searchRecording(title: String, artists: List<String>) =
+        searchRecording(title, artists, HttpClientPriority.HIGH)
 
-    suspend fun searchRecording(title: String, artists: List<String>, priority: HttpClientPriority = HttpClientPriority.NORMAL): MusicBrainzRecording? {
+    suspend fun searchRecording(
+        title: String,
+        artists: List<String>,
+        priority: HttpClientPriority = HttpClientPriority.NORMAL
+    ): MusicBrainzRecording? {
         val result = musicBrainzService.searchRecordingMb(title, artists, priority) ?: return null
         return getRecording(result.id, priority)
     }
 
-    override suspend fun searchRelease(title: String, artists: List<String>) = searchRelease(title, artists, HttpClientPriority.HIGH)
+    override suspend fun searchRelease(title: String, artists: List<String>) =
+        searchRelease(title, artists, HttpClientPriority.HIGH)
 
-    suspend fun searchRelease(title: String, artists: List<String>, priority: HttpClientPriority = HttpClientPriority.NORMAL): MusicBrainzRelease? {
+    suspend fun searchRelease(
+        title: String,
+        artists: List<String>,
+        priority: HttpClientPriority = HttpClientPriority.NORMAL
+    ): MusicBrainzRelease? {
         val result = musicBrainzService.searchReleaseMb(title, artists, priority) ?: return null
         return getRelease(result.id, priority)
     }
 
-    override suspend fun searchReleaseByBarcode(barcode: String, artists: List<String>) = searchReleaseByBarcode(barcode, artists, HttpClientPriority.HIGH)
+    override suspend fun searchReleaseByBarcode(barcode: String, artists: List<String>) =
+        searchReleaseByBarcode(barcode, artists, HttpClientPriority.HIGH)
 
-    suspend fun searchReleaseByBarcode(barcode: String, artists: List<String>, priority: HttpClientPriority = HttpClientPriority.NORMAL): MusicBrainzRelease? {
+    suspend fun searchReleaseByBarcode(
+        barcode: String,
+        artists: List<String>,
+        priority: HttpClientPriority = HttpClientPriority.NORMAL
+    ): MusicBrainzRelease? {
         val result = musicBrainzService.searchReleaseByBarcodeMb(barcode, artists, priority) ?: return null
         return getRelease(result.id, priority)
     }

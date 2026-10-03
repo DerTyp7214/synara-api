@@ -77,7 +77,7 @@ class PopulateCreditedArtistNamesTest : KoinTest {
 
         val duoId = UUID.randomUUID()
         val duoMbId = UUID.randomUUID()
-        
+
         val soloId = UUID.randomUUID()
         val soloMbId = UUID.randomUUID()
 
@@ -90,7 +90,9 @@ class PopulateCreditedArtistNamesTest : KoinTest {
             ArtistTable.insert { it[id] = duoId; it[name] = "Yung Kafa & Kücük Efendi" }
             ArtistTable.insert { it[id] = soloId; it[name] = "Solo Artist" }
 
-            MBArtistTable.insert { it[id] = duoMbId; it[name] = "Yung Kafa & Kücük Efendi"; it[sortName] = "Yung Kafa & Kücük Efendi" }
+            MBArtistTable.insert {
+                it[id] = duoMbId; it[name] = "Yung Kafa & Kücük Efendi"; it[sortName] = "Yung Kafa & Kücük Efendi"
+            }
             MBArtistTable.insert { it[id] = soloMbId; it[name] = "Solo Artist"; it[sortName] = "Solo Artist" }
 
             ArtistMusicBrainzTable.insert { it[artistId] = duoId; it[musicBrainzId] = duoMbId }
@@ -156,7 +158,10 @@ class PopulateCreditedArtistNamesTest : KoinTest {
             val duoAlbumRow = AlbumArtistTable.selectAll()
                 .where { (AlbumArtistTable.albumId eq albumId) and (AlbumArtistTable.artistId eq duoId) }
                 .single()
-            assertNotNull(duoAlbumRow[AlbumArtistTable.creditedAliasId], "duo should have a credited alias on the album")
+            assertNotNull(
+                duoAlbumRow[AlbumArtistTable.creditedAliasId],
+                "duo should have a credited alias on the album"
+            )
         }
     }
 }

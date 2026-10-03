@@ -23,14 +23,15 @@ class SpotifyService(
         limit: Int,
         priority: HttpClientPriority
     ): List<IMetadataService.Track> {
-        val searchResponse = ApiClient.queueInstance.safeQueuedGet<SearchResponse>("https://api.spotify.com/v1/search", priority) {
-            val token = getAccessToken()
-            header(HttpHeaders.Authorization, "${token.tokenType} ${token.accessToken}")
-            header(HttpHeaders.ContentType, ContentType.Application.Json)
-            parameter("q", query)
-            parameter("type", "track")
-            parameter("limit", limit)
-        }
+        val searchResponse =
+            ApiClient.queueInstance.safeQueuedGet<SearchResponse>("https://api.spotify.com/v1/search", priority) {
+                val token = getAccessToken()
+                header(HttpHeaders.Authorization, "${token.tokenType} ${token.accessToken}")
+                header(HttpHeaders.ContentType, ContentType.Application.Json)
+                parameter("q", query)
+                parameter("type", "track")
+                parameter("limit", limit)
+            }
 
         return searchResponse?.tracks?.items?.map { track ->
             IMetadataService.Track(
@@ -54,14 +55,15 @@ class SpotifyService(
         isrc: String,
         priority: HttpClientPriority
     ): IMetadataService.Track? {
-        val searchResponse = ApiClient.queueInstance.safeQueuedGet<SearchResponse>("https://api.spotify.com/v1/search", priority) {
-            val token = getAccessToken()
-            header(HttpHeaders.Authorization, "${token.tokenType} ${token.accessToken}")
-            header(HttpHeaders.ContentType, ContentType.Application.Json)
-            parameter("q", "isrc:$isrc")
-            parameter("type", "track")
-            parameter("limit", 1)
-        }
+        val searchResponse =
+            ApiClient.queueInstance.safeQueuedGet<SearchResponse>("https://api.spotify.com/v1/search", priority) {
+                val token = getAccessToken()
+                header(HttpHeaders.Authorization, "${token.tokenType} ${token.accessToken}")
+                header(HttpHeaders.ContentType, ContentType.Application.Json)
+                parameter("q", "isrc:$isrc")
+                parameter("type", "track")
+                parameter("limit", 1)
+            }
 
         val track = searchResponse?.tracks?.items?.firstOrNull() ?: return null
 
@@ -85,14 +87,15 @@ class SpotifyService(
         barcode: String,
         priority: HttpClientPriority
     ): IMetadataService.Album? {
-        val searchResponse = ApiClient.queueInstance.safeQueuedGet<SearchResponse>("https://api.spotify.com/v1/search", priority) {
-            val token = getAccessToken()
-            header(HttpHeaders.Authorization, "${token.tokenType} ${token.accessToken}")
-            header(HttpHeaders.ContentType, ContentType.Application.Json)
-            parameter("q", "upc:$barcode")
-            parameter("type", "album")
-            parameter("limit", 1)
-        }
+        val searchResponse =
+            ApiClient.queueInstance.safeQueuedGet<SearchResponse>("https://api.spotify.com/v1/search", priority) {
+                val token = getAccessToken()
+                header(HttpHeaders.Authorization, "${token.tokenType} ${token.accessToken}")
+                header(HttpHeaders.ContentType, ContentType.Application.Json)
+                parameter("q", "upc:$barcode")
+                parameter("type", "album")
+                parameter("limit", 1)
+            }
 
         val album = searchResponse?.albums?.items?.firstOrNull() ?: return null
 
@@ -117,14 +120,15 @@ class SpotifyService(
         limit: Int,
         priority: HttpClientPriority
     ): List<IMetadataService.Artist> {
-        val searchResponse = ApiClient.queueInstance.safeQueuedGet<SearchResponse>("https://api.spotify.com/v1/search", priority) {
-            val token = getAccessToken()
-            header(HttpHeaders.Authorization, "${token.tokenType} ${token.accessToken}")
-            header(HttpHeaders.ContentType, ContentType.Application.Json)
-            parameter("q", query)
-            parameter("type", "artist")
-            parameter("limit", limit)
-        }
+        val searchResponse =
+            ApiClient.queueInstance.safeQueuedGet<SearchResponse>("https://api.spotify.com/v1/search", priority) {
+                val token = getAccessToken()
+                header(HttpHeaders.Authorization, "${token.tokenType} ${token.accessToken}")
+                header(HttpHeaders.ContentType, ContentType.Application.Json)
+                parameter("q", query)
+                parameter("type", "artist")
+                parameter("limit", limit)
+            }
 
         return searchResponse?.artists?.items?.map { artist ->
             IMetadataService.Artist(
@@ -149,14 +153,15 @@ class SpotifyService(
         includeTracks: Boolean,
         priority: HttpClientPriority
     ): List<IMetadataService.Album> {
-        val searchResponse = ApiClient.queueInstance.safeQueuedGet<SearchResponse>("https://api.spotify.com/v1/search", priority) {
-            val token = getAccessToken()
-            header(HttpHeaders.Authorization, "${token.tokenType} ${token.accessToken}")
-            header(HttpHeaders.ContentType, ContentType.Application.Json)
-            parameter("q", query)
-            parameter("type", "album")
-            parameter("limit", limit)
-        }
+        val searchResponse =
+            ApiClient.queueInstance.safeQueuedGet<SearchResponse>("https://api.spotify.com/v1/search", priority) {
+                val token = getAccessToken()
+                header(HttpHeaders.Authorization, "${token.tokenType} ${token.accessToken}")
+                header(HttpHeaders.ContentType, ContentType.Application.Json)
+                parameter("q", query)
+                parameter("type", "album")
+                parameter("limit", limit)
+            }
 
         return searchResponse?.albums?.items?.map { album ->
             IMetadataService.Album(

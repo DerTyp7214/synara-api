@@ -65,7 +65,14 @@ class MetadataServiceCredentialTest {
 
     @Test
     fun `the access token is resolved through the credential provider`() = runBlocking {
-        credentialProvider.put(ResolvedCredential.AccessToken(CredentialNames.SPOTIFY_API, "provider-token", "Bearer", null))
+        credentialProvider.put(
+            ResolvedCredential.AccessToken(
+                CredentialNames.SPOTIFY_API,
+                "provider-token",
+                "Bearer",
+                null
+            )
+        )
 
         spotify.searchArtists("test", 1)
 
@@ -87,7 +94,14 @@ class MetadataServiceCredentialTest {
     fun `supported features follow credential availability`() {
         assertTrue(spotify.supportedFeatures.isEmpty())
 
-        credentialProvider.put(ResolvedCredential.AccessToken(CredentialNames.SPOTIFY_API, "provider-token", "Bearer", null))
+        credentialProvider.put(
+            ResolvedCredential.AccessToken(
+                CredentialNames.SPOTIFY_API,
+                "provider-token",
+                "Bearer",
+                null
+            )
+        )
         assertTrue(spotify.supported())
         assertTrue(IMetadataService.Feature.GET_TRACK_BY_ISRC in spotify.supportedFeatures)
 

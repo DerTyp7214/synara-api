@@ -55,7 +55,9 @@ interface ProbeApi {
 
 private object ProbeDefaults : ProbeApi {
     override suspend fun find(id: UUID): Probe? = throw CapturedArguments(id)
-    override suspend fun page(query: String, page: Int, pageSize: Int): String = throw CapturedArguments(query, page, pageSize)
+    override suspend fun page(query: String, page: Int, pageSize: Int): String =
+        throw CapturedArguments(query, page, pageSize)
+
     override suspend fun secret(): Probe = throw CapturedArguments()
     override suspend fun explode(): Probe = throw CapturedArguments()
     override suspend fun touch(): Unit = throw CapturedArguments()
@@ -131,7 +133,8 @@ class RestCallTest {
                         val pageSize = queryParam("pageSize", RestConvert.int)
                         val result = restInvoke {
                             val requiredQuery = required("query", query)
-                            val defaults = if (page == null || pageSize == null) captureDefaults { ProbeDefaults.page(requiredQuery) } else null
+                            val defaults =
+                                if (page == null || pageSize == null) captureDefaults { ProbeDefaults.page(requiredQuery) } else null
                             service.page(requiredQuery, page ?: defaults!!.arg(1), pageSize ?: defaults!!.arg(2))
                         } ?: return@probe
                         respondJson(result)
@@ -199,7 +202,8 @@ class RestCallTest {
                         val offset = queryParam("offset", RestConvert.long)
                         if (respondFile("stream", listOf(probeId, offset))) return@probe
                         val result = restInvoke {
-                            val defaults = if (offset == null) captureDefaults { ProbeDefaults.stream(probeId) } else null
+                            val defaults =
+                                if (offset == null) captureDefaults { ProbeDefaults.stream(probeId) } else null
                             service.stream(probeId, offset ?: defaults!!.arg(1))
                         } ?: return@probe
                         respondBytesFlow(result)
@@ -295,7 +299,10 @@ class RestCallTest {
     @Test
     fun `json query parameter decodes or fails with 400`() = testApplication {
         setUpProbeApplication()
-        assertEquals("""{"name":"x","count":2}""", client.get("/probe/json?probe=%7B%22name%22%3A%22x%22%2C%22count%22%3A2%7D").text())
+        assertEquals(
+            """{"name":"x","count":2}""",
+            client.get("/probe/json?probe=%7B%22name%22%3A%22x%22%2C%22count%22%3A2%7D").text()
+        )
         assertEquals("null", client.get("/probe/json").text())
         val bad = client.get("/probe/json?probe=%7Bnope")
         assertEquals(HttpStatusCode.BadRequest, bad.status)

@@ -71,8 +71,9 @@ class RemoveForeignKeyOrphans : CustomMigration() {
 
     private fun orphans(key: ForeignKeyConstraint): Op<Boolean> {
         val parent = key.targetTable.alias("fk_parent")
-        val match = key.references.map<Column<*>, Column<*>, Op<Boolean>> { (from, target) -> EqOp(parent[target], from) }
-            .reduce { a, b -> a and b }
+        val match =
+            key.references.map<Column<*>, Column<*>, Op<Boolean>> { (from, target) -> EqOp(parent[target], from) }
+                .reduce { a, b -> a and b }
         val present = key.from.map<Column<*>, Op<Boolean>> { it.isNotNull() }.reduce { a, b -> a and b }
         return present and notExists(parent.select(parent[key.target.first()]).where { match })
     }

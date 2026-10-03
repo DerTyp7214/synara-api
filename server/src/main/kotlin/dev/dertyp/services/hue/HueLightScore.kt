@@ -220,7 +220,8 @@ object HueLightScore {
 
     private fun nextAt(beats: List<Int>, index: Int, durationMs: Long, beatMs: Int?): Long {
         val at = beats[index]
-        return beats.getOrNull(index + 1)?.toLong() ?: (if (durationMs > at) durationMs else at + (beatMs ?: 500).toLong())
+        return beats.getOrNull(index + 1)?.toLong() ?: (if (durationMs > at) durationMs else at + (beatMs
+            ?: 500).toLong())
     }
 
     private fun kinds(size: Int, phase: Int): Array<KeyframeKind> =

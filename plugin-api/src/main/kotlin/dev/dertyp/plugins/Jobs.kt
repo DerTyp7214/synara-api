@@ -30,7 +30,14 @@ interface JobContext {
 }
 
 interface Jobs {
-    suspend fun enqueue(kind: String, title: String, user: UserInfo?, summary: String = "", run: suspend JobContext.() -> Unit): PlatformUUID
+    suspend fun enqueue(
+        kind: String,
+        title: String,
+        user: UserInfo?,
+        summary: String = "",
+        run: suspend JobContext.() -> Unit
+    ): PlatformUUID
+
     fun jobs(kind: String? = null, user: UserInfo? = null): Flow<List<JobInfo>>
     fun log(jobId: PlatformUUID): Flow<String>
     suspend fun cancel(jobId: PlatformUUID): Boolean

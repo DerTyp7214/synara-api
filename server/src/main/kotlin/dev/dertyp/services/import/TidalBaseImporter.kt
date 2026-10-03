@@ -151,7 +151,8 @@ abstract class TidalBaseImporter(
             async {
                 val parsed = parseUrl(url) ?: return@async null
                 if (parsed.second != Type.SONG) return@async null
-                val tidalTrack = metadataService.getTrackById(parsed.first, HttpClientPriority.HIGH) ?: return@async null
+                val tidalTrack =
+                    metadataService.getTrackById(parsed.first, HttpClientPriority.HIGH) ?: return@async null
                 url to tidalTrack
             }
         }.awaitAll().filterNotNull().toMap()
@@ -196,13 +197,17 @@ abstract class TidalBaseImporter(
             }
 
             if (providedAlbum == null && mbRelease == null && metadata is IMetadataService.Album) {
-                val mbid = try { UUID.fromString(metadata.id) } catch (_: Exception) { null }
+                val mbid = try {
+                    UUID.fromString(metadata.id)
+                } catch (_: Exception) {
+                    null
+                }
                 if (mbid != null) {
                     onLiveOutput("Using provided MusicBrainz metadata for album: ${metadata.title}")
                     mbRelease = musicBrainzService.getRelease(mbid)
                 }
             }
-            
+
             if (providedAlbum == null && mbRelease == null && !albumTitle.isNullOrBlank()) {
                 onLiveOutput("Searching MusicBrainz for album: $albumTitle")
                 mbRelease = musicBrainzService.searchRelease(albumTitle, albumArtists)
@@ -234,7 +239,11 @@ abstract class TidalBaseImporter(
                 var finalDiscNumber = provided?.discNumber
 
                 if (metadata is IMetadataService.Track) {
-                    val mbid = try { UUID.fromString(metadata.id) } catch (_: Exception) { null }
+                    val mbid = try {
+                        UUID.fromString(metadata.id)
+                    } catch (_: Exception) {
+                        null
+                    }
                     if (mbid != null) {
                         onLiveOutput("Using provided MusicBrainz metadata for track: ${metadata.title}")
                         finalMbId = metadata.id
@@ -258,7 +267,9 @@ abstract class TidalBaseImporter(
                 if (mbTrack != null) {
                     onLiveOutput("Found track '${tidalTrack.title}' in matched release '${mbRelease.title}'")
                     finalTitle = mbTrack.title ?: finalTitle
-                    finalArtist = mbTrack.recording?.artistCredit?.joinToString(indexer.artistDelimiter) { it.name ?: it.artist?.name ?: "" } ?: finalArtist
+                    finalArtist = mbTrack.recording?.artistCredit?.joinToString(indexer.artistDelimiter) {
+                        it.name ?: it.artist?.name ?: ""
+                    } ?: finalArtist
                     finalAlbum = mbRelease.title ?: finalAlbum
                     finalDate = mbRelease.date ?: finalDate
                     finalMbId = mbTrack.recording?.id?.toString()
@@ -276,11 +287,15 @@ abstract class TidalBaseImporter(
                     if (mbRecording != null) {
                         onLiveOutput("Matched MusicBrainz Recording: ${mbRecording.title}")
                         finalTitle = mbRecording.title ?: finalTitle
-                        finalArtist = mbRecording.artistCredit?.joinToString(indexer.artistDelimiter) { it.name ?: it.artist?.name ?: "" } ?: finalArtist
+                        finalArtist = mbRecording.artistCredit?.joinToString(indexer.artistDelimiter) {
+                            it.name ?: it.artist?.name ?: ""
+                        } ?: finalArtist
 
-                        val bestRelease = mbRecording.releases?.find { it.title?.cleanTitle()?.equals(albumTitle?.cleanTitle(), true) == true } 
+                        val bestRelease = mbRecording.releases?.find {
+                            it.title?.cleanTitle()?.equals(albumTitle?.cleanTitle(), true) == true
+                        }
                             ?: mbRecording.releases?.firstOrNull()
-                        
+
                         finalAlbum = bestRelease?.title ?: finalAlbum
                         finalDate = bestRelease?.date
                         finalMbId = mbRecording.id.toString()
@@ -412,7 +427,8 @@ abstract class TidalBaseImporter(
 
                         if (tag.getFirst(FieldKey.LYRICS).isNullOrBlank()) {
                             val duration = (audioFile.audioHeader.preciseTrackLength * 1000).toLong()
-                            val lyricsResponse = lrcLibService.getLyrics(metadata.artist, metadata.title, metadata.album, duration)
+                            val lyricsResponse =
+                                lrcLibService.getLyrics(metadata.artist, metadata.title, metadata.album, duration)
                             lyricsResponse?.syncedLyrics?.let { synced ->
                                 if (synced.isNotBlank()) {
                                     tag.setField(FieldKey.LYRICS, synced)
@@ -547,18 +563,19 @@ abstract class TidalBaseImporter(
             }
 
             Type.PLAYLIST -> {
-                val groups = metadataService.getPlaylistsByIds(ids, true, user, priority = HttpClientPriority.HIGH).map { playlist ->
-                    IdsGroup(
-                        playlist.id,
-                        playlist.sharedTracks.map {
-                            Pair(
-                                it.addedAt?.toInstant()?.toEpochMilli()
-                                    ?: UUID.randomUUID().mostSignificantBits, it.id
-                            )
-                        },
-                        playlist
-                    )
-                }
+                val groups = metadataService.getPlaylistsByIds(ids, true, user, priority = HttpClientPriority.HIGH)
+                    .map { playlist ->
+                        IdsGroup(
+                            playlist.id,
+                            playlist.sharedTracks.map {
+                                Pair(
+                                    it.addedAt?.toInstant()?.toEpochMilli()
+                                        ?: UUID.randomUUID().mostSignificantBits, it.id
+                                )
+                            },
+                            playlist
+                        )
+                    }
                 IdsWrapper(type, groups)
             }
         }
@@ -607,7 +624,7 @@ abstract class TidalBaseImporter(
         val downloadStageMutex = Mutex()
 
         val wrapper = getWrapper(type, ids, user)
-        
+
         val existingSongs = if (wrapper.fetchExistingSongs()) {
             songService.byOriginalIds(ids.map { "https://tidal.com/track/$it" }, user.id)
         } else emptyList()
@@ -774,7 +791,7 @@ abstract class TidalBaseImporter(
                 val chunkSize = 20
                 while (downloadStageMutex.withLock { downloadStage.isNotEmpty() }) {
                     contentToDownload = true
-                    val urls = downloadStageMutex.withLock { 
+                    val urls = downloadStageMutex.withLock {
                         val chunk = downloadStage.take(chunkSize)
                         downloadStage.removeAll(chunk)
                         chunk

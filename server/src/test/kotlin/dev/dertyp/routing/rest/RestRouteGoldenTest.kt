@@ -81,32 +81,40 @@ class RestRouteGoldenTest {
             .filter { it.servicePrefix in prefixes }
             .sortedWith(compareBy({ it.servicePrefix }, { it.method }, { it.canonicalPath }, { it.functionName }))
 
-    private fun renderRoutes(routes: List<RestRouteInfo>): String = routes.joinToString("\n", postfix = "\n") { it.render() }
+    private fun renderRoutes(routes: List<RestRouteInfo>): String =
+        routes.joinToString("\n", postfix = "\n") { it.render() }
 
     private fun openApiOperations(openApi: JsonObject): List<Triple<String, String, JsonObject>> =
         openApi["paths"]!!.jsonObject.entries
             .filterNot { it.key.startsWith("/api.json") }
             .flatMap { (path, methods) ->
-                methods.jsonObject.entries.map { (method, operation) -> Triple(method.uppercase(), path, operation.jsonObject) }
+                methods.jsonObject.entries.map { (method, operation) ->
+                    Triple(
+                        method.uppercase(),
+                        path,
+                        operation.jsonObject
+                    )
+                }
             }
             .sortedWith(compareBy({ it.second }, { it.first }))
 
-    private fun renderOpenApi(openApi: JsonObject): String = openApiOperations(openApi).joinToString("\n", postfix = "\n") { (method, path, operation) ->
-        val operationId = operation["operationId"]?.jsonPrimitive?.content ?: "-"
-        val summary = operation["summary"]?.jsonPrimitive?.content ?: "-"
-        val tags = operation["tags"]?.jsonArray?.joinToString(",") { it.jsonPrimitive.content } ?: "-"
-        val security = operation["security"]?.jsonArray
-            ?.flatMap { it.jsonObject.keys }
-            ?.takeIf { it.isNotEmpty() }
-            ?.joinToString(",")
-            ?: "-"
-        val params = operation["parameters"]?.jsonArray
-            ?.joinToString(",") { "${it.jsonObject["name"]!!.jsonPrimitive.content}:${it.jsonObject["in"]!!.jsonPrimitive.content}" }
-            ?.ifEmpty { "-" }
-            ?: "-"
-        val body = if (operation.containsKey("requestBody")) "yes" else "no"
-        "$method $path $operationId | $summary | $tags | $security | $params | body:$body"
-    }
+    private fun renderOpenApi(openApi: JsonObject): String =
+        openApiOperations(openApi).joinToString("\n", postfix = "\n") { (method, path, operation) ->
+            val operationId = operation["operationId"]?.jsonPrimitive?.content ?: "-"
+            val summary = operation["summary"]?.jsonPrimitive?.content ?: "-"
+            val tags = operation["tags"]?.jsonArray?.joinToString(",") { it.jsonPrimitive.content } ?: "-"
+            val security = operation["security"]?.jsonArray
+                ?.flatMap { it.jsonObject.keys }
+                ?.takeIf { it.isNotEmpty() }
+                ?.joinToString(",")
+                ?: "-"
+            val params = operation["parameters"]?.jsonArray
+                ?.joinToString(",") { "${it.jsonObject["name"]!!.jsonPrimitive.content}:${it.jsonObject["in"]!!.jsonPrimitive.content}" }
+                ?.ifEmpty { "-" }
+                ?: "-"
+            val body = if (operation.containsKey("requestBody")) "yes" else "no"
+            "$method $path $operationId | $summary | $tags | $security | $params | body:$body"
+        }
 
     @Test
     fun `routes golden`() {
@@ -125,8 +133,16 @@ class RestRouteGoldenTest {
         val captured = capture()
         val fromOpenApi = openApiOperations(captured.openApi).map { it.first to it.second }.toSet()
         val treeWithoutTrailingSlash = captured.tree.map { (method, path) -> method to path.trimEnd('/') }.toSet()
-        assertEquals(emptySet<Pair<String, String>>(), fromOpenApi - treeWithoutTrailingSlash, "documented but not routed")
-        assertEquals(emptySet<Pair<String, String>>(), treeWithoutTrailingSlash - fromOpenApi, "routed but not documented")
+        assertEquals(
+            emptySet<Pair<String, String>>(),
+            fromOpenApi - treeWithoutTrailingSlash,
+            "documented but not routed"
+        )
+        assertEquals(
+            emptySet<Pair<String, String>>(),
+            treeWithoutTrailingSlash - fromOpenApi,
+            "routed but not documented"
+        )
         assertEquals(fromOpenApi.size, captured.tree.size)
 
         val fromManifest = registeredRoutes(registeredPrefixes(captured.tree))

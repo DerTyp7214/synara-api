@@ -151,7 +151,13 @@ class ClientRequestServiceTest : KoinTest {
         val requestId = UUID.randomUUID()
 
         assertThrows<IllegalArgumentException> { service.complete(sessionId, requestId, ClientRequestStatus.TIMED_OUT) }
-        assertThrows<IllegalArgumentException> { service.complete(sessionId, requestId, ClientRequestStatus.UNREACHABLE) }
+        assertThrows<IllegalArgumentException> {
+            service.complete(
+                sessionId,
+                requestId,
+                ClientRequestStatus.UNREACHABLE
+            )
+        }
     }
 
     @Test

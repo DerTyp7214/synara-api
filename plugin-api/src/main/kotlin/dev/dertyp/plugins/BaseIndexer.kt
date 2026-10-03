@@ -121,13 +121,19 @@ abstract class BaseIndexer(
 
                             val name = audioFile.album ?: audioFile.title
                             val delimiter = getArtistDelimiter(audioFile)
-                            val artists = audioFile.getAlbumArtists(delimiter).ifEmpty { audioFile.getArtists(delimiter) }.sorted()
+                            val artists =
+                                audioFile.getAlbumArtists(delimiter).ifEmpty { audioFile.getArtists(delimiter) }
+                                    .sorted()
                             val songCount = audioFile.songCount ?: 0
                             val year = audioFile.year
                             val rawBarcode = audioFile.barcode
                             val barcode = if (rawBarcode?.uppercase() == "BARCODE") null else rawBarcode
                             val mbReleaseId = audioFile.musicBrainzReleaseId?.let {
-                                try { UUID.fromString(it) } catch (_: Exception) { null }
+                                try {
+                                    UUID.fromString(it)
+                                } catch (_: Exception) {
+                                    null
+                                }
                             }
 
                             if (name == null) return@withPermit
@@ -350,14 +356,22 @@ abstract class BaseIndexer(
         val lyrics = tag.getFirst(FieldKey.LYRICS) ?: ""
         val year = tag.getFirst(FieldKey.YEAR)
         var musicBrainzId = tag.getFirst(FieldKey.MUSICBRAINZ_TRACK_ID).ifBlank { null }?.let {
-            try { UUID.fromString(it) } catch (_: Exception) { null }
+            try {
+                UUID.fromString(it)
+            } catch (_: Exception) {
+                null
+            }
         }
 
         if (musicBrainzId == null && !isrc.isNullOrBlank() && metadataType == IMetadataService.MetadataType.musicBrainz) {
             try {
                 val recording = context.metadataService.getTrackByIsrc(IMetadataService.MetadataType.musicBrainz, isrc)
                 if (recording != null) {
-                    musicBrainzId = try { UUID.fromString(recording.id) } catch (_: Exception) { null }
+                    musicBrainzId = try {
+                        UUID.fromString(recording.id)
+                    } catch (_: Exception) {
+                        null
+                    }
                 }
             } catch (_: Exception) {
             }
@@ -375,7 +389,8 @@ abstract class BaseIndexer(
             null
         }
 
-        val isExplicit = audioFile.file.nameWithoutExtension.endsWith("(Explicit)") || isExplicitByEmoji || audioFile.isExplicit
+        val isExplicit =
+            audioFile.file.nameWithoutExtension.endsWith("(Explicit)") || isExplicitByEmoji || audioFile.isExplicit
 
         var needsCommit = false
         if (isExplicit && !audioFile.isExplicit) {

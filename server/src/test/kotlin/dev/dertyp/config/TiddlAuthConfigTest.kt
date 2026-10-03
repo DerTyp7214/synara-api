@@ -6,7 +6,8 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
 class TiddlAuthConfigTest {
-    private fun parse(vararg entries: Pair<String, String>) = ServerConfig(MapApplicationConfig(*entries)).importers.tiddlAuth
+    private fun parse(vararg entries: Pair<String, String>) =
+        ServerConfig(MapApplicationConfig(*entries)).importers.tiddlAuth
 
     @Test
     fun `a valid value is split on the first semicolon and trimmed`() {

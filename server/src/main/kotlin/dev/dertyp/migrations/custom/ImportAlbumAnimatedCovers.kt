@@ -61,7 +61,8 @@ class ImportAlbumAnimatedCovers : CustomMigration() {
                 val distinctTidalIds = allTidalAlbums.map { it.second }.distinct()
                 ctx.log("Found ${allTidalAlbums.size} Tidal album(s) without animated cover (${distinctTidalIds.size} distinct IDs).")
 
-                val metadataService = MetadataService.getMetadataService(IMetadataService.MetadataType.tidal, environment)
+                val metadataService =
+                    MetadataService.getMetadataService(IMetadataService.MetadataType.tidal, environment)
 
                 val tidalIdToAnimatedUrl = mutableMapOf<String, String>()
                 val chunks = distinctTidalIds.chunked(20)
@@ -69,7 +70,8 @@ class ImportAlbumAnimatedCovers : CustomMigration() {
                     try {
                         val albums = metadataService.getAlbumsByIds(chunk)
                         albums.forEach { album ->
-                            val animatedImage = album.images.filter { it.animated }.maxByOrNull { it.width } ?: return@forEach
+                            val animatedImage =
+                                album.images.filter { it.animated }.maxByOrNull { it.width } ?: return@forEach
                             tidalIdToAnimatedUrl[album.id] = animatedImage.url
                         }
                     } catch (e: CancellationException) {

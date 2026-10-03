@@ -42,7 +42,8 @@ class HueCommandQueueTest {
         val api = mockk<HueBridgeApi>(relaxed = true)
         val sentAt = CopyOnWriteArrayList<Long>()
         useVirtualTime()
-        val queue = HueCommandQueue(api, backgroundScope, onSent = { sentAt += testScheduler.currentTime }, onError = {})
+        val queue =
+            HueCommandQueue(api, backgroundScope, onSent = { sentAt += testScheduler.currentTime }, onError = {})
         repeat(5) { queue.submit(HueLightCommand(light("l$it"), update(50.0))) }
         advanceTimeBy(1)
         yield()
@@ -50,7 +51,10 @@ class HueCommandQueueTest {
         advanceTimeBy(450)
         yield()
         assertEquals(5, sentAt.size)
-        for (i in 1 until sentAt.size) assertTrue(sentAt[i] - sentAt[i - 1] >= 100, "spacing ${sentAt[i] - sentAt[i - 1]}")
+        for (i in 1 until sentAt.size) assertTrue(
+            sentAt[i] - sentAt[i - 1] >= 100,
+            "spacing ${sentAt[i] - sentAt[i - 1]}"
+        )
         coVerify(exactly = 5) { api.putLight(any(), any()) }
         queue.close()
     }
@@ -79,7 +83,11 @@ class HueCommandQueueTest {
         val sentAt = CopyOnWriteArrayList<Long>()
         coEvery { api.putGroupedLight("g", update(1.0)) } throws HueRateLimited()
         useVirtualTime()
-        val queue = HueCommandQueue(api, backgroundScope, onSent = { sentAt += testScheduler.currentTime }, onError = { errors += it })
+        val queue = HueCommandQueue(
+            api,
+            backgroundScope,
+            onSent = { sentAt += testScheduler.currentTime },
+            onError = { errors += it })
         queue.submit(HueLightCommand(room, update(1.0)))
         advanceTimeBy(1)
         yield()
@@ -107,7 +115,8 @@ class HueCommandQueueTest {
         val api = mockk<HueBridgeApi>(relaxed = true)
         val sentAt = CopyOnWriteArrayList<Long>()
         useVirtualTime()
-        val queue = HueCommandQueue(api, backgroundScope, onSent = { sentAt += testScheduler.currentTime }, onError = {})
+        val queue =
+            HueCommandQueue(api, backgroundScope, onSent = { sentAt += testScheduler.currentTime }, onError = {})
         val recall = SceneRecallUpdate(ClipSceneRecall(duration = 400))
         queue.submit(HueSceneCommand("s1", recall))
         advanceTimeBy(1)

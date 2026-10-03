@@ -90,14 +90,16 @@ class CredentialServerAdminClient(
     suspend fun testCredential(name: String): CredentialTestResult =
         mutate { decode(send(HttpMethod.Post, "${credential(name)}/test")) }
 
-    suspend fun presets(): List<CredentialPreset> = decode(send(HttpMethod.Get, "${CredentialProtocol.ADMIN_PREFIX}/presets"))
+    suspend fun presets(): List<CredentialPreset> =
+        decode(send(HttpMethod.Get, "${CredentialProtocol.ADMIN_PREFIX}/presets"))
 
     suspend fun startTidalLogin(name: String, request: TidalLoginStart): TidalLoginSession =
         decode(send(HttpMethod.Post, "${credential(name)}/tidal-login", json.encodeToString(request)))
 
     suspend fun tidalLogin(loginId: String): TidalLoginEvent = decode(send(HttpMethod.Get, tidalLoginPath(loginId)))
 
-    suspend fun cancelTidalLogin(loginId: String) = mutate { send(HttpMethod.Delete, tidalLoginPath(loginId)).discard() }
+    suspend fun cancelTidalLogin(loginId: String) =
+        mutate { send(HttpMethod.Delete, tidalLoginPath(loginId)).discard() }
 
     fun tidalLoginEvents(loginId: String): Flow<TidalLoginEvent> = flow {
         val (baseUrl, adminKey) = target(admin = true)
@@ -137,7 +139,12 @@ class CredentialServerAdminClient(
         return baseUrl to adminKey
     }
 
-    private suspend fun send(method: HttpMethod, path: String, body: String? = null, admin: Boolean = true): HttpResponse {
+    private suspend fun send(
+        method: HttpMethod,
+        path: String,
+        body: String? = null,
+        admin: Boolean = true
+    ): HttpResponse {
         val (baseUrl, adminKey) = target(admin)
         val response = httpClient.request {
             this.method = method
@@ -163,10 +170,15 @@ class CredentialServerAdminClient(
         } catch (_: IllegalArgumentException) {
             null
         }
-        throw CredentialServerAdminException(response.status, error, error?.message ?: "Credential server returned ${response.status}")
+        throw CredentialServerAdminException(
+            response.status,
+            error,
+            error?.message ?: "Credential server returned ${response.status}"
+        )
     }
 
-    private suspend inline fun <reified T> decode(response: HttpResponse): T = json.decodeFromString(response.bodyAsText())
+    private suspend inline fun <reified T> decode(response: HttpResponse): T =
+        json.decodeFromString(response.bodyAsText())
 
     private suspend fun HttpResponse.discard() {
         bodyAsText()
@@ -176,7 +188,8 @@ class CredentialServerAdminClient(
 
     private fun credential(name: String) = "$CREDENTIALS/${name.encodeURLPathPart()}"
 
-    private fun tidalLoginPath(loginId: String) = "${CredentialProtocol.ADMIN_PREFIX}/tidal-logins/${loginId.encodeURLPathPart()}"
+    private fun tidalLoginPath(loginId: String) =
+        "${CredentialProtocol.ADMIN_PREFIX}/tidal-logins/${loginId.encodeURLPathPart()}"
 
     companion object {
         private const val CLIENTS = "${CredentialProtocol.ADMIN_PREFIX}/clients"

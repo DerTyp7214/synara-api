@@ -44,7 +44,12 @@ object AtmosFixture {
             repeat(frameSamples) {
                 val tone = sin(2 * PI * 440 * t / SAMPLE_RATE)
                 repeat(CHANNELS) { channel ->
-                    buffer.put(((tone * 0.3 + random.nextDouble(-0.2, 0.2)) * Short.MAX_VALUE * (1 - channel * 0.1)).toInt().toShort())
+                    buffer.put(
+                        ((tone * 0.3 + random.nextDouble(
+                            -0.2,
+                            0.2
+                        )) * Short.MAX_VALUE * (1 - channel * 0.1)).toInt().toShort()
+                    )
                 }
                 t++
             }

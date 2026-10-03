@@ -207,7 +207,8 @@ class HttpClientQueueService : Service() {
 
                     var attempts = 1
                     while (response.status.value == 429 && attempts < 3) {
-                        val retryAfter = response.headers["Retry-After"]?.toIntOrNull()?.seconds ?: (delayTime + 500.milliseconds)
+                        val retryAfter =
+                            response.headers["Retry-After"]?.toIntOrNull()?.seconds ?: (delayTime + 500.milliseconds)
                         logger.warn("Rate limit exceeded for $host (attempt $attempts), waiting $retryAfter before retry")
                         delay(retryAfter)
                         response = client.get(next.urlString) {

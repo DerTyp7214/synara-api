@@ -37,7 +37,13 @@ class SongQueryFixture(
             *allMusicBrainzTables
         )
 
-        private class EdgeSong(val title: String, val releaseDate: String?, val explicit: Boolean, val album: Int, val inserted: Long)
+        private class EdgeSong(
+            val title: String,
+            val releaseDate: String?,
+            val explicit: Boolean,
+            val album: Int,
+            val inserted: Long
+        )
 
         private val edgeSongs = listOf(
             EdgeSong("Edge A\t", "2021", false, 0, 1_000_001L),
@@ -98,8 +104,10 @@ class SongQueryFixture(
                 val imageRows = mutableListOf<Pair<UUID, String?>>()
                 fun image(blurHash: String?): UUID = uuid().also { imageRows += it to blurHash }
 
-                val artistImages = artistIds.indices.associateWith { a -> if (a % 2 == 0) image("artist-bh-$a") else null }
-                val albumImages = albumIds.indices.associateWith { b -> if (b % 4 != 3) image(if (b % 3 == 0) null else "album-bh-$b") else null }
+                val artistImages =
+                    artistIds.indices.associateWith { a -> if (a % 2 == 0) image("artist-bh-$a") else null }
+                val albumImages =
+                    albumIds.indices.associateWith { b -> if (b % 4 != 3) image(if (b % 3 == 0) null else "album-bh-$b") else null }
                 val songImages = songIds.indices.associateWith { i -> if (i % 3 != 0) image("song-bh-$i") else null }
                 val songFrames = songIds.indices.filter { it % 7 == 0 }.associateWith { i -> image("song-frame-$i") }
                 val albumFrames = albumIds.indices.filter { it % 3 == 0 }.associateWith { b -> image("album-frame-$b") }
@@ -158,7 +166,8 @@ class SongQueryFixture(
                 }
 
                 val memberRows = artistIds.indices.filter { it % 4 == 0 }.flatMap { group ->
-                    listOf(group + 1, group + 2).filter { it < artistCount }.map { member -> artistIds[member] to artistIds[group] }
+                    listOf(group + 1, group + 2).filter { it < artistCount }
+                        .map { member -> artistIds[member] to artistIds[group] }
                 } + listOf(artistIds[1] to artistIds[4])
                 ArtistMemberTable.batchInsert(memberRows.distinct()) { (member, group) ->
                     this[ArtistMemberTable.artistId] = member
@@ -166,7 +175,15 @@ class SongQueryFixture(
                 }
 
                 val aliasIds = artistIds.indices.filter { it % 3 == 1 }.associateWith { listOf(uuid(), uuid()) }
-                ArtistAliasTable.batchInsert(aliasIds.entries.flatMap { (a, ids) -> ids.mapIndexed { n, aliasId -> Triple(a, n, aliasId) } }) { (a, n, aliasId) ->
+                ArtistAliasTable.batchInsert(aliasIds.entries.flatMap { (a, ids) ->
+                    ids.mapIndexed { n, aliasId ->
+                        Triple(
+                            a,
+                            n,
+                            aliasId
+                        )
+                    }
+                }) { (a, n, aliasId) ->
                     this[ArtistAliasTable.id] = aliasId
                     this[ArtistAliasTable.artistId] = artistIds[a]
                     this[ArtistAliasTable.name] = "Alias $a-$n"
@@ -202,7 +219,11 @@ class SongQueryFixture(
                     val first = (b * 3 + 1) % artistCount
                     val second = (b * 3 + 2) % artistCount
                     val third = (b * 3 + 5) % artistCount
-                    val artists = listOfNotNull(first, if (b % 2 == 0) second else null, if (b % 3 == 0) third else null).distinct()
+                    val artists = listOfNotNull(
+                        first,
+                        if (b % 2 == 0) second else null,
+                        if (b % 3 == 0) third else null
+                    ).distinct()
                     val byIdString = artists.sortedBy { artistIds[it].toString() }
                     artists.mapIndexed { j, a -> Triple(b, a, j to byIdString.indexOf(a)) }
                 }
@@ -224,7 +245,8 @@ class SongQueryFixture(
                     val pair = if (duplicates) i / 2 else i
                     this[SongTable.id] = songId
                     this[SongTable.title] = if (i % 16 == 3) "Song $pair 🅴" else "Song $pair"
-                    this[SongTable.titleTags] = if (i % 13 == 0) encodeTitleTags(listOf(TitleTag(TitleTagKind.LIVE, "Live"))) else "[]"
+                    this[SongTable.titleTags] =
+                        if (i % 13 == 0) encodeTitleTags(listOf(TitleTag(TitleTagKind.LIVE, "Live"))) else "[]"
                     this[SongTable.albumId] = albumIds[pair % albumCount]
                     this[SongTable.duration] = 180000L + (pair % 7) * 1000L
                     this[SongTable.releaseDate] = "2020-0${pair % 9 + 1}-01"
@@ -285,7 +307,9 @@ class SongQueryFixture(
                     }
                 }
 
-                SongGenreTable.batchInsert(songIds.indices.flatMap { i -> (0 until i % 5).map { g -> i to (i + g * 2) % genreIds.size }.distinct() }) { (i, g) ->
+                SongGenreTable.batchInsert(songIds.indices.flatMap { i ->
+                    (0 until i % 5).map { g -> i to (i + g * 2) % genreIds.size }.distinct()
+                }) { (i, g) ->
                     this[SongGenreTable.songId] = songIds[i]
                     this[SongGenreTable.genreId] = genreIds[g]
                 }
@@ -297,7 +321,11 @@ class SongQueryFixture(
                         val externalId = "${i * 7 + p}"
                         Triple(i, provider to externalId, "https://$provider.example/track/$externalId")
                     } + listOfNotNull(
-                        if (i % 5 == 2 && originalUrl.isNotEmpty()) Triple(i, "zzz" to "orig-$i", originalUrl) else null,
+                        if (i % 5 == 2 && originalUrl.isNotEmpty()) Triple(
+                            i,
+                            "zzz" to "orig-$i",
+                            originalUrl
+                        ) else null,
                         if (i % 6 == 1) Triple(i, "Tidal" to "x$i", "https://Tidal.example/track/x$i") else null,
                     ) + if (i % 7 == 3) listOf("9", "10").map { externalId ->
                         Triple(i, "qobuz" to externalId, "https://qobuz.example/track/$i/$externalId")
@@ -364,7 +392,11 @@ class SongQueryFixture(
                     it[description] = ""
                     it[creator] = userId
                 }
-                UserPlaylistSongTable.batchInsert(songIds.indices.filter { it % 3 == 1 }.map { it to 100L + it / 6 } + (if (duplicates) listOf(0 to 50L, 0 to 150L) else emptyList())) { (i, addedAt) ->
+                UserPlaylistSongTable.batchInsert(songIds.indices.filter { it % 3 == 1 }
+                    .map { it to 100L + it / 6 } + (if (duplicates) listOf(
+                    0 to 50L,
+                    0 to 150L
+                ) else emptyList())) { (i, addedAt) ->
                     this[UserPlaylistSongTable.playlistId] = userPlaylistId
                     this[UserPlaylistSongTable.songId] = songIds[i]
                     this[UserPlaylistSongTable.addedAt] = addedAt
@@ -386,7 +418,16 @@ class SongQueryFixture(
                 }
             }
 
-            return SongQueryFixture(userId, songIds + edgeSongIds, artistIds, albumIds, playlistId, userPlaylistId, collectionId, recordingIds)
+            return SongQueryFixture(
+                userId,
+                songIds + edgeSongIds,
+                artistIds,
+                albumIds,
+                playlistId,
+                userPlaylistId,
+                collectionId,
+                recordingIds
+            )
         }
     }
 }

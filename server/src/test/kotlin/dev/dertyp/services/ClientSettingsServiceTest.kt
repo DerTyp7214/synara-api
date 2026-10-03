@@ -81,58 +81,84 @@ class ClientSettingsServiceTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `a batch write bumps the version by exactly one and stamps the writer device`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        val userId = transaction(database) { insertUser() }
+    fun `a batch write bumps the version by exactly one and stamps the writer device`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val userId = transaction(database) { insertUser() }
 
-        val result = service.setSettings(
-            userId, ClientSettingScope.DEVICE, "device-1",
-            listOf(write("theme", "\"dark\""), write("volume", "50")), false
-        )
+            val result = service.setSettings(
+                userId, ClientSettingScope.DEVICE, "device-1",
+                listOf(write("theme", "\"dark\""), write("volume", "50")), false
+            )
 
-        check(result is ClientSettingsWriteResult.Ok)
-        assertEquals(1L, result.version)
-        assertEquals(2, result.entries.size)
-        assertTrue(result.entries.all { it.modifiedByDeviceId == "device-1" })
+            check(result is ClientSettingsWriteResult.Ok)
+            assertEquals(1L, result.version)
+            assertEquals(2, result.entries.size)
+            assertTrue(result.entries.all { it.modifiedByDeviceId == "device-1" })
 
-        val second = service.setSettings(
-            userId, ClientSettingScope.DEVICE, "device-1",
-            listOf(write("theme", "\"light\"", baseVersion = 1)), false
-        )
+            val second = service.setSettings(
+                userId, ClientSettingScope.DEVICE, "device-1",
+                listOf(write("theme", "\"light\"", baseVersion = 1)), false
+            )
 
-        check(second is ClientSettingsWriteResult.Ok)
-        assertEquals(2L, second.version)
-    }
+            check(second is ClientSettingsWriteResult.Ok)
+            assertEquals(2L, second.version)
+        }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `a stale baseVersion is rejected with a conflict carrying the stored entry and writes nothing`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        val userId = transaction(database) { insertUser() }
-        val first = service.setSettings(userId, ClientSettingScope.DEVICE, "device-1", listOf(write("theme", "\"dark\"")), false)
-        check(first is ClientSettingsWriteResult.Ok)
+    fun `a stale baseVersion is rejected with a conflict carrying the stored entry and writes nothing`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val userId = transaction(database) { insertUser() }
+            val first = service.setSettings(
+                userId,
+                ClientSettingScope.DEVICE,
+                "device-1",
+                listOf(write("theme", "\"dark\"")),
+                false
+            )
+            check(first is ClientSettingsWriteResult.Ok)
 
-        val conflict = service.setSettings(userId, ClientSettingScope.DEVICE, "device-1", listOf(write("theme", "\"light\"", baseVersion = 0)), false)
+            val conflict = service.setSettings(
+                userId,
+                ClientSettingScope.DEVICE,
+                "device-1",
+                listOf(write("theme", "\"light\"", baseVersion = 0)),
+                false
+            )
 
-        check(conflict is ClientSettingsWriteResult.Conflict)
-        assertEquals(1L, conflict.version)
-        val storedConflict = conflict.conflicts.single()
-        assertEquals("theme", storedConflict.key)
-        assertEquals("\"dark\"", storedConflict.current?.value)
+            check(conflict is ClientSettingsWriteResult.Conflict)
+            assertEquals(1L, conflict.version)
+            val storedConflict = conflict.conflicts.single()
+            assertEquals("theme", storedConflict.key)
+            assertEquals("\"dark\"", storedConflict.current?.value)
 
-        val settings = service.getSettings(userId, ClientSettingScope.DEVICE, "device-1", false)
-        assertEquals("\"dark\"", settings.single().value)
-    }
+            val settings = service.getSettings(userId, ClientSettingScope.DEVICE, "device-1", false)
+            assertEquals("\"dark\"", settings.single().value)
+        }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
     fun `force applies a write even past the stored version`(dialect: DbDialect) = runBlocking {
         setup(dialect)
         val userId = transaction(database) { insertUser() }
-        val first = service.setSettings(userId, ClientSettingScope.DEVICE, "device-1", listOf(write("theme", "\"dark\"")), false)
+        val first = service.setSettings(
+            userId,
+            ClientSettingScope.DEVICE,
+            "device-1",
+            listOf(write("theme", "\"dark\"")),
+            false
+        )
         check(first is ClientSettingsWriteResult.Ok)
 
-        val forced = service.setSettings(userId, ClientSettingScope.DEVICE, "device-1", listOf(write("theme", "\"light\"", baseVersion = 0)), true)
+        val forced = service.setSettings(
+            userId,
+            ClientSettingScope.DEVICE,
+            "device-1",
+            listOf(write("theme", "\"light\"", baseVersion = 0)),
+            true
+        )
 
         check(forced is ClientSettingsWriteResult.Ok)
         assertEquals(2L, forced.version)
@@ -164,7 +190,13 @@ class ClientSettingsServiceTest : KoinTest {
         val created = service.setSettings(userId, ClientSettingScope.SYNCED, null, listOf(write("a", "1")), false)
         check(created is ClientSettingsWriteResult.Ok)
 
-        val deleted = service.setSettings(userId, ClientSettingScope.SYNCED, null, listOf(write("a", null, baseVersion = created.version)), false)
+        val deleted = service.setSettings(
+            userId,
+            ClientSettingScope.SYNCED,
+            null,
+            listOf(write("a", null, baseVersion = created.version)),
+            false
+        )
         check(deleted is ClientSettingsWriteResult.Ok)
         assertTrue(deleted.entries.single().deleted)
 
@@ -179,7 +211,13 @@ class ClientSettingsServiceTest : KoinTest {
         setup(dialect)
         val userId = transaction(database) { insertUser() }
 
-        val result = service.setSettings(userId, ClientSettingScope.SYNCED, null, listOf(write("ghost", null, baseVersion = 0)), false)
+        val result = service.setSettings(
+            userId,
+            ClientSettingScope.SYNCED,
+            null,
+            listOf(write("ghost", null, baseVersion = 0)),
+            false
+        )
 
         check(result is ClientSettingsWriteResult.Ok)
         assertEquals(0L, result.version)
@@ -194,14 +232,32 @@ class ClientSettingsServiceTest : KoinTest {
         val userId = transaction(database) { insertUser() }
         val created = service.setSettings(userId, ClientSettingScope.SYNCED, null, listOf(write("a", "1")), false)
         check(created is ClientSettingsWriteResult.Ok)
-        val firstTombstone = service.setSettings(userId, ClientSettingScope.SYNCED, null, listOf(write("a", null, baseVersion = created.version)), false)
+        val firstTombstone = service.setSettings(
+            userId,
+            ClientSettingScope.SYNCED,
+            null,
+            listOf(write("a", null, baseVersion = created.version)),
+            false
+        )
         check(firstTombstone is ClientSettingsWriteResult.Ok)
 
-        val rewrittenAtZero = service.setSettings(userId, ClientSettingScope.SYNCED, null, listOf(write("a", "2", baseVersion = 0)), false)
+        val rewrittenAtZero = service.setSettings(
+            userId,
+            ClientSettingScope.SYNCED,
+            null,
+            listOf(write("a", "2", baseVersion = 0)),
+            false
+        )
         check(rewrittenAtZero is ClientSettingsWriteResult.Ok)
         assertEquals("2", rewrittenAtZero.entries.single().value)
 
-        val secondTombstone = service.setSettings(userId, ClientSettingScope.SYNCED, null, listOf(write("a", null, baseVersion = rewrittenAtZero.version)), false)
+        val secondTombstone = service.setSettings(
+            userId,
+            ClientSettingScope.SYNCED,
+            null,
+            listOf(write("a", null, baseVersion = rewrittenAtZero.version)),
+            false
+        )
         check(secondTombstone is ClientSettingsWriteResult.Ok)
 
         val rewrittenAtTombstoneVersion = service.setSettings(
@@ -223,7 +279,13 @@ class ClientSettingsServiceTest : KoinTest {
         service.setSettings(userId, ClientSettingScope.SYNCED, null, listOf(write("c", "3")), false)
         val created = service.setSettings(userId, ClientSettingScope.SYNCED, null, listOf(write("d", "4")), false)
         check(created is ClientSettingsWriteResult.Ok)
-        service.setSettings(userId, ClientSettingScope.SYNCED, null, listOf(write("d", null, baseVersion = created.version)), false)
+        service.setSettings(
+            userId,
+            ClientSettingScope.SYNCED,
+            null,
+            listOf(write("d", null, baseVersion = created.version)),
+            false
+        )
 
         val firstPage = service.getChanges(userId, ClientSettingScope.SYNCED, null, 0, 2)
         assertEquals(5L, firstPage.version)
@@ -239,62 +301,95 @@ class ClientSettingsServiceTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `getChanges reports a full resync once cleanup purged the tombstones it would have returned`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        val userId = transaction(database) { insertUser() }
-        val created = service.setSettings(userId, ClientSettingScope.SYNCED, null, listOf(write("a", "1")), false)
-        check(created is ClientSettingsWriteResult.Ok)
-        val tombstoned = service.setSettings(userId, ClientSettingScope.SYNCED, null, listOf(write("a", null, baseVersion = created.version)), false)
-        check(tombstoned is ClientSettingsWriteResult.Ok)
+    fun `getChanges reports a full resync once cleanup purged the tombstones it would have returned`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val userId = transaction(database) { insertUser() }
+            val created = service.setSettings(userId, ClientSettingScope.SYNCED, null, listOf(write("a", "1")), false)
+            check(created is ClientSettingsWriteResult.Ok)
+            val tombstoned = service.setSettings(
+                userId,
+                ClientSettingScope.SYNCED,
+                null,
+                listOf(write("a", null, baseVersion = created.version)),
+                false
+            )
+            check(tombstoned is ClientSettingsWriteResult.Ok)
 
-        service.cleanup(tombstoneMaxAgeMs = -1)
+            service.cleanup(tombstoneMaxAgeMs = -1)
 
-        val changes = service.getChanges(userId, ClientSettingScope.SYNCED, null, 1, 500)
-        assertTrue(changes.fullResync)
+            val changes = service.getChanges(userId, ClientSettingScope.SYNCED, null, 1, 500)
+            assertTrue(changes.fullResync)
 
-        val fromScratch = service.getChanges(userId, ClientSettingScope.SYNCED, null, 0, 500)
-        assertFalse(fromScratch.fullResync)
-    }
-
-    @ParameterizedTest
-    @EnumSource(DbDialect::class)
-    fun `synced entries are visible to every device while device entries stay isolated per device`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        val userId = transaction(database) { insertUser() }
-        service.setSettings(userId, ClientSettingScope.SYNCED, "device-a", listOf(write("theme", "\"dark\"")), false)
-        service.setSettings(userId, ClientSettingScope.DEVICE, "device-a", listOf(write("volume", "50")), false)
-        service.setSettings(userId, ClientSettingScope.DEVICE, "device-b", listOf(write("volume", "80")), false)
-
-        assertEquals("\"dark\"", service.getSettings(userId, ClientSettingScope.SYNCED, "device-a", false).single().value)
-        assertEquals("\"dark\"", service.getSettings(userId, ClientSettingScope.SYNCED, "device-b", false).single().value)
-
-        assertEquals("50", service.getSettings(userId, ClientSettingScope.DEVICE, "device-a", false).single().value)
-        assertEquals("80", service.getSettings(userId, ClientSettingScope.DEVICE, "device-b", false).single().value)
-    }
+            val fromScratch = service.getChanges(userId, ClientSettingScope.SYNCED, null, 0, 500)
+            assertFalse(fromScratch.fullResync)
+        }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `a snapshot carries the live entries of both scopes tagged with their scope and versions`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        val userId = transaction(database) { insertUser() }
-        val created = service.setSettings(userId, ClientSettingScope.SYNCED, null, listOf(write("a", "1"), write("gone", "x")), false)
-        check(created is ClientSettingsWriteResult.Ok)
-        service.setSettings(userId, ClientSettingScope.SYNCED, null, listOf(write("gone", null, baseVersion = created.version)), false)
-        service.setSettings(userId, ClientSettingScope.DEVICE, "device-1", listOf(write("b", "2")), false)
+    fun `synced entries are visible to every device while device entries stay isolated per device`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val userId = transaction(database) { insertUser() }
+            service.setSettings(
+                userId,
+                ClientSettingScope.SYNCED,
+                "device-a",
+                listOf(write("theme", "\"dark\"")),
+                false
+            )
+            service.setSettings(userId, ClientSettingScope.DEVICE, "device-a", listOf(write("volume", "50")), false)
+            service.setSettings(userId, ClientSettingScope.DEVICE, "device-b", listOf(write("volume", "80")), false)
 
-        val snapshot = service.getSnapshot(userId, "device-1")
+            assertEquals(
+                "\"dark\"",
+                service.getSettings(userId, ClientSettingScope.SYNCED, "device-a", false).single().value
+            )
+            assertEquals(
+                "\"dark\"",
+                service.getSettings(userId, ClientSettingScope.SYNCED, "device-b", false).single().value
+            )
 
-        assertEquals(2L, snapshot.syncedVersion)
-        assertEquals(1L, snapshot.deviceVersion)
-        assertEquals(2, snapshot.entries.size)
-        assertTrue(snapshot.entries.none { it.deleted })
-        val synced = snapshot.entries.single { it.scope == ClientSettingScope.SYNCED }
-        assertEquals("a", synced.key)
-        assertNull(synced.deviceId)
-        val device = snapshot.entries.single { it.scope == ClientSettingScope.DEVICE }
-        assertEquals("b", device.key)
-        assertEquals("device-1", device.deviceId)
-    }
+            assertEquals("50", service.getSettings(userId, ClientSettingScope.DEVICE, "device-a", false).single().value)
+            assertEquals("80", service.getSettings(userId, ClientSettingScope.DEVICE, "device-b", false).single().value)
+        }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `a snapshot carries the live entries of both scopes tagged with their scope and versions`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val userId = transaction(database) { insertUser() }
+            val created = service.setSettings(
+                userId,
+                ClientSettingScope.SYNCED,
+                null,
+                listOf(write("a", "1"), write("gone", "x")),
+                false
+            )
+            check(created is ClientSettingsWriteResult.Ok)
+            service.setSettings(
+                userId,
+                ClientSettingScope.SYNCED,
+                null,
+                listOf(write("gone", null, baseVersion = created.version)),
+                false
+            )
+            service.setSettings(userId, ClientSettingScope.DEVICE, "device-1", listOf(write("b", "2")), false)
+
+            val snapshot = service.getSnapshot(userId, "device-1")
+
+            assertEquals(2L, snapshot.syncedVersion)
+            assertEquals(1L, snapshot.deviceVersion)
+            assertEquals(2, snapshot.entries.size)
+            assertTrue(snapshot.entries.none { it.deleted })
+            val synced = snapshot.entries.single { it.scope == ClientSettingScope.SYNCED }
+            assertEquals("a", synced.key)
+            assertNull(synced.deviceId)
+            val device = snapshot.entries.single { it.scope == ClientSettingScope.DEVICE }
+            assertEquals("b", device.key)
+            assertEquals("device-1", device.deviceId)
+        }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
@@ -312,7 +407,13 @@ class ClientSettingsServiceTest : KoinTest {
         setup(dialect)
         val userId = transaction(database) { insertUser() }
         repeat(25) { index ->
-            service.setSettings(userId, ClientSettingScope.SYNCED, null, listOf(write("counter", index.toString())), true)
+            service.setSettings(
+                userId,
+                ClientSettingScope.SYNCED,
+                null,
+                listOf(write("counter", index.toString())),
+                true
+            )
         }
 
         val history = service.getHistory(userId, ClientSettingScope.SYNCED, null, "counter", 25)
@@ -324,23 +425,31 @@ class ClientSettingsServiceTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `restore writes a new version with the historic value and pushes the replaced value into history`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        val userId = transaction(database) { insertUser() }
-        val first = service.setSettings(userId, ClientSettingScope.SYNCED, null, listOf(write("a", "\"v1\"")), false)
-        check(first is ClientSettingsWriteResult.Ok)
-        val second = service.setSettings(userId, ClientSettingScope.SYNCED, null, listOf(write("a", "\"v2\"", baseVersion = first.version)), false)
-        check(second is ClientSettingsWriteResult.Ok)
+    fun `restore writes a new version with the historic value and pushes the replaced value into history`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val userId = transaction(database) { insertUser() }
+            val first =
+                service.setSettings(userId, ClientSettingScope.SYNCED, null, listOf(write("a", "\"v1\"")), false)
+            check(first is ClientSettingsWriteResult.Ok)
+            val second = service.setSettings(
+                userId,
+                ClientSettingScope.SYNCED,
+                null,
+                listOf(write("a", "\"v2\"", baseVersion = first.version)),
+                false
+            )
+            check(second is ClientSettingsWriteResult.Ok)
 
-        val restored = service.restore(userId, ClientSettingScope.SYNCED, null, "a", first.version, false)
+            val restored = service.restore(userId, ClientSettingScope.SYNCED, null, "a", first.version, false)
 
-        check(restored is ClientSettingsWriteResult.Ok)
-        assertEquals(3L, restored.version)
-        assertEquals("\"v1\"", restored.entries.single().value)
+            check(restored is ClientSettingsWriteResult.Ok)
+            assertEquals(3L, restored.version)
+            assertEquals("\"v1\"", restored.entries.single().value)
 
-        val history = service.getHistory(userId, ClientSettingScope.SYNCED, null, "a", 20)
-        assertEquals(listOf("\"v2\"", "\"v1\""), history.map { it.value })
-    }
+            val history = service.getHistory(userId, ClientSettingScope.SYNCED, null, "a", 20)
+            assertEquals(listOf("\"v2\"", "\"v1\""), history.map { it.value })
+        }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
@@ -356,22 +465,36 @@ class ClientSettingsServiceTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `a plain restore succeeds even after another write changed the key in between`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        val userId = transaction(database) { insertUser() }
-        val first = service.setSettings(userId, ClientSettingScope.SYNCED, null, listOf(write("a", "\"v1\"")), false)
-        check(first is ClientSettingsWriteResult.Ok)
-        val second = service.setSettings(userId, ClientSettingScope.SYNCED, null, listOf(write("a", "\"v2\"", baseVersion = first.version)), false)
-        check(second is ClientSettingsWriteResult.Ok)
-        val third = service.setSettings(userId, ClientSettingScope.SYNCED, null, listOf(write("a", "\"v3\"", baseVersion = second.version)), false)
-        check(third is ClientSettingsWriteResult.Ok)
+    fun `a plain restore succeeds even after another write changed the key in between`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val userId = transaction(database) { insertUser() }
+            val first =
+                service.setSettings(userId, ClientSettingScope.SYNCED, null, listOf(write("a", "\"v1\"")), false)
+            check(first is ClientSettingsWriteResult.Ok)
+            val second = service.setSettings(
+                userId,
+                ClientSettingScope.SYNCED,
+                null,
+                listOf(write("a", "\"v2\"", baseVersion = first.version)),
+                false
+            )
+            check(second is ClientSettingsWriteResult.Ok)
+            val third = service.setSettings(
+                userId,
+                ClientSettingScope.SYNCED,
+                null,
+                listOf(write("a", "\"v3\"", baseVersion = second.version)),
+                false
+            )
+            check(third is ClientSettingsWriteResult.Ok)
 
-        val restored = service.restore(userId, ClientSettingScope.SYNCED, null, "a", first.version, false)
+            val restored = service.restore(userId, ClientSettingScope.SYNCED, null, "a", first.version, false)
 
-        check(restored is ClientSettingsWriteResult.Ok)
-        assertEquals(4L, restored.version)
-        assertEquals("\"v1\"", restored.entries.single().value)
-    }
+            check(restored is ClientSettingsWriteResult.Ok)
+            assertEquals(4L, restored.version)
+            assertEquals("\"v1\"", restored.entries.single().value)
+        }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
@@ -401,7 +524,15 @@ class ClientSettingsServiceTest : KoinTest {
         val userId = transaction(database) { insertUser() }
 
         assertThrows<IllegalArgumentException> {
-            runBlocking { service.setSettings(userId, ClientSettingScope.SYNCED, null, listOf(write("a", "not json")), false) }
+            runBlocking {
+                service.setSettings(
+                    userId,
+                    ClientSettingScope.SYNCED,
+                    null,
+                    listOf(write("a", "not json")),
+                    false
+                )
+            }
         }
     }
 
@@ -413,7 +544,15 @@ class ClientSettingsServiceTest : KoinTest {
         val oversized = "x".repeat(70_000)
 
         assertThrows<IllegalArgumentException> {
-            runBlocking { service.setSettings(userId, ClientSettingScope.SYNCED, null, listOf(write("a", oversized)), false) }
+            runBlocking {
+                service.setSettings(
+                    userId,
+                    ClientSettingScope.SYNCED,
+                    null,
+                    listOf(write("a", oversized)),
+                    false
+                )
+            }
         }
     }
 
@@ -425,7 +564,15 @@ class ClientSettingsServiceTest : KoinTest {
         val longKey = "k".repeat(256)
 
         assertThrows<IllegalArgumentException> {
-            runBlocking { service.setSettings(userId, ClientSettingScope.SYNCED, null, listOf(write(longKey, "1")), false) }
+            runBlocking {
+                service.setSettings(
+                    userId,
+                    ClientSettingScope.SYNCED,
+                    null,
+                    listOf(write(longKey, "1")),
+                    false
+                )
+            }
         }
     }
 
@@ -436,7 +583,15 @@ class ClientSettingsServiceTest : KoinTest {
         val userId = transaction(database) { insertUser() }
 
         assertThrows<IllegalArgumentException> {
-            runBlocking { service.setSettings(userId, ClientSettingScope.SYNCED, null, listOf(write("   ", "1")), false) }
+            runBlocking {
+                service.setSettings(
+                    userId,
+                    ClientSettingScope.SYNCED,
+                    null,
+                    listOf(write("   ", "1")),
+                    false
+                )
+            }
         }
     }
 
@@ -447,7 +602,15 @@ class ClientSettingsServiceTest : KoinTest {
         val userId = transaction(database) { insertUser() }
 
         assertThrows<IllegalArgumentException> {
-            runBlocking { service.setSettings(userId, ClientSettingScope.SYNCED, null, listOf(write("a", "1"), write("a", "2")), false) }
+            runBlocking {
+                service.setSettings(
+                    userId,
+                    ClientSettingScope.SYNCED,
+                    null,
+                    listOf(write("a", "1"), write("a", "2")),
+                    false
+                )
+            }
         }
     }
 
@@ -476,7 +639,15 @@ class ClientSettingsServiceTest : KoinTest {
         }
 
         assertThrows<IllegalArgumentException> {
-            runBlocking { service.setSettings(userId, ClientSettingScope.SYNCED, null, listOf(write("overflow", "1")), false) }
+            runBlocking {
+                service.setSettings(
+                    userId,
+                    ClientSettingScope.SYNCED,
+                    null,
+                    listOf(write("overflow", "1")),
+                    false
+                )
+            }
         }
     }
 
@@ -505,18 +676,19 @@ class ClientSettingsServiceTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `registerDevice refreshes name platform and lastSeenAt without duplicating the device`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        val userId = transaction(database) { insertUser() }
+    fun `registerDevice refreshes name platform and lastSeenAt without duplicating the device`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val userId = transaction(database) { insertUser() }
 
-        val first = service.registerDevice(userId, "device-1", "Phone", "android")
-        val second = service.registerDevice(userId, "device-1", "New Phone", "ios")
+            val first = service.registerDevice(userId, "device-1", "Phone", "android")
+            val second = service.registerDevice(userId, "device-1", "New Phone", "ios")
 
-        assertEquals("New Phone", second.name)
-        assertEquals("ios", second.platform)
-        assertTrue(second.lastSeenAt >= first.lastSeenAt)
-        assertEquals(1, service.getDevices(userId).size)
-    }
+            assertEquals("New Phone", second.name)
+            assertEquals("ios", second.platform)
+            assertTrue(second.lastSeenAt >= first.lastSeenAt)
+            assertEquals(1, service.getDevices(userId).size)
+        }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
@@ -533,23 +705,31 @@ class ClientSettingsServiceTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `deleteDevice removes its settings history and scope row but keeps the synced entries`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        val userId = transaction(database) { insertUser() }
-        service.setSettings(userId, ClientSettingScope.SYNCED, null, listOf(write("shared", "1")), false)
-        val first = service.setSettings(userId, ClientSettingScope.DEVICE, "device-1", listOf(write("a", "1")), false)
-        check(first is ClientSettingsWriteResult.Ok)
-        service.setSettings(userId, ClientSettingScope.DEVICE, "device-1", listOf(write("a", "2", baseVersion = first.version)), false)
+    fun `deleteDevice removes its settings history and scope row but keeps the synced entries`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val userId = transaction(database) { insertUser() }
+            service.setSettings(userId, ClientSettingScope.SYNCED, null, listOf(write("shared", "1")), false)
+            val first =
+                service.setSettings(userId, ClientSettingScope.DEVICE, "device-1", listOf(write("a", "1")), false)
+            check(first is ClientSettingsWriteResult.Ok)
+            service.setSettings(
+                userId,
+                ClientSettingScope.DEVICE,
+                "device-1",
+                listOf(write("a", "2", baseVersion = first.version)),
+                false
+            )
 
-        service.deleteDevice(userId, "device-1")
+            service.deleteDevice(userId, "device-1")
 
-        assertTrue(service.getDevices(userId).none { it.deviceId == "device-1" })
-        assertTrue(service.getHistory(userId, ClientSettingScope.DEVICE, "device-1", "a", 20).isEmpty())
-        assertTrue(service.getSettings(userId, ClientSettingScope.DEVICE, "device-1", true).isEmpty())
-        assertEquals(0L, service.getChanges(userId, ClientSettingScope.DEVICE, "device-1", 0, 10).version)
+            assertTrue(service.getDevices(userId).none { it.deviceId == "device-1" })
+            assertTrue(service.getHistory(userId, ClientSettingScope.DEVICE, "device-1", "a", 20).isEmpty())
+            assertTrue(service.getSettings(userId, ClientSettingScope.DEVICE, "device-1", true).isEmpty())
+            assertEquals(0L, service.getChanges(userId, ClientSettingScope.DEVICE, "device-1", 0, 10).version)
 
-        assertEquals("1", service.getSettings(userId, ClientSettingScope.SYNCED, null, false).single().value)
-    }
+            assertEquals("1", service.getSettings(userId, ClientSettingScope.SYNCED, null, false).single().value)
+        }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
@@ -559,9 +739,16 @@ class ClientSettingsServiceTest : KoinTest {
 
         val userId = transaction(database) { insertUser() }
         service.setSettings(userId, ClientSettingScope.SYNCED, null, listOf(write("a", "1")), false)
-        val deviceWrite = service.setSettings(userId, ClientSettingScope.DEVICE, "device-1", listOf(write("b", "2")), false)
+        val deviceWrite =
+            service.setSettings(userId, ClientSettingScope.DEVICE, "device-1", listOf(write("b", "2")), false)
         check(deviceWrite is ClientSettingsWriteResult.Ok)
-        service.setSettings(userId, ClientSettingScope.DEVICE, "device-1", listOf(write("b", "3", baseVersion = deviceWrite.version)), false)
+        service.setSettings(
+            userId,
+            ClientSettingScope.DEVICE,
+            "device-1",
+            listOf(write("b", "3", baseVersion = deviceWrite.version)),
+            false
+        )
 
         transaction(database) { UserTable.deleteWhere { UserTable.id eq userId } }
 

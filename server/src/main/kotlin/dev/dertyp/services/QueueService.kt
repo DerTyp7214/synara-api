@@ -232,7 +232,8 @@ class QueueService : Service() {
                 }
             }
 
-            val currentIndex = if (size > 0 && at <= meta.currentIndex) meta.currentIndex + accepted.size else meta.currentIndex
+            val currentIndex =
+                if (size > 0 && at <= meta.currentIndex) meta.currentIndex + accepted.size else meta.currentIndex
             meta.copy(currentIndex = currentIndex)
         }
     }
@@ -567,15 +568,15 @@ class QueueService : Service() {
                 sourceId = row[UserQueueTable.sourceId]
             )
         } ?: Meta(
-            version = 0,
-            modifiedAt = 0,
-            modifiedBySessionId = null,
-            modifiedByDeviceName = null,
-            currentIndex = 0,
-            shuffleMode = false,
-            repeatMode = RepeatMode.OFF,
-            sourceId = null,
-        )
+        version = 0,
+        modifiedAt = 0,
+        modifiedBySessionId = null,
+        modifiedByDeviceName = null,
+        currentIndex = 0,
+        shuffleMode = false,
+        repeatMode = RepeatMode.OFF,
+        sourceId = null,
+    )
 
     private fun loadRows(userId: UUID): List<Row> = UserQueueEntryTable
         .selectAll()

@@ -80,7 +80,7 @@ class McpRoutesTest {
 
     private fun initializeBody(id: Int = 1) =
         """{"jsonrpc":"2.0","id":$id,"method":"initialize","params":{"protocolVersion":"2025-06-18",""" +
-            """"capabilities":{},"clientInfo":{"name":"t","version":"1"}}}"""
+                """"capabilities":{},"clientInfo":{"name":"t","version":"1"}}}"""
 
     private suspend fun ApplicationTestBuilder.mcpPost(body: String, key: String? = "good") =
         client.post("/mcp") {

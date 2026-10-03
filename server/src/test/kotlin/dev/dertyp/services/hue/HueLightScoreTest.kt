@@ -166,7 +166,10 @@ class HueLightScoreTest {
         val beats = beats(240)
         val loud = envelope(durationMs) { -30f + (it % 400) / 10f }
         assertEquals(0.55, HueLightScore.build(timeline(beats, loud), null, durationMs, 8_000).levelFloor)
-        assertEquals(0.30, HueLightScore.build(timeline(beats, loud), null, durationMs, 8_000, LevelSource.BASS).levelFloor)
+        assertEquals(
+            0.30,
+            HueLightScore.build(timeline(beats, loud), null, durationMs, 8_000, LevelSource.BASS).levelFloor
+        )
         assertEquals(0.30, HueLightScore.build(null, null, 30_000, 8_000, LevelSource.BASS).levelFloor)
         assertEquals(0.55, HueLightScore.build(null, null, 30_000, 8_000).levelFloor)
     }
@@ -278,7 +281,13 @@ class HueLightScoreTest {
             if (beatIndex % 4 == 0 && ms % beatMs < 200) base + 6f else base
         }
         val kick = kickBand { if (it % 4 == 0) 20f else 10f }
-        val score = HueLightScore.build(bandTimeline(beats, kick, loudness = stepped), null, durationMs, 8_000, LevelSource.BASS)
+        val score = HueLightScore.build(
+            bandTimeline(beats, kick, loudness = stepped),
+            null,
+            durationMs,
+            8_000,
+            LevelSource.BASS
+        )
 
         val sections = score.keyframes.filter { it.kind == KeyframeKind.SECTION }
         assertEquals(1, sections.size, sections.toString())

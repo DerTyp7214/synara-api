@@ -106,7 +106,14 @@ class RpcQueueServiceTest {
         val uploadId = UUID.randomUUID()
         val requestId = UUID.randomUUID()
         val meta = QueueMeta(currentIndex = 0, shuffleMode = false, repeatMode = RepeatMode.OFF)
-        val info = QueueInfo(version = 1, modifiedAt = 0, currentIndex = 0, shuffleMode = false, repeatMode = RepeatMode.OFF, total = 0)
+        val info = QueueInfo(
+            version = 1,
+            modifiedAt = 0,
+            currentIndex = 0,
+            shuffleMode = false,
+            repeatMode = RepeatMode.OFF,
+            total = 0
+        )
         val service = RpcQueueService(user, sessionId, queueService, sessionService, clientRequestService)
 
         coEvery { queueService.commitUpload(userId, uploadId, meta) } returns QueueWriteResult.Ok(info)

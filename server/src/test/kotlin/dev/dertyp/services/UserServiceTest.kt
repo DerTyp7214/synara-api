@@ -81,11 +81,11 @@ class UserServiceTest : KoinTest {
         setup(dialect)
         val request = AuthenticationRequest("testuser", "password")
         val user = service.createUser(request)
-        
+
         assertNotNull(user)
         assertEquals("testuser", user?.username)
         assertFalse(user!!.isAdmin)
-        
+
         val found = service.findUserByUsername("testuser")
         assertEquals(user.id, found?.id)
     }
@@ -152,7 +152,7 @@ class UserServiceTest : KoinTest {
         }
 
         service.updateProfileImage(userId, imageId)
-        
+
         val user = service.findUserById(userId)
         assertEquals(imageId, user?.profileImageId)
     }

@@ -115,13 +115,16 @@ class RemoveForeignKeyOrphansTest : KoinTest {
         RemoveForeignKeyOrphans().migrate()
 
         dbQuery {
-            val profileImages = UserTable.selectAll().associate { it[UserTable.id].value to it[UserTable.profileImage]?.value }
+            val profileImages =
+                UserTable.selectAll().associate { it[UserTable.id].value to it[UserTable.profileImage]?.value }
             assertEquals(keptImage, profileImages[keptUser])
             assertEquals(setOf(keptUser, clearedUser), profileImages.keys)
             assertNull(profileImages[clearedUser])
 
             assertEquals(listOf(keptEpisode), PodcastEpisodeTable.selectAll().map { it[PodcastEpisodeTable.id].value })
-            assertEquals(listOf(keptTranscript), PodcastTranscriptTable.selectAll().map { it[PodcastTranscriptTable.id].value })
+            assertEquals(
+                listOf(keptTranscript),
+                PodcastTranscriptTable.selectAll().map { it[PodcastTranscriptTable.id].value })
 
             assertEquals(setOf(keptSong, restrictedSong), SongTable.selectAll().map { it[SongTable.id].value }.toSet())
             assertEquals(1, SongTable.selectAll().where { SongTable.id eq restrictedSong }.count().toInt())

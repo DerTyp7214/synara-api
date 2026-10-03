@@ -42,7 +42,10 @@ class HueLightScoreExtractionTest {
         score.keyframes.forEach { assertTrue(it.level >= 0.8, "beat ${it.index} level ${it.level}") }
 
         val floors = score.keyframes.drop(2).map { it.floor }
-        assertTrue(floors.max() - floors.min() <= 0.05, "floors should be steady: min=${floors.min()} max=${floors.max()}")
+        assertTrue(
+            floors.max() - floors.min() <= 0.05,
+            "floors should be steady: min=${floors.min()} max=${floors.max()}"
+        )
 
         val kick = KickOnsets(timeline.bands[AudioBand.KICK.ordinal].levelsDb, timeline.bandHz)
         val frameMs = 1000 / timeline.bandHz
@@ -62,7 +65,8 @@ class HueLightScoreExtractionTest {
             min,
             max,
         )
-        val rms = AudioTimelineCodec.decodeEnvelope(AudioTimelineCodec.encodeEnvelope(envelopes.rmsDb, min, max), min, max)
+        val rms =
+            AudioTimelineCodec.decodeEnvelope(AudioTimelineCodec.encodeEnvelope(envelopes.rmsDb, min, max), min, max)
         return SongAudioTimeline(
             songId = UUID.randomUUID(),
             beatsMs = beats,

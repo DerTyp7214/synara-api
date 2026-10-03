@@ -76,7 +76,7 @@ class ScheduleService : IScheduleService, Service() {
     private val scheduleMutex = Mutex()
 
     private val queueUpdateNotifier = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
-    
+
     data class ManagedTask(
         val key: String,
         val name: String,
@@ -177,7 +177,8 @@ class ScheduleService : IScheduleService, Service() {
                     if (waitTime <= Duration.ZERO) {
                         scheduleMutex.withLock {
                             val scheduledTask = schedules.poll() ?: return@withLock
-                            val taskName = if (scheduledTask.name != null) "${scheduledTask.name} (${scheduledTask.id})" else "${scheduledTask.id}"
+                            val taskName =
+                                if (scheduledTask.name != null) "${scheduledTask.name} (${scheduledTask.id})" else "${scheduledTask.id}"
                             logger.info("Executing task: $taskName")
                             launch {
                                 try {
@@ -290,7 +291,8 @@ class ScheduleService : IScheduleService, Service() {
 
     override fun triggerTask(id: UUID): Boolean {
         val scheduledTask = schedules.find { it.id == id } ?: return false
-        val taskName = if (scheduledTask.name != null) "${scheduledTask.name} (${scheduledTask.id})" else "${scheduledTask.id}"
+        val taskName =
+            if (scheduledTask.name != null) "${scheduledTask.name} (${scheduledTask.id})" else "${scheduledTask.id}"
         logger.info("Manually triggering task: $taskName")
         ApplicationScope.scope.launch {
             try {
@@ -365,16 +367,17 @@ class ScheduleService : IScheduleService, Service() {
         queueUpdateNotifier.tryEmit(Unit)
     }
 
-    private suspend fun notifyTaskCompletion(completedTaskId: UUID, completedTaskKey: String?) = scheduleMutex.withLock {
-        val dependentTasks = schedules.filter {
-            val trigger = it.trigger
-            trigger is TaskCompletionTrigger && (trigger.dependencyId == completedTaskId || (completedTaskKey != null && trigger.dependencyKey == completedTaskKey))
-        }
+    private suspend fun notifyTaskCompletion(completedTaskId: UUID, completedTaskKey: String?) =
+        scheduleMutex.withLock {
+            val dependentTasks = schedules.filter {
+                val trigger = it.trigger
+                trigger is TaskCompletionTrigger && (trigger.dependencyId == completedTaskId || (completedTaskKey != null && trigger.dependencyKey == completedTaskKey))
+            }
 
-        dependentTasks.forEach { task ->
-            schedules.remove(task)
-            (task.trigger as TaskCompletionTrigger).activate()
-            schedule(task)
+            dependentTasks.forEach { task ->
+                schedules.remove(task)
+                (task.trigger as TaskCompletionTrigger).activate()
+                schedule(task)
+            }
         }
-    }
 }

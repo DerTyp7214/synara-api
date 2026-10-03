@@ -31,7 +31,7 @@ class SongSearchTest : KoinTest {
     private val genreService = mockk<GenreService>(relaxed = true)
 
     private val allTables = arrayOf(
-        ArtistTable, AlbumTable, SongTable, SongVariantTable, SongArtistTable, 
+        ArtistTable, AlbumTable, SongTable, SongVariantTable, SongArtistTable,
         SongMusicBrainzTable, SongAudioDataTable, ImageTable, GenreTable,
         UserTable, AlbumMusicBrainzTable, ArtistMusicBrainzTable,
         ArtistAliasTable, ArtistMemberTable, AlbumArtistTable,
@@ -135,7 +135,7 @@ class SongSearchTest : KoinTest {
                 it[title] = "Target Song"
                 it[albumId] = album1[AlbumTable.id]
             }
-            
+
             val album2 = AlbumTable.insert {
                 it[id] = UUID.randomUUID()
                 it[name] = "Target Album"
@@ -279,7 +279,7 @@ class SongSearchTest : KoinTest {
                 it[name] = "Album"
             }
             val albumId = albumRow[AlbumTable.id]
-            
+
             SongTable.insert {
                 it[id] = UUID.randomUUID()
                 it[title] = "Explicit Song"
@@ -306,43 +306,44 @@ class SongSearchTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `searchByLyrics should rank matches in synced lyrics higher than plain lyrics`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        val songService = SongService()
-        val userId = UUID.randomUUID()
+    fun `searchByLyrics should rank matches in synced lyrics higher than plain lyrics`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val songService = SongService()
+            val userId = UUID.randomUUID()
 
-        transaction(database) {
-            UserTable.insert {
-                it[id] = userId
-                it[username] = "testuser"
-                it[passwordHash] = ""
-            }
-            val albumId = AlbumTable.insert {
-                it[id] = UUID.randomUUID()
-                it[name] = "Album"
-            }[AlbumTable.id]
+            transaction(database) {
+                UserTable.insert {
+                    it[id] = userId
+                    it[username] = "testuser"
+                    it[passwordHash] = ""
+                }
+                val albumId = AlbumTable.insert {
+                    it[id] = UUID.randomUUID()
+                    it[name] = "Album"
+                }[AlbumTable.id]
 
-            SongTable.insert {
-                it[id] = UUID.randomUUID()
-                it[title] = "Plain Match"
-                it[lyrics] = "The quick brown fox"
-                it[SongTable.albumId] = albumId
+                SongTable.insert {
+                    it[id] = UUID.randomUUID()
+                    it[title] = "Plain Match"
+                    it[lyrics] = "The quick brown fox"
+                    it[SongTable.albumId] = albumId
+                }
+
+                val song2Id = UUID.randomUUID()
+                SongTable.insert {
+                    it[id] = song2Id
+                    it[title] = "Synced Match"
+                    it[SongTable.albumId] = albumId
+                }
+                SyncedLyricsTable.insert {
+                    it[SyncedLyricsTable.songId] = song2Id
+                    it[SyncedLyricsTable.rawLyrics] = "The quick brown fox"
+                }
             }
 
-            val song2Id = UUID.randomUUID()
-            SongTable.insert {
-                it[id] = song2Id
-                it[title] = "Synced Match"
-                it[SongTable.albumId] = albumId
-            }
-            SyncedLyricsTable.insert {
-                it[SyncedLyricsTable.songId] = song2Id
-                it[SyncedLyricsTable.rawLyrics] = "The quick brown fox"
-            }
+            val result = songService.searchByLyrics(0, 10, "quick brown", true, userId)
+            assertEquals(2, result.data.size)
+            assertEquals("Synced Match", result.data.first().title)
         }
-
-        val result = songService.searchByLyrics(0, 10, "quick brown", true, userId)
-        assertEquals(2, result.data.size)
-        assertEquals("Synced Match", result.data.first().title)
-    }
 }

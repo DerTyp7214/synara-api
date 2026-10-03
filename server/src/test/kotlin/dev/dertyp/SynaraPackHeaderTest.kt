@@ -16,7 +16,7 @@ class SynaraPackHeaderTest {
     fun `withSynaraPack should enable negotiation when header is true`() {
         val route = mockk<KrpcRoute>()
         every { route.call.request.header("X-Synara-Pack") } returns "true"
-        
+
         route.withSynaraPack()
         assertTrue(SynaraNegotiation.isEnabled)
     }
@@ -25,7 +25,7 @@ class SynaraPackHeaderTest {
     fun `withSynaraPack should disable negotiation when header is missing`() {
         val route = mockk<KrpcRoute>()
         every { route.call.request.header("X-Synara-Pack") } returns null
-        
+
         route.withSynaraPack()
         assertFalse(SynaraNegotiation.isEnabled)
     }
@@ -34,7 +34,7 @@ class SynaraPackHeaderTest {
     fun `withSynaraPack should disable negotiation when header is false`() {
         val route = mockk<KrpcRoute>()
         every { route.call.request.header("X-Synara-Pack") } returns "false"
-        
+
         route.withSynaraPack()
         assertFalse(SynaraNegotiation.isEnabled)
     }

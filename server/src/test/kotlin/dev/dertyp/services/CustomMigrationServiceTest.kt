@@ -102,9 +102,10 @@ class CustomMigrationServiceTest : KoinTest {
 
     @Test
     fun `version comparison should work correctly`() {
-        val compareVersions = service.javaClass.getDeclaredMethod("compareVersions", String::class.java, String::class.java).apply {
-            isAccessible = true
-        }
+        val compareVersions =
+            service.javaClass.getDeclaredMethod("compareVersions", String::class.java, String::class.java).apply {
+                isAccessible = true
+            }
 
         fun invokeCompare(v1: String, v2: String) = compareVersions.invoke(service, v1, v2) as Int
 

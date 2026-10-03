@@ -18,7 +18,11 @@ fun List<CreditLink>.mergedPerOwner(): List<CreditLink> =
         ordered.first().copy(joinPhrase = ordered.last().joinPhrase)
     }
 
-fun List<CreditLink>.splitInto(targetIds: List<UUID>, existingLinks: Set<Pair<UUID, UUID>>, keepsOriginal: Boolean): List<CreditLink> =
+fun List<CreditLink>.splitInto(
+    targetIds: List<UUID>,
+    existingLinks: Set<Pair<UUID, UUID>>,
+    keepsOriginal: Boolean
+): List<CreditLink> =
     flatMap { original ->
         val added = targetIds
             .filter { it != original.artistId && (original.ownerId to it) !in existingLinks }

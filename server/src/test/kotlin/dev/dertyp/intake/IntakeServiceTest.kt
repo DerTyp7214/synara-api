@@ -44,7 +44,9 @@ class IntakeServiceTest {
             val accepted = items.filter(accepts)
             if (accepted.isEmpty()) return null
             return if (navigational) IntakeOffer(accepted, action = UiAction.OpenNative("externalSearch"))
-            else IntakeOffer(accepted, submit = { submitted += accepted; IntakeReceipt(accepted.size, "importer.queued") })
+            else IntakeOffer(
+                accepted,
+                submit = { submitted += accepted; IntakeReceipt(accepted.size, "importer.queued") })
         }
     }
 

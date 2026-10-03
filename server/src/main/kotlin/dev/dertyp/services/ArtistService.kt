@@ -29,12 +29,18 @@ class ArtistRpcService(private val user: User, private val artistService: Artist
     override suspend fun rankedSearch(page: Int, pageSize: Int, query: String): PaginatedResponse<Artist> =
         artistService.rankedSearch(page, pageSize, query, user.id)
 
-    override suspend fun setGroup(id: UUID, artistIds: List<UUID>?): Artist? = artistService.setGroup(id, artistIds, user.id)
+    override suspend fun setGroup(id: UUID, artistIds: List<UUID>?): Artist? =
+        artistService.setGroup(id, artistIds, user.id)
+
     override suspend fun byGroup(page: Int, pageSize: Int, groupId: UUID): PaginatedResponse<Artist> =
         artistService.byGroup(page, pageSize, groupId, user.id)
 
-    override suspend fun mergeArtists(mergeArtists: MergeArtists): Artist? = artistService.mergeArtists(mergeArtists, user.id)
-    override suspend fun splitArtist(splitArtist: SplitArtist): List<Artist> = artistService.splitArtist(splitArtist, user.id)
+    override suspend fun mergeArtists(mergeArtists: MergeArtists): Artist? =
+        artistService.mergeArtists(mergeArtists, user.id)
+
+    override suspend fun splitArtist(splitArtist: SplitArtist): List<Artist> =
+        artistService.splitArtist(splitArtist, user.id)
+
     override suspend fun allArtists(page: Int, pageSize: Int): PaginatedResponse<Artist> =
         artistService.allArtists(page, pageSize, user.id)
 
@@ -56,9 +62,12 @@ class ArtistRpcService(private val user: User, private val artistService: Artist
         query: String,
         page: Int,
         pageSize: Int
-    ): PaginatedResponse<MusicBrainzArtist> = artistService.searchArtistOnMusicBrainz(query, page, pageSize, HttpClientPriority.HIGH)
+    ): PaginatedResponse<MusicBrainzArtist> =
+        artistService.searchArtistOnMusicBrainz(query, page, pageSize, HttpClientPriority.HIGH)
 
-    override suspend fun fetchMusicBrainzId(id: UUID): Artist? = artistService.fetchMusicBrainzId(id, user.id, HttpClientPriority.HIGH)
+    override suspend fun fetchMusicBrainzId(id: UUID): Artist? =
+        artistService.fetchMusicBrainzId(id, user.id, HttpClientPriority.HIGH)
+
     override suspend fun setMusicBrainzId(id: UUID, musicBrainzId: UUID?): Artist? =
         artistService.setMusicBrainzId(id, musicBrainzId, user.id)
 
@@ -71,7 +80,9 @@ class ArtistRpcService(private val user: User, private val artistService: Artist
     override suspend fun setArtistImageByUrl(id: UUID, url: String): Artist? =
         artistService.setArtistImageByUrl(id, url, user.id)
 
-    override fun artistsWithoutMusicBrainzIdFlow(): Flow<Artist> = artistService.artistsWithoutMusicBrainzIdFlow(user.id)
+    override fun artistsWithoutMusicBrainzIdFlow(): Flow<Artist> =
+        artistService.artistsWithoutMusicBrainzIdFlow(user.id)
+
     override fun artistIdsWithoutMusicBrainzId(): Flow<UUID> = artistService.artistIdsWithoutMusicBrainzId()
 
     override suspend fun aliases(id: UUID): List<ArtistAlias> = artistService.aliases(id)
@@ -153,9 +164,13 @@ class ArtistService(private val searchIndexWorker: SearchIndexWorker? = null) : 
 
     fun map(resultRow: ResultRow): Artist = mapArtist(resultRow)
 
-    suspend fun fetchMusicBrainzId(id: UUID, userId: UUID? = null, priority: HttpClientPriority = HttpClientPriority.NORMAL): Artist? {
+    suspend fun fetchMusicBrainzId(
+        id: UUID,
+        userId: UUID? = null,
+        priority: HttpClientPriority = HttpClientPriority.NORMAL
+    ): Artist? {
         val artist = byId(id, userId) ?: return null
-        
+
         var mbArtistId: UUID? = artist.musicbrainzId
 
         if (mbArtistId == null) {
@@ -174,7 +189,10 @@ class ArtistService(private val searchIndexWorker: SearchIndexWorker? = null) : 
                     }
 
                     val matchedArtist = mbRecording.artistCredit?.find {
-                        it.name.equals(artist.name, ignoreCase = true) || it.artist?.name.equals(artist.name, ignoreCase = true)
+                        it.name.equals(artist.name, ignoreCase = true) || it.artist?.name.equals(
+                            artist.name,
+                            ignoreCase = true
+                        )
                     }?.artist
 
                     if (matchedArtist != null) {
@@ -186,7 +204,8 @@ class ArtistService(private val searchIndexWorker: SearchIndexWorker? = null) : 
         }
 
         if (mbArtistId == null) {
-            val albums = albumService.byArtist(page = 0, pageSize = 5, artistId = id, singles = false, userId = userId).data
+            val albums =
+                albumService.byArtist(page = 0, pageSize = 5, artistId = id, singles = false, userId = userId).data
             for (album in albums) {
                 val mbRelease = if (album.musicbrainzId != null) {
                     cachedMusicBrainzService.getRelease(album.musicbrainzId!!, priority)
@@ -195,12 +214,15 @@ class ArtistService(private val searchIndexWorker: SearchIndexWorker? = null) : 
                         musicBrainzCacheService.updateReleaseCache(it)
                     }
                 }
-                
+
                 if (mbRelease != null) {
                     val matchedArtist = mbRelease.artistCredit?.find {
-                        it.name.equals(artist.name, ignoreCase = true) || it.artist?.name.equals(artist.name, ignoreCase = true)
+                        it.name.equals(artist.name, ignoreCase = true) || it.artist?.name.equals(
+                            artist.name,
+                            ignoreCase = true
+                        )
                     }?.artist
-                    
+
                     if (matchedArtist != null) {
                         mbArtistId = matchedArtist.id
                         break
@@ -208,11 +230,11 @@ class ArtistService(private val searchIndexWorker: SearchIndexWorker? = null) : 
                 }
             }
         }
-        
+
         val mbArtist = if (mbArtistId != null) {
             cachedMusicBrainzService.getArtist(mbArtistId, priority)
         } else return byId(id, userId)
-        
+
         if (mbArtist != null) {
             val genres = mbArtist.genres?.map { it.name } ?: emptyList()
             if (genres.isNotEmpty()) {
@@ -226,7 +248,7 @@ class ArtistService(private val searchIndexWorker: SearchIndexWorker? = null) : 
                 }
             }
         }
-        
+
         return setMusicBrainzId(id, mbArtist?.id, userId)
     }
 
@@ -286,7 +308,12 @@ class ArtistService(private val searchIndexWorker: SearchIndexWorker? = null) : 
         return byId(id, userId)
     }
 
-    suspend fun searchArtistOnMusicBrainz(query: String, page: Int, pageSize: Int, priority: HttpClientPriority = HttpClientPriority.NORMAL): PaginatedResponse<MusicBrainzArtist> {
+    suspend fun searchArtistOnMusicBrainz(
+        query: String,
+        page: Int,
+        pageSize: Int,
+        priority: HttpClientPriority = HttpClientPriority.NORMAL
+    ): PaginatedResponse<MusicBrainzArtist> {
         return musicBrainzService.searchArtistsMbPaged(query, page, pageSize, priority)
     }
 
@@ -301,17 +328,21 @@ class ArtistService(private val searchIndexWorker: SearchIndexWorker? = null) : 
             where { ArtistMusicBrainzTable.musicBrainzId eq mbId }
         }.data
 
-    suspend fun byMusicBrainzIds(@LogParam("size") mbIds: Collection<PlatformUUID>, userId: UUID? = null): List<Artist> =
+    suspend fun byMusicBrainzIds(
+        @LogParam("size") mbIds: Collection<PlatformUUID>,
+        userId: UUID? = null
+    ): List<Artist> =
         queryArtists(0, Int.MAX_VALUE, userId = userId) {
             where { ArtistMusicBrainzTable.musicBrainzId inList mbIds }
         }.data
 
-    suspend fun byIds(@LogParam("size") ids: List<UUID>, userId: UUID? = null): List<Artist> = queryArtists(0, Int.MAX_VALUE, userId = userId) {
-        where { ArtistTable.id inList ids }
-    }.let { response ->
-        val artistMap = response.data.associateBy { it.id }
-        ids.mapNotNull { artistMap[it] }
-    }
+    suspend fun byIds(@LogParam("size") ids: List<UUID>, userId: UUID? = null): List<Artist> =
+        queryArtists(0, Int.MAX_VALUE, userId = userId) {
+            where { ArtistTable.id inList ids }
+        }.let { response ->
+            val artistMap = response.data.associateBy { it.id }
+            ids.mapNotNull { artistMap[it] }
+        }
 
     suspend fun rankedSearch(page: Int, pageSize: Int, query: String, userId: UUID? = null): PaginatedResponse<Artist> =
         rankedArtistSearch(page, pageSize, query, userId)
@@ -354,10 +385,22 @@ class ArtistService(private val searchIndexWorker: SearchIndexWorker? = null) : 
         scope: Query.() -> Query = { this }
     ): PaginatedResponse<Artist> =
         queryArtistsRanked(page, pageSize, userId = userId, columnSet = {
-            leftJoin(artistGroupJoinAlias, onColumn = { ArtistTable.id }, otherColumn = { artistGroupJoinAlias[ArtistMemberTable.artistId] })
-                .leftJoin(artistGroupAlias, onColumn = { artistGroupJoinAlias[ArtistMemberTable.groupId] }, otherColumn = { artistGroupAlias[ArtistTable.id] })
-                .leftJoin(artistMemberJoinAlias, onColumn = { ArtistTable.id }, otherColumn = { artistMemberJoinAlias[ArtistMemberTable.groupId] })
-                .leftJoin(artistMemberAlias, onColumn = { artistMemberJoinAlias[ArtistMemberTable.artistId] }, otherColumn = { artistMemberAlias[ArtistTable.id] })
+            leftJoin(
+                artistGroupJoinAlias,
+                onColumn = { ArtistTable.id },
+                otherColumn = { artistGroupJoinAlias[ArtistMemberTable.artistId] })
+                .leftJoin(
+                    artistGroupAlias,
+                    onColumn = { artistGroupJoinAlias[ArtistMemberTable.groupId] },
+                    otherColumn = { artistGroupAlias[ArtistTable.id] })
+                .leftJoin(
+                    artistMemberJoinAlias,
+                    onColumn = { ArtistTable.id },
+                    otherColumn = { artistMemberJoinAlias[ArtistMemberTable.groupId] })
+                .leftJoin(
+                    artistMemberAlias,
+                    onColumn = { artistMemberJoinAlias[ArtistMemberTable.artistId] },
+                    otherColumn = { artistMemberAlias[ArtistTable.id] })
                 .withMBArtistSearch()
         }) {
             rankedSearchQuery(
@@ -460,7 +503,12 @@ class ArtistService(private val searchIndexWorker: SearchIndexWorker? = null) : 
         }
 
         val songCredits = SongArtistTable
-            .select(SongArtistTable.songId, SongArtistTable.artistId, SongArtistTable.position, SongArtistTable.joinPhrase)
+            .select(
+                SongArtistTable.songId,
+                SongArtistTable.artistId,
+                SongArtistTable.position,
+                SongArtistTable.joinPhrase
+            )
             .where { SongArtistTable.artistId inList currentArtistIds }
             .map {
                 CreditLink(
@@ -480,7 +528,12 @@ class ArtistService(private val searchIndexWorker: SearchIndexWorker? = null) : 
         }
 
         val albumCredits = AlbumArtistTable
-            .select(AlbumArtistTable.albumId, AlbumArtistTable.artistId, AlbumArtistTable.position, AlbumArtistTable.joinPhrase)
+            .select(
+                AlbumArtistTable.albumId,
+                AlbumArtistTable.artistId,
+                AlbumArtistTable.position,
+                AlbumArtistTable.joinPhrase
+            )
             .where { AlbumArtistTable.artistId inList currentArtistIds }
             .map {
                 CreditLink(
@@ -598,9 +651,9 @@ class ArtistService(private val searchIndexWorker: SearchIndexWorker? = null) : 
             .where { ArtistMusicBrainzTable.artistId inList currentArtistIds }
             .mapNotNull { it[ArtistMusicBrainzTable.musicBrainzId]?.value }
             .distinct()
-            
+
         if (existingMbIds.isNotEmpty()) {
-            ArtistMusicBrainzTable.insert { 
+            ArtistMusicBrainzTable.insert {
                 it[artistId] = newArtist
                 it[musicBrainzId] = existingMbIds.first()
             }
@@ -882,9 +935,10 @@ class ArtistService(private val searchIndexWorker: SearchIndexWorker? = null) : 
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    fun artistsWithoutMusicBrainzIdFlow(userId: UUID? = null): Flow<Artist> = artistIdsWithoutMusicBrainzId().chunked(100).flatMapConcat { ids ->
-        byIds(ids, userId).asFlow()
-    }
+    fun artistsWithoutMusicBrainzIdFlow(userId: UUID? = null): Flow<Artist> =
+        artistIdsWithoutMusicBrainzId().chunked(100).flatMapConcat { ids ->
+            byIds(ids, userId).asFlow()
+        }
 
     suspend fun aliases(id: UUID): List<ArtistAlias> = dbQuery {
         ArtistAliasTable
@@ -1021,7 +1075,10 @@ class ArtistService(private val searchIndexWorker: SearchIndexWorker? = null) : 
                 .leftJoin(ArtistGenreTable)
                 .leftJoin(GenreTable)
                 .leftJoin(ImageTable, onColumn = { ArtistTable.image }, otherColumn = { ImageTable.id })
-                .innerJoin(ArtistMemberTable, onColumn = { ArtistTable.id }, otherColumn = { ArtistMemberTable.artistId })
+                .innerJoin(
+                    ArtistMemberTable,
+                    onColumn = { ArtistTable.id },
+                    otherColumn = { ArtistMemberTable.artistId })
                 .selectAll()
                 .where { ArtistMemberTable.groupId inList groupIds }
                 .toList()
@@ -1048,7 +1105,8 @@ class ArtistService(private val searchIndexWorker: SearchIndexWorker? = null) : 
             .mapNotNull { row ->
                 val groupId = row.getOrNull(ArtistMemberTable.groupId)?.value ?: return@mapNotNull null
                 val artistId = row[ArtistTable.id].value
-                val artist = mapArtist(row, genres = genresByArtistId[artistId] ?: listOf(), followedTable = followedTable)
+                val artist =
+                    mapArtist(row, genres = genresByArtistId[artistId] ?: listOf(), followedTable = followedTable)
                 groupId to artist
             }
             .groupBy({ it.first }, { it.second })
@@ -1089,7 +1147,8 @@ class ArtistService(private val searchIndexWorker: SearchIndexWorker? = null) : 
                 .toList()
         }
 
-        val existingNames = existingRows.flatMap { listOfNotNull(it[ArtistTable.name], it.getOrNull(ArtistAliasTable.name)) }.toSet()
+        val existingNames =
+            existingRows.flatMap { listOfNotNull(it[ArtistTable.name], it.getOrNull(ArtistAliasTable.name)) }.toSet()
         val existingMap = existingRows.flatMap {
             val mainName = it[ArtistTable.name]
             val aliasName = it.getOrNull(ArtistAliasTable.name)
@@ -1126,7 +1185,8 @@ class ArtistService(private val searchIndexWorker: SearchIndexWorker? = null) : 
         return BulkCreateResult(existingSplits + existingMap + newMap, newNames.toSet())
     }
 
-    suspend fun getOrBulkCreate(artistNames: List<String>): Map<String, List<UUID>> = getOrBulkCreateWithResult(artistNames).nameToIds
+    suspend fun getOrBulkCreate(artistNames: List<String>): Map<String, List<UUID>> =
+        getOrBulkCreateWithResult(artistNames).nameToIds
 
     suspend fun deleteUnreferencedArtists(onProgress: suspend (Double, String) -> Unit = { _, _ -> }): Int = dbQuery {
         val referencedArtists = mutableSetOf<UUID>()
@@ -1148,7 +1208,7 @@ class ArtistService(private val searchIndexWorker: SearchIndexWorker? = null) : 
             ArtistTable.deleteWhere { ArtistTable.id inList batch }
             ArtistAliasTable.deleteWhere { ArtistAliasTable.artistId inList batch }
         }
-        
+
         libraryFileDeleter.removeFromSearchIndex(SearchIndexEntityType.ARTIST, unreferencedArtists)
 
         onProgress(100.0, "Deleted ${unreferencedArtists.size} artists")
@@ -1164,7 +1224,7 @@ class ArtistService(private val searchIndexWorker: SearchIndexWorker? = null) : 
             it[about] = artist.about
             it[image] = artist.imageId?.let { imageId -> EntityID(imageId, ImageTable) }
         }
-        
+
         if (artist.musicbrainzId != null) {
             val mbId = artist.musicbrainzId!!
             if (MBArtistTable.selectAll().where { MBArtistTable.id eq mbId }.empty()) {
@@ -1193,7 +1253,7 @@ class ArtistService(private val searchIndexWorker: SearchIndexWorker? = null) : 
         val exists = ArtistAliasTable.selectAll()
             .where { (ArtistAliasTable.artistId eq alias.artistId) and (ArtistAliasTable.name eq alias.name) }
             .any()
-        
+
         if (!exists) {
             ArtistAliasTable.insert {
                 it[artistId] = alias.artistId

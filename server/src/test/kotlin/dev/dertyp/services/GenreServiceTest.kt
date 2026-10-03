@@ -42,7 +42,7 @@ class GenreServiceTest : KoinTest {
         val ids = service.getOrCreateGenres(names)
 
         assertEquals(2, ids.size)
-        
+
         transaction(database) {
             val count = GenreTable.selectAll().count()
             assertEquals(2L, count)
@@ -57,7 +57,7 @@ class GenreServiceTest : KoinTest {
         val ids = service.getOrCreateGenres(names)
 
         assertEquals(1, ids.size)
-        
+
         transaction(database) {
             val genre = GenreTable.selectAll().single()
             assertEquals("rock", genre[GenreTable.name])
@@ -76,7 +76,7 @@ class GenreServiceTest : KoinTest {
 
         assertEquals(2, ids2.size)
         assertTrue(ids2.contains(ids1[0]))
-        
+
         transaction(database) {
             val count = GenreTable.selectAll().count()
             assertEquals(2L, count)

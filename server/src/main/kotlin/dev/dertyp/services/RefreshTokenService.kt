@@ -67,7 +67,12 @@ class RefreshTokenService : Service() {
         RefreshTokenTable.deleteWhere { op }
     }
 
-    suspend fun createToken(userId: UUID, expirationMillis: Duration, tokenHash: String, sessionId: UUID?): RefreshToken? = dbQuery {
+    suspend fun createToken(
+        userId: UUID,
+        expirationMillis: Duration,
+        tokenHash: String,
+        sessionId: UUID?
+    ): RefreshToken? = dbQuery {
         val expirationDate = Instant.now().toEpochMilli().date + expirationMillis
 
         RefreshTokenTable.insert {

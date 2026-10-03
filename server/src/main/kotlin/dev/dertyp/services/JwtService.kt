@@ -211,8 +211,12 @@ class JwtService(
                     }
                 }
             }) {
-                val callingUser = call.getUser() ?: return@post call.respond(HttpStatusCode.Unauthorized, "Invalid user")
-                if (!callingUser.isAdmin) return@post call.respond(HttpStatusCode.Forbidden, "Only admins can register new users")
+                val callingUser =
+                    call.getUser() ?: return@post call.respond(HttpStatusCode.Unauthorized, "Invalid user")
+                if (!callingUser.isAdmin) return@post call.respond(
+                    HttpStatusCode.Forbidden,
+                    "Only admins can register new users"
+                )
 
                 val authenticationRequest = call.receive<AuthenticationRequest>()
 
@@ -259,7 +263,9 @@ class JwtService(
                 }
             }) {
                 val user = call.getUser() ?: return@delete call.respond(HttpStatusCode.Unauthorized, "Invalid user")
-                val sessionId = call.parameters["sessionId"]?.toUUIDOrNull() ?: return@delete call.respond(HttpStatusCode.BadRequest)
+                val sessionId = call.parameters["sessionId"]?.toUUIDOrNull() ?: return@delete call.respond(
+                    HttpStatusCode.BadRequest
+                )
 
                 sessionService.deactivateSession(sessionId, user.id)
                 call.respond(HttpStatusCode.OK)

@@ -57,6 +57,7 @@ object MockGenerator {
                     (0..100).random()
                 }
             }
+
             classifier == Long::class -> (0..Int.MAX_VALUE.toLong()).random()
             classifier == Boolean::class -> {
                 if (isEssentialField(name)) {
@@ -65,12 +66,14 @@ object MockGenerator {
                     (0..1).random() == 1
                 }
             }
+
             classifier == Double::class -> (0..10000).random().toDouble() / 100.0
             classifier == Float::class -> (0..10000).random().toFloat() / 100.0f
             classifier == ByteArray::class -> {
                 val size = if (nameContains(name, "data", "bytes")) 64 else 32
                 Random.nextBytes(size)
             }
+
             classifier == Date::class || classifier.simpleName == "Date" || classifier.simpleName == "PlatformDate" -> {
                 if (nameContains(name, "expire")) {
                     Date(System.currentTimeMillis() + 1000L * 60 * 60 * 24 * 30)
@@ -78,6 +81,7 @@ object MockGenerator {
                     Date()
                 }
             }
+
             classifier == Instant::class || classifier.simpleName == "Instant" || classifier.simpleName == "PlatformInstant" -> {
                 if (nameContains(name, "expire")) {
                     Instant.now().plusSeconds(60 * 60 * 24 * 30)
@@ -85,6 +89,7 @@ object MockGenerator {
                     Instant.now()
                 }
             }
+
             classifier == LocalDate::class || classifier.simpleName == "LocalDate" || classifier.simpleName == "PlatformLocalDate" -> {
                 if (nameContains(name, "expire")) {
                     LocalDate.now().plusMonths(1)
@@ -92,6 +97,7 @@ object MockGenerator {
                     LocalDate.now()
                 }
             }
+
             classifier == UUID::class || classifier.simpleName == "UUID" || classifier.simpleName == "PlatformUUID" -> UUID.randomUUID()
             classifier.isSubclassOf(Enum::class) -> classifier.java.enumConstants?.random()
             classifier.isSealed -> {
@@ -107,6 +113,7 @@ object MockGenerator {
                 val subclass = candidates.randomOrNull() ?: return null
                 createDummy(subclass.starProjectedType, name, depth + 1)
             }
+
             classifier.isSubclassOf(Map::class) -> {
                 val keyType = type.arguments.getOrNull(0)?.type ?: return emptyMap<Any, Any>()
                 val valueType = type.arguments.getOrNull(1)?.type ?: return emptyMap<Any, Any>()
@@ -114,10 +121,12 @@ object MockGenerator {
                 val map = (1..3).associate {
                     createDummy(keyType, "${name}Key", depth + 1) to createDummy(valueType, "${name}Value", depth + 1)
                 }.filterKeys { it != null }
+
                 @Suppress("UNCHECKED_CAST")
                 val result = map as Map<Any, Any>
                 if (classifier.isSubclassOf(MutableMap::class)) result.toMutableMap() else result
             }
+
             classifier.isSubclassOf(Iterable::class) || classifier.isSubclassOf(Collection::class) -> {
                 val itemType = type.arguments.firstOrNull()?.type ?: return emptyList<Any>()
                 if (depth > 5) return if (classifier.isSubclassOf(Set::class)) emptySet() else emptyList<Any>()
@@ -131,6 +140,7 @@ object MockGenerator {
                     else -> items
                 }
             }
+
             classifier.simpleName == "Flow" -> {
                 val itemType = type.arguments.firstOrNull()?.type ?: return null
                 flow {
@@ -139,6 +149,7 @@ object MockGenerator {
                     }
                 }
             }
+
             classifier.simpleName == "PaginatedResponse" -> {
                 val itemType = type.arguments.firstOrNull()?.type ?: return null
                 val items = List(5) { createDummy(itemType, name, depth + 1) }
@@ -151,6 +162,7 @@ object MockGenerator {
                     hasNextPage = false
                 )
             }
+
             classifier.isData -> {
                 if (depth > 10) return try {
                     classifier.createInstance()
@@ -168,6 +180,7 @@ object MockGenerator {
                 }.toMap()
                 constructor.callBy(args)
             }
+
             else -> {
                 try {
                     classifier.createInstance()

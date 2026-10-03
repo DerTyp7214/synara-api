@@ -81,7 +81,8 @@ class PodcastIndexOrgIndexTest {
     }
 
     private fun sha1Hex(value: String): String =
-        MessageDigest.getInstance("SHA-1").digest(value.toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
+        MessageDigest.getInstance("SHA-1").digest(value.toByteArray(Charsets.UTF_8))
+            .joinToString("") { "%02x".format(it) }
 
     @Test
     fun `signs the request and maps a full feed`() = runBlocking {

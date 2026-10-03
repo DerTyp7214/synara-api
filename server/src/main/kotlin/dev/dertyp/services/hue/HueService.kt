@@ -135,7 +135,8 @@ class HueService : Service() {
     private val catalogs = ConcurrentHashMap<UUID, BridgeCatalog>()
     private val areaCache = ConcurrentHashMap<UUID, List<HueEntertainmentArea>>()
 
-    private val changeFlow = MutableSharedFlow<Unit>(extraBufferCapacity = 16, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+    private val changeFlow =
+        MutableSharedFlow<Unit>(extraBufferCapacity = 16, onBufferOverflow = BufferOverflow.DROP_OLDEST)
     val changes: SharedFlow<Unit> = changeFlow.asSharedFlow()
 
     override suspend fun startService() {
@@ -162,14 +163,21 @@ class HueService : Service() {
     suspend fun discover(userId: UUID, force: Boolean = false): List<HueBridgeCandidate> {
         val paired = bridges(userId)
         return discoveryService.discover(force = force).map { candidate ->
-            candidate.copy(paired = paired.any { it.ip == candidate.ip || (candidate.bridgeId != null && it.bridgeId.equals(candidate.bridgeId, true)) })
+            candidate.copy(paired = paired.any {
+                it.ip == candidate.ip || (candidate.bridgeId != null && it.bridgeId.equals(
+                    candidate.bridgeId,
+                    true
+                ))
+            })
         }
     }
 
-    fun cachedDiscovery(userId: UUID): List<HueBridgeCandidate> = discoveryService.cached().map { it.copy(paired = false) }
+    fun cachedDiscovery(userId: UUID): List<HueBridgeCandidate> =
+        discoveryService.cached().map { it.copy(paired = false) }
 
     suspend fun bridges(userId: UUID): List<BridgeRow> = dbQuery {
-        HueBridgeTable.selectAll().where { HueBridgeTable.userId eq userId }.orderBy(HueBridgeTable.name).map(::mapBridge)
+        HueBridgeTable.selectAll().where { HueBridgeTable.userId eq userId }.orderBy(HueBridgeTable.name)
+            .map(::mapBridge)
     }
 
     suspend fun bridge(userId: UUID, id: UUID): BridgeRow? = dbQuery {
@@ -338,9 +346,9 @@ class HueService : Service() {
             val areas = HueEntertainmentMap.build(configurations, services, lights)
             areaCache[bridgeId] = areas
             rooms.map { HueTarget(HueTargetType.ROOM, it.id, it.metadata?.name ?: "Room", it.groupedLightId) } +
-                zones.map { HueTarget(HueTargetType.ZONE, it.id, it.metadata?.name ?: "Zone", it.groupedLightId) } +
-                colorLights.map { HueTarget(HueTargetType.LIGHT, it.id, lightName(it)) } +
-                areas.map { HueTarget(HueTargetType.ENTERTAINMENT, it.id, it.name) }
+                    zones.map { HueTarget(HueTargetType.ZONE, it.id, it.metadata?.name ?: "Zone", it.groupedLightId) } +
+                    colorLights.map { HueTarget(HueTargetType.LIGHT, it.id, lightName(it)) } +
+                    areas.map { HueTarget(HueTargetType.ENTERTAINMENT, it.id, it.name) }
         } catch (e: Exception) {
             recordError(row.id, e)
             throw e
@@ -350,7 +358,11 @@ class HueService : Service() {
         return targets
     }
 
-    private fun buildCatalog(colorLights: List<ClipLight>, rooms: List<ClipGroup>, zones: List<ClipGroup>): BridgeCatalog {
+    private fun buildCatalog(
+        colorLights: List<ClipLight>,
+        rooms: List<ClipGroup>,
+        zones: List<ClipGroup>
+    ): BridgeCatalog {
         val byDevice = colorLights.groupBy { it.owner?.rid }
         val byId = colorLights.associateBy { it.id }
         val profiles = colorLights.associate { light ->
@@ -405,7 +417,8 @@ class HueService : Service() {
         val row = bridge(userId, bridgeId) ?: throw IllegalArgumentException("Unknown bridge $bridgeId")
         val client = runtime(row).client
         val targets = listTargets(userId, bridgeId, force)
-        val groups = targets.filter { it.type == HueTargetType.ROOM || it.type == HueTargetType.ZONE }.associateBy { it.id }
+        val groups =
+            targets.filter { it.type == HueTargetType.ROOM || it.type == HueTargetType.ZONE }.associateBy { it.id }
         val scenes = try {
             client.scenes().mapNotNull { scene ->
                 val ref = scene.group ?: return@mapNotNull null
@@ -442,7 +455,9 @@ class HueService : Service() {
         if (requested.targets.count { it.type == HueTargetType.ENTERTAINMENT } > 1) {
             throw IllegalArgumentException("At most one entertainment area per bridge")
         }
-        if (requested.enabled && requested.onStop == HueStopMode.SCENE && requested.stopScenes.isEmpty()) throw IllegalArgumentException("At least one scene is required")
+        if (requested.enabled && requested.onStop == HueStopMode.SCENE && requested.stopScenes.isEmpty()) throw IllegalArgumentException(
+            "At least one scene is required"
+        )
         val now = System.currentTimeMillis()
         val link = requested.copy(
             latencyMs = requested.latencyMs.coerceIn(0, MAX_LATENCY_MS),
@@ -459,7 +474,8 @@ class HueService : Service() {
                 it[transitionMode] = link.transitionMode
                 it[transitionMs] = link.transitionMs
                 it[onStop] = link.onStop
-                it[stopScenes] = ApplicationScope.json.encodeToString(ListSerializer(HueScene.serializer()), link.stopScenes)
+                it[stopScenes] =
+                    ApplicationScope.json.encodeToString(ListSerializer(HueScene.serializer()), link.stopScenes)
                 it[motion] = link.motion
                 it[latencyMs] = link.latencyMs
                 it[updatedAt] = now
@@ -511,7 +527,10 @@ class HueService : Service() {
 
         val songId = event.songId
         val reported = PlaybackClock(event.positionMs, event.startedAt, event.playing)
-        if (songId != null && lastSong[event.userId] == songId && !pendingStops.containsKey(event.userId) && clocks.containsKey(event.userId)) {
+        if (songId != null && lastSong[event.userId] == songId && !pendingStops.containsKey(event.userId) && clocks.containsKey(
+                event.userId
+            )
+        ) {
             updateClock(event.userId, reported)
             return
         }
@@ -555,7 +574,8 @@ class HueService : Service() {
                 ?.let { area(event.userId, link.bridgeId, it.id) }
             val session = streamArea?.let { ensureStream(event.userId, row, it, base, score.levelFloor) }
             val targets = expandTargets(link.bridgeId, clipTargets(link, streamArea))
-            val result = HuePaletteMapper.map(image?.palette ?: emptyList(), image?.primaryColor, audio, link, targets, profiles)
+            val result =
+                HuePaletteMapper.map(image?.palette ?: emptyList(), image?.primaryColor, audio, link, targets, profiles)
             runtime.queue.submitAll(result.commands)
             val palette = result.palette.ifEmpty {
                 HuePaletteMapper.pickColors(
@@ -578,8 +598,11 @@ class HueService : Service() {
                 startMotion(event.userId, link, runtime, targets, palette, audio, score, song.duration, session)
             }
         }
-        val streamed = links.filter { link -> link.targets.any { it.type == HueTargetType.ENTERTAINMENT } }.map { it.bridgeId }.toSet()
-        streams.keys.filter { it.first == event.userId && it.second !in streamed }.forEach { stopStream(event.userId, it.second) }
+        val streamed =
+            links.filter { link -> link.targets.any { it.type == HueTargetType.ENTERTAINMENT } }.map { it.bridgeId }
+                .toSet()
+        streams.keys.filter { it.first == event.userId && it.second !in streamed }
+            .forEach { stopStream(event.userId, it.second) }
         lastCommandAt[event.userId] = System.currentTimeMillis()
     }
 
@@ -589,13 +612,14 @@ class HueService : Service() {
         return areaCache[bridgeId]?.firstOrNull { it.id == id }
     }
 
-    private fun clipTargets(link: HueUserLink, area: HueEntertainmentArea?): List<HueTarget> = link.targets.filter { target ->
-        when (target.type) {
-            HueTargetType.ENTERTAINMENT -> false
-            HueTargetType.LIGHT -> area == null || target.id !in area.lightIds
-            else -> true
+    private fun clipTargets(link: HueUserLink, area: HueEntertainmentArea?): List<HueTarget> =
+        link.targets.filter { target ->
+            when (target.type) {
+                HueTargetType.ENTERTAINMENT -> false
+                HueTargetType.LIGHT -> area == null || target.id !in area.lightIds
+                else -> true
+            }
         }
-    }
 
     private suspend fun ensureStream(
         userId: UUID,
@@ -608,9 +632,13 @@ class HueService : Service() {
         streams[key]?.takeIf { it.isActive && it.area.id == area.id }?.let { return it }
         stopStream(userId, row.id)
         val client = runtime(row).client
-        val configuration = runCatchingCancellable { client.entertainmentConfigurations().firstOrNull { it.id == area.id } }.getOrNull()
+        val configuration =
+            runCatchingCancellable { client.entertainmentConfigurations().firstOrNull { it.id == area.id } }.getOrNull()
         if (configuration?.active == true) {
-            recordError(row.id, HueBridgeException("Entertainment area ${area.name} is already streamed by another app"))
+            recordError(
+                row.id,
+                HueBridgeException("Entertainment area ${area.name} is already streamed by another app")
+            )
             return null
         }
         var created: HueEntertainmentStream? = null
@@ -689,12 +717,14 @@ class HueService : Service() {
         durationMs: Long,
         sources: Set<LevelSource>,
     ): Map<LevelSource, LightScore> {
-        val cached = sources.mapNotNull { source -> scoreCache.getIfPresent(songId to source)?.let { source to it } }.toMap()
+        val cached =
+            sources.mapNotNull { source -> scoreCache.getIfPresent(songId to source)?.let { source to it } }.toMap()
         val missing = sources - cached.keys
         if (missing.isEmpty()) return cached
         val timeline = runCatchingCancellable { audioAnalysisService.getAudioTimeline(songId) }.getOrNull()
         val built = missing.associateWith { source ->
-            val score = HueLightScore.build(timeline, audio?.bpm, durationMs, HuePaletteMapper.barMs(audio?.bpm), source)
+            val score =
+                HueLightScore.build(timeline, audio?.bpm, durationMs, HuePaletteMapper.barMs(audio?.bpm), source)
             if (timeline != null) scoreCache.put(songId to source, score)
             score
         }
@@ -708,7 +738,12 @@ class HueService : Service() {
     }
 
     private fun lightScore(link: HueUserLink, scores: Map<LevelSource, LightScore>, durationMs: Long): LightScore {
-        return levelSource(link.motion)?.let { scores[it] } ?: HueLightScore.build(null, null, durationMs, SLOW_MOTION_INTERVAL)
+        return levelSource(link.motion)?.let { scores[it] } ?: HueLightScore.build(
+            null,
+            null,
+            durationMs,
+            SLOW_MOTION_INTERVAL
+        )
     }
 
     private fun beatDivisor(targets: List<HueTarget>, score: LightScore): Int? {
@@ -747,7 +782,8 @@ class HueService : Service() {
         animations.remove(key)?.cancel()
         if (palette.isEmpty()) return
         val clock = clocks[userId] ?: return
-        val base = HuePaletteMapper.brightness(link.intensity, audio?.energy ?: SongAudioData.DEFAULT_ENERGY, audio?.loudness)
+        val base =
+            HuePaletteMapper.brightness(link.intensity, audio?.energy ?: SongAudioData.DEFAULT_ENERGY, audio?.loudness)
         val profiles = catalogs[link.bridgeId]?.profiles ?: emptyMap()
         val lightTargets = targets.filter { it.type == HueTargetType.LIGHT }
         val clipCadence = cadence(targets, score)
@@ -762,7 +798,8 @@ class HueService : Service() {
                     KeyframeKind.DOWNBEAT -> 1
                     KeyframeKind.BEAT -> 0
                 }
-                val brightness = (base * HuePaletteMapper.levelFactor(keyframe.level, keyframe.floor)).roundToInt().coerceIn(1, 100)
+                val brightness =
+                    (base * HuePaletteMapper.levelFactor(keyframe.level, keyframe.floor)).roundToInt().coerceIn(1, 100)
                 val beat = keyframe.kind == KeyframeKind.BEAT
                 val cap = if (beat) MAX_BEAT_TRANSITION_MS else MAX_MOTION_TRANSITION_MS
                 val transition = ((nextAtMs ?: (keyframe.atMs + cap)) - keyframe.atMs).coerceIn(0, cap)
@@ -776,7 +813,10 @@ class HueService : Service() {
                             pulse(
                                 keyframe.level,
                                 now,
-                                beatMs.coerceIn(HueEntertainmentRenderer.MIN_DECAY_MS, HueEntertainmentRenderer.MAX_DECAY_MS),
+                                beatMs.coerceIn(
+                                    HueEntertainmentRenderer.MIN_DECAY_MS,
+                                    HueEntertainmentRenderer.MAX_DECAY_MS
+                                ),
                                 keyframe.floor,
                             )
                         }
@@ -784,7 +824,14 @@ class HueService : Service() {
                     }
                 }
                 if (clipCadence(keyframe)) {
-                    val frame = HuePaletteMapper.frame(palette, if (beat) lightTargets else targets, step, brightness, transition, profiles)
+                    val frame = HuePaletteMapper.frame(
+                        palette,
+                        if (beat) lightTargets else targets,
+                        step,
+                        brightness,
+                        transition,
+                        profiles
+                    )
                     runtime.queue.submitAll(frame.commands)
                     if (!beat) currentColors[userId] = frame.colors + streamColors
                     lastCommandAt[userId] = System.currentTimeMillis()
@@ -818,7 +865,13 @@ class HueService : Service() {
             applicationKey = row.applicationKey,
             pinnedFingerprint = row.certFingerprint,
         ) { fingerprint ->
-            scope.launch { dbQuery { HueBridgeTable.update({ HueBridgeTable.id eq row.id }) { it[certFingerprint] = fingerprint } } }
+            scope.launch {
+                dbQuery {
+                    HueBridgeTable.update({ HueBridgeTable.id eq row.id }) {
+                        it[certFingerprint] = fingerprint
+                    }
+                }
+            }
         }
         val queue = HueCommandQueue(
             api = client,
@@ -838,7 +891,11 @@ class HueService : Service() {
 
     private suspend fun recordError(id: UUID, error: Throwable) {
         logger.warn("Hue bridge $id: ${error.message}")
-        dbQuery { HueBridgeTable.update({ HueBridgeTable.id eq id }) { it[lastError] = error.message?.take(500) ?: error::class.simpleName } }
+        dbQuery {
+            HueBridgeTable.update({ HueBridgeTable.id eq id }) {
+                it[lastError] = error.message?.take(500) ?: error::class.simpleName
+            }
+        }
     }
 
     private fun deviceType(): String {
@@ -864,7 +921,12 @@ class HueService : Service() {
     private fun mapLink(row: ResultRow) = HueUserLink(
         bridgeId = row[HueUserLinkTable.bridgeId].value,
         enabled = row[HueUserLinkTable.enabled],
-        targets = runCatching { ApplicationScope.json.decodeFromString(ListSerializer(HueTarget.serializer()), row[HueUserLinkTable.targets]) }.getOrDefault(emptyList()),
+        targets = runCatching {
+            ApplicationScope.json.decodeFromString(
+                ListSerializer(HueTarget.serializer()),
+                row[HueUserLinkTable.targets]
+            )
+        }.getOrDefault(emptyList()),
         intensity = row[HueUserLinkTable.intensity],
         transitionMode = row[HueUserLinkTable.transitionMode],
         transitionMs = row[HueUserLinkTable.transitionMs],
@@ -872,7 +934,12 @@ class HueService : Service() {
         motion = row[HueUserLinkTable.motion],
         updatedAt = row[HueUserLinkTable.updatedAt],
         latencyMs = row[HueUserLinkTable.latencyMs],
-        stopScenes = runCatching { ApplicationScope.json.decodeFromString(ListSerializer(HueScene.serializer()), row[HueUserLinkTable.stopScenes]) }.getOrDefault(emptyList()),
+        stopScenes = runCatching {
+            ApplicationScope.json.decodeFromString(
+                ListSerializer(HueScene.serializer()),
+                row[HueUserLinkTable.stopScenes]
+            )
+        }.getOrDefault(emptyList()),
     )
 
     companion object {

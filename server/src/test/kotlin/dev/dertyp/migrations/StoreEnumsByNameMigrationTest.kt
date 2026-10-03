@@ -40,7 +40,8 @@ class StoreEnumsByNameMigrationTest : KoinTest {
     private var password = ""
 
     private object LegacyListenTable : UUIDTable("listen") {
-        val listenBrainzUserId = reference("listenBrainzUserId", ListenBrainzUserTable.id, onDelete = ReferenceOption.CASCADE).nullable()
+        val listenBrainzUserId =
+            reference("listenBrainzUserId", ListenBrainzUserTable.id, onDelete = ReferenceOption.CASCADE).nullable()
         val userId = reference("userId", UserTable.id, onDelete = ReferenceOption.CASCADE).nullable()
         val songId = reference("songId", SongTable.id, onDelete = ReferenceOption.SET_NULL).nullable()
         val recordingMbid = javaUUID("recordingMbid").nullable()
@@ -183,9 +184,10 @@ class StoreEnumsByNameMigrationTest : KoinTest {
         assertEquals(listOf(local), localOnly)
 
         val (columns, indexedColumns) = DriverManager.getConnection(database.url, user, password).use { connection ->
-            columnNames(connection, "listen") to connection.metaData.getIndexInfo(null, null, "listen", false, false).use { rs ->
-                buildSet { while (rs.next()) rs.getString("COLUMN_NAME")?.let { add(it.trim('"')) } }
-            }
+            columnNames(connection, "listen") to connection.metaData.getIndexInfo(null, null, "listen", false, false)
+                .use { rs ->
+                    buildSet { while (rs.next()) rs.getString("COLUMN_NAME")?.let { add(it.trim('"')) } }
+                }
         }
         assertFalse(columns.any { it.equals("source", ignoreCase = true) })
         assertTrue(indexedColumns.any { it.equals("listenSource", ignoreCase = true) })

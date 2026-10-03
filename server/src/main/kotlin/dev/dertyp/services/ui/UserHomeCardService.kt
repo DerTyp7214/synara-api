@@ -25,7 +25,8 @@ import java.util.UUID
 class UserHomeCardService : KoinComponent {
     private data class Row(val contributionId: String, val pinned: Boolean, val position: Int)
 
-    private val changes = MutableSharedFlow<UUID>(extraBufferCapacity = 64, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+    private val changes =
+        MutableSharedFlow<UUID>(extraBufferCapacity = 64, onBufferOverflow = BufferOverflow.DROP_OLDEST)
     private val changeNotifier by inject<ChangeNotifier>()
 
     private fun changed(userId: UUID) {
@@ -36,7 +37,13 @@ class UserHomeCardService : KoinComponent {
     private suspend fun rows(userId: UUID): List<Row> = dbQuery {
         UserHomeCardTable.selectAll()
             .where { UserHomeCardTable.userId eq userId }
-            .map { Row(it[UserHomeCardTable.contributionId], it[UserHomeCardTable.pinned], it[UserHomeCardTable.position]) }
+            .map {
+                Row(
+                    it[UserHomeCardTable.contributionId],
+                    it[UserHomeCardTable.pinned],
+                    it[UserHomeCardTable.position]
+                )
+            }
     }
 
     suspend fun layoutFor(userId: UUID, available: List<UiContributionInfo>): UiHomeLayout {

@@ -17,9 +17,10 @@ suspend fun ByteWriteChannel.isClientConnected(): Boolean = try {
 }
 
 suspend fun ByteWriteChannel.sendSafe(msg: String, message: String = "") = try {
-    writeStringUtf8("event: $message${
-        LocalTime.now().format(DateTimeFormatter.ISO_LOCAL_TIME).split(".").first()
-    }\ndata: $msg\n\n"
+    writeStringUtf8(
+        "event: $message${
+            LocalTime.now().format(DateTimeFormatter.ISO_LOCAL_TIME).split(".").first()
+        }\ndata: $msg\n\n"
     )
     flush()
 } catch (e: CancellationException) {

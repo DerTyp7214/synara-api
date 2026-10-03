@@ -84,7 +84,8 @@ class HttpClientFactory : Service() {
 
 fun HttpClientConfig<*>.timeouts(request: Duration, connect: Duration, socket: Duration) {
     install(HttpTimeout) {
-        requestTimeoutMillis = if (request.isInfinite()) HttpTimeoutConfig.INFINITE_TIMEOUT_MS else request.inWholeMilliseconds
+        requestTimeoutMillis =
+            if (request.isInfinite()) HttpTimeoutConfig.INFINITE_TIMEOUT_MS else request.inWholeMilliseconds
         connectTimeoutMillis = connect.inWholeMilliseconds
         socketTimeoutMillis = socket.inWholeMilliseconds
     }

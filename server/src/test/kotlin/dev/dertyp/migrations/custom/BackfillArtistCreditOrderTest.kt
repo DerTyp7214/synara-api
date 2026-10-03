@@ -191,7 +191,9 @@ class BackfillArtistCreditOrderTest : KoinTest {
             AlbumTable.insert { it[id] = albumId; it[name] = "Album" }
             SongTable.insert { it[id] = songId; it[title] = "Song"; it[this.albumId] = albumId }
             SongMusicBrainzTable.insert { it[this.songId] = songId; it[musicBrainzId] = null }
-            SongArtistTable.insert { it[this.songId] = songId; it[this.artistId] = artistId; it[position] = 3; it[joinPhrase] = " with " }
+            SongArtistTable.insert {
+                it[this.songId] = songId; it[this.artistId] = artistId; it[position] = 3; it[joinPhrase] = " with "
+            }
         }
 
         BackfillArtistCreditOrder().migrate()

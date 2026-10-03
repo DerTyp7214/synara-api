@@ -107,13 +107,25 @@ class FetchMissingRecordingIsrcsTest : KoinTest {
         val mockRecording2 = MusicBrainzRecording(id = recordingId2, title = "Recording 2", isrcs = listOf("ISRC2"))
         val mockRecording3 = MusicBrainzRecording(id = recordingId3, title = "Recording 3", isrcs = emptyList())
 
-        coEvery { musicBrainzService.fetchRecordingsMetadataLB(any(), any()) } returns listOf(mockRecording2, mockRecording3)
+        coEvery { musicBrainzService.fetchRecordingsMetadataLB(any(), any()) } returns listOf(
+            mockRecording2,
+            mockRecording3
+        )
         coEvery { musicBrainzCacheService.updateRecordingIsrcs(any(), any()) } returns Unit
 
         val migration = FetchMissingRecordingIsrcs()
         migration.migrate()
 
-        coVerify(exactly = 1) { musicBrainzService.fetchRecordingsMetadataLB(match { it.containsAll(listOf(recordingId2, recordingId3)) }, any()) }
+        coVerify(exactly = 1) {
+            musicBrainzService.fetchRecordingsMetadataLB(match {
+                it.containsAll(
+                    listOf(
+                        recordingId2,
+                        recordingId3
+                    )
+                )
+            }, any())
+        }
         coVerify(exactly = 0) { musicBrainzService.fetchRecordingById(any(), any()) }
 
         coVerify(exactly = 1) { musicBrainzCacheService.updateRecordingIsrcs(recordingId2, mockRecording2.isrcs!!) }

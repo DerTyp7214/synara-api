@@ -41,7 +41,7 @@ class DatabaseManagerTest {
         every { environment.config } returns config
 
         val manager = DatabaseManager(ServerConfig(environment.config))
-        
+
         startKoin {
             modules(module {
                 single { manager }

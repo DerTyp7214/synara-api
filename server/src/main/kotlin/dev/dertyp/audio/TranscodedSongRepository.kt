@@ -82,13 +82,14 @@ class TranscodedSongRepository {
         }
     }
 
-    suspend fun insertTranscodedSong(songId: UUID, file: File, bitrate: Int, format: AudioFormat = AudioFormat.OPUS) = dbQuery {
-        TranscodedSongTable.insertIgnore {
-            it[TranscodedSongTable.songId] = songId
-            it[TranscodedSongTable.bitrate] = bitrate
-            it[TranscodedSongTable.format] = format
-            it[TranscodedSongTable.path] = file.absolutePath
-            it[TranscodedSongTable.fileSize] = file.length()
+    suspend fun insertTranscodedSong(songId: UUID, file: File, bitrate: Int, format: AudioFormat = AudioFormat.OPUS) =
+        dbQuery {
+            TranscodedSongTable.insertIgnore {
+                it[TranscodedSongTable.songId] = songId
+                it[TranscodedSongTable.bitrate] = bitrate
+                it[TranscodedSongTable.format] = format
+                it[TranscodedSongTable.path] = file.absolutePath
+                it[TranscodedSongTable.fileSize] = file.length()
+            }
         }
-    }
 }

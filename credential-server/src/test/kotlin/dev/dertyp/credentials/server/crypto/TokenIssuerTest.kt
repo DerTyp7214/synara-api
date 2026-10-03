@@ -36,8 +36,14 @@ class TokenIssuerTest {
         assertEquals(listOf(TokenIssuer.AUDIENCE), decoded.audience)
         assertEquals(client.id.toString(), decoded.subject)
         assertEquals(4, decoded.getClaim(TokenIssuer.CLAIM_VERSION).asInt())
-        assertEquals(listOf("tidal.api", "importer.tiddl"), decoded.getClaim(TokenIssuer.CLAIM_GRANTS).asList(String::class.java))
-        assertEquals(listOf("importer.tiddl"), decoded.getClaim(TokenIssuer.CLAIM_WRITE_BACK).asList(String::class.java))
+        assertEquals(
+            listOf("tidal.api", "importer.tiddl"),
+            decoded.getClaim(TokenIssuer.CLAIM_GRANTS).asList(String::class.java)
+        )
+        assertEquals(
+            listOf("importer.tiddl"),
+            decoded.getClaim(TokenIssuer.CLAIM_WRITE_BACK).asList(String::class.java)
+        )
         assertNotNull(decoded.id)
         assertEquals(issued.expiresAt / 1000, decoded.expiresAtAsInstant.epochSecond)
     }

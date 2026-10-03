@@ -23,7 +23,14 @@ class RpcClientSettingsServiceTest {
     fun `getSettings forwards the user id scope device and includeDeleted`() = runBlocking {
         service.getSettings(ClientSettingScope.DEVICE, "device-1", true)
 
-        coVerify(exactly = 1) { clientSettingsService.getSettings(user.id, ClientSettingScope.DEVICE, "device-1", true) }
+        coVerify(exactly = 1) {
+            clientSettingsService.getSettings(
+                user.id,
+                ClientSettingScope.DEVICE,
+                "device-1",
+                true
+            )
+        }
     }
 
     @Test
@@ -37,7 +44,15 @@ class RpcClientSettingsServiceTest {
     fun `getChanges forwards the user id scope sinceVersion device and limit`() = runBlocking {
         service.getChanges(ClientSettingScope.SYNCED, 5, "device-1", 100)
 
-        coVerify(exactly = 1) { clientSettingsService.getChanges(user.id, ClientSettingScope.SYNCED, "device-1", 5, 100) }
+        coVerify(exactly = 1) {
+            clientSettingsService.getChanges(
+                user.id,
+                ClientSettingScope.SYNCED,
+                "device-1",
+                5,
+                100
+            )
+        }
     }
 
     @Test
@@ -46,21 +61,46 @@ class RpcClientSettingsServiceTest {
 
         service.setSettings(entries, ClientSettingScope.DEVICE, "device-1", true)
 
-        coVerify(exactly = 1) { clientSettingsService.setSettings(user.id, ClientSettingScope.DEVICE, "device-1", entries, true) }
+        coVerify(exactly = 1) {
+            clientSettingsService.setSettings(
+                user.id,
+                ClientSettingScope.DEVICE,
+                "device-1",
+                entries,
+                true
+            )
+        }
     }
 
     @Test
     fun `getHistory forwards the user id scope key device and limit`() = runBlocking {
         service.getHistory(ClientSettingScope.SYNCED, "a", "device-1", 10)
 
-        coVerify(exactly = 1) { clientSettingsService.getHistory(user.id, ClientSettingScope.SYNCED, "device-1", "a", 10) }
+        coVerify(exactly = 1) {
+            clientSettingsService.getHistory(
+                user.id,
+                ClientSettingScope.SYNCED,
+                "device-1",
+                "a",
+                10
+            )
+        }
     }
 
     @Test
     fun `restore forwards the user id scope key version device and force`() = runBlocking {
         service.restore(ClientSettingScope.SYNCED, "a", 3, "device-1", true)
 
-        coVerify(exactly = 1) { clientSettingsService.restore(user.id, ClientSettingScope.SYNCED, "device-1", "a", 3, true) }
+        coVerify(exactly = 1) {
+            clientSettingsService.restore(
+                user.id,
+                ClientSettingScope.SYNCED,
+                "device-1",
+                "a",
+                3,
+                true
+            )
+        }
     }
 
     @Test

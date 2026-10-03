@@ -57,7 +57,11 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
         }
     }
 
-    suspend fun followArtist(userId: UUID, musicBrainzId: UUID, priority: HttpClientPriority = HttpClientPriority.NORMAL): Boolean {
+    suspend fun followArtist(
+        userId: UUID,
+        musicBrainzId: UUID,
+        priority: HttpClientPriority = HttpClientPriority.NORMAL
+    ): Boolean {
         val artistId = getOrCreateArtistByMbId(musicBrainzId, priority) ?: return false
         val followed = dbQuery {
             FollowedArtistTable.upsert(FollowedArtistTable.userId, FollowedArtistTable.artistId) {
@@ -73,7 +77,10 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
         return followed
     }
 
-    private suspend fun getOrCreateArtistByMbId(musicBrainzId: UUID, priority: HttpClientPriority = HttpClientPriority.NORMAL): UUID? {
+    private suspend fun getOrCreateArtistByMbId(
+        musicBrainzId: UUID,
+        priority: HttpClientPriority = HttpClientPriority.NORMAL
+    ): UUID? {
         val existingArtistId = dbQuery {
             ArtistMusicBrainzTable.selectAll()
                 .where { ArtistMusicBrainzTable.musicBrainzId eq musicBrainzId }
@@ -173,10 +180,14 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
                     .toList()
             }
 
-        val providersMap = providerLinkService.recentReleaseUrls(musicBrainzRows.map { it[RecentReleaseTable.releaseId].value })
-        val providerLinksMap = providerLinkService.providerReleaseUrls(providerRows.map { it[ProviderReleaseTable.id].value })
-        val groupArtistsMap = releaseArtistService.groupArtistIdsTx(musicBrainzRows.map { it[RecentReleaseTable.releaseId].value })
-        val providerArtistsMap = releaseArtistService.providerReleaseArtistIdsTx(providerRows.map { it[ProviderReleaseTable.id].value })
+        val providersMap =
+            providerLinkService.recentReleaseUrls(musicBrainzRows.map { it[RecentReleaseTable.releaseId].value })
+        val providerLinksMap =
+            providerLinkService.providerReleaseUrls(providerRows.map { it[ProviderReleaseTable.id].value })
+        val groupArtistsMap =
+            releaseArtistService.groupArtistIdsTx(musicBrainzRows.map { it[RecentReleaseTable.releaseId].value })
+        val providerArtistsMap =
+            releaseArtistService.providerReleaseArtistIdsTx(providerRows.map { it[ProviderReleaseTable.id].value })
 
         val feedByType = (musicBrainzRows.map { musicBrainzFeedRow(it, providersMap, groupArtistsMap, nowMs) } +
                 providerRows.map { providerFeedRow(it, providerLinksMap, providerArtistsMap, nowMs) })
@@ -375,7 +386,10 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
 
         val musicBrainzQuery = RecentReleaseTable
             .leftJoin(ImageTable, onColumn = { RecentReleaseTable.imageId }, otherColumn = { ImageTable.id })
-            .leftJoin(HiddenReleaseTable, onColumn = { RecentReleaseTable.releaseId }, otherColumn = { HiddenReleaseTable.releaseGroupId })
+            .leftJoin(
+                HiddenReleaseTable,
+                onColumn = { RecentReleaseTable.releaseId },
+                otherColumn = { HiddenReleaseTable.releaseGroupId })
             .selectAll()
             .where {
                 (RecentReleaseTable.artistId eq artistId) or
@@ -399,7 +413,10 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
 
         val providerQuery = ProviderReleaseTable
             .leftJoin(ImageTable, onColumn = { ProviderReleaseTable.imageId }, otherColumn = { ImageTable.id })
-            .leftJoin(HiddenReleaseTable, onColumn = { ProviderReleaseTable.id }, otherColumn = { HiddenReleaseTable.providerReleaseId })
+            .leftJoin(
+                HiddenReleaseTable,
+                onColumn = { ProviderReleaseTable.id },
+                otherColumn = { HiddenReleaseTable.providerReleaseId })
             .selectAll()
             .where {
                 (ProviderReleaseTable.artistId eq artistId) or
@@ -422,10 +439,14 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
             .limit(topN)
             .toList()
 
-        val providersMap = providerLinkService.recentReleaseUrls(musicBrainzRows.map { it[RecentReleaseTable.releaseId].value })
-        val providerLinksMap = providerLinkService.providerReleaseUrls(providerRows.map { it[ProviderReleaseTable.id].value })
-        val groupArtistsMap = releaseArtistService.groupArtistIdsTx(musicBrainzRows.map { it[RecentReleaseTable.releaseId].value })
-        val providerArtistsMap = releaseArtistService.providerReleaseArtistIdsTx(providerRows.map { it[ProviderReleaseTable.id].value })
+        val providersMap =
+            providerLinkService.recentReleaseUrls(musicBrainzRows.map { it[RecentReleaseTable.releaseId].value })
+        val providerLinksMap =
+            providerLinkService.providerReleaseUrls(providerRows.map { it[ProviderReleaseTable.id].value })
+        val groupArtistsMap =
+            releaseArtistService.groupArtistIdsTx(musicBrainzRows.map { it[RecentReleaseTable.releaseId].value })
+        val providerArtistsMap =
+            releaseArtistService.providerReleaseArtistIdsTx(providerRows.map { it[ProviderReleaseTable.id].value })
 
         val feed = musicBrainzRows.map { musicBrainzFeedRow(it, providersMap, groupArtistsMap, nowMs) } +
                 providerRows.map { providerFeedRow(it, providerLinksMap, providerArtistsMap, nowMs) }
@@ -605,7 +626,12 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
             }
 
         val providerFacets = ProviderReleaseTable
-            .select(ProviderReleaseTable.id, ProviderReleaseTable.title, ProviderReleaseTable.releaseDate, ProviderReleaseTable.suspect)
+            .select(
+                ProviderReleaseTable.id,
+                ProviderReleaseTable.title,
+                ProviderReleaseTable.releaseDate,
+                ProviderReleaseTable.suspect
+            )
             .where { ProviderReleaseTable.artistId eq artistId }
             .andWhere { ProviderReleaseTable.type eq type }
             .andWhere { ProviderReleaseTable.releaseDate.between(from, to) }
@@ -668,7 +694,8 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
             }
         }
 
-        return getProviderReleaseById(releaseId) ?: throw IllegalArgumentException("Unknown provider release $releaseId")
+        return getProviderReleaseById(releaseId)
+            ?: throw IllegalArgumentException("Unknown provider release $releaseId")
     }
 
     suspend fun refreshRecentRelease(releaseId: UUID): RecentRelease? {
@@ -839,7 +866,10 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
     private suspend fun getProviderReleaseById(releaseId: UUID): RecentRelease? = dbQuery {
         val row = ProviderReleaseTable
             .leftJoin(ImageTable, onColumn = { ProviderReleaseTable.imageId }, otherColumn = { ImageTable.id })
-            .leftJoin(HiddenReleaseTable, onColumn = { ProviderReleaseTable.id }, otherColumn = { HiddenReleaseTable.providerReleaseId })
+            .leftJoin(
+                HiddenReleaseTable,
+                onColumn = { ProviderReleaseTable.id },
+                otherColumn = { HiddenReleaseTable.providerReleaseId })
             .selectAll()
             .where { ProviderReleaseTable.id eq releaseId }
             .singleOrNull() ?: return@dbQuery null
@@ -853,7 +883,10 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
     private suspend fun getRecentReleaseById(releaseId: UUID): RecentRelease? = dbQuery {
         val row = RecentReleaseTable
             .leftJoin(ImageTable, onColumn = { RecentReleaseTable.imageId }, otherColumn = { ImageTable.id })
-            .leftJoin(HiddenReleaseTable, onColumn = { RecentReleaseTable.releaseId }, otherColumn = { HiddenReleaseTable.releaseGroupId })
+            .leftJoin(
+                HiddenReleaseTable,
+                onColumn = { RecentReleaseTable.releaseId },
+                otherColumn = { HiddenReleaseTable.releaseGroupId })
             .selectAll()
             .where { RecentReleaseTable.releaseId eq releaseId }
             .singleOrNull() ?: return@dbQuery null
@@ -864,57 +897,67 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
         musicBrainzFeedRow(row, mapOf(releaseId to links), artistsMap, Clock.System.now().toEpochMilliseconds()).release
     }
 
-    suspend fun fetchNewReleases(onProgress: suspend (Double, String) -> Unit = { _, _ -> }): Map<String, Int> = coroutineScope {
-        val tidalService = MetadataService.getMetadataService(
-            IMetadataService.MetadataType.tidal,
-            environment
-        ) as TidalService
+    suspend fun fetchNewReleases(onProgress: suspend (Double, String) -> Unit = { _, _ -> }): Map<String, Int> =
+        coroutineScope {
+            val tidalService = MetadataService.getMetadataService(
+                IMetadataService.MetadataType.tidal,
+                environment
+            ) as TidalService
 
-        val appleMusicService = MetadataService.getMetadataService(
-            IMetadataService.MetadataType.appleMusic,
-            environment
-        ) as AppleMusicService
+            val appleMusicService = MetadataService.getMetadataService(
+                IMetadataService.MetadataType.appleMusic,
+                environment
+            ) as AppleMusicService
 
-        val followedArtists = dbQuery {
-            FollowedArtistTable.innerJoin(ArtistMusicBrainzTable, { FollowedArtistTable.artistId }, { ArtistMusicBrainzTable.artistId })
-                .select(FollowedArtistTable.artistId, ArtistMusicBrainzTable.musicBrainzId)
-                .where { ArtistMusicBrainzTable.musicBrainzId.isNotNull() }
-                .groupBy(FollowedArtistTable.artistId, ArtistMusicBrainzTable.musicBrainzId)
-                .map { it[FollowedArtistTable.artistId].value to it[ArtistMusicBrainzTable.musicBrainzId]!!.value }
-                .distinctBy { it.second }
+            val followedArtists = dbQuery {
+                FollowedArtistTable.innerJoin(
+                    ArtistMusicBrainzTable,
+                    { FollowedArtistTable.artistId },
+                    { ArtistMusicBrainzTable.artistId })
+                    .select(FollowedArtistTable.artistId, ArtistMusicBrainzTable.musicBrainzId)
+                    .where { ArtistMusicBrainzTable.musicBrainzId.isNotNull() }
+                    .groupBy(FollowedArtistTable.artistId, ArtistMusicBrainzTable.musicBrainzId)
+                    .map { it[FollowedArtistTable.artistId].value to it[ArtistMusicBrainzTable.musicBrainzId]!!.value }
+                    .distinctBy { it.second }
+            }
+
+            val followedResults = processArtistsBatch(
+                artists = followedArtists,
+                tidalService = tidalService,
+                appleMusicService = appleMusicService,
+                onProgress = { p, s -> onProgress(p * 0.5, s) },
+                label = "followed"
+            )
+
+            val unfollowedResults = fetchUnfollowedArtistsReleases(tidalService, appleMusicService) { p, s ->
+                onProgress(p * 0.5 + 50.0, s)
+            }
+
+            onProgress(100.0, "Finished fetching new releases")
+
+            unlinkUnfollowedRecentReleaseImages()
+            backfillMissingRecentReleaseImages()
+
+            followedResults + unfollowedResults
         }
-
-        val followedResults = processArtistsBatch(
-            artists = followedArtists,
-            tidalService = tidalService,
-            appleMusicService = appleMusicService,
-            onProgress = { p, s -> onProgress(p * 0.5, s) },
-            label = "followed"
-        )
-
-        val unfollowedResults = fetchUnfollowedArtistsReleases(tidalService, appleMusicService) { p, s ->
-            onProgress(p * 0.5 + 50.0, s)
-        }
-
-        onProgress(100.0, "Finished fetching new releases")
-
-        unlinkUnfollowedRecentReleaseImages()
-        backfillMissingRecentReleaseImages()
-
-        followedResults + unfollowedResults
-    }
 
     suspend fun backfillMissingRecentReleaseImages(artistId: UUID? = null) {
         val now = Clock.System.now().toEpochMilliseconds()
         val candidates = dbQuery {
-            val query = RecentReleaseTable.select(RecentReleaseTable.releaseId, RecentReleaseTable.releaseDate, RecentReleaseTable.lastImageFetch)
+            val query = RecentReleaseTable.select(
+                RecentReleaseTable.releaseId,
+                RecentReleaseTable.releaseDate,
+                RecentReleaseTable.lastImageFetch
+            )
                 .where { RecentReleaseTable.imageId.isNull() }
                 .andWhere {
                     (RecentReleaseTable.artistId inSubQuery FollowedArtistTable.select(FollowedArtistTable.artistId)) or
                             (RecentReleaseTable.releaseId inSubQuery ReleaseArtistTable
                                 .select(ReleaseArtistTable.releaseGroupId)
                                 .where {
-                                    ReleaseArtistTable.artistId inSubQuery FollowedArtistTable.select(FollowedArtistTable.artistId)
+                                    ReleaseArtistTable.artistId inSubQuery FollowedArtistTable.select(
+                                        FollowedArtistTable.artistId
+                                    )
                                 }
                                 .andWhere { ReleaseArtistTable.releaseGroupId.isNotNull() })
                 }
@@ -1038,7 +1081,8 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
 
                         logger.info("Fetching releases for $label artist: $resolvedArtistName")
 
-                        val mbReleases = musicBrainzService.fetchReleasesByArtist(mbId, priority = HttpClientPriority.LOW)
+                        val mbReleases =
+                            musicBrainzService.fetchReleasesByArtist(mbId, priority = HttpClientPriority.LOW)
 
                         val albumMappings = dbSemaphore.withPermit {
                             dbQuery {
@@ -1112,7 +1156,10 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
                                         progressAddedForArtist += groupWeight
                                     }
                                     dbSemaphore.withPermit {
-                                        onProgress(currentProgress * 100.0, "Processed $resolvedArtistName: ${group.title}")
+                                        onProgress(
+                                            currentProgress * 100.0,
+                                            "Processed $resolvedArtistName: ${group.title}"
+                                        )
                                     }
                                 }
                             }
@@ -1124,7 +1171,8 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
                                     it[lastCheck] = Clock.System.now().toEpochMilliseconds()
                                 }
                                 ArtistMusicBrainzTable.update({ ArtistMusicBrainzTable.artistId eq artistId }) {
-                                    it[lastReleaseCheck] = Clock.System.now().toEpochMilliseconds() + (0.days .. 5.days).random().inWholeMilliseconds
+                                    it[lastReleaseCheck] = Clock.System.now()
+                                        .toEpochMilliseconds() + (0.days..5.days).random().inWholeMilliseconds
                                 }
                             }
                         }
@@ -1570,7 +1618,8 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
         if (!providerImagePersistInFlight.add(releaseId)) return
         scope.launch {
             try {
-                val bytes = fetchProviderArtworkBytes(AppleMusicService.artworkUrlForSize(artworkUrl, 0)) ?: return@launch
+                val bytes =
+                    fetchProviderArtworkBytes(AppleMusicService.artworkUrlForSize(artworkUrl, 0)) ?: return@launch
                 val persistedImageId = imageService.createBatch(
                     listOf(
                         InsertableImage(

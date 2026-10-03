@@ -329,7 +329,12 @@ class Transcoder(private val storageService: StorageService) {
         }
     }
 
-    private fun cacheFileFor(environment: ApplicationEnvironment, source: File, folder: String, extension: String): File {
+    private fun cacheFileFor(
+        environment: ApplicationEnvironment,
+        source: File,
+        folder: String,
+        extension: String
+    ): File {
         val paths = environment.config.toTranscodeConfig()
         val tracksPath = paths.tracksPath
         val transcoderPath = paths.outputPath ?: ""

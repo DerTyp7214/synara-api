@@ -185,12 +185,18 @@ class PodcastFeedParserTest {
 
     @Test
     fun `guidFor prefers guid then enclosure url then link and title`() {
-        assertEquals("guid", PodcastFeedParser.guidFor(" guid ", "https://cdn.example.com/a.mp3", "https://example.com/1", "Title"))
+        assertEquals(
+            "guid",
+            PodcastFeedParser.guidFor(" guid ", "https://cdn.example.com/a.mp3", "https://example.com/1", "Title")
+        )
         assertEquals(
             "https://cdn.example.com/a.mp3",
             PodcastFeedParser.guidFor("   ", "https://cdn.example.com/a.mp3", "https://example.com/1", "Title")
         )
-        assertEquals("https://example.com/1|Title", PodcastFeedParser.guidFor(null, "", "https://example.com/1", "Title"))
+        assertEquals(
+            "https://example.com/1|Title",
+            PodcastFeedParser.guidFor(null, "", "https://example.com/1", "Title")
+        )
         assertEquals("|Title", PodcastFeedParser.guidFor(null, "", null, "Title"))
     }
 
@@ -365,8 +371,8 @@ class PodcastFeedParserTest {
             """.trimIndent()
         )
         val bytes = byteArrayOf(0xEF.toByte(), 0xBB.toByte(), 0xBF.toByte()) +
-            "\n   \t".toByteArray(Charsets.UTF_8) +
-            xml.toByteArray(Charsets.UTF_8)
+                "\n   \t".toByteArray(Charsets.UTF_8) +
+                xml.toByteArray(Charsets.UTF_8)
 
         val feed = PodcastFeedParser.parse(ByteArrayInputStream(bytes), now)
 

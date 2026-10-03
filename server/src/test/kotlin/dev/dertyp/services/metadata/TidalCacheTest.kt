@@ -37,7 +37,7 @@ class TidalCacheTest : KoinTest {
 
         tidalService = spyk(TidalService(getKoin().get()))
         every { tidalService.jedis } returns jedis
-        
+
         mockkObject(RedisCacheObject)
     }
 
@@ -55,19 +55,19 @@ class TidalCacheTest : KoinTest {
             duration = 3.minutes,
             images = emptyList()
         )
-        
+
         val mockCacheObj = mockk<RedisCacheObject>(relaxed = true)
         every { RedisCacheObject.fromObject(track) } returns mockCacheObj
         every { mockCacheObj.toString() } returns "serialized-track"
 
         tidalService.writeToJedis(track)
 
-        verify { 
+        verify {
             jedis.set(
-                "tidal_track::123", 
-                "serialized-track", 
+                "tidal_track::123",
+                "serialized-track",
                 any<SetParams>()
-            ) 
+            )
         }
     }
 

@@ -185,70 +185,71 @@ class MosaicSearchTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `createSongMosaic should handle pagination with multiple occurrences of same color`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        val discoveryService = DiscoveryService()
-        val userId = UUID.randomUUID()
+    fun `createSongMosaic should handle pagination with multiple occurrences of same color`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val discoveryService = DiscoveryService()
+            val userId = UUID.randomUUID()
 
-        val red = Color.RED
-        val (rl, ra, rb) = ColorUtils.rgbToLab(red.red, red.green, red.blue)
+            val red = Color.RED
+            val (rl, ra, rb) = ColorUtils.rgbToLab(red.red, red.green, red.blue)
 
-        transaction(database) {
-            UserTable.insert {
-                it[id] = userId
-                it[username] = "testuser"
-                it[passwordHash] = ""
-            }
-
-            repeat(3) { i ->
-                val imgId = ImageTable.insert {
-                    it[id] = UUID.randomUUID()
-                    it[path] = "red$i.jpg"
-                    it[imageHash] = "red$i"
-                    it[origin] = "test"
-                }[ImageTable.id]
-
-                ImageMetadataTable.insert {
-                    it[imageId] = imgId
-                    it[width] = 100
-                    it[height] = 100
-                    it[byteSize] = 1000
-                    it[primaryColor] = red.rgb
-                    it[ImageMetadataTable.red] = red.red
-                    it[ImageMetadataTable.green] = red.green
-                    it[ImageMetadataTable.blue] = red.blue
-                    it[luminance] = 0.5
-                    it[labL] = rl
-                    it[labA] = ra
-                    it[labB] = rb
+            transaction(database) {
+                UserTable.insert {
+                    it[id] = userId
+                    it[username] = "testuser"
+                    it[passwordHash] = ""
                 }
 
-                val albumId = AlbumTable.insert {
-                    it[id] = UUID.randomUUID()
-                    it[name] = "Album $i"
-                    it[cover] = imgId
-                }[AlbumTable.id]
+                repeat(3) { i ->
+                    val imgId = ImageTable.insert {
+                        it[id] = UUID.randomUUID()
+                        it[path] = "red$i.jpg"
+                        it[imageHash] = "red$i"
+                        it[origin] = "test"
+                    }[ImageTable.id]
 
-                SongTable.insert {
-                    it[id] = UUID.randomUUID()
-                    it[title] = "Red Song $i"
-                    it[cover] = imgId
-                    it[SongTable.albumId] = albumId
+                    ImageMetadataTable.insert {
+                        it[imageId] = imgId
+                        it[width] = 100
+                        it[height] = 100
+                        it[byteSize] = 1000
+                        it[primaryColor] = red.rgb
+                        it[ImageMetadataTable.red] = red.red
+                        it[ImageMetadataTable.green] = red.green
+                        it[ImageMetadataTable.blue] = red.blue
+                        it[luminance] = 0.5
+                        it[labL] = rl
+                        it[labA] = ra
+                        it[labB] = rb
+                    }
+
+                    val albumId = AlbumTable.insert {
+                        it[id] = UUID.randomUUID()
+                        it[name] = "Album $i"
+                        it[cover] = imgId
+                    }[AlbumTable.id]
+
+                    SongTable.insert {
+                        it[id] = UUID.randomUUID()
+                        it[title] = "Red Song $i"
+                        it[cover] = imgId
+                        it[SongTable.albumId] = albumId
+                    }
                 }
             }
+
+            val imageBytes = createDummyImage(listOf(Color.RED, Color.RED, Color.RED))
+
+            val page0 = discoveryService.createSongMosaic(imageBytes, 3, 1, 0, 2, 5, userId)
+            assertEquals(2, page0.data.size)
+            assertEquals("Red Song 0", page0.data[0].title)
+            assertEquals("Red Song 1", page0.data[1].title)
+
+            val page1 = discoveryService.createSongMosaic(imageBytes, 3, 1, 1, 2, 5, userId)
+            assertEquals(1, page1.data.size)
+            assertEquals("Red Song 2", page1.data[0].title)
         }
-
-        val imageBytes = createDummyImage(listOf(Color.RED, Color.RED, Color.RED))
-
-        val page0 = discoveryService.createSongMosaic(imageBytes, 3, 1, 0, 2, 5, userId)
-        assertEquals(2, page0.data.size)
-        assertEquals("Red Song 0", page0.data[0].title)
-        assertEquals("Red Song 1", page0.data[1].title)
-
-        val page1 = discoveryService.createSongMosaic(imageBytes, 3, 1, 1, 2, 5, userId)
-        assertEquals(1, page1.data.size)
-        assertEquals("Red Song 2", page1.data[0].title)
-    }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)

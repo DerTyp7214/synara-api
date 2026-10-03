@@ -9,7 +9,10 @@ import dev.dertyp.credentials.WriteBackRequest
 class TidalSessionBroker(private val authApi: TidalAuthApi) : CredentialBroker<TidalSessionSecret> {
     override suspend fun resolve(name: String, secret: TidalSessionSecret): BrokerResolution<TidalSessionSecret> {
         val refreshToken = secret.refreshToken
-            ?: throw CredentialException(CredentialErrorCode.NEEDS_LOGIN, "No Tidal session stored, a login is required")
+            ?: throw CredentialException(
+                CredentialErrorCode.NEEDS_LOGIN,
+                "No Tidal session stored, a login is required"
+            )
         val grant = authApi.refresh(secret.clientId, secret.clientSecret, refreshToken)
         val updated = secret.copy(
             accessToken = grant.accessToken,
@@ -21,7 +24,10 @@ class TidalSessionBroker(private val authApi: TidalAuthApi) : CredentialBroker<T
         return BrokerResolution(render(name, updated), updated, stateOf(updated))
     }
 
-    fun writeBack(secret: TidalSessionSecret, request: WriteBackRequest): Pair<TidalSessionSecret, CredentialStateUpdate> {
+    fun writeBack(
+        secret: TidalSessionSecret,
+        request: WriteBackRequest
+    ): Pair<TidalSessionSecret, CredentialStateUpdate> {
         val role = TidalAuthFormats.role(secret.format)
         val file = request.files.firstOrNull { it.role == role }
             ?: throw CredentialException(CredentialErrorCode.INVALID, "Write-back is missing the $role file")
@@ -38,7 +44,12 @@ class TidalSessionBroker(private val authApi: TidalAuthApi) : CredentialBroker<T
         fun fingerprint(secret: TidalSessionSecret): String? = secret.refreshToken?.let { Fingerprints.sha256Hex(it) }
 
         fun stateOf(secret: TidalSessionSecret): CredentialStateUpdate = if (secret.refreshToken == null) {
-            CredentialStateUpdate(CredentialStatus.NEEDS_LOGIN, "No Tidal session stored, a login is required", secret.expiresAt, null)
+            CredentialStateUpdate(
+                CredentialStatus.NEEDS_LOGIN,
+                "No Tidal session stored, a login is required",
+                secret.expiresAt,
+                null
+            )
         } else {
             CredentialStateUpdate(CredentialStatus.OK, null, secret.expiresAt, fingerprint(secret))
         }

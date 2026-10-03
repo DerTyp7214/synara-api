@@ -219,10 +219,22 @@ class LegacySongQuery(val songService: SongService) {
                 albumArtistImageAlias,
                 onColumn = { albumArtistAlias[ArtistTable.image] },
                 otherColumn = { albumArtistImageAlias[ImageTable.id] })
-            .leftJoin(songAnimatedImageAlias, onColumn = { SongTable.animatedCover }, otherColumn = { songAnimatedImageAlias[AnimatedImageTable.id] })
-            .leftJoin(songAnimatedFrameAlias, onColumn = { songAnimatedImageAlias[AnimatedImageTable.imageId] }, otherColumn = { songAnimatedFrameAlias[ImageTable.id] })
-            .leftJoin(albumAnimatedImageAlias, onColumn = { AlbumTable.animatedCover }, otherColumn = { albumAnimatedImageAlias[AnimatedImageTable.id] })
-            .leftJoin(albumAnimatedFrameAlias, onColumn = { albumAnimatedImageAlias[AnimatedImageTable.imageId] }, otherColumn = { albumAnimatedFrameAlias[ImageTable.id] })
+            .leftJoin(
+                songAnimatedImageAlias,
+                onColumn = { SongTable.animatedCover },
+                otherColumn = { songAnimatedImageAlias[AnimatedImageTable.id] })
+            .leftJoin(
+                songAnimatedFrameAlias,
+                onColumn = { songAnimatedImageAlias[AnimatedImageTable.imageId] },
+                otherColumn = { songAnimatedFrameAlias[ImageTable.id] })
+            .leftJoin(
+                albumAnimatedImageAlias,
+                onColumn = { AlbumTable.animatedCover },
+                otherColumn = { albumAnimatedImageAlias[AnimatedImageTable.id] })
+            .leftJoin(
+                albumAnimatedFrameAlias,
+                onColumn = { albumAnimatedImageAlias[AnimatedImageTable.imageId] },
+                otherColumn = { albumAnimatedFrameAlias[ImageTable.id] })
             .leftJoin(SongMusicBrainzTable)
             .userSong(userId)
             .followedArtist(userId)
@@ -285,14 +297,38 @@ class LegacySongQuery(val songService: SongService) {
         val songRows = songIdChunks.flatMap { chunk ->
             SongTable
                 .leftJoin(AlbumTable, onColumn = { SongTable.albumId }, otherColumn = { AlbumTable.id })
-                .leftJoin(AlbumMusicBrainzTable, onColumn = { AlbumTable.id }, otherColumn = { AlbumMusicBrainzTable.albumId })
-                .leftJoin(songImageAlias, onColumn = { SongTable.cover }, otherColumn = { songImageAlias[ImageTable.id] })
-                .leftJoin(albumImageAlias, onColumn = { AlbumTable.cover }, otherColumn = { albumImageAlias[ImageTable.id] })
-                .leftJoin(songAnimatedImageAlias, onColumn = { SongTable.animatedCover }, otherColumn = { songAnimatedImageAlias[AnimatedImageTable.id] })
-                .leftJoin(songAnimatedFrameAlias, onColumn = { songAnimatedImageAlias[AnimatedImageTable.imageId] }, otherColumn = { songAnimatedFrameAlias[ImageTable.id] })
-                .leftJoin(albumAnimatedImageAlias, onColumn = { AlbumTable.animatedCover }, otherColumn = { albumAnimatedImageAlias[AnimatedImageTable.id] })
-                .leftJoin(albumAnimatedFrameAlias, onColumn = { albumAnimatedImageAlias[AnimatedImageTable.imageId] }, otherColumn = { albumAnimatedFrameAlias[ImageTable.id] })
-                .leftJoin(SongMusicBrainzTable, onColumn = { SongTable.id }, otherColumn = { SongMusicBrainzTable.songId })
+                .leftJoin(
+                    AlbumMusicBrainzTable,
+                    onColumn = { AlbumTable.id },
+                    otherColumn = { AlbumMusicBrainzTable.albumId })
+                .leftJoin(
+                    songImageAlias,
+                    onColumn = { SongTable.cover },
+                    otherColumn = { songImageAlias[ImageTable.id] })
+                .leftJoin(
+                    albumImageAlias,
+                    onColumn = { AlbumTable.cover },
+                    otherColumn = { albumImageAlias[ImageTable.id] })
+                .leftJoin(
+                    songAnimatedImageAlias,
+                    onColumn = { SongTable.animatedCover },
+                    otherColumn = { songAnimatedImageAlias[AnimatedImageTable.id] })
+                .leftJoin(
+                    songAnimatedFrameAlias,
+                    onColumn = { songAnimatedImageAlias[AnimatedImageTable.imageId] },
+                    otherColumn = { songAnimatedFrameAlias[ImageTable.id] })
+                .leftJoin(
+                    albumAnimatedImageAlias,
+                    onColumn = { AlbumTable.animatedCover },
+                    otherColumn = { albumAnimatedImageAlias[AnimatedImageTable.id] })
+                .leftJoin(
+                    albumAnimatedFrameAlias,
+                    onColumn = { albumAnimatedImageAlias[AnimatedImageTable.imageId] },
+                    otherColumn = { albumAnimatedFrameAlias[ImageTable.id] })
+                .leftJoin(
+                    SongMusicBrainzTable,
+                    onColumn = { SongTable.id },
+                    otherColumn = { SongMusicBrainzTable.songId })
                 .userSong(userId)
                 .selectAll()
                 .where { SongTable.id inList chunk }
@@ -302,9 +338,18 @@ class LegacySongQuery(val songService: SongService) {
         val artistsBySong = songIdChunks.flatMap { chunk ->
             SongArtistTable
                 .innerJoin(ArtistTable, onColumn = { SongArtistTable.artistId }, otherColumn = { ArtistTable.id })
-                .leftJoin(ArtistMusicBrainzTable, onColumn = { ArtistTable.id }, otherColumn = { ArtistMusicBrainzTable.artistId })
-                .leftJoin(songCreditedAliasAlias, onColumn = { SongArtistTable.creditedAliasId }, otherColumn = { songCreditedAliasAlias[ArtistAliasTable.id] })
-                .leftJoin(artistImageAlias, onColumn = { ArtistTable.image }, otherColumn = { artistImageAlias[ImageTable.id] })
+                .leftJoin(
+                    ArtistMusicBrainzTable,
+                    onColumn = { ArtistTable.id },
+                    otherColumn = { ArtistMusicBrainzTable.artistId })
+                .leftJoin(
+                    songCreditedAliasAlias,
+                    onColumn = { SongArtistTable.creditedAliasId },
+                    otherColumn = { songCreditedAliasAlias[ArtistAliasTable.id] })
+                .leftJoin(
+                    artistImageAlias,
+                    onColumn = { ArtistTable.image },
+                    otherColumn = { artistImageAlias[ImageTable.id] })
                 .followedArtist(userId)
                 .selectAll()
                 .where { SongArtistTable.songId inList chunk }
@@ -328,16 +373,29 @@ class LegacySongQuery(val songService: SongService) {
 
         val albumArtistsByAlbum = albumIds.chunked(SONG_DETAIL_CHUNK_SIZE).flatMap { chunk ->
             AlbumArtistTable
-                .innerJoin(albumArtistAlias, onColumn = { AlbumArtistTable.artistId }, otherColumn = { albumArtistAlias[ArtistTable.id] })
-                .leftJoin(albumArtistMusicBrainzAlias, onColumn = { albumArtistAlias[ArtistTable.id] }, otherColumn = { albumArtistMusicBrainzAlias[ArtistMusicBrainzTable.artistId] })
-                .leftJoin(albumCreditedAliasAlias, onColumn = { AlbumArtistTable.creditedAliasId }, otherColumn = { albumCreditedAliasAlias[ArtistAliasTable.id] })
-                .leftJoin(albumArtistImageAlias, onColumn = { albumArtistAlias[ArtistTable.image] }, otherColumn = { albumArtistImageAlias[ImageTable.id] })
+                .innerJoin(
+                    albumArtistAlias,
+                    onColumn = { AlbumArtistTable.artistId },
+                    otherColumn = { albumArtistAlias[ArtistTable.id] })
+                .leftJoin(
+                    albumArtistMusicBrainzAlias,
+                    onColumn = { albumArtistAlias[ArtistTable.id] },
+                    otherColumn = { albumArtistMusicBrainzAlias[ArtistMusicBrainzTable.artistId] })
+                .leftJoin(
+                    albumCreditedAliasAlias,
+                    onColumn = { AlbumArtistTable.creditedAliasId },
+                    otherColumn = { albumCreditedAliasAlias[ArtistAliasTable.id] })
+                .leftJoin(
+                    albumArtistImageAlias,
+                    onColumn = { albumArtistAlias[ArtistTable.image] },
+                    otherColumn = { albumArtistImageAlias[ImageTable.id] })
                 .followedArtist(userId, albumFollowedArtistAlias, albumArtistAlias[ArtistTable.id])
                 .selectAll()
                 .where { AlbumArtistTable.albumId inList chunk }
                 .toList()
         }.groupBy { it[AlbumArtistTable.albumId].value }.mapValues { (_, rows) ->
-            val positions = rows.associate { it[albumArtistAlias[ArtistTable.id]].value to it[AlbumArtistTable.position] }
+            val positions =
+                rows.associate { it[albumArtistAlias[ArtistTable.id]].value to it[AlbumArtistTable.position] }
             rows.map { row ->
                 mapArtist(
                     row,
@@ -364,7 +422,12 @@ class LegacySongQuery(val songService: SongService) {
 
         val providersBySong = songIdChunks.flatMap { chunk ->
             SongProviderTable
-                .select(SongProviderTable.songId, SongProviderTable.provider, SongProviderTable.externalId, SongProviderTable.rawUrl)
+                .select(
+                    SongProviderTable.songId,
+                    SongProviderTable.provider,
+                    SongProviderTable.externalId,
+                    SongProviderTable.rawUrl
+                )
                 .where { SongProviderTable.songId inList chunk }
                 .toList()
         }.groupBy({ it[SongProviderTable.songId].value }) { row ->

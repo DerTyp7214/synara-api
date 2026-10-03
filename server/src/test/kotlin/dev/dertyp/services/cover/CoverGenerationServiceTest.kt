@@ -65,12 +65,38 @@ class CoverGenerationServiceTest {
         database = TestDatabase.connect(dialect, "cover_test")
         transaction(database) {
             SchemaUtils.create(
-                UserTable, ImageTable, ImageMetadataTable, AlbumTable, ArtistTable, SongTable, SongVariantTable,
-                UserPlaylistTable, UserPlaylistSongTable, GenreTable, SongGenreTable, AlbumGenreTable, ArtistGenreTable,
-                SongEmbeddingTable, SongAudioDataTable, CollectionTable, CollectionSongTable, CollectionAlbumTable,
-                CollectionArtistTable, CollectionPlaylistTable, PlaylistTable, MBReleaseGroupTable, MBReleaseGroupCoverTable,
-                RecentReleaseTable, ProviderReleaseTable, ProviderLinkTable, RecentReleaseLinkTable, ProviderReleaseLinkTable, AnimatedImageTable, RadioChannelTable,
-                PodcastShowTable, PodcastEpisodeTable,
+                UserTable,
+                ImageTable,
+                ImageMetadataTable,
+                AlbumTable,
+                ArtistTable,
+                SongTable,
+                SongVariantTable,
+                UserPlaylistTable,
+                UserPlaylistSongTable,
+                GenreTable,
+                SongGenreTable,
+                AlbumGenreTable,
+                ArtistGenreTable,
+                SongEmbeddingTable,
+                SongAudioDataTable,
+                CollectionTable,
+                CollectionSongTable,
+                CollectionAlbumTable,
+                CollectionArtistTable,
+                CollectionPlaylistTable,
+                PlaylistTable,
+                MBReleaseGroupTable,
+                MBReleaseGroupCoverTable,
+                RecentReleaseTable,
+                ProviderReleaseTable,
+                ProviderLinkTable,
+                RecentReleaseLinkTable,
+                ProviderReleaseLinkTable,
+                AnimatedImageTable,
+                RadioChannelTable,
+                PodcastShowTable,
+                PodcastEpisodeTable,
             )
             UserTable.insert {
                 it[id] = userId
@@ -79,9 +105,20 @@ class CoverGenerationServiceTest {
             }
         }
         imageService = ImageService(storageService, redisConfig)
-        val config = CoverConfig(File(tempDir, "packs").absolutePath, nsfwPacks = false, autoGenerate = true, debounce = 1.seconds)
+        val config = CoverConfig(
+            File(tempDir, "packs").absolutePath,
+            nsfwPacks = false,
+            autoGenerate = true,
+            debounce = 1.seconds
+        )
         jobService = JobService().also { it.pause(CoverGenerationService.JOB_KIND) }
-        service = CoverGenerationService(imageService, CoverAssetPackService(config), CoverSourceCollector(), jobService, config)
+        service = CoverGenerationService(
+            imageService,
+            CoverAssetPackService(config),
+            CoverSourceCollector(),
+            jobService,
+            config
+        )
     }
 
     private lateinit var jobService: JobService
@@ -265,12 +302,19 @@ class CoverGenerationServiceTest {
                 it[name] = "Everything"
                 it[creator] = EntityID(userId, UserTable)
             }
-            CollectionArtistTable.insert { it[CollectionArtistTable.collectionId] = collectionId; it[CollectionArtistTable.artistId] = artistId.value }
-            CollectionPlaylistTable.insert { it[CollectionPlaylistTable.collectionId] = collectionId; it[CollectionPlaylistTable.playlistId] = playlistId }
+            CollectionArtistTable.insert {
+                it[CollectionArtistTable.collectionId] = collectionId; it[CollectionArtistTable.artistId] =
+                artistId.value
+            }
+            CollectionPlaylistTable.insert {
+                it[CollectionPlaylistTable.collectionId] = collectionId; it[CollectionPlaylistTable.playlistId] =
+                playlistId
+            }
         }
         val target = CoverTarget(CoverTargetType.COLLECTION, collectionId)
         val imageId = service.apply(target, CoverGenerationParams(style = CoverStyle.GRID))
-        val row = transaction(database) { CollectionTable.selectAll().where { CollectionTable.id eq collectionId }.single() }
+        val row =
+            transaction(database) { CollectionTable.selectAll().where { CollectionTable.id eq collectionId }.single() }
         assertEquals(imageId, row[CollectionTable.imageId]?.value)
         assertEquals(ImageSource.GENERATED, row[CollectionTable.imageSource])
         assertEquals("generated:collection:$collectionId", imageService.byId(imageId)!!.origin)
@@ -287,8 +331,12 @@ class CoverGenerationServiceTest {
             val again = service.render(target, CoverGenerationParams())
             assertEquals(reference.seed, again.seed)
             assertEquals(reference.style, again.style)
-            val firstDiff = reference.bytes.indices.firstOrNull { it >= again.bytes.size || reference.bytes[it] != again.bytes[it] }
-            assertTrue(firstDiff == null && reference.bytes.size == again.bytes.size, "iteration $iteration differs at byte $firstDiff (sizes ${reference.bytes.size} vs ${again.bytes.size})")
+            val firstDiff =
+                reference.bytes.indices.firstOrNull { it >= again.bytes.size || reference.bytes[it] != again.bytes[it] }
+            assertTrue(
+                firstDiff == null && reference.bytes.size == again.bytes.size,
+                "iteration $iteration differs at byte $firstDiff (sizes ${reference.bytes.size} vs ${again.bytes.size})"
+            )
         }
     }
 

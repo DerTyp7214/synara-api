@@ -21,7 +21,11 @@ import java.util.UUID
 internal const val SUBSONIC_AUTH_NOTE =
     "Authenticate with `u`+`t`+`s` (token), `u`+`p` (password, optionally `enc:`-hex), or an `apiKey` holding the `subsonic` scope. Select the response format with `f` (xml, json or jsonp). Also available as POST and with a `.view` suffix."
 
-internal fun Route.sub(name: String, docs: RouteConfig.() -> Unit = {}, handler: suspend RoutingContext.(Parameters) -> Unit) {
+internal fun Route.sub(
+    name: String,
+    docs: RouteConfig.() -> Unit = {},
+    handler: suspend RoutingContext.(Parameters) -> Unit
+) {
     val impl: suspend RoutingContext.() -> Unit = {
         val form = if (call.request.local.method == HttpMethod.Post) {
             runCatchingCancellable { call.receiveParameters() }.getOrNull()
@@ -92,7 +96,13 @@ private fun Route.subsonicSystemRoutes() {
         description = "Synara always reports a valid license."
     }) { params, user ->
         call.respondSubsonic(
-            SubsonicResponse(license = License(valid = true, email = user.username, licenseExpires = "2099-12-31T23:59:59Z")),
+            SubsonicResponse(
+                license = License(
+                    valid = true,
+                    email = user.username,
+                    licenseExpires = "2099-12-31T23:59:59Z"
+                )
+            ),
             params["f"], params["callback"],
         )
     }
@@ -225,7 +235,8 @@ private fun Route.subsonicBrowseRoutes() {
         summary = "List albums (ID3)"
         request {
             queryParameter<String>("type") {
-                description = "One of newest, random, alphabeticalByName, alphabeticalByArtist, byGenre, byYear, frequent, recent, starred."
+                description =
+                    "One of newest, random, alphabeticalByName, alphabeticalByArtist, byGenre, byYear, frequent, recent, starred."
                 required = true
             }
             queryParameter<Int>("size") { description = "Number of albums (max 500, default 10)." }

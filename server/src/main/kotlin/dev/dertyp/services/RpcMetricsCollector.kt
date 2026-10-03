@@ -113,7 +113,10 @@ class RpcMetricsCollector(private val config: MetricsConfig) : Service() {
                     it[count] = delta
                 }
                 RpcCallStatsTable.upsert(
-                    RpcCallStatsTable.service, RpcCallStatsTable.method, RpcCallStatsTable.username, RpcCallStatsTable.bucketStart,
+                    RpcCallStatsTable.service,
+                    RpcCallStatsTable.method,
+                    RpcCallStatsTable.username,
+                    RpcCallStatsTable.bucketStart,
                     onUpdate = { it[RpcCallStatsTable.count] = RpcCallStatsTable.count + delta },
                 ) {
                     it[service] = key.service

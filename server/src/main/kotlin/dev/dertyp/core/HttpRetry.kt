@@ -73,6 +73,7 @@ suspend fun <T> retryingGet(
                     logger.error("$label failed after ${attempt + 1} attempt(s): ${e.message}", e)
                     AttemptOutcome.Failed
                 }
+
                 else -> {
                     val wait = policy.delayFor(null, attempt)
                     logger.warn("$label failed: ${e.message}, retrying in $wait (${attempt + 1}/${policy.maxAttempts - 1})")
@@ -86,6 +87,7 @@ suspend fun <T> retryingGet(
                 onGiveUp(outcome.response, attempt)
                 return null
             }
+
             AttemptOutcome.Failed -> return null
             is AttemptOutcome.Retry -> {
                 delay(outcome.wait)

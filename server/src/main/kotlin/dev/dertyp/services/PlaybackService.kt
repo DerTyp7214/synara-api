@@ -10,7 +10,8 @@ import java.util.concurrent.ConcurrentHashMap
 class PlaybackService : Service() {
     private class SessionEntry {
         val flow = MutableSharedFlow<PlaybackState>(replay = 0)
-        @Volatile var lastState: PlaybackState? = null
+        @Volatile
+        var lastState: PlaybackState? = null
     }
 
     private val sessions = ConcurrentHashMap<UUID, SessionEntry>()

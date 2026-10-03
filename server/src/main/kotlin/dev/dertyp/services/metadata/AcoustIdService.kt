@@ -107,7 +107,7 @@ class AcoustIdService(
             val narrowers: List<(AcoustIdRecording) -> Boolean> = listOf(
                 { recording ->
                     recording.title?.cleanTitle()?.normalizedKey() == songTitle &&
-                        recording.artists.any { it.name?.normalizedKey() in songArtists }
+                            recording.artists.any { it.name?.normalizedKey() in songArtists }
                 },
                 { recording ->
                     songAlbum != null && recording.releasegroups.any { it.title?.normalizedKey() == songAlbum }
@@ -142,7 +142,10 @@ class AcoustIdService(
                 .trim()
     }
 
-    suspend fun matchRecording(song: BaseSong, priority: HttpClientPriority = HttpClientPriority.NORMAL): PlatformUUID? {
+    suspend fun matchRecording(
+        song: BaseSong,
+        priority: HttpClientPriority = HttpClientPriority.NORMAL
+    ): PlatformUUID? {
         if (song.path.isBlank()) return null
         val now = Clock.System.now().toEpochMilliseconds()
         val cached = dbQuery {
@@ -168,7 +171,10 @@ class AcoustIdService(
         return match?.recordingId
     }
 
-    suspend fun lookup(fingerprint: Fingerprint, priority: HttpClientPriority = HttpClientPriority.NORMAL): AcoustIdLookupResponse? {
+    suspend fun lookup(
+        fingerprint: Fingerprint,
+        priority: HttpClientPriority = HttpClientPriority.NORMAL
+    ): AcoustIdLookupResponse? {
         val apiKey = (credentialProvider.resolve(CredentialNames.ACOUSTID_API) as? ResolvedCredential.ApiKey)?.key
         if (apiKey == null) {
             if (missingKeyLogged.compareAndSet(false, true)) {
@@ -198,14 +204,15 @@ class AcoustIdService(
         return body
     }
 
-    private suspend fun store(songId: PlatformUUID, fingerprint: Fingerprint, match: AcoustIdMatch?, now: Long) = dbQuery {
-        SongAcoustIdTable.upsert(SongAcoustIdTable.songId) {
-            it[SongAcoustIdTable.songId] = songId
-            it[SongAcoustIdTable.fingerprint] = fingerprint.fingerprint
-            it[duration] = fingerprint.duration
-            it[acoustId] = match?.acoustId
-            it[score] = match?.score
-            it[lastCheck] = now
+    private suspend fun store(songId: PlatformUUID, fingerprint: Fingerprint, match: AcoustIdMatch?, now: Long) =
+        dbQuery {
+            SongAcoustIdTable.upsert(SongAcoustIdTable.songId) {
+                it[SongAcoustIdTable.songId] = songId
+                it[SongAcoustIdTable.fingerprint] = fingerprint.fingerprint
+                it[duration] = fingerprint.duration
+                it[acoustId] = match?.acoustId
+                it[score] = match?.score
+                it[lastCheck] = now
+            }
         }
-    }
 }

@@ -33,7 +33,10 @@ data class CredentialServerSettings(
                     ?: DEFAULT_TOKEN_TTL_SECONDS,
                 database = DatabaseSettings(
                     driverClassName = value("storage.driverClassName", "org.sqlite.JDBC").ifBlank { "org.sqlite.JDBC" },
-                    jdbcUrl = value("storage.jdbcURL", "jdbc:sqlite:credentials.db").ifBlank { "jdbc:sqlite:credentials.db" },
+                    jdbcUrl = value(
+                        "storage.jdbcURL",
+                        "jdbc:sqlite:credentials.db"
+                    ).ifBlank { "jdbc:sqlite:credentials.db" },
                     user = value("storage.user"),
                     password = value("storage.password"),
                 ),

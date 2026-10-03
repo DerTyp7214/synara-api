@@ -62,12 +62,18 @@ class ClientSettingsCleanupTest : KoinTest {
     private fun write(settingKey: String, settingValue: String?, baseVersion: Long = 0) =
         ClientSettingWrite(key = settingKey, value = settingValue, baseVersion = baseVersion)
 
-    private fun backdateSetting(owner: UUID, ownerScope: ClientSettingScope, ownerDeviceId: String, settingKey: String, at: Long) {
+    private fun backdateSetting(
+        owner: UUID,
+        ownerScope: ClientSettingScope,
+        ownerDeviceId: String,
+        settingKey: String,
+        at: Long
+    ) {
         ClientSettingTable.update({
             (ClientSettingTable.userId eq owner) and
-                (ClientSettingTable.scope eq ownerScope) and
-                (ClientSettingTable.deviceId eq ownerDeviceId) and
-                (ClientSettingTable.key eq settingKey)
+                    (ClientSettingTable.scope eq ownerScope) and
+                    (ClientSettingTable.deviceId eq ownerDeviceId) and
+                    (ClientSettingTable.key eq settingKey)
         }) {
             it[modifiedAt] = at
         }
@@ -86,36 +92,51 @@ class ClientSettingsCleanupTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `old tombstones are purged in both scopes and the scope records a purged version`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        val userId = transaction(database) { insertUser() }
+    fun `old tombstones are purged in both scopes and the scope records a purged version`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val userId = transaction(database) { insertUser() }
 
-        val syncedCreated = service.setSettings(userId, ClientSettingScope.SYNCED, null, listOf(write("a", "1")), false)
-        check(syncedCreated is ClientSettingsWriteResult.Ok)
-        val syncedTombstoned = service.setSettings(userId, ClientSettingScope.SYNCED, null, listOf(write("a", null, baseVersion = syncedCreated.version)), false)
-        check(syncedTombstoned is ClientSettingsWriteResult.Ok)
+            val syncedCreated =
+                service.setSettings(userId, ClientSettingScope.SYNCED, null, listOf(write("a", "1")), false)
+            check(syncedCreated is ClientSettingsWriteResult.Ok)
+            val syncedTombstoned = service.setSettings(
+                userId,
+                ClientSettingScope.SYNCED,
+                null,
+                listOf(write("a", null, baseVersion = syncedCreated.version)),
+                false
+            )
+            check(syncedTombstoned is ClientSettingsWriteResult.Ok)
 
-        val deviceCreated = service.setSettings(userId, ClientSettingScope.DEVICE, "device-1", listOf(write("b", "2")), false)
-        check(deviceCreated is ClientSettingsWriteResult.Ok)
-        val deviceTombstoned = service.setSettings(userId, ClientSettingScope.DEVICE, "device-1", listOf(write("b", null, baseVersion = deviceCreated.version)), false)
-        check(deviceTombstoned is ClientSettingsWriteResult.Ok)
+            val deviceCreated =
+                service.setSettings(userId, ClientSettingScope.DEVICE, "device-1", listOf(write("b", "2")), false)
+            check(deviceCreated is ClientSettingsWriteResult.Ok)
+            val deviceTombstoned = service.setSettings(
+                userId,
+                ClientSettingScope.DEVICE,
+                "device-1",
+                listOf(write("b", null, baseVersion = deviceCreated.version)),
+                false
+            )
+            check(deviceTombstoned is ClientSettingsWriteResult.Ok)
 
-        transaction(database) {
-            backdateSetting(userId, ClientSettingScope.SYNCED, "", "a", staleTombstoneTimestamp())
-            backdateSetting(userId, ClientSettingScope.DEVICE, "device-1", "b", staleTombstoneTimestamp())
+            transaction(database) {
+                backdateSetting(userId, ClientSettingScope.SYNCED, "", "a", staleTombstoneTimestamp())
+                backdateSetting(userId, ClientSettingScope.DEVICE, "device-1", "b", staleTombstoneTimestamp())
+            }
+
+            val counts = service.cleanup()
+
+            assertEquals(2, counts.getValue("tombstonesPurged"))
+            assertTrue(service.getSettings(userId, ClientSettingScope.SYNCED, null, true).isEmpty())
+            assertTrue(service.getSettings(userId, ClientSettingScope.DEVICE, "device-1", true).isEmpty())
+
+            val syncedChanges = service.getChanges(userId, ClientSettingScope.SYNCED, null, 1, 10)
+            assertTrue(syncedChanges.fullResync)
+            val deviceChanges = service.getChanges(userId, ClientSettingScope.DEVICE, "device-1", 1, 10)
+            assertTrue(deviceChanges.fullResync)
         }
-
-        val counts = service.cleanup()
-
-        assertEquals(2, counts.getValue("tombstonesPurged"))
-        assertTrue(service.getSettings(userId, ClientSettingScope.SYNCED, null, true).isEmpty())
-        assertTrue(service.getSettings(userId, ClientSettingScope.DEVICE, "device-1", true).isEmpty())
-
-        val syncedChanges = service.getChanges(userId, ClientSettingScope.SYNCED, null, 1, 10)
-        assertTrue(syncedChanges.fullResync)
-        val deviceChanges = service.getChanges(userId, ClientSettingScope.DEVICE, "device-1", 1, 10)
-        assertTrue(deviceChanges.fullResync)
-    }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
@@ -123,16 +144,29 @@ class ClientSettingsCleanupTest : KoinTest {
         setup(dialect)
         val userId = transaction(database) { insertUser() }
 
-        val created = service.setSettings(userId, ClientSettingScope.SYNCED, null, listOf(write("live", "1"), write("gone", "2")), false)
+        val created = service.setSettings(
+            userId,
+            ClientSettingScope.SYNCED,
+            null,
+            listOf(write("live", "1"), write("gone", "2")),
+            false
+        )
         check(created is ClientSettingsWriteResult.Ok)
-        val tombstoned = service.setSettings(userId, ClientSettingScope.SYNCED, null, listOf(write("gone", null, baseVersion = created.version)), false)
+        val tombstoned = service.setSettings(
+            userId,
+            ClientSettingScope.SYNCED,
+            null,
+            listOf(write("gone", null, baseVersion = created.version)),
+            false
+        )
         check(tombstoned is ClientSettingsWriteResult.Ok)
 
         val counts = service.cleanup()
 
         assertEquals(0, counts.getValue("tombstonesPurged"))
         assertEquals("1", service.getSettings(userId, ClientSettingScope.SYNCED, null, false).single().value)
-        assertTrue(service.getSettings(userId, ClientSettingScope.SYNCED, null, true).any { it.key == "gone" && it.deleted })
+        assertTrue(
+            service.getSettings(userId, ClientSettingScope.SYNCED, null, true).any { it.key == "gone" && it.deleted })
     }
 
     @ParameterizedTest
@@ -140,7 +174,15 @@ class ClientSettingsCleanupTest : KoinTest {
     fun `history beyond the limit is trimmed by cleanup`(dialect: DbDialect) = runBlocking {
         setup(dialect)
         val userId = transaction(database) { insertUser() }
-        repeat(8) { index -> service.setSettings(userId, ClientSettingScope.SYNCED, null, listOf(write("counter", index.toString())), true) }
+        repeat(8) { index ->
+            service.setSettings(
+                userId,
+                ClientSettingScope.SYNCED,
+                null,
+                listOf(write("counter", index.toString())),
+                true
+            )
+        }
 
         val beforeHistory = service.getHistory(userId, ClientSettingScope.SYNCED, null, "counter", 20)
         assertEquals(7, beforeHistory.size)
@@ -154,22 +196,30 @@ class ClientSettingsCleanupTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `devices unseen past the cutoff are deleted together with their settings and history`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        val userId = transaction(database) { insertUser() }
-        val first = service.setSettings(userId, ClientSettingScope.DEVICE, "stale-device", listOf(write("a", "1")), false)
-        check(first is ClientSettingsWriteResult.Ok)
-        service.setSettings(userId, ClientSettingScope.DEVICE, "stale-device", listOf(write("a", "2", baseVersion = first.version)), false)
+    fun `devices unseen past the cutoff are deleted together with their settings and history`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val userId = transaction(database) { insertUser() }
+            val first =
+                service.setSettings(userId, ClientSettingScope.DEVICE, "stale-device", listOf(write("a", "1")), false)
+            check(first is ClientSettingsWriteResult.Ok)
+            service.setSettings(
+                userId,
+                ClientSettingScope.DEVICE,
+                "stale-device",
+                listOf(write("a", "2", baseVersion = first.version)),
+                false
+            )
 
-        transaction(database) { backdateDevice(userId, "stale-device", staleDeviceTimestamp()) }
+            transaction(database) { backdateDevice(userId, "stale-device", staleDeviceTimestamp()) }
 
-        val counts = service.cleanup()
+            val counts = service.cleanup()
 
-        assertEquals(1, counts.getValue("devicesDeleted"))
-        assertTrue(service.getDevices(userId).none { it.deviceId == "stale-device" })
-        assertTrue(service.getSettings(userId, ClientSettingScope.DEVICE, "stale-device", true).isEmpty())
-        assertTrue(service.getHistory(userId, ClientSettingScope.DEVICE, "stale-device", "a", 20).isEmpty())
-    }
+            assertEquals(1, counts.getValue("devicesDeleted"))
+            assertTrue(service.getDevices(userId).none { it.deviceId == "stale-device" })
+            assertTrue(service.getSettings(userId, ClientSettingScope.DEVICE, "stale-device", true).isEmpty())
+            assertTrue(service.getHistory(userId, ClientSettingScope.DEVICE, "stale-device", "a", 20).isEmpty())
+        }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
@@ -193,7 +243,13 @@ class ClientSettingsCleanupTest : KoinTest {
         val userId = transaction(database) { insertUser() }
         val created = service.setSettings(userId, ClientSettingScope.SYNCED, null, listOf(write("a", "1")), false)
         check(created is ClientSettingsWriteResult.Ok)
-        val tombstoned = service.setSettings(userId, ClientSettingScope.SYNCED, null, listOf(write("a", null, baseVersion = created.version)), false)
+        val tombstoned = service.setSettings(
+            userId,
+            ClientSettingScope.SYNCED,
+            null,
+            listOf(write("a", null, baseVersion = created.version)),
+            false
+        )
         check(tombstoned is ClientSettingsWriteResult.Ok)
         transaction(database) { backdateSetting(userId, ClientSettingScope.SYNCED, "", "a", staleTombstoneTimestamp()) }
 
@@ -207,12 +263,13 @@ class ClientSettingsCleanupTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `cleanup returns the counts of tombstones history rows and devices it removed`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        transaction(database) { insertUser() }
+    fun `cleanup returns the counts of tombstones history rows and devices it removed`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            transaction(database) { insertUser() }
 
-        val counts = service.cleanup()
+            val counts = service.cleanup()
 
-        assertEquals(setOf("tombstonesPurged", "historyTrimmed", "devicesDeleted"), counts.keys)
-    }
+            assertEquals(setOf("tombstonesPurged", "historyTrimmed", "devicesDeleted"), counts.keys)
+        }
 }

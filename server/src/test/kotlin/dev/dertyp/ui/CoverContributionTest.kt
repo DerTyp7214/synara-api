@@ -56,7 +56,15 @@ class CoverContributionTest {
     )
 
     private fun row(source: ImageSource?, imageId: UUID? = if (source == null) null else UUID.randomUUID()) =
-        CoverGenerationService.TargetRow(target, "Late Night", owner.id, imageId, source, CoverStyle.GRID.takeIf { source == ImageSource.GENERATED }, 7L)
+        CoverGenerationService.TargetRow(
+            target,
+            "Late Night",
+            owner.id,
+            imageId,
+            source,
+            CoverStyle.GRID.takeIf { source == ImageSource.GENERATED },
+            7L
+        )
 
     private fun UiComponent.flatten(): List<UiComponent> = listOf(this) + when (this) {
         is UiComponent.Column -> children.flatMap { it.flatten() }
@@ -69,7 +77,11 @@ class CoverContributionTest {
 
     private fun stub(source: ImageSource?, nsfw: Boolean = false) {
         coEvery { service.row(target) } returns row(source)
-        every { service.options() } returns CoverGenerationOptions(CoverStyle.entries, listOf(CoverPackInfo("grunge", "Grunge")), nsfw)
+        every { service.options() } returns CoverGenerationOptions(
+            CoverStyle.entries,
+            listOf(CoverPackInfo("grunge", "Grunge")),
+            nsfw
+        )
         every { service.nsfwEnabled } returns nsfw
     }
 
@@ -78,10 +90,14 @@ class CoverContributionTest {
         stub(ImageSource.GENERATED)
         val tree = contribution.render(scope(owner)).flatten()
         val selects = tree.filterIsInstance<UiComponent.Select>()
-        assertEquals(listOf(CoverSlotContribution.FIELD_STYLE, CoverSlotContribution.FIELD_PACK), selects.map { it.key })
+        assertEquals(
+            listOf(CoverSlotContribution.FIELD_STYLE, CoverSlotContribution.FIELD_PACK),
+            selects.map { it.key })
         assertEquals(CoverStyle.GRID.name, selects[0].value)
         assertEquals(listOf("", "grunge"), selects[1].options.map { it.value })
-        assertEquals(listOf(CoverSlotContribution.FIELD_TITLE), tree.filterIsInstance<UiComponent.Switch>().map { it.key })
+        assertEquals(
+            listOf(CoverSlotContribution.FIELD_TITLE),
+            tree.filterIsInstance<UiComponent.Switch>().map { it.key })
         assertTrue(tree.filterIsInstance<UiComponent.Image>().isNotEmpty())
         assertTrue(tree.filterIsInstance<UiComponent.Badge>().any { it.text == "Generated cover" })
         assertFalse(tree.filterIsInstance<UiComponent.Button>().any { it.label == "Remove custom cover" })
@@ -91,8 +107,12 @@ class CoverContributionTest {
     fun `user covers get a reset button and nsfw switch appears only when enabled`() = runBlocking {
         stub(ImageSource.USER, nsfw = true)
         val tree = contribution.render(scope(owner)).flatten()
-        assertTrue(tree.filterIsInstance<UiComponent.Button>().any { it.label == "Remove custom cover" && (it.action as UiAction.Invoke).confirmText != null })
-        assertEquals(listOf(CoverSlotContribution.FIELD_TITLE, CoverSlotContribution.FIELD_NSFW), tree.filterIsInstance<UiComponent.Switch>().map { it.key })
+        assertTrue(
+            tree.filterIsInstance<UiComponent.Button>()
+                .any { it.label == "Remove custom cover" && (it.action as UiAction.Invoke).confirmText != null })
+        assertEquals(
+            listOf(CoverSlotContribution.FIELD_TITLE, CoverSlotContribution.FIELD_NSFW),
+            tree.filterIsInstance<UiComponent.Switch>().map { it.key })
     }
 
     @Test
@@ -117,7 +137,12 @@ class CoverContributionTest {
         val result = contribution.invoke(scope(owner), CoverSlotContribution.ACTION_APPLY, values)
         assertEquals(UiInvokeStatus.OK, result.status)
         assertTrue(result.refresh)
-        coVerify { service.apply(target, CoverGenerationParams(CoverStyle.MOSAIC, null, allowNsfw = true, includeTitle = false, pack = "grunge")) }
+        coVerify {
+            service.apply(
+                target,
+                CoverGenerationParams(CoverStyle.MOSAIC, null, allowNsfw = true, includeTitle = false, pack = "grunge")
+            )
+        }
 
         val shuffle = contribution.invoke(scope(owner), CoverSlotContribution.ACTION_SHUFFLE, emptyMap())
         assertEquals(UiInvokeStatus.OK, shuffle.status)

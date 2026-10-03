@@ -52,7 +52,7 @@ class FlacAnalysisWorker : Worker("FlacAnalysisWorker") {
                 try {
                     flacAnalysisService.fixSeekpoints(songId)
                     val currentCount = processedCount.incrementAndGet()
-                    
+
                     if (currentCount % 10 == 0 || currentCount == totalToProcess) {
                         val progress = (currentCount.toDouble() / totalToProcess) * 100.0
                         onProgress(progress, "Fixed $currentCount/$totalToProcess files")

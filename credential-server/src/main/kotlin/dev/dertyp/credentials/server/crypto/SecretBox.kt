@@ -73,7 +73,10 @@ class SecretBox(key: ByteArray) {
                 Files.setPosixFilePermissions(keyFile, PosixFilePermissions.fromString("rw-------"))
             } catch (_: UnsupportedOperationException) {
             }
-            logger.warn("Generated a new master key file at {}. Back it up, stored credentials are unreadable without it", keyFile.toAbsolutePath())
+            logger.warn(
+                "Generated a new master key file at {}. Back it up, stored credentials are unreadable without it",
+                keyFile.toAbsolutePath()
+            )
             return generated
         }
     }

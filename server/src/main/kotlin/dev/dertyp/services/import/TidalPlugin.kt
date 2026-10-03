@@ -73,13 +73,16 @@ class TidalIndexer(context: PluginContext) : BaseIndexer(context, IMetadataServi
                 }
             }.awaitAll().filterNotNull()
 
-            val tracksToResolve = audioFilesWithTags.filter { it.second.album == null && (it.second.musicBrainzTrackId != null || it.second.isrc != null) }
+            val tracksToResolve =
+                audioFilesWithTags.filter { it.second.album == null && (it.second.musicBrainzTrackId != null || it.second.isrc != null) }
             val mbTrackIds = tracksToResolve.mapNotNull { it.second.musicBrainzTrackId }.distinct()
-            val isrcsToResolve = tracksToResolve.filter { it.second.musicBrainzTrackId == null }.mapNotNull { it.second.isrc }.distinct()
+            val isrcsToResolve =
+                tracksToResolve.filter { it.second.musicBrainzTrackId == null }.mapNotNull { it.second.isrc }.distinct()
 
             val resolvedMbTracks = if (mbTrackIds.isNotEmpty()) {
                 try {
-                    context.metadataService.getTracksByIds(IMetadataService.MetadataType.musicBrainz, mbTrackIds).associateBy { it.id }
+                    context.metadataService.getTracksByIds(IMetadataService.MetadataType.musicBrainz, mbTrackIds)
+                        .associateBy { it.id }
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
@@ -105,7 +108,8 @@ class TidalIndexer(context: PluginContext) : BaseIndexer(context, IMetadataServi
             val mbAlbumIds = allResolvedTracks.values.mapNotNull { it.albumId }.distinct()
             val resolvedMbAlbums = if (mbAlbumIds.isNotEmpty()) {
                 try {
-                    context.metadataService.getAlbumsByIds(IMetadataService.MetadataType.musicBrainz, mbAlbumIds).associateBy { it.id }
+                    context.metadataService.getAlbumsByIds(IMetadataService.MetadataType.musicBrainz, mbAlbumIds)
+                        .associateBy { it.id }
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
@@ -129,7 +133,11 @@ class TidalIndexer(context: PluginContext) : BaseIndexer(context, IMetadataServi
                 val barcode = if (rawBarcode?.uppercase() == "BARCODE") null else rawBarcode
 
                 val mbReleaseId = audioFile.musicBrainzReleaseId?.let {
-                    try { UUID.fromString(it) } catch (_: Exception) { null }
+                    try {
+                        UUID.fromString(it)
+                    } catch (_: Exception) {
+                        null
+                    }
                 }
 
                 val albumUrl = audioFile.tag.getFirst("URL")
@@ -137,14 +145,16 @@ class TidalIndexer(context: PluginContext) : BaseIndexer(context, IMetadataServi
                     albumUrl.substringAfter("/album/").substringBefore("/")
                 } else null
 
-                val originalId = tidalAlbumId?.let { "tidal:$it" } ?: pluginStorages.firstNotNullOfOrNull { it.tracksPath }?.let { _ ->
-                    pluginStorages.find { storage ->
-                        storage.tracksPath?.let { file.absolutePathString().startsWith(it) } == true
-                    }?.let { _ ->
-                        val folderName = file.parent.name
-                        if (folderName.all { it.isDigit() }) "$id:$folderName" else null
-                    }
-                }
+                val originalId =
+                    tidalAlbumId?.let { "tidal:$it" } ?: pluginStorages.firstNotNullOfOrNull { it.tracksPath }
+                        ?.let { _ ->
+                            pluginStorages.find { storage ->
+                                storage.tracksPath?.let { file.absolutePathString().startsWith(it) } == true
+                            }?.let { _ ->
+                                val folderName = file.parent.name
+                                if (folderName.all { it.isDigit() }) "$id:$folderName" else null
+                            }
+                        }
 
                 val album = InsertableAlbum(
                     name = name,
@@ -263,7 +273,13 @@ class TidalProxyImporter(
     override fun canHandle(url: String): Boolean = current().canHandle(url)
     override suspend fun parseUrl(url: String) = current().parseUrl(url)
     override suspend fun getWrapper(type: Type, ids: List<String>, user: User) = current().getWrapper(type, ids, user)
-    override suspend fun importIds(ids: List<String>, type: Type, user: User, callback: suspend (List<String>) -> Unit) = current().importIds(ids, type, user, callback)
+    override suspend fun importIds(
+        ids: List<String>,
+        type: Type,
+        user: User,
+        callback: suspend (List<String>) -> Unit
+    ) = current().importIds(ids, type, user, callback)
+
     override suspend fun importContent(
         urls: List<String>,
         maxRetries: Int,
@@ -272,11 +288,25 @@ class TidalProxyImporter(
         metadata: IMetadataService.BaseMetadata?,
         onLiveOutput: suspend (String) -> Unit
     ) = current().importContent(urls, maxRetries, aliveCheck, userId, metadata, onLiveOutput)
-    override suspend fun importFavoriteCollection(type: ImportFavType, maxRetries: Int, aliveCheck: suspend () -> Boolean, userId: PlatformUUID?, onLiveOutput: suspend (String) -> Unit) = current().importFavoriteCollection(type, maxRetries, aliveCheck, userId, onLiveOutput)
-    override suspend fun syncFavorites(user: User, onProgress: suspend (Double, String) -> Unit) = current().syncFavorites(user, onProgress)
+
+    override suspend fun importFavoriteCollection(
+        type: ImportFavType,
+        maxRetries: Int,
+        aliveCheck: suspend () -> Boolean,
+        userId: PlatformUUID?,
+        onLiveOutput: suspend (String) -> Unit
+    ) = current().importFavoriteCollection(type, maxRetries, aliveCheck, userId, onLiveOutput)
+
+    override suspend fun syncFavorites(user: User, onProgress: suspend (Double, String) -> Unit) =
+        current().syncFavorites(user, onProgress)
+
     override suspend fun search(query: String, count: Int) = current().search(query, count)
-    override suspend fun updateAlbumMetadata(albumId: PlatformUUID, originalId: String) = current().updateAlbumMetadata(albumId, originalId)
-    override suspend fun login(aliveCheck: suspend () -> Boolean, onLiveOutput: suspend (String) -> Unit) = current().login(aliveCheck, onLiveOutput)
+    override suspend fun updateAlbumMetadata(albumId: PlatformUUID, originalId: String) =
+        current().updateAlbumMetadata(albumId, originalId)
+
+    override suspend fun login(aliveCheck: suspend () -> Boolean, onLiveOutput: suspend (String) -> Unit) =
+        current().login(aliveCheck, onLiveOutput)
+
     override fun extractLoginUrl(log: String) = current().extractLoginUrl(log)
     override suspend fun authorized(aliveCheck: suspend () -> Boolean) = current().authorized(aliveCheck)
     override fun tokenFileExists() = current().tokenFileExists()

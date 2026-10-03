@@ -83,7 +83,8 @@ object MBReleaseTable : MBIdTable("mb_release") {
     val country = varchar("country", 128).nullable()
     val date = varchar("date", 128).nullable()
     val disambiguation = text("disambiguation").nullable()
-    val releaseGroupId = reference("releaseGroupId", MBReleaseGroupTable.id, onDelete = ReferenceOption.CASCADE).nullable()
+    val releaseGroupId =
+        reference("releaseGroupId", MBReleaseGroupTable.id, onDelete = ReferenceOption.CASCADE).nullable()
     val score = integer("score").nullable()
     val lastUpdate = long("lastUpdate").default(0L)
 }

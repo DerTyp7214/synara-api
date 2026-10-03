@@ -94,7 +94,8 @@ class KeyedMutexTest {
         }.awaitAll()
         runCatching { locks.withLock("failing.flac") { error("boom") } }
 
-        val entries = KeyedMutex::class.java.getDeclaredField("entries").apply { isAccessible = true }.get(locks) as Map<*, *>
+        val entries =
+            KeyedMutex::class.java.getDeclaredField("entries").apply { isAccessible = true }.get(locks) as Map<*, *>
         assertTrue(entries.isEmpty())
     }
 }

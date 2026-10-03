@@ -23,7 +23,13 @@ class HuePaletteMapperTest {
         HueTarget(HueTargetType.LIGHT, "l3", "Window"),
     )
     private val room = HueTarget(HueTargetType.ROOM, "r1", "Living", groupedLightId = "g1")
-    private fun link(targets: List<HueTarget> = lights, intensity: HueIntensity = HueIntensity.MEDIUM, mode: HueTransitionMode = HueTransitionMode.FIXED, ms: Int = 400, onStop: HueStopMode = HueStopMode.KEEP) =
+    private fun link(
+        targets: List<HueTarget> = lights,
+        intensity: HueIntensity = HueIntensity.MEDIUM,
+        mode: HueTransitionMode = HueTransitionMode.FIXED,
+        ms: Int = 400,
+        onStop: HueStopMode = HueStopMode.KEEP
+    ) =
         HueUserLink(UUID.randomUUID(), true, targets, intensity, mode, ms, onStop)
 
     private val strip = HueTarget(HueTargetType.LIGHT, "s1", "Aisle")
@@ -40,7 +46,11 @@ class HuePaletteMapperTest {
 
     @Test
     fun `vivid colors are kept, greys dropped, hues deduplicated`() {
-        val colors = HuePaletteMapper.pickColors(listOf(grey, red, 0xFFE81828.toInt(), blue, nearBlack), energy = 0.7, valence = 0.5)
+        val colors = HuePaletteMapper.pickColors(
+            listOf(grey, red, 0xFFE81828.toInt(), blue, nearBlack),
+            energy = 0.7,
+            valence = 0.5
+        )
         assertEquals(listOf(red, blue).toSet(), colors.toSet())
     }
 
@@ -103,7 +113,14 @@ class HuePaletteMapperTest {
         )
         val recalled = HuePaletteMapper.stop(link(onStop = HueStopMode.SCENE, ms = 700).copy(stopScenes = scenes))
         assertEquals(2, recalled.size)
-        assertTrue(recalled.all { it is HueSceneCommand && it.update == SceneRecallUpdate(ClipSceneRecall("active", 700)) })
+        assertTrue(recalled.all {
+            it is HueSceneCommand && it.update == SceneRecallUpdate(
+                ClipSceneRecall(
+                    "active",
+                    700
+                )
+            )
+        })
         assertEquals(setOf("scene:s1", "scene:s2"), recalled.map { it.resourceKey }.toSet())
 
         assertTrue(HuePaletteMapper.stop(link(onStop = HueStopMode.SCENE)).isEmpty())
@@ -118,7 +135,14 @@ class HuePaletteMapperTest {
         assertEquals(listOf(red, blue, grey), step0)
         assertEquals(listOf(blue, grey, red), step1)
         assertEquals(step0, step3)
-        assertTrue(HuePaletteMapper.frame(palette, lights, 1, 50, 1000).commands.all { (it as HueLightCommand).update.dynamics?.duration == 1000 })
+        assertTrue(
+            HuePaletteMapper.frame(
+                palette,
+                lights,
+                1,
+                50,
+                1000
+            ).commands.all { (it as HueLightCommand).update.dynamics?.duration == 1000 })
         assertTrue(HuePaletteMapper.frame(emptyList(), lights, 1, 50, 1000).commands.isEmpty())
         assertEquals(listOf(red, blue), HuePaletteMapper.map(listOf(blue), red, null, link()).palette)
     }
@@ -176,14 +200,28 @@ class HuePaletteMapperTest {
 
     @Test
     fun `a single color palette leaves the gradient unset`() {
-        val update = (HuePaletteMapper.frame(listOf(red), listOf(strip), 0, 50, 1000, gradientProfiles).commands.single() as HueLightCommand).update
+        val update = (HuePaletteMapper.frame(
+            listOf(red),
+            listOf(strip),
+            0,
+            50,
+            1000,
+            gradientProfiles
+        ).commands.single() as HueLightCommand).update
         assertNull(update.gradient)
         assertEquals(xy(red), update.color!!.xy)
     }
 
     @Test
     fun `a frame step shifts the gradient window`() {
-        val update = (HuePaletteMapper.frame(listOf(red, blue, grey), listOf(strip), 1, 50, 1000, gradientProfiles).commands.single() as HueLightCommand).update
+        val update = (HuePaletteMapper.frame(
+            listOf(red, blue, grey),
+            listOf(strip),
+            1,
+            50,
+            1000,
+            gradientProfiles
+        ).commands.single() as HueLightCommand).update
         assertEquals(listOf(xy(blue), xy(grey), xy(red)), update.gradient!!.points.map { it.color.xy })
     }
 

@@ -70,7 +70,9 @@ sealed class ProxyMessage {
             is Pong -> 5
         }
         val metadataBytes = when (this) {
-            is NewClient -> Json.encodeToString(ConnectionMetadata.serializer(), ConnectionMetadata(uri, headers)).toByteArray()
+            is NewClient -> Json.encodeToString(ConnectionMetadata.serializer(), ConnectionMetadata(uri, headers))
+                .toByteArray()
+
             is AssignedId -> id.toByteArray()
             else -> ByteArray(0)
         }
@@ -80,7 +82,7 @@ sealed class ProxyMessage {
         bytes.put(type.toByte())
         bytes.putLong(clientId.mostSignificantBits)
         bytes.putLong(clientId.leastSignificantBits)
-        
+
         // Use subType byte for frame type preservation
         if (this is ClientFrame) {
             bytes.put(if (isBinary) 1.toByte() else 0.toByte())
@@ -89,7 +91,7 @@ sealed class ProxyMessage {
             bytes.put(0.toByte())
             bytes.put(metadataBytes)
         }
-        
+
         return Frame.Binary(true, bytes.array())
     }
 
@@ -104,17 +106,22 @@ sealed class ProxyMessage {
             val lsb = buffer.getLong()
             val clientId = UUID(msb, lsb)
             val subType = buffer.get().toInt()
-            
+
             return when (type) {
                 0 -> {
-                    val metadata = Json.decodeFromString(ConnectionMetadata.serializer(), String(ByteArray(buffer.remaining()).also { buffer.get(it) }))
+                    val metadata = Json.decodeFromString(
+                        ConnectionMetadata.serializer(),
+                        String(ByteArray(buffer.remaining()).also { buffer.get(it) })
+                    )
                     NewClient(clientId, metadata.uri, metadata.headers)
                 }
+
                 1 -> {
                     val data = ByteArray(buffer.remaining())
                     buffer.get(data)
                     ClientFrame(clientId, data, subType == 1)
                 }
+
                 2 -> ClientDisconnected(clientId)
                 3 -> AssignedId(String(ByteArray(buffer.remaining()).also { buffer.get(it) }))
                 4 -> Ping

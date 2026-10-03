@@ -38,7 +38,10 @@ class LosslessFormatTest {
 
     @Test
     fun `toAudioConfig reads the lossless format`() {
-        assertEquals(LosslessFormat.WAV, MapApplicationConfig("audio.losslessFormat" to "WAV").toAudioConfig().losslessFormat)
+        assertEquals(
+            LosslessFormat.WAV,
+            MapApplicationConfig("audio.losslessFormat" to "WAV").toAudioConfig().losslessFormat
+        )
         assertEquals(LosslessFormat.FLAC, MapApplicationConfig().toAudioConfig().losslessFormat)
     }
 }

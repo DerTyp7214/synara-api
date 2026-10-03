@@ -31,6 +31,7 @@ fun isoDateKey(iso: Expression<String?>): Expression<String> {
     fun part(start: Int, count: Int) = Substring(iso, intLiteral(start), intLiteral(count))
     fun digits(positions: IntRange): Op<Boolean> =
         positions.map<Int, Op<Boolean>> { part(it, 1) inList asciiDigits }.reduce { acc, op -> acc and op }
+
     val month = part(6, 2)
     val day = part(9, 2)
     val leapYear = (part(3, 2) inList twoDigitMultiplesOfFour) and

@@ -88,7 +88,8 @@ class GamdlIndexer(context: PluginContext) : BaseIndexer(context, IMetadataServi
             val mbAlbumIds = resolvedIsrcTracks.values.mapNotNull { it.albumId }.distinct()
             val resolvedMbAlbums = if (mbAlbumIds.isNotEmpty()) {
                 try {
-                    context.metadataService.getAlbumsByIds(IMetadataService.MetadataType.musicBrainz, mbAlbumIds).associateBy { it.id }
+                    context.metadataService.getAlbumsByIds(IMetadataService.MetadataType.musicBrainz, mbAlbumIds)
+                        .associateBy { it.id }
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
@@ -111,7 +112,11 @@ class GamdlIndexer(context: PluginContext) : BaseIndexer(context, IMetadataServi
                 val barcode = if (rawBarcode?.uppercase() == "BARCODE") null else rawBarcode
 
                 val mbReleaseId = audioFile.musicBrainzReleaseId?.let {
-                    try { UUID.fromString(it) } catch (_: Exception) { null }
+                    try {
+                        UUID.fromString(it)
+                    } catch (_: Exception) {
+                        null
+                    }
                 }
 
                 val originalId = pluginStorages.firstNotNullOfOrNull { it.tracksPath }?.let { _ ->
@@ -188,7 +193,13 @@ class GamdlIndexer(context: PluginContext) : BaseIndexer(context, IMetadataServi
         val isrc = base.isrc ?: return base
         return try {
             val recording = context.metadataService.getTrackByIsrc(IMetadataService.MetadataType.musicBrainz, isrc)
-            val mbId = recording?.id?.let { try { UUID.fromString(it) } catch (_: Exception) { null } }
+            val mbId = recording?.id?.let {
+                try {
+                    UUID.fromString(it)
+                } catch (_: Exception) {
+                    null
+                }
+            }
             if (mbId != null) base.copy(musicBrainzId = mbId) else base
         } catch (e: CancellationException) {
             throw e

@@ -85,7 +85,9 @@ class UserHomeCardServiceTest {
         assertEquals(listOf("core.c", "core.a", "core.b"), layout.cards.map { it.contributionId })
         assertEquals(listOf(true, false, false), layout.cards.map { it.pinned })
 
-        assertEquals(listOf("core.c"), service.layoutFor(accountId, available.take(0) + available[2]).cards.map { it.contributionId })
+        assertEquals(
+            listOf("core.c"),
+            service.layoutFor(accountId, available.take(0) + available[2]).cards.map { it.contributionId })
     }
 
     @ParameterizedTest

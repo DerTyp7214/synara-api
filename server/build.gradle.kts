@@ -36,7 +36,8 @@ tasks.register<JavaExec>("runSearchBenchmark") {
 
 tasks.register<JavaExec>("generateApiConstantsDocs") {
     group = "documentation"
-    description = "Generates docs/API_CONSTANTS.md from the version, feature and authentication constants in the server sources."
+    description =
+        "Generates docs/API_CONSTANTS.md from the version, feature and authentication constants in the server sources."
     mainClass.set("dev.dertyp.docs.ApiConstantsDocsKt")
     classpath = sourceSets["main"].runtimeClasspath
     workingDir = rootProject.projectDir

@@ -94,18 +94,26 @@ class PluginCredentialsTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `remotely granted plugin names are fetched under their full name and are read only`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        val credentials = factory().forPlugin("remote")
+    fun `remotely granted plugin names are fetched under their full name and are read only`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val credentials = factory().forPlugin("remote")
 
-        assertTrue(credentials.managedRemotely)
-        assertEquals("from-server", (credentials.get("token") as ResolvedCredential.ApiKey).key)
-        assertEquals(1, server.fetches(remoteName))
-        assertThrows<IllegalStateException> { runBlocking { credentials.store("token", ResolvedCredential.ApiKey("token", "x")) } }
-        assertThrows<IllegalStateException> { runBlocking { credentials.remove("token") } }
+            assertTrue(credentials.managedRemotely)
+            assertEquals("from-server", (credentials.get("token") as ResolvedCredential.ApiKey).key)
+            assertEquals(1, server.fetches(remoteName))
+            assertThrows<IllegalStateException> {
+                runBlocking {
+                    credentials.store(
+                        "token",
+                        ResolvedCredential.ApiKey("token", "x")
+                    )
+                }
+            }
+            assertThrows<IllegalStateException> { runBlocking { credentials.remove("token") } }
 
-        credentials.store("other", ResolvedCredential.ApiKey("other", "local"))
-        assertEquals(ResolvedCredential.ApiKey("other", "local"), credentials.get("other"))
-        assertEquals(0, server.fetches(CredentialNames.plugin("remote", "other")))
-    }
+            credentials.store("other", ResolvedCredential.ApiKey("other", "local"))
+            assertEquals(ResolvedCredential.ApiKey("other", "local"), credentials.get("other"))
+            assertEquals(0, server.fetches(CredentialNames.plugin("remote", "other")))
+        }
 }

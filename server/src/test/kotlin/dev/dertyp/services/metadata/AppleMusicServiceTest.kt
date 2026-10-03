@@ -77,6 +77,7 @@ class AppleMusicServiceTest : KoinTest {
                               ]
                             }
                         """.trimIndent()
+
                         entity == "album" -> """
                             {
                               "resultCount": 1,
@@ -92,6 +93,7 @@ class AppleMusicServiceTest : KoinTest {
                               ]
                             }
                         """.trimIndent()
+
                         entity?.contains("song") == true -> """
                             {
                               "resultCount": 2,
@@ -117,6 +119,7 @@ class AppleMusicServiceTest : KoinTest {
                               ]
                             }
                         """.trimIndent()
+
                         else -> """{"resultCount": 0, "results": []}"""
                     }
                     respond(
@@ -125,6 +128,7 @@ class AppleMusicServiceTest : KoinTest {
                         headers = headersOf(HttpHeaders.ContentType, "text/javascript; charset=utf-8")
                     )
                 }
+
                 else -> respondError(HttpStatusCode.NotFound)
             }
         }
@@ -157,7 +161,11 @@ class AppleMusicServiceTest : KoinTest {
 
     private fun provideDeveloperToken() {
         credentialProvider.put(
-            ResolvedCredential.DeveloperToken(CredentialNames.APPLE_MUSIC_DEVELOPER, "mock-token", System.currentTimeMillis() + 100000)
+            ResolvedCredential.DeveloperToken(
+                CredentialNames.APPLE_MUSIC_DEVELOPER,
+                "mock-token",
+                System.currentTimeMillis() + 100000
+            )
         )
     }
 
@@ -676,7 +684,7 @@ class AppleMusicServiceTest : KoinTest {
         val albums = appleMusicService.searchAlbums("Bonez MC", 10, includeTracks = true)
 
         assertEquals(4, albums.size)
-        
+
         val titles = albums.map { it.title }.toSet()
         assertTrue(titles.contains("LOVELINE EP 💔"))
         assertTrue(titles.contains("Hollywood"))

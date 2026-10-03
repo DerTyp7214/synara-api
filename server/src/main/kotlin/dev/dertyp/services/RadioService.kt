@@ -66,7 +66,8 @@ class RadioService : Service() {
 
     fun createChannelSession(userId: UUID, discovery: Boolean, poolSource: RadioSongSupplier): UUID {
         val id = UUID.randomUUID()
-        sessions[id] = RadioSessionState(userId, RadioType.RANDOM, seed = null, poolSource = poolSource, discovery = discovery)
+        sessions[id] =
+            RadioSessionState(userId, RadioType.RANDOM, seed = null, poolSource = poolSource, discovery = discovery)
         return id
     }
 
@@ -154,7 +155,11 @@ class RadioService : Service() {
     }
 
     companion object {
-        fun <T> weightedSample(weights: Map<T, Float>, limit: Int, random: kotlin.random.Random = kotlin.random.Random): List<T> {
+        fun <T> weightedSample(
+            weights: Map<T, Float>,
+            limit: Int,
+            random: kotlin.random.Random = kotlin.random.Random
+        ): List<T> {
             val pool = weights.entries.filter { it.value > 0f }.map { it.key to it.value }.toMutableList()
             val picked = ArrayList<T>(minOf(limit, pool.size))
             var total = pool.sumOf { it.second.toDouble() }

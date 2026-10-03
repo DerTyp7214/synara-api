@@ -43,7 +43,7 @@ class SongDeduplicationTest : KoinTest {
     private val pluginManager = mockk<PluginManager>(relaxed = true)
 
     private val allTables = arrayOf(
-        ArtistTable, AlbumTable, SongTable, SongVariantTable, SongTitleTagTable, SongArtistTable, 
+        ArtistTable, AlbumTable, SongTable, SongVariantTable, SongTitleTagTable, SongArtistTable,
         SongMusicBrainzTable, SongAudioDataTable, ImageTable, GenreTable,
         UserTable, AlbumMusicBrainzTable, ArtistMusicBrainzTable,
         ArtistAliasTable, ArtistMemberTable, AlbumArtistTable,
@@ -90,111 +90,121 @@ class SongDeduplicationTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `createBatch should not insert duplicate if originalUrl matches but path differs`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        val songService = SongService()
+    fun `createBatch should not insert duplicate if originalUrl matches but path differs`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val songService = SongService()
 
-        val artistId = UUID.randomUUID()
-        val albumId = UUID.randomUUID()
+            val artistId = UUID.randomUUID()
+            val albumId = UUID.randomUUID()
 
-        transaction(database) {
-            ArtistTable.insert {
-                it[id] = artistId
-                it[name] = "Test Artist"
+            transaction(database) {
+                ArtistTable.insert {
+                    it[id] = artistId
+                    it[name] = "Test Artist"
+                }
+                AlbumTable.insert {
+                    it[id] = albumId
+                    it[name] = "Test Album"
+                }
             }
-            AlbumTable.insert {
-                it[id] = albumId
-                it[name] = "Test Album"
+
+            coEvery { artistService.getOrBulkCreate(any()) } answers {
+                val names = it.invocation.args[0] as List<String>
+                names.associateWith { listOf(artistId) }
+            }
+            coEvery { albumService.getOrBulkCreate(any()) } answers {
+                val albums = it.invocation.args[0] as List<InsertableAlbum>
+                albums.associateWith { albumId }
+            }
+
+            val song1 = InsertableSong(
+                title = "Dedupe Test",
+                artists = listOf("Test Artist"),
+                album = InsertableAlbum(name = "Test Album", artists = listOf("Test Artist")),
+                path = "/old/path/song.flac",
+                originalUrl = "https://tidal.com/track/dedupe-123",
+                duration = 3.minutes.inWholeMilliseconds,
+                explicit = false,
+                audio = AudioInfo("flac", 44100, 16, 1000, 1000, 2)
+            )
+
+            val song2 = song1.copy(path = "/new/path/song.flac")
+
+            songService.createBatch(listOf(song1))
+            transaction(database) {
+                assertEquals(1L, SongTable.selectAll().count())
+            }
+
+            songService.createBatch(listOf(song2))
+            transaction(database) {
+                assertEquals(
+                    1L,
+                    SongTable.selectAll().count(),
+                    "Should not have inserted a second song when originalUrl matches"
+                )
             }
         }
-
-        coEvery { artistService.getOrBulkCreate(any()) } answers {
-            val names = it.invocation.args[0] as List<String>
-            names.associateWith { listOf(artistId) }
-        }
-        coEvery { albumService.getOrBulkCreate(any()) } answers {
-            val albums = it.invocation.args[0] as List<InsertableAlbum>
-            albums.associateWith { albumId }
-        }
-
-        val song1 = InsertableSong(
-            title = "Dedupe Test",
-            artists = listOf("Test Artist"),
-            album = InsertableAlbum(name = "Test Album", artists = listOf("Test Artist")),
-            path = "/old/path/song.flac",
-            originalUrl = "https://tidal.com/track/dedupe-123",
-            duration = 3.minutes.inWholeMilliseconds,
-            explicit = false,
-            audio = AudioInfo("flac", 44100, 16, 1000, 1000, 2)
-        )
-
-        val song2 = song1.copy(path = "/new/path/song.flac")
-
-        songService.createBatch(listOf(song1))
-        transaction(database) {
-            assertEquals(1L, SongTable.selectAll().count())
-        }
-
-        songService.createBatch(listOf(song2))
-        transaction(database) {
-            assertEquals(1L, SongTable.selectAll().count(), "Should not have inserted a second song when originalUrl matches")
-        }
-    }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `createBatch should not insert duplicate if title and album match but path differs`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        val songService = SongService()
+    fun `createBatch should not insert duplicate if title and album match but path differs`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val songService = SongService()
 
-        val artistId = UUID.randomUUID()
-        val albumId = UUID.randomUUID()
+            val artistId = UUID.randomUUID()
+            val albumId = UUID.randomUUID()
 
-        transaction(database) {
-            ArtistTable.insert {
-                it[id] = artistId
-                it[name] = "Test Artist"
+            transaction(database) {
+                ArtistTable.insert {
+                    it[id] = artistId
+                    it[name] = "Test Artist"
+                }
+                AlbumTable.insert {
+                    it[id] = albumId
+                    it[name] = "Test Album"
+                }
             }
-            AlbumTable.insert {
-                it[id] = albumId
-                it[name] = "Test Album"
+
+            coEvery { artistService.getOrBulkCreate(any()) } answers {
+                val names = it.invocation.args[0] as List<String>
+                names.associateWith { listOf(artistId) }
+            }
+            coEvery { albumService.getOrBulkCreate(any()) } answers {
+                val albums = it.invocation.args[0] as List<InsertableAlbum>
+                albums.associateWith { albumId }
+            }
+
+            val song1 = InsertableSong(
+                title = "Dedupe Test Metadata",
+                artists = listOf("Test Artist"),
+                album = InsertableAlbum(name = "Test Album", artists = listOf("Test Artist")),
+                path = "/old/path/song2.flac",
+                originalUrl = "",
+                trackNumber = 1,
+                discNumber = 1,
+                duration = 3.minutes.inWholeMilliseconds,
+                explicit = false,
+                audio = AudioInfo("flac", 44100, 16, 1000, 1000, 2)
+            )
+
+            val song2 = song1.copy(path = "/new/path/song2.flac")
+
+            songService.createBatch(listOf(song1))
+            transaction(database) {
+                assertEquals(1L, SongTable.selectAll().count())
+            }
+
+            songService.createBatch(listOf(song2))
+            transaction(database) {
+                assertEquals(
+                    1L,
+                    SongTable.selectAll().count(),
+                    "Should not have inserted a second song when metadata matches"
+                )
             }
         }
-
-        coEvery { artistService.getOrBulkCreate(any()) } answers {
-            val names = it.invocation.args[0] as List<String>
-            names.associateWith { listOf(artistId) }
-        }
-        coEvery { albumService.getOrBulkCreate(any()) } answers {
-            val albums = it.invocation.args[0] as List<InsertableAlbum>
-            albums.associateWith { albumId }
-        }
-
-        val song1 = InsertableSong(
-            title = "Dedupe Test Metadata",
-            artists = listOf("Test Artist"),
-            album = InsertableAlbum(name = "Test Album", artists = listOf("Test Artist")),
-            path = "/old/path/song2.flac",
-            originalUrl = "",
-            trackNumber = 1,
-            discNumber = 1,
-            duration = 3.minutes.inWholeMilliseconds,
-            explicit = false,
-            audio = AudioInfo("flac", 44100, 16, 1000, 1000, 2)
-        )
-
-        val song2 = song1.copy(path = "/new/path/song2.flac")
-
-        songService.createBatch(listOf(song1))
-        transaction(database) {
-            assertEquals(1L, SongTable.selectAll().count())
-        }
-
-        songService.createBatch(listOf(song2))
-        transaction(database) {
-            assertEquals(1L, SongTable.selectAll().count(), "Should not have inserted a second song when metadata matches")
-        }
-    }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
@@ -308,66 +318,75 @@ class SongDeduplicationTest : KoinTest {
 
         songService.createBatch(listOf(albumVersion))
         transaction(database) {
-            assertEquals(2L, SongTable.selectAll().count(), "Same ISRC on a different album must be inserted as a separate song")
+            assertEquals(
+                2L,
+                SongTable.selectAll().count(),
+                "Same ISRC on a different album must be inserted as a separate song"
+            )
         }
     }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `createBatch should not insert duplicate if different URLs point to the same song via SongProviderTable`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        val songService = SongService()
+    fun `createBatch should not insert duplicate if different URLs point to the same song via SongProviderTable`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val songService = SongService()
 
-        val artistId = UUID.randomUUID()
-        val albumId = UUID.randomUUID()
+            val artistId = UUID.randomUUID()
+            val albumId = UUID.randomUUID()
 
-        transaction(database) {
-            ArtistTable.insert {
-                it[id] = artistId
-                it[name] = "Test Artist"
+            transaction(database) {
+                ArtistTable.insert {
+                    it[id] = artistId
+                    it[name] = "Test Artist"
+                }
+                AlbumTable.insert {
+                    it[id] = albumId
+                    it[name] = "Test Album"
+                }
             }
-            AlbumTable.insert {
-                it[id] = albumId
-                it[name] = "Test Album"
+
+            coEvery { artistService.getOrBulkCreate(any()) } answers {
+                val names = it.invocation.args[0] as List<String>
+                names.associateWith { listOf(artistId) }
+            }
+            coEvery { albumService.getOrBulkCreate(any()) } answers {
+                val albums = it.invocation.args[0] as List<InsertableAlbum>
+                albums.associateWith { albumId }
+            }
+
+            val song1 = InsertableSong(
+                title = "Dedupe Test Provider",
+                artists = listOf("Test Artist"),
+                album = InsertableAlbum(name = "Test Album", artists = listOf("Test Artist")),
+                path = "/old/path/song3.flac",
+                originalUrl = "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+                duration = 3.minutes.inWholeMilliseconds,
+                explicit = false,
+                audio = AudioInfo("flac", 44100, 16, 1000, 1000, 2)
+            )
+
+            val song2 = song1.copy(
+                path = "/new/path/song3.flac",
+                originalUrl = "https://youtu.be/dQw4w9WgXcQ"
+            )
+
+            songService.createBatch(listOf(song1))
+            transaction(database) {
+                assertEquals(1L, SongTable.selectAll().count())
+                assertEquals(1L, SongProviderTable.selectAll().count())
+            }
+
+            songService.createBatch(listOf(song2))
+            transaction(database) {
+                assertEquals(
+                    1L,
+                    SongTable.selectAll().count(),
+                    "Should not have inserted a second song when provider ID matches"
+                )
             }
         }
-
-        coEvery { artistService.getOrBulkCreate(any()) } answers {
-            val names = it.invocation.args[0] as List<String>
-            names.associateWith { listOf(artistId) }
-        }
-        coEvery { albumService.getOrBulkCreate(any()) } answers {
-            val albums = it.invocation.args[0] as List<InsertableAlbum>
-            albums.associateWith { albumId }
-        }
-
-        val song1 = InsertableSong(
-            title = "Dedupe Test Provider",
-            artists = listOf("Test Artist"),
-            album = InsertableAlbum(name = "Test Album", artists = listOf("Test Artist")),
-            path = "/old/path/song3.flac",
-            originalUrl = "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
-            duration = 3.minutes.inWholeMilliseconds,
-            explicit = false,
-            audio = AudioInfo("flac", 44100, 16, 1000, 1000, 2)
-        )
-
-        val song2 = song1.copy(
-            path = "/new/path/song3.flac",
-            originalUrl = "https://youtu.be/dQw4w9WgXcQ"
-        )
-
-        songService.createBatch(listOf(song1))
-        transaction(database) {
-            assertEquals(1L, SongTable.selectAll().count())
-            assertEquals(1L, SongProviderTable.selectAll().count())
-        }
-
-        songService.createBatch(listOf(song2))
-        transaction(database) {
-            assertEquals(1L, SongTable.selectAll().count(), "Should not have inserted a second song when provider ID matches")
-        }
-    }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)

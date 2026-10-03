@@ -59,14 +59,14 @@ class FillIsrcAndBarcodeTest : KoinTest {
     @EnumSource(DbDialect::class)
     fun `migration should fill isrc and barcode from musicbrainz tables`(dialect: DbDialect) = runBlocking {
         setup(dialect)
-        
+
         val songId = UUID.randomUUID()
         val mbRecordingId = UUID.randomUUID()
         val albumId = UUID.randomUUID()
         val mbReleaseId = UUID.randomUUID()
         val existingSongId = UUID.randomUUID()
         val existingAlbumId = UUID.randomUUID()
-        
+
         val isrcValue = "USAT20300184"
         val barcodeValue = "123456789012"
 

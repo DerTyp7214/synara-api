@@ -32,9 +32,14 @@ class AlbumRpcService(private val user: User, private val albumService: AlbumSer
     IAlbumService {
     override suspend fun byId(id: UUID): Album? = albumService.byId(id, user.id)
     override suspend fun byMusicBrainzId(mbId: UUID): List<Album> = albumService.byMusicBrainzId(mbId, user.id)
-    override suspend fun byMusicBrainzIds(@LogParam("size") mbIds: List<UUID>): List<Album?> = albumService.byMusicBrainzIds(mbIds, user.id)
-    override suspend fun byOriginalIds(@LogParam("size") ids: Collection<PrefixedId>): List<Album> = albumService.byOriginalIds(ids)
-    override suspend fun byOriginalUrls(urls: Collection<String>): Map<String, Album?> = albumService.byOriginalUrls(urls)
+    override suspend fun byMusicBrainzIds(@LogParam("size") mbIds: List<UUID>): List<Album?> =
+        albumService.byMusicBrainzIds(mbIds, user.id)
+
+    override suspend fun byOriginalIds(@LogParam("size") ids: Collection<PrefixedId>): List<Album> =
+        albumService.byOriginalIds(ids)
+
+    override suspend fun byOriginalUrls(urls: Collection<String>): Map<String, Album?> =
+        albumService.byOriginalUrls(urls)
 
     override suspend fun byIds(@LogParam("size") ids: List<UUID>): List<Album> = albumService.byIds(ids, user.id)
     override suspend fun versions(id: UUID): List<Album> = albumService.versions(id, user.id)
@@ -385,14 +390,18 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
             val matchedSong = dbSongs.find { it.musicBrainzId == mbRecordingId }
                 ?: dbSongs.find { mbIsrc != null && it.isrc == mbIsrc }
                 ?: dbSongs.find { mbTitle != null && it.fullTitle.equals(mbTitle, ignoreCase = true) }
-                ?: dbSongs.find { mbTitle != null && it.fullTitle.cleanTitle().equals(mbTitle.cleanTitle(), ignoreCase = true) }
+                ?: dbSongs.find {
+                    mbTitle != null && it.fullTitle.cleanTitle().equals(mbTitle.cleanTitle(), ignoreCase = true)
+                }
                 ?: dbSongs.find { mbTitle != null && it.title.equals(mbTitle, ignoreCase = true) }
-                ?: dbSongs.find { mbTitle != null && it.title.cleanTitle().equals(mbTitle.cleanTitle(), ignoreCase = true) }
+                ?: dbSongs.find {
+                    mbTitle != null && it.title.cleanTitle().equals(mbTitle.cleanTitle(), ignoreCase = true)
+                }
                 ?: dbSongs.find {
                     mbTitle != null &&
-                    mbDuration != null &&
-                    abs(it.duration - mbDuration) < 2000 &&
-                    it.title.cleanTitle().contains(mbTitle.cleanTitle(), ignoreCase = true)
+                            mbDuration != null &&
+                            abs(it.duration - mbDuration) < 2000 &&
+                            it.title.cleanTitle().contains(mbTitle.cleanTitle(), ignoreCase = true)
                 }
 
             if (matchedSong != null) {
@@ -496,38 +505,40 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
         )
     }
 
-    fun albumIdsForProviderEnrichment(excludeSingles: Boolean = false, onlySingles: Boolean = false): Flow<UUID> = flow {
-        val oneWeekAgo = Clock.System.now() - 7.days
+    fun albumIdsForProviderEnrichment(excludeSingles: Boolean = false, onlySingles: Boolean = false): Flow<UUID> =
+        flow {
+            val oneWeekAgo = Clock.System.now() - 7.days
 
-        AlbumTable
-            .select(AlbumTable.id)
-            .where {
-                var condition: Op<Boolean> = AlbumTable.lastProviderEnrichment.isNull() or
-                        (AlbumTable.lastProviderEnrichment less oneWeekAgo.toEpochMilliseconds())
+            AlbumTable
+                .select(AlbumTable.id)
+                .where {
+                    var condition: Op<Boolean> = AlbumTable.lastProviderEnrichment.isNull() or
+                            (AlbumTable.lastProviderEnrichment less oneWeekAgo.toEpochMilliseconds())
 
-                if (excludeSingles) {
-                    condition = condition and (AlbumTable.songCount greater 1)
+                    if (excludeSingles) {
+                        condition = condition and (AlbumTable.songCount greater 1)
+                    }
+                    if (onlySingles) {
+                        condition = condition and (AlbumTable.songCount eq 1)
+                    }
+                    condition
                 }
-                if (onlySingles) {
-                    condition = condition and (AlbumTable.songCount eq 1)
+                .orderBy(AlbumTable.lastProviderEnrichment, SortOrder.ASC)
+                .orderBy(AlbumTable.id, SortOrder.ASC)
+                .fetchBatchedResults(1000) { batch ->
+                    batch.forEach {
+                        emit(it[AlbumTable.id].value)
+                    }
                 }
-                condition
-            }
-            .orderBy(AlbumTable.lastProviderEnrichment, SortOrder.ASC)
-            .orderBy(AlbumTable.id, SortOrder.ASC)
-            .fetchBatchedResults(1000) { batch ->
-                batch.forEach {
-                    emit(it[AlbumTable.id].value)
-                }
-            }
-    }
+        }
 
     fun albumIdsForBarcodeEnrichment(provider: String): Flow<UUID> = flow {
         val now = Clock.System.now().toEpochMilliseconds()
         val threshold = now - 30.days.inWholeMilliseconds
 
         AlbumTable
-            .leftJoin(ProviderEnrichmentCheckTable,
+            .leftJoin(
+                ProviderEnrichmentCheckTable,
                 onColumn = { AlbumTable.id },
                 otherColumn = { ProviderEnrichmentCheckTable.entityId },
                 additionalConstraint = {
@@ -573,7 +584,11 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
         val provider = parser?.name ?: "unknown"
         val externalId = parsed?.first ?: url
 
-        AlbumProviderTable.upsert(AlbumProviderTable.albumId, AlbumProviderTable.provider, AlbumProviderTable.externalId) {
+        AlbumProviderTable.upsert(
+            AlbumProviderTable.albumId,
+            AlbumProviderTable.provider,
+            AlbumProviderTable.externalId
+        ) {
             it[AlbumProviderTable.albumId] = albumId
             it[AlbumProviderTable.provider] = provider
             it[AlbumProviderTable.externalId] = externalId
@@ -615,11 +630,11 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
                     ParserFactory.toUrl(provider, externalId, type) ?: row[AlbumProviderTable.rawUrl]
                 }
         }.toMutableSet()
-        
+
         seedUrls.addAll(urls)
 
         val resolvedLinks = linkResolverService.batchResolve(seedUrls, upc = upc, priority = priority)
-        
+
         val allUrls = (urls + resolvedLinks).distinct()
 
         dbQuery {
@@ -710,9 +725,19 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
         val uniqueReleaseGroupIds = idToReleaseGroupId.values.distinct()
         val rgIdToAlbumIds = dbQuery {
             AlbumMusicBrainzTable
-                .innerJoin(MBReleaseTable, onColumn = { AlbumMusicBrainzTable.musicBrainzId }, otherColumn = { MBReleaseTable.id })
+                .innerJoin(
+                    MBReleaseTable,
+                    onColumn = { AlbumMusicBrainzTable.musicBrainzId },
+                    otherColumn = { MBReleaseTable.id })
                 .select(AlbumMusicBrainzTable.albumId, MBReleaseTable.releaseGroupId)
-                .where { MBReleaseTable.releaseGroupId inList uniqueReleaseGroupIds.map { EntityID(it, MBReleaseGroupTable) } }
+                .where {
+                    MBReleaseTable.releaseGroupId inList uniqueReleaseGroupIds.map {
+                        EntityID(
+                            it,
+                            MBReleaseGroupTable
+                        )
+                    }
+                }
                 .mapNotNull { row ->
                     val rgId = row[MBReleaseTable.releaseGroupId]?.value ?: return@mapNotNull null
                     val albumId = row[AlbumMusicBrainzTable.albumId].value
@@ -750,10 +775,10 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
                     .select(AlbumProviderTable.albumId)
                     .where {
                         (AlbumProviderTable.type eq Type.ALBUM.value) and (
-                            (AlbumProviderTable.rawUrl inList idChunk) or
-                                    (AlbumProviderTable.externalId inList idChunk) or
-                                    AlbumProviderTable.matchesAny(parsedLookups)
-                            )
+                                (AlbumProviderTable.rawUrl inList idChunk) or
+                                        (AlbumProviderTable.externalId inList idChunk) or
+                                        AlbumProviderTable.matchesAny(parsedLookups)
+                                )
                     }
                     .map { it[AlbumProviderTable.albumId].value }
             }
@@ -771,18 +796,24 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
         if (urls.isEmpty()) return mutableMapOf()
 
         val distinctUrls = urls.distinct()
-        val parsedLookups = distinctUrls.mapNotNull { url -> providerLookup(url, Type.ALBUM)?.let { url to it } }.toMap()
+        val parsedLookups =
+            distinctUrls.mapNotNull { url -> providerLookup(url, Type.ALBUM)?.let { url to it } }.toMap()
 
         val winners = dbQuery {
             val urlChunks = distinctUrls.chunked(PROVIDER_LOOKUP_CHUNK_SIZE)
             val providerRows = urlChunks.flatMap { urlChunk ->
                 AlbumProviderTable
-                    .select(AlbumProviderTable.albumId, AlbumProviderTable.provider, AlbumProviderTable.externalId, AlbumProviderTable.rawUrl)
+                    .select(
+                        AlbumProviderTable.albumId,
+                        AlbumProviderTable.provider,
+                        AlbumProviderTable.externalId,
+                        AlbumProviderTable.rawUrl
+                    )
                     .where {
                         (AlbumProviderTable.type eq Type.ALBUM.value) and (
-                            (AlbumProviderTable.rawUrl inList urlChunk) or
-                                    AlbumProviderTable.matchesAny(urlChunk.mapNotNull { parsedLookups[it] })
-                            )
+                                (AlbumProviderTable.rawUrl inList urlChunk) or
+                                        AlbumProviderTable.matchesAny(urlChunk.mapNotNull { parsedLookups[it] })
+                                )
                     }
                     .map { row ->
                         ProviderUrlRow(
@@ -809,11 +840,12 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
             )
         }
 
-        val albumsById = winners.values.filterNotNull().distinct().chunked(PROVIDER_LOOKUP_CHUNK_SIZE).flatMap { chunk ->
-            queryAlbums(0, Int.MAX_VALUE) {
-                where { AlbumTable.id inList chunk }
-            }.data
-        }.associateBy { it.id }
+        val albumsById =
+            winners.values.filterNotNull().distinct().chunked(PROVIDER_LOOKUP_CHUNK_SIZE).flatMap { chunk ->
+                queryAlbums(0, Int.MAX_VALUE) {
+                    where { AlbumTable.id inList chunk }
+                }.data
+            }.associateBy { it.id }
 
         return winners.mapValuesTo(mutableMapOf()) { (_, id) -> id?.let { albumsById[it] } }
     }
@@ -835,7 +867,10 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
             if (releaseGroupId != null) {
                 val otherAlbumIds = dbQuery {
                     AlbumMusicBrainzTable
-                        .innerJoin(MBReleaseTable, onColumn = { AlbumMusicBrainzTable.musicBrainzId }, otherColumn = { MBReleaseTable.id })
+                        .innerJoin(
+                            MBReleaseTable,
+                            onColumn = { AlbumMusicBrainzTable.musicBrainzId },
+                            otherColumn = { MBReleaseTable.id })
                         .select(AlbumMusicBrainzTable.albumId)
                         .where { (MBReleaseTable.releaseGroupId eq releaseGroupId) and (AlbumMusicBrainzTable.albumId neq id) }
                         .map { it[AlbumMusicBrainzTable.albumId].value }
@@ -926,10 +961,22 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
         scope: Query.() -> Query = { this }
     ): PaginatedResponse<Album> =
         queryAlbumsRanked(page, pageSize, userId = userId, columnSet = {
-            leftJoin(artistGroupJoinAlias, onColumn = { ArtistTable.id }, otherColumn = { artistGroupJoinAlias[ArtistMemberTable.artistId] })
-                .leftJoin(artistGroupAlias, onColumn = { artistGroupJoinAlias[ArtistMemberTable.groupId] }, otherColumn = { artistGroupAlias[ArtistTable.id] })
-                .leftJoin(artistMemberJoinAlias, onColumn = { ArtistTable.id }, otherColumn = { artistMemberJoinAlias[ArtistMemberTable.groupId] })
-                .leftJoin(artistMemberAlias, onColumn = { artistMemberJoinAlias[ArtistMemberTable.artistId] }, otherColumn = { artistMemberAlias[ArtistTable.id] })
+            leftJoin(
+                artistGroupJoinAlias,
+                onColumn = { ArtistTable.id },
+                otherColumn = { artistGroupJoinAlias[ArtistMemberTable.artistId] })
+                .leftJoin(
+                    artistGroupAlias,
+                    onColumn = { artistGroupJoinAlias[ArtistMemberTable.groupId] },
+                    otherColumn = { artistGroupAlias[ArtistTable.id] })
+                .leftJoin(
+                    artistMemberJoinAlias,
+                    onColumn = { ArtistTable.id },
+                    otherColumn = { artistMemberJoinAlias[ArtistMemberTable.groupId] })
+                .leftJoin(
+                    artistMemberAlias,
+                    onColumn = { artistMemberJoinAlias[ArtistMemberTable.artistId] },
+                    otherColumn = { artistMemberAlias[ArtistTable.id] })
                 .withMBReleaseSearch()
                 .withMBArtistSearch()
         }) {
@@ -1061,8 +1108,14 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
             .leftJoin(AlbumGenreTable)
             .leftJoin(GenreTable)
             .leftJoin(ImageTable, onColumn = { AlbumTable.cover }, otherColumn = { ImageTable.id })
-            .leftJoin(albumAnimatedImageAlias, onColumn = { AlbumTable.animatedCover }, otherColumn = { albumAnimatedImageAlias[AnimatedImageTable.id] })
-            .leftJoin(albumAnimatedFrameAlias, onColumn = { albumAnimatedImageAlias[AnimatedImageTable.imageId] }, otherColumn = { albumAnimatedFrameAlias[ImageTable.id] })
+            .leftJoin(
+                albumAnimatedImageAlias,
+                onColumn = { AlbumTable.animatedCover },
+                otherColumn = { albumAnimatedImageAlias[AnimatedImageTable.id] })
+            .leftJoin(
+                albumAnimatedFrameAlias,
+                onColumn = { albumAnimatedImageAlias[AnimatedImageTable.imageId] },
+                otherColumn = { albumAnimatedFrameAlias[ImageTable.id] })
             .columnSet()
             .selectAll()
             .search()
@@ -1130,8 +1183,14 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
             .leftJoin(AlbumGenreTable)
             .leftJoin(GenreTable)
             .leftJoin(ImageTable, onColumn = { AlbumTable.cover }, otherColumn = { ImageTable.id })
-            .leftJoin(albumAnimatedImageAlias, onColumn = { AlbumTable.animatedCover }, otherColumn = { albumAnimatedImageAlias[AnimatedImageTable.id] })
-            .leftJoin(albumAnimatedFrameAlias, onColumn = { albumAnimatedImageAlias[AnimatedImageTable.imageId] }, otherColumn = { albumAnimatedFrameAlias[ImageTable.id] })
+            .leftJoin(
+                albumAnimatedImageAlias,
+                onColumn = { AlbumTable.animatedCover },
+                otherColumn = { albumAnimatedImageAlias[AnimatedImageTable.id] })
+            .leftJoin(
+                albumAnimatedFrameAlias,
+                onColumn = { albumAnimatedImageAlias[AnimatedImageTable.imageId] },
+                otherColumn = { albumAnimatedFrameAlias[ImageTable.id] })
             .columnSet()
             .selectAll()
             .where { AlbumTable.id inList ids }
@@ -1265,7 +1324,14 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
             andWhere { AlbumTable.songCount inList uniqueSongCounts }
             orWhere { AlbumTable.originalId inList uniqueOriginalIds.filterNotNull() }
             orWhere { if (uniqueBarcodes.isNotEmpty()) AlbumTable.barcode inList uniqueBarcodes else Op.FALSE }
-            orWhere { if (uniqueMbIds.isNotEmpty()) AlbumMusicBrainzTable.musicBrainzId inList uniqueMbIds.map { EntityID(it, MBReleaseTable) } else Op.FALSE }
+            orWhere {
+                if (uniqueMbIds.isNotEmpty()) AlbumMusicBrainzTable.musicBrainzId inList uniqueMbIds.map {
+                    EntityID(
+                        it,
+                        MBReleaseTable
+                    )
+                } else Op.FALSE
+            }
             orWhere { AlbumTable.id inList albumIdsFromProviders }
         }.data
 
@@ -1471,7 +1537,12 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
                 } else false
             }
 
-            getIdentityKey(rowOriginalId, rowName, matchedAlbum.artists, matchedAlbum.releaseDate) to row[AlbumTable.id].value
+            getIdentityKey(
+                rowOriginalId,
+                rowName,
+                matchedAlbum.artists,
+                matchedAlbum.releaseDate
+            ) to row[AlbumTable.id].value
         }
 
         val newAlbumArtistLinks = newAlbumsToInsert.flatMap { album ->

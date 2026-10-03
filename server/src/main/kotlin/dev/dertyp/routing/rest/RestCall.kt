@@ -211,7 +211,7 @@ class RestCall<S : Any>(
     suspend fun respondBytes(bytes: ByteArray) {
         val sniffed = sniffMediaType(bytes)?.takeIf {
             it.contentType.equals("image", ignoreCase = true) ||
-                it.contentType.equals("video", ignoreCase = true)
+                    it.contentType.equals("video", ignoreCase = true)
         }
         if (sniffed == null) {
             call.respondBytes(bytes, ContentType.Application.OctetStream)

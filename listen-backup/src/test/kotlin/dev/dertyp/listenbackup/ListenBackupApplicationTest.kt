@@ -78,7 +78,12 @@ class ListenBackupApplicationTest {
         val second = client.post(ListenBackupProtocol.LISTENS_PATH) {
             header(ListenBackupProtocol.KEY_HEADER, "secret")
             contentType(ContentType.Application.Json)
-            setBody(ListenBackupBatch(serverId, listOf(listen(listenId, 250L, 2L), listen(UUID.randomUUID(), null, 3L))))
+            setBody(
+                ListenBackupBatch(
+                    serverId,
+                    listOf(listen(listenId, 250L, 2L), listen(UUID.randomUUID(), null, 3L))
+                )
+            )
         }
         assertEquals(2, second.body<ListenBackupBatchResult>().received)
 

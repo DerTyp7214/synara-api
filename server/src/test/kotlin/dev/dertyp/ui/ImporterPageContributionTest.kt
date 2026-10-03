@@ -60,10 +60,23 @@ import org.junit.jupiter.api.Test
 import java.util.UUID
 
 class ImporterPageContributionTest {
-    private val account = User(UUID.randomUUID(), "imp", displayName = "Importer Ann", passwordHash = "", capabilities = listOf(UserCapability.IMPORT))
+    private val account = User(
+        UUID.randomUUID(),
+        "imp",
+        displayName = "Importer Ann",
+        passwordHash = "",
+        capabilities = listOf(UserCapability.IMPORT)
+    )
     private val client = ClientInfo(ApiVersion.CURRENT, UiSchemaVersion.CURRENT, "en")
 
-    private fun importer(id: String, name: String, authorized: Boolean, capabilities: Set<ImporterCapability> = emptySet(), tidal: Boolean = false, installed: Boolean = true): IImporter =
+    private fun importer(
+        id: String,
+        name: String,
+        authorized: Boolean,
+        capabilities: Set<ImporterCapability> = emptySet(),
+        tidal: Boolean = false,
+        installed: Boolean = true
+    ): IImporter =
         mockk(relaxed = true) {
             every { this@mockk.id } returns id
             every { this@mockk.name } returns name
@@ -75,23 +88,52 @@ class ImporterPageContributionTest {
         }
 
     private val tidal = importer("tidal", "Tidal", authorized = true, tidal = true)
-    private val gamdl = importer("gamdl", "gamdl (Apple Music)", authorized = false, capabilities = setOf(ImporterCapability.IMPORT_SONG, ImporterCapability.CREDENTIALS))
+    private val gamdl = importer(
+        "gamdl",
+        "gamdl (Apple Music)",
+        authorized = false,
+        capabilities = setOf(ImporterCapability.IMPORT_SONG, ImporterCapability.CREDENTIALS)
+    )
     private val youtube = importer("youtube", "YouTube", authorized = false)
 
     private val logFlow = MutableSharedFlow<String?>()
     private val queueChanges = MutableSharedFlow<Unit>()
-    private val currentEntry = UrlImportQueueEntry(mutableListOf("https://tidal.com/browse/track/1", "https://tidal.com/browse/track/2"), byUser = account.id, type = Type.SONG)
-    private val currentFinished = FinishedImportQueueEntry(currentEntry, ProcessExecutionResult.EMPTY, mutableListOf("Let us check the token", "", "Fetching metadata…", "Downloading 1/2"))
+    private val currentEntry = UrlImportQueueEntry(
+        mutableListOf("https://tidal.com/browse/track/1", "https://tidal.com/browse/track/2"),
+        byUser = account.id,
+        type = Type.SONG
+    )
+    private val currentFinished = FinishedImportQueueEntry(
+        currentEntry,
+        ProcessExecutionResult.EMPTY,
+        mutableListOf("Let us check the token", "", "Fetching metadata…", "Downloading 1/2")
+    )
 
     private val pendingEntries = listOf(
         FavouriteImportQueueEntry(ImportFavType.tracks, byUser = account.id),
         UrlImportQueueEntry(mutableListOf("https://tidal.com/browse/album/9"), byUser = null, type = Type.ALBUM),
     )
+
     private fun job(entry: dev.dertyp.services.import.ImportQueueEntry, status: JobStatus) = ImportService.ImportJob(
-        JobInfo(UUID.randomUUID(), ImportService.JOB_KIND, "server", "t", "s", entry.byUser, status, if (status == JobStatus.RUNNING) 0.5 else null, null, 0, null, null),
+        JobInfo(
+            UUID.randomUUID(),
+            ImportService.JOB_KIND,
+            "server",
+            "t",
+            "s",
+            entry.byUser,
+            status,
+            if (status == JobStatus.RUNNING) 0.5 else null,
+            null,
+            0,
+            null,
+            null
+        ),
         entry,
     )
-    private val pluginManager = mockk<PluginManager> { every { getAllImporters() } returns listOf(tidal, gamdl, youtube) }
+
+    private val pluginManager =
+        mockk<PluginManager> { every { getAllImporters() } returns listOf(tidal, gamdl, youtube) }
     private val importService = mockk<ImportService>(relaxed = true) {
         every { this@mockk.pluginManager } returns this@ImporterPageContributionTest.pluginManager
         every { log } returns logFlow
@@ -99,17 +141,30 @@ class ImporterPageContributionTest {
         every { currentImport } returns currentFinished
         every { currentImport(any()) } returns currentEntry
         coEvery { importQueue(any()) } returns pendingEntries
-        every { importJobs(any()) } answers { listOf(job(currentEntry, JobStatus.RUNNING)) + pendingEntries.map { job(it, JobStatus.PENDING) } }
+        every { importJobs(any()) } answers {
+            listOf(
+                job(
+                    currentEntry,
+                    JobStatus.RUNNING
+                )
+            ) + pendingEntries.map { job(it, JobStatus.PENDING) }
+        }
     }
     private val importerProxy = mockk<ImporterProxy> {
         every { defaultService } returns ImportBackend("tidal")
-        coEvery { resolveImporter(any(), any()) } answers { if (firstArg<String>().contains("tidal.com")) tidal to firstArg() else null }
+        coEvery {
+            resolveImporter(
+                any(),
+                any()
+            )
+        } answers { if (firstArg<String>().contains("tidal.com")) tidal to firstArg() else null }
     }
     private val userService = mockk<UserService> { coEvery { findUserById(account.id) } returns account }
 
     private val registry = UiRegistry()
     private val translations = TranslationService(registry)
-    private val uiService = UiService(registry, translations, PluginSettingsService(), UserHomeCardService(), IntakeService(translations))
+    private val uiService =
+        UiService(registry, translations, PluginSettingsService(), UserHomeCardService(), IntakeService(translations))
     private val intakeService = mockk<IntakeService>()
     private val jobService = JobService()
     private val credentials = FakeCredentialProvider()
@@ -195,19 +250,31 @@ class ImporterPageContributionTest {
         val toolbar = page.toolbar(scope()).map { it as UiComponent.Button }
         assertEquals(listOf("Queue", "Sync Favorites", "Importer settings"), toolbar.map { it.label })
         assertEquals(UiAction.OpenPage(ImporterQueuePageContribution.ID, modal = true), toolbar[0].action)
-        assertEquals("Are you sure you want to synchronize your favorites?", (toolbar[1].action as UiAction.Invoke).confirmText)
+        assertEquals(
+            "Are you sure you want to synchronize your favorites?",
+            (toolbar[1].action as UiAction.Invoke).confirmText
+        )
         assertEquals(UiAction.OpenPage(ImporterSettingsPageContribution.ID, modal = true), toolbar[2].action)
 
         every { tidal.canHandle(any()) } returns false
-        assertEquals(listOf("Queue", "Importer settings"), page.toolbar(scope()).map { (it as UiComponent.Button).label })
+        assertEquals(
+            listOf("Queue", "Importer settings"),
+            page.toolbar(scope()).map { (it as UiComponent.Button).label })
     }
 
     @Test
     fun `settings page manages auth and hides slot items the user may not see`() = runBlocking {
-        registry.register(object : UiContribution("x.section", UiContributionKind.SLOT, "importer.title", UiSlots.IMPORTER) {
+        registry.register(object :
+            UiContribution("x.section", UiContributionKind.SLOT, "importer.title", UiSlots.IMPORTER) {
             override suspend fun render(scope: UiRenderScope) = UiComponent.Badge("inlined")
         }, "x")
-        registry.register(object : UiContribution("x.admin", UiContributionKind.SLOT, "importer.title", UiSlots.IMPORTER, access = UiAccess(requiresAdmin = true)) {
+        registry.register(object : UiContribution(
+            "x.admin",
+            UiContributionKind.SLOT,
+            "importer.title",
+            UiSlots.IMPORTER,
+            access = UiAccess(requiresAdmin = true)
+        ) {
             override suspend fun render(scope: UiRenderScope) = UiComponent.Badge("hidden")
         }, "x")
 
@@ -216,7 +283,8 @@ class ImporterPageContributionTest {
         assertEquals("Importers", importers.title)
         val all = importers.flatten()
         assertEquals("Authorized", all.filterIsInstance<UiComponent.ListItem>().first { it.title == "Tidal" }.subtitle)
-        val logins = all.filterIsInstance<UiComponent.Button>().filter { (it.action as? UiAction.Invoke)?.actionId == "login" }
+        val logins =
+            all.filterIsInstance<UiComponent.Button>().filter { (it.action as? UiAction.Invoke)?.actionId == "login" }
         assertEquals(listOf("youtube"), logins.map { (it.action as UiAction.Invoke).params["importer"]?.text })
 
         val inlined = root.children.drop(1).map { it as UiComponent.Section }
@@ -227,9 +295,15 @@ class ImporterPageContributionTest {
 
     @Test
     fun `settings page lists installed but unauthenticated importers with a login button`() = runBlocking {
-        val tidalImporter = importer("tidal", "Tidal", authorized = false, capabilities = setOf(ImporterCapability.LOGIN))
+        val tidalImporter =
+            importer("tidal", "Tidal", authorized = false, capabilities = setOf(ImporterCapability.LOGIN))
         every { tidalImporter.enabled } returns false
-        val gamdlImporter = importer("gamdl", "gamdl (Apple Music)", authorized = false, capabilities = setOf(ImporterCapability.IMPORT_SONG, ImporterCapability.CREDENTIALS))
+        val gamdlImporter = importer(
+            "gamdl",
+            "gamdl (Apple Music)",
+            authorized = false,
+            capabilities = setOf(ImporterCapability.IMPORT_SONG, ImporterCapability.CREDENTIALS)
+        )
         every { gamdlImporter.enabled } returns false
         val missingImporter = importer("missing", "Missing", authorized = false, installed = false)
         every { pluginManager.getAllImporters() } returns listOf(tidalImporter, gamdlImporter, missingImporter)
@@ -244,7 +318,8 @@ class ImporterPageContributionTest {
         assertTrue(listItems.any { it.title == "gamdl (Apple Music)" })
         assertTrue(listItems.none { it.title == "Missing" })
 
-        val logins = all.filterIsInstance<UiComponent.Button>().filter { (it.action as? UiAction.Invoke)?.actionId == "login" }
+        val logins =
+            all.filterIsInstance<UiComponent.Button>().filter { (it.action as? UiAction.Invoke)?.actionId == "login" }
         assertEquals(listOf("tidal"), logins.map { (it.action as UiAction.Invoke).params["importer"]?.text })
 
         val loginRequiredBadges = all.filterIsInstance<UiComponent.Badge>().filter { it.text == "Login required" }
@@ -272,11 +347,17 @@ class ImporterPageContributionTest {
 
         val card = (page.render(scope()) as UiComponent.Column).children[0] as UiComponent.Card
         assertTrue(card.actions.isEmpty())
-        assertEquals("Managed by the credential server", card.children.filterIsInstance<UiComponent.Text>().single().text)
+        assertEquals(
+            "Managed by the credential server",
+            card.children.filterIsInstance<UiComponent.Text>().single().text
+        )
 
         val settingsAll = (settingsPage.render(scope()) as UiComponent.Column).children[0].flatten()
-        assertTrue(settingsAll.filterIsInstance<UiComponent.Button>().none { (it.action as? UiAction.Invoke)?.actionId == "login" })
-        assertTrue(settingsAll.filterIsInstance<UiComponent.Text>().any { it.text == "Managed by the credential server" })
+        assertTrue(
+            settingsAll.filterIsInstance<UiComponent.Button>()
+                .none { (it.action as? UiAction.Invoke)?.actionId == "login" })
+        assertTrue(
+            settingsAll.filterIsInstance<UiComponent.Text>().any { it.text == "Managed by the credential server" })
         assertTrue(settingsAll.filterIsInstance<UiComponent.Badge>().any { it.text == "Login required" })
 
         val result = state.login(scope(), "tiddl")
@@ -294,13 +375,18 @@ class ImporterPageContributionTest {
         assertEquals("Login", (card.actions.single() as UiComponent.Button).label)
 
         val settingsAll = (settingsPage.render(scope()) as UiComponent.Column).children[0].flatten()
-        assertEquals(1, settingsAll.filterIsInstance<UiComponent.Button>().count { (it.action as? UiAction.Invoke)?.actionId == "login" })
-        assertTrue(settingsAll.filterIsInstance<UiComponent.Text>().none { it.text == "Managed by the credential server" })
+        assertEquals(
+            1,
+            settingsAll.filterIsInstance<UiComponent.Button>()
+                .count { (it.action as? UiAction.Invoke)?.actionId == "login" })
+        assertTrue(
+            settingsAll.filterIsInstance<UiComponent.Text>().none { it.text == "Managed by the credential server" })
     }
 
     @Test
     fun `login resolves an installed unauthenticated importer`() = runBlocking {
-        val tidalImporter = importer("tidal", "Tidal", authorized = false, capabilities = setOf(ImporterCapability.LOGIN))
+        val tidalImporter =
+            importer("tidal", "Tidal", authorized = false, capabilities = setOf(ImporterCapability.LOGIN))
         every { tidalImporter.enabled } returns false
         every { pluginManager.getAllImporters() } returns listOf(tidalImporter)
         coEvery { tidalImporter.login(any(), any()) } coAnswers {
@@ -339,21 +425,56 @@ class ImporterPageContributionTest {
         assertEquals(UiInvokeStatus.VALIDATION_ERROR, empty.status)
         assertNotNull(empty.fieldErrors["input"])
 
-        val items = listOf(IntakeItem.Url("https://tidal.com/browse/album/1"), IntakeItem.Code(UiIntakeCodeKind.ISRC, "USRC17607839"))
-        coEvery { intakeService.submit(items, null, account, "en") } returns UiIntakeResult(UiIntakeStatus.OK, accepted = 2)
-        val ok = page.invoke(scope(), "import", mapOf("input" to UiValue.of("https://tidal.com/browse/album/1\nUSRC17607839")))
+        val items = listOf(
+            IntakeItem.Url("https://tidal.com/browse/album/1"),
+            IntakeItem.Code(UiIntakeCodeKind.ISRC, "USRC17607839")
+        )
+        coEvery { intakeService.submit(items, null, account, "en") } returns UiIntakeResult(
+            UiIntakeStatus.OK,
+            accepted = 2
+        )
+        val ok = page.invoke(
+            scope(),
+            "import",
+            mapOf("input" to UiValue.of("https://tidal.com/browse/album/1\nUSRC17607839"))
+        )
         assertEquals(UiInvokeStatus.OK, ok.status)
         assertEquals("2 items queued", ok.message)
         assertTrue(ok.refresh)
 
-        val handler = UiHookHandler("import.gamdl", "import.gamdl", "server", "Import with gamdl", null, null, UiAction.Intake(items, "import.gamdl"))
-        coEvery { intakeService.submit(items, null, account, "en") } returns UiIntakeResult(UiIntakeStatus.NEEDS_CHOICE, handlers = listOf(handler))
-        val choice = page.invoke(scope(), "import", mapOf("input" to UiValue.of("https://tidal.com/browse/album/1\nUSRC17607839")))
+        val handler = UiHookHandler(
+            "import.gamdl",
+            "import.gamdl",
+            "server",
+            "Import with gamdl",
+            null,
+            null,
+            UiAction.Intake(items, "import.gamdl")
+        )
+        coEvery { intakeService.submit(items, null, account, "en") } returns UiIntakeResult(
+            UiIntakeStatus.NEEDS_CHOICE,
+            handlers = listOf(handler)
+        )
+        val choice = page.invoke(
+            scope(),
+            "import",
+            mapOf("input" to UiValue.of("https://tidal.com/browse/album/1\nUSRC17607839"))
+        )
         assertEquals(UiInvokeStatus.OK, choice.status)
-        assertEquals(listOf(UiMenuItem("Import with gamdl", handler.action, id = "import.gamdl")), (choice.next as UiAction.OpenMenu).items)
+        assertEquals(
+            listOf(UiMenuItem("Import with gamdl", handler.action, id = "import.gamdl")),
+            (choice.next as UiAction.OpenMenu).items
+        )
 
-        coEvery { intakeService.submit(items, null, account, "en") } returns UiIntakeResult(UiIntakeStatus.UNHANDLED, rejected = items)
-        val unhandled = page.invoke(scope(), "import", mapOf("input" to UiValue.of("https://tidal.com/browse/album/1\nUSRC17607839")))
+        coEvery { intakeService.submit(items, null, account, "en") } returns UiIntakeResult(
+            UiIntakeStatus.UNHANDLED,
+            rejected = items
+        )
+        val unhandled = page.invoke(
+            scope(),
+            "import",
+            mapOf("input" to UiValue.of("https://tidal.com/browse/album/1\nUSRC17607839"))
+        )
         assertEquals(UiInvokeStatus.VALIDATION_ERROR, unhandled.status)
         assertTrue(unhandled.fieldErrors["input"]!!.contains("USRC17607839"))
         coVerify(exactly = 0) { importService.addToQueue(*anyVararg()) }
@@ -375,12 +496,21 @@ class ImporterPageContributionTest {
         queueChanges.emit(Unit)
         logFlow.emit("Done")
         job.join()
-        assertEquals(listOf(UiLiveUpdate.AppendLines(listOf("Downloading 2/2")), UiLiveUpdate.AppendLines(listOf("Done"))), updates)
+        assertEquals(
+            listOf(
+                UiLiveUpdate.AppendLines(listOf("Downloading 2/2")),
+                UiLiveUpdate.AppendLines(listOf("Done"))
+            ), updates
+        )
 
         while (state.logLines().size < 4) yield()
         assertEquals(listOf("Fetching metadata…", "Downloading 1/2", "Downloading 2/2", "Done"), state.logLines())
-        val log = ((page.render(scope()) as UiComponent.Column).children[1] as UiComponent.Column).children[1] as UiComponent.Live
-        assertEquals(listOf("Fetching metadata…", "Downloading 1/2", "Downloading 2/2", "Done"), (log.child as UiComponent.Log).lines)
+        val log =
+            ((page.render(scope()) as UiComponent.Column).children[1] as UiComponent.Column).children[1] as UiComponent.Live
+        assertEquals(
+            listOf("Fetching metadata…", "Downloading 1/2", "Downloading 2/2", "Done"),
+            (log.child as UiComponent.Log).lines
+        )
     }
 
     @Test
@@ -422,7 +552,10 @@ class ImporterPageContributionTest {
     fun `share hooks offer to open the importer with the text prefilled`() = runBlocking {
         val offer = page.onHook(scope(), UiHookEvent.ShareUrl("https://tidal.com/browse/album/1"))!!
         assertEquals("importer.hook.open", offer.titleKey)
-        assertEquals(UiAction.OpenPage("core.importer", mapOf("input" to "https://tidal.com/browse/album/1")), offer.action)
+        assertEquals(
+            UiAction.OpenPage("core.importer", mapOf("input" to "https://tidal.com/browse/album/1")),
+            offer.action
+        )
         assertNull(page.onHook(scope(), UiHookEvent.ShareText("   ")))
     }
 
@@ -432,8 +565,13 @@ class ImporterPageContributionTest {
         assertEquals(UiContributionKind.HOME_CARD, card.kind)
         val root = card.render(scope()) as UiComponent.Card
         assertEquals("Importer", root.title)
-        assertEquals(listOf("Pending" to "2", "Importing" to "1"), root.flatten().filterIsInstance<UiComponent.Stat>().map { it.label to it.value })
-        assertEquals(currentEntry.urls.joinToString(", "), root.flatten().filterIsInstance<UiComponent.ListItem>().single().title)
+        assertEquals(
+            listOf("Pending" to "2", "Importing" to "1"),
+            root.flatten().filterIsInstance<UiComponent.Stat>().map { it.label to it.value })
+        assertEquals(
+            currentEntry.urls.joinToString(", "),
+            root.flatten().filterIsInstance<UiComponent.ListItem>().single().title
+        )
         assertEquals(UiAction.OpenPage(ImporterPageContribution.ID), (root.actions[0] as UiComponent.Button).action)
 
         every { importService.currentImport(any()) } returns null

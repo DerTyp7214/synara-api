@@ -87,7 +87,9 @@ internal fun Route.subsonicAnnotationRoutes() {
         request {
             queryParameter<String>("id") { description = "Song id; repeatable."; required = true }
             queryParameter<Long>("time") { description = "Play timestamp in ms since epoch; pairs with each id." }
-            queryParameter<Boolean>("submission") { description = "true (default) records a listen, false sets now playing." }
+            queryParameter<Boolean>("submission") {
+                description = "true (default) records a listen, false sets now playing."
+            }
         }
     }) { params, user ->
         val ids = params.getAll("id")?.mapNotNull { (SubsonicId.parse(it) as? SubsonicId.Song)?.uuid } ?: emptyList()
@@ -192,9 +194,12 @@ internal fun Route.subsonicAnnotationRoutes() {
 
     subAuth("getSimilarSongs2", authenticator, {
         summary = "Get similar songs for an artist (ID3)"
-        description = "Seeds Synara's discovery engine with the artist's most played songs; also accepts a song id as seed."
+        description =
+            "Seeds Synara's discovery engine with the artist's most played songs; also accepts a song id as seed."
         request {
-            queryParameter<String>("id") { description = "Artist id (`ar-<uuid>`) or song id (`tr-<uuid>`)."; required = true }
+            queryParameter<String>("id") {
+                description = "Artist id (`ar-<uuid>`) or song id (`tr-<uuid>`)."; required = true
+            }
             queryParameter<Int>("count") { description = "Max songs (default 50)." }
         }
     }) { params, user ->

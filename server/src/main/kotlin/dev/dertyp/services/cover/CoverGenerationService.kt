@@ -69,21 +69,46 @@ class CoverGenerationService(
     suspend fun row(target: CoverTarget): TargetRow? = dbQuery {
         when (target.type) {
             CoverTargetType.PLAYLIST -> UserPlaylistTable
-                .select(UserPlaylistTable.name, UserPlaylistTable.creator, UserPlaylistTable.imageId, UserPlaylistTable.imageSource, UserPlaylistTable.coverStyle, UserPlaylistTable.coverSeed)
+                .select(
+                    UserPlaylistTable.name,
+                    UserPlaylistTable.creator,
+                    UserPlaylistTable.imageId,
+                    UserPlaylistTable.imageSource,
+                    UserPlaylistTable.coverStyle,
+                    UserPlaylistTable.coverSeed
+                )
                 .where { UserPlaylistTable.id eq target.id }
                 .singleOrNull()?.let {
                     TargetRow(
-                        target, it[UserPlaylistTable.name], it[UserPlaylistTable.creator].value, it[UserPlaylistTable.imageId]?.value,
-                        it[UserPlaylistTable.imageSource], it[UserPlaylistTable.coverStyle], it[UserPlaylistTable.coverSeed],
+                        target,
+                        it[UserPlaylistTable.name],
+                        it[UserPlaylistTable.creator].value,
+                        it[UserPlaylistTable.imageId]?.value,
+                        it[UserPlaylistTable.imageSource],
+                        it[UserPlaylistTable.coverStyle],
+                        it[UserPlaylistTable.coverSeed],
                     )
                 }
+
             CoverTargetType.COLLECTION -> CollectionTable
-                .select(CollectionTable.name, CollectionTable.creator, CollectionTable.imageId, CollectionTable.imageSource, CollectionTable.coverStyle, CollectionTable.coverSeed)
+                .select(
+                    CollectionTable.name,
+                    CollectionTable.creator,
+                    CollectionTable.imageId,
+                    CollectionTable.imageSource,
+                    CollectionTable.coverStyle,
+                    CollectionTable.coverSeed
+                )
                 .where { CollectionTable.id eq target.id }
                 .singleOrNull()?.let {
                     TargetRow(
-                        target, it[CollectionTable.name], it[CollectionTable.creator].value, it[CollectionTable.imageId]?.value,
-                        it[CollectionTable.imageSource], it[CollectionTable.coverStyle], it[CollectionTable.coverSeed],
+                        target,
+                        it[CollectionTable.name],
+                        it[CollectionTable.creator].value,
+                        it[CollectionTable.imageId]?.value,
+                        it[CollectionTable.imageSource],
+                        it[CollectionTable.coverStyle],
+                        it[CollectionTable.coverSeed],
                     )
                 }
         }
@@ -95,7 +120,8 @@ class CoverGenerationService(
     }
 
     suspend fun render(target: CoverTarget, params: CoverGenerationParams): RenderedBytes {
-        val context = collector.collect(target) ?: throw IllegalArgumentException("Unknown ${target.type.name.lowercase()} ${target.id}")
+        val context = collector.collect(target)
+            ?: throw IllegalArgumentException("Unknown ${target.type.name.lowercase()} ${target.id}")
         val seed = params.seed ?: stableSeed(target, context.coverImageIds)
         val pack = packService.select(CoverTagDeriver.tags(context), seed, params.allowNsfw, params.pack)
         val random = Random(seed xor PACK_SALT)
@@ -108,7 +134,8 @@ class CoverGenerationService(
 
         return withContext(Dispatchers.IO) {
             val background = pack.backgrounds.takeIf { it.isNotEmpty() }?.let { readImage(it[random.nextInt(it.size)]) }
-            val overlay = pack.overlays.takeIf { it.isNotEmpty() && random.nextInt(10) < 7 }?.let { readImage(it[random.nextInt(it.size)]) }
+            val overlay = pack.overlays.takeIf { it.isNotEmpty() && random.nextInt(10) < 7 }
+                ?.let { readImage(it[random.nextInt(it.size)]) }
             val font = pack.fonts.firstOrNull()?.let { readFont(it) }
             val spec = CoverRenderSpec(
                 seed = seed,
@@ -138,6 +165,7 @@ class CoverGenerationService(
                     it[coverStyle] = params.style
                     it[coverSeed] = params.seed
                 }
+
                 CoverTargetType.COLLECTION -> CollectionTable.update({ CollectionTable.id eq target.id }) {
                     it[CollectionTable.imageId] = EntityID(imageId, ImageTable)
                     it[imageSource] = ImageSource.GENERATED
@@ -167,6 +195,7 @@ class CoverGenerationService(
                     it[coverStyle] = null
                     it[coverSeed] = null
                 }
+
                 CoverTargetType.COLLECTION -> CollectionTable.update({ CollectionTable.id eq target.id }) {
                     it[imageId] = null
                     it[imageSource] = null
@@ -181,7 +210,8 @@ class CoverGenerationService(
 
     fun enqueueAuto(target: CoverTarget, title: String, user: UUID?): JobService.Job? {
         if (!config.autoGenerate) return null
-        val pending = jobService.jobsOf(JOB_KIND).firstOrNull { it.payload == target && it.info.status == JobStatus.PENDING }
+        val pending =
+            jobService.jobsOf(JOB_KIND).firstOrNull { it.payload == target && it.info.status == JobStatus.PENDING }
         if (pending != null) return pending
         return jobService.enqueue(JOB_KIND, title, user, target.type.name.lowercase(), payload = target) {
             log("Generating cover for ${target.type.name.lowercase()} $title")
@@ -247,7 +277,8 @@ class CoverGenerationService(
         fun parseOrigin(origin: String): CoverTarget? {
             val body = origin.removePrefix(ImageService.GENERATED_ORIGIN_PREFIX)
             val (typeName, id) = body.split(":", limit = 2).takeIf { it.size == 2 } ?: return null
-            val type = CoverTargetType.entries.firstOrNull { it.name.equals(typeName, ignoreCase = true) } ?: return null
+            val type =
+                CoverTargetType.entries.firstOrNull { it.name.equals(typeName, ignoreCase = true) } ?: return null
             return runCatching { CoverTarget(type, UUID.fromString(id)) }.getOrNull()
         }
 

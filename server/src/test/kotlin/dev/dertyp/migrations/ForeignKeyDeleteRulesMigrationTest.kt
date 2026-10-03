@@ -134,13 +134,15 @@ class ForeignKeyDeleteRulesMigrationTest : KoinTest {
         runMigration()
 
         val writers = transaction(database) {
-            UserQueueTable.selectAll().associate { it[UserQueueTable.userId].value to it[UserQueueTable.modifiedBySessionId]?.value }
+            UserQueueTable.selectAll()
+                .associate { it[UserQueueTable.userId].value to it[UserQueueTable.modifiedBySessionId]?.value }
         }
         assertEquals(mapOf(kept to session, orphaned to null), writers)
 
         transaction(database) { SessionTable.deleteWhere { SessionTable.id eq session } }
         val afterDelete = transaction(database) {
-            UserQueueTable.selectAll().where { UserQueueTable.userId eq kept }.single()[UserQueueTable.modifiedBySessionId]
+            UserQueueTable.selectAll().where { UserQueueTable.userId eq kept }
+                .single()[UserQueueTable.modifiedBySessionId]
         }
         assertNull(afterDelete)
     }

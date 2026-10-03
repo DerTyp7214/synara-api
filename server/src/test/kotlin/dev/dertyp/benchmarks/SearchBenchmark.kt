@@ -68,17 +68,50 @@ object SearchBenchmark {
     )
 
     private val allTables = arrayOf(
-        UserTable, SongTable, SongVariantTable, SongTitleTagTable, AlbumTable, ArtistTable, SongArtistTable, AlbumArtistTable,
-        SongMusicBrainzTable, AlbumMusicBrainzTable, ArtistMusicBrainzTable, ArtistAliasTable,
-        ImageTable, GenreTable, SongGenreTable, AlbumGenreTable, ArtistGenreTable,
-        ArtistMemberTable, SearchIndexQueueTable, MBRecordingTable, MBReleaseTable,
-        MBArtistTable, MBArtistAliasTable, MBRecordingArtistCreditTable, MBReleaseArtistCreditTable,
-        UserSongTable, FollowedArtistTable,
-        ArtistSplitAliasTable, ImageMetadataTable, ProviderEnrichmentCheckTable,
-        SongProviderTable, AlbumProviderTable, SongAudioDataTable, SyncedLyricsTable,
-        PlaylistSongTable, UserPlaylistSongTable, PlaylistTable, UserPlaylistTable,
-        PersonTable, SongComposerTable, SongLyricistTable, SongProducerTable,
-        TranscodedSongTable, TimecodeTagTable
+        UserTable,
+        SongTable,
+        SongVariantTable,
+        SongTitleTagTable,
+        AlbumTable,
+        ArtistTable,
+        SongArtistTable,
+        AlbumArtistTable,
+        SongMusicBrainzTable,
+        AlbumMusicBrainzTable,
+        ArtistMusicBrainzTable,
+        ArtistAliasTable,
+        ImageTable,
+        GenreTable,
+        SongGenreTable,
+        AlbumGenreTable,
+        ArtistGenreTable,
+        ArtistMemberTable,
+        SearchIndexQueueTable,
+        MBRecordingTable,
+        MBReleaseTable,
+        MBArtistTable,
+        MBArtistAliasTable,
+        MBRecordingArtistCreditTable,
+        MBReleaseArtistCreditTable,
+        UserSongTable,
+        FollowedArtistTable,
+        ArtistSplitAliasTable,
+        ImageMetadataTable,
+        ProviderEnrichmentCheckTable,
+        SongProviderTable,
+        AlbumProviderTable,
+        SongAudioDataTable,
+        SyncedLyricsTable,
+        PlaylistSongTable,
+        UserPlaylistSongTable,
+        PlaylistTable,
+        UserPlaylistTable,
+        PersonTable,
+        SongComposerTable,
+        SongLyricistTable,
+        SongProducerTable,
+        TranscodedSongTable,
+        TimecodeTagTable
     )
 
     private object UI {
@@ -126,8 +159,20 @@ object SearchBenchmark {
                 out.append("\u001b[1m=========================================================\u001b[0m\n")
                 out.append(" \u001b[1;34mSEARCH BENCHMARK PROGRESS\u001b[0m\n")
                 out.append("=========================================================\n")
-                out.append("Dataset:   \u001b[36m%-10d\u001b[0m [%d/%d]\n".format(size, sizes.indexOf(size) + 1, sizes.size))
-                out.append("Backend:   \u001b[35m%-10s\u001b[0m [%d/%d]\n".format(backend.name, backends.indexOf(backend) + 1, backends.size))
+                out.append(
+                    "Dataset:   \u001b[36m%-10d\u001b[0m [%d/%d]\n".format(
+                        size,
+                        sizes.indexOf(size) + 1,
+                        sizes.size
+                    )
+                )
+                out.append(
+                    "Backend:   \u001b[35m%-10s\u001b[0m [%d/%d]\n".format(
+                        backend.name,
+                        backends.indexOf(backend) + 1,
+                        backends.size
+                    )
+                )
                 out.append("Iteration: \u001b[32m%d/%-10d\u001b[0m\n".format(run, NUM_RUNS[size]))
                 out.append("---------------------------------------------------------\n")
 
@@ -137,11 +182,11 @@ object SearchBenchmark {
                         Status.ACTIVE -> "\u001b[33m▶\u001b[0m" to "\u001b[1;33m"
                         Status.PENDING -> "\u001b[2m○\u001b[0m" to "\u001b[2m"
                     }
-                    
+
                     val label = "$color${step.name}\u001b[0m"
                     val time = step.duration?.let { " | \u001b[2m$it\u001b[0m" } ?: ""
                     val detailText = if (step.detail.isNotEmpty()) " (\u001b[33m${step.detail}\u001b[0m)" else ""
-                    
+
                     out.append("$icon %-30s%s%s\u001b[K\n".format(label, time, detailText))
                 }
                 out.append("=========================================================\n")
@@ -188,7 +233,7 @@ object SearchBenchmark {
         for (runs in NUM_RUNS.filterKeys { it in sizes }) {
             resultFile.appendText("- Dataset Size: ${runs.key} (${runs.value} runs)\n")
         }
-        
+
         val reports = mutableListOf<AggregatedReport>()
         for (size in sizes) {
             resultFile.appendText("## Dataset Size: $size\n\n")
@@ -198,23 +243,23 @@ object SearchBenchmark {
             val sizeReports = mutableListOf<AggregatedReport>()
             for (backend in backends) {
                 val runResults = mutableListOf<SingleRunResult>()
-                
+
                 for (i in 1..NUM_RUNS[size]!!) {
                     runResults.add(runSingleBenchmark(backend, size, i, originalOut))
                 }
-                
+
                 val agg = aggregate(backend.name, size, runResults)
                 reports.add(agg)
                 sizeReports.add(agg)
-                
+
                 val ramStr = if (backend == Backend.Redis) "${agg.avgRamUsageMb} MB" else "N/A"
                 resultFile.appendText("| ${backend.name} | ${agg.avgInitTime} | ${agg.avgQueryTime} | $ramStr |\n")
             }
-            
+
             resultFile.appendText("\n### Detailed Query Statistics ($size)\n\n")
             resultFile.appendText("| Query | Backend | Mean Time | Min | Max | Total Found |\n")
             resultFile.appendText("| :--- | :--- | :--- | :--- | :--- | :--- |\n")
-            
+
             for (query in queries) {
                 for (report in sizeReports) {
                     val stats = report.queryStats.find { it.query == query }
@@ -237,7 +282,7 @@ object SearchBenchmark {
 
         val avgInit = validRuns.map { it.initTime.inWholeNanoseconds }.average().toLong().nanoseconds
         val avgRam = validRuns.map { it.ramUsageMb }.average().toLong()
-        
+
         val queryStats = queries.map { query ->
             val runResults = validRuns.mapNotNull { run -> run.queryResults.find { it.query == query } }
             val count = runResults.firstOrNull()?.count ?: 0
@@ -249,13 +294,18 @@ object SearchBenchmark {
                 count = count
             )
         }
-        
+
         val totalAvgQuery = queryStats.map { it.mean.inWholeNanoseconds }.average().toLong().nanoseconds
-        
+
         return AggregatedReport(backend, size, avgInit, queryStats, totalAvgQuery, avgRam)
     }
 
-    private suspend fun runSingleBenchmark(backend: Backend, size: Int, runIdx: Int, realOut: PrintStream): SingleRunResult {
+    private suspend fun runSingleBenchmark(
+        backend: Backend,
+        size: Int,
+        runIdx: Int,
+        realOut: PrintStream
+    ): SingleRunResult {
         UI.resetSteps()
         fun draw() = UI.draw(size, backend, runIdx, realOut)
 
@@ -266,7 +316,7 @@ object SearchBenchmark {
             setupDatabase(backend)
         }
         UI.updateStep("Infrastructure", UI.Status.DONE, infraTime)
-        
+
         UI.updateStep("Data Generation", UI.Status.ACTIVE)
         draw()
         val songs = generateData(size)
@@ -276,6 +326,7 @@ object SearchBenchmark {
         draw()
 
         val injectionStart = System.currentTimeMillis()
+
         @OptIn(DelicateCoroutinesApi::class)
         val timerJob = GlobalScope.launch {
             while (isActive) {
@@ -292,12 +343,12 @@ object SearchBenchmark {
             } finally {
                 timerJob.cancelAndJoin()
             }
-            
+
             if (backend == Backend.PostgreSQL || backend == Backend.Redis) {
                 UI.updateStep("Injection/Indexing", UI.Status.ACTIVE, detail = "Enqueuing...")
                 draw()
                 enqueueAllForIndexing()
-                
+
                 var totalProcessed = 0
                 while (true) {
                     val processed = searchIndexWorker.processBatch()
@@ -320,14 +371,14 @@ object SearchBenchmark {
         draw()
         songService.rankedSearch(0, 50, "Warmup", true, userId)
         UI.updateStep("Warmup Search", UI.Status.DONE)
-        
+
         UI.updateStep("Queries", UI.Status.ACTIVE)
         draw()
         val runsPerQuery = 5
         for (query in queries) {
             UI.updateStep("Queries", UI.Status.ACTIVE, detail = query)
             draw()
-            
+
             val times = mutableListOf<Long>()
             var count = 0
             repeat(runsPerQuery) {
@@ -338,13 +389,15 @@ object SearchBenchmark {
                 times.add(time.inWholeNanoseconds)
             }
 
-            queryResults.add(QueryResult(
-                query = query,
-                mean = times.average().toLong().nanoseconds,
-                min = times.minOrNull()?.nanoseconds ?: 0.nanoseconds,
-                max = times.maxOrNull()?.nanoseconds ?: 0.nanoseconds,
-                count = count
-            ))
+            queryResults.add(
+                QueryResult(
+                    query = query,
+                    mean = times.average().toLong().nanoseconds,
+                    min = times.minOrNull()?.nanoseconds ?: 0.nanoseconds,
+                    max = times.maxOrNull()?.nanoseconds ?: 0.nanoseconds,
+                    count = count
+                )
+            )
         }
         UI.updateStep("Queries", UI.Status.DONE, queryResults.sumOf { it.mean.inWholeNanoseconds }.nanoseconds)
 
@@ -362,17 +415,18 @@ object SearchBenchmark {
         sb.append("## Scaling Analysis (Mean Latency)\n\n")
         sb.append("| Backend | 1k -> 100k Latency Increase |\n")
         sb.append("| :--- | :--- |\n")
-        
+
         for (backend in backends) {
             val small = reports.find { it.backend == backend.name && it.datasetSize == sizes.first() }
             val big = reports.find { it.backend == backend.name && it.datasetSize == sizes.last() }
-            
+
             if (small != null && big != null && small.avgQueryTime != Duration.ZERO) {
-                val growth = big.avgQueryTime.inWholeNanoseconds.toDouble() / small.avgQueryTime.inWholeNanoseconds.toDouble()
+                val growth =
+                    big.avgQueryTime.inWholeNanoseconds.toDouble() / small.avgQueryTime.inWholeNanoseconds.toDouble()
                 sb.append("| ${backend.name} | %.2fx growth (for 100x data) |\n".format(growth))
             }
         }
-        
+
         file.appendText(sb.toString())
     }
 
@@ -431,7 +485,7 @@ object SearchBenchmark {
         val dialect = if (backend == Backend.SQLite) DbDialect.SQLITE else DbDialect.POSTGRES
         database = TestDatabase.connect(dialect, "bench")
         TransactionManager.defaultDatabase = database
-        
+
         transaction(database) {
             SchemaUtils.create(*allTables)
             UserTable.insert { row ->
@@ -445,7 +499,8 @@ object SearchBenchmark {
     private fun tearDown() {
         try {
             GlobalContext.get().getOrNull<RedisCacheProvider>()?.jedis?.close()
-        } catch (_: Exception) {}
+        } catch (_: Exception) {
+        }
         stopKoin()
         TestDatabase.cleanUp()
     }
@@ -454,23 +509,25 @@ object SearchBenchmark {
         val albumsPerArtist = 5
         val songsPerAlbum = 10
         val artistCount = (count / (albumsPerArtist * songsPerAlbum)).coerceAtLeast(1)
-        
+
         val songs = mutableListOf<InsertableSong>()
         for (i in 1..count) {
             val artistIndex = (i / (albumsPerArtist * songsPerAlbum)) % artistCount
             val albumIndex = (i / songsPerAlbum) % (artistCount * albumsPerArtist)
-            
+
             val artistName = "Artist$artistIndex"
             val albumName = "Album$albumIndex"
-            
-            songs.add(InsertableSong(
-                title = "Song $i",
-                artists = listOf(artistName),
-                album = InsertableAlbum(albumName, listOf(artistName)),
-                duration = 180000,
-                explicit = i % 10 == 0,
-                path = "/music/$artistName/$albumName/song_$i.flac"
-            ))
+
+            songs.add(
+                InsertableSong(
+                    title = "Song $i",
+                    artists = listOf(artistName),
+                    album = InsertableAlbum(albumName, listOf(artistName)),
+                    duration = 180000,
+                    explicit = i % 10 == 0,
+                    path = "/music/$artistName/$albumName/song_$i.flac"
+                )
+            )
         }
         return songs
     }

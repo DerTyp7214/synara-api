@@ -25,10 +25,15 @@ class PopulateAlbumProviderTable : CustomMigration() {
             val parser = ParserFactory.getParser(originalId)
             val parsed = parser?.parse(originalId)
             val provider = parser?.name ?: "unknown"
-            val externalId = parsed?.first ?: (if (originalId.contains(":")) originalId.substringAfter(":") else originalId)
+            val externalId =
+                parsed?.first ?: (if (originalId.contains(":")) originalId.substringAfter(":") else originalId)
 
             dbQuery {
-                AlbumProviderTable.upsert(AlbumProviderTable.albumId, AlbumProviderTable.provider, AlbumProviderTable.externalId) {
+                AlbumProviderTable.upsert(
+                    AlbumProviderTable.albumId,
+                    AlbumProviderTable.provider,
+                    AlbumProviderTable.externalId
+                ) {
                     it[AlbumProviderTable.albumId] = albumId
                     it[AlbumProviderTable.provider] = provider
                     it[AlbumProviderTable.externalId] = externalId

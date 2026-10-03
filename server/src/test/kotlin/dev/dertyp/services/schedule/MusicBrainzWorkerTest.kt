@@ -31,13 +31,13 @@ class MusicBrainzWorkerTest : KoinTest {
     @EnumSource(DbDialect::class)
     fun `worker should tag unmapped entities`(dialect: DbDialect) = runBlocking {
         TestDatabase.connect(dialect, "musicbrainz_worker_test")
-        
+
         val songService = mockk<SongService>()
         val albumService = mockk<AlbumService>()
         val artistService = mockk<ArtistService>()
         val userService = mockk<UserService>()
         val libraryMergeService = mockk<LibraryMergeService>()
-        
+
         val admin = mockk<User>()
         val adminId = UUID.randomUUID()
         coEvery { admin.id } returns adminId
@@ -51,9 +51,26 @@ class MusicBrainzWorkerTest : KoinTest {
         coEvery { albumService.albumIdsWithoutMusicBrainzId() } returns flowOf(albumId)
         coEvery { artistService.artistIdsWithoutMusicBrainzId() } returns flowOf(artistId)
 
-        coEvery { songService.fetchMusicBrainzId(songId, adminId, HttpClientPriority.LOW) } returns mockk(relaxed = true)
-        coEvery { albumService.fetchMusicBrainzId(albumId, priority = HttpClientPriority.LOW, triggerMerge = false) } returns mockk(relaxed = true)
-        coEvery { artistService.fetchMusicBrainzId(artistId, priority = HttpClientPriority.LOW) } returns mockk(relaxed = true)
+        coEvery {
+            songService.fetchMusicBrainzId(
+                songId,
+                adminId,
+                HttpClientPriority.LOW
+            )
+        } returns mockk(relaxed = true)
+        coEvery {
+            albumService.fetchMusicBrainzId(
+                albumId,
+                priority = HttpClientPriority.LOW,
+                triggerMerge = false
+            )
+        } returns mockk(relaxed = true)
+        coEvery {
+            artistService.fetchMusicBrainzId(
+                artistId,
+                priority = HttpClientPriority.LOW
+            )
+        } returns mockk(relaxed = true)
         coEvery { libraryMergeService.mergeDuplicateAlbums() } returns 0
 
         startKoin {

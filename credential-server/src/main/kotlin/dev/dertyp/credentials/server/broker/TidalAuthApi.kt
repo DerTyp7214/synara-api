@@ -57,7 +57,10 @@ class TidalAuthApi(private val httpClient: HttpClient) {
         val body = response.jsonBodyOrNull()
             ?: throw CredentialException(CredentialErrorCode.UPSTREAM_FAILED, "Tidal token refresh returned no JSON")
         return grantFrom(body)
-            ?: throw CredentialException(CredentialErrorCode.UPSTREAM_FAILED, "Tidal token refresh returned no access_token")
+            ?: throw CredentialException(
+                CredentialErrorCode.UPSTREAM_FAILED,
+                "Tidal token refresh returned no access_token"
+            )
     }
 
     suspend fun deviceAuthorization(clientId: String): TidalDeviceAuthorization {
@@ -73,18 +76,25 @@ class TidalAuthApi(private val httpClient: HttpClient) {
             )
         }
         val body = response.jsonBodyOrNull()
-            ?: throw CredentialException(CredentialErrorCode.UPSTREAM_FAILED, "Tidal device authorization returned no JSON")
+            ?: throw CredentialException(
+                CredentialErrorCode.UPSTREAM_FAILED,
+                "Tidal device authorization returned no JSON"
+            )
         val deviceCode = body.string("deviceCode") ?: body.string("device_code")
         val userCode = body.string("userCode") ?: body.string("user_code")
         val verificationUri = body.string("verificationUri") ?: body.string("verification_uri")
         if (deviceCode == null || userCode == null || verificationUri == null) {
-            throw CredentialException(CredentialErrorCode.UPSTREAM_FAILED, "Tidal device authorization response is incomplete")
+            throw CredentialException(
+                CredentialErrorCode.UPSTREAM_FAILED,
+                "Tidal device authorization response is incomplete"
+            )
         }
         return TidalDeviceAuthorization(
             deviceCode = deviceCode,
             userCode = userCode,
             verificationUri = withScheme(verificationUri),
-            verificationUriComplete = (body.string("verificationUriComplete") ?: body.string("verification_uri_complete"))
+            verificationUriComplete = (body.string("verificationUriComplete")
+                ?: body.string("verification_uri_complete"))
                 ?.let(::withScheme),
             expiresInSeconds = body.long("expiresIn") ?: body.long("expires_in") ?: DEFAULT_DEVICE_EXPIRY_SECONDS,
             intervalSeconds = (body.long("interval") ?: DEFAULT_INTERVAL_SECONDS).coerceAtLeast(1),

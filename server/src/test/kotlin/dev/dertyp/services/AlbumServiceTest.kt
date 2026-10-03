@@ -36,7 +36,7 @@ class AlbumServiceTest : KoinTest {
     private val musicBrainzService = mockk<MusicBrainzService>(relaxed = true)
     private val storageService = mockk<StorageService>(relaxed = true)
     private val libraryMergeService = mockk<LibraryMergeService>(relaxed = true)
-    
+
     private val user = User(
         id = UUID.randomUUID(),
         username = "testuser",
@@ -88,9 +88,9 @@ class AlbumServiceTest : KoinTest {
                 *allMusicBrainzTables
             )
         }
-        
+
         every { storageService.albumsPath } returns null
-        
+
         service = AlbumService()
         rpcService = AlbumRpcService(user, service)
     }
@@ -123,42 +123,43 @@ class AlbumServiceTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `byId should return album with isFollowed true for artist if artist is followed by user`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        val albumId = UUID.randomUUID()
-        val artistId = UUID.randomUUID()
-        val userId = UUID.randomUUID()
-        
-        transaction(database) {
-            UserTable.insert {
-                it[id] = userId
-                it[username] = "user1"
-                it[passwordHash] = "hash"
-            }
-            ArtistTable.insert {
-                it[id] = artistId
-                it[name] = "Followed Artist"
-            }
-            FollowedArtistTable.insert {
-                it[FollowedArtistTable.artistId] = artistId
-                it[FollowedArtistTable.userId] = userId
-            }
-            AlbumTable.insert {
-                it[id] = albumId
-                it[name] = "Followed Artist Album"
-                it[songCount] = 1
-            }
-            AlbumArtistTable.insert {
-                it[AlbumArtistTable.albumId] = albumId
-                it[AlbumArtistTable.artistId] = artistId
-            }
-        }
+    fun `byId should return album with isFollowed true for artist if artist is followed by user`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val albumId = UUID.randomUUID()
+            val artistId = UUID.randomUUID()
+            val userId = UUID.randomUUID()
 
-        val album = service.byId(albumId, userId)
-        assertNotNull(album)
-        assertEquals(1, album?.artists?.size)
-        assertEquals(true, album?.artists?.firstOrNull()?.isFollowed)
-    }
+            transaction(database) {
+                UserTable.insert {
+                    it[id] = userId
+                    it[username] = "user1"
+                    it[passwordHash] = "hash"
+                }
+                ArtistTable.insert {
+                    it[id] = artistId
+                    it[name] = "Followed Artist"
+                }
+                FollowedArtistTable.insert {
+                    it[FollowedArtistTable.artistId] = artistId
+                    it[FollowedArtistTable.userId] = userId
+                }
+                AlbumTable.insert {
+                    it[id] = albumId
+                    it[name] = "Followed Artist Album"
+                    it[songCount] = 1
+                }
+                AlbumArtistTable.insert {
+                    it[AlbumArtistTable.albumId] = albumId
+                    it[AlbumArtistTable.artistId] = artistId
+                }
+            }
+
+            val album = service.byId(albumId, userId)
+            assertNotNull(album)
+            assertEquals(1, album?.artists?.size)
+            assertEquals(true, album?.artists?.firstOrNull()?.isFollowed)
+        }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
@@ -204,7 +205,7 @@ class AlbumServiceTest : KoinTest {
         val testGroupId = UUID.randomUUID()
         val testMemberId = UUID.randomUUID()
         val testAlbumId = UUID.randomUUID()
-        
+
         transaction(database) {
             ArtistTable.insert {
                 it[id] = testGroupId
@@ -241,7 +242,7 @@ class AlbumServiceTest : KoinTest {
         val testGroupId = UUID.randomUUID()
         val testMemberId = UUID.randomUUID()
         val testAlbumId = UUID.randomUUID()
-        
+
         transaction(database) {
             ArtistTable.insert {
                 it[id] = testGroupId
@@ -286,12 +287,12 @@ class AlbumServiceTest : KoinTest {
 
         val album = service.byId(id)!!
         val updatedAlbum = album.copy(name = "Updated Name", songCount = 12)
-        
+
         val result = service.updateAlbum(updatedAlbum)
         assertNotNull(result)
         assertEquals("Updated Name", result?.name)
         assertEquals(12, result?.songCount)
-        
+
         val fromDb = service.byId(id)
         assertEquals("Updated Name", fromDb?.name)
         assertEquals(12, fromDb?.songCount)
@@ -304,7 +305,7 @@ class AlbumServiceTest : KoinTest {
         val albumId = UUID.randomUUID()
         val artistId1 = UUID.randomUUID()
         val artistId2 = UUID.randomUUID()
-        
+
         transaction(database) {
             ArtistTable.insert {
                 it[id] = artistId1
@@ -334,9 +335,9 @@ class AlbumServiceTest : KoinTest {
             ArtistService.mapArtist(row)
         }
         val updatedAlbum = album.copy(artists = listOf(artist2))
-        
+
         service.updateAlbum(updatedAlbum)
-        
+
         val fromDb = service.byId(albumId)
         assertEquals(1, fromDb?.artists?.size)
         assertEquals("Artist 2", fromDb?.artists?.get(0)?.name)
@@ -441,7 +442,7 @@ class AlbumServiceTest : KoinTest {
         val artistId = UUID.randomUUID()
         val mbReleaseId = UUID.randomUUID()
         val mbArtistId = UUID.randomUUID()
-        
+
         transaction(database) {
             ArtistTable.insert {
                 it[id] = artistId
@@ -611,7 +612,7 @@ class AlbumServiceTest : KoinTest {
         setup(dialect)
         val artistId = UUID.randomUUID()
         val albumId = UUID.randomUUID()
-        
+
         transaction(database) {
             ArtistTable.insert {
                 it[id] = artistId
@@ -641,7 +642,7 @@ class AlbumServiceTest : KoinTest {
         val albumName = "Matching Album"
         val releaseDate = LocalDate.of(2024, 1, 1)
         val isoDate = "2024-01-01"
-        
+
         val artistId = transaction(database) {
             ArtistTable.insertAndGetId {
                 it[ArtistTable.name] = artistName
@@ -664,7 +665,7 @@ class AlbumServiceTest : KoinTest {
             InsertableAlbum(albumName, listOf(artistName), songCount = 10, releaseDate = releaseDate)
         )
         val result = service.getOrBulkCreate(albums)
-        
+
         assertEquals(1, result.size)
         assertEquals(albumId, result.values.first(), "Should return existing album ID when metadata and artists match")
 
@@ -672,10 +673,10 @@ class AlbumServiceTest : KoinTest {
             InsertableAlbum(albumName, listOf("Different Artist"), songCount = 10, releaseDate = releaseDate)
         )
         val result2 = service.getOrBulkCreate(albumsDifferentArtist)
-        
+
         assertEquals(1, result2.size)
         assertNotEquals(albumId, result2.values.first(), "Should create a new album if artists don't match")
-        
+
         val newAlbum = service.byId(result2.values.first())
         assertNotNull(newAlbum)
         assertEquals("Different Artist", newAlbum?.artists?.firstOrNull()?.name)
@@ -705,7 +706,7 @@ class AlbumServiceTest : KoinTest {
 
         val deletedCount = service.deleteEmptyAlbums()
         assertEquals(1, deletedCount)
-        
+
         val albums = service.allAlbums(0, 10).data
         assertEquals(1, albums.size)
         assertEquals("Non-Empty", albums[0].name)
@@ -717,7 +718,7 @@ class AlbumServiceTest : KoinTest {
         setup(dialect)
         val artistName = "Test Artist"
         val barcode = "123456789012"
-        
+
         val artistId = transaction(database) {
             ArtistTable.insertAndGetId {
                 it[ArtistTable.name] = artistName
@@ -739,7 +740,7 @@ class AlbumServiceTest : KoinTest {
             InsertableAlbum("New Name", listOf(artistName), barcode = barcode)
         )
         val result = service.getOrBulkCreate(albums)
-        
+
         assertEquals(1, result.size)
         assertEquals(albumId, result.values.first(), "Should return existing album ID when barcode matches")
     }
@@ -783,44 +784,45 @@ class AlbumServiceTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `byMusicBrainzId should return alternative versions if direct match is missing`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        val requestedMbId = UUID.randomUUID()
-        val siblingMbId = UUID.randomUUID()
-        val releaseGroupId = UUID.randomUUID()
-        val localAlbumId = UUID.randomUUID()
+    fun `byMusicBrainzId should return alternative versions if direct match is missing`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val requestedMbId = UUID.randomUUID()
+            val siblingMbId = UUID.randomUUID()
+            val releaseGroupId = UUID.randomUUID()
+            val localAlbumId = UUID.randomUUID()
 
-        transaction(database) {
-            MBReleaseGroupTable.insert {
-                it[id] = releaseGroupId
-                it[title] = "Release Group Title"
+            transaction(database) {
+                MBReleaseGroupTable.insert {
+                    it[id] = releaseGroupId
+                    it[title] = "Release Group Title"
+                }
+                MBReleaseTable.insert {
+                    it[id] = siblingMbId
+                    it[title] = "Sibling Release"
+                    it[MBReleaseTable.releaseGroupId] = releaseGroupId
+                }
+                AlbumTable.insert {
+                    it[id] = localAlbumId
+                    it[name] = "Local Album"
+                    it[songCount] = 10
+                }
+                AlbumMusicBrainzTable.insert {
+                    it[albumId] = localAlbumId
+                    it[musicBrainzId] = siblingMbId
+                }
             }
-            MBReleaseTable.insert {
-                it[id] = siblingMbId
-                it[title] = "Sibling Release"
-                it[MBReleaseTable.releaseGroupId] = releaseGroupId
-            }
-            AlbumTable.insert {
-                it[id] = localAlbumId
-                it[name] = "Local Album"
-                it[songCount] = 10
-            }
-            AlbumMusicBrainzTable.insert {
-                it[albumId] = localAlbumId
-                it[musicBrainzId] = siblingMbId
-            }
+
+            coEvery { musicBrainzService.fetchReleaseById(requestedMbId, any()) } returns MusicBrainzRelease(
+                id = requestedMbId,
+                title = "Requested Release",
+                releaseGroup = MusicBrainzReleaseGroup(id = releaseGroupId, title = "Release Group Title")
+            )
+
+            val results = service.byMusicBrainzId(requestedMbId)
+            assertEquals(1, results.size)
+            assertEquals(localAlbumId, results[0].id)
         }
-
-        coEvery { musicBrainzService.fetchReleaseById(requestedMbId, any()) } returns MusicBrainzRelease(
-            id = requestedMbId,
-            title = "Requested Release",
-            releaseGroup = MusicBrainzReleaseGroup(id = releaseGroupId, title = "Release Group Title")
-        )
-
-        val results = service.byMusicBrainzId(requestedMbId)
-        assertEquals(1, results.size)
-        assertEquals(localAlbumId, results[0].id)
-    }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
@@ -1102,7 +1104,10 @@ class AlbumServiceTest : KoinTest {
             }
         }
 
-        coEvery { musicBrainzService.searchAlbumMb(any(), any()) } returns MusicBrainzRelease(id = mbReleaseId, title = "Current Album")
+        coEvery { musicBrainzService.searchAlbumMb(any(), any()) } returns MusicBrainzRelease(
+            id = mbReleaseId,
+            title = "Current Album"
+        )
         coEvery { musicBrainzService.fetchReleaseById(mbReleaseId, any()) } returns MusicBrainzRelease(
             id = mbReleaseId,
             title = "Current Album",
@@ -1145,7 +1150,10 @@ class AlbumServiceTest : KoinTest {
             }
         }
 
-        coEvery { musicBrainzService.searchAlbumMb(any(), any()) } returns MusicBrainzRelease(id = mbReleaseId, title = "New Album")
+        coEvery { musicBrainzService.searchAlbumMb(any(), any()) } returns MusicBrainzRelease(
+            id = mbReleaseId,
+            title = "New Album"
+        )
         coEvery { musicBrainzService.fetchReleaseById(mbReleaseId, any()) } returns MusicBrainzRelease(
             id = mbReleaseId,
             title = "New Album",
@@ -1163,13 +1171,18 @@ class AlbumServiceTest : KoinTest {
             AlbumArtistTable.selectAll().where { AlbumArtistTable.albumId eq albumId }
                 .map { it[AlbumArtistTable.artistId].value }
         }
-        
+
         assertEquals(1, artistsOnAlbum.size)
         val resolvedArtistId = artistsOnAlbum.first()
-        assertNotEquals(existingArtistId, resolvedArtistId, "Should have created a new artist instead of reusing name-match without evidence")
-        
+        assertNotEquals(
+            existingArtistId,
+            resolvedArtistId,
+            "Should have created a new artist instead of reusing name-match without evidence"
+        )
+
         val mbInfo = transaction(database) {
-            ArtistMusicBrainzTable.selectAll().where { ArtistMusicBrainzTable.artistId eq resolvedArtistId }.singleOrNull()
+            ArtistMusicBrainzTable.selectAll().where { ArtistMusicBrainzTable.artistId eq resolvedArtistId }
+                .singleOrNull()
         }
         assertNotNull(mbInfo)
         assertEquals(mbArtistId, mbInfo!![ArtistMusicBrainzTable.musicBrainzId]?.value)
@@ -1290,7 +1303,7 @@ class AlbumServiceTest : KoinTest {
         }
 
         val result = service.byOriginalUrls(listOf(url1, url2, url2alt))
-        
+
         assertEquals(3, result.size)
         assertEquals(albumId1, result[url1]?.id)
         assertEquals(albumId2, result[url2]?.id)
@@ -1299,46 +1312,47 @@ class AlbumServiceTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `byOriginalUrls picks the exact match first and the lowest id among equals across lookup chunks`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        val exactHigh = UUID.fromString("00000000-0000-0000-0000-00000000000f")
-        val providerLow = UUID.fromString("00000000-0000-0000-0000-000000000001")
-        val sharedHigh = UUID.fromString("00000000-0000-0000-0000-00000000000e")
-        val sharedLow = UUID.fromString("00000000-0000-0000-0000-000000000002")
+    fun `byOriginalUrls picks the exact match first and the lowest id among equals across lookup chunks`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val exactHigh = UUID.fromString("00000000-0000-0000-0000-00000000000f")
+            val providerLow = UUID.fromString("00000000-0000-0000-0000-000000000001")
+            val sharedHigh = UUID.fromString("00000000-0000-0000-0000-00000000000e")
+            val sharedLow = UUID.fromString("00000000-0000-0000-0000-000000000002")
 
-        val exactUrl = "https://example.com/album/exact"
-        val sharedUrl = "https://example.com/album/shared"
-        val fillers = (0 until 6000).map { "https://example.com/missing/$it" }
+            val exactUrl = "https://example.com/album/exact"
+            val sharedUrl = "https://example.com/album/shared"
+            val fillers = (0 until 6000).map { "https://example.com/missing/$it" }
 
-        transaction(database) {
-            fun album(albumId: UUID, albumName: String, url: String?) = AlbumTable.insert {
-                it[id] = albumId
-                it[name] = albumName
-                it[originalId] = url
+            transaction(database) {
+                fun album(albumId: UUID, albumName: String, url: String?) = AlbumTable.insert {
+                    it[id] = albumId
+                    it[name] = albumName
+                    it[originalId] = url
+                }
+                album(exactHigh, "Exact", exactUrl)
+                album(providerLow, "Provider", null)
+                album(sharedHigh, "Shared high", sharedUrl)
+                album(sharedLow, "Shared low", sharedUrl)
+                AlbumProviderTable.insert {
+                    it[AlbumProviderTable.albumId] = providerLow
+                    it[provider] = "example"
+                    it[externalId] = "exact"
+                    it[type] = Type.ALBUM.value
+                    it[rawUrl] = exactUrl
+                }
             }
-            album(exactHigh, "Exact", exactUrl)
-            album(providerLow, "Provider", null)
-            album(sharedHigh, "Shared high", sharedUrl)
-            album(sharedLow, "Shared low", sharedUrl)
-            AlbumProviderTable.insert {
-                it[AlbumProviderTable.albumId] = providerLow
-                it[provider] = "example"
-                it[externalId] = "exact"
-                it[type] = Type.ALBUM.value
-                it[rawUrl] = exactUrl
-            }
+
+            val smallUrls = listOf(exactUrl, sharedUrl)
+            val small = service.byOriginalUrls(smallUrls)
+            val large = service.byOriginalUrls(fillers.take(5500) + exactUrl + fillers.drop(5500) + sharedUrl)
+
+            assertEquals(exactHigh, small[exactUrl]?.id)
+            assertEquals(sharedLow, small[sharedUrl]?.id)
+            assertEquals(6002, large.size)
+            assertEquals(small.mapValues { it.value?.id }, smallUrls.associateWith { large[it]?.id })
+            assertTrue(fillers.all { it in large && large[it] == null })
         }
-
-        val smallUrls = listOf(exactUrl, sharedUrl)
-        val small = service.byOriginalUrls(smallUrls)
-        val large = service.byOriginalUrls(fillers.take(5500) + exactUrl + fillers.drop(5500) + sharedUrl)
-
-        assertEquals(exactHigh, small[exactUrl]?.id)
-        assertEquals(sharedLow, small[sharedUrl]?.id)
-        assertEquals(6002, large.size)
-        assertEquals(small.mapValues { it.value?.id }, smallUrls.associateWith { large[it]?.id })
-        assertTrue(fillers.all { it in large && large[it] == null })
-    }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
@@ -1456,33 +1470,36 @@ class AlbumServiceTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `getOrBulkCreateWithResult should store musicBrainzId in AlbumMusicBrainzTable for new albums`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        val mbId = UUID.randomUUID()
-        val artistName = "Test Artist"
+    fun `getOrBulkCreateWithResult should store musicBrainzId in AlbumMusicBrainzTable for new albums`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val mbId = UUID.randomUUID()
+            val artistName = "Test Artist"
 
-        coEvery { musicBrainzService.fetchReleaseById(mbId, any()) } returns MusicBrainzRelease(
-            id = mbId,
-            title = "MB Album"
-        )
+            coEvery { musicBrainzService.fetchReleaseById(mbId, any()) } returns MusicBrainzRelease(
+                id = mbId,
+                title = "MB Album"
+            )
 
-        val albums = listOf(InsertableAlbum("New Album", listOf(artistName), musicBrainzId = mbId))
-        service.getOrBulkCreate(albums)
+            val albums = listOf(InsertableAlbum("New Album", listOf(artistName), musicBrainzId = mbId))
+            service.getOrBulkCreate(albums)
 
-        val storedMbId = transaction(database) {
-            val albumId = AlbumTable.select(AlbumTable.id)
-                .where { AlbumTable.name eq "New Album" }
-                .firstOrNull()?.get(AlbumTable.id)?.value ?: return@transaction null
-            AlbumMusicBrainzTable.select(AlbumMusicBrainzTable.musicBrainzId)
-                .where { AlbumMusicBrainzTable.albumId eq albumId }
-                .firstOrNull()?.getOrNull(AlbumMusicBrainzTable.musicBrainzId)?.value
+            val storedMbId = transaction(database) {
+                val albumId = AlbumTable.select(AlbumTable.id)
+                    .where { AlbumTable.name eq "New Album" }
+                    .firstOrNull()?.get(AlbumTable.id)?.value ?: return@transaction null
+                AlbumMusicBrainzTable.select(AlbumMusicBrainzTable.musicBrainzId)
+                    .where { AlbumMusicBrainzTable.albumId eq albumId }
+                    .firstOrNull()?.getOrNull(AlbumMusicBrainzTable.musicBrainzId)?.value
+            }
+            assertEquals(mbId, storedMbId)
         }
-        assertEquals(mbId, storedMbId)
-    }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `getOrBulkCreateWithResult should store musicBrainzId in AlbumMusicBrainzTable for existing albums without one`(dialect: DbDialect) = runBlocking {
+    fun `getOrBulkCreateWithResult should store musicBrainzId in AlbumMusicBrainzTable for existing albums without one`(
+        dialect: DbDialect
+    ) = runBlocking {
         setup(dialect)
         val mbId = UUID.randomUUID()
         val artistName = "Test Artist"
@@ -1593,21 +1610,22 @@ class AlbumServiceTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `syncMusicBrainzForAlbums should skip albums with no AlbumMusicBrainzTable entry`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        val albumId = UUID.randomUUID()
+    fun `syncMusicBrainzForAlbums should skip albums with no AlbumMusicBrainzTable entry`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val albumId = UUID.randomUUID()
 
-        transaction(database) {
-            AlbumTable.insert {
-                it[id] = albumId
-                it[name] = "Album Without MB"
+            transaction(database) {
+                AlbumTable.insert {
+                    it[id] = albumId
+                    it[name] = "Album Without MB"
+                }
             }
+
+            service.syncMusicBrainzForAlbums(listOf(albumId))
+
+            coVerify(exactly = 0) { musicBrainzService.fetchReleaseById(any(), any()) }
         }
-
-        service.syncMusicBrainzForAlbums(listOf(albumId))
-
-        coVerify(exactly = 0) { musicBrainzService.fetchReleaseById(any(), any()) }
-    }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)

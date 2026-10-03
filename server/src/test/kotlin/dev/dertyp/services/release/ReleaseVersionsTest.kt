@@ -123,8 +123,10 @@ class ReleaseVersionsTest {
             "versioned",
             facet("Album (Deluxe Edition)", source = ReleaseSource.MusicBrainz, suspect = false, date = 0L)
         )
-        val later = Member("later", facet("Album", source = ReleaseSource.MusicBrainz, suspect = false, date = dayMs(10)))
-        val earliest = Member("earliest", facet("Album", source = ReleaseSource.MusicBrainz, suspect = false, date = dayMs(5)))
+        val later =
+            Member("later", facet("Album", source = ReleaseSource.MusicBrainz, suspect = false, date = dayMs(10)))
+        val earliest =
+            Member("earliest", facet("Album", source = ReleaseSource.MusicBrainz, suspect = false, date = dayMs(5)))
 
         assertEquals(earliest, primary(listOf(apple, suspectMb, versioned, later, earliest)))
     }

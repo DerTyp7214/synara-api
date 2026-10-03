@@ -42,7 +42,11 @@ class BackfillSongAudioInfo : CustomMigration() {
                 val known = row.getOrNull(FlacInfoTable.channels) ?: row.getOrNull(PcmInfoTable.channels)
                 val channels = known ?: AudioProbe.probeChannels(File(row[SongTable.filePath])).also { probed++ }
                 if (channels > 0) {
-                    dbQuery { SongTable.update({ SongTable.id eq row[SongTable.id] }) { it[SongTable.channels] = channels } }
+                    dbQuery {
+                        SongTable.update({ SongTable.id eq row[SongTable.id] }) {
+                            it[SongTable.channels] = channels
+                        }
+                    }
                 } else failed++
                 done++
                 updateProgress(done.toDouble() / total, "Songs $done/$total, probed $probed, unresolved $failed")

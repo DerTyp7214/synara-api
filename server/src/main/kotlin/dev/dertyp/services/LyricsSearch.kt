@@ -50,7 +50,10 @@ class LyricsSearch : ILyricsSearch, Service() {
     }
 
     @OptIn(ExperimentalTime::class)
-    private suspend fun runCommand(command: List<String>, onLineReceived: suspend (String) -> Unit): ProcessExecutionResult {
+    private suspend fun runCommand(
+        command: List<String>,
+        onLineReceived: suspend (String) -> Unit
+    ): ProcessExecutionResult {
         val startTime = Clock.System.now()
         return executeCommand(
             command = command,

@@ -67,8 +67,14 @@ class HueEntertainmentMapTest {
             "c1",
             "TV",
             listOf(
-                ClipEntertainmentChannel(channelId = 5, members = listOf(ClipChannelMember(ClipResourceRef("svc-a", "entertainment")))),
-                ClipEntertainmentChannel(channelId = 1, members = listOf(ClipChannelMember(ClipResourceRef("ghost", "entertainment")))),
+                ClipEntertainmentChannel(
+                    channelId = 5,
+                    members = listOf(ClipChannelMember(ClipResourceRef("svc-a", "entertainment")))
+                ),
+                ClipEntertainmentChannel(
+                    channelId = 1,
+                    members = listOf(ClipChannelMember(ClipResourceRef("ghost", "entertainment")))
+                ),
             ),
         )
         val area = HueEntertainmentMap.build(listOf(configuration), services, lights).single()
@@ -100,7 +106,8 @@ class HueEntertainmentMapTest {
 
     @Test
     fun `the streaming status and its streamer are mapped`() {
-        val streaming = configuration("c1", "TV", listOf(channel(0, 0.0, "svc-a")), status = "active", streamer = "app-1")
+        val streaming =
+            configuration("c1", "TV", listOf(channel(0, 0.0, "svc-a")), status = "active", streamer = "app-1")
         val idle = configuration("c2", "Desk", listOf(channel(0, 0.0, "svc-b")), status = "inactive")
         val areas = HueEntertainmentMap.build(listOf(streaming, idle), services, lights).associateBy { it.id }
         assertTrue(areas.getValue("c1").active)

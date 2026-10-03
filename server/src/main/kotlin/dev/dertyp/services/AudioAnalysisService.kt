@@ -134,7 +134,10 @@ open class AudioAnalysisService : IAudioAnalysisService, Service() {
             .map { it[SongTable.id].value }
     }
 
-    suspend fun getSongIdsMissingTimeline(limit: Int? = null, retryFailedAfterMs: Long = TIMELINE_RETRY_INTERVAL): List<PlatformUUID> = dbQuery {
+    suspend fun getSongIdsMissingTimeline(
+        limit: Int? = null,
+        retryFailedAfterMs: Long = TIMELINE_RETRY_INTERVAL
+    ): List<PlatformUUID> = dbQuery {
         val cutoff = System.currentTimeMillis() - retryFailedAfterMs
         SongTable
             .leftJoin(SongAudioTimelineTable)
@@ -178,11 +181,12 @@ open class AudioAnalysisService : IAudioAnalysisService, Service() {
         }
     }
 
-    private suspend fun extractEnvelopes(filePath: String): RmsEnvelopeExtractor.Envelopes? = withContext(Dispatchers.IO) {
-        runCatching { RmsEnvelopeExtractor.extract(File(filePath), ENVELOPE_HZ) }
-            .onFailure { logger.warn("Loudness envelope extraction failed for $filePath: ${it.message}") }
-            .getOrNull()
-    }
+    private suspend fun extractEnvelopes(filePath: String): RmsEnvelopeExtractor.Envelopes? =
+        withContext(Dispatchers.IO) {
+            runCatching { RmsEnvelopeExtractor.extract(File(filePath), ENVELOPE_HZ) }
+                .onFailure { logger.warn("Loudness envelope extraction failed for $filePath: ${it.message}") }
+                .getOrNull()
+        }
 
     private fun encodeEnvelope(values: FloatArray): ByteArray =
         AudioTimelineCodec.encodeEnvelope(values, RmsEnvelopeExtractor.MIN_DB, RmsEnvelopeExtractor.MAX_DB)
@@ -240,12 +244,21 @@ open class AudioAnalysisService : IAudioAnalysisService, Service() {
         val maxDb = row[SongAudioTimelineTable.envelopeMaxDb].toFloat()
         return SongAudioTimeline(
             songId = row[SongAudioTimelineTable.songId].value,
-            beatsMs = row[SongAudioTimelineTable.beats]?.let { AudioTimelineCodec.decodeBeats(it).toList() } ?: emptyList(),
+            beatsMs = row[SongAudioTimelineTable.beats]?.let { AudioTimelineCodec.decodeBeats(it).toList() }
+                ?: emptyList(),
             beatsCount = row[SongAudioTimelineTable.beatsCount],
             onsetRate = row[SongAudioTimelineTable.onsetRate],
             envelopeHz = row[SongAudioTimelineTable.envelopeHz],
-            envelopeDb = row[SongAudioTimelineTable.envelope]?.let { AudioTimelineCodec.decodeEnvelope(it, minDb, maxDb).toList() } ?: emptyList(),
-            bassEnvelopeDb = row[SongAudioTimelineTable.bassEnvelope]?.let { AudioTimelineCodec.decodeEnvelope(it, minDb, maxDb).toList() } ?: emptyList(),
+            envelopeDb = row[SongAudioTimelineTable.envelope]?.let {
+                AudioTimelineCodec.decodeEnvelope(it, minDb, maxDb).toList()
+            } ?: emptyList(),
+            bassEnvelopeDb = row[SongAudioTimelineTable.bassEnvelope]?.let {
+                AudioTimelineCodec.decodeEnvelope(
+                    it,
+                    minDb,
+                    maxDb
+                ).toList()
+            } ?: emptyList(),
             bandHz = row[SongAudioTimelineTable.bandHz],
             bands = row[SongAudioTimelineTable.bands]
                 ?.let { AudioTimelineCodec.decodeBands(it, row[SongAudioTimelineTable.bandCount], minDb, maxDb) }
@@ -320,6 +333,7 @@ open class AudioAnalysisService : IAudioAnalysisService, Service() {
     private fun saveCredits(songId: PlatformUUID, names: List<String>?, table: Table) {
         @Suppress("UNCHECKED_CAST")
         val songIdCol = table.columns.first { it.name == "songId" } as Column<EntityID<UUID>>
+
         @Suppress("UNCHECKED_CAST")
         val personIdCol = table.columns.first { it.name == "personId" } as Column<EntityID<UUID>>
 
@@ -331,7 +345,8 @@ open class AudioAnalysisService : IAudioAnalysisService, Service() {
             PersonTable.insertIgnore {
                 it[this.name] = name
             }
-            val personId = PersonTable.select(PersonTable.id).where { PersonTable.name eq name }.single()[PersonTable.id]
+            val personId =
+                PersonTable.select(PersonTable.id).where { PersonTable.name eq name }.single()[PersonTable.id]
 
             table.insert {
                 it[songIdCol] = EntityID(songId, SongTable)
@@ -362,6 +377,7 @@ open class AudioAnalysisService : IAudioAnalysisService, Service() {
     private fun getCredits(songId: PlatformUUID, table: Table): List<String> {
         @Suppress("UNCHECKED_CAST")
         val songIdCol = table.columns.first { it.name == "songId" } as Column<EntityID<UUID>>
+
         @Suppress("UNCHECKED_CAST")
         val personIdCol = table.columns.first { it.name == "personId" } as Column<EntityID<UUID>>
 

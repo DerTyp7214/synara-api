@@ -14,8 +14,8 @@ object ArtistIdentityEvidence {
 
     private val TRAILING_CLAUSE = Regex(
         "\\b(?:manufactured and distributed by|exclusively distributed by|distributed by" +
-            "|under exclusive licen[cs]e to|under licen[cs]e to|exclusive licen[cs]e to" +
-            "|licensed to|a division of|marketed by|all rights reserved)\\b"
+                "|under exclusive licen[cs]e to|under licen[cs]e to|exclusive licen[cs]e to" +
+                "|licensed to|a division of|marketed by|all rights reserved)\\b"
     )
 
     private val TRAILING_COMPANY_CLAUSE = Regex(",\\s+an?\\b.*\\b(?:company|label|division)\\b.*$")
@@ -143,8 +143,8 @@ object ArtistIdentityEvidence {
         if (blockHits.isNotEmpty()) return Verdict(true, blockHits.joinToString(", "), blocked = true)
 
         val trusted = matchesName(holder, rules.trustNames) ||
-            matchesName(label, rules.trustNames) ||
-            signals.registrants.any { it in rules.trustRegistrants }
+                matchesName(label, rules.trustNames) ||
+                signals.registrants.any { it in rules.trustRegistrants }
         if (trusted) return Verdict.CLEAR
 
         if (signals.foreignArtistIds.isNotEmpty()) {

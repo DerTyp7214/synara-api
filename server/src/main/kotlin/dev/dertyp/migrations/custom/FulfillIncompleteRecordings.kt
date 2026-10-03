@@ -26,7 +26,10 @@ class FulfillIncompleteRecordings : CustomMigration() {
         logTask("Fulfill Incomplete MusicBrainz Recordings") {
             val incompleteIds = dbQuery {
                 val recordingsWithNoArtists = MBRecordingTable
-                    .leftJoin(MBRecordingArtistCreditTable, onColumn = { MBRecordingTable.id }, otherColumn = { MBRecordingArtistCreditTable.recordingId })
+                    .leftJoin(
+                        MBRecordingArtistCreditTable,
+                        onColumn = { MBRecordingTable.id },
+                        otherColumn = { MBRecordingArtistCreditTable.recordingId })
                     .select(MBRecordingTable.id)
                     .where { MBRecordingArtistCreditTable.recordingId.isNull() }
                     .map { it[MBRecordingTable.id].value }

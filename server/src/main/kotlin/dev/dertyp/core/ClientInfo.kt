@@ -71,9 +71,15 @@ data class ClientInfo(
 
         fun fromHeader(value: String?): ClientInfo = fromHeaders(value, null, null)
 
-        fun fromHeaders(apiVersion: String?, uiSchemaVersion: String?, acceptLanguage: String?, timeZone: String? = null): ClientInfo = ClientInfo(
+        fun fromHeaders(
+            apiVersion: String?,
+            uiSchemaVersion: String?,
+            acceptLanguage: String?,
+            timeZone: String? = null
+        ): ClientInfo = ClientInfo(
             apiVersion = apiVersion?.trim()?.toIntOrNull()?.takeIf { it >= ApiVersion.LEGACY } ?: ApiVersion.LEGACY,
-            uiSchemaVersion = uiSchemaVersion?.trim()?.toIntOrNull()?.takeIf { it >= UiSchemaVersion.NONE } ?: UiSchemaVersion.NONE,
+            uiSchemaVersion = uiSchemaVersion?.trim()?.toIntOrNull()?.takeIf { it >= UiSchemaVersion.NONE }
+                ?: UiSchemaVersion.NONE,
             locale = parseLocale(acceptLanguage),
             timeZone = timeZone?.trim()?.takeIf { it.isNotEmpty() }?.let { runCatching { ZoneId.of(it) }.getOrNull() },
         )

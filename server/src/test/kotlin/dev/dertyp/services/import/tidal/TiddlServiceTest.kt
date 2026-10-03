@@ -48,7 +48,8 @@ class TiddlServiceTest {
     @Test
     fun `executeDownloader should prefix tiddl command with python3 -u`() = runBlocking {
         val command = listOf("tiddl", "download", "url", "https://tidal.com/track/1")
-        val expectedCommand = listOf("python3", "-u", "/usr/local/bin/tiddl", "download", "url", "https://tidal.com/track/1")
+        val expectedCommand =
+            listOf("python3", "-u", "/usr/local/bin/tiddl", "download", "url", "https://tidal.com/track/1")
 
         coEvery {
             executeCommand(expectedCommand, any(), any(), any(), any(), any())
@@ -88,11 +89,11 @@ class TiddlServiceTest {
     fun `downloadFavoriteCollection should call executeDownloader with correct command`() = runBlocking {
         val tiddlService = spyk(service)
         val expectedCommand = listOf("tiddl", "download", "fav", "--types", "track")
-        
+
         coEvery { tiddlService.executeImporter(any(), any(), any(), any()) } returns ProcessExecutionResult(0, "", "")
-        
+
         tiddlService.importFavoriteCollection(ImportFavType.tracks, 3, { true }, null) {}
-        
+
         coVerify { tiddlService.executeImporter(expectedCommand, any(), any(), any()) }
     }
 
@@ -100,11 +101,11 @@ class TiddlServiceTest {
     fun `login should call executeDownloader with correct command`() = runBlocking {
         val tiddlService = spyk(service)
         val expectedCommand = listOf("tiddl", "auth", "login", "--no-browser")
-        
+
         coEvery { tiddlService.executeImporter(any(), any(), any(), any()) } returns ProcessExecutionResult(0, "", "")
-        
+
         tiddlService.login({ true }) {}
-        
+
         coVerify { tiddlService.executeImporter(expectedCommand, any(), any(), any()) }
     }
 }

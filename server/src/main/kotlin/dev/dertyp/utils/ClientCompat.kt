@@ -40,6 +40,7 @@ open class ResponseShaper(val client: ClientInfo, rules: List<CompatRule> = Comp
             toolbar = value.toolbar.map(::shapeUiComponent),
             schemaVersion = minOf(value.schemaVersion, client.uiSchemaVersion),
         )
+
         is UiSlotRender -> value.copy(items = value.items.map { shape(it) as UiRender })
         is UiLiveUpdate.Replace -> value.copy(child = shapeUiComponent(value.child))
         is RecentRelease -> shapeRecentReleases(listOf(value)).first()
@@ -52,6 +53,7 @@ open class ResponseShaper(val client: ClientInfo, rules: List<CompatRule> = Comp
             nowPlaying = value.nowPlaying?.let { shape(it) as NowPlaying },
             recent = value.recent.map { shape(it) as ListenedSong },
         )
+
         is ListenedSong -> value.copy(song = shapeUserSong(value.song))
         is CollectionSongMatch -> value.copy(song = shapeUserSong(value.song))
         is RadioChannelSongMatch -> value.copy(song = shapeUserSong(value.song))
@@ -63,7 +65,9 @@ open class ResponseShaper(val client: ClientInfo, rules: List<CompatRule> = Comp
 
     @Suppress("UNCHECKED_CAST")
     private fun shapeList(list: List<*>): List<Any?> =
-        if (list.isNotEmpty() && list.all { it is RecentRelease }) shapeRecentReleases(list as List<RecentRelease>) else list.map(::shape)
+        if (list.isNotEmpty() && list.all { it is RecentRelease }) shapeRecentReleases(list as List<RecentRelease>) else list.map(
+            ::shape
+        )
 
     private fun shapePaginated(response: PaginatedResponse<Any?>): PaginatedResponse<Any?> {
         val data = shapeList(response.data)
@@ -75,7 +79,8 @@ open class ResponseShaper(val client: ClientInfo, rules: List<CompatRule> = Comp
 
     protected open fun shapeSong(song: Song): Song = activeRules.fold(song) { shaped, rule -> rule.shapeSong(shaped) }
 
-    protected open fun shapeUserSong(song: UserSong): UserSong = activeRules.fold(song) { shaped, rule -> rule.shapeUserSong(shaped) }
+    protected open fun shapeUserSong(song: UserSong): UserSong =
+        activeRules.fold(song) { shaped, rule -> rule.shapeUserSong(shaped) }
 
     protected open fun shapeUiComponent(component: UiComponent): UiComponent =
         activeRules.fold(component) { shaped, rule -> rule.shapeUiComponent(shaped, client) }

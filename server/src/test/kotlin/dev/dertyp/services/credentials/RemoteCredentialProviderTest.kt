@@ -26,7 +26,8 @@ class RemoteCredentialProviderTest {
         )
     ).apply {
         credentials[CredentialNames.YOUTUBE_API] = ResolvedCredential.ApiKey(CredentialNames.YOUTUBE_API, "yt-key")
-        credentials[CredentialNames.LINKRESOLVER_API] = ResolvedCredential.ApiKey(CredentialNames.LINKRESOLVER_API, "lr-key")
+        credentials[CredentialNames.LINKRESOLVER_API] =
+            ResolvedCredential.ApiKey(CredentialNames.LINKRESOLVER_API, "lr-key")
         credentials[CredentialNames.IMPORTER_TIDDL] = ResolvedCredential.Files(
             CredentialNames.IMPORTER_TIDDL,
             listOf(CredentialFile("auth.json", "e30=")),
@@ -141,7 +142,16 @@ class RemoteCredentialProviderTest {
         val provider = server.provider(client)
         provider.resolve(CredentialNames.YOUTUBE_API)
 
-        assertTrue(client.updateConnection(CredentialServerConnection(FakeCredentialServer.URL + "/", FakeCredentialServer.CLIENT_ID, FakeCredentialServer.CLIENT_SECRET, null)))
+        assertTrue(
+            client.updateConnection(
+                CredentialServerConnection(
+                    FakeCredentialServer.URL + "/",
+                    FakeCredentialServer.CLIENT_ID,
+                    FakeCredentialServer.CLIENT_SECRET,
+                    null
+                )
+            )
+        )
         assertFalse(provider.isManagedRemotely(CredentialNames.YOUTUBE_API))
         provider.resolve(CredentialNames.YOUTUBE_API)
 
@@ -173,13 +183,16 @@ class RemoteCredentialProviderTest {
         val client = server.client(source)
         val admin = server.admin(source)
         val provider = server.provider(client, source, admin)
-        server.credentials[CredentialNames.PODCAST_INDEX_API] = ResolvedCredential.ApiKeyPair(CredentialNames.PODCAST_INDEX_API, "pi-key", "pi-secret")
+        server.credentials[CredentialNames.PODCAST_INDEX_API] =
+            ResolvedCredential.ApiKeyPair(CredentialNames.PODCAST_INDEX_API, "pi-key", "pi-secret")
         provider.connect()
         assertFalse(provider.isAvailable(CredentialNames.PODCAST_INDEX_API))
 
         provider.startService()
         try {
-            admin.setGrants("c1", server.grants.map { GrantSpec(it.name, it.writeBack) } + GrantSpec(CredentialNames.PODCAST_INDEX_API))
+            admin.setGrants(
+                "c1",
+                server.grants.map { GrantSpec(it.name, it.writeBack) } + GrantSpec(CredentialNames.PODCAST_INDEX_API))
             withTimeout(5.seconds) { client.grants.first { CredentialNames.PODCAST_INDEX_API in it } }
 
             assertTrue(provider.isAvailable(CredentialNames.PODCAST_INDEX_API))

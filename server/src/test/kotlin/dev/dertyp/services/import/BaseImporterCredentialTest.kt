@@ -68,29 +68,38 @@ class BaseImporterCredentialTest {
 
     private fun remoteAuth(content: String, fingerprint: String = "fp-1") = ResolvedCredential.Files(
         name = CredentialNames.IMPORTER_TIDDL,
-        files = listOf(CredentialFile(CredentialFileRoles.TIDDL_AUTH, Base64.getEncoder().encodeToString(content.toByteArray()))),
+        files = listOf(
+            CredentialFile(
+                CredentialFileRoles.TIDDL_AUTH,
+                Base64.getEncoder().encodeToString(content.toByteArray())
+            )
+        ),
         fingerprint = fingerprint,
     )
 
     @Test
-    fun `executeImporter materializes the remote files around the command and writes back a rotated token`() = runBlocking {
-        credentialProvider.put(remoteAuth("""{"token":"old"}"""), managedRemotely = true)
-        var seen: String? = null
-        coEvery { executeCommand(any(), any(), any(), any(), any(), any()) } answers {
-            seen = authFile.readText()
-            authFile.writeText("""{"token":"new"}""")
-            ProcessExecutionResult(0, "", "")
+    fun `executeImporter materializes the remote files around the command and writes back a rotated token`() =
+        runBlocking {
+            credentialProvider.put(remoteAuth("""{"token":"old"}"""), managedRemotely = true)
+            var seen: String? = null
+            coEvery { executeCommand(any(), any(), any(), any(), any(), any()) } answers {
+                seen = authFile.readText()
+                authFile.writeText("""{"token":"new"}""")
+                ProcessExecutionResult(0, "", "")
+            }
+
+            service.executeImporter(listOf("tiddl", "download", "url", "x"), { true }, null) {}
+
+            assertEquals("""{"token":"old"}""", seen)
+            val writeBack = credentialProvider.writeBacks.single()
+            assertEquals(CredentialNames.IMPORTER_TIDDL, writeBack.name)
+            assertEquals("fp-1", writeBack.expectedFingerprint)
+            assertEquals(CredentialFileRoles.TIDDL_AUTH, writeBack.files.single().role)
+            assertEquals(
+                """{"token":"new"}""",
+                String(Base64.getDecoder().decode(writeBack.files.single().contentBase64))
+            )
         }
-
-        service.executeImporter(listOf("tiddl", "download", "url", "x"), { true }, null) {}
-
-        assertEquals("""{"token":"old"}""", seen)
-        val writeBack = credentialProvider.writeBacks.single()
-        assertEquals(CredentialNames.IMPORTER_TIDDL, writeBack.name)
-        assertEquals("fp-1", writeBack.expectedFingerprint)
-        assertEquals(CredentialFileRoles.TIDDL_AUTH, writeBack.files.single().role)
-        assertEquals("""{"token":"new"}""", String(Base64.getDecoder().decode(writeBack.files.single().contentBase64)))
-    }
 
     @Test
     fun `executeImporter writes nothing back when the command leaves the files untouched`() = runBlocking {
@@ -133,7 +142,16 @@ class BaseImporterCredentialTest {
 
         service.login({ true }) {}
 
-        coVerify { executeCommand(match { it.containsAll(listOf("auth", "login")) }, any(), any(), any(), any(), any()) }
+        coVerify {
+            executeCommand(
+                match { it.containsAll(listOf("auth", "login")) },
+                any(),
+                any(),
+                any(),
+                any(),
+                any()
+            )
+        }
     }
 
     @Test

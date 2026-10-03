@@ -61,6 +61,9 @@ class EntityQueriesTest {
             page
         )
         assertEquals(false, idOrderedPage(ids, items, total = 9, page = 2, pageSize = 3) { it.id }.hasNextPage)
-        assertEquals(false, idOrderedPage(ids, items, total = 9, page = 0, pageSize = Int.MAX_VALUE) { it.id }.hasNextPage)
+        assertEquals(
+            false,
+            idOrderedPage(ids, items, total = 9, page = 0, pageSize = Int.MAX_VALUE) { it.id }.hasNextPage
+        )
     }
 }

@@ -390,7 +390,8 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
             animatedCoverImageIdColumn: Expression<EntityID<UUID>?>? = null,
             animatedCoverBlurHashColumn: Expression<String?>? = null,
         ): UserSong {
-            val song = mapSong(resultRow, genres, blurHashColumn, animatedCoverImageIdColumn, animatedCoverBlurHashColumn)
+            val song =
+                mapSong(resultRow, genres, blurHashColumn, animatedCoverImageIdColumn, animatedCoverBlurHashColumn)
             val isFavourite = resultRow.getOrNull(UserSongTable.isFavourite) ?: false
             val superLikedAt = resultRow.getOrNull(UserSongTable.superLikedAt)
 
@@ -455,7 +456,13 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
         animatedCoverImageIdColumn: Expression<EntityID<UUID>?>? = null,
         animatedCoverBlurHashColumn: Expression<String?>? = null,
     ): BaseSong =
-        if (T::class == UserSong::class) mapUserSong(resultRow, genres, blurHashColumn, animatedCoverImageIdColumn, animatedCoverBlurHashColumn)
+        if (T::class == UserSong::class) mapUserSong(
+            resultRow,
+            genres,
+            blurHashColumn,
+            animatedCoverImageIdColumn,
+            animatedCoverBlurHashColumn
+        )
         else mapSong(resultRow, genres, blurHashColumn, animatedCoverImageIdColumn, animatedCoverBlurHashColumn)
 
     private fun ColumnSet.userSong(userId: UUID?) = if (userId != null) {
@@ -1181,7 +1188,8 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                 providerRows = providerRows,
                 order = compareBy<UUID> { insertedBySong[it] }.then(uuidOrder),
             )
-            val songsById = loadSongs<UserSong>(winners.values.filterNotNull().distinct(), userId, true).associateBy { it.id }
+            val songsById =
+                loadSongs<UserSong>(winners.values.filterNotNull().distinct(), userId, true).associateBy { it.id }
 
             winners.mapValuesTo(mutableMapOf()) { (_, id) -> id?.let { songsById[it] } }
         }
@@ -1336,22 +1344,31 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                 (SongTable.id inSubQuery CollectionSongTable
                     .select(CollectionSongTable.songId)
                     .where { CollectionSongTable.collectionId eq collectionId }
-                ) or (SongTable.albumId inSubQuery CollectionAlbumTable
+                        ) or (SongTable.albumId inSubQuery CollectionAlbumTable
                     .select(CollectionAlbumTable.albumId)
                     .where { CollectionAlbumTable.collectionId eq collectionId }
-                ) or (SongTable.id inSubQuery SongArtistTable
-                    .innerJoin(CollectionArtistTable, onColumn = { SongArtistTable.artistId }, otherColumn = { CollectionArtistTable.artistId })
+                        ) or (SongTable.id inSubQuery SongArtistTable
+                    .innerJoin(
+                        CollectionArtistTable,
+                        onColumn = { SongArtistTable.artistId },
+                        otherColumn = { CollectionArtistTable.artistId })
                     .select(SongArtistTable.songId)
                     .where { CollectionArtistTable.collectionId eq collectionId }
-                ) or (SongTable.albumId inSubQuery AlbumArtistTable
-                    .innerJoin(CollectionArtistTable, onColumn = { AlbumArtistTable.artistId }, otherColumn = { CollectionArtistTable.artistId })
+                        ) or (SongTable.albumId inSubQuery AlbumArtistTable
+                    .innerJoin(
+                        CollectionArtistTable,
+                        onColumn = { AlbumArtistTable.artistId },
+                        otherColumn = { CollectionArtistTable.artistId })
                     .select(AlbumArtistTable.albumId)
                     .where { CollectionArtistTable.collectionId eq collectionId }
-                ) or (SongTable.id inSubQuery UserPlaylistSongTable
-                    .innerJoin(CollectionPlaylistTable, onColumn = { UserPlaylistSongTable.playlistId }, otherColumn = { CollectionPlaylistTable.playlistId })
+                        ) or (SongTable.id inSubQuery UserPlaylistSongTable
+                    .innerJoin(
+                        CollectionPlaylistTable,
+                        onColumn = { UserPlaylistSongTable.playlistId },
+                        otherColumn = { CollectionPlaylistTable.playlistId })
                     .select(UserPlaylistSongTable.songId)
                     .where { CollectionPlaylistTable.collectionId eq collectionId }
-                )
+                        )
             }
         }
 
@@ -1368,18 +1385,24 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                 (SongTable.id inSubQuery RadioChannelSongTable
                     .select(RadioChannelSongTable.songId)
                     .where { RadioChannelSongTable.channelId eq channelId }
-                ) or (SongTable.albumId inSubQuery RadioChannelAlbumTable
+                        ) or (SongTable.albumId inSubQuery RadioChannelAlbumTable
                     .select(RadioChannelAlbumTable.albumId)
                     .where { RadioChannelAlbumTable.channelId eq channelId }
-                ) or (SongTable.id inSubQuery SongArtistTable
-                    .innerJoin(RadioChannelArtistTable, onColumn = { SongArtistTable.artistId }, otherColumn = { RadioChannelArtistTable.artistId })
+                        ) or (SongTable.id inSubQuery SongArtistTable
+                    .innerJoin(
+                        RadioChannelArtistTable,
+                        onColumn = { SongArtistTable.artistId },
+                        otherColumn = { RadioChannelArtistTable.artistId })
                     .select(SongArtistTable.songId)
                     .where { RadioChannelArtistTable.channelId eq channelId }
-                ) or (SongTable.albumId inSubQuery AlbumArtistTable
-                    .innerJoin(RadioChannelArtistTable, onColumn = { AlbumArtistTable.artistId }, otherColumn = { RadioChannelArtistTable.artistId })
+                        ) or (SongTable.albumId inSubQuery AlbumArtistTable
+                    .innerJoin(
+                        RadioChannelArtistTable,
+                        onColumn = { AlbumArtistTable.artistId },
+                        otherColumn = { RadioChannelArtistTable.artistId })
                     .select(AlbumArtistTable.albumId)
                     .where { RadioChannelArtistTable.channelId eq channelId }
-                )
+                        )
             }
         }
 
@@ -1599,7 +1622,12 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
         return StreamInfo(file, contentTypeFor(file, songContentTypes), file.length(), file.name)
     }
 
-    fun streamSong(id: UUID, offset: Long, chunkSize: Int = 4096, client: ClientInfo = ClientInfo.LEGACY): Flow<ByteArray>? {
+    fun streamSong(
+        id: UUID,
+        offset: Long,
+        chunkSize: Int = 4096,
+        client: ClientInfo = ClientInfo.LEGACY
+    ): Flow<ByteArray>? {
         val song = runBlocking { byId(id) } ?: return null
         if (!File(song.path).exists()) return null
 
@@ -1650,7 +1678,12 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
         return StreamInfo(file, ContentType.Audio.MP4, file.length(), file.name)
     }
 
-    fun streamSongAtmos(id: UUID, offset: Long, chunkSize: Int = 4096, client: ClientInfo = ClientInfo.LEGACY): Flow<ByteArray>? {
+    fun streamSongAtmos(
+        id: UUID,
+        offset: Long,
+        chunkSize: Int = 4096,
+        client: ClientInfo = ClientInfo.LEGACY
+    ): Flow<ByteArray>? {
         val song = runBlocking { byId(id) } ?: return null
         val file = resolveAtmosStream(song, client)?.file ?: return null
 
@@ -1983,9 +2016,10 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
             .orderBy(SongTable.inserted to SortOrder.ASC, SongTable.id to SortOrder.ASC)
             .alias("duplicate_rank")
 
-        val matched = Query(Slice(withAlbum, listOf(SongTable.id, duplicateRank) + sortValues.map { it.first }), query.where)
-            .apply { if (!explicit) andWhere { SongTable.explicit eq false } }
-            .groupBy(SongTable.id, AlbumTable.id)
+        val matched =
+            Query(Slice(withAlbum, listOf(SongTable.id, duplicateRank) + sortValues.map { it.first }), query.where)
+                .apply { if (!explicit) andWhere { SongTable.explicit eq false } }
+                .groupBy(SongTable.id, AlbumTable.id)
         query.having?.let { having -> matched.having { having } }
         val songs = matched.alias("ranked")
 
@@ -2018,19 +2052,52 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
         .leftJoin(AlbumMusicBrainzTable, onColumn = { AlbumTable.id }, otherColumn = { AlbumMusicBrainzTable.albumId })
         .leftJoin(SongArtistTable, onColumn = { SongTable.id }, otherColumn = { SongArtistTable.songId })
         .leftJoin(ArtistTable, onColumn = { SongArtistTable.artistId }, otherColumn = { ArtistTable.id })
-        .leftJoin(ArtistMusicBrainzTable, onColumn = { ArtistTable.id }, otherColumn = { ArtistMusicBrainzTable.artistId })
-        .leftJoin(artistGroupJoinAlias, onColumn = { ArtistTable.id }, otherColumn = { artistGroupJoinAlias[ArtistMemberTable.artistId] })
-        .leftJoin(artistGroupAlias, onColumn = { artistGroupJoinAlias[ArtistMemberTable.groupId] }, otherColumn = { artistGroupAlias[ArtistTable.id] })
-        .leftJoin(artistMemberJoinAlias, onColumn = { ArtistTable.id }, otherColumn = { artistMemberJoinAlias[ArtistMemberTable.groupId] })
-        .leftJoin(artistMemberAlias, onColumn = { artistMemberJoinAlias[ArtistMemberTable.artistId] }, otherColumn = { artistMemberAlias[ArtistTable.id] })
+        .leftJoin(
+            ArtistMusicBrainzTable,
+            onColumn = { ArtistTable.id },
+            otherColumn = { ArtistMusicBrainzTable.artistId })
+        .leftJoin(
+            artistGroupJoinAlias,
+            onColumn = { ArtistTable.id },
+            otherColumn = { artistGroupJoinAlias[ArtistMemberTable.artistId] })
+        .leftJoin(
+            artistGroupAlias,
+            onColumn = { artistGroupJoinAlias[ArtistMemberTable.groupId] },
+            otherColumn = { artistGroupAlias[ArtistTable.id] })
+        .leftJoin(
+            artistMemberJoinAlias,
+            onColumn = { ArtistTable.id },
+            otherColumn = { artistMemberJoinAlias[ArtistMemberTable.groupId] })
+        .leftJoin(
+            artistMemberAlias,
+            onColumn = { artistMemberJoinAlias[ArtistMemberTable.artistId] },
+            otherColumn = { artistMemberAlias[ArtistTable.id] })
         .leftJoin(ArtistAliasTable, onColumn = { ArtistTable.id }, otherColumn = { ArtistAliasTable.artistId })
         .leftJoin(AlbumArtistTable, onColumn = { AlbumTable.id }, otherColumn = { AlbumArtistTable.albumId })
-        .leftJoin(albumArtistAlias, onColumn = { AlbumArtistTable.artistId }, otherColumn = { albumArtistAlias[ArtistTable.id] })
-        .leftJoin(albumArtistAliasAlias, onColumn = { AlbumArtistTable.artistId }, otherColumn = { albumArtistAliasAlias[ArtistAliasTable.artistId] })
-        .leftJoin(albumArtistGroupJoinAlias, onColumn = { albumArtistAlias[ArtistTable.id] }, otherColumn = { albumArtistGroupJoinAlias[ArtistMemberTable.artistId] })
-        .leftJoin(albumArtistGroupAlias, onColumn = { albumArtistGroupJoinAlias[ArtistMemberTable.groupId] }, otherColumn = { albumArtistGroupAlias[ArtistTable.id] })
-        .leftJoin(albumArtistMemberJoinAlias, onColumn = { albumArtistAlias[ArtistTable.id] }, otherColumn = { albumArtistMemberJoinAlias[ArtistMemberTable.groupId] })
-        .leftJoin(albumArtistMemberAlias, onColumn = { albumArtistMemberJoinAlias[ArtistMemberTable.artistId] }, otherColumn = { albumArtistMemberAlias[ArtistTable.id] })
+        .leftJoin(
+            albumArtistAlias,
+            onColumn = { AlbumArtistTable.artistId },
+            otherColumn = { albumArtistAlias[ArtistTable.id] })
+        .leftJoin(
+            albumArtistAliasAlias,
+            onColumn = { AlbumArtistTable.artistId },
+            otherColumn = { albumArtistAliasAlias[ArtistAliasTable.artistId] })
+        .leftJoin(
+            albumArtistGroupJoinAlias,
+            onColumn = { albumArtistAlias[ArtistTable.id] },
+            otherColumn = { albumArtistGroupJoinAlias[ArtistMemberTable.artistId] })
+        .leftJoin(
+            albumArtistGroupAlias,
+            onColumn = { albumArtistGroupJoinAlias[ArtistMemberTable.groupId] },
+            otherColumn = { albumArtistGroupAlias[ArtistTable.id] })
+        .leftJoin(
+            albumArtistMemberJoinAlias,
+            onColumn = { albumArtistAlias[ArtistTable.id] },
+            otherColumn = { albumArtistMemberJoinAlias[ArtistMemberTable.groupId] })
+        .leftJoin(
+            albumArtistMemberAlias,
+            onColumn = { albumArtistMemberJoinAlias[ArtistMemberTable.artistId] },
+            otherColumn = { albumArtistMemberAlias[ArtistTable.id] })
 
     private suspend inline fun <reified T : BaseSong> loadSongs(
         ids: List<UUID>,
@@ -2042,14 +2109,38 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
         val songRows = songIdChunks.flatMap { chunk ->
             SongTable
                 .leftJoin(AlbumTable, onColumn = { SongTable.albumId }, otherColumn = { AlbumTable.id })
-                .leftJoin(AlbumMusicBrainzTable, onColumn = { AlbumTable.id }, otherColumn = { AlbumMusicBrainzTable.albumId })
-                .leftJoin(songImageAlias, onColumn = { SongTable.cover }, otherColumn = { songImageAlias[ImageTable.id] })
-                .leftJoin(albumImageAlias, onColumn = { AlbumTable.cover }, otherColumn = { albumImageAlias[ImageTable.id] })
-                .leftJoin(songAnimatedImageAlias, onColumn = { SongTable.animatedCover }, otherColumn = { songAnimatedImageAlias[AnimatedImageTable.id] })
-                .leftJoin(songAnimatedFrameAlias, onColumn = { songAnimatedImageAlias[AnimatedImageTable.imageId] }, otherColumn = { songAnimatedFrameAlias[ImageTable.id] })
-                .leftJoin(albumAnimatedImageAlias, onColumn = { AlbumTable.animatedCover }, otherColumn = { albumAnimatedImageAlias[AnimatedImageTable.id] })
-                .leftJoin(albumAnimatedFrameAlias, onColumn = { albumAnimatedImageAlias[AnimatedImageTable.imageId] }, otherColumn = { albumAnimatedFrameAlias[ImageTable.id] })
-                .leftJoin(SongMusicBrainzTable, onColumn = { SongTable.id }, otherColumn = { SongMusicBrainzTable.songId })
+                .leftJoin(
+                    AlbumMusicBrainzTable,
+                    onColumn = { AlbumTable.id },
+                    otherColumn = { AlbumMusicBrainzTable.albumId })
+                .leftJoin(
+                    songImageAlias,
+                    onColumn = { SongTable.cover },
+                    otherColumn = { songImageAlias[ImageTable.id] })
+                .leftJoin(
+                    albumImageAlias,
+                    onColumn = { AlbumTable.cover },
+                    otherColumn = { albumImageAlias[ImageTable.id] })
+                .leftJoin(
+                    songAnimatedImageAlias,
+                    onColumn = { SongTable.animatedCover },
+                    otherColumn = { songAnimatedImageAlias[AnimatedImageTable.id] })
+                .leftJoin(
+                    songAnimatedFrameAlias,
+                    onColumn = { songAnimatedImageAlias[AnimatedImageTable.imageId] },
+                    otherColumn = { songAnimatedFrameAlias[ImageTable.id] })
+                .leftJoin(
+                    albumAnimatedImageAlias,
+                    onColumn = { AlbumTable.animatedCover },
+                    otherColumn = { albumAnimatedImageAlias[AnimatedImageTable.id] })
+                .leftJoin(
+                    albumAnimatedFrameAlias,
+                    onColumn = { albumAnimatedImageAlias[AnimatedImageTable.imageId] },
+                    otherColumn = { albumAnimatedFrameAlias[ImageTable.id] })
+                .leftJoin(
+                    SongMusicBrainzTable,
+                    onColumn = { SongTable.id },
+                    otherColumn = { SongMusicBrainzTable.songId })
                 .userSong(userId)
                 .selectAll()
                 .where { SongTable.id inList chunk }
@@ -2059,9 +2150,18 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
         val artistsBySong = songIdChunks.flatMap { chunk ->
             SongArtistTable
                 .innerJoin(ArtistTable, onColumn = { SongArtistTable.artistId }, otherColumn = { ArtistTable.id })
-                .leftJoin(ArtistMusicBrainzTable, onColumn = { ArtistTable.id }, otherColumn = { ArtistMusicBrainzTable.artistId })
-                .leftJoin(songCreditedAliasAlias, onColumn = { SongArtistTable.creditedAliasId }, otherColumn = { songCreditedAliasAlias[ArtistAliasTable.id] })
-                .leftJoin(artistImageAlias, onColumn = { ArtistTable.image }, otherColumn = { artistImageAlias[ImageTable.id] })
+                .leftJoin(
+                    ArtistMusicBrainzTable,
+                    onColumn = { ArtistTable.id },
+                    otherColumn = { ArtistMusicBrainzTable.artistId })
+                .leftJoin(
+                    songCreditedAliasAlias,
+                    onColumn = { SongArtistTable.creditedAliasId },
+                    otherColumn = { songCreditedAliasAlias[ArtistAliasTable.id] })
+                .leftJoin(
+                    artistImageAlias,
+                    onColumn = { ArtistTable.image },
+                    otherColumn = { artistImageAlias[ImageTable.id] })
                 .followedArtist(userId)
                 .selectAll()
                 .where { SongArtistTable.songId inList chunk }
@@ -2085,16 +2185,29 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
 
         val albumArtistsByAlbum = albumIds.chunked(SONG_DETAIL_CHUNK_SIZE).flatMap { chunk ->
             AlbumArtistTable
-                .innerJoin(albumArtistAlias, onColumn = { AlbumArtistTable.artistId }, otherColumn = { albumArtistAlias[ArtistTable.id] })
-                .leftJoin(albumArtistMusicBrainzAlias, onColumn = { albumArtistAlias[ArtistTable.id] }, otherColumn = { albumArtistMusicBrainzAlias[ArtistMusicBrainzTable.artistId] })
-                .leftJoin(albumCreditedAliasAlias, onColumn = { AlbumArtistTable.creditedAliasId }, otherColumn = { albumCreditedAliasAlias[ArtistAliasTable.id] })
-                .leftJoin(albumArtistImageAlias, onColumn = { albumArtistAlias[ArtistTable.image] }, otherColumn = { albumArtistImageAlias[ImageTable.id] })
+                .innerJoin(
+                    albumArtistAlias,
+                    onColumn = { AlbumArtistTable.artistId },
+                    otherColumn = { albumArtistAlias[ArtistTable.id] })
+                .leftJoin(
+                    albumArtistMusicBrainzAlias,
+                    onColumn = { albumArtistAlias[ArtistTable.id] },
+                    otherColumn = { albumArtistMusicBrainzAlias[ArtistMusicBrainzTable.artistId] })
+                .leftJoin(
+                    albumCreditedAliasAlias,
+                    onColumn = { AlbumArtistTable.creditedAliasId },
+                    otherColumn = { albumCreditedAliasAlias[ArtistAliasTable.id] })
+                .leftJoin(
+                    albumArtistImageAlias,
+                    onColumn = { albumArtistAlias[ArtistTable.image] },
+                    otherColumn = { albumArtistImageAlias[ImageTable.id] })
                 .followedArtist(userId, albumFollowedArtistAlias, albumArtistAlias[ArtistTable.id])
                 .selectAll()
                 .where { AlbumArtistTable.albumId inList chunk }
                 .toList()
         }.groupBy { it[AlbumArtistTable.albumId].value }.mapValues { (_, rows) ->
-            val positions = rows.associate { it[albumArtistAlias[ArtistTable.id]].value to it[AlbumArtistTable.position] }
+            val positions =
+                rows.associate { it[albumArtistAlias[ArtistTable.id]].value to it[AlbumArtistTable.position] }
             rows.map { row ->
                 mapArtist(
                     row,
@@ -2121,7 +2234,12 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
 
         val providersBySong = songIdChunks.flatMap { chunk ->
             SongProviderTable
-                .select(SongProviderTable.songId, SongProviderTable.provider, SongProviderTable.externalId, SongProviderTable.rawUrl)
+                .select(
+                    SongProviderTable.songId,
+                    SongProviderTable.provider,
+                    SongProviderTable.externalId,
+                    SongProviderTable.rawUrl
+                )
                 .where { SongProviderTable.songId inList chunk }
                 .toList()
         }.groupBy({ it[SongProviderTable.songId].value }) { row ->
@@ -2596,11 +2714,11 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                 .awaitAll()
                 .flatten()
                 .associateBy { it.id }
-            
+
             if (debug) {
                 logger.info("Batch indexing (${filteredSongs.size} songs) complete, total time: ${(System.currentTimeMillis() - overallStart).milliseconds}")
             }
-            
+
             finalResult
         }
 

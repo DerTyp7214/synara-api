@@ -258,7 +258,14 @@ class RemoteControlServiceTest : KoinTest {
         )
 
         assertThrows<IllegalArgumentException> {
-            runBlocking { service.sendCommand(userId, UUID.randomUUID(), withoutVolume, PlaybackCommand.SetVolume(0.5f)) }
+            runBlocking {
+                service.sendCommand(
+                    userId,
+                    UUID.randomUUID(),
+                    withoutVolume,
+                    PlaybackCommand.SetVolume(0.5f)
+                )
+            }
         }
         assertThrows<IllegalArgumentException> {
             runBlocking { service.sendCommand(userId, UUID.randomUUID(), withVolume, PlaybackCommand.SetVolume(1.5f)) }

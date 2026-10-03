@@ -49,7 +49,8 @@ val explicitMocks: Map<KClass<*>, () -> Any> = mapOf(
     IUiService::class to { MockUiService() },
 )
 
-fun mockFor(serviceClass: KClass<*>): Any = explicitMocks[serviceClass]?.invoke() ?: MockGenerator.createMock(serviceClass)
+fun mockFor(serviceClass: KClass<*>): Any =
+    explicitMocks[serviceClass]?.invoke() ?: MockGenerator.createMock(serviceClass)
 
 val MockAuthPlugin = createRouteScopedPlugin("MockAuthPlugin") {
     onCall { call ->
@@ -77,7 +78,7 @@ fun Application.module() {
             cbor(AppCbor)
         }
     }
-    
+
     initializeServiceRegistry()
     val allServices = getAllServiceClasses()
     val publicServices = listOf("IAuthService", "IServerStatsService")
@@ -87,11 +88,12 @@ fun Application.module() {
             val krpcRoute = this
             allServices.filter { it.simpleName in publicServices }.forEach { serviceClass ->
                 try {
-                    val method = KrpcRoute::class.memberFunctions.find { 
-                        it.name == "registerService" && it.parameters.size == 3 
+                    val method = KrpcRoute::class.memberFunctions.find {
+                        it.name == "registerService" && it.parameters.size == 3
                     }
                     method?.call(krpcRoute, serviceClass, { mockFor(serviceClass) })
-                } catch (_: Exception) {}
+                } catch (_: Exception) {
+                }
             }
         }
 
@@ -99,11 +101,12 @@ fun Application.module() {
             val krpcRoute = this
             allServices.filter { it.simpleName == "IAuthService" }.forEach { serviceClass ->
                 try {
-                    val method = KrpcRoute::class.memberFunctions.find { 
-                        it.name == "registerService" && it.parameters.size == 3 
+                    val method = KrpcRoute::class.memberFunctions.find {
+                        it.name == "registerService" && it.parameters.size == 3
                     }
                     method?.call(krpcRoute, serviceClass, { mockFor(serviceClass) })
-                } catch (_: Exception) {}
+                } catch (_: Exception) {
+                }
             }
         }
 
@@ -113,11 +116,12 @@ fun Application.module() {
                 val krpcRoute = this
                 allServices.filter { it.simpleName !in publicServices }.forEach { serviceClass ->
                     try {
-                        val method = KrpcRoute::class.memberFunctions.find { 
-                            it.name == "registerService" && it.parameters.size == 3 
+                        val method = KrpcRoute::class.memberFunctions.find {
+                            it.name == "registerService" && it.parameters.size == 3
                         }
                         method?.call(krpcRoute, serviceClass, { mockFor(serviceClass) })
-                    } catch (_: Exception) {}
+                    } catch (_: Exception) {
+                    }
                 }
             }
         }
@@ -135,7 +139,9 @@ fun Application.module() {
 }
 
 fun Route.registerMockRestService(serviceInterface: KClass<*>, json: Json, isPublic: Boolean) {
-    val serviceName = serviceInterface.simpleName?.removePrefix("I")?.removeSuffix("Service")?.replaceFirstChar { it.lowercase() } ?: ""
+    val serviceName =
+        serviceInterface.simpleName?.removePrefix("I")?.removeSuffix("Service")?.replaceFirstChar { it.lowercase() }
+            ?: ""
 
     route("/$serviceName") {
         if (!isPublic) {
@@ -166,7 +172,8 @@ fun Route.registerMockRestService(serviceInterface: KClass<*>, json: Json, isPub
                     call.respond(HttpStatusCode.NotFound)
                 } else {
                     try {
-                        val responseType = if (func.returnType.classifier == Flow::class) func.returnType.arguments.first().type!! else func.returnType
+                        val responseType =
+                            if (func.returnType.classifier == Flow::class) func.returnType.arguments.first().type!! else func.returnType
                         val responseJson = json.encodeToString(serializer(responseType), dummy)
                         call.respondText(responseJson, ContentType.Application.Json)
                     } catch (_: Exception) {

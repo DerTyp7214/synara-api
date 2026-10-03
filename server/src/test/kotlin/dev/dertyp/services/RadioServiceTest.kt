@@ -95,7 +95,7 @@ class RadioServiceTest : KoinTest {
         val userId = UUID.randomUUID()
         val recommended = library.take(15).toList()
         coEvery { recommendations.similarSongs(any(), any(), any()) } returns
-            recommended.map { rid -> mockk<UserSong> { every { id } returns rid } }
+                recommended.map { rid -> mockk<UserSong> { every { id } returns rid } }
 
         val radio = RadioService()
         val seedId = library.first()

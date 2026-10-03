@@ -22,7 +22,8 @@ object HuePaletteMapper {
     private const val BEATS_PER_BAR = 4
     private const val DEFAULT_BAR_MS = 6_000L
 
-    val TEST_COLORS = listOf(0xFFFF3B30.toInt(), 0xFF34C759.toInt(), 0xFF007AFF.toInt(), 0xFFFFCC00.toInt(), 0xFFAF52DE.toInt())
+    val TEST_COLORS =
+        listOf(0xFFFF3B30.toInt(), 0xFF34C759.toInt(), 0xFF007AFF.toInt(), 0xFFFFCC00.toInt(), 0xFFAF52DE.toInt())
 
     fun map(
         palette: List<Int>,
@@ -34,7 +35,8 @@ object HuePaletteMapper {
     ): Result {
         if (targets.isEmpty()) return Result(emptyList(), emptyList())
         val energy = audio?.energy ?: SongAudioData.DEFAULT_ENERGY
-        val colors = pickColors(listOfNotNull(primary) + palette, energy, audio?.valence ?: SongAudioData.DEFAULT_VALENCE)
+        val colors =
+            pickColors(listOfNotNull(primary) + palette, energy, audio?.valence ?: SongAudioData.DEFAULT_VALENCE)
         val brightness = brightness(link.intensity, energy, audio?.loudness)
         val transition = transition(link, audio?.bpm)
         return assign(colors, targets, brightness, transition, profiles)
@@ -68,7 +70,14 @@ object HuePaletteMapper {
         HueStopMode.OFF -> link.targets
             .filter { it.type == HueTargetType.LIGHT || it.type == HueTargetType.ROOM || it.type == HueTargetType.ZONE }
             .map { HueLightCommand(it, LightUpdate(on = ClipOn(false), dynamics = ClipDynamics(link.transitionMs))) }
-        HueStopMode.SCENE -> link.stopScenes.map { HueSceneCommand(it.id, SceneRecallUpdate(ClipSceneRecall(duration = link.transitionMs))) }
+
+        HueStopMode.SCENE -> link.stopScenes.map {
+            HueSceneCommand(
+                it.id,
+                SceneRecallUpdate(ClipSceneRecall(duration = link.transitionMs))
+            )
+        }
+
         HueStopMode.KEEP -> emptyList()
     }
 
@@ -80,7 +89,8 @@ object HuePaletteMapper {
         }
         val minSaturation = if (energy < 0.35) 0.12 else 0.25
         var vivid = parsed.filter { it.saturation >= minSaturation && it.lightness in 0.15..0.85 }
-        if (vivid.isEmpty()) vivid = listOfNotNull(parsed.maxByOrNull { it.saturation }?.takeIf { it.saturation >= 0.08 })
+        if (vivid.isEmpty()) vivid =
+            listOfNotNull(parsed.maxByOrNull { it.saturation }?.takeIf { it.saturation >= 0.08 })
         if (vivid.isEmpty()) {
             val fallback = java.awt.Color.getHSBColor(if (valence >= 0.5) 30f / 360f else 220f / 360f, 0.6f, 0.6f).rgb
             return listOf(fallback)
@@ -105,10 +115,17 @@ object HuePaletteMapper {
 
     internal fun transition(link: HueUserLink, bpm: Double?): Int = when (link.transitionMode) {
         HueTransitionMode.FIXED -> link.transitionMs.coerceIn(0, 10_000)
-        HueTransitionMode.BPM -> bpm?.takeIf { it > 0 }?.let { (60_000 / it).roundToInt().coerceIn(200, 1500) } ?: link.transitionMs.coerceIn(0, 10_000)
+        HueTransitionMode.BPM -> bpm?.takeIf { it > 0 }?.let { (60_000 / it).roundToInt().coerceIn(200, 1500) }
+            ?: link.transitionMs.coerceIn(0, 10_000)
     }
 
-    private fun assign(colors: List<Int>, targets: List<HueTarget>, brightness: Int, transition: Int, profiles: Map<String, LightProfile>): Result {
+    private fun assign(
+        colors: List<Int>,
+        targets: List<HueTarget>,
+        brightness: Int,
+        transition: Int,
+        profiles: Map<String, LightProfile>
+    ): Result {
         if (colors.isEmpty() || targets.isEmpty()) return Result(emptyList(), emptyList())
         val lights = targets.filter { it.type == HueTargetType.LIGHT }.sortedBy { it.name }
         val groups = targets.filter { it.type == HueTargetType.ROOM || it.type == HueTargetType.ZONE }
@@ -137,7 +154,14 @@ object HuePaletteMapper {
     ): HueCommand {
         val gamut = profiles[target.id]?.gamut ?: HueColor.GAMUT_C
         val gradient = if (points < 2) null else ClipGradientUpdate(
-            List(points) { offset -> ClipGradientPointUpdate(colorUpdate(colors[(index + offset) % colors.size], gamut)) },
+            List(points) { offset ->
+                ClipGradientPointUpdate(
+                    colorUpdate(
+                        colors[(index + offset) % colors.size],
+                        gamut
+                    )
+                )
+            },
         )
         return HueLightCommand(
             target,

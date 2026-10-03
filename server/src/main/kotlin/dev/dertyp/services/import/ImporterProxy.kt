@@ -66,11 +66,19 @@ class ImporterProxy(
         override val pluginId: String = id
         override var indexer: IPluginIndexer
             get() = throw IllegalStateException("Importer $id is disabled")
-            set(_) { throw IllegalStateException("Importer $id is disabled") }
+            set(_) {
+                throw IllegalStateException("Importer $id is disabled")
+            }
         override val enabled: Boolean = false
         override fun canHandle(url: String): Boolean = false
         override suspend fun getWrapper(type: Type, ids: List<String>, user: User) = IdsWrapper(type, emptyFlow())
-        override suspend fun importIds(ids: List<String>, type: Type, user: User, callback: suspend (List<String>) -> Unit) = Pair(false, emptyList<UserSong>())
+        override suspend fun importIds(
+            ids: List<String>,
+            type: Type,
+            user: User,
+            callback: suspend (List<String>) -> Unit
+        ) = Pair(false, emptyList<UserSong>())
+
         override suspend fun importContent(
             urls: List<String>,
             maxRetries: Int,
@@ -82,13 +90,25 @@ class ImporterProxy(
             onLiveOutput("Error: Importer $id is disabled and no fallback is available.")
             return ProcessExecutionResult(-1, "Importer $id is disabled", "")
         }
-        override suspend fun importFavoriteCollection(type: ImportFavType, maxRetries: Int, aliveCheck: suspend () -> Boolean, userId: PlatformUUID?, onLiveOutput: suspend (String) -> Unit): ProcessExecutionResult {
+
+        override suspend fun importFavoriteCollection(
+            type: ImportFavType,
+            maxRetries: Int,
+            aliveCheck: suspend () -> Boolean,
+            userId: PlatformUUID?,
+            onLiveOutput: suspend (String) -> Unit
+        ): ProcessExecutionResult {
             onLiveOutput("Error: Importer $id is disabled and no fallback is available.")
             return ProcessExecutionResult(-1, "Importer $id is disabled", "")
         }
+
         override suspend fun syncFavorites(user: User, onProgress: suspend (Double, String) -> Unit) {}
         override suspend fun search(query: String, count: Int): List<SearchResult> = emptyList()
-        override suspend fun login(aliveCheck: suspend () -> Boolean, onLiveOutput: suspend (String) -> Unit): ProcessExecutionResult = ProcessExecutionResult(-1, "Importer $id is disabled", "")
+        override suspend fun login(
+            aliveCheck: suspend () -> Boolean,
+            onLiveOutput: suspend (String) -> Unit
+        ): ProcessExecutionResult = ProcessExecutionResult(-1, "Importer $id is disabled", "")
+
         override suspend fun authorized(aliveCheck: suspend () -> Boolean): Boolean = false
         override fun tokenFileExists(): Boolean = false
     }
@@ -127,7 +147,8 @@ class ImporterProxy(
         service: ImportBackend = defaultService,
         userId: PlatformUUID? = null,
         onLiveOutput: suspend (String) -> Unit
-    ): ProcessExecutionResult = getImporter(service).importFavoriteCollection(type, maxRetries, aliveCheck, userId, onLiveOutput)
+    ): ProcessExecutionResult =
+        getImporter(service).importFavoriteCollection(type, maxRetries, aliveCheck, userId, onLiveOutput)
 
     @OptIn(ExperimentalTime::class)
     suspend fun authorized(

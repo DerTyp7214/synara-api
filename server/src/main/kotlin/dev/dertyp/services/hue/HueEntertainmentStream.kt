@@ -68,7 +68,13 @@ class HueDtlsStream(
                 throw HueBridgeException(failure("timed out after $HANDSHAKE_TIMEOUT_MS ms"))
             } catch (e: IOException) {
                 close()
-                throw HueBridgeException(failure(if (timedOut.get()) "timed out after $HANDSHAKE_TIMEOUT_MS ms" else describe(e)))
+                throw HueBridgeException(
+                    failure(
+                        if (timedOut.get()) "timed out after $HANDSHAKE_TIMEOUT_MS ms" else describe(
+                            e
+                        )
+                    )
+                )
             } finally {
                 watchdog.cancel()
             }

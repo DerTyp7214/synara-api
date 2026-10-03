@@ -32,15 +32,15 @@ class JmDNSPluginTest {
         every { InetAddress.getLocalHost() } returns mockAddress
         every { mockAddress.hostName } returns "test-host"
         every { JmDNS.create(any<InetAddress>(), any<String>()) } returns mockJmDNS
-        every { 
+        every {
             ServiceInfo.create(
-                any<String>(), 
-                any<String>(), 
-                any<Int>(), 
-                any<Int>(), 
-                any<Int>(), 
+                any<String>(),
+                any<String>(),
+                any<Int>(),
+                any<Int>(),
+                any<Int>(),
                 any<Map<String, String>>()
-            ) 
+            )
         } returns mockServiceInfo
 
         testApplication {
@@ -51,14 +51,14 @@ class JmDNSPluginTest {
         }
 
         verify { JmDNS.create(mockAddress, "test-host") }
-        verify { 
+        verify {
             ServiceInfo.create(
                 "_test._tcp.local.",
                 "test-service",
                 8080,
                 0, 0,
                 emptyMap<String, String>()
-            ) 
+            )
         }
         verify { mockJmDNS.registerService(mockServiceInfo) }
         verify { mockJmDNS.unregisterAllServices() }

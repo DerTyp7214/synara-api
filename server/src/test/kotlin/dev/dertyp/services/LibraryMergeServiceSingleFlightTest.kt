@@ -51,11 +51,29 @@ class LibraryMergeServiceSingleFlightTest : KoinTest {
         database = TestDatabase.connect(dialect, "merge_single_flight_test")
         transaction(database) {
             SchemaUtils.create(
-                ArtistTable, AlbumTable, SongTable, SongVariantTable, ImageTable, PlaylistTable,
-                UserTable, UserPlaylistTable, UserPlaylistSongTable, PlaylistSongTable,
-                SongArtistTable, AlbumArtistTable, AlbumMusicBrainzTable, SongMusicBrainzTable,
-                TranscodedSongTable, UserSongTable, SongProviderTable, AlbumProviderTable,
-                CollectionTable, CollectionSongTable, CollectionAlbumTable, CollectionArtistTable, CollectionPlaylistTable,
+                ArtistTable,
+                AlbumTable,
+                SongTable,
+                SongVariantTable,
+                ImageTable,
+                PlaylistTable,
+                UserTable,
+                UserPlaylistTable,
+                UserPlaylistSongTable,
+                PlaylistSongTable,
+                SongArtistTable,
+                AlbumArtistTable,
+                AlbumMusicBrainzTable,
+                SongMusicBrainzTable,
+                TranscodedSongTable,
+                UserSongTable,
+                SongProviderTable,
+                AlbumProviderTable,
+                CollectionTable,
+                CollectionSongTable,
+                CollectionAlbumTable,
+                CollectionArtistTable,
+                CollectionPlaylistTable,
                 *allMusicBrainzTables
             )
         }
@@ -96,59 +114,61 @@ class LibraryMergeServiceSingleFlightTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `requests during a running album merge are coalesced into one follow-up run and never overlap`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
+    fun `requests during a running album merge are coalesced into one follow-up run and never overlap`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
 
-        val firstPair = transaction(database) { insertDuplicatePair("First") }
-        val secondPair = mutableListOf<UUID>()
-        val thirdPair = mutableListOf<UUID>()
+            val firstPair = transaction(database) { insertDuplicatePair("First") }
+            val secondPair = mutableListOf<UUID>()
+            val thirdPair = mutableListOf<UUID>()
 
-        val passes = AtomicInteger(0)
-        val active = AtomicInteger(0)
-        val maxActive = AtomicInteger(0)
-        val firstPassEntered = CompletableDeferred<Unit>()
-        val releaseFirstPass = CompletableDeferred<Unit>()
+            val passes = AtomicInteger(0)
+            val active = AtomicInteger(0)
+            val maxActive = AtomicInteger(0)
+            val firstPassEntered = CompletableDeferred<Unit>()
+            val releaseFirstPass = CompletableDeferred<Unit>()
 
-        coEvery { albumService.fetchMusicBrainzId(any(), any(), any(), any()) } coAnswers {
-            val running = active.incrementAndGet()
-            maxActive.accumulateAndGet(running) { a, b -> maxOf(a, b) }
-            try {
-                when (passes.incrementAndGet()) {
-                    1 -> {
-                        secondPair += insertDuplicatePair("Second")
-                        firstPassEntered.complete(Unit)
-                        releaseFirstPass.await()
+            coEvery { albumService.fetchMusicBrainzId(any(), any(), any(), any()) } coAnswers {
+                val running = active.incrementAndGet()
+                maxActive.accumulateAndGet(running) { a, b -> maxOf(a, b) }
+                try {
+                    when (passes.incrementAndGet()) {
+                        1 -> {
+                            secondPair += insertDuplicatePair("Second")
+                            firstPassEntered.complete(Unit)
+                            releaseFirstPass.await()
+                        }
+
+                        2 -> thirdPair += insertDuplicatePair("Third")
                     }
-                    2 -> thirdPair += insertDuplicatePair("Third")
+                } finally {
+                    active.decrementAndGet()
                 }
-            } finally {
-                active.decrementAndGet()
+                null
             }
-            null
+
+            val running = async(Dispatchers.Default) { service.mergeDuplicateAlbums() }
+            withTimeout(30.seconds) { firstPassEntered.await() }
+
+            val concurrent = withTimeout(30.seconds) {
+                (1..3).map { async(Dispatchers.Default) { service.mergeDuplicateAlbums() } }.awaitAll()
+            }
+            assertEquals(listOf(0, 0, 0), concurrent)
+            assertFalse(running.isCompleted)
+            assertEquals(1, passes.get())
+
+            releaseFirstPass.complete(Unit)
+            val merged = withTimeout(30.seconds) { running.await() }
+
+            assertEquals(2, merged)
+            assertEquals(2, passes.get())
+            assertEquals(1, maxActive.get())
+            assertEquals(1L, existingAlbums(firstPair))
+            assertEquals(1L, existingAlbums(secondPair))
+            assertEquals(2L, existingAlbums(thirdPair))
+
+            assertEquals(1, service.mergeDuplicateAlbums())
+            assertEquals(3, passes.get())
+            assertEquals(1L, existingAlbums(thirdPair))
         }
-
-        val running = async(Dispatchers.Default) { service.mergeDuplicateAlbums() }
-        withTimeout(30.seconds) { firstPassEntered.await() }
-
-        val concurrent = withTimeout(30.seconds) {
-            (1..3).map { async(Dispatchers.Default) { service.mergeDuplicateAlbums() } }.awaitAll()
-        }
-        assertEquals(listOf(0, 0, 0), concurrent)
-        assertFalse(running.isCompleted)
-        assertEquals(1, passes.get())
-
-        releaseFirstPass.complete(Unit)
-        val merged = withTimeout(30.seconds) { running.await() }
-
-        assertEquals(2, merged)
-        assertEquals(2, passes.get())
-        assertEquals(1, maxActive.get())
-        assertEquals(1L, existingAlbums(firstPair))
-        assertEquals(1L, existingAlbums(secondPair))
-        assertEquals(2L, existingAlbums(thirdPair))
-
-        assertEquals(1, service.mergeDuplicateAlbums())
-        assertEquals(3, passes.get())
-        assertEquals(1L, existingAlbums(thirdPair))
-    }
 }

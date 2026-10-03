@@ -45,91 +45,250 @@ tasks.register("generateEnvDocs") {
     doLast {
         val varInfo = mapOf(
             "PORT" to mapOf("desc" to "The port the server listens on.", "cat" to "General & Authentication"),
-            "CLIENT_ID" to mapOf("desc" to "Initial admin username (only on first run).", "cat" to "General & Authentication"),
-            "CLIENT_SECRET" to mapOf("desc" to "Initial admin password (only on first run).", "cat" to "General & Authentication"),
+            "CLIENT_ID" to mapOf(
+                "desc" to "Initial admin username (only on first run).",
+                "cat" to "General & Authentication"
+            ),
+            "CLIENT_SECRET" to mapOf(
+                "desc" to "Initial admin password (only on first run).",
+                "cat" to "General & Authentication"
+            ),
             "JWT_ISSUER" to mapOf("desc" to "The issuer claim for JWT tokens.", "cat" to "General & Authentication"),
-            "JWT_AUDIENCE" to mapOf("desc" to "The audience claim for JWT tokens.", "cat" to "General & Authentication"),
+            "JWT_AUDIENCE" to mapOf(
+                "desc" to "The audience claim for JWT tokens.",
+                "cat" to "General & Authentication"
+            ),
             "JWT_REALM" to mapOf("desc" to "The realm for JWT authentication.", "cat" to "General & Authentication"),
             "JWT_SECRET" to mapOf("desc" to "Secret key for signing tokens.", "cat" to "General & Authentication"),
-            "CREDENTIALS_ENCRYPTION_KEY" to mapOf("desc" to "Key that encrypts credentials stored through the admin settings, for example the Podcast Index and AcoustID keys. Generate one with `openssl rand -base64 32`. When unset, a random key is generated once into CREDENTIALS_KEY_FILE. Keep this value, or the key file, to read stored credentials after restoring a backup on another host.", "cat" to "General & Authentication"),
-            "CREDENTIALS_KEY_FILE" to mapOf("desc" to "Key file used when CREDENTIALS_ENCRYPTION_KEY is unset. Defaults to `~/.config/synara/credentials.key` and is created on first start.", "cat" to "General & Authentication"),
+            "CREDENTIALS_ENCRYPTION_KEY" to mapOf(
+                "desc" to "Key that encrypts credentials stored through the admin settings, for example the Podcast Index and AcoustID keys. Generate one with `openssl rand -base64 32`. When unset, a random key is generated once into CREDENTIALS_KEY_FILE. Keep this value, or the key file, to read stored credentials after restoring a backup on another host.",
+                "cat" to "General & Authentication"
+            ),
+            "CREDENTIALS_KEY_FILE" to mapOf(
+                "desc" to "Key file used when CREDENTIALS_ENCRYPTION_KEY is unset. Defaults to `~/.config/synara/credentials.key` and is created on first start.",
+                "cat" to "General & Authentication"
+            ),
             "DB_DRIVER" to mapOf("desc" to "JDBC driver class name.", "cat" to "Database Configuration"),
             "DB_URL" to mapOf("desc" to "JDBC connection URL.", "cat" to "Database Configuration"),
             "DB_USER" to mapOf("desc" to "Database username.", "cat" to "Database Configuration"),
             "DB_PASSWORD" to mapOf("desc" to "Database password.", "cat" to "Database Configuration"),
             "BACKUP_DIR" to mapOf("desc" to "Directory for database backups.", "cat" to "Database Configuration"),
-            "SETUP_FROM_BACKUP" to mapOf("desc" to "Path to a backup file to initialize the server from (only if the database is empty).", "cat" to "Database Configuration"),
-            "SETUP_FROM_MIRROR_URL" to mapOf("desc" to "URL of another Synara server to initialize from (only if the database is empty).", "cat" to "Database Configuration"),
-            "SETUP_FROM_MIRROR_USERNAME" to mapOf("desc" to "Username for the remote server mirroring setup.", "cat" to "Database Configuration"),
-            "SETUP_FROM_MIRROR_PASSWORD" to mapOf("desc" to "Password for the remote server mirroring setup.", "cat" to "Database Configuration"),
+            "SETUP_FROM_BACKUP" to mapOf(
+                "desc" to "Path to a backup file to initialize the server from (only if the database is empty).",
+                "cat" to "Database Configuration"
+            ),
+            "SETUP_FROM_MIRROR_URL" to mapOf(
+                "desc" to "URL of another Synara server to initialize from (only if the database is empty).",
+                "cat" to "Database Configuration"
+            ),
+            "SETUP_FROM_MIRROR_USERNAME" to mapOf(
+                "desc" to "Username for the remote server mirroring setup.",
+                "cat" to "Database Configuration"
+            ),
+            "SETUP_FROM_MIRROR_PASSWORD" to mapOf(
+                "desc" to "Password for the remote server mirroring setup.",
+                "cat" to "Database Configuration"
+            ),
             "REDIS_HOST" to mapOf("desc" to "Redis server hostname.", "cat" to "Redis Configuration"),
             "REDIS_PORT" to mapOf("desc" to "Redis server port.", "cat" to "Redis Configuration"),
-            "REDIS_USE_SEARCH" to mapOf("desc" to "Whether to use RediSearch for ranked searching.", "cat" to "Redis Configuration"),
+            "REDIS_USE_SEARCH" to mapOf(
+                "desc" to "Whether to use RediSearch for ranked searching.",
+                "cat" to "Redis Configuration"
+            ),
             "REDIS_INDEX_PREFIX" to mapOf("desc" to "Prefix for Redis Search indices.", "cat" to "Redis Configuration"),
-            "REDIS_CACHE_ANIMATED_IMAGES" to mapOf("desc" to "Whether to cache animated cover bytes in Redis.", "cat" to "Redis Configuration"),
+            "REDIS_CACHE_ANIMATED_IMAGES" to mapOf(
+                "desc" to "Whether to cache animated cover bytes in Redis.",
+                "cat" to "Redis Configuration"
+            ),
             "IMAGE_CACHE_URL" to mapOf("desc" to "Image Cache service URL.", "cat" to "External Services"),
             "IMAGE_CACHE_TOKEN" to mapOf("desc" to "Image Cache auth token.", "cat" to "External Services"),
             "TRANSCRIBER_URL" to mapOf("desc" to "Transcriber service URL.", "cat" to "External Services"),
-            "AUDIO_EMBED_URL" to mapOf("desc" to "URL of the audio embedding service (MusiCNN). Empty disables per-song audio embeddings.", "cat" to "Recommendations"),
-            "RECSYS_DATA_DIR" to mapOf("desc" to "Shared directory used to exchange training data with the recommendation (recsys) service. Empty disables recommendation training.", "cat" to "Recommendations"),
-            "LINKRESOLVER_API_KEY" to mapOf("desc" to "API key for the self-hosted LinkResolver service (linkresolver.synara.audio).", "cat" to "External Services"),
+            "AUDIO_EMBED_URL" to mapOf(
+                "desc" to "URL of the audio embedding service (MusiCNN). Empty disables per-song audio embeddings.",
+                "cat" to "Recommendations"
+            ),
+            "RECSYS_DATA_DIR" to mapOf(
+                "desc" to "Shared directory used to exchange training data with the recommendation (recsys) service. Empty disables recommendation training.",
+                "cat" to "Recommendations"
+            ),
+            "LINKRESOLVER_API_KEY" to mapOf(
+                "desc" to "API key for the self-hosted LinkResolver service (linkresolver.synara.audio).",
+                "cat" to "External Services"
+            ),
             "SPOTIFY_CLIENT_ID" to mapOf("desc" to "Spotify API Client ID.", "cat" to "External Services"),
             "SPOTIFY_CLIENT_SECRET" to mapOf("desc" to "Spotify API Client Secret.", "cat" to "External Services"),
             "TIDAL_CLIENT_ID" to mapOf("desc" to "Tidal API Client ID.", "cat" to "External Services"),
             "TIDAL_CLIENT_SECRET" to mapOf("desc" to "Tidal API Client Secret.", "cat" to "External Services"),
             "APPLE_MUSIC_TEAM_ID" to mapOf("desc" to "Apple Music Team ID.", "cat" to "External Services"),
             "APPLE_MUSIC_KEY_ID" to mapOf("desc" to "Apple Music Key ID.", "cat" to "External Services"),
-            "APPLE_MUSIC_P8_PATH" to mapOf("desc" to "Path to the Apple Music .p8 private key file.", "cat" to "External Services"),
-            "APPLE_MUSIC_STOREFRONT" to mapOf("desc" to "Apple Music storefront (country code) used for catalog requests.", "cat" to "External Services"),
+            "APPLE_MUSIC_P8_PATH" to mapOf(
+                "desc" to "Path to the Apple Music .p8 private key file.",
+                "cat" to "External Services"
+            ),
+            "APPLE_MUSIC_STOREFRONT" to mapOf(
+                "desc" to "Apple Music storefront (country code) used for catalog requests.",
+                "cat" to "External Services"
+            ),
             "AUDIO_TRACKS_PATH" to mapOf("desc" to "Base path for audio tracks.", "cat" to "Storage & Paths"),
             "AUDIO_ALBUMS_PATH" to mapOf("desc" to "Base path for albums.", "cat" to "Storage & Paths"),
             "AUDIO_PLAYLISTS_PATH" to mapOf("desc" to "Base path for playlists.", "cat" to "Storage & Paths"),
             "AUDIO_TRANSCODE_PATH" to mapOf("desc" to "Path for transcoded files.", "cat" to "Storage & Paths"),
-            "AUDIO_AUTO_TRANSCODE_QUALITIES" to mapOf("desc" to "Bitrates for auto-transcoding (Opus).", "cat" to "Storage & Paths"),
-            "AUDIO_AUTO_TRANSCODE_QUALITIES_AAC" to mapOf("desc" to "Bitrates for auto-transcoding (AAC).", "cat" to "Storage & Paths"),
+            "AUDIO_AUTO_TRANSCODE_QUALITIES" to mapOf(
+                "desc" to "Bitrates for auto-transcoding (Opus).",
+                "cat" to "Storage & Paths"
+            ),
+            "AUDIO_AUTO_TRANSCODE_QUALITIES_AAC" to mapOf(
+                "desc" to "Bitrates for auto-transcoding (AAC).",
+                "cat" to "Storage & Paths"
+            ),
             "AUDIO_CUSTOM_PATH" to mapOf("desc" to "Path for custom uploaded audio.", "cat" to "Storage & Paths"),
-            "AUDIO_LOSSLESS_FORMAT" to mapOf("desc" to "Lossless container for audio the server produces (custom uploads, downloader imports): FLAC, WAV or AIFF.", "cat" to "Storage & Paths"),
-            "PODCASTS_LIBRARY_PATH" to mapOf("desc" to "Root folder of local podcast shows: one sub-folder per show, audio files inside become episodes.", "cat" to "Storage & Paths"),
-            "PODCASTS_IMPORTS_PATH" to mapOf("desc" to "Folder where episodes of IMPORT-mode feed subscriptions are stored (<showId>/<episodeId>.<ext>).", "cat" to "Storage & Paths"),
+            "AUDIO_LOSSLESS_FORMAT" to mapOf(
+                "desc" to "Lossless container for audio the server produces (custom uploads, downloader imports): FLAC, WAV or AIFF.",
+                "cat" to "Storage & Paths"
+            ),
+            "PODCASTS_LIBRARY_PATH" to mapOf(
+                "desc" to "Root folder of local podcast shows: one sub-folder per show, audio files inside become episodes.",
+                "cat" to "Storage & Paths"
+            ),
+            "PODCASTS_IMPORTS_PATH" to mapOf(
+                "desc" to "Folder where episodes of IMPORT-mode feed subscriptions are stored (<showId>/<episodeId>.<ext>).",
+                "cat" to "Storage & Paths"
+            ),
             "DATA_IMAGES_PATH" to mapOf("desc" to "Path for cached images/covers.", "cat" to "Storage & Paths"),
-            "DATA_ANIMATED_IMAGES_PATH" to mapOf("desc" to "Path for cached animated covers.", "cat" to "Storage & Paths"),
-            "DATA_COVER_ASSETS_PATH" to mapOf("desc" to "Path containing cover asset packs (one directory with pack.json per pack).", "cat" to "Storage & Paths"),
-            "COVER_NSFW_PACKS_ENABLED" to mapOf("desc" to "Whether NSFW cover asset packs may be used when a request opts in.", "cat" to "Covers"),
-            "COVER_AUTO_GENERATE" to mapOf("desc" to "Whether covers are generated automatically for playlists and collections without one.", "cat" to "Covers"),
-            "COVER_AUTO_DEBOUNCE_SECONDS" to mapOf("desc" to "Seconds to wait after the last content change before regenerating a cover.", "cat" to "Covers"),
-            "AUDIO_TRACKS_SECONDARY_PATH" to mapOf("desc" to "Optional secondary audio path.", "cat" to "Storage & Paths"),
+            "DATA_ANIMATED_IMAGES_PATH" to mapOf(
+                "desc" to "Path for cached animated covers.",
+                "cat" to "Storage & Paths"
+            ),
+            "DATA_COVER_ASSETS_PATH" to mapOf(
+                "desc" to "Path containing cover asset packs (one directory with pack.json per pack).",
+                "cat" to "Storage & Paths"
+            ),
+            "COVER_NSFW_PACKS_ENABLED" to mapOf(
+                "desc" to "Whether NSFW cover asset packs may be used when a request opts in.",
+                "cat" to "Covers"
+            ),
+            "COVER_AUTO_GENERATE" to mapOf(
+                "desc" to "Whether covers are generated automatically for playlists and collections without one.",
+                "cat" to "Covers"
+            ),
+            "COVER_AUTO_DEBOUNCE_SECONDS" to mapOf(
+                "desc" to "Seconds to wait after the last content change before regenerating a cover.",
+                "cat" to "Covers"
+            ),
+            "AUDIO_TRACKS_SECONDARY_PATH" to mapOf(
+                "desc" to "Optional secondary audio path.",
+                "cat" to "Storage & Paths"
+            ),
             "YTDLP_CONFIG_PATH" to mapOf("desc" to "Path to yt-dlp.conf for yt-dlp.", "cat" to "Storage & Paths"),
-            "TIDDL_AUTH" to mapOf("desc" to "Optional Tidal client for tiddl in the form client_id;client_secret, the same value tiddl reads. When set, the credential server page sends it for tiddl sessions whenever the client id and secret fields are blank.", "cat" to "External Services"),
-            "GAMDL_COOKIES_PATH" to mapOf("desc" to "Path to the Netscape cookies.txt for Apple Music (gamdl importer).", "cat" to "External Services"),
-            "GAMDL_WVD_PATH" to mapOf("desc" to "Optional path to a Widevine .wvd device for higher-quality gamdl codecs.", "cat" to "External Services"),
-            "GAMDL_CODEC_SONG" to mapOf("desc" to "Optional gamdl song codec override (empty = gamdl default, e.g. aac-web). Advanced/version-sensitive.", "cat" to "External Services"),
-            "PODCAST_INDEX_API_KEY" to mapOf("desc" to "Podcast Index (podcastindex.org) API key used to search podcast directories. Can also be stored through the admin settings card, which takes precedence.", "cat" to "External Services"),
-            "PODCAST_INDEX_API_SECRET" to mapOf("desc" to "Podcast Index API secret belonging to PODCAST_INDEX_API_KEY.", "cat" to "External Services"),
-            "ACOUSTID_API_KEY" to mapOf("desc" to "An AcoustID client API key used to identify songs without a MusicBrainz id by audio fingerprint. The Docker images set a default Synara key. Without a key, fingerprint matching is skipped. Overridable in the admin settings.", "cat" to "External Services"),
+            "TIDDL_AUTH" to mapOf(
+                "desc" to "Optional Tidal client for tiddl in the form client_id;client_secret, the same value tiddl reads. When set, the credential server page sends it for tiddl sessions whenever the client id and secret fields are blank.",
+                "cat" to "External Services"
+            ),
+            "GAMDL_COOKIES_PATH" to mapOf(
+                "desc" to "Path to the Netscape cookies.txt for Apple Music (gamdl importer).",
+                "cat" to "External Services"
+            ),
+            "GAMDL_WVD_PATH" to mapOf(
+                "desc" to "Optional path to a Widevine .wvd device for higher-quality gamdl codecs.",
+                "cat" to "External Services"
+            ),
+            "GAMDL_CODEC_SONG" to mapOf(
+                "desc" to "Optional gamdl song codec override (empty = gamdl default, e.g. aac-web). Advanced/version-sensitive.",
+                "cat" to "External Services"
+            ),
+            "PODCAST_INDEX_API_KEY" to mapOf(
+                "desc" to "Podcast Index (podcastindex.org) API key used to search podcast directories. Can also be stored through the admin settings card, which takes precedence.",
+                "cat" to "External Services"
+            ),
+            "PODCAST_INDEX_API_SECRET" to mapOf(
+                "desc" to "Podcast Index API secret belonging to PODCAST_INDEX_API_KEY.",
+                "cat" to "External Services"
+            ),
+            "ACOUSTID_API_KEY" to mapOf(
+                "desc" to "An AcoustID client API key used to identify songs without a MusicBrainz id by audio fingerprint. The Docker images set a default Synara key. Without a key, fingerprint matching is skipped. Overridable in the admin settings.",
+                "cat" to "External Services"
+            ),
             "PROXY_HOSTNAME" to mapOf("desc" to "Public hostname of the proxy.", "cat" to "Proxy Configuration"),
-            "PROXY_CONTROL_PORT" to mapOf("desc" to "Port for the proxy control interface.", "cat" to "Proxy Configuration"),
+            "PROXY_CONTROL_PORT" to mapOf(
+                "desc" to "Port for the proxy control interface.",
+                "cat" to "Proxy Configuration"
+            ),
             "PROXY_SSL" to mapOf("desc" to "Whether to use SSL (true/false).", "cat" to "Proxy Configuration"),
             "PROXY_NAME" to mapOf("desc" to "Display name for this proxy instance.", "cat" to "Proxy Configuration"),
             "PROXY_ID" to mapOf("desc" to "Unique identifier for this proxy.", "cat" to "Proxy Configuration"),
             "PROXY_KEY" to mapOf("desc" to "Authentication key for the proxy.", "cat" to "Proxy Configuration"),
-            "CREDENTIAL_SERVER_PORT" to mapOf("desc" to "HTTP port of the credential server.", "cat" to "Credential Server"),
-            "CREDENTIAL_SERVER_ADMIN_KEY" to mapOf("desc" to "Admin key of the credential server. The credential server requires it as X-Admin-Key for its admin routes and answers 503 while it is unset. A Synara server uses the same variable to manage a connected credential server.", "cat" to "Credential Server"),
-            "CREDENTIAL_SERVER_MASTER_KEY" to mapOf("desc" to "Master key that encrypts the stored credentials and signing keys of the credential server. When empty, a key file is generated instead.", "cat" to "Credential Server"),
-            "CREDENTIAL_SERVER_KEY_FILE" to mapOf("desc" to "Path of the generated master key file, used when no master key is set.", "cat" to "Credential Server"),
-            "CREDENTIAL_SERVER_ISSUER" to mapOf("desc" to "Issuer claim of the tokens signed by the credential server.", "cat" to "Credential Server"),
-            "CREDENTIAL_SERVER_TOKEN_TTL_SECONDS" to mapOf("desc" to "Lifetime of the access tokens issued by the credential server in seconds.", "cat" to "Credential Server"),
-            "CREDENTIAL_SERVER_DB_DRIVER" to mapOf("desc" to "JDBC driver of the credential server database. Use org.postgresql.Driver for PostgreSQL.", "cat" to "Credential Server"),
-            "CREDENTIAL_SERVER_DB_URL" to mapOf("desc" to "JDBC URL of the credential server database.", "cat" to "Credential Server"),
-            "CREDENTIAL_SERVER_DB_USER" to mapOf("desc" to "Database user of the credential server (PostgreSQL only).", "cat" to "Credential Server"),
-            "CREDENTIAL_SERVER_DB_PASSWORD" to mapOf("desc" to "Database password of the credential server (PostgreSQL only).", "cat" to "Credential Server"),
-            "CREDENTIAL_SERVER_URL" to mapOf("desc" to "Base URL of a credential server this Synara server fetches third-party credentials from. Can also be set on the credential server settings page.", "cat" to "Credential Server"),
-            "CREDENTIAL_SERVER_CLIENT_ID" to mapOf("desc" to "Client id this Synara server uses to authenticate at the credential server.", "cat" to "Credential Server"),
-            "CREDENTIAL_SERVER_CLIENT_SECRET" to mapOf("desc" to "Client secret belonging to CREDENTIAL_SERVER_CLIENT_ID.", "cat" to "Credential Server"),
-            "YOUTUBE_API_KEY" to mapOf("desc" to "Youtube API key for YouTube Data API v3 (Downloader).", "cat" to "Other"),
-            "WORKER_THREAD_MULTIPLIER" to mapOf("desc" to "Multiplier for background worker threads. Scales the number of parallel tasks relative to CPU cores.", "cat" to "Other"),
-            "METRICS_ENABLED" to mapOf("desc" to "Whether to collect RPC call usage metrics (invocation counts per call, per user, over time).", "cat" to "Metrics"),
-            "METRICS_FLUSH_INTERVAL_SECONDS" to mapOf("desc" to "How often (in seconds) buffered in-memory call counts are flushed to the database.", "cat" to "Metrics"),
-            "METRICS_EVENT_LOG_RETENTION_HOURS" to mapOf("desc" to "How long (in hours) individual call events are retained in the capped event log before pruning. Lifetime totals are never pruned.", "cat" to "Metrics")
+            "CREDENTIAL_SERVER_PORT" to mapOf(
+                "desc" to "HTTP port of the credential server.",
+                "cat" to "Credential Server"
+            ),
+            "CREDENTIAL_SERVER_ADMIN_KEY" to mapOf(
+                "desc" to "Admin key of the credential server. The credential server requires it as X-Admin-Key for its admin routes and answers 503 while it is unset. A Synara server uses the same variable to manage a connected credential server.",
+                "cat" to "Credential Server"
+            ),
+            "CREDENTIAL_SERVER_MASTER_KEY" to mapOf(
+                "desc" to "Master key that encrypts the stored credentials and signing keys of the credential server. When empty, a key file is generated instead.",
+                "cat" to "Credential Server"
+            ),
+            "CREDENTIAL_SERVER_KEY_FILE" to mapOf(
+                "desc" to "Path of the generated master key file, used when no master key is set.",
+                "cat" to "Credential Server"
+            ),
+            "CREDENTIAL_SERVER_ISSUER" to mapOf(
+                "desc" to "Issuer claim of the tokens signed by the credential server.",
+                "cat" to "Credential Server"
+            ),
+            "CREDENTIAL_SERVER_TOKEN_TTL_SECONDS" to mapOf(
+                "desc" to "Lifetime of the access tokens issued by the credential server in seconds.",
+                "cat" to "Credential Server"
+            ),
+            "CREDENTIAL_SERVER_DB_DRIVER" to mapOf(
+                "desc" to "JDBC driver of the credential server database. Use org.postgresql.Driver for PostgreSQL.",
+                "cat" to "Credential Server"
+            ),
+            "CREDENTIAL_SERVER_DB_URL" to mapOf(
+                "desc" to "JDBC URL of the credential server database.",
+                "cat" to "Credential Server"
+            ),
+            "CREDENTIAL_SERVER_DB_USER" to mapOf(
+                "desc" to "Database user of the credential server (PostgreSQL only).",
+                "cat" to "Credential Server"
+            ),
+            "CREDENTIAL_SERVER_DB_PASSWORD" to mapOf(
+                "desc" to "Database password of the credential server (PostgreSQL only).",
+                "cat" to "Credential Server"
+            ),
+            "CREDENTIAL_SERVER_URL" to mapOf(
+                "desc" to "Base URL of a credential server this Synara server fetches third-party credentials from. Can also be set on the credential server settings page.",
+                "cat" to "Credential Server"
+            ),
+            "CREDENTIAL_SERVER_CLIENT_ID" to mapOf(
+                "desc" to "Client id this Synara server uses to authenticate at the credential server.",
+                "cat" to "Credential Server"
+            ),
+            "CREDENTIAL_SERVER_CLIENT_SECRET" to mapOf(
+                "desc" to "Client secret belonging to CREDENTIAL_SERVER_CLIENT_ID.",
+                "cat" to "Credential Server"
+            ),
+            "YOUTUBE_API_KEY" to mapOf(
+                "desc" to "Youtube API key for YouTube Data API v3 (Downloader).",
+                "cat" to "Other"
+            ),
+            "WORKER_THREAD_MULTIPLIER" to mapOf(
+                "desc" to "Multiplier for background worker threads. Scales the number of parallel tasks relative to CPU cores.",
+                "cat" to "Other"
+            ),
+            "METRICS_ENABLED" to mapOf(
+                "desc" to "Whether to collect RPC call usage metrics (invocation counts per call, per user, over time).",
+                "cat" to "Metrics"
+            ),
+            "METRICS_FLUSH_INTERVAL_SECONDS" to mapOf(
+                "desc" to "How often (in seconds) buffered in-memory call counts are flushed to the database.",
+                "cat" to "Metrics"
+            ),
+            "METRICS_EVENT_LOG_RETENTION_HOURS" to mapOf(
+                "desc" to "How long (in hours) individual call events are retained in the capped event log before pruning. Lifetime totals are never pruned.",
+                "cat" to "Metrics"
+            )
         )
 
         val varsFound = mutableMapOf<String, String?>()

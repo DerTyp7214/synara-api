@@ -85,7 +85,7 @@ fun Application.module() {
 
             val requestedId = call.request.queryParameters["id"]
             val serverName = call.request.queryParameters["name"]
-            
+
             var assignedId = requestedId ?: UUID.randomUUID().toString().take(8)
 
             if (tunnels.containsKey(assignedId)) {
@@ -111,19 +111,23 @@ fun Application.module() {
                         is ProxyMessage.ClientFrame -> {
                             val client = tunnel.clients[msg.clientId]
                             if (client != null) {
-                                val outFrame = if (msg.isBinary) Frame.Binary(true, msg.data) else Frame.Text(String(msg.data))
+                                val outFrame =
+                                    if (msg.isBinary) Frame.Binary(true, msg.data) else Frame.Text(String(msg.data))
                                 client.send(outFrame)
                             } else {
                                 logger.debug("[{}] Dropping frame for unknown client {}", assignedId, msg.clientId)
                             }
                         }
+
                         is ProxyMessage.ClientDisconnected -> {
                             logger.info("[{}] Client {} disconnected by server", assignedId, msg.clientId)
                             tunnel.clients.remove(msg.clientId)?.close()
                         }
+
                         is ProxyMessage.Ping -> {
                             tunnel.sendChannel.send(ProxyMessage.Pong)
                         }
+
                         else -> {}
                     }
                 }
@@ -143,9 +147,9 @@ fun Application.module() {
         webSocket("/{id}/{...}") {
             val id = call.parameters["id"] ?: return@webSocket
             val uri = call.request.uri.removePrefix("/$id")
-            
+
             if (id == "proxy" || id == "instances") return@webSocket
-            
+
             if (!uri.startsWith("/rpc")) {
                 logger.warn("Rejecting non-RPC path request for ID {}: {}", id, uri)
                 close(CloseReason(CloseReason.Codes.CANNOT_ACCEPT, "Only RPC paths are proxied"))
@@ -161,7 +165,7 @@ fun Application.module() {
             val clientId = UUID.randomUUID()
             logger.info("[{}] New client connection {} for URI {}", id, clientId, uri)
             tunnel.clients[clientId] = this
-            
+
             val headers = call.request.headers.entries().associate { it.key to it.value.joinToString(",") }
             tunnel.sendChannel.send(ProxyMessage.NewClient(clientId, uri, headers))
 

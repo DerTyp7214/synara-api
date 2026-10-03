@@ -68,7 +68,8 @@ class ImporterState(
     val jobService: JobService,
     private val credentialProvider: CredentialProvider,
 ) : Service() {
-    private val authChangeFlow = MutableSharedFlow<Unit>(extraBufferCapacity = 8, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+    private val authChangeFlow =
+        MutableSharedFlow<Unit>(extraBufferCapacity = 8, onBufferOverflow = BufferOverflow.DROP_OLDEST)
     val authChanges: Flow<Unit> = merge(authChangeFlow.asSharedFlow(), credentialProvider.changes())
 
     fun managedRemotely(importer: IImporter): Boolean =
@@ -82,7 +83,8 @@ class ImporterState(
         ?: enabledImporters().firstOrNull()
         ?: installedImporters().firstOrNull()
 
-    fun canLogin(importer: IImporter): Boolean = importer.capabilities.isEmpty() || ImporterCapability.LOGIN in importer.capabilities
+    fun canLogin(importer: IImporter): Boolean =
+        importer.capabilities.isEmpty() || ImporterCapability.LOGIN in importer.capabilities
 
     fun tidalAvailable(): Boolean = enabledImporters().any { it.canHandle("https://tidal.com/browse/track/1") }
 
@@ -147,14 +149,24 @@ class ImporterState(
             job.cancel()
             return UiInvokeResult(UiInvokeStatus.ERROR, scope.t("importer.error.loginUrl"))
         }
-        return UiInvokeResult(UiInvokeStatus.OK, scope.t("importer.backends.loginHint"), refresh = true, next = UiAction.OpenUrl(loginUrl))
+        return UiInvokeResult(
+            UiInvokeStatus.OK,
+            scope.t("importer.backends.loginHint"),
+            refresh = true,
+            next = UiAction.OpenUrl(loginUrl)
+        )
     }
 
     suspend fun syncFavourites(scope: ServerUiRenderScope): UiInvokeResult {
         val call = scope.call ?: return UiInvokeResult(UiInvokeStatus.ERROR, NO_CALL)
-        val sync = SyncService.getInstance(scope.account, call.application.environment, ISyncService.SyncServiceType.tidal)
+        val sync =
+            SyncService.getInstance(scope.account, call.application.environment, ISyncService.SyncServiceType.tidal)
         if (sync.getAccessToken() == null) {
-            return UiInvokeResult(UiInvokeStatus.OK, scope.t("importer.favorites.authorize"), next = UiAction.OpenUrl(sync.buildAuthUrl(call)))
+            return UiInvokeResult(
+                UiInvokeStatus.OK,
+                scope.t("importer.favorites.authorize"),
+                next = UiAction.OpenUrl(sync.buildAuthUrl(call))
+            )
         }
         return try {
             importService.syncFavourites(call, ignoreService = true).invokeOnCompletion { authChangeFlow.tryEmit(Unit) }
@@ -210,8 +222,16 @@ class ImporterHomeCardContribution(private val state: ImporterState) : UiContrib
         val body = mutableListOf<UiComponent>(
             UiComponent.Row(
                 children = listOf(
-                    UiComponent.Stat(scope.t("importer.card.pending"), queue.size.toString(), icon = UiIcon(UiIconName.QUEUE)),
-                    UiComponent.Stat(scope.t("importer.queue.importing"), if (current != null) "1" else "0", icon = UiIcon(UiIconName.IMPORT)),
+                    UiComponent.Stat(
+                        scope.t("importer.card.pending"),
+                        queue.size.toString(),
+                        icon = UiIcon(UiIconName.QUEUE)
+                    ),
+                    UiComponent.Stat(
+                        scope.t("importer.queue.importing"),
+                        if (current != null) "1" else "0",
+                        icon = UiIcon(UiIconName.IMPORT)
+                    ),
                 ),
             ),
         )
@@ -233,8 +253,18 @@ class ImporterHomeCardContribution(private val state: ImporterState) : UiContrib
             icon = icon,
             children = body,
             actions = listOf(
-                UiComponent.Button(scope.t("importer.card.open"), UiAction.OpenPage(ImporterPageContribution.ID), UiButtonStyle.TEXT, icon = UiIcon(UiIconName.IMPORT)),
-                UiComponent.Button(scope.t("importer.queue.title"), UiAction.OpenPage(ImporterQueuePageContribution.ID, modal = true), UiButtonStyle.TEXT, icon = UiIcon(UiIconName.QUEUE)),
+                UiComponent.Button(
+                    scope.t("importer.card.open"),
+                    UiAction.OpenPage(ImporterPageContribution.ID),
+                    UiButtonStyle.TEXT,
+                    icon = UiIcon(UiIconName.IMPORT)
+                ),
+                UiComponent.Button(
+                    scope.t("importer.queue.title"),
+                    UiAction.OpenPage(ImporterQueuePageContribution.ID, modal = true),
+                    UiButtonStyle.TEXT,
+                    icon = UiIcon(UiIconName.QUEUE)
+                ),
             ),
         )
     }
@@ -275,7 +305,13 @@ class ImporterPageContribution(
                 subtitle = scope.t("importer.login.message"),
                 icon = UiIcon(UiIconName.LOGIN),
                 tone = UiTone.WARNING,
-                children = if (managed) listOf(UiComponent.Text(scope.t("importer.login.managed"), UiTextStyle.CAPTION, UiTone.MUTED)) else emptyList(),
+                children = if (managed) listOf(
+                    UiComponent.Text(
+                        scope.t("importer.login.managed"),
+                        UiTextStyle.CAPTION,
+                        UiTone.MUTED
+                    )
+                ) else emptyList(),
                 actions = if (managed) emptyList() else listOf(
                     UiComponent.Button(
                         label = scope.t("importer.login.action"),
@@ -305,11 +341,21 @@ class ImporterPageContribution(
                             required = true,
                             kind = UiTextKind.MULTILINE_URLS,
                             toolbar = listOf(
-                                UiComponent.Button(scope.t("importer.done"), UiAction.DismissKeyboard, UiButtonStyle.TEXT, icon = UiIcon(UiIconName.CHECK)),
+                                UiComponent.Button(
+                                    scope.t("importer.done"),
+                                    UiAction.DismissKeyboard,
+                                    UiButtonStyle.TEXT,
+                                    icon = UiIcon(UiIconName.CHECK)
+                                ),
                             ),
                         ),
                     ),
-                    actions = listOf(UiComponent.Native(UiPortals.BARCODE_SCANNER, params = mapOf("target" to PARAM_INPUT))),
+                    actions = listOf(
+                        UiComponent.Native(
+                            UiPortals.BARCODE_SCANNER,
+                            params = mapOf("target" to PARAM_INPUT)
+                        )
+                    ),
                 ),
             ),
         )
@@ -328,7 +374,12 @@ class ImporterPageContribution(
     override suspend fun toolbar(scope: UiRenderScope): List<UiComponent> {
         val server = scope as? ServerUiRenderScope
         val items = mutableListOf<UiComponent>(
-            UiComponent.Button(scope.t("importer.queue.title"), UiAction.OpenPage(ImporterQueuePageContribution.ID, modal = true), UiButtonStyle.TEXT, icon = UiIcon(UiIconName.QUEUE)),
+            UiComponent.Button(
+                scope.t("importer.queue.title"),
+                UiAction.OpenPage(ImporterQueuePageContribution.ID, modal = true),
+                UiButtonStyle.TEXT,
+                icon = UiIcon(UiIconName.QUEUE)
+            ),
         )
         if (state.tidalAvailable()) {
             val available = server?.call?.let { importService.syncFavouritesAvailable(it) } ?: true
@@ -342,9 +393,14 @@ class ImporterPageContribution(
             }
         }
         val manageable = state.installedImporters().any(state::canLogin) ||
-            (server != null && uiService.list(server.account, server.client, slot = UiSlots.IMPORTER).isNotEmpty())
+                (server != null && uiService.list(server.account, server.client, slot = UiSlots.IMPORTER).isNotEmpty())
         if (manageable) {
-            items += UiComponent.Button(scope.t("importer.settings.title"), UiAction.OpenPage(ImporterSettingsPageContribution.ID, modal = true), UiButtonStyle.TEXT, icon = UiIcon(UiIconName.SETTINGS))
+            items += UiComponent.Button(
+                scope.t("importer.settings.title"),
+                UiAction.OpenPage(ImporterSettingsPageContribution.ID, modal = true),
+                UiButtonStyle.TEXT,
+                icon = UiIcon(UiIconName.SETTINGS)
+            )
         }
         return items
     }
@@ -370,7 +426,10 @@ class ImporterPageContribution(
     private suspend fun import(scope: ServerUiRenderScope, values: Map<String, UiValue>): UiInvokeResult {
         val lines = values[PARAM_INPUT]?.text.orEmpty().lines().map { it.trim() }.filter { it.isNotEmpty() }
         if (lines.isEmpty()) {
-            return UiInvokeResult(UiInvokeStatus.VALIDATION_ERROR, fieldErrors = mapOf(PARAM_INPUT to scope.t("importer.error.empty")))
+            return UiInvokeResult(
+                UiInvokeStatus.VALIDATION_ERROR,
+                fieldErrors = mapOf(PARAM_INPUT to scope.t("importer.error.empty"))
+            )
         }
         val items = lines.map(IntakeItem::parse)
         val result = state.intakeService.submit(items, null, scope.account, scope.client.locale)
@@ -384,12 +443,19 @@ class ImporterPageContribution(
 
             UiIntakeStatus.NEEDS_CHOICE -> UiInvokeResult(
                 UiInvokeStatus.OK,
-                next = UiAction.OpenMenu(result.handlers.map { UiMenuItem(it.title, it.action, it.icon, id = it.id) }, title = scope.t("importer.choose")),
+                next = UiAction.OpenMenu(
+                    result.handlers.map { UiMenuItem(it.title, it.action, it.icon, id = it.id) },
+                    title = scope.t("importer.choose")
+                ),
             )
 
             UiIntakeStatus.UNHANDLED -> UiInvokeResult(
                 UiInvokeStatus.VALIDATION_ERROR,
-                fieldErrors = mapOf(PARAM_INPUT to scope.t("importer.error.unhandled", "items" to result.rejected.joinToString(", ") { it.describe() })),
+                fieldErrors = mapOf(
+                    PARAM_INPUT to scope.t(
+                        "importer.error.unhandled",
+                        "items" to result.rejected.joinToString(", ") { it.describe() })
+                ),
             )
 
             UiIntakeStatus.UNAUTHORIZED -> UiInvokeResult(UiInvokeStatus.UNAUTHORIZED, result.message)
@@ -441,19 +507,37 @@ class ImporterSettingsPageContribution(
 
         children += UiComponent.Section(
             title = scope.t("importer.backends.title"),
-            children = if (importers.isEmpty()) listOf(UiComponent.Text(scope.t("importer.backends.none"), tone = UiTone.WARNING))
+            children = if (importers.isEmpty()) listOf(
+                UiComponent.Text(
+                    scope.t("importer.backends.none"),
+                    tone = UiTone.WARNING
+                )
+            )
             else importers.map { importer ->
                 val authorized = importer.tokenFileExists()
-                val statusText = if (authorized) scope.t("importer.backends.authorized") else scope.t("importer.backends.loginRequired")
+                val statusText =
+                    if (authorized) scope.t("importer.backends.authorized") else scope.t("importer.backends.loginRequired")
                 UiComponent.Row(
                     weights = listOf(1.0, 0.0, 0.0),
                     children = listOfNotNull(
-                        UiComponent.ListItem(title = importer.name, subtitle = statusText, icon = UiIcon(UiIconName.PLUG)),
+                        UiComponent.ListItem(
+                            title = importer.name,
+                            subtitle = statusText,
+                            icon = UiIcon(UiIconName.PLUG)
+                        ),
                         UiComponent.Badge(statusText, if (authorized) UiTone.SUCCESS else UiTone.WARNING),
-                        if (state.managedRemotely(importer)) UiComponent.Text(scope.t("importer.login.managed"), UiTextStyle.CAPTION, UiTone.MUTED)
+                        if (state.managedRemotely(importer)) UiComponent.Text(
+                            scope.t("importer.login.managed"),
+                            UiTextStyle.CAPTION,
+                            UiTone.MUTED
+                        )
                         else if (!authorized && state.canLogin(importer)) UiComponent.Button(
                             label = scope.t("importer.login.action"),
-                            action = UiAction.Invoke(id, "login", params = mapOf(ImporterPageContribution.PARAM_IMPORTER to UiValue.of(importer.id))),
+                            action = UiAction.Invoke(
+                                id,
+                                "login",
+                                params = mapOf(ImporterPageContribution.PARAM_IMPORTER to UiValue.of(importer.id))
+                            ),
                             style = UiButtonStyle.PRIMARY,
                             icon = UiIcon(UiIconName.LOGIN),
                         ) else null,
@@ -465,7 +549,12 @@ class ImporterSettingsPageContribution(
         if (server != null) {
             val slot = uiService.renderSlot(server.account, server.client, UiSlots.IMPORTER, scope.context, server.call)
             children += slot.items.map { item ->
-                UiComponent.Section(title = item.title ?: item.contributionId, collapsible = true, collapsed = true, children = listOf(item.root))
+                UiComponent.Section(
+                    title = item.title ?: item.contributionId,
+                    collapsible = true,
+                    collapsed = true,
+                    children = listOf(item.root)
+                )
             }
         }
 
@@ -518,7 +607,8 @@ class ImporterQueuePageContribution(
         }
 
         val users = mutableMapOf<java.util.UUID, User?>()
-        suspend fun userOf(entry: ImportQueueEntry): User? = entry.byUser?.let { id -> users.getOrPut(id) { userService.findUserById(id) } }
+        suspend fun userOf(entry: ImportQueueEntry): User? =
+            entry.byUser?.let { id -> users.getOrPut(id) { userService.findUserById(id) } }
 
         val children = mutableListOf<UiComponent>()
         val total = urlCount(current) + queue.sumOf { urlCount(it) }
@@ -561,7 +651,12 @@ class ImporterQueuePageContribution(
         val body: UiComponent
         when (entry) {
             is UrlImportQueueEntry -> {
-                header = UiComponent.Row(children = listOf(UiComponent.Icon(UiIcon(UiIconName.LINK), UiTone.PRIMARY), UiComponent.Text(scope.t("importer.queue.type.urls"), UiTextStyle.SUBTITLE)))
+                header = UiComponent.Row(
+                    children = listOf(
+                        UiComponent.Icon(UiIcon(UiIconName.LINK), UiTone.PRIMARY),
+                        UiComponent.Text(scope.t("importer.queue.type.urls"), UiTextStyle.SUBTITLE)
+                    )
+                )
                 body = UiComponent.ListItem(
                     title = entry.urls.joinToString(", "),
                     action = UiAction.OpenMenu(
@@ -572,17 +667,36 @@ class ImporterQueuePageContribution(
             }
 
             is FavouriteImportQueueEntry -> {
-                header = UiComponent.Row(children = listOf(UiComponent.Icon(UiIcon(UiIconName.HEART), UiTone.PRIMARY), UiComponent.Text(scope.t("importer.queue.type.favorites"), UiTextStyle.SUBTITLE)))
+                header = UiComponent.Row(
+                    children = listOf(
+                        UiComponent.Icon(UiIcon(UiIconName.HEART), UiTone.PRIMARY),
+                        UiComponent.Text(scope.t("importer.queue.type.favorites"), UiTextStyle.SUBTITLE)
+                    )
+                )
                 body = UiComponent.Text(entry.favoriteType.name, UiTextStyle.CAPTION, UiTone.MUTED)
             }
         }
         val badges = listOfNotNull(
             entry.type?.let { UiComponent.Badge(it.value.uppercase(), UiTone.PRIMARY) },
-            user?.let { UiComponent.Badge(it.displayName ?: it.username, UiTone.MUTED, icon = UiIcon(UiIconName.USER)) },
+            user?.let {
+                UiComponent.Badge(
+                    it.displayName ?: it.username,
+                    UiTone.MUTED,
+                    icon = UiIcon(UiIconName.USER)
+                )
+            },
         )
-        val progress = if (job.info.status == JobStatus.RUNNING) UiComponent.Progress(job.info.progress, job.info.message) else null
+        val progress = if (job.info.status == JobStatus.RUNNING) UiComponent.Progress(
+            job.info.progress,
+            job.info.message
+        ) else null
         return UiComponent.Card(
-            children = listOfNotNull(header, body, progress, if (badges.isNotEmpty()) UiComponent.Row(children = badges) else null),
+            children = listOfNotNull(
+                header,
+                body,
+                progress,
+                if (badges.isNotEmpty()) UiComponent.Row(children = badges) else null
+            ),
             actions = listOf(
                 UiComponent.Button(
                     scope.t("importer.queue.cancel"),

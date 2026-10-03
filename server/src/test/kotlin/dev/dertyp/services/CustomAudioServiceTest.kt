@@ -56,7 +56,7 @@ class CustomAudioServiceTest {
 
         val deferred = CompletableDeferred<Unit>()
         deferred.complete(Unit)
-        
+
         coEvery { indexer.queue(any(), any(), any(), any(), any()) } returns deferred
 
         val service = CustomAudioService(indexer, storageService)
@@ -73,37 +73,38 @@ class CustomAudioServiceTest {
 
     @ParameterizedTest
     @EnumSource(LosslessFormat::class)
-    fun `uploadCustomAudio should convert non-lossless input to the configured format`(format: LosslessFormat) = runBlocking {
-        val indexer = mockk<Indexer>(relaxed = true)
-        val storageService = mockk<StorageService>()
-        val customPath = File(tempDir.toFile(), "custom").apply { mkdirs() }
-        every { storageService.customAudioPath } returns customPath.absolutePath
-        justRun { storageService.invalidate(any()) }
+    fun `uploadCustomAudio should convert non-lossless input to the configured format`(format: LosslessFormat) =
+        runBlocking {
+            val indexer = mockk<Indexer>(relaxed = true)
+            val storageService = mockk<StorageService>()
+            val customPath = File(tempDir.toFile(), "custom").apply { mkdirs() }
+            every { storageService.customAudioPath } returns customPath.absolutePath
+            justRun { storageService.invalidate(any()) }
 
-        mockkConstructor(FFmpegFrameGrabber::class)
-        every { anyConstructed<FFmpegFrameGrabber>().start() } just Runs
-        every { anyConstructed<FFmpegFrameGrabber>().format } returns "mp3"
-        every { anyConstructed<FFmpegFrameGrabber>().stop() } just Runs
-        every { anyConstructed<FFmpegFrameGrabber>().release() } just Runs
+            mockkConstructor(FFmpegFrameGrabber::class)
+            every { anyConstructed<FFmpegFrameGrabber>().start() } just Runs
+            every { anyConstructed<FFmpegFrameGrabber>().format } returns "mp3"
+            every { anyConstructed<FFmpegFrameGrabber>().stop() } just Runs
+            every { anyConstructed<FFmpegFrameGrabber>().release() } just Runs
 
-        val transcoder = mockk<Transcoder>()
-        coEvery { transcoder.convertLossless(any(), any(), format) } answers {
-            secondArg<File>().writeText("converted data")
+            val transcoder = mockk<Transcoder>()
+            coEvery { transcoder.convertLossless(any(), any(), format) } answers {
+                secondArg<File>().writeText("converted data")
+            }
+            startKoin { modules(module { single { transcoder } }) }
+
+            val deferred = CompletableDeferred<Unit>()
+            deferred.complete(Unit)
+            coEvery { indexer.queue(any(), any(), any(), any(), any()) } returns deferred
+
+            val service = CustomAudioService(indexer, storageService, AudioConfig(losslessFormat = format))
+            val uuid = service.uploadCustomAudio("fake mp3 data".toByteArray(), "test.mp3", null)
+
+            assertNotNull(uuid)
+            val targetFile = File(customPath, "$uuid.${format.extension}")
+            assertEquals("converted data", targetFile.readText())
+            coVerify { transcoder.convertLossless(any(), targetFile, format) }
         }
-        startKoin { modules(module { single { transcoder } }) }
-
-        val deferred = CompletableDeferred<Unit>()
-        deferred.complete(Unit)
-        coEvery { indexer.queue(any(), any(), any(), any(), any()) } returns deferred
-
-        val service = CustomAudioService(indexer, storageService, AudioConfig(losslessFormat = format))
-        val uuid = service.uploadCustomAudio("fake mp3 data".toByteArray(), "test.mp3", null)
-
-        assertNotNull(uuid)
-        val targetFile = File(customPath, "$uuid.${format.extension}")
-        assertEquals("converted data", targetFile.readText())
-        coVerify { transcoder.convertLossless(any(), targetFile, format) }
-    }
 
     @Test
     fun `uploadCustomAudio should copy WAV when WAV is configured`() = runBlocking {

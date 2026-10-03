@@ -87,8 +87,10 @@ class HueServiceTest {
     private val playbackClocks = CopyOnWriteArrayList<MutableStateFlow<PlaybackClock>>()
 
     private class FakeStream(private val failStart: Boolean = false) : HueEntertainmentStream {
-        @Volatile var started = false
-        @Volatile var closed = false
+        @Volatile
+        var started = false
+        @Volatile
+        var closed = false
         val frames = CopyOnWriteArrayList<ByteArray>()
 
         override suspend fun start() {
@@ -111,11 +113,26 @@ class HueServiceTest {
         audioAnalysisService = mockk()
         api = mockk(relaxed = true)
         coEvery { api.putLight(any(), any()) } answers { sent += (firstArg<String>() to secondArg<LightUpdate>()) }
-        coEvery { api.putGroupedLight(any(), any()) } answers { sent += (firstArg<String>() to secondArg<LightUpdate>()) }
-        coEvery { api.recallScene(any(), any()) } answers { recalled += (firstArg<String>() to secondArg<SceneRecallUpdate>()) }
+        coEvery {
+            api.putGroupedLight(
+                any(),
+                any()
+            )
+        } answers { sent += (firstArg<String>() to secondArg<LightUpdate>()) }
+        coEvery {
+            api.recallScene(
+                any(),
+                any()
+            )
+        } answers { recalled += (firstArg<String>() to secondArg<SceneRecallUpdate>()) }
         coEvery { api.entertainmentConfigurations() } returns emptyList()
         coEvery { api.entertainmentServices() } returns emptyList()
-        coEvery { api.setEntertainmentStreaming(any(), any()) } answers { streaming += (firstArg<String>() to secondArg<Boolean>()) }
+        coEvery {
+            api.setEntertainmentStreaming(
+                any(),
+                any()
+            )
+        } answers { streaming += (firstArg<String>() to secondArg<Boolean>()) }
         routeBridgeClients()
         routeStreams()
         trackMotions()
@@ -163,10 +180,30 @@ class HueServiceTest {
         coEvery { anyConstructed<HueBridgeClient>().scenes() } coAnswers { api.scenes() }
         coEvery { anyConstructed<HueBridgeClient>().entertainmentConfigurations() } coAnswers { api.entertainmentConfigurations() }
         coEvery { anyConstructed<HueBridgeClient>().entertainmentServices() } coAnswers { api.entertainmentServices() }
-        coEvery { anyConstructed<HueBridgeClient>().setEntertainmentStreaming(any(), any()) } coAnswers { api.setEntertainmentStreaming(firstArg(), secondArg()) }
-        coEvery { anyConstructed<HueBridgeClient>().putLight(any(), any()) } coAnswers { api.putLight(firstArg(), secondArg()) }
-        coEvery { anyConstructed<HueBridgeClient>().putGroupedLight(any(), any()) } coAnswers { api.putGroupedLight(firstArg(), secondArg()) }
-        coEvery { anyConstructed<HueBridgeClient>().recallScene(any(), any()) } coAnswers { api.recallScene(firstArg(), secondArg()) }
+        coEvery {
+            anyConstructed<HueBridgeClient>().setEntertainmentStreaming(
+                any(),
+                any()
+            )
+        } coAnswers { api.setEntertainmentStreaming(firstArg(), secondArg()) }
+        coEvery { anyConstructed<HueBridgeClient>().putLight(any(), any()) } coAnswers {
+            api.putLight(
+                firstArg(),
+                secondArg()
+            )
+        }
+        coEvery { anyConstructed<HueBridgeClient>().putGroupedLight(any(), any()) } coAnswers {
+            api.putGroupedLight(
+                firstArg(),
+                secondArg()
+            )
+        }
+        coEvery { anyConstructed<HueBridgeClient>().recallScene(any(), any()) } coAnswers {
+            api.recallScene(
+                firstArg(),
+                secondArg()
+            )
+        }
         every { anyConstructed<HueBridgeClient>().close() } answers { api.close() }
     }
 
@@ -248,8 +285,16 @@ class HueServiceTest {
                 metadata = ClipMetadata("Living"),
                 status = if (active) "active" else "inactive",
                 channels = listOf(
-                    ClipEntertainmentChannel(0, ClipPosition(-0.5, 0.0, 0.0), listOf(ClipChannelMember(ClipResourceRef("e1", "entertainment"), 0))),
-                    ClipEntertainmentChannel(1, ClipPosition(0.5, 0.0, 0.0), listOf(ClipChannelMember(ClipResourceRef("e2", "entertainment"), 0))),
+                    ClipEntertainmentChannel(
+                        0,
+                        ClipPosition(-0.5, 0.0, 0.0),
+                        listOf(ClipChannelMember(ClipResourceRef("e1", "entertainment"), 0))
+                    ),
+                    ClipEntertainmentChannel(
+                        1,
+                        ClipPosition(0.5, 0.0, 0.0),
+                        listOf(ClipChannelMember(ClipResourceRef("e2", "entertainment"), 0))
+                    ),
                 ),
                 lightServices = listOf(ClipResourceRef("l1", "light"), ClipResourceRef("l2", "light")),
             ),
@@ -310,7 +355,14 @@ class HueServiceTest {
         val song = song(songId, coverId)
         every { song.duration } returns duration
         coEvery { songService.byIds(listOf(songId), userId) } returns listOf(song)
-        coEvery { imageService.byId(coverId) } returns Image(coverId, "p", "h", "o", palette = palette, primaryColor = palette.first())
+        coEvery { imageService.byId(coverId) } returns Image(
+            coverId,
+            "p",
+            "h",
+            "o",
+            palette = palette,
+            primaryColor = palette.first()
+        )
         coEvery { audioAnalysisService.getAudioDataBatch(listOf(songId)) } returns emptyMap()
         return song
     }
@@ -321,13 +373,35 @@ class HueServiceTest {
         setup(dialect)
         val bridgeId = bridge()
         assertTrue(service.getLinks(userId).isEmpty())
-        val link = HueUserLink(bridgeId, true, listOf(light("l1", "Desk")), HueIntensity.HIGH, HueTransitionMode.BPM, 700, HueStopMode.OFF)
+        val link = HueUserLink(
+            bridgeId,
+            true,
+            listOf(light("l1", "Desk")),
+            HueIntensity.HIGH,
+            HueTransitionMode.BPM,
+            700,
+            HueStopMode.OFF
+        )
         val saved = service.setLink(userId, link)
         assertTrue(saved.updatedAt > 0)
         val loaded = service.getLinks(userId).single()
         assertEquals(link.copy(updatedAt = loaded.updatedAt), loaded)
-        assertThrows(IllegalArgumentException::class.java) { runBlocking { service.setLink(userId, HueUserLink(bridgeId, enabled = true)) } }
-        assertThrows(IllegalArgumentException::class.java) { runBlocking { service.setLink(userId, HueUserLink(UUID.randomUUID(), enabled = false)) } }
+        assertThrows(IllegalArgumentException::class.java) {
+            runBlocking {
+                service.setLink(
+                    userId,
+                    HueUserLink(bridgeId, enabled = true)
+                )
+            }
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            runBlocking {
+                service.setLink(
+                    userId,
+                    HueUserLink(UUID.randomUUID(), enabled = false)
+                )
+            }
+        }
         assertTrue(service.removeLink(userId, bridgeId))
         assertTrue(service.getLinks(userId).isEmpty())
         assertEquals(1, service.listBridges(userId).size)
@@ -348,7 +422,15 @@ class HueServiceTest {
             runBlocking { service.setLink(second, HueUserLink(bridgeId, true, listOf(light("l1", "Desk")))) }
         }
         assertThrows(IllegalArgumentException::class.java) { runBlocking { service.listTargets(second, bridgeId) } }
-        assertThrows(IllegalArgumentException::class.java) { runBlocking { service.test(second, bridgeId, listOf(light("l1", "Desk"))) } }
+        assertThrows(IllegalArgumentException::class.java) {
+            runBlocking {
+                service.test(
+                    second,
+                    bridgeId,
+                    listOf(light("l1", "Desk"))
+                )
+            }
+        }
         assertFalse(service.removeBridge(second, bridgeId))
 
         assertEquals(1, service.listBridges(userId).size)
@@ -362,7 +444,12 @@ class HueServiceTest {
         val second = insertUser("second")
         val pairApi = mockk<HueBridgeApi>(relaxed = true)
         var attempts = 0
-        coEvery { pairApi.pair(any()) } answers { if (++attempts < 2) null else HuePairSuccess("app-key", "client-key") }
+        coEvery { pairApi.pair(any()) } answers {
+            if (++attempts < 2) null else HuePairSuccess(
+                "app-key",
+                "client-key"
+            )
+        }
         coEvery { pairApi.bridge() } returns ClipBridge("uuid", "001788FFFE0000AA")
         pairingApi = pairApi
         coEvery { delay(PAIRING_POLL_MS) } coAnswers { delay(50L) }
@@ -387,13 +474,28 @@ class HueServiceTest {
     fun `now playing drives enabled links and stops turn lights off`(dialect: DbDialect) = runBlocking {
         setup(dialect)
         val bridgeId = bridge()
-        service.setLink(userId, HueUserLink(bridgeId, true, listOf(light("l1", "Desk"), light("l2", "Shelf")), onStop = HueStopMode.OFF))
+        service.setLink(
+            userId,
+            HueUserLink(bridgeId, true, listOf(light("l1", "Desk"), light("l2", "Shelf")), onStop = HueStopMode.OFF)
+        )
         val other = UUID.randomUUID()
         val songId = UUID.randomUUID()
         val coverId = UUID.randomUUID()
         coEvery { songService.byIds(listOf(songId), userId) } returns listOf(song(songId, coverId))
-        coEvery { imageService.byId(coverId) } returns Image(coverId, "p", "h", "o", palette = listOf(0xFFE01020.toInt(), 0xFF1030E0.toInt()), primaryColor = 0xFFE01020.toInt())
-        coEvery { audioAnalysisService.getAudioDataBatch(listOf(songId)) } returns mapOf(songId to SongAudioData(energy = 0.9, bpm = 120.0))
+        coEvery { imageService.byId(coverId) } returns Image(
+            coverId,
+            "p",
+            "h",
+            "o",
+            palette = listOf(0xFFE01020.toInt(), 0xFF1030E0.toInt()),
+            primaryColor = 0xFFE01020.toInt()
+        )
+        coEvery { audioAnalysisService.getAudioDataBatch(listOf(songId)) } returns mapOf(
+            songId to SongAudioData(
+                energy = 0.9,
+                bpm = 120.0
+            )
+        )
 
         service.onNowPlaying(HookEvent.NowPlayingChanged(other, songId, 1, 0))
         delay(100)
@@ -432,12 +534,24 @@ class HueServiceTest {
             ClipGroup(
                 "r1",
                 ClipMetadata("Living"),
-                children = listOf(ClipResourceRef("d1", "device"), ClipResourceRef("d2", "device"), ClipResourceRef("d3", "device")),
+                children = listOf(
+                    ClipResourceRef("d1", "device"),
+                    ClipResourceRef("d2", "device"),
+                    ClipResourceRef("d3", "device")
+                ),
                 services = listOf(ClipResourceRef("g1", "grouped_light")),
             ),
         )
         coEvery { api.zones() } returns emptyList()
-        service.setLink(userId, HueUserLink(bridgeId, true, listOf(HueTarget(HueTargetType.ROOM, "r1", "Living", "g1")), onStop = HueStopMode.OFF))
+        service.setLink(
+            userId,
+            HueUserLink(
+                bridgeId,
+                true,
+                listOf(HueTarget(HueTargetType.ROOM, "r1", "Living", "g1")),
+                onStop = HueStopMode.OFF
+            )
+        )
         val songId = UUID.randomUUID()
         playingSong(songId, UUID.randomUUID(), listOf(0xFFE01020.toInt(), 0xFF1030E0.toInt()))
 
@@ -503,7 +617,10 @@ class HueServiceTest {
 
         awaitRecalled(2)
         assertEquals(
-            setOf("s1" to SceneRecallUpdate(ClipSceneRecall("active", 400)), "s2" to SceneRecallUpdate(ClipSceneRecall("active", 400))),
+            setOf(
+                "s1" to SceneRecallUpdate(ClipSceneRecall("active", 400)),
+                "s2" to SceneRecallUpdate(ClipSceneRecall("active", 400))
+            ),
             recalled.toSet(),
         )
     }
@@ -514,7 +631,12 @@ class HueServiceTest {
         setup(dialect)
         val bridgeId = bridge()
         assertThrows(IllegalArgumentException::class.java) {
-            runBlocking { service.setLink(userId, HueUserLink(bridgeId, true, listOf(light("l1", "Desk")), onStop = HueStopMode.SCENE)) }
+            runBlocking {
+                service.setLink(
+                    userId,
+                    HueUserLink(bridgeId, true, listOf(light("l1", "Desk")), onStop = HueStopMode.SCENE)
+                )
+            }
         }
         service.setLink(
             userId,
@@ -539,7 +661,12 @@ class HueServiceTest {
         setup(dialect)
         val bridgeId = bridge()
         assertThrows(IllegalArgumentException::class.java) {
-            runBlocking { service.setLink(userId, HueUserLink(bridgeId, true, listOf(area(), area("0b216bc8-1d1a-4a2f-8b8c-4d5e6f708193", "Kitchen")))) }
+            runBlocking {
+                service.setLink(
+                    userId,
+                    HueUserLink(bridgeId, true, listOf(area(), area("0b216bc8-1d1a-4a2f-8b8c-4d5e6f708193", "Kitchen")))
+                )
+            }
         }
         assertNotNull(service.setLink(userId, HueUserLink(bridgeId, true, listOf(area(), light("l3", "Lamp")))))
     }
@@ -570,12 +697,36 @@ class HueServiceTest {
         setup(dialect)
         val bridgeId = bridge()
         mockkObject(HueLightScore)
-        every { HueLightScore.build(null, null, any(), SLOW_MOTION_INTERVAL_MS, any()) } answers { HueLightScore.build(null, null, thirdArg(), 400L, arg(4)) }
-        service.setLink(userId, HueUserLink(bridgeId, true, listOf(light("l1", "Desk"), light("l2", "Shelf")), motion = HueMotionMode.SLOW, latencyMs = 0))
+        every { HueLightScore.build(null, null, any(), SLOW_MOTION_INTERVAL_MS, any()) } answers {
+            HueLightScore.build(
+                null,
+                null,
+                thirdArg(),
+                400L,
+                arg(4)
+            )
+        }
+        service.setLink(
+            userId,
+            HueUserLink(
+                bridgeId,
+                true,
+                listOf(light("l1", "Desk"), light("l2", "Shelf")),
+                motion = HueMotionMode.SLOW,
+                latencyMs = 0
+            )
+        )
         val songId = UUID.randomUUID()
         val coverId = UUID.randomUUID()
         coEvery { songService.byIds(listOf(songId), userId) } returns listOf(song(songId, coverId))
-        coEvery { imageService.byId(coverId) } returns Image(coverId, "p", "h", "o", palette = listOf(0xFFE01020.toInt(), 0xFF1030E0.toInt()), primaryColor = 0xFFE01020.toInt())
+        coEvery { imageService.byId(coverId) } returns Image(
+            coverId,
+            "p",
+            "h",
+            "o",
+            palette = listOf(0xFFE01020.toInt(), 0xFF1030E0.toInt()),
+            primaryColor = 0xFFE01020.toInt()
+        )
         coEvery { audioAnalysisService.getAudioDataBatch(listOf(songId)) } returns emptyMap()
 
         service.onNowPlaying(HookEvent.NowPlayingChanged(userId, songId, 1, System.currentTimeMillis()))
@@ -598,15 +749,33 @@ class HueServiceTest {
     fun `tempo motion follows the beat grid and playback reports`(dialect: DbDialect) = runBlocking {
         setup(dialect)
         val bridgeId = bridge()
-        service.setLink(userId, HueUserLink(bridgeId, true, listOf(light("l1", "Desk"), light("l2", "Shelf")), motion = HueMotionMode.TEMPO, latencyMs = 0))
+        service.setLink(
+            userId,
+            HueUserLink(
+                bridgeId,
+                true,
+                listOf(light("l1", "Desk"), light("l2", "Shelf")),
+                motion = HueMotionMode.TEMPO,
+                latencyMs = 0
+            )
+        )
         val songId = UUID.randomUUID()
         val coverId = UUID.randomUUID()
         val song = song(songId, coverId)
         every { song.duration } returns 60_000L
         coEvery { songService.byIds(listOf(songId), userId) } returns listOf(song)
-        coEvery { imageService.byId(coverId) } returns Image(coverId, "p", "h", "o", palette = listOf(0xFFE01020.toInt(), 0xFF1030E0.toInt()), primaryColor = 0xFFE01020.toInt())
+        coEvery { imageService.byId(coverId) } returns Image(
+            coverId,
+            "p",
+            "h",
+            "o",
+            palette = listOf(0xFFE01020.toInt(), 0xFF1030E0.toInt()),
+            primaryColor = 0xFFE01020.toInt()
+        )
         coEvery { audioAnalysisService.getAudioDataBatch(listOf(songId)) } returns emptyMap()
-        coEvery { audioAnalysisService.getAudioTimeline(songId) } returns SongAudioTimeline(songId, beatsMs = List(120) { it * 500 })
+        coEvery { audioAnalysisService.getAudioTimeline(songId) } returns SongAudioTimeline(
+            songId,
+            beatsMs = List(120) { it * 500 })
 
         val startedAt = System.currentTimeMillis()
         service.onNowPlaying(HookEvent.NowPlayingChanged(userId, songId, 1, startedAt))
@@ -614,18 +783,44 @@ class HueServiceTest {
         assertEquals(1, awaitRunningMotions())
         coVerify(exactly = 1) { audioAnalysisService.getAudioTimeline(songId) }
 
-        service.onNowPlaying(HookEvent.NowPlayingChanged(userId, songId, 2, System.currentTimeMillis(), positionMs = System.currentTimeMillis() - startedAt))
+        service.onNowPlaying(
+            HookEvent.NowPlayingChanged(
+                userId,
+                songId,
+                2,
+                System.currentTimeMillis(),
+                positionMs = System.currentTimeMillis() - startedAt
+            )
+        )
         assertEquals(1, awaitRunningMotions())
         coVerify(exactly = 1) { songService.byIds(listOf(songId), userId) }
 
-        service.onNowPlaying(HookEvent.NowPlayingChanged(userId, songId, 3, System.currentTimeMillis(), positionMs = 30_000, playing = false))
+        service.onNowPlaying(
+            HookEvent.NowPlayingChanged(
+                userId,
+                songId,
+                3,
+                System.currentTimeMillis(),
+                positionMs = 30_000,
+                playing = false
+            )
+        )
         delay(200)
         val paused = sent.size
         delay(700)
         assertEquals(paused, sent.size)
         assertEquals(1, awaitRunningMotions())
 
-        service.onNowPlaying(HookEvent.NowPlayingChanged(userId, songId, 4, System.currentTimeMillis(), positionMs = 30_000, playing = true))
+        service.onNowPlaying(
+            HookEvent.NowPlayingChanged(
+                userId,
+                songId,
+                4,
+                System.currentTimeMillis(),
+                positionMs = 30_000,
+                playing = true
+            )
+        )
         awaitSent(paused + 2)
         assertEquals(1, awaitRunningMotions())
     }
@@ -635,20 +830,36 @@ class HueServiceTest {
     fun `bass motion dims below the loudness floor on beats without a kick`(dialect: DbDialect) = runBlocking {
         setup(dialect)
         val bridgeId = bridge()
-        service.setLink(userId, HueUserLink(bridgeId, true, listOf(light("l1", "Desk"), light("l2", "Shelf")), motion = HueMotionMode.BASS, latencyMs = 0))
+        service.setLink(
+            userId,
+            HueUserLink(
+                bridgeId,
+                true,
+                listOf(light("l1", "Desk"), light("l2", "Shelf")),
+                motion = HueMotionMode.BASS,
+                latencyMs = 0
+            )
+        )
         val songId = UUID.randomUUID()
         val coverId = UUID.randomUUID()
         val song = song(songId, coverId)
         every { song.duration } returns 60_000L
         coEvery { songService.byIds(listOf(songId), userId) } returns listOf(song)
-        coEvery { imageService.byId(coverId) } returns Image(coverId, "p", "h", "o", palette = listOf(0xFFE01020.toInt(), 0xFF1030E0.toInt()), primaryColor = 0xFFE01020.toInt())
+        coEvery { imageService.byId(coverId) } returns Image(
+            coverId,
+            "p",
+            "h",
+            "o",
+            palette = listOf(0xFFE01020.toInt(), 0xFF1030E0.toInt()),
+            primaryColor = 0xFFE01020.toInt()
+        )
         coEvery { audioAnalysisService.getAudioDataBatch(listOf(songId)) } returns emptyMap()
         val bass = List(600) { index ->
             val ms = index * 100
             if ((ms / 500) % 4 == 0 && ms % 500 < 150) -6f else -60f
         }
         coEvery { audioAnalysisService.getAudioTimeline(songId) } returns
-            SongAudioTimeline(songId, beatsMs = List(120) { it * 500 }, envelopeHz = 10, bassEnvelopeDb = bass)
+                SongAudioTimeline(songId, beatsMs = List(120) { it * 500 }, envelopeHz = 10, bassEnvelopeDb = bass)
 
         service.onNowPlaying(HookEvent.NowPlayingChanged(userId, songId, 1, System.currentTimeMillis()))
         awaitSent(6)
@@ -665,13 +876,29 @@ class HueServiceTest {
     fun `bass motion with band levels dims between kicks`(dialect: DbDialect) = runBlocking {
         setup(dialect)
         val bridgeId = bridge()
-        service.setLink(userId, HueUserLink(bridgeId, true, listOf(light("l1", "Desk"), light("l2", "Shelf")), motion = HueMotionMode.BASS, latencyMs = 0))
+        service.setLink(
+            userId,
+            HueUserLink(
+                bridgeId,
+                true,
+                listOf(light("l1", "Desk"), light("l2", "Shelf")),
+                motion = HueMotionMode.BASS,
+                latencyMs = 0
+            )
+        )
         val songId = UUID.randomUUID()
         val coverId = UUID.randomUUID()
         val song = song(songId, coverId)
         every { song.duration } returns 60_000L
         coEvery { songService.byIds(listOf(songId), userId) } returns listOf(song)
-        coEvery { imageService.byId(coverId) } returns Image(coverId, "p", "h", "o", palette = listOf(0xFFE01020.toInt(), 0xFF1030E0.toInt()), primaryColor = 0xFFE01020.toInt())
+        coEvery { imageService.byId(coverId) } returns Image(
+            coverId,
+            "p",
+            "h",
+            "o",
+            palette = listOf(0xFFE01020.toInt(), 0xFF1030E0.toInt()),
+            primaryColor = 0xFFE01020.toInt()
+        )
         coEvery { audioAnalysisService.getAudioDataBatch(listOf(songId)) } returns emptyMap()
         val kickLevels = List(3_000) { index ->
             val ms = index * 20
@@ -711,7 +938,15 @@ class HueServiceTest {
         entertainmentBridge()
         val stream = FakeStream()
         streamTarget = stream
-        service.setLink(userId, HueUserLink(bridgeId, true, listOf(area(), light("l1", "Desk"), light("l3", "Lamp")), onStop = HueStopMode.OFF))
+        service.setLink(
+            userId,
+            HueUserLink(
+                bridgeId,
+                true,
+                listOf(area(), light("l1", "Desk"), light("l3", "Lamp")),
+                onStop = HueStopMode.OFF
+            )
+        )
         val songId = UUID.randomUUID()
         playingSong(songId, UUID.randomUUID(), listOf(0xFFE01020.toInt(), 0xFF1030E0.toInt()))
 
@@ -799,10 +1034,15 @@ class HueServiceTest {
         entertainmentBridge()
         val stream = FakeStream()
         streamTarget = stream
-        service.setLink(userId, HueUserLink(bridgeId, true, listOf(area()), motion = HueMotionMode.TEMPO, latencyMs = 0))
+        service.setLink(
+            userId,
+            HueUserLink(bridgeId, true, listOf(area()), motion = HueMotionMode.TEMPO, latencyMs = 0)
+        )
         val songId = UUID.randomUUID()
         playingSong(songId, UUID.randomUUID(), listOf(0xFFE01020.toInt(), 0xFF1030E0.toInt()))
-        coEvery { audioAnalysisService.getAudioTimeline(songId) } returns SongAudioTimeline(songId, beatsMs = List(120) { it * 500 })
+        coEvery { audioAnalysisService.getAudioTimeline(songId) } returns SongAudioTimeline(
+            songId,
+            beatsMs = List(120) { it * 500 })
 
         service.onNowPlaying(HookEvent.NowPlayingChanged(userId, songId, 1, System.currentTimeMillis()))
         awaitFrames(stream, 20)
@@ -820,10 +1060,21 @@ class HueServiceTest {
             ClipLight("l1", ClipMetadata("Desk"), color = ClipColor(ClipXy(0.3, 0.3))),
             ClipLight("plug", ClipMetadata("Plug")),
         )
-        coEvery { api.rooms() } returns listOf(ClipGroup("r1", ClipMetadata("Living"), services = listOf(ClipResourceRef("g1", "grouped_light"))))
+        coEvery { api.rooms() } returns listOf(
+            ClipGroup(
+                "r1",
+                ClipMetadata("Living"),
+                services = listOf(ClipResourceRef("g1", "grouped_light"))
+            )
+        )
         coEvery { api.zones() } returns emptyList()
         val targets = service.listTargets(userId, bridgeId)
-        assertEquals(listOf(HueTarget(HueTargetType.ROOM, "r1", "Living", "g1"), HueTarget(HueTargetType.LIGHT, "l1", "Desk")), targets)
+        assertEquals(
+            listOf(
+                HueTarget(HueTargetType.ROOM, "r1", "Living", "g1"),
+                HueTarget(HueTargetType.LIGHT, "l1", "Desk")
+            ), targets
+        )
         assertTrue(service.test(userId, bridgeId, targets))
         awaitSent(2)
         assertEquals(setOf("g1", "l1"), sent.map { it.first }.toSet())
@@ -848,8 +1099,20 @@ class HueServiceTest {
         setup(dialect)
         val bridgeId = bridge()
         coEvery { api.lights() } returns emptyList()
-        coEvery { api.rooms() } returns listOf(ClipGroup("r1", ClipMetadata("Living"), services = listOf(ClipResourceRef("g1", "grouped_light"))))
-        coEvery { api.zones() } returns listOf(ClipGroup("z1", ClipMetadata("Desk"), services = listOf(ClipResourceRef("g2", "grouped_light"))))
+        coEvery { api.rooms() } returns listOf(
+            ClipGroup(
+                "r1",
+                ClipMetadata("Living"),
+                services = listOf(ClipResourceRef("g1", "grouped_light"))
+            )
+        )
+        coEvery { api.zones() } returns listOf(
+            ClipGroup(
+                "z1",
+                ClipMetadata("Desk"),
+                services = listOf(ClipResourceRef("g2", "grouped_light"))
+            )
+        )
         coEvery { api.scenes() } returns listOf(
             ClipScene("s1", ClipMetadata("Relax"), ClipResourceRef("r1", "room")),
             ClipScene("s2", ClipMetadata("Read"), ClipResourceRef("z1", "zone")),
@@ -866,7 +1129,14 @@ class HueServiceTest {
         )
         service.listScenes(userId, bridgeId)
         coVerify(exactly = 1) { api.scenes() }
-        assertThrows(IllegalArgumentException::class.java) { runBlocking { service.listScenes(userId, UUID.randomUUID()) } }
+        assertThrows(IllegalArgumentException::class.java) {
+            runBlocking {
+                service.listScenes(
+                    userId,
+                    UUID.randomUUID()
+                )
+            }
+        }
     }
 
     @ParameterizedTest
@@ -875,7 +1145,12 @@ class HueServiceTest {
         setup(dialect)
         val pairApi = mockk<HueBridgeApi>(relaxed = true)
         var attempts = 0
-        coEvery { pairApi.pair(any()) } answers { if (++attempts < 2) null else HuePairSuccess("app-key", "client-key") }
+        coEvery { pairApi.pair(any()) } answers {
+            if (++attempts < 2) null else HuePairSuccess(
+                "app-key",
+                "client-key"
+            )
+        }
         coEvery { pairApi.bridge() } returns ClipBridge("uuid", "001788FFFE0000AA")
         pairingApi = pairApi
         coEvery { delay(PAIRING_POLL_MS) } coAnswers { delay(50L) }

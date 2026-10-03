@@ -27,12 +27,14 @@ fun Image.sized(size: Int): ByteArray {
         Thumbnails
             .of(ByteArrayInputStream(data))
             .size(size, size)
-            .outputFormat(when (Path(path).extension) {
-                "jpg" -> "jpeg"
-                "jpeg" -> "jpeg"
-                "png" -> "png"
-                else -> "jpeg"
-            })
+            .outputFormat(
+                when (Path(path).extension) {
+                    "jpg" -> "jpeg"
+                    "jpeg" -> "jpeg"
+                    "png" -> "png"
+                    else -> "jpeg"
+                }
+            )
             .toOutputStream(outputStream)
         outputStream.toByteArray()
     } catch (_: Throwable) {

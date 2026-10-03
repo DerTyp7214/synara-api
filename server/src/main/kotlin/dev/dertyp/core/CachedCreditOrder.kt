@@ -19,20 +19,42 @@ private class CreditLinkColumns(
 )
 
 private val songLinkColumns = CreditLinkColumns(
-    SongArtistTable, SongArtistTable.songId, SongArtistTable.artistId, SongArtistTable.position, SongArtistTable.joinPhrase,
+    SongArtistTable,
+    SongArtistTable.songId,
+    SongArtistTable.artistId,
+    SongArtistTable.position,
+    SongArtistTable.joinPhrase,
 )
 
 private val albumLinkColumns = CreditLinkColumns(
-    AlbumArtistTable, AlbumArtistTable.albumId, AlbumArtistTable.artistId, AlbumArtistTable.position, AlbumArtistTable.joinPhrase,
+    AlbumArtistTable,
+    AlbumArtistTable.albumId,
+    AlbumArtistTable.artistId,
+    AlbumArtistTable.position,
+    AlbumArtistTable.joinPhrase,
 )
 
 fun applyCachedSongCreditOrder(songIds: Collection<UUID>): Int =
     applyCachedCreditOrder(songLinkColumns, songIds) { chunk ->
         SongArtistTable
-            .innerJoin(SongMusicBrainzTable, onColumn = { SongArtistTable.songId }, otherColumn = { SongMusicBrainzTable.songId })
-            .innerJoin(ArtistMusicBrainzTable, onColumn = { SongArtistTable.artistId }, otherColumn = { ArtistMusicBrainzTable.artistId })
-            .innerJoin(MBRecordingArtistCreditTable, onColumn = { SongMusicBrainzTable.musicBrainzId }, otherColumn = { MBRecordingArtistCreditTable.recordingId })
-            .select(SongArtistTable.songId, SongArtistTable.artistId, MBRecordingArtistCreditTable.position, MBRecordingArtistCreditTable.joinPhrase)
+            .innerJoin(
+                SongMusicBrainzTable,
+                onColumn = { SongArtistTable.songId },
+                otherColumn = { SongMusicBrainzTable.songId })
+            .innerJoin(
+                ArtistMusicBrainzTable,
+                onColumn = { SongArtistTable.artistId },
+                otherColumn = { ArtistMusicBrainzTable.artistId })
+            .innerJoin(
+                MBRecordingArtistCreditTable,
+                onColumn = { SongMusicBrainzTable.musicBrainzId },
+                otherColumn = { MBRecordingArtistCreditTable.recordingId })
+            .select(
+                SongArtistTable.songId,
+                SongArtistTable.artistId,
+                MBRecordingArtistCreditTable.position,
+                MBRecordingArtistCreditTable.joinPhrase
+            )
             .where { SongArtistTable.songId inList chunk }
             .andWhere { MBRecordingArtistCreditTable.artistId eq ArtistMusicBrainzTable.musicBrainzId }
             .map {
@@ -48,10 +70,24 @@ fun applyCachedSongCreditOrder(songIds: Collection<UUID>): Int =
 fun applyCachedAlbumCreditOrder(albumIds: Collection<UUID>): Int =
     applyCachedCreditOrder(albumLinkColumns, albumIds) { chunk ->
         AlbumArtistTable
-            .innerJoin(AlbumMusicBrainzTable, onColumn = { AlbumArtistTable.albumId }, otherColumn = { AlbumMusicBrainzTable.albumId })
-            .innerJoin(ArtistMusicBrainzTable, onColumn = { AlbumArtistTable.artistId }, otherColumn = { ArtistMusicBrainzTable.artistId })
-            .innerJoin(MBReleaseArtistCreditTable, onColumn = { AlbumMusicBrainzTable.musicBrainzId }, otherColumn = { MBReleaseArtistCreditTable.releaseId })
-            .select(AlbumArtistTable.albumId, AlbumArtistTable.artistId, MBReleaseArtistCreditTable.position, MBReleaseArtistCreditTable.joinPhrase)
+            .innerJoin(
+                AlbumMusicBrainzTable,
+                onColumn = { AlbumArtistTable.albumId },
+                otherColumn = { AlbumMusicBrainzTable.albumId })
+            .innerJoin(
+                ArtistMusicBrainzTable,
+                onColumn = { AlbumArtistTable.artistId },
+                otherColumn = { ArtistMusicBrainzTable.artistId })
+            .innerJoin(
+                MBReleaseArtistCreditTable,
+                onColumn = { AlbumMusicBrainzTable.musicBrainzId },
+                otherColumn = { MBReleaseArtistCreditTable.releaseId })
+            .select(
+                AlbumArtistTable.albumId,
+                AlbumArtistTable.artistId,
+                MBReleaseArtistCreditTable.position,
+                MBReleaseArtistCreditTable.joinPhrase
+            )
             .where { AlbumArtistTable.albumId inList chunk }
             .andWhere { MBReleaseArtistCreditTable.artistId eq ArtistMusicBrainzTable.musicBrainzId }
             .map {

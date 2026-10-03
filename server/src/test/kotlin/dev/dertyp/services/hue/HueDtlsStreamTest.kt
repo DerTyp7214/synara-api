@@ -24,7 +24,24 @@ class HueDtlsStreamTest {
 
         assertEquals(16, bytes.size)
         assertArrayEquals(
-            byteArrayOf(0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88.toByte(), 0x99.toByte(), 0xAA.toByte(), 0xBB.toByte(), 0xCC.toByte(), 0xDD.toByte(), 0xEE.toByte(), 0xFF.toByte()),
+            byteArrayOf(
+                0x00,
+                0x11,
+                0x22,
+                0x33,
+                0x44,
+                0x55,
+                0x66,
+                0x77,
+                0x88.toByte(),
+                0x99.toByte(),
+                0xAA.toByte(),
+                0xBB.toByte(),
+                0xCC.toByte(),
+                0xDD.toByte(),
+                0xEE.toByte(),
+                0xFF.toByte()
+            ),
             bytes,
         )
     }

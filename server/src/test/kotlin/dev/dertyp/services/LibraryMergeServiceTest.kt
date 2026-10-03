@@ -59,13 +59,38 @@ class LibraryMergeServiceTest : KoinTest {
         database = TestDatabase.connect(dialect, "merge_test")
         transaction(database) {
             SchemaUtils.create(
-                ArtistTable, AlbumTable, SongTable, SongVariantTable, SongTitleTagTable, ImageTable, PlaylistTable,
-                UserTable, UserPlaylistTable, UserPlaylistSongTable, PlaylistSongTable,
-                SongArtistTable, AlbumArtistTable, AlbumMusicBrainzTable, SongMusicBrainzTable,
-                TranscodedSongTable, UserSongTable, SongProviderTable, AlbumProviderTable,
-                CollectionTable, CollectionSongTable, CollectionAlbumTable, CollectionArtistTable, CollectionPlaylistTable,
-                MBReleaseGroupTable, MBReleaseGroupCoverTable, RecentReleaseTable, ProviderReleaseTable,
-                AnimatedImageTable, RadioChannelTable, PodcastShowTable, PodcastEpisodeTable
+                ArtistTable,
+                AlbumTable,
+                SongTable,
+                SongVariantTable,
+                SongTitleTagTable,
+                ImageTable,
+                PlaylistTable,
+                UserTable,
+                UserPlaylistTable,
+                UserPlaylistSongTable,
+                PlaylistSongTable,
+                SongArtistTable,
+                AlbumArtistTable,
+                AlbumMusicBrainzTable,
+                SongMusicBrainzTable,
+                TranscodedSongTable,
+                UserSongTable,
+                SongProviderTable,
+                AlbumProviderTable,
+                CollectionTable,
+                CollectionSongTable,
+                CollectionAlbumTable,
+                CollectionArtistTable,
+                CollectionPlaylistTable,
+                MBReleaseGroupTable,
+                MBReleaseGroupCoverTable,
+                RecentReleaseTable,
+                ProviderReleaseTable,
+                AnimatedImageTable,
+                RadioChannelTable,
+                PodcastShowTable,
+                PodcastEpisodeTable
             )
         }
         service = LibraryMergeService()
@@ -81,7 +106,7 @@ class LibraryMergeServiceTest : KoinTest {
     @EnumSource(DbDialect::class)
     fun `mergeDuplicates should merge exact duplicate songs`(dialect: DbDialect) = runBlocking {
         setup(dialect)
-        
+
         mockkObject(MetadataService.Companion)
         every { MetadataService.getMetadataService(any(), any()) } returns tidalService
 
@@ -107,7 +132,7 @@ class LibraryMergeServiceTest : KoinTest {
         }
 
         val result = service.mergeDuplicates()
-        
+
         assertEquals(1, result["songsMerged"])
         transaction(database) {
             assertEquals(1, SongTable.selectAll().count())
@@ -151,7 +176,9 @@ class LibraryMergeServiceTest : KoinTest {
             val row = SongTable.selectAll().single()
             assertEquals(keptId, row[SongTable.id].value)
             assertEquals(remixTags, row.titleTags())
-            val kinds = SongTitleTagTable.selectAll().map { it[SongTitleTagTable.songId].value to it[SongTitleTagTable.kind] }.toSet()
+            val kinds =
+                SongTitleTagTable.selectAll().map { it[SongTitleTagTable.songId].value to it[SongTitleTagTable.kind] }
+                    .toSet()
             assertEquals(setOf(keptId to TitleTagKind.REMIX, keptId to TitleTagKind.FEAT), kinds)
             assertEquals(0L, SongTitleTagTable.selectAll().where { SongTitleTagTable.songId eq mergedId }.count())
         }
@@ -188,7 +215,7 @@ class LibraryMergeServiceTest : KoinTest {
         }
 
         val result = service.mergeDuplicates()
-        
+
         assertEquals(1, result["sameAlbumSongsMerged"])
         coVerify { songService.deleteSongs(match { it.size == 1 }) }
     }
@@ -313,50 +340,51 @@ class LibraryMergeServiceTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `mergeDuplicates should handle emoji title variations and path-based duplicates`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        val albumId = UUID.randomUUID()
-        val artistId = UUID.randomUUID()
-        val path = "/music/song.flac"
+    fun `mergeDuplicates should handle emoji title variations and path-based duplicates`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val albumId = UUID.randomUUID()
+            val artistId = UUID.randomUUID()
+            val path = "/music/song.flac"
 
-        transaction(database) {
-            ArtistTable.insert {
-                it[id] = artistId
-                it[name] = "Artist"
-            }
-            AlbumTable.insert {
-                it[id] = albumId
-                it[name] = "Album"
+            transaction(database) {
+                ArtistTable.insert {
+                    it[id] = artistId
+                    it[name] = "Artist"
+                }
+                AlbumTable.insert {
+                    it[id] = albumId
+                    it[name] = "Album"
+                }
+
+                SongTable.insert {
+                    it[id] = UUID.randomUUID()
+                    it[title] = "Song Title \uD83C\uDD74"
+                    it[SongTable.albumId] = albumId
+                    it[filePath] = path
+                    it[explicit] = false
+                    it[inserted] = 1000
+                }
+
+                SongTable.insert {
+                    it[id] = UUID.randomUUID()
+                    it[title] = "Song Title"
+                    it[SongTable.albumId] = albumId
+                    it[filePath] = path
+                    it[explicit] = true
+                    it[inserted] = 2000
+                }
             }
 
-            SongTable.insert {
-                it[id] = UUID.randomUUID()
-                it[title] = "Song Title \uD83C\uDD74"
-                it[SongTable.albumId] = albumId
-                it[filePath] = path
-                it[explicit] = false
-                it[inserted] = 1000
-            }
-            
-            SongTable.insert {
-                it[id] = UUID.randomUUID()
-                it[title] = "Song Title"
-                it[SongTable.albumId] = albumId
-                it[filePath] = path
-                it[explicit] = true
-                it[inserted] = 2000
+            service.mergeDuplicates()
+
+            transaction(database) {
+                val songs = SongTable.selectAll().where { SongTable.filePath eq path }.toList()
+                assertEquals(1, songs.size, "Should have merged duplicates with same path")
+                assertEquals("Song Title", songs[0][SongTable.title])
+                assertEquals(true, songs[0][SongTable.explicit], "Should have propagated explicit flag")
             }
         }
-
-        service.mergeDuplicates()
-
-        transaction(database) {
-            val songs = SongTable.selectAll().where { SongTable.filePath eq path }.toList()
-            assertEquals(1, songs.size, "Should have merged duplicates with same path")
-            assertEquals("Song Title", songs[0][SongTable.title])
-            assertEquals(true, songs[0][SongTable.explicit], "Should have propagated explicit flag")
-        }
-    }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
@@ -387,7 +415,7 @@ class LibraryMergeServiceTest : KoinTest {
             SongArtistTable.insert { it[songId] = song1; it[this.artistId] = artistId }
             UserSongTable.insert { it[songId] = song1; it[this.userId] = userId; it[isFavourite] = true }
             UserSongTable.insert { it[songId] = song2; it[this.userId] = userId; it[isFavourite] = false }
-            
+
             PlaylistSongTable.insert {
                 it[playlistId] = PlaylistTable.insert { table -> table[name] = "P" }[PlaylistTable.id]
                 it[songId] = song1
@@ -401,12 +429,12 @@ class LibraryMergeServiceTest : KoinTest {
             val remainingSongId = SongTable.selectAll().single()[SongTable.id].value
             assertEquals(1, SongArtistTable.selectAll().count())
             assertEquals(remainingSongId, SongArtistTable.selectAll().single()[SongArtistTable.songId].value)
-            
+
             assertEquals(1, UserSongTable.selectAll().count())
             val userSong = UserSongTable.selectAll().single()
             assertEquals(remainingSongId, userSong[UserSongTable.songId].value)
             assertEquals(true, userSong[UserSongTable.isFavourite]) // Should merge favorites
-            
+
             assertEquals(1, PlaylistSongTable.selectAll().count())
             assertEquals(remainingSongId, PlaylistSongTable.selectAll().single()[PlaylistSongTable.songId].value)
         }
@@ -414,79 +442,82 @@ class LibraryMergeServiceTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `mergeSongReferences keeps the earliest superLikedAt and marks the merged row a favourite`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
+    fun `mergeSongReferences keeps the earliest superLikedAt and marks the merged row a favourite`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
 
-        data class Ids(val song1: UUID, val song2: UUID, val userLikedOnly: UUID, val userBothSuper: UUID)
+            data class Ids(val song1: UUID, val song2: UUID, val userLikedOnly: UUID, val userBothSuper: UUID)
 
-        val (song1, song2, userLikedOnly, userBothSuper) = transaction(database) {
-            val albumId = AlbumTable.insert { it[name] = "Album" }[AlbumTable.id]
-            val userLikedOnly = UserTable.insert { it[username] = "likedOnly"; it[passwordHash] = "pass" }[UserTable.id].value
-            val userBothSuper = UserTable.insert { it[username] = "bothSuper"; it[passwordHash] = "pass" }[UserTable.id].value
+            val (song1, song2, userLikedOnly, userBothSuper) = transaction(database) {
+                val albumId = AlbumTable.insert { it[name] = "Album" }[AlbumTable.id]
+                val userLikedOnly =
+                    UserTable.insert { it[username] = "likedOnly"; it[passwordHash] = "pass" }[UserTable.id].value
+                val userBothSuper =
+                    UserTable.insert { it[username] = "bothSuper"; it[passwordHash] = "pass" }[UserTable.id].value
 
-            val song1 = SongTable.insert {
-                it[title] = "S1"
-                it[this.albumId] = albumId
-                it[fileSize] = 100L
-                it[inserted] = 1000L
-                it[filePath] = "p-super"
-            }[SongTable.id].value
+                val song1 = SongTable.insert {
+                    it[title] = "S1"
+                    it[this.albumId] = albumId
+                    it[fileSize] = 100L
+                    it[inserted] = 1000L
+                    it[filePath] = "p-super"
+                }[SongTable.id].value
 
-            val song2 = SongTable.insert {
-                it[title] = "S1"
-                it[this.albumId] = albumId
-                it[fileSize] = 100L
-                it[inserted] = 2000L
-                it[filePath] = "p-super"
-            }[SongTable.id].value
+                val song2 = SongTable.insert {
+                    it[title] = "S1"
+                    it[this.albumId] = albumId
+                    it[fileSize] = 100L
+                    it[inserted] = 2000L
+                    it[filePath] = "p-super"
+                }[SongTable.id].value
 
-            UserSongTable.insert {
-                it[songId] = song1
-                it[this.userId] = userLikedOnly
-                it[isFavourite] = true
+                UserSongTable.insert {
+                    it[songId] = song1
+                    it[this.userId] = userLikedOnly
+                    it[isFavourite] = true
+                }
+                UserSongTable.insert {
+                    it[songId] = song2
+                    it[this.userId] = userLikedOnly
+                    it[isFavourite] = true
+                    it[superLikedAt] = 9000L
+                }
+
+                UserSongTable.insert {
+                    it[songId] = song1
+                    it[this.userId] = userBothSuper
+                    it[isFavourite] = true
+                    it[superLikedAt] = 5000L
+                }
+                UserSongTable.insert {
+                    it[songId] = song2
+                    it[this.userId] = userBothSuper
+                    it[isFavourite] = true
+                    it[superLikedAt] = 10000L
+                }
+
+                Ids(song1, song2, userLikedOnly, userBothSuper)
             }
-            UserSongTable.insert {
-                it[songId] = song2
-                it[this.userId] = userLikedOnly
-                it[isFavourite] = true
-                it[superLikedAt] = 9000L
-            }
 
-            UserSongTable.insert {
-                it[songId] = song1
-                it[this.userId] = userBothSuper
-                it[isFavourite] = true
-                it[superLikedAt] = 5000L
-            }
-            UserSongTable.insert {
-                it[songId] = song2
-                it[this.userId] = userBothSuper
-                it[isFavourite] = true
-                it[superLikedAt] = 10000L
-            }
+            service.mergeDuplicates()
 
-            Ids(song1, song2, userLikedOnly, userBothSuper)
+            transaction(database) {
+                val remainingSongId = SongTable.selectAll().single()[SongTable.id].value
+                assertEquals(song1, remainingSongId)
+
+                val likedOnlyRow = UserSongTable.selectAll()
+                    .where { (UserSongTable.songId eq remainingSongId) and (UserSongTable.userId eq userLikedOnly) }
+                    .single()
+                assertEquals(true, likedOnlyRow[UserSongTable.isFavourite])
+                assertEquals(9000L, likedOnlyRow[UserSongTable.superLikedAt])
+
+                val bothSuperRow = UserSongTable.selectAll()
+                    .where { (UserSongTable.songId eq remainingSongId) and (UserSongTable.userId eq userBothSuper) }
+                    .single()
+                assertEquals(true, bothSuperRow[UserSongTable.isFavourite])
+                assertEquals(5000L, bothSuperRow[UserSongTable.superLikedAt])
+            }
         }
-
-        service.mergeDuplicates()
-
-        transaction(database) {
-            val remainingSongId = SongTable.selectAll().single()[SongTable.id].value
-            assertEquals(song1, remainingSongId)
-
-            val likedOnlyRow = UserSongTable.selectAll()
-                .where { (UserSongTable.songId eq remainingSongId) and (UserSongTable.userId eq userLikedOnly) }
-                .single()
-            assertEquals(true, likedOnlyRow[UserSongTable.isFavourite])
-            assertEquals(9000L, likedOnlyRow[UserSongTable.superLikedAt])
-
-            val bothSuperRow = UserSongTable.selectAll()
-                .where { (UserSongTable.songId eq remainingSongId) and (UserSongTable.userId eq userBothSuper) }
-                .single()
-            assertEquals(true, bothSuperRow[UserSongTable.isFavourite])
-            assertEquals(5000L, bothSuperRow[UserSongTable.superLikedAt])
-        }
-    }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
@@ -500,10 +531,12 @@ class LibraryMergeServiceTest : KoinTest {
             val albumId = AlbumTable.insert { it[name] = "Album" }[AlbumTable.id]
             // song dedup keeps the lowest `inserted`
             val kept = SongTable.insert {
-                it[title] = "Dup"; it[this.albumId] = albumId; it[fileSize] = 100L; it[duration] = 60L; it[filePath] = "p"; it[inserted] = 1000L
+                it[title] = "Dup"; it[this.albumId] = albumId; it[fileSize] = 100L; it[duration] = 60L; it[filePath] =
+                "p"; it[inserted] = 1000L
             }[SongTable.id].value
             val removed = SongTable.insert {
-                it[title] = "Dup"; it[this.albumId] = albumId; it[fileSize] = 100L; it[duration] = 60L; it[filePath] = "p"; it[inserted] = 2000L
+                it[title] = "Dup"; it[this.albumId] = albumId; it[fileSize] = 100L; it[duration] = 60L; it[filePath] =
+                "p"; it[inserted] = 2000L
             }[SongTable.id].value
 
             val userId = UserTable.insert { it[username] = "u"; it[passwordHash] = "p" }[UserTable.id]
@@ -534,10 +567,12 @@ class LibraryMergeServiceTest : KoinTest {
         val keptSong = transaction(database) {
             val albumId = AlbumTable.insert { it[name] = "Album" }[AlbumTable.id]
             val kept = SongTable.insert {
-                it[title] = "Dup"; it[this.albumId] = albumId; it[fileSize] = 100L; it[duration] = 60L; it[filePath] = "p"; it[inserted] = 1000L
+                it[title] = "Dup"; it[this.albumId] = albumId; it[fileSize] = 100L; it[duration] = 60L; it[filePath] =
+                "p"; it[inserted] = 1000L
             }[SongTable.id].value
             val removed = SongTable.insert {
-                it[title] = "Dup"; it[this.albumId] = albumId; it[fileSize] = 100L; it[duration] = 60L; it[filePath] = "p"; it[inserted] = 2000L
+                it[title] = "Dup"; it[this.albumId] = albumId; it[fileSize] = 100L; it[duration] = 60L; it[filePath] =
+                "p"; it[inserted] = 2000L
             }[SongTable.id].value
 
             val userId = UserTable.insert { it[username] = "u"; it[passwordHash] = "p" }[UserTable.id]
@@ -573,12 +608,18 @@ class LibraryMergeServiceTest : KoinTest {
         val collectionId = UUID.randomUUID()
 
         transaction(database) {
-            AlbumTable.insert { it[id] = removedAlbum; it[name] = "Album"; it[originalId] = "tidal:orig"; it[songCount] = 10 }
-            AlbumTable.insert { it[id] = keptAlbum; it[name] = "Album (dup)"; it[originalId] = "tidal:orig"; it[songCount] = 12 }
+            AlbumTable.insert {
+                it[id] = removedAlbum; it[name] = "Album"; it[originalId] = "tidal:orig"; it[songCount] = 10
+            }
+            AlbumTable.insert {
+                it[id] = keptAlbum; it[name] = "Album (dup)"; it[originalId] = "tidal:orig"; it[songCount] = 12
+            }
 
             val userId = UserTable.insert { it[username] = "u"; it[passwordHash] = "p" }[UserTable.id]
             CollectionTable.insert { it[id] = collectionId; it[name] = "C"; it[creator] = userId }
-            CollectionAlbumTable.insert { it[CollectionAlbumTable.collectionId] = collectionId; it[albumId] = removedAlbum }
+            CollectionAlbumTable.insert {
+                it[CollectionAlbumTable.collectionId] = collectionId; it[albumId] = removedAlbum
+            }
         }
 
         service.mergeDuplicates()

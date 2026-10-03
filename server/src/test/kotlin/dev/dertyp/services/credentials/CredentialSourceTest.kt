@@ -34,7 +34,10 @@ class CredentialSourceTest {
     @AfterEach
     fun tearDown() = TestDatabase.cleanUp()
 
-    private fun source(env: Map<String, String> = emptyMap(), with: CredentialCipher = cipher): PodcastIndexCredentialSource {
+    private fun source(
+        env: Map<String, String> = emptyMap(),
+        with: CredentialCipher = cipher
+    ): PodcastIndexCredentialSource {
         val config = MapApplicationConfig()
         env.forEach { (key, value) -> config.put(key, value) }
         return PodcastIndexCredentialSource(settings, config, with)

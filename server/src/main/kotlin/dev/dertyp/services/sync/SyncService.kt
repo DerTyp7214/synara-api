@@ -78,7 +78,11 @@ abstract class SyncService(
             return instance
         }
 
-        fun getInstance(user: User, environment: ApplicationEnvironment, type: ISyncService.SyncServiceType): SyncService {
+        fun getInstance(
+            user: User,
+            environment: ApplicationEnvironment,
+            type: ISyncService.SyncServiceType
+        ): SyncService {
             return when (type) {
                 ISyncService.SyncServiceType.tidal -> TidalSyncService(environment, user)
                 else -> throw IllegalArgumentException("Invalid sync service type: $type")

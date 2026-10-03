@@ -144,9 +144,16 @@ class ScheduleServiceWorkerTaskTest : KoinTest {
         val audioStartRuns = CompletableDeferred<Unit>()
         val dependentDone = CompletableDeferred<Unit>()
 
-        service.registerManagedTask(TaskKeys.MUSICBRAINZ_WORKER, "MusicBrainz Worker") { musicBrainzRuns.incrementAndGet() }
+        service.registerManagedTask(
+            TaskKeys.MUSICBRAINZ_WORKER,
+            "MusicBrainz Worker"
+        ) { musicBrainzRuns.incrementAndGet() }
         service.registerManagedTask(TaskKeys.IMAGE_ANALYSIS, "Image Analysis") { imageRuns.complete(Unit) }
-        service.registerManagedTask(TaskKeys.AUDIO_START_ANALYSIS, "Audio Start Analysis") { audioStartRuns.complete(Unit) }
+        service.registerManagedTask(TaskKeys.AUDIO_START_ANALYSIS, "Audio Start Analysis") {
+            audioStartRuns.complete(
+                Unit
+            )
+        }
         service.dependentOn(TaskKeys.MUSICBRAINZ_WORKER) { dependentDone.complete(Unit) }
 
         val job = launch { service.startService() }

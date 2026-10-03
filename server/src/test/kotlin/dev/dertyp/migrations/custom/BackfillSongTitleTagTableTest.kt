@@ -70,7 +70,8 @@ class BackfillSongTitleTagTableTest : KoinTest {
     @EnumSource(DbDialect::class)
     fun `fills the table from the title tags column`(dialect: DbDialect) = runBlocking {
         setup(dialect)
-        val remix = insertSong("Song", """[{"kind":"REMIX","label":"Skrillex Remix"},{"kind":"FEAT","label":"feat. X"}]""")
+        val remix =
+            insertSong("Song", """[{"kind":"REMIX","label":"Skrillex Remix"},{"kind":"FEAT","label":"feat. X"}]""")
         val doubleFeat = insertSong("Song", """[{"kind":"FEAT","label":"feat. X"},{"kind":"FEAT","label":"with Y"}]""")
         insertSong("Plain")
         insertSong("Broken", "not json")

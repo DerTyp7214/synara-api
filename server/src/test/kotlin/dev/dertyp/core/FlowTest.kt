@@ -49,7 +49,7 @@ class FlowTest {
         transaction(database) {
             SchemaUtils.create(*allTables)
         }
-        
+
         startKoin {
             modules(module {
                 single { mockk<dev.dertyp.services.StorageService>(relaxed = true) }
@@ -68,7 +68,7 @@ class FlowTest {
     fun `filterExisting should filter tracks by ISRC`(dialect: DbDialect) = runBlocking {
         setup(dialect)
         val isrc = "USAT20300184"
-        
+
         transaction(database) {
             val albumId = AlbumTable.insert { it[name] = "Album" }[AlbumTable.id]
             SongTable.insert {

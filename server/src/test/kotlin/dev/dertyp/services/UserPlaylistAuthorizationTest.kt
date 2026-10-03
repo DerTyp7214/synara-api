@@ -28,7 +28,7 @@ class UserPlaylistAuthorizationTest : KoinTest {
         database = TestDatabase.connect(dialect, "playlist_auth")
         transaction(database) {
             SchemaUtils.create(
-                UserTable, ImageTable, UserPlaylistTable, SongTable, SongVariantTable, 
+                UserTable, ImageTable, UserPlaylistTable, SongTable, SongVariantTable,
                 UserPlaylistSongTable, SongMusicBrainzTable, MBReleaseTable,
                 AlbumTable, ArtistTable, SongArtistTable, AlbumArtistTable
             )
@@ -60,7 +60,7 @@ class UserPlaylistAuthorizationTest : KoinTest {
         transaction(database) {
             UserTable.insert { it[id] = user1Id; it[username] = "user1"; it[passwordHash] = "" }
             UserTable.insert { it[id] = user2Id; it[username] = "user2"; it[passwordHash] = "" }
-            
+
             UserPlaylistTable.insert {
                 it[id] = UUID.randomUUID()
                 it[name] = "User 1 Playlist"
@@ -90,7 +90,7 @@ class UserPlaylistAuthorizationTest : KoinTest {
         transaction(database) {
             UserTable.insert { it[id] = user1Id; it[username] = "user1"; it[passwordHash] = "" }
             UserTable.insert { it[id] = user2Id; it[username] = "user2"; it[passwordHash] = "" }
-            
+
             UserPlaylistTable.insert {
                 it[id] = UUID.randomUUID()
                 it[name] = "User 1 Playlist"

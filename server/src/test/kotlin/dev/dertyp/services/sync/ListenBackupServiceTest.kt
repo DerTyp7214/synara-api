@@ -71,6 +71,7 @@ class ListenBackupServiceTest {
                     failNext = false
                     respond("boom", HttpStatusCode.InternalServerError)
                 }
+
                 request.url.encodedPath.endsWith(ListenBackupProtocol.LISTENS_PATH) -> {
                     val body = (request.body as TextContent).text
                     val batch = json.decodeFromString<ListenBackupBatch>(body)
@@ -81,16 +82,19 @@ class ListenBackupServiceTest {
                         headersOf("Content-Type", ContentType.Application.Json.toString()),
                     )
                 }
+
                 request.url.encodedPath.endsWith(ListenBackupProtocol.HEALTH_PATH) -> respond(
                     """{"ok":true,"listenCount":3}""",
                     HttpStatusCode.OK,
                     headersOf("Content-Type", ContentType.Application.Json.toString()),
                 )
+
                 request.url.encodedPath.endsWith(ListenBackupProtocol.STATUS_PATH) -> respond(
                     """{"serverId":null,"listenCount":3,"lastReceivedAt":null,"maxUpdatedAt":null}""",
                     HttpStatusCode.OK,
                     headersOf("Content-Type", ContentType.Application.Json.toString()),
                 )
+
                 else -> respond("not found", HttpStatusCode.NotFound)
             }
         }
@@ -122,19 +126,20 @@ class ListenBackupServiceTest {
         uid
     }
 
-    private fun insertListen(userId: UUID, source: ListenSource, updatedAt: Long, msPlayed: Long? = 200_000L): UUID = transaction(database) {
-        val id = UUID.randomUUID()
-        ListenTable.insert {
-            it[ListenTable.id] = id
-            it[ListenTable.userId] = userId
-            it[listenedAt] = updatedAt
-            it[listenSource] = source
-            it[ListenTable.msPlayed] = msPlayed
-            it[ListenTable.updatedAt] = updatedAt
-            it[trackName] = "Track $updatedAt"
+    private fun insertListen(userId: UUID, source: ListenSource, updatedAt: Long, msPlayed: Long? = 200_000L): UUID =
+        transaction(database) {
+            val id = UUID.randomUUID()
+            ListenTable.insert {
+                it[ListenTable.id] = id
+                it[ListenTable.userId] = userId
+                it[listenedAt] = updatedAt
+                it[listenSource] = source
+                it[ListenTable.msPlayed] = msPlayed
+                it[ListenTable.updatedAt] = updatedAt
+                it[trackName] = "Track $updatedAt"
+            }
+            id
         }
-        id
-    }
 
     private fun receivedIds(): List<UUID> = received.flatMap { batch -> batch.listens.map { it.id } }
 
@@ -259,8 +264,22 @@ class ListenBackupServiceTest {
     fun `updateConfig validates input and keeps the key when null`(dialect: DbDialect) = runBlocking {
         setup(dialect)
         assertThrows<IllegalArgumentException> { service.updateConfig(ListenBackupConfig(enabled = true, url = "")) }
-        assertThrows<IllegalArgumentException> { service.updateConfig(ListenBackupConfig(url = "ftp://x", batchSize = 10)) }
-        assertThrows<IllegalArgumentException> { service.updateConfig(ListenBackupConfig(url = "http://x", batchSize = 0)) }
+        assertThrows<IllegalArgumentException> {
+            service.updateConfig(
+                ListenBackupConfig(
+                    url = "ftp://x",
+                    batchSize = 10
+                )
+            )
+        }
+        assertThrows<IllegalArgumentException> {
+            service.updateConfig(
+                ListenBackupConfig(
+                    url = "http://x",
+                    batchSize = 0
+                )
+            )
+        }
 
         service.updateConfig(ListenBackupConfig(enabled = true, url = "http://x", key = "k1", batchSize = 10))
         assertTrue(service.getState().hasKey)

@@ -32,7 +32,7 @@ class ArtistIdentityEvidenceTest {
     fun `normalizeCopyrightHolder strips notices, years, distribution clauses and legal suffixes`() {
         val cases = listOf<Pair<String?, String?>>(
             "℗ 2026 DIVISION / RCA & GOLD LEAGUE distributed by Sony Music Entertainment" to
-                "division / rca & gold league",
+                    "division / rca & gold league",
             "℗ 2026 13652890 Records DK" to "13652890 records dk",
             "℗ 2024 Division Recordings" to "division recordings",
             "(P) 2019 Sony Music Entertainment Germany GmbH" to "sony music entertainment germany",
@@ -40,7 +40,7 @@ class ArtistIdentityEvidenceTest {
             "℗ 2024 Universal Music GmbH" to "universal music",
             "℗ & © 2023 Division, a Sony Music company" to "division",
             "© 2022 Warner Music Group Germany Holding GmbH, under exclusive license to Warner Music Central Europe" to
-                "warner music group germany holding",
+                    "warner music group germany holding",
             "Copyright 2020 Chapter ONE, a division of Universal Music GmbH" to "chapter one",
             "℗ 2024" to null,
             "" to null,
@@ -164,7 +164,7 @@ class ArtistIdentityEvidenceTest {
         assertTrue(verdict.blocked)
         assertEquals(
             "blocked copyright holder \"13652890 records dk\", blocked label \"13652890 Records DK\", " +
-                "blocked ISRC registrant \"QZK6P\"",
+                    "blocked ISRC registrant \"QZK6P\"",
             verdict.reason
         )
     }
@@ -289,7 +289,7 @@ class ArtistIdentityEvidenceTest {
         assertFalse(verdict.blocked)
         assertEquals(
             "copyright holder \"13652890 records dk\", label \"13652890 Records DK\" and " +
-                "ISRC registrant \"QZK6P\" never seen for this artist",
+                    "ISRC registrant \"QZK6P\" never seen for this artist",
             verdict.reason
         )
     }
@@ -307,7 +307,7 @@ class ArtistIdentityEvidenceTest {
         assertTrue(verdict.suspect)
         assertEquals(
             "ISRC registrants \"QMDA7\", \"QZK6P\" never seen for this artist " +
-                "(genre Pop, artist mostly Hip-Hop/Rap)",
+                    "(genre Pop, artist mostly Hip-Hop/Rap)",
             verdict.reason
         )
     }

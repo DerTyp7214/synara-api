@@ -17,7 +17,7 @@ class FlacAnalysisService : Service() {
         SongTable
             .leftJoin(FlacInfoTable)
             .select(SongTable.id)
-            .where { 
+            .where {
                 (SongTable.format eq "flac") and (FlacInfoTable.songId.isNull())
             }
             .map { it[SongTable.id].value }
@@ -102,7 +102,7 @@ class FlacAnalysisService : Service() {
         if (result.exitCode != 0) return null
 
         val output = result.fullOutput
-        
+
         var sampleRate = 0
         var channels = 0
         var bitDepth = 0
@@ -126,15 +126,18 @@ class FlacAnalysisService : Service() {
 
             when (currentBlockType) {
                 "STREAMINFO" -> {
-                    if (trimmed.startsWith("sample_rate: ")) sampleRate = trimmed.substringAfter(": ").substringBefore(" ").toInt()
+                    if (trimmed.startsWith("sample_rate: ")) sampleRate =
+                        trimmed.substringAfter(": ").substringBefore(" ").toInt()
                     if (trimmed.startsWith("channels: ")) channels = trimmed.substringAfter(": ").toInt()
                     if (trimmed.startsWith("bits-per-sample: ")) bitDepth = trimmed.substringAfter(": ").toInt()
                     if (trimmed.startsWith("total samples: ")) totalSamples = trimmed.substringAfter(": ").toLong()
                     if (trimmed.startsWith("MD5 signature: ")) md5 = trimmed.substringAfter(": ")
                 }
+
                 "PADDING" -> {
                     if (trimmed.startsWith("length: ")) padding += trimmed.substringAfter(": ").toInt()
                 }
+
                 "SEEKTABLE" -> {
                     if (trimmed.startsWith("point ") && trimmed.contains("sample_number=")) {
                         val sampleNum = trimmed.substringAfter("sample_number=").substringBefore(",").toLong()

@@ -351,52 +351,55 @@ class AppleMusicReleaseService(private val environment: ApplicationEnvironment) 
             }
         }
 
-        val groupLinks = if (artistGroupIds.isEmpty()) emptyMap<Pair<String, String>, UUID>() else dbSemaphore.withPermit {
-            dbQuery {
-                RecentReleaseLinkTable
-                    .innerJoin(ProviderLinkTable, { RecentReleaseLinkTable.linkId }, { ProviderLinkTable.id })
-                    .select(
-                        ProviderLinkTable.provider,
-                        ProviderLinkTable.externalId,
-                        RecentReleaseLinkTable.releaseId
-                    )
-                    .where { RecentReleaseLinkTable.releaseId inList artistGroupIds }
-                    .associate {
-                        (it[ProviderLinkTable.provider] to it[ProviderLinkTable.externalId]) to
-                                it[RecentReleaseLinkTable.releaseId].value
-                    }
+        val groupLinks =
+            if (artistGroupIds.isEmpty()) emptyMap<Pair<String, String>, UUID>() else dbSemaphore.withPermit {
+                dbQuery {
+                    RecentReleaseLinkTable
+                        .innerJoin(ProviderLinkTable, { RecentReleaseLinkTable.linkId }, { ProviderLinkTable.id })
+                        .select(
+                            ProviderLinkTable.provider,
+                            ProviderLinkTable.externalId,
+                            RecentReleaseLinkTable.releaseId
+                        )
+                        .where { RecentReleaseLinkTable.releaseId inList artistGroupIds }
+                        .associate {
+                            (it[ProviderLinkTable.provider] to it[ProviderLinkTable.externalId]) to
+                                    it[RecentReleaseLinkTable.releaseId].value
+                        }
+                }
             }
-        }
 
-        val relationLinks = if (artistGroupIds.isEmpty()) emptyMap<Pair<String, String>, UUID>() else dbSemaphore.withPermit {
-            dbQuery {
-                val releaseGroups = MBReleaseTable
-                    .select(MBReleaseTable.id, MBReleaseTable.releaseGroupId)
-                    .where { MBReleaseTable.releaseGroupId inList artistGroupIds }
-                    .mapNotNull { row ->
-                        val group = row[MBReleaseTable.releaseGroupId]?.value ?: return@mapNotNull null
-                        row[MBReleaseTable.id].value to group
-                    }
-                    .toMap()
+        val relationLinks =
+            if (artistGroupIds.isEmpty()) emptyMap<Pair<String, String>, UUID>() else dbSemaphore.withPermit {
+                dbQuery {
+                    val releaseGroups = MBReleaseTable
+                        .select(MBReleaseTable.id, MBReleaseTable.releaseGroupId)
+                        .where { MBReleaseTable.releaseGroupId inList artistGroupIds }
+                        .mapNotNull { row ->
+                            val group = row[MBReleaseTable.releaseGroupId]?.value ?: return@mapNotNull null
+                            row[MBReleaseTable.id].value to group
+                        }
+                        .toMap()
 
-                val owners = artistGroupIds + releaseGroups.keys
-                val groupOwners = artistGroupIds.toSet()
+                    val owners = artistGroupIds + releaseGroups.keys
+                    val groupOwners = artistGroupIds.toSet()
 
-                MBRelationProviderTable
-                    .select(
-                        MBRelationProviderTable.ownerId,
-                        MBRelationProviderTable.provider,
-                        MBRelationProviderTable.externalId
-                    )
-                    .where { MBRelationProviderTable.ownerId inList owners }
-                    .mapNotNull { row ->
-                        val owner = row[MBRelationProviderTable.ownerId]
-                        val group = if (owner in groupOwners) owner else (releaseGroups[owner] ?: return@mapNotNull null)
-                        (row[MBRelationProviderTable.provider] to row[MBRelationProviderTable.externalId]) to group
-                    }
-                    .toMap()
+                    MBRelationProviderTable
+                        .select(
+                            MBRelationProviderTable.ownerId,
+                            MBRelationProviderTable.provider,
+                            MBRelationProviderTable.externalId
+                        )
+                        .where { MBRelationProviderTable.ownerId inList owners }
+                        .mapNotNull { row ->
+                            val owner = row[MBRelationProviderTable.ownerId]
+                            val group =
+                                if (owner in groupOwners) owner else (releaseGroups[owner] ?: return@mapNotNull null)
+                            (row[MBRelationProviderTable.provider] to row[MBRelationProviderTable.externalId]) to group
+                        }
+                        .toMap()
+                }
             }
-        }
 
         val barcodeGroups = if (barcodes.isEmpty()) emptyMap<String, UUID>() else dbSemaphore.withPermit {
             dbQuery {
@@ -627,9 +630,15 @@ class AppleMusicReleaseService(private val environment: ApplicationEnvironment) 
             var finalGroupId = matchedGroupId
             val trackableGroupId = untrackedGroupId
             if (finalGroupId == null && trackableGroupId != null) {
-                val tracked = runCatchingCancellable { releaseService.trackReleaseGroup(trackableGroupId, artistId, priority) }
-                    .onFailure { logger.error("Failed to track release group $trackableGroupId for artist $artistId", it) }
-                    .getOrDefault(false)
+                val tracked =
+                    runCatchingCancellable { releaseService.trackReleaseGroup(trackableGroupId, artistId, priority) }
+                        .onFailure {
+                            logger.error(
+                                "Failed to track release group $trackableGroupId for artist $artistId",
+                                it
+                            )
+                        }
+                        .getOrDefault(false)
                 if (tracked) finalGroupId = trackableGroupId
             }
 

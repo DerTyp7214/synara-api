@@ -35,7 +35,8 @@ class CredentialResolver(private val repository: SecretRepository, httpClient: H
             recordFailure(name, secret, e)
             throw e
         } catch (e: Exception) {
-            val failure = CredentialException(CredentialErrorCode.UPSTREAM_FAILED, e.message ?: e::class.simpleName.orEmpty())
+            val failure =
+                CredentialException(CredentialErrorCode.UPSTREAM_FAILED, e.message ?: e::class.simpleName.orEmpty())
             recordFailure(name, secret, failure)
             throw failure
         }
@@ -63,7 +64,12 @@ class CredentialResolver(private val repository: SecretRepository, httpClient: H
         CredentialTestResult(ok = false, expiresAt = null, message = "${e.code}: ${e.message}")
     }
 
-    fun toStoredSecret(name: String, kind: CredentialKind, input: CredentialInput, existing: StoredSecret?): StoredSecret {
+    fun toStoredSecret(
+        name: String,
+        kind: CredentialKind,
+        input: CredentialInput,
+        existing: StoredSecret?
+    ): StoredSecret {
         val inputKind = kindOf(input)
         if (inputKind != kind) {
             throw CredentialException(CredentialErrorCode.INVALID, "Input $inputKind does not match kind $kind")
@@ -79,6 +85,7 @@ class CredentialResolver(private val repository: SecretRepository, httpClient: H
                     scope = input.scope?.takeIf { it.isNotBlank() },
                 )
             }
+
             is CredentialInput.AppleDeveloperKeyInput -> {
                 val previous = existing as? AppleSecret
                 if (input.ttlSeconds !in 1..AppleDeveloperTokenBroker.MAX_TTL_SECONDS) {
@@ -90,12 +97,18 @@ class CredentialResolver(private val repository: SecretRepository, httpClient: H
                 AppleSecret(
                     teamId = keep(input.teamId, previous?.teamId, "teamId"),
                     keyId = keep(input.keyId, previous?.keyId, "keyId"),
-                    p8Pem = keep(input.p8Pem, previous?.p8Pem, "p8Pem").also { AppleDeveloperTokenBroker.parsePrivateKey(it) },
+                    p8Pem = keep(
+                        input.p8Pem,
+                        previous?.p8Pem,
+                        "p8Pem"
+                    ).also { AppleDeveloperTokenBroker.parsePrivateKey(it) },
                     ttlSeconds = input.ttlSeconds,
                 )
             }
+
             is CredentialInput.ApiKeyInput ->
                 ApiKeySecret(keep(input.key, (existing as? ApiKeySecret)?.key, "key"))
+
             is CredentialInput.ApiKeyPairInput -> {
                 val previous = existing as? ApiKeyPairSecret
                 ApiKeyPairSecret(
@@ -103,6 +116,7 @@ class CredentialResolver(private val repository: SecretRepository, httpClient: H
                     secret = keep(input.secret, previous?.secret, "secret"),
                 )
             }
+
             is CredentialInput.TidalSessionInput -> tidalSecret(name, input, existing as? TidalSessionSecret)
             is CredentialInput.FileInput -> fileSecret(input.files, existing as? FileSecret)
         }
@@ -133,22 +147,31 @@ class CredentialResolver(private val repository: SecretRepository, httpClient: H
     private fun lockFor(name: String) = locks.computeIfAbsent(name) { Mutex() }
 
     private fun load(name: String): StoredSecret =
-        repository.loadSecret(name) ?: throw CredentialException(CredentialErrorCode.NOT_FOUND, "Unknown credential $name")
+        repository.loadSecret(name) ?: throw CredentialException(
+            CredentialErrorCode.NOT_FOUND,
+            "Unknown credential $name"
+        )
 
-    private suspend fun dispatch(name: String, secret: StoredSecret): BrokerResolution<out StoredSecret> = when (secret) {
-        is OAuthSecret -> oauthBroker.resolve(name, secret)
-        is AppleSecret -> appleBroker.resolve(name, secret)
-        is ApiKeySecret, is ApiKeyPairSecret -> apiKeyBroker.resolve(name, secret)
-        is TidalSessionSecret -> tidalBroker.resolve(name, secret)
-        is FileSecret -> fileBroker.resolve(name, secret)
-    }
+    private suspend fun dispatch(name: String, secret: StoredSecret): BrokerResolution<out StoredSecret> =
+        when (secret) {
+            is OAuthSecret -> oauthBroker.resolve(name, secret)
+            is AppleSecret -> appleBroker.resolve(name, secret)
+            is ApiKeySecret, is ApiKeyPairSecret -> apiKeyBroker.resolve(name, secret)
+            is TidalSessionSecret -> tidalBroker.resolve(name, secret)
+            is FileSecret -> fileBroker.resolve(name, secret)
+        }
 
     private fun recordFailure(name: String, secret: StoredSecret, failure: CredentialException) {
-        val status = if (failure.code == CredentialErrorCode.NEEDS_LOGIN) CredentialStatus.NEEDS_LOGIN else CredentialStatus.ERROR
+        val status =
+            if (failure.code == CredentialErrorCode.NEEDS_LOGIN) CredentialStatus.NEEDS_LOGIN else CredentialStatus.ERROR
         repository.updateState(name, initialState(secret).copy(status = status, statusMessage = failure.message))
     }
 
-    private fun tidalSecret(name: String, input: CredentialInput.TidalSessionInput, previous: TidalSessionSecret?): TidalSessionSecret {
+    private fun tidalSecret(
+        name: String,
+        input: CredentialInput.TidalSessionInput,
+        previous: TidalSessionSecret?
+    ): TidalSessionSecret {
         val client = CredentialPresets.tidalClient(name, input.clientId, input.clientSecret, previous)
         val base = TidalSessionSecret(
             format = input.format,

@@ -139,17 +139,23 @@ class CollectionService : Service() {
                 if (SongTable.select(SongTable.id).where { SongTable.id eq itemId }.empty()) return@dbQuery false
                 CollectionSongTable.insertIgnore { it[collectionId] = id; it[songId] = itemId }.insertedCount > 0
             }
+
             CollectionItemType.ALBUM -> {
                 if (AlbumTable.select(AlbumTable.id).where { AlbumTable.id eq itemId }.empty()) return@dbQuery false
                 CollectionAlbumTable.insertIgnore { it[collectionId] = id; it[albumId] = itemId }.insertedCount > 0
             }
+
             CollectionItemType.ARTIST -> {
                 if (ArtistTable.select(ArtistTable.id).where { ArtistTable.id eq itemId }.empty()) return@dbQuery false
                 CollectionArtistTable.insertIgnore { it[collectionId] = id; it[artistId] = itemId }.insertedCount > 0
             }
+
             CollectionItemType.PLAYLIST -> {
-                if (UserPlaylistTable.select(UserPlaylistTable.id).where { UserPlaylistTable.id eq itemId }.empty()) return@dbQuery false
-                CollectionPlaylistTable.insertIgnore { it[collectionId] = id; it[playlistId] = itemId }.insertedCount > 0
+                if (UserPlaylistTable.select(UserPlaylistTable.id).where { UserPlaylistTable.id eq itemId }
+                        .empty()) return@dbQuery false
+                CollectionPlaylistTable.insertIgnore {
+                    it[collectionId] = id; it[playlistId] = itemId
+                }.insertedCount > 0
             }
         }
     }
@@ -159,10 +165,13 @@ class CollectionService : Service() {
             when (itemType) {
                 CollectionItemType.SONG ->
                     CollectionSongTable.deleteWhere { (collectionId eq id) and (songId eq itemId) } > 0
+
                 CollectionItemType.ALBUM ->
                     CollectionAlbumTable.deleteWhere { (collectionId eq id) and (albumId eq itemId) } > 0
+
                 CollectionItemType.ARTIST ->
                     CollectionArtistTable.deleteWhere { (collectionId eq id) and (artistId eq itemId) } > 0
+
                 CollectionItemType.PLAYLIST ->
                     CollectionPlaylistTable.deleteWhere { (collectionId eq id) and (playlistId eq itemId) } > 0
             }
@@ -204,9 +213,12 @@ class CollectionService : Service() {
                 hasNextPage = songPage.hasNextPage,
             )
         }
-        val artistsDeferred = async { artistService.rankedSearchInCollection(collectionId, page, pageSize, query, userId) }
-        val albumsDeferred = async { albumService.rankedSearchInCollection(collectionId, page, pageSize, query, userId) }
-        val playlistsDeferred = async { userPlaylistService.rankedSearchInCollection(collectionId, page, pageSize, query) }
+        val artistsDeferred =
+            async { artistService.rankedSearchInCollection(collectionId, page, pageSize, query, userId) }
+        val albumsDeferred =
+            async { albumService.rankedSearchInCollection(collectionId, page, pageSize, query, userId) }
+        val playlistsDeferred =
+            async { userPlaylistService.rankedSearchInCollection(collectionId, page, pageSize, query) }
 
         CollectionSearchResults(
             songs = songsDeferred.await(),
@@ -217,13 +229,36 @@ class CollectionService : Service() {
     }
 
     fun songIds(collectionId: UUID): Flow<UUID> =
-        linkedIdFlow(collectionId, CollectionSongTable.collectionId, CollectionSongTable.songId, CollectionSongTable.addedAt)
+        linkedIdFlow(
+            collectionId,
+            CollectionSongTable.collectionId,
+            CollectionSongTable.songId,
+            CollectionSongTable.addedAt
+        )
+
     fun albumIds(collectionId: UUID): Flow<UUID> =
-        linkedIdFlow(collectionId, CollectionAlbumTable.collectionId, CollectionAlbumTable.albumId, CollectionAlbumTable.addedAt)
+        linkedIdFlow(
+            collectionId,
+            CollectionAlbumTable.collectionId,
+            CollectionAlbumTable.albumId,
+            CollectionAlbumTable.addedAt
+        )
+
     fun artistIds(collectionId: UUID): Flow<UUID> =
-        linkedIdFlow(collectionId, CollectionArtistTable.collectionId, CollectionArtistTable.artistId, CollectionArtistTable.addedAt)
+        linkedIdFlow(
+            collectionId,
+            CollectionArtistTable.collectionId,
+            CollectionArtistTable.artistId,
+            CollectionArtistTable.addedAt
+        )
+
     fun playlistIds(collectionId: UUID): Flow<UUID> =
-        linkedIdFlow(collectionId, CollectionPlaylistTable.collectionId, CollectionPlaylistTable.playlistId, CollectionPlaylistTable.addedAt)
+        linkedIdFlow(
+            collectionId,
+            CollectionPlaylistTable.collectionId,
+            CollectionPlaylistTable.playlistId,
+            CollectionPlaylistTable.addedAt
+        )
 
     private fun linkedIdFlow(
         collectionId: UUID,

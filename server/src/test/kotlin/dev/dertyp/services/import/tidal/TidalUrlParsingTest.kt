@@ -44,7 +44,10 @@ class TidalUrlParsingTest {
         assertEquals("357676034" to Type.ALBUM, downloader.parseUrl("https://tidal.com/album/357676034"))
         assertEquals("130201923" to Type.ALBUM, downloader.parseUrl("https://tidal.com/browse/album/130201923"))
         assertEquals("11343637" to Type.ALBUM, downloader.parseUrl("https://listen.tidal.com/album/11343637"))
-        assertEquals("301366648" to Type.ALBUM, downloader.parseUrl("https://listen.tidal.com/album/301366648/track/301366649"))
+        assertEquals(
+            "301366648" to Type.ALBUM,
+            downloader.parseUrl("https://listen.tidal.com/album/301366648/track/301366649")
+        )
         assertEquals("80" to Type.ARTIST, downloader.parseUrl("https://tidal.com/artist/80"))
         assertEquals("3557299" to Type.ARTIST, downloader.parseUrl("https://tidal.com/browse/artist/3557299"))
         assertEquals("116" to Type.ARTIST, downloader.parseUrl("https://listen.tidal.com/artist/116"))

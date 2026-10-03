@@ -116,7 +116,13 @@ class ListenHistoryQueryServiceTest {
         }
     }
 
-    private fun registerSong(id: UUID, title: String, durationMs: Long = 0, artists: List<Artist> = emptyList(), album: Album? = null) {
+    private fun registerSong(
+        id: UUID,
+        title: String,
+        durationMs: Long = 0,
+        artists: List<Artist> = emptyList(),
+        album: Album? = null
+    ) {
         songDtos[id] = UserSong(
             id = id,
             title = title,
@@ -326,7 +332,8 @@ class ListenHistoryQueryServiceTest {
         setup(dialect)
         val user = transaction(database) { insertUser() }
 
-        val error = runCatching { service.listens(user, ListenFilter(), 10, "garbage", ZoneOffset.UTC) }.exceptionOrNull()
+        val error =
+            runCatching { service.listens(user, ListenFilter(), 10, "garbage", ZoneOffset.UTC) }.exceptionOrNull()
 
         assertTrue(error is IllegalArgumentException)
     }
@@ -363,20 +370,21 @@ class ListenHistoryQueryServiceTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `summary counts listens and listened time using full duration when msPlayed is null`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        val user = transaction(database) {
-            val u = insertUser()
-            val song = insertSong(insertAlbum(), durationMs = 200_000)
-            insertListen(ms(2024, 1, 1), userId = u, songId = song, playedMs = null)
-            u
+    fun `summary counts listens and listened time using full duration when msPlayed is null`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val user = transaction(database) {
+                val u = insertUser()
+                val song = insertSong(insertAlbum(), durationMs = 200_000)
+                insertListen(ms(2024, 1, 1), userId = u, songId = song, playedMs = null)
+                u
+            }
+
+            val result = service.summary(user, ListenFilter(), ZoneOffset.UTC)
+
+            assertEquals(1L, result.listenCount)
+            assertEquals(200_000L, result.listenedMs)
         }
-
-        val result = service.summary(user, ListenFilter(), ZoneOffset.UTC)
-
-        assertEquals(1L, result.listenCount)
-        assertEquals(200_000L, result.listenedMs)
-    }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
@@ -491,8 +499,22 @@ class ListenHistoryQueryServiceTest {
             val localSong = insertSong(album, title = "Local Song", durationMs = 229_133)
             val mbid = UUID.randomUUID()
             val t = ms(2026, 9, 10, 13, 49, 44)
-            insertListen(t, lbUserId = lb, songId = lbSong, recordingMbid = mbid, isrcs = "US1111111111", playedMs = 229_133)
-            insertListen(t + 83, userId = u, songId = localSong, recordingMbid = mbid, isrcs = "US1111111111", playedMs = 229_000)
+            insertListen(
+                t,
+                lbUserId = lb,
+                songId = lbSong,
+                recordingMbid = mbid,
+                isrcs = "US1111111111",
+                playedMs = 229_133
+            )
+            insertListen(
+                t + 83,
+                userId = u,
+                songId = localSong,
+                recordingMbid = mbid,
+                isrcs = "US1111111111",
+                playedMs = 229_000
+            )
             u to localSong
         }
 
@@ -585,7 +607,8 @@ class ListenHistoryQueryServiceTest {
             u
         }
 
-        val byCount = service.top(user, ListenFilter(), McpTopKind.SONGS, McpTopOrder.LISTEN_COUNT, 10, 0, ZoneOffset.UTC)
+        val byCount =
+            service.top(user, ListenFilter(), McpTopKind.SONGS, McpTopOrder.LISTEN_COUNT, 10, 0, ZoneOffset.UTC)
         val byTime = service.top(user, ListenFilter(), McpTopKind.SONGS, McpTopOrder.LISTENED_MS, 10, 0, ZoneOffset.UTC)
 
         assertEquals("Song A", byCount.entries.first().name)
@@ -642,9 +665,13 @@ class ListenHistoryQueryServiceTest {
             u
         }
 
-        val result = service.top(user, ListenFilter(), McpTopKind.ARTISTS, McpTopOrder.LISTEN_COUNT, 10, 0, ZoneOffset.UTC)
+        val result =
+            service.top(user, ListenFilter(), McpTopKind.ARTISTS, McpTopOrder.LISTEN_COUNT, 10, 0, ZoneOffset.UTC)
 
-        assertEquals(setOf("Artist One" to 2L, "Artist Two" to 2L), result.entries.map { it.name to it.listenCount }.toSet())
+        assertEquals(
+            setOf("Artist One" to 2L, "Artist Two" to 2L),
+            result.entries.map { it.name to it.listenCount }.toSet()
+        )
     }
 
     @ParameterizedTest
@@ -660,7 +687,8 @@ class ListenHistoryQueryServiceTest {
             u
         }
 
-        val result = service.top(user, ListenFilter(), McpTopKind.SONGS, McpTopOrder.LISTEN_COUNT, 10, 0, ZoneOffset.UTC)
+        val result =
+            service.top(user, ListenFilter(), McpTopKind.SONGS, McpTopOrder.LISTEN_COUNT, 10, 0, ZoneOffset.UTC)
 
         val entry = result.entries.single()
         assertFalse(entry.matched)
@@ -690,7 +718,15 @@ class ListenHistoryQueryServiceTest {
             u to artist1
         }
 
-        val result = service.top(user, ListenFilter(artistId = artist1), McpTopKind.SONGS, McpTopOrder.LISTEN_COUNT, 10, 0, ZoneOffset.UTC)
+        val result = service.top(
+            user,
+            ListenFilter(artistId = artist1),
+            McpTopKind.SONGS,
+            McpTopOrder.LISTEN_COUNT,
+            10,
+            0,
+            ZoneOffset.UTC
+        )
 
         assertEquals(1, result.total)
         assertEquals("Song One", result.entries.single().name)
@@ -699,7 +735,9 @@ class ListenHistoryQueryServiceTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `timeline day buckets follow the requested timezone across a midnight boundary and include empty buckets`(dialect: DbDialect) = runBlocking {
+    fun `timeline day buckets follow the requested timezone across a midnight boundary and include empty buckets`(
+        dialect: DbDialect
+    ) = runBlocking {
         setup(dialect)
         val zone = ZoneId.of("Europe/Berlin")
         val from = ms(2024, 1, 15)

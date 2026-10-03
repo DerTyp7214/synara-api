@@ -73,7 +73,7 @@ class RedisSearchServiceTest {
         Thread.sleep(200)
 
         val results = service.search("song", "bohemian")
-        
+
         assertTrue(results.ids.contains(songId), "Should find the song by title")
         assertEquals(1, results.ids.size)
 
@@ -137,7 +137,7 @@ class RedisSearchServiceTest {
         Thread.sleep(200)
 
         val results = service.search("song", "Target")
-        
+
         assertEquals(3, results.ids.size)
         assertEquals(id1, results.ids[0], "Title match (weight 5) should be first")
         assertEquals(id3, results.ids[1], "Artist match (weight 2) should be second")
@@ -157,7 +157,7 @@ class RedisSearchServiceTest {
         Thread.sleep(200)
 
         val results = service.search("artist", "Target")
-        
+
         assertEquals(2, results.ids.size)
         assertEquals(id1, results.ids[0], "Name match should be first")
         assertEquals(id2, results.ids[1], "Alias match should be second")
@@ -167,7 +167,7 @@ class RedisSearchServiceTest {
     fun `search should respect offset and limit`() {
         if (TestRedis.redisContainer == null) return
 
-        (1..10).forEach { 
+        (1..10).forEach {
             val id = UUID.randomUUID()
             service.indexSong(id, "Test Song $it", "", "", "")
         }

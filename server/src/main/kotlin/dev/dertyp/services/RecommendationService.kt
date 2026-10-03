@@ -57,7 +57,10 @@ class RecommendationService : Service() {
 
         onProgress(0.0, "Exporting library")
         val songCount = exportSongs(File(dir, "songs.jsonl")) { exported, totalSongs ->
-            onProgress(exported.toDouble() / totalSongs.coerceAtLeast(1) * 35.0, "Exporting library: $exported/$totalSongs songs")
+            onProgress(
+                exported.toDouble() / totalSongs.coerceAtLeast(1) * 35.0,
+                "Exporting library: $exported/$totalSongs songs"
+            )
         }
         if (songCount == 0) {
             logger.info("No songs to train on, skipping")
@@ -144,7 +147,9 @@ class RecommendationService : Service() {
         UserPlaylistSongTable
             .select(UserPlaylistSongTable.playlistId, UserPlaylistSongTable.songId, UserPlaylistSongTable.addedAt)
             .orderBy(UserPlaylistSongTable.playlistId to SortOrder.ASC, UserPlaylistSongTable.addedAt to SortOrder.ASC)
-            .groupBy({ it[UserPlaylistSongTable.playlistId].value }, { it[UserPlaylistSongTable.songId].value.toString() })
+            .groupBy(
+                { it[UserPlaylistSongTable.playlistId].value },
+                { it[UserPlaylistSongTable.songId].value.toString() })
             .values.forEach { writer.emitSequence(it) }
 
         PlaylistSongTable
@@ -157,7 +162,11 @@ class RecommendationService : Service() {
     private fun emitAlbumSequences(writer: BufferedWriter) {
         SongTable
             .select(SongTable.id, SongTable.albumId, SongTable.discNumber, SongTable.trackNumber)
-            .orderBy(SongTable.albumId to SortOrder.ASC, SongTable.discNumber to SortOrder.ASC, SongTable.trackNumber to SortOrder.ASC)
+            .orderBy(
+                SongTable.albumId to SortOrder.ASC,
+                SongTable.discNumber to SortOrder.ASC,
+                SongTable.trackNumber to SortOrder.ASC
+            )
             .groupBy({ it[SongTable.albumId].value }, { it[SongTable.id].value.toString() })
             .values.forEach { writer.emitSequence(it) }
     }
@@ -182,7 +191,18 @@ class RecommendationService : Service() {
         ListenTable
             .join(link, JoinType.LEFT, onColumn = ListenTable.listenBrainzUserId, otherColumn = link.listenBrainzUserId)
             .join(SongTable, JoinType.INNER, onColumn = ListenTable.songId, otherColumn = SongTable.id)
-            .select(ListenTable.userId, link.userId, ListenTable.listenBrainzUserId, ListenTable.songId, ListenTable.listenedAt, ListenTable.recordingMbid, ListenTable.isrcs, ListenTable.msPlayed, ListenTable.listenSource, SongTable.duration)
+            .select(
+                ListenTable.userId,
+                link.userId,
+                ListenTable.listenBrainzUserId,
+                ListenTable.songId,
+                ListenTable.listenedAt,
+                ListenTable.recordingMbid,
+                ListenTable.isrcs,
+                ListenTable.msPlayed,
+                ListenTable.listenSource,
+                SongTable.duration
+            )
             .where { ListenTable.songId.isNotNull() }
             .andWhere { ListenTable.userId.isNotNull() or ListenTable.listenBrainzUserId.isNotNull() }
             .orderBy(ownerKey to SortOrder.ASC, ListenTable.listenedAt to SortOrder.ASC)
@@ -205,10 +225,10 @@ class RecommendationService : Service() {
                 }
 
                 val duplicatePlay = ts - lastTs <= ListenTable.DEDUP_WINDOW_MS && (
-                    song == lastSong ||
-                        (recordingMbid != null && recordingMbid == lastRecordingMbid) ||
-                        isrcs.any { it in lastIsrcs }
-                    )
+                        song == lastSong ||
+                                (recordingMbid != null && recordingMbid == lastRecordingMbid) ||
+                                isrcs.any { it in lastIsrcs }
+                        )
                 val play = PendingPlay(
                     song = song,
                     qualified = ListenTable.isQualifiedPlay(row[ListenTable.msPlayed], row[SongTable.duration]),

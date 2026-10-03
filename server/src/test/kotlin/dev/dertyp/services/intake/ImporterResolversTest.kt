@@ -64,7 +64,15 @@ class ImporterResolversTest {
         every { pluginManager.getAllImporters() } returns listOf(tiddl, tdn)
         every { importerProxy.defaultService } returns ImportBackend.Tiddl
         coEvery { userService.findUserById(user.id) } returns user
-        return ImporterResolvers(pluginManager, importerProxy, importService, linkResolver, userService, environment, upcomingReleases)
+        return ImporterResolvers(
+            pluginManager,
+            importerProxy,
+            importService,
+            linkResolver,
+            userService,
+            environment,
+            upcomingReleases
+        )
     }
 
     private fun resolver(backend: ImportBackend) = resolvers().resolvers().single { it.id == "import.${backend.id}" }

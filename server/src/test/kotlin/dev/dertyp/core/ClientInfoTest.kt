@@ -68,7 +68,10 @@ class ClientInfoTest {
     @Test
     fun `a valid time zone header is parsed`() {
         assertEquals(ZoneId.of("Europe/Berlin"), ClientInfo.fromHeaders("5", "2", "de", "Europe/Berlin").timeZone)
-        assertEquals(ZoneId.of("America/New_York"), ClientInfo.fromHeaders("5", "2", "en", " America/New_York ").timeZone)
+        assertEquals(
+            ZoneId.of("America/New_York"),
+            ClientInfo.fromHeaders("5", "2", "en", " America/New_York ").timeZone
+        )
     }
 
     @Test

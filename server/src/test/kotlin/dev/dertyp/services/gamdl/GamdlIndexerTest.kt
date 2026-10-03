@@ -56,7 +56,11 @@ class GamdlIndexerTest {
         return p
     }
 
-    private fun mockAudio(file: Path, tagValues: Map<FieldKey, String>, albumArtists: List<String> = listOf("Artist")): AudioFile {
+    private fun mockAudio(
+        file: Path,
+        tagValues: Map<FieldKey, String>,
+        albumArtists: List<String> = listOf("Artist")
+    ): AudioFile {
         val tag = mockk<Tag>(relaxed = true)
         val audio = mockk<AudioFile>(relaxed = true)
         every { audio.tag } returns tag

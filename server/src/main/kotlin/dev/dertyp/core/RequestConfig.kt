@@ -18,9 +18,11 @@ fun RequestConfig.paging() {
 fun RequestConfig.authHeader() {
     headerParameter<String>(HttpHeaders.Authorization) {
         description = "The auth token (JWT) \"Bearer\""
-        example(ValueExampleDescriptor(
-            name = "JWT",
-            value = $$"Bearer ${[token]}",
-        ))
+        example(
+            ValueExampleDescriptor(
+                name = "JWT",
+                value = $$"Bearer ${[token]}",
+            )
+        )
     }
 }

@@ -30,7 +30,17 @@ class ImportServiceTest {
         val urls = listOf("https://tidal.com/track/1")
         val entry = UrlImportQueueEntry(urls = urls.toMutableList())
 
-        coEvery { importerProxy.importContent(any(), any(), any(), any(), any(), any(), any()) } returns ProcessExecutionResult(0, "ok", "")
+        coEvery {
+            importerProxy.importContent(
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any()
+            )
+        } returns ProcessExecutionResult(0, "ok", "")
 
         val job = launch {
             service.startService()
@@ -57,7 +67,17 @@ class ImportServiceTest {
         val metadata = mockk<IMetadataService.Track>()
         val entry = UrlImportQueueEntry(urls = urls.toMutableList(), metadata = metadata)
 
-        coEvery { importerProxy.importContent(any(), any(), any(), any(), any(), any(), any()) } returns ProcessExecutionResult(0, "ok", "")
+        coEvery {
+            importerProxy.importContent(
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any()
+            )
+        } returns ProcessExecutionResult(0, "ok", "")
 
         val job = launch {
             service.startService()

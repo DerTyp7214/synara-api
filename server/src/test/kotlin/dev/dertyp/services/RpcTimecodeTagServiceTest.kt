@@ -22,7 +22,16 @@ class RpcTimecodeTagServiceTest {
         service.createTag(songId, TimecodeTagType.CHAPTER, "Intro", 1000L, 2000L, TimecodeTagAction.SKIP, true)
 
         coVerify(exactly = 1) {
-            timecodeTagService.createTag(user.id, songId, TimecodeTagType.CHAPTER, "Intro", 1000L, 2000L, TimecodeTagAction.SKIP, true)
+            timecodeTagService.createTag(
+                user.id,
+                songId,
+                TimecodeTagType.CHAPTER,
+                "Intro",
+                1000L,
+                2000L,
+                TimecodeTagAction.SKIP,
+                true
+            )
         }
     }
 
@@ -33,7 +42,16 @@ class RpcTimecodeTagServiceTest {
         service.createTag(songId, TimecodeTagType.MARKER, "Drop", 1000L)
 
         coVerify(exactly = 1) {
-            timecodeTagService.createTag(user.id, songId, TimecodeTagType.MARKER, "Drop", 1000L, null, TimecodeTagAction.NONE, false)
+            timecodeTagService.createTag(
+                user.id,
+                songId,
+                TimecodeTagType.MARKER,
+                "Drop",
+                1000L,
+                null,
+                TimecodeTagAction.NONE,
+                false
+            )
         }
     }
 
@@ -53,7 +71,16 @@ class RpcTimecodeTagServiceTest {
         service.updateTag(tagId, TimecodeTagType.MARKER, "Chorus", 5000L, null, TimecodeTagAction.PLAY_UNTIL, true)
 
         coVerify(exactly = 1) {
-            timecodeTagService.updateTag(user.id, tagId, TimecodeTagType.MARKER, "Chorus", 5000L, null, TimecodeTagAction.PLAY_UNTIL, true)
+            timecodeTagService.updateTag(
+                user.id,
+                tagId,
+                TimecodeTagType.MARKER,
+                "Chorus",
+                5000L,
+                null,
+                TimecodeTagAction.PLAY_UNTIL,
+                true
+            )
         }
     }
 
@@ -63,7 +90,18 @@ class RpcTimecodeTagServiceTest {
 
         service.updateTag(tagId, TimecodeTagType.MARKER, "Chorus", 5000L, null)
 
-        coVerify(exactly = 1) { timecodeTagService.updateTag(user.id, tagId, TimecodeTagType.MARKER, "Chorus", 5000L, null, null, null) }
+        coVerify(exactly = 1) {
+            timecodeTagService.updateTag(
+                user.id,
+                tagId,
+                TimecodeTagType.MARKER,
+                "Chorus",
+                5000L,
+                null,
+                null,
+                null
+            )
+        }
     }
 
     @Test
@@ -80,7 +118,13 @@ class RpcTimecodeTagServiceTest {
         val songId = UUID.randomUUID()
         val tags = listOf(
             TimecodeTagInput(type = TimecodeTagType.NOTE, text = "note", timestampMs = 100L, endMs = null),
-            TimecodeTagInput(type = TimecodeTagType.CHAPTER, timestampMs = 200L, endMs = 900L, action = TimecodeTagAction.SKIP, fade = true)
+            TimecodeTagInput(
+                type = TimecodeTagType.CHAPTER,
+                timestampMs = 200L,
+                endMs = 900L,
+                action = TimecodeTagAction.SKIP,
+                fade = true
+            )
         )
 
         service.replaceTags(songId, tags)

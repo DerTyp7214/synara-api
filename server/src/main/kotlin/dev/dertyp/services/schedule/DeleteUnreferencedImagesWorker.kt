@@ -4,7 +4,11 @@ import dev.dertyp.data.TaskKeys
 import dev.dertyp.services.ImageService
 import org.koin.core.component.inject
 
-@WorkerTask(TaskKeys.DELETE_UNREFERENCED_IMAGES, "Delete Unreferenced Images", afterTask = TaskKeys.DELETE_UNREFERENCED_ARTISTS)
+@WorkerTask(
+    TaskKeys.DELETE_UNREFERENCED_IMAGES,
+    "Delete Unreferenced Images",
+    afterTask = TaskKeys.DELETE_UNREFERENCED_ARTISTS
+)
 class DeleteUnreferencedImagesWorker : Worker("DeleteUnreferencedImagesWorker") {
     private val imageService by inject<ImageService>()
 

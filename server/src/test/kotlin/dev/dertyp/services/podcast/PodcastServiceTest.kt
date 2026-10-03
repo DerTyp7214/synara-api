@@ -205,30 +205,33 @@ class PodcastServiceTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `subscribeToShow is idempotent and tracks subscribed and subscriberCount per user, unknown show throws`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        val userA = transaction(database) { insertUser() }
-        val userB = transaction(database) { insertUser() }
-        val showId = transaction(database) { insertFeedShow("https://feed.example/a") }
+    fun `subscribeToShow is idempotent and tracks subscribed and subscriberCount per user, unknown show throws`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val userA = transaction(database) { insertUser() }
+            val userB = transaction(database) { insertUser() }
+            val showId = transaction(database) { insertFeedShow("https://feed.example/a") }
 
-        service.subscribeToShow(userA, showId)
-        val show = service.subscribeToShow(userA, showId)
+            service.subscribeToShow(userA, showId)
+            val show = service.subscribeToShow(userA, showId)
 
-        assertTrue(show.subscribed)
-        assertEquals(1, show.subscriberCount)
+            assertTrue(show.subscribed)
+            assertEquals(1, show.subscriberCount)
 
-        val fromB = service.getShow(userB, showId)!!
-        assertFalse(fromB.subscribed)
-        assertEquals(1, fromB.subscriberCount)
+            val fromB = service.getShow(userB, showId)!!
+            assertFalse(fromB.subscribed)
+            assertEquals(1, fromB.subscriberCount)
 
-        assertThrows<IllegalArgumentException> {
-            runBlocking { service.subscribeToShow(userA, UUID.randomUUID()) }
+            assertThrows<IllegalArgumentException> {
+                runBlocking { service.subscribeToShow(userA, UUID.randomUUID()) }
+            }
         }
-    }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `unsubscribe orphans a feed show only for the last subscriber, never a local show, and resubscribing clears it`(dialect: DbDialect) = runBlocking {
+    fun `unsubscribe orphans a feed show only for the last subscriber, never a local show, and resubscribing clears it`(
+        dialect: DbDialect
+    ) = runBlocking {
         setup(dialect)
         val userA = transaction(database) { insertUser() }
         val userB = transaction(database) { insertUser() }
@@ -276,8 +279,15 @@ class PodcastServiceTest {
         setup(dialect)
         val userId = transaction(database) { insertUser() }
         val byTitle = transaction(database) { insertFeedShow("https://feed.example/t", title = "Space Talk") }
-        val byAuthor = transaction(database) { insertFeedShow("https://feed.example/a", title = "Unrelated", author = "Jane Doe") }
-        val byDescription = transaction(database) { insertFeedShow("https://feed.example/d", title = "Unrelated 2", description = "Something about Cats") }
+        val byAuthor =
+            transaction(database) { insertFeedShow("https://feed.example/a", title = "Unrelated", author = "Jane Doe") }
+        val byDescription = transaction(database) {
+            insertFeedShow(
+                "https://feed.example/d",
+                title = "Unrelated 2",
+                description = "Something about Cats"
+            )
+        }
 
         assertEquals(listOf(byTitle), service.browseShows(userId, "space talk", 0, 50).data.map { it.id })
         assertEquals(listOf(byAuthor), service.browseShows(userId, "JANE", 0, 50).data.map { it.id })
@@ -286,17 +296,19 @@ class PodcastServiceTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `browseShows treats percent and underscore in the query as literal characters`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        val userId = transaction(database) { insertUser() }
-        val percentMatch = transaction(database) { insertFeedShow("https://feed.example/p1", title = "100% Cotton") }
-        transaction(database) { insertFeedShow("https://feed.example/p2", title = "100X Cotton") }
-        val underscoreMatch = transaction(database) { insertFeedShow("https://feed.example/u1", title = "a_b") }
-        transaction(database) { insertFeedShow("https://feed.example/u2", title = "axb") }
+    fun `browseShows treats percent and underscore in the query as literal characters`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val userId = transaction(database) { insertUser() }
+            val percentMatch =
+                transaction(database) { insertFeedShow("https://feed.example/p1", title = "100% Cotton") }
+            transaction(database) { insertFeedShow("https://feed.example/p2", title = "100X Cotton") }
+            val underscoreMatch = transaction(database) { insertFeedShow("https://feed.example/u1", title = "a_b") }
+            transaction(database) { insertFeedShow("https://feed.example/u2", title = "axb") }
 
-        assertEquals(listOf(percentMatch), service.browseShows(userId, "100%", 0, 50).data.map { it.id })
-        assertEquals(listOf(underscoreMatch), service.browseShows(userId, "a_b", 0, 50).data.map { it.id })
-    }
+            assertEquals(listOf(percentMatch), service.browseShows(userId, "100%", 0, 50).data.map { it.id })
+            assertEquals(listOf(underscoreMatch), service.browseShows(userId, "a_b", 0, 50).data.map { it.id })
+        }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
@@ -401,7 +413,13 @@ class PodcastServiceTest {
         setup(dialect)
         val userId = transaction(database) { insertUser() }
         val imageId = transaction(database) { insertImage() }
-        val showId = transaction(database) { insertFeedShow("https://feed.example/img", title = "Illustrated Show", imageId = imageId) }
+        val showId = transaction(database) {
+            insertFeedShow(
+                "https://feed.example/img",
+                title = "Illustrated Show",
+                imageId = imageId
+            )
+        }
         transaction(database) { insertEpisode(showId, "i1", 1000L) }
 
         val episode = service.getEpisodes(userId, showId, 0, 50, true).data.single()
@@ -426,19 +444,20 @@ class PodcastServiceTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `getEpisodesByIds keeps the requested order, repeats duplicates and skips unknown ids`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        val userId = transaction(database) { insertUser() }
-        val showA = transaction(database) { insertFeedShow("https://feed.example/byids-a") }
-        val showB = transaction(database) { insertFeedShow("https://feed.example/byids-b") }
-        val first = transaction(database) { insertEpisode(showA, "bi1", 1000L) }
-        val second = transaction(database) { insertEpisode(showB, "bi2", 2000L) }
-        val third = transaction(database) { insertEpisode(showA, "bi3", 3000L) }
-        val unknown = UUID.randomUUID()
+    fun `getEpisodesByIds keeps the requested order, repeats duplicates and skips unknown ids`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val userId = transaction(database) { insertUser() }
+            val showA = transaction(database) { insertFeedShow("https://feed.example/byids-a") }
+            val showB = transaction(database) { insertFeedShow("https://feed.example/byids-b") }
+            val first = transaction(database) { insertEpisode(showA, "bi1", 1000L) }
+            val second = transaction(database) { insertEpisode(showB, "bi2", 2000L) }
+            val third = transaction(database) { insertEpisode(showA, "bi3", 3000L) }
+            val unknown = UUID.randomUUID()
 
-        val requested = listOf(third, unknown, first, second, first)
-        assertEquals(listOf(third, first, second, first), service.getEpisodesByIds(userId, requested).map { it.id })
-    }
+            val requested = listOf(third, unknown, first, second, first)
+            assertEquals(listOf(third, first, second, first), service.getEpisodesByIds(userId, requested).map { it.id })
+        }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
@@ -461,44 +480,53 @@ class PodcastServiceTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `getEpisodesByIds returns nothing for an empty list and rejects more than 500 ids`(dialect: DbDialect) = runBlocking<Unit> {
-        setup(dialect)
-        val userId = transaction(database) { insertUser() }
+    fun `getEpisodesByIds returns nothing for an empty list and rejects more than 500 ids`(dialect: DbDialect) =
+        runBlocking<Unit> {
+            setup(dialect)
+            val userId = transaction(database) { insertUser() }
 
-        assertTrue(service.getEpisodesByIds(userId, emptyList()).isEmpty())
+            assertTrue(service.getEpisodesByIds(userId, emptyList()).isEmpty())
 
-        val tooMany = List(501) { UUID.randomUUID() }
-        assertThrows<IllegalArgumentException> {
-            runBlocking { service.getEpisodesByIds(userId, tooMany) }
+            val tooMany = List(501) { UUID.randomUUID() }
+            assertThrows<IllegalArgumentException> {
+                runBlocking { service.getEpisodesByIds(userId, tooMany) }
+            }
         }
-    }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `getEpisodeWindow returns the anchor with the requested neighbours in chronological order`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        val userId = transaction(database) { insertUser() }
-        val showId = transaction(database) { insertFeedShow("https://feed.example/window") }
-        val episodes = transaction(database) { (1..7).map { insertEpisode(showId, "w$it", it * 1000L) } }
+    fun `getEpisodeWindow returns the anchor with the requested neighbours in chronological order`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val userId = transaction(database) { insertUser() }
+            val showId = transaction(database) { insertFeedShow("https://feed.example/window") }
+            val episodes = transaction(database) { (1..7).map { insertEpisode(showId, "w$it", it * 1000L) } }
 
-        val window = service.getEpisodeWindow(userId, episodes[3], older = 2, newer = 2)
+            val window = service.getEpisodeWindow(userId, episodes[3], older = 2, newer = 2)
 
-        assertEquals(episodes.subList(1, 6), window.map { it.id })
-    }
+            assertEquals(episodes.subList(1, 6), window.map { it.id })
+        }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `getEpisodeWindow with zero counts returns only the anchor and larger counts return every episode`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        val userId = transaction(database) { insertUser() }
-        val showId = transaction(database) { insertFeedShow("https://feed.example/window-bounds") }
-        val episodes = transaction(database) { (1..7).map { insertEpisode(showId, "wb$it", it * 1000L) } }
+    fun `getEpisodeWindow with zero counts returns only the anchor and larger counts return every episode`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val userId = transaction(database) { insertUser() }
+            val showId = transaction(database) { insertFeedShow("https://feed.example/window-bounds") }
+            val episodes = transaction(database) { (1..7).map { insertEpisode(showId, "wb$it", it * 1000L) } }
 
-        assertEquals(listOf(episodes[3]), service.getEpisodeWindow(userId, episodes[3], older = 0, newer = 0).map { it.id })
-        assertEquals(episodes.subList(0, 4), service.getEpisodeWindow(userId, episodes[3], older = 50, newer = 0).map { it.id })
-        assertEquals(episodes.subList(3, 7), service.getEpisodeWindow(userId, episodes[3], older = 0, newer = 50).map { it.id })
-        assertEquals(episodes, service.getEpisodeWindow(userId, episodes[3], older = 50, newer = 50).map { it.id })
-    }
+            assertEquals(
+                listOf(episodes[3]),
+                service.getEpisodeWindow(userId, episodes[3], older = 0, newer = 0).map { it.id })
+            assertEquals(
+                episodes.subList(0, 4),
+                service.getEpisodeWindow(userId, episodes[3], older = 50, newer = 0).map { it.id })
+            assertEquals(
+                episodes.subList(3, 7),
+                service.getEpisodeWindow(userId, episodes[3], older = 0, newer = 50).map { it.id })
+            assertEquals(episodes, service.getEpisodeWindow(userId, episodes[3], older = 50, newer = 50).map { it.id })
+        }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
@@ -508,23 +536,28 @@ class PodcastServiceTest {
         val showId = transaction(database) { insertFeedShow("https://feed.example/window-negative") }
         val episodes = transaction(database) { (1..5).map { insertEpisode(showId, "wn$it", it * 1000L) } }
 
-        assertEquals(listOf(episodes[2]), service.getEpisodeWindow(userId, episodes[2], older = -3, newer = -1).map { it.id })
-        assertEquals(episodes.subList(2, 4), service.getEpisodeWindow(userId, episodes[2], older = -3, newer = 1).map { it.id })
+        assertEquals(
+            listOf(episodes[2]),
+            service.getEpisodeWindow(userId, episodes[2], older = -3, newer = -1).map { it.id })
+        assertEquals(
+            episodes.subList(2, 4),
+            service.getEpisodeWindow(userId, episodes[2], older = -3, newer = 1).map { it.id })
     }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `getEpisodeWindow never crosses into another show and returns nothing for an unknown episode`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        val userId = transaction(database) { insertUser() }
-        val showA = transaction(database) { insertFeedShow("https://feed.example/window-a") }
-        val showB = transaction(database) { insertFeedShow("https://feed.example/window-b") }
-        val mine = transaction(database) { (1..3).map { insertEpisode(showA, "wa$it", it * 1000L) } }
-        transaction(database) { (1..5).map { insertEpisode(showB, "wbb$it", it * 500L) } }
+    fun `getEpisodeWindow never crosses into another show and returns nothing for an unknown episode`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val userId = transaction(database) { insertUser() }
+            val showA = transaction(database) { insertFeedShow("https://feed.example/window-a") }
+            val showB = transaction(database) { insertFeedShow("https://feed.example/window-b") }
+            val mine = transaction(database) { (1..3).map { insertEpisode(showA, "wa$it", it * 1000L) } }
+            transaction(database) { (1..5).map { insertEpisode(showB, "wbb$it", it * 500L) } }
 
-        assertEquals(mine, service.getEpisodeWindow(userId, mine[1], older = 10, newer = 10).map { it.id })
-        assertTrue(service.getEpisodeWindow(userId, UUID.randomUUID(), older = 5, newer = 5).isEmpty())
-    }
+            assertEquals(mine, service.getEpisodeWindow(userId, mine[1], older = 10, newer = 10).map { it.id })
+            assertTrue(service.getEpisodeWindow(userId, UUID.randomUUID(), older = 5, newer = 5).isEmpty())
+        }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
@@ -560,174 +593,205 @@ class PodcastServiceTest {
 
         assertEquals(tied.toSet(), ordered.toSet())
         assertEquals(ordered, service.getEpisodeWindow(userId, anchor, older = 10, newer = 10).map { it.id })
-        assertEquals(ordered.subList(1, 4), service.getEpisodeWindow(userId, anchor, older = 1, newer = 10).map { it.id })
-        assertEquals(ordered.subList(2, 3), service.getEpisodeWindow(userId, anchor, older = 0, newer = 0).map { it.id })
+        assertEquals(
+            ordered.subList(1, 4),
+            service.getEpisodeWindow(userId, anchor, older = 1, newer = 10).map { it.id })
+        assertEquals(
+            ordered.subList(2, 3),
+            service.getEpisodeWindow(userId, anchor, older = 0, newer = 0).map { it.id })
     }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `searchEpisodes matches episode title description and show title, blank throws`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        val userId = transaction(database) { insertUser() }
-        val showId = transaction(database) { insertFeedShow("https://feed.example/search", title = "Searchable Show") }
-        val byTitle = transaction(database) { insertEpisode(showId, "se1", 1000L, title = "Unique Episode Title") }
-        val byDescription = transaction(database) { insertEpisode(showId, "se2", 2000L, description = "Mentions unicorns here") }
-        val byShowTitle = transaction(database) { insertEpisode(showId, "se3", 3000L, title = "Plain") }
+    fun `searchEpisodes matches episode title description and show title, blank throws`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val userId = transaction(database) { insertUser() }
+            val showId =
+                transaction(database) { insertFeedShow("https://feed.example/search", title = "Searchable Show") }
+            val byTitle = transaction(database) { insertEpisode(showId, "se1", 1000L, title = "Unique Episode Title") }
+            val byDescription =
+                transaction(database) { insertEpisode(showId, "se2", 2000L, description = "Mentions unicorns here") }
+            val byShowTitle = transaction(database) { insertEpisode(showId, "se3", 3000L, title = "Plain") }
 
-        assertEquals(listOf(byTitle), service.searchEpisodes(userId, "Unique Episode", 0, 50).data.map { it.id })
-        assertEquals(listOf(byDescription), service.searchEpisodes(userId, "unicorns", 0, 50).data.map { it.id })
-        assertEquals(setOf(byTitle, byDescription, byShowTitle), service.searchEpisodes(userId, "Searchable", 0, 50).data.map { it.id }.toSet())
+            assertEquals(listOf(byTitle), service.searchEpisodes(userId, "Unique Episode", 0, 50).data.map { it.id })
+            assertEquals(listOf(byDescription), service.searchEpisodes(userId, "unicorns", 0, 50).data.map { it.id })
+            assertEquals(
+                setOf(byTitle, byDescription, byShowTitle),
+                service.searchEpisodes(userId, "Searchable", 0, 50).data.map { it.id }.toSet()
+            )
 
-        assertThrows<IllegalArgumentException> {
-            runBlocking { service.searchEpisodes(userId, "   ", 0, 50) }
+            assertThrows<IllegalArgumentException> {
+                runBlocking { service.searchEpisodes(userId, "   ", 0, 50) }
+            }
         }
-    }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `getLatestEpisodes only returns episodes from the user's subscriptions newest first`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        val userId = transaction(database) { insertUser() }
-        val subscribed = transaction(database) { insertFeedShow("https://feed.example/subscribed") }
-        val notSubscribed = transaction(database) { insertFeedShow("https://feed.example/not-subscribed") }
-        val older = transaction(database) { insertEpisode(subscribed, "l1", 1000L) }
-        val newer = transaction(database) { insertEpisode(subscribed, "l2", 2000L) }
-        transaction(database) { insertEpisode(notSubscribed, "l3", 3000L) }
+    fun `getLatestEpisodes only returns episodes from the user's subscriptions newest first`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val userId = transaction(database) { insertUser() }
+            val subscribed = transaction(database) { insertFeedShow("https://feed.example/subscribed") }
+            val notSubscribed = transaction(database) { insertFeedShow("https://feed.example/not-subscribed") }
+            val older = transaction(database) { insertEpisode(subscribed, "l1", 1000L) }
+            val newer = transaction(database) { insertEpisode(subscribed, "l2", 2000L) }
+            transaction(database) { insertEpisode(notSubscribed, "l3", 3000L) }
 
-        service.subscribeToShow(userId, subscribed)
+            service.subscribeToShow(userId, subscribed)
 
-        val latest = service.getLatestEpisodes(userId, 0, 50)
-        assertEquals(listOf(newer, older), latest.data.map { it.id })
-    }
-
-    @ParameterizedTest
-    @EnumSource(DbDialect::class)
-    fun `getInProgress excludes completed and untouched episodes and orders by lastPlayedAt desc`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        val userId = transaction(database) { insertUser() }
-        val showId = transaction(database) { insertFeedShow("https://feed.example/inprogress") }
-        val untouched = transaction(database) { insertEpisode(showId, "ip1", 1000L, durationMs = 60000L) }
-        val completed = transaction(database) { insertEpisode(showId, "ip2", 2000L, durationMs = 60000L) }
-        val olderStarted = transaction(database) { insertEpisode(showId, "ip3", 3000L, durationMs = 60000L) }
-        val newerStarted = transaction(database) { insertEpisode(showId, "ip4", 4000L, durationMs = 60000L) }
-
-        service.reportPlayback(userId, EpisodePlaybackReport(episodeId = untouched, positionMs = 0))
-        service.setPlayed(userId, completed, true)
-        service.reportPlayback(userId, EpisodePlaybackReport(episodeId = olderStarted, positionMs = 1000))
-        Thread.sleep(5)
-        service.reportPlayback(userId, EpisodePlaybackReport(episodeId = newerStarted, positionMs = 2000))
-
-        val inProgress = service.getInProgress(userId, 0, 50)
-        assertEquals(listOf(newerStarted, olderStarted), inProgress.data.map { it.id })
-    }
+            val latest = service.getLatestEpisodes(userId, 0, 50)
+            assertEquals(listOf(newer, older), latest.data.map { it.id })
+        }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `getLastPlayed returns the most recently played episode across shows with its progress`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        val userId = transaction(database) { insertUser() }
-        val showA = transaction(database) { insertFeedShow("https://feed.example/last-a") }
-        val showB = transaction(database) { insertFeedShow("https://feed.example/last-b") }
-        val older = transaction(database) { insertEpisode(showA, "lp1", 1000L, durationMs = 600000L) }
-        val newer = transaction(database) { insertEpisode(showB, "lp2", 2000L, durationMs = 600000L) }
+    fun `getInProgress excludes completed and untouched episodes and orders by lastPlayedAt desc`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val userId = transaction(database) { insertUser() }
+            val showId = transaction(database) { insertFeedShow("https://feed.example/inprogress") }
+            val untouched = transaction(database) { insertEpisode(showId, "ip1", 1000L, durationMs = 60000L) }
+            val completed = transaction(database) { insertEpisode(showId, "ip2", 2000L, durationMs = 60000L) }
+            val olderStarted = transaction(database) { insertEpisode(showId, "ip3", 3000L, durationMs = 60000L) }
+            val newerStarted = transaction(database) { insertEpisode(showId, "ip4", 4000L, durationMs = 60000L) }
 
-        service.reportPlayback(userId, EpisodePlaybackReport(episodeId = older, positionMs = 1000))
-        Thread.sleep(5)
-        service.reportPlayback(userId, EpisodePlaybackReport(episodeId = newer, positionMs = 2000))
+            service.reportPlayback(userId, EpisodePlaybackReport(episodeId = untouched, positionMs = 0))
+            service.setPlayed(userId, completed, true)
+            service.reportPlayback(userId, EpisodePlaybackReport(episodeId = olderStarted, positionMs = 1000))
+            Thread.sleep(5)
+            service.reportPlayback(userId, EpisodePlaybackReport(episodeId = newerStarted, positionMs = 2000))
 
-        val lastPlayed = service.getLastPlayed(userId, includeCompleted = true)
-        assertNotNull(lastPlayed)
-        assertEquals(newer, lastPlayed!!.id)
-        assertEquals(2000L, lastPlayed.progress!!.positionMs)
-    }
-
-    @ParameterizedTest
-    @EnumSource(DbDialect::class)
-    fun `getLastPlayed without completed skips a newer finished episode and one still at the start`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        val userId = transaction(database) { insertUser() }
-        val showId = transaction(database) { insertFeedShow("https://feed.example/last-unfinished") }
-        val started = transaction(database) { insertEpisode(showId, "lu1", 1000L, durationMs = 600000L) }
-        val completed = transaction(database) { insertEpisode(showId, "lu2", 2000L, durationMs = 600000L) }
-        val atStart = transaction(database) { insertEpisode(showId, "lu3", 3000L, durationMs = 600000L) }
-
-        service.reportPlayback(userId, EpisodePlaybackReport(episodeId = started, positionMs = 1000))
-        Thread.sleep(5)
-        service.setPlayed(userId, completed, true)
-        Thread.sleep(5)
-        service.reportPlayback(userId, EpisodePlaybackReport(episodeId = atStart, positionMs = 0))
-
-        assertEquals(atStart, service.getLastPlayed(userId, includeCompleted = true)!!.id)
-        assertEquals(started, service.getLastPlayed(userId, includeCompleted = false)!!.id)
-    }
+            val inProgress = service.getInProgress(userId, 0, 50)
+            assertEquals(listOf(newerStarted, olderStarted), inProgress.data.map { it.id })
+        }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `getLastPlayed returns null without progress and never reads another user's progress`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        val userA = transaction(database) { insertUser() }
-        val userB = transaction(database) { insertUser() }
-        val showId = transaction(database) { insertFeedShow("https://feed.example/last-leak") }
-        val episodeId = transaction(database) { insertEpisode(showId, "ll1", 1000L, durationMs = 600000L) }
+    fun `getLastPlayed returns the most recently played episode across shows with its progress`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val userId = transaction(database) { insertUser() }
+            val showA = transaction(database) { insertFeedShow("https://feed.example/last-a") }
+            val showB = transaction(database) { insertFeedShow("https://feed.example/last-b") }
+            val older = transaction(database) { insertEpisode(showA, "lp1", 1000L, durationMs = 600000L) }
+            val newer = transaction(database) { insertEpisode(showB, "lp2", 2000L, durationMs = 600000L) }
 
-        assertNull(service.getLastPlayed(userA, includeCompleted = true))
+            service.reportPlayback(userId, EpisodePlaybackReport(episodeId = older, positionMs = 1000))
+            Thread.sleep(5)
+            service.reportPlayback(userId, EpisodePlaybackReport(episodeId = newer, positionMs = 2000))
 
-        service.reportPlayback(userA, EpisodePlaybackReport(episodeId = episodeId, positionMs = 1000))
-
-        assertEquals(episodeId, service.getLastPlayed(userA, includeCompleted = true)!!.id)
-        assertNull(service.getLastPlayed(userB, includeCompleted = true))
-        assertNull(service.getLastPlayed(userB, includeCompleted = false))
-    }
-
-    @ParameterizedTest
-    @EnumSource(DbDialect::class)
-    fun `reportPlayback creates then overwrites, last writer wins and stores deviceId`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        val userId = transaction(database) { insertUser() }
-        val showId = transaction(database) { insertFeedShow("https://feed.example/lww") }
-        val episodeId = transaction(database) { insertEpisode(showId, "rp1", 1000L, durationMs = 100000L) }
-
-        val first = service.reportPlayback(userId, EpisodePlaybackReport(episodeId = episodeId, positionMs = 1000, deviceId = "device-a"))
-        assertEquals(1000L, first.positionMs)
-        assertEquals("device-a", first.deviceId)
-
-        val second = service.reportPlayback(userId, EpisodePlaybackReport(episodeId = episodeId, positionMs = 5000, deviceId = "device-b"))
-        assertEquals(5000L, second.positionMs)
-        assertEquals("device-b", second.deviceId)
-
-        val stored = service.getEpisode(userId, episodeId)!!.progress!!
-        assertEquals(5000L, stored.positionMs)
-        assertEquals("device-b", stored.deviceId)
-    }
+            val lastPlayed = service.getLastPlayed(userId, includeCompleted = true)
+            assertNotNull(lastPlayed)
+            assertEquals(newer, lastPlayed!!.id)
+            assertEquals(2000L, lastPlayed.progress!!.positionMs)
+        }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `reportPlayback auto-completes when 30 seconds or less remain on a short episode`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        val userId = transaction(database) { insertUser() }
-        val showId = transaction(database) { insertFeedShow("https://feed.example/tail30") }
-        val episodeId = transaction(database) { insertEpisode(showId, "t30", 1000L, durationMs = 40000L) }
+    fun `getLastPlayed without completed skips a newer finished episode and one still at the start`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val userId = transaction(database) { insertUser() }
+            val showId = transaction(database) { insertFeedShow("https://feed.example/last-unfinished") }
+            val started = transaction(database) { insertEpisode(showId, "lu1", 1000L, durationMs = 600000L) }
+            val completed = transaction(database) { insertEpisode(showId, "lu2", 2000L, durationMs = 600000L) }
+            val atStart = transaction(database) { insertEpisode(showId, "lu3", 3000L, durationMs = 600000L) }
 
-        val progress = service.reportPlayback(userId, EpisodePlaybackReport(episodeId = episodeId, positionMs = 10000))
-        assertTrue(progress.completed)
-    }
+            service.reportPlayback(userId, EpisodePlaybackReport(episodeId = started, positionMs = 1000))
+            Thread.sleep(5)
+            service.setPlayed(userId, completed, true)
+            Thread.sleep(5)
+            service.reportPlayback(userId, EpisodePlaybackReport(episodeId = atStart, positionMs = 0))
+
+            assertEquals(atStart, service.getLastPlayed(userId, includeCompleted = true)!!.id)
+            assertEquals(started, service.getLastPlayed(userId, includeCompleted = false)!!.id)
+        }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `reportPlayback auto-completes at 5 percent remaining on a 20 minute episode even past 30 seconds`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        val userId = transaction(database) { insertUser() }
-        val showId = transaction(database) { insertFeedShow("https://feed.example/tail5pct") }
-        val duration = 1_200_000L
-        val completingId = transaction(database) { insertEpisode(showId, "tp1", 1000L, durationMs = duration) }
-        val stillPlayingId = transaction(database) { insertEpisode(showId, "tp2", 2000L, durationMs = duration) }
+    fun `getLastPlayed returns null without progress and never reads another user's progress`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val userA = transaction(database) { insertUser() }
+            val userB = transaction(database) { insertUser() }
+            val showId = transaction(database) { insertFeedShow("https://feed.example/last-leak") }
+            val episodeId = transaction(database) { insertEpisode(showId, "ll1", 1000L, durationMs = 600000L) }
 
-        val completing = service.reportPlayback(userId, EpisodePlaybackReport(episodeId = completingId, positionMs = duration - 45_000L))
-        assertTrue(completing.completed)
+            assertNull(service.getLastPlayed(userA, includeCompleted = true))
 
-        val stillPlaying = service.reportPlayback(userId, EpisodePlaybackReport(episodeId = stillPlayingId, positionMs = duration - 65_000L))
-        assertFalse(stillPlaying.completed)
-    }
+            service.reportPlayback(userA, EpisodePlaybackReport(episodeId = episodeId, positionMs = 1000))
+
+            assertEquals(episodeId, service.getLastPlayed(userA, includeCompleted = true)!!.id)
+            assertNull(service.getLastPlayed(userB, includeCompleted = true))
+            assertNull(service.getLastPlayed(userB, includeCompleted = false))
+        }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `reportPlayback creates then overwrites, last writer wins and stores deviceId`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val userId = transaction(database) { insertUser() }
+            val showId = transaction(database) { insertFeedShow("https://feed.example/lww") }
+            val episodeId = transaction(database) { insertEpisode(showId, "rp1", 1000L, durationMs = 100000L) }
+
+            val first = service.reportPlayback(
+                userId,
+                EpisodePlaybackReport(episodeId = episodeId, positionMs = 1000, deviceId = "device-a")
+            )
+            assertEquals(1000L, first.positionMs)
+            assertEquals("device-a", first.deviceId)
+
+            val second = service.reportPlayback(
+                userId,
+                EpisodePlaybackReport(episodeId = episodeId, positionMs = 5000, deviceId = "device-b")
+            )
+            assertEquals(5000L, second.positionMs)
+            assertEquals("device-b", second.deviceId)
+
+            val stored = service.getEpisode(userId, episodeId)!!.progress!!
+            assertEquals(5000L, stored.positionMs)
+            assertEquals("device-b", stored.deviceId)
+        }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `reportPlayback auto-completes when 30 seconds or less remain on a short episode`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val userId = transaction(database) { insertUser() }
+            val showId = transaction(database) { insertFeedShow("https://feed.example/tail30") }
+            val episodeId = transaction(database) { insertEpisode(showId, "t30", 1000L, durationMs = 40000L) }
+
+            val progress =
+                service.reportPlayback(userId, EpisodePlaybackReport(episodeId = episodeId, positionMs = 10000))
+            assertTrue(progress.completed)
+        }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `reportPlayback auto-completes at 5 percent remaining on a 20 minute episode even past 30 seconds`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val userId = transaction(database) { insertUser() }
+            val showId = transaction(database) { insertFeedShow("https://feed.example/tail5pct") }
+            val duration = 1_200_000L
+            val completingId = transaction(database) { insertEpisode(showId, "tp1", 1000L, durationMs = duration) }
+            val stillPlayingId = transaction(database) { insertEpisode(showId, "tp2", 2000L, durationMs = duration) }
+
+            val completing = service.reportPlayback(
+                userId,
+                EpisodePlaybackReport(episodeId = completingId, positionMs = duration - 45_000L)
+            )
+            assertTrue(completing.completed)
+
+            val stillPlaying = service.reportPlayback(
+                userId,
+                EpisodePlaybackReport(episodeId = stillPlayingId, positionMs = duration - 65_000L)
+            )
+            assertFalse(stillPlaying.completed)
+        }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
@@ -766,7 +830,10 @@ class PodcastServiceTest {
         val showId = transaction(database) { insertFeedShow("https://feed.example/explicit") }
         val episodeId = transaction(database) { insertEpisode(showId, "ex1", 1000L, durationMs = null) }
 
-        val progress = service.reportPlayback(userId, EpisodePlaybackReport(episodeId = episodeId, positionMs = 500, completed = true))
+        val progress = service.reportPlayback(
+            userId,
+            EpisodePlaybackReport(episodeId = episodeId, positionMs = 500, completed = true)
+        )
         assertTrue(progress.completed)
         assertNull(progress.durationMs)
     }
@@ -778,38 +845,56 @@ class PodcastServiceTest {
         val userId = transaction(database) { insertUser() }
 
         assertThrows<IllegalArgumentException> {
-            runBlocking { service.reportPlayback(userId, EpisodePlaybackReport(episodeId = UUID.randomUUID(), positionMs = 0)) }
+            runBlocking {
+                service.reportPlayback(
+                    userId,
+                    EpisodePlaybackReport(episodeId = UUID.randomUUID(), positionMs = 0)
+                )
+            }
         }
     }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `reportPlayback validation rejects a negative position and an oversized deviceId`(dialect: DbDialect) = runBlocking<Unit> {
-        setup(dialect)
-        val userId = transaction(database) { insertUser() }
-        val showId = transaction(database) { insertFeedShow("https://feed.example/validation") }
-        val episodeId = transaction(database) { insertEpisode(showId, "val1", 1000L) }
+    fun `reportPlayback validation rejects a negative position and an oversized deviceId`(dialect: DbDialect) =
+        runBlocking<Unit> {
+            setup(dialect)
+            val userId = transaction(database) { insertUser() }
+            val showId = transaction(database) { insertFeedShow("https://feed.example/validation") }
+            val episodeId = transaction(database) { insertEpisode(showId, "val1", 1000L) }
 
-        assertThrows<IllegalArgumentException> {
-            runBlocking { service.reportPlayback(userId, EpisodePlaybackReport(episodeId = episodeId, positionMs = -1)) }
+            assertThrows<IllegalArgumentException> {
+                runBlocking {
+                    service.reportPlayback(
+                        userId,
+                        EpisodePlaybackReport(episodeId = episodeId, positionMs = -1)
+                    )
+                }
+            }
+            assertThrows<IllegalArgumentException> {
+                runBlocking {
+                    service.reportPlayback(
+                        userId,
+                        EpisodePlaybackReport(episodeId = episodeId, positionMs = 0, deviceId = "d".repeat(65))
+                    )
+                }
+            }
         }
-        assertThrows<IllegalArgumentException> {
-            runBlocking { service.reportPlayback(userId, EpisodePlaybackReport(episodeId = episodeId, positionMs = 0, deviceId = "d".repeat(65))) }
-        }
-    }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `reportPlayback falls back to the episode's stored duration when the report has none`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        val userId = transaction(database) { insertUser() }
-        val showId = transaction(database) { insertFeedShow("https://feed.example/fallback-duration") }
-        val episodeId = transaction(database) { insertEpisode(showId, "fd1", 1000L, durationMs = 100000L) }
+    fun `reportPlayback falls back to the episode's stored duration when the report has none`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val userId = transaction(database) { insertUser() }
+            val showId = transaction(database) { insertFeedShow("https://feed.example/fallback-duration") }
+            val episodeId = transaction(database) { insertEpisode(showId, "fd1", 1000L, durationMs = 100000L) }
 
-        val progress = service.reportPlayback(userId, EpisodePlaybackReport(episodeId = episodeId, positionMs = 999999999))
-        assertEquals(100000L, progress.durationMs)
-        assertEquals(100000L, progress.positionMs)
-    }
+            val progress =
+                service.reportPlayback(userId, EpisodePlaybackReport(episodeId = episodeId, positionMs = 999999999))
+            assertEquals(100000L, progress.durationMs)
+            assertEquals(100000L, progress.positionMs)
+        }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
@@ -860,7 +945,9 @@ class PodcastServiceTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `upsertEpisodes is idempotent by showId and guid and preserves import state while keeping the stored duration`(dialect: DbDialect) = runBlocking {
+    fun `upsertEpisodes is idempotent by showId and guid and preserves import state while keeping the stored duration`(
+        dialect: DbDialect
+    ) = runBlocking {
         setup(dialect)
         val showId = transaction(database) { insertFeedShow("https://feed.example/upsert") }
 
@@ -914,7 +1001,14 @@ class PodcastServiceTest {
 
         val (inserted, _) = service.upsertEpisodes(
             showId,
-            listOf(ParsedEpisode(guid = longGuid, title = "Long Guid", publishedAt = 1000L, enclosureUrl = "https://feed.example/lg.mp3"))
+            listOf(
+                ParsedEpisode(
+                    guid = longGuid,
+                    title = "Long Guid",
+                    publishedAt = 1000L,
+                    enclosureUrl = "https://feed.example/lg.mp3"
+                )
+            )
         )
         assertEquals(1, inserted)
         assertEquals(longGuid, service.episodesOfShow(showId).single().guid)
@@ -922,46 +1016,47 @@ class PodcastServiceTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `upsertEpisodes syncs feed transcripts, removing vanished urls while embedded transcripts survive`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        val userId = transaction(database) { insertUser() }
-        val showId = transaction(database) { insertFeedShow("https://feed.example/transcript-sync") }
+    fun `upsertEpisodes syncs feed transcripts, removing vanished urls while embedded transcripts survive`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val userId = transaction(database) { insertUser() }
+            val showId = transaction(database) { insertFeedShow("https://feed.example/transcript-sync") }
 
-        service.upsertEpisodes(
-            showId,
-            listOf(
-                ParsedEpisode(
-                    guid = "tr-1",
-                    title = "Episode",
-                    publishedAt = 1000L,
-                    enclosureUrl = "https://feed.example/tr1.mp3",
-                    transcripts = listOf(ParsedTranscript(url = "https://feed.example/tr1.vtt", type = "text/vtt")),
+            service.upsertEpisodes(
+                showId,
+                listOf(
+                    ParsedEpisode(
+                        guid = "tr-1",
+                        title = "Episode",
+                        publishedAt = 1000L,
+                        enclosureUrl = "https://feed.example/tr1.mp3",
+                        transcripts = listOf(ParsedTranscript(url = "https://feed.example/tr1.vtt", type = "text/vtt")),
+                    )
                 )
             )
-        )
-        val episodeId = service.episodesOfShow(showId).single().id
-        assertEquals(1, service.getTranscripts(userId, episodeId).size)
+            val episodeId = service.episodesOfShow(showId).single().id
+            assertEquals(1, service.getTranscripts(userId, episodeId).size)
 
-        service.addEmbeddedTranscript(episodeId, "embedded lyrics", "text/plain")
-        assertEquals(2, service.getTranscripts(userId, episodeId).size)
+            service.addEmbeddedTranscript(episodeId, "embedded lyrics", "text/plain")
+            assertEquals(2, service.getTranscripts(userId, episodeId).size)
 
-        service.upsertEpisodes(
-            showId,
-            listOf(
-                ParsedEpisode(
-                    guid = "tr-1",
-                    title = "Episode",
-                    publishedAt = 1000L,
-                    enclosureUrl = "https://feed.example/tr1.mp3",
-                    transcripts = emptyList(),
+            service.upsertEpisodes(
+                showId,
+                listOf(
+                    ParsedEpisode(
+                        guid = "tr-1",
+                        title = "Episode",
+                        publishedAt = 1000L,
+                        enclosureUrl = "https://feed.example/tr1.mp3",
+                        transcripts = emptyList(),
+                    )
                 )
             )
-        )
 
-        val remaining = service.getTranscripts(userId, episodeId)
-        assertEquals(1, remaining.size)
-        assertTrue(remaining.single().available)
-    }
+            val remaining = service.getTranscripts(userId, episodeId)
+            assertEquals(1, remaining.size)
+            assertTrue(remaining.single().available)
+        }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
@@ -1001,7 +1096,9 @@ class PodcastServiceTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `upsertLocalEpisodes marks episodes imported with file fields and syncs sidecar and embedded transcripts`(dialect: DbDialect) = runBlocking {
+    fun `upsertLocalEpisodes marks episodes imported with file fields and syncs sidecar and embedded transcripts`(
+        dialect: DbDialect
+    ) = runBlocking {
         setup(dialect)
         val userId = transaction(database) { insertUser() }
         val showId = service.upsertLocalShow("localshow", "Local Show", null)
@@ -1036,83 +1133,133 @@ class PodcastServiceTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `updateShowSettings rejects a keepEpisodes of 0 and stores IMPORT with a valid keepEpisodes`(dialect: DbDialect) = runBlocking<Unit> {
-        setup(dialect)
-        val userId = transaction(database) { insertUser() }
-        val showId = transaction(database) { insertFeedShow("https://feed.example/settings") }
+    fun `updateShowSettings rejects a keepEpisodes of 0 and stores IMPORT with a valid keepEpisodes`(dialect: DbDialect) =
+        runBlocking<Unit> {
+            setup(dialect)
+            val userId = transaction(database) { insertUser() }
+            val showId = transaction(database) { insertFeedShow("https://feed.example/settings") }
 
-        assertThrows<IllegalArgumentException> {
-            runBlocking { service.updateShowSettings(showId, PodcastShowSettings(PodcastDeliveryMode.IMPORT, keepEpisodes = 0), userId) }
-        }
+            assertThrows<IllegalArgumentException> {
+                runBlocking {
+                    service.updateShowSettings(
+                        showId,
+                        PodcastShowSettings(PodcastDeliveryMode.IMPORT, keepEpisodes = 0),
+                        userId
+                    )
+                }
+            }
 
-        val updated = service.updateShowSettings(showId, PodcastShowSettings(PodcastDeliveryMode.IMPORT, keepEpisodes = 5), userId)
-        assertEquals(PodcastDeliveryMode.IMPORT, updated.deliveryMode)
-        assertEquals(5, updated.keepEpisodes)
+            val updated = service.updateShowSettings(
+                showId,
+                PodcastShowSettings(PodcastDeliveryMode.IMPORT, keepEpisodes = 5),
+                userId
+            )
+            assertEquals(PodcastDeliveryMode.IMPORT, updated.deliveryMode)
+            assertEquals(5, updated.keepEpisodes)
 
-        assertThrows<IllegalArgumentException> {
-            runBlocking { service.updateShowSettings(UUID.randomUUID(), PodcastShowSettings(PodcastDeliveryMode.STREAM), userId) }
-        }
-    }
-
-    @ParameterizedTest
-    @EnumSource(DbDialect::class)
-    fun `updateShowSettings stores unlistened retention only for import delivery and getShow exposes it`(dialect: DbDialect) = runBlocking<Unit> {
-        setup(dialect)
-        val userId = transaction(database) { insertUser() }
-        val showId = transaction(database) { insertFeedShow("https://feed.example/retention") }
-
-        assertEquals(PodcastRetention.NEWEST, service.getShow(userId, showId)!!.retention)
-
-        assertThrows<IllegalArgumentException> {
-            runBlocking {
-                service.updateShowSettings(
-                    showId,
-                    PodcastShowSettings(PodcastDeliveryMode.STREAM, retention = PodcastRetention.UNLISTENED),
-                    userId
-                )
+            assertThrows<IllegalArgumentException> {
+                runBlocking {
+                    service.updateShowSettings(
+                        UUID.randomUUID(),
+                        PodcastShowSettings(PodcastDeliveryMode.STREAM),
+                        userId
+                    )
+                }
             }
         }
 
-        val updated = service.updateShowSettings(
-            showId,
-            PodcastShowSettings(PodcastDeliveryMode.IMPORT, keepEpisodes = 3, retention = PodcastRetention.UNLISTENED),
-            userId
-        )
-        assertEquals(PodcastRetention.UNLISTENED, updated.retention)
-        assertEquals(PodcastRetention.UNLISTENED, service.getShow(userId, showId)!!.retention)
-        assertEquals(PodcastRetention.UNLISTENED, service.showById(showId)!!.retention)
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `updateShowSettings stores unlistened retention only for import delivery and getShow exposes it`(dialect: DbDialect) =
+        runBlocking<Unit> {
+            setup(dialect)
+            val userId = transaction(database) { insertUser() }
+            val showId = transaction(database) { insertFeedShow("https://feed.example/retention") }
 
-        val reverted = service.updateShowSettings(showId, PodcastShowSettings(PodcastDeliveryMode.STREAM), userId)
-        assertEquals(PodcastRetention.NEWEST, reverted.retention)
-    }
+            assertEquals(PodcastRetention.NEWEST, service.getShow(userId, showId)!!.retention)
+
+            assertThrows<IllegalArgumentException> {
+                runBlocking {
+                    service.updateShowSettings(
+                        showId,
+                        PodcastShowSettings(PodcastDeliveryMode.STREAM, retention = PodcastRetention.UNLISTENED),
+                        userId
+                    )
+                }
+            }
+
+            val updated = service.updateShowSettings(
+                showId,
+                PodcastShowSettings(
+                    PodcastDeliveryMode.IMPORT,
+                    keepEpisodes = 3,
+                    retention = PodcastRetention.UNLISTENED
+                ),
+                userId
+            )
+            assertEquals(PodcastRetention.UNLISTENED, updated.retention)
+            assertEquals(PodcastRetention.UNLISTENED, service.getShow(userId, showId)!!.retention)
+            assertEquals(PodcastRetention.UNLISTENED, service.showById(showId)!!.retention)
+
+            val reverted = service.updateShowSettings(showId, PodcastShowSettings(PodcastDeliveryMode.STREAM), userId)
+            assertEquals(PodcastRetention.NEWEST, reverted.retention)
+        }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `importCandidates filters by enclosure, import state and attempts, ordered newest first with a limit`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        val showId = transaction(database) { insertFeedShow("https://feed.example/candidates") }
-        val none = transaction(database) {
-            insertEpisode(showId, "ic1", 3000L, enclosureUrl = "https://x/1.mp3", importState = PodcastImportState.NONE, importAttempts = 0)
-        }
-        val failed = transaction(database) {
-            insertEpisode(showId, "ic2", 5000L, enclosureUrl = "https://x/2.mp3", importState = PodcastImportState.FAILED, importAttempts = 1)
-        }
-        transaction(database) {
-            insertEpisode(showId, "ic3", 4000L, enclosureUrl = "https://x/3.mp3", importState = PodcastImportState.FAILED, importAttempts = 5)
-        }
-        transaction(database) {
-            insertEpisode(showId, "ic4", 6000L, enclosureUrl = null, importState = PodcastImportState.NONE)
-        }
-        transaction(database) {
-            insertEpisode(showId, "ic5", 7000L, enclosureUrl = "https://x/5.mp3", importState = PodcastImportState.IMPORTED)
-        }
+    fun `importCandidates filters by enclosure, import state and attempts, ordered newest first with a limit`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val showId = transaction(database) { insertFeedShow("https://feed.example/candidates") }
+            val none = transaction(database) {
+                insertEpisode(
+                    showId,
+                    "ic1",
+                    3000L,
+                    enclosureUrl = "https://x/1.mp3",
+                    importState = PodcastImportState.NONE,
+                    importAttempts = 0
+                )
+            }
+            val failed = transaction(database) {
+                insertEpisode(
+                    showId,
+                    "ic2",
+                    5000L,
+                    enclosureUrl = "https://x/2.mp3",
+                    importState = PodcastImportState.FAILED,
+                    importAttempts = 1
+                )
+            }
+            transaction(database) {
+                insertEpisode(
+                    showId,
+                    "ic3",
+                    4000L,
+                    enclosureUrl = "https://x/3.mp3",
+                    importState = PodcastImportState.FAILED,
+                    importAttempts = 5
+                )
+            }
+            transaction(database) {
+                insertEpisode(showId, "ic4", 6000L, enclosureUrl = null, importState = PodcastImportState.NONE)
+            }
+            transaction(database) {
+                insertEpisode(
+                    showId,
+                    "ic5",
+                    7000L,
+                    enclosureUrl = "https://x/5.mp3",
+                    importState = PodcastImportState.IMPORTED
+                )
+            }
 
-        val candidates = service.importCandidates(showId, limit = 10, maxAttempts = 3)
-        assertEquals(listOf(failed, none), candidates.map { it.id })
+            val candidates = service.importCandidates(showId, limit = 10, maxAttempts = 3)
+            assertEquals(listOf(failed, none), candidates.map { it.id })
 
-        val limited = service.importCandidates(showId, limit = 1, maxAttempts = 3)
-        assertEquals(listOf(failed), limited.map { it.id })
-    }
+            val limited = service.importCandidates(showId, limit = 1, maxAttempts = 3)
+            assertEquals(listOf(failed), limited.map { it.id })
+        }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
@@ -1183,7 +1330,9 @@ class PodcastServiceTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `markImported stores the file and keeps the existing duration unless a new one is given, clearImport resets it`(dialect: DbDialect) = runBlocking {
+    fun `markImported stores the file and keeps the existing duration unless a new one is given, clearImport resets it`(
+        dialect: DbDialect
+    ) = runBlocking {
         setup(dialect)
         val showId = transaction(database) { insertFeedShow("https://feed.example/markimported") }
         val episodeId = transaction(database) { insertEpisode(showId, "mi1", 1000L, durationMs = 5000L) }
@@ -1271,28 +1420,29 @@ class PodcastServiceTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `getTranscript fetches a url transcript once through the http client and caches it`(dialect: DbDialect) = runBlocking {
-        var requestCount = 0
-        setup(dialect) { _ ->
-            requestCount++
-            respond("WEBVTT\n\nHello", HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, "text/vtt"))
-        }
-        val userId = transaction(database) { insertUser() }
-        val showId = transaction(database) { insertFeedShow("https://feed.example/url") }
-        val episodeId = transaction(database) { insertEpisode(showId, "url1", 1000L) }
-        val transcriptId = transaction(database) {
-            insertTranscript(episodeId, "url-key", url = "https://example.com/transcript.vtt")
-        }
+    fun `getTranscript fetches a url transcript once through the http client and caches it`(dialect: DbDialect) =
+        runBlocking {
+            var requestCount = 0
+            setup(dialect) { _ ->
+                requestCount++
+                respond("WEBVTT\n\nHello", HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, "text/vtt"))
+            }
+            val userId = transaction(database) { insertUser() }
+            val showId = transaction(database) { insertFeedShow("https://feed.example/url") }
+            val episodeId = transaction(database) { insertEpisode(showId, "url1", 1000L) }
+            val transcriptId = transaction(database) {
+                insertTranscript(episodeId, "url-key", url = "https://example.com/transcript.vtt")
+            }
 
-        val first = service.getTranscript(userId, transcriptId)
-        assertNotNull(first)
-        assertEquals("WEBVTT\n\nHello", first!!.content)
-        assertEquals(1, requestCount)
+            val first = service.getTranscript(userId, transcriptId)
+            assertNotNull(first)
+            assertEquals("WEBVTT\n\nHello", first!!.content)
+            assertEquals(1, requestCount)
 
-        val second = service.getTranscript(userId, transcriptId)
-        assertNotNull(second)
-        assertEquals(1, requestCount)
-    }
+            val second = service.getTranscript(userId, transcriptId)
+            assertNotNull(second)
+            assertEquals(1, requestCount)
+        }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
@@ -1309,7 +1459,8 @@ class PodcastServiceTest {
         assertNull(content)
 
         val fetchError = transaction(database) {
-            PodcastTranscriptTable.selectAll().where { PodcastTranscriptTable.id eq transcriptId }.single()[PodcastTranscriptTable.fetchError]
+            PodcastTranscriptTable.selectAll().where { PodcastTranscriptTable.id eq transcriptId }
+                .single()[PodcastTranscriptTable.fetchError]
         }
         assertNotNull(fetchError)
     }

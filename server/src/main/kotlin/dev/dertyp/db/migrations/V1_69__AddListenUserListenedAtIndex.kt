@@ -10,7 +10,12 @@ class V1_69__AddListenUserListenedAtIndex : BaseJavaMigration() {
     override fun migrate(context: Context) {
         val indexStatements = tempConnection {
             ListenTable.indices
-                .filter { index -> index.columns.map { it.name } == listOf(ListenTable.userId.name, ListenTable.listenedAt.name) }
+                .filter { index ->
+                    index.columns.map { it.name } == listOf(
+                        ListenTable.userId.name,
+                        ListenTable.listenedAt.name
+                    )
+                }
                 .flatMap { it.createStatement() }
         }.map {
             it.replaceFirst("CREATE INDEX ", "CREATE INDEX IF NOT EXISTS ")

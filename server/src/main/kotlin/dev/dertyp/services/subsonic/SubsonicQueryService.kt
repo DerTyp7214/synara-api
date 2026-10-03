@@ -97,7 +97,12 @@ class SubsonicQueryService : Service() {
                 val to = toYear ?: 9999
                 val year = AlbumTable.releaseDate.substring(1, 4)
                 val query = AlbumTable.select(AlbumTable.id)
-                    .where { year.between(minOf(from, to).toString().padStart(4, '0'), maxOf(from, to).toString().padStart(4, '0')) }
+                    .where {
+                        year.between(
+                            minOf(from, to).toString().padStart(4, '0'),
+                            maxOf(from, to).toString().padStart(4, '0')
+                        )
+                    }
                     .orderBy(AlbumTable.releaseDate, if (to < from) SortOrder.DESC else SortOrder.ASC)
                 query.limit(size).offset(offset).map { it[AlbumTable.id].value }
             }

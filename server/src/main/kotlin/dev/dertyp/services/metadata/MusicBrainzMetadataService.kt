@@ -17,12 +17,19 @@ class MusicBrainzMetadataService(
 ) : MetadataService("MusicBrainz", IMetadataService.MetadataType.musicBrainz, environment) {
 
     override suspend fun getAlbumIdByTrackId(trackId: String, priority: HttpClientPriority): String? {
-        val mbId = try { UUID.fromString(trackId) } catch (_: Exception) { return null }
+        val mbId = try {
+            UUID.fromString(trackId)
+        } catch (_: Exception) {
+            return null
+        }
         val recording = musicBrainzService.getRecording(mbId) ?: return null
         return recording.releases?.firstOrNull()?.id?.toString()
     }
 
-    override suspend fun getTracksByIds(trackIds: List<String>, priority: HttpClientPriority): List<IMetadataService.Track> {
+    override suspend fun getTracksByIds(
+        trackIds: List<String>,
+        priority: HttpClientPriority
+    ): List<IMetadataService.Track> {
         return trackIds.mapNotNull { id ->
             try {
                 getTrackByMbId(UUID.fromString(id), priority)
@@ -34,7 +41,10 @@ class MusicBrainzMetadataService(
         }
     }
 
-    override suspend fun getAlbumsByIds(albumIds: List<String>, priority: HttpClientPriority): List<IMetadataService.Album> {
+    override suspend fun getAlbumsByIds(
+        albumIds: List<String>,
+        priority: HttpClientPriority
+    ): List<IMetadataService.Album> {
         return albumIds.mapNotNull { id ->
             try {
                 getAlbumByMbId(UUID.fromString(id), priority)
@@ -46,7 +56,10 @@ class MusicBrainzMetadataService(
         }
     }
 
-    override suspend fun getArtistsByIds(artistIds: List<String>, priority: HttpClientPriority): List<IMetadataService.Artist> {
+    override suspend fun getArtistsByIds(
+        artistIds: List<String>,
+        priority: HttpClientPriority
+    ): List<IMetadataService.Artist> {
         return artistIds.mapNotNull { id ->
             try {
                 getArtistByMbId(UUID.fromString(id), priority)
@@ -120,7 +133,10 @@ class MusicBrainzMetadataService(
         return mapTrack(recording, priority)
     }
 
-    private suspend fun mapTrack(recording: MusicBrainzRecording, priority: HttpClientPriority): IMetadataService.Track {
+    private suspend fun mapTrack(
+        recording: MusicBrainzRecording,
+        priority: HttpClientPriority
+    ): IMetadataService.Track {
         val firstRelease = recording.releases?.firstOrNull()
         return IMetadataService.Track(
             id = recording.id.toString(),
@@ -134,11 +150,17 @@ class MusicBrainzMetadataService(
         )
     }
 
-    override suspend fun getImageUrlByAlbumMbId(mbId: PlatformUUID, priority: HttpClientPriority): List<IMetadataService.Image> {
+    override suspend fun getImageUrlByAlbumMbId(
+        mbId: PlatformUUID,
+        priority: HttpClientPriority
+    ): List<IMetadataService.Image> {
         return listOf(IMetadataService.Image("https://coverartarchive.org/release-group/$mbId/front", 0, 0))
     }
 
-    override suspend fun getImageUrlByTrackMbId(mbId: PlatformUUID, priority: HttpClientPriority): List<IMetadataService.Image> {
+    override suspend fun getImageUrlByTrackMbId(
+        mbId: PlatformUUID,
+        priority: HttpClientPriority
+    ): List<IMetadataService.Image> {
         val recording = musicBrainzService.getRecording(mbId) ?: return emptyList()
         val firstRelease = recording.releases?.firstOrNull()
         val releaseGroupId = firstRelease?.releaseGroup?.id ?: firstRelease?.id

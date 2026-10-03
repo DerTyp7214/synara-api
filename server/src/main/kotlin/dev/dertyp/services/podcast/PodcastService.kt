@@ -235,48 +235,52 @@ class PodcastService(private val http: PodcastHttp) : Service() {
         }
     }
 
-    suspend fun getEpisodeWindow(userId: UUID, episodeId: UUID, older: Int, newer: Int): List<PodcastEpisode> = dbQuery {
-        val anchor = episodeRow(episodeId) ?: return@dbQuery emptyList()
-        val olderCount = older.coerceIn(0, MAX_PAGE)
-        val newerCount = newer.coerceIn(0, MAX_PAGE)
+    suspend fun getEpisodeWindow(userId: UUID, episodeId: UUID, older: Int, newer: Int): List<PodcastEpisode> =
+        dbQuery {
+            val anchor = episodeRow(episodeId) ?: return@dbQuery emptyList()
+            val olderCount = older.coerceIn(0, MAX_PAGE)
+            val newerCount = newer.coerceIn(0, MAX_PAGE)
 
-        val olderRows = if (olderCount == 0) {
-            emptyList()
-        } else {
-            episodeSource(userId)
+            val olderRows = if (olderCount == 0) {
+                emptyList()
+            } else {
+                episodeSource(userId)
+                    .selectAll()
+                    .where { PodcastEpisodeTable.showId eq anchor.showId }
+                    .andWhere {
+                        (PodcastEpisodeTable.publishedAt less anchor.publishedAt) or
+                                ((PodcastEpisodeTable.publishedAt eq anchor.publishedAt) and (PodcastEpisodeTable.id less anchor.id))
+                    }
+                    .orderBy(
+                        PodcastEpisodeTable.publishedAt to SortOrder.DESC,
+                        PodcastEpisodeTable.id to SortOrder.DESC
+                    )
+                    .limit(olderCount)
+                    .toList()
+            }
+
+            val newerRows = if (newerCount == 0) {
+                emptyList()
+            } else {
+                episodeSource(userId)
+                    .selectAll()
+                    .where { PodcastEpisodeTable.showId eq anchor.showId }
+                    .andWhere {
+                        (PodcastEpisodeTable.publishedAt greater anchor.publishedAt) or
+                                ((PodcastEpisodeTable.publishedAt eq anchor.publishedAt) and (PodcastEpisodeTable.id greater anchor.id))
+                    }
+                    .orderBy(PodcastEpisodeTable.publishedAt to SortOrder.ASC, PodcastEpisodeTable.id to SortOrder.ASC)
+                    .limit(newerCount)
+                    .toList()
+            }
+
+            val anchorRow = episodeSource(userId)
                 .selectAll()
-                .where { PodcastEpisodeTable.showId eq anchor.showId }
-                .andWhere {
-                    (PodcastEpisodeTable.publishedAt less anchor.publishedAt) or
-                        ((PodcastEpisodeTable.publishedAt eq anchor.publishedAt) and (PodcastEpisodeTable.id less anchor.id))
-                }
-                .orderBy(PodcastEpisodeTable.publishedAt to SortOrder.DESC, PodcastEpisodeTable.id to SortOrder.DESC)
-                .limit(olderCount)
-                .toList()
+                .where { PodcastEpisodeTable.id eq episodeId }
+                .single()
+
+            episodesOf(olderRows.reversed()) + episodesOf(listOf(anchorRow)) + episodesOf(newerRows)
         }
-
-        val newerRows = if (newerCount == 0) {
-            emptyList()
-        } else {
-            episodeSource(userId)
-                .selectAll()
-                .where { PodcastEpisodeTable.showId eq anchor.showId }
-                .andWhere {
-                    (PodcastEpisodeTable.publishedAt greater anchor.publishedAt) or
-                        ((PodcastEpisodeTable.publishedAt eq anchor.publishedAt) and (PodcastEpisodeTable.id greater anchor.id))
-                }
-                .orderBy(PodcastEpisodeTable.publishedAt to SortOrder.ASC, PodcastEpisodeTable.id to SortOrder.ASC)
-                .limit(newerCount)
-                .toList()
-        }
-
-        val anchorRow = episodeSource(userId)
-            .selectAll()
-            .where { PodcastEpisodeTable.id eq episodeId }
-            .single()
-
-        episodesOf(olderRows.reversed()) + episodesOf(listOf(anchorRow)) + episodesOf(newerRows)
-    }
 
     suspend fun getLastPlayed(userId: UUID, includeCompleted: Boolean): PodcastEpisode? = dbQuery {
         val query = if (includeCompleted) {
@@ -297,7 +301,12 @@ class PodcastService(private val http: PodcastHttp) : Service() {
         episodesOf(rows).firstOrNull()
     }
 
-    suspend fun searchEpisodes(userId: UUID, query: String, page: Int, pageSize: Int): PaginatedResponse<PodcastEpisode> {
+    suspend fun searchEpisodes(
+        userId: UUID,
+        query: String,
+        page: Int,
+        pageSize: Int
+    ): PaginatedResponse<PodcastEpisode> {
         require(query.isNotBlank()) { "A podcast search needs a search term" }
 
         val size = pageSize.coerceIn(1, MAX_PAGE)
@@ -364,7 +373,9 @@ class PodcastService(private val http: PodcastHttp) : Service() {
         val reported = report.durationMs
         require(report.positionMs >= 0) { "A listening position must not be negative" }
         require(reported == null || reported > 0) { "An episode length must be positive" }
-        require((report.deviceId?.length ?: 0) <= MAX_DEVICE_ID) { "A device id is at most $MAX_DEVICE_ID characters long" }
+        require(
+            (report.deviceId?.length ?: 0) <= MAX_DEVICE_ID
+        ) { "A device id is at most $MAX_DEVICE_ID characters long" }
 
         val progress = dbQuery {
             val episode = episodeRow(report.episodeId)
@@ -849,7 +860,12 @@ class PodcastService(private val http: PodcastHttp) : Service() {
             .selectAll()
             .where { PodcastEpisodeTable.showId eq showId }
             .andWhere { PodcastEpisodeTable.enclosureUrl.isNotNull() }
-            .andWhere { PodcastEpisodeTable.importState inList listOf(PodcastImportState.NONE, PodcastImportState.FAILED) }
+            .andWhere {
+                PodcastEpisodeTable.importState inList listOf(
+                    PodcastImportState.NONE,
+                    PodcastImportState.FAILED
+                )
+            }
             .andWhere { PodcastEpisodeTable.importAttempts less maxAttempts }
             .orderBy(PodcastEpisodeTable.publishedAt to SortOrder.DESC, PodcastEpisodeTable.id to SortOrder.ASC)
             .limit(limit)
@@ -885,7 +901,12 @@ class PodcastService(private val http: PodcastHttp) : Service() {
             .selectAll()
             .where { PodcastEpisodeTable.showId eq showId }
             .andWhere { PodcastEpisodeTable.enclosureUrl.isNotNull() }
-            .andWhere { PodcastEpisodeTable.importState inList listOf(PodcastImportState.NONE, PodcastImportState.FAILED) }
+            .andWhere {
+                PodcastEpisodeTable.importState inList listOf(
+                    PodcastImportState.NONE,
+                    PodcastImportState.FAILED
+                )
+            }
             .andWhere { PodcastEpisodeTable.importAttempts less maxAttempts }
             .orderBy(PodcastEpisodeTable.publishedAt to SortOrder.DESC, PodcastEpisodeTable.id to SortOrder.ASC)
             .map(::mapEpisodeRow)
@@ -1192,8 +1213,8 @@ class PodcastService(private val http: PodcastHttp) : Service() {
         if (term.isNotBlank()) {
             shows.andWhere {
                 (PodcastShowTable.title containsTerm term) or
-                    (PodcastShowTable.author containsTerm term) or
-                    (PodcastShowTable.description containsTerm term)
+                        (PodcastShowTable.author containsTerm term) or
+                        (PodcastShowTable.description containsTerm term)
             }
         }
 
@@ -1221,8 +1242,8 @@ class PodcastService(private val http: PodcastHttp) : Service() {
         .selectAll()
         .where {
             (PodcastEpisodeTable.title containsTerm term) or
-                (PodcastEpisodeTable.description containsTerm term) or
-                (PodcastShowTable.title containsTerm term)
+                    (PodcastEpisodeTable.description containsTerm term) or
+                    (PodcastShowTable.title containsTerm term)
         }
 
     private fun subscribedEpisodes(userId: UUID): Query = episodeSource(userId)

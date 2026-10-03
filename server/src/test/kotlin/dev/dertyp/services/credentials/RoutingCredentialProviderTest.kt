@@ -60,7 +60,8 @@ class RoutingCredentialProviderTest {
         remote.connect()
         val routing = routing(remote, emptyLocal)
         server.grants = server.grants + grant(CredentialNames.PODCAST_INDEX_API, CredentialKind.API_KEY_PAIR)
-        server.credentials[CredentialNames.PODCAST_INDEX_API] = ResolvedCredential.ApiKeyPair(CredentialNames.PODCAST_INDEX_API, "pi-key", "pi-secret")
+        server.credentials[CredentialNames.PODCAST_INDEX_API] =
+            ResolvedCredential.ApiKeyPair(CredentialNames.PODCAST_INDEX_API, "pi-key", "pi-secret")
         assertFalse(routing.isAvailable(CredentialNames.PODCAST_INDEX_API))
 
         val resolved = routing.resolve(CredentialNames.PODCAST_INDEX_API)

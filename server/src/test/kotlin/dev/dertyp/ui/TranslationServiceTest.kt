@@ -19,8 +19,10 @@ class TranslationServiceTest {
 
     @Test
     fun `plugin bundles override core and fall back to core and english`() {
-        service.forSource("plugin").registerBundle("de", mapOf("plugin.hello" to "Hallo", "importer.title" to "Mein Importer"))
-        service.forSource("plugin").registerBundle("en", mapOf("plugin.hello" to "Hello", "plugin.only" to "Only english"))
+        service.forSource("plugin")
+            .registerBundle("de", mapOf("plugin.hello" to "Hallo", "importer.title" to "Mein Importer"))
+        service.forSource("plugin")
+            .registerBundle("en", mapOf("plugin.hello" to "Hello", "plugin.only" to "Only english"))
 
         val de = service.translator("plugin", "de-CH")
         assertEquals("Hallo", de.t("plugin.hello"))
@@ -36,7 +38,10 @@ class TranslationServiceTest {
     fun `placeholders are substituted`() {
         service.forSource("p").registerBundle("en", mapOf("greet" to "Hi {user}, {count} new"))
         assertEquals("Hi Ann, 3 new", service.translator("p", "en").t("greet", "user" to "Ann", "count" to "3"))
-        assertEquals("2 items queued", service.translator(UiRegistry.SERVER_SOURCE, "en").t("importer.queued", "count" to "2"))
+        assertEquals(
+            "2 items queued",
+            service.translator(UiRegistry.SERVER_SOURCE, "en").t("importer.queued", "count" to "2")
+        )
     }
 
     @Test

@@ -45,7 +45,8 @@ object FileContents {
 
     fun decodeText(file: CredentialFile): String = decode(file).decodeToString()
 
-    fun encode(role: String, text: String) = CredentialFile(role, Base64.getEncoder().encodeToString(text.toByteArray()))
+    fun encode(role: String, text: String) =
+        CredentialFile(role, Base64.getEncoder().encodeToString(text.toByteArray()))
 }
 
 internal suspend fun HttpResponse.jsonBodyOrNull(): JsonObject? = runCatching {

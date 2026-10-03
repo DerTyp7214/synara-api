@@ -20,7 +20,13 @@ private val serverVersion: String =
 
 fun Route.publicRoutes(deps: CredentialServerDeps) {
     get(CredentialProtocol.HEALTH_PATH) {
-        call.respond(CredentialServerHealth(ok = true, protocolVersion = CredentialProtocol.PROTOCOL_VERSION, version = serverVersion))
+        call.respond(
+            CredentialServerHealth(
+                ok = true,
+                protocolVersion = CredentialProtocol.PROTOCOL_VERSION,
+                version = serverVersion
+            )
+        )
     }
 
     post(CredentialProtocol.TOKEN_PATH) {
@@ -47,7 +53,10 @@ fun Route.consumerRoutes(deps: CredentialServerDeps) {
             val principal = call.consumer()
             val name = call.credentialName()
             if (name !in principal.grants) {
-                throw CredentialException(CredentialErrorCode.NOT_GRANTED, "Credential $name is not granted to this client")
+                throw CredentialException(
+                    CredentialErrorCode.NOT_GRANTED,
+                    "Credential $name is not granted to this client"
+                )
             }
             val resolved: ResolvedCredential = deps.resolver.resolve(name)
             deps.store.touchGrant(principal.clientUuid, name)
@@ -58,7 +67,10 @@ fun Route.consumerRoutes(deps: CredentialServerDeps) {
             val principal = call.consumer()
             val name = call.credentialName()
             if (name !in principal.writeBack) {
-                throw CredentialException(CredentialErrorCode.NOT_GRANTED, "Write-back of $name is not granted to this client")
+                throw CredentialException(
+                    CredentialErrorCode.NOT_GRANTED,
+                    "Write-back of $name is not granted to this client"
+                )
             }
             val request = call.receive<WriteBackRequest>()
             val result = deps.resolver.writeBack(name, request)

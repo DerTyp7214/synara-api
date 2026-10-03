@@ -73,10 +73,15 @@ class FakeCredentialServer(grants: List<GrantInfo> = emptyList()) {
                 json(
                     CredentialJson.json.encodeToString(
                         TokenResponse.serializer(),
-                        TokenResponse("token-$number", expiresAt = System.currentTimeMillis() + tokenTtlMs, grants = this@FakeCredentialServer.grants),
+                        TokenResponse(
+                            "token-$number",
+                            expiresAt = System.currentTimeMillis() + tokenTtlMs,
+                            grants = this@FakeCredentialServer.grants
+                        ),
                     )
                 )
             }
+
             path.startsWith(CredentialProtocol.ADMIN_PREFIX + "/") -> {
                 if (request.headers[CredentialProtocol.ADMIN_KEY_HEADER] != ADMIN_KEY) {
                     return@MockEngine failure(HttpStatusCode.Unauthorized, CredentialErrorCode.UNAUTHORIZED)
@@ -87,7 +92,11 @@ class FakeCredentialServer(grants: List<GrantInfo> = emptyList()) {
                 val body = CredentialJson.json.decodeFromString<SetGrantsRequest>((request.body as TextContent).text)
                 val current = this@FakeCredentialServer.grants
                 this@FakeCredentialServer.grants = body.grants.map { spec ->
-                    GrantInfo(spec.name, current.firstOrNull { it.name == spec.name }?.kind ?: CredentialKind.API_KEY, spec.writeBack)
+                    GrantInfo(
+                        spec.name,
+                        current.firstOrNull { it.name == spec.name }?.kind ?: CredentialKind.API_KEY,
+                        spec.writeBack
+                    )
                 }
                 val id = path.removePrefix(CredentialProtocol.ADMIN_PREFIX + "/clients/").removeSuffix("/grants")
                 json(
@@ -97,13 +106,20 @@ class FakeCredentialServer(grants: List<GrantInfo> = emptyList()) {
                     )
                 )
             }
+
             path.startsWith(CredentialProtocol.CREDENTIALS_PATH + "/") && path.endsWith("/files") && request.method == HttpMethod.Put -> {
                 val name = path.removePrefix(CredentialProtocol.CREDENTIALS_PATH + "/").removeSuffix("/files")
                 val body = CredentialJson.json.decodeFromString<WriteBackRequest>((request.body as TextContent).text)
                 writeBacks += name to body
                 if (writeBackConflict) failure(HttpStatusCode.Conflict, CredentialErrorCode.CONFLICT)
-                else json(CredentialJson.json.encodeToString(WriteBackResult.serializer(), WriteBackResult("new-fingerprint")))
+                else json(
+                    CredentialJson.json.encodeToString(
+                        WriteBackResult.serializer(),
+                        WriteBackResult("new-fingerprint")
+                    )
+                )
             }
+
             path.startsWith(CredentialProtocol.CREDENTIALS_PATH + "/") && request.method == HttpMethod.Get -> {
                 val name = path.removePrefix(CredentialProtocol.CREDENTIALS_PATH + "/")
                 bearers += request.headers[HttpHeaders.Authorization].orEmpty()
@@ -115,9 +131,13 @@ class FakeCredentialServer(grants: List<GrantInfo> = emptyList()) {
                 if (this@FakeCredentialServer.grants.none { it.name == name }) {
                     return@MockEngine failure(HttpStatusCode.Forbidden, CredentialErrorCode.NOT_GRANTED)
                 }
-                val credential = credentials[name] ?: return@MockEngine failure(HttpStatusCode.NotFound, CredentialErrorCode.NOT_FOUND)
+                val credential = credentials[name] ?: return@MockEngine failure(
+                    HttpStatusCode.NotFound,
+                    CredentialErrorCode.NOT_FOUND
+                )
                 json(CredentialJson.json.encodeToString(ResolvedCredential.serializer(), credential))
             }
+
             else -> respond("not found", HttpStatusCode.NotFound)
         }
     }
@@ -151,9 +171,11 @@ class FakeCredentialServer(grants: List<GrantInfo> = emptyList()) {
         )
     }
 
-    fun client(source: CredentialServerConnectionSource = connectionSource()) = CredentialServerClient(httpClientFactory, source)
+    fun client(source: CredentialServerConnectionSource = connectionSource()) =
+        CredentialServerClient(httpClientFactory, source)
 
-    fun admin(source: CredentialServerConnectionSource = connectionSource()) = CredentialServerAdminClient(source, httpClientFactory)
+    fun admin(source: CredentialServerConnectionSource = connectionSource()) =
+        CredentialServerAdminClient(source, httpClientFactory)
 
     fun provider(
         client: CredentialServerClient = client(),

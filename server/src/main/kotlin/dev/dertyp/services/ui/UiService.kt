@@ -122,7 +122,12 @@ class UiService(
 
     private fun visible(user: User): List<RegisteredContribution> = registry.all().filter { allowed(it, user) }
 
-    fun list(user: User, client: ClientInfo, kind: UiContributionKind? = null, slot: String? = null): List<UiContributionInfo> =
+    fun list(
+        user: User,
+        client: ClientInfo,
+        kind: UiContributionKind? = null,
+        slot: String? = null
+    ): List<UiContributionInfo> =
         visible(user)
             .filter { kind == null || it.contribution.kind == kind }
             .filter { slot == null || it.contribution.slot == slot }
@@ -134,7 +139,13 @@ class UiService(
         return registered
     }
 
-    fun scope(registered: RegisteredContribution, user: User, client: ClientInfo, context: UiContext, call: ApplicationCall?): ServerUiRenderScope =
+    fun scope(
+        registered: RegisteredContribution,
+        user: User,
+        client: ClientInfo,
+        context: UiContext,
+        call: ApplicationCall?
+    ): ServerUiRenderScope =
         ServerUiRenderScope(
             user = UserInfo.fromUser(user),
             context = context,
@@ -172,16 +183,29 @@ class UiService(
             title = scope.t(contribution.titleKey),
             schemaVersion = UiSchemaVersion.CURRENT,
             revision = revisions.getOrPut(contribution.id) { AtomicLong() }.incrementAndGet(),
-            toolbar = if (contribution.kind == UiContributionKind.PAGE) contribution.toolbar(scope).map { withKeyboardToolbar(it, done) } else emptyList(),
+            toolbar = if (contribution.kind == UiContributionKind.PAGE) contribution.toolbar(scope)
+                .map { withKeyboardToolbar(it, done) } else emptyList(),
         )
     }
 
-    suspend fun render(user: User, client: ClientInfo, id: String, context: UiContext, call: ApplicationCall? = null): UiRender {
+    suspend fun render(
+        user: User,
+        client: ClientInfo,
+        id: String,
+        context: UiContext,
+        call: ApplicationCall? = null
+    ): UiRender {
         val registered = require(id, user)
         return renderWith(registered, scope(registered, user, client, context, call))
     }
 
-    suspend fun renderSlot(user: User, client: ClientInfo, slot: String, context: UiContext, call: ApplicationCall? = null): UiSlotRender {
+    suspend fun renderSlot(
+        user: User,
+        client: ClientInfo,
+        slot: String,
+        context: UiContext,
+        call: ApplicationCall? = null
+    ): UiSlotRender {
         val items = registry.bySlot(slot).filter { allowed(it, user) }.mapNotNull { registered ->
             try {
                 renderWith(registered, scope(registered, user, client, context, call))
@@ -195,10 +219,22 @@ class UiService(
         return UiSlotRender(slot, items)
     }
 
-    fun subscribe(user: User, client: ClientInfo, id: String, entityId: UUID? = null, call: ApplicationCall? = null): Flow<UiRender> =
+    fun subscribe(
+        user: User,
+        client: ClientInfo,
+        id: String,
+        entityId: UUID? = null,
+        call: ApplicationCall? = null
+    ): Flow<UiRender> =
         subscribe(user, client, id, UiContext(entityId = entityId), call)
 
-    fun subscribe(user: User, client: ClientInfo, id: String, context: UiContext, call: ApplicationCall? = null): Flow<UiRender> = flow {
+    fun subscribe(
+        user: User,
+        client: ClientInfo,
+        id: String,
+        context: UiContext,
+        call: ApplicationCall? = null
+    ): Flow<UiRender> = flow {
         val registered = require(id, user)
         val scope = scope(registered, user, client, context, call)
         val changes = registered.contribution.changes(scope) ?: emptyFlow()
@@ -211,18 +247,47 @@ class UiService(
         )
     }
 
-    fun subscribeLive(user: User, client: ClientInfo, id: String, key: String, entityId: UUID? = null, call: ApplicationCall? = null): Flow<UiLiveUpdate> =
+    fun subscribeLive(
+        user: User,
+        client: ClientInfo,
+        id: String,
+        key: String,
+        entityId: UUID? = null,
+        call: ApplicationCall? = null
+    ): Flow<UiLiveUpdate> =
         subscribeLive(user, client, id, key, UiContext(entityId = entityId), call)
 
-    fun subscribeLive(user: User, client: ClientInfo, id: String, key: String, context: UiContext, call: ApplicationCall? = null): Flow<UiLiveUpdate> = flow {
+    fun subscribeLive(
+        user: User,
+        client: ClientInfo,
+        id: String,
+        key: String,
+        context: UiContext,
+        call: ApplicationCall? = null
+    ): Flow<UiLiveUpdate> = flow {
         val registered = require(id, user)
         val scope = scope(registered, user, client, context, call)
-        val updates = registered.contribution.live(scope, key) ?: throw IllegalArgumentException("Unknown live key '$key' for UI contribution $id")
+        val updates = registered.contribution.live(scope, key)
+            ?: throw IllegalArgumentException("Unknown live key '$key' for UI contribution $id")
         val done = keyboardToolbar(client)
-        emitAll(updates.map { if (it is UiLiveUpdate.Replace) it.copy(child = withKeyboardToolbar(it.child, done)) else it })
+        emitAll(updates.map {
+            if (it is UiLiveUpdate.Replace) it.copy(
+                child = withKeyboardToolbar(
+                    it.child,
+                    done
+                )
+            ) else it
+        })
     }
 
-    suspend fun invoke(user: User, client: ClientInfo, id: String, actionId: String, payload: UiInvokePayload, call: ApplicationCall? = null): UiInvokeResult {
+    suspend fun invoke(
+        user: User,
+        client: ClientInfo,
+        id: String,
+        actionId: String,
+        payload: UiInvokePayload,
+        call: ApplicationCall? = null
+    ): UiInvokeResult {
         val registered = require(id, user)
         val scope = scope(registered, user, client, payload.context, call)
         val result = try {
@@ -241,13 +306,19 @@ class UiService(
         return result
     }
 
-    suspend fun dispatchHook(user: User, client: ClientInfo, event: UiHookEvent, call: ApplicationCall? = null): List<UiHookHandler> {
+    suspend fun dispatchHook(
+        user: User,
+        client: ClientInfo,
+        event: UiHookEvent,
+        call: ApplicationCall? = null
+    ): List<UiHookHandler> {
         val candidates = visible(user).filter { event.kind in it.contribution.hooks }
         val offers = supervisorScope {
             candidates.map { registered ->
                 async {
                     try {
-                        registered.contribution.onHook(scope(registered, user, client, UiContext(), call), event)?.let { registered to it }
+                        registered.contribution.onHook(scope(registered, user, client, UiContext(), call), event)
+                            ?.let { registered to it }
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
@@ -279,7 +350,8 @@ class UiService(
 
     private fun homeCardInfos(user: User, client: ClientInfo) = list(user, client, kind = UiContributionKind.HOME_CARD)
 
-    suspend fun homeLayout(user: User, client: ClientInfo): UiHomeLayout = homeCards.layoutFor(user.id, homeCardInfos(user, client))
+    suspend fun homeLayout(user: User, client: ClientInfo): UiHomeLayout =
+        homeCards.layoutFor(user.id, homeCardInfos(user, client))
 
     suspend fun setHomeCardPinned(user: User, client: ClientInfo, id: String, pinned: Boolean): UiHomeLayout {
         val registered = require(id, user)
@@ -294,7 +366,9 @@ class UiService(
         return homeLayout(user, client)
     }
 
-    fun homeLayoutFlow(user: User, client: ClientInfo): Flow<UiHomeLayout> = homeCards.layoutFlow(user.id) { homeCardInfos(user, client) }
+    fun homeLayoutFlow(user: User, client: ClientInfo): Flow<UiHomeLayout> =
+        homeCards.layoutFlow(user.id) { homeCardInfos(user, client) }
 
-    fun contributionsOf(registeredContribution: UiContribution): RegisteredContribution? = registry.get(registeredContribution.id)
+    fun contributionsOf(registeredContribution: UiContribution): RegisteredContribution? =
+        registry.get(registeredContribution.id)
 }

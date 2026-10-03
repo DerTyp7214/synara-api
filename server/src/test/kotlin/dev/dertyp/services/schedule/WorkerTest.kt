@@ -84,9 +84,9 @@ class WorkerTest : KoinTest {
                 val threadValues = workers.map { it.name to it.getThreadsFlow().value }
                 val currentTotal = threadValues.sumOf { it.second }
                 val allRegistered = threadValues.all { it.second > 0 }
-                
+
                 if (allRegistered && currentTotal == expectedTotal) break
-                
+
                 delay(200.milliseconds)
             }
         }
@@ -154,13 +154,13 @@ class WorkerTest : KoinTest {
         val cores = 128
         every { availableCores() } returns cores
         val maxSafe = 115
-        
+
         val worker1 = TestWorker("LargeW1")
         val worker2 = TestWorker("LargeW2")
         val worker3 = TestWorker("LargeW3")
 
         val latch = CompletableDeferred<Unit>()
-        
+
         val job1 = launch { worker1.testRunParallel((1..100).toList(), 100) { latch.await() } }
         val job2 = launch { worker2.testRunParallel((1..100).toList(), 50) { latch.await() } }
         val job3 = launch { worker3.testRunParallel((1..100).toList(), 50) { latch.await() } }
@@ -185,12 +185,12 @@ class WorkerTest : KoinTest {
     @Timeout(value = 1, unit = TimeUnit.MINUTES)
     fun `runParallel should respect thread scaling`() = runBlocking(Dispatchers.Default) {
         setupKoin(threadMultiplier = 1.0)
-        
+
         val maxSafe = 14
-        
+
         val worker1 = TestWorker("Worker1")
         val worker2 = TestWorker("Worker2")
-        
+
         val latch = CompletableDeferred<Unit>()
         val worker1Started = CompletableDeferred<Unit>()
 
@@ -222,11 +222,11 @@ class WorkerTest : KoinTest {
         latch.complete(Unit)
         job1.join()
         job2.join()
-        
+
         val worker3 = TestWorker("Worker3")
         launch {
             worker3.testRunParallel((1..1).toList(), maxSafe) {
-                 assertEquals(maxSafe, worker3.getThreadsFlow().value)
+                assertEquals(maxSafe, worker3.getThreadsFlow().value)
             }
         }.join()
     }

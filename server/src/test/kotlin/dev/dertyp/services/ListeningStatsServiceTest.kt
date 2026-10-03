@@ -182,8 +182,22 @@ class ListeningStatsServiceTest : KoinTest {
             val lbSong = insertSong(album, title = "LB Song", durationMs = 229_133)
             val localSong = insertSong(album, title = "Local Song", durationMs = 229_133)
             val mbid = UUID.randomUUID()
-            insertListen(at(1), lbUserId = lb, songId = lbSong, recordingMbid = mbid, isrcs = "US1111111111", playedMs = 229_133)
-            insertListen(at(1) + 83, userId = u, songId = localSong, recordingMbid = mbid, isrcs = "US1111111111", playedMs = 229_000)
+            insertListen(
+                at(1),
+                lbUserId = lb,
+                songId = lbSong,
+                recordingMbid = mbid,
+                isrcs = "US1111111111",
+                playedMs = 229_133
+            )
+            insertListen(
+                at(1) + 83,
+                userId = u,
+                songId = localSong,
+                recordingMbid = mbid,
+                isrcs = "US1111111111",
+                playedMs = 229_000
+            )
             u to localSong
         }
 
@@ -484,7 +498,10 @@ class ListeningStatsServiceTest : KoinTest {
         assertEquals("Artist One, Artist Two", topSong.artistName)
         assertEquals("Best Album", topSong.albumName)
         assertEquals(3L, topSong.listenCount)
-        assertEquals(setOf("Artist One" to 3L, "Artist Two" to 3L), result.topArtists.map { it.name to it.listenCount }.toSet())
+        assertEquals(
+            setOf("Artist One" to 3L, "Artist Two" to 3L),
+            result.topArtists.map { it.name to it.listenCount }.toSet()
+        )
         assertEquals("Best Album" to 3L, result.topAlbums.single().let { it.name to it.listenCount })
         assertEquals(1, result.uniqueSongs)
         assertEquals(2, result.uniqueArtists)
@@ -688,7 +705,13 @@ class ListeningStatsServiceTest : KoinTest {
             val lb = insertLbUser()
             linkListenBrainzUser(u, lb)
             val song = insertSong(insertAlbum(), title = "Lib Song")
-            insertListen(at(1), lbUserId = lb, trackName = "Foreign Name", recordingMbid = mbid, recordingMsid = UUID.randomUUID())
+            insertListen(
+                at(1),
+                lbUserId = lb,
+                trackName = "Foreign Name",
+                recordingMbid = mbid,
+                recordingMsid = UUID.randomUUID()
+            )
             insertListen(at(2), lbUserId = lb, trackName = "Foreign Name", recordingMbid = mbid)
             insertListen(at(3), userId = u, songId = song)
             u to song

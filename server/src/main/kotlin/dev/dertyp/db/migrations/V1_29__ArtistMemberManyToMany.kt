@@ -12,14 +12,14 @@ class V1_29__ArtistMemberManyToMany : BaseJavaMigration() {
         val statements = tempConnection {
             SchemaUtils.createStatements(ArtistMemberTable)
         }
-        
+
         context.connection.createStatement().use { statement ->
             for (sql in statements) statement.execute(sql)
 
             val columnExists = try {
                 context.connection.metaData.getColumns(null, null, "artist", "groupId").next() ||
-                context.connection.metaData.getColumns(null, null, "artist", "groupid").next() ||
-                context.connection.metaData.getColumns(null, null, "ARTIST", "GROUPID").next()
+                        context.connection.metaData.getColumns(null, null, "artist", "groupid").next() ||
+                        context.connection.metaData.getColumns(null, null, "ARTIST", "GROUPID").next()
             } catch (e: Exception) {
                 false
             }

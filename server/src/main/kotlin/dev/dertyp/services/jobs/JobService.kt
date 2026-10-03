@@ -35,7 +35,8 @@ class JobService {
         @Volatile var info: JobInfo,
     ) {
         internal val logLines = ArrayDeque<String>()
-        internal val logFlow = MutableSharedFlow<String>(extraBufferCapacity = 256, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+        internal val logFlow =
+            MutableSharedFlow<String>(extraBufferCapacity = 256, onBufferOverflow = BufferOverflow.DROP_OLDEST)
 
         @Volatile
         internal var coroutine: kotlinx.coroutines.Job? = null
@@ -71,7 +72,8 @@ class JobService {
 
     private val queues = ConcurrentHashMap<String, KindQueue>()
     private val byId = ConcurrentHashMap<UUID, Job>()
-    private val changeFlow = MutableSharedFlow<Unit>(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+    private val changeFlow =
+        MutableSharedFlow<Unit>(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
 
     val changes: Flow<Unit> = changeFlow.asSharedFlow()
 
@@ -158,7 +160,11 @@ class JobService {
     }
 
     private fun finish(queue: KindQueue, job: Job, status: JobStatus, message: String?) {
-        job.info = job.info.copy(status = status, message = message ?: job.info.message, finishedAt = System.currentTimeMillis())
+        job.info = job.info.copy(
+            status = status,
+            message = message ?: job.info.message,
+            finishedAt = System.currentTimeMillis()
+        )
         synchronized(queue) {
             if (queue.running === job) queue.running = null
             queue.finished.addLast(job)
@@ -196,7 +202,8 @@ class JobService {
         job.logFlow.collect { emit(it) }
     }
 
-    fun logLines(jobId: UUID): List<String> = byId[jobId]?.let { job -> synchronized(job.logLines) { job.logLines.toList() } } ?: emptyList()
+    fun logLines(jobId: UUID): List<String> =
+        byId[jobId]?.let { job -> synchronized(job.logLines) { job.logLines.toList() } } ?: emptyList()
 
     fun cancel(jobId: UUID, user: UserInfo? = null): Boolean {
         val job = byId[jobId] ?: return false
@@ -214,7 +221,13 @@ class JobService {
     }
 
     fun forSource(source: String): Jobs = object : Jobs {
-        override suspend fun enqueue(kind: String, title: String, user: UserInfo?, summary: String, run: suspend JobContext.() -> Unit): UUID =
+        override suspend fun enqueue(
+            kind: String,
+            title: String,
+            user: UserInfo?,
+            summary: String,
+            run: suspend JobContext.() -> Unit
+        ): UUID =
             this@JobService.enqueue(
                 kind = kind,
                 title = title,
@@ -227,7 +240,8 @@ class JobService {
 
         override fun jobs(kind: String?, user: UserInfo?): Flow<List<JobInfo>> = jobsFlow(kind, user)
         override fun log(jobId: UUID): Flow<String> = this@JobService.log(jobId)
-        override suspend fun cancel(jobId: UUID): Boolean = byId[jobId]?.takeIf { it.source == source }?.let { cancel(it.id) } ?: false
+        override suspend fun cancel(jobId: UUID): Boolean =
+            byId[jobId]?.takeIf { it.source == source }?.let { cancel(it.id) } ?: false
     }
 
     companion object {

@@ -77,7 +77,14 @@ object CollageLayout {
         for (i in steps downTo 1) {
             val offset = spread * i / steps
             g.color = Color(0, 0, 0, 14)
-            g.fillRoundRect(x - offset + spread / 2, y - offset + spread, w + 2 * offset, h + 2 * offset, offset * 2, offset * 2)
+            g.fillRoundRect(
+                x - offset + spread / 2,
+                y - offset + spread,
+                w + 2 * offset,
+                h + 2 * offset,
+                offset * 2,
+                offset * 2
+            )
         }
     }
 }

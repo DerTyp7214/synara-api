@@ -76,7 +76,12 @@ private fun stringSchema(description: String, values: List<String>? = null): Jso
     if (values != null) putJsonArray("enum") { values.forEach { add(it) } }
 }
 
-private fun integerSchema(description: String, minimum: Int? = null, maximum: Int? = null, default: Int? = null): JsonObject =
+private fun integerSchema(
+    description: String,
+    minimum: Int? = null,
+    maximum: Int? = null,
+    default: Int? = null
+): JsonObject =
     buildJsonObject {
         put("type", "integer")
         put("description", description)
@@ -154,7 +159,8 @@ private object McpArgs {
         val raw = element(args, name) ?: return null
         val array = raw as? JsonArray ?: throw IllegalArgumentException("Parameter '$name' must be an array of strings")
         val values = array.map {
-            val item = it as? JsonPrimitive ?: throw IllegalArgumentException("Parameter '$name' must be an array of strings")
+            val item =
+                it as? JsonPrimitive ?: throw IllegalArgumentException("Parameter '$name' must be an array of strings")
             val wanted = normalizeEnumValue(item.content)
             allowed.firstOrNull { candidate -> normalizeEnumValue(candidate) == wanted }
                 ?: throw IllegalArgumentException("Parameter '$name' must only contain ${allowed.joinToString(", ")}, got '${item.content}'")
@@ -195,7 +201,7 @@ class ListenHistoryMcpServerFactory(
     private fun Server.addSearchLibrary(user: User) = addTool(
         name = "search_library",
         description = "Search the user's library for songs, artists and albums by name and return their ids. " +
-            "Use this to resolve a name mentioned by the user into the songId, artistId or albumId that the other tools take.",
+                "Use this to resolve a name mentioned by the user into the songId, artistId or albumId that the other tools take.",
         inputSchema = ToolSchema(
             properties = buildJsonObject {
                 put("query", stringSchema("Free-text search terms, e.g. a song title, artist name or album name."))
@@ -206,7 +212,10 @@ class ListenHistoryMcpServerFactory(
                         listOf("songs", "artists", "albums"),
                     ),
                 )
-                put("limit", integerSchema("Maximum number of results per type.", minimum = 1, maximum = 50, default = 10))
+                put(
+                    "limit",
+                    integerSchema("Maximum number of results per type.", minimum = 1, maximum = 50, default = 10)
+                )
             },
             required = listOf("query"),
         ),
@@ -232,7 +241,7 @@ class ListenHistoryMcpServerFactory(
     private fun Server.addGetListens(user: User) = addTool(
         name = "get_listens",
         description = "List the user's individual listens, newest first, optionally filtered by time window, song, artist, " +
-            "album or source. Returns a page of listens plus a cursor for the next page.",
+                "album or source. Returns a page of listens plus a cursor for the next page.",
         inputSchema = ToolSchema(
             properties = buildJsonObject {
                 put("from", stringSchema(FROM_DESC))
@@ -259,7 +268,10 @@ class ListenHistoryMcpServerFactory(
                 )
                 put(
                     "qualifiedOnly",
-                    booleanSchema("Only return listens that played long enough to count as a real listen.", default = false),
+                    booleanSchema(
+                        "Only return listens that played long enough to count as a real listen.",
+                        default = false
+                    ),
                 )
                 put("timezone", stringSchema(TIMEZONE_DESC))
             },
@@ -282,7 +294,7 @@ class ListenHistoryMcpServerFactory(
     private fun Server.addGetListeningSummary(user: User) = addTool(
         name = "get_listening_summary",
         description = "Aggregate the user's listens over a time window: totals, unique songs, artists and albums, " +
-            "first and last listen, and the distribution over the hours of the day and days of the week in the given timezone.",
+                "first and last listen, and the distribution over the hours of the day and days of the week in the given timezone.",
         inputSchema = ToolSchema(
             properties = buildJsonObject {
                 put("from", stringSchema(FROM_DESC))
@@ -304,7 +316,7 @@ class ListenHistoryMcpServerFactory(
     private fun Server.addGetTop(user: User) = addTool(
         name = "get_top",
         description = "Rank the user's most listened songs, artists or albums over a time window, by listen count or by " +
-            "milliseconds listened. Supports paging through offset and limit.",
+                "milliseconds listened. Supports paging through offset and limit.",
         inputSchema = ToolSchema(
             properties = buildJsonObject {
                 put("kind", stringSchema("What to rank.", listOf("songs", "artists", "albums")))
@@ -337,7 +349,8 @@ class ListenHistoryMcpServerFactory(
     ) { request ->
         val args = request.params.arguments
         val zone = McpArgs.zone(args)
-        val kind = McpArgs.requiredEnum(args, "kind", McpTopKind.entries.toTypedArray(), listOf("songs", "artists", "albums"))
+        val kind =
+            McpArgs.requiredEnum(args, "kind", McpTopKind.entries.toTypedArray(), listOf("songs", "artists", "albums"))
         val order = McpArgs.enum(
             args,
             "orderBy",
@@ -361,10 +374,13 @@ class ListenHistoryMcpServerFactory(
     private fun Server.addGetListenTimeline(user: User) = addTool(
         name = "get_listen_timeline",
         description = "Bucket the user's listens over time (per hour, day, week, month or year) to show listening activity " +
-            "as a series. Buckets are aligned to local boundaries in the given timezone and empty buckets are included.",
+                "as a series. Buckets are aligned to local boundaries in the given timezone and empty buckets are included.",
         inputSchema = ToolSchema(
             properties = buildJsonObject {
-                put("bucket", stringSchema("Bucket size of the series.", listOf("hour", "day", "week", "month", "year")))
+                put(
+                    "bucket",
+                    stringSchema("Bucket size of the series.", listOf("hour", "day", "week", "month", "year"))
+                )
                 put("from", stringSchema(FROM_DESC))
                 put("to", stringSchema(TO_DESC))
                 put("songId", stringSchema(SONG_ID_DESC))
@@ -390,19 +406,22 @@ class ListenHistoryMcpServerFactory(
     private fun Server.addGetListeningStats(user: User) = addTool(
         name = "get_listening_stats",
         description = "The user's full listening statistics for a named range, the same report the Synara clients show: " +
-            "totals, comparison against the previous range, top songs, artists and albums, listen clock, streaks and new discoveries.",
+                "totals, comparison against the previous range, top songs, artists and albums, listen clock, streaks and new discoveries.",
         inputSchema = ToolSchema(
             properties = buildJsonObject {
                 put(
                     "range",
                     stringSchema(
                         "Which range to report on. DAY, WEEK, MONTH and YEAR cover the current period so far; " +
-                            "LAST_WEEK, LAST_MONTH and LAST_YEAR cover the previous complete one.",
+                                "LAST_WEEK, LAST_MONTH and LAST_YEAR cover the previous complete one.",
                         StatsRange.entries.map { it.name },
                     ),
                 )
                 put("timezone", stringSchema(TIMEZONE_DESC))
-                put("topLimit", integerSchema("How many entries each top list contains.", minimum = 1, maximum = 100, default = 10))
+                put(
+                    "topLimit",
+                    integerSchema("How many entries each top list contains.", minimum = 1, maximum = 100, default = 10)
+                )
                 put(
                     "topOrder",
                     stringSchema("How the top lists are ranked.", TopOrder.entries.map { it.name }),
@@ -444,7 +463,13 @@ class ListenHistoryMcpServerFactory(
         songId = McpArgs.uuid(args, "songId"),
         artistId = McpArgs.uuid(args, "artistId"),
         albumId = McpArgs.uuid(args, "albumId"),
-        source = McpArgs.enum(args, "source", ListenSource.entries.toTypedArray(), null, listOf("LOCAL", "LISTENBRAINZ")),
+        source = McpArgs.enum(
+            args,
+            "source",
+            ListenSource.entries.toTypedArray(),
+            null,
+            listOf("LOCAL", "LISTENBRAINZ")
+        ),
         qualifiedOnly = McpArgs.bool(args, "qualifiedOnly", false),
     )
 }

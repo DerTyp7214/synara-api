@@ -126,7 +126,12 @@ class PodcastIndexServiceTest : KoinTest {
     @EnumSource(DbDialect::class)
     fun `unconfigured indexes are skipped`(dialect: DbDialect): Unit = runBlocking {
         val unconfigured = FakeIndex("a", "A", configured = false, entries = listOf(entry("https://example.com/a.xml")))
-        val broken = FakeIndex("b", "B", configureFailure = IllegalStateException("no token"), entries = listOf(entry("https://example.com/b.xml")))
+        val broken = FakeIndex(
+            "b",
+            "B",
+            configureFailure = IllegalStateException("no token"),
+            entries = listOf(entry("https://example.com/b.xml"))
+        )
         setup(dialect, listOf(unconfigured, broken))
 
         assertEquals(emptyList<String>(), service.search("q", 10, emptyList()).map { it.feedUrl })
@@ -139,7 +144,8 @@ class PodcastIndexServiceTest : KoinTest {
     fun `an unknown index id is rejected`(dialect: DbDialect) {
         setup(dialect, listOf(FakeIndex("a", "A")))
 
-        val error = assertThrows<IllegalArgumentException> { runBlocking { service.search("q", 10, listOf("a", "nope")) } }
+        val error =
+            assertThrows<IllegalArgumentException> { runBlocking { service.search("q", 10, listOf("a", "nope")) } }
         assertEquals("Unknown podcast index: nope", error.message)
     }
 
@@ -160,7 +166,12 @@ class PodcastIndexServiceTest : KoinTest {
     @ParameterizedTest
     @EnumSource(DbDialect::class)
     fun `a failing provider contributes nothing while the other one answers`(dialect: DbDialect): Unit = runBlocking {
-        val failing = FakeIndex("a", "A", failWith = IllegalStateException("boom"), entries = listOf(entry("https://example.com/a.xml")))
+        val failing = FakeIndex(
+            "a",
+            "A",
+            failWith = IllegalStateException("boom"),
+            entries = listOf(entry("https://example.com/a.xml"))
+        )
         val working = FakeIndex("b", "B", entries = listOf(entry("https://example.com/b.xml")))
         setup(dialect, listOf(failing, working))
 
@@ -181,7 +192,11 @@ class PodcastIndexServiceTest : KoinTest {
     @EnumSource(DbDialect::class)
     fun `results are deduplicated by the normalized feed url`(dialect: DbDialect): Unit = runBlocking {
         val first = FakeIndex("a", "A", entries = listOf(entry("https://example.com/same.xml")))
-        val second = FakeIndex("b", "B", entries = listOf(entry("https://example.com/same.xml#x"), entry("https://example.com/other.xml")))
+        val second = FakeIndex(
+            "b",
+            "B",
+            entries = listOf(entry("https://example.com/same.xml#x"), entry("https://example.com/other.xml"))
+        )
         setup(dialect, listOf(first, second))
 
         val results = service.search("q", 10, emptyList())

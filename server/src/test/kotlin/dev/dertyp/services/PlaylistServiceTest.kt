@@ -136,10 +136,10 @@ class PlaylistServiceTest : KoinTest {
         val playlists = listOf(
             InsertablePlaylist("New Playlist", songPaths = listOf(songPath))
         )
-        
+
         val result = service.createBatch(playlists)
         assertEquals(1, result.size)
-        
+
         val playlist = service.byId(result[0])
         assertNotNull(playlist)
         assertEquals("New Playlist", playlist?.name)
@@ -161,36 +161,37 @@ class PlaylistServiceTest : KoinTest {
 
         val updated = Playlist(playlistId, "Updated", emptyList())
         service.upsertPlaylist(updated)
-        
+
         val fromDb = service.byId(playlistId)
         assertEquals("Updated", fromDb?.name)
     }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `allPlaylists pages past the first page and allPlaylistsFlow emits every playlist`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        val ids = (1..105).map { UUID.randomUUID() }
-        transaction(database) {
-            ids.forEachIndexed { index, playlistId ->
-                PlaylistTable.insert {
-                    it[id] = playlistId
-                    it[name] = "Playlist $index"
+    fun `allPlaylists pages past the first page and allPlaylistsFlow emits every playlist`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val ids = (1..105).map { UUID.randomUUID() }
+            transaction(database) {
+                ids.forEachIndexed { index, playlistId ->
+                    PlaylistTable.insert {
+                        it[id] = playlistId
+                        it[name] = "Playlist $index"
+                    }
                 }
             }
+
+            val second = service.allPlaylists(1, 50)
+            assertEquals(50, second.data.size)
+            assertEquals(105, second.total)
+            assertEquals(true, second.hasNextPage)
+
+            val last = service.allPlaylists(2, 50)
+            assertEquals(5, last.data.size)
+            assertEquals(false, last.hasNextPage)
+
+            val emitted = service.allPlaylistsFlow().toList().map { it.id }
+            assertEquals(105, emitted.size)
+            assertEquals(ids.toSet(), emitted.toSet())
         }
-
-        val second = service.allPlaylists(1, 50)
-        assertEquals(50, second.data.size)
-        assertEquals(105, second.total)
-        assertEquals(true, second.hasNextPage)
-
-        val last = service.allPlaylists(2, 50)
-        assertEquals(5, last.data.size)
-        assertEquals(false, last.hasNextPage)
-
-        val emitted = service.allPlaylistsFlow().toList().map { it.id }
-        assertEquals(105, emitted.size)
-        assertEquals(ids.toSet(), emitted.toSet())
-    }
 }

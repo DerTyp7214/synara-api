@@ -34,7 +34,8 @@ class MirrorRpcService(
 
     override fun getImageMetadata(): Flow<Image> = mirrorService.getImageMetadata()
 
-    override fun getSongData(songId: UUID, quality: Int, chunkSize: Int, force: Boolean): Flow<ByteArray> = mirrorService.getSongData(songId, quality, chunkSize, force)
+    override fun getSongData(songId: UUID, quality: Int, chunkSize: Int, force: Boolean): Flow<ByteArray> =
+        mirrorService.getSongData(songId, quality, chunkSize, force)
 
     override fun getUsers(): Flow<User> = mirrorService.getUsers()
 
@@ -84,23 +85,28 @@ class MirrorService : Service() {
     fun getArtistAliases(): Flow<ArtistAlias> = flow {
         ArtistAliasTable.selectAll().fetchBatchedResultsByIdKeyset(ArtistAliasTable.id, 1000) { batch ->
             for (row in batch) {
-                emit(ArtistAlias(
-                    artistId = row[ArtistAliasTable.artistId].value,
-                    name = row[ArtistAliasTable.name]
-                ))
+                emit(
+                    ArtistAlias(
+                        artistId = row[ArtistAliasTable.artistId].value,
+                        name = row[ArtistAliasTable.name]
+                    )
+                )
             }
         }
     }.flowOn(Dispatchers.IO)
 
     fun getArtistSplitAliases(): Flow<ArtistSplitAlias> = flow {
-        ArtistSplitAliasTable.selectAll().fetchBatchedResultsByKeyset(ArtistSplitAliasTable.name, ArtistSplitAliasTable.artistId, 1000) { batch ->
-            for (row in batch) {
-                emit(ArtistSplitAlias(
-                    artistId = row[ArtistSplitAliasTable.artistId].value,
-                    name = row[ArtistSplitAliasTable.name]
-                ))
+        ArtistSplitAliasTable.selectAll()
+            .fetchBatchedResultsByKeyset(ArtistSplitAliasTable.name, ArtistSplitAliasTable.artistId, 1000) { batch ->
+                for (row in batch) {
+                    emit(
+                        ArtistSplitAlias(
+                            artistId = row[ArtistSplitAliasTable.artistId].value,
+                            name = row[ArtistSplitAliasTable.name]
+                        )
+                    )
+                }
             }
-        }
     }.flowOn(Dispatchers.IO)
 
     fun getAlbums(): Flow<Album> = albumService.allAlbumsFlow()

@@ -18,7 +18,12 @@ import java.util.concurrent.ConcurrentHashMap
 class PluginSettingsService {
     private val flows = ConcurrentHashMap<String, MutableSharedFlow<Map<String, String>>>()
 
-    private fun flowFor(pluginId: String) = flows.getOrPut(pluginId) { MutableSharedFlow(extraBufferCapacity = 16, onBufferOverflow = BufferOverflow.DROP_OLDEST) }
+    private fun flowFor(pluginId: String) = flows.getOrPut(pluginId) {
+        MutableSharedFlow(
+            extraBufferCapacity = 16,
+            onBufferOverflow = BufferOverflow.DROP_OLDEST
+        )
+    }
 
     suspend fun getAll(pluginId: String): Map<String, String> = dbQuery {
         PluginSettingTable.selectAll()

@@ -47,7 +47,10 @@ class GamdlCredentialsContribution(
                 title = scope.t("gamdl.credentials.title"),
                 subtitle = scope.t("gamdl.credentials.description"),
                 icon = icon,
-                children = listOf(status, UiComponent.Text(scope.t("gamdl.credentials.managed"), UiTextStyle.CAPTION, UiTone.MUTED)),
+                children = listOf(
+                    status,
+                    UiComponent.Text(scope.t("gamdl.credentials.managed"), UiTextStyle.CAPTION, UiTone.MUTED)
+                ),
             )
         }
         return UiComponent.Card(
@@ -86,7 +89,10 @@ class GamdlCredentialsContribution(
         if (managedRemotely()) return UiInvokeResult(UiInvokeStatus.ERROR, scope.t("gamdl.credentials.managed"))
         val cookies = values["cookiesTxt"]?.text?.trim().orEmpty()
         if (cookies.isEmpty()) {
-            return UiInvokeResult(UiInvokeStatus.VALIDATION_ERROR, fieldErrors = mapOf("cookiesTxt" to scope.t("gamdl.credentials.error.cookies")))
+            return UiInvokeResult(
+                UiInvokeStatus.VALIDATION_ERROR,
+                fieldErrors = mapOf("cookiesTxt" to scope.t("gamdl.credentials.error.cookies"))
+            )
         }
         val wvd = values["wvdBase64"]?.text?.trim()?.takeIf { it.isNotEmpty() }
         gamdlService.provideCredentials(GamdlCredentials(cookiesTxt = cookies, wvdBase64 = wvd))

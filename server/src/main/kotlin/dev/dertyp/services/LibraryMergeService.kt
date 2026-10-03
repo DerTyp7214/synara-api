@@ -115,7 +115,7 @@ class LibraryMergeService : Service() {
         val keptSongId = keptSongRow[SongTable.id].value
         val songsToMerge = songsInGroup.drop(1)
 
-        val anyExplicit = songsInGroup.any { 
+        val anyExplicit = songsInGroup.any {
             it[SongTable.explicit] || it[SongTable.title].contains("\uD83C\uDD74")
         }
 
@@ -146,7 +146,9 @@ class LibraryMergeService : Service() {
             SongTable.deleteWhere { SongTable.id eq oldSongId }
             mergedInGroup++
         }
-        libraryFileDeleter.removeFromSearchIndex(SearchIndexEntityType.SONG, songsToMerge.map { it[SongTable.id].value })
+        libraryFileDeleter.removeFromSearchIndex(
+            SearchIndexEntityType.SONG,
+            songsToMerge.map { it[SongTable.id].value })
         return mergedInGroup
     }
 
@@ -196,7 +198,7 @@ class LibraryMergeService : Service() {
             val keptSongId = keptSongRow[SongTable.id].value
             val songsToMerge = sortedGroup.drop(1)
 
-            val anyExplicit = songsInGroupRows.any { 
+            val anyExplicit = songsInGroupRows.any {
                 it[SongTable.explicit] || it[SongTable.title].contains("\uD83C\uDD74")
             }
             val cleanTitle = keptSongRow[SongTable.title].replace("\uD83C\uDD74", "").trim()
@@ -274,7 +276,9 @@ class LibraryMergeService : Service() {
                 AlbumTable.deleteWhere { AlbumTable.id eq oldAlbum[AlbumTable.id].value }
                 totalMerged++
             }
-            libraryFileDeleter.removeFromSearchIndex(SearchIndexEntityType.ALBUM, albumsToMerge.map { it[AlbumTable.id].value })
+            libraryFileDeleter.removeFromSearchIndex(
+                SearchIndexEntityType.ALBUM,
+                albumsToMerge.map { it[AlbumTable.id].value })
 
             if (totalMerged > 0) {
                 val albumService = get<AlbumService>()
@@ -282,11 +286,12 @@ class LibraryMergeService : Service() {
             }
         }
 
-        val remainingAlbums = if (totalMerged > 0) AlbumTable.leftJoin(AlbumMusicBrainzTable).selectAll().toList() else allAlbums
+        val remainingAlbums =
+            if (totalMerged > 0) AlbumTable.leftJoin(AlbumMusicBrainzTable).selectAll().toList() else allAlbums
 
         val originalIdGroups = remainingAlbums
             .filter { it[AlbumTable.originalId] != null }
-            .groupBy { 
+            .groupBy {
                 val id = it[AlbumTable.originalId]!!
                 if (id.contains(":")) id else "tidal:$id"
             }
@@ -318,7 +323,9 @@ class LibraryMergeService : Service() {
                 AlbumTable.deleteWhere { AlbumTable.id eq oldAlbum[AlbumTable.id].value }
                 totalMerged++
             }
-            libraryFileDeleter.removeFromSearchIndex(SearchIndexEntityType.ALBUM, albumsToMerge.map { it[AlbumTable.id].value })
+            libraryFileDeleter.removeFromSearchIndex(
+                SearchIndexEntityType.ALBUM,
+                albumsToMerge.map { it[AlbumTable.id].value })
 
             val musicBrainzId = keptAlbum.getOrNull(AlbumMusicBrainzTable.musicBrainzId)?.value
             if (musicBrainzId != null) {
@@ -379,7 +386,7 @@ class LibraryMergeService : Service() {
             val keptAlbum = sortedGroup.first()
             val keptAlbumId = keptAlbum[AlbumTable.id].value
             val albumsToMerge = sortedGroup.drop(1)
-            
+
             logger.info("Merging ${albumsToMerge.size} albums into $keptAlbumId")
 
             for (oldAlbum in albumsToMerge) {
@@ -387,7 +394,9 @@ class LibraryMergeService : Service() {
                 AlbumTable.deleteWhere { AlbumTable.id eq oldAlbum[AlbumTable.id].value }
                 totalMerged++
             }
-            libraryFileDeleter.removeFromSearchIndex(SearchIndexEntityType.ALBUM, albumsToMerge.map { it[AlbumTable.id].value })
+            libraryFileDeleter.removeFromSearchIndex(
+                SearchIndexEntityType.ALBUM,
+                albumsToMerge.map { it[AlbumTable.id].value })
         }
 
         logger.info("Duplicate album merge completed")
@@ -486,8 +495,8 @@ class LibraryMergeService : Service() {
             val (identity, _) = finalGroups[i]
             identity.first == albumCover && identity.second
         } ?: finalGroups.indices.find { i -> finalGroups[i].first.second }
-          ?: finalGroups.indices.find { i -> finalGroups[i].first.first == albumCover }
-          ?: finalGroups.indices.maxBy { finalGroups[it].second.size }
+        ?: finalGroups.indices.find { i -> finalGroups[i].first.first == albumCover }
+        ?: finalGroups.indices.maxBy { finalGroups[it].second.size }
 
         val targetIdentity = finalGroups[targetGroupIndex].first
 
@@ -571,7 +580,12 @@ class LibraryMergeService : Service() {
         }
 
         val artists = AlbumArtistTable
-            .select(AlbumArtistTable.artistId, AlbumArtistTable.creditedAliasId, AlbumArtistTable.position, AlbumArtistTable.joinPhrase)
+            .select(
+                AlbumArtistTable.artistId,
+                AlbumArtistTable.creditedAliasId,
+                AlbumArtistTable.position,
+                AlbumArtistTable.joinPhrase
+            )
             .where { AlbumArtistTable.albumId eq originalAlbumId }
             .toList()
         AlbumArtistTable.batchInsert(artists) { row ->
@@ -582,7 +596,9 @@ class LibraryMergeService : Service() {
             this[AlbumArtistTable.joinPhrase] = row[AlbumArtistTable.joinPhrase]
         }
 
-        val genres = AlbumGenreTable.select(AlbumGenreTable.genreId).where { AlbumGenreTable.albumId eq originalAlbumId }.toList()
+        val genres =
+            AlbumGenreTable.select(AlbumGenreTable.genreId).where { AlbumGenreTable.albumId eq originalAlbumId }
+                .toList()
         AlbumGenreTable.batchInsert(genres) { row ->
             this[AlbumGenreTable.albumId] = EntityID(newAlbumId, AlbumTable)
             this[AlbumGenreTable.genreId] = row[AlbumGenreTable.genreId]
@@ -603,7 +619,12 @@ class LibraryMergeService : Service() {
         }
     }
 
-    private fun calculateSimilarity(albumA: ResultRow, albumB: ResultRow, artistsA: List<UUID>, artistsB: List<UUID>): Int {
+    private fun calculateSimilarity(
+        albumA: ResultRow,
+        albumB: ResultRow,
+        artistsA: List<UUID>,
+        artistsB: List<UUID>
+    ): Int {
         val mbIdA = albumA.getOrNull(AlbumMusicBrainzTable.musicBrainzId)?.value
         val mbIdB = albumB.getOrNull(AlbumMusicBrainzTable.musicBrainzId)?.value
         if (mbIdA != null && mbIdB != null && mbIdA != mbIdB) return 0
@@ -644,15 +665,20 @@ class LibraryMergeService : Service() {
     }
 
     private fun mergeAlbumReferences(oldAlbumId: UUID, keptAlbumId: UUID) {
-        val songsForOld = SongTable.select(SongTable.id).where { SongTable.albumId eq oldAlbumId }.map { it[SongTable.id].value }
+        val songsForOld =
+            SongTable.select(SongTable.id).where { SongTable.albumId eq oldAlbumId }.map { it[SongTable.id].value }
         if (songsForOld.isNotEmpty()) {
             SongTable.update({ SongTable.albumId eq oldAlbumId }) {
                 it[SongTable.albumId] = keptAlbumId
             }
         }
 
-        val artistsForOld = AlbumArtistTable.select(AlbumArtistTable.artistId).where { AlbumArtistTable.albumId eq oldAlbumId }.map { it[AlbumArtistTable.artistId].value }
-        val artistsForKept = AlbumArtistTable.select(AlbumArtistTable.artistId).where { AlbumArtistTable.albumId eq keptAlbumId }.map { it[AlbumArtistTable.artistId].value }.toSet()
+        val artistsForOld =
+            AlbumArtistTable.select(AlbumArtistTable.artistId).where { AlbumArtistTable.albumId eq oldAlbumId }
+                .map { it[AlbumArtistTable.artistId].value }
+        val artistsForKept =
+            AlbumArtistTable.select(AlbumArtistTable.artistId).where { AlbumArtistTable.albumId eq keptAlbumId }
+                .map { it[AlbumArtistTable.artistId].value }.toSet()
 
         for (artistId in artistsForOld) {
             if (artistId !in artistsForKept) {
@@ -663,7 +689,8 @@ class LibraryMergeService : Service() {
         }
         AlbumArtistTable.deleteWhere { AlbumArtistTable.albumId eq oldAlbumId }
 
-        val hasMbKept = AlbumMusicBrainzTable.select(AlbumMusicBrainzTable.albumId).where { AlbumMusicBrainzTable.albumId eq keptAlbumId }.any()
+        val hasMbKept = AlbumMusicBrainzTable.select(AlbumMusicBrainzTable.albumId)
+            .where { AlbumMusicBrainzTable.albumId eq keptAlbumId }.any()
         if (!hasMbKept) {
             AlbumMusicBrainzTable.update({ AlbumMusicBrainzTable.albumId eq oldAlbumId }) {
                 it[AlbumMusicBrainzTable.albumId] = keptAlbumId
@@ -690,8 +717,11 @@ class LibraryMergeService : Service() {
         }
         AlbumProviderTable.deleteWhere { AlbumProviderTable.albumId eq oldAlbumId }
 
-        val collectionsForOldAlbum = CollectionAlbumTable.select(CollectionAlbumTable.collectionId).where { CollectionAlbumTable.albumId eq oldAlbumId }.map { it[CollectionAlbumTable.collectionId].value }
-        val collectionsForKeptAlbum = CollectionAlbumTable.select(CollectionAlbumTable.collectionId).where { CollectionAlbumTable.albumId eq keptAlbumId }.map { it[CollectionAlbumTable.collectionId].value }.toSet()
+        val collectionsForOldAlbum = CollectionAlbumTable.select(CollectionAlbumTable.collectionId)
+            .where { CollectionAlbumTable.albumId eq oldAlbumId }.map { it[CollectionAlbumTable.collectionId].value }
+        val collectionsForKeptAlbum = CollectionAlbumTable.select(CollectionAlbumTable.collectionId)
+            .where { CollectionAlbumTable.albumId eq keptAlbumId }.map { it[CollectionAlbumTable.collectionId].value }
+            .toSet()
 
         for (collectionId in collectionsForOldAlbum) {
             if (collectionId !in collectionsForKeptAlbum) {
@@ -745,8 +775,12 @@ class LibraryMergeService : Service() {
     }
 
     private fun mergeSongReferences(oldSongId: UUID, keptSongId: UUID) {
-        val artistsForOld = SongArtistTable.select(SongArtistTable.artistId).where { SongArtistTable.songId eq oldSongId }.map { it[SongArtistTable.artistId].value }
-        val artistsForKept = SongArtistTable.select(SongArtistTable.artistId).where { SongArtistTable.songId eq keptSongId }.map { it[SongArtistTable.artistId].value }.toSet()
+        val artistsForOld =
+            SongArtistTable.select(SongArtistTable.artistId).where { SongArtistTable.songId eq oldSongId }
+                .map { it[SongArtistTable.artistId].value }
+        val artistsForKept =
+            SongArtistTable.select(SongArtistTable.artistId).where { SongArtistTable.songId eq keptSongId }
+                .map { it[SongArtistTable.artistId].value }.toSet()
 
         for (artistId in artistsForOld) {
             if (artistId !in artistsForKept) {
@@ -757,8 +791,12 @@ class LibraryMergeService : Service() {
         }
         SongArtistTable.deleteWhere { SongArtistTable.songId eq oldSongId }
 
-        val playlistsForOld = PlaylistSongTable.select(PlaylistSongTable.playlistId).where { PlaylistSongTable.songId eq oldSongId }.map { it[PlaylistSongTable.playlistId].value }
-        val playlistsForKept = PlaylistSongTable.select(PlaylistSongTable.playlistId).where { PlaylistSongTable.songId eq keptSongId }.map { it[PlaylistSongTable.playlistId].value }.toSet()
+        val playlistsForOld =
+            PlaylistSongTable.select(PlaylistSongTable.playlistId).where { PlaylistSongTable.songId eq oldSongId }
+                .map { it[PlaylistSongTable.playlistId].value }
+        val playlistsForKept =
+            PlaylistSongTable.select(PlaylistSongTable.playlistId).where { PlaylistSongTable.songId eq keptSongId }
+                .map { it[PlaylistSongTable.playlistId].value }.toSet()
 
         for (playlistId in playlistsForOld) {
             if (playlistId !in playlistsForKept) {
@@ -773,8 +811,12 @@ class LibraryMergeService : Service() {
             it[UserPlaylistSongTable.songId] = keptSongId
         }
 
-        val usersForOld = UserSongTable.select(UserSongTable.userId, UserSongTable.isFavourite, UserSongTable.superLikedAt).where { UserSongTable.songId eq oldSongId }.toList()
-        val usersForKept = UserSongTable.select(UserSongTable.userId, UserSongTable.isFavourite, UserSongTable.superLikedAt).where { UserSongTable.songId eq keptSongId }.associateBy { it[UserSongTable.userId].value }
+        val usersForOld =
+            UserSongTable.select(UserSongTable.userId, UserSongTable.isFavourite, UserSongTable.superLikedAt)
+                .where { UserSongTable.songId eq oldSongId }.toList()
+        val usersForKept =
+            UserSongTable.select(UserSongTable.userId, UserSongTable.isFavourite, UserSongTable.superLikedAt)
+                .where { UserSongTable.songId eq keptSongId }.associateBy { it[UserSongTable.userId].value }
 
         for (row in usersForOld) {
             val userId = row[UserSongTable.userId].value
@@ -801,8 +843,11 @@ class LibraryMergeService : Service() {
         }
         UserSongTable.deleteWhere { UserSongTable.songId eq oldSongId }
 
-        val variantsForKept = SongVariantTable.select(SongVariantTable.kind).where { SongVariantTable.songId eq keptSongId }.map { it[SongVariantTable.kind] }.toSet()
-        SongVariantTable.select(SongVariantTable.kind).where { SongVariantTable.songId eq oldSongId }.map { it[SongVariantTable.kind] }.forEach { variantKind ->
+        val variantsForKept =
+            SongVariantTable.select(SongVariantTable.kind).where { SongVariantTable.songId eq keptSongId }
+                .map { it[SongVariantTable.kind] }.toSet()
+        SongVariantTable.select(SongVariantTable.kind).where { SongVariantTable.songId eq oldSongId }
+            .map { it[SongVariantTable.kind] }.forEach { variantKind ->
             if (variantKind !in variantsForKept) {
                 SongVariantTable.update({ (SongVariantTable.songId eq oldSongId) and (SongVariantTable.kind eq variantKind) }) {
                     it[SongVariantTable.songId] = keptSongId
@@ -811,8 +856,12 @@ class LibraryMergeService : Service() {
         }
         SongVariantTable.deleteWhere { SongVariantTable.songId eq oldSongId }
 
-        val transForOld = TranscodedSongTable.select(TranscodedSongTable.bitrate).where { TranscodedSongTable.songId eq oldSongId }.map { it[TranscodedSongTable.bitrate] }
-        val transForKept = TranscodedSongTable.select(TranscodedSongTable.bitrate).where { TranscodedSongTable.songId eq keptSongId }.map { it[TranscodedSongTable.bitrate] }.toSet()
+        val transForOld =
+            TranscodedSongTable.select(TranscodedSongTable.bitrate).where { TranscodedSongTable.songId eq oldSongId }
+                .map { it[TranscodedSongTable.bitrate] }
+        val transForKept =
+            TranscodedSongTable.select(TranscodedSongTable.bitrate).where { TranscodedSongTable.songId eq keptSongId }
+                .map { it[TranscodedSongTable.bitrate] }.toSet()
 
         for (bitrate in transForOld) {
             if (bitrate !in transForKept) {
@@ -823,7 +872,9 @@ class LibraryMergeService : Service() {
         }
         TranscodedSongTable.deleteWhere { TranscodedSongTable.songId eq oldSongId }
 
-        val hasMbKept = SongMusicBrainzTable.select(SongMusicBrainzTable.songId).where { SongMusicBrainzTable.songId eq keptSongId }.any()
+        val hasMbKept =
+            SongMusicBrainzTable.select(SongMusicBrainzTable.songId).where { SongMusicBrainzTable.songId eq keptSongId }
+                .any()
         if (!hasMbKept) {
             SongMusicBrainzTable.update({ SongMusicBrainzTable.songId eq oldSongId }) {
                 it[SongMusicBrainzTable.songId] = keptSongId
@@ -850,8 +901,11 @@ class LibraryMergeService : Service() {
         }
         SongProviderTable.deleteWhere { SongProviderTable.songId eq oldSongId }
 
-        val collectionsForOldSong = CollectionSongTable.select(CollectionSongTable.collectionId).where { CollectionSongTable.songId eq oldSongId }.map { it[CollectionSongTable.collectionId].value }
-        val collectionsForKeptSong = CollectionSongTable.select(CollectionSongTable.collectionId).where { CollectionSongTable.songId eq keptSongId }.map { it[CollectionSongTable.collectionId].value }.toSet()
+        val collectionsForOldSong = CollectionSongTable.select(CollectionSongTable.collectionId)
+            .where { CollectionSongTable.songId eq oldSongId }.map { it[CollectionSongTable.collectionId].value }
+        val collectionsForKeptSong = CollectionSongTable.select(CollectionSongTable.collectionId)
+            .where { CollectionSongTable.songId eq keptSongId }.map { it[CollectionSongTable.collectionId].value }
+            .toSet()
 
         for (collectionId in collectionsForOldSong) {
             if (collectionId !in collectionsForKeptSong) {

@@ -28,7 +28,19 @@ class CoverTagDeriverTest {
                 explicitRatio = 0.7,
             )
         )
-        assertTrue(tags.containsAll(listOf("rock", "metal", "mood:aggressive", "energy:high", "valence:sad", "tempo:fast", "explicit")))
+        assertTrue(
+            tags.containsAll(
+                listOf(
+                    "rock",
+                    "metal",
+                    "mood:aggressive",
+                    "energy:high",
+                    "valence:sad",
+                    "tempo:fast",
+                    "explicit"
+                )
+            )
+        )
         assertFalse(tags.contains("pop") && tags.contains("jazz"))
         assertFalse(tags.any { it.startsWith("palette:") })
     }
@@ -46,6 +58,9 @@ class CoverTagDeriverTest {
     @Test
     fun `missing data yields no buckets`() {
         assertEquals(emptySet<String>(), CoverTagDeriver.tags(context()))
-        assertEquals(setOf("energy:mid", "valence:neutral", "tempo:mid"), CoverTagDeriver.tags(context(energy = 0.5, valence = 0.5, bpm = 110.0)))
+        assertEquals(
+            setOf("energy:mid", "valence:neutral", "tempo:mid"),
+            CoverTagDeriver.tags(context(energy = 0.5, valence = 0.5, bpm = 110.0))
+        )
     }
 }

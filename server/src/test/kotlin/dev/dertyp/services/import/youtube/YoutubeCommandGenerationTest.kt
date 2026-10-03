@@ -95,10 +95,10 @@ class YoutubeCommandGenerationTest : KoinTest {
         coVerify {
             executeCommand(match { cmd ->
                 cmd.contains("-x") &&
-                cmd.contains("--audio-format") &&
-                cmd.contains("flac") &&
-                cmd.contains("-o") &&
-                cmd.any { it.contains(videoId) }
+                        cmd.contains("--audio-format") &&
+                        cmd.contains("flac") &&
+                        cmd.contains("-o") &&
+                        cmd.any { it.contains(videoId) }
             }, any(), any(), any(), any(), any())
         }
     }
@@ -108,7 +108,8 @@ class YoutubeCommandGenerationTest : KoinTest {
         val url = "https://www.youtube.com/watch?v=aqz-KE-bpKQ&list=PL123"
         val videoId = "aqz-KE-bpKQ"
         val playlistId = "PL123"
-        val mockJson = """{"id": "$videoId", "title": "Big Buck Bunny", "uploader": "Blender", "playlist_id": "$playlistId"}"""
+        val mockJson =
+            """{"id": "$videoId", "title": "Big Buck Bunny", "uploader": "Blender", "playlist_id": "$playlistId"}"""
 
         coEvery {
             executeCommand(match { it.contains("-J") }, any(), any(), any(), any(), any())

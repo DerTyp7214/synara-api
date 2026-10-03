@@ -50,7 +50,14 @@ class SongServiceDeletionTest : KoinTest {
                 single { MusicBrainzCacheService() }
                 single { CachedMusicBrainzService(get(), get()) }
                 single { AcoustIdService(fingerprintService) }
-                single<CredentialProvider> { FakeCredentialProvider(ResolvedCredential.ApiKey(CredentialNames.ACOUSTID_API, "testKey")) }
+                single<CredentialProvider> {
+                    FakeCredentialProvider(
+                        ResolvedCredential.ApiKey(
+                            CredentialNames.ACOUSTID_API,
+                            "testKey"
+                        )
+                    )
+                }
                 single { mockk<ImageService>(relaxed = true) }
                 single { storageService }
                 single { mockk<MetadataFetchingService>(relaxed = true) }
@@ -140,35 +147,36 @@ class SongServiceDeletionTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `deleteSongs deletes files and variants after commit and removes search entries`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        val albumDir = File(tempDir, "album").apply { mkdirs() }
-        val songFile = File(albumDir, "track.flac").apply { writeText("audio") }
-        val variantFile = File(albumDir, "track.atmos.m4a").apply { writeText("atmos") }
+    fun `deleteSongs deletes files and variants after commit and removes search entries`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val albumDir = File(tempDir, "album").apply { mkdirs() }
+            val songFile = File(albumDir, "track.flac").apply { writeText("audio") }
+            val variantFile = File(albumDir, "track.atmos.m4a").apply { writeText("atmos") }
 
-        val albumId = insertAlbum()
-        val songId = insertSong(albumId, songFile.absolutePath)
-        transaction(database) {
-            SongVariantTable.insert {
-                it[SongVariantTable.songId] = songId
-                it[kind] = SongVariantKind.ATMOS
-                it[path] = variantFile.absolutePath
+            val albumId = insertAlbum()
+            val songId = insertSong(albumId, songFile.absolutePath)
+            transaction(database) {
+                SongVariantTable.insert {
+                    it[SongVariantTable.songId] = songId
+                    it[kind] = SongVariantKind.ATMOS
+                    it[path] = variantFile.absolutePath
+                }
             }
-        }
 
-        assertTrue(songService.deleteSongs(listOf(songId)))
+            assertTrue(songService.deleteSongs(listOf(songId)))
 
-        assertFalse(songFile.exists())
-        assertFalse(variantFile.exists())
-        assertFalse(albumDir.exists())
-        transaction(database) {
-            assertEquals(0, SongTable.selectAll().where { SongTable.id eq songId }.count())
-            assertEquals(0, AlbumTable.selectAll().where { AlbumTable.id eq albumId }.count())
+            assertFalse(songFile.exists())
+            assertFalse(variantFile.exists())
+            assertFalse(albumDir.exists())
+            transaction(database) {
+                assertEquals(0, SongTable.selectAll().where { SongTable.id eq songId }.count())
+                assertEquals(0, AlbumTable.selectAll().where { AlbumTable.id eq albumId }.count())
+            }
+            verify { storageService.invalidate(StorageCategory.TOTAL) }
+            verify { redisSearchService.remove(SearchIndexEntityType.SONG, listOf(songId)) }
+            verify { redisSearchService.remove(SearchIndexEntityType.ALBUM, match { albumId in it }) }
         }
-        verify { storageService.invalidate(StorageCategory.TOTAL) }
-        verify { redisSearchService.remove(SearchIndexEntityType.SONG, listOf(songId)) }
-        verify { redisSearchService.remove(SearchIndexEntityType.ALBUM, match { albumId in it }) }
-    }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)

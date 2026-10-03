@@ -35,7 +35,8 @@ class RpcCoverGenerationService(
         service.enqueueMissing(user.id, params).id
 
     private suspend fun requireOwner(target: CoverTarget) {
-        val row = service.row(target) ?: throw IllegalArgumentException("Unknown ${target.type.name.lowercase()} ${target.id}")
+        val row = service.row(target)
+            ?: throw IllegalArgumentException("Unknown ${target.type.name.lowercase()} ${target.id}")
         if (row.creator != user.id && !user.isAdmin) throw IllegalAccessException("Not the owner of ${target.type.name.lowercase()} ${target.id}")
     }
 }

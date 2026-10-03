@@ -44,7 +44,16 @@ class BackupServiceTest {
     fun setup(dialect: DbDialect) {
         database = TestDatabase.connect(dialect, "backup_test")
         transaction(database) {
-            SchemaUtils.create(SongTable, SongVariantTable, FlacInfoTable, PcmInfoTable, SongMusicBrainzTable, MBRecordingTable, AlbumTable, ImageTable)
+            SchemaUtils.create(
+                SongTable,
+                SongVariantTable,
+                FlacInfoTable,
+                PcmInfoTable,
+                SongMusicBrainzTable,
+                MBRecordingTable,
+                AlbumTable,
+                ImageTable
+            )
         }
 
         tempDir = Files.createTempDirectory("backup_test_root").toFile()
@@ -53,7 +62,7 @@ class BackupServiceTest {
         tracksDir = tempDir.resolve("tracks")
         downloaderTracksDir = tempDir.resolve("tiddl").resolve("tracks")
         blobsDir = backupDir.resolve("blobs")
-        
+
         backupDir.mkdirs()
         imagesDir.mkdirs()
         tracksDir.mkdirs()
@@ -89,9 +98,14 @@ class BackupServiceTest {
     @EnumSource(DbDialect::class)
     fun `createBackup should create a zip file with expected entries and blobs`(dialect: DbDialect) = runBlocking {
         setup(dialect)
-        val service = BackupService(dbManagementService, storageService, pluginManager, ServerConfig(environment.config))
+        val service =
+            BackupService(dbManagementService, storageService, pluginManager, ServerConfig(environment.config))
         val dummyDbData = byteArrayOf(1, 2, 3)
-        coEvery { dbManagementService.exportData(any<OutputStream>()) } answers { firstArg<OutputStream>().write(dummyDbData) }
+        coEvery { dbManagementService.exportData(any<OutputStream>()) } answers {
+            firstArg<OutputStream>().write(
+                dummyDbData
+            )
+        }
 
         val imgHash = "abcdef1234567890"
         val imgSubPath = "ab/cd/ef/12"
@@ -169,7 +183,7 @@ class BackupServiceTest {
         }
 
         val result = service.createBackup()
-        
+
         val backupFile = backupDir.resolve(result.fileName)
         assertTrue(backupFile.exists(), "Backup file should exist")
         assertEquals(1, result.imageCount)
@@ -206,11 +220,18 @@ class BackupServiceTest {
     @EnumSource(DbDialect::class)
     fun `loadBackup should restore database and images`(dialect: DbDialect) = runBlocking {
         setup(dialect)
-        val service = BackupService(dbManagementService, storageService, pluginManager, ServerConfig(environment.config))
+        val service =
+            BackupService(dbManagementService, storageService, pluginManager, ServerConfig(environment.config))
         val dummyDbData = byteArrayOf(1, 2, 3)
         var capturedDbData: ByteArray? = null
-        coEvery { dbManagementService.exportData(any<OutputStream>()) } answers { firstArg<OutputStream>().write(dummyDbData) }
-        coEvery { dbManagementService.importData(any<InputStream>()) } answers { capturedDbData = firstArg<InputStream>().readBytes() }
+        coEvery { dbManagementService.exportData(any<OutputStream>()) } answers {
+            firstArg<OutputStream>().write(
+                dummyDbData
+            )
+        }
+        coEvery { dbManagementService.importData(any<InputStream>()) } answers {
+            capturedDbData = firstArg<InputStream>().readBytes()
+        }
 
         val imgSubPath = "ab/cd/ef/12"
         val imgFileDir = imagesDir.resolve(imgSubPath)
@@ -237,11 +258,18 @@ class BackupServiceTest {
     @EnumSource(DbDialect::class)
     fun `loadBackup should restore database and images from File`(dialect: DbDialect) = runBlocking {
         setup(dialect)
-        val service = BackupService(dbManagementService, storageService, pluginManager, ServerConfig(environment.config))
+        val service =
+            BackupService(dbManagementService, storageService, pluginManager, ServerConfig(environment.config))
         val dummyDbData = byteArrayOf(1, 2, 3)
         var capturedDbData: ByteArray? = null
-        coEvery { dbManagementService.exportData(any<OutputStream>()) } answers { firstArg<OutputStream>().write(dummyDbData) }
-        coEvery { dbManagementService.importData(any<InputStream>()) } answers { capturedDbData = firstArg<InputStream>().readBytes() }
+        coEvery { dbManagementService.exportData(any<OutputStream>()) } answers {
+            firstArg<OutputStream>().write(
+                dummyDbData
+            )
+        }
+        coEvery { dbManagementService.importData(any<InputStream>()) } answers {
+            capturedDbData = firstArg<InputStream>().readBytes()
+        }
 
         val imgSubPath = "ab/cd/ef/12"
         val imgFileDir = imagesDir.resolve(imgSubPath)
@@ -269,7 +297,8 @@ class BackupServiceTest {
     @EnumSource(DbDialect::class)
     fun `createBackup should remove the partial zip when the export fails`(dialect: DbDialect) = runBlocking {
         setup(dialect)
-        val service = BackupService(dbManagementService, storageService, pluginManager, ServerConfig(environment.config))
+        val service =
+            BackupService(dbManagementService, storageService, pluginManager, ServerConfig(environment.config))
         coEvery { dbManagementService.exportData(any<OutputStream>()) } throws IllegalStateException("export failed")
 
         var thrown: Throwable? = null
@@ -290,18 +319,30 @@ class BackupServiceTest {
     @EnumSource(DbDialect::class)
     fun `rotateBackups should delete old backups and unreferenced blobs`(dialect: DbDialect) = runBlocking {
         setup(dialect)
-        val service = BackupService(dbManagementService, storageService, pluginManager, ServerConfig(environment.config))
-        coEvery { dbManagementService.exportData(any<OutputStream>()) } answers { firstArg<OutputStream>().write(byteArrayOf(0)) }
+        val service =
+            BackupService(dbManagementService, storageService, pluginManager, ServerConfig(environment.config))
+        coEvery { dbManagementService.exportData(any<OutputStream>()) } answers {
+            firstArg<OutputStream>().write(
+                byteArrayOf(0)
+            )
+        }
 
         repeat(11) { i ->
             imagesDir.deleteRecursively()
             imagesDir.mkdirs()
 
             val hash = String.format("%016x", i)
-            val dir = imagesDir.resolve("${hash.substring(0,2)}/${hash.substring(2,4)}/${hash.substring(4,6)}/${hash.substring(6,8)}")
+            val dir = imagesDir.resolve(
+                "${hash.substring(0, 2)}/${hash.substring(2, 4)}/${
+                    hash.substring(
+                        4,
+                        6
+                    )
+                }/${hash.substring(6, 8)}"
+            )
             dir.mkdirs()
             dir.resolve("${hash.substring(8)}.jpg").writeBytes(byteArrayOf(i.toByte()))
-            
+
             service.createBackup()
             Thread.sleep(1005)
         }
@@ -311,7 +352,10 @@ class BackupServiceTest {
 
         val firstBlobHash = String.format("%016x", 0)
         val firstBlob = blobsDir.resolve("00/00/00/00/$firstBlobHash")
-        
-        assertFalse(firstBlob.exists(), "Oldest blob $firstBlobHash should have been cleaned up as it is no longer referenced by any existing backup")
+
+        assertFalse(
+            firstBlob.exists(),
+            "Oldest blob $firstBlobHash should have been cleaned up as it is no longer referenced by any existing backup"
+        )
     }
 }

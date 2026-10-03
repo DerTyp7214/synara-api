@@ -26,7 +26,8 @@ class HueMotionScheduler(
         while (currentCoroutineContext().isActive) {
             val current = clock.value
             val position = current.positionAt(now())
-            val index = if (current.playing && !ended(position)) score.nextIndexAfter(position, emitted + 1, cadence) else -1
+            val index =
+                if (current.playing && !ended(position)) score.nextIndexAfter(position, emitted + 1, cadence) else -1
             val keyframe = score.keyframes.getOrNull(index)?.takeIf { !ended(it.atMs.toLong()) }
             if (keyframe == null) {
                 clock.first { it != current }

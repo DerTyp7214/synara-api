@@ -178,11 +178,13 @@ class PurgeNonImageCoverFilesTest : KoinTest {
             assertTrue(pngImage in remainingImages)
             assertTrue(customImage in remainingImages)
 
-            val htmlRelease = RecentReleaseTable.selectAll().where { RecentReleaseTable.releaseId eq htmlReleaseGroup }.single()
+            val htmlRelease =
+                RecentReleaseTable.selectAll().where { RecentReleaseTable.releaseId eq htmlReleaseGroup }.single()
             assertNull(htmlRelease[RecentReleaseTable.imageId])
             assertNull(htmlRelease[RecentReleaseTable.lastImageFetch])
 
-            val pngRelease = RecentReleaseTable.selectAll().where { RecentReleaseTable.releaseId eq pngReleaseGroup }.single()
+            val pngRelease =
+                RecentReleaseTable.selectAll().where { RecentReleaseTable.releaseId eq pngReleaseGroup }.single()
             assertEquals(pngImage, pngRelease[RecentReleaseTable.imageId]?.value)
             assertEquals(1000L, pngRelease[RecentReleaseTable.lastImageFetch])
 

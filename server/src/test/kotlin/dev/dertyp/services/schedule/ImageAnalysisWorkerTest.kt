@@ -44,7 +44,7 @@ class ImageAnalysisWorkerTest : KoinTest {
         setup(dialect)
         val imageService = mockk<ImageService>()
         val imageId = UUID.randomUUID()
-        
+
         coEvery { imageService.getUnanalyzedImageIds() } returns listOf(imageId)
         coEvery { imageService.analyzeImage(imageId) } returns Unit
 

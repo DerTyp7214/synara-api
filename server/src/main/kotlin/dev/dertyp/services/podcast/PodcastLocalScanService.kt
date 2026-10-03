@@ -22,115 +22,126 @@ class PodcastLocalScanService(
 ) : Service() {
     private val scanMutex = Mutex()
 
-    suspend fun scan(onProgress: suspend (Double, String) -> Unit = { _, _ -> }): PodcastScanResult = scanMutex.withLock {
-        val root = File(storageService.podcastLibraryPath).absoluteFile
-        if (!root.exists()) root.mkdirs()
+    suspend fun scan(onProgress: suspend (Double, String) -> Unit = { _, _ -> }): PodcastScanResult =
+        scanMutex.withLock {
+            val root = File(storageService.podcastLibraryPath).absoluteFile
+            if (!root.exists()) root.mkdirs()
 
-        val realRoot = runCatching { root.toPath().toRealPath() }.getOrElse { root.toPath() }
+            val realRoot = runCatching { root.toPath().toRealPath() }.getOrElse { root.toPath() }
 
-        val directories = withContext(Dispatchers.IO) {
-            root.listFiles()
-                ?.filter { it.isDirectory && !it.isHidden && !it.name.startsWith(".") }
-                ?.sortedBy { it.name.lowercase() }
-                ?: emptyList()
-        }
-
-        var added = 0
-        var updated = 0
-        var removed = 0
-        var showsRemoved = 0
-
-        directories.forEachIndexed { index, directory ->
-            onProgress(index * 90.0 / directories.size.coerceAtLeast(1), "Scanning ${directory.name}")
-
-            val localPath = directory.name
-
-            val coverBytes = withContext(Dispatchers.IO) {
-                coverFile(directory)?.let { file -> runCatching { file.readBytes() }.getOrNull() }
-            }?.takeIf { it.isNotEmpty() }
-
-            var showArtwork = coverBytes
-            var showImageId = coverBytes?.let { bytes ->
-                runCatchingCancellable { imageService.createImage(bytes, "podcast-local:$localPath") }.getOrNull()
+            val directories = withContext(Dispatchers.IO) {
+                root.listFiles()
+                    ?.filter { it.isDirectory && !it.isHidden && !it.name.startsWith(".") }
+                    ?.sortedBy { it.name.lowercase() }
+                    ?: emptyList()
             }
 
-            val showId = podcastService.upsertLocalShow(localPath, localPath, showImageId)
-            val existing = podcastService.episodesOfShow(showId).associateBy { it.guidKey }
-            val seenKeys = mutableSetOf<String>()
-            val episodes = mutableListOf<LocalEpisode>()
+            var added = 0
+            var updated = 0
+            var removed = 0
+            var showsRemoved = 0
 
-            val files = withContext(Dispatchers.IO) { audioFiles(directory, realRoot) }
+            directories.forEachIndexed { index, directory ->
+                onProgress(index * 90.0 / directories.size.coerceAtLeast(1), "Scanning ${directory.name}")
 
-            for (file in files) {
-                val guid = relativeGuid(directory, file)
-                val key = PodcastKeys.guidKey(guid)
-                seenKeys += key
+                val localPath = directory.name
 
-                val row = existing[key]
-                val size = file.length()
-                if (row != null && row.fileSize == size && row.updatedAt >= file.lastModified()) continue
+                val coverBytes = withContext(Dispatchers.IO) {
+                    coverFile(directory)?.let { file -> runCatching { file.readBytes() }.getOrNull() }
+                }?.takeIf { it.isNotEmpty() }
 
-                val probe = withContext(Dispatchers.IO) { PodcastMediaProbe.probe(file) }
-
-                var imageId: UUID? = null
-                val artwork = probe.artwork
-                if (artwork != null) {
-                    if (showArtwork == null) {
-                        showArtwork = artwork
-                        showImageId = runCatchingCancellable { imageService.createImage(artwork, "podcast-local:$localPath") }.getOrNull()
-                        podcastService.upsertLocalShow(localPath, localPath, showImageId)
-                    } else if (!artwork.contentEquals(showArtwork)) {
-                        imageId = runCatchingCancellable { imageService.createImage(artwork, "podcast-local-episode:$guid") }.getOrNull()
-                    }
+                var showArtwork = coverBytes
+                var showImageId = coverBytes?.let { bytes ->
+                    runCatchingCancellable { imageService.createImage(bytes, "podcast-local:$localPath") }.getOrNull()
                 }
 
-                episodes += LocalEpisode(
-                    guid = guid,
-                    title = probe.title ?: file.nameWithoutExtension,
-                    description = probe.comment,
-                    publishedAt = probe.date ?: file.lastModified(),
-                    durationMs = probe.durationMs,
-                    filePath = file.absolutePath,
-                    fileSize = size,
-                    format = file.extension.lowercase(),
-                    episodeNumber = probe.track,
-                    imageId = imageId,
-                    transcripts = transcriptsFor(file, probe.lyrics)
-                )
+                val showId = podcastService.upsertLocalShow(localPath, localPath, showImageId)
+                val existing = podcastService.episodesOfShow(showId).associateBy { it.guidKey }
+                val seenKeys = mutableSetOf<String>()
+                val episodes = mutableListOf<LocalEpisode>()
+
+                val files = withContext(Dispatchers.IO) { audioFiles(directory, realRoot) }
+
+                for (file in files) {
+                    val guid = relativeGuid(directory, file)
+                    val key = PodcastKeys.guidKey(guid)
+                    seenKeys += key
+
+                    val row = existing[key]
+                    val size = file.length()
+                    if (row != null && row.fileSize == size && row.updatedAt >= file.lastModified()) continue
+
+                    val probe = withContext(Dispatchers.IO) { PodcastMediaProbe.probe(file) }
+
+                    var imageId: UUID? = null
+                    val artwork = probe.artwork
+                    if (artwork != null) {
+                        if (showArtwork == null) {
+                            showArtwork = artwork
+                            showImageId = runCatchingCancellable {
+                                imageService.createImage(
+                                    artwork,
+                                    "podcast-local:$localPath"
+                                )
+                            }.getOrNull()
+                            podcastService.upsertLocalShow(localPath, localPath, showImageId)
+                        } else if (!artwork.contentEquals(showArtwork)) {
+                            imageId = runCatchingCancellable {
+                                imageService.createImage(
+                                    artwork,
+                                    "podcast-local-episode:$guid"
+                                )
+                            }.getOrNull()
+                        }
+                    }
+
+                    episodes += LocalEpisode(
+                        guid = guid,
+                        title = probe.title ?: file.nameWithoutExtension,
+                        description = probe.comment,
+                        publishedAt = probe.date ?: file.lastModified(),
+                        durationMs = probe.durationMs,
+                        filePath = file.absolutePath,
+                        fileSize = size,
+                        format = file.extension.lowercase(),
+                        episodeNumber = probe.track,
+                        imageId = imageId,
+                        transcripts = transcriptsFor(file, probe.lyrics)
+                    )
+                }
+
+                if (episodes.isNotEmpty()) {
+                    val (inserted, changed) = podcastService.upsertLocalEpisodes(showId, episodes)
+                    added += inserted
+                    updated += changed
+                }
+
+                val stale = existing.filterKeys { it !in seenKeys }.values.map { it.id }
+                if (stale.isNotEmpty()) removed += podcastService.deleteEpisodes(stale)
             }
 
-            if (episodes.isNotEmpty()) {
-                val (inserted, changed) = podcastService.upsertLocalEpisodes(showId, episodes)
-                added += inserted
-                updated += changed
+            onProgress(95.0, "Removing gone shows")
+
+            podcastService.localShows().forEach { show ->
+                val localPath = show.localPath
+                val directory = localPath?.let { File(root, it) }
+                if (directory == null || !directory.isDirectory) {
+                    podcastService.deleteShow(show.id)
+                    showsRemoved++
+                }
             }
 
-            val stale = existing.filterKeys { it !in seenKeys }.values.map { it.id }
-            if (stale.isNotEmpty()) removed += podcastService.deleteEpisodes(stale)
+            storageService.invalidate(StorageCategory.PODCASTS)
+            storageService.invalidate(StorageCategory.TOTAL)
+
+            PodcastScanResult(
+                shows = directories.size,
+                episodesAdded = added,
+                episodesUpdated = updated,
+                episodesRemoved = removed,
+                showsRemoved = showsRemoved
+            )
         }
-
-        onProgress(95.0, "Removing gone shows")
-
-        podcastService.localShows().forEach { show ->
-            val localPath = show.localPath
-            val directory = localPath?.let { File(root, it) }
-            if (directory == null || !directory.isDirectory) {
-                podcastService.deleteShow(show.id)
-                showsRemoved++
-            }
-        }
-
-        storageService.invalidate(StorageCategory.PODCASTS)
-        storageService.invalidate(StorageCategory.TOTAL)
-
-        PodcastScanResult(
-            shows = directories.size,
-            episodesAdded = added,
-            episodesUpdated = updated,
-            episodesRemoved = removed,
-            showsRemoved = showsRemoved
-        )
-    }
 
     private fun coverFile(directory: File): File? {
         val names = directory.listFiles()?.filter { it.isFile } ?: return null
@@ -167,7 +178,9 @@ class PodcastLocalScanService(
             val stem = sibling.nameWithoutExtension
             val language = when {
                 stem == base -> null
-                stem.startsWith("$base.") -> stem.removePrefix("$base.").takeIf { it.isNotBlank() && !it.contains('.') } ?: continue
+                stem.startsWith("$base.") -> stem.removePrefix("$base.").takeIf { it.isNotBlank() && !it.contains('.') }
+                    ?: continue
+
                 else -> continue
             }
 

@@ -50,7 +50,8 @@ class AudioTimelineTest {
 
     @Test
     fun `minimal essentia json decodes`() {
-        val output = ApplicationScope.json.decodeFromString<EssentiaOutput>("""{"rhythm":{"beats_position":[0.5,1.0]},"lowlevel":{"dynamic_complexity":3.0}}""")
+        val output =
+            ApplicationScope.json.decodeFromString<EssentiaOutput>("""{"rhythm":{"beats_position":[0.5,1.0]},"lowlevel":{"dynamic_complexity":3.0}}""")
         assertEquals(listOf(0.5, 1.0), output.rhythm?.beatsPosition)
         assertEquals(3.0, output.lowLevel?.dynamicComplexity)
     }
@@ -138,7 +139,12 @@ class AudioTimelineTest {
             assertEquals(expectedBand.lowHz, band.lowHz)
             assertEquals(expectedBand.highHz, band.highHz)
             val expectedValues = fiveBands[index]
-            band.levelsDb.forEachIndexed { i, value -> assertTrue(abs(value - expectedValues[i]) <= step, "band $index index $i") }
+            band.levelsDb.forEachIndexed { i, value ->
+                assertTrue(
+                    abs(value - expectedValues[i]) <= step,
+                    "band $index index $i"
+                )
+            }
         }
     }
 

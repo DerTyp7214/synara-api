@@ -16,7 +16,11 @@ import kotlinx.coroutines.launch
 import org.koin.core.component.inject
 import java.util.concurrent.atomic.AtomicInteger
 
-@WorkerTask(TaskKeys.ISRC_PROVIDER_ENRICHMENT_WORKER, "ISRC/Barcode Provider Enrichment Worker", afterTask = TaskKeys.MUSICBRAINZ_CACHE_WORKER)
+@WorkerTask(
+    TaskKeys.ISRC_PROVIDER_ENRICHMENT_WORKER,
+    "ISRC/Barcode Provider Enrichment Worker",
+    afterTask = TaskKeys.MUSICBRAINZ_CACHE_WORKER
+)
 class IsrcProviderEnrichmentWorker : Worker("ISRC/Barcode Provider Enrichment Worker") {
     private val albumService by inject<AlbumService>()
     private val songService by inject<SongService>()
@@ -114,7 +118,11 @@ class IsrcProviderEnrichmentWorker : Worker("ISRC/Barcode Provider Enrichment Wo
                                         }
                                     }
                                 }
-                                albumService.updateProviderEnrichmentCheck(id, providerName, ProviderEnrichmentType.ALBUM)
+                                albumService.updateProviderEnrichmentCheck(
+                                    id,
+                                    providerName,
+                                    ProviderEnrichmentType.ALBUM
+                                )
                             } catch (e: CancellationException) {
                                 throw e
                             } catch (e: Exception) {

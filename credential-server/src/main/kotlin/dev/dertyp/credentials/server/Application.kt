@@ -64,7 +64,10 @@ fun Application.credentialServerModule(deps: CredentialServerDeps) {
             )
         }
         exception<IllegalArgumentException> { call, cause ->
-            call.respond(HttpStatusCode.BadRequest, CredentialError(CredentialErrorCode.INVALID, cause.message ?: "Bad request"))
+            call.respond(
+                HttpStatusCode.BadRequest,
+                CredentialError(CredentialErrorCode.INVALID, cause.message ?: "Bad request")
+            )
         }
         exception<Throwable> { call, cause ->
             if (cause is CancellationException) throw cause

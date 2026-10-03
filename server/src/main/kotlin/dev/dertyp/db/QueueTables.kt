@@ -9,7 +9,8 @@ object UserQueueTable : Table("userQueue") {
     val userId = reference("userId", UserTable.id, onDelete = ReferenceOption.CASCADE)
     val version = long("version").default(0)
     val modifiedAt = long("modifiedAt").clientDefault { Instant.now().toEpochMilli() }
-    val modifiedBySessionId = reference("modifiedBySessionId", SessionTable.id, onDelete = ReferenceOption.SET_NULL).nullable()
+    val modifiedBySessionId =
+        reference("modifiedBySessionId", SessionTable.id, onDelete = ReferenceOption.SET_NULL).nullable()
     val modifiedByDeviceName = text("modifiedByDeviceName").nullable()
     val currentIndex = integer("currentIndex").default(0)
     val shuffleMode = bool("shuffleMode").default(false)

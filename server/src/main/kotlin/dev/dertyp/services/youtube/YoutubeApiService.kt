@@ -154,7 +154,7 @@ class YoutubeApiService : Service() {
             map["title"] = item.snippet?.title ?: ""
             map["uploader"] = item.snippet?.channelTitle ?: ""
             map["description"] = item.snippet?.description ?: ""
-            
+
             val thumbnails = item.snippet?.thumbnails
             val bestThumbnail = thumbnails?.values?.find { it.width != null && it.width == it.height && it.width > 0 }
                 ?: thumbnails?.get("maxres")
@@ -162,19 +162,19 @@ class YoutubeApiService : Service() {
                 ?: thumbnails?.get("high")
                 ?: thumbnails?.get("medium")
                 ?: thumbnails?.get("default")
-            
+
             bestThumbnail?.url?.let { map["thumbnail"] = it }
             bestThumbnail?.width?.let { map["width"] = it.toString() }
             bestThumbnail?.height?.let { map["height"] = it.toString() }
 
             if (bestThumbnail == null || bestThumbnail.width != bestThumbnail.height) {
-                getYoutubeMusicCover(videoId)?.let { 
+                getYoutubeMusicCover(videoId)?.let {
                     map["thumbnail"] = it
                     map.remove("width")
                     map.remove("height")
                 }
             }
-            
+
             map
         } catch (e: CancellationException) {
             throw e
@@ -192,11 +192,12 @@ class YoutubeApiService : Service() {
         var nextToken: String? = null
 
         do {
-            val url = "$baseUrl/playlistItems?part=snippet,contentDetails&maxResults=50&playlistId=$playlistId&key=$apiKey" +
-                    (nextToken?.let { "&pageToken=$it" } ?: "")
-            
+            val url =
+                "$baseUrl/playlistItems?part=snippet,contentDetails&maxResults=50&playlistId=$playlistId&key=$apiKey" +
+                        (nextToken?.let { "&pageToken=$it" } ?: "")
+
             val response = retryableQueuedGet<YoutubePlaylistResponse>(url, HttpClientPriority.HIGH)
-            
+
             response?.items?.let { items.addAll(it) }
             nextToken = response?.nextPageToken
         } while (nextToken != null)

@@ -50,7 +50,7 @@ import dev.dertyp.data.Artist as DataArtist
 class ReleaseServiceTest : KoinTest {
     private lateinit var database: Database
     private lateinit var service: ReleaseService
-    
+
     private lateinit var musicBrainzService: MusicBrainzService
     private lateinit var artistService: ArtistService
     private lateinit var imageService: ImageService
@@ -66,7 +66,7 @@ class ReleaseServiceTest : KoinTest {
             modules(module {
                 single<StorageService> { mockk(relaxed = true) }
                 single<RedisCacheProvider.Config> { mockk(relaxed = true) }
-                
+
                 single { mockk<MusicBrainzService>(relaxed = true) }
                 single { MusicBrainzCacheService() }
                 single { mockk<ArtistService>(relaxed = true) }
@@ -199,7 +199,7 @@ class ReleaseServiceTest : KoinTest {
         val artistId = UUID.randomUUID()
         val releaseId = UUID.randomUUID()
         val imageId = UUID.randomUUID()
-        
+
         transaction(database) {
             UserTable.insert {
                 it[id] = userId
@@ -249,7 +249,12 @@ class ReleaseServiceTest : KoinTest {
 
         mockkObject(MetadataService.Companion)
         every { MetadataService.getMetadataService(IMetadataService.MetadataType.tidal, any()) } returns tidalService
-        every { MetadataService.getMetadataService(IMetadataService.MetadataType.appleMusic, any()) } returns appleMusicService
+        every {
+            MetadataService.getMetadataService(
+                IMetadataService.MetadataType.appleMusic,
+                any()
+            )
+        } returns appleMusicService
 
         val mbId = UUID.randomUUID()
         val releaseId = UUID.randomUUID()
@@ -281,8 +286,13 @@ class ReleaseServiceTest : KoinTest {
             )
         )
 
-        coEvery { linkResolverService.batchResolve(any(), priority = HttpClientPriority.LOW) } returns listOf("https://tidal.com/album/456")
-        
+        coEvery {
+            linkResolverService.batchResolve(
+                any(),
+                priority = HttpClientPriority.LOW
+            )
+        } returns listOf("https://tidal.com/album/456")
+
         val spiedService = spyk(service, recordPrivateCalls = true)
         val dummyImageId = UUID.randomUUID()
         transaction(database) {
@@ -323,7 +333,12 @@ class ReleaseServiceTest : KoinTest {
 
         mockkObject(MetadataService.Companion)
         every { MetadataService.getMetadataService(IMetadataService.MetadataType.tidal, any()) } returns tidalService
-        every { MetadataService.getMetadataService(IMetadataService.MetadataType.appleMusic, any()) } returns appleMusicService
+        every {
+            MetadataService.getMetadataService(
+                IMetadataService.MetadataType.appleMusic,
+                any()
+            )
+        } returns appleMusicService
 
         val mbId = UUID.randomUUID()
         val releaseIdInAlbumDb = UUID.randomUUID()
@@ -402,11 +417,12 @@ class ReleaseServiceTest : KoinTest {
         assertEquals("Truly New Album", releases[0].title)
         assertEquals(null, releases[0].albumId)
         assertEquals(null, releases[0].songId)
-        
+
         transaction(database) {
-            val allInDb = RecentReleaseTable.selectAll().map { it[RecentReleaseTable.title] to (it[RecentReleaseTable.albumId]?.value to it[RecentReleaseTable.songId]?.value) }
+            val allInDb = RecentReleaseTable.selectAll()
+                .map { it[RecentReleaseTable.title] to (it[RecentReleaseTable.albumId]?.value to it[RecentReleaseTable.songId]?.value) }
             assertEquals(3, allInDb.size)
-            
+
             val albumWithExistingSong = allInDb.find { it.first == "Album with existing song" }
             assertEquals(existingSongId, albumWithExistingSong?.second?.second)
 
@@ -425,14 +441,16 @@ class ReleaseServiceTest : KoinTest {
         transaction(database) {
             UserTable.insert { it[id] = userId; it[username] = "user"; it[passwordHash] = "hash" }
             ArtistTable.insert { it[id] = artistId; it[name] = "Artist" }
-            FollowedArtistTable.insert { it[FollowedArtistTable.userId] = userId; it[FollowedArtistTable.artistId] = artistId }
+            FollowedArtistTable.insert {
+                it[FollowedArtistTable.userId] = userId; it[FollowedArtistTable.artistId] = artistId
+            }
 
-            val dummyAlbumId = AlbumTable.insert { 
+            val dummyAlbumId = AlbumTable.insert {
                 it[id] = UUID.randomUUID()
-                it[name] = "Dummy Album" 
+                it[name] = "Dummy Album"
             }[AlbumTable.id]
 
-            val dummySongId = SongTable.insert { 
+            val dummySongId = SongTable.insert {
                 it[id] = UUID.randomUUID()
                 it[title] = "Dummy Song"
                 it[SongTable.albumId] = dummyAlbumId
@@ -556,7 +574,12 @@ class ReleaseServiceTest : KoinTest {
 
         mockkObject(MetadataService.Companion)
         every { MetadataService.getMetadataService(IMetadataService.MetadataType.tidal, any()) } returns tidalService
-        every { MetadataService.getMetadataService(IMetadataService.MetadataType.appleMusic, any()) } returns appleMusicService
+        every {
+            MetadataService.getMetadataService(
+                IMetadataService.MetadataType.appleMusic,
+                any()
+            )
+        } returns appleMusicService
 
         transaction(database) {
             UserTable.insert { it[id] = userId; it[username] = "user"; it[passwordHash] = "hash" }
@@ -566,8 +589,13 @@ class ReleaseServiceTest : KoinTest {
             FollowedArtistTable.insert { it[this.userId] = userId; it[this.artistId] = artistId }
         }
 
-        coEvery { musicBrainzService.fetchReleaseGroups(mbId, priority = HttpClientPriority.LOW) } throws Exception("MB Failure")
-        
+        coEvery {
+            musicBrainzService.fetchReleaseGroups(
+                mbId,
+                priority = HttpClientPriority.LOW
+            )
+        } throws Exception("MB Failure")
+
         val result = service.fetchNewReleases()
         assertTrue(result.isEmpty())
     }
@@ -578,7 +606,12 @@ class ReleaseServiceTest : KoinTest {
         setup(dialect)
         mockkObject(MetadataService.Companion)
         every { MetadataService.getMetadataService(IMetadataService.MetadataType.tidal, any()) } returns tidalService
-        every { MetadataService.getMetadataService(IMetadataService.MetadataType.appleMusic, any()) } returns appleMusicService
+        every {
+            MetadataService.getMetadataService(
+                IMetadataService.MetadataType.appleMusic,
+                any()
+            )
+        } returns appleMusicService
 
         val mbId = UUID.randomUUID()
         val artistId = UUID.randomUUID()
@@ -593,10 +626,22 @@ class ReleaseServiceTest : KoinTest {
         }
 
         coEvery { musicBrainzService.fetchReleaseGroups(mbId, priority = HttpClientPriority.LOW) } returns listOf(
-            MusicBrainzReleaseGroup(id = relGroupId, title = "The Title", firstReleaseDate = "2023-01-01", primaryType = "Single")
+            MusicBrainzReleaseGroup(
+                id = relGroupId,
+                title = "The Title",
+                firstReleaseDate = "2023-01-01",
+                primaryType = "Single"
+            )
         )
-        
-        coEvery { appleMusicService.searchAlbums(any(), any(), any(), priority = HttpClientPriority.LOW) } returns listOf(
+
+        coEvery {
+            appleMusicService.searchAlbums(
+                any(),
+                any(),
+                any(),
+                priority = HttpClientPriority.LOW
+            )
+        } returns listOf(
             IMetadataService.Album(
                 id = "apple-1",
                 title = "The Title - Single",
@@ -606,14 +651,14 @@ class ReleaseServiceTest : KoinTest {
                 releaseDate = LocalDate.parse("2023-01-01")
             )
         )
-        
+
         val spiedService = spyk(service, recordPrivateCalls = true)
         coEvery { linkResolverService.batchResolve(any(), priority = HttpClientPriority.LOW) } returns emptyList()
         coEvery { spiedService.fetchReleaseGroupImage(any()) } returns null
 
         val result = spiedService.fetchNewReleases()
         assertEquals(1, result["Test Artist"])
-        
+
         transaction(database) {
             val release = RecentReleaseTable.selectAll().single()
             val links = ApplicationScope.json.decodeFromString<List<String>>(release[RecentReleaseTable.links])
@@ -688,123 +733,152 @@ class ReleaseServiceTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `backfillMissingRecentReleaseImages should respect progressive cooldown tiers`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        val userId = UUID.randomUUID()
-        val artistId = UUID.randomUUID()
-        val now = Clock.System.now().toEpochMilliseconds()
+    fun `backfillMissingRecentReleaseImages should respect progressive cooldown tiers`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val userId = UUID.randomUUID()
+            val artistId = UUID.randomUUID()
+            val now = Clock.System.now().toEpochMilliseconds()
 
-        val rel1 = UUID.randomUUID()
-        val date1 = now - 2.days.inWholeMilliseconds
-        val last1 = now - 12.hours.inWholeMilliseconds
+            val rel1 = UUID.randomUUID()
+            val date1 = now - 2.days.inWholeMilliseconds
+            val last1 = now - 12.hours.inWholeMilliseconds
 
-        val rel2 = UUID.randomUUID()
-        val date2 = now - 7.days.inWholeMilliseconds
-        val last2 = now - 1.days.inWholeMilliseconds
+            val rel2 = UUID.randomUUID()
+            val date2 = now - 7.days.inWholeMilliseconds
+            val last2 = now - 1.days.inWholeMilliseconds
 
-        val rel3 = UUID.randomUUID()
-        val date3 = now - 15.days.inWholeMilliseconds
-        val last3 = now - 6.days.inWholeMilliseconds
+            val rel3 = UUID.randomUUID()
+            val date3 = now - 15.days.inWholeMilliseconds
+            val last3 = now - 6.days.inWholeMilliseconds
 
-        val rel4 = UUID.randomUUID()
-        val date4 = now - 2.days.inWholeMilliseconds
-        val last4 = now - 25.hours.inWholeMilliseconds
+            val rel4 = UUID.randomUUID()
+            val date4 = now - 2.days.inWholeMilliseconds
+            val last4 = now - 25.hours.inWholeMilliseconds
 
-        transaction(database) {
-            UserTable.insert { it[id] = userId; it[username] = "user"; it[passwordHash] = "hash" }
-            ArtistTable.insert { it[id] = artistId; it[name] = "Artist" }
-            FollowedArtistTable.insert { it[this.userId] = userId; it[this.artistId] = artistId }
-            listOf(
-                rel1 to Pair(date1, last1),
-                rel2 to Pair(date2, last2),
-                rel3 to Pair(date3, last3),
-                rel4 to Pair(date4, last4)
-            ).forEach { (id, data) ->
-                MBReleaseGroupTable.insert { it[MBReleaseGroupTable.id] = EntityID(id, MBReleaseGroupTable); it[title] = "Rel $id" }
-                RecentReleaseTable.insert {
-                    it[RecentReleaseTable.releaseId] = EntityID(id, MBReleaseGroupTable)
-                    it[RecentReleaseTable.artistId] = artistId
-                    it[RecentReleaseTable.artistName] = "Artist"
-                    it[RecentReleaseTable.title] = "Rel $id"
-                    it[RecentReleaseTable.releaseDate] = data.first
-                    it[RecentReleaseTable.lastImageFetch] = data.second
+            transaction(database) {
+                UserTable.insert { it[id] = userId; it[username] = "user"; it[passwordHash] = "hash" }
+                ArtistTable.insert { it[id] = artistId; it[name] = "Artist" }
+                FollowedArtistTable.insert { it[this.userId] = userId; it[this.artistId] = artistId }
+                listOf(
+                    rel1 to Pair(date1, last1),
+                    rel2 to Pair(date2, last2),
+                    rel3 to Pair(date3, last3),
+                    rel4 to Pair(date4, last4)
+                ).forEach { (id, data) ->
+                    MBReleaseGroupTable.insert {
+                        it[MBReleaseGroupTable.id] = EntityID(id, MBReleaseGroupTable); it[title] = "Rel $id"
+                    }
+                    RecentReleaseTable.insert {
+                        it[RecentReleaseTable.releaseId] = EntityID(id, MBReleaseGroupTable)
+                        it[RecentReleaseTable.artistId] = artistId
+                        it[RecentReleaseTable.artistName] = "Artist"
+                        it[RecentReleaseTable.title] = "Rel $id"
+                        it[RecentReleaseTable.releaseDate] = data.first
+                        it[RecentReleaseTable.lastImageFetch] = data.second
+                    }
                 }
             }
+
+            val spiedService = spyk(service, recordPrivateCalls = true)
+            coEvery { spiedService.fetchReleaseGroupImage(any()) } returns null
+
+            spiedService.backfillMissingRecentReleaseImages()
+
+            coVerify(exactly = 1) { spiedService.fetchReleaseGroupImage(any()) }
+            coVerify { spiedService.fetchReleaseGroupImage(rel4) }
         }
-
-        val spiedService = spyk(service, recordPrivateCalls = true)
-        coEvery { spiedService.fetchReleaseGroupImage(any()) } returns null
-
-        spiedService.backfillMissingRecentReleaseImages()
-
-        coVerify(exactly = 1) { spiedService.fetchReleaseGroupImage(any()) }
-        coVerify { spiedService.fetchReleaseGroupImage(rel4) }
-    }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `refreshRecentRelease re-fetches a cached release and prunes stale providers`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        mockkObject(MetadataService.Companion)
-        every { MetadataService.getMetadataService(IMetadataService.MetadataType.tidal, any()) } returns tidalService
-        every { MetadataService.getMetadataService(IMetadataService.MetadataType.appleMusic, any()) } returns appleMusicService
+    fun `refreshRecentRelease re-fetches a cached release and prunes stale providers`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            mockkObject(MetadataService.Companion)
+            every {
+                MetadataService.getMetadataService(
+                    IMetadataService.MetadataType.tidal,
+                    any()
+                )
+            } returns tidalService
+            every {
+                MetadataService.getMetadataService(
+                    IMetadataService.MetadataType.appleMusic,
+                    any()
+                )
+            } returns appleMusicService
 
-        val userId = UUID.randomUUID()
-        val artistId = UUID.randomUUID()
-        val mbId = UUID.randomUUID()
-        val releaseId = UUID.randomUUID()
+            val userId = UUID.randomUUID()
+            val artistId = UUID.randomUUID()
+            val mbId = UUID.randomUUID()
+            val releaseId = UUID.randomUUID()
 
-        transaction(database) {
-            UserTable.insert { it[id] = userId; it[username] = "user"; it[passwordHash] = "hash" }
-            ArtistTable.insert { it[id] = artistId; it[name] = "Test Artist" }
-            MBArtistTable.insert { it[id] = mbId; it[name] = "Test Artist"; it[sortName] = "Test Artist" }
-            ArtistMusicBrainzTable.insert { it[this.artistId] = artistId; it[musicBrainzId] = mbId }
-            MBReleaseGroupTable.insert { it[id] = releaseId; it[title] = "Album" }
-            RecentReleaseTable.insert {
-                it[RecentReleaseTable.releaseId] = releaseId
-                it[RecentReleaseTable.artistId] = artistId
-                it[RecentReleaseTable.artistName] = "Test Artist"
-                it[RecentReleaseTable.title] = "Album"
-                it[RecentReleaseTable.releaseDate] = 1672531200000L
-                it[RecentReleaseTable.links] = "[]"
+            transaction(database) {
+                UserTable.insert { it[id] = userId; it[username] = "user"; it[passwordHash] = "hash" }
+                ArtistTable.insert { it[id] = artistId; it[name] = "Test Artist" }
+                MBArtistTable.insert { it[id] = mbId; it[name] = "Test Artist"; it[sortName] = "Test Artist" }
+                ArtistMusicBrainzTable.insert { it[this.artistId] = artistId; it[musicBrainzId] = mbId }
+                MBReleaseGroupTable.insert { it[id] = releaseId; it[title] = "Album" }
+                RecentReleaseTable.insert {
+                    it[RecentReleaseTable.releaseId] = releaseId
+                    it[RecentReleaseTable.artistId] = artistId
+                    it[RecentReleaseTable.artistName] = "Test Artist"
+                    it[RecentReleaseTable.title] = "Album"
+                    it[RecentReleaseTable.releaseDate] = 1672531200000L
+                    it[RecentReleaseTable.links] = "[]"
+                }
             }
-        }
-        attachLink(releaseId, "deezer", "stale-999", "https://deezer.com/album/999")
+            attachLink(releaseId, "deezer", "stale-999", "https://deezer.com/album/999")
 
-        coEvery { musicBrainzService.fetchReleasesByArtist(mbId, priority = HttpClientPriority.HIGH) } returns emptyList()
-        coEvery { musicBrainzService.fetchReleaseGroupById(releaseId, priority = HttpClientPriority.HIGH) } returns MusicBrainzReleaseGroup(
-            id = releaseId,
-            title = "Album",
-            firstReleaseDate = "2023-01-01",
-            relations = listOf(
-                MusicBrainzRelation(
-                    type = "spotify",
-                    url = MusicBrainzRelationUrl(id = UUID.randomUUID(), resource = "https://spotify.com/album/123")
+            coEvery {
+                musicBrainzService.fetchReleasesByArtist(
+                    mbId,
+                    priority = HttpClientPriority.HIGH
+                )
+            } returns emptyList()
+            coEvery {
+                musicBrainzService.fetchReleaseGroupById(
+                    releaseId,
+                    priority = HttpClientPriority.HIGH
+                )
+            } returns MusicBrainzReleaseGroup(
+                id = releaseId,
+                title = "Album",
+                firstReleaseDate = "2023-01-01",
+                relations = listOf(
+                    MusicBrainzRelation(
+                        type = "spotify",
+                        url = MusicBrainzRelationUrl(id = UUID.randomUUID(), resource = "https://spotify.com/album/123")
+                    )
                 )
             )
-        )
-        coEvery { linkResolverService.batchResolve(any(), priority = HttpClientPriority.LOW) } returns listOf("https://tidal.com/album/456")
+            coEvery {
+                linkResolverService.batchResolve(
+                    any(),
+                    priority = HttpClientPriority.LOW
+                )
+            } returns listOf("https://tidal.com/album/456")
 
-        val spiedService = spyk(service, recordPrivateCalls = true)
-        coEvery { spiedService.fetchReleaseGroupImage(any()) } returns null
+            val spiedService = spyk(service, recordPrivateCalls = true)
+            coEvery { spiedService.fetchReleaseGroupImage(any()) } returns null
 
-        val result = spiedService.refreshRecentRelease(releaseId)
+            val result = spiedService.refreshRecentRelease(releaseId)
 
-        assertNotNull(result)
-        assertTrue(result!!.links.contains("https://tidal.com/album/456"))
-        assertTrue(result.links.contains("https://spotify.com/album/123"))
+            assertNotNull(result)
+            assertTrue(result!!.links.contains("https://tidal.com/album/456"))
+            assertTrue(result.links.contains("https://spotify.com/album/123"))
 
-        val providers = linkKeysOf(releaseId)
-        assertEquals(2, providers.size)
-        assertEquals("123", providers["spotify"])
-        assertEquals("456", providers["tidal"])
-        assertNull(providers["deezer"])
+            val providers = linkKeysOf(releaseId)
+            assertEquals(2, providers.size)
+            assertEquals("123", providers["spotify"])
+            assertEquals("456", providers["tidal"])
+            assertNull(providers["deezer"])
 
-        transaction(database) {
-            val row = RecentReleaseTable.selectAll().where { RecentReleaseTable.releaseId eq releaseId }.single()
-            assertNotNull(row[RecentReleaseTable.lastUpdate])
+            transaction(database) {
+                val row = RecentReleaseTable.selectAll().where { RecentReleaseTable.releaseId eq releaseId }.single()
+                assertNotNull(row[RecentReleaseTable.lastUpdate])
+            }
         }
-    }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
@@ -812,7 +886,12 @@ class ReleaseServiceTest : KoinTest {
         setup(dialect)
         val releaseId = UUID.randomUUID()
 
-        coEvery { musicBrainzService.fetchReleasesByReleaseGroup(releaseId, priority = HttpClientPriority.HIGH) } returns emptyList()
+        coEvery {
+            musicBrainzService.fetchReleasesByReleaseGroup(
+                releaseId,
+                priority = HttpClientPriority.HIGH
+            )
+        } returns emptyList()
 
         val result = service.refreshRecentRelease(releaseId)
         assertNull(result)
@@ -824,7 +903,12 @@ class ReleaseServiceTest : KoinTest {
         setup(dialect)
         mockkObject(MetadataService.Companion)
         every { MetadataService.getMetadataService(IMetadataService.MetadataType.tidal, any()) } returns tidalService
-        every { MetadataService.getMetadataService(IMetadataService.MetadataType.appleMusic, any()) } returns appleMusicService
+        every {
+            MetadataService.getMetadataService(
+                IMetadataService.MetadataType.appleMusic,
+                any()
+            )
+        } returns appleMusicService
 
         val userId = UUID.randomUUID()
         val artistId = UUID.randomUUID()
@@ -839,14 +923,36 @@ class ReleaseServiceTest : KoinTest {
             MBReleaseGroupTable.insert { it[id] = releaseId; it[title] = "Fresh Album" }
         }
 
-        coEvery { musicBrainzService.fetchReleasesByReleaseGroup(releaseId, priority = HttpClientPriority.HIGH) } returns listOf(
+        coEvery {
+            musicBrainzService.fetchReleasesByReleaseGroup(
+                releaseId,
+                priority = HttpClientPriority.HIGH
+            )
+        } returns listOf(
             MusicBrainzRelease(
                 id = releaseId,
-                artistCredit = listOf(MusicBrainzArtistCredit(artist = MusicBrainzArtist(id = mbId, name = "Test Artist")))
+                artistCredit = listOf(
+                    MusicBrainzArtistCredit(
+                        artist = MusicBrainzArtist(
+                            id = mbId,
+                            name = "Test Artist"
+                        )
+                    )
+                )
             )
         )
-        coEvery { musicBrainzService.fetchReleasesByArtist(mbId, priority = HttpClientPriority.HIGH) } returns emptyList()
-        coEvery { musicBrainzService.fetchReleaseGroupById(releaseId, priority = HttpClientPriority.HIGH) } returns MusicBrainzReleaseGroup(
+        coEvery {
+            musicBrainzService.fetchReleasesByArtist(
+                mbId,
+                priority = HttpClientPriority.HIGH
+            )
+        } returns emptyList()
+        coEvery {
+            musicBrainzService.fetchReleaseGroupById(
+                releaseId,
+                priority = HttpClientPriority.HIGH
+            )
+        } returns MusicBrainzReleaseGroup(
             id = releaseId,
             title = "Fresh Album",
             firstReleaseDate = "2023-01-01"
@@ -874,7 +980,12 @@ class ReleaseServiceTest : KoinTest {
         setup(dialect)
         mockkObject(MetadataService.Companion)
         every { MetadataService.getMetadataService(IMetadataService.MetadataType.tidal, any()) } returns tidalService
-        every { MetadataService.getMetadataService(IMetadataService.MetadataType.appleMusic, any()) } returns appleMusicService
+        every {
+            MetadataService.getMetadataService(
+                IMetadataService.MetadataType.appleMusic,
+                any()
+            )
+        } returns appleMusicService
 
         val userId = UUID.randomUUID()
         val artistId = UUID.randomUUID()
@@ -904,8 +1015,18 @@ class ReleaseServiceTest : KoinTest {
         coEvery { musicBrainzService.fetchReleaseGroups(mbId, priority = HttpClientPriority.LOW) } returns listOf(
             MusicBrainzReleaseGroup(id = releaseId, title = "Just Released", firstReleaseDate = "2023-01-01")
         )
-        coEvery { musicBrainzService.fetchReleasesByArtist(mbId, priority = HttpClientPriority.LOW) } returns emptyList()
-        coEvery { linkResolverService.batchResolve(any(), priority = HttpClientPriority.LOW) } returns listOf("https://tidal.com/album/456")
+        coEvery {
+            musicBrainzService.fetchReleasesByArtist(
+                mbId,
+                priority = HttpClientPriority.LOW
+            )
+        } returns emptyList()
+        coEvery {
+            linkResolverService.batchResolve(
+                any(),
+                priority = HttpClientPriority.LOW
+            )
+        } returns listOf("https://tidal.com/album/456")
 
         val spiedService = spyk(service, recordPrivateCalls = true)
         coEvery { spiedService.fetchReleaseGroupImage(any()) } returns null
@@ -926,7 +1047,12 @@ class ReleaseServiceTest : KoinTest {
         setup(dialect)
         mockkObject(MetadataService.Companion)
         every { MetadataService.getMetadataService(IMetadataService.MetadataType.tidal, any()) } returns tidalService
-        every { MetadataService.getMetadataService(IMetadataService.MetadataType.appleMusic, any()) } returns appleMusicService
+        every {
+            MetadataService.getMetadataService(
+                IMetadataService.MetadataType.appleMusic,
+                any()
+            )
+        } returns appleMusicService
 
         val userId = UUID.randomUUID()
         val artistId = UUID.randomUUID()
@@ -956,14 +1082,24 @@ class ReleaseServiceTest : KoinTest {
         coEvery { musicBrainzService.fetchReleaseGroups(mbId, priority = HttpClientPriority.LOW) } returns listOf(
             MusicBrainzReleaseGroup(id = releaseId, title = "Upcoming", firstReleaseDate = "2099-01-01")
         )
-        coEvery { musicBrainzService.fetchReleasesByArtist(mbId, priority = HttpClientPriority.LOW) } returns emptyList()
+        coEvery {
+            musicBrainzService.fetchReleasesByArtist(
+                mbId,
+                priority = HttpClientPriority.LOW
+            )
+        } returns emptyList()
 
         val spiedService = spyk(service, recordPrivateCalls = true)
         coEvery { spiedService.fetchReleaseGroupImage(any()) } returns null
 
         spiedService.fetchNewReleases()
 
-        coVerify(exactly = 0) { musicBrainzService.fetchReleasesByReleaseGroup(releaseId, priority = HttpClientPriority.LOW) }
+        coVerify(exactly = 0) {
+            musicBrainzService.fetchReleasesByReleaseGroup(
+                releaseId,
+                priority = HttpClientPriority.LOW
+            )
+        }
         transaction(database) {
             val row = RecentReleaseTable.selectAll().where { RecentReleaseTable.releaseId eq releaseId }.single()
             assertEquals(originalLastUpdate, row[RecentReleaseTable.lastUpdate])
@@ -976,7 +1112,12 @@ class ReleaseServiceTest : KoinTest {
         setup(dialect)
         mockkObject(MetadataService.Companion)
         every { MetadataService.getMetadataService(IMetadataService.MetadataType.tidal, any()) } returns tidalService
-        every { MetadataService.getMetadataService(IMetadataService.MetadataType.appleMusic, any()) } returns appleMusicService
+        every {
+            MetadataService.getMetadataService(
+                IMetadataService.MetadataType.appleMusic,
+                any()
+            )
+        } returns appleMusicService
 
         val userId = UUID.randomUUID()
         val artistId = UUID.randomUUID()
@@ -1006,14 +1147,24 @@ class ReleaseServiceTest : KoinTest {
         coEvery { musicBrainzService.fetchReleaseGroups(mbId, priority = HttpClientPriority.LOW) } returns listOf(
             MusicBrainzReleaseGroup(id = releaseId, title = "Recently Refreshed", firstReleaseDate = "2023-01-01")
         )
-        coEvery { musicBrainzService.fetchReleasesByArtist(mbId, priority = HttpClientPriority.LOW) } returns emptyList()
+        coEvery {
+            musicBrainzService.fetchReleasesByArtist(
+                mbId,
+                priority = HttpClientPriority.LOW
+            )
+        } returns emptyList()
 
         val spiedService = spyk(service, recordPrivateCalls = true)
         coEvery { spiedService.fetchReleaseGroupImage(any()) } returns null
 
         spiedService.fetchNewReleases()
 
-        coVerify(exactly = 0) { musicBrainzService.fetchReleasesByReleaseGroup(releaseId, priority = HttpClientPriority.LOW) }
+        coVerify(exactly = 0) {
+            musicBrainzService.fetchReleasesByReleaseGroup(
+                releaseId,
+                priority = HttpClientPriority.LOW
+            )
+        }
         transaction(database) {
             val row = RecentReleaseTable.selectAll().where { RecentReleaseTable.releaseId eq releaseId }.single()
             assertEquals(originalLastUpdate, row[RecentReleaseTable.lastUpdate])
@@ -1047,40 +1198,41 @@ class ReleaseServiceTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `backfillMissingRecentReleaseImages with artistId only backfills that artist`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        val userId = UUID.randomUUID()
-        val artistA = UUID.randomUUID()
-        val artistB = UUID.randomUUID()
-        val releaseA = UUID.randomUUID()
-        val releaseB = UUID.randomUUID()
+    fun `backfillMissingRecentReleaseImages with artistId only backfills that artist`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val userId = UUID.randomUUID()
+            val artistA = UUID.randomUUID()
+            val artistB = UUID.randomUUID()
+            val releaseA = UUID.randomUUID()
+            val releaseB = UUID.randomUUID()
 
-        transaction(database) {
-            UserTable.insert { it[id] = userId; it[username] = "user"; it[passwordHash] = "hash" }
-            ArtistTable.insert { it[id] = artistA; it[name] = "Artist A" }
-            ArtistTable.insert { it[id] = artistB; it[name] = "Artist B" }
-            FollowedArtistTable.insert { it[this.userId] = userId; it[this.artistId] = artistA }
-            FollowedArtistTable.insert { it[this.userId] = userId; it[this.artistId] = artistB }
-            listOf(releaseA to artistA, releaseB to artistB).forEach { (relId, artId) ->
-                MBReleaseGroupTable.insert { it[id] = relId; it[title] = "Rel $relId" }
-                RecentReleaseTable.insert {
-                    it[RecentReleaseTable.releaseId] = relId
-                    it[RecentReleaseTable.artistId] = artId
-                    it[RecentReleaseTable.title] = "Rel $relId"
-                    it[RecentReleaseTable.imageId] = null
-                    it[RecentReleaseTable.lastImageFetch] = null
+            transaction(database) {
+                UserTable.insert { it[id] = userId; it[username] = "user"; it[passwordHash] = "hash" }
+                ArtistTable.insert { it[id] = artistA; it[name] = "Artist A" }
+                ArtistTable.insert { it[id] = artistB; it[name] = "Artist B" }
+                FollowedArtistTable.insert { it[this.userId] = userId; it[this.artistId] = artistA }
+                FollowedArtistTable.insert { it[this.userId] = userId; it[this.artistId] = artistB }
+                listOf(releaseA to artistA, releaseB to artistB).forEach { (relId, artId) ->
+                    MBReleaseGroupTable.insert { it[id] = relId; it[title] = "Rel $relId" }
+                    RecentReleaseTable.insert {
+                        it[RecentReleaseTable.releaseId] = relId
+                        it[RecentReleaseTable.artistId] = artId
+                        it[RecentReleaseTable.title] = "Rel $relId"
+                        it[RecentReleaseTable.imageId] = null
+                        it[RecentReleaseTable.lastImageFetch] = null
+                    }
                 }
             }
+
+            val spiedService = spyk(service, recordPrivateCalls = true)
+            coEvery { spiedService.fetchReleaseGroupImage(any()) } returns null
+
+            spiedService.backfillMissingRecentReleaseImages(artistA)
+
+            coVerify(exactly = 1) { spiedService.fetchReleaseGroupImage(any()) }
+            coVerify { spiedService.fetchReleaseGroupImage(releaseA) }
         }
-
-        val spiedService = spyk(service, recordPrivateCalls = true)
-        coEvery { spiedService.fetchReleaseGroupImage(any()) } returns null
-
-        spiedService.backfillMissingRecentReleaseImages(artistA)
-
-        coVerify(exactly = 1) { spiedService.fetchReleaseGroupImage(any()) }
-        coVerify { spiedService.fetchReleaseGroupImage(releaseA) }
-    }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
@@ -1111,7 +1263,12 @@ class ReleaseServiceTest : KoinTest {
         setup(dialect)
         mockkObject(MetadataService.Companion)
         every { MetadataService.getMetadataService(IMetadataService.MetadataType.tidal, any()) } returns tidalService
-        every { MetadataService.getMetadataService(IMetadataService.MetadataType.appleMusic, any()) } returns appleMusicService
+        every {
+            MetadataService.getMetadataService(
+                IMetadataService.MetadataType.appleMusic,
+                any()
+            )
+        } returns appleMusicService
 
         val mbId = UUID.randomUUID()
         val artistId = UUID.randomUUID()
@@ -1126,7 +1283,12 @@ class ReleaseServiceTest : KoinTest {
         coEvery { musicBrainzService.fetchReleaseGroups(mbId, priority = HttpClientPriority.LOW) } returns listOf(
             MusicBrainzReleaseGroup(id = releaseId, title = "New Album", firstReleaseDate = "2023-10-27")
         )
-        coEvery { musicBrainzService.fetchReleasesByArtist(mbId, priority = HttpClientPriority.LOW) } returns emptyList()
+        coEvery {
+            musicBrainzService.fetchReleasesByArtist(
+                mbId,
+                priority = HttpClientPriority.LOW
+            )
+        } returns emptyList()
         coEvery { linkResolverService.batchResolve(any(), priority = HttpClientPriority.LOW) } returns emptyList()
 
         val spiedService = spyk(service, recordPrivateCalls = true)
@@ -1141,59 +1303,69 @@ class ReleaseServiceTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `unlinkUnfollowedRecentReleaseImages unlinks only CAA images of unfollowed artists`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        val userId = UUID.randomUUID()
-        val followedArtist = UUID.randomUUID()
-        val unfollowedArtist = UUID.randomUUID()
-        val caaRelease = UUID.randomUUID()
-        val nonCaaRelease = UUID.randomUUID()
-        val followedRelease = UUID.randomUUID()
-        val caaImage = UUID.randomUUID()
-        val nonCaaImage = UUID.randomUUID()
-        val followedImage = UUID.randomUUID()
+    fun `unlinkUnfollowedRecentReleaseImages unlinks only CAA images of unfollowed artists`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val userId = UUID.randomUUID()
+            val followedArtist = UUID.randomUUID()
+            val unfollowedArtist = UUID.randomUUID()
+            val caaRelease = UUID.randomUUID()
+            val nonCaaRelease = UUID.randomUUID()
+            val followedRelease = UUID.randomUUID()
+            val caaImage = UUID.randomUUID()
+            val nonCaaImage = UUID.randomUUID()
+            val followedImage = UUID.randomUUID()
 
-        transaction(database) {
-            UserTable.insert { it[id] = userId; it[username] = "user"; it[passwordHash] = "hash" }
-            ArtistTable.insert { it[id] = followedArtist; it[name] = "Followed" }
-            ArtistTable.insert { it[id] = unfollowedArtist; it[name] = "Unfollowed" }
-            FollowedArtistTable.insert { it[this.userId] = userId; it[this.artistId] = followedArtist }
+            transaction(database) {
+                UserTable.insert { it[id] = userId; it[username] = "user"; it[passwordHash] = "hash" }
+                ArtistTable.insert { it[id] = followedArtist; it[name] = "Followed" }
+                ArtistTable.insert { it[id] = unfollowedArtist; it[name] = "Unfollowed" }
+                FollowedArtistTable.insert { it[this.userId] = userId; it[this.artistId] = followedArtist }
 
-            ImageTable.insert { it[id] = caaImage; it[path] = "caa"; it[imageHash] = "h1"; it[origin] = "https://coverartarchive.org/release-group/$caaRelease/front" }
-            ImageTable.insert { it[id] = nonCaaImage; it[path] = "tidal"; it[imageHash] = "h2"; it[origin] = "https://resources.tidal.com/images/cover.jpg" }
-            ImageTable.insert { it[id] = followedImage; it[path] = "caa2"; it[imageHash] = "h3"; it[origin] = "https://coverartarchive.org/release-group/$followedRelease/front" }
+                ImageTable.insert {
+                    it[id] = caaImage; it[path] = "caa"; it[imageHash] = "h1"; it[origin] =
+                    "https://coverartarchive.org/release-group/$caaRelease/front"
+                }
+                ImageTable.insert {
+                    it[id] = nonCaaImage; it[path] = "tidal"; it[imageHash] = "h2"; it[origin] =
+                    "https://resources.tidal.com/images/cover.jpg"
+                }
+                ImageTable.insert {
+                    it[id] = followedImage; it[path] = "caa2"; it[imageHash] = "h3"; it[origin] =
+                    "https://coverartarchive.org/release-group/$followedRelease/front"
+                }
 
-            listOf(
-                Triple(caaRelease, unfollowedArtist, caaImage),
-                Triple(nonCaaRelease, unfollowedArtist, nonCaaImage),
-                Triple(followedRelease, followedArtist, followedImage)
-            ).forEach { (relId, artId, imgId) ->
-                MBReleaseGroupTable.insert { it[id] = relId; it[title] = "Rel $relId" }
-                RecentReleaseTable.insert {
-                    it[RecentReleaseTable.releaseId] = relId
-                    it[RecentReleaseTable.artistId] = artId
-                    it[RecentReleaseTable.title] = "Rel $relId"
-                    it[RecentReleaseTable.imageId] = EntityID(imgId, ImageTable)
-                    it[RecentReleaseTable.lastImageFetch] = 1000L
+                listOf(
+                    Triple(caaRelease, unfollowedArtist, caaImage),
+                    Triple(nonCaaRelease, unfollowedArtist, nonCaaImage),
+                    Triple(followedRelease, followedArtist, followedImage)
+                ).forEach { (relId, artId, imgId) ->
+                    MBReleaseGroupTable.insert { it[id] = relId; it[title] = "Rel $relId" }
+                    RecentReleaseTable.insert {
+                        it[RecentReleaseTable.releaseId] = relId
+                        it[RecentReleaseTable.artistId] = artId
+                        it[RecentReleaseTable.title] = "Rel $relId"
+                        it[RecentReleaseTable.imageId] = EntityID(imgId, ImageTable)
+                        it[RecentReleaseTable.lastImageFetch] = 1000L
+                    }
                 }
             }
-        }
 
-        val unlinked = service.unlinkUnfollowedRecentReleaseImages()
-        assertEquals(1, unlinked)
+            val unlinked = service.unlinkUnfollowedRecentReleaseImages()
+            assertEquals(1, unlinked)
 
-        transaction(database) {
-            val rows = RecentReleaseTable.selectAll().associate {
-                it[RecentReleaseTable.releaseId].value to (it[RecentReleaseTable.imageId]?.value to it[RecentReleaseTable.lastImageFetch])
+            transaction(database) {
+                val rows = RecentReleaseTable.selectAll().associate {
+                    it[RecentReleaseTable.releaseId].value to (it[RecentReleaseTable.imageId]?.value to it[RecentReleaseTable.lastImageFetch])
+                }
+                assertNull(rows[caaRelease]!!.first)
+                assertNull(rows[caaRelease]!!.second)
+                assertEquals(nonCaaImage, rows[nonCaaRelease]!!.first)
+                assertEquals(1000L, rows[nonCaaRelease]!!.second)
+                assertEquals(followedImage, rows[followedRelease]!!.first)
+                assertEquals(1000L, rows[followedRelease]!!.second)
             }
-            assertNull(rows[caaRelease]!!.first)
-            assertNull(rows[caaRelease]!!.second)
-            assertEquals(nonCaaImage, rows[nonCaaRelease]!!.first)
-            assertEquals(1000L, rows[nonCaaRelease]!!.second)
-            assertEquals(followedImage, rows[followedRelease]!!.first)
-            assertEquals(1000L, rows[followedRelease]!!.second)
         }
-    }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
@@ -1349,7 +1521,8 @@ class ReleaseServiceTest : KoinTest {
         var persistedImageId: UUID? = null
         repeat(100) {
             persistedImageId = transaction(database) {
-                RecentReleaseTable.selectAll().where { RecentReleaseTable.releaseId eq releaseId }.single()[RecentReleaseTable.imageId]?.value
+                RecentReleaseTable.selectAll().where { RecentReleaseTable.releaseId eq releaseId }
+                    .single()[RecentReleaseTable.imageId]?.value
             }
             if (persistedImageId != null) return@repeat
             Thread.sleep(50)
@@ -1389,7 +1562,8 @@ class ReleaseServiceTest : KoinTest {
                 it[ProviderReleaseTable.url] = rowUrl
                 it[ProviderReleaseTable.artworkUrl] = rowArtworkUrl
                 it[ProviderReleaseTable.imageId] = rowImageId?.let { value -> EntityID(value, ImageTable) }
-                it[ProviderReleaseTable.releaseGroupId] = rowReleaseGroupId?.let { value -> EntityID(value, MBReleaseGroupTable) }
+                it[ProviderReleaseTable.releaseGroupId] =
+                    rowReleaseGroupId?.let { value -> EntityID(value, MBReleaseGroupTable) }
                 it[ProviderReleaseTable.albumId] = rowAlbumId?.let { value -> EntityID(value, AlbumTable) }
                 it[ProviderReleaseTable.songId] = rowSongId?.let { value -> EntityID(value, SongTable) }
                 it[ProviderReleaseTable.copyrightHolder] = rowCopyrightHolder
@@ -1580,7 +1754,13 @@ class ReleaseServiceTest : KoinTest {
             insertRecentRelease(UUID.randomUUID(), artistId, "MB $i", (i * 2).toLong(), rowType = ReleaseType.Album)
         }
         for (i in 1..5) {
-            insertProviderRelease(UUID.randomUUID(), artistId, "Apple $i", (i * 2 - 1).toLong(), rowType = ReleaseType.Album)
+            insertProviderRelease(
+                UUID.randomUUID(),
+                artistId,
+                "Apple $i",
+                (i * 2 - 1).toLong(),
+                rowType = ReleaseType.Album
+            )
         }
 
         val page0 = service.getRecentReleases(userId, page = 0, pageSize = 3)
@@ -1665,36 +1845,37 @@ class ReleaseServiceTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `getRecentReleases groups Apple explicit and deluxe editions under the plain title`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        val userId = UUID.randomUUID()
-        val artistId = UUID.randomUUID()
-        val plainId = UUID(0L, 1L)
-        val explicitId = UUID(0L, 2L)
-        val deluxeId = UUID(0L, 3L)
-        val date = Clock.System.now().toEpochMilliseconds() - 10.days.inWholeMilliseconds
+    fun `getRecentReleases groups Apple explicit and deluxe editions under the plain title`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val userId = UUID.randomUUID()
+            val artistId = UUID.randomUUID()
+            val plainId = UUID(0L, 1L)
+            val explicitId = UUID(0L, 2L)
+            val deluxeId = UUID(0L, 3L)
+            val date = Clock.System.now().toEpochMilliseconds() - 10.days.inWholeMilliseconds
 
-        seedFollowedArtist(userId, artistId)
-        insertProviderRelease(plainId, artistId, "Album", date)
-        insertProviderRelease(explicitId, artistId, "Album (Explicit)", date)
-        insertProviderRelease(deluxeId, artistId, "Album (Deluxe Edition)", date)
-        attachProviderLink(explicitId, "tidal", "explicit-1", "https://tidal.com/album/explicit-1")
+            seedFollowedArtist(userId, artistId)
+            insertProviderRelease(plainId, artistId, "Album", date)
+            insertProviderRelease(explicitId, artistId, "Album (Explicit)", date)
+            insertProviderRelease(deluxeId, artistId, "Album (Deluxe Edition)", date)
+            attachProviderLink(explicitId, "tidal", "explicit-1", "https://tidal.com/album/explicit-1")
 
-        val result = service.getRecentReleases(userId)
+            val result = service.getRecentReleases(userId)
 
-        assertEquals(1, result.total)
-        assertFalse(result.hasNextPage)
-        val entry = result.data.single()
-        assertEquals("Album", entry.title)
-        assertEquals(plainId, entry.releaseId)
-        assertEquals(2, entry.versions.size)
-        assertEquals(setOf(explicitId, deluxeId), entry.versions.map { it.releaseId }.toSet())
-        assertFalse(entry.links.contains("https://tidal.com/album/explicit-1"))
-        val explicit = entry.versions.single { it.releaseId == explicitId }
-        assertTrue(explicit.links.contains("https://tidal.com/album/explicit-1"))
-        assertTrue(explicit.links.contains("https://music.apple.com/album/$explicitId"))
-        assertTrue(entry.versions.all { it.versions.isEmpty() })
-    }
+            assertEquals(1, result.total)
+            assertFalse(result.hasNextPage)
+            val entry = result.data.single()
+            assertEquals("Album", entry.title)
+            assertEquals(plainId, entry.releaseId)
+            assertEquals(2, entry.versions.size)
+            assertEquals(setOf(explicitId, deluxeId), entry.versions.map { it.releaseId }.toSet())
+            assertFalse(entry.links.contains("https://tidal.com/album/explicit-1"))
+            val explicit = entry.versions.single { it.releaseId == explicitId }
+            assertTrue(explicit.links.contains("https://tidal.com/album/explicit-1"))
+            assertTrue(explicit.links.contains("https://music.apple.com/album/$explicitId"))
+            assertTrue(entry.versions.all { it.versions.isEmpty() })
+        }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
@@ -1753,7 +1934,12 @@ class ReleaseServiceTest : KoinTest {
 
         seedFollowedArtist(userId, artistId)
         insertProviderRelease(UUID.randomUUID(), artistId, "Album", date)
-        insertProviderRelease(UUID.randomUUID(), artistId, "Album (Deluxe Edition)", date + 120.days.inWholeMilliseconds)
+        insertProviderRelease(
+            UUID.randomUUID(),
+            artistId,
+            "Album (Deluxe Edition)",
+            date + 120.days.inWholeMilliseconds
+        )
 
         val result = service.getRecentReleases(userId)
 
@@ -1786,33 +1972,37 @@ class ReleaseServiceTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `getArtistRecentReleases with includeHidden keeps hidden editions in their own group`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        val userId = UUID.randomUUID()
-        val artistId = UUID.randomUUID()
-        val plainId = UUID.randomUUID()
-        val explicitId = UUID.randomUUID()
-        val cleanId = UUID.randomUUID()
-        val date = Clock.System.now().toEpochMilliseconds() - 10.days.inWholeMilliseconds
+    fun `getArtistRecentReleases with includeHidden keeps hidden editions in their own group`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val userId = UUID.randomUUID()
+            val artistId = UUID.randomUUID()
+            val plainId = UUID.randomUUID()
+            val explicitId = UUID.randomUUID()
+            val cleanId = UUID.randomUUID()
+            val date = Clock.System.now().toEpochMilliseconds() - 10.days.inWholeMilliseconds
 
-        seedFollowedArtist(userId, artistId)
-        insertProviderRelease(plainId, artistId, "Album", date)
-        insertProviderRelease(explicitId, artistId, "Album (Explicit)", date)
-        insertProviderRelease(cleanId, artistId, "Album (Clean)", date)
-        markHidden(explicitId, artistId)
-        markHidden(cleanId, artistId)
+            seedFollowedArtist(userId, artistId)
+            insertProviderRelease(plainId, artistId, "Album", date)
+            insertProviderRelease(explicitId, artistId, "Album (Explicit)", date)
+            insertProviderRelease(cleanId, artistId, "Album (Clean)", date)
+            markHidden(explicitId, artistId)
+            markHidden(cleanId, artistId)
 
-        val result = service.getArtistRecentReleases(artistId, includeHidden = true)
+            val result = service.getArtistRecentReleases(artistId, includeHidden = true)
 
-        assertEquals(2, result.total)
-        val visible = result.data.single { !it.hidden }
-        assertEquals(plainId, visible.releaseId)
-        assertTrue(visible.versions.isEmpty())
-        val hiddenGroup = result.data.single { it.hidden }
-        assertEquals(setOf(explicitId, cleanId), (listOf(hiddenGroup) + hiddenGroup.versions).map { it.releaseId }.toSet())
-        assertEquals(1, hiddenGroup.versions.size)
-        assertTrue(hiddenGroup.versions.single().hidden)
-    }
+            assertEquals(2, result.total)
+            val visible = result.data.single { !it.hidden }
+            assertEquals(plainId, visible.releaseId)
+            assertTrue(visible.versions.isEmpty())
+            val hiddenGroup = result.data.single { it.hidden }
+            assertEquals(
+                setOf(explicitId, cleanId),
+                (listOf(hiddenGroup) + hiddenGroup.versions).map { it.releaseId }.toSet()
+            )
+            assertEquals(1, hiddenGroup.versions.size)
+            assertTrue(hiddenGroup.versions.single().hidden)
+        }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
@@ -1824,7 +2014,13 @@ class ReleaseServiceTest : KoinTest {
 
         seedFollowedArtist(userId, artistId)
         for (i in 1..5) {
-            insertRecentRelease(UUID.randomUUID(), artistId, "MB $i", now - (6 - i) * 20.days.inWholeMilliseconds, rowType = ReleaseType.Album)
+            insertRecentRelease(
+                UUID.randomUUID(),
+                artistId,
+                "MB $i",
+                now - (6 - i) * 20.days.inWholeMilliseconds,
+                rowType = ReleaseType.Album
+            )
         }
         val newest = now - 20.days.inWholeMilliseconds
         insertProviderRelease(UUID.randomUUID(), artistId, "MB 5 (Explicit)", newest, rowType = ReleaseType.Album)
@@ -1852,10 +2048,22 @@ class ReleaseServiceTest : KoinTest {
 
         seedFollowedArtist(userId, artistId)
         for (i in 1..60) {
-            insertProviderRelease(UUID.randomUUID(), artistId, "Album $i", now - i * 1.days.inWholeMilliseconds, rowType = ReleaseType.Album)
+            insertProviderRelease(
+                UUID.randomUUID(),
+                artistId,
+                "Album $i",
+                now - i * 1.days.inWholeMilliseconds,
+                rowType = ReleaseType.Album
+            )
         }
         for (i in 1..5) {
-            insertProviderRelease(UUID.randomUUID(), artistId, "Single $i", now - i * 1.days.inWholeMilliseconds, rowType = ReleaseType.Single)
+            insertProviderRelease(
+                UUID.randomUUID(),
+                artistId,
+                "Single $i",
+                now - i * 1.days.inWholeMilliseconds,
+                rowType = ReleaseType.Single
+            )
         }
 
         val page0 = service.getRecentReleases(userId, page = 0, pageSize = 50)
@@ -1885,7 +2093,13 @@ class ReleaseServiceTest : KoinTest {
             val date = now - i * 100.days.inWholeMilliseconds
             insertProviderRelease(UUID.randomUUID(), artistId, "Album $i", date, rowType = ReleaseType.Album)
             if (i <= 50) {
-                insertProviderRelease(UUID.randomUUID(), artistId, "Album $i (Explicit)", date, rowType = ReleaseType.Album)
+                insertProviderRelease(
+                    UUID.randomUUID(),
+                    artistId,
+                    "Album $i (Explicit)",
+                    date,
+                    rowType = ReleaseType.Album
+                )
             }
         }
 
@@ -1912,8 +2126,20 @@ class ReleaseServiceTest : KoinTest {
 
         seedFollowedArtist(userId, artistId)
         insertProviderRelease(UUID.randomUUID(), artistId, "Album", date, rowType = ReleaseType.Album)
-        insertProviderRelease(UUID.randomUUID(), artistId, "Single", date + 1.days.inWholeMilliseconds, rowType = ReleaseType.Single)
-        insertProviderRelease(UUID.randomUUID(), artistId, "EP", date - 1.days.inWholeMilliseconds, rowType = ReleaseType.EP)
+        insertProviderRelease(
+            UUID.randomUUID(),
+            artistId,
+            "Single",
+            date + 1.days.inWholeMilliseconds,
+            rowType = ReleaseType.Single
+        )
+        insertProviderRelease(
+            UUID.randomUUID(),
+            artistId,
+            "EP",
+            date - 1.days.inWholeMilliseconds,
+            rowType = ReleaseType.EP
+        )
 
         val result = service.getRecentReleases(userId)
 
@@ -1924,32 +2150,33 @@ class ReleaseServiceTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `getArtistRecentReleases returns provider rows for an artist without a MusicBrainz id`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        val artistId = UUID.randomUUID()
-        val groupId = UUID.randomUUID()
+    fun `getArtistRecentReleases returns provider rows for an artist without a MusicBrainz id`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val artistId = UUID.randomUUID()
+            val groupId = UUID.randomUUID()
 
-        transaction(database) {
-            ArtistTable.insert { it[id] = artistId; it[name] = "Artist" }
-            MBReleaseGroupTable.insert { it[id] = groupId; it[title] = "Matched Group" }
+            transaction(database) {
+                ArtistTable.insert { it[id] = artistId; it[name] = "Artist" }
+                MBReleaseGroupTable.insert { it[id] = groupId; it[title] = "Matched Group" }
+            }
+
+            var libraryAlbumId: UUID? = null
+            transaction(database) {
+                libraryAlbumId = AlbumTable.insert { it[name] = "Owned Album" }[AlbumTable.id].value
+            }
+
+            insertProviderRelease(UUID.randomUUID(), artistId, "Apple Discography", 3000L)
+            insertProviderRelease(UUID.randomUUID(), artistId, "Owned Album", 2000L, rowAlbumId = libraryAlbumId)
+            insertProviderRelease(UUID.randomUUID(), artistId, "Matched", 1000L, rowReleaseGroupId = groupId)
+
+            val result = service.getArtistRecentReleases(artistId)
+
+            assertEquals(2, result.total)
+            assertEquals(listOf("Apple Discography", "Owned Album"), result.data.map { it.title })
+            assertEquals(libraryAlbumId, result.data[1].albumId)
+            assertEquals(listOf(artistId), result.data[0].artistIds)
         }
-
-        var libraryAlbumId: UUID? = null
-        transaction(database) {
-            libraryAlbumId = AlbumTable.insert { it[name] = "Owned Album" }[AlbumTable.id].value
-        }
-
-        insertProviderRelease(UUID.randomUUID(), artistId, "Apple Discography", 3000L)
-        insertProviderRelease(UUID.randomUUID(), artistId, "Owned Album", 2000L, rowAlbumId = libraryAlbumId)
-        insertProviderRelease(UUID.randomUUID(), artistId, "Matched", 1000L, rowReleaseGroupId = groupId)
-
-        val result = service.getArtistRecentReleases(artistId)
-
-        assertEquals(2, result.total)
-        assertEquals(listOf("Apple Discography", "Owned Album"), result.data.map { it.title })
-        assertEquals(libraryAlbumId, result.data[1].albumId)
-        assertEquals(listOf(artistId), result.data[0].artistIds)
-    }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
@@ -2012,7 +2239,12 @@ class ReleaseServiceTest : KoinTest {
         setup(dialect)
         mockkObject(MetadataService.Companion)
         every { MetadataService.getMetadataService(IMetadataService.MetadataType.tidal, any()) } returns tidalService
-        every { MetadataService.getMetadataService(IMetadataService.MetadataType.appleMusic, any()) } returns appleMusicService
+        every {
+            MetadataService.getMetadataService(
+                IMetadataService.MetadataType.appleMusic,
+                any()
+            )
+        } returns appleMusicService
 
         val userId = UUID.randomUUID()
         val ownerId = UUID.randomUUID()
@@ -2036,7 +2268,12 @@ class ReleaseServiceTest : KoinTest {
         coEvery { musicBrainzService.fetchReleaseGroups(ownerMbId, priority = HttpClientPriority.LOW) } returns listOf(
             MusicBrainzReleaseGroup(id = groupId, title = "Collab Album", firstReleaseDate = "2023-10-27")
         )
-        coEvery { musicBrainzService.fetchReleasesByArtist(ownerMbId, priority = HttpClientPriority.LOW) } returns listOf(
+        coEvery {
+            musicBrainzService.fetchReleasesByArtist(
+                ownerMbId,
+                priority = HttpClientPriority.LOW
+            )
+        } returns listOf(
             MusicBrainzRelease(
                 id = mbReleaseId,
                 title = "Collab Album",
@@ -2059,46 +2296,69 @@ class ReleaseServiceTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `fetchNewReleases links a stored group of another artist without processing it`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        mockkObject(MetadataService.Companion)
-        every { MetadataService.getMetadataService(IMetadataService.MetadataType.tidal, any()) } returns tidalService
-        every { MetadataService.getMetadataService(IMetadataService.MetadataType.appleMusic, any()) } returns appleMusicService
+    fun `fetchNewReleases links a stored group of another artist without processing it`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            mockkObject(MetadataService.Companion)
+            every {
+                MetadataService.getMetadataService(
+                    IMetadataService.MetadataType.tidal,
+                    any()
+                )
+            } returns tidalService
+            every {
+                MetadataService.getMetadataService(
+                    IMetadataService.MetadataType.appleMusic,
+                    any()
+                )
+            } returns appleMusicService
 
-        val userId = UUID.randomUUID()
-        val ownerId = UUID.randomUUID()
-        val collaboratorId = UUID.randomUUID()
-        val collaboratorMbId = UUID.randomUUID()
-        val groupId = UUID.randomUUID()
+            val userId = UUID.randomUUID()
+            val ownerId = UUID.randomUUID()
+            val collaboratorId = UUID.randomUUID()
+            val collaboratorMbId = UUID.randomUUID()
+            val groupId = UUID.randomUUID()
 
-        transaction(database) {
-            UserTable.insert { it[id] = userId; it[username] = "user"; it[passwordHash] = "hash" }
-            ArtistTable.insert { it[id] = ownerId; it[name] = "Owner" }
-            ArtistTable.insert { it[id] = collaboratorId; it[name] = "Collaborator" }
-            MBArtistTable.insert { it[id] = collaboratorMbId; it[name] = "Collaborator"; it[sortName] = "Collaborator" }
-            ArtistMusicBrainzTable.insert { it[artistId] = collaboratorId; it[musicBrainzId] = collaboratorMbId }
-            FollowedArtistTable.insert { it[this.userId] = userId; it[artistId] = collaboratorId }
+            transaction(database) {
+                UserTable.insert { it[id] = userId; it[username] = "user"; it[passwordHash] = "hash" }
+                ArtistTable.insert { it[id] = ownerId; it[name] = "Owner" }
+                ArtistTable.insert { it[id] = collaboratorId; it[name] = "Collaborator" }
+                MBArtistTable.insert {
+                    it[id] = collaboratorMbId; it[name] = "Collaborator"; it[sortName] = "Collaborator"
+                }
+                ArtistMusicBrainzTable.insert { it[artistId] = collaboratorId; it[musicBrainzId] = collaboratorMbId }
+                FollowedArtistTable.insert { it[this.userId] = userId; it[artistId] = collaboratorId }
+            }
+            insertRecentRelease(groupId, ownerId, "Stored Album", 1000L)
+
+            coEvery {
+                musicBrainzService.fetchReleaseGroups(
+                    collaboratorMbId,
+                    priority = HttpClientPriority.LOW
+                )
+            } returns listOf(
+                MusicBrainzReleaseGroup(id = groupId, title = "Stored Album", firstReleaseDate = "1970-01-01")
+            )
+            coEvery {
+                musicBrainzService.fetchReleasesByArtist(
+                    collaboratorMbId,
+                    priority = HttpClientPriority.LOW
+                )
+            } returns emptyList()
+
+            val spiedService = spyk(service, recordPrivateCalls = true)
+            coEvery { spiedService.fetchReleaseGroupImage(any()) } returns null
+
+            spiedService.fetchNewReleases()
+
+            assertEquals(setOf(groupId to collaboratorId), linkedArtistIds())
+            coVerify(exactly = 0) { musicBrainzService.fetchReleasesByReleaseGroup(groupId, any()) }
+
+            val owner = transaction(database) {
+                RecentReleaseTable.selectAll().single()[RecentReleaseTable.artistId].value
+            }
+            assertEquals(ownerId, owner)
         }
-        insertRecentRelease(groupId, ownerId, "Stored Album", 1000L)
-
-        coEvery { musicBrainzService.fetchReleaseGroups(collaboratorMbId, priority = HttpClientPriority.LOW) } returns listOf(
-            MusicBrainzReleaseGroup(id = groupId, title = "Stored Album", firstReleaseDate = "1970-01-01")
-        )
-        coEvery { musicBrainzService.fetchReleasesByArtist(collaboratorMbId, priority = HttpClientPriority.LOW) } returns emptyList()
-
-        val spiedService = spyk(service, recordPrivateCalls = true)
-        coEvery { spiedService.fetchReleaseGroupImage(any()) } returns null
-
-        spiedService.fetchNewReleases()
-
-        assertEquals(setOf(groupId to collaboratorId), linkedArtistIds())
-        coVerify(exactly = 0) { musicBrainzService.fetchReleasesByReleaseGroup(groupId, any()) }
-
-        val owner = transaction(database) {
-            RecentReleaseTable.selectAll().single()[RecentReleaseTable.artistId].value
-        }
-        assertEquals(ownerId, owner)
-    }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
@@ -2175,26 +2435,27 @@ class ReleaseServiceTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `refreshRecentRelease refreshes a provider release through the Apple Music service`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        val artistId = UUID.randomUUID()
-        val releaseId = UUID.randomUUID()
+    fun `refreshRecentRelease refreshes a provider release through the Apple Music service`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val artistId = UUID.randomUUID()
+            val releaseId = UUID.randomUUID()
 
-        transaction(database) {
-            ArtistTable.insert { it[id] = artistId; it[name] = "Artist" }
+            transaction(database) {
+                ArtistTable.insert { it[id] = artistId; it[name] = "Artist" }
+            }
+            insertProviderRelease(releaseId, artistId, "Apple Only", 1000L)
+
+            coEvery { appleMusicReleaseService.fetchArtistReleases(artistId) } returns 1
+
+            val result = service.refreshRecentRelease(releaseId)
+
+            assertNotNull(result)
+            assertEquals("Apple Only", result!!.title)
+            assertEquals(ReleaseSource.Apple, result.source)
+            coVerify { appleMusicReleaseService.fetchArtistReleases(artistId) }
+            coVerify(exactly = 0) { musicBrainzService.fetchReleasesByReleaseGroup(any(), any()) }
         }
-        insertProviderRelease(releaseId, artistId, "Apple Only", 1000L)
-
-        coEvery { appleMusicReleaseService.fetchArtistReleases(artistId) } returns 1
-
-        val result = service.refreshRecentRelease(releaseId)
-
-        assertNotNull(result)
-        assertEquals("Apple Only", result!!.title)
-        assertEquals(ReleaseSource.Apple, result.source)
-        coVerify { appleMusicReleaseService.fetchArtistReleases(artistId) }
-        coVerify(exactly = 0) { musicBrainzService.fetchReleasesByReleaseGroup(any(), any()) }
-    }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
@@ -2276,7 +2537,12 @@ class ReleaseServiceTest : KoinTest {
         setup(dialect)
         mockkObject(MetadataService.Companion)
         every { MetadataService.getMetadataService(IMetadataService.MetadataType.tidal, any()) } returns tidalService
-        every { MetadataService.getMetadataService(IMetadataService.MetadataType.appleMusic, any()) } returns appleMusicService
+        every {
+            MetadataService.getMetadataService(
+                IMetadataService.MetadataType.appleMusic,
+                any()
+            )
+        } returns appleMusicService
 
         val userId = UUID.randomUUID()
         val artistId = UUID.randomUUID()
@@ -2297,7 +2563,12 @@ class ReleaseServiceTest : KoinTest {
         coEvery { musicBrainzService.fetchReleaseGroups(mbId, priority = HttpClientPriority.LOW) } returns listOf(
             MusicBrainzReleaseGroup(id = groupId, title = "New Album", firstReleaseDate = "2023-10-27")
         )
-        coEvery { musicBrainzService.fetchReleasesByArtist(mbId, priority = HttpClientPriority.LOW) } returns emptyList()
+        coEvery {
+            musicBrainzService.fetchReleasesByArtist(
+                mbId,
+                priority = HttpClientPriority.LOW
+            )
+        } returns emptyList()
         coEvery { linkResolverService.batchResolve(any(), priority = HttpClientPriority.LOW) } returns emptyList()
         coEvery { appleMusicReleaseService.findUnlinkedAppleRelease(any(), any(), any()) } returns rowId
 
@@ -2319,7 +2590,12 @@ class ReleaseServiceTest : KoinTest {
         setup(dialect)
         mockkObject(MetadataService.Companion)
         every { MetadataService.getMetadataService(IMetadataService.MetadataType.tidal, any()) } returns tidalService
-        every { MetadataService.getMetadataService(IMetadataService.MetadataType.appleMusic, any()) } returns appleMusicService
+        every {
+            MetadataService.getMetadataService(
+                IMetadataService.MetadataType.appleMusic,
+                any()
+            )
+        } returns appleMusicService
 
         val userId = UUID.randomUUID()
         val artistId = UUID.randomUUID()
@@ -2348,8 +2624,18 @@ class ReleaseServiceTest : KoinTest {
                 )
             )
         )
-        coEvery { musicBrainzService.fetchReleasesByArtist(mbId, priority = HttpClientPriority.LOW) } returns emptyList()
-        coEvery { musicBrainzService.fetchReleasesByReleaseGroup(groupId, priority = HttpClientPriority.LOW) } returns listOf(
+        coEvery {
+            musicBrainzService.fetchReleasesByArtist(
+                mbId,
+                priority = HttpClientPriority.LOW
+            )
+        } returns emptyList()
+        coEvery {
+            musicBrainzService.fetchReleasesByReleaseGroup(
+                groupId,
+                priority = HttpClientPriority.LOW
+            )
+        } returns listOf(
             MusicBrainzRelease(id = mbReleaseId, barcode = "0123456789012")
         )
         coEvery { linkResolverService.batchResolve(any(), priority = HttpClientPriority.LOW) } returns emptyList()
@@ -2381,7 +2667,12 @@ class ReleaseServiceTest : KoinTest {
         setup(dialect)
         mockkObject(MetadataService.Companion)
         every { MetadataService.getMetadataService(IMetadataService.MetadataType.tidal, any()) } returns tidalService
-        every { MetadataService.getMetadataService(IMetadataService.MetadataType.appleMusic, any()) } returns appleMusicService
+        every {
+            MetadataService.getMetadataService(
+                IMetadataService.MetadataType.appleMusic,
+                any()
+            )
+        } returns appleMusicService
 
         val artistId = UUID.randomUUID()
         val mbId = UUID.randomUUID()
@@ -2403,8 +2694,18 @@ class ReleaseServiceTest : KoinTest {
         }
         attachLink(releaseId, "deezer", "stale-999", "https://deezer.com/album/999")
 
-        coEvery { musicBrainzService.fetchReleasesByArtist(mbId, priority = HttpClientPriority.HIGH) } returns emptyList()
-        coEvery { musicBrainzService.fetchReleaseGroupById(releaseId, priority = HttpClientPriority.HIGH) } returns MusicBrainzReleaseGroup(
+        coEvery {
+            musicBrainzService.fetchReleasesByArtist(
+                mbId,
+                priority = HttpClientPriority.HIGH
+            )
+        } returns emptyList()
+        coEvery {
+            musicBrainzService.fetchReleaseGroupById(
+                releaseId,
+                priority = HttpClientPriority.HIGH
+            )
+        } returns MusicBrainzReleaseGroup(
             id = releaseId,
             title = "Album",
             firstReleaseDate = "2023-01-01"
@@ -2431,7 +2732,12 @@ class ReleaseServiceTest : KoinTest {
         setup(dialect)
         mockkObject(MetadataService.Companion)
         every { MetadataService.getMetadataService(IMetadataService.MetadataType.tidal, any()) } returns tidalService
-        every { MetadataService.getMetadataService(IMetadataService.MetadataType.appleMusic, any()) } returns appleMusicService
+        every {
+            MetadataService.getMetadataService(
+                IMetadataService.MetadataType.appleMusic,
+                any()
+            )
+        } returns appleMusicService
 
         val userId = UUID.randomUUID()
         val artistId = UUID.randomUUID()
@@ -2448,11 +2754,28 @@ class ReleaseServiceTest : KoinTest {
         }
 
         coEvery { musicBrainzService.fetchReleaseGroups(mbId, priority = HttpClientPriority.LOW) } returns listOf(
-            MusicBrainzReleaseGroup(id = groupId, title = "The Title", firstReleaseDate = "2023-01-01", primaryType = "Single")
+            MusicBrainzReleaseGroup(
+                id = groupId,
+                title = "The Title",
+                firstReleaseDate = "2023-01-01",
+                primaryType = "Single"
+            )
         )
-        coEvery { musicBrainzService.fetchReleasesByArtist(mbId, priority = HttpClientPriority.LOW) } returns emptyList()
+        coEvery {
+            musicBrainzService.fetchReleasesByArtist(
+                mbId,
+                priority = HttpClientPriority.LOW
+            )
+        } returns emptyList()
         coEvery { linkResolverService.batchResolve(any(), priority = HttpClientPriority.LOW) } returns emptyList()
-        coEvery { appleMusicService.searchAlbums(any(), any(), any(), priority = HttpClientPriority.LOW) } returns listOf(
+        coEvery {
+            appleMusicService.searchAlbums(
+                any(),
+                any(),
+                any(),
+                priority = HttpClientPriority.LOW
+            )
+        } returns listOf(
             IMetadataService.Album(
                 id = "apple-1",
                 title = "The Title - Single",
@@ -2511,28 +2834,30 @@ class ReleaseServiceTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `fetchReleaseGroupImage returns null and stores nothing for a Cover Art Archive 404 page`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        val releaseGroupId = UUID.randomUUID()
-        val notFoundPage = "<!doctype html><html lang=en><title>404 Not Found</title><h1>Not Found</h1><p>No cover art found for release group $releaseGroupId</p>"
+    fun `fetchReleaseGroupImage returns null and stores nothing for a Cover Art Archive 404 page`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val releaseGroupId = UUID.randomUUID()
+            val notFoundPage =
+                "<!doctype html><html lang=en><title>404 Not Found</title><h1>Not Found</h1><p>No cover art found for release group $releaseGroupId</p>"
 
-        val mockHttpClient = HttpClient(MockEngine { _ ->
-            respond(
-                content = notFoundPage,
-                status = HttpStatusCode.NotFound,
-                headers = headersOf("Content-Type", ContentType.Text.Html.toString())
-            )
-        }) {
-            install(ContentNegotiation) { json(ApplicationScope.json) }
+            val mockHttpClient = HttpClient(MockEngine { _ ->
+                respond(
+                    content = notFoundPage,
+                    status = HttpStatusCode.NotFound,
+                    headers = headersOf("Content-Type", ContentType.Text.Html.toString())
+                )
+            }) {
+                install(ContentNegotiation) { json(ApplicationScope.json) }
+            }
+            mockkObject(ApiClient)
+            every { ApiClient.instance } returns mockHttpClient
+
+            val result = service.fetchReleaseGroupImage(releaseGroupId)
+
+            assertNull(result)
+            coVerify(exactly = 0) { imageService.createBatch(any()) }
         }
-        mockkObject(ApiClient)
-        every { ApiClient.instance } returns mockHttpClient
-
-        val result = service.fetchReleaseGroupImage(releaseGroupId)
-
-        assertNull(result)
-        coVerify(exactly = 0) { imageService.createBatch(any()) }
-    }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
@@ -2565,40 +2890,44 @@ class ReleaseServiceTest : KoinTest {
         coVerify {
             imageService.createBatch(match {
                 it.size == 1 &&
-                    it.single().data.contentEquals(jpeg) &&
-                    it.single().origin == "https://coverartarchive.org/release-group/$releaseGroupId/front"
+                        it.single().data.contentEquals(jpeg) &&
+                        it.single().origin == "https://coverartarchive.org/release-group/$releaseGroupId/front"
             })
         }
     }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `fetchReleaseGroupImage returns null and stores nothing for a non-image 200 response`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        val releaseGroupId = UUID.randomUUID()
-        val notFoundPage = "<!doctype html><html lang=en><title>404 Not Found</title><h1>Not Found</h1><p>No cover art found for release group $releaseGroupId</p>"
+    fun `fetchReleaseGroupImage returns null and stores nothing for a non-image 200 response`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val releaseGroupId = UUID.randomUUID()
+            val notFoundPage =
+                "<!doctype html><html lang=en><title>404 Not Found</title><h1>Not Found</h1><p>No cover art found for release group $releaseGroupId</p>"
 
-        val mockHttpClient = HttpClient(MockEngine { _ ->
-            respond(
-                content = notFoundPage,
-                status = HttpStatusCode.OK,
-                headers = headersOf("Content-Type", ContentType.Text.Html.toString())
-            )
-        }) {
-            install(ContentNegotiation) { json(ApplicationScope.json) }
+            val mockHttpClient = HttpClient(MockEngine { _ ->
+                respond(
+                    content = notFoundPage,
+                    status = HttpStatusCode.OK,
+                    headers = headersOf("Content-Type", ContentType.Text.Html.toString())
+                )
+            }) {
+                install(ContentNegotiation) { json(ApplicationScope.json) }
+            }
+            mockkObject(ApiClient)
+            every { ApiClient.instance } returns mockHttpClient
+
+            val result = service.fetchReleaseGroupImage(releaseGroupId)
+
+            assertNull(result)
+            coVerify(exactly = 0) { imageService.createBatch(any()) }
         }
-        mockkObject(ApiClient)
-        every { ApiClient.instance } returns mockHttpClient
-
-        val result = service.fetchReleaseGroupImage(releaseGroupId)
-
-        assertNull(result)
-        coVerify(exactly = 0) { imageService.createBatch(any()) }
-    }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `setReleaseHidden hides a MusicBrainz entry from the feed and the artist feed shows it only with includeHidden`(dialect: DbDialect) = runBlocking {
+    fun `setReleaseHidden hides a MusicBrainz entry from the feed and the artist feed shows it only with includeHidden`(
+        dialect: DbDialect
+    ) = runBlocking {
         setup(dialect)
         val userId = UUID.randomUUID()
         val artistId = UUID.randomUUID()
@@ -2643,7 +2972,9 @@ class ReleaseServiceTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `setReleaseHidden with includeRelated hides the siblings sharing the copyright holder and records a block`(dialect: DbDialect) = runBlocking {
+    fun `setReleaseHidden with includeRelated hides the siblings sharing the copyright holder and records a block`(
+        dialect: DbDialect
+    ) = runBlocking {
         setup(dialect)
         val userId = UUID.randomUUID()
         val artistId = UUID.randomUUID()
@@ -2678,70 +3009,73 @@ class ReleaseServiceTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `setReleaseHidden with includeRelated falls back to the record label when no holder is known`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        val userId = UUID.randomUUID()
-        val artistId = UUID.randomUUID()
-        val releaseA = UUID.randomUUID()
-        val releaseB = UUID.randomUUID()
-        val releaseC = UUID.randomUUID()
+    fun `setReleaseHidden with includeRelated falls back to the record label when no holder is known`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val userId = UUID.randomUUID()
+            val artistId = UUID.randomUUID()
+            val releaseA = UUID.randomUUID()
+            val releaseB = UUID.randomUUID()
+            val releaseC = UUID.randomUUID()
 
-        seedFollowedArtist(userId, artistId)
-        insertProviderRelease(releaseA, artistId, "A", 3000L, rowRecordLabel = "Label One")
-        insertProviderRelease(releaseB, artistId, "B", 2000L, rowRecordLabel = "Label One")
-        insertProviderRelease(releaseC, artistId, "C", 1000L, rowRecordLabel = "Label Two")
+            seedFollowedArtist(userId, artistId)
+            insertProviderRelease(releaseA, artistId, "A", 3000L, rowRecordLabel = "Label One")
+            insertProviderRelease(releaseB, artistId, "B", 2000L, rowRecordLabel = "Label One")
+            insertProviderRelease(releaseC, artistId, "C", 1000L, rowRecordLabel = "Label Two")
 
-        assertEquals(2, service.setReleaseHidden(userId, releaseA, true, includeRelated = true))
+            assertEquals(2, service.setReleaseHidden(userId, releaseA, true, includeRelated = true))
 
-        assertEquals(setOf(releaseA, releaseB), hiddenReleaseIds())
-        assertEquals(listOf("C"), service.getRecentReleases(userId).data.map { it.title })
+            assertEquals(setOf(releaseA, releaseB), hiddenReleaseIds())
+            assertEquals(listOf("C"), service.getRecentReleases(userId).data.map { it.title })
 
-        val rule = sourceRules().single()
-        assertEquals(ArtistSourceRuleKind.LABEL, rule.kind)
-        assertEquals("Label One", rule.value)
-        assertEquals(ArtistSourceRulePolarity.BLOCK, rule.rule)
-    }
-
-    @ParameterizedTest
-    @EnumSource(DbDialect::class)
-    fun `setReleaseHidden with includeRelated on a MusicBrainz entry hides only that entry`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        val userId = UUID.randomUUID()
-        val artistId = UUID.randomUUID()
-        val releaseId = UUID.randomUUID()
-        val otherReleaseId = UUID.randomUUID()
-
-        seedFollowedArtist(userId, artistId)
-        insertRecentRelease(releaseId, artistId, "MB One", 2000L)
-        insertRecentRelease(otherReleaseId, artistId, "MB Two", 1000L)
-
-        assertEquals(1, service.setReleaseHidden(userId, releaseId, true, includeRelated = true))
-
-        assertEquals(setOf(releaseId), hiddenReleaseIds())
-        assertTrue(sourceRules().isEmpty())
-        assertEquals(listOf("MB Two"), service.getRecentReleases(userId).data.map { it.title })
-    }
+            val rule = sourceRules().single()
+            assertEquals(ArtistSourceRuleKind.LABEL, rule.kind)
+            assertEquals("Label One", rule.value)
+            assertEquals(ArtistSourceRulePolarity.BLOCK, rule.rule)
+        }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `setReleaseHidden unhide with includeRelated removes the block and shows the siblings again`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        val userId = UUID.randomUUID()
-        val artistId = UUID.randomUUID()
-        val releaseA = UUID.randomUUID()
-        val releaseB = UUID.randomUUID()
+    fun `setReleaseHidden with includeRelated on a MusicBrainz entry hides only that entry`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val userId = UUID.randomUUID()
+            val artistId = UUID.randomUUID()
+            val releaseId = UUID.randomUUID()
+            val otherReleaseId = UUID.randomUUID()
 
-        seedFollowedArtist(userId, artistId)
-        insertProviderRelease(releaseA, artistId, "A", 2000L, rowCopyrightHolder = "X")
-        insertProviderRelease(releaseB, artistId, "B", 1000L, rowCopyrightHolder = "X")
+            seedFollowedArtist(userId, artistId)
+            insertRecentRelease(releaseId, artistId, "MB One", 2000L)
+            insertRecentRelease(otherReleaseId, artistId, "MB Two", 1000L)
 
-        assertEquals(2, service.setReleaseHidden(userId, releaseA, true, includeRelated = true))
-        assertEquals(2, service.setReleaseHidden(userId, releaseA, false, includeRelated = true))
+            assertEquals(1, service.setReleaseHidden(userId, releaseId, true, includeRelated = true))
 
-        assertTrue(hiddenReleaseIds().isEmpty())
-        assertTrue(sourceRules().isEmpty())
-        assertEquals(listOf("A", "B"), service.getRecentReleases(userId).data.map { it.title })
-    }
+            assertEquals(setOf(releaseId), hiddenReleaseIds())
+            assertTrue(sourceRules().isEmpty())
+            assertEquals(listOf("MB Two"), service.getRecentReleases(userId).data.map { it.title })
+        }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `setReleaseHidden unhide with includeRelated removes the block and shows the siblings again`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val userId = UUID.randomUUID()
+            val artistId = UUID.randomUUID()
+            val releaseA = UUID.randomUUID()
+            val releaseB = UUID.randomUUID()
+
+            seedFollowedArtist(userId, artistId)
+            insertProviderRelease(releaseA, artistId, "A", 2000L, rowCopyrightHolder = "X")
+            insertProviderRelease(releaseB, artistId, "B", 1000L, rowCopyrightHolder = "X")
+
+            assertEquals(2, service.setReleaseHidden(userId, releaseA, true, includeRelated = true))
+            assertEquals(2, service.setReleaseHidden(userId, releaseA, false, includeRelated = true))
+
+            assertTrue(hiddenReleaseIds().isEmpty())
+            assertTrue(sourceRules().isEmpty())
+            assertEquals(listOf("A", "B"), service.getRecentReleases(userId).data.map { it.title })
+        }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
@@ -2782,32 +3116,39 @@ class ReleaseServiceTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `setReleaseHidden with includeRelated still records the block and hides the group`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        val userId = UUID.randomUUID()
-        val artistId = UUID.randomUUID()
-        val plainId = UUID.randomUUID()
-        val explicitId = UUID.randomUUID()
-        val unrelatedId = UUID.randomUUID()
-        val date = Clock.System.now().toEpochMilliseconds() - 10.days.inWholeMilliseconds
+    fun `setReleaseHidden with includeRelated still records the block and hides the group`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val userId = UUID.randomUUID()
+            val artistId = UUID.randomUUID()
+            val plainId = UUID.randomUUID()
+            val explicitId = UUID.randomUUID()
+            val unrelatedId = UUID.randomUUID()
+            val date = Clock.System.now().toEpochMilliseconds() - 10.days.inWholeMilliseconds
 
-        seedFollowedArtist(userId, artistId)
-        insertProviderRelease(plainId, artistId, "Album", date, rowCopyrightHolder = "X")
-        insertProviderRelease(explicitId, artistId, "Album (Explicit)", date, rowCopyrightHolder = "X")
-        insertProviderRelease(unrelatedId, artistId, "Unrelated", date - 200.days.inWholeMilliseconds, rowCopyrightHolder = "X")
+            seedFollowedArtist(userId, artistId)
+            insertProviderRelease(plainId, artistId, "Album", date, rowCopyrightHolder = "X")
+            insertProviderRelease(explicitId, artistId, "Album (Explicit)", date, rowCopyrightHolder = "X")
+            insertProviderRelease(
+                unrelatedId,
+                artistId,
+                "Unrelated",
+                date - 200.days.inWholeMilliseconds,
+                rowCopyrightHolder = "X"
+            )
 
-        assertEquals(3, service.setReleaseHidden(userId, plainId, true, includeRelated = true))
+            assertEquals(3, service.setReleaseHidden(userId, plainId, true, includeRelated = true))
 
-        assertEquals(setOf(plainId, explicitId, unrelatedId), hiddenReleaseIds())
-        assertTrue(service.getRecentReleases(userId).data.isEmpty())
+            assertEquals(setOf(plainId, explicitId, unrelatedId), hiddenReleaseIds())
+            assertTrue(service.getRecentReleases(userId).data.isEmpty())
 
-        val rule = sourceRules().single()
-        assertEquals(artistId.toString(), rule.artistId)
-        assertEquals("apple", rule.provider)
-        assertEquals(ArtistSourceRuleKind.COPYRIGHT_HOLDER, rule.kind)
-        assertEquals("X", rule.value)
-        assertEquals(ArtistSourceRulePolarity.BLOCK, rule.rule)
-    }
+            val rule = sourceRules().single()
+            assertEquals(artistId.toString(), rule.artistId)
+            assertEquals("apple", rule.provider)
+            assertEquals(ArtistSourceRuleKind.COPYRIGHT_HOLDER, rule.kind)
+            assertEquals("X", rule.value)
+            assertEquals(ArtistSourceRulePolarity.BLOCK, rule.rule)
+        }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
@@ -2893,44 +3234,45 @@ class ReleaseServiceTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `getArtistRecentReleases exposes suspect, suspectReason, recordLabel and copyright of provider rows`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        val artistId = UUID.randomUUID()
-        val providerId = UUID.randomUUID()
-        val mbId = UUID.randomUUID()
+    fun `getArtistRecentReleases exposes suspect, suspectReason, recordLabel and copyright of provider rows`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val artistId = UUID.randomUUID()
+            val providerId = UUID.randomUUID()
+            val mbId = UUID.randomUUID()
 
-        transaction(database) {
-            ArtistTable.insert { it[id] = artistId; it[name] = "Artist" }
+            transaction(database) {
+                ArtistTable.insert { it[id] = artistId; it[name] = "Artist" }
+            }
+            insertProviderRelease(
+                providerId,
+                artistId,
+                "Apple Release",
+                2000L,
+                rowCopyrightHolder = "h",
+                rowRecordLabel = "Label One",
+                rowCopyright = "2024 Label One",
+                rowSuspect = true,
+                rowSuspectReason = "unknown label"
+            )
+            insertRecentRelease(mbId, artistId, "MB Release", 1000L)
+
+            val byTitle = service.getArtistRecentReleases(artistId).data.associateBy { it.title }
+
+            val apple = byTitle.getValue("Apple Release")
+            assertTrue(apple.suspect)
+            assertEquals("unknown label", apple.suspectReason)
+            assertEquals("Label One", apple.recordLabel)
+            assertEquals("2024 Label One", apple.copyright)
+            assertFalse(apple.hidden)
+
+            val musicBrainz = byTitle.getValue("MB Release")
+            assertFalse(musicBrainz.suspect)
+            assertNull(musicBrainz.suspectReason)
+            assertNull(musicBrainz.recordLabel)
+            assertNull(musicBrainz.copyright)
+            assertFalse(musicBrainz.hidden)
         }
-        insertProviderRelease(
-            providerId,
-            artistId,
-            "Apple Release",
-            2000L,
-            rowCopyrightHolder = "h",
-            rowRecordLabel = "Label One",
-            rowCopyright = "2024 Label One",
-            rowSuspect = true,
-            rowSuspectReason = "unknown label"
-        )
-        insertRecentRelease(mbId, artistId, "MB Release", 1000L)
-
-        val byTitle = service.getArtistRecentReleases(artistId).data.associateBy { it.title }
-
-        val apple = byTitle.getValue("Apple Release")
-        assertTrue(apple.suspect)
-        assertEquals("unknown label", apple.suspectReason)
-        assertEquals("Label One", apple.recordLabel)
-        assertEquals("2024 Label One", apple.copyright)
-        assertFalse(apple.hidden)
-
-        val musicBrainz = byTitle.getValue("MB Release")
-        assertFalse(musicBrainz.suspect)
-        assertNull(musicBrainz.suspectReason)
-        assertNull(musicBrainz.recordLabel)
-        assertNull(musicBrainz.copyright)
-        assertFalse(musicBrainz.hidden)
-    }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
@@ -2964,7 +3306,12 @@ class ReleaseServiceTest : KoinTest {
         setup(dialect)
         mockkObject(MetadataService.Companion)
         every { MetadataService.getMetadataService(IMetadataService.MetadataType.tidal, any()) } returns tidalService
-        every { MetadataService.getMetadataService(IMetadataService.MetadataType.appleMusic, any()) } returns appleMusicService
+        every {
+            MetadataService.getMetadataService(
+                IMetadataService.MetadataType.appleMusic,
+                any()
+            )
+        } returns appleMusicService
 
         val userId = UUID.randomUUID()
         val artistId = UUID.randomUUID()
@@ -3008,8 +3355,18 @@ class ReleaseServiceTest : KoinTest {
         runBlocking {
             setup(dialect)
             mockkObject(MetadataService.Companion)
-            every { MetadataService.getMetadataService(IMetadataService.MetadataType.tidal, any()) } returns tidalService
-            every { MetadataService.getMetadataService(IMetadataService.MetadataType.appleMusic, any()) } returns appleMusicService
+            every {
+                MetadataService.getMetadataService(
+                    IMetadataService.MetadataType.tidal,
+                    any()
+                )
+            } returns tidalService
+            every {
+                MetadataService.getMetadataService(
+                    IMetadataService.MetadataType.appleMusic,
+                    any()
+                )
+            } returns appleMusicService
 
             val userId = UUID.randomUUID()
             val artistId = UUID.randomUUID()
@@ -3042,7 +3399,12 @@ class ReleaseServiceTest : KoinTest {
         setup(dialect)
         mockkObject(MetadataService.Companion)
         every { MetadataService.getMetadataService(IMetadataService.MetadataType.tidal, any()) } returns tidalService
-        every { MetadataService.getMetadataService(IMetadataService.MetadataType.appleMusic, any()) } returns appleMusicService
+        every {
+            MetadataService.getMetadataService(
+                IMetadataService.MetadataType.appleMusic,
+                any()
+            )
+        } returns appleMusicService
 
         val userId = UUID.randomUUID()
         val artistId = UUID.randomUUID()
@@ -3059,7 +3421,12 @@ class ReleaseServiceTest : KoinTest {
         coEvery { musicBrainzService.fetchReleaseGroups(mbId, priority = HttpClientPriority.LOW) } returns listOf(
             MusicBrainzReleaseGroup(id = releaseId, title = "Cached Album", firstReleaseDate = "2023-10-27")
         )
-        coEvery { musicBrainzService.fetchReleasesByReleaseGroup(releaseId, priority = HttpClientPriority.LOW) } returns listOf(
+        coEvery {
+            musicBrainzService.fetchReleasesByReleaseGroup(
+                releaseId,
+                priority = HttpClientPriority.LOW
+            )
+        } returns listOf(
             MusicBrainzRelease(
                 id = groupReleaseId,
                 title = "Cached Album",

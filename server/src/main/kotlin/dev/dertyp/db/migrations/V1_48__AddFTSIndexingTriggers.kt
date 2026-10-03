@@ -42,7 +42,7 @@ class V1_48__AddFTSIndexingTriggers : BaseJavaMigration() {
             END;
             $$ LANGUAGE plpgsql;
             """.trimIndent(),
-            
+
             "DROP TRIGGER IF EXISTS artist_change_indexing_trigger ON artist",
             "CREATE TRIGGER artist_change_indexing_trigger AFTER INSERT OR UPDATE OR DELETE ON artist FOR EACH ROW EXECUTE FUNCTION trigger_on_artist_change()",
 

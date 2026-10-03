@@ -88,7 +88,8 @@ class LyricsService : ILyricsService, Service() {
                     connectTimeoutMillis = 10.seconds.inWholeMilliseconds
                     socketTimeoutMillis = 15.minutes.inWholeMilliseconds
                 }
-                setBody(mapOf(
+                setBody(
+                    mapOf(
                     "path" to file.absolutePath,
                     "artist" to (song.artists.firstOrNull()?.name ?: ""),
                     "title" to song.title,
