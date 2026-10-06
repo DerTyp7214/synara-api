@@ -32,7 +32,7 @@ import kotlin.test.assertIs
 
 class SubsonicAuthTest : KoinTest {
     private val userId = UUID.randomUUID()
-    private val testUser = User(id = userId, username = "tester", passwordHash = "irrelevant")
+    private val testUser = User(id = userId, username = "tester")
     private val userService = mockk<UserService>()
 
     private fun md5Hex(input: String): String =

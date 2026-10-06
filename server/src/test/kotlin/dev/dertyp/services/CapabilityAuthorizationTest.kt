@@ -75,7 +75,6 @@ class CapabilityAuthorizationTest : KoinTest {
         val userWithoutEdit = User(
             id = UUID.randomUUID(),
             username = "noedit",
-            passwordHash = "",
             isAdmin = false,
             capabilities = emptyList()
         )
@@ -100,7 +99,6 @@ class CapabilityAuthorizationTest : KoinTest {
         val userWithEdit = User(
             id = UUID.randomUUID(),
             username = "withedit",
-            passwordHash = "",
             isAdmin = false,
             capabilities = listOf(UserCapability.EDIT)
         )
@@ -119,7 +117,6 @@ class CapabilityAuthorizationTest : KoinTest {
         val adminUser = User(
             id = UUID.randomUUID(),
             username = "admin",
-            passwordHash = "",
             isAdmin = true,
             capabilities = emptyList()
         )
@@ -185,7 +182,6 @@ class CapabilityAuthorizationTest : KoinTest {
             val userWithoutEdit = User(
                 id = UUID.randomUUID(),
                 username = "podcast-noedit",
-                passwordHash = "",
                 isAdmin = false,
                 capabilities = emptyList()
             )
@@ -232,7 +228,6 @@ class CapabilityAuthorizationTest : KoinTest {
         val userWithEdit = User(
             id = UUID.randomUUID(),
             username = "podcast-withedit",
-            passwordHash = "",
             isAdmin = false,
             capabilities = listOf(UserCapability.PODCAST_EDIT),
         )
@@ -252,7 +247,6 @@ class CapabilityAuthorizationTest : KoinTest {
             val adminUser = User(
                 id = UUID.randomUUID(),
                 username = "podcast-admin",
-                passwordHash = "",
                 isAdmin = true,
                 capabilities = emptyList()
             )
@@ -272,7 +266,6 @@ class CapabilityAuthorizationTest : KoinTest {
             val userWithoutEdit = User(
                 id = UUID.randomUUID(),
                 username = "podcast-noedit2",
-                passwordHash = "",
                 isAdmin = false,
                 capabilities = emptyList()
             )
@@ -290,7 +283,6 @@ class CapabilityAuthorizationTest : KoinTest {
         val userWithoutAdmin = User(
             id = UUID.randomUUID(),
             username = "podcast-nonadmin",
-            passwordHash = "",
             isAdmin = false,
             capabilities = emptyList()
         )
@@ -312,7 +304,6 @@ class CapabilityAuthorizationTest : KoinTest {
         val adminUser = User(
             id = UUID.randomUUID(),
             username = "podcast-delete-admin",
-            passwordHash = "",
             isAdmin = true,
             capabilities = emptyList()
         )
@@ -344,7 +335,6 @@ class CapabilityAuthorizationTest : KoinTest {
         val userWithoutEdit = User(
             id = UUID.randomUUID(),
             username = "release-noedit",
-            passwordHash = "",
             isAdmin = false,
             capabilities = emptyList()
         )
@@ -373,7 +363,6 @@ class CapabilityAuthorizationTest : KoinTest {
         val userWithEdit = User(
             id = UUID.randomUUID(),
             username = "release-withedit",
-            passwordHash = "",
             isAdmin = false,
             capabilities = listOf(UserCapability.EDIT)
         )
@@ -390,7 +379,6 @@ class CapabilityAuthorizationTest : KoinTest {
         val adminUser = User(
             id = UUID.randomUUID(),
             username = "release-admin",
-            passwordHash = "",
             isAdmin = true,
             capabilities = emptyList()
         )

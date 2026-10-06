@@ -34,7 +34,7 @@ class UserPlaylistBackupServiceTest {
 
     @Test
     fun `createBackup should save playlists and rotate`() = runBlocking {
-        val user = User(id = UUID.randomUUID(), username = "testuser", passwordHash = "hash")
+        val user = User(id = UUID.randomUUID(), username = "testuser")
         val userPlaylistService = mockk<UserPlaylistService>()
         val imageService = mockk<ImageService>()
         val userService = mockk<UserService>()
@@ -71,7 +71,7 @@ class UserPlaylistBackupServiceTest {
 
     @Test
     fun `restoreBackup should call upsert on service`() = runBlocking {
-        val user = User(id = UUID.randomUUID(), username = "testuser", passwordHash = "hash")
+        val user = User(id = UUID.randomUUID(), username = "testuser")
         val userPlaylistService = mockk<UserPlaylistService>(relaxed = true)
         val imageService = mockk<ImageService>(relaxed = true)
         val userService = mockk<UserService>()
@@ -104,7 +104,7 @@ class UserPlaylistBackupServiceTest {
 
     @Test
     fun `listBackups should return all backups for user`() = runBlocking {
-        val user = User(id = UUID.randomUUID(), username = "testuser", passwordHash = "hash")
+        val user = User(id = UUID.randomUUID(), username = "testuser")
         val userPlaylistService = mockk<UserPlaylistService>()
         val imageService = mockk<ImageService>()
         val userService = mockk<UserService>()
@@ -126,7 +126,7 @@ class UserPlaylistBackupServiceTest {
 
     @Test
     fun `deleteBackup should remove file`() = runBlocking {
-        val user = User(id = UUID.randomUUID(), username = "testuser", passwordHash = "hash")
+        val user = User(id = UUID.randomUUID(), username = "testuser")
         val userPlaylistService = mockk<UserPlaylistService>()
         val imageService = mockk<ImageService>()
         val userService = mockk<UserService>()
@@ -147,7 +147,7 @@ class UserPlaylistBackupServiceTest {
 
     @Test
     fun `getBackupContent should return decoded backup`() = runBlocking {
-        val user = User(id = UUID.randomUUID(), username = "testuser", passwordHash = "hash")
+        val user = User(id = UUID.randomUUID(), username = "testuser")
         val userPlaylistService = mockk<UserPlaylistService>()
         val imageService = mockk<ImageService>()
         val userService = mockk<UserService>()
@@ -170,8 +170,8 @@ class UserPlaylistBackupServiceTest {
 
     @Test
     fun `backupAllUsers should create backups for all users`() = runBlocking {
-        val user1 = User(id = UUID.randomUUID(), username = "user1", passwordHash = "hash")
-        val user2 = User(id = UUID.randomUUID(), username = "user2", passwordHash = "hash")
+        val user1 = User(id = UUID.randomUUID(), username = "user1")
+        val user2 = User(id = UUID.randomUUID(), username = "user2")
 
         val userService = mockk<UserService>()
         coEvery { userService.queryUser() } returns listOf(user1, user2)

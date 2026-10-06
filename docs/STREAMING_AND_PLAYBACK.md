@@ -17,12 +17,12 @@ Notes that matter in practice:
 - **The original is not transcoded** — whatever the importer stored is what you get. `downloadSong` with `quality` ≤ 0 also returns the original.
 - **Transcoding happens during your request.** The first `downloadSong` for a given (file, kbps, format) runs ffmpeg to completion before the first byte arrives; afterwards the result is cached on disk and reused. `force` defaults to `true`, which compares the cached copy's duration with the source and re-transcodes on a mismatch; `force=false` returns a cached copy immediately and is the right choice for a player.
 - **WAV and AIFF are converted to FLAC** for clients that don't support `LOSSLESS_WAV_AIFF` (see [API_CONSTANTS.md#features](API_CONSTANTS.md#features)), once, cached, and served in place of the original. Clients that support it receive the real file.
-- **Atmos is gated twice.** Without `DOLBY_ATMOS` support the `atmos` field is stripped from songs and `streamSongAtmos` answers `404`. Offer the Atmos stream only on platforms that actually decode E-AC-3 JOC; clients do not ship their own decoders, and a variant that cannot be decoded is simply not offered.
+- **Atmos is gated twice.** Without `DOLBY_ATMOS` support `streamSongAtmos` answers `404`, while songs still carry the `atmos` field. Offer the Atmos stream only on platforms that actually decode E-AC-3 JOC; clients do not ship their own decoders, and a variant that cannot be decoded is simply not offered.
 - Everything else in the library that is not a song follows its own route: podcasts below, radio below, and never through `streamSong`.
 
 ### What the song tells you
 
-[`Song`/`UserSong`](MODELS.md#devdertypdatausersong) carry, once the client's `X-Api-Version` supports `AUDIO_INFO` (see [API_CONSTANTS.md#features](API_CONSTANTS.md#features)), an `audio` object and — when one exists — an `atmos` object of the same shape ([`AudioInfo`](MODELS.md#devdertypdataaudioinfo)):
+[`Song`/`UserSong`](MODELS.md#devdertypdatausersong) carry an `audio` object and — when one exists — an `atmos` object of the same shape ([`AudioInfo`](MODELS.md#devdertypdataaudioinfo)):
 
 | Field | Meaning |
 |---|---|
@@ -33,7 +33,7 @@ Notes that matter in practice:
 | `fileSize` | bytes |
 | `channels` | 2 for stereo, 6 for 5.1 |
 
-Use them to decide *before* fetching: pick Atmos when `atmos != null` and your platform decodes it, the original when the connection allows `audio.fileSize`, otherwise a `downloadSong` quality. Without `AUDIO_INFO` support the same numbers arrive in the flat, deprecated `sampleRate`/`bitsPerSample`/`bitRate`/`fileSize` fields instead.
+Use them to decide *before* fetching: pick Atmos when `atmos != null` and your platform decodes it, the original when the connection allows `audio.fileSize`, otherwise a `downloadSong` quality.
 
 `duration` is milliseconds. `audioStartMs` is the offset of the first audible sound (or `null` when the song has not been analysed) — useful to skip leading silence. `coverId`, `blurHash`, `animatedCoverId` and `animatedCoverImageId` are covered under *Images* below.
 
@@ -114,7 +114,7 @@ Reporting is what makes now-playing, listening statistics and ListenBrainz work.
 2. **On every playback event and while playing** — `POST /scrobble/reportPlayback` with [`PlaybackReport`](MODELS.md#devdertypdataplaybackreport): `{"songId": …, "positionMs": 12345, "isPlaying": true, "sentAt": <client epoch ms>}`. Send it on play, pause, resume and seek, and every 10 to 15 seconds while playing. The response is the server's epoch milliseconds at receipt, so you can measure the offset between client and server clocks; `sentAt` lets the server compensate transport delay.
 3. **On finish** — `POST /scrobble/listened` with [`ScrobbleRequest`](MODELS.md#devdertypdatascrobblerequest): `{"songId": …, "listenedAt": <epoch ms>, "msPlayed": …}`. `listenedAt` defaults to the server's current time.
 4. **On stop** — `POST /scrobble/clearNowPlaying`.
-5. **To follow along** — `GET /scrobble/recentListensFlow?limit=20` is an SSE stream of [`RecentListens`](MODELS.md#devdertypdatarecentlistens) (`nowPlaying` plus the recent list), debounced by 100 ms; `limit` is clamped to 1…1000. `GET /scrobble/recentListens?limit=20` returns the same once. `GET /scrobble/recentArtists` and `GET /scrobble/recentAlbums` (plus their `Flow` variants) list the recently listened artists and albums with the time each was last played, most recent first.
+5. **To follow along** — `GET /scrobble/recentListens?limit=20` returns [`RecentListens`](MODELS.md#devdertypdatarecentlistens) (`nowPlaying` plus the recent list); `limit` is clamped to 1…1000. `GET /change/observeChanges` is an SSE stream that reports the `LISTENS` topic whenever they change, so read `recentListens` again then. `GET /scrobble/recentArtists` and `GET /scrobble/recentAlbums` list the recently listened artists and albums with the time each was last played, most recent first.
 
 All five take a JWT; none of them accept an episode id — podcasts have their own reporting, described above.
 

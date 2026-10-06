@@ -31,9 +31,9 @@ import org.junit.jupiter.api.Test
 import java.util.UUID
 
 class CoverContributionTest {
-    private val owner = User(UUID.randomUUID(), "owner", passwordHash = "")
-    private val stranger = User(UUID.randomUUID(), "stranger", passwordHash = "")
-    private val admin = User(UUID.randomUUID(), "admin", passwordHash = "", isAdmin = true)
+    private val owner = User(UUID.randomUUID(), "owner")
+    private val stranger = User(UUID.randomUUID(), "stranger")
+    private val admin = User(UUID.randomUUID(), "admin", isAdmin = true)
     private val playlistId = UUID.randomUUID()
     private val target = CoverTarget(CoverTargetType.PLAYLIST, playlistId)
     private val client = ClientInfo(ApiVersion.CURRENT, UiSchemaVersion.CURRENT, "en")

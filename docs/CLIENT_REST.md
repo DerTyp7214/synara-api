@@ -106,11 +106,11 @@ Error bodies are **plain text**, not JSON. Treat a `404` as "no such thing" rath
 
 Any method returning `Flow<T>` (other than `Flow<ByteArray>`) is an SSE endpoint: `Content-Type: text/event-stream`, `Cache-Control: no-cache`, one JSON object per `data:` line, no event names and no ids. The stream stays open until you close it or the server shuts down; `null` items are skipped. Reconnect yourself — there is no `Last-Event-ID` handling.
 
-Whether the first event arrives immediately depends on the stream. `GET /scrobble/recentListensFlow?limit=5` emits the current state right away; `GET /queue/observeQueue` emits only after a write, so a fresh subscription stays silent until something actually changes — read `GET /queue/queueInfo` once for the initial state. `GET /clientRequest/connect?description=`, `GET /remoteControl/observeStatus/{sessionId}` (see [STREAMING_AND_PLAYBACK.md](STREAMING_AND_PLAYBACK.md)) and `GET /change/observeChanges` behave like the latter, except `observeStatus` replays the last known status immediately. `observeChanges` only ever names the topic that changed (`ONLINE_DEVICES`, `HOME_CARDS`, `LISTENS`, `LISTENBRAINZ_STATUS`) and carries no data, so the client reads the actual state with the regular getter — `getOnlineDevices`, `getHomeCards`, `recentListens`/`recentArtists`/`recentAlbums`, or ListenBrainz's `getStatus`.
+Whether the first event arrives immediately depends on the stream. `GET /listenBackup/observeState` emits the current state right away; `GET /queue/observeQueue` emits only after a write, so a fresh subscription stays silent until something actually changes — read `GET /queue/queueInfo` once for the initial state. `GET /clientRequest/connect?description=`, `GET /remoteControl/observeStatus/{sessionId}` (see [STREAMING_AND_PLAYBACK.md](STREAMING_AND_PLAYBACK.md)) and `GET /change/observeChanges` behave like the latter, except `observeStatus` replays the last known status immediately. `observeChanges` only ever names the topic that changed (`ONLINE_DEVICES`, `HOME_CARDS`, `LISTENS`, `LISTENBRAINZ_STATUS`) and carries no data, so the client reads the actual state with the regular getter — `getOnlineDevices`, `getHomeCards`, `recentListens`/`recentArtists`/`recentAlbums`, or ListenBrainz's `getStatus`.
 
 ```bash
 curl -N -H "Authorization: Bearer $TOKEN" -H 'X-Api-Version: 6' \
-  'http://localhost:8080/scrobble/recentListensFlow?limit=5'
+  'http://localhost:8080/queue/observeQueue'
 ```
 
 ```bash
@@ -121,22 +121,22 @@ curl -N -H "Authorization: Bearer $TOKEN" -H 'X-Api-Version: 6' -G \
 
 ```ts
 document.cookie = `synara-auth=${token}; path=/; SameSite=Strict`;
-const events = new EventSource("/scrobble/recentListensFlow?limit=5");
+const events = new EventSource("/queue/observeQueue");
 events.onmessage = (event) => {
-  const listens = JSON.parse(event.data);
-  console.log(listens.nowPlaying?.song.title, listens.recent.length);
+  const info = JSON.parse(event.data);
+  console.log(info.version, info.total);
 };
 ```
 
 ```swift
-var request = URLRequest(url: URL(string: "\(base)/scrobble/recentListensFlow?limit=5")!)
+var request = URLRequest(url: URL(string: "\(base)/queue/observeQueue")!)
 request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
 request.setValue("6", forHTTPHeaderField: "X-Api-Version")
 
 let (stream, _) = try await URLSession.shared.bytes(for: request)
 for try await line in stream.lines where line.hasPrefix("data: ") {
     let payload = Data(line.dropFirst(6).utf8)
-    handle(try JSONDecoder().decode(RecentListens.self, from: payload))
+    handle(try JSONDecoder().decode(QueueInfo.self, from: payload))
 }
 ```
 

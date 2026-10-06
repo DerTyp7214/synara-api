@@ -1,11 +1,7 @@
 package dev.dertyp.services
 
 import dev.dertyp.core.ChangeNotifier
-import dev.dertyp.data.Album
 import dev.dertyp.data.ChangeTopic
-import dev.dertyp.data.Artist
-import dev.dertyp.data.ListenedAlbum
-import dev.dertyp.data.ListenedArtist
 import dev.dertyp.data.ListenedSong
 import dev.dertyp.data.PlaybackReport
 import dev.dertyp.data.RecentListens
@@ -23,7 +19,6 @@ import io.mockk.unmockkStatic
 import io.mockk.verify
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.BufferOverflow
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -79,27 +74,9 @@ class ScrobbleServiceTest : KoinTest {
         return song
     }
 
-    private fun artistStub(id: UUID): Artist {
-        val artist = mockk<Artist>(relaxed = true)
-        every { artist.id } returns id
-        return artist
-    }
-
-    private fun albumStub(id: UUID): Album {
-        val album = mockk<Album>(relaxed = true)
-        every { album.id } returns id
-        return album
-    }
-
     private fun collect(service: ScrobbleService, user: UUID): List<RecentListens> {
         val emissions = CopyOnWriteArrayList<RecentListens>()
         collectorScope.launch { service.recentListensFlow(user, 10).collect { emissions.add(it) } }
-        return emissions
-    }
-
-    private fun <T> collectFlow(flow: Flow<T>): List<T> {
-        val emissions = CopyOnWriteArrayList<T>()
-        collectorScope.launch { flow.collect { emissions.add(it) } }
         return emissions
     }
 
@@ -423,42 +400,6 @@ class ScrobbleServiceTest : KoinTest {
 
         assertEquals(songId, result.nowPlaying?.song?.id)
         assertEquals(recent, result.recent)
-    }
-
-    @Test
-    fun `recentArtistsFlow emits on start and re-emits after a listen change`() = runBlocking {
-        setup()
-        val service = ScrobbleService()
-        val user = UUID.randomUUID()
-        val artistA = ListenedArtist(artist = artistStub(UUID.randomUUID()), lastListenedAt = 100L)
-        val artistB = ListenedArtist(artist = artistStub(UUID.randomUUID()), lastListenedAt = 200L)
-        coEvery { listenService.recentArtists(user, 10) } returns listOf(artistA)
-
-        val emissions = collectFlow(service.recentArtistsFlow(user, 10))
-        awaitCondition { emissions.isNotEmpty() }
-        assertEquals(listOf(artistA), emissions.last())
-
-        coEvery { listenService.recentArtists(user, 10) } returns listOf(artistB)
-        listenChanges.emit(Unit)
-        awaitCondition { emissions.last() == listOf(artistB) }
-    }
-
-    @Test
-    fun `recentAlbumsFlow emits on start and re-emits after a listen change`() = runBlocking {
-        setup()
-        val service = ScrobbleService()
-        val user = UUID.randomUUID()
-        val albumA = ListenedAlbum(album = albumStub(UUID.randomUUID()), lastListenedAt = 100L)
-        val albumB = ListenedAlbum(album = albumStub(UUID.randomUUID()), lastListenedAt = 200L)
-        coEvery { listenService.recentAlbums(user, 10) } returns listOf(albumA)
-
-        val emissions = collectFlow(service.recentAlbumsFlow(user, 10))
-        awaitCondition { emissions.isNotEmpty() }
-        assertEquals(listOf(albumA), emissions.last())
-
-        coEvery { listenService.recentAlbums(user, 10) } returns listOf(albumB)
-        listenChanges.emit(Unit)
-        awaitCondition { emissions.last() == listOf(albumB) }
     }
 
     @Test

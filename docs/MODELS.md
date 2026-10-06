@@ -349,7 +349,6 @@ Contains metadata about a collection of songs released together.
 | `originalId` | `String`? | The original ID of the album on external sources. |
 | `barcode` | `String`? | The barcode or UPC of the album. |
 | `musicBrainzId` | `PlatformUUID`? | The MusicBrainz Release unique identifier. |
-| `musicbrainzId` | `PlatformUUID`? | Old name, used for clients below API version 8. |
 | `animatedCoverId` | `PlatformUUID`? | The animated cover unique identifier. |
 | `animatedCoverImageId` | `PlatformUUID`? | Identifier of the still Image from the animated cover's first frame. |
 | `animatedCoverBlurHash` | `String`? | BlurHash of the animated cover's first frame. |
@@ -414,7 +413,6 @@ Contains metadata about a music artist or group.
 | `imageId` | `PlatformUUID`? | The artist image unique identifier. |
 | `blurHash` | `String`? | The blur hash of the artist image. |
 | `musicBrainzId` | `PlatformUUID`? | The MusicBrainz Artist unique identifier. |
-| `musicbrainzId` | `PlatformUUID`? | Old name, used for clients below API version 8. |
 | `isFollowed` | `Boolean` | Whether the current user is following this artist. |
 | `creditedName` | `String`? | The name this artist was credited as in the current song/album context, if different from the canonical name. |
 | `joinPhrase` | `String`? | The phrase that follows this artist in the credit of the current song/album context, such as " & " or " feat. ". Null when the credit source has none. |
@@ -440,7 +438,6 @@ An artist as credited on a song or album. Carries the same fields as a full arti
 | `imageId` | `PlatformUUID`? | The artist image unique identifier. |
 | `blurHash` | `String`? | The blur hash of the artist image. |
 | `musicBrainzId` | `PlatformUUID`? | The MusicBrainz Artist unique identifier. |
-| `musicbrainzId` | `PlatformUUID`? | Old name, used for clients below API version 8. |
 | `isFollowed` | `Boolean` | Whether the current user is following this artist. |
 | `creditedName` | `String`? | The name this artist was credited as in the current song/album context, if different from the canonical name. |
 | `joinPhrase` | `String`? | The phrase that follows this artist in the credit of the current song/album context, such as " & " or " feat. ". Null when the credit source has none. |
@@ -758,7 +755,6 @@ A song matched by a collection search, with how it belongs to the collection.
 | :--- | :--- | :--- |
 | `song` | [UserSong](#devdertypdatausersong) | The matched song. |
 | `directMember` | `Boolean` | True when the song is added directly to the collection. False when it is reached via an album, artist or playlist that is in the collection. |
-| `explicitMember` | `Boolean` | Old name, used for clients below API version 8. |
 
 ### CoverGenerationOptions <a name="devdertypdatacovergenerationoptions"></a>
 Styles and asset packs the current user may choose from.
@@ -1449,7 +1445,6 @@ A playback progress report for the song the user is playing.
 | `songId` | `PlatformUUID` | The library song being played. |
 | `positionMs` | `Long` | Playback position in milliseconds at the time the report was sampled. |
 | `isPlaying` | `Boolean` | Whether playback is running. False while paused. |
-| `playing` | `Boolean` | Old name, used for clients below API version 8. |
 | `sentAt` | `Long`? | Client epoch milliseconds when the position was sampled. Lets the server compensate transport delay. |
 
 ### PlaybackState <a name="devdertypdataplaybackstate"></a>
@@ -1462,7 +1457,6 @@ Represents the real-time status of music playback on a device.
 | `isPlaying` | `Boolean` | Whether the playback is currently active. |
 | `positionMs` | `Long` | Current playback position in milliseconds. |
 | `isShuffled` | `Boolean` | Whether the queue is being played in random order. |
-| `shuffleMode` | `Boolean` | Old name, used for clients below API version 8. |
 | `repeatMode` | [RepeatMode](#devdertypdatarepeatmode) | The current repetition mode. |
 | `sourceId` | `String`? | Identifier for the origin of the current queue (e.g., a playlist ID). |
 
@@ -1483,8 +1477,6 @@ A queue entry linked to a persistent song ID.
 
 ### WithSong <a name="devdertypdataplaybackstatequeueentrywithsong"></a>
 A queue entry containing full song metadata.
-
-Old type name `Explicit`, used for clients below API version 8.
 
 | Field | Type | Description |
 | :--- | :--- | :--- |
@@ -1740,7 +1732,6 @@ Metadata describing the state of the server-stored play queue of a user.
 | `modifiedByDeviceName` | `String`? | Snapshot of the device name of the session that performed the last write. |
 | `currentIndex` | `Int` | Index of the currently playing entry in the active order (the shuffled order while shuffle is on, otherwise the original order). |
 | `isShuffled` | `Boolean` | Whether the queue is played in the stored shuffled order. |
-| `shuffleMode` | `Boolean` | Old name, used for clients below API version 8. |
 | `repeatMode` | [RepeatMode](#devdertypdatarepeatmode) | The current repetition mode. |
 | `sourceId` | `String`? | Identifier for the origin of the queue (e.g., a playlist ID). |
 | `total` | `Int` | Total number of entries in the queue. |
@@ -1755,7 +1746,6 @@ A single entry of the server-stored play queue.
 | `position` | `Int` | Zero-based index in the original (unshuffled) order. |
 | `shuffledPosition` | `Int`? | Zero-based index in the shuffled order, or null while shuffle is off. |
 | `userAdded` | `Boolean` | Whether this entry was added explicitly by the user rather than by the source. |
-| `explicit` | `Boolean` | Old name, used for clients below API version 8. |
 | `song` | [UserSong](#devdertypdatausersong)? | The resolved song metadata. Filled in by the server only when the queue is read with includeSongs enabled, and ignored on writes. |
 
 ### QueueMeta <a name="devdertypdataqueuemeta"></a>
@@ -1765,7 +1755,6 @@ Playback metadata written together with a full queue upload.
 | :--- | :--- | :--- |
 | `currentIndex` | `Int` | Index of the currently playing entry in the active order. |
 | `isShuffled` | `Boolean` | Whether the queue is played in the uploaded shuffled order. |
-| `shuffleMode` | `Boolean` | Old name, used for clients below API version 8. |
 | `repeatMode` | [RepeatMode](#devdertypdatarepeatmode) | The repetition mode to store. |
 | `sourceId` | `String`? | Identifier for the origin of the queue (e.g., a playlist ID). |
 
@@ -1872,7 +1861,6 @@ A song matched by a radio channel search, with how it belongs to the channel.
 | :--- | :--- | :--- |
 | `song` | [UserSong](#devdertypdatausersong) | The matched song. |
 | `directMember` | `Boolean` | True when the song is added directly to the channel. False when it is reached via an album or artist that is configured on the channel. |
-| `explicitMember` | `Boolean` | Old name, used for clients below API version 8. |
 
 ### RadioSeed <a name="devdertypdataradioseed"></a>
 Seed material for a radio station. When any field is set, the radio is built from songs similar to the seed rather than from listen history.
@@ -1961,7 +1949,6 @@ What a remote-controllable device is playing, as it last reported it. A controll
 | `positionMs` | `Long` | Playback position within the song in milliseconds at the time of the report. |
 | `durationMs` | `Long`? | Length of the song in milliseconds, when the device knows it. |
 | `isShuffled` | `Boolean` | Whether the device plays its queue in shuffled order. |
-| `shuffleMode` | `Boolean` | Old name, used for clients below API version 8. |
 | `repeatMode` | [RepeatMode](#devdertypdatarepeatmode) | The repetition mode of the device. |
 | `volume` | `Float`? | Playback volume between 0 and 1, or null on a device that does not expose its volume. |
 | `currentQueueId` | `Long`? | Queue id of the shared queue entry the device is playing, or null when the device is not playing its shared queue. |
@@ -2177,10 +2164,6 @@ Contains core metadata about a track that is common for all users.
 | `copyright` | `String` | Copyright information for the track. |
 | `audio` | [AudioInfo](#devdertypdataaudioinfo)? | Properties of the primary audio file. |
 | `atmos` | [AudioInfo](#devdertypdataaudioinfo)? | Properties of the Dolby Atmos (E-AC-3 JOC in MP4) variant, if one exists. |
-| `sampleRate` | `Int`? | Audio sample rate in Hz. Only sent to clients that predate the audio field. See audio. |
-| `bitsPerSample` | `Int`? | Number of bits per audio sample. Only sent to clients that predate the audio field. See audio. |
-| `bitRate` | `Long`? | Audio bit rate in kilobits per second. Only sent to clients that predate the audio field. See audio. |
-| `fileSize` | `Long`? | Size of the audio file in bytes. Only sent to clients that predate the audio field. See audio. |
 | `coverId` | `PlatformUUID`? | The song cover image unique identifier. |
 | `blurHash` | `String`? | The blur hash of the song cover image. |
 | `musicBrainzId` | `PlatformUUID`? | The MusicBrainz Recording unique identifier. |
@@ -2190,7 +2173,6 @@ Contains core metadata about a track that is common for all users.
 | `animatedCoverImageId` | `PlatformUUID`? | Identifier of the still Image from the animated cover's first frame. |
 | `animatedCoverBlurHash` | `String`? | BlurHash of the animated cover's first frame. |
 | `audioStartMs` | `Long`? | Offset in milliseconds of the first audible sound, or null if not yet analyzed. |
-| `atmosPath` | `String`? | Internal server path to the Dolby Atmos variant. Only sent to clients that predate the atmos field. Use atmos and streamSongAtmos. |
 | `tags` | `List`<[TitleTag](#devdertypdatatitletag)> | Version markers split off the title, e.g. remix, live or featuring, in order of extraction. The title never contains them. |
 | `atmosVariantPath` | `String`? |  |
 
@@ -2505,7 +2487,6 @@ Contains core identity and profile data for a Synara user.
 | `id` | `PlatformUUID` | The user unique identifier. |
 | `username` | `String` | The unique login name of the user. |
 | `displayName` | `String`? | Optional display name shown to other users. |
-| `passwordHash` | `String` | Always empty. Password hashes are never sent to clients. |
 | `isAdmin` | `Boolean` | Whether the user has administrative privileges. |
 | `capabilities` | `List`<[UserCapability](#devdertypdatausercapability)> | List of specific capabilities granted to the user. |
 | `profileImageId` | `PlatformUUID`? | The user's profile avatar image unique identifier. |
@@ -2598,10 +2579,6 @@ Extends track metadata with user-specific information like favorite status.
 | `copyright` | `String` | Copyright information for the track. |
 | `audio` | [AudioInfo](#devdertypdataaudioinfo)? | Properties of the primary audio file. |
 | `atmos` | [AudioInfo](#devdertypdataaudioinfo)? | Properties of the Dolby Atmos (E-AC-3 JOC in MP4) variant, if one exists. |
-| `sampleRate` | `Int`? | Audio sample rate in Hz. Only sent to clients that predate the audio field. See audio. |
-| `bitsPerSample` | `Int`? | Number of bits per audio sample. Only sent to clients that predate the audio field. See audio. |
-| `bitRate` | `Long`? | Audio bit rate in kilobits per second. Only sent to clients that predate the audio field. See audio. |
-| `fileSize` | `Long`? | Size of the audio file in bytes. Only sent to clients that predate the audio field. See audio. |
 | `coverId` | `PlatformUUID`? | The song cover image unique identifier. |
 | `blurHash` | `String`? | The blur hash of the song cover image. |
 | `musicBrainzId` | `PlatformUUID`? | The MusicBrainz Recording unique identifier. |
@@ -2611,7 +2588,6 @@ Extends track metadata with user-specific information like favorite status.
 | `animatedCoverImageId` | `PlatformUUID`? | Identifier of the still Image from the animated cover's first frame. |
 | `animatedCoverBlurHash` | `String`? | BlurHash of the animated cover's first frame. |
 | `audioStartMs` | `Long`? | Offset in milliseconds of the first audible sound, or null if not yet analyzed. |
-| `atmosPath` | `String`? | Internal server path to the Dolby Atmos variant. Only sent to clients that predate the atmos field. Use atmos and streamSongAtmos. |
 | `tags` | `List`<[TitleTag](#devdertypdatatitletag)> | Version markers split off the title, e.g. remix, live or featuring, in order of extraction. The title never contains them. |
 | `atmosVariantPath` | `String`? |  |
 | `isFavourite` | `Boolean`? | Whether the current user has marked this song as a favorite. |

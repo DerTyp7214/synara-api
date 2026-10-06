@@ -33,13 +33,13 @@ class IntakeHandlerInfoTest {
             UiRegistry.SERVER_SOURCE
         )
 
-        val plain = User(UUID.randomUUID(), "u", passwordHash = "")
+        val plain = User(UUID.randomUUID(), "u")
         val infos = service.handlerInfos(plain, "en")
         assertEquals(listOf("Import with Tidal"), infos.map { it.title })
         assertEquals("import.tidal", infos.single().id)
         assertTrue(infos.single().kinds.containsAll(UiHookKind.entries))
 
-        val importer = User(UUID.randomUUID(), "i", passwordHash = "", capabilities = listOf(UserCapability.IMPORT))
+        val importer = User(UUID.randomUUID(), "i", capabilities = listOf(UserCapability.IMPORT))
         assertEquals(
             listOf("Import with Restricted", "Import with Tidal"),
             service.handlerInfos(importer, "en").map { it.title })

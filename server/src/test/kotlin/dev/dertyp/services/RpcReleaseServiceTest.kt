@@ -18,7 +18,7 @@ import java.util.UUID
 
 class RpcReleaseServiceTest {
     private val releaseService = mockk<ReleaseService>()
-    private val user = User(id = UUID.randomUUID(), username = "test", passwordHash = "", isAdmin = false)
+    private val user = User(id = UUID.randomUUID(), username = "test", isAdmin = false)
     private val rpcService = RpcReleaseService(user, releaseService)
 
     @Test

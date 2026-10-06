@@ -42,7 +42,7 @@ class JwtServiceTest {
 
     @Test
     fun `generateToken and validateToken should work for active session`() = runBlocking {
-        val user = User(id = UUID.randomUUID(), username = "testuser", passwordHash = "")
+        val user = User(id = UUID.randomUUID(), username = "testuser")
         val sessionId = UUID.randomUUID()
 
         coEvery { refreshTokenService.createToken(any(), any(), any(), any()) } returns mockk()
@@ -60,7 +60,7 @@ class JwtServiceTest {
 
     @Test
     fun `validateToken should return null for inactive session`() = runBlocking {
-        val user = User(id = UUID.randomUUID(), username = "testuser", passwordHash = "")
+        val user = User(id = UUID.randomUUID(), username = "testuser")
         val sessionId = UUID.randomUUID()
 
         coEvery { refreshTokenService.createToken(any(), any(), any(), any()) } returns mockk()

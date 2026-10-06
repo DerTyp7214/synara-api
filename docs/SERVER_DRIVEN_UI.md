@@ -200,7 +200,7 @@ Work accepted by an intake handler runs in server-side **jobs**, queued per kind
 
 ## Home cards
 
-`getHomeCards()` / `getHomeCardsFlow()` return every `HOME_CARD` contribution with `pinned` and `position`. Render pinned cards on the home screen (each through `subscribe(card.contributionId)`), offer the unpinned ones in a picker, and persist changes with `setHomeCardPinned` / `setHomeCardOrder`.
+`getHomeCards()` returns every `HOME_CARD` contribution with `pinned` and `position`. `IChangeService.observeChanges` reports the `HOME_CARDS` topic when the layout changes, so read `getHomeCards()` again then. Render pinned cards on the home screen (each through `subscribe(card.contributionId)`), offer the unpinned ones in a picker, and persist changes with `setHomeCardPinned` / `setHomeCardOrder`.
 
 ## Hooks
 

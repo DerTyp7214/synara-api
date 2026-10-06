@@ -394,7 +394,7 @@ class TidalMetadataEnrichmentTest : KoinTest {
 
     @Test
     fun `album import skips a track whose ISRC already exists on the same release`() = runBlocking {
-        val user = User(UUID.randomUUID(), "test", passwordHash = "hash")
+        val user = User(UUID.randomUUID(), "test")
         prepareAlbumImport(libraryBarcode = "123456789012")
 
         downloader = TestTidalImporter(indexer, storageService, emptyList())
@@ -405,7 +405,7 @@ class TidalMetadataEnrichmentTest : KoinTest {
 
     @Test
     fun `album import keeps a track whose ISRC only exists on another release`() = runBlocking {
-        val user = User(UUID.randomUUID(), "test", passwordHash = "hash")
+        val user = User(UUID.randomUUID(), "test")
         prepareAlbumImport(libraryBarcode = "9999999999999")
 
         val entries = mutableListOf<ImportQueueEntry>()

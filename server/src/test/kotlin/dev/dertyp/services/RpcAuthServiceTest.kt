@@ -31,7 +31,7 @@ class RpcAuthServiceTest {
     private val call = mockk<ApplicationCall>(relaxed = true)
     private val service = RpcAuthService(call, authService, sessionService, jwtService, userService)
 
-    private val user = User(UUID.randomUUID(), "testuser", passwordHash = "hash")
+    private val user = User(UUID.randomUUID(), "testuser")
 
     @BeforeEach
     fun setUp() {

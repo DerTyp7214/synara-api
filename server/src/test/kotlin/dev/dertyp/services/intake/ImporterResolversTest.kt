@@ -45,7 +45,7 @@ class ImporterResolversTest {
         every { enabled } returns true
     }
 
-    private val user = User(UUID.randomUUID(), "importer", passwordHash = "")
+    private val user = User(UUID.randomUUID(), "importer")
     private val info = UserInfo.fromUser(user)
 
     private val appleUrl = "https://music.apple.com/us/album/upcoming/1234"

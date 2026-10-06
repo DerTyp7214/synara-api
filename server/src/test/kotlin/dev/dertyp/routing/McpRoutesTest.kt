@@ -48,7 +48,7 @@ class McpRoutesTest {
     private val query = mockk<ListenHistoryQueryService>()
     private val stats = mockk<ListeningStatsService>()
     private val factory = ListenHistoryMcpServerFactory(query, stats)
-    private val user = User(id = UUID.randomUUID(), username = "tester", passwordHash = "x")
+    private val user = User(id = UUID.randomUUID(), username = "tester")
 
     private fun stubs() {
         coEvery { apiKeyService.resolveUser("good", ApiKeyScope.Mcp) } returns user

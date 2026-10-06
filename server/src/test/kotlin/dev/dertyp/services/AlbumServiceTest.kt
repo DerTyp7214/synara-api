@@ -41,7 +41,6 @@ class AlbumServiceTest : KoinTest {
     private val user = User(
         id = UUID.randomUUID(),
         username = "testuser",
-        passwordHash = "hash",
         isAdmin = true
     )
 

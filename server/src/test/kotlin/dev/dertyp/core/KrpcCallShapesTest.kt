@@ -2,9 +2,6 @@
 
 package dev.dertyp.core
 
-import dev.dertyp.core.wire.OldClientCbor
-import dev.dertyp.core.wire.newSong
-import dev.dertyp.core.wire.oldSong
 import dev.dertyp.data.ApiVersion
 import dev.dertyp.data.ArtistPlaylistSortStrategy
 import dev.dertyp.data.InsertablePlaylist
@@ -39,8 +36,6 @@ import kotlinx.serialization.BinaryFormat
 import kotlinx.serialization.DeserializationStrategy
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerializationStrategy
-import kotlinx.serialization.builtins.ListSerializer
-import kotlinx.serialization.builtins.nullable
 import kotlinx.serialization.cbor.Cbor
 import kotlinx.serialization.cbor.CborBuilder
 import kotlinx.serialization.modules.SerializersModule
@@ -51,7 +46,6 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.util.Collections
 import java.util.UUID
-import dev.dertyp.core.wire.old.UserSong as OldUserSong
 
 private class PlainClientFormat(val cbor: Cbor, val received: MutableList<Pair<String, ByteArray>>) : BinaryFormat {
     override val serializersModule: SerializersModule get() = cbor.serializersModule
@@ -103,6 +97,18 @@ class KrpcCallShapesTest {
     private val page = PaginatedResponse(data = listOf(playlist), total = 1, pageSize = 50)
     private val insertable = InsertablePlaylist(name = "New", description = "Fresh", songPaths = listOf("/a.flac"))
 
+    private val newSong = UserSong(
+        id = songId,
+        title = "Song",
+        artists = emptyList(),
+        album = null,
+        duration = 200,
+        explicit = true,
+        path = "/a.flac",
+        musicBrainzId = uuid(115),
+        isFavourite = true,
+    )
+
     private val lyrics = mockk<ILyricsService>()
     private val playlists = mockk<IUserPlaylistService>()
     private val collections = mockk<ICollectionService>()
@@ -124,14 +130,7 @@ class KrpcCallShapesTest {
         coEvery { songs.byIds(any()) } returns listOf(newSong)
     }
 
-    private fun lastReceived(received: List<Pair<String, ByteArray>>, serialName: String): ByteArray =
-        received.last { it.first == serialName }.second
-
-    private fun callEveryShape(
-        version: String,
-        clientCbor: Cbor,
-        checkSongs: (UserSong?, List<UserSong>, List<Pair<String, ByteArray>>) -> Unit
-    ) =
+    private fun callEveryShape(version: String) =
         testApplication {
             stubServices()
             application {
@@ -154,7 +153,7 @@ class KrpcCallShapesTest {
                         register(
                             KrpcSerialFormatBuilder.Binary(
                                 PlainClientKrpcFormat,
-                                PlainClientFormat(clientCbor, received)
+                                PlainClientFormat(AppCbor, received)
                             ) {})
                     }
                 }
@@ -211,25 +210,16 @@ class KrpcCallShapesTest {
             coVerify(exactly = 1) { songs.byId(songId) }
             coVerify(exactly = 1) { songs.byIds(listOf(songId)) }
 
-            checkSongs(song, songList, received.toList())
+            assertEquals(newSong, song)
+            assertEquals(listOf(newSong), songList)
+            assertTrue(received.isNotEmpty())
         }
 
     @Test
-    fun `old clients below api version 8 reach every call shape with their arguments intact`() =
-        callEveryShape("7", OldClientCbor) { _, _, received ->
-            val songBytes = lastReceived(received, UserSong.serializer().nullable.descriptor.serialName)
-            assertEquals(oldSong, OldClientCbor.decodeFromByteArray(OldUserSong.serializer().nullable, songBytes))
-            val listBytes = lastReceived(received, ListSerializer(UserSong.serializer()).descriptor.serialName)
-            assertEquals(
-                listOf(oldSong),
-                OldClientCbor.decodeFromByteArray(ListSerializer(OldUserSong.serializer()), listBytes)
-            )
-        }
+    fun `clients below api version 8 reach every call shape with their arguments intact`() =
+        callEveryShape("7")
 
     @Test
     fun `clients from api version 8 reach every call shape with their arguments intact`() =
-        callEveryShape("8", AppCbor) { song, songList, _ ->
-            assertEquals(newSong, song)
-            assertEquals(listOf(newSong), songList)
-        }
+        callEveryShape("8")
 }

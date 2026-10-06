@@ -12,17 +12,17 @@ Kotlin clients get this for free: `createRpcHttpClient` installs it as a default
 
 ## Features
 
-Each version introduced one feature. A client "supports" a feature when the version it sent is at least the feature's minimum, and for every feature the server has a rule describing what to do when it does not. The full table — which version introduced which feature, what it introduces and what an older client gets instead — is in [API_CONSTANTS.md#features](API_CONSTANTS.md#features).
+Each version introduced one feature. A client "supports" a feature when the version it sent is at least the feature's minimum. For most features the server has a rule describing what to do when it does not. Features whose fallback was removed stay in the table as the version history, and their fallback column says that there is none. The full table — which version introduced which feature, what it introduces and what an older client gets instead — is in [API_CONSTANTS.md#features](API_CONSTANTS.md#features).
 
-The deprecated song fields are only ever populated by this shaping — a current-version client always reads `audio` / `atmos` and never the flat fields ([Song.kt](../common-rpc/src/commonMain/kotlin/dev/dertyp/data/Song.kt)).
+The flat song fields `sampleRate`, `bitsPerSample`, `bitRate`, `fileSize` and `atmosPath` no longer exist. Every client reads the file properties from `audio` / `atmos` ([Song.kt](../common-rpc/src/commonMain/kotlin/dev/dertyp/data/Song.kt)).
 
 ## How the shaping happens
 
 Every registered service is wrapped in a chain of proxies — caching, then metrics, then client compatibility on the outside ([RpcRegistry.kt](../server/src/main/kotlin/dev/dertyp/routing/RpcRegistry.kt)); the REST layer wraps each service the same way. Because shaping sits *outside* the cache, one cached value is reshaped per connection instead of being cached per version.
 
-The shaper ([ClientCompat.kt](../server/src/main/kotlin/dev/dertyp/utils/ClientCompat.kt)) walks the returned value recursively, so a rule reaches a `Song` whether it came back on its own, inside a `PaginatedResponse`, a `List`, a `Map`, a `Flow`, a queue entry, a now-playing record or a listen history entry. Rules are applied newest-first, so a client sending `ApiVersion.LEGACY` gets the title-tag rule, then the audio-info rule, then the Atmos rule, each on the result of the previous. When the client supports everything, the shaper reports itself as a no-op and no proxy is installed at all.
+The shaper ([ClientCompat.kt](../server/src/main/kotlin/dev/dertyp/utils/ClientCompat.kt)) walks the returned value recursively, so a rule reaches a `Song` whether it came back on its own, inside a `PaginatedResponse`, a `List`, a `Map`, a `Flow`, a queue entry, a now-playing record or a listen history entry. Rules are applied newest-first, so a client sending `ApiVersion.LEGACY` gets every rule in `CompatRules.all` ([CompatRule.kt](../server/src/main/kotlin/dev/dertyp/utils/CompatRule.kt)), each on the result of the previous. When the client supports everything, the shaper reports itself as a no-op and no proxy is installed at all.
 
-Renamed fields are handled one layer lower, in the wire format. For a client below the `FIELD_RENAMES` version the server writes and reads the old field and type names on the RPC and the REST wire alike ([WireFormats.kt](../server/src/main/kotlin/dev/dertyp/core/WireFormats.kt), [LegacyWire.kt](../server/src/main/kotlin/dev/dertyp/core/wire/LegacyWire.kt)). The models in `common-rpc` only carry the old name in a `@LegacyWireName` annotation, and clients use the plain generated serializers without any compatibility code.
+Renamed fields are handled one layer lower, in the wire format. For a client below the `FIELD_RENAMES` version the server writes and reads the old field and type names on the RPC and the REST wire alike ([WireFormats.kt](../server/src/main/kotlin/dev/dertyp/core/WireFormats.kt), [LegacyWire.kt](../server/src/main/kotlin/dev/dertyp/core/wire/LegacyWire.kt)). A renamed model in `common-rpc` only carries the old name in a `@LegacyWireName` annotation, and clients use the plain generated serializers without any compatibility code. No model carries such an annotation at the moment, so the legacy wire format currently writes and reads exactly what the plain one does.
 
 The consequence for you: **you never see a half-shaped object.** Whatever version you claim, the models are internally consistent; you just have to claim the right one.
 
@@ -54,7 +54,7 @@ Send the `ApiVersion.CURRENT` of the `common-rpc` you compiled against, and noth
 Then compare the handshake with your own constant:
 
 - `handshake.apiVersion >= ApiVersion.CURRENT` — the normal case. The server understands everything you do.
-- `handshake.apiVersion < ApiVersion.CURRENT` — **the server is older than your client.** No shaping protects you here: the server simply never had the newer fields, so `audio`/`atmos` may be absent on a version-3 server, `tags` on a version-5 server, and the Atmos stream will not exist. Fall back the way the server would have: `BaseSong.effectiveAudio` in `common-rpc` reconstructs an `AudioInfo` from the deprecated flat fields for exactly this case, and an empty `tags` list is indistinguishable from a song without markers.
+- `handshake.apiVersion < ApiVersion.CURRENT` — **the server is older than your client.** No shaping protects you here: the server simply never had the newer fields, so `audio`/`atmos` may be absent on a version-3 server, `tags` on a version-5 server, and the Atmos stream will not exist. Treat the missing values as unknown. An empty `tags` list is indistinguishable from a song without markers.
 - `handshake.uiSchemaVersion == 0` — do not show server-driven entry points. `BaseRpcServiceManager` already exposes `min(server, CURRENT)` as its `uiSchemaVersion` flow, which is the number your renderer should honour.
 
 Treat both numbers as data to branch on, never as a reason to refuse to connect.

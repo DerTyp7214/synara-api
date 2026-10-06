@@ -16,7 +16,7 @@ import java.util.UUID
 
 class RpcClientSettingsServiceTest {
     private val clientSettingsService = mockk<ClientSettingsService>(relaxed = true)
-    private val user = User(UUID.randomUUID(), "user", passwordHash = "hash")
+    private val user = User(UUID.randomUUID(), "user")
     private val service = RpcClientSettingsService(user, clientSettingsService)
 
     @Test

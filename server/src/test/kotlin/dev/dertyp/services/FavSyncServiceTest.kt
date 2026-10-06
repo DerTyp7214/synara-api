@@ -38,12 +38,12 @@ class FavSyncServiceTest {
     @EnumSource(DbDialect::class)
     fun `insertFavSync should upsert status`(dialect: DbDialect) = runBlocking {
         setup(dialect)
-        val user = User(UUID.randomUUID(), "user", passwordHash = "hash")
+        val user = User(UUID.randomUUID(), "user")
         transaction(database) {
             UserTable.insert {
                 it[id] = user.id
                 it[username] = user.username
-                it[passwordHash] = user.passwordHash
+                it[passwordHash] = "hash"
             }
         }
 

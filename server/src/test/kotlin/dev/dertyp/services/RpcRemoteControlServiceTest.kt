@@ -19,7 +19,7 @@ import java.util.UUID
 
 class RpcRemoteControlServiceTest {
     private val remoteControlService = mockk<RemoteControlService>(relaxed = true)
-    private val user = User(UUID.randomUUID(), "user", passwordHash = "hash")
+    private val user = User(UUID.randomUUID(), "user")
     private val sessionId = UUID.randomUUID()
     private val service = RpcRemoteControlService(user, sessionId, remoteControlService)
 

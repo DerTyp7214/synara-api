@@ -24,13 +24,13 @@ enum class ClientFeature(val minApiVersion: Int, val maxApiVersion: Int? = null)
 
     @FeatureDoc(
         introduces = "The Dolby Atmos variant of a song (E-AC-3 JOC in MP4) and the `streamSongAtmos` endpoint.",
-        fallback = "The Atmos stream resolves to nothing — there is no Atmos playback, and `atmosPath` is stripped from every song.",
+        fallback = "The Atmos stream resolves to nothing — there is no Atmos playback. Songs still carry `atmos`.",
     )
     DOLBY_ATMOS(3),
 
     @FeatureDoc(
         introduces = "File properties nested in `audio` and `atmos` as @AudioInfo — `codec`, `sampleRate`, `bitsPerSample`, `bitRate`, `fileSize`, `channels`.",
-        fallback = "`audio` and `atmos` are cleared and their values flattened back into the deprecated top-level `sampleRate`, `bitsPerSample`, `bitRate`, `fileSize` and `atmosPath` fields.",
+        fallback = "There is no fallback. The flat top-level fields are gone, so clients below this version get no file properties.",
     )
     AUDIO_INFO(4),
 
@@ -54,7 +54,7 @@ enum class ClientFeature(val minApiVersion: Int, val maxApiVersion: Int? = null)
 
     @FeatureDoc(
         introduces = "Renamed fields under their new names: `musicBrainzId` on @Album, @Artist and @ArtistCredit, `isPlaying` on @PlaybackReport, `directMember` on @CollectionSongMatch and @RadioChannelSongMatch, `isShuffled` on @PlaybackState, @QueueInfo, @QueueMeta and @RemotePlaybackStatus, and `userAdded` on @QueueItem. The queue entry with full song metadata has the type `WithSong`.",
-        fallback = "Clients below API version 8 receive and send only the old names: `musicbrainzId`, `playing`, `explicitMember`, `shuffleMode`, `explicit`, and the queue entry type `Explicit`.",
+        fallback = "There is no fallback. The old names are no longer served, so clients below this version cannot read or send these fields.",
     )
     FIELD_RENAMES(8),
 

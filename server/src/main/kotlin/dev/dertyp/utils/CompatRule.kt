@@ -20,40 +20,6 @@ interface CompatRule {
     fun shapeRecentReleases(releases: List<RecentRelease>): List<RecentRelease> = releases
 }
 
-@Suppress("DEPRECATION")
-object AudioInfoCompat : CompatRule {
-    override val feature = ClientFeature.AUDIO_INFO
-
-    override fun shapeSong(song: Song): Song = song.copy(
-        sampleRate = song.audio?.sampleRate ?: 0,
-        bitsPerSample = song.audio?.bitsPerSample ?: 0,
-        bitRate = song.audio?.bitRate ?: 0,
-        fileSize = song.audio?.fileSize ?: 0,
-        atmosPath = song.atmosVariantPath,
-        audio = null,
-        atmos = null,
-    )
-
-    override fun shapeUserSong(song: UserSong): UserSong = song.copy(
-        sampleRate = song.audio?.sampleRate ?: 0,
-        bitsPerSample = song.audio?.bitsPerSample ?: 0,
-        bitRate = song.audio?.bitRate ?: 0,
-        fileSize = song.audio?.fileSize ?: 0,
-        atmosPath = song.atmosVariantPath,
-        audio = null,
-        atmos = null,
-    )
-}
-
-@Suppress("DEPRECATION")
-object DolbyAtmosCompat : CompatRule {
-    override val feature = ClientFeature.DOLBY_ATMOS
-
-    override fun shapeSong(song: Song): Song = song.copy(atmosPath = null)
-
-    override fun shapeUserSong(song: UserSong): UserSong = song.copy(atmosPath = null)
-}
-
 object TitleTagsCompat : CompatRule {
     override val feature = ClientFeature.TITLE_TAGS
 
@@ -87,5 +53,5 @@ object ReleaseVersionsCompat : CompatRule {
 
 object CompatRules {
     val all: List<CompatRule> =
-        listOf(AudioInfoCompat, DolbyAtmosCompat, TitleTagsCompat, ReleaseVersionsCompat, AlbumTitleTagsCompat, UiSchemaCompat())
+        listOf(TitleTagsCompat, ReleaseVersionsCompat, AlbumTitleTagsCompat, UiSchemaCompat())
 }

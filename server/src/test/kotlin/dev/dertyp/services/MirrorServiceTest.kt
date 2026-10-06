@@ -6,6 +6,7 @@ import dev.dertyp.data.User
 import dev.dertyp.data.UserPasswordHash
 
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.flow.flowOf
@@ -82,15 +83,13 @@ class MirrorServiceTest : KoinTest {
     }
 
     @Test
-    fun `getUsers should return users with password hashes`() = runBlocking {
+    fun `getUsers should return users without password hashes`() = runBlocking {
         val user = User(UUID.randomUUID(), "test")
         coEvery { userService.queryUser(any()) } returns listOf(user)
-        coEvery { userService.passwordHashes() } returns listOf(UserPasswordHash(id = user.id, passwordHash = "secret"))
 
         val users = service.getUsers().toList()
-        assertEquals(1, users.size)
-        assertEquals("test", users[0].username)
-        assertEquals("secret", users[0].passwordHash)
+        assertEquals(listOf(user), users)
+        coVerify(exactly = 0) { userService.passwordHashes() }
     }
 
     @Test

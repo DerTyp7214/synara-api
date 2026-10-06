@@ -32,7 +32,6 @@ GET /artist/allArtists IArtistService.allArtists [q:page? q:pageSize?] JSON
 GET /artist/artistIdsWithoutMusicBrainzId IArtistService.artistIdsWithoutMusicBrainzId [] SSE
 GET /artist/artistOnMusicBrainz IArtistService.searchArtistOnMusicBrainz [q:query q:page? q:pageSize?] JSON
 GET /artist/artistsWithoutMusicBrainzId IArtistService.artistsWithoutMusicBrainzId [] SSE
-GET /artist/artistsWithoutMusicBrainzIdFlow IArtistService.artistsWithoutMusicBrainzIdFlow [] SSE
 GET /artist/byColor IArtistService.byColor [q:page? q:pageSize? q:color q:range?] JSON
 GET /artist/byGroup/{groupId} IArtistService.byGroup [q:page? q:pageSize? p:groupId] JSON
 GET /artist/byId/{id} IArtistService.byId [p:id] JSON
@@ -151,7 +150,6 @@ PUT /import/importService IImportService.setImportService [b:service] UNIT
 POST /indexer/start IIndexer.start [] SSE
 GET /listenBackup/observeState IListenBackupService.observeState [] SSE
 GET /listenBackup/state IListenBackupService.getState [] JSON
-GET /listenBackup/stateFlow IListenBackupService.getStateFlow [] SSE
 POST /listenBackup/resetCursor IListenBackupService.resetCursor [] JSON
 POST /listenBackup/syncNow IListenBackupService.syncNow [] JSON
 POST /listenBackup/testConnection IListenBackupService.testConnection [b:config?] JSON
@@ -159,7 +157,6 @@ PUT /listenBackup/config IListenBackupService.updateConfig [b:config] JSON
 DELETE /listenBrainz/link IListenBrainzService.unlink [] UNIT
 GET /listenBrainz/recentListens IListenBrainzService.recentListens [q:limit] JSON
 GET /listenBrainz/status IListenBrainzService.getStatus [] JSON
-GET /listenBrainz/statusFlow IListenBrainzService.getStatusFlow [] SSE
 POST /listenBrainz/link IListenBrainzService.link [q:username q:token?] JSON
 POST /listenBrainz/syncNow IListenBrainzService.syncNow [] JSON
 GET /listeningStats/stats IListeningStatsService.getStats [q:range q:timezone q:topLimit q:topOrder?] JSON
@@ -270,7 +267,6 @@ PUT /queue/currentIndex IQueueService.setCurrentIndex [q:baseVersion q:currentIn
 PUT /queue/modes IQueueService.setModes [q:baseVersion q:shuffleMode q:repeatMode q:force?] JSON
 PUT /queue/syncEnabled IQueueService.setSyncEnabled [q:enabled q:deviceName] UNIT
 GET /radio/observeRadio/{sessionId} IRadioService.observeRadio [p:sessionId] SSE
-GET /radio/radioFlow/{sessionId} IRadioService.radioFlow [p:sessionId] SSE
 POST /radio/radioSession IRadioService.createRadioSession [q:type? b:seed?] JSON
 DELETE /radioChannel/channel/{id} IRadioChannelService.deleteChannel [p:id] JSON
 DELETE /radioChannel/{type}/channelItem/{id} IRadioChannelService.removeChannelItem [p:id p:type q:itemId] JSON
@@ -315,19 +311,14 @@ POST /rpcMetrics/lifetimeTotals IRpcMetricsService.lifetimeTotals [q:limit? q:us
 POST /rpcMetrics/recentEvents IRpcMetricsService.recentEvents [q:limit?] JSON
 POST /rpcMetrics/timeSeries IRpcMetricsService.timeSeries [q:service q:method q:sinceMillis] JSON
 GET /scheduledTaskConfiguration/configurations IScheduledTaskConfigurationService.getConfigurations [] JSON
-GET /scheduledTaskConfiguration/configurationsFlow IScheduledTaskConfigurationService.getConfigurationsFlow [] SSE
 GET /scheduledTaskConfiguration/observeConfigurations IScheduledTaskConfigurationService.observeConfigurations [] SSE
 POST /scheduledTaskConfiguration/triggerTask IScheduledTaskConfigurationService.triggerTask [q:key] JSON
 PUT /scheduledTaskConfiguration/configuration IScheduledTaskConfigurationService.updateConfiguration [b:configuration] UNIT
 GET /scheduledTaskLog/groupedLogs IScheduledTaskLogService.getGroupedLogs [] JSON
-GET /scheduledTaskLog/groupedLogsFlow IScheduledTaskLogService.getGroupedLogsFlow [] SSE
 GET /scheduledTaskLog/observeGroupedLogs IScheduledTaskLogService.observeGroupedLogs [] SSE
 GET /scrobble/recentAlbums IScrobbleService.recentAlbums [q:limit] JSON
-GET /scrobble/recentAlbumsFlow IScrobbleService.recentAlbumsFlow [q:limit] SSE
 GET /scrobble/recentArtists IScrobbleService.recentArtists [q:limit] JSON
-GET /scrobble/recentArtistsFlow IScrobbleService.recentArtistsFlow [q:limit] SSE
 GET /scrobble/recentListens IScrobbleService.recentListens [q:limit] JSON
-GET /scrobble/recentListensFlow IScrobbleService.recentListensFlow [q:limit] SSE
 POST /scrobble/clearNowPlaying IScrobbleService.clearNowPlaying [] UNIT
 POST /scrobble/listened IScrobbleService.listened [b:request] UNIT
 POST /scrobble/nowPlaying/{songId} IScrobbleService.nowPlaying [p:songId] UNIT
@@ -378,7 +369,6 @@ POST /song/moveSongs ISongService.moveSongs [q:oldPath q:newPath q:originalIdPre
 POST /song/musicBrainzId/{id} ISongService.fetchMusicBrainzId [p:id] JSON
 PUT /song/artists/{id} ISongService.setArtists [p:id q:artistIds] JSON
 PUT /song/likeLevel/{id} ISongService.setLikeLevel [p:id q:level] JSON
-PUT /song/liked/{id} ISongService.setLiked [p:id q:liked q:addedAt?] JSON
 PUT /song/lyrics/{id} ISongService.setLyrics [p:id q:lyrics] JSON
 PUT /song/musicBrainzId/{id} ISongService.setMusicBrainzId [p:id q:musicBrainzId] JSON
 PUT /song/song ISongService.updateSong [b:song] JSON
@@ -394,7 +384,6 @@ PUT /timecodeTag/tag/{tagId} ITimecodeTagService.updateTag [p:tagId q:tagType q:
 PUT /timecodeTag/tags/{songId} ITimecodeTagService.replaceTags [p:songId b:tags] JSON
 GET /ui/contributions IUiService.listContributions [q:kind? q:slot?] JSON
 GET /ui/homeCards IUiService.getHomeCards [] JSON
-GET /ui/homeCardsFlow IUiService.getHomeCardsFlow [] SSE
 GET /ui/hookHandlers IUiService.listHookHandlers [q:kind?] JSON
 GET /ui/subscribe/{contributionId} IUiService.subscribe [p:contributionId q:entityId?] SSE
 GET /ui/subscribeLive/{contributionId} IUiService.subscribeLive [p:contributionId q:key q:entityId?] SSE
@@ -412,8 +401,6 @@ GET /user/allUsers IUserService.allUsers [] JSON
 GET /user/byId/{id} IUserService.byId [p:id] JSON
 GET /user/byUsername IUserService.byUsername [q:username] JSON
 GET /user/me IUserService.me [] JSON
-GET /user/userById/{id} IUserService.findUserById [p:id] JSON
-GET /user/userByUsername IUserService.findUserByUsername [q:username] JSON
 POST /user/user IUserService.createUser [b:user q:isAdmin? q:capabilities?] JSON
 PUT /user/capabilities/{id} IUserService.setCapabilities [p:id q:capabilities] UNIT
 PUT /user/displayName IUserService.setDisplayName [q:name] UNIT

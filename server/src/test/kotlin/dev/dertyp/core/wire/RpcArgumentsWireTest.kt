@@ -4,6 +4,7 @@ package dev.dertyp.core.wire
 
 import dev.dertyp.core.LegacyServerCbor
 import dev.dertyp.core.ServerWire
+import dev.dertyp.core.wire.fixtures.IWireQueueService
 import dev.dertyp.serializers.AppCbor
 import dev.dertyp.serializers.AppJson
 import dev.dertyp.services.ILyricsService
@@ -33,7 +34,6 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.modules.plus
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -64,8 +64,7 @@ class RpcArgumentsWireTest {
 
     private val legacyServer = LegacyCborFormat(LegacyServerCbor, ServerWire)
 
-    private val oldClient =
-        Cbor(OldClientCbor) { serializersModule = OldClientCbor.serializersModule + ServerWire.module }
+    private val oldClient = LegacyServerCbor
 
     private val maxDepth = 4
 
@@ -74,6 +73,7 @@ class RpcArgumentsWireTest {
             .enableClassInfo()
             .enableAnnotationInfo()
             .acceptPackages("dev.dertyp")
+            .rejectPackages(IWireQueueService::class.java.packageName)
             .scan().use { scan ->
                 scan.getClassesWithAnnotation(Rpc::class.java.name)
                     .filter { it.isInterface }

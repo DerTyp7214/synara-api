@@ -35,7 +35,6 @@ GET /artist/artistIdsWithoutMusicBrainzId IArtistService.artistIdsWithoutMusicBr
 PUT /artist/artistImageByUrl/{id} IArtistService.setArtistImageByUrl | Set an artist's image from a direct URL. | artist | UserAuth | id:path,url:query | body:no
 GET /artist/artistOnMusicBrainz IArtistService.searchArtistOnMusicBrainz | Search for an artist directly on MusicBrainz. | artist | UserAuth | query:query,page:query,pageSize:query | body:no
 GET /artist/artistsWithoutMusicBrainzId IArtistService.artistsWithoutMusicBrainzId | Stream all artists that are missing a MusicBrainz ID. | artist | UserAuth | - | body:no
-GET /artist/artistsWithoutMusicBrainzIdFlow IArtistService.artistsWithoutMusicBrainzIdFlow | Stream all artists that are missing a MusicBrainz ID. | artist | UserAuth | - | body:no
 GET /artist/byColor IArtistService.byColor | Search for artists by color. | artist | UserAuth | page:query,pageSize:query,color:query,range:query | body:no
 GET /artist/byGroup/{groupId} IArtistService.byGroup | List artists in a group. | artist | UserAuth | page:query,pageSize:query,groupId:path | body:no
 GET /artist/byId/{id} IArtistService.byId | Get artist by ID. | artist | UserAuth | id:path | body:no
@@ -153,14 +152,12 @@ PUT /listenBackup/config IListenBackupService.updateConfig | Update the backup c
 GET /listenBackup/observeState IListenBackupService.observeState | Stream the backup state, re-emitting whenever the configuration or sync progress changes. | listenBackup | UserAuth | - | body:no
 POST /listenBackup/resetCursor IListenBackupService.resetCursor | Reset the sync cursor so the next run re-pushes every local listen. | listenBackup | UserAuth | - | body:no
 GET /listenBackup/state IListenBackupService.getState | Get the current backup configuration and sync state. | listenBackup | UserAuth | - | body:no
-GET /listenBackup/stateFlow IListenBackupService.getStateFlow | Stream the backup state, re-emitting whenever the configuration or sync progress changes. | listenBackup | UserAuth | - | body:no
 POST /listenBackup/syncNow IListenBackupService.syncNow | Run a backup sync now and return the resulting state. | listenBackup | UserAuth | - | body:no
 POST /listenBackup/testConnection IListenBackupService.testConnection | Probe a receiver. Uses the stored configuration when no config is given. | listenBackup | UserAuth | - | body:yes
 DELETE /listenBrainz/link IListenBrainzService.unlink | Remove the current user's ListenBrainz link. | listenBrainz | UserAuth | - | body:no
 POST /listenBrainz/link IListenBrainzService.link | Link the current user to a ListenBrainz account and trigger an initial sync. | listenBrainz | UserAuth | username:query,token:query | body:no
 GET /listenBrainz/recentListens IListenBrainzService.recentListens | Return the current user's most recent listened songs (newest first), capped at 1000. | listenBrainz | UserAuth | limit:query | body:no
 GET /listenBrainz/status IListenBrainzService.getStatus | Get the current user's ListenBrainz connection status, or null if not linked. | listenBrainz | UserAuth | - | body:no
-GET /listenBrainz/statusFlow IListenBrainzService.getStatusFlow | Stream the current user's ListenBrainz status, re-emitting whenever it changes (e.g. during a sync). @IChangeService.observeChanges reports the LISTENBRAINZ_STATUS topic of @ChangeTopic instead, after which @IListenBrainzService.getStatus reads the status once. | listenBrainz | UserAuth | - | body:no
 POST /listenBrainz/syncNow IListenBrainzService.syncNow | Trigger an incremental sync of the current user's ListenBrainz listens now. | listenBrainz | UserAuth | - | body:no
 POST /listeningStats/linkUnmatchedTrack IListeningStatsService.linkUnmatchedTrack | Link the current user's unmatched listens of a track to a library song, identified by recording MSID and/or MBID. The link persists, applies to future synced listens, and is submitted to ListenBrainz as a manual mapping when the song has a recording MBID. | listeningStats | UserAuth | - | body:yes
 GET /listeningStats/stats IListeningStatsService.getStats | Compute listen count, previous-range comparison, top songs/artists/albums, listen clock, streaks, unique counts and new discoveries for a time range. | listeningStats | UserAuth | range:query,timezone:query,topLimit:query,topOrder:query | body:no
@@ -270,7 +267,6 @@ GET /queue/syncDevices IQueueService.getSyncDevices | List the devices of the us
 PUT /queue/syncEnabled IQueueService.setSyncEnabled | Opt the calling session in or out of queue synchronization and record the name it is listed under on other devices. | queue | UserAuth | enabled:query,deviceName:query | body:no
 POST /queue/uploadPage/{uploadId} IQueueService.uploadPage | Stage another page of entries for a started upload. Returns the total number of entries staged so far. | queue | UserAuth | uploadId:path | body:yes
 GET /radio/observeRadio/{sessionId} IRadioService.observeRadio | Infinite stream of song identifiers for a radio session. Re-collecting the same session continues without repeating songs. | radio | UserAuth | sessionId:path | body:no
-GET /radio/radioFlow/{sessionId} IRadioService.radioFlow | Infinite stream of song identifiers for a radio session. Re-collecting the same session continues without repeating songs. | radio | UserAuth | sessionId:path | body:no
 POST /radio/radioSession IRadioService.createRadioSession | Create a radio session and return its identifier. The same identifier can be reused to resume the station where it left off. | radio | UserAuth | type:query | body:yes
 POST /radioChannel/channel IRadioChannelService.createChannel | Create a new radio channel. | radioChannel | UserAuth | - | body:yes
 DELETE /radioChannel/channel/{id} IRadioChannelService.deleteChannel | Delete a radio channel. | radioChannel | UserAuth | id:path | body:no
@@ -316,21 +312,16 @@ POST /rpcMetrics/recentEvents IRpcMetricsService.recentEvents | The most recent 
 POST /rpcMetrics/timeSeries IRpcMetricsService.timeSeries | Hourly time-series of invocation counts for a specific call, oldest first. | rpcMetrics | UserAuth | service:query,method:query,sinceMillis:query | body:no
 PUT /scheduledTaskConfiguration/configuration IScheduledTaskConfigurationService.updateConfiguration | Update a task configuration. | scheduledTaskConfiguration | UserAuth | - | body:yes
 GET /scheduledTaskConfiguration/configurations IScheduledTaskConfigurationService.getConfigurations | Retrieve all background task configurations. | scheduledTaskConfiguration | UserAuth | - | body:no
-GET /scheduledTaskConfiguration/configurationsFlow IScheduledTaskConfigurationService.getConfigurationsFlow | Stream real-time updates for all background task configurations. | scheduledTaskConfiguration | UserAuth | - | body:no
 GET /scheduledTaskConfiguration/observeConfigurations IScheduledTaskConfigurationService.observeConfigurations | Stream real-time updates for all background task configurations. | scheduledTaskConfiguration | UserAuth | - | body:no
 POST /scheduledTaskConfiguration/triggerTask IScheduledTaskConfigurationService.triggerTask | Manually trigger a background task by its unique key. | scheduledTaskConfiguration | UserAuth | key:query | body:no
 GET /scheduledTaskLog/groupedLogs IScheduledTaskLogService.getGroupedLogs | Retrieve a snapshot of the most recent background task logs grouped by task name. | scheduledTaskLog | UserAuth | - | body:no
-GET /scheduledTaskLog/groupedLogsFlow IScheduledTaskLogService.getGroupedLogsFlow | Stream real-time updates for all background task progress and completion. | scheduledTaskLog | UserAuth | - | body:no
 GET /scheduledTaskLog/observeGroupedLogs IScheduledTaskLogService.observeGroupedLogs | Stream real-time updates for all background task progress and completion. | scheduledTaskLog | UserAuth | - | body:no
 POST /scrobble/clearNowPlaying IScrobbleService.clearNowPlaying | Clear the current user's now-playing state, e.g. when playback stops. | scrobble | UserAuth | - | body:no
 POST /scrobble/listened IScrobbleService.listened | Record that the current user finished listening to a library song. | scrobble | UserAuth | - | body:yes
 POST /scrobble/nowPlaying/{songId} IScrobbleService.nowPlaying | Report the library song the current user is now playing. Auto-clears after the song's duration unless reported again. | scrobble | UserAuth | songId:path | body:no
 GET /scrobble/recentAlbums IScrobbleService.recentAlbums | Get the current user's recently listened albums, most recently played first. | scrobble | UserAuth | limit:query | body:no
-GET /scrobble/recentAlbumsFlow IScrobbleService.recentAlbumsFlow | Stream the current user's recently listened albums, most recently played first, re-emitting on changes (debounced 100ms). @IChangeService.observeChanges reports the LISTENS topic of @ChangeTopic instead, after which @IScrobbleService.recentAlbums reads them once. | scrobble | UserAuth | limit:query | body:no
 GET /scrobble/recentArtists IScrobbleService.recentArtists | Get the current user's recently listened artists, most recently played first. | scrobble | UserAuth | limit:query | body:no
-GET /scrobble/recentArtistsFlow IScrobbleService.recentArtistsFlow | Stream the current user's recently listened artists, most recently played first, re-emitting on changes (debounced 100ms). @IChangeService.observeChanges reports the LISTENS topic of @ChangeTopic instead, after which @IScrobbleService.recentArtists reads them once. | scrobble | UserAuth | limit:query | body:no
 GET /scrobble/recentListens IScrobbleService.recentListens | Get the current user's recently listened songs and current now-playing once. | scrobble | UserAuth | limit:query | body:no
-GET /scrobble/recentListensFlow IScrobbleService.recentListensFlow | Stream the current user's recently listened songs and current now-playing, re-emitting on changes (debounced 100ms). @IChangeService.observeChanges reports the LISTENS topic of @ChangeTopic instead, after which @IScrobbleService.recentListens reads them once. | scrobble | UserAuth | limit:query | body:no
 POST /scrobble/reportPlayback IScrobbleService.reportPlayback | Report playback progress for the current user: call on play, pause, resume, seek and every 10-15 seconds while playing. Returns the server's epoch milliseconds at receipt so clients can align their clocks. | scrobble | UserAuth | - | body:yes
 GET /serverStats/health IServerStatsService.health | Simple connectivity check to verify the server is responding. | serverStats | - | - | body:no
 GET /serverStats/proxyInfo IServerStatsService.getProxyInfo | Retrieve information about the reverse proxy status and configuration. | serverStats | - | - | body:no
@@ -360,7 +351,6 @@ HEAD /song/downloadSong/{id} ISongService.downloadSong | Download song audio in 
 GET /song/exportFavouritesAsCsv ISongService.exportFavouritesAsCsv | Export all favorited songs as a CSV string. | song | UserAuth | - | body:no
 GET /song/extendedMetadata/{id} ISongService.extendedMetadata | Get extended metadata for a song. | song | UserAuth | id:path | body:no
 PUT /song/likeLevel/{id} ISongService.setLikeLevel | Set the like level of a song. A super like also counts as a like. Changing between LIKE and SUPER keeps the song's position among the liked songs. | song | UserAuth | id:path,level:query | body:no
-PUT /song/liked/{id} ISongService.setLiked | Toggle favorite status. | song | UserAuth | id:path,liked:query,addedAt:query | body:no
 GET /song/likedByArtist/{artistId} ISongService.likedByArtist | List songs liked by the user for a specific artist. | song | UserAuth | page:query,pageSize:query,artistId:path,explicit:query | body:no
 GET /song/likedSongIds ISongService.likedSongIds | Stream all IDs of songs liked by the current user. | song | UserAuth | explicit:query | body:no
 GET /song/likedSongs ISongService.likedSongs | Get all songs liked by the current user. | song | UserAuth | page:query,pageSize:query,explicit:query | body:no
@@ -397,7 +387,6 @@ POST /ui/dispatchHook IUiService.dispatchHook | Forward an app-level event (e.g.
 PUT /ui/homeCardOrder IUiService.setHomeCardOrder | Persist the order of the current user's pinned home cards. | ui | UserAuth | contributionIds:query | body:no
 PUT /ui/homeCardPinned/{contributionId} IUiService.setHomeCardPinned | Pin or unpin a home card for the current user. | ui | UserAuth | contributionId:path,pinned:query | body:no
 GET /ui/homeCards IUiService.getHomeCards | Home-card layout of the current user, including cards available for pinning. | ui | UserAuth | - | body:no
-GET /ui/homeCardsFlow IUiService.getHomeCardsFlow | Stream the current user's home-card layout. @IChangeService.observeChanges reports the HOME_CARDS topic of @ChangeTopic instead, after which @IUiService.getHomeCards reads the layout once. | ui | UserAuth | - | body:no
 GET /ui/hookHandlers IUiService.listHookHandlers | List every handler that may offer to take hook events for the current user, without an input. Intake resolvers serve every kind. Contributions list the kinds they declare. Whether a handler accepts a specific event is only known from dispatchHook. | ui | UserAuth | kind:query | body:no
 POST /ui/intake IUiService.intake | Hand items (links, codes, ids, text) to the server. Unambiguous items are submitted immediately. When several handlers offer, NEEDS_CHOICE returns them and the client calls intake again with the chosen handler's action. Items nobody accepts are returned as rejected. | ui | UserAuth | resolverId:query | body:yes
 POST /ui/invoke/{contributionId} IUiService.invoke | Dispatch an action declared by a contribution, with form values and/or action parameters. | ui | UserAuth | contributionId:path,actionId:query | body:yes
@@ -416,8 +405,6 @@ PUT /user/displayName IUserService.setDisplayName | Update the current user's di
 GET /user/me IUserService.me | Get the profile of the current authenticated user. | user | UserAuth | - | body:no
 PUT /user/profileImage IUserService.setProfileImage | Update the current user's avatar. | user | UserAuth | - | body:yes
 POST /user/user IUserService.createUser | Create a new user. | user | UserAuth | isAdmin:query,capabilities:query | body:yes
-GET /user/userById/{id} IUserService.findUserById | Look up a user by their unique ID. | user | UserAuth | id:path | body:no
-GET /user/userByUsername IUserService.findUserByUsername | Look up a user by their username. | user | UserAuth | username:query | body:no
 POST /userPlaylist/addAlbumToPlaylist/{id} IUserPlaylistService.addAlbumToPlaylist | Add all songs of an album to a user playlist. | userPlaylist | UserAuth | id:path,albumId:query | body:no
 POST /userPlaylist/addPlaylistToPlaylist/{id} IUserPlaylistService.addPlaylistToPlaylist | Add all songs of a playlist to a user playlist. | userPlaylist | UserAuth | id:path,sourcePlaylistId:query | body:no
 POST /userPlaylist/addSongsToPlaylist/{id} IUserPlaylistService.addSongsToPlaylist | Add songs to a user playlist. | userPlaylist | UserAuth | id:path,songIds:query | body:no

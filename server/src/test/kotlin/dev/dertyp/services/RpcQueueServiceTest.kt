@@ -64,7 +64,7 @@ class RpcQueueServiceTest {
         insertUser(otherUserId)
         val targetSessionId = sessionService.createSession(otherUserId, "agent", "127.0.0.1")
 
-        val user = User(callerId, "caller", passwordHash = "hash")
+        val user = User(callerId, "caller")
         val service = RpcQueueService(user, UUID.randomUUID(), queueService, sessionService, clientRequestService)
 
         assertThrows<UnauthorizedException> {
@@ -88,7 +88,7 @@ class RpcQueueServiceTest {
             ClientRequestStatus.COMPLETED
         }
 
-        val user = User(callerId, "caller", passwordHash = "hash")
+        val user = User(callerId, "caller")
         val service = RpcQueueService(user, callerSessionId, queueService, sessionService, clientRequestService)
 
         val result = service.requestUploadFrom(targetSessionId)
@@ -101,7 +101,7 @@ class RpcQueueServiceTest {
     @Test
     fun `commitUpload completes the client request only on Ok`() = runBlocking {
         val userId = UUID.randomUUID()
-        val user = User(userId, "user", passwordHash = "hash")
+        val user = User(userId, "user")
         val sessionId = UUID.randomUUID()
         val uploadId = UUID.randomUUID()
         val requestId = UUID.randomUUID()
@@ -127,7 +127,7 @@ class RpcQueueServiceTest {
 
     @Test
     fun `setSyncEnabled without a session throws IllegalStateException`() = runBlocking<Unit> {
-        val user = User(UUID.randomUUID(), "user", passwordHash = "hash")
+        val user = User(UUID.randomUUID(), "user")
         val service = RpcQueueService(user, null, queueService, sessionService, clientRequestService)
 
         assertThrows<IllegalStateException> {

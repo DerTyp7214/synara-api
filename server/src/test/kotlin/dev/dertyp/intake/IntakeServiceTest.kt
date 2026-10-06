@@ -21,8 +21,8 @@ import java.util.UUID
 
 class IntakeServiceTest {
     private val service = IntakeService(TranslationService(UiRegistry()))
-    private val user = User(UUID.randomUUID(), "u", passwordHash = "", capabilities = listOf(UserCapability.IMPORT))
-    private val plain = User(UUID.randomUUID(), "p", passwordHash = "")
+    private val user = User(UUID.randomUUID(), "u", capabilities = listOf(UserCapability.IMPORT))
+    private val plain = User(UUID.randomUUID(), "p")
 
     private val tidalUrl = IntakeItem.Url("https://tidal.com/x")
     private val appleUrl = IntakeItem.Url("https://music.apple.com/x")
@@ -101,7 +101,7 @@ class IntakeServiceTest {
     @Test
     fun `access is enforced and failing resolvers are skipped`() = runBlocking {
         assertTrue(service.handlers(listOf(tidalUrl), plain, "en").none { it.id == "admin.only" })
-        val admin = User(UUID.randomUUID(), "a", passwordHash = "", isAdmin = true)
+        val admin = User(UUID.randomUUID(), "a", isAdmin = true)
         assertTrue(service.handlers(listOf(tidalUrl), admin, "en").any { it.id == "admin.only" })
         val unknown = service.submit(listOf(tidalUrl), "missing", user, "en")
         assertEquals(UiIntakeStatus.ERROR, unknown.status)

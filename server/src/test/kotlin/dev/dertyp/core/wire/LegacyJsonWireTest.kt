@@ -2,8 +2,11 @@ package dev.dertyp.core.wire
 
 import dev.dertyp.core.ClientInfo
 import dev.dertyp.core.jsonFor
+import dev.dertyp.core.wire.fixtures.*
 import dev.dertyp.data.PlaybackState
+import dev.dertyp.data.QueueInfo
 import dev.dertyp.data.QueueWriteResult
+import dev.dertyp.data.RepeatMode
 import dev.dertyp.serializers.AppJson
 import dev.dertyp.services.models.tidal.BaseAttributes
 import dev.dertyp.services.models.tidal.JsonAttribute
@@ -19,19 +22,19 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import dev.dertyp.core.wire.old.QueueWriteResult as OldQueueWriteResult
+import java.util.UUID
 
 class LegacyJsonWireTest {
-    private val legacy = jsonFor(ClientInfo(7))
-    private val plain = jsonFor(ClientInfo(8))
+    private val legacy = WireJson(FixtureLegacyJson, FixtureWire)
+    private val plain = WireJson(AppJson)
 
     private fun <N, O> assertSameAsOldClient(case: WireCase<N, O>) {
-        val old = OldClientJson.encodeToString(case.oldSerializer, case.oldValue)
+        val old = AppJson.encodeToString(case.oldSerializer, case.oldValue)
         assertEquals(old, legacy.encodeToString(case.serializer, case.value), case.name)
     }
 
     private fun <N, O> assertServerDecodesOldClient(case: WireCase<N, O>) {
-        val old = OldClientJson.encodeToString(case.oldSerializer, case.oldValue)
+        val old = AppJson.encodeToString(case.oldSerializer, case.oldValue)
         assertEquals(case.value, legacy.decodeFromString(case.serializer, old), case.name)
         assertEquals(
             case.value,
@@ -42,7 +45,7 @@ class LegacyJsonWireTest {
 
     private fun <N, O> assertOldClientDecodesLegacy(case: WireCase<N, O>) {
         val text = legacy.encodeToString(case.serializer, case.value)
-        assertEquals(case.oldValue, OldClientJson.decodeFromString(case.oldSerializer, text), case.name)
+        assertEquals(case.oldValue, AppJson.decodeFromString(case.oldSerializer, text), case.name)
     }
 
     private fun <N, O> assertPlainForNewClients(case: WireCase<N, O>) {
@@ -67,9 +70,9 @@ class LegacyJsonWireTest {
     }
 
     @Test
-    fun `clients from api version 8 get exactly the plain encoding`() {
+    fun `the plain format gives exactly the plain encoding`() {
         wireCases.forEach { assertPlainForNewClients(it) }
-        val text = plain.encodeToString(PlaybackState.serializer(), newState)
+        val text = plain.encodeToString(WirePlaybackState.serializer(), newState)
         assertTrue("\"isShuffled\":true" in text)
         assertTrue("{\"type\":\"WithSong\",\"song\":" in text)
         assertFalse("shuffleMode" in text)
@@ -79,7 +82,7 @@ class LegacyJsonWireTest {
 
     @Test
     fun `the queue entry type is written inline under its old name`() {
-        val text = legacy.encodeToString(PlaybackState.serializer(), newState)
+        val text = legacy.encodeToString(WirePlaybackState.serializer(), newState)
         assertTrue("{\"type\":\"Explicit\",\"song\":" in text)
         assertTrue("{\"type\":\"FromSource\",\"songId\":" in text)
         assertTrue("\"shuffleMode\":true" in text)
@@ -91,9 +94,12 @@ class LegacyJsonWireTest {
 
     @Test
     fun `a renamed field inside a subclass without a rename is read under its old name`() {
-        val old = OldClientJson.encodeToString(OldQueueWriteResult.serializer(), OldQueueWriteResult.Conflict(oldInfo))
+        val old = AppJson.encodeToString(OldWireQueueWriteResult.serializer(), OldWireQueueWriteResult.Conflict(oldInfo))
         assertTrue("\"shuffleMode\":true" in old)
-        assertEquals(QueueWriteResult.Conflict(newInfo), legacy.decodeFromString(QueueWriteResult.serializer(), old))
+        assertEquals(
+            WireQueueWriteResult.Conflict(newInfo),
+            legacy.decodeFromString(WireQueueWriteResult.serializer(), old)
+        )
     }
 
     @Test
@@ -104,11 +110,11 @@ class LegacyJsonWireTest {
                {"song":{"id":"00000000-0000-0000-0000-000000000010","title":"Bare","artists":[],"album":null,"duration":100,"explicit":false,"path":"/b.flac"},"queueId":3,"type":"Explicit"}
              ],"currentIndex":0,"isPlaying":false,"positionMs":5,"shuffleMode":true,"repeatMode":"OFF","bogus":{"a":[1]}}
         """.trimIndent()
-        val decoded = legacy.decodeFromString(PlaybackState.serializer(), text)
+        val decoded = legacy.decodeFromString(WirePlaybackState.serializer(), text)
         assertTrue(decoded.isShuffled)
-        assertTrue(decoded.queue[0] is PlaybackState.QueueEntry.FromSource)
+        assertTrue(decoded.queue[0] is WirePlaybackState.QueueEntry.FromSource)
         val withSong = decoded.queue[1]
-        assertTrue(withSong is PlaybackState.QueueEntry.WithSong && withSong.song.title == "Bare")
+        assertTrue(withSong is WirePlaybackState.QueueEntry.WithSong && withSong.song.title == "Bare")
     }
 
     @Test
@@ -131,5 +137,40 @@ class LegacyJsonWireTest {
         assertEquals(AppJson.encodeToString(rawSerializer, raw), rawText)
         assertEquals(raw, legacy.decodeFromString(rawSerializer, rawText))
         assertEquals(raw, legacy.decodeFromJsonElement(rawSerializer, AppJson.parseToJsonElement(rawText)))
+    }
+
+    @Test
+    fun `clients below api version 8 get real models exactly like the plain format`() {
+        val server = jsonFor(ClientInfo(7))
+        val info = QueueInfo(
+            version = 3,
+            modifiedAt = 4,
+            currentIndex = 1,
+            isShuffled = true,
+            repeatMode = RepeatMode.ONE,
+            total = 2
+        )
+        val state = PlaybackState(
+            queue = listOf(
+                PlaybackState.QueueEntry.FromSource(UUID.fromString("00000000-0000-0000-0000-000000000011"), 1)
+            ),
+            currentIndex = 0,
+            isPlaying = true,
+            positionMs = 5,
+            isShuffled = true,
+            repeatMode = RepeatMode.ALL,
+        )
+        val results = listOf(QueueWriteResult.Ok(info), QueueWriteResult.Conflict(info))
+        val resultSerializer = ListSerializer(QueueWriteResult.serializer())
+
+        val stateText = server.encodeToString(PlaybackState.serializer(), state)
+        assertEquals(AppJson.encodeToString(PlaybackState.serializer(), state), stateText)
+        assertTrue("\"isShuffled\":true" in stateText)
+        assertFalse("shuffleMode" in stateText)
+        assertEquals(state, server.decodeFromString(PlaybackState.serializer(), stateText))
+        val resultText = server.encodeToString(resultSerializer, results)
+        assertEquals(AppJson.encodeToString(resultSerializer, results), resultText)
+        assertEquals(results, server.decodeFromString(resultSerializer, resultText))
+        assertEquals(results, server.decodeFromJsonElement(resultSerializer, AppJson.parseToJsonElement(resultText)))
     }
 }

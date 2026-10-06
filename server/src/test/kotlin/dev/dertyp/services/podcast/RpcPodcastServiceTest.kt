@@ -31,7 +31,7 @@ class RpcPodcastServiceTest {
     private val streamService = mockk<PodcastStreamService>(relaxed = true)
     private val indexService = mockk<PodcastIndexService>(relaxed = true)
     private val maintenanceService = mockk<PodcastMaintenanceService>(relaxed = true)
-    private val user = User(UUID.randomUUID(), "user", passwordHash = "hash")
+    private val user = User(UUID.randomUUID(), "user")
     private val service =
         RpcPodcastService(
             user,

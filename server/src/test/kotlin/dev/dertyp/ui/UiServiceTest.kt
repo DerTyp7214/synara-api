@@ -37,10 +37,10 @@ class UiServiceTest {
     private val service =
         UiService(registry, translations, PluginSettingsService(), UserHomeCardService(), IntakeService(translations))
 
-    private val admin = User(UUID.randomUUID(), "admin", passwordHash = "", isAdmin = true)
+    private val admin = User(UUID.randomUUID(), "admin", isAdmin = true)
     private val importer =
-        User(UUID.randomUUID(), "importer", passwordHash = "", capabilities = listOf(UserCapability.IMPORT))
-    private val plain = User(UUID.randomUUID(), "plain", passwordHash = "")
+        User(UUID.randomUUID(), "importer", capabilities = listOf(UserCapability.IMPORT))
+    private val plain = User(UUID.randomUUID(), "plain")
     private val client = ClientInfo(ApiVersion.CURRENT, UiSchemaVersion.CURRENT, "de")
 
     private open class Fake(

@@ -73,7 +73,6 @@ class SongServiceTest : KoinTest {
     private val user = User(
         id = UUID.randomUUID(),
         username = "testuser",
-        passwordHash = "hash",
         isAdmin = true
     )
 
@@ -146,7 +145,7 @@ class SongServiceTest : KoinTest {
             UserTable.insert {
                 it[id] = user.id
                 it[username] = user.username
-                it[passwordHash] = user.passwordHash
+                it[passwordHash] = "hash"
                 it[isAdmin] = user.isAdmin
             }
         }
@@ -350,7 +349,7 @@ class SongServiceTest : KoinTest {
             }
         }
 
-        val updated = rpcService.setLiked(songId, true, null)
+        val updated = songService.setLikedReturning(songId, user.id, true, null)
         assertNotNull(updated)
         assertEquals(true, updated?.isFavourite)
 
@@ -453,11 +452,11 @@ class SongServiceTest : KoinTest {
         val songId = insertSongWithPath("/setliked-super.mp3")
         rpcService.setLikeLevel(songId, LikeLevel.SUPER)
 
-        val stillSuper = rpcService.setLiked(songId, true, null)
+        val stillSuper = songService.setLikedReturning(songId, user.id, true, null)
         assertEquals(LikeLevel.SUPER, stillSuper?.likeLevel)
         assertNotNull(stillSuper?.superLikedAt)
 
-        val unliked = rpcService.setLiked(songId, false, null)
+        val unliked = songService.setLikedReturning(songId, user.id, false, null)
         assertEquals(LikeLevel.NONE, unliked?.likeLevel)
         assertEquals(false, unliked?.isFavourite)
         assertNull(unliked?.superLikedAt)
@@ -554,7 +553,7 @@ class SongServiceTest : KoinTest {
         setup(dialect)
         val untouched = insertSongWithPath("/untouched.mp3")
         val liked = insertSongWithPath("/plain-like.mp3")
-        rpcService.setLiked(liked, true, null)
+        songService.setLikedReturning(liked, user.id, true, null)
 
         val untouchedSong = rpcService.byId(untouched)
         val likedSong = rpcService.byId(liked)
@@ -704,7 +703,7 @@ class SongServiceTest : KoinTest {
                 it[filePath] = "/anniversary/stay.flac"
             }
         }
-        rpcService.setLiked(favouriteId, true, null)
+        songService.setLikedReturning(favouriteId, user.id, true, null)
 
         val line = songService.exportFavouritesAsCsv(user.id).lines()[1]
         assertTrue(line.startsWith("Stay,,The Divine Feminine (10th Anniversary),"), line)

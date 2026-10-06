@@ -45,8 +45,8 @@ class CachedAuthenticatedRouteTest {
     private val sessionService = mockk<SessionService>(relaxed = true)
     private val jwtService = mockk<JwtService>()
 
-    private val admin = User(id = UUID.randomUUID(), username = "admin", passwordHash = "x", isAdmin = true)
-    private val member = User(id = UUID.randomUUID(), username = "member", passwordHash = "x", isAdmin = false)
+    private val admin = User(id = UUID.randomUUID(), username = "admin", isAdmin = true)
+    private val member = User(id = UUID.randomUUID(), username = "member", isAdmin = false)
 
     private fun tokenFor(username: String) = JWT.create()
         .withClaim(JwtService.CLAIM_USERNAME, username)

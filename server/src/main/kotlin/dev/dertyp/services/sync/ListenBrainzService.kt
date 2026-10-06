@@ -12,7 +12,6 @@ import dev.dertyp.data.User
 import dev.dertyp.db.*
 import dev.dertyp.core.db.dbQuery
 import dev.dertyp.platformUUIDFromString
-import dev.dertyp.rpc.annotations.REMOVED_IN_API_9
 import dev.dertyp.services.IListenBrainzService
 import dev.dertyp.services.IncomingListen
 import dev.dertyp.services.ListenService
@@ -21,14 +20,11 @@ import dev.dertyp.services.SongService
 import io.ktor.client.request.*
 import io.ktor.http.*
 import kotlinx.coroutines.*
-import kotlinx.coroutines.channels.BufferOverflow
-import kotlinx.coroutines.flow.*
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.jdbc.*
 import org.koin.core.component.inject
-import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 class ListenBrainzService : Service() {
@@ -36,11 +32,7 @@ class ListenBrainzService : Service() {
     private val songService by inject<SongService>()
     private val changeNotifier by inject<ChangeNotifier>()
 
-    private val changes =
-        MutableSharedFlow<Unit>(extraBufferCapacity = 8, onBufferOverflow = BufferOverflow.DROP_OLDEST)
-
     private fun signalChange(userIds: Collection<PlatformUUID>) {
-        changes.tryEmit(Unit)
         userIds.forEach { changeNotifier.notify(it, ChangeTopic.LISTENBRAINZ_STATUS) }
     }
 
@@ -55,14 +47,6 @@ class ListenBrainzService : Service() {
             .map { it[UserListenBrainzLinkTable.userId].value }
             .distinct()
     }
-
-    @OptIn(FlowPreview::class)
-    fun statusFlow(userId: PlatformUUID): Flow<ListenBrainzStatus?> =
-        changes
-            .onStart { emit(Unit) }
-            .debounce(100.milliseconds)
-            .map { getStatus(userId) }
-            .distinctUntilChanged()
 
     suspend fun link(userId: PlatformUUID, username: String, token: String?): ListenBrainzStatus {
         val lbUserId = dbQuery {
@@ -575,9 +559,6 @@ class RpcListenBrainzService(
     override suspend fun unlink() = service.unlink(user.id)
 
     override suspend fun getStatus(): ListenBrainzStatus? = service.getStatus(user.id)
-
-    @Deprecated(REMOVED_IN_API_9 + " Use IChangeService.observeChanges and getStatus.")
-    override fun getStatusFlow(): Flow<ListenBrainzStatus?> = service.statusFlow(user.id)
 
     override suspend fun syncNow(): ListenBrainzStatus = service.syncNow(user.id)
 

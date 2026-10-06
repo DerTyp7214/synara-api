@@ -107,8 +107,8 @@ class CredentialServerContributionsTest {
             credential(CredentialNames.plugin("demo", "token"), CredentialKind.API_KEY),
         ),
     )
-    private val admin = User(UUID.randomUUID(), "root", displayName = "Root", passwordHash = "", isAdmin = true)
-    private val member = User(UUID.randomUUID(), "member", displayName = "Member", passwordHash = "", isAdmin = false)
+    private val admin = User(UUID.randomUUID(), "root", displayName = "Root", isAdmin = true)
+    private val member = User(UUID.randomUUID(), "member", displayName = "Member", isAdmin = false)
 
     private var consumerGrants = emptyList<GrantInfo>()
     private val factory = httpClientFactory()

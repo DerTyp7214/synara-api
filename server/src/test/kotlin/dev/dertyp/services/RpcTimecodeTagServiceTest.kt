@@ -12,7 +12,7 @@ import java.util.UUID
 
 class RpcTimecodeTagServiceTest {
     private val timecodeTagService = mockk<TimecodeTagService>(relaxed = true)
-    private val user = User(UUID.randomUUID(), "user", passwordHash = "hash")
+    private val user = User(UUID.randomUUID(), "user")
     private val service = RpcTimecodeTagService(user, timecodeTagService)
 
     @Test

@@ -414,7 +414,7 @@ class GeneratedRestRoutesSmokeTest {
     }
 
     @Test
-    fun `clients below api version 8 get only the old key of a renamed field`() = testApplication {
+    fun `clients below api version 8 get the same body as current clients`() = testApplication {
         setUpApplication()
         coEvery { queue.setModes(any(), any(), any(), any()) } returns queueResult()
 
@@ -425,31 +425,24 @@ class GeneratedRestRoutesSmokeTest {
             header(ApiVersion.HEADER, "8")
         }
 
-        val legacyInfo = AppJson.parseToJsonElement(legacy.bodyAsText()).jsonObject.getValue("info").jsonObject
-        assertEquals(JsonPrimitive(false), legacyInfo["shuffleMode"])
-        assertFalse("isShuffled" in legacyInfo)
-        val currentInfo = AppJson.parseToJsonElement(current.bodyAsText()).jsonObject.getValue("info").jsonObject
-        assertEquals(JsonPrimitive(false), currentInfo["isShuffled"])
-        assertFalse("shuffleMode" in currentInfo)
+        val legacyBody = legacy.bodyAsText()
+        assertEquals(current.bodyAsText(), legacyBody)
+        val legacyInfo = AppJson.parseToJsonElement(legacyBody).jsonObject.getValue("info").jsonObject
+        assertEquals(JsonPrimitive(false), legacyInfo["isShuffled"])
+        assertFalse("shuffleMode" in legacyInfo)
     }
 
     @Test
-    fun `a request body is accepted with the old key of a renamed field`() = testApplication {
+    fun `a request body of a client below api version 8 is read with the current keys`() = testApplication {
         setUpApplication()
         coEvery { remoteControl.reportStatus(any()) } returns Unit
         val status =
             RemotePlaybackStatus(isPlaying = true, positionMs = 10, isShuffled = true, repeatMode = RepeatMode.OFF)
-        val body = buildJsonObject {
-            AppJson.encodeToJsonElement(RemotePlaybackStatus.serializer(), status).jsonObject
-                .filterKeys { it != "isShuffled" }
-                .forEach { (key, value) -> put(key, value) }
-            put("shuffleMode", true)
-        }
 
         val response = client.post("/remoteControl/reportStatus") {
             header(ApiVersion.HEADER, "7")
             contentType(ContentType.Application.Json)
-            setBody(AppJson.encodeToString(JsonObject.serializer(), body))
+            setBody(AppJson.encodeToString(RemotePlaybackStatus.serializer(), status))
         }
 
         assertEquals(HttpStatusCode.OK, response.status)

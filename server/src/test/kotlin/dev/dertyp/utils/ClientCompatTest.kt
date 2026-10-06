@@ -3,7 +3,6 @@ package dev.dertyp.utils
 import dev.dertyp.core.ClientInfo
 import dev.dertyp.data.Album
 import dev.dertyp.data.ApiVersion
-import dev.dertyp.data.AudioInfo
 import dev.dertyp.data.ListenedSong
 import dev.dertyp.data.NowPlaying
 import dev.dertyp.data.PaginatedResponse
@@ -168,40 +167,6 @@ class ClientCompatTest {
     }
 
     @Test
-    @Suppress("DEPRECATION")
-    fun `audio info is flattened for clients below api version 4`() = runBlocking {
-        val audio = AudioInfo("flac", 48000, 24, 2000000, 81000000, 6)
-        val atmos = AudioInfo("eac3", 48000, 0, 768000, 17905147, 6)
-        val atmosUserSong = userSong.copy(audio = audio, atmos = atmos, atmosVariantPath = "atmos.m4a")
-        val atmosSong = song.copy(audio = audio, atmos = atmos, atmosVariantPath = "atmos.m4a")
-        val api = object : SongApi by fake {
-            override suspend fun one() = atmosUserSong
-            override suspend fun plain() = atmosSong
-        }
-
-        val v2 = api.withClientCompat(SongApi::class.java, ResponseShaper(ClientInfo(2))).one()!!
-        assertEquals(48000, v2.sampleRate)
-        assertEquals(24, v2.bitsPerSample)
-        assertEquals(2000000L, v2.bitRate)
-        assertEquals(81000000L, v2.fileSize)
-        assertEquals(null, v2.atmosPath)
-        assertEquals(null, v2.audio)
-        assertEquals(null, v2.atmos)
-
-        val v3 = api.withClientCompat(SongApi::class.java, ResponseShaper(ClientInfo(3)))
-        assertEquals("atmos.m4a", v3.one()!!.atmosPath)
-        assertEquals("atmos.m4a", v3.plain().atmosPath)
-        assertEquals(48000, v3.plain().sampleRate)
-        assertEquals(null, v3.plain().audio)
-
-        val v4 = api.withClientCompat(SongApi::class.java, ResponseShaper(ClientInfo(ApiVersion.CURRENT)))
-        assertEquals(audio, v4.one()!!.audio)
-        assertEquals(atmos, v4.plain().atmos)
-        assertEquals(null, v4.one()!!.sampleRate)
-        assertEquals(null, v4.plain().atmosPath)
-    }
-
-    @Test
     fun `only rules for unsupported features are active`() {
         assertEquals(false, ResponseShaper(ClientInfo(2)).isNoop)
         assertEquals(false, ResponseShaper(ClientInfo(3)).isNoop)
@@ -212,8 +177,8 @@ class ClientCompatTest {
             ResponseShaper(ClientInfo(ApiVersion.CURRENT, uiSchemaVersion = UiSchemaVersion.CURRENT)).isNoop
         )
         assertEquals(true, ResponseShaper(ClientInfo(2), rules = emptyList()).isNoop)
-        assertEquals(true, ResponseShaper(ClientInfo(3), rules = listOf(DolbyAtmosCompat)).isNoop)
-        assertEquals(false, ResponseShaper(ClientInfo(2), rules = listOf(DolbyAtmosCompat)).isNoop)
+        assertEquals(true, ResponseShaper(ClientInfo(6), rules = listOf(TitleTagsCompat)).isNoop)
+        assertEquals(false, ResponseShaper(ClientInfo(5), rules = listOf(TitleTagsCompat)).isNoop)
     }
 
     @Test

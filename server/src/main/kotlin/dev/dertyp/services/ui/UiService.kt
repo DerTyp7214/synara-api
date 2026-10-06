@@ -366,9 +366,6 @@ class UiService(
         return homeLayout(user, client)
     }
 
-    fun homeLayoutFlow(user: User, client: ClientInfo): Flow<UiHomeLayout> =
-        homeCards.layoutFlow(user.id) { homeCardInfos(user, client) }
-
     fun contributionsOf(registeredContribution: UiContribution): RegisteredContribution? =
         registry.get(registeredContribution.id)
 }

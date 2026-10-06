@@ -192,7 +192,7 @@ class UserServiceTest : KoinTest {
         assertEquals(4, users.size)
         users.forEach { user ->
             val json = AppJson.encodeToString(User.serializer(), user)
-            assertTrue(json.contains("\"passwordHash\":\"\""), json)
+            assertFalse(json.contains("passwordHash"), json)
             assertFalse(json.contains("stored-hash"), json)
         }
     }

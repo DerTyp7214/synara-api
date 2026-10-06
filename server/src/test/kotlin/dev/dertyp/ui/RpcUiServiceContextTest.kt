@@ -25,7 +25,7 @@ class RpcUiServiceContextTest {
     private val translations = TranslationService(registry)
     private val uiService =
         UiService(registry, translations, PluginSettingsService(), UserHomeCardService(), IntakeService(translations))
-    private val user = User(UUID.randomUUID(), "admin", passwordHash = "", isAdmin = true)
+    private val user = User(UUID.randomUUID(), "admin", isAdmin = true)
     private val client = ClientInfo(ApiVersion.CURRENT, UiSchemaVersion.CURRENT, "en")
     private val rpc = RpcUiService(user, client, null, uiService)
 

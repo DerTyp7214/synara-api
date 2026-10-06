@@ -65,7 +65,7 @@ class RpcPlaybackServiceTest {
     )
 
     private fun serviceFor(userId: UUID) =
-        RpcPlaybackService(User(userId, "user_$userId", passwordHash = "hash"), sessionService, playbackService)
+        RpcPlaybackService(User(userId, "user_$userId"), sessionService, playbackService)
 
     @Test
     fun `getPlaybackState of an own session is forwarded`() = runBlocking {

@@ -3,19 +3,12 @@
 package dev.dertyp.core
 
 import dev.dertyp.core.wire.LegacyWire
-import dev.dertyp.core.wire.latin1
-import dev.dertyp.core.wire.newInfo
-import dev.dertyp.core.wire.newItems
+import dev.dertyp.core.wire.fixtures.*
+import dev.dertyp.core.wire.legacyCbor
 import dev.dertyp.data.ApiVersion
 import dev.dertyp.data.PaginatedResponse
-import dev.dertyp.data.QueueInfo
-import dev.dertyp.data.QueueItem
-import dev.dertyp.data.QueueMeta
-import dev.dertyp.data.QueueUploadStart
-import dev.dertyp.data.QueueWriteResult
 import dev.dertyp.data.RepeatMode
 import dev.dertyp.serializers.AppCbor
-import dev.dertyp.services.IQueueService
 import io.ktor.client.request.header
 import io.ktor.server.application.install
 import io.ktor.server.testing.testApplication
@@ -34,6 +27,7 @@ import kotlinx.rpc.krpc.ktor.client.rpc
 import kotlinx.rpc.krpc.ktor.server.rpc
 import kotlinx.rpc.krpc.serialization.KrpcSerialFormat
 import kotlinx.rpc.krpc.serialization.KrpcSerialFormatBuilder
+import kotlinx.rpc.krpc.serialization.cbor.cbor
 import kotlinx.rpc.withService
 import kotlinx.serialization.BinaryFormat
 import kotlinx.serialization.DeserializationStrategy
@@ -80,13 +74,13 @@ private object RecordingKrpcFormat : KrpcSerialFormat<Recording, CborBuilder> {
 }
 
 class WireFormatKrpcTest {
-    private val meta = QueueMeta(currentIndex = 1, isShuffled = true, repeatMode = RepeatMode.ALL)
+    private val meta = WireQueueMeta(currentIndex = 1, isShuffled = true, repeatMode = RepeatMode.ALL)
     private val uploadId = UUID.fromString("00000000-0000-0000-0000-000000000042")
 
     private class Connection(val version: String, wire: LegacyWire?) {
         val sent: MutableList<ByteArray> = Collections.synchronizedList(mutableListOf())
         val received: MutableList<ByteArray> = Collections.synchronizedList(mutableListOf())
-        val format = Recording(if (wire == null) AppCbor else LegacyServerCbor, wire, sent, received)
+        val format = Recording(if (wire == null) AppCbor else FixtureLegacyCbor, wire, sent, received)
 
         fun sentText(): String = sent.joinToString("") { it.latin1() }
 
@@ -94,44 +88,52 @@ class WireFormatKrpcTest {
     }
 
     private class CallResults(
-        val info: QueueInfo,
-        val page: PaginatedResponse<QueueItem>,
-        val observed: List<QueueInfo>,
-        val insert: QueueWriteResult,
-        val begin: QueueUploadStart,
-        val commit: QueueWriteResult,
+        val info: WireQueueInfo,
+        val page: PaginatedResponse<WireQueueItem>,
+        val observed: List<WireQueueInfo>,
+        val insert: WireQueueWriteResult,
+        val begin: WireQueueUploadStart,
+        val commit: WireQueueWriteResult,
     )
 
     @Test
-    fun `connections below and at api version 8 are served side by side with their own names`() = testApplication {
-        val queue = mockk<IQueueService>()
-        val inserted = Collections.synchronizedList(mutableListOf<List<QueueItem>>())
-        val committed = Collections.synchronizedList(mutableListOf<QueueMeta>())
-        val items = slot<List<QueueItem>>()
-        val metaSlot = slot<QueueMeta>()
+    fun `connections on the legacy and the plain format are served side by side with their own names`() = testApplication {
+        val queue = mockk<IWireQueueService>()
+        val inserted = Collections.synchronizedList(mutableListOf<List<WireQueueItem>>())
+        val committed = Collections.synchronizedList(mutableListOf<WireQueueMeta>())
+        val items = slot<List<WireQueueItem>>()
+        val metaSlot = slot<WireQueueMeta>()
         coEvery { queue.getQueueInfo() } returns newInfo
-        coEvery { queue.getQueue(any(), any(), any()) } returns newItems
+        coEvery { queue.getQueue(any(), any()) } returns newItems
         every { queue.observeQueue() } returns flowOf(newInfo, newInfo.copy(version = 4))
-        coEvery { queue.insert(any(), any(), capture(items), any()) } answers {
+        coEvery { queue.insert(any(), any(), capture(items)) } answers {
             inserted += items.captured
-            QueueWriteResult.Ok(newInfo)
+            WireQueueWriteResult.Ok(newInfo)
         }
-        coEvery { queue.beginUpload(any(), any()) } returns QueueUploadStart.Conflict(newInfo)
-        coEvery { queue.commitUpload(any(), capture(metaSlot), any()) } answers {
+        coEvery { queue.beginUpload(any()) } returns WireQueueUploadStart.Conflict(newInfo)
+        coEvery { queue.commitUpload(any(), capture(metaSlot)) } answers {
             committed += metaSlot.captured
-            QueueWriteResult.Conflict(newInfo)
+            WireQueueWriteResult.Conflict(newInfo)
         }
         application {
             install(WebSockets)
         }
         routing {
             rpc("/rpc") {
-                rpcConfig { serialization { cborFor(call.clientInfo) } }
-                registerService(IQueueService::class) { queue }
+                rpcConfig {
+                    serialization {
+                        if (call.clientInfo.apiVersion < FIXTURE_RENAMES_API_VERSION) {
+                            legacyCbor(FixtureLegacyCbor, FixtureWire)
+                        } else {
+                            cbor(AppCbor)
+                        }
+                    }
+                }
+                registerService(IWireQueueService::class) { queue }
             }
         }
 
-        val legacy = Connection("7", ServerWire)
+        val legacy = Connection("7", FixtureWire)
         val current = Connection("8", null)
 
         val results = coroutineScope {
@@ -145,10 +147,10 @@ class WireFormatKrpcTest {
                         }
                     }
                     val service = client.rpc("/rpc") { header(ApiVersion.HEADER, connection.version) }
-                        .withService<IQueueService>()
+                        .withService<IWireQueueService>()
                     CallResults(
                         info = service.getQueueInfo(),
-                        page = service.getQueue(0, 50, true),
+                        page = service.getQueue(0, 50),
                         observed = service.observeQueue().toList(),
                         insert = service.insert(1, 0, newItems.data),
                         begin = service.beginUpload(1),
@@ -162,9 +164,9 @@ class WireFormatKrpcTest {
             assertEquals(newInfo, result.info)
             assertEquals(newItems, result.page)
             assertEquals(listOf(newInfo, newInfo.copy(version = 4)), result.observed)
-            assertEquals(QueueWriteResult.Ok(newInfo), result.insert)
-            assertEquals(QueueUploadStart.Conflict(newInfo), result.begin)
-            assertEquals(QueueWriteResult.Conflict(newInfo), result.commit)
+            assertEquals(WireQueueWriteResult.Ok(newInfo), result.insert)
+            assertEquals(WireQueueUploadStart.Conflict(newInfo), result.begin)
+            assertEquals(WireQueueWriteResult.Conflict(newInfo), result.commit)
         }
         assertEquals(List(4) { newItems.data }, inserted.toList())
         assertEquals(List(4) { meta }, committed.toList())

@@ -14,7 +14,6 @@ import dev.dertyp.core.db.dbQuery
 import dev.dertyp.data.*
 import dev.dertyp.db.*
 import dev.dertyp.plugins.SongLibrary
-import dev.dertyp.rpc.annotations.REMOVED_IN_API_9
 import dev.dertyp.routing.rest.RestFileProvider
 import dev.dertyp.services.AlbumService.Companion.calculateAlbumStats
 import dev.dertyp.services.AlbumService.Companion.mapAlbum
@@ -76,16 +75,6 @@ class SongRpcService(
         }
         return null
     }
-
-    @Deprecated(
-        REMOVED_IN_API_9 + " Use setLikeLevel.",
-        ReplaceWith("setLikeLevel(id, if (liked) LikeLevel.LIKE else LikeLevel.NONE)")
-    )
-    override suspend fun setLiked(
-        id: UUID,
-        liked: Boolean,
-        addedAt: Instant?
-    ): UserSong? = songService.setLikedReturning(id, user.id, liked, addedAt)
 
     override suspend fun setLikeLevel(id: UUID, level: LikeLevel): UserSong? =
         songService.setLikeLevelReturning(id, user.id, level)
@@ -2779,7 +2768,7 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
             it[trackNumber] = song.trackNumber
             it[discNumber] = song.discNumber
             it[copyright] = song.copyright
-            song.effectiveAudio?.let { audio ->
+            song.audio?.let { audio ->
                 it[sampleRate] = audio.sampleRate
                 it[bitsPerSample] = audio.bitsPerSample
                 it[bitRate] = audio.bitRate

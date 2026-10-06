@@ -11,11 +11,7 @@ import dev.dertyp.core.db.dbQuery
 import dev.dertyp.services.ui.UserHomeCardService
 import io.mockk.mockk
 import io.mockk.verify
-import kotlinx.coroutines.flow.take
-import kotlinx.coroutines.flow.toList
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.yield
 import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.junit.jupiter.api.AfterEach
@@ -88,20 +84,6 @@ class UserHomeCardServiceTest {
         assertEquals(
             listOf("core.c"),
             service.layoutFor(accountId, available.take(0) + available[2]).cards.map { it.contributionId })
-    }
-
-    @ParameterizedTest
-    @EnumSource(DbDialect::class)
-    fun `layout flow emits on changes of the same user only`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        val emissions = mutableListOf<UiHomeLayout>()
-        val job = launch { service.layoutFlow(accountId) { available }.take(2).toList(emissions) }
-        while (emissions.isEmpty()) yield()
-        service.setPinned(otherAccountId, "core.a", true)
-        service.setPinned(accountId, "core.b", true)
-        job.join()
-        assertEquals(2, emissions.size)
-        assertEquals("core.b", emissions.last().cards.first().contributionId)
     }
 
     @ParameterizedTest

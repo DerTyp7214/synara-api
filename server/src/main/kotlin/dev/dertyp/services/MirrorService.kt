@@ -68,8 +68,7 @@ class MirrorService : Service() {
     )
 
     fun getUsers(): Flow<User> = flow {
-        val hashes = userService.passwordHashes().associate { it.id to it.passwordHash }
-        userService.queryUser().forEach { emit(it.copy(passwordHash = hashes[it.id].orEmpty())) }
+        userService.queryUser().forEach { emit(it) }
     }.flowOn(Dispatchers.IO)
 
     fun getUserPasswordHashes(): Flow<UserPasswordHash> = flow {

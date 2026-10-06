@@ -19,7 +19,6 @@ An admin implicitly has every capability, so every method on this page is open t
 | [IDbManagementService](RPC_SERVICES.md#devdertypservicesidbmanagementservice) | `importData` | Import a previously exported database blob to overwrite the current state. |
 | [IImageService](RPC_SERVICES.md#devdertypservicesiimageservice) | `moveImages` | Batch update image file paths. |
 | [IListenBackupService](RPC_SERVICES.md#devdertypservicesilistenbackupservice) | `getState` | Get the current backup configuration and sync state. |
-| [IListenBackupService](RPC_SERVICES.md#devdertypservicesilistenbackupservice) | `getStateFlow` | Stream the backup state, re-emitting whenever the configuration or sync progress changes. |
 | [IListenBackupService](RPC_SERVICES.md#devdertypservicesilistenbackupservice) | `observeState` | Stream the backup state, re-emitting whenever the configuration or sync progress changes. |
 | [IListenBackupService](RPC_SERVICES.md#devdertypservicesilistenbackupservice) | `resetCursor` | Reset the sync cursor so the next run re-pushes every local listen. |
 | [IListenBackupService](RPC_SERVICES.md#devdertypservicesilistenbackupservice) | `syncNow` | Run a backup sync now and return the resulting state. |
@@ -61,17 +60,14 @@ An admin implicitly has every capability, so every method on this page is open t
 | [IRpcMetricsService](RPC_SERVICES.md#devdertypservicesirpcmetricsservice) | `recentEvents` | The most recent recorded invocations from the capped event log, newest first. |
 | [IRpcMetricsService](RPC_SERVICES.md#devdertypservicesirpcmetricsservice) | `timeSeries` | Hourly time-series of invocation counts for a specific call, oldest first. |
 | [IScheduledTaskConfigurationService](RPC_SERVICES.md#devdertypservicesischeduledtaskconfigurationservice) | `getConfigurations` | Retrieve all background task configurations. |
-| [IScheduledTaskConfigurationService](RPC_SERVICES.md#devdertypservicesischeduledtaskconfigurationservice) | `getConfigurationsFlow` | Stream real-time updates for all background task configurations. |
 | [IScheduledTaskConfigurationService](RPC_SERVICES.md#devdertypservicesischeduledtaskconfigurationservice) | `observeConfigurations` | Stream real-time updates for all background task configurations. |
 | [IScheduledTaskConfigurationService](RPC_SERVICES.md#devdertypservicesischeduledtaskconfigurationservice) | `triggerTask` | Manually trigger a background task by its unique key. |
 | [IScheduledTaskConfigurationService](RPC_SERVICES.md#devdertypservicesischeduledtaskconfigurationservice) | `updateConfiguration` | Update a task configuration. |
 | [IScheduledTaskLogService](RPC_SERVICES.md#devdertypservicesischeduledtasklogservice) | `getGroupedLogs` | Retrieve a snapshot of the most recent background task logs grouped by task name. |
-| [IScheduledTaskLogService](RPC_SERVICES.md#devdertypservicesischeduledtasklogservice) | `getGroupedLogsFlow` | Stream real-time updates for all background task progress and completion. |
 | [IScheduledTaskLogService](RPC_SERVICES.md#devdertypservicesischeduledtasklogservice) | `observeGroupedLogs` | Stream real-time updates for all background task progress and completion. |
 | [ISongService](RPC_SERVICES.md#devdertypservicesisongservice) | `moveSongs` | Batch update song file paths. |
 | [IUserService](RPC_SERVICES.md#devdertypservicesiuserservice) | `allUsers` | List all users on the server. |
 | [IUserService](RPC_SERVICES.md#devdertypservicesiuserservice) | `createUser` | Create a new user. |
-| [IUserService](RPC_SERVICES.md#devdertypservicesiuserservice) | `getAllUsers` | List all users on the server. |
 | [IUserService](RPC_SERVICES.md#devdertypservicesiuserservice) | `setCapabilities` | Update the capabilities for a specific user. |
 | [IImportService](RPC_SERVICES.md#devdertypservicesimportiimportservice) | `getAuthUrl` | Get the Tidal OAuth authorization URL. |
 | [IImportService](RPC_SERVICES.md#devdertypservicesimportiimportservice) | `killAllChildProcesses` | Immediately stop all active importer processes. |

@@ -7,12 +7,6 @@ import dev.dertyp.core.db.dbQuery
 import dev.dertyp.ui.UiContributionInfo
 import dev.dertyp.ui.UiHomeCard
 import dev.dertyp.ui.UiHomeLayout
-import kotlinx.coroutines.channels.BufferOverflow
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.filter
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.onStart
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
@@ -25,12 +19,9 @@ import java.util.UUID
 class UserHomeCardService : KoinComponent {
     private data class Row(val contributionId: String, val pinned: Boolean, val position: Int)
 
-    private val changes =
-        MutableSharedFlow<UUID>(extraBufferCapacity = 64, onBufferOverflow = BufferOverflow.DROP_OLDEST)
     private val changeNotifier by inject<ChangeNotifier>()
 
     private fun changed(userId: UUID) {
-        changes.tryEmit(userId)
         changeNotifier.notify(userId, ChangeTopic.HOME_CARDS)
     }
 
@@ -93,7 +84,4 @@ class UserHomeCardService : KoinComponent {
         }
         changed(userId)
     }
-
-    fun layoutFlow(userId: UUID, available: suspend () -> List<UiContributionInfo>): Flow<UiHomeLayout> =
-        changes.filter { it == userId }.map { }.onStart { emit(Unit) }.map { layoutFor(userId, available()) }
 }

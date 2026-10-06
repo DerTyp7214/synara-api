@@ -27,7 +27,7 @@ import kotlin.time.Duration.Companion.minutes
 class FlowTest {
     private lateinit var database: Database
     private val songService = SongService()
-    private val user = User(UUID.randomUUID(), "test", passwordHash = "hash")
+    private val user = User(UUID.randomUUID(), "test")
 
     private val allTables = arrayOf(
         ArtistTable, AlbumTable, SongTable, SongVariantTable, SongArtistTable,

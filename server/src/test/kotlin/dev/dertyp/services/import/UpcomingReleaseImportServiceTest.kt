@@ -35,7 +35,7 @@ class UpcomingReleaseImportServiceTest {
     private val songService = mockk<SongService>(relaxed = true)
     private val environment = mockk<ApplicationEnvironment>(relaxed = true)
 
-    private val user = User(UUID.randomUUID(), "test", passwordHash = "hash")
+    private val user = User(UUID.randomUUID(), "test")
 
     private lateinit var service: UpcomingReleaseImportService
 

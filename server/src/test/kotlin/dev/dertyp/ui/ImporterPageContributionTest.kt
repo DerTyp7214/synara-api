@@ -64,7 +64,6 @@ class ImporterPageContributionTest {
         UUID.randomUUID(),
         "imp",
         displayName = "Importer Ann",
-        passwordHash = "",
         capabilities = listOf(UserCapability.IMPORT)
     )
     private val client = ClientInfo(ApiVersion.CURRENT, UiSchemaVersion.CURRENT, "en")

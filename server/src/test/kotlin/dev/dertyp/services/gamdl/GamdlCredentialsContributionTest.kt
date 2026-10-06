@@ -25,7 +25,7 @@ import org.junit.jupiter.api.Test
 import java.util.UUID
 
 class GamdlCredentialsContributionTest {
-    private val admin = User(UUID.randomUUID(), "admin", passwordHash = "")
+    private val admin = User(UUID.randomUUID(), "admin")
     private val translations = TranslationService(UiRegistry())
 
     init {

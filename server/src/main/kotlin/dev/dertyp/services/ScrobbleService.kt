@@ -5,7 +5,6 @@ import dev.dertyp.core.ChangeNotifier
 import dev.dertyp.data.*
 import dev.dertyp.plugins.HookBus
 import dev.dertyp.plugins.HookEvent
-import dev.dertyp.rpc.annotations.REMOVED_IN_API_9
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.*
@@ -138,22 +137,6 @@ class ScrobbleService : Service() {
     suspend fun recentAlbums(userId: PlatformUUID, limit: Int): List<ListenedAlbum> =
         listenService.recentAlbums(userId, limit)
 
-    @OptIn(FlowPreview::class)
-    fun recentArtistsFlow(userId: PlatformUUID, limit: Int): Flow<List<ListenedArtist>> =
-        listenService.listenChanges
-            .onStart { emit(Unit) }
-            .debounce(100.milliseconds)
-            .map { listenService.recentArtists(userId, limit) }
-            .distinctUntilChanged()
-
-    @OptIn(FlowPreview::class)
-    fun recentAlbumsFlow(userId: PlatformUUID, limit: Int): Flow<List<ListenedAlbum>> =
-        listenService.listenChanges
-            .onStart { emit(Unit) }
-            .debounce(100.milliseconds)
-            .map { listenService.recentAlbums(userId, limit) }
-            .distinctUntilChanged()
-
     suspend fun recentListens(userId: PlatformUUID, limit: Int): RecentListens {
         val recent = listenService.recentListens(userId, limit)
         val current = nowPlaying[userId]?.let { NowPlaying(song = it.song, startedAt = it.firstStartedAt) }
@@ -182,16 +165,7 @@ class RpcScrobbleService(
 
     override suspend fun recentListens(limit: Int): RecentListens = service.recentListens(user.id, limit)
 
-    @Deprecated(REMOVED_IN_API_9 + " Use IChangeService.observeChanges and recentListens.")
-    override fun recentListensFlow(limit: Int): Flow<RecentListens> = service.recentListensFlow(user.id, limit)
-
     override suspend fun recentArtists(limit: Int): List<ListenedArtist> = service.recentArtists(user.id, limit)
 
-    @Deprecated(REMOVED_IN_API_9 + " Use IChangeService.observeChanges and recentArtists.")
-    override fun recentArtistsFlow(limit: Int): Flow<List<ListenedArtist>> = service.recentArtistsFlow(user.id, limit)
-
     override suspend fun recentAlbums(limit: Int): List<ListenedAlbum> = service.recentAlbums(user.id, limit)
-
-    @Deprecated(REMOVED_IN_API_9 + " Use IChangeService.observeChanges and recentAlbums.")
-    override fun recentAlbumsFlow(limit: Int): Flow<List<ListenedAlbum>> = service.recentAlbumsFlow(user.id, limit)
 }
