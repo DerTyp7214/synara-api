@@ -186,35 +186,37 @@ class SongServiceDeletionTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `deleteSongs rebuilds the album version groups when it removes an anchor album`(dialect: DbDialect) =
+    fun `deleteSongs rebuilds the album version groups when it removes an album of a group`(dialect: DbDialect) =
         runBlocking {
             setup(dialect)
             val spied = spyk(get<AlbumService>())
             coEvery { spied.rebuildVersionGroups() } returns 0
             loadKoinModules(module { single<AlbumService> { spied } })
 
-            val anchorAlbum = insertAlbum()
+            val removedAlbum = insertAlbum()
             val memberAlbum = insertAlbum()
-            val anchorSong = insertSong(anchorAlbum, "/missing/anchor.flac")
+            val removedSong = insertSong(removedAlbum, "/missing/removed.flac")
             val memberSong = insertSong(memberAlbum, "/missing/member-a.flac")
             insertSong(memberAlbum, "/missing/member-b.flac")
-            transaction(database) {
-                AlbumTable.update({ AlbumTable.id inList listOf(anchorAlbum, memberAlbum) }) {
-                    it[versionGroupId] = anchorAlbum
+            val sharedGroup = transaction(database) {
+                val created = AlbumVersionGroupTable.insertAndGetId { }
+                AlbumTable.update({ AlbumTable.id inList listOf(removedAlbum, memberAlbum) }) {
+                    it[versionGroupId] = created
                 }
+                created.value
             }
 
             assertTrue(songService.deleteSongs(listOf(memberSong)))
             coVerify(exactly = 0) { spied.rebuildVersionGroups() }
 
-            assertTrue(songService.deleteSongs(listOf(anchorSong)))
+            assertTrue(songService.deleteSongs(listOf(removedSong)))
 
             coVerify(timeout = 5000, exactly = 1) { spied.rebuildVersionGroups() }
             transaction(database) {
-                assertEquals(0, AlbumTable.selectAll().where { AlbumTable.id eq anchorAlbum }.count())
+                assertEquals(0, AlbumTable.selectAll().where { AlbumTable.id eq removedAlbum }.count())
                 assertEquals(
-                    null,
-                    AlbumTable.selectAll().where { AlbumTable.id eq memberAlbum }.single()[AlbumTable.versionGroupId]
+                    sharedGroup,
+                    AlbumTable.selectAll().where { AlbumTable.id eq memberAlbum }.single()[AlbumTable.versionGroupId]?.value
                 )
             }
         }

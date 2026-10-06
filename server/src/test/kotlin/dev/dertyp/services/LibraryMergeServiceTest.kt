@@ -61,6 +61,7 @@ class LibraryMergeServiceTest : KoinTest {
         transaction(database) {
             SchemaUtils.create(
                 ArtistTable,
+                AlbumVersionGroupTable,
                 AlbumTable,
                 SongTable,
                 SongVariantTable,
@@ -755,6 +756,50 @@ class LibraryMergeServiceTest : KoinTest {
         assertEquals(1, service.mergeDuplicateAlbums())
 
         coVerify(timeout = 5000) { albumService.rebuildVersionGroups() }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `mergeDuplicateAlbums leaves no album without a version group`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+
+        mockkObject(MetadataService.Companion)
+        every { MetadataService.getMetadataService(any(), any()) } returns tidalService
+        coEvery { tidalService.getAlbumsByIds(any()) } returns emptyList()
+        coEvery { albumService.fetchMusicBrainzId(any()) } returns null
+        every { pluginManager.getAllImporters() } returns emptyList()
+
+        val (mergedGroups, untouchedGroup) = transaction(database) {
+            val groups = (1..3).map { AlbumVersionGroupTable.insert { }[AlbumVersionGroupTable.id] }
+            AlbumTable.insert {
+                it[id] = UUID.randomUUID(); it[name] = "Album"; it[originalId] = "tidal:orig"; it[songCount] = 10
+                it[versionGroupId] = groups[0]
+            }
+            AlbumTable.insert {
+                it[id] = UUID.randomUUID(); it[name] = "Album (dup)"; it[originalId] = "tidal:orig"; it[songCount] = 12
+                it[versionGroupId] = groups[1]
+            }
+            AlbumTable.insert {
+                it[id] = UUID.randomUUID(); it[name] = "Other"; it[originalId] = "tidal:other"; it[songCount] = 8
+                it[versionGroupId] = groups[2]
+            }
+            setOf(groups[0].value, groups[1].value) to groups[2].value
+        }
+
+        assertEquals(1, service.mergeDuplicateAlbums())
+
+        transaction(database) {
+            val remaining = AlbumTable.selectAll()
+                .associate { it[AlbumTable.name] to it[AlbumTable.versionGroupId]?.value }
+            val stored = AlbumVersionGroupTable.selectAll().map { it[AlbumVersionGroupTable.id].value }.toSet()
+
+            assertEquals(2, remaining.size)
+            assertEquals(untouchedGroup, remaining["Other"])
+            val keptGroup = remaining.entries.single { it.key != "Other" }.value
+            assertEquals(true, keptGroup in mergedGroups)
+            assertEquals(true, stored.containsAll(remaining.values.filterNotNull()))
+            assertEquals(0, remaining.values.count { it == null })
+        }
     }
 
     @ParameterizedTest

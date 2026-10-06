@@ -14,6 +14,7 @@ import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.EnumSource
 import org.koin.core.context.startKoin
@@ -42,6 +43,7 @@ class BuildAlbumVersionGroupsTest : KoinTest {
                 ImageTable,
                 AnimatedImageTable,
                 ArtistTable,
+                AlbumVersionGroupTable,
                 AlbumTable,
                 AlbumArtistTable,
                 MBReleaseGroupTable,
@@ -83,7 +85,12 @@ class BuildAlbumVersionGroupsTest : KoinTest {
         AlbumTable.selectAll().associate { it[AlbumTable.id].value to it[AlbumTable.versionGroupId]?.value }
     }
 
-    private fun lowestId(vararg ids: UUID): UUID = ids.minBy { it.toString() }
+    private fun storedGroups(): Set<UUID> = transaction(database) {
+        AlbumVersionGroupTable.selectAll().mapTo(mutableSetOf()) { it[AlbumVersionGroupTable.id].value }
+    }
+
+    private fun albumsByGroup(groups: Map<UUID, UUID?>): Set<Set<UUID>> =
+        groups.entries.groupBy({ it.value }, { it.key }).values.mapTo(mutableSetOf()) { it.toSet() }
 
     private class Fixtures(
         val linked: UUID,
@@ -108,23 +115,25 @@ class BuildAlbumVersionGroupsTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `groups the editions of an album under one anchor`(dialect: DbDialect) = runBlocking {
+    fun `gives every album a group and the editions of an album the same one`(dialect: DbDialect) = runBlocking {
         setup(dialect)
         val albums = insertFixtures()
+        assertEquals(setOf<UUID?>(null), versionGroups().values.toSet())
 
         BuildAlbumVersionGroups().migrate()
 
-        val anchor = lowestId(albums.linked, albums.linkedReissue, albums.unlinked)
+        val groups = versionGroups()
+        assertEquals(5, groups.size)
+        assertFalse(groups.values.any { it == null })
         assertEquals(
-            mapOf(
-                albums.linked to anchor,
-                albums.linkedReissue to anchor,
-                albums.unlinked to anchor,
-                albums.sameNameOtherArtist to null,
-                albums.alone to null,
+            setOf(
+                setOf(albums.linked, albums.linkedReissue, albums.unlinked),
+                setOf(albums.sameNameOtherArtist),
+                setOf(albums.alone),
             ),
-            versionGroups()
+            albumsByGroup(groups)
         )
+        assertEquals(groups.values.toSet(), storedGroups())
     }
 
     @ParameterizedTest
@@ -135,11 +144,14 @@ class BuildAlbumVersionGroupsTest : KoinTest {
 
         BuildAlbumVersionGroups().migrate()
         val first = versionGroups()
+        val firstStored = storedGroups()
         assertEquals(0, albumService.rebuildVersionGroups())
 
         BuildAlbumVersionGroups().migrate()
 
         assertEquals(first, versionGroups())
-        assertEquals(3, first.values.count { it != null })
+        assertEquals(firstStored, storedGroups())
+        assertEquals(5, first.values.count { it != null })
+        assertEquals(3, first.values.toSet().size)
     }
 }

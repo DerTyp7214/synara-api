@@ -583,8 +583,10 @@ class LibraryMergeService : Service() {
             ?.splitAlbumTitleTags()
             ?: SplitTitle(originalAlbum[AlbumTable.name], originalAlbum.albumTitleTags())
 
+        val newGroupId = AlbumVersionGroupTable.insertAndGetId { }
         AlbumTable.insert { album ->
             album[id] = EntityID(newAlbumId, AlbumTable)
+            album[versionGroupId] = newGroupId
             album[name] = edition.title
             album[titleTags] = encodeTitleTags(edition.tags)
             album[releaseDate] = mbRelease?.get(MBReleaseTable.date) ?: originalAlbum[AlbumTable.releaseDate]

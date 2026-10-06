@@ -10,6 +10,7 @@ GET /album/byMusicBrainzIds IAlbumService.byMusicBrainzIds | Get multiple albums
 GET /album/byName IAlbumService.byName | Search albums by name. | album | UserAuth | page:query,pageSize:query,name:query | body:no
 GET /album/byOriginalIds IAlbumService.byOriginalIds | Find albums by their original platform-specific unique identifiers. | album | UserAuth | ids:query | body:no
 GET /album/byOriginalUrls IAlbumService.byOriginalUrls | Find albums by their original platform URLs, returning a mapping. | album | UserAuth | urls:query | body:no
+GET /album/byVersionGroup/{versionGroupId} IAlbumService.byVersionGroup | List all albums of a version group, main edition first. The albums come back as a flat list and their versions lists are empty. | album | UserAuth | versionGroupId:path,explicit:query | body:no
 GET /album/extendedMetadata/{id} IAlbumService.extendedMetadata | Get extended metadata for an album. | album | UserAuth | id:path | body:no
 POST /album/musicBrainzId/{id} IAlbumService.fetchMusicBrainzId | Fetch and link MusicBrainz ID for an album. | album | UserAuth | id:path | body:no
 PUT /album/musicBrainzId/{id} IAlbumService.setMusicBrainzId | Manually set MusicBrainz ID for an album. | album | UserAuth | id:path,musicBrainzId:query | body:no

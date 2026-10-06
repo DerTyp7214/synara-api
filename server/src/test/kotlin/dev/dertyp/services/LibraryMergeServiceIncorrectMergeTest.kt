@@ -59,7 +59,7 @@ class LibraryMergeServiceIncorrectMergeTest : KoinTest {
         database = TestDatabase.connect(dialect, "merge_fix_test")
         transaction(database) {
             SchemaUtils.create(
-                ArtistTable, AlbumTable, AlbumTitleTagTable, SongTable, SongVariantTable, ImageTable, PlaylistTable,
+                ArtistTable, AlbumVersionGroupTable, AlbumTable, AlbumTitleTagTable, SongTable, SongVariantTable, ImageTable, PlaylistTable,
                 UserTable, UserPlaylistTable, UserPlaylistSongTable, PlaylistSongTable,
                 SongArtistTable, AlbumArtistTable, AlbumMusicBrainzTable, SongMusicBrainzTable,
                 TranscodedSongTable, UserSongTable, SongProviderTable, AlbumProviderTable,
@@ -522,5 +522,59 @@ class LibraryMergeServiceIncorrectMergeTest : KoinTest {
         assertEquals(1, service.fixIncorrectMerges())
 
         coVerify(timeout = 5000) { albumService.rebuildVersionGroups() }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `fixIncorrectMerges gives the split album its own version group`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+
+        val (originalAlbum, originalGroup) = transaction(database) {
+            val cover1 = ImageTable.insert {
+                it[id] = UUID.randomUUID()
+                it[path] = "cover1"; it[imageHash] = "hash1"; it[origin] = "o"
+            }[ImageTable.id]
+            val cover2 = ImageTable.insert {
+                it[id] = UUID.randomUUID()
+                it[path] = "cover2"; it[imageHash] = "hash2"; it[origin] = "o"
+            }[ImageTable.id]
+
+            val ownGroup = AlbumVersionGroupTable.insert { }[AlbumVersionGroupTable.id]
+            val albumId = AlbumTable.insert {
+                it[name] = "Album"
+                it[cover] = cover1
+                it[songCount] = 2
+                it[versionGroupId] = ownGroup
+            }[AlbumTable.id]
+
+            SongTable.insert {
+                it[title] = "Song 1"
+                it[this.albumId] = albumId
+                it[cover] = cover1
+                it[filePath] = "p1"
+            }
+            SongTable.insert {
+                it[title] = "Song 2"
+                it[this.albumId] = albumId
+                it[cover] = cover2
+                it[filePath] = "p2"
+            }
+            albumId.value to ownGroup.value
+        }
+
+        assertEquals(1, service.fixIncorrectMerges())
+
+        transaction(database) {
+            val groups = AlbumTable.selectAll()
+                .associate { it[AlbumTable.id].value to it[AlbumTable.versionGroupId]?.value }
+            val stored = AlbumVersionGroupTable.selectAll().map { it[AlbumVersionGroupTable.id].value }.toSet()
+
+            assertEquals(2, groups.size)
+            assertEquals(originalGroup, groups[originalAlbum])
+            val splitGroup = groups.entries.single { it.key != originalAlbum }.value
+            assertNotEquals(null, splitGroup)
+            assertNotEquals(originalGroup, splitGroup)
+            assertEquals(setOf(originalGroup, splitGroup), stored)
+        }
     }
 }

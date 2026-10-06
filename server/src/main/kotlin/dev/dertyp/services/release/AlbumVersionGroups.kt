@@ -18,6 +18,14 @@ object AlbumVersionGroups {
         val explicit: Boolean
     )
 
+    data class Assignment(
+        val moved: Map<UUID, List<UUID>>,
+        val created: List<List<UUID>>,
+        val unused: Set<UUID>
+    )
+
+    private data class Claim(val group: Int, val groupId: UUID, val holders: Int, val smallestAlbumId: UUID)
+
     private data class Identity(val name: String, val artistIds: Set<UUID>)
 
     private val whitespace = Regex("\\s+")
@@ -53,6 +61,45 @@ object AlbumVersionGroups {
         return (merged + standalone)
             .map { it.sortedWith(idOrder) }
             .sortedWith(compareBy(uuidOrder) { it.first().id })
+    }
+
+    fun assign(groups: List<List<Edition>>, current: Map<UUID, UUID?>): Assignment {
+        val members = groups.map { group -> group.map { it.id } }.filter { it.isNotEmpty() }
+
+        val claims = members.mapIndexedNotNull { index, albumIds ->
+            albumIds
+                .mapNotNull { current[it] }
+                .groupingBy { it }
+                .eachCount()
+                .entries
+                .minWithOrNull(compareByDescending<Map.Entry<UUID, Int>> { it.value }.thenBy(uuidOrder) { it.key })
+                ?.let { Claim(index, it.key, it.value, albumIds.minWith(uuidOrder)) }
+        }
+
+        val kept = claims.groupBy { it.groupId }.values.associate { rivals ->
+            val winner = rivals.minWith(
+                compareByDescending<Claim> { it.holders }.thenBy(uuidOrder) { it.smallestAlbumId }
+            )
+            winner.group to winner.groupId
+        }
+
+        val moved = mutableMapOf<UUID, List<UUID>>()
+        val created = mutableListOf<List<UUID>>()
+        members.forEachIndexed { index, albumIds ->
+            val groupId = kept[index]
+            if (groupId == null) {
+                created += albumIds
+            } else {
+                val changed = albumIds.filter { current[it] != groupId }
+                if (changed.isNotEmpty()) moved[groupId] = changed
+            }
+        }
+
+        return Assignment(
+            moved = moved,
+            created = created,
+            unused = current.values.filterNotNullTo(mutableSetOf()) - kept.values.toSet()
+        )
     }
 
     fun mainFirst(members: List<Edition>, explicit: Boolean): List<Edition> {

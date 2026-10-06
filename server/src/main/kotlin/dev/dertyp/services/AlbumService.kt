@@ -47,6 +47,9 @@ class AlbumRpcService(private val user: User, private val albumService: AlbumSer
 
     override suspend fun byIds(@LogParam("size") ids: List<UUID>): List<Album> = albumService.byIds(ids, user.id)
     override suspend fun versions(id: UUID): List<Album> = albumService.versions(id, user.id)
+    override suspend fun byVersionGroup(versionGroupId: UUID, explicit: Boolean): List<Album> =
+        albumService.byVersionGroup(versionGroupId, explicit, user.id)
+
     override suspend fun byName(page: Int, pageSize: Int, name: String): PaginatedResponse<Album> =
         albumService.byName(page, pageSize, name, user.id)
 
@@ -142,6 +145,7 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
                 animatedCoverImageId = animatedCoverImageIdColumn?.let { resultRow.getOrNull(it) }?.value,
                 animatedCoverBlurHash = animatedCoverBlurHashColumn?.let { resultRow.getOrNull(it) },
                 tags = resultRow.albumTitleTags(),
+                versionGroupId = resultRow[AlbumTable.versionGroupId]?.value,
             )
         }
 
@@ -886,13 +890,25 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
 
             AlbumTable
                 .select(AlbumTable.id)
-                .where { versionGroupKey eq groupId }
+                .where { AlbumTable.versionGroupId eq groupId }
                 .map { it[AlbumTable.id].value }
         }
         if (memberIds.size < 2) return emptyList()
 
         return mainFirst(byIds(memberIds, userId), albumIdsWithExplicitSong(memberIds), explicit = true)
             .filter { it.id != id }
+    }
+
+    suspend fun byVersionGroup(versionGroupId: UUID, explicit: Boolean, userId: UUID? = null): List<Album> {
+        val memberIds = dbQuery {
+            AlbumTable
+                .select(AlbumTable.id)
+                .where { AlbumTable.versionGroupId eq versionGroupId }
+                .map { it[AlbumTable.id].value }
+        }
+        if (memberIds.isEmpty()) return emptyList()
+
+        return mainFirst(byIds(memberIds, userId), albumIdsWithExplicitSong(memberIds), explicit)
     }
 
     suspend fun rebuildVersionGroups(): Int {
@@ -948,27 +964,44 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
                 }
         }
 
-        val changes = AlbumVersionGroups.groups(editions).mapNotNull { group ->
-            val anchor = if (group.size > 1) group.minOfWith(uuidOrder) { it.id } else null
-            val changed = group.map { it.id }.filter { current[it] != anchor }
-            if (changed.isEmpty()) null else anchor to changed
+        val assignment = AlbumVersionGroups.assign(AlbumVersionGroups.groups(editions), current)
+
+        assignment.created.chunked(VERSION_GROUP_UPDATE_CHUNK_SIZE).forEach { chunk ->
+            dbQuery {
+                val groupIds = AlbumVersionGroupTable.batchInsert(chunk) { }.map { it[AlbumVersionGroupTable.id] }
+                chunk.zip(groupIds).forEach { (albumIds, groupId) -> moveToVersionGroup(albumIds, groupId) }
+            }
         }
 
-        changes.chunked(VERSION_GROUP_UPDATE_CHUNK_SIZE).forEach { chunk ->
+        assignment.moved.entries.chunked(VERSION_GROUP_UPDATE_CHUNK_SIZE).forEach { chunk ->
             dbQuery {
-                for ((anchor, albumIds) in chunk) {
-                    albumIds.chunked(VERSION_GROUP_UPDATE_CHUNK_SIZE).forEach { ids ->
-                        AlbumTable.update({ AlbumTable.id inList ids }) {
-                            it[versionGroupId] = anchor?.let { anchorId -> EntityID(anchorId, AlbumTable) }
-                        }
-                    }
+                for ((groupId, albumIds) in chunk) {
+                    moveToVersionGroup(albumIds, EntityID(groupId, AlbumVersionGroupTable))
                 }
             }
         }
 
-        val updated = changes.sumOf { it.second.size }
-        if (updated > 0) logger.info("Rebuilt album version groups, updated $updated album(s)")
+        val removed = dbQuery {
+            AlbumVersionGroupTable.deleteWhere {
+                AlbumVersionGroupTable.id notInSubQuery AlbumTable
+                    .select(AlbumTable.versionGroupId)
+                    .where { AlbumTable.versionGroupId.isNotNull() }
+            }
+        }
+
+        val updated = assignment.created.sumOf { it.size } + assignment.moved.values.sumOf { it.size }
+        if (updated > 0 || removed > 0) {
+            logger.info("Rebuilt album version groups, updated $updated album(s), removed $removed empty group(s)")
+        }
         return updated
+    }
+
+    private fun moveToVersionGroup(albumIds: List<UUID>, groupId: EntityID<UUID>) {
+        albumIds.chunked(VERSION_GROUP_UPDATE_CHUNK_SIZE).forEach { ids ->
+            AlbumTable.update({ AlbumTable.id inList ids }) {
+                it[versionGroupId] = groupId
+            }
+        }
     }
 
     private suspend fun albumIdsWithExplicitSong(albumIds: List<UUID>): Set<UUID> = dbQuery {
@@ -1664,7 +1697,11 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
 
         val newRows = if (newAlbumsToInsert.isNotEmpty()) {
             dbQuery {
-                AlbumTable.batchInsert(newAlbumsToInsert) { album ->
+                val groupIds = AlbumVersionGroupTable
+                    .batchInsert(newAlbumsToInsert) { }
+                    .map { it[AlbumVersionGroupTable.id] }
+                AlbumTable.batchInsert(newAlbumsToInsert.zip(groupIds)) { (album, groupId) ->
+                    this[AlbumTable.versionGroupId] = groupId
                     this[AlbumTable.name] = album.name
                     this[AlbumTable.titleTags] = encodeTitleTags(album.tags)
                     this[AlbumTable.releaseDate] = getISOFromDate(album.releaseDate)
@@ -1862,7 +1899,12 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
         }
 
         dbQuery {
+            val newGroupId = if (AlbumTable.select(AlbumTable.id).where { AlbumTable.id eq album.id }.empty()) {
+                AlbumVersionGroupTable.insertAndGetId { }
+            } else null
+
             AlbumTable.upsert(AlbumTable.id) {
+                if (newGroupId != null) it[versionGroupId] = newGroupId
                 it[id] = album.id
                 it[name] = album.name
                 it[titleTags] = encodeTitleTags(album.tags)

@@ -2,7 +2,9 @@ package dev.dertyp.services.release
 
 import dev.dertyp.data.TitleTag
 import dev.dertyp.data.TitleTagKind
+import dev.dertyp.services.release.AlbumVersionGroups.Assignment
 import dev.dertyp.services.release.AlbumVersionGroups.Edition
+import dev.dertyp.services.release.AlbumVersionGroups.assign
 import dev.dertyp.services.release.AlbumVersionGroups.groups
 import dev.dertyp.services.release.AlbumVersionGroups.mainFirst
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -225,6 +227,141 @@ class AlbumVersionGroupsTest {
         )
 
         assertEquals(listOf(listOf(id(1), id(3)), listOf(id(2), id(4))), result.map { group -> group.map { it.id } })
+    }
+
+    private fun groupId(number: Int): UUID = UUID.fromString("d0000000-0000-0000-0000-%012d".format(number))
+
+    private fun grouped(vararg albumNumbers: List<Int>): List<List<Edition>> =
+        albumNumbers.map { numbers -> numbers.map { edition(it) } }
+
+    private fun held(vararg holders: Pair<Int, Int?>): Map<UUID, UUID?> =
+        holders.associate { (album, group) -> id(album) to group?.let { groupId(it) } }
+
+    @Test
+    fun `unchanged groups keep their ids`() {
+        val result = assign(
+            grouped(listOf(1, 2), listOf(3)),
+            held(1 to 1, 2 to 1, 3 to 2)
+        )
+
+        assertEquals(Assignment(emptyMap(), emptyList(), emptySet()), result)
+    }
+
+    @Test
+    fun `a new edition joins the id its group already has`() {
+        val withoutGroup = assign(
+            grouped(listOf(1, 2, 3)),
+            held(1 to 1, 2 to 1, 3 to null)
+        )
+        val withOwnGroup = assign(
+            grouped(listOf(1, 2, 3)),
+            held(1 to 1, 2 to 1, 3 to 2)
+        )
+
+        assertEquals(Assignment(mapOf(groupId(1) to listOf(id(3))), emptyList(), emptySet()), withoutGroup)
+        assertEquals(Assignment(mapOf(groupId(1) to listOf(id(3))), emptyList(), setOf(groupId(2))), withOwnGroup)
+    }
+
+    @Test
+    fun `a merge keeps the id of the group contributing more members`() {
+        val result = assign(
+            grouped(listOf(1, 2, 3, 4, 5)),
+            held(1 to 2, 2 to 2, 3 to 1, 4 to 1, 5 to 1)
+        )
+
+        assertEquals(
+            Assignment(mapOf(groupId(1) to listOf(id(1), id(2))), emptyList(), setOf(groupId(2))),
+            result
+        )
+    }
+
+    @Test
+    fun `a merge of equally large groups keeps the smallest id`() {
+        val result = assign(
+            grouped(listOf(1, 2, 3, 4)),
+            held(1 to 2, 2 to 2, 3 to 1, 4 to 1)
+        )
+        val unknownHolder = assign(
+            listOf(listOf(edition(1), edition(2), edition(9))),
+            held(1 to 2, 2 to 1)
+        )
+
+        assertEquals(
+            Assignment(mapOf(groupId(1) to listOf(id(1), id(2))), emptyList(), setOf(groupId(2))),
+            result
+        )
+        assertEquals(
+            Assignment(mapOf(groupId(1) to listOf(id(1), id(9))), emptyList(), setOf(groupId(2))),
+            unknownHolder
+        )
+    }
+
+    @Test
+    fun `a split leaves the id with the larger part`() {
+        val result = assign(
+            grouped(listOf(1), listOf(2, 3)),
+            held(1 to 1, 2 to 1, 3 to 1)
+        )
+
+        assertEquals(Assignment(emptyMap(), listOf(listOf(id(1))), emptySet()), result)
+    }
+
+    @Test
+    fun `a split into equal parts leaves the id with the part holding the smallest album id`() {
+        val result = assign(
+            grouped(listOf(1, 4), listOf(2, 3)),
+            held(1 to 1, 2 to 1, 3 to 1, 4 to 1)
+        )
+        val reordered = assign(
+            grouped(listOf(3, 2), listOf(4, 1)),
+            held(4 to 1, 3 to 1, 2 to 1, 1 to 1)
+        )
+
+        assertEquals(Assignment(emptyMap(), listOf(listOf(id(2), id(3))), emptySet()), result)
+        assertEquals(Assignment(emptyMap(), listOf(listOf(id(3), id(2))), emptySet()), reordered)
+    }
+
+    @Test
+    fun `the group that loses its id gets a new one instead of its second choice`() {
+        val result = assign(
+            grouped(listOf(1, 2), listOf(3, 4, 5)),
+            held(1 to 1, 2 to 1, 3 to 1, 4 to 2, 5 to null)
+        )
+
+        assertEquals(
+            Assignment(emptyMap(), listOf(listOf(id(3), id(4), id(5))), setOf(groupId(2))),
+            result
+        )
+    }
+
+    @Test
+    fun `albums without a group get a new one per computed group`() {
+        val result = assign(
+            grouped(listOf(1, 2), listOf(3), listOf(4)),
+            held(1 to null, 2 to null, 4 to 1)
+        )
+
+        assertEquals(
+            Assignment(emptyMap(), listOf(listOf(id(1), id(2)), listOf(id(3))), emptySet()),
+            result
+        )
+    }
+
+    @Test
+    fun `ids nobody holds afterwards are reported as unused`() {
+        val result = assign(
+            grouped(listOf(1, 2, 3), listOf(4)),
+            held(1 to 1, 2 to 2, 3 to 3, 4 to 4)
+        )
+
+        assertEquals(
+            Assignment(
+                mapOf(groupId(1) to listOf(id(2), id(3))),
+                emptyList(),
+                setOf(groupId(2), groupId(3))
+            ),
+            result
+        )
     }
 
     @Test

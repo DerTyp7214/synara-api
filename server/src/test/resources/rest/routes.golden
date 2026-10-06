@@ -9,6 +9,7 @@ GET /album/byMusicBrainzIds IAlbumService.byMusicBrainzIds [q:mbIds] JSON
 GET /album/byName IAlbumService.byName [q:page? q:pageSize? q:name] JSON
 GET /album/byOriginalIds IAlbumService.byOriginalIds [q:ids] JSON
 GET /album/byOriginalUrls IAlbumService.byOriginalUrls [q:urls] JSON
+GET /album/byVersionGroup/{versionGroupId} IAlbumService.byVersionGroup [p:versionGroupId q:explicit?] JSON
 GET /album/extendedMetadata/{id} IAlbumService.extendedMetadata [p:id] JSON
 GET /album/search IAlbumService.rankedSearch [q:page? q:pageSize? q:query] JSON
 GET /album/versions/{id} IAlbumService.versions [p:id] JSON
